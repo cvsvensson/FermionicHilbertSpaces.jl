@@ -38,6 +38,7 @@ Constructs a `FockSymmetry` object that represents the symmetry of a many-body s
 """
 function focksymmetry(focknumbers, qn)
     qntofockstates = group(f -> qn(f), focknumbers)
+    sortkeys!(qntofockstates)
     ordered_fockstates = vcat(qntofockstates...)
     focktoinddict = Dictionary(ordered_fockstates, 1:length(ordered_fockstates))
     FockSymmetry(ordered_fockstates, focktoinddict, qntofockstates, qn)
