@@ -97,7 +97,7 @@ end
 function Base.show(io::IO, H::SymmetricFockHilbertSpace)
     n, m = size(H)
     println(io, "$(n)⨯$m SymmetricFockHilbertSpace:")
-    print(io, "modes: $(mode_ordering(H))")
+    println(io, "modes: $(mode_ordering(H))")
     show(io, H.symmetry)
 end
 Base.show(io::IO, sym::FockSymmetry) = print(io, sym.conserved_quantity)
@@ -174,4 +174,46 @@ hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, 
     @test isorderedpartition(Hs1, H.jw)
     @test isorderedpartition(map(keys, Hs3), H)
     @test !isorderedpartition(Hs4, H)
+end
+
+
+function subspace(modes, H::SimpleFockHilbertSpace)
+    if !isorderedsubsystem(modes, H.jw)
+        throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
+    end
+    SimpleFockHilbertSpace(modes)
+end
+
+function subspace(modes, H::FockHilbertSpace)
+    if !isorderedsubsystem(modes, H.jw)
+        throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
+    end
+    # loop through all focknumbers in H and collect the fock states that are in the subsystem
+    outinds = siteindices(modes, H.jw)
+    outbits(f) = map(i -> _bit(f, i), outinds)
+    subfocks = FockNumber[]
+    for f in focknumbers(H)
+        subbits = outbits(f)
+        subfock = focknbr_from_bits(subbits)
+        push!(subfocks, subfock)
+    end
+    sort!(unique!(subfocks), by=f -> f.f)
+    FockHilbertSpace(modes, subfocks)
+end
+
+function subspace(modes, H::SymmetricFockHilbertSpace)
+    if !isorderedsubsystem(modes, H.jw)
+        throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
+    end
+    # loop through all focknumbers in H and collect the fock states that are in the subsystem
+    outinds = siteindices(modes, H.jw)
+    outbits(f) = map(i -> _bit(f, i), outinds)
+    subfocks = FockNumber[]
+    for f in focknumbers(H)
+        subbits = outbits(f)
+        subfock = focknbr_from_bits(subbits)
+        push!(subfocks, subfock)
+    end
+    sort!(unique!(subfocks), by=f -> f.f)
+    FockHilbertSpace(modes, subfocks)
 end

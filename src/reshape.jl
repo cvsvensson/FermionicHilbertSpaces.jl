@@ -6,8 +6,8 @@ function Base.reshape(m::AbstractVector, H::AbstractFockHilbertSpace, Hs, phase_
     _reshape_vec_to_tensor(m, H, Hs, FockSplitter(H, Hs), phase_factors)
 end
 const PairWithHilbertSpace = Union{Pair{<:AbstractFockHilbertSpace,<:Any},Pair{<:Any,<:AbstractFockHilbertSpace}}
-Base.reshape(Hs::PairWithHilbertSpace) = m -> reshape(m, first(Hs), last(Hs), phase_factors)
-Base.reshape(m, Hs::PairWithHilbertSpace) = reshape(m, first(Hs), last(Hs))
+Base.reshape(Hs::PairWithHilbertSpace, phase_factors=true) = m -> reshape(m, first(Hs), last(Hs), phase_factors)
+Base.reshape(m, Hs::PairWithHilbertSpace, phase_factors=true) = reshape(m, first(Hs), last(Hs), phase_factors)
 
 function Base.reshape(t::AbstractArray, Hs::Union{<:AbstractVector,Tuple}, H::AbstractFockHilbertSpace, phase_factors::Bool=true)
     if ndims(t) == 2 * length(Hs)

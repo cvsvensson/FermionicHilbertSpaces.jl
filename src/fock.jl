@@ -91,6 +91,7 @@ end
 
 @testitem "Fock" begin
     using Random
+    using FermionicHilbertSpaces: bits, _bit, focknbr_from_bits, focknbr_from_site_indices
     Random.seed!(1234)
 
     N = 6
@@ -98,16 +99,16 @@ end
     fbits = bits(focknumber, N)
     @test fbits == [0, 0, 1, 0, 1, 0]
 
-    @test FermionicHilbertSpaces.focknbr_from_bits(fbits) == focknumber
-    @test FermionicHilbertSpaces.focknbr_from_bits(Tuple(fbits)) == focknumber
-    @test !FermionicHilbertSpaces._bit(focknumber, 1)
-    @test !FermionicHilbertSpaces._bit(focknumber, 2)
-    @test FermionicHilbertSpaces._bit(focknumber, 3)
-    @test !FermionicHilbertSpaces._bit(focknumber, 4)
-    @test FermionicHilbertSpaces._bit(focknumber, 5)
+    @test focknbr_from_bits(fbits) == focknumber
+    @test focknbr_from_bits(Tuple(fbits)) == focknumber
+    @test !_bit(focknumber, 1)
+    @test !_bit(focknumber, 2)
+    @test _bit(focknumber, 3)
+    @test !_bit(focknumber, 4)
+    @test _bit(focknumber, 5)
 
-    @test FermionicHilbertSpaces.focknbr_from_site_indices((3, 5)) == focknumber
-    @test FermionicHilbertSpaces.focknbr_from_site_indices([3, 5]) == focknumber
+    @test focknbr_from_site_indices((3, 5)) == focknumber
+    @test focknbr_from_site_indices([3, 5]) == focknumber
 
     @testset "removefermion" begin
         focknbr = FockNumber(rand(1:2^N) - 1)
