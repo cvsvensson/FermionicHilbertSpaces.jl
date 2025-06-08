@@ -101,15 +101,15 @@ struct SymmetricFockHilbertSpace{L,S} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
     symmetry::S
 end
-function SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry, focknumbers=map(FockNumber, 0:2^length(labels)-1))
-    jw = JordanWignerOrdering(labels)
-    SymmetricFockHilbertSpace(jw, qn, focknumbers)
+function SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry)
+    SymmetricFockHilbertSpace(JordanWignerOrdering(labels), qn)
 end
-function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry, focknumbers=map(FockNumber, 0:2^length(labels)-1))
-    labelled_symmetry = instantiate(qn, jw)
+function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry)
+    labelled_symmetry, focknumbers = instantiate_and_get_focknumbers(jw, qn)
     sym_concrete = focksymmetry(focknumbers, labelled_symmetry)
     SymmetricFockHilbertSpace{eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
 end
+
 function Base.show(io::IO, H::SymmetricFockHilbertSpace)
     n, m = size(H)
     println(io, "$(n)⨯$m SymmetricFockHilbertSpace:")

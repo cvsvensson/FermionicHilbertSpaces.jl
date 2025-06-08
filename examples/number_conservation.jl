@@ -2,8 +2,8 @@ using FermionicHilbertSpaces
 
 N = 20
 n = 5
-fs = FermionicHilbertSpaces.fockstates(N, n) # Generate all fock states on N modes with n particles
-H = hilbert_space(1:N, FermionConservation(), fs)
+
+H = hilbert_space(1:N, FermionConservation(n)) # Spans all states with n fermions on N sites
 @fermions c
 
 # Define a Hamiltonian that conserves the number of fermions
