@@ -265,3 +265,17 @@ end
     # Error on non-subsystem
     @test_throws ArgumentError subspace([4], H)
 end
+
+
+
+function sector(m::AbstractMatrix, qn::Int, H::SymmetricFockHilbertSpace)
+    ls = length.(H.symmetry.qntofockstates)
+    startindex = 1
+    for (n, l) in pairs(ls)
+        if n == qn
+            return m[startindex:startindex+l-1, startindex:startindex+l-1]
+        end
+        startindex += l
+    end
+    throw(ArgumentError("Sector $qn not found in the matrix."))
+end

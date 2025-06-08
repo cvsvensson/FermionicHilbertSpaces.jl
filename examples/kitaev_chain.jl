@@ -20,6 +20,6 @@ h ≈ kitaev_chain(N, fH, μ, t, Δ, U)
 ## Even subspace
 Heven = hilbert_space(1:N, [FockNumber(n) for n in 0:2^N-1 if iseven(count_ones(n))])
 heven = matrix_representation(ham, Heven)
-h[H.symmetry.qntoinds[1], H.symmetry.qntoinds[1]] ≈ heven
+FermionicHilbertSpaces.sector(h, 1, H) ≈ heven 
 # fermions(H2) # errors, because fermions map outside the subspace
 

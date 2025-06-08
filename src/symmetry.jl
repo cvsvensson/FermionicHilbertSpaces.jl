@@ -170,7 +170,7 @@ sectors(qn::ParityConservation) = qn.sectors
     labels = 1:4
     qn = FermionConservation() * ParityConservation()
     H = hilbert_space(labels, qn)
-    @test keys(H.symmetry.qntoinds).values == [(n, (-1)^n) for n in 0:4]
+    @test keys(H.symmetry.qntofockstates).values == [(n, (-1)^n) for n in 0:4]
     qn = prod(FermionSubsetConservation([l], H.jw) for l in labels)
     @test all(length.(hilbert_space(labels, qn).symmetry.qntofockstates) .== 1)
 end
