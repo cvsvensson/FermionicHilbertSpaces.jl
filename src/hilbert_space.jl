@@ -1,3 +1,10 @@
+function Base.show(io::IO, H::Htype) where Htype<:AbstractHilbertSpace
+    n, m = size(H)
+    println(io, "$(n)⨯$m $(Htype.name.name):")
+    println(io, "modes: $(mode_ordering(H))")
+    print(io, "fermionic: $(isfermionic(H))")
+end
+Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 
 Base.size(H::AbstractFockHilbertSpace) = (length(focknumbers(H)), length(focknumbers(H)))
 function isorderedpartition(Hs, H::AbstractHilbertSpace)
@@ -90,6 +97,15 @@ struct SymmetricFockHilbertSpace{L,S} <: AbstractFockHilbertSpace
     fermionic::Bool
     symmetry::S
 end
+function Base.show(io::IO, H::SymmetricFockHilbertSpace)
+    n, m = size(H)
+    println(io, "$(n)⨯$m SymmetricFockHilbertSpace:")
+    println(io, "modes: $(mode_ordering(H))")
+    println(io, "fermionic: $(isfermionic(H))")
+    show(io, H.symmetry)
+end
+Base.show(io::IO, sym::FockSymmetry) = print(io, sym.conserved_quantity)
+
 Base.keys(H::SymmetricFockHilbertSpace) = keys(H.jw)
 isfermionic(H::SymmetricFockHilbertSpace) = H.fermionic
 indtofock(ind, H::SymmetricFockHilbertSpace) = indtofock(ind, H.symmetry)
