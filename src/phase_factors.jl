@@ -105,7 +105,7 @@ function phase_factor_h(f1, f2, partition, jw)::Int
     return phase
 end
 @testitem "Phase factor f" begin
-    import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, siteindices
+    import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, siteindices, bits
 
     ## Appendix A.2
     N = 2

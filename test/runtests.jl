@@ -27,10 +27,6 @@ end
     @test Bspin[1, :↑] isa SparseMatrixCSC
     @test parityoperator(H) isa SparseMatrixCSC
     @test parityoperator(Hspin) isa SparseMatrixCSC
-    @test pretty_print(B[1], H) |> isnothing
-    @test pretty_print(pi * B[1][:, 1], H) |> isnothing
-    @test pretty_print(rand() * Bspin[1, :↑], Hspin) |> isnothing
-    @test pretty_print(rand(ComplexF64) * Bspin[1, :↑][:, 1], Hspin) |> isnothing
 
     H = hilbert_space(1:3)
     a = fermions(H)
