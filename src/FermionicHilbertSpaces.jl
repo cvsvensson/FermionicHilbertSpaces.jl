@@ -9,11 +9,11 @@ using TestItems
 using TermInterface
 
 
-export FockNumber, JordanWignerOrdering, hc, diagonalize, focknumbers
+export FockNumber, JordanWignerOrdering, hc, focknumbers
 export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space
 export parityoperator, numberoperator, fermions, majoranas, matrix_representation
 
-export partial_trace, fermionic_kron, tensor_product, embedding, many_body_density_matrix, extension
+export partial_trace, fermionic_kron, tensor_product, embedding, extension
 export @fermions, @majoranas
 export FermionConservation, NoSymmetry, ParityConservation, IndexConservation
 export project_on_parity, project_on_parities
@@ -40,6 +40,7 @@ include("tensor_product.jl")
 
 include("fermionic_tensor_product.jl")
 include("reshape.jl")
+include("qubit.jl")
 
 include("symbolics/muladd.jl")
 include("symbolics/symbolic_fermions.jl")

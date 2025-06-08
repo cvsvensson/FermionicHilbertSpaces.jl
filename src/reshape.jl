@@ -1,15 +1,15 @@
 
-function Base.reshape(m::AbstractMatrix, H::AbstractFockHilbertSpace, Hs, phase_factors=use_reshape_phase_factors(H, Hs))
+function Base.reshape(m::AbstractMatrix, H::AbstractFockHilbertSpace, Hs, phase_factors::Bool=true)
     _reshape_mat_to_tensor(m, H, Hs, FockSplitter(H, Hs), phase_factors)
 end
-function Base.reshape(m::AbstractVector, H::AbstractFockHilbertSpace, Hs, phase_factors=use_reshape_phase_factors(H, Hs))
+function Base.reshape(m::AbstractVector, H::AbstractFockHilbertSpace, Hs, phase_factors::Bool=true)
     _reshape_vec_to_tensor(m, H, Hs, FockSplitter(H, Hs), phase_factors)
 end
-Base.reshape(Hs::Pair, phase_factors=use_reshape_phase_factors(first(Hs), last(Hs))) =
-    m -> reshape(m, first(Hs), last(Hs), phase_factors)
-Base.reshape(m, Hs::Pair, phase_factors=use_reshape_phase_factors(first(Hs), last(Hs))) = Base.reshape(m, first(Hs), last(Hs), phase_factors)
+const PairWithHilbertSpace = Union{Pair{<:AbstractFockHilbertSpace,<:Any},Pair{<:Any,<:AbstractFockHilbertSpace}}
+Base.reshape(Hs::PairWithHilbertSpace) = m -> reshape(m, first(Hs), last(Hs), phase_factors)
+Base.reshape(m, Hs::PairWithHilbertSpace) = reshape(m, first(Hs), last(Hs))
 
-function Base.reshape(t::AbstractArray, Hs, H::AbstractFockHilbertSpace, phase_factors=use_reshape_phase_factors(H, Hs))
+function Base.reshape(t::AbstractArray, Hs::Union{<:AbstractVector,Tuple}, H::AbstractFockHilbertSpace, phase_factors::Bool=true)
     if ndims(t) == 2 * length(Hs)
         return _reshape_tensor_to_mat(t, Hs, H, FockMapper(Hs, H), phase_factors)
     elseif ndims(t) == length(Hs)

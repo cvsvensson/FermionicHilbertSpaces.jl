@@ -80,37 +80,34 @@ end
 end
 
 """
-    tensor_product(bs)
+    tensor_product(Hs)
 
-Compute the tensor_product product of a list of `FermionBasis` objects. The symmetry of the resulting basis is computed by promote_symmetry.
+Compute the tensor_product product hilbert spaces `Hs`. The symmetry of the resulting basis is computed by promote_symmetry.
 """
-tensor_product(bs::AbstractVector{<:AbstractHilbertSpace}) = foldl(tensor_product, bs)
-tensor_product(bs::Tuple) = foldl(tensor_product, bs)
+tensor_product(Hs::AbstractVector{<:AbstractHilbertSpace}) = foldl(tensor_product, Hs)
+tensor_product(Hs::Tuple) = foldl(tensor_product, Hs)
 
 function tensor_product(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
     isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
-    allequal(isfermionic, (H1, H2)) || throw(ArgumentError("All Hilbert spaces should have the same fermionicity"))
     newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
     qn = promote_symmetry(H1.symmetry, H2.symmetry)
     M1 = length(H1.jw)
     newfocknumbers = vec([f1 + shift_right(f2, M1) for f1 in focknumbers(H1), f2 in focknumbers(H2)])
-    SymmetricFockHilbertSpace(newlabels, qn, newfocknumbers; fermionic=isfermionic(H1))
+    SymmetricFockHilbertSpace(newlabels, qn, newfocknumbers)
 end
 
 function tensor_product(H1::FockHilbertSpace, H2::FockHilbertSpace)
     isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
-    allequal(isfermionic, (H1, H2)) || throw(ArgumentError("All Hilbert spaces should have the same fermionicity"))
     newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
     M1 = length(H1.jw)
     newfocknumbers = vec([f1 + shift_right(f2, M1) for f1 in focknumbers(H1), f2 in focknumbers(H2)])
-    FockHilbertSpace(newlabels, newfocknumbers; fermionic=isfermionic(H1))
+    FockHilbertSpace(newlabels, newfocknumbers)
 end
 
 function simple_tensor_product(H1::AbstractFockHilbertSpace, H2::AbstractFockHilbertSpace)
     isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
-    allequal(isfermionic, (H1, H2)) || throw(ArgumentError("All Hilbert spaces should have the same fermionicity"))
     newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
-    SimpleFockHilbertSpace(newlabels; fermionic=isfermionic(H1))
+    SimpleFockHilbertSpace(newlabels)
 end
 tensor_product(H1::SimpleFockHilbertSpace, H2) = simple_tensor_product(H1, H2)
 tensor_product(H1, H2::SimpleFockHilbertSpace) = simple_tensor_product(H1, H2)

@@ -32,7 +32,6 @@ end
     a = fermions(H)
     Hs = (hilbert_space(1:1), hilbert_space(2:2), hilbert_space(3:3))
     Hw = tensor_product(Hs)
-    @test FermionicHilbertSpaces.isfermionic(Hw)
 
     v = [FermionicHilbertSpaces.indtofock(i, H) for i in 1:8]
     t1 = reshape(v, H, Hs)

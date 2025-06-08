@@ -1,8 +1,7 @@
 function Base.show(io::IO, H::Htype) where Htype<:AbstractHilbertSpace
     n, m = size(H)
     println(io, "$(n)⨯$m $(Htype.name.name):")
-    println(io, "modes: $(mode_ordering(H))")
-    print(io, "fermionic: $(isfermionic(H))")
+    print(io, "modes: $(mode_ordering(H))")
 end
 Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 
@@ -32,14 +31,12 @@ bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_em
 
 struct SimpleFockHilbertSpace{L} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
-    fermionic::Bool
-    function SimpleFockHilbertSpace(labels; fermionic=true)
+    function SimpleFockHilbertSpace(labels)
         jw = JordanWignerOrdering(labels)
-        new{eltype(jw)}(jw, fermionic)
+        new{eltype(jw)}(jw)
     end
 end
 Base.keys(H::SimpleFockHilbertSpace) = keys(H.jw)
-isfermionic(H::SimpleFockHilbertSpace) = H.fermionic
 focknumbers(H::SimpleFockHilbertSpace) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
 indtofock(ind, ::SimpleFockHilbertSpace) = FockNumber(ind - 1)
 focktoind(focknbr::FockNumber, ::SimpleFockHilbertSpace) = focknbr.f + 1
@@ -50,9 +47,6 @@ function Base.:(==)(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace)
     if H1.jw != H2.jw
         return false
     end
-    if H1.fermionic != H2.fermionic
-        return false
-    end
     return true
 end
 
@@ -60,15 +54,13 @@ struct FockHilbertSpace{L,F,I} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
     focknumbers::F
     focktoind::I
-    fermionic::Bool
-    function FockHilbertSpace(labels, focknumbers::F=map(FockNumber, 0:2^length(labels)-1); fermionic=true) where F
+    function FockHilbertSpace(labels, focknumbers::F=map(FockNumber, 0:2^length(labels)-1)) where F
         jw = JordanWignerOrdering(labels)
         focktoind = Dict(reverse(pair) for pair in enumerate(focknumbers))
-        new{eltype(jw),F,typeof(focktoind)}(jw, focknumbers, focktoind, fermionic)
+        new{eltype(jw),F,typeof(focktoind)}(jw, focknumbers, focktoind)
     end
 end
 Base.keys(H::FockHilbertSpace) = keys(H.jw)
-isfermionic(H::FockHilbertSpace) = H.fermionic
 focknumbers(H::FockHilbertSpace) = H.focknumbers
 indtofock(ind, H::FockHilbertSpace) = focknumbers(H)[ind]
 focktoind(focknbr::FockNumber, H::FockHilbertSpace) = H.focktoind[focknbr]
@@ -77,9 +69,6 @@ function Base.:(==)(H1::FockHilbertSpace, H2::FockHilbertSpace)
         return true
     end
     if H1.jw != H2.jw
-        return false
-    end
-    if H1.fermionic != H2.fermionic
         return false
     end
     if H1.focknumbers != H2.focknumbers
@@ -94,30 +83,30 @@ end
 
 struct SymmetricFockHilbertSpace{L,S} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
-    fermionic::Bool
     symmetry::S
+end
+function SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry, focknumbers=map(FockNumber, 0:2^length(labels)-1))
+    jw = JordanWignerOrdering(labels)
+    SymmetricFockHilbertSpace(jw, qn, focknumbers)
+end
+function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry, focknumbers=map(FockNumber, 0:2^length(labels)-1))
+    labelled_symmetry = instantiate(qn, jw)
+    sym_concrete = focksymmetry(focknumbers, labelled_symmetry)
+    SymmetricFockHilbertSpace{eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
 end
 function Base.show(io::IO, H::SymmetricFockHilbertSpace)
     n, m = size(H)
     println(io, "$(n)⨯$m SymmetricFockHilbertSpace:")
-    println(io, "modes: $(mode_ordering(H))")
-    println(io, "fermionic: $(isfermionic(H))")
+    print(io, "modes: $(mode_ordering(H))")
     show(io, H.symmetry)
 end
 Base.show(io::IO, sym::FockSymmetry) = print(io, sym.conserved_quantity)
 
 Base.keys(H::SymmetricFockHilbertSpace) = keys(H.jw)
-isfermionic(H::SymmetricFockHilbertSpace) = H.fermionic
 indtofock(ind, H::SymmetricFockHilbertSpace) = indtofock(ind, H.symmetry)
 focktoind(f::FockNumber, H::SymmetricFockHilbertSpace) = focktoind(f, H.symmetry)
 focknumbers(H::SymmetricFockHilbertSpace) = focknumbers(H.symmetry)
 focknumbers(H::SymmetricFockHilbertSpace{<:Any,NoSymmetry}) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
-function SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry, focknumbers=map(FockNumber, 0:2^length(labels)-1); fermionic=true)
-    jw = JordanWignerOrdering(labels)
-    labelled_symmetry = instantiate(qn, jw)
-    sym_concrete = focksymmetry(focknumbers, labelled_symmetry)
-    SymmetricFockHilbertSpace(jw, fermionic, sym_concrete)
-end
 
 function Base.:(==)(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
     if H1 === H2
@@ -129,23 +118,15 @@ function Base.:(==)(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace
     if H1.symmetry != H2.symmetry
         return false
     end
-    if H1.fermionic != H2.fermionic
-        return false
-    end
     return true
 end
 
-qubit_hilbert_space(labels) = SimpleFockHilbertSpace(labels; fermionic=false)
-qubit_hilbert_space(labels, focknumbers) = FockHilbertSpace(labels, focknumbers; fermionic=false)
-qubit_hilbert_space(labels, qn::AbstractSymmetry, focknumbers) = SymmetricFockHilbertSpace(labels, qn, focknumbers; fermionic=false)
-qubit_hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, qn; fermionic=false)
-
-hilbert_space(labels; fermionic=true) = SimpleFockHilbertSpace(labels; fermionic=fermionic)
-hilbert_space(labels, focknumbers; fermionic=true) = FockHilbertSpace(labels, focknumbers; fermionic=fermionic)
-hilbert_space(labels, ::NoSymmetry; fermionic=true) = SimpleFockHilbertSpace(labels; fermionic=fermionic)
-hilbert_space(labels, ::NoSymmetry, focknumbers; fermionic=true) = FockHilbertSpace(labels, focknumbers; fermionic=fermionic)
-hilbert_space(labels, qn::AbstractSymmetry, focknumbers; fermionic=true) = SymmetricFockHilbertSpace(labels, qn, focknumbers; fermionic)
-hilbert_space(labels, qn::AbstractSymmetry; fermionic=true) = SymmetricFockHilbertSpace(labels, qn; fermionic)
+hilbert_space(labels) = SimpleFockHilbertSpace(labels)
+hilbert_space(labels, focknumbers) = FockHilbertSpace(labels, focknumbers)
+hilbert_space(labels, ::NoSymmetry) = SimpleFockHilbertSpace(labels)
+hilbert_space(labels, ::NoSymmetry, focknumbers) = FockHilbertSpace(labels, focknumbers)
+hilbert_space(labels, qn::AbstractSymmetry, focknumbers) = SymmetricFockHilbertSpace(labels, qn, focknumbers)
+hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, qn)
 
 #= Tests for isorderedsubsystem, issubsystem, and consistent_ordering for Hilbert spaces =#
 @testitem "Hilbert space subsystem and ordering" begin
