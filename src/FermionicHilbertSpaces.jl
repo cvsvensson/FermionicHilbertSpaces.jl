@@ -37,9 +37,9 @@ include("symmetry.jl")
 include("hilbert_space.jl")
 include("operators.jl")
 include("tensor_product.jl")
-
-include("fermionic_tensor_product.jl")
+include("embedding.jl")
 include("reshape.jl")
+
 include("qubit.jl")
 
 include("symbolics/muladd.jl")
