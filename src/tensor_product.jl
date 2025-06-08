@@ -7,16 +7,20 @@ Compute the tensor_product product hilbert spaces `Hs`. The symmetry of the resu
 tensor_product(Hs::AbstractVector{<:AbstractHilbertSpace}) = foldl(tensor_product, Hs)
 tensor_product(Hs::Tuple) = foldl(tensor_product, Hs)
 
-function tensor_product(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
-    isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
-    newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
-    qn = promote_symmetry(H1.symmetry, H2.symmetry)
-    M1 = length(H1.jw)
-    newfocknumbers = vec([f1 + shift_right(f2, M1) for f1 in focknumbers(H1), f2 in focknumbers(H2)])
-    SymmetricFockHilbertSpace(newlabels, qn, newfocknumbers)
+tensor_product(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace) = tensor_product_combine_focknumbers(H1, H2)
+
+function tensor_product(H1::SymmetricFockHilbertSpace{<:Any,ParityConservation}, H2::SymmetricFockHilbertSpace{<:Any,ParityConservation})
+    if sectors(H1.symmetry) == [-1, 1] == sectors(H2.symmetry)
+        isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
+        newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
+        return SymmetricFockHilbertSpace(newlabels, ParityConservation())
+    end
+    tensor_product_combine_focknumbers(H1, H2)
 end
 
-function tensor_product(H1::FockHilbertSpace, H2::FockHilbertSpace)
+tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace) = tensor_product_combine_focknumbers(H1, H2)
+
+function tensor_product_combine_focknumbers(H1, H2)
     isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
     newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
     M1 = length(H1.jw)
@@ -29,8 +33,6 @@ function simple_tensor_product(H1::AbstractFockHilbertSpace, H2::AbstractFockHil
     newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
     SimpleFockHilbertSpace(newlabels)
 end
-tensor_product(H1::SimpleFockHilbertSpace, H2) = simple_tensor_product(H1, H2)
-tensor_product(H1, H2::SimpleFockHilbertSpace) = simple_tensor_product(H1, H2)
 tensor_product(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace) = simple_tensor_product(H1, H2)
 
 @testitem "tensor_product product of Fock Hilbert Spaces" begin
