@@ -268,3 +268,47 @@ end
     @test all(iseven ∘ fermionnumber, fs)
     @test all(fermionnumber(f & qn.symmetries[2].mask) == 1 for f in fs)
 end
+
+@testitem "sector" begin
+    import FermionicHilbertSpaces: sector
+    # Create a Hilbert space with parity symmetry
+    labels = 1:3
+    qn = ParityConservation()
+    H = hilbert_space(labels, qn)
+    n = length(focknumbers(H.symmetry))
+    m = reshape(1:(n^2), n, n)  # simple test matrix
+    # Get the sector for parity = 1
+    even_sector = sector(m, 1, H)
+    # The size of the even sector block should match the number of even-parity states
+    even_states = [f for f in focknumbers(H) if qn(f) == 1]
+    @test size(even_sector, 1) == length(even_states)
+    @test size(even_sector, 2) == length(even_states)
+    # The values should match the corresponding block in m
+    # Get the indices of even states in the full focknumbers list
+    even_inds = findall(f -> qn(f) == 1, focknumbers(H.symmetry))
+    @test even_sector == m[even_inds, even_inds]
+    # Test that an invalid sector throws an error
+    @test_throws ArgumentError sector(m, 99, H)
+
+    # Test with FermionConservation
+    qn_f = FermionConservation([1, 2])
+    Hf = hilbert_space(labels, qn_f)
+    n_f = length(focknumbers(Hf.symmetry))
+    m_f = reshape(1:(n_f^2), n_f, n_f)
+    # Test sector for fermion number = 1
+    sector1 = sector(m_f, 1, Hf)
+    states1 = [f for f in focknumbers(Hf) if qn_f(f) == 1]
+    inds1 = findall(f -> qn_f(f) == 1, focknumbers(Hf.symmetry))
+    @test size(sector1, 1) == length(states1)
+    @test size(sector1, 2) == length(states1)
+    @test sector1 == m_f[inds1, inds1]
+    # Test sector for fermion number = 2
+    sector2 = sector(m_f, 2, Hf)
+    states2 = [f for f in focknumbers(Hf) if qn_f(f) == 2]
+    inds2 = findall(f -> qn_f(f) == 2, focknumbers(Hf.symmetry))
+    @test size(sector2, 1) == length(states2)
+    @test size(sector2, 2) == length(states2)
+    @test sector2 == m_f[inds2, inds2]
+    # Test that an invalid sector throws an error
+    @test_throws ArgumentError sector(m_f, 99, Hf)
+end
