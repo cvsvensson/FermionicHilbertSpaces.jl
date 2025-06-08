@@ -12,9 +12,9 @@ function removefermion(digitposition, f::FockNumber)
 end
 
 """
-    parityoperator(H::AbstractFockHilbertSpace)
+    parityoperator(H)
 
-Return the parity operator of `H`.
+Return the fermionic parity operator for the Hilbert space `H`.
 """
 function parityoperator(H::AbstractFockHilbertSpace)
     sparse_fockoperator(f -> (f, parity(f)), H)
@@ -22,9 +22,9 @@ end
 
 
 """
-    numberoperator(basis::AbstractFockHilbertSpace)
+    numberoperator(H)
 
-Return the number operator of `H`.
+Return the number operator for the Hilbert space `H`.
 """
 function numberoperator(H::AbstractFockHilbertSpace)
     sparse_fockoperator(f -> (f, fermionnumber(f)), H)
@@ -129,6 +129,11 @@ end
     @test numberoperator(H) == Diagonal([1])
 end
 
+"""
+    fermions(H)
+
+Return a dictionary of fermionic annihilation operators for the Hilbert space `H`.
+"""
 function fermions(H::AbstractFockHilbertSpace)
     M = length(H.jw)
     labelvec = keys(H)
@@ -136,6 +141,11 @@ function fermions(H::AbstractFockHilbertSpace)
     OrderedDict(zip(labelvec, reps))
 end
 
+"""
+    majoranas(H)
+
+Return a dictionary of Majorana operators for the Hilbert space `H`.
+"""
 function majoranas(H::AbstractFockHilbertSpace, labels=Base.product(keys(H), (:-, :+)))
     fs = values(fermions(H))
     majA = map(f -> f + f', fs)
@@ -144,10 +154,21 @@ function majoranas(H::AbstractFockHilbertSpace, labels=Base.product(keys(H), (:-
     OrderedDict(zip(labels, majs))
 end
 
+@testitem "CAR" begin
+    using LinearAlgebra
+    for qn in [NoSymmetry(), ParityConservation(), FermionConservation()]
+        c = fermions(hilbert_space(1:2, qn))
+        @test c[1] * c[1] == 0I
+        @test c[1]' * c[1] + c[1] * c[1]' == I
+        @test c[1]' * c[2] + c[2] * c[1]' == 0I
+        @test c[1] * c[2] + c[2] * c[1] == 0I
+    end
+end
+
 @testitem "Majorana operators" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: FockHilbertSpace, majoranas
-    H = FockHilbertSpace(1:2)
+    using FermionicHilbertSpaces: majoranas
+    H = hilbert_space(1:2)
     γ = majoranas(H)
     # There should be 4 Majorana operators for 2 modes
     @test length(γ) == 4

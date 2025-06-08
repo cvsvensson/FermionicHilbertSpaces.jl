@@ -1,8 +1,15 @@
-
+"""
+    FockNumber
+A type representing a Fock state as the bitstring of an integer.
+"""
 struct FockNumber
     f::Int
 end
 FockNumber(f::FockNumber) = f
+"""
+    JordanWignerOrdering
+A type representing the ordering of fermionic modes.
+"""
 struct JordanWignerOrdering{L}
     labels::Vector{L}
     ordering::OrderedDict{L,Int}

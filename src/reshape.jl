@@ -89,6 +89,7 @@ end
 
 @testitem "Reshape" begin
     using LinearAlgebra
+    using FermionicHilbertSpaces: project_on_parities, project_on_parity
     function majorana_basis(H)
         b = fermions(H)
         majoranas = Dict((l, s) => (s == :- ? 1im : 1) * b[l] + hc for (l, s) in Base.product(keys(b), [:+, :-]))

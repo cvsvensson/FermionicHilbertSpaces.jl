@@ -167,7 +167,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}, phase_factors::Bool=
     # Properties from J. Phys. A: Math. Theor. 54 (2021) 393001
     # Eq. 16
     using Random, Base.Iterators, LinearAlgebra
-    import FermionicHilbertSpaces: embedding, tensor_product, embedding_unitary, canonical_embedding
+    import FermionicHilbertSpaces: embedding, tensor_product, embedding_unitary, canonical_embedding, project_on_parity, project_on_parities
 
     Random.seed!(1)
     N = 7
@@ -212,7 +212,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}, phase_factors::Bool=
     modebases = [hilbert_space(j:j) for j in 1:N]
     lhs = prod(j -> embedding(As_modes[j], modebases[j], H), 1:N)
     rhs_ordered_prod(X, basis) = mapreduce(j -> embedding(As_modes[j], modebases[j], basis), *, X)
-    rhs = fermionic_kron([rhs_ordered_prod(X, b) for (X, b) in zip(ξ, ξbases)], ξbases, H)
+    rhs = fermionic_kron([rhs_ordered_prod(X, H) for (X, H) in zip(ξ, ξbases)], ξbases, H)
     @test lhs ≈ rhs
 
     # Associativity (Eq. 21)
@@ -483,7 +483,7 @@ function phase_map(fockstates, M::Int)
     PhaseMap(phases, fockstates)
 end
 phase_map(N::Int) = phase_map(map(FockNumber, 0:2^N-1), N)
-phase_map(b::AbstractFockHilbertSpace) = phase_map(collect(focknumbers(b)), length(b.jw))
+phase_map(H::AbstractFockHilbertSpace) = phase_map(collect(focknumbers(H)), length(H.jw))
 LazyPhaseMap(N::Int) = LazyPhaseMap{N}(map(FockNumber, 0:2^N-1))
 SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest...) = SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(rest...)
 (p::PhaseMap)(op::AbstractMatrix) = p.phases .* op
@@ -576,10 +576,10 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::
     return mout
 end
 
-function project_on_parities(op::AbstractMatrix, b, bs, parities)
-    length(bs) == length(parities) || throw(ArgumentError("The number of parities must match the number of subsystems"))
-    for (bsub, parity) in zip(bs, parities)
-        op = project_on_subparity(op, b, bsub, parity)
+function project_on_parities(op::AbstractMatrix, H, Hs, parities)
+    length(Hs) == length(parities) || throw(ArgumentError("The number of parities must match the number of subsystems"))
+    for (bsub, parity) in zip(Hs, parities)
+        op = project_on_subparity(op, H, bsub, parity)
     end
     return op
 end
@@ -604,17 +604,18 @@ function project_on_parity(op::AbstractMatrix, P::AbstractMatrix, parity)
 end
 
 @testitem "Parity projection" begin
-    bs = [SimpleFockHilbertSpace(2k-1:2k) for k in 1:3]
-    b = tensor_product(bs)
-    op = rand(ComplexF64, size(b))
+    import FermionicHilbertSpaces: project_on_parity, project_on_parities
+    Hs = [hilbert_space(2k-1:2k) for k in 1:3]
+    H = tensor_product(Hs)
+    op = rand(ComplexF64, size(H))
     local_parity_iter = (1, -1)
-    all_parities = Base.product([local_parity_iter for _ in 1:length(bs)]...)
-    @test sum(project_on_parities(op, b, bs, parities) for parities in all_parities) ≈ op
+    all_parities = Base.product([local_parity_iter for _ in 1:length(Hs)]...)
+    @test sum(project_on_parities(op, H, Hs, parities) for parities in all_parities) ≈ op
 
-    ops = [rand(ComplexF64, size(b)) for b in bs]
+    ops = [rand(ComplexF64, size(H)) for H in Hs]
     for parities in all_parities
-        projected_ops = [project_on_parity(op, bsub, parity) for (op, bsub, parity) in zip(ops, bs, parities)]
-        local op = tensor_product(projected_ops, bs, b)
-        @test op ≈ project_on_parities(op, b, bs, parities)
+        projected_ops = [project_on_parity(op, Hsub, parity) for (op, Hsub, parity) in zip(ops, Hs, parities)]
+        local op = tensor_product(projected_ops, Hs, H)
+        @test op ≈ project_on_parities(op, H, Hs, parities)
     end
 end

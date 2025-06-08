@@ -16,15 +16,27 @@ export parityoperator, numberoperator, fermions, majoranas, matrix_representatio
 export partial_trace, fermionic_kron, tensor_product, embedding, extension
 export @fermions, @majoranas
 export FermionConservation, NoSymmetry, ParityConservation, IndexConservation
-export project_on_parity, project_on_parities
 
 ## Symbolics extension
+"""
+    fermion_to_majorana(expr)
+Convert symbolic fermions to symbolic majoranas.
+"""
 function fermion_to_majorana end
+"""
+    majorana_to_fermion(expr)
+Convert symbolic majoranas to symbolic fermions.
+"""
 function majorana_to_fermion end
 
-
+## Some types
 abstract type AbstractHilbertSpace end
 abstract type AbstractFockHilbertSpace <: AbstractHilbertSpace end
+
+"""
+    HC
+Represents the Hermitian conjugate.
+"""
 struct HC end
 Base.:+(m, ::HC) = (m + m')
 Base.:-(m, ::HC) = (m - m')

@@ -29,6 +29,10 @@ embedding_unitary(partition, H::AbstractFockHilbertSpace) = embedding_unitary(pa
 bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_embedding_unitary(X, Xbar, focknumbers(H), H.jw)
 
 
+"""
+    SimpleFockHilbertSpace
+A type representing a simple Fock Hilbert space with all fock states included.
+"""
 struct SimpleFockHilbertSpace{L} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
     function SimpleFockHilbertSpace(labels)
@@ -37,6 +41,10 @@ struct SimpleFockHilbertSpace{L} <: AbstractFockHilbertSpace
     end
 end
 Base.keys(H::SimpleFockHilbertSpace) = keys(H.jw)
+"""
+    focknumbers(H)
+Return an iterator over all Fock states for the given Hilbert space `H`.
+"""
 focknumbers(H::SimpleFockHilbertSpace) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
 indtofock(ind, ::SimpleFockHilbertSpace) = FockNumber(ind - 1)
 focktoind(focknbr::FockNumber, ::SimpleFockHilbertSpace) = focknbr.f + 1
@@ -50,6 +58,10 @@ function Base.:(==)(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace)
     return true
 end
 
+"""
+    FockHilbertSpace
+A type representing a Fock Hilbert space with a given set of modes and Fock states.
+"""
 struct FockHilbertSpace{L,F,I} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
     focknumbers::F
@@ -81,6 +93,10 @@ function Base.:(==)(H1::FockHilbertSpace, H2::FockHilbertSpace)
 end
 
 
+"""
+    SymmetricFockHilbertSpace
+A type representing a Fock Hilbert space with fockstates organized by their quantum number.
+"""
 struct SymmetricFockHilbertSpace{L,S} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
     symmetry::S
@@ -121,6 +137,10 @@ function Base.:(==)(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace
     return true
 end
 
+"""
+    hilbert_space(labels[, symmetry, focknumbers])
+Construct a Hilbert space from a set of labels, with optional symmetry and Fock number specification.
+"""
 hilbert_space(labels) = SimpleFockHilbertSpace(labels)
 hilbert_space(labels, focknumbers) = FockHilbertSpace(labels, focknumbers)
 hilbert_space(labels, ::NoSymmetry) = SimpleFockHilbertSpace(labels)
@@ -176,7 +196,10 @@ hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, 
     @test !isorderedpartition(Hs4, H)
 end
 
+"""subspace(modes, H::AbstractHilbertSpace)
 
+Return a subspace of the Hilbert space `H` that is spanned by the modes in `modes`. Only substates in `H` are included.
+"""
 function subspace(modes, H::SimpleFockHilbertSpace)
     if !isorderedsubsystem(modes, H.jw)
         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))

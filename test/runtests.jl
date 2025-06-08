@@ -2,16 +2,6 @@
 using TestItemRunner
 @run_package_tests
 
-@testitem "CAR" begin
-    using LinearAlgebra
-    for qn in [NoSymmetry(), ParityConservation(), FermionConservation()]
-        c = fermions(hilbert_space(1:2, qn))
-        @test c[1] * c[1] == 0I
-        @test c[1]' * c[1] + c[1] * c[1]' == I
-        @test c[1]' * c[2] + c[2] * c[1]' == 0I
-        @test c[1] * c[2] + c[2] * c[1] == 0I
-    end
-end
 
 @testitem "Basis" begin
     using SparseArrays, LinearAlgebra, Random

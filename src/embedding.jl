@@ -116,6 +116,11 @@ end
 const PairWithHilbertSpaces = Pair{<:AbstractFockHilbertSpace,<:AbstractFockHilbertSpace}
 embedding(Hs::PairWithHilbertSpaces, phase_factors::Bool=true) = m -> embedding(m, first(Hs), last(Hs), phase_factors)
 embedding(m, Hs::PairWithHilbertSpaces, phase_factors::Bool=true) = embedding(m, first(Hs), last(Hs), phase_factors)
+
+"""
+    extension(m, H, Hbar[, phase_factors])
+Extend an operator or state `m` from Hilbert space `H` into a disjoint space `Hbar`.
+"""
 function extension(m, H::AbstractFockHilbertSpace, Hbar, phase_factors::Bool=true)
     isdisjoint(keys(H), keys(Hbar)) || throw(ArgumentError("The bases of the two Hilbert spaces must be disjoint"))
     Hs = (H, Hbar)

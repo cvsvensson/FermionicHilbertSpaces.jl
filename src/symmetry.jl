@@ -1,4 +1,9 @@
 abstract type AbstractSymmetry end
+
+"""
+    NoSymmetry
+A symmetry type indicating no symmetry constraints.
+"""
 struct NoSymmetry <: AbstractSymmetry end
 
 """
@@ -87,7 +92,13 @@ function fockstates(M, n)
     states
 end
 
-struct FermionConservation <: AbstractSymmetry end
+"""
+    FermionConservation
+A symmetry type representing conservation of total fermion number.
+"""
+struct FermionConservation <: AbstractSymmetry
+end
+
 struct FermionSubsetConservation{M} <: AbstractSymmetry
     mask::M
 end
@@ -128,6 +139,10 @@ Base.:*(sym1::AbstractSymmetry, sym2::ProductSymmetry) = ProductSymmetry((sym1, 
 Base.:*(sym1::ProductSymmetry, sym2::AbstractSymmetry) = ProductSymmetry((sym1.symmetries..., sym2))
 Base.:*(sym1::ProductSymmetry, sym2::ProductSymmetry) = ProductSymmetry((sym1.symmetries..., sym2.symmetries...))
 
+"""
+    ParityConservation
+A symmetry type representing conservation of fermion parity.
+"""
 struct ParityConservation <: AbstractSymmetry end
 (qn::ParityConservation)(fs) = parity(fs)
 instantiate(qn::ParityConservation, labels) = qn
@@ -141,6 +156,9 @@ instantiate(qn::ParityConservation, labels) = qn
     @test all(hilbert_space(labels, qn).symmetry.qntoblocksizes .== 1)
 end
 
+"""
+    IndexConservation
+A symmetry type representing conservation of the numbers of modes which contains a specific index or set of indices."""
 struct IndexConservation{L} <: AbstractSymmetry
     labels::L
 end

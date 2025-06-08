@@ -19,11 +19,12 @@ spatial_labels = 1:N
 internal_labels = (:↑,:↓)
 labels = Base.product(spatial_labels, internal_labels) 
 H = hilbert_space(labels) 
+#= 16⨯16 SimpleFockHilbertSpace:
+modes: [(1, :↑), (2, :↑), (1, :↓), (2, :↓)]=#
 c = fermions(H) #fermionic annihilation operators
-
 ```
 
-Indexing into `c` returns sparse representations of the fermionic operators, so that one can write down Hamiltonians in a natural way
+Indexing into `c` returns sparse representations of the fermionic operators, so that one can write down Hamiltonians in a natural way:
 ```julia
 H_hopping = c[1,:↑]'c[2,:↑] + c[1,:↓]'c[2,:↓] + hc 
 H_coulomb = sum(c[n,:↑]'c[n,:↑]c[n,:↓]'c[n,:↓] for n in spatial_labels)
@@ -37,7 +38,7 @@ H = H_hopping + H_coulomb
 
 ## Tensor product and Partial trace
 ```julia
-using LinearAlgebra
+using FermionicHilbertSpaces, LinearAlgebra
 H1 = hilbert_space([1, 2])
 H2 = hilbert_space([3, 4])
 H = tensor_product(H1, H2)
