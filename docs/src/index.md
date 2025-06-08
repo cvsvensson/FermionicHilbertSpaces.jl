@@ -21,7 +21,7 @@ Pkg.add("FermionicHilbertSpaces")
 The following example demonstrates how to define a fermionic Hilbert space, create fermionic operators, and construct a simple Hamiltonian:
 
 ```@example intro
-using FermionicHilbertSpaces
+using FermionicHilbertSpaces, LinearAlgebra
 N = 2 # number of fermions
 spatial_labels = 1:N 
 internal_labels = (:↑,:↓)
@@ -38,7 +38,7 @@ c = fermions(H) # fermionic annihilation operators
 ```@example intro
 H_hopping = c[1,:↑]'c[2,:↑] + c[1,:↓]'c[2,:↓] + hc 
 H_coulomb = sum(c[n,:↑]'c[n,:↑]c[n,:↓]'c[n,:↓] for n in spatial_labels)
-H_total
+H_hopping + H_coulomb
 ```
 
 ### Defining a symbolic hamiltonian
