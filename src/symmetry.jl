@@ -12,23 +12,19 @@ struct NoSymmetry <: AbstractSymmetry end
 FockSymmetry represents a symmetry that is diagonal in fock space, i.e. particle number conservation, parity, spin consvervation.
 
 ## Fields
-- `indtofockdict::IF`: A dictionary mapping indices to Fock states.
+- `focknumbers::IF`: A vector of Fock numbers, which are integers representing the occupation of each mode.
 - `focktoinddict::FI`: A dictionary mapping Fock states to indices.
-- `qntoblocksizes::Dictionary{QN,Int}`: A dictionary mapping quantum numbers to block sizes.
 - `qntofockstates::Dictionary{QN,Vector{Int}}`: A dictionary mapping quantum numbers to Fock states.
-- `qntoinds::Dictionary{QN,Vector{Int}}`: A dictionary mapping quantum numbers to indices.
 - `conserved_quantity::QNfunc`: A function that computes the conserved quantity from a fock number.
 """
 struct FockSymmetry{IF,FI,QN,QNfunc} <: AbstractSymmetry
-    indtofockdict::IF
+    focknumbers::IF
     focktoinddict::FI
-    qntoblocksizes::Dictionary{QN,Int}
     qntofockstates::Dictionary{QN,Vector{FockNumber}}
-    qntoinds::Dictionary{QN,Vector{Int}}
     conserved_quantity::QNfunc
 end
 
-Base.:(==)(sym1::FockSymmetry, sym2::FockSymmetry) = sym1.indtofockdict == sym2.indtofockdict && sym1.focktoinddict == sym2.focktoinddict && sym1.qntoblocksizes == sym2.qntoblocksizes && sym1.qntofockstates == sym2.qntofockstates && sym1.qntoinds == sym2.qntoinds #&& sym1.conserved_quantity == sym2.conserved_quantity
+Base.:(==)(sym1::FockSymmetry, sym2::FockSymmetry) = sym1.focknumbers == sym2.focknumbers && sym1.focktoinddict == sym2.focktoinddict && sym1.qntofockstates == sym2.qntofockstates
 
 
 """
@@ -41,24 +37,16 @@ Constructs a `FockSymmetry` object that represents the symmetry of a many-body s
 - `qn`: A function that takes an integer representing a fock state and returns corresponding quantum number.
 """
 function focksymmetry(focknumbers, qn)
-    oldinds = eachindex(focknumbers)
-    qntooldinds = group(ind -> qn(focknumbers[ind]), oldinds)
-    sortkeys!(qntooldinds)
-    oldindfromnew = vcat(qntooldinds...)
-    blocksizes = map(length, qntooldinds)
-    newindfromold = map(first, sort!(collect(enumerate(oldindfromnew)), by=last))
-    indtofockdict = map(i -> focknumbers[i], oldindfromnew)
-    indtofock(ind) = indtofockdict[ind]
-    focktoinddict = Dictionary(focknumbers, newindfromold)
-    qntoinds = map(oldinds -> map(oldind -> newindfromold[oldind], oldinds), qntooldinds)
-    qntofockstates = map(oldinds -> focknumbers[oldinds], qntooldinds)
-    FockSymmetry(indtofockdict, focktoinddict, blocksizes, qntofockstates, qntoinds, qn)
+    qntofockstates = group(f -> qn(f), focknumbers)
+    ordered_fockstates = vcat(qntofockstates...)
+    focktoinddict = Dictionary(ordered_fockstates, 1:length(ordered_fockstates))
+    FockSymmetry(ordered_fockstates, focktoinddict, qntofockstates, qn)
 end
 focksymmetry(::AbstractVector, ::NoSymmetry) = NoSymmetry()
 instantiate(::NoSymmetry, labels) = NoSymmetry()
-indtofock(ind, sym::FockSymmetry) = FockNumber(sym.indtofockdict[ind])
+indtofock(ind, sym::FockSymmetry) = FockNumber(sym.focknumbers[ind])
 focktoind(f, sym::FockSymmetry) = sym.focktoinddict[f]
-focknumbers(sym::FockSymmetry) = sym.indtofockdict
+focknumbers(sym::FockSymmetry) = sym.focknumbers
 
 focktoind(fs::FockNumber, ::NoSymmetry) = fs.f + 1
 indtofock(ind, ::NoSymmetry) = FockNumber(ind - 1)
@@ -143,7 +131,7 @@ instantiate(qn::FermionConservation, ::JordanWignerOrdering) = qn
 
     conservedlabels = 2:2
     c1 = hilbert_space(labels, FermionSubsetConservation(conservedlabels))
-    @test all(c1.symmetry.qntoblocksizes .== 2^(length(labels) - length(conservedlabels)))
+    @test all(length.(c1.symmetry.qntofockstates) .== 2^(length(labels) - length(conservedlabels)))
 end
 
 struct ProductSymmetry{T} <: AbstractSymmetry
@@ -239,12 +227,13 @@ function instantiate_and_get_focknumbers(jw, _qn)
     fs = focknumbers(jw, qn)
     return qn, fs
 end
-focknumbers(jw::JordanWignerOrdering, ::NoSymmetry) = Iterators.map(FockNumber, 0:2^length(jw)-1)
+focknumbers(jw::JordanWignerOrdering, ::NoSymmetry) = map(FockNumber, 0:2^length(jw)-1)
 function focknumbers(jw::JordanWignerOrdering, qn::ParityConservation)
     s = sectors(qn)
-    ismissing(s) && return focknumbers(jw, NoSymmetry())
+    fs = focknumbers(jw, NoSymmetry())
+    ismissing(s) && return fs
     filt = in(s) ∘ parity
-    Iterators.filter(filt, focknumbers(jw, NoSymmetry()))
+    filter!(filt, fs)
 end
 function focknumbers(jw::JordanWignerOrdering, qn::FermionConservation)
     s = sectors(qn)
@@ -255,12 +244,13 @@ end
 function focknumbers(jw::JordanWignerOrdering, qn::FermionSubsetConservation)
     s = sectors(qn)
     mask = qn.mask
-    ismissing(s) && return focknumbers(jw, NoSymmetry())
+    fs = focknumbers(jw, NoSymmetry())
+    ismissing(s) && return fs
     filt = in(s) ∘ fermionnumber ∘ (f -> f & mask)
-    Iterators.filter(filt, focknumbers(jw, NoSymmetry()))
+    filter!(filt, fs)
 end
 function focknumbers(jw::JordanWignerOrdering, sym::ProductSymmetry)
-    Iterators.filter(f -> allowed_qn(sym(f), sym), focknumbers(jw, NoSymmetry()))
+    filter!(f -> allowed_qn(sym(f), sym), focknumbers(jw, NoSymmetry()))
 end
 
 @testitem "Symmetry focknumbers" begin
