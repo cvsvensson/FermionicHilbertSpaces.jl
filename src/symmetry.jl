@@ -171,7 +171,7 @@ sectors(qn::ParityConservation) = qn.sectors
     H = hilbert_space(labels, qn)
     @test keys(H.symmetry.qntoinds).values == [(n, (-1)^n) for n in 0:4]
     qn = prod(FermionSubsetConservation([l], H.jw) for l in labels)
-    @test all(hilbert_space(labels, qn).symmetry.qntoblocksizes .== 1)
+    @test all(length.(hilbert_space(labels, qn).symmetry.qntofockstates) .== 1)
 end
 
 """
@@ -199,7 +199,7 @@ IndexConservation(index, jw::JordanWignerOrdering, sectors) = FermionSubsetConse
     all_labels = Base.product(spatial_labels, spin_labels)
     qn = IndexConservation(:↑) * IndexConservation(:↓)
     H = hilbert_space(all_labels, qn)
-    @test all(H.symmetry.qntoblocksizes .== 1)
+    @test all(length.(H.symmetry.qntofockstates) .== 1)
 end
 
 instantiate(f::F, labels) where {F} = f
