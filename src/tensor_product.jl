@@ -52,7 +52,7 @@ end
 
 @testitem "Embedding unitary" begin
     # Appendix C.4
-    import FermionicHilbertSpaces: embedding_unitary, canonical_embedding, bipartite_embedding_unitary
+    import FermionicHilbertSpaces: embedding_unitary, canonical_embedding, bipartite_embedding_unitary, bits
     using LinearAlgebra
     jw = JordanWignerOrdering(1:2)
     fockstates = sort(map(FockNumber, 0:3), by=Base.Fix2(bits, 2))
