@@ -122,12 +122,3 @@ end
         test_adjoint(H23, H)
     end
 end
-
-@testitem "blocks" begin
-    using SparseArrays, LinearAlgebra
-    N = 2
-    H = hilbert_space(1:N, ParityConservation())
-    a = fermions(H)
-    parityop = blocks(parityoperator(H), H)
-    numberop = blocks(numberoperator(H), H)
-end

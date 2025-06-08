@@ -18,6 +18,6 @@ using KrylovKit
 vals, vecs = eigsolve(v -> ham * v, rand(size(ham, 1)), 1)
 
 ## Partial trace to half the system
-Hsub = FermionicHilbertSpaces.subspace(1:div(10, 2), H)
+Hsub = FermionicHilbertSpaces.subspace(1:div(N, 2), H)
 subrho = partial_trace(vecs[1] * vecs[1]', H => Hsub)
 sum(v -> -v * log(abs(v)), eigvals(subrho))
