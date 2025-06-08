@@ -145,7 +145,6 @@ hilbert_space(labels) = SimpleFockHilbertSpace(labels)
 hilbert_space(labels, focknumbers) = FockHilbertSpace(labels, focknumbers)
 hilbert_space(labels, ::NoSymmetry) = SimpleFockHilbertSpace(labels)
 hilbert_space(labels, ::NoSymmetry, focknumbers) = FockHilbertSpace(labels, focknumbers)
-hilbert_space(labels, qn::AbstractSymmetry, focknumbers) = SymmetricFockHilbertSpace(labels, qn, focknumbers)
 hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, qn)
 
 #= Tests for isorderedsubsystem, issubsystem, and consistent_ordering for Hilbert spaces =#

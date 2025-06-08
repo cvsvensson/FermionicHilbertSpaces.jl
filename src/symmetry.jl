@@ -255,7 +255,7 @@ function focknumbers(jw::JordanWignerOrdering, sym::ProductSymmetry)
 end
 
 @testitem "Symmetry focknumbers" begin
-    import FermionicHilbertSpaces: instantiate_and_get_focknumbers, fermionnumber
+    import FermionicHilbertSpaces: instantiate_and_get_focknumbers, fermionnumber, FermionSubsetConservation
     H = hilbert_space(1:5)
     @test length(collect(focknumbers(H.jw, ParityConservation()))) == 2^5
     @test length(collect(focknumbers(H.jw, ParityConservation(1)))) == 2^4
