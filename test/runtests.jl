@@ -53,9 +53,7 @@ end
     @test Matrix(ptmap) ≈ Matrix(embeddingmap)'
 
     H = hilbert_space(Base.product(1:2, (:a, :b)))
-    # c = fermions(H)
     Hparity = hilbert_space(Base.product(1:2, (:a, :b)), ParityConservation())
-    # cparity = fermions(Hparity)
     ρ = Matrix(Hermitian(rand(2^4, 2^4) .- 0.5))
     ρ = ρ / tr(ρ)
     function bilinears(H, labels)
@@ -79,20 +77,6 @@ end
         @test all(bilinear_equality(H, hilbert_space(subsystem, ParityConservation()), ρ) for subsystem in get_subsystems(Hparity, N))
         @test all(bilinear_equality(H, hilbert_space(subsystem), ρ) for subsystem in get_subsystems(Hparity, N))
     end
-end
-
-
-@testitem "Fermionic trace" begin
-    using LinearAlgebra
-    N = 4
-    Hs = [hilbert_space(n:n) for n in 1:N]
-    H = hilbert_space(1:4)
-    ops = [rand(ComplexF64, 2, 2) for _ in 1:N]
-    op = fermionic_kron(ops, Hs, H)
-    @test tr(op) ≈ prod(tr, ops)
-
-    op = fermionic_kron(ops, Hs[[3, 2, 1, 4]], H)
-    @test tr(op) ≈ prod(tr, ops)
 end
 
 

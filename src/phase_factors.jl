@@ -134,7 +134,7 @@ end
 
 @testitem "Phase factor h" begin
     # Appendix B.1
-    import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, siteindices
+    import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, siteindices, bits
     N = 2
     jw = JordanWignerOrdering(1:N)
     fockstates = sort(map(FockNumber, 0:2^N-1), by=Base.Fix2(bits, N))
@@ -215,7 +215,7 @@ end
 
 @testitem "Phase factor l" begin
     # Appendix B.6
-    import FermionicHilbertSpaces: phase_factor_l
+    import FermionicHilbertSpaces: phase_factor_l, bits
     N = 2
     jw = JordanWignerOrdering(1:N)
     fockstates = sort(map(FockNumber, 0:2^N-1), by=Base.Fix2(bits, N))
