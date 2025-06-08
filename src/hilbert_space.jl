@@ -196,7 +196,8 @@ hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, 
     @test !isorderedpartition(Hs4, H)
 end
 
-"""subspace(modes, H::AbstractHilbertSpace)
+"""
+    subspace(modes, H::AbstractHilbertSpace)
 
 Return a subspace of the Hilbert space `H` that is spanned by the modes in `modes`. Only substates in `H` are included.
 """
@@ -239,4 +240,29 @@ function subspace(modes, H::SymmetricFockHilbertSpace)
     end
     sort!(unique!(subfocks), by=f -> f.f)
     FockHilbertSpace(modes, subfocks)
+end
+
+@testitem "subspace function" begin
+    using FermionicHilbertSpaces
+    # SimpleFockHilbertSpace
+    H = hilbert_space([1, 2, 3])
+    Hsub = subspace([1, 2], H)
+    @test Hsub isa SimpleFockHilbertSpace
+    @test keys(Hsub) == [1, 2]
+    # FockHilbertSpace
+    focks = [FockNumber(1), FockNumber(3)]
+    HF = FockHilbertSpace([1, 2], focks)
+    HFsub = subspace([1], HF)
+    @test HFsub isa FockHilbertSpace
+    @test keys(HFsub) == [1]
+    focknumbers(HFsub) == [FockNumber(1)]
+    # SymmetricFockHilbertSpace
+    qn = ParityConservation()
+    HS = hilbert_space([1, 2], qn, [FockNumber(1), FockNumber(3)])
+    HSsub = subspace([1], HS)
+    @test HSsub isa FockHilbertSpace
+    @test keys(HSsub) == [1]
+    focknumbers(HSsub) == [FockNumber(1)]
+    # Error on non-subsystem
+    @test_throws ArgumentError subspace([4], H)
 end
