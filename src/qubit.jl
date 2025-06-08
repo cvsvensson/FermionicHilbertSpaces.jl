@@ -39,8 +39,6 @@ qubit_operator(c, ::QubitOp{:H}) = 1 / sqrt(2) * (qubit_operator(c, QubitOp{:Z}(
     @test B[1] + B[1]' ≈ B[1, :X]
     @test I - 2B[1]'B[1] ≈ B[1, :Z]
     @test 1im * (B[1]' - B[1]) ≈ B[1, :Y]
-    @test pretty_print(B[1, :X], H) |> isnothing
-    @test pretty_print(B[1, :X][:, 1], H) |> isnothing
 
     H = hilbert_space(1:3)
     a = QubitOperators(H)

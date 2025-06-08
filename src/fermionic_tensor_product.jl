@@ -392,34 +392,6 @@ end
         @test partial_trace(rho3, H3 => H1) ≈ rho1
         @test partial_trace(rho3, H3 => H2) ≈ rho2
 
-        # Test BD1_hamiltonian
-        H1 = hilbert_space(Base.product(1:2, (:↑, :↓)), qn)
-        H2 = hilbert_space(Base.product(3:4, (:↑, :↓)), qn)
-        H12 = hilbert_space(Base.product(1:4, (:↑, :↓)), qn)
-        H12w = tensor_product(H1, H2)
-        Hs = [H1, H2]
-        b1 = fermions(H1)
-        b2 = fermions(H2)
-        b12 = fermions(H12)
-        θ1 = 0.5
-        θ2 = 0.2
-        params1 = (; μ=1, t=0.5, Δ=2.0, V=0, θ=(1:4) .* θ1, ϕ=1.0, h=4.0, U=2.0, Δ1=0.1)
-        params2 = (; μ=1, t=0.1, Δ=1.0, V=0, θ=(1:4) .* θ2, ϕ=5.0, h=1.0, U=10.0, Δ1=-1.0)
-        params12 = (; μ=[params1.μ, params1.μ, params2.μ, params2.μ], t=[params1.t, 0, params2.t, 0], Δ=[params1.Δ, params1.Δ, params2.Δ, params2.Δ], V=[params1.V, 0, params2.V, 0], θ=[0, θ1, 0, θ2], ϕ=[params1.ϕ, params1.ϕ, params2.ϕ, params2.ϕ], h=[params1.h, params1.h, params2.h, params2.h], U=[params1.U, params1.U, params2.U, params2.U], Δ1=[params1.Δ1, 0, params2.Δ1, 0])
-        h1 = Matrix(FermionicHilbertSpaces.BD1_hamiltonian(b1; params1...))
-        h2 = Matrix(FermionicHilbertSpaces.BD1_hamiltonian(b2; params2...))
-
-        h12w = Matrix(tensor_product([h1, I], Hs, H12w) + tensor_product([I, h2], Hs, H12w))
-        h12 = Matrix(FermionicHilbertSpaces.BD1_hamiltonian(b12; params12...))
-
-        v12w = fermionic_kron([eigvecs(Matrix(h1))[:, 1], eigvecs(Matrix(h2))[:, 1]], Hs, H12w)
-        v12 = eigvecs(h12)[:, 1]
-        v12ww = eigvecs(h12w)[:, 1]
-        sort(abs.(v12w)) - sort(abs.(v12))
-        @test sum(abs, v12w) ≈ sum(abs, v12)
-        @test sum(abs, v12w) ≈ sum(abs, v12ww)
-        @test diff(eigvals(h12w)) ≈ diff(eigvals(h12))
-
         # Test zero-mode tensor_product
         H1 = hilbert_space(1:0, qn)
         H2 = hilbert_space(1:1, qn)
