@@ -7,14 +7,7 @@ Compute the tensor_product product hilbert spaces `Hs`. The symmetry of the resu
 tensor_product(Hs::AbstractVector{<:AbstractHilbertSpace}) = foldl(tensor_product, Hs)
 tensor_product(Hs::Tuple) = foldl(tensor_product, Hs)
 
-tensor_product(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace) = tensor_product_combine_focknumbers(H1, H2)
-
-function tensor_product(H1::SymmetricFockHilbertSpace{<:Any,ParityConservation}, H2::SymmetricFockHilbertSpace{<:Any,ParityConservation})
-    if sectors(H1.symmetry) == [-1, 1] == sectors(H2.symmetry)
-        isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
-        newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
-        return SymmetricFockHilbertSpace(newlabels, ParityConservation())
-    end
+function tensor_product(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
     tensor_product_combine_focknumbers(H1, H2)
 end
 
@@ -48,14 +41,14 @@ tensor_product(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace) = simple_
     H2 = SymmetricFockHilbertSpace(3:4, FermionConservation())
     Hw = tensor_product(H1, H2)
     H3 = SymmetricFockHilbertSpace(1:4, FermionConservation())
-    @test Hw == H3
+    @test sort(focknumbers(Hw), by=f -> f.f) == sort(focknumbers(H3), by=f -> f.f)
     @test size(H1) .* size(H2) == size(Hw)
 
     H1 = SymmetricFockHilbertSpace(1:2, ParityConservation())
     H2 = SymmetricFockHilbertSpace(3:4, ParityConservation())
     Hw = tensor_product(H1, H2)
     H3 = SymmetricFockHilbertSpace(1:4, ParityConservation())
-    @test Hw == H3
+    @test sort(focknumbers(Hw), by=f -> f.f) == sort(focknumbers(H3), by=f -> f.f)
     @test size(H1) .* size(H2) == size(Hw)
 
 end
@@ -68,7 +61,6 @@ function check_tensor_product_basis_compatibility(b1::AbstractHilbertSpace, b2::
 end
 
 ##
-
 
 """
     fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))

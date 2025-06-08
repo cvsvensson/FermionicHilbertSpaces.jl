@@ -257,11 +257,11 @@ end
     focknumbers(HFsub) == [FockNumber(1)]
     # SymmetricFockHilbertSpace
     qn = ParityConservation()
-    HS = hilbert_space([1, 2], qn, [FockNumber(1), FockNumber(3)])
+    HS = hilbert_space([1, 2], qn)
     HSsub = subspace([1], HS)
     @test HSsub isa FockHilbertSpace
     @test keys(HSsub) == [1]
-    focknumbers(HSsub) == [FockNumber(1)]
+    focknumbers(HSsub) == [FockNumber(0), FockNumber(1)]
     # Error on non-subsystem
     @test_throws ArgumentError subspace([4], H)
 end
