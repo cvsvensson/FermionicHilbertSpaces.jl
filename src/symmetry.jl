@@ -183,6 +183,15 @@ A symmetry type representing conservation of the numbers of modes which contains
 struct IndexConservation{L} <: AbstractSymmetry
     labels::L
     sectors::Union{Vector{Int},Missing}
+    function IndexConservation(labels::L, sectors) where L
+        ismissing(sectors) && return new{L}(labels, missing)
+        allunique(labels) || throw(ArgumentError("IndexConservation labels must be unique."))
+        allunique(sectors) || throw(ArgumentError("IndexConservation sectors must be unique."))
+        allowed_qns = Set(0:length(labels))
+        all(in(allowed_qns), sectors) || throw(ArgumentError("IndexConservation can only have sectors 0 up to the number of particles."))
+        sectorvec = sort!(Int[sectors...])
+        new{L}(labels, sectorvec)
+    end
 end
 sectors(qn::IndexConservation) = qn.sectors
 IndexConservation(labels) = IndexConservation(labels, missing)

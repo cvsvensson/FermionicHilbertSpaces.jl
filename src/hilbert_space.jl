@@ -6,6 +6,7 @@ end
 Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 
 Base.size(H::AbstractFockHilbertSpace) = (length(focknumbers(H)), length(focknumbers(H)))
+Base.size(H::AbstractFockHilbertSpace, i) = i == 1 || i == 2 ? length(focknumbers(H)) : throw(BoundsError(H, (i,)))
 function isorderedpartition(Hs, H::AbstractHilbertSpace)
     partition = map(keys, Hs)
     isorderedpartition(partition, H.jw)
