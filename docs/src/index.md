@@ -63,9 +63,9 @@ c[1]*c[3] == c1c3
 partial_trace(tensor_product([c1[1], I/4], [H1, H2] => H), H => H1) == c1[1] 
 ```
 
-### Subspace
+### Subregion
 ```@example intro
-H1 == FermionicHilbertSpaces.subspace([1,2], H)
+H1 == subregion([1,2], H)
 ``` 
 
 ### Conserved quantum numbers

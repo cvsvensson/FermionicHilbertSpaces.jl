@@ -18,7 +18,7 @@ using KrylovKit
 vals, vecs = eigsolve(v -> ham * v, rand(size(ham, 1)), 1)
 
 ## Partial trace to half the system
-Hsub = subspace(1:div(N, 2), H)
+Hsub = subregion(1:div(N, 2), H)
 #vecs[1]*vecs[1]' runs out of memory for large N, so we use a rank-1 matrix
 struct Rank1Matrix{T} <: AbstractMatrix{T}
     vec::Vector{T}

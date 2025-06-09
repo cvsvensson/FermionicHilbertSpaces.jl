@@ -196,18 +196,18 @@ hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, 
 end
 
 """
-    subspace(modes, H::AbstractHilbertSpace)
+    subregion(modes, H::AbstractHilbertSpace)
 
-Return a subspace of the Hilbert space `H` that is spanned by the modes in `modes`. Only substates in `H` are included.
+Return a subregion of the Hilbert space `H` that is spanned by the modes in `modes`. Only substates in `H` are included.
 """
-function subspace(modes, H::SimpleFockHilbertSpace)
+function subregion(modes, H::SimpleFockHilbertSpace)
     if !isorderedsubsystem(modes, H.jw)
         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
     SimpleFockHilbertSpace(modes)
 end
 
-function subspace(modes, H::FockHilbertSpace)
+function subregion(modes, H::FockHilbertSpace)
     if !isorderedsubsystem(modes, H.jw)
         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
@@ -224,7 +224,7 @@ function subspace(modes, H::FockHilbertSpace)
     FockHilbertSpace(modes, subfocks)
 end
 
-function subspace(modes, H::SymmetricFockHilbertSpace)
+function subregion(modes, H::SymmetricFockHilbertSpace)
     if !isorderedsubsystem(modes, H.jw)
         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
@@ -241,29 +241,29 @@ function subspace(modes, H::SymmetricFockHilbertSpace)
     FockHilbertSpace(modes, subfocks)
 end
 
-@testitem "subspace function" begin
+@testitem "subregion function" begin
     using FermionicHilbertSpaces
     # SimpleFockHilbertSpace
     H = hilbert_space([1, 2, 3])
-    Hsub = subspace([1, 2], H)
+    Hsub = subregion([1, 2], H)
     @test Hsub isa SimpleFockHilbertSpace
     @test keys(Hsub) == [1, 2]
     # FockHilbertSpace
     focks = [FockNumber(1), FockNumber(3)]
     HF = FockHilbertSpace([1, 2], focks)
-    HFsub = subspace([1], HF)
+    HFsub = subregion([1], HF)
     @test HFsub isa FockHilbertSpace
     @test keys(HFsub) == [1]
     focknumbers(HFsub) == [FockNumber(1)]
     # SymmetricFockHilbertSpace
     qn = ParityConservation()
     HS = hilbert_space([1, 2], qn)
-    HSsub = subspace([1], HS)
+    HSsub = subregion([1], HS)
     @test HSsub isa FockHilbertSpace
     @test keys(HSsub) == [1]
     focknumbers(HSsub) == [FockNumber(0), FockNumber(1)]
     # Error on non-subsystem
-    @test_throws ArgumentError subspace([4], H)
+    @test_throws ArgumentError subregion([4], H)
 end
 
 
