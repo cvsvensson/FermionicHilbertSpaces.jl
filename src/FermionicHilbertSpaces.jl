@@ -10,7 +10,7 @@ using TermInterface
 
 
 export FockNumber, JordanWignerOrdering, hc, focknumbers
-export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subspace
+export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subregion
 export parityoperator, numberoperator, fermions, majoranas, matrix_representation
 
 export partial_trace, fermionic_kron, tensor_product, embedding, extension

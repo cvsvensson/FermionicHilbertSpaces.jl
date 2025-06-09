@@ -6,6 +6,7 @@ end
 Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 
 Base.size(H::AbstractFockHilbertSpace) = (length(focknumbers(H)), length(focknumbers(H)))
+Base.size(H::AbstractFockHilbertSpace, i) = i == 1 || i == 2 ? length(focknumbers(H)) : throw(BoundsError(H, (i,)))
 function isorderedpartition(Hs, H::AbstractHilbertSpace)
     partition = map(keys, Hs)
     isorderedpartition(partition, H.jw)
@@ -101,15 +102,15 @@ struct SymmetricFockHilbertSpace{L,S} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
     symmetry::S
 end
-function SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry, focknumbers=map(FockNumber, 0:2^length(labels)-1))
-    jw = JordanWignerOrdering(labels)
-    SymmetricFockHilbertSpace(jw, qn, focknumbers)
+function SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry)
+    SymmetricFockHilbertSpace(JordanWignerOrdering(labels), qn)
 end
-function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry, focknumbers=map(FockNumber, 0:2^length(labels)-1))
-    labelled_symmetry = instantiate(qn, jw)
+function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry)
+    labelled_symmetry, focknumbers = instantiate_and_get_focknumbers(jw, qn)
     sym_concrete = focksymmetry(focknumbers, labelled_symmetry)
     SymmetricFockHilbertSpace{eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
 end
+
 function Base.show(io::IO, H::SymmetricFockHilbertSpace)
     n, m = size(H)
     println(io, "$(n)⨯$m SymmetricFockHilbertSpace:")
@@ -145,7 +146,6 @@ hilbert_space(labels) = SimpleFockHilbertSpace(labels)
 hilbert_space(labels, focknumbers) = FockHilbertSpace(labels, focknumbers)
 hilbert_space(labels, ::NoSymmetry) = SimpleFockHilbertSpace(labels)
 hilbert_space(labels, ::NoSymmetry, focknumbers) = FockHilbertSpace(labels, focknumbers)
-hilbert_space(labels, qn::AbstractSymmetry, focknumbers) = SymmetricFockHilbertSpace(labels, qn, focknumbers)
 hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, qn)
 
 #= Tests for isorderedsubsystem, issubsystem, and consistent_ordering for Hilbert spaces =#
@@ -197,18 +197,18 @@ hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, 
 end
 
 """
-    subspace(modes, H::AbstractHilbertSpace)
+    subregion(modes, H::AbstractHilbertSpace)
 
-Return a subspace of the Hilbert space `H` that is spanned by the modes in `modes`. Only substates in `H` are included.
+Return a subregion of the Hilbert space `H` that is spanned by the modes in `modes`. Only substates in `H` are included.
 """
-function subspace(modes, H::SimpleFockHilbertSpace)
+function subregion(modes, H::SimpleFockHilbertSpace)
     if !isorderedsubsystem(modes, H.jw)
         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
     SimpleFockHilbertSpace(modes)
 end
 
-function subspace(modes, H::FockHilbertSpace)
+function subregion(modes, H::FockHilbertSpace)
     if !isorderedsubsystem(modes, H.jw)
         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
@@ -225,7 +225,7 @@ function subspace(modes, H::FockHilbertSpace)
     FockHilbertSpace(modes, subfocks)
 end
 
-function subspace(modes, H::SymmetricFockHilbertSpace)
+function subregion(modes, H::SymmetricFockHilbertSpace)
     if !isorderedsubsystem(modes, H.jw)
         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
@@ -242,27 +242,67 @@ function subspace(modes, H::SymmetricFockHilbertSpace)
     FockHilbertSpace(modes, subfocks)
 end
 
-@testitem "subspace function" begin
+@testitem "subregion function" begin
     using FermionicHilbertSpaces
     # SimpleFockHilbertSpace
     H = hilbert_space([1, 2, 3])
-    Hsub = subspace([1, 2], H)
+    Hsub = subregion([1, 2], H)
     @test Hsub isa SimpleFockHilbertSpace
     @test keys(Hsub) == [1, 2]
     # FockHilbertSpace
     focks = [FockNumber(1), FockNumber(3)]
     HF = FockHilbertSpace([1, 2], focks)
-    HFsub = subspace([1], HF)
+    HFsub = subregion([1], HF)
     @test HFsub isa FockHilbertSpace
     @test keys(HFsub) == [1]
     focknumbers(HFsub) == [FockNumber(1)]
     # SymmetricFockHilbertSpace
     qn = ParityConservation()
-    HS = hilbert_space([1, 2], qn, [FockNumber(1), FockNumber(3)])
-    HSsub = subspace([1], HS)
+    HS = hilbert_space([1, 2], qn)
+    HSsub = subregion([1], HS)
     @test HSsub isa FockHilbertSpace
     @test keys(HSsub) == [1]
-    focknumbers(HSsub) == [FockNumber(1)]
+    focknumbers(HSsub) == [FockNumber(0), FockNumber(1)]
     # Error on non-subsystem
-    @test_throws ArgumentError subspace([4], H)
+    @test_throws ArgumentError subregion([4], H)
+end
+
+
+
+function sector(m::AbstractMatrix, qn::Int, H::SymmetricFockHilbertSpace)
+    ls = length.(H.symmetry.qntofockstates)
+    startindex = 1
+    for (n, l) in pairs(ls)
+        if n == qn
+            return m[startindex:startindex+l-1, startindex:startindex+l-1]
+        end
+        startindex += l
+    end
+    throw(ArgumentError("Sector $qn not found in the matrix."))
+end
+
+@testitem "Hilbert space printing" begin
+    # Check that printing of Hilbert spaces doesn't error
+    using FermionicHilbertSpaces
+    io = IOBuffer()
+    # SimpleFockHilbertSpace
+    H_simple = hilbert_space(1:3)
+    @test begin
+        show(io, H_simple)
+        true
+    end
+    # FockHilbertSpace
+    focks = [FockNumber(0), FockNumber(1), FockNumber(2)]
+    H_fock = FockHilbertSpace(1:2, focks)
+    @test begin
+        show(io, H_fock)
+        true
+    end
+    # SymmetricFockHilbertSpace
+    qn = ParityConservation()
+    H_sym = hilbert_space(1:2, qn)
+    @test begin
+        show(io, H_sym)
+        true
+    end
 end
