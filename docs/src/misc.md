@@ -2,7 +2,7 @@
 CurrentModule = FermionicHilbertSpaces
 ```
 
-# FermionicHilbertSpaces
+# Misc
 
 ## No double occupation
 
@@ -32,3 +32,4 @@ This gives the same states but with a different ordering.
 ```@example intro
 sort(focknumbers(H2), by = f->f.f) == sort(focknumbers(H), by = f->f.f)
 ```
+
