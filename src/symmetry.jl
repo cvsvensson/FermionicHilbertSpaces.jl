@@ -17,10 +17,10 @@ FockSymmetry represents a symmetry that is diagonal in fock space, i.e. particle
 - `qntofockstates::Dictionary{QN,Vector{Int}}`: A dictionary mapping quantum numbers to Fock states.
 - `conserved_quantity::QNfunc`: A function that computes the conserved quantity from a fock number.
 """
-struct FockSymmetry{IF,FI,QN,QNfunc} <: AbstractSymmetry
+struct FockSymmetry{IF,FI,QN,I,QNfunc} <: AbstractSymmetry
     focknumbers::IF
     focktoinddict::FI
-    qntofockstates::Dictionary{QN,Vector{FockNumber}}
+    qntofockstates::Dictionary{QN,Vector{FockNumber{I}}}
     conserved_quantity::QNfunc
 end
 
@@ -58,21 +58,23 @@ function nextfockstate_with_same_number(v)
     t | (((div((t & -t), (v & -v))) >> 1) - 1)
 end
 """
-    fockstates(M, n)
+    fockstates_number_sector(M, n)
 
 Generate a list of Fock states with `n` occupied fermions in a system with `M` different fermions.
 """
-function fockstates(M, n)
-    v::Int = focknbr_from_bits(ntuple(i -> true, n)).f
-    maxv = v * 2^(M - n)
-    states = Vector{FockNumber}(undef, binomial(M, n))
+function fockstates_number_sector(M, n, ::Type{T}=(M > 63 ? BigInt : Int)) where T
+    iszero(n) && return map(FockNumber{T}, [0])
+    v = T(focknbr_from_bits([true for _ in 1:n]).f)
+    maxv = v << (M - n)
+    # states = Vector{FockNumber}(undef, binomial(M, n))
+    states = Vector{T}(undef, binomial(M, n))
     count = 1
     while v <= maxv
-        states[count] = FockNumber(v)
+        states[count] = v
         v = nextfockstate_with_same_number(v)
         count += 1
     end
-    states
+    map(FockNumber{T}, states)
 end
 
 """
@@ -223,7 +225,7 @@ function allowed_qn(qn, sym::AbstractSymmetry)
     in(qn, sectors(sym)) || return false
     return true
 end
-function instantiate_and_get_focknumbers(jw, _qn)
+function instantiate_and_get_focknumbers(jw::JordanWignerOrdering, _qn)
     qn = instantiate(_qn, jw)
     fs = focknumbers(jw, qn)
     return qn, fs
@@ -240,7 +242,7 @@ function focknumbers(jw::JordanWignerOrdering, qn::FermionConservation)
     s = sectors(qn)
     ismissing(s) && return focknumbers(jw, NoSymmetry())
     N = length(jw)
-    mapreduce(n -> fockstates(N, n), vcat, s)
+    mapreduce(n -> fockstates_number_sector(N, n), vcat, s)
 end
 function focknumbers(jw::JordanWignerOrdering, qn::FermionSubsetConservation)
     s = sectors(qn)
@@ -311,4 +313,18 @@ end
     @test sector2 == m_f[inds2, inds2]
     # Test that an invalid sector throws an error
     @test_throws ArgumentError sector(m_f, 99, Hf)
+end
+
+@testitem "fockstates handles large M without overflow or duplicates" begin
+    import FermionicHilbertSpaces: fockstates_number_sector
+    # For large M, fockstates should use BigInt and not overflow
+    M = 70
+    n = 3
+    states = fockstates_number_sector(M, n)
+    # All states should be unique
+    @test length(states) == length(unique(states))
+    # All states should be non-negative
+    @test all(f -> f.f >= 0, states)
+    # Check that the type is FockNumber{BigInt} for large M
+    @test all(f -> f isa FockNumber{BigInt}, states)
 end

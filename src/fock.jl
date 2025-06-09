@@ -2,8 +2,8 @@
     FockNumber
 A type representing a Fock state as the bitstring of an integer.
 """
-struct FockNumber
-    f::Int
+struct FockNumber{I<:Integer}
+    f::I
 end
 FockNumber(f::FockNumber) = f
 """
@@ -45,7 +45,7 @@ Base.iszero(f::FockNumber) = iszero(f.f)
 Base.:*(b::Bool, f::FockNumber) = FockNumber(b * f.f)
 Base.:~(f::FockNumber) = FockNumber(~f.f)
 
-focknbr_from_bits(bits) = mapreduce(nb -> FockNumber(nb[2] * (1 << (nb[1] - 1))), +, enumerate(bits))
+focknbr_from_bits(bits, ::Type{T}=(length(bits) > 63 ? BigInt : Int)) where T = FockNumber(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
 focknbr_from_site_index(site::Integer) = FockNumber(1 << (site - 1))
 focknbr_from_site_indices(sites) = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber(0))
 
@@ -147,7 +147,7 @@ end
         @test sign == 0
     end
 
-    fs = FermionicHilbertSpaces.fockstates(10, 5)
+    fs = FermionicHilbertSpaces.fockstates_number_sector(10, 5)
     @test length(fs) == binomial(10, 5)
     @test allunique(fs)
     @test all(FermionicHilbertSpaces.fermionnumber.(fs) .== 5)
