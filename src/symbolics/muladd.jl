@@ -72,7 +72,20 @@ Base.hash(a::FermionAdd, h::UInt) = hash(a.coeff, hash(a.dict, h))
 const SM = Union{AbstractFermionSym,FermionMul}
 const SMA = Union{AbstractFermionSym,FermionMul,FermionAdd}
 
+function show_compact_sum(io, x::FermionAdd, max_terms=3)
+    println(io, "Sum with ", length(x.dict), " terms: ")
+    N = min(max_terms, length(x.dict))
+    args = sum(sorted_arguments(x)[1:N])
+    show(io, args)
+    if N < length(x.dict)
+        print(io, " + ...")
+    end
+    return nothing
+end
 function Base.show(io::IO, x::FermionAdd)
+    if length(x.dict) > 3
+        return show_compact_sum(io, x)
+    end
     compact = get(io, :compact, false)
     args = sorted_arguments(x)
     print_one = !iszero(x.coeff)
@@ -109,6 +122,7 @@ function Base.show(io::IO, x::FermionAdd)
             print(io, "(", v, ")*", k)
         end
     end
+    return nothing
 end
 print_num(io::IO, x) = isreal(x) ? print(io, real(x)) : print(io, "(", x, ")")
 
