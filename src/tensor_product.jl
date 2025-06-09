@@ -380,12 +380,12 @@ end
 end
 
 
-struct PhaseMap
+struct PhaseMap{F}
     phases::Matrix{Int}
-    fockstates::Vector{FockNumber}
+    fockstates::Vector{F}
 end
-struct LazyPhaseMap{M} <: AbstractMatrix{Int}
-    fockstates::Vector{FockNumber}
+struct LazyPhaseMap{M,F} <: AbstractMatrix{Int}
+    fockstates::Vector{F}
 end
 Base.length(p::LazyPhaseMap) = length(p.fockstates)
 Base.ndims(::LazyPhaseMap) = 2

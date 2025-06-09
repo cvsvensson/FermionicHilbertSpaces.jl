@@ -215,7 +215,7 @@ function subregion(modes, H::FockHilbertSpace)
     # loop through all focknumbers in H and collect the fock states that are in the subsystem
     outinds = siteindices(modes, H.jw)
     outbits(f) = map(i -> _bit(f, i), outinds)
-    subfocks = FockNumber[]
+    subfocks = eltype(H.focknumbers)[]
     for f in focknumbers(H)
         subbits = outbits(f)
         subfock = focknbr_from_bits(subbits)
@@ -232,7 +232,7 @@ function subregion(modes, H::SymmetricFockHilbertSpace)
     # loop through all focknumbers in H and collect the fock states that are in the subsystem
     outinds = siteindices(modes, H.jw)
     outbits(f) = map(i -> _bit(f, i), outinds)
-    subfocks = FockNumber[]
+    subfocks = eltype(H.symmetry.focknumbers)[]
     for f in focknumbers(H)
         subbits = outbits(f)
         subfock = focknbr_from_bits(subbits)

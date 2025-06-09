@@ -66,7 +66,6 @@ function fockstates_number_sector(M, n, ::Type{T}=(M > 63 ? BigInt : Int)) where
     iszero(n) && return map(FockNumber{T}, [0])
     v = T(focknbr_from_bits([true for _ in 1:n]).f)
     maxv = v << (M - n)
-    # states = Vector{FockNumber}(undef, binomial(M, n))
     states = Vector{T}(undef, binomial(M, n))
     count = 1
     while v <= maxv
