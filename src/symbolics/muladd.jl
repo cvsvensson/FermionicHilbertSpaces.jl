@@ -24,11 +24,7 @@ function Base.show(io::IO, x::FermionMul)
         if isreal(v)
             neg = v < 0
             if neg isa Bool
-                if neg
-                    print(io, -real(v))
-                else
-                    print(io, real(v))
-                end
+                print(io, real(v))
             else
                 print(io, "(", v, ")")
             end
