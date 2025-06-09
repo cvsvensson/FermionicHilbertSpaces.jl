@@ -223,7 +223,7 @@ order_mul(x::Number) = x
 
 ## Instantiating sparse matrices
 _labels(a::FermionMul) = [s.label for s in a.factors]
-matrix_representation(op::Union{<:FermionAdd,<:FermionMul,<:FermionAdd,<:AbstractFermionSym}, H::AbstractFockHilbertSpace) = matrix_representation(op, H.jw, focknumbers(H), focknumbers(H))
+matrix_representation(op::Union{<:FermionAdd,<:FermionMul,<:AbstractFermionSym}, H::AbstractFockHilbertSpace) = matrix_representation(op, H.jw, focknumbers(H), focknumbers(H))
 function matrix_representation(op::Union{<:FermionMul,<:AbstractFermionSym}, labels, outstates, instates)
     outinds, ininds, amps = sparsetuple(op, labels, outstates, instates)
     sparse(outinds, ininds, identity.(amps), length(outstates), length(instates))
@@ -340,15 +340,15 @@ end
 
 
 ## Symmetries
-isnumberconserving(x::FermionSym) = false
+isnumberconserving(x::AbstractFermionSym) = false
 isnumberconserving(x::FermionMul) = iszero(sum(s -> 2s.creation - 1, x.factors))
 isnumberconserving(x::FermionAdd) = all(isnumberconserving, fermionterms(x))
 
-isparityconserving(x::FermionSym) = false
+isparityconserving(x::AbstractFermionSym) = false
 isparityconserving(x::FermionMul) = iseven(length(x.factors))
 isparityconserving(x::FermionAdd) = all(isparityconserving, fermionterms(x))
 
-isquadratic(::FermionSym) = false
+isquadratic(::AbstractFermionSym) = false
 isquadratic(x::FermionMul) = length(x.factors) == 2
 isquadratic(x::FermionAdd) = all(isquadratic, fermionterms(x))
 
