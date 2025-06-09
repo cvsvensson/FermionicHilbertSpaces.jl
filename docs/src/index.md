@@ -2,13 +2,11 @@
 CurrentModule = FermionicHilbertSpaces
 ```
 
+# FermionicHilbertSpaces.jl
 
-```@contents
-```
+[FermionicHilbertSpaces.jl](https://github.com/cvsvensson/FermionicHilbertSpaces.jl) is a Julia package for defining fermionic Hilbert spaces and operators. The central features are fermionic tensor products and partial traces, which differ from the standard tensor product since fermions anticommute. 
+[1](#fermion_information_article) 
 
-# FermionicHilbertSpaces
-
-Documentation for [FermionicHilbertSpaces](https://github.com/cvsvensson/FermionicHilbertSpaces.jl).
 
 # Installation 
 ```julia
@@ -67,21 +65,13 @@ c[1]*c[3] == c1c3
 partial_trace(tensor_product([c1[1], I/4], [H1, H2] => H), H => H1) == c1[1] 
 ```
 
-## Subregion
-```@example intro
-H1 == subregion([1,2], H)
-``` 
-
 ## Conserved quantum numbers
 ```@example intro
 H = hilbert_space([1,2], ParityConservation())
 ```
 
-# Functions
-```@index
+# References
+```@raw html
+<a name="fermion_information_article"></a>
 ```
-
-# Docstrings
-```@autodocs
-Modules = [FermionicHilbertSpaces]
-```
+[1] Szalay, Szilárd, et al. "Fermionic systems for quantum information people." [Journal of Physics A: Mathematical and Theoretical 54.39 (2021): 393001](https://doi.org/10.1088/1751-8121/ac0646), [arXiv:2006.03087](https://arxiv.org/abs/2006.03087)

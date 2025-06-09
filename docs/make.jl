@@ -15,6 +15,7 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "Misc" => "misc.md",
+        "Functions" => "docstrings.md",
     ],
 )
 
