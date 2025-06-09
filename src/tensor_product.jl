@@ -393,9 +393,9 @@ function Base.size(p::LazyPhaseMap, d::Int)
     d < 1 && error("arraysize: dimension out of range")
     d in (1, 2) ? length(p.fockstates) : 1
 end
-Base.size(p::LazyPhaseMap{M}) where {M} = (length(p.fockstates), length(p.fockstates))
-function Base.show(io::IO, p::LazyPhaseMap{M}) where {M}
-    print(io, "LazyPhaseMap{$M}(")
+Base.size(p::LazyPhaseMap)  = (length(p.fockstates), length(p.fockstates))
+function Base.show(io::IO, p::LazyPhaseMap{M,F}) where {M,F}
+    print(io, "LazyPhaseMap{$M,$F}(")
     show(io, p.fockstates)
     print(")")
 end
@@ -412,7 +412,7 @@ function phase_map(fockstates, M::Int)
 end
 phase_map(N::Int) = phase_map(map(FockNumber, 0:2^N-1), N)
 phase_map(H::AbstractFockHilbertSpace) = phase_map(collect(focknumbers(H)), length(H.jw))
-LazyPhaseMap(N::Int) = LazyPhaseMap{N}(map(FockNumber, 0:2^N-1))
+LazyPhaseMap(N::Int) = LazyPhaseMap{N,FockNumber{Int}}(map(FockNumber, 0:2^N-1))
 SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest...) = SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(rest...)
 (p::PhaseMap)(op::AbstractMatrix) = p.phases .* op
 (p::LazyPhaseMap)(op::AbstractMatrix) = p .* op
