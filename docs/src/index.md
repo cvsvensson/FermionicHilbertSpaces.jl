@@ -5,7 +5,7 @@ CurrentModule = FermionicHilbertSpaces
 # FermionicHilbertSpaces.jl
 
 [FermionicHilbertSpaces.jl](https://github.com/cvsvensson/FermionicHilbertSpaces.jl) is a Julia package for defining fermionic Hilbert spaces and operators. The central features are fermionic tensor products and partial traces, which differ from the standard tensor product since fermions anticommute. 
-[1](#fermion_information_article) 
+[[1]](#fermion_information_article) 
 
 
 # Installation 
