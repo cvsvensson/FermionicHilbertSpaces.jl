@@ -279,3 +279,29 @@ function sector(m::AbstractMatrix, qn::Int, H::SymmetricFockHilbertSpace)
     end
     throw(ArgumentError("Sector $qn not found in the matrix."))
 end
+
+@testitem "Hilbert space printing" begin
+    # Check that printing of Hilbert spaces doesn't error
+    using FermionicHilbertSpaces
+    io = IOBuffer()
+    # SimpleFockHilbertSpace
+    H_simple = hilbert_space(1:3)
+    @test begin
+        show(io, H_simple)
+        true
+    end
+    # FockHilbertSpace
+    focks = [FockNumber(0), FockNumber(1), FockNumber(2)]
+    H_fock = FockHilbertSpace(1:2, focks)
+    @test begin
+        show(io, H_fock)
+        true
+    end
+    # SymmetricFockHilbertSpace
+    qn = ParityConservation()
+    H_sym = hilbert_space(1:2, qn)
+    @test begin
+        show(io, H_sym)
+        true
+    end
+end
