@@ -294,21 +294,6 @@ end
 eval_in_basis(a::FermionMul, f) = a.coeff * mapfoldl(Base.Fix2(eval_in_basis, f), *, a.factors)
 eval_in_basis(a::FermionAdd, f) = a.coeff * I + mapfoldl(Base.Fix2(eval_in_basis, f), +, fermionterms(a))
 
-## Symmetries
-isnumberconserving(x::FermionMul) = iszero(sum(s -> 2s.creation - 1, x.factors))
-isnumberconserving(x::FermionAdd) = all(isnumberconserving, fermionterms(x))
-
-isparityconserving(x::FermionMul) = iseven(length(x.factors))
-isparityconserving(x::FermionAdd) = all(isparityconserving, fermionterms(x))
-
-# is_ph_symmetric(x::SMA) = iszero(particle_hole_transform(x) + x)
-# particle_hole_transform(x::FermionSym) = FermionSym(!x.creation, x.label, x.basis)
-# particle_hole_transform(x::FermionMul) = x.coeff' * prod(particle_hole_transform, x.factors)
-# particle_hole_transform(x::FermionAdd) = x.coeff' + sum(particle_hole_transform(f) for f in fermionterms(x))
-
-# Base.iszero(x::FermionAdd) = iszero(x.coeff) && all(iszero, fermionterms(x))
-# Base.iszero(x::FermionMul) = iszero(x.coeff)
-# Base.iszero(x::FermionSym) = false
 ##
 TermInterface.head(a::Union{FermionMul,FermionAdd}) = operation(a)
 TermInterface.iscall(::Union{FermionMul,FermionAdd}) = true
@@ -351,4 +336,40 @@ function _merge!(f::F, d, others...; filter=x -> false) where {F}
         end
     end
     acc
+end
+
+
+## Symmetries
+isnumberconserving(x::FermionSym) = false
+isnumberconserving(x::FermionMul) = iszero(sum(s -> 2s.creation - 1, x.factors))
+isnumberconserving(x::FermionAdd) = all(isnumberconserving, fermionterms(x))
+
+isparityconserving(x::FermionSym) = false
+isparityconserving(x::FermionMul) = iseven(length(x.factors))
+isparityconserving(x::FermionAdd) = all(isparityconserving, fermionterms(x))
+
+isquadratic(::FermionSym) = false
+isquadratic(x::FermionMul) = length(x.factors) == 2
+isquadratic(x::FermionAdd) = all(isquadratic, fermionterms(x))
+
+@testitem "Fermion symmetry property checks" begin
+    import FermionicHilbertSpaces: isnumberconserving, isparityconserving, isquadratic
+    @fermions f
+    # isnumberconserving
+    @test !isnumberconserving(f[1])
+    @test isnumberconserving(f[1]'f[2])
+    @test !isnumberconserving(f[1]f[2])
+    @test !isnumberconserving(f[1]'f[2] + f[3])
+    @test isnumberconserving(f[1]'f[2] + f[3]f[3]' + 1)
+    # isparityconserving
+    @test !isparityconserving(f[1])
+    @test isparityconserving(f[1]f[2])
+    @test !isparityconserving(f[1]f[2] * f[3])
+    @test !isparityconserving(f[1]f[2] + f[3])
+    @test isparityconserving(f[1]f[2] + f[3]f[3]' + 1)
+    # isquadratic
+    @test !isquadratic(f[1])
+    @test isquadratic(f[1]f[2])
+    @test !isquadratic(f[1]f[2] * f[3])
+    @test isquadratic(f[1]f[2] + f[3] * f[3]' + 1)
 end
