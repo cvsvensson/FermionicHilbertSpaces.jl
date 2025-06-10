@@ -62,9 +62,8 @@ struct DirectSum{HS}
     spaces::HS
 end
 # Then, we can extend the odd and even vectors to the full Hilbert space.
-function extend(v, p = Pair{<:AbstractHilbertSpace, <:DirectSum})
-     n = findfirst(isequal(first(p)), last(p).spaces)
-     mapreduce((mH) -> n == mH[1] ? v : zeros(size(mH[2], 1)), vcat, enumerate(last(p).spaces))
+function extend(v, p=Pair{<:AbstractHilbertSpace,<:DirectSum})
+    mapreduce(H -> H == first(p) ? v : zeros(size(H, 1)), vcat, last(p).spaces)
 end
 
 Hsum = DirectSum((Hodd, Heven))
