@@ -8,7 +8,7 @@
 # We start by importing the necessary packages.
 using FermionicHilbertSpaces, LinearAlgebra, Plots
 
-# Then we define the Hilbert space with `N` sites and number-parity conservation.
+# Then we define the Hilbert space with `N` sites and parity conservation.
 N = 10
 H = hilbert_space(1:N, ParityConservation())
 

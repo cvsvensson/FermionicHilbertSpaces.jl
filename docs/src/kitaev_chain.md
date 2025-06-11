@@ -14,7 +14,7 @@ We start by importing the necessary packages.
 using FermionicHilbertSpaces, LinearAlgebra, Plots
 ````
 
-Then we define the Hilbert space with `N` sites and number-parity conservation.
+Then we define the Hilbert space with `N` sites and parity conservation.
 
 ````@example kitaev_chain
 N = 10
