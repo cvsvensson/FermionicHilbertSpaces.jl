@@ -16,10 +16,12 @@ makedocs(;
         "Home" => "index.md",
         "Misc" => "misc.md",
         "Functions" => "docstrings.md",
+        "Tutorials" => ["Interacting Kitaev chain" => "kitaev_chain.md",]
     ],
 )
 
 deploydocs(;
     repo="github.com/cvsvensson/FermionicHilbertSpaces.jl",
     devbranch="main",
+    push_preview=true
 )
