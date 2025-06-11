@@ -16,6 +16,7 @@ makedocs(;
         "Home" => "index.md",
         "Misc" => "misc.md",
         "Functions" => "docstrings.md",
+        "Tutorials" => ["Interacting Kitave chain" => "kitaev_chain.md",]
     ],
 )
 

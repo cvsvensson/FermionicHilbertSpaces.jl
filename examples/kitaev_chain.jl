@@ -1,3 +1,5 @@
+# # Interacting Kitaev Chain Tutorial
+
 # In this example, we study the interacting Kitaev chain.
 # We show how the Hamiltonian can be constructed symbolically or by using matrix representations of the fermionic operators,
 # and how to restrict the Hilbert space to a subspace of a given parity.
