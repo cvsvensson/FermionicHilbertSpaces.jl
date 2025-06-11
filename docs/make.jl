@@ -23,4 +23,5 @@ makedocs(;
 deploydocs(;
     repo="github.com/cvsvensson/FermionicHilbertSpaces.jl",
     devbranch="main",
+    push_preview=true
 )

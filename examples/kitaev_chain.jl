@@ -83,6 +83,7 @@ Hmodes = [hilbert_space(i:i) for i in 1:N]
 γ_reductions = [norm(partial_trace(γ, H => Hmode)) for Hmode in Hmodes]
 γ̃_reductions = [norm(partial_trace(γ̃, H => Hmode)) for Hmode in Hmodes]
 # We can plot the reductions to visualize the localization of the Majorana modes.
-plot(1:N, γ_reductions / sqrt(2), label="γ", xlabel="Site", ylabel="||γ_i|| / √2", title="Majorana Locality")
-plot!(1:N, γ̃_reductions / sqrt(2), label="γ̃")
+plot(xlabel="Site", ylabel="||γᵢ|| / √2", title="Majorana Locality", frame=:box, size=(500, 300))
+plot!(1:N, γ_reductions / sqrt(2), label="γ", lw=2)
+plot!(1:N, γ̃_reductions / sqrt(2), label="γ̃", lw=2)
 
