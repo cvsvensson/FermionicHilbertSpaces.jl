@@ -147,7 +147,7 @@ end
         @test sign == 0
     end
 
-    fs = FermionicHilbertSpaces.fockstates_number_sector(10, 5)
+    fs = FermionicHilbertSpaces.fixed_particle_number_fockstates(10, 5)
     @test length(fs) == binomial(10, 5)
     @test allunique(fs)
     @test all(FermionicHilbertSpaces.fermionnumber.(fs) .== 5)

@@ -58,11 +58,11 @@ function nextfockstate_with_same_number(v)
     t | (((div((t & -t), (v & -v))) >> 1) - 1)
 end
 """
-    fockstates_number_sector(M, n)
+    fixed_particle_number_fockstates(M, n)
 
 Generate a list of Fock states with `n` occupied fermions in a system with `M` different fermions.
 """
-function fockstates_number_sector(M, n, ::Type{T}=(M > 63 ? BigInt : Int)) where T
+function fixed_particle_number_fockstates(M, n, ::Type{T}=(M > 63 ? BigInt : Int)) where T
     iszero(n) && return map(FockNumber{T}, [0])
     v = T(focknbr_from_bits([true for _ in 1:n]).f)
     maxv = v << (M - n)
@@ -250,7 +250,7 @@ function focknumbers(jw::JordanWignerOrdering, qn::FermionConservation)
     s = sectors(qn)
     ismissing(s) && return focknumbers(jw, NoSymmetry())
     N = length(jw)
-    mapreduce(n -> fockstates_number_sector(N, n), vcat, s)
+    mapreduce(n -> fixed_particle_number_fockstates(N, n), vcat, s)
 end
 function focknumbers(jw::JordanWignerOrdering, qn::FermionSubsetConservation)
     s = sectors(qn)
@@ -324,11 +324,11 @@ end
 end
 
 @testitem "fockstates handles large M without overflow or duplicates" begin
-    import FermionicHilbertSpaces: fockstates_number_sector
+    import FermionicHilbertSpaces: fixed_particle_number_fockstates
     # For large M, fockstates should use BigInt and not overflow
     M = 70
     n = 3
-    states = fockstates_number_sector(M, n)
+    states = fixed_particle_number_fockstates(M, n)
     # All states should be unique
     @test length(states) == length(unique(states))
     # All states should be non-negative

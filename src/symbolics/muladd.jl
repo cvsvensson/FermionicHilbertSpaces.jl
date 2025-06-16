@@ -278,7 +278,7 @@ sparsetuple!((outinds, ininds, amps), op::AbstractFermionSym, jw, outstates, ins
     mat = sum(fmb[l]' * fmb[l] for l in labels)
     @test newmat == mat
 
-    @test all(matrix_representation(sum(f[l]' * f[l] for l in labels), H.jw, FermionicHilbertSpaces.fockstates_number_sector(N, n)) == n * I for n in 1:N)
+    @test all(matrix_representation(sum(f[l]' * f[l] for l in labels), H.jw, FermionicHilbertSpaces.fixed_particle_number_fockstates(N, n)) == n * I for n in 1:N)
 
     @test all(eval_in_basis(f[l], fmb) == fmb[l] for l in labels)
     @test all(eval_in_basis(f[l]', fmb) == fmb[l]' for l in labels)
