@@ -162,7 +162,7 @@ function FockSplitter(jw::JordanWignerOrdering, jws)
     Base.Fix2(split_focknumber, fermionpositions)
 end
 function split_focknumber(f::FockNumber, fermionpositions)
-    map(positions -> focknbr_from_bits(map(i -> _bit(f, i), positions)), fermionpositions)
+    map(positions -> focknbr_from_bits(Iterators.map(i -> _bit(f, i), positions)), fermionpositions)
 end
 function split_focknumber(f::FockNumber, fockmapper::FockMapper)
     split_focknumber(f, fockmapper.fermionpositions)
