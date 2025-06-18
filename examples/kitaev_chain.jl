@@ -9,7 +9,7 @@
 using FermionicHilbertSpaces, LinearAlgebra, Plots
 
 # Then we define the Hilbert space with `N` sites and parity conservation.
-N = 10
+N = 12
 H = hilbert_space(1:N, ParityConservation())
 
 # Fermions are defined either as symbolic fermions `f` using the `@fermions` macro,
@@ -30,7 +30,7 @@ kitaev_chain(f, N, μ, t, Δ, U) = sum(t * f[i]' * f[i+1] + hc for i in 1:N-1) +
 # Define parameters close to the sweet spot with perfectly localized Majoranas.
 U = 4.0
 t = 1.0
-δΔ = 0.4
+δΔ = 1.5
 Δ = t + U / 2 - δΔ # slightly detuned from the sweet spot
 μ = fill(-U / 2, N) # edge chemical potential
 μ[2:N-1] .= -U # bulk chemical potential
@@ -79,6 +79,7 @@ e = extend(evenvec, Heven => Hsum) # even ground state in the full Hilbert space
 # This is done by tracing down the Majorana operators to each mode.
 # So let's first define the Hilbert space for each mode.
 Hmodes = [hilbert_space(i:i) for i in 1:N]
+Hmodes2 = [[hilbert_space(i:i+r) for i in 1:N-r] for r in 0:N-1]
 # Now we can compute the reduction of the Majorana operators to each mode.
 γ_reductions = [norm(partial_trace(γ, H => Hmode)) for Hmode in Hmodes]
 γ̃_reductions = [norm(partial_trace(γ̃, H => Hmode)) for Hmode in Hmodes]
@@ -87,3 +88,10 @@ plot(xlabel="Site", ylabel="||γᵢ|| / √2", title="Majorana Locality", frame=
 plot!(1:N, γ_reductions / sqrt(2), label="γ", lw=2)
 plot!(1:N, γ̃_reductions / sqrt(2), label="γ̃", lw=2)
 
+##
+red2 = [n + r - 1 < N ? norm(partial_trace(γ, H => Hmodes2[r+1][n])) : NaN for (n, r) in Base.product(1:N, 0:N-1)]
+red2tilde = [n + r - 1 < N ? norm(partial_trace(γ̃, H => Hmodes2[r+1][n])) : NaN for (n, r) in Base.product(1:N, 0:N-1)]
+##
+heatmap(red2' ./ sqrt(2), c=:viridis, clims=(0, 1), title="||γ||", xlabel="Site", ylabel="Subregion size")
+heatmap(1:N, 1:N, red2tilde' ./ sqrt(2), c=:viridis, clims=(0, 1), title="||γ̃||", xlabel="Site", ylabel="Subregion size")
+heatmap(1:N, 1:N, map(min, red2, red2tilde)' ./ sqrt(2), c=:viridis, clims=(0, 1), title="LF", xlabel="Site", ylabel="Subregion size")
