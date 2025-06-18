@@ -488,7 +488,7 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::
     fill!(mout, zero(eltype(mout)))
     outinds = siteindices(labels, H.jw)
     bitmask = FockNumber(2^M - 1) - focknbr_from_site_indices(outinds)
-    outbits(f) = map(i -> _bit(f, i), outinds)
+    outbits(f) = Iterators.map(i -> _bit(f, i), outinds)
     fockstates = focknumbers(H)
     for f1 in fockstates, f2 in fockstates
         if (f1 & bitmask) != (f2 & bitmask)
