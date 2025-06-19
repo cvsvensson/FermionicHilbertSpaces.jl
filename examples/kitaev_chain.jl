@@ -9,7 +9,7 @@
 using FermionicHilbertSpaces, LinearAlgebra, Plots
 
 # Then we define the Hilbert space with `N` sites and parity conservation.
-N = 12
+N = 10
 H = hilbert_space(1:N, ParityConservation())
 
 # Fermions are defined either as symbolic fermions `f` using the `@fermions` macro,
@@ -32,7 +32,7 @@ U = 4.0
 t = 1.0
 δΔ = 1.5
 Δ = t + U / 2 - δΔ # slightly detuned from the sweet spot
-μ = fill(-U / 2, N) # edge chemical potential
+μ = 1 * fill(-U / 2, N) # edge chemical potential
 μ[2:N-1] .= -U # bulk chemical potential
 params = (μ, t, Δ, U)
 
@@ -75,11 +75,15 @@ e = extend(evenvec, Heven => Hsum) # even ground state in the full Hilbert space
 γ = o * e' + hc
 γ̃ = 1im * o * e' + hc
 
+c = (γ + 1im * γ̃) / sqrt(2)
+δρ = 1im * γ * γ̃
 # Finally, we can check the locality of the Majorana operators.
 # This is done by tracing down the Majorana operators to each mode.
 # So let's first define the Hilbert space for each mode.
 Hmodes = [hilbert_space(i:i) for i in 1:N]
-Hmodes2 = [[hilbert_space(i:i+r) for i in 1:N-r] for r in 0:N-1]
+
+# Hmodes2 = [[hilbert_space(i:i+r-1) for i in 1:N-r+1] for r in 1:N]
+Hmodes2 = [(n + r <= N + 1) ? hilbert_space(n:n+r-1) : missing for (n, r) in Base.product(1:N, 1:N)]
 # Now we can compute the reduction of the Majorana operators to each mode.
 γ_reductions = [norm(partial_trace(γ, H => Hmode)) for Hmode in Hmodes]
 γ̃_reductions = [norm(partial_trace(γ̃, H => Hmode)) for Hmode in Hmodes]
@@ -89,9 +93,24 @@ plot!(1:N, γ_reductions / sqrt(2), label="γ", lw=2)
 plot!(1:N, γ̃_reductions / sqrt(2), label="γ̃", lw=2)
 
 ##
-red2 = [n + r - 1 < N ? norm(partial_trace(γ, H => Hmodes2[r+1][n])) : NaN for (n, r) in Base.product(1:N, 0:N-1)]
-red2tilde = [n + r - 1 < N ? norm(partial_trace(γ̃, H => Hmodes2[r+1][n])) : NaN for (n, r) in Base.product(1:N, 0:N-1)]
+# @profview red2 = [ismissing(HR) ? missing : norm(partial_trace(γ, H => HR)) for HR in Hmodes2]
+# @btime red2 = [ismissing(HR) ? missing : norm(partial_trace(γ, H => HR)) for HR in Hmodes2];
+# red2tilde = [ismissing(HR) ? missing : norm(partial_trace(γ̃, H => HR)) for HR in Hmodes2]
+red2 = [ismissing(HR) ? missing : norm(svdvals(partial_trace(γ, H => HR)), 1) for HR in Hmodes2]
+red2tilde = [ismissing(HR) ? missing : norm(svdvals(partial_trace(γ̃, H => HR)), Inf) for HR in Hmodes2]
+# gauge = [ismissing(HR) ? missing : abs(tr(partial_trace(γ̃, H => HR) * partial_trace(γ, H => HR))) for HR in Hmodes2] #Automatically the right gauge as this is zero.
+
+cR = [ismissing(HR) ? missing : partial_trace(c, H => HR) for HR in Hmodes2]
+LD = [ismissing(HR) ? missing : norm(partial_trace(δρ, H => HR)) for HR in Hmodes2]
+LFmin = map(cR -> ismissing(cR) ? missing : norm(cR)^2 - abs(tr(cR^2)), cR)
+LFmax = map(cR -> ismissing(cR) ? missing : norm(cR)^2 + abs(tr(cR^2)), cR)
 ##
-heatmap(red2' ./ sqrt(2), c=:viridis, clims=(0, 1), title="||γ||", xlabel="Site", ylabel="Subregion size")
-heatmap(1:N, 1:N, red2tilde' ./ sqrt(2), c=:viridis, clims=(0, 1), title="||γ̃||", xlabel="Site", ylabel="Subregion size")
-heatmap(1:N, 1:N, map(min, red2, red2tilde)' ./ sqrt(2), c=:viridis, clims=(0, 1), title="LF", xlabel="Site", ylabel="Subregion size")
+heatmap(red2', c=:viridis, clims=(0, sqrt(2)), title="||γ||", xlabel="Site", ylabel="Subregion size")
+heatmap(1:N, 1:N, red2tilde', c=cgrad(:viridis), clims=(0, 1), title="||γ̃||₁", xlabel="Site", ylabel="Subregion size")
+heatmap(1:N, 1:N, red2tilde', c=cgrad(:viridis), clims=(0, 1), title="||γ̃||₁", xlabel="Site", ylabel="Subregion size")
+heatmap(1:N, 1:N, map(min, red2, red2tilde)' .^ 2, c=:viridis, clims=(0, 2), title="LF", xlabel="Site", ylabel="Subregion size")
+##
+heatmap(LFmin', c=:viridis, clims=(0, 2), title="LFmin", xlabel="Site", ylabel="Subregion size")
+heatmap(LFmax', c=:viridis, clims=(0, 2), title="LFmax", xlabel="Site", ylabel="Subregion size")
+heatmap(LD', c=:viridis, clims=(0, sqrt(2)), title="LD", xlabel="Site", ylabel="Subregion size")
+heatmap((abs.(LFmin - LFmax) ./ (LFmin + LFmax))', c=:viridis, clims=(0, 1), title="MP", xlabel="Site", ylabel="Subregion size")
