@@ -9,7 +9,7 @@
 using FermionicHilbertSpaces, LinearAlgebra, Plots
 
 # Then we define the Hilbert space with `N` sites and parity conservation.
-N = 10
+N = 12
 H = hilbert_space(1:N, ParityConservation())
 
 # Fermions are defined either as symbolic fermions `f` using the `@fermions` macro,
@@ -30,7 +30,7 @@ kitaev_chain(f, N, μ, t, Δ, U) = sum(t * f[i]' * f[i+1] + hc for i in 1:N-1) +
 # Define parameters close to the sweet spot with perfectly localized Majoranas.
 U = 4.0
 t = 1.0
-δΔ = 0.4
+δΔ = 1.5
 Δ = t + U / 2 - δΔ # slightly detuned from the sweet spot
 μ = fill(-U / 2, N) # edge chemical potential
 μ[2:N-1] .= -U # bulk chemical potential
