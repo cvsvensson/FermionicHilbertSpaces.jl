@@ -7,6 +7,7 @@
 
 # We start by importing the necessary packages.
 using FermionicHilbertSpaces, LinearAlgebra, Plots
+using Arpack
 
 # Then we define the Hilbert space with `N` sites and parity conservation.
 N = 12
@@ -28,7 +29,7 @@ kitaev_chain(f, N, μ, t, Δ, U) = sum(t * f[i]' * f[i+1] + hc for i in 1:N-1) +
                                  sum(μ[i] * f[i]' * f[i] for i in 1:N)
 
 # Define parameters close to the sweet spot with perfectly localized Majoranas.
-U = 4.0
+U = 2.0
 t = 1.0
 δΔ = 1.5
 Δ = t + U / 2 - δΔ # slightly detuned from the sweet spot
@@ -39,9 +40,9 @@ params = (μ, t, Δ, U)
 # We can now construct the Hamiltonian using symbolic fermions for a symbolic representation
 hsym = kitaev_chain(fsym, N, μ, t, Δ, U)
 # or using matrix representations for the matrix representation.
-hmat = kitaev_chain(fmat, N, μ, t, Δ, U)
+# hmat = kitaev_chain(fmat, N, μ, t, Δ, U)
 # To convert the symbolic Hamiltonian to a matrix representation, we can use the `matrix_representation` function.
-matrix_representation(hsym, H) ≈ hmat # true
+# matrix_representation(hsym, H) ≈ hmat # true
 
 
 # Now, let's diagonalize the system.
@@ -52,6 +53,8 @@ Hodd = hilbert_space(1:N, ParityConservation(-1))
 heven = matrix_representation(hsym, Heven)
 hodd = matrix_representation(hsym, Hodd)
 # and then diagonalize each sector separately.
+@time oddvec = eigs(hodd; nev=1, which=:SR)[2][:, 1]
+@time evenvec = eigs(heven; nev=1, which=:SR)[2][:, 1] # even ground state
 
 function extend(v, p)
     mapreduce(H -> H == first(p) ? v : zeros(size(H, 1)), vcat, last(p))
@@ -94,3 +97,27 @@ plot(xlabel="Site", title="Majorana quality measures"; frame=:box, size=(500, 30
 plot!(1:N, γ_reductions; label="‖γₙ‖", lw, legendfontsize, marker, markerstrokewidth)
 plot!(1:N, γ̃_reductions; label="‖γ̃ₙ‖", lw, legendfontsize, marker, markerstrokewidth)
 plot!(1:N, LD; label="‖(iγγ̃)ₙ‖", lw, legendfontsize, marker, markerstrokewidth)
+
+##
+Hmodes2 = [(n + r <= N + 1) ? hilbert_space(n:n+r-1) : missing for (n, r) in Base.product(1:N, 1:3)]
+@time eoR = [ismissing(Hmode) ? missing : partial_trace(yv, H => Hmode) for Hmode in Hmodes2];
+@time eeR = [ismissing(Hmode) ? missing : partial_trace(ee, H => Hmode) for Hmode in Hmodes2];
+@time ooR = [ismissing(Hmode) ? missing : partial_trace(oo, H => Hmode) for Hmode in Hmodes2];
+red2 = [ismissing(eoR) ? missing : norm(svdvals(eoR + hc), 1) for eoR in eoR]
+red2tilde = [ismissing(eoR) ? missing : norm(svdvals(1im * eoR + hc), 1) for eoR in eoR]
+LD = [ismissing(eeR) ? missing : norm(svdvals(ooR - eeR), 1) for (ooR, eeR) in zip(ooR, eeR)]
+
+# cR = [ismissing(HR) ? missing : partial_trace(c, H => HR) for HR in Hmodes2]
+# LD = [ismissing(HR) ? missing : norm(partial_trace(δρ, H => HR)) for HR in Hmodes2]
+# LFmin = map(cR -> ismissing(cR) ? missing : norm(cR)^2 - abs(tr(cR^2)), cR)
+# LFmax = map(cR -> ismissing(cR) ? missing : norm(cR)^2 + abs(tr(cR^2)), cR)
+##
+heatmap(red2', c=:viridis, clims=(0, sqrt(2)), title="||γ||", xlabel="Site", ylabel="Subregion size")
+heatmap(red2tilde', c=cgrad(:viridis), clims=(0, 1), title="||γ̃||₁", xlabel="Site", ylabel="Subregion size")
+heatmap(red2tilde', c=cgrad(:viridis), clims=(0, 1), title="||γ̃||₁", xlabel="Site", ylabel="Subregion size")
+heatmap(map(min, red2, red2tilde)' .^ 2, c=:viridis, clims=(0, 2), title="LF", xlabel="Site", ylabel="Subregion size")
+##
+heatmap(LFmin', c=:viridis, clims=(0, 2), title="LFmin", xlabel="Site", ylabel="Subregion size")
+heatmap(LFmax', c=:viridis, clims=(0, 2), title="LFmax", xlabel="Site", ylabel="Subregion size")
+heatmap(LD', c=:viridis, clims=(0, sqrt(2)), title="LD", xlabel="Site", ylabel="Subregion size")
+heatmap((abs.(LFmin - LFmax) ./ (LFmin + LFmax))', c=:viridis, clims=(0, 1), title="MP", xlabel="Site", ylabel="Subregion size")
