@@ -73,7 +73,6 @@ function fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs), phas
 
     fermionpositions = map(Base.Fix2(siteindices, H.jw) ∘ collect ∘ keys, Hs)
     fockmapper = FockMapper(fermionpositions)
-
     if N == 1
         return fermionic_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, fockmapper)
     elseif N == 2
@@ -393,7 +392,7 @@ function Base.size(p::LazyPhaseMap, d::Int)
     d < 1 && error("arraysize: dimension out of range")
     d in (1, 2) ? length(p.fockstates) : 1
 end
-Base.size(p::LazyPhaseMap)  = (length(p.fockstates), length(p.fockstates))
+Base.size(p::LazyPhaseMap) = (length(p.fockstates), length(p.fockstates))
 function Base.show(io::IO, p::LazyPhaseMap{M,F}) where {M,F}
     print(io, "LazyPhaseMap{$M,$F}(")
     show(io, p.fockstates)
@@ -486,21 +485,25 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::
     end
     N = length(labels)
     fill!(mout, zero(eltype(mout)))
-    outinds = siteindices(labels, H.jw)
-    bitmask = FockNumber(2^M - 1) - focknbr_from_site_indices(outinds)
-    outbits(f) = Iterators.map(i -> _bit(f, i), outinds)
-    fockstates = focknumbers(H)
-    for f1 in fockstates, f2 in fockstates
-        if (f1 & bitmask) != (f2 & bitmask)
-            continue
+    
+    subfockstates = focknumbers(Hout)
+    Hbar_labels = setdiff(collect(keys(H)), collect(keys(Hout)))
+    Hbar = SimpleFockHilbertSpace(Hbar_labels)
+    barfockstates = focknumbers(Hbar)
+    fm = FockMapper((Hout, Hbar), H)
+    for f1 in subfockstates, f2 in subfockstates
+        s2 = phase_factors ? phase_factor_f(f1, f2, N) : 1
+        I1 = focktoind(f1, Hout)
+        I2 = focktoind(f2, Hout)
+        for fbar in barfockstates
+            fullf1 = fm((f1, fbar))
+            fullf2 = fm((f2, fbar))
+            s1 = phase_factors ? phase_factor_f(fullf1, fullf2, M) : 1
+            s = s2 * s1
+            mout[I1, I2] += s * m[focktoind(fullf1, H), focktoind(fullf2, H)]
         end
-        newfocknbr1 = focknbr_from_bits(outbits(f1))
-        newfocknbr2 = focknbr_from_bits(outbits(f2))
-        s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
-        s2 = phase_factors ? phase_factor_f(newfocknbr1, newfocknbr2, N) : 1
-        s = s2 * s1
-        mout[focktoind(newfocknbr1, Hout), focktoind(newfocknbr2, Hout)] += s * m[focktoind(f1, H), focktoind(f2, H)]
     end
+    
     return mout
 end
 
