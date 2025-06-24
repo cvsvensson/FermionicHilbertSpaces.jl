@@ -52,16 +52,18 @@ Hodd = hilbert_space(1:N, ParityConservation(-1))
 heven = matrix_representation(hsym, Heven)
 hodd = matrix_representation(hsym, Hodd)
 # and then diagonalize each sector separately.
+oddeigs = eigen(Matrix(hodd))
+eveneigs = eigen(Matrix(heven))
+oddvec = oddeigs.vectors[:, 1] # odd ground state
+evenvec = eveneigs.vectors[:, 1] # even ground state
+# The ground states are almost degenerate, as expected.
+first(oddeigs.values) - first(eveneigs.values) # ≈ 10^-4
 
+# Now, we construct the ground state Majoranas.
+# First, we need to embed the lowest energy odd and even states into the full Hilbert space.
 function extend(v, p)
     mapreduce(H -> H == first(p) ? v : zeros(size(H, 1)), vcat, last(p))
 end
-struct Rank1Matrix{T} <: AbstractMatrix{T}
-    vec1::Vector{T}
-    vec2::Vector{T}
-end
-Base.getindex(m::Rank1Matrix, i::Int, j::Int) = m.vec1[i] * conj(m.vec2[j])
-Base.size(m::Rank1Matrix) = (length(m.vec1), length(m.vec2))
 
 Hsum = (Hodd, Heven)
 o = extend(oddvec, Hodd => Hsum) # odd ground state in the full Hilbert space
@@ -69,6 +71,14 @@ e = extend(evenvec, Heven => Hsum) # even ground state in the full Hilbert space
 # Then, we can construct the ground state Majorana operators as
 # γ = o * e' + hc
 # γ̃ = 1im * o * e' + hc
+# but that takes a lot of memory for large systems
+struct Rank1Matrix{T} <: AbstractMatrix{T}
+    vec1::Vector{T}
+    vec2::Vector{T}
+end
+Base.getindex(m::Rank1Matrix, i::Int, j::Int) = m.vec1[i] * conj(m.vec2[j])
+Base.size(m::Rank1Matrix) = (length(m.vec1), length(m.vec2))
+
 yv = Rank1Matrix(o, e)
 ee = Rank1Matrix(e, e)
 oo = Rank1Matrix(o, o)
