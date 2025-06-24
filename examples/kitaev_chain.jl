@@ -7,9 +7,10 @@
 
 # We start by importing the necessary packages.
 using FermionicHilbertSpaces, LinearAlgebra, Plots
+using Arpack
 
 # Then we define the Hilbert space with `N` sites and parity conservation.
-N = 10
+N = 20
 H = hilbert_space(1:N, ParityConservation())
 
 # Fermions are defined either as symbolic fermions `f` using the `@fermions` macro,
@@ -28,20 +29,20 @@ kitaev_chain(f, N, μ, t, Δ, U) = sum(t * f[i]' * f[i+1] + hc for i in 1:N-1) +
                                  sum(μ[i] * f[i]' * f[i] for i in 1:N)
 
 # Define parameters close to the sweet spot with perfectly localized Majoranas.
-U = 4.0
+U = 2.0
 t = 1.0
-δΔ = 0.4
-Δ = t + U / 2 - δΔ # slightly detuned from the sweet spot
-μ = fill(-U / 2, N) # edge chemical potential
-μ[2:N-1] .= -U # bulk chemical potential
-params = (μ, t, Δ, U)
+δΔ = 0.0
+Δ = t + 0 * U / 2 - δΔ # slightly detuned from the sweet spot
+μ = 0 * fill(-U / 2, N) # edge chemical potential
+# μ[2:N-1] .= -U # bulk chemical potential¨
+# μ .+= 0.1
 
 # We can now construct the Hamiltonian using symbolic fermions for a symbolic representation
 hsym = kitaev_chain(fsym, N, μ, t, Δ, U)
 # or using matrix representations for the matrix representation.
-hmat = kitaev_chain(fmat, N, μ, t, Δ, U)
+# hmat = kitaev_chain(fmat, N, μ, t, Δ, U)
 # To convert the symbolic Hamiltonian to a matrix representation, we can use the `matrix_representation` function.
-matrix_representation(hsym, H) ≈ hmat # true
+# matrix_representation(hsym, H) ≈ hmat # true
 
 
 # Now, let's diagonalize the system.
@@ -52,6 +53,8 @@ Hodd = hilbert_space(1:N, ParityConservation(-1))
 heven = matrix_representation(hsym, Heven)
 hodd = matrix_representation(hsym, Hodd)
 # and then diagonalize each sector separately.
+@time oddvec = eigs(hodd; nev=1, which=:SR)[2][:, 1]
+@time evenvec = eigs(heven; nev=1, which=:SR)[2][:, 1] # even ground state
 
 function extend(v, p)
     mapreduce(H -> H == first(p) ? v : zeros(size(H, 1)), vcat, last(p))
