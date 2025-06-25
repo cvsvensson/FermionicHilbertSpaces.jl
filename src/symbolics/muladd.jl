@@ -250,7 +250,7 @@ function matrix_representation(op::FermionAdd{C}, jw, outstates, instates) where
     for op in fermionterms(op)
         sparsetuple!((outinds, ininds, amps), op, jw, outstates, instates; fock_to_outind=fock_to_outind)
     end
-    return sparse(outinds, ininds, [amps...], length(outstates), length(instates))
+    return sparse(outinds, ininds, identity.(amps), length(outstates), length(instates))
 end
 sparsetuple!((outinds, ininds, amps), op::AbstractFermionSym, jw, outstates, instates; kwargs...) = sparsetuple!((outinds, ininds, amps), FermionMul(1, [op]), jw, outstates, instates; kwargs...)
 
