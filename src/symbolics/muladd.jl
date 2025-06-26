@@ -16,7 +16,7 @@ function Base.show(io::IO, x::FermionMul)
     if print_coeff
         v = x.coeff
         if isreal(v)
-            neg = v < 0
+            neg = real(v) < 0
             if neg isa Bool
                 print(io, real(v))
             else
@@ -41,18 +41,27 @@ Base.:(==)(b::AbstractFermionSym, a::FermionMul) = isequal(a, b)
 Base.hash(a::FermionMul, h::UInt) = hash(a.coeff, hash(a.factors, h))
 FermionMul(f::FermionMul) = f
 FermionMul(f::AbstractFermionSym) = FermionMul(1, [f])
+
+isscalar(x::FermionMul) = iszero(x.coeff) || (length(x.factors) == 0)
+isscalar(x::FermionAdd) = length(x.dict) == 0 || all(isscalar, keys(x.dict)) || all(iszero(values(x.dict)))
+isscalar(x::AbstractFermionSym) = false
 struct FermionAdd{C,D}
     coeff::C
     dict::D
     function FermionAdd(coeff::C, dict::D) where {C,D}
+        for (k, v) in dict
+            if isscalar(k)
+                coeff += k.coeff * v
+            end
+        end
+        dict = filter(p -> !(isscalar(first(p))), dict)
         if length(dict) == 0
             coeff
         elseif length(dict) == 1 && iszero(coeff)
             k, v = first(dict)
             v * k
         else
-            # all(isone(k.coeff) for (k, v) in dict)
-            new{C,D}(coeff, dict)
+            new{typeof(coeff),D}(coeff, dict)
         end
     end
 end
@@ -154,10 +163,10 @@ Base.:*(as::FermionMul, bs::FermionMul) = order_mul(unordered_prod(as, bs))
 Base.adjoint(x::FermionMul) = length(x.factors) == 0 ? FermionMul(adjoint(x.coeff), x.factors) : adjoint(x.coeff) * foldr(*, reverse(adjoint.(x.factors)))
 Base.:*(a::FermionAdd, b::SM) = (b' * a')'
 function Base.:*(a::SM, b::FermionAdd)
-    a * b.coeff + sum(a * f for f in fermionterms(b))
+    a * b.coeff + sum((v * a) * f for (f, v) in b.dict)
 end
 function Base.:*(a::FermionAdd, b::FermionAdd)
-    a.coeff * b + sum(f * b for f in fermionterms(a))
+    a.coeff * b + sum((va * fa) * b for (fa, va) in a.dict)
 end
 
 Base.adjoint(x::FermionAdd) = adjoint(x.coeff) + sum(f' for f in fermionterms(x))
@@ -226,7 +235,7 @@ end
 function operator_inds_amps!((outinds, ininds, amps), op::FermionMul{C}, jw, outstates, instates; fock_to_outind=Dict(map(reverse, enumerate(outstates)))) where {C}
     digitpositions = reverse(siteindices(_labels(op), jw))
     daggers = reverse([s.creation for s in op.factors])
-    mc = - op.coeff
+    mc = -op.coeff
     pc = op.coeff
     for (n, f) in enumerate(instates)
         newfockstate, amp = togglefermions(digitpositions, daggers, f)
@@ -252,7 +261,7 @@ function matrix_representation(op::FermionAdd{C}, jw, outstates, instates) where
     sizehint!(ininds, N * length(instates))
     sizehint!(amps, N * length(instates))
     for (factor, coeff) in op.dict
-        operator_inds_amps!((outinds, ininds, amps), coeff*factor, jw, outstates, instates; fock_to_outind=fock_to_outind)
+        operator_inds_amps!((outinds, ininds, amps), coeff * factor, jw, outstates, instates; fock_to_outind=fock_to_outind)
     end
     if !iszero(op.coeff)
         append!(ininds, eachindex(instates))
@@ -261,7 +270,7 @@ function matrix_representation(op::FermionAdd{C}, jw, outstates, instates) where
     end
     return sparse(outinds, ininds, amps, length(outstates), length(instates))
 end
-operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, jw, outstates, instates; kwargs...) = operator_inds_amps!((outinds, ininds, amps),  FermionMul(1, [op]), jw, outstates, instates; kwargs...)
+operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, jw, outstates, instates; kwargs...) = operator_inds_amps!((outinds, ininds, amps), FermionMul(1, [op]), jw, outstates, instates; kwargs...)
 
 @testitem "Instantiating symbolic fermions" begin
     using SparseArrays, LinearAlgebra
