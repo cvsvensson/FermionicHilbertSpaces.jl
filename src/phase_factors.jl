@@ -1,9 +1,17 @@
 function phase_factor_f(focknbr1, focknbr2, subinds::NTuple)::Int
     bitmask = focknbr_from_site_indices(subinds)
-    prod(i -> (jwstring_anti(i, bitmask & focknbr1) * jwstring_anti(i, bitmask & focknbr2))^_bit(focknbr2, i), subinds, init=1)
+    pf = 1
+    for i in subinds
+        pf *= _phase_factor_f(bitmask & focknbr1, bitmask & focknbr2, i)
+    end
+    return pf
 end
 function phase_factor_f(focknbr1, focknbr2, N::Int)::Int
-    prod(_phase_factor_f(focknbr1, focknbr2, i) for i in 1:N; init=1)
+    pf = 1
+    for i in 1:N
+        pf *= _phase_factor_f(focknbr1, focknbr2, i)
+    end
+    return pf
 end
 
 function _phase_factor_f(focknbr1, focknbr2, i::Int)::Int
