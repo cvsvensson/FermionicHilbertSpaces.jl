@@ -12,6 +12,7 @@ struct FermionMul{C,F<:AbstractFermionSym}
     end
 end
 function Base.show(io::IO, x::FermionMul)
+    isscalar(x) && print(io, x.coeff)
     print_coeff = !isone(x.coeff)
     if print_coeff
         v = x.coeff
@@ -35,9 +36,10 @@ function Base.show(io::IO, x::FermionMul)
 end
 Base.iszero(x::FermionMul) = iszero(x.coeff)
 
-Base.:(==)(a::FermionMul, b::FermionMul) = isequal(a.coeff, b.coeff) && isequal(a.factors, b.factors)
-Base.:(==)(a::FermionMul, b::AbstractFermionSym) = isone(a.coeff) && length(a.factors) == 1 && isequal(only(a.factors), b)
-Base.:(==)(b::AbstractFermionSym, a::FermionMul) = isequal(a, b)
+Base.:(==)(a::FermionMul, b::Number) = isscalar(a) && a.coeff == b
+Base.:(==)(a::FermionMul, b::FermionMul) = a.coeff == b.coeff && a.factors == b.factors
+Base.:(==)(a::FermionMul, b::AbstractFermionSym) = isone(a.coeff) && length(a.factors) == 1 && only(a.factors) == b
+Base.:(==)(b::AbstractFermionSym, a::FermionMul) = a == b
 Base.hash(a::FermionMul, h::UInt) = hash(a.coeff, hash(a.factors, h))
 FermionMul(f::FermionMul) = f
 FermionMul(f::AbstractFermionSym) = FermionMul(1, [f])
@@ -62,7 +64,7 @@ struct FermionAdd{C,D}
         end
     end
 end
-Base.:(==)(a::FermionAdd, b::FermionAdd) = isequal(a.coeff, b.coeff) && isequal(a.dict, b.dict)
+Base.:(==)(a::FermionAdd, b::FermionAdd) = a.coeff == b.coeff && a.dict == b.dict
 Base.hash(a::FermionAdd, h::UInt) = hash(a.coeff, hash(a.dict, h))
 
 const SM = Union{AbstractFermionSym,FermionMul}
