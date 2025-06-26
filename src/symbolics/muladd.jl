@@ -7,14 +7,8 @@ struct FermionMul{C,F<:AbstractFermionSym}
     factors::Vector{F}
     ordered::Bool
     function FermionMul(coeff::C, factors) where {C}
-        if iszero(coeff)
-            0
-        elseif length(factors) == 0
-            coeff
-        else
-            ordered = issorted(factors) && sorted_noduplicates(factors)
-            new{C,eltype(factors)}(coeff, factors, ordered)
-        end
+        ordered = issorted(factors) && sorted_noduplicates(factors)
+        new{C,eltype(factors)}(coeff, factors, ordered)
     end
 end
 function Base.show(io::IO, x::FermionMul)
@@ -242,18 +236,29 @@ function sparsetuple!((outinds, ininds, amps), op::FermionMul{C}, jw, outstates,
     end
     return (outinds, ininds, amps)
 end
+promote_array(v) = convert(Array{eltype(promote(map(zero, unique(typeof(v) for v in v))...))}, v)
+
 function matrix_representation(op::FermionAdd{C}, jw, outstates, instates) where C
-    fock_to_outind = Dict(map(reverse, enumerate(outstates)))
+    fock_to_outind = Dict(Iterators.map(reverse, enumerate(outstates)))
     outinds = Int[]
     ininds = Int[]
-    amps = []
+    AT = promote_type(C, valtype(op.dict))
+    amps = AT[]
     sizehint!(outinds, length(instates))
     sizehint!(ininds, length(instates))
     sizehint!(amps, length(instates))
     for op in fermionterms(op)
         sparsetuple!((outinds, ininds, amps), op, jw, outstates, instates; fock_to_outind=fock_to_outind)
     end
-    return op.coeff * I + sparse(outinds, ininds, identity.(amps), length(outstates), length(instates))
+    if !iszero(op.coeff)
+        append!(ininds, eachindex(instates))
+        append!(outinds, eachindex(outstates))
+        append!(amps, fill(op.coeff, length(instates)))
+    end
+    return sparse(outinds, ininds, amps, length(outstates), length(instates))
+    # return sparse(outinds, ininds, identity.(amps), length(outstates), length(instates))
+    # return op.coeff * I + sparse(outinds, ininds, identity.(amps), length(outstates), length(instates))
+    # return op.coeff * I + sparse(outinds, ininds, promote_array(amps), length(outstates), length(instates))
 end
 sparsetuple!((outinds, ininds, amps), op::AbstractFermionSym, jw, outstates, instates; kwargs...) = sparsetuple!((outinds, ininds, amps), FermionMul(1, [op]), jw, outstates, instates; kwargs...)
 
@@ -313,7 +318,8 @@ TermInterface.maketerm(::Type{Q}, head::Type{T}, args, metadata) where {Q<:Union
 
 
 #From SymbolicUtils
-_merge(f::F, d, others...; filter=x -> false) where {F} = _merge!(f, Dict{SM,Any}(d), others...; filter=filter)
+# _merge(f::F, d, others...; filter=x -> false) where {F} = _merge!(f, Dict{SM,Any}(d), others...; filter=filter)
+_merge(f::F, d, others...; filter=x -> false) where {F} = _merge!(f, Dict{SM,Union{promote_type(valtype(d), valtype.(others)...)}}(d), others...; filter=filter)
 
 function _merge!(f::F, d, others...; filter=x -> false) where {F}
     acc = d
