@@ -69,15 +69,21 @@ jwstring_left(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f) - count_
 struct FockMapper{P}
     fermionpositions::P
 end
-FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_tuple(jws, jw)
+FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_collect(jws, jw)
 FockMapper_collect(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)) #faster construction
-FockMapper_tuple(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ Tuple ∘ keys, jws)) #faster application
+FockMapper_tuple(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ Tuple ∘ keys, jws)) #faster application, but type instability
 FockMapper(Hs, H::AbstractHilbertSpace) = FockMapper(map(b -> b.jw, Hs), H.jw)
-
+# (fm::FockMapper)(f::NTuple{N,<:FockNumber}) where {N} = mapreduce(insert_bits, +, f, fm.fermionpositions)
+function (fm::FockMapper)(fs::NTuple{N,<:FockNumber}) where {N}
+    f0 = 0 & first(fs)
+    for (f, pos) in zip(fs, fm.fermionpositions)
+        f0 += insert_bits(f, pos)
+    end
+    return f0
+end
 struct FockShifter{M}
     shifts::M
 end
-(fm::FockMapper)(f::NTuple{N,<:FockNumber}) where {N} = mapreduce(insert_bits, +, f, fm.fermionpositions)
 (fs::FockShifter)(f::NTuple{N,<:FockNumber}) where {N} = mapreduce((f, M) -> shift_right(f, M), +, f, fs.shifts)
 shift_right(f::FockNumber, M) = FockNumber(f.f << M)
 FockSplitter(H::AbstractHilbertSpace, bs) = FockSplitter(H.jw, map(b -> b.jw, bs))
@@ -162,7 +168,7 @@ function FockSplitter(jw::JordanWignerOrdering, jws)
     Base.Fix2(split_focknumber, fermionpositions)
 end
 function split_focknumber(f::FockNumber, fermionpositions)
-    map(positions -> focknbr_from_bits(map(i -> _bit(f, i), positions)), fermionpositions)
+    map(positions -> focknbr_from_bits(Iterators.map(i -> _bit(f, i), positions)), fermionpositions)
 end
 function split_focknumber(f::FockNumber, fockmapper::FockMapper)
     split_focknumber(f, fockmapper.fermionpositions)
