@@ -42,9 +42,6 @@ Base.hash(a::FermionMul, h::UInt) = hash(a.coeff, hash(a.factors, h))
 FermionMul(f::FermionMul) = f
 FermionMul(f::AbstractFermionSym) = FermionMul(1, [f])
 
-isscalar(x::FermionMul) = iszero(x.coeff) || (length(x.factors) == 0)
-isscalar(x::FermionAdd) = length(x.dict) == 0 || all(isscalar, keys(x.dict)) || all(iszero(values(x.dict)))
-isscalar(x::AbstractFermionSym) = false
 struct FermionAdd{C,D}
     coeff::C
     dict::D
@@ -218,6 +215,10 @@ bubble_sort(a::Number) = a
 
 order_mul(a::FermionMul) = bubble_sort(a)
 order_mul(x::Number) = x
+
+isscalar(x::FermionMul) = iszero(x.coeff) || (length(x.factors) == 0)
+isscalar(x::FermionAdd) = length(x.dict) == 0 || all(isscalar, keys(x.dict)) || all(iszero(values(x.dict)))
+isscalar(x::AbstractFermionSym) = false
 
 
 ## Instantiating sparse matrices
