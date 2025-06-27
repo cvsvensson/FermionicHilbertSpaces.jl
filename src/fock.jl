@@ -44,6 +44,12 @@ Base.:|(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f | f2.f)
 Base.iszero(f::FockNumber) = iszero(f.f)
 Base.:*(b::Bool, f::FockNumber) = FockNumber(b * f.f)
 Base.:~(f::FockNumber) = FockNumber(~f.f)
+Base.:>>(f::FockNumber, n::Integer) = FockNumber(f.f >> n)
+Base.:<<(f::FockNumber, n::Integer) = FockNumber(f.f << n)
+Base.:|(n::Integer, f::FockNumber) = FockNumber(n | f.f)
+Base.zero(::FockNumber{T}) where T = zero(FockNumber{T})
+Base.zero(::Type{FockNumber{T}}) where T = FockNumber(zero(T))
+
 
 focknbr_from_bits(bits, ::Type{T}=(length(bits) > 63 ? BigInt : Int)) where T = FockNumber(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
 focknbr_from_site_index(site::Integer) = FockNumber(1 << (site - 1))
@@ -69,48 +75,8 @@ jwstring_left(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f) - count_
 struct FockMapper{P}
     fermionpositions::P
 end
-struct FockMapper2{P1,P2}
-    fermionpositions::P1
-    widths::Vector{Int}
-    permutation::P2
-end
-function FockMapper_2(jws, jw)
-    widths = collect(map(length, jws))
-    fermionpositions = map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)
-    permutation = BitPermutation{UInt}(reduce(vcat, fermionpositions))
-    FockMapper2(fermionpositions, widths, permutation)
-end
-# FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_collect(jws, jw)
-FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_2(jws, jw)
-FockMapper_collect(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)) #faster construction
-FockMapper_tuple(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ Tuple ∘ keys, jws)) #faster application, but type instability
-FockMapper(Hs, H::AbstractHilbertSpace) = FockMapper(map(b -> b.jw, Hs), H.jw)
-function (fm::FockMapper2)(fs::NTuple{N,FockNumber{T}}) where {N,T}
-    concatenate_and_permute(fs, fm.widths, fm.permutation)
-end
-Base.:>>(f::FockNumber, n::Integer) = FockNumber(f.f >> n)
-Base.:<<(f::FockNumber, n::Integer) = FockNumber(f.f << n)
-Base.:|(n::Integer, f::FockNumber) = FockNumber(n | f.f)
 
-function concatenate_and_permute(masks, widths, permutation)
-    mask = concatenate_bitmasks(masks, widths)
-    bitpermute(mask, permutation)
-end
-BitPermutations.bitpermute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
-function concatenate_bitmasks(masks, widths)
-    result = zero(first(masks))
-    return foldl(((result, lastwidth), (mask, width)) -> ((result << lastwidth) | mask, width), zip(Iterators.reverse(masks), widths); init=(result, 0)) |> first
-end
-Base.zero(::FockNumber{T}) where T = zero(FockNumber{T})
-Base.zero(::Type{FockNumber{T}}) where T = FockNumber(zero(T))
-
-struct FockShifter{M}
-    shifts::M
-end
-(fs::FockShifter)(f::NTuple{N,<:FockNumber}) where {N} = mapreduce((f, M) -> shift_right(f, M), +, f, fs.shifts)
-shift_right(f::FockNumber, M) = FockNumber(f.f << M)
-FockSplitter(H::AbstractHilbertSpace, bs) = FockSplitter(H.jw, map(b -> b.jw, bs))
-
+(fm::FockMapper)(f::NTuple{N,<:FockNumber}) where {N} = mapreduce(insert_bits, +, f, fm.fermionpositions)
 
 function insert_bits(_x::FockNumber, positions)
     x = _x.f
@@ -124,6 +90,42 @@ function insert_bits(_x::FockNumber, positions)
     end
     return FockNumber(result)
 end
+
+struct FockMapperBitPermutations{P1,P2}
+    fermionpositions::P1
+    widths::Vector{Int}
+    permutation::P2
+end
+FockMapper_collect(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)) #faster construction
+FockMapper_tuple(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ Tuple ∘ keys, jws)) #faster application, but type instability
+FockMapper(Hs, H::AbstractHilbertSpace) = FockMapper(map(b -> b.jw, Hs), H.jw)
+function FockMapper_bp(jws, jw)
+    widths = collect(map(length, jws))
+    fermionpositions = map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)
+    permutation = BitPermutation{UInt}(reduce(vcat, fermionpositions))
+    FockMapperBitPermutations(fermionpositions, widths, permutation)
+end
+FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_bp(jws, jw)
+(fm::FockMapperBitPermutations)(fs) = concatenate_and_permute(fs, fm.widths, fm.permutation)
+
+function concatenate_and_permute(masks, widths, permutation)
+    mask = concatenate_bitmasks(masks, widths)
+    bitpermute(mask, permutation)
+end
+function concatenate_bitmasks(masks, widths)
+    result = zero(first(masks))
+    return foldl(((result, lastwidth), (mask, width)) -> ((result << lastwidth) | mask, width), zip(Iterators.reverse(masks), widths); init=(result, 0)) |> first
+end
+
+BitPermutations.bitpermute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
+
+struct FockShifter{M}
+    shifts::M
+end
+(fs::FockShifter)(f::NTuple{N,<:FockNumber}) where {N} = mapreduce((f, M) -> shift_right(f, M), +, f, fs.shifts)
+shift_right(f::FockNumber, M) = FockNumber(f.f << M)
+FockSplitter(H::AbstractHilbertSpace, bs) = FockSplitter(H.jw, map(b -> b.jw, bs))
+
 
 @testitem "Fock" begin
     using Random
@@ -196,7 +198,7 @@ end
 function split_focknumber(f::FockNumber, fockmapper::FockMapper)
     split_focknumber(f, fockmapper.fermionpositions)
 end
-function split_focknumber(f::FockNumber, fockmapper::FockMapper2)
+function split_focknumber(f::FockNumber, fockmapper::FockMapperBitPermutations)
     split_focknumber(f, fockmapper.fermionpositions)
 end
 @testitem "Split and join focknumbers" begin
