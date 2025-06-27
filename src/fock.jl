@@ -69,18 +69,60 @@ jwstring_left(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f) - count_
 struct FockMapper{P}
     fermionpositions::P
 end
-FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_collect(jws, jw)
+using BitPermutations
+struct FockMapper2{P}
+    widths::Vector{Int}
+    permutation::P
+end
+FockMapper_2(jws, jw) = FockMapper2(collect(map(length, jws)), BitPermutation{UInt}((mapreduce(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, vcat, jws))))
+FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_2(jws, jw)
 FockMapper_collect(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)) #faster construction
 FockMapper_tuple(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ Tuple ∘ keys, jws)) #faster application, but type instability
 FockMapper(Hs, H::AbstractHilbertSpace) = FockMapper(map(b -> b.jw, Hs), H.jw)
 # (fm::FockMapper)(f::NTuple{N,<:FockNumber}) where {N} = mapreduce(insert_bits, +, f, fm.fermionpositions)
 function (fm::FockMapper)(fs::NTuple{N,<:FockNumber}) where {N}
-    f0 = 0 & first(fs)
+    # scatter_bitmasks(fs, fm.fermionpositions)
+    f0 = (0 & first(fs))
     for (f, pos) in zip(fs, fm.fermionpositions)
         f0 += insert_bits(f, pos)
     end
     return f0
 end
+function (fm::FockMapper2)(fs::NTuple{N,<:FockNumber}) where {N}
+    masks = Iterators.map(f -> f.f, fs)
+    FockNumber{Int}(bp(masks, fm.widths, fm.permutation))
+end
+Base.:>>(f::FockNumber, n::Integer) = FockNumber(f.f >> n)
+Base.:<<(f::FockNumber, n::Integer) = FockNumber(f.f << n)
+Base.:|(n::Integer, f::FockNumber) = FockNumber(n | f.f)
+function scatter_bitmasks(masks, positions)
+    result = 0 #& first(masks)
+    for (mask, pos_vec) in zip(masks, positions)
+        for (bit_idx, target_pos) in enumerate(pos_vec)
+            # Extract bit at position (bit_idx - 1) from mask
+            bit = 1 & (mask >> (bit_idx - 1))
+            # Set bit at target_pos in result
+            result |= (bit << (target_pos - 1))
+        end
+    end
+    return result
+end
+function bp(masks, widths, permutation)
+    mask = concatenate_bitmasks(masks, widths)
+    # println(mask)
+    bitpermute(mask, permutation)
+end
+function concatenate_bitmasks(masks, widths)
+    result = zero(first(masks))
+    foldl(((result, lastwidth), (mask, width)) -> ((result << lastwidth) | mask, width), zip(masks, widths); init=(result, 0)) |> first
+    # for (width, mask) in zip(widths, masks)
+    #     result = (result >> width) | mask
+    # end
+    # return result
+end
+Base.zero(::FockNumber{T}) where T = zero(FockNumber{T})
+Base.zero(::Type{FockNumber{T}}) where T = FockNumber(zero(T))
+
 struct FockShifter{M}
     shifts::M
 end
