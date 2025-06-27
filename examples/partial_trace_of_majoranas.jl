@@ -2,11 +2,11 @@
 # In this example, we will look at partial traces of many-body Majorana operators
 
 using FermionicHilbertSpaces: majoranas
-using Combinatorics
+using Combinatorics, LinearAlgebra
 
 # First, let's define the full Hilbert space `H`, and the subregion `R`,
 H = hilbert_space(1:5)
-R = hilbert_space((1, 3, 4))
+R = subregion((1, 3, 4), H)
 # and the Majorana operators in `H`.
 Γ = majoranas(H)
 # Then let's test a couple of properties. If the Majorana extends outside of `R`, it vanishes under the partial trace.
@@ -23,8 +23,3 @@ for labels in labels_combs
     γR2 = mapreduce(l -> ΓR[l...], *, labels)
     @test partial_trace(γR, H => R) ≈ 4 * γR2 # dim(R̄) = 4
 end
-
-
-
-
-
