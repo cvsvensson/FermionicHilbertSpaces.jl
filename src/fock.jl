@@ -103,7 +103,7 @@ function FockMapper_bp(jws, jw)
     widths = collect(map(length, jws))
     fermionpositions = map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)
     permutation = BitPermutation{UInt}(reduce(vcat, fermionpositions))
-    FockMapperBitPermutations(fermionpositions, widths, permutation)
+    FockMapperBitPermutations(fermionpositions, widths, permutation')
 end
 FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_bp(jws, jw)
 (fm::FockMapperBitPermutations)(fs) = concatenate_and_permute(fs, fm.widths, fm.permutation)
@@ -114,7 +114,7 @@ function concatenate_and_permute(masks, widths, permutation)
 end
 function concatenate_bitmasks(masks, widths)
     result = zero(first(masks))
-    return foldl(((result, lastwidth), (mask, width)) -> ((result << lastwidth) | mask, width), zip(Iterators.reverse(masks), widths); init=(result, 0)) |> first
+    return foldl(((result, lastwidth), (mask, width)) -> (result | (mask << lastwidth), lastwidth + width), zip(masks, widths); init=(result, 0)) |> first
 end
 
 BitPermutations.bitpermute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
@@ -249,4 +249,14 @@ end
     @test fock((2,)) == fockmapper((fock((2,)), fock(())))
     @test fock((2, 3)) == fockmapper((fock((2,)), fock((1,))))
     @test fock((3,)) == fockmapper((fock(()), fock((1,))))
+
+    # test splitting with different sizes
+    jw1 = JordanWignerOrdering((1, 4))
+    jw2 = JordanWignerOrdering((2,))
+    jw3 = JordanWignerOrdering((3,))
+    jw = JordanWignerOrdering(1:4)
+    focksplitter = FermionicHilbertSpaces.FockSplitter(jw, (jw1, jw2, jw3))
+    fockmapper = FermionicHilbertSpaces.FockMapper((jw1, jw2, jw3), jw)
+    ident = fockmapper ∘ focksplitter
+    @test all(ident(FockNumber(k)) == FockNumber(k) for k in 0:2^length(jw)-1)
 end
