@@ -69,12 +69,17 @@ jwstring_left(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f) - count_
 struct FockMapper{P}
     fermionpositions::P
 end
-using BitPermutations
-struct FockMapper2{P}
+struct FockMapper2{P1,P2}
+    fermionpositions::P1
     widths::Vector{Int}
-    permutation::P
+    permutation::P2
 end
-FockMapper_2(jws, jw) = FockMapper2(collect(map(length, jws)), BitPermutation{UInt}((mapreduce(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, vcat, jws))))
+function FockMapper_2(jws, jw)
+    widths = collect(map(length, jws))
+    fermionpositions = map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)
+    permutation = BitPermutation{UInt}(reduce(vcat, fermionpositions))
+    FockMapper2(fermionpositions, widths, permutation)
+end
 FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_2(jws, jw)
 FockMapper_collect(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)) #faster construction
 FockMapper_tuple(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ Tuple ∘ keys, jws)) #faster application, but type instability
@@ -89,7 +94,7 @@ function (fm::FockMapper)(fs::NTuple{N,<:FockNumber}) where {N}
     return f0
 end
 function (fm::FockMapper2)(fs::NTuple{N,<:FockNumber}) where {N}
-    masks = Iterators.map(f -> f.f, fs)
+    masks = Iterators.map(f -> f.f, Iterators.reverse(fs))
     FockNumber{Int}(bp(masks, fm.widths, fm.permutation))
 end
 Base.:>>(f::FockNumber, n::Integer) = FockNumber(f.f >> n)
@@ -215,7 +220,10 @@ end
 function split_focknumber(f::FockNumber, fockmapper::FockMapper)
     split_focknumber(f, fockmapper.fermionpositions)
 end
-@testitem "Split focknumber" begin
+function split_focknumber(f::FockNumber, fockmapper::FockMapper2)
+    split_focknumber(f, fockmapper.fermionpositions)
+end
+@testitem "Split and join focknumbers" begin
     import FermionicHilbertSpaces: focknbr_from_site_indices as fock
     jw1 = JordanWignerOrdering((1, 3))
     jw2 = JordanWignerOrdering((2, 4))
@@ -233,6 +241,17 @@ end
     fockmapper = FermionicHilbertSpaces.FockMapper((jw1, jw2), jw)
     @test FermionicHilbertSpaces.split_focknumber(fock((1, 2, 4)), fockmapper) == focksplitter(fock((1, 2, 4)))
 
+    # test all cases above with fockmapper
+    @test fock((1, 2, 3, 4)) == fockmapper((fock((1, 2)), fock((1, 2))))
+    @test fock((1,)) == fockmapper((fock((1,)), fock(())))
+    @test fock(()) == fockmapper((fock(()), fock(())))
+    @test fock((1, 2, 3)) == fockmapper((fock((1, 2)), fock((1,))))
+    @test fock((1, 3)) == fockmapper((fock((1, 2)), fock(())))
+    @test fock((2, 4)) == fockmapper((fock(()), fock((1, 2))))
+    @test fock((3, 2)) == fockmapper((fock((2,)), fock((1,))))
+    @test fock((3, 4)) == fockmapper((fock((2,)), fock((2,))))
+
+    
     jw1 = JordanWignerOrdering((1, 2))
     jw2 = JordanWignerOrdering((3,))
     jw = JordanWignerOrdering((1, 2, 3))

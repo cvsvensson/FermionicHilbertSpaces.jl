@@ -7,7 +7,7 @@ import FillArrays: Zeros
 import OrderedCollections: OrderedDict
 using TestItems
 using TermInterface
-
+using BitPermutations
 
 export FockNumber, JordanWignerOrdering, hc, focknumbers
 export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subregion
