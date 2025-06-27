@@ -485,7 +485,6 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::
     end
     N = length(labels)
     fill!(mout, zero(eltype(mout)))
-    
     subfockstates = focknumbers(Hout)
     Hbar_labels = setdiff(collect(keys(H)), collect(keys(Hout)))
     Hbar = SimpleFockHilbertSpace(Hbar_labels)
@@ -503,7 +502,6 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::
             mout[I1, I2] += s * m[focktoind(fullf1, H), focktoind(fullf2, H)]
         end
     end
-    
     return mout
 end
 

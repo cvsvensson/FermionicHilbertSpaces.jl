@@ -80,22 +80,14 @@ function FockMapper_2(jws, jw)
     permutation = BitPermutation{UInt}(reduce(vcat, fermionpositions))
     FockMapper2(fermionpositions, widths, permutation)
 end
+# FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_collect(jws, jw)
 FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_2(jws, jw)
 FockMapper_collect(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)) #faster construction
 FockMapper_tuple(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ Tuple ∘ keys, jws)) #faster application, but type instability
 FockMapper(Hs, H::AbstractHilbertSpace) = FockMapper(map(b -> b.jw, Hs), H.jw)
 # (fm::FockMapper)(f::NTuple{N,<:FockNumber}) where {N} = mapreduce(insert_bits, +, f, fm.fermionpositions)
-function (fm::FockMapper)(fs::NTuple{N,<:FockNumber}) where {N}
-    # scatter_bitmasks(fs, fm.fermionpositions)
-    f0 = (0 & first(fs))
-    for (f, pos) in zip(fs, fm.fermionpositions)
-        f0 += insert_bits(f, pos)
-    end
-    return f0
-end
-function (fm::FockMapper2)(fs::NTuple{N,<:FockNumber}) where {N}
-    masks = Iterators.map(f -> f.f, Iterators.reverse(fs))
-    FockNumber{Int}(bp(masks, fm.widths, fm.permutation))
+function (fm::FockMapper2)(fs::NTuple{N,FockNumber{T}}) where {N,T}
+    concatenate_and_permute(fs, fm.widths, fm.permutation)
 end
 Base.:>>(f::FockNumber, n::Integer) = FockNumber(f.f >> n)
 Base.:<<(f::FockNumber, n::Integer) = FockNumber(f.f << n)
@@ -112,15 +104,15 @@ function scatter_bitmasks(masks, positions)
     end
     return result
 end
-function bp(masks, widths, permutation)
+function concatenate_and_permute(masks, widths, permutation)
     mask = concatenate_bitmasks(masks, widths)
-    # println(mask)
     bitpermute(mask, permutation)
 end
+BitPermutations.bitpermute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
 function concatenate_bitmasks(masks, widths)
     result = zero(first(masks))
-    foldl(((result, lastwidth), (mask, width)) -> ((result << lastwidth) | mask, width), zip(masks, widths); init=(result, 0)) |> first
-    # for (width, mask) in zip(widths, masks)
+    return foldl(((result, lastwidth), (mask, width)) -> ((result << lastwidth) | mask, width), zip(Iterators.reverse(masks), widths); init=(result, 0)) |> first
+    # for (width, mask) in zip(widths, Iterators.reverse(masks))
     #     result = (result >> width) | mask
     # end
     # return result
@@ -251,7 +243,7 @@ end
     @test fock((3, 2)) == fockmapper((fock((2,)), fock((1,))))
     @test fock((3, 4)) == fockmapper((fock((2,)), fock((2,))))
 
-    
+    # test splitting with different sizes
     jw1 = JordanWignerOrdering((1, 2))
     jw2 = JordanWignerOrdering((3,))
     jw = JordanWignerOrdering((1, 2, 3))
@@ -262,4 +254,13 @@ end
     @test focksplitter(fock((2,))) == (fock((2,)), fock(()))
     @test focksplitter(fock((2, 3))) == (fock((2,)), fock((1,)))
     @test focksplitter(fock((3,))) == (fock(()), fock((1)))
+
+    # test all cases above with fockmapper
+    fockmapper = FermionicHilbertSpaces.FockMapper((jw1, jw2), jw)
+    @test FermionicHilbertSpaces.split_focknumber(fock((1, 2, 3)), fockmapper) == focksplitter(fock((1, 2, 3)))
+    @test fock((1, 3)) == fockmapper((fock((1,)), fock((1,))))
+    @test fock((1, 2)) == fockmapper((fock((1, 2)), fock(())))
+    @test fock((2,)) == fockmapper((fock((2,)), fock(())))
+    @test fock((2, 3)) == fockmapper((fock((2,)), fock((1,))))
+    @test fock((3,)) == fockmapper((fock(()), fock((1,))))
 end
