@@ -271,7 +271,7 @@ function matrix_representation(op::FermionAdd{C}, jw, outstates, instates) where
         append!(outinds, eachindex(outstates))
         append!(amps, fill(op.coeff, length(instates)))
     end
-    return sparse(outinds, ininds, amps, length(outstates), length(instates))
+    return SparseArrays.sparse!(outinds, ininds, amps, length(outstates), length(instates))
 end
 operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, jw, outstates, instates; kwargs...) = operator_inds_amps!((outinds, ininds, amps), FermionMul(1, [op]), jw, outstates, instates; kwargs...)
 
