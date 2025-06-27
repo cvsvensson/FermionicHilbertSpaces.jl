@@ -15,7 +15,7 @@ R = hilbert_space((1, 3, 4))
 γRRbar = Γ[1, :-] * Γ[3, :+] * Γ[2, :-]
 @test norm(partial_trace(γRRbar, H => R)) ≈ 0
 
-# If the Majorana is contained in `R`, its partial trace is the same as if expressed in the smaller basis `γR`, up to multiplication by dim(R̄).
+# If the Majorana is contained in `R`, its partial trace is the same as if expressed in the smaller basis `ΓR`, up to multiplication by dim(R̄).
 ΓR = majoranas(R)
 labels_combs = combinations(collect(keys(ΓR)))
 for labels in labels_combs
