@@ -46,7 +46,7 @@ Base.keys(H::SimpleFockHilbertSpace) = keys(H.jw)
     focknumbers(H)
 Return an iterator over all Fock states for the given Hilbert space `H`.
 """
-focknumbers(H::SimpleFockHilbertSpace) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
+focknumbers(H::SimpleFockHilbertSpace) = Iterators.map(FockNumber{UInt}, 0:2^length(H.jw)-1)
 indtofock(ind, ::SimpleFockHilbertSpace) = FockNumber(ind - 1)
 focktoind(focknbr::FockNumber, ::SimpleFockHilbertSpace) = focknbr.f + 1
 function Base.:(==)(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace)
@@ -67,7 +67,7 @@ struct FockHilbertSpace{L,F,I} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
     focknumbers::F
     focktoind::I
-    function FockHilbertSpace(labels, focknumbers::F=map(FockNumber, 0:2^length(labels)-1)) where F
+    function FockHilbertSpace(labels, focknumbers::F=map(FockNumber{UInt}, 0:2^length(labels)-1)) where F
         jw = JordanWignerOrdering(labels)
         focktoind = Dict(reverse(pair) for pair in enumerate(focknumbers))
         new{eltype(jw),F,typeof(focktoind)}(jw, focknumbers, focktoind)
@@ -123,7 +123,7 @@ Base.keys(H::SymmetricFockHilbertSpace) = keys(H.jw)
 indtofock(ind, H::SymmetricFockHilbertSpace) = indtofock(ind, H.symmetry)
 focktoind(f::FockNumber, H::SymmetricFockHilbertSpace) = focktoind(f, H.symmetry)
 focknumbers(H::SymmetricFockHilbertSpace) = focknumbers(H.symmetry)
-focknumbers(H::SymmetricFockHilbertSpace{<:Any,NoSymmetry}) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
+focknumbers(H::SymmetricFockHilbertSpace{<:Any,NoSymmetry}) = Iterators.map(FockNumber{UInt}, 0:2^length(H.jw)-1)
 
 function Base.:(==)(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
     if H1 === H2

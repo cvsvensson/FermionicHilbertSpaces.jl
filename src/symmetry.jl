@@ -7,14 +7,14 @@ A symmetry type indicating no symmetry constraints.
 struct NoSymmetry <: AbstractSymmetry end
 
 """
-    struct FockSymmetry{IF,FI,QN,QNfunc} <: AbstractSymmetry
+    struct FockSymmetry{IF,FI,QN,I,QNfunc} <: AbstractSymmetry
 
 FockSymmetry represents a symmetry that is diagonal in fock space, i.e. particle number conservation, parity, spin consvervation.
 
 ## Fields
 - `focknumbers::IF`: A vector of Fock numbers, which are integers representing the occupation of each mode.
 - `focktoinddict::FI`: A dictionary mapping Fock states to indices.
-- `qntofockstates::Dictionary{QN,Vector{Int}}`: A dictionary mapping quantum numbers to Fock states.
+- `qntofockstates::Dictionary{QN,FockNumber{I}}`: A dictionary mapping quantum numbers to Fock states.
 - `conserved_quantity::QNfunc`: A function that computes the conserved quantity from a fock number.
 """
 struct FockSymmetry{IF,FI,QN,I,QNfunc} <: AbstractSymmetry
@@ -62,7 +62,7 @@ end
 
 Generate a list of Fock states with `n` occupied fermions in a system with `M` different fermions.
 """
-function fixed_particle_number_fockstates(M, n, ::Type{T}=(M > 63 ? BigInt : Int)) where T
+function fixed_particle_number_fockstates(M, n, ::Type{T}=(M > 62 ? BigInt : UInt)) where T
     iszero(n) && return map(FockNumber{T}, [0])
     v = T(focknbr_from_bits([true for _ in 1:n]).f)
     maxv = v << (M - n)
@@ -238,7 +238,7 @@ function instantiate_and_get_focknumbers(jw::JordanWignerOrdering, _qn)
     fs = focknumbers(jw, qn)
     return qn, fs
 end
-focknumbers(jw::JordanWignerOrdering, ::NoSymmetry) = map(FockNumber, 0:2^length(jw)-1)
+focknumbers(jw::JordanWignerOrdering, ::NoSymmetry) = map(FockNumber{UInt}, 0:2^length(jw)-1)
 function focknumbers(jw::JordanWignerOrdering, qn::ParityConservation)
     s = sectors(qn)
     fs = focknumbers(jw, NoSymmetry())

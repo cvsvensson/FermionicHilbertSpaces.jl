@@ -51,9 +51,9 @@ Base.zero(::FockNumber{T}) where T = zero(FockNumber{T})
 Base.zero(::Type{FockNumber{T}}) where T = FockNumber(zero(T))
 
 
-focknbr_from_bits(bits, ::Type{T}=(length(bits) > 63 ? BigInt : Int)) where T = FockNumber(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
+focknbr_from_bits(bits, ::Type{T}=(length(bits) > 62 ? BigInt : UInt)) where T = FockNumber(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
 focknbr_from_site_index(site::Integer) = FockNumber(1 << (site - 1))
-focknbr_from_site_indices(sites) = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber(0))
+focknbr_from_site_indices(sites) = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber(Uint(0)))
 
 bits(f::FockNumber, N) = digits(Bool, f.f, base=2, pad=N)
 parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
