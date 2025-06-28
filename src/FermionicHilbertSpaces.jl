@@ -58,6 +58,8 @@ include("symbolics/muladd.jl")
 include("symbolics/symbolic_fermions.jl")
 include("symbolics/symbolic_majoranas.jl")
 
+include("majorana_hilbert_space.jl")
+
 import PrecompileTools
 
 PrecompileTools.@compile_workload begin

@@ -2,7 +2,7 @@ struct SymbolicMajoranaBasis
     name::Symbol
     universe::UInt64
 end
-
+abstract type AbstractMajoranaSym <: AbstractFermionSym end
 """
     @majoranas a b ...
 
@@ -32,7 +32,7 @@ Base.getindex(f::SymbolicMajoranaBasis, is...) = MajoranaSym(is, f)
 Base.getindex(f::SymbolicMajoranaBasis, i) = MajoranaSym(i, f)
 Base.:(==)(a::SymbolicMajoranaBasis, b::SymbolicMajoranaBasis) = a.name == b.name && a.universe == b.universe
 
-struct MajoranaSym{L,B} <: AbstractFermionSym
+struct MajoranaSym{L,B} <: AbstractMajoranaSym
     label::L
     basis::B
 end
@@ -84,6 +84,9 @@ eval_in_basis(a::MajoranaSym, f) = f[a.label]
 TermInterface.operation(::MajoranaSym) = MajoranaSym
 TermInterface.arguments(a::MajoranaSym) = [a.label, a.basis]
 TermInterface.children(a::MajoranaSym) = arguments(a)
+
+Base.valtype(::AbstractMajoranaSym) = Complex{Int}
+Base.valtype(::FermionMul{C,F}) where {C,F<:AbstractMajoranaSym} = complex(C)
 
 @testitem "MajoranaSym" begin
     using Symbolics
