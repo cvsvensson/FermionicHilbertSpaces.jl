@@ -119,10 +119,6 @@ end
 
 BitPermutations.bitpermute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
 
-struct FockShifter{M}
-    shifts::M
-end
-(fs::FockShifter)(f::NTuple{N,<:FockNumber}) where {N} = mapreduce((f, M) -> shift_right(f, M), +, f, fs.shifts)
 shift_right(f::FockNumber, M) = FockNumber(f.f << M)
 FockSplitter(H::AbstractHilbertSpace, bs) = FockSplitter(H.jw, map(b -> b.jw, bs))
 
