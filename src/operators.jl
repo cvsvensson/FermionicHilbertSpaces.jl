@@ -85,7 +85,7 @@ function sparse_fockoperator(op, H::AbstractFockHilbertSpace)
             push!(outinds, focktoind(newfockstate, H))
         end
     end
-    return sparse(outinds, ininds, amps, N, N)
+    return SparseArrays.sparse!(outinds, ininds, amps, N, N)
 end
 
 

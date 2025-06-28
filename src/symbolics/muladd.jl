@@ -225,7 +225,9 @@ isscalar(x::AbstractFermionSym) = false
 
 ## Instantiating sparse matrices
 _labels(a::FermionMul) = [s.label for s in a.factors]
-matrix_representation(op::Union{<:FermionAdd,<:FermionMul,<:AbstractFermionSym}, H::AbstractFockHilbertSpace) = matrix_representation(op, H.jw, focknumbers(H), focknumbers(H))
+matrix_representation(op, H::AbstractFockHilbertSpace) = matrix_representation(op, H.jw, focknumbers(H), focknumbers(H))
+matrix_representation(op::Number, H::AbstractFockHilbertSpace) = op * I(size(H, 1))
+
 function matrix_representation(op::Union{<:FermionMul,<:AbstractFermionSym}, labels, outstates, instates)
     outinds, ininds, amps = operator_inds_amps(op, labels, outstates, instates)
     sparse(outinds, ininds, identity.(amps), length(outstates), length(instates))
@@ -271,7 +273,7 @@ function matrix_representation(op::FermionAdd{C}, jw, outstates, instates) where
         append!(outinds, eachindex(outstates))
         append!(amps, fill(op.coeff, length(instates)))
     end
-    return sparse(outinds, ininds, amps, length(outstates), length(instates))
+    return SparseArrays.sparse!(outinds, ininds, amps, length(outstates), length(instates))
 end
 operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, jw, outstates, instates; kwargs...) = operator_inds_amps!((outinds, ininds, amps), FermionMul(1, [op]), jw, outstates, instates; kwargs...)
 
