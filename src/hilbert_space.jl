@@ -47,7 +47,7 @@ Base.keys(H::SimpleFockHilbertSpace) = keys(H.jw)
 Return an iterator over all Fock states for the given Hilbert space `H`.
 """
 focknumbers(H::SimpleFockHilbertSpace) = Iterators.map(FockNumber{UInt}, 0:2^length(H.jw)-1)
-indtofock(ind, ::SimpleFockHilbertSpace) = FockNumber(ind - 1)
+indtofock(ind, ::SimpleFockHilbertSpace) = FockNumber{UInt}(ind - 1)
 focktoind(focknbr::FockNumber, ::SimpleFockHilbertSpace) = focknbr.f + 1
 function Base.:(==)(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace)
     if H1 === H2
