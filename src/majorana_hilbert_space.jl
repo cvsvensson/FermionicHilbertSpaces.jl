@@ -1,12 +1,17 @@
 struct MajoranaHilbertSpace{L,H} <: AbstractHilbertSpace
-    siteindex::L
+    majoranaindices::L
     parent::H
 end
-Base.size(m::MajoranaHilbertSpace) = size(m.parent)
-mode_ordering(m::MajoranaHilbertSpace) = mode_ordering(m.parent)
-Base.:(==)(m1::MajoranaHilbertSpace, m2::MajoranaHilbertSpace) = m1.pairing == m2.pairing && m1.parent == m2.parent
+Base.size(H::MajoranaHilbertSpace) = size(H.parent)
+mode_ordering(H::MajoranaHilbertSpace) = mode_ordering(H.parent)
+Base.:(==)(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace) = H1.majoranaindices == H2.majoranaindices && H1.parent == H2.parent
 focknumbers(m::MajoranaHilbertSpace) = focknumbers(m.parent)
+Base.parent(H::MajoranaHilbertSpace) = H.parent
 
+function majoranas(H::MajoranaHilbertSpace)
+    @majoranas γ
+    OrderedDict(l => matrix_representation(γ[l], H) for l in keys(H.majoranaindices))
+end
 function majorana_hilbert_space(labels, qn=NoSymmetry())
     iseven(length(labels)) || throw(ArgumentError("Must be an even number of Majoranas to define a Hilbert space."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
@@ -16,9 +21,23 @@ function majorana_hilbert_space(labels, qn=NoSymmetry())
     MajoranaHilbertSpace(majorana_position, H)
 end
 Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace:"); show(io, m.parent))
-## Define matrix representations of symbolic majorana operators on Majorana Hilbert spaces.
 
-matrix_representation(op, H::MajoranaHilbertSpace) = matrix_representation(op, H.siteindex, focknumbers(H), focknumbers(H))
+function subregion(modes, H::MajoranaHilbertSpace)
+    iseven(length(modes)) || throw(ArgumentError("Must be an even number of Majoranas to define a subregion."))
+    pairs = [(modes[i], modes[i+1]) for i in 1:2:length(modes)-1]
+    majorana_position = OrderedDict(label => n for (n, label) in enumerate(modes))
+    MajoranaHilbertSpace(majorana_position, subregion(pairs, H.parent))
+end
+partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hout::MajoranaHilbertSpace, phase_factors::Bool=true) = partial_trace!(mout, m, H.parent, Hout.parent, phase_factors)
+isorderedpartition(Hs, H::MajoranaHilbertSpace) = isorderedpartition(map(parent, Hs), H.parent)
+embedding(m, H::MajoranaHilbertSpace, Hnew::MajoranaHilbertSpace, phase_factors::Bool=true) = embedding(m, H.parent, Hnew.parent, phase_factors)
+function tensor_product(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace)
+    Hf = tensor_product(H1.parent, H2.parent)
+    majoranaindices = OrderedDict(mapreduce((ntup) -> [ntup[2][1] => 2ntup[1] - 1, ntup[2][2] => 2ntup[1]], vcat, enumerate(keys(Hf))))
+    MajoranaHilbertSpace(majoranaindices, Hf)
+end
+## Define matrix representations of symbolic majorana operators on Majorana Hilbert spaces.
+matrix_representation(op, H::MajoranaHilbertSpace) = matrix_representation(op, H.majoranaindices, focknumbers(H), focknumbers(H))
 matrix_representation(op::Number, H::MajoranaHilbertSpace) = matrix_representation(op, H.parent)
 
 function operator_inds_amps!((outinds, ininds, amps), op::FermionMul{C,F}, label_to_site, outstates, instates; fock_to_outind=Dict(map(reverse, enumerate(outstates)))) where {C,F<:AbstractMajoranaSym}
@@ -66,4 +85,23 @@ end
     @test matrix_representation(γ[1] * γ[2], H) == matrix_representation(y(f[(1, 2)]) * y(f[(1, 2)]'), Hf)
     @test matrix_representation(1 + γ[1] + 1im * γ[2] + 0.2 * γ[1] * γ[2], H) ==
           matrix_representation(1 + y(f[(1, 2)]) + 1im * y(f[(1, 2)]') + 0.2 * y(f[(1, 2)]) * y(f[(1, 2)]'), Hf)
+end
+
+@testitem "Majorana hilbert space" begin
+    using FermionicHilbertSpaces: majorana_hilbert_space
+    H = majorana_hilbert_space(1:4, ParityConservation(1))
+    Hsub = subregion(1:2, H)
+    Hf = H.parent
+    Hfsub = subregion([(1, 2)], Hf)
+    m = rand(size(H)...)
+    @test partial_trace(m, H => Hsub) == partial_trace(m, Hf => Hfsub)
+    Hsub2 = subregion(3:4, H)
+    Hfsub2 = subregion([(3, 4)], Hf)
+
+    Hprod = tensor_product(Hsub, Hsub2)
+    @test parent(Hprod) == tensor_product(Hfsub, Hfsub2)
+
+    m1 = rand(size(Hsub)...)
+    m2 = rand(size(Hsub2)...)
+    @test tensor_product((m1, m2), (Hsub, Hsub2), Hprod) == tensor_product((m1, m2), (Hfsub, Hfsub2) => parent(Hprod))
 end

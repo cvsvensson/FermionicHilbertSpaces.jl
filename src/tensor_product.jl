@@ -476,7 +476,7 @@ partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, phase_
 Compute the fermionic partial trace of a matrix `m` in basis `H`, leaving only the subsystems specified by `labels`. The result is stored in `mout`, and `Hout` determines the ordering of the basis states.
 """
 function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::AbstractHilbertSpace, phase_factors::Bool=true)
-    M = length(H.jw)
+    M = length(keys(H))
     labels = collect(keys(Hout))
     if phase_factors
         consistent_ordering(labels, H.jw) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
@@ -497,7 +497,11 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::
             fullf2 = fm((f2, fbar))
             s1 = phase_factors ? phase_factor_f(fullf1, fullf2, M) : 1
             s = s2 * s1
-            mout[I1, I2] += s * m[focktoind(fullf1, H), focktoind(fullf2, H)]
+            J1 = focktoind(fullf1, H)
+            ismissing(J1) && continue
+            J2 = focktoind(fullf2, H)
+            ismissing(J2) && continue
+            mout[I1, I2] += s * m[J1, J2]
         end
     end
     return mout

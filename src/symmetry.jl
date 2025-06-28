@@ -46,7 +46,8 @@ end
 focksymmetry(::AbstractVector, ::NoSymmetry) = NoSymmetry()
 instantiate(::NoSymmetry, labels) = NoSymmetry()
 indtofock(ind, sym::FockSymmetry) = FockNumber(sym.focknumbers[ind])
-focktoind(f, sym::FockSymmetry) = sym.focktoinddict[f]
+focktoind(f, sym::FockSymmetry) = get(sym.focktoinddict, f, missing)
+# focktoind(f, sym::FockSymmetry) = sym.focktoinddict[f]
 focknumbers(sym::FockSymmetry) = sym.focknumbers
 
 focktoind(fs::FockNumber, ::NoSymmetry) = fs.f + 1
