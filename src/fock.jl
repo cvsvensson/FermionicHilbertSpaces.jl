@@ -7,6 +7,8 @@ struct FockNumber{I<:Integer}
 end
 FockNumber(f::FockNumber) = f
 Base.convert(::Type{FockNumber{I}}, f::FockNumber) where I = FockNumber{I}(f.f)
+Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
+
 """
     JordanWignerOrdering
 A type representing the ordering of fermionic modes.
