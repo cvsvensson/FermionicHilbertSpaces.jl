@@ -70,9 +70,7 @@ Compute the fermionic tensor product of matrices or vectors in `ms` with respect
 function fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs), phase_factors::Bool=true)
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs)
-
-    fermionpositions = map(Base.Fix2(siteindices, H.jw) ∘ collect ∘ keys, Hs)
-    fockmapper = FockMapper(fermionpositions)
+    fockmapper = FockMapper(Hs, H)
     if N == 1
         return fermionic_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, fockmapper)
     elseif N == 2
@@ -163,7 +161,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}, phase_factors::Bool=
     import FermionicHilbertSpaces: embedding, tensor_product, embedding_unitary, canonical_embedding, project_on_parity, project_on_parities
 
     Random.seed!(1)
-    N = 7
+    N = 10
     rough_size = 5
     fine_size = 3
     rough_partitions = sort.(collect(partition(randperm(N), rough_size)))
@@ -485,7 +483,6 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::
     end
     N = length(labels)
     fill!(mout, zero(eltype(mout)))
-    
     subfockstates = focknumbers(Hout)
     Hbar_labels = setdiff(collect(keys(H)), collect(keys(Hout)))
     Hbar = SimpleFockHilbertSpace(Hbar_labels)
@@ -503,7 +500,6 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::
             mout[I1, I2] += s * m[focktoind(fullf1, H), focktoind(fullf2, H)]
         end
     end
-    
     return mout
 end
 
