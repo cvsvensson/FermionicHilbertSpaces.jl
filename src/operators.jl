@@ -55,7 +55,6 @@ function togglefermions(digitpositions, daggers, focknbr)
     # fermionstatistics better way?
     return newfocknbr, allowed * fermionstatistics
 end
-Base.zero(::FockNumber{T}) where T = FockNumber(zero(T))
 
 function togglemajoranas(digitpositions, daggers, focknbr)
     newfocknbr = zero(focknbr)
