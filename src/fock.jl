@@ -6,6 +6,9 @@ struct FockNumber{I<:Integer}
     f::I
 end
 FockNumber(f::FockNumber) = f
+Base.convert(::Type{FockNumber{I}}, f::FockNumber) where I = FockNumber{I}(f.f)
+Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
+
 """
     JordanWignerOrdering
 A type representing the ordering of fermionic modes.
@@ -32,7 +35,7 @@ siteindices(labels, jw::JordanWignerOrdering) = map(Base.Fix2(siteindex, jw), la
 
 label_at_site(n, ordering::JordanWignerOrdering) = ordering.labels[n]
 focknbr_from_site_label(label, jw::JordanWignerOrdering) = focknbr_from_site_index(siteindex(label, jw))
-focknbr_from_site_labels(labels, jw::JordanWignerOrdering) = mapreduce(Base.Fix2(focknbr_from_site_label, jw), +, labels, init=FockNumber(0))
+focknbr_from_site_labels(labels, jw::JordanWignerOrdering) = mapreduce(Base.Fix2(focknbr_from_site_label, jw), +, labels, init=FockNumber{UInt}(0))
 focknbr_from_site_labels(labels::JordanWignerOrdering, jw::JordanWignerOrdering) = focknbr_from_site_labels(labels.labels, jw)
 
 Base.:+(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f + f2.f)
@@ -51,9 +54,9 @@ Base.zero(::FockNumber{T}) where T = zero(FockNumber{T})
 Base.zero(::Type{FockNumber{T}}) where T = FockNumber(zero(T))
 
 
-focknbr_from_bits(bits, ::Type{T}=(length(bits) > 63 ? BigInt : Int)) where T = FockNumber(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
+focknbr_from_bits(bits, ::Type{T}=(length(bits) > 62 ? BigInt : UInt)) where T = FockNumber(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
 focknbr_from_site_index(site::Integer) = FockNumber(1 << (site - 1))
-focknbr_from_site_indices(sites) = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber(0))
+focknbr_from_site_indices(sites) = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber(UInt(0)))
 
 bits(f::FockNumber, N) = digits(Bool, f.f, base=2, pad=N)
 parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
@@ -78,9 +81,9 @@ end
 
 (fm::FockMapper)(f::NTuple{N,<:FockNumber}) where {N} = mapreduce(insert_bits, +, f, fm.fermionpositions)
 
-function insert_bits(_x::FockNumber, positions)
+function insert_bits(_x::FockNumber{T}, positions) where T
     x = _x.f
-    result = 0
+    result = zero(T)
     bit_index = 1
     for pos in positions
         if x & (1 << (bit_index - 1)) != 0
@@ -88,7 +91,7 @@ function insert_bits(_x::FockNumber, positions)
         end
         bit_index += 1
     end
-    return FockNumber(result)
+    return FockNumber{T}(result)
 end
 
 struct FockMapperBitPermutations{P1,P2}
