@@ -43,7 +43,7 @@ qubit_operator(c, ::QubitOp{:H}) = 1 / sqrt(2) * (qubit_operator(c, QubitOp{:Z}(
     H = hilbert_space(1:3)
     a = QubitOperators(H)
     Hs = (hilbert_space(1:1), hilbert_space(2:2), hilbert_space(3:3))
-    v = [FermionicHilbertSpaces.indtofock(i, H) for i in 1:8]
+    v = [FermionicHilbertSpaces.basisstate(i, H) for i in 1:8]
     t1 = reshape(v, H, Hs)
     t2 = [i1 + 2i2 + 4i3 for i1 in (0, 1), i2 in (0, 1), i3 in (0, 1)]
     @test t1 == FockNumber.(t2)

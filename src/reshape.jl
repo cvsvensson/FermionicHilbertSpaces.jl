@@ -23,10 +23,10 @@ function _reshape_vec_to_tensor(v, H::AbstractFockHilbertSpace, Hs, fock_splitte
     if phase_factors
         isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
     end
-    dims = length.(focknumbers.(Hs))
-    fs = focknumbers(H)
-    Is = map(f -> focktoind(f, H), fs)
-    Iouts = map(f -> focktoind.(fock_splitter(f), Hs), fs)
+    dims = length.(basisstates.(Hs))
+    fs = basisstates(H)
+    Is = map(f -> state_index(f, H), fs)
+    Iouts = map(f -> state_index.(fock_splitter(f), Hs), fs)
     t = Array{eltype(v),length(Hs)}(undef, dims...)
     for (I, Iout) in zip(Is, Iouts)
         t[Iout...] = v[I...]
@@ -39,10 +39,10 @@ function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractFockHilbertSpace, 
     if phase_factors
         isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
     end
-    dims = length.(focknumbers.(Hs))
-    fs = focknumbers(H)
-    Is = map(f -> focktoind(f, H), fs)
-    Iouts = map(f -> focktoind.(fock_splitter(f), Hs), fs)
+    dims = length.(basisstates.(Hs))
+    fs = basisstates(H)
+    Is = map(f -> state_index(f, H), fs)
+    Iouts = map(f -> state_index.(fock_splitter(f), Hs), fs)
     t = Array{eltype(m),2 * length(Hs)}(undef, dims..., dims...)
     partition = map(collect ∘ keys, Hs)
     for (I1, Iout1, f1) in zip(Is, Iouts, fs)
@@ -58,10 +58,10 @@ function _reshape_tensor_to_mat(t, Hs, H::AbstractFockHilbertSpace, fockmapper, 
     if phase_factors
         isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
     end
-    fs = Base.product(focknumbers.(Hs)...)
+    fs = Base.product(basisstates.(Hs)...)
     fsb = map(fockmapper, fs)
-    Is = map(f -> focktoind.(f, Hs), fs)
-    Iouts = map(f -> focktoind(f, H), fsb)
+    Is = map(f -> state_index.(f, Hs), fs)
+    Iouts = map(f -> state_index(f, H), fsb)
     m = Matrix{eltype(t)}(undef, length(fsb), length(fsb))
     partition = map(collect ∘ keys, Hs)
 
@@ -76,12 +76,12 @@ end
 
 function _reshape_tensor_to_vec(t, Hs, H::AbstractFockHilbertSpace, fockmapper, phase_factors)
     isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
-    fs = Base.product(focknumbers.(Hs)...)
+    fs = Base.product(basisstates.(Hs)...)
     v = Vector{eltype(t)}(undef, length(fs))
     for fs in fs
-        Is = focktoind.(fs, Hs)
+        Is = state_index.(fs, Hs)
         fb = fockmapper(fs)
-        Iout = focktoind(fb, H)
+        Iout = state_index(fb, H)
         v[Iout] = t[Is...]
     end
     return v

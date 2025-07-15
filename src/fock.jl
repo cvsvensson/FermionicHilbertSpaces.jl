@@ -1,8 +1,9 @@
+abstract type AbstractFockState <: AbstractBasisState end
 """
     FockNumber
 A type representing a Fock state as the bitstring of an integer.
 """
-struct FockNumber{I<:Integer}
+struct FockNumber{I<:Integer} <: AbstractFockState
     f::I
 end
 FockNumber(f::FockNumber) = f

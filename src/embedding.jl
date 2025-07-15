@@ -1,27 +1,27 @@
 
 """
-    embedding_unitary(partition, fockstates, jw)
+    embedding_unitary(partition, basisstates, jw)
 
     Compute the unitary matrix that maps between the tensor embedding and the fermionic embedding in the physical subspace. 
     # Arguments
     - `partition`: A partition of the labels in `jw` into disjoint sets.
-    - `fockstates`: The fock states in the basis
+    - `basisstates`: The basis states in the basis
     - `jw`: The Jordan-Wigner ordering.
 """
-function embedding_unitary(_partition, fockstates, jw::JordanWignerOrdering)
+function embedding_unitary(_partition, basisstates, jw::JordanWignerOrdering)
     #for locally physical algebra, ie only for even operators or states of well-defined parity
     #if ξ is ordered, the phases are +1. 
     # Note that the jordan wigner modes are ordered in reverse from the labels, but this is taken care of by direction of the jwstring below
     partition = map(mode_ordering, _partition)
     isorderedpartition(partition, jw) || throw(ArgumentError("The partition must be ordered according to jw"))
 
-    phases = ones(Int, length(fockstates))
+    phases = ones(Int, length(basisstates))
     for (s, Xs) in enumerate(partition)
         mask = focknbr_from_site_labels(Xs, jw)
         for (r, Xr) in Iterators.drop(enumerate(partition), s)
             for li in Xr
                 i = siteindex(li, jw)
-                for (n, f) in zip(eachindex(phases), fockstates)
+                for (n, f) in zip(eachindex(phases), basisstates)
                     if _bit(f, i)
                         phases[n] *= jwstring_anti(i, mask & f)
                     end
@@ -32,16 +32,16 @@ function embedding_unitary(_partition, fockstates, jw::JordanWignerOrdering)
     return Diagonal(phases)
 end
 
-function bipartite_embedding_unitary(_X, _Xbar, fockstates, jw::JordanWignerOrdering)
+function bipartite_embedding_unitary(_X, _Xbar, basisstates, jw::JordanWignerOrdering)
     #(122a)
     X = mode_ordering(_X)
     Xbar = mode_ordering(_Xbar)
     ispartition((X, Xbar), jw) || throw(ArgumentError("The partition must be ordered according to jw"))
-    phases = ones(Int, length(fockstates))
+    phases = ones(Int, length(basisstates))
     mask = focknbr_from_site_labels(X, jw)
     for li in Xbar
         i = siteindex(li, jw)
-        for (n, f) in zip(eachindex(phases), fockstates)
+        for (n, f) in zip(eachindex(phases), basisstates)
             if _bit(f, i)
                 phases[n] *= jwstring_anti(i, mask & f)
             end

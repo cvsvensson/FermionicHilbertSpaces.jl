@@ -12,46 +12,46 @@ struct NoSymmetry <: AbstractSymmetry end
 FockSymmetry represents a symmetry that is diagonal in fock space, i.e. particle number conservation, parity, spin consvervation.
 
 ## Fields
-- `focknumbers::IF`: A vector of Fock numbers, which are integers representing the occupation of each mode.
-- `focktoinddict::FI`: A dictionary mapping Fock states to indices.
+- `basisstates::IF`: A vector of Fock numbers, which are integers representing the occupation of each mode.
+- `state_indexdict::FI`: A dictionary mapping Fock states to indices.
 - `qntofockstates::Dictionary{QN,Vector{Int}}`: A dictionary mapping quantum numbers to Fock states.
 - `conserved_quantity::QNfunc`: A function that computes the conserved quantity from a fock number.
 """
 struct FockSymmetry{IF,FI,QN,I,QNfunc} <: AbstractSymmetry
-    focknumbers::IF
-    focktoinddict::FI
+    basisstates::IF
+    state_indexdict::FI
     qntofockstates::Dictionary{QN,Vector{FockNumber{I}}}
     conserved_quantity::QNfunc
 end
 
-Base.:(==)(sym1::FockSymmetry, sym2::FockSymmetry) = sym1.focknumbers == sym2.focknumbers && sym1.focktoinddict == sym2.focktoinddict && sym1.qntofockstates == sym2.qntofockstates
+Base.:(==)(sym1::FockSymmetry, sym2::FockSymmetry) = sym1.basisstates == sym2.basisstates && sym1.state_indexdict == sym2.state_indexdict && sym1.qntofockstates == sym2.qntofockstates
 
 
 """
-    focksymmetry(focknumbers, qn)
+    focksymmetry(basisstates, qn)
 
 Constructs a `FockSymmetry` object that represents the symmetry of a many-body system. 
 
 # Arguments
-- `focknumbers`: The focknumbers to iterate over
+- `basisstates`: The basisstates to iterate over
 - `qn`: A function that takes an integer representing a fock state and returns corresponding quantum number.
 """
-function focksymmetry(focknumbers, qn)
-    qntofockstates = group(f -> qn(f), focknumbers)
+function focksymmetry(basisstates, qn)
+    qntofockstates = group(f -> qn(f), basisstates)
     sortkeys!(qntofockstates)
     ordered_fockstates = vcat(qntofockstates...)
-    focktoinddict = Dictionary(ordered_fockstates, 1:length(ordered_fockstates))
-    FockSymmetry(ordered_fockstates, focktoinddict, qntofockstates, qn)
+    state_indexdict = Dictionary(ordered_fockstates, 1:length(ordered_fockstates))
+    FockSymmetry(ordered_fockstates, state_indexdict, qntofockstates, qn)
 end
 focksymmetry(::AbstractVector, ::NoSymmetry) = NoSymmetry()
 instantiate(::NoSymmetry, labels) = NoSymmetry()
-indtofock(ind, sym::FockSymmetry) = FockNumber(sym.focknumbers[ind])
-focktoind(f, sym::FockSymmetry) = get(sym.focktoinddict, f, missing)
-# focktoind(f, sym::FockSymmetry) = sym.focktoinddict[f]
-focknumbers(sym::FockSymmetry) = sym.focknumbers
+basisstate(ind, sym::FockSymmetry) = FockNumber(sym.basisstates[ind])
+state_index(f, sym::FockSymmetry) = get(sym.state_indexdict, f, missing)
+# state_index(f, sym::FockSymmetry) = sym.state_indexdict[f]
+basisstates(sym::FockSymmetry) = sym.basisstates
 
-focktoind(fs::FockNumber, ::NoSymmetry) = fs.f + 1
-indtofock(ind, ::NoSymmetry) = FockNumber(ind - 1)
+state_index(fs::FockNumber, ::NoSymmetry) = fs.f + 1
+basisstate(ind, ::NoSymmetry) = FockNumber(ind - 1)
 
 function nextfockstate_with_same_number(v)
     #http://graphics.stanford.edu/~seander/bithacks.html#NextBitPermutation
@@ -234,48 +234,48 @@ function allowed_qn(qn, sym::AbstractSymmetry)
     in(qn, sectors(sym)) || return false
     return true
 end
-function instantiate_and_get_focknumbers(jw::JordanWignerOrdering, _qn)
+function instantiate_and_get_basisstates(jw::JordanWignerOrdering, _qn)
     qn = instantiate(_qn, jw)
-    fs = focknumbers(jw, qn)
+    fs = basisstates(jw, qn)
     return qn, fs
 end
-focknumbers(jw::JordanWignerOrdering, ::NoSymmetry) = map(FockNumber, 0:2^length(jw)-1)
-function focknumbers(jw::JordanWignerOrdering, qn::ParityConservation)
+basisstates(jw::JordanWignerOrdering, ::NoSymmetry) = map(FockNumber, 0:2^length(jw)-1)
+function basisstates(jw::JordanWignerOrdering, qn::ParityConservation)
     s = sectors(qn)
-    fs = focknumbers(jw, NoSymmetry())
+    fs = basisstates(jw, NoSymmetry())
     ismissing(s) && return fs
     filt = in(s) ∘ parity
     filter!(filt, fs)
 end
-function focknumbers(jw::JordanWignerOrdering, qn::FermionConservation)
+function basisstates(jw::JordanWignerOrdering, qn::FermionConservation)
     s = sectors(qn)
-    ismissing(s) && return focknumbers(jw, NoSymmetry())
+    ismissing(s) && return basisstates(jw, NoSymmetry())
     N = length(jw)
     mapreduce(n -> fixed_particle_number_fockstates(N, n), vcat, s)
 end
-function focknumbers(jw::JordanWignerOrdering, qn::FermionSubsetConservation)
+function basisstates(jw::JordanWignerOrdering, qn::FermionSubsetConservation)
     s = sectors(qn)
     mask = qn.mask
-    fs = focknumbers(jw, NoSymmetry())
+    fs = basisstates(jw, NoSymmetry())
     ismissing(s) && return fs
     filt = in(s) ∘ fermionnumber ∘ (f -> f & mask)
     filter!(filt, fs)
 end
-function focknumbers(jw::JordanWignerOrdering, sym::ProductSymmetry)
-    filter!(f -> allowed_qn(sym(f), sym), focknumbers(jw, NoSymmetry()))
+function basisstates(jw::JordanWignerOrdering, sym::ProductSymmetry)
+    filter!(f -> allowed_qn(sym(f), sym), basisstates(jw, NoSymmetry()))
 end
 
-@testitem "Symmetry focknumbers" begin
-    import FermionicHilbertSpaces: instantiate_and_get_focknumbers, fermionnumber, FermionSubsetConservation
+@testitem "Symmetry basisstates" begin
+    import FermionicHilbertSpaces: instantiate_and_get_basisstates, fermionnumber, FermionSubsetConservation
     H = hilbert_space(1:5)
-    @test length(collect(focknumbers(H.jw, ParityConservation()))) == 2^5
-    @test length(collect(focknumbers(H.jw, ParityConservation(1)))) == 2^4
-    odd_focks = focknumbers(H.jw, ParityConservation(-1))
+    @test length(collect(basisstates(H.jw, ParityConservation()))) == 2^5
+    @test length(collect(basisstates(H.jw, ParityConservation(1)))) == 2^4
+    odd_focks = basisstates(H.jw, ParityConservation(-1))
     @test all(isodd ∘ fermionnumber, odd_focks)
-    @test length(collect(focknumbers(H.jw, ParityConservation([-1, 1])))) == 2^5
+    @test length(collect(basisstates(H.jw, ParityConservation([-1, 1])))) == 2^5
 
     ## ProductSymmetry
-    qn, fs = instantiate_and_get_focknumbers(H.jw, ParityConservation([1]) * FermionSubsetConservation(1:3, 1:1))
+    qn, fs = instantiate_and_get_basisstates(H.jw, ParityConservation([1]) * FermionSubsetConservation(1:3, 1:1))
     @test all(iseven ∘ fermionnumber, fs)
     @test all(fermionnumber(f & qn.symmetries[2].mask) == 1 for f in fs)
 end
@@ -286,17 +286,17 @@ end
     labels = 1:3
     qn = ParityConservation()
     H = hilbert_space(labels, qn)
-    n = length(focknumbers(H.symmetry))
+    n = length(basisstates(H.symmetry))
     m = reshape(1:(n^2), n, n)  # simple test matrix
     # Get the sector for parity = 1
     even_sector = sector(m, 1, H)
     # The size of the even sector block should match the number of even-parity states
-    even_states = [f for f in focknumbers(H) if qn(f) == 1]
+    even_states = [f for f in basisstates(H) if qn(f) == 1]
     @test size(even_sector, 1) == length(even_states)
     @test size(even_sector, 2) == length(even_states)
     # The values should match the corresponding block in m
-    # Get the indices of even states in the full focknumbers list
-    even_inds = findall(f -> qn(f) == 1, focknumbers(H.symmetry))
+    # Get the indices of even states in the full basisstates list
+    even_inds = findall(f -> qn(f) == 1, basisstates(H.symmetry))
     @test even_sector == m[even_inds, even_inds]
     # Test that an invalid sector throws an error
     @test_throws ArgumentError sector(m, 99, H)
@@ -304,19 +304,19 @@ end
     # Test with FermionConservation
     qn_f = FermionConservation([1, 2])
     Hf = hilbert_space(labels, qn_f)
-    n_f = length(focknumbers(Hf.symmetry))
+    n_f = length(basisstates(Hf.symmetry))
     m_f = reshape(1:(n_f^2), n_f, n_f)
     # Test sector for fermion number = 1
     sector1 = sector(m_f, 1, Hf)
-    states1 = [f for f in focknumbers(Hf) if qn_f(f) == 1]
-    inds1 = findall(f -> qn_f(f) == 1, focknumbers(Hf.symmetry))
+    states1 = [f for f in basisstates(Hf) if qn_f(f) == 1]
+    inds1 = findall(f -> qn_f(f) == 1, basisstates(Hf.symmetry))
     @test size(sector1, 1) == length(states1)
     @test size(sector1, 2) == length(states1)
     @test sector1 == m_f[inds1, inds1]
     # Test sector for fermion number = 2
     sector2 = sector(m_f, 2, Hf)
-    states2 = [f for f in focknumbers(Hf) if qn_f(f) == 2]
-    inds2 = findall(f -> qn_f(f) == 2, focknumbers(Hf.symmetry))
+    states2 = [f for f in basisstates(Hf) if qn_f(f) == 2]
+    inds2 = findall(f -> qn_f(f) == 2, basisstates(Hf.symmetry))
     @test size(sector2, 1) == length(states2)
     @test size(sector2, 2) == length(states2)
     @test sector2 == m_f[inds2, inds2]

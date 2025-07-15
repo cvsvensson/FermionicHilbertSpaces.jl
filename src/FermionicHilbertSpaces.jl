@@ -9,7 +9,7 @@ using TestItems
 using TermInterface
 using BitPermutations
 
-export FockNumber, JordanWignerOrdering, hc, focknumbers
+export FockNumber, JordanWignerOrdering, hc, basisstates
 export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subregion
 export parityoperator, numberoperator, fermions, majoranas, matrix_representation
 
@@ -33,6 +33,7 @@ function majorana_to_fermion end
 ## Some types
 abstract type AbstractHilbertSpace end
 abstract type AbstractFockHilbertSpace <: AbstractHilbertSpace end
+abstract type AbstractBasisState end
 
 """
     HC

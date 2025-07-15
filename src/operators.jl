@@ -86,7 +86,7 @@ end
 
 
 function sparse_fockoperator(op, H::AbstractFockHilbertSpace)
-    fs = focknumbers(H)
+    fs = basisstates(H)
     N = length(fs)
     amps = Int[]
     ininds = Int[]
@@ -95,12 +95,12 @@ function sparse_fockoperator(op, H::AbstractFockHilbertSpace)
     sizehint!(ininds, N)
     sizehint!(outinds, N)
     for f in fs
-        n = focktoind(f, H)
+        n = state_index(f, H)
         newfockstate, amp = op(f)
         if !iszero(amp)
             push!(amps, amp)
             push!(ininds, n)
-            push!(outinds, focktoind(newfockstate, H))
+            push!(outinds, state_index(newfockstate, H))
         end
     end
     return SparseArrays.sparse!(outinds, ininds, amps, N, N)
@@ -124,13 +124,13 @@ end
     @test numberoperator(H) == Diagonal([0, 1, 1, 2]) == numopvariant(H)
 
     ## Truncated Hilbert space
-    focknumbers = map(FockNumber, 0:2)
-    H = FockHilbertSpace(1:2, focknumbers)
+    basisstates = map(FockNumber, 0:2)
+    H = FockHilbertSpace(1:2, basisstates)
     @test parityoperator(H) == Diagonal([1, -1, -1])
     @test numberoperator(H) == Diagonal([0, 1, 1])
 
-    focknumbers = map(FockNumber, 2:2)
-    H = FockHilbertSpace(1:2, focknumbers)
+    basisstates = map(FockNumber, 2:2)
+    H = FockHilbertSpace(1:2, basisstates)
     @test parityoperator(H) == Diagonal([-1])
     @test numberoperator(H) == Diagonal([1])
 end
