@@ -39,6 +39,7 @@ focknbr_from_site_labels(labels::JordanWignerOrdering, jw::JordanWignerOrdering)
 Base.:+(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f + f2.f)
 Base.:-(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f - f2.f)
 Base.:⊻(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f ⊻ f2.f)
+Base.:⊻(f1::Integer, f2::FockNumber) = FockNumber(f1 ⊻ f2.f)
 Base.:&(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f & f2.f)
 Base.:&(f1::Integer, f2::FockNumber) = FockNumber(f1 & f2.f)
 Base.:|(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f | f2.f)
@@ -198,6 +199,8 @@ end
 function split_focknumber(f::FockNumber, fockmapper::FockMapperBitPermutations)
     split_focknumber(f, fockmapper.fermionpositions)
 end
+combine_states(f1::FockNumber, f2::FockNumber, H1, H2) = f1 + shift_right(f2, length(H1.jw))
+
 @testitem "Split and join focknumbers" begin
     import FermionicHilbertSpaces: focknbr_from_site_indices as fock
     jw1 = JordanWignerOrdering((1, 3))
@@ -256,4 +259,76 @@ end
     fockmapper = FermionicHilbertSpaces.FockMapper((jw1, jw2, jw3), jw)
     ident = fockmapper ∘ focksplitter
     @test all(ident(FockNumber(k)) == FockNumber(k) for k in 0:2^length(jw)-1)
+end
+
+## N-particle fock state
+using TupleTools
+struct FixedNumberFockState{N}
+    sites::NTuple{N,Int}
+    FixedNumberFockState(sites::NTuple{N}) where N = new{N}(TupleTools.sort(sites))
+end
+const SingleParticleState = FixedNumberFockState{1}
+SingleParticleState(site::Int) = FixedNumberFockState((site,))
+function jwstring_left(site, f::FixedNumberFockState)
+    sign = 1
+    for s in f.sites
+        if s < site
+            sign *= -1
+        end
+    end
+    return sign
+end
+function jwstring_right(site, f::FixedNumberFockState)
+    sign = 1
+    for s in f.sites
+        if s > site
+            sign *= -1
+        end
+    end
+    return sign
+end
+FockNumber(f::FixedNumberFockState) = focknbr_from_site_indices(f.sites)
+FixedNumberFockState(f::FockNumber) = FixedNumberFockState(focknbr_to_site_indices(f))
+combine_states(f1::FixedNumberFockState, f2::FixedNumberFockState, H1, H2) = FixedNumberFockState((f1.sites..., f2.sites...))
+
+@testitem "FixedNumberFockState" begin
+    import FermionicHilbertSpaces: jwstring_left, jwstring_right, FixedNumberFockState, FockNumber, SingleParticleState
+    f = FixedNumberFockState((1, 3, 5))
+    f2 = FockNumber(f)
+    @test jwstring_left(2, f) == -1 == jwstring_left(2, f2)
+    @test jwstring_left(4, f) == 1 == jwstring_left(4, f2)
+    @test jwstring_right(2, f) == 1 == jwstring_right(2, f2)
+    @test jwstring_right(4, f) == -1 == jwstring_right(4, f2)
+
+    N = 10
+    H = hilbert_space(1:N, SingleParticleState.(1:N))
+    Hf = hilbert_space(1:N, FermionConservation(1))
+    @test length(basisstates(H)) == length(basisstates(Hf)) == N
+
+    @fermions f
+    op = sum(rand() * f[k1]'f[k2] + rand(ComplexF64) * f[k1]f[k2]' for (k1, k2) in Base.product(1:N, 1:N))
+    @test matrix_representation(op, H) ≈ matrix_representation(op, Hf)
+end
+
+function togglefermions(sites, daggers, f::FixedNumberFockState)
+    fsites = f.sites
+    allowed = true
+    fermionstatistics = 1
+    for (site, dagger) in zip(sites, daggers)
+        if dagger
+            if site in fsites
+                allowed = false
+                continue
+            end
+            fsites = (fsites..., site)
+        else
+            if !(site in fsites)
+                allowed = false
+                continue
+            end
+            fsites = TupleTools.deleteat(fsites, findfirst(isequal(site), fsites))
+        end
+        fermionstatistics *= jwstring(site, FixedNumberFockState(fsites))
+    end
+    return FixedNumberFockState(fsites), fermionstatistics * allowed
 end

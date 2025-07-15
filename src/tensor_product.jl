@@ -16,8 +16,7 @@ tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace) = tensor_prod
 function tensor_product_combine_basisstates(H1, H2)
     isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
     newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
-    M1 = length(H1.jw)
-    newbasisstates = vec([f1 + shift_right(f2, M1) for f1 in basisstates(H1), f2 in basisstates(H2)])
+    newbasisstates = vec([combine_states(f1, f2, H1, H2) for f1 in basisstates(H1), f2 in basisstates(H2)])
     FockHilbertSpace(newlabels, newbasisstates)
 end
 
