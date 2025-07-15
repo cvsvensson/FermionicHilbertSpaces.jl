@@ -8,17 +8,17 @@ tensor_product(Hs::AbstractVector{<:AbstractHilbertSpace}) = foldl(tensor_produc
 tensor_product(Hs::Tuple) = foldl(tensor_product, Hs)
 
 function tensor_product(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
-    tensor_product_combine_focknumbers(H1, H2)
+    tensor_product_combine_basisstates(H1, H2)
 end
 
-tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace) = tensor_product_combine_focknumbers(H1, H2)
+tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace) = tensor_product_combine_basisstates(H1, H2)
 
-function tensor_product_combine_focknumbers(H1, H2)
+function tensor_product_combine_basisstates(H1, H2)
     isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
     newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
     M1 = length(H1.jw)
-    newfocknumbers = vec([f1 + shift_right(f2, M1) for f1 in focknumbers(H1), f2 in focknumbers(H2)])
-    FockHilbertSpace(newlabels, newfocknumbers)
+    newbasisstates = vec([f1 + shift_right(f2, M1) for f1 in basisstates(H1), f2 in basisstates(H2)])
+    FockHilbertSpace(newlabels, newbasisstates)
 end
 
 function simple_tensor_product(H1::AbstractFockHilbertSpace, H2::AbstractFockHilbertSpace)
@@ -41,14 +41,14 @@ tensor_product(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace) = simple_
     H2 = SymmetricFockHilbertSpace(3:4, FermionConservation())
     Hw = tensor_product(H1, H2)
     H3 = SymmetricFockHilbertSpace(1:4, FermionConservation())
-    @test sort(focknumbers(Hw), by=f -> f.f) == sort(focknumbers(H3), by=f -> f.f)
+    @test sort(basisstates(Hw), by=f -> f.f) == sort(basisstates(H3), by=f -> f.f)
     @test size(H1) .* size(H2) == size(Hw)
 
     H1 = SymmetricFockHilbertSpace(1:2, ParityConservation())
     H2 = SymmetricFockHilbertSpace(3:4, ParityConservation())
     Hw = tensor_product(H1, H2)
     H3 = SymmetricFockHilbertSpace(1:4, ParityConservation())
-    @test sort(focknumbers(Hw), by=f -> f.f) == sort(focknumbers(H3), by=f -> f.f)
+    @test sort(basisstates(Hw), by=f -> f.f) == sort(basisstates(H3), by=f -> f.f)
     @test size(H1) .* size(H2) == size(Hw)
 
 end
@@ -70,11 +70,11 @@ Compute the fermionic tensor product of matrices or vectors in `ms` with respect
 function fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs), phase_factors::Bool=true)
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs)
-    fockmapper = FockMapper(Hs, H)
+    extend_state = FockMapper(Hs, H)
     if N == 1
-        return fermionic_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, fockmapper)
+        return fermionic_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state)
     elseif N == 2
-        return fermionic_kron_mat!(mout, Tuple(ms), Tuple(Hs), H, fockmapper, phase_factors)
+        return fermionic_kron_mat!(mout, Tuple(ms), Tuple(Hs), H, extend_state, phase_factors)
     end
     throw(ArgumentError("Only 1D or 2D arrays are supported"))
 end
@@ -90,7 +90,7 @@ function allocate_tensor_product_result(ms, bs)
     N = ndims(first(ms))
     types = map(uniform_to_sparse_type ∘ typeof, ms)
     MT = Base.promote_op(kron, types...)
-    dimlengths = map(length ∘ focknumbers, bs)
+    dimlengths = map(length ∘ basisstates, bs)
     Nout = prod(dimlengths)
     _mout = Zeros(T, ntuple(j -> Nout, N))
     try
@@ -101,41 +101,41 @@ function allocate_tensor_product_result(ms, bs)
 end
 
 tensor_product_iterator(m, ::AbstractFockHilbertSpace) = findall(!iszero, m)
-tensor_product_iterator(::UniformScaling, H::AbstractFockHilbertSpace) = diagind(I(length(focknumbers(H))), IndexCartesian())
+tensor_product_iterator(::UniformScaling, H::AbstractFockHilbertSpace) = diagind(I(length(basisstates(H))), IndexCartesian())
 
-function fermionic_kron_mat!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, fockmapper, phase_factors::Bool=true)
+function fermionic_kron_mat!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state, phase_factors::Bool=true)
     fill!(mout, zero(eltype(mout)))
-    jw = H.jw
     partition = map(collect ∘ keys, Hs) # using collect here turns out to be a bit faster
-    isorderedpartition(partition, jw) || throw(ArgumentError("The partition must be ordered according to jw"))
+    ispartition(partition, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
+    phase_factors && (isorderedpartition(partition, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
 
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     for I in inds
         I1 = map(i -> i[1], I)
         I2 = map(i -> i[2], I)
-        fock1 = map(indtofock, I1, Hs)
-        fullfock1 = fockmapper(fock1)
-        outind1 = focktoind(fullfock1, H)
-        fock2 = map(indtofock, I2, Hs)
-        fullfock2 = fockmapper(fock2)
-        outind2 = focktoind(fullfock2, H)
-        s = phase_factors ? phase_factor_h(fullfock1, fullfock2, partition, jw) : 1
+        fock1 = map(basisstate, I1, Hs)
+        fullfock1 = extend_state(fock1)
+        outind1 = state_index(fullfock1, H)
+        fock2 = map(basisstate, I2, Hs)
+        fullfock2 = extend_state(fock2)
+        outind2 = state_index(fullfock2, H)
+        s = phase_factors ? phase_factor_h(fullfock1, fullfock2, partition, H) : 1
         v = mapreduce((m, i1, i2) -> m[i1, i2], *, ms, I1, I2)
         mout[outind1, outind2] += v * s
     end
     return mout
 end
 
-function fermionic_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, fockmapper)
+function fermionic_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state)
     fill!(mout, zero(eltype(mout)))
     U = embedding_unitary(Hs, H)
-    dimlengths = map(length ∘ focknumbers, Hs)
+    dimlengths = map(length ∘ basisstates, Hs)
     inds = CartesianIndices(Tuple(dimlengths))
     for I in inds
         TI = Tuple(I)
-        fock = map(indtofock, TI, Hs)
-        fullfock = fockmapper(fock)
-        outind = focktoind(fullfock, H)
+        fock = map(basisstate, TI, Hs)
+        fullfock = extend_state(fock)
+        outind = state_index(fullfock, H)
         mout[outind] += mapreduce((i1, m) -> m[i1], *, TI, ms)
     end
     return U * mout
@@ -327,7 +327,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}, phase_factors::Bool=
         return phase
     end
     opsk = [[physical_ops[1:k-1]..., ops[k], physical_ops[k+1:end]...] for k in 1:length(ops)]
-    unitaries = [Diagonal([phase(k, f) for f in focknumbers(H)]) * Uemb for k in 1:length(opsk)]
+    unitaries = [Diagonal([phase(k, f) for f in basisstates(H)]) * Uemb for k in 1:length(opsk)]
     embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
     kron_prods = [kron(ops, Hs, H) for ops in opsk]
     @test all(op1 ≈ U * op2 * U for (op1, op2, U) in zip(embedding_prods, kron_prods, unitaries))
@@ -408,7 +408,7 @@ function phase_map(fockstates, M::Int)
     PhaseMap(phases, fockstates)
 end
 phase_map(N::Int) = phase_map(map(FockNumber, 0:2^N-1), N)
-phase_map(H::AbstractFockHilbertSpace) = phase_map(collect(focknumbers(H)), length(H.jw))
+phase_map(H::AbstractFockHilbertSpace) = phase_map(collect(basisstates(H)), length(H.jw))
 LazyPhaseMap(N::Int) = LazyPhaseMap{N,FockNumber{Int}}(map(FockNumber, 0:2^N-1))
 SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest...) = SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(rest...)
 (p::PhaseMap)(op::AbstractMatrix) = p.phases .* op
@@ -483,23 +483,23 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::
     end
     N = length(labels)
     fill!(mout, zero(eltype(mout)))
-    subfockstates = focknumbers(Hout)
+    subfockstates = basisstates(Hout)
     Hbar_labels = setdiff(collect(keys(H)), collect(keys(Hout)))
     Hbar = SimpleFockHilbertSpace(Hbar_labels)
-    barfockstates = focknumbers(Hbar)
+    barfockstates = basisstates(Hbar)
     fm = FockMapper((Hout, Hbar), H)
     for f1 in subfockstates, f2 in subfockstates
         s2 = phase_factors ? phase_factor_f(f1, f2, N) : 1
-        I1 = focktoind(f1, Hout)
-        I2 = focktoind(f2, Hout)
+        I1 = state_index(f1, Hout)
+        I2 = state_index(f2, Hout)
         for fbar in barfockstates
             fullf1 = fm((f1, fbar))
             fullf2 = fm((f2, fbar))
             s1 = phase_factors ? phase_factor_f(fullf1, fullf2, M) : 1
             s = s2 * s1
-            J1 = focktoind(fullf1, H)
+            J1 = state_index(fullf1, H)
             ismissing(J1) && continue
-            J2 = focktoind(fullf2, H)
+            J2 = state_index(fullf2, H)
             ismissing(J2) && continue
             mout[I1, I2] += s * m[J1, J2]
         end

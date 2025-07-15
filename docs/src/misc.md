@@ -17,7 +17,7 @@ When the Hilbert space has a restricted set of fock states, the Hilbert space of
 ```@example subregion
 H = hilbert_space(1:4, FermionConservation(1))
 Hsub = subregion(1:2, H)
-focknumbers(Hsub)
+basisstates(Hsub)
 ``` 
 
 ## No double occupation
@@ -46,6 +46,6 @@ H2 = hilbert_space(keys(H), qn2)
 
 This gives the same states but with a different ordering.
 ```@example double_occupation
-sort(focknumbers(H2), by = f->f.f) == sort(focknumbers(H), by = f->f.f)
+sort(basisstates(H2), by = f->f.f) == sort(basisstates(H), by = f->f.f)
 ```
 

@@ -1,33 +1,29 @@
-function Base.show(io::IO, H::Htype) where Htype<:AbstractHilbertSpace
+function Base.show(io::IO, H::Htype) where Htype<:AbstractFockHilbertSpace
     n, m = size(H)
     println(io, "$(n)⨯$m $(Htype.name.name):")
     print(io, "modes: $(mode_ordering(H))")
 end
 Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 
-Base.size(H::AbstractFockHilbertSpace) = (length(focknumbers(H)), length(focknumbers(H)))
-Base.size(H::AbstractFockHilbertSpace, i) = i == 1 || i == 2 ? length(focknumbers(H)) : throw(BoundsError(H, (i,)))
-function isorderedpartition(Hs, H::AbstractHilbertSpace)
-    partition = map(keys, Hs)
-    isorderedpartition(partition, H.jw)
-end
-isorderedsubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = isorderedsubsystem(Hsub.jw, H.jw)
-isorderedsubsystem(Hsub::AbstractHilbertSpace, jw::JordanWignerOrdering) = isorderedsubsystem(Hsub.jw, jw)
+Base.size(H::AbstractHilbertSpace) = (length(basisstates(H)), length(basisstates(H)))
+Base.size(H::AbstractHilbertSpace, i) = i == 1 || i == 2 ? length(basisstates(H)) : throw(BoundsError(H, (i,)))
+isorderedpartition(partition, H::AbstractFockHilbertSpace) = isorderedpartition(partition, H.jw)
+isorderedsubsystem(Hsub::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = isorderedsubsystem(Hsub.jw, H.jw)
+isorderedsubsystem(Hsub::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = isorderedsubsystem(Hsub.jw, jw)
 issubsystem(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = issubsystem(subsystem.jw, jw)
 issubsystem(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = issubsystem(subsystem.jw, H.jw)
 consistent_ordering(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = consistent_ordering(subsystem.jw, jw)
 consistent_ordering(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = consistent_ordering(subsystem.jw, H.jw)
 focknbr_from_site_labels(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(H), jw)
 ispartition(partition, H::AbstractFockHilbertSpace) = ispartition(partition, H.jw)
-isorderedpartition(partition, H::AbstractFockHilbertSpace) = isorderedpartition(partition, H.jw)
 
 siteindices(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = siteindices(H.jw, jw)
 
 mode_ordering(H::AbstractFockHilbertSpace) = H.jw.labels
 mode_ordering(jw::JordanWignerOrdering) = jw.labels
 mode_ordering(v::AbstractVector) = v
-embedding_unitary(partition, H::AbstractFockHilbertSpace) = embedding_unitary(partition, focknumbers(H), H.jw)
-bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_embedding_unitary(X, Xbar, focknumbers(H), H.jw)
+embedding_unitary(partition, H::AbstractFockHilbertSpace) = embedding_unitary(partition, basisstates(H), H.jw)
+bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_embedding_unitary(X, Xbar, basisstates(H), H.jw)
 
 
 """
@@ -43,12 +39,12 @@ struct SimpleFockHilbertSpace{L} <: AbstractFockHilbertSpace
 end
 Base.keys(H::SimpleFockHilbertSpace) = keys(H.jw)
 """
-    focknumbers(H)
-Return an iterator over all Fock states for the given Hilbert space `H`.
+    basisstates(H)
+Return an iterator over all basis states for the given Hilbert space `H`.
 """
-focknumbers(H::SimpleFockHilbertSpace) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
-indtofock(ind, ::SimpleFockHilbertSpace) = FockNumber(ind - 1)
-focktoind(focknbr::FockNumber, ::SimpleFockHilbertSpace) = focknbr.f + 1
+basisstates(H::SimpleFockHilbertSpace) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
+basisstate(ind, ::SimpleFockHilbertSpace) = FockNumber(ind - 1)
+state_index(focknbr::FockNumber, ::SimpleFockHilbertSpace) = focknbr.f + 1
 function Base.:(==)(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace)
     if H1 === H2
         return true
@@ -65,18 +61,18 @@ A type representing a Fock Hilbert space with a given set of modes and Fock stat
 """
 struct FockHilbertSpace{L,F,I} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
-    focknumbers::F
-    focktoind::I
-    function FockHilbertSpace(labels, focknumbers::F=map(FockNumber, 0:2^length(labels)-1)) where F
+    basisstates::F
+    state_index::I
+    function FockHilbertSpace(labels, basisstates::F=map(FockNumber, 0:2^length(labels)-1)) where F
         jw = JordanWignerOrdering(labels)
-        focktoind = Dict(reverse(pair) for pair in enumerate(focknumbers))
-        new{eltype(jw),F,typeof(focktoind)}(jw, focknumbers, focktoind)
+        state_index = Dict(reverse(pair) for pair in enumerate(basisstates))
+        new{eltype(jw),F,typeof(state_index)}(jw, basisstates, state_index)
     end
 end
 Base.keys(H::FockHilbertSpace) = keys(H.jw)
-focknumbers(H::FockHilbertSpace) = H.focknumbers
-indtofock(ind, H::FockHilbertSpace) = focknumbers(H)[ind]
-focktoind(focknbr::FockNumber, H::FockHilbertSpace) = H.focktoind[focknbr]
+basisstates(H::FockHilbertSpace) = H.basisstates
+basisstate(ind, H::FockHilbertSpace) = basisstates(H)[ind]
+state_index(fockstate::AbstractFockState, H::FockHilbertSpace) = H.state_index[fockstate]
 function Base.:(==)(H1::FockHilbertSpace, H2::FockHilbertSpace)
     if H1 === H2
         return true
@@ -84,10 +80,10 @@ function Base.:(==)(H1::FockHilbertSpace, H2::FockHilbertSpace)
     if H1.jw != H2.jw
         return false
     end
-    if H1.focknumbers != H2.focknumbers
+    if H1.basisstates != H2.basisstates
         return false
     end
-    if H1.focktoind != H2.focktoind
+    if H1.state_index != H2.state_index
         return false
     end
     return true
@@ -106,8 +102,8 @@ function SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry)
     SymmetricFockHilbertSpace(JordanWignerOrdering(labels), qn)
 end
 function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry)
-    labelled_symmetry, focknumbers = instantiate_and_get_focknumbers(jw, qn)
-    sym_concrete = focksymmetry(focknumbers, labelled_symmetry)
+    labelled_symmetry, basisstates = instantiate_and_get_basisstates(jw, qn)
+    sym_concrete = focksymmetry(basisstates, labelled_symmetry)
     SymmetricFockHilbertSpace{eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
 end
 
@@ -120,10 +116,10 @@ end
 Base.show(io::IO, sym::FockSymmetry) = print(io, sym.conserved_quantity)
 
 Base.keys(H::SymmetricFockHilbertSpace) = keys(H.jw)
-indtofock(ind, H::SymmetricFockHilbertSpace) = indtofock(ind, H.symmetry)
-focktoind(f::FockNumber, H::SymmetricFockHilbertSpace) = focktoind(f, H.symmetry)
-focknumbers(H::SymmetricFockHilbertSpace) = focknumbers(H.symmetry)
-focknumbers(H::SymmetricFockHilbertSpace{<:Any,NoSymmetry}) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
+basisstate(ind, H::SymmetricFockHilbertSpace) = basisstate(ind, H.symmetry)
+state_index(f::AbstractFockState, H::SymmetricFockHilbertSpace) = state_index(f, H.symmetry)
+basisstates(H::SymmetricFockHilbertSpace) = basisstates(H.symmetry)
+basisstates(H::SymmetricFockHilbertSpace{<:Any,NoSymmetry}) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
 
 function Base.:(==)(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
     if H1 === H2
@@ -139,13 +135,13 @@ function Base.:(==)(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace
 end
 
 """
-    hilbert_space(labels[, symmetry, focknumbers])
+    hilbert_space(labels[, symmetry, basisstates])
 Construct a Hilbert space from a set of labels, with optional symmetry and Fock number specification.
 """
 hilbert_space(labels) = SimpleFockHilbertSpace(labels)
-hilbert_space(labels, focknumbers) = FockHilbertSpace(labels, focknumbers)
+hilbert_space(labels, basisstates) = FockHilbertSpace(labels, basisstates)
 hilbert_space(labels, ::NoSymmetry) = SimpleFockHilbertSpace(labels)
-hilbert_space(labels, ::NoSymmetry, focknumbers) = FockHilbertSpace(labels, focknumbers)
+hilbert_space(labels, ::NoSymmetry, basisstates) = FockHilbertSpace(labels, basisstates)
 hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, qn)
 
 #= Tests for isorderedsubsystem, issubsystem, and consistent_ordering for Hilbert spaces =#
@@ -212,11 +208,11 @@ function subregion(modes, H::FockHilbertSpace)
     if !isorderedsubsystem(modes, H.jw)
         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
-    # loop through all focknumbers in H and collect the fock states that are in the subsystem
+    # loop through all basisstates in H and collect the fock states that are in the subsystem
     outinds = siteindices(modes, H.jw)
     outbits(f) = Iterators.map(i -> _bit(f, i), outinds)
-    subfocks = eltype(H.focknumbers)[]
-    for f in focknumbers(H)
+    subfocks = eltype(H.basisstates)[]
+    for f in basisstates(H)
         subbits = outbits(f)
         subfock = focknbr_from_bits(subbits)
         push!(subfocks, subfock)
@@ -229,11 +225,11 @@ function subregion(modes, H::SymmetricFockHilbertSpace)
     if !isorderedsubsystem(modes, H.jw)
         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
-    # loop through all focknumbers in H and collect the fock states that are in the subsystem
+    # loop through all basisstates in H and collect the fock states that are in the subsystem
     outinds = siteindices(modes, H.jw)
     outbits(f) = Iterators.map(i -> _bit(f, i), outinds)
-    subfocks = eltype(H.symmetry.focknumbers)[]
-    for f in focknumbers(H)
+    subfocks = eltype(H.symmetry.basisstates)[]
+    for f in basisstates(H)
         subbits = outbits(f)
         subfock = focknbr_from_bits(subbits)
         push!(subfocks, subfock)
@@ -255,14 +251,14 @@ end
     HFsub = subregion([1], HF)
     @test HFsub isa FockHilbertSpace
     @test keys(HFsub) == [1]
-    focknumbers(HFsub) == [FockNumber(1)]
+    basisstates(HFsub) == [FockNumber(1)]
     # SymmetricFockHilbertSpace
     qn = ParityConservation()
     HS = hilbert_space([1, 2], qn)
     HSsub = subregion([1], HS)
     @test HSsub isa FockHilbertSpace
     @test keys(HSsub) == [1]
-    focknumbers(HSsub) == [FockNumber(0), FockNumber(1)]
+    basisstates(HSsub) == [FockNumber(0), FockNumber(1)]
     # Error on non-subsystem
     @test_throws ArgumentError subregion([4], H)
 end

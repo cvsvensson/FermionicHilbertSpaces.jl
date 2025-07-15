@@ -91,7 +91,8 @@ end
     @test isorderedpart([[2], [1, 3]])
 end
 
-function phase_factor_h(f1, f2, partition, jw)::Int
+phase_factor_h(f1, f2, partition, H::AbstractFockHilbertSpace) = phase_factor_h(f1, f2, partition, H.jw)
+function phase_factor_h(f1, f2, partition, jw::JordanWignerOrdering)::Int
     #(120b)
     phase = 1
     for X in partition
