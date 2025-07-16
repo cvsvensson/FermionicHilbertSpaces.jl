@@ -13,12 +13,11 @@ N = 12
 H = hilbert_space(1:N, ParityConservation())
 
 # Symbolic fermions can be defined using the `@fermions` macro,
-@fermions fsym
+@fermions f
 
 # Let's define the interacting Kitaev chain Hamiltonian.
 # It is a function of the fermions `f` and parameters `N`, `μ`, `t`, `Δ`, and `U`,
 # representing the number of sites, chemical potential, hopping amplitude, pairing amplitude, and interaction strength, respectively.
-# Here, f can be either symbolic (`fsym`) or a matrix representation (`fmat`).
 # Note the use of the Hermitian conjugate `hc`, which simplifies the expression for the Hamiltonian.
 kitaev_chain(f, N, μ, t, Δ, U) = sum(t * f[i]' * f[i+1] + hc for i in 1:N-1) +
                                  sum(Δ * f[i] * f[i+1] + hc for i in 1:N-1) +
@@ -34,7 +33,7 @@ t = 1.0
 μ[2:N-1] .= -U # bulk chemical potential
 
 # We can now construct the Hamiltonian using symbolic fermions for a symbolic representation
-hsym = kitaev_chain(fsym, N, μ, t, Δ, U)
+hsym = kitaev_chain(f, N, μ, t, Δ, U)
 # To convert the symbolic Hamiltonian to a matrix representation, we can use the `matrix_representation` function.
 matrix_representation(hsym, H)
 
