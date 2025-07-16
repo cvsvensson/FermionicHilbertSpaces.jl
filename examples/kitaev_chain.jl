@@ -65,7 +65,7 @@ e = extend(evenvec, Heven => Hsum) # even ground state in the full Hilbert space
 # Then, we can construct the ground state Majorana operators as
 # γ = o * e' + hc
 # γ̃ = 1im * o * e' + hc
-# but that takes a lot of memory for large systems
+# but that takes a lot of memory for large systems. Let's make a quick struct representing a rank-1 matrix and use that instead.
 struct Rank1Matrix{T} <: AbstractMatrix{T}
     vec1::Vector{T}
     vec2::Vector{T}
