@@ -221,6 +221,8 @@ function subregion(modes, H::FockHilbertSpace)
     FockHilbertSpace(modes, subfocks)
 end
 
+complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace) = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
+
 function subregion(modes, H::SymmetricFockHilbertSpace)
     if !isorderedsubsystem(modes, H.jw)
         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))

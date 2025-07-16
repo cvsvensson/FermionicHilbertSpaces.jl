@@ -103,15 +103,13 @@ end
 """
     embedding(m, H, Hnew)
 
-Compute the fermionic embedding of a matrix `m` in the basis `H` into the basis `Hnew`.
+Compute the fermionic embedding of a matrix `m` in the basis `Hsub` into the basis `H`.
 """
-function embedding(m, H::AbstractFockHilbertSpace, Hnew, phase_factors::Bool=true)
+function embedding(m, Hsub::AbstractFockHilbertSpace, H, phase_factors::Bool=true)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
-    isorderedsubsystem(H, Hnew) || throw(ArgumentError("Can't embed $H into $Hnew"))
-    bbar_labs = setdiff(collect(keys(Hnew)), collect(keys(H))) # arrays to keep order
-    bbar = SimpleFockHilbertSpace(bbar_labs)
-    Hs = (H, bbar)
-    return fermionic_kron((m, I), Hs, Hnew, phase_factors)
+    isorderedsubsystem(Hsub, H) || throw(ArgumentError("Can't embed $Hsub into $H"))
+    Hbar = complementary_subsystem(H, Hsub)
+    return fermionic_kron((m, I), (Hsub, Hbar), H, phase_factors)
 end
 const PairWithHilbertSpaces = Pair{<:AbstractFockHilbertSpace,<:AbstractFockHilbertSpace}
 embedding(Hs::PairWithHilbertSpaces, phase_factors::Bool=true) = m -> embedding(m, first(Hs), last(Hs), phase_factors)
