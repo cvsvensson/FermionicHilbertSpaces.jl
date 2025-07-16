@@ -23,7 +23,7 @@ makedocs(;
         "Home" => "index.md",
         "Misc" => "misc.md",
         "Functions" => "docstrings.md",
-        "Tutorials" => ["Interacting Kitaev chain" => "examples/kitaev_chain.md",]
+        "Tutorials" => ["Interacting Kitaev chain" => "literate_output/kitaev_chain.md",]
     ],
 )
 
