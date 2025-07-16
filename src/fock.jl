@@ -288,13 +288,14 @@ function jwstring_right(site, f::FixedNumberFockState)
     return sign
 end
 FockNumber(f::FixedNumberFockState) = focknbr_from_site_indices(f.sites)
-FixedNumberFockState(f::FockNumber) = FixedNumberFockState(focknbr_to_site_indices(f))
+FixedNumberFockState{N}(f::FockNumber) where N = FixedNumberFockState(Tuple(bits(f, N)))
 combine_states(f1::FixedNumberFockState, f2::FixedNumberFockState, H1, H2) = FixedNumberFockState((f1.sites..., f2.sites...))
 
 @testitem "FixedNumberFockState" begin
     import FermionicHilbertSpaces: jwstring_left, jwstring_right, FixedNumberFockState, FockNumber, SingleParticleState
     f = FixedNumberFockState((1, 3, 5))
     f2 = FockNumber(f)
+    @test f == FixedNumberFockState(f2)
     @test jwstring_left(2, f) == -1 == jwstring_left(2, f2)
     @test jwstring_left(4, f) == 1 == jwstring_left(4, f2)
     @test jwstring_right(2, f) == 1 == jwstring_right(2, f2)
