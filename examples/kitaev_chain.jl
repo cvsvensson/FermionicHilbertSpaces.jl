@@ -38,6 +38,7 @@ hsym = kitaev_chain(fsym, N, μ, t, Δ, U)
 # To convert the symbolic Hamiltonian to a matrix representation, we can use the `matrix_representation` function.
 matrix_representation(hsym, H)
 
+
 # Now, let's diagonalize the system.
 # Since parity is conserved, we can work in the even and odd parity sectors separately.
 # To do this, we can create two new Hilbert spaces for the even and odd sectors
