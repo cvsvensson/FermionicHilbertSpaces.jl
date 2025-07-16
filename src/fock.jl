@@ -99,7 +99,9 @@ struct FockMapperBitPermutations{P1,P2}
 end
 FockMapper_collect(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)) #faster construction
 FockMapper_tuple(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ Tuple ∘ keys, jws)) #faster application, but type instability
-FockMapper(Hs, H::AbstractHilbertSpace) = FockMapper(map(b -> b.jw, Hs), H.jw)
+FockMapper(Hs, H::AbstractFockHilbertSpace) = FockMapper(map(b -> b.jw, Hs), H.jw)
+StateExtender(Hs, H::AbstractFockHilbertSpace) = FockMapper(Hs, H)
+
 function FockMapper_bp(jws, jw)
     widths = collect(map(length, jws))
     fermionpositions = map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)
@@ -121,7 +123,8 @@ end
 BitPermutations.bitpermute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
 
 shift_right(f::FockNumber, M) = FockNumber(f.f << M)
-FockSplitter(H::AbstractHilbertSpace, bs) = FockSplitter(H.jw, map(b -> b.jw, bs))
+FockSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H.jw, map(b -> b.jw, Hs))
+StateSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H, Hs)
 
 
 @testitem "Fock" begin
