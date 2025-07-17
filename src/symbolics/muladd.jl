@@ -317,6 +317,10 @@ end
 eval_in_basis(a::FermionMul, f) = a.coeff * mapfoldl(Base.Fix2(eval_in_basis, f), *, a.factors)
 eval_in_basis(a::FermionAdd, f) = a.coeff * I + mapfoldl(Base.Fix2(eval_in_basis, f), +, fermionterms(a))
 
+## 
+remove_identity(a::SM) = a
+remove_identity(a::FermionAdd) = FermionAdd(zero(a.coeff), a.dict)
+
 ##
 TermInterface.head(a::Union{FermionMul,FermionAdd}) = operation(a)
 TermInterface.iscall(::Union{FermionMul,FermionAdd}) = true
