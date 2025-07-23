@@ -7,7 +7,7 @@ function Base.reshape(m::AbstractVector, H::AbstractHilbertSpace, Hs, phase_fact
 end
 const PairWithHilbertSpace = Union{Pair{<:AbstractHilbertSpace,<:Any},Pair{<:Any,<:AbstractHilbertSpace}}
 Base.reshape(Hs::PairWithHilbertSpace, phase_factors=true) = m -> reshape(m, first(Hs), last(Hs), phase_factors)
-Base.reshape(m, Hs::PairWithHilbertSpace, phase_factors=true) = reshape(m, first(Hs), last(Hs), phase_factors)
+Base.reshape(m::AbstractArray, Hs::PairWithHilbertSpace, phase_factors=true) = reshape(m, first(Hs), last(Hs), phase_factors)
 
 function Base.reshape(t::AbstractArray, Hs::Union{<:AbstractVector,Tuple}, H::AbstractHilbertSpace, phase_factors::Bool=true)
     if ndims(t) == 2 * length(Hs)

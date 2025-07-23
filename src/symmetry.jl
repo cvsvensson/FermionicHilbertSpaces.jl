@@ -91,7 +91,7 @@ sectors(qn::FermionConservation) = qn.sectors
 struct FermionSubsetConservation <: AbstractSymmetry
     mask::FockNumber
     sectors::Union{Vector{Int},Missing}
-    function FermionSubsetConservation(mask::FockNumber, sectors)
+    function FermionSubsetConservation(mask::FockNumber, sectors::Union{<:AbstractVector{Int},Missing})
         allunique(sectors) || throw(ArgumentError("FermionSubsetConservation sectors must be unique."))
         sectorvec = sort!(Int[sectors...])
         new(mask, sectorvec)
