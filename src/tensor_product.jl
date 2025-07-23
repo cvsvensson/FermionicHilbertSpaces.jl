@@ -103,11 +103,10 @@ end
 tensor_product_iterator(m, ::AbstractFockHilbertSpace) = findall(!iszero, m)
 tensor_product_iterator(::UniformScaling, H::AbstractFockHilbertSpace) = diagind(I(length(basisstates(H))), IndexCartesian())
 
-function fermionic_kron_mat!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state, phase_factors::Bool=true)
-    fill!(mout, zero(eltype(mout)))
-    partition = map(collect ∘ keys, Hs) # using collect here turns out to be a bit faster
-    ispartition(partition, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
-    phase_factors && (isorderedpartition(partition, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
+function fermionic_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state, phase_factors::Bool=true) where T
+    fill!(mout, zero(T))
+    ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
+    phase_factors && (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
 
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     for I in inds
@@ -119,8 +118,11 @@ function fermionic_kron_mat!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertS
         fock2 = map(basisstate, I2, Hs)
         fullfock2 = extend_state(fock2)
         outind2 = state_index(fullfock2, H)
-        s = phase_factors ? phase_factor_h(fullfock1, fullfock2, partition, H) : 1
-        v = mapreduce((m, i1, i2) -> m[i1, i2], *, ms, I1, I2)
+        s = phase_factors ? phase_factor_h(fullfock1, fullfock2, Hs, H) : 1
+        v = one(T)
+        for (m, i1, i2) in zip(ms, I1, I2)
+            v *= m[i1, i2]
+        end
         mout[outind1, outind2] += v * s
     end
     return mout
