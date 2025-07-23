@@ -29,14 +29,10 @@ function consistent_ordering(subsystem, jw::JordanWignerOrdering)::Bool
     return true
 end
 function ispartition(partition, jw::JordanWignerOrdering)
-    count = 0
-    for subset in partition
-        for l in subset
-            haskey(jw.ordering, l) || return false
-            count += 1
-        end
-    end
-    count == length(jw) || return false
+    modes = union(partition...)
+    length(jw) == length(modes) || return false
+    injw = Base.Fix1(haskey, jw.ordering)
+    all(injw, modes) || return false
     return true
 end
 function isorderedpartition(partition, jw::JordanWignerOrdering)
