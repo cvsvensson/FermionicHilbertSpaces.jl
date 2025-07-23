@@ -29,10 +29,14 @@ function consistent_ordering(subsystem, jw::JordanWignerOrdering)::Bool
     return true
 end
 function ispartition(partition, jw::JordanWignerOrdering)
-    modes = union(mode_ordering.(partition)...)
-    length(jw) == length(modes) || return false
-    injw = in(Set(keys(jw)))
-    all(injw, modes) || return false
+    count = 0
+    for subset in partition
+        for l in subset
+            haskey(jw.ordering, l) || return false
+            count += 1
+        end
+    end
+    count == length(jw) || return false
     return true
 end
 function isorderedpartition(partition, jw::JordanWignerOrdering)
@@ -91,7 +95,7 @@ end
     @test isorderedpart([[2], [1, 3]])
 end
 
-phase_factor_h(f1, f2, partition, H::AbstractFockHilbertSpace) = phase_factor_h(f1, f2, partition, H.jw)
+phase_factor_h(f1, f2, Hs, H::AbstractFockHilbertSpace) = phase_factor_h(f1, f2, map(mode_ordering, Hs), H.jw)
 function phase_factor_h(f1, f2, partition, jw::JordanWignerOrdering)::Int
     #(120b)
     phase = 1
