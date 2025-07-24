@@ -65,7 +65,7 @@ ham = matrix_representation(sym_ham, Hcons)
   ⋅         ⋅         ⋅        ⋅        1.0       1.32709
 ````
 
-and for the partial trace
+and we can calculate the partial trace as before
 
 ````julia
 Ψ = eigvecs(collect(ham))[:, 1]

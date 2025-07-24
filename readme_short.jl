@@ -40,6 +40,6 @@ entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
 Hcons = hilbert_space(1:4, FermionConservation(2))
 # This hilbert space contains only states with two fermions. We can use it just as before to get a matrix representation of the hamiltonian
 ham = matrix_representation(sym_ham, Hcons)
-# and for the partial trace
+# and we can calculate the partial trace as before
 Ψ = eigvecs(collect(ham))[:, 1]
 ρsub = partial_trace(Ψ * Ψ', Hcons => Hsub)
