@@ -9,78 +9,30 @@ This package provides tools for working with fermionic hilbert spaces. This incl
 - Fermionic tensor products and partial traces mapping between different hilbert spaces, taking into account the fermionic properties.
 - Operators on the hilbert spaces.
 
-## Example
+## Quick example
 Let's define a small fermionic system, find the ground state and compute the entanglement entropy of half the system.
 
 ````julia
-using FermionicHilbertSpaces
-@fermions f
-ε, t = 0.1, 1
-sym_ham = ε * sum(f[n]'f[n] for n in 1:4) +
-          t * sum(f[n+1]'f[n] + hc for n in 1:3)
-````
+using FermionicHilbertSpaces, LinearAlgebra
+@fermions f # Defines a symbolic fermion
+sym_ham = 0.5 * sum(f[n]'f[n] for n in 1:4) +
+          sum(f[n+1]'f[n] + hc for n in 1:3) # Symbolic hamiltonian
 
-````
-Sum with 10 terms: 
-0.1*f†[1]*f[1] + f†[1]*f[2] + f†[2]*f[1] + ...
-````
-
-We now have a symbolic hamiltonian. To represent it as a matrix, let's define a hilbert space with four fermions
-
-````julia
+#Get a matrix representation of the hamiltonian on a hilbert space
 H = hilbert_space(1:4)
-````
-
-````
-16⨯16 SimpleFockHilbertSpace:
-modes: [1, 2, 3, 4]
-````
-
-and then do
-
-````julia
 ham = matrix_representation(sym_ham, H)
-````
 
-````
-16×16 SparseArrays.SparseMatrixCSC{Float64, Int64} with 39 stored entries:
-⎡⠰⢆⢄⠀⠀⠀⠀⠀⎤
-⎢⠀⠑⠱⢆⠑⢄⠀⠀⎥
-⎢⠀⠀⠑⢄⠱⢆⢄⠀⎥
-⎣⠀⠀⠀⠀⠀⠑⠱⢆⎦
-````
-
-Use standard linear algebra to find the ground state
-
-````julia
-using LinearAlgebra
+#Diagonalize to find the ground state
 Ψ = eigvecs(collect(ham))[:, 1]
-ρ = Ψ * Ψ';
-````
 
-Define a subsystem and calculate the partial trace to find the reduced density matrix
-
-````julia
+#Define a subsystem and partial trace to find the reduced density matrix
 Hsub = hilbert_space(1:2)
-ρsub = partial_trace(ρ, H => Hsub)
-````
-
-````
-4×4 Matrix{Float64}:
- 0.05   0.0        0.0       0.0
- 0.0    0.45      -0.447214  0.0
- 0.0   -0.447214   0.45      0.0
- 0.0    0.0        0.0       0.05
-````
-
-Compute the entanglement entropy
-
-````julia
+ρsub = partial_trace(Ψ * Ψ', H => Hsub)
 entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
 ````
 
 ````
-0.41327862776996693
+0.413278627769967
 ````
 
 ## Conserved quantities
@@ -106,6 +58,6 @@ entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
 ````
 
 ````
-0.41327862776996765
+0.41327862776996815
 ````
 
