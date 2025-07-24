@@ -12,13 +12,15 @@
 # - Fermionic tensor products and partial traces mapping between different hilbert spaces, taking into account the fermionic properties.
 # - Operators on the hilbert spaces.
 
+import Random: seed!;#hide
+seed!(1);#hide
 
 # ## Quick example
 # Let's define a small fermionic system, find the ground state and compute the entanglement entropy of half the system.
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions f # Defines a symbolic fermion
-sym_ham = 0.5 * sum(f[n]'f[n] for n in 1:4) +
-          sum(f[n+1]'f[n] + hc for n in 1:3) # Symbolic hamiltonian
+sym_ham = sum(rand() * f[n]'f[n] for n in 1:4) +
+          sum(f[n+1]'f[n] + hc for n in 1:3)
 
 #Get a matrix representation of the hamiltonian on a hilbert space
 H = hilbert_space(1:4)
@@ -29,15 +31,15 @@ ham = matrix_representation(sym_ham, H)
 
 #Define a subsystem and partial trace to find the reduced density matrix
 Hsub = hilbert_space(1:2)
-ρsub = partial_trace(Ψ * Ψ', H => Hsub) 
+ρsub = partial_trace(Ψ * Ψ', H => Hsub)
 entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
 
 
 # ## Conserved quantities
-# The hamiltonian above conserves the number of fermion, which we can exploit.
+# The hamiltonian above conserves the number of fermions, which we can exploit as
 Hcons = hilbert_space(1:4, FermionConservation(2))
-# Hcons contains only states with two fermions. We can use this hilbert space just as before
+# This hilbert space contains only states with two fermions. We can use it just as before to get a matrix representation of the hamiltonian
 ham = matrix_representation(sym_ham, Hcons)
+# and for the partial trace
 Ψ = eigvecs(collect(ham))[:, 1]
 ρsub = partial_trace(Ψ * Ψ', Hcons => Hsub)
-entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
