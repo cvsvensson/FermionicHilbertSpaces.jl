@@ -36,7 +36,7 @@ entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
 0.44395495955661934
 ````
 
-## Conserved quantities
+### Conserved quantities
 The hamiltonian above conserves the number of fermions, which we can exploit as
 
 ````julia

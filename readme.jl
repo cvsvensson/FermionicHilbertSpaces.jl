@@ -35,7 +35,7 @@ Hsub = hilbert_space(1:2)
 entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
 
 
-# ## Conserved quantities
+# ### Conserved quantities
 # The hamiltonian above conserves the number of fermions, which we can exploit as
 Hcons = hilbert_space(1:4, FermionConservation(2))
 # This hilbert space contains only states with two fermions. We can use it just as before to get a matrix representation of the hamiltonian
