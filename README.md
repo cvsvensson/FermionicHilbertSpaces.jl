@@ -5,50 +5,107 @@
 [![Build Status](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl)
 
-
 This package provides tools for working with fermionic hilbert spaces. This includes:
 - Fermionic tensor products and partial traces mapping between different hilbert spaces, taking into account the fermionic properties.
 - Operators on the hilbert spaces.
 
-## Introduction
-Let's analyze a small fermionic system. We first define a basis
-```julia
+## Example
+Let's define a small fermionic system, find the ground state and compute the entanglement entropy of half the system.
+
+````julia
 using FermionicHilbertSpaces
-N = 2 # number of fermions
-spatial_labels = 1:N 
-internal_labels = (:↑,:↓)
-labels = Base.product(spatial_labels, internal_labels) 
-H = hilbert_space(labels) 
-#= 16⨯16 SimpleFockHilbertSpace:
-modes: [(1, :↑), (2, :↑), (1, :↓), (2, :↓)]=#
-c = fermions(H) #fermionic annihilation operators
-```
+@fermions f
+ε, t = 0.1, 1
+sym_ham = ε * sum(f[n]'f[n] for n in 1:4) +
+          t * sum(f[n+1]'f[n] + hc for n in 1:3)
+````
 
-Indexing into `c` returns sparse representations of the fermionic operators, so that one can write down Hamiltonians in a natural way:
-```julia
-H_hopping = c[1,:↑]'c[2,:↑] + c[1,:↓]'c[2,:↓] + hc 
-H_coulomb = sum(c[n,:↑]'c[n,:↑]c[n,:↓]'c[n,:↓] for n in spatial_labels)
-H = H_hopping + H_coulomb
-#= 16×16 SparseArrays.SparseMatrixCSC{Int64, Int64} with 23 stored entries:
-⎡⠠⠂⠀⠀⠀⠀⠀⠀⎤
-⎢⠀⠀⠰⢂⠑⢄⠀⠀⎥
-⎢⠀⠀⠑⢄⠠⢆⠀⠀⎥
-⎣⠀⠀⠀⠀⠀⠀⠰⢆⎦ =#
-```
+````
+Sum with 10 terms: 
+0.1*f†[1]*f[1] + f†[1]*f[2] + f†[2]*f[1] + ...
+````
 
-## Tensor product and Partial trace
-```julia
-using FermionicHilbertSpaces, LinearAlgebra
-H1 = hilbert_space([1, 2])
-H2 = hilbert_space([3, 4])
-H = tensor_product(H1, H2)
+We now have a symbolic hamiltonian. To represent it as a matrix, let's define a hilbert space with four fermions
 
-c1 = fermions(H1)
-c2 = fermions(H2)
-c = fermions(H)
+````julia
+H = hilbert_space(1:4)
+````
 
-c1c3 = tensor_product([c1[1], c2[3]], [H1, H2] => H)
-c[1]*c[3] == c1c3 # true
+````
+16⨯16 SimpleFockHilbertSpace:
+modes: [1, 2, 3, 4]
+````
 
-partial_trace(tensor_product([c1[1], I/4],[H1,H2] => H), H => H1) == c1[1] # true
-```
+and then do
+
+````julia
+ham = matrix_representation(sym_ham, H)
+````
+
+````
+16×16 SparseArrays.SparseMatrixCSC{Float64, Int64} with 39 stored entries:
+⎡⠰⢆⢄⠀⠀⠀⠀⠀⎤
+⎢⠀⠑⠱⢆⠑⢄⠀⠀⎥
+⎢⠀⠀⠑⢄⠱⢆⢄⠀⎥
+⎣⠀⠀⠀⠀⠀⠑⠱⢆⎦
+````
+
+Use standard linear algebra to find the ground state
+
+````julia
+using LinearAlgebra
+Ψ = eigvecs(collect(ham))[:, 1]
+ρ = Ψ * Ψ';
+````
+
+Define a subsystem and calculate the partial trace to find the reduced density matrix
+
+````julia
+Hsub = hilbert_space(1:2)
+ρsub = partial_trace(ρ, H => Hsub)
+````
+
+````
+4×4 Matrix{Float64}:
+ 0.05   0.0        0.0       0.0
+ 0.0    0.45      -0.447214  0.0
+ 0.0   -0.447214   0.45      0.0
+ 0.0    0.0        0.0       0.05
+````
+
+Compute the entanglement entropy
+
+````julia
+entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
+````
+
+````
+0.41327862776996693
+````
+
+## Conserved quantities
+The hamiltonian above conserves the number of fermion, which we can exploit.
+
+````julia
+Hcons = hilbert_space(1:4, FermionConservation(2))
+````
+
+````
+6⨯6 SymmetricFockHilbertSpace:
+modes: [1, 2, 3, 4]
+FermionConservation([2])
+````
+
+Hcons contains only states with two fermions. We can use this hilbert space just as before
+
+````julia
+ham = matrix_representation(sym_ham, Hcons)
+Ψ = eigvecs(collect(ham))[:, 1]
+ρsub = partial_trace(Ψ * Ψ', Hcons => Hsub)
+entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
+````
+
+````
+0.41327862776996765
+````
+
