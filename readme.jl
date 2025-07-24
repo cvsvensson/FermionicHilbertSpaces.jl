@@ -12,36 +12,34 @@
 # - Fermionic tensor products and partial traces mapping between different hilbert spaces, taking into account the fermionic properties.
 # - Operators on the hilbert spaces.
 
+import Random: seed!;#hide
+seed!(1);#hide
 
-# ## Example
+# ## Quick example
 # Let's define a small fermionic system, find the ground state and compute the entanglement entropy of half the system.
-using FermionicHilbertSpaces
-@fermions f
-ε, t = 0.1, 1
-sym_ham = ε * sum(f[n]'f[n] for n in 1:4) +
-          t * sum(f[n+1]'f[n] + hc for n in 1:3)
-# We now have a symbolic hamiltonian. To represent it as a matrix, let's define a hilbert space with four fermions
-H = hilbert_space(1:4) 
-# and then do
+using FermionicHilbertSpaces, LinearAlgebra
+@fermions f # Defines a symbolic fermion
+sym_ham = sum(rand() * f[n]'f[n] for n in 1:4) +
+          sum(f[n+1]'f[n] + hc for n in 1:3)
+
+#Get a matrix representation of the hamiltonian on a hilbert space
+H = hilbert_space(1:4)
 ham = matrix_representation(sym_ham, H)
 
-# Use standard linear algebra to find the ground state
-using LinearAlgebra
+#Diagonalize to find the ground state
 Ψ = eigvecs(collect(ham))[:, 1]
-ρ = Ψ * Ψ';
 
-# Define a subsystem and calculate the partial trace to find the reduced density matrix
-Hsub = hilbert_space(1:2) 
-ρsub = partial_trace(ρ, H => Hsub)
-# Compute the entanglement entropy
+#Define a subsystem and partial trace to find the reduced density matrix
+Hsub = hilbert_space(1:2)
+ρsub = partial_trace(Ψ * Ψ', H => Hsub)
 entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
 
 
 # ## Conserved quantities
-# The hamiltonian above conserves the number of fermion, which we can exploit.
+# The hamiltonian above conserves the number of fermions, which we can exploit as
 Hcons = hilbert_space(1:4, FermionConservation(2))
-# Hcons contains only states with two fermions. We can use this hilbert space just as before
+# This hilbert space contains only states with two fermions. We can use it just as before to get a matrix representation of the hamiltonian
 ham = matrix_representation(sym_ham, Hcons)
+# and we can calculate the partial trace as before
 Ψ = eigvecs(collect(ham))[:, 1]
 ρsub = partial_trace(Ψ * Ψ', Hcons => Hsub)
-entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
