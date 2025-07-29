@@ -241,12 +241,12 @@ function matrix_representation(op::Union{<:FermionMul,<:AbstractFermionSym}, lab
     sizehint!(outinds, length(instates))
     sizehint!(ininds, length(instates))
     sizehint!(amps, length(instates))
-    operator_inds_amps!((outinds, ininds, amps), op, labels, outstates, instates)
+    operator_inds_amps!((outinds, ininds, amps), op, labels, outstates, instates, Dict(map(reverse, enumerate(outstates))))
     SparseArrays.sparse!(outinds, ininds, identity.(amps), length(outstates), length(instates))
 end
 matrix_representation(op, labels, instates) = matrix_representation(op, labels, instates, instates)
 
-function operator_inds_amps!((outinds, ininds, amps), op::FermionMul{C}, label_to_site_index, outstates, instates, fock_to_outind) where {C} #Dict(map(reverse, enumerate(outstates)))
+function operator_inds_amps!((outinds, ininds, amps), op::FermionMul{C}, label_to_site_index, outstates, instates, fock_to_outind) where {C}
     digitpositions = collect(Iterators.reverse(label_to_site_index[f.label] for f in op.factors)) #reverse(siteindices(_labels(op), jw))
     daggers = collect(Iterators.reverse(s.creation for s in op.factors))
     mc = -op.coeff
