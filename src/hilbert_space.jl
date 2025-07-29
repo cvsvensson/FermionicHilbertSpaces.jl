@@ -1,7 +1,8 @@
 function Base.show(io::IO, H::Htype) where Htype<:AbstractFockHilbertSpace
     n, m = size(H)
     println(io, "$(n)⨯$m $(Htype.name.name):")
-    print(io, "modes: $(mode_ordering(H))")
+    print("modes: ")
+    print(IOContext(io, :compact => true), modes(H))
 end
 Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 
@@ -19,9 +20,12 @@ ispartition(partition, H::AbstractFockHilbertSpace) = ispartition(partition, H.j
 
 siteindices(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = siteindices(H.jw, jw)
 
-mode_ordering(H::AbstractFockHilbertSpace) = H.jw.labels
-mode_ordering(jw::JordanWignerOrdering) = jw.labels
+mode_ordering(H::AbstractFockHilbertSpace) = H.jw.ordering
+mode_ordering(jw::JordanWignerOrdering) = jw.ordering
 mode_ordering(v::AbstractVector) = v
+modes(H::AbstractFockHilbertSpace) = H.jw.labels
+modes(jw::JordanWignerOrdering) = jw.labels
+modes(v::AbstractVector) = v
 embedding_unitary(partition, H::AbstractFockHilbertSpace) = embedding_unitary(partition, basisstates(H), H.jw)
 bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_embedding_unitary(X, Xbar, basisstates(H), H.jw)
 
@@ -110,7 +114,8 @@ end
 function Base.show(io::IO, H::SymmetricFockHilbertSpace)
     n, m = size(H)
     println(io, "$(n)⨯$m SymmetricFockHilbertSpace:")
-    println(io, "modes: $(mode_ordering(H))")
+    print("modes: ")
+    println(IOContext(io, :compact => true), modes(H))
     show(io, H.symmetry)
 end
 Base.show(io::IO, sym::FockSymmetry) = print(io, sym.conserved_quantity)

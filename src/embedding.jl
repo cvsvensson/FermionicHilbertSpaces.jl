@@ -12,7 +12,7 @@ function embedding_unitary(_partition, basisstates, jw::JordanWignerOrdering)
     #for locally physical algebra, ie only for even operators or states of well-defined parity
     #if ξ is ordered, the phases are +1. 
     # Note that the jordan wigner modes are ordered in reverse from the labels, but this is taken care of by direction of the jwstring below
-    partition = map(mode_ordering, _partition)
+    partition = map(modes, _partition)
     isorderedpartition(partition, jw) || throw(ArgumentError("The partition must be ordered according to jw"))
 
     phases = ones(Int, length(basisstates))
@@ -34,8 +34,8 @@ end
 
 function bipartite_embedding_unitary(_X, _Xbar, basisstates, jw::JordanWignerOrdering)
     #(122a)
-    X = mode_ordering(_X)
-    Xbar = mode_ordering(_Xbar)
+    X = modes(_X)
+    Xbar = modes(_Xbar)
     ispartition((X, Xbar), jw) || throw(ArgumentError("The partition must be ordered according to jw"))
     phases = ones(Int, length(basisstates))
     mask = focknbr_from_site_labels(X, jw)

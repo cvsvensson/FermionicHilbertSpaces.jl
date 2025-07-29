@@ -34,6 +34,7 @@ end
 Base.size(h::BdGHilbertSpace) = size(h.parent)
 Base.size(h::BdGHilbertSpace, dim) = size(h.parent, dim)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
+modes(H::BdGHilbertSpace) = modes(H.parent)
 Base.keys(h::BdGHilbertSpace) = keys(h.parent)
 
 function matrix_representation(op, H::BdGHilbertSpace)
