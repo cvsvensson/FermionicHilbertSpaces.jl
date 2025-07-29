@@ -53,7 +53,6 @@ include("operators.jl")
 include("tensor_product.jl")
 include("embedding.jl")
 include("reshape.jl")
-include("bdg.jl")
 
 include("qubit.jl")
 
@@ -62,6 +61,7 @@ include("symbolics/symbolic_fermions.jl")
 include("symbolics/symbolic_majoranas.jl")
 
 include("majorana_hilbert_space.jl")
+include("bdg.jl")
 
 import PrecompileTools
 

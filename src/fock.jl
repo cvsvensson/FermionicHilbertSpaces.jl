@@ -350,7 +350,6 @@ function togglefermions(sites, daggers, f::FixedNumberFockState)
         end
         fermionstatistics *= jwstring(site, FixedNumberFockState(fsites))
     end
-    println(fermionstatistics)
     return FixedNumberFockState(fsites), fermionstatistics * allowed
 end
 
