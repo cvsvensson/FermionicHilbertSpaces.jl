@@ -7,6 +7,9 @@ struct FockNumber{I<:Integer} <: AbstractFockState
     f::I
 end
 FockNumber(f::FockNumber) = f
+Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
+Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
+
 """
     JordanWignerOrdering
 A type representing the ordering of fermionic modes.
@@ -267,6 +270,8 @@ struct FixedNumberFockState{N}
     sites::NTuple{N,Int}
 end
 FixedNumberFockState(sites::NTuple{N}) where N = FixedNumberFockState{N}(TupleTools.sort(sites))
+Base.:(==)(f1::FixedNumberFockState, f2::FixedNumberFockState) = f1.sites == f2.sites
+Base.hash(f::FixedNumberFockState, h::UInt) = hash(f.sites, h)
 const SingleParticleState = FixedNumberFockState{1}
 SingleParticleState(site::Int) = FixedNumberFockState((site,))
 function jwstring_left(site, f::FixedNumberFockState)
@@ -317,8 +322,8 @@ combine_states(f1::FixedNumberFockState, f2::FixedNumberFockState, H1, H2) = Fix
 
     @fermions f
     h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
-    H = hilbert_space(1:2, FermionicHilbertSpaces.SingleParticleState.(1:2))
-    matrix_representation(h, H) #should error
+    H = hilbert_space(1:2, FermionicHilbertSpaces.SingleParticleState.(1:3))
+    matrix_representation(h, H) #should error?
 
     N = 10
     H = hilbert_space(1:N, SingleParticleState.(1:N))
@@ -332,25 +337,23 @@ end
 
 function togglefermions(sites, daggers, f::FixedNumberFockState)
     fsites = f.sites
-    allowed = true
     fermionstatistics = 1
     for (site, dagger) in zip(sites, daggers)
         if dagger
             if site in fsites
-                allowed = false
-                continue
+                return f, false
             end
             fsites = (fsites..., site)
         else
             if !(site in fsites)
-                allowed = false
-                continue
+                return f, false
             end
             fsites = TupleTools.deleteat(fsites, findfirst(isequal(site), fsites))
         end
         fermionstatistics *= jwstring(site, FixedNumberFockState(fsites))
     end
-    return FixedNumberFockState(fsites), fermionstatistics * allowed
+    fsites = TupleTools.sort(fsites)
+    return FixedNumberFockState(fsites), fermionstatistics
 end
 
 

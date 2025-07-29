@@ -30,12 +30,18 @@ function numberoperator(H::AbstractFockHilbertSpace)
     sparse_fockoperator(f -> (f, fermionnumber(f)), H)
 end
 
-function togglefermions(digitpositions, daggers, focknbr::FockNumber)
+
+"""
+    togglefermions(digitpositions, daggers, f::FockNumber)
+
+Return (newfocknbr, fermionstatistics) where `newfocknbr` is the state obtained by toggling fermions at `digitpositions` with `daggers` in the Fock state `f`, and `fermionstatistics` is the phase from the Jordan-Wigner string. If the operation puts two fermions one the same site, the resulting state is undefined.
+"""
+function togglefermions(digitpositions, daggers, focknbr::FockNumber{I}) where I
     newfocknbr = 0
     allowed = true
     fermionstatistics = 1
     for (digitpos, dagger) in zip(digitpositions, daggers)
-        op = (1 << (digitpos - 1)) #2^(digitpos - 1) but faster
+        op = (one(I) << (digitpos - 1)) #2^(digitpos - 1) but faster
         if dagger
             newfocknbr = op | focknbr
             # Check if there already was a fermion at the site.

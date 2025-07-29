@@ -60,7 +60,6 @@ function Base.isless(a::FermionSym, b::FermionSym)
 end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
-Base.hash(a::FermionSym) = hash(a.creation, hash(a.label, hash(a.basis)))
 
 function ordered_prod(a::FermionSym, b::FermionSym)
     a_uni = a.basis.universe
