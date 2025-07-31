@@ -31,6 +31,7 @@ struct BdGHilbertSpace{H} <: AbstractFockHilbertSpace
         return new{typeof(H)}(H)
     end
 end
+bdg_hilbert_space(labels) = BdGHilbertSpace(labels)
 Base.size(h::BdGHilbertSpace) = size(h.parent)
 Base.size(h::BdGHilbertSpace, dim) = size(h.parent, dim)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
