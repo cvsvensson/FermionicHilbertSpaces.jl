@@ -268,52 +268,5 @@ end
     end
 end
 
-## Many body 
-function many_body_density_matrix_exp(_G, c=FermionBasis(1:div(size(G, 1), 2), qn=parity); alg=SkewEigenAlg())
-    G = _G - tr(_G)I / size(_G, 1)
-    vals, vecs = diagonalize(BdGMatrix(G; check=false), alg)
-    clamp_val(e) = clamp(e, -1 / 2 + eps(e), 1 / 2 - eps(e))
-    f(e) = log((e + 1 / 2) / (1 / 2 - e))
-    vals2 = map(f ∘ clamp_val, vals[1:div(length(vals), 2)])
-    H = vecs * Diagonal(vcat(vals2, -reverse(vals2))) * vecs'
-    N = length(vals2)
-    _H = Hermitian(H[1:N, 1:N])
-    Δ = H[1:N, N+1:2N]
-    Δ = (Δ - transpose(Δ)) / 2
-    @assert _H ≈ -transpose(H[N+1:2N, N+1:2N])
-    @assert Δ ≈ -transpose(Δ)
-    @assert Δ ≈ -conj(H[N+1:2N, 1:N])
-    Hmb = Matrix(many_body_hamiltonian(_H, Δ, c))
-    rho = exp(Hmb)
-    return rho / tr(rho)
-end
 const DEFAULT_PH_CUTOFF = 1e-12
-
-# remove_trace(A) = A - tr(A)I / size(A, 1)
-"""
-    many_body_density_matrix(G, labels, alg=SkewEigenAlg())
-
-Compute the many-body density matrix for a given correlator G. 
-"""
-function many_body_density_matrix(_G, labels=1:div(size(_G, 2), 2), alg=BdGEigen())
-    G = _G - tr(_G)I / size(_G, 1)
-    isbdgmatrix(G) || throw(ArgumentError("G must be a BdG matrix."))
-    vals, vecs = eigen(G, alg)
-    @fermions f
-    N = length(labels)
-    qps = [sum((n > N ? f[labels[n-N]]' : f[labels[n]]) * vecs[n, i] for n in 1:2N) for i in 1:size(vecs, 2)]
-    prod((1 * (1 / 2 - e) + 2e * (qp' * qp)) for (e, qp) in zip(vals[1:N], qps))
-end
-many_body_density_matrix(_G, H::BdGHilbertSpace, alg=BdGEigen()) = many_body_density_matrix(_G, keys(H), alg)
-many_body_density_matrix(_G, H::AbstractHilbertSpace, alg=BdGEigen()) = matrix_representation(many_body_density_matrix(_G, keys(H), alg), H)
-
-
-"""
-    many_body_hamiltonian(H::AbstractMatrix, Δ::AbstractMatrix, c::FermionBasis=FermionBasis(1:size(H, 1), qn=parity))
-
-Construct the many-body Hamiltonian for a given BdG Hamiltonian consisting of hoppings `H` and pairings `Δ`.
-"""
-# function many_body_hamiltonian(H::AbstractMatrix, Δ::AbstractMatrix, c::FermionBasis=FermionBasis(1:size(H, 1), qn=parity))
-#     sum((H[i, j] * c[i]' * c[j] - conj(H[i, j]) * c[i] * c[j]') / 2 - (Δ[i, j] * c[i] * c[j] - conj(Δ[i, j]) * c[i]' * c[j]') / 2 for (i, j) in Base.product(keys(c), keys(c)))
-# end
 
