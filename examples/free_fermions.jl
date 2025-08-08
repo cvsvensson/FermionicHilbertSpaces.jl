@@ -27,6 +27,7 @@ function vec_to_square_grid(v::AbstractVector{T}) where T
     end
     return reshape(vals, size(square_grid))
 end
+# ## Construct hamiltonian
 # Let's define a quadratic hamiltonian with a spiral chemical potential and hopping
 function potential(xy)
     θ = atan(xy...)
@@ -49,6 +50,7 @@ end
 # And get a matrix representation of it on the single particle hilbert space
 mat = matrix_representation(ham, H)
 
+# ## Compute eigenstates and momentum operators and plot results
 # Compute a few eigenvalues/eigenvectors (lowest energy states)
 vals, vecs = eigs(mat; nev=3^2, which=:SR, v0=map(x -> eltype(mat)(first(x)), disc)[:]);
 # Calculate momentum operators px, py and define a function to calculate angular momentum density
