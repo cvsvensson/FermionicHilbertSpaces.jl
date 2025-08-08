@@ -2,6 +2,8 @@ struct SymbolicMajoranaBasis
     name::Symbol
     universe::UInt64
 end
+Base.hash(x::SymbolicMajoranaBasis, h::UInt) = hash(x.name, hash(x.universe, h))
+
 abstract type AbstractMajoranaSym <: AbstractFermionSym end
 """
     @majoranas a b ...

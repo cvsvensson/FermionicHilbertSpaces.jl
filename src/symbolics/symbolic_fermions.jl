@@ -3,6 +3,7 @@ struct SymbolicFermionBasis
     name::Symbol
     universe::UInt64
 end
+Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.universe, h))
 
 """
     @fermions a b ...
