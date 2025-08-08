@@ -260,16 +260,16 @@ function matrix_representation(op::Union{<:FermionMul,<:AbstractFermionSym}, lab
 end
 matrix_representation(op, labels, instates) = matrix_representation(op, labels, instates, instates)
 
-function operator_inds_amps!((outinds, ininds, amps), op, coeff, label_to_site_index, outstates::AbstractVector{SingleParticleState}, instates::AbstractVector{SingleParticleState}, fock_to_outind)
-    isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, coeff, label_to_site_index, outstates, instates, fock_to_outind)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, coeff, label_to_site_index, outstates, instates, fock_to_outind)
+function operator_inds_amps!((outinds, ininds, amps), op, label_to_site_index, outstates::AbstractVector{SingleParticleState}, instates::AbstractVector{SingleParticleState}, fock_to_outind)
+    isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, label_to_site_index, outstates, instates, fock_to_outind)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, label_to_site_index, outstates, instates, fock_to_outind)
 end
 
-function operator_inds_amps!((outinds, ininds, amps), op, coeff, label_to_site_index, outstates, instates, fock_to_outind)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, coeff, label_to_site_index, outstates, instates, fock_to_outind)
+function operator_inds_amps!((outinds, ininds, amps), op, label_to_site_index, outstates, instates, fock_to_outind)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, label_to_site_index, outstates, instates, fock_to_outind)
 end
 
-function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::FermionMul, coeff, label_to_site_index, outstates::AbstractVector{SingleParticleState}, instates::AbstractVector{SingleParticleState}, fock_to_outind)
+function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::FermionMul, label_to_site_index, outstates::AbstractVector{SingleParticleState}, instates::AbstractVector{SingleParticleState}, fock_to_outind)
     if length(op.factors) != 2
         throw(ArgumentError("Only two-fermion operators supported for free fermions"))
     end
@@ -279,15 +279,15 @@ function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::FermionMu
     sign = (-1)^op.factors[2].creation
     push!(outinds, outind)
     push!(ininds, inind)
-    push!(amps, sign * op.coeff * coeff)
+    push!(amps, sign * op.coeff)
     return (outinds, ininds, amps)
 end
 
-function operator_inds_amps_generic!((outinds, ininds, amps), op::FermionMul, coeff, label_to_site_index, outstates, instates, fock_to_outind)
+function operator_inds_amps_generic!((outinds, ininds, amps), op::FermionMul, label_to_site_index, outstates, instates, fock_to_outind)
     digitpositions = collect(Iterators.reverse(label_to_site_index[f.label] for f in op.factors)) #reverse(siteindices(_labels(op), jw))
     daggers = collect(Iterators.reverse(s.creation for s in op.factors))
-    mc = -op.coeff * coeff
-    pc = op.coeff * coeff
+    mc = -op.coeff
+    pc = op.coeff
     for (n, f) in enumerate(instates)
         newfockstate, amp = togglefermions(digitpositions, daggers, f)
         if !iszero(amp)
@@ -311,7 +311,7 @@ function matrix_representation(op::FermionAdd{C}, label_to_site_index, outstates
     sizehint!(ininds, length(instates))
     sizehint!(amps, length(instates))
     for (operator, coeff) in op.dict
-        operator_inds_amps!((outinds, ininds, amps), operator, coeff, label_to_site_index, outstates, instates, fock_to_outind)
+        operator_inds_amps!((outinds, ininds, amps), coeff * operator, label_to_site_index, outstates, instates, fock_to_outind)
     end
     if !iszero(op.coeff)
         append!(ininds, eachindex(instates))
@@ -320,7 +320,7 @@ function matrix_representation(op::FermionAdd{C}, label_to_site_index, outstates
     end
     return SparseArrays.sparse!(outinds, ininds, amps, length(outstates), length(instates))
 end
-# operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, args...; kwargs...) = operator_inds_amps!((outinds, ininds, amps), FermionMul(1, [op]), args...; kwargs...)
+operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, args...; kwargs...) = operator_inds_amps!((outinds, ininds, amps), FermionMul(1, [op]), args...; kwargs...)
 
 @testitem "Instantiating symbolic fermions" begin
     using SparseArrays, LinearAlgebra
