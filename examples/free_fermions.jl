@@ -9,7 +9,7 @@ N = 40
 xs, ys = -N:N, -N:N
 indomain(xy) = norm(xy) < N
 square_grid = [indomain(xy) ? xy : missing for xy in Iterators.product(xs, ys)]
-disc = filter(!ismissing, square_grid)
+disc = collect(skipmissing(square_grid))
 shifts = [(1, 0), (0, 1), (-1, 0), (0, -1)]
 neighbours(Nx, Ny) = [(Nx + dx, Ny + dy) for (dx, dy) in shifts if (Nx + dx, Ny + dy) in disc]
 # Utility: Map a vector of values back to the 2D grid (for plotting)
@@ -36,8 +36,8 @@ end
 hopping(xy1, xy2) = N
 @fermions f
 
-# Since we are dealing with many fermions, symbolic syms may take a long time. To get better performance, we will use the function `add!` to update the symbolic hamiltonian in place. For this, it is important to initialize the Hamiltonian with the correct type like
-ham = zero(1.0 * f[0, 0] + 1.0)  #zero(1.0 * f[disc[1]]' * f[disc[1]] + hopping(disc[1], disc[2]) * f[disc[1]]' * f[disc[2]] + hc)
+# Since we are dealing with many fermions, symbolic sums may take a long time. To get better performance, we will use the function `add!` to update the symbolic hamiltonian in place. For this, it is important to initialize the Hamiltonian with the correct type like
+ham = zero(1.0 * f[0, 0] + 1.0)
 
 # Build the Hamiltonian: sum onsite potential and hopping terms
 for xy in disc

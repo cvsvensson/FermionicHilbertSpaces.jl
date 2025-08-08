@@ -64,12 +64,6 @@ function isantisymmetric(A::AbstractMatrix)
     end
     return true
 end
-function bdg_view(A::AbstractMatrix)
-    isbdgmatrix(A) || throw(ArgumentError("Matrix must be a BdG matrix."))
-    H = @views A[inds1[1:N], inds2[1:N]]
-    Δ = @views A[inds1[1:N], inds2[N+1:2N]]
-    return H, Δ
-end
 function isbdgmatrix(A::AbstractMatrix)
     # Check if A is a BdG matrix, i.e., it has the form:
     # [H, Δ; -conj(Δ), -conj(H)]

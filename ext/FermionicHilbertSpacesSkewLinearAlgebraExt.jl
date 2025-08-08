@@ -1,6 +1,6 @@
 module FermionicHilbertSpacesSkewLinearAlgebraExt
 
-using FermionicHilbertSpaces, FermionicHilbertSpacesSkewLinearAlgebraExt
+using FermionicHilbertSpaces, SkewLinearAlgebra
 
 function bdg_to_skew(B::BdGMatrix; check=true)
     bdg_to_skew(B.H, B.Δ; check)
