@@ -23,7 +23,10 @@ makedocs(;
         "Home" => "index.md",
         "Misc" => "misc.md",
         "Functions" => "docstrings.md",
-        "Tutorials" => ["Interacting Kitaev chain" => "literate_output/kitaev_chain.md",]
+        "Tutorials" => [
+            "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
+            "Free fermions" => "literate_output/free_fermions.md"
+        ],
     ],
 )
 
