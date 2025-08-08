@@ -1,4 +1,4 @@
-using FermionicHilbertSpaces, Plots
+using FermionicHilbertSpaces, Plots, LinearAlgebra
 import FermionicHilbertSpaces: add!
 using Arpack
 using Pkg
@@ -33,7 +33,7 @@ end
 hopping(xy1, xy2) = N
 @fermions f
 ham = zero(1.0 * f[disc[1]]' * f[disc[1]] + hopping(disc[1], disc[2]) * f[disc[1]]' * f[disc[2]] + hc) # To get the type of the hamiltonian right
-@time for xy in disc
+for xy in disc
     add!(ham, potential(xy) * f[xy]' * f[xy])
     for nbr in neighbours(xy...)
         if nbr in disc
