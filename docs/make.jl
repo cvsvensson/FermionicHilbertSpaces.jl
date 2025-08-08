@@ -1,7 +1,14 @@
 using FermionicHilbertSpaces
 using Documenter
+using Literate
 
 DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilbertSpaces); recursive=true)
+
+literate_files = ["examples/kitaev_chain.jl"]
+output_directory = "docs/src/literate_output"
+for file in literate_files
+    Literate.markdown(file, output_directory; documenter=true, execute=false)
+end
 
 makedocs(;
     modules=[FermionicHilbertSpaces],
@@ -16,7 +23,7 @@ makedocs(;
         "Home" => "index.md",
         "Misc" => "misc.md",
         "Functions" => "docstrings.md",
-        "Tutorials" => ["Interacting Kitaev chain" => "kitaev_chain.md",]
+        "Tutorials" => ["Interacting Kitaev chain" => "literate_output/kitaev_chain.md",]
     ],
 )
 

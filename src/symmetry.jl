@@ -91,7 +91,7 @@ sectors(qn::FermionConservation) = qn.sectors
 struct FermionSubsetConservation <: AbstractSymmetry
     mask::FockNumber
     sectors::Union{Vector{Int},Missing}
-    function FermionSubsetConservation(mask::FockNumber, sectors)
+    function FermionSubsetConservation(mask::FockNumber, sectors::Union{<:AbstractVector{Int},Missing})
         allunique(sectors) || throw(ArgumentError("FermionSubsetConservation sectors must be unique."))
         sectorvec = sort!(Int[sectors...])
         new(mask, sectorvec)
@@ -183,12 +183,14 @@ A symmetry type representing conservation of the numbers of modes which contains
 struct IndexConservation{L} <: AbstractSymmetry
     labels::L
     sectors::Union{Vector{Int},Missing}
-    function IndexConservation(labels::L, sectors) where L
+    function IndexConservation(labels::_L, sectors) where _L
+        if !Base.isiterable(_L)
+            labels = (labels,)
+        end
+        L = typeof(labels)
         ismissing(sectors) && return new{L}(labels, missing)
         allunique(labels) || throw(ArgumentError("IndexConservation labels must be unique."))
         allunique(sectors) || throw(ArgumentError("IndexConservation sectors must be unique."))
-        allowed_qns = Set(0:length(labels))
-        all(in(allowed_qns), sectors) || throw(ArgumentError("IndexConservation can only have sectors 0 up to the number of particles."))
         sectorvec = sort!(Int[sectors...])
         new{L}(labels, sectorvec)
     end
@@ -196,7 +198,8 @@ end
 sectors(qn::IndexConservation) = qn.sectors
 IndexConservation(labels) = IndexConservation(labels, missing)
 instantiate(qn::IndexConservation, jw::JordanWignerOrdering) = IndexConservation(qn.labels, jw, qn.sectors)
-IndexConservation(index, jw::JordanWignerOrdering, sectors) = FermionSubsetConservation(filter(label -> index in label || index == label, jw.labels), jw, sectors)
+IndexConservation(indices, jw::JordanWignerOrdering, sectors) = FermionSubsetConservation(filter(label -> any((index in label || index == label) for index in indices), jw.labels), jw, sectors)
+
 @testitem "IndexConservation" begin
     import FermionicHilbertSpaces: FermionSubsetConservation
     labels = 1:4
@@ -212,6 +215,13 @@ IndexConservation(index, jw::JordanWignerOrdering, sectors) = FermionSubsetConse
     qn = IndexConservation(:↑) * IndexConservation(:↓)
     H = hilbert_space(all_labels, qn)
     @test all(length.(H.symmetry.qntofockstates) .== 1)
+
+    spatial_labels = 1:2
+    spin_labels = (:↑, :↓)
+    all_labels = Base.product(spatial_labels, spin_labels)
+    qn = IndexConservation(:↑, 1)
+    H = hilbert_space(all_labels, qn)
+    @test length(basisstates(H)) == 2^3
 end
 
 instantiate(f::F, labels) where {F} = f

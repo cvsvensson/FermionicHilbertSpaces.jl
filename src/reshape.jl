@@ -1,32 +1,32 @@
 
-function Base.reshape(m::AbstractMatrix, H::AbstractFockHilbertSpace, Hs, phase_factors::Bool=true)
-    _reshape_mat_to_tensor(m, H, Hs, FockSplitter(H, Hs), phase_factors)
+function Base.reshape(m::AbstractMatrix, H::AbstractHilbertSpace, Hs, phase_factors::Bool=true)
+    _reshape_mat_to_tensor(m, H, Hs, StateSplitter(H, Hs), phase_factors)
 end
-function Base.reshape(m::AbstractVector, H::AbstractFockHilbertSpace, Hs, phase_factors::Bool=true)
-    _reshape_vec_to_tensor(m, H, Hs, FockSplitter(H, Hs), phase_factors)
+function Base.reshape(m::AbstractVector, H::AbstractHilbertSpace, Hs, phase_factors::Bool=true)
+    _reshape_vec_to_tensor(m, H, Hs, StateSplitter(H, Hs), phase_factors)
 end
-const PairWithHilbertSpace = Union{Pair{<:AbstractFockHilbertSpace,<:Any},Pair{<:Any,<:AbstractFockHilbertSpace}}
+const PairWithHilbertSpace = Union{Pair{<:AbstractHilbertSpace,<:Any},Pair{<:Any,<:AbstractHilbertSpace}}
 Base.reshape(Hs::PairWithHilbertSpace, phase_factors=true) = m -> reshape(m, first(Hs), last(Hs), phase_factors)
-Base.reshape(m, Hs::PairWithHilbertSpace, phase_factors=true) = reshape(m, first(Hs), last(Hs), phase_factors)
+Base.reshape(m::AbstractArray, Hs::PairWithHilbertSpace, phase_factors=true) = reshape(m, first(Hs), last(Hs), phase_factors)
 
-function Base.reshape(t::AbstractArray, Hs::Union{<:AbstractVector,Tuple}, H::AbstractFockHilbertSpace, phase_factors::Bool=true)
+function Base.reshape(t::AbstractArray, Hs::Union{<:AbstractVector,Tuple}, H::AbstractHilbertSpace, phase_factors::Bool=true)
     if ndims(t) == 2 * length(Hs)
-        return _reshape_tensor_to_mat(t, Hs, H, FockMapper(Hs, H), phase_factors)
+        return _reshape_tensor_to_mat(t, Hs, H, StateExtender(Hs, H), phase_factors)
     elseif ndims(t) == length(Hs)
-        return _reshape_tensor_to_vec(t, Hs, H, FockMapper(Hs, H), phase_factors)
+        return _reshape_tensor_to_vec(t, Hs, H, StateExtender(Hs, H), phase_factors)
     else
         throw(ArgumentError("The number of dimensions in the tensor must match the number of subsystems"))
     end
 end
 
-function _reshape_vec_to_tensor(v, H::AbstractFockHilbertSpace, Hs, fock_splitter, phase_factors)
+function _reshape_vec_to_tensor(v::AbstractVector, H::AbstractHilbertSpace, Hs, statesplitter, phase_factors)
     if phase_factors
         isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
     end
     dims = length.(basisstates.(Hs))
     fs = basisstates(H)
     Is = map(f -> state_index(f, H), fs)
-    Iouts = map(f -> state_index.(fock_splitter(f), Hs), fs)
+    Iouts = map(f -> state_index.(statesplitter(f), Hs), fs)
     t = Array{eltype(v),length(Hs)}(undef, dims...)
     for (I, Iout) in zip(Is, Iouts)
         t[Iout...] = v[I...]
@@ -34,7 +34,7 @@ function _reshape_vec_to_tensor(v, H::AbstractFockHilbertSpace, Hs, fock_splitte
     return t
 end
 
-function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractFockHilbertSpace, Hs, fock_splitter, phase_factors)
+function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractHilbertSpace, Hs, statesplitter, phase_factors)
     #reshape the matrix m in basis b into a tensor where each index pair has a basis in bs
     if phase_factors
         isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
@@ -42,7 +42,7 @@ function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractFockHilbertSpace, 
     dims = length.(basisstates.(Hs))
     fs = basisstates(H)
     Is = map(f -> state_index(f, H), fs)
-    Iouts = map(f -> state_index.(fock_splitter(f), Hs), fs)
+    Iouts = map(f -> state_index.(statesplitter(f), Hs), fs)
     t = Array{eltype(m),2 * length(Hs)}(undef, dims..., dims...)
     partition = map(collect ∘ keys, Hs)
     for (I1, Iout1, f1) in zip(Is, Iouts, fs)
@@ -54,12 +54,12 @@ function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractFockHilbertSpace, 
     return t
 end
 
-function _reshape_tensor_to_mat(t, Hs, H::AbstractFockHilbertSpace, fockmapper, phase_factors)
+function _reshape_tensor_to_mat(t, Hs, H::AbstractHilbertSpace, stateextender, phase_factors)
     if phase_factors
         isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
     end
     fs = Base.product(basisstates.(Hs)...)
-    fsb = map(fockmapper, fs)
+    fsb = map(stateextender, fs)
     Is = map(f -> state_index.(f, Hs), fs)
     Iouts = map(f -> state_index(f, H), fsb)
     m = Matrix{eltype(t)}(undef, length(fsb), length(fsb))
@@ -74,13 +74,13 @@ function _reshape_tensor_to_mat(t, Hs, H::AbstractFockHilbertSpace, fockmapper, 
     return m
 end
 
-function _reshape_tensor_to_vec(t, Hs, H::AbstractFockHilbertSpace, fockmapper, phase_factors)
+function _reshape_tensor_to_vec(t, Hs, H::AbstractHilbertSpace, stateextender, phase_factors)
     isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
     fs = Base.product(basisstates.(Hs)...)
     v = Vector{eltype(t)}(undef, length(fs))
     for fs in fs
         Is = state_index.(fs, Hs)
-        fb = fockmapper(fs)
+        fb = stateextender(fs)
         Iout = state_index(fb, H)
         v[Iout] = t[Is...]
     end

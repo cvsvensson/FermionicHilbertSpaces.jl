@@ -8,7 +8,7 @@ Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 
 Base.size(H::AbstractHilbertSpace) = (length(basisstates(H)), length(basisstates(H)))
 Base.size(H::AbstractHilbertSpace, i) = i == 1 || i == 2 ? length(basisstates(H)) : throw(BoundsError(H, (i,)))
-isorderedpartition(partition, H::AbstractFockHilbertSpace) = isorderedpartition(partition, H.jw)
+isorderedpartition(Hs, H::AbstractFockHilbertSpace) = isorderedpartition(map(mode_ordering, Hs), H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = isorderedsubsystem(Hsub.jw, H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = isorderedsubsystem(Hsub.jw, jw)
 issubsystem(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = issubsystem(subsystem.jw, jw)
@@ -16,7 +16,7 @@ issubsystem(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = 
 consistent_ordering(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = consistent_ordering(subsystem.jw, jw)
 consistent_ordering(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = consistent_ordering(subsystem.jw, H.jw)
 focknbr_from_site_labels(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(H), jw)
-ispartition(partition, H::AbstractFockHilbertSpace) = ispartition(partition, H.jw)
+ispartition(Hs, H::AbstractFockHilbertSpace) = ispartition(map(mode_ordering, Hs), H.jw)
 
 siteindices(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = siteindices(H.jw, jw)
 
@@ -188,12 +188,11 @@ hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, 
     Hs2 = [hilbert_space([2]), hilbert_space([1, 3])]
     Hs3 = [hilbert_space([1, 2, 3])]
     Hs4 = [hilbert_space([1]), hilbert_space([2])]
-    @test ispartition(Hs1, H.jw)
+    @test ispartition(Hs1, H)
     @test ispartition(map(keys, Hs2), H.jw)
-    @test ispartition(map(keys, Hs2), H)
     @test !ispartition(Hs4, H)
-    @test isorderedpartition(Hs1, H.jw)
-    @test isorderedpartition(map(keys, Hs3), H)
+    @test isorderedpartition(Hs1, H)
+    @test isorderedpartition(map(keys, Hs3), H.jw)
     @test !isorderedpartition(Hs4, H)
 end
 
@@ -225,6 +224,8 @@ function subregion(modes, H::FockHilbertSpace)
     sort!(unique!(subfocks), by=f -> f.f)
     FockHilbertSpace(modes, subfocks)
 end
+
+complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace) = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
 
 function subregion(modes, H::SymmetricFockHilbertSpace)
     if !isorderedsubsystem(modes, H.jw)

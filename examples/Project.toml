@@ -1,5 +1,6 @@
 [deps]
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
+DisplayAs = "0b91fe84-8a4c-11e9-3e1d-67c38462b6d6"
 FermionicHilbertSpaces = "82e5dd95-83c3-46b2-a303-acc930c81756"
 KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"

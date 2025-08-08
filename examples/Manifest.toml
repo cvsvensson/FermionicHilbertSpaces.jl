@@ -360,6 +360,11 @@ version = "6.179.0"
     Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
     Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
+[[deps.DisplayAs]]
+git-tree-sha1 = "43c017d5dd3a48d56486055973f443f8a39bb6d9"
+uuid = "0b91fe84-8a4c-11e9-3e1d-67c38462b6d6"
+version = "0.1.6"
+
 [[deps.Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
 uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
@@ -1186,6 +1191,7 @@ git-tree-sha1 = "57d3969321911e101c94dde1d1ff54d6308669fd"
 uuid = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 version = "2.105.0"
 
+
     [deps.SciMLBase.extensions]
     SciMLBaseChainRulesCoreExt = "ChainRulesCore"
     SciMLBaseMLStyleExt = "MLStyle"
@@ -1444,8 +1450,6 @@ version = "0.4.1"
 
 [[deps.Unitful]]
 deps = ["Dates", "LinearAlgebra", "Random"]
-git-tree-sha1 = "d2282232f8a4d71f79e85dc4dd45e5b12a6297fb"
-uuid = "1986cc42-f94f-5a68-af5c-568840ba703d"
 version = "1.23.1"
 
     [deps.Unitful.extensions]
