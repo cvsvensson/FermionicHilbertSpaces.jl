@@ -91,7 +91,7 @@ end
     @test isorderedpart([[2], [1, 3]])
 end
 
-phase_factor_h(f1, f2, Hs, H::AbstractFockHilbertSpace) = phase_factor_h(f1, f2, map(mode_ordering, Hs), H.jw)
+phase_factor_h(f1, f2, Hs, H::AbstractFockHilbertSpace) = phase_factor_h(f1, f2, map(modes, Hs), H.jw)
 function phase_factor_h(f1, f2, partition, jw::JordanWignerOrdering)::Int
     #(120b)
     phase = 1
