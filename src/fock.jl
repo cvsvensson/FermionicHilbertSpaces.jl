@@ -323,7 +323,7 @@ combine_states(f1::FixedNumberFockState, f2::FixedNumberFockState, H1, H2) = Fix
     @fermions f
     h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
     H = hilbert_space(1:2, FermionicHilbertSpaces.SingleParticleState.(1:3))
-    matrix_representation(h, H) #should error?
+    @test_throws KeyError matrix_representation(h, H)
 
     N = 10
     H = hilbert_space(1:N, SingleParticleState.(1:N))
@@ -336,36 +336,60 @@ combine_states(f1::FixedNumberFockState, f2::FixedNumberFockState, H1, H2) = Fix
 end
 
 function togglefermions(sites, daggers, f::FixedNumberFockState)
-    fsites = f.sites
+    # Check if operation results in vacuum or not,
+    # short circuiting if so to avoid allocating fsites
+    for site in sites
+        last_dagger = false
+        for s in f.sites
+            if s == site
+                last_dagger = true
+            end
+        end
+        for (s, dagger) in zip(sites, daggers)
+            if s == site
+                if dagger == last_dagger
+                    return f, false
+                end
+                last_dagger = dagger
+            end
+        end
+    end
+
+    fsites = collect(f.sites) # Lots of allocations
     fermionstatistics = 1
     for (site, dagger) in zip(sites, daggers)
         if dagger
             if site in fsites
                 return f, false
             end
-            fsites = (fsites..., site)
+            fsites = push!(fsites, site)
         else
             if !(site in fsites)
                 return f, false
             end
-            fsites = TupleTools.deleteat(fsites, findfirst(isequal(site), fsites))
+            deleteat!(fsites, findfirst(isequal(site), fsites))
         end
-        fermionstatistics *= jwstring(site, FixedNumberFockState(fsites))
+        sign = 1
+        for s in fsites
+            if s < site
+                sign *= -1
+            end
+        end
+        fermionstatistics *= sign
     end
-    fsites = TupleTools.sort(fsites)
-    return FixedNumberFockState(fsites), fermionstatistics
+    sort!(fsites)
+    return FixedNumberFockState(Tuple(fsites)), fermionstatistics
 end
 
-
-
-struct SingleParticleHilbertSpace{H} <: AbstractFockHilbertSpace
-    parent::H
-    function SingleParticleHilbertSpace(labels)
-        states = [SingleParticleState(i) for (i, label) in enumerate(labels)]
-        H = hilbert_space(labels, states)
-        return new{typeof(H)}(H)
-    end
-end
-Base.size(h::SingleParticleHilbertSpace) = size(h.parent)
-Base.size(h::SingleParticleHilbertSpace, dim) = size(h.parent, dim)
-mode_ordering(h::SingleParticleHilbertSpace) = mode_ordering(h.parent)
+# struct SingleParticleHilbertSpace{H} <: AbstractFockHilbertSpace
+#     parent::H
+#     function SingleParticleHilbertSpace(labels)
+#         states = [SingleParticleState(i) for (i, label) in enumerate(labels)]
+#         H = hilbert_space(labels, states)
+#         return new{typeof(H)}(H)
+#     end
+# end
+# Base.size(h::SingleParticleHilbertSpace) = size(h.parent)
+# Base.size(h::SingleParticleHilbertSpace, dim) = size(h.parent, dim)
+# mode_ordering(h::SingleParticleHilbertSpace) = mode_ordering(h.parent)
+single_particle_hilbert_space(labels) = hilbert_space(labels, SingleParticleState.(eachindex(labels)))

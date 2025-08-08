@@ -1,7 +1,7 @@
 function Base.show(io::IO, H::Htype) where Htype<:AbstractFockHilbertSpace
     n, m = size(H)
     println(io, "$(n)⨯$m $(Htype.name.name):")
-    print("modes: ")
+    print(io, "modes: ")
     print(IOContext(io, :compact => true), modes(H))
 end
 Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
@@ -114,7 +114,7 @@ end
 function Base.show(io::IO, H::SymmetricFockHilbertSpace)
     n, m = size(H)
     println(io, "$(n)⨯$m SymmetricFockHilbertSpace:")
-    print("modes: ")
+    print(io, "modes: ")
     println(IOContext(io, :compact => true), modes(H))
     show(io, H.symmetry)
 end

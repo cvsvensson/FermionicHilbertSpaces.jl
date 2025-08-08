@@ -7,6 +7,7 @@ struct FermionMul{C,F<:AbstractFermionSym}
     factors::Vector{F}
     ordered::Bool
     function FermionMul(coeff::C, factors) where {C}
+        (iszero(coeff) || iszero(length(factors))) && return coeff
         ordered = issorted(factors) && sorted_noduplicates(factors)
         new{C,eltype(factors)}(coeff, factors, ordered)
     end
@@ -43,20 +44,20 @@ Base.:(==)(b::AbstractFermionSym, a::FermionMul) = a == b
 Base.hash(a::FermionMul, h::UInt) = hash(a.coeff, hash(a.factors, h))
 FermionMul(f::FermionMul) = f
 FermionMul(f::AbstractFermionSym) = FermionMul(1, [f])
-
+has_scalars(d) = any(isscalar, keys(d)) || any(iszero, values(d))
 struct FermionAdd{C,D}
     coeff::C
     dict::D
-    function FermionAdd(coeff::C, dict::D; filter_scalars=true) where {C,D}
+    function FermionAdd(coeff::C, dict::D; filter_scalars=true, check_length=true) where {C,D}
         if filter_scalars
             for (k, v) in dict
                 if isscalar(k)
                     coeff += k.coeff * v
+                    delete!(dict, k)
                 end
             end
-            dict = filter(p -> !(isscalar(first(p))), dict)
         end
-        if length(dict) == 0
+        if check_length && length(dict) == 0
             coeff
         elseif length(dict) == 1 && iszero(coeff)
             k, v = first(dict)
@@ -128,8 +129,11 @@ print_num(io::IO, x) = isreal(x) ? print(io, real(x)) : print(io, "(", x, ")")
 
 Base.:+(a::Number, b::SM) = iszero(a) ? b : FermionAdd(a, to_add(b))
 Base.:+(a::SM, b::Number) = b + a
-Base.:+(a::SM, b::SM) = FermionAdd(0, (_merge!(+, to_add(a), to_add(b); filter=iszero)))
-Base.:+(a::SM, b::FermionAdd) = FermionAdd(b.coeff, (_merge!(+, b.dict, to_add(a); filter=iszero)), filter_scalars=false)
+Base.:+(a::SM, b::SM) = FermionAdd(0, (_merge(+, to_add(a), to_add(b); filter=iszero)))
+Base.:+(a::SM, b::FermionAdd) = FermionAdd(b.coeff, (_merge(+, to_add(a), b.dict; filter=iszero)), filter_scalars=false)
+add!(a::FermionAdd, b::SM) = FermionAdd(a.coeff, _merge!(+, a.dict, to_add(b); filter=iszero), filter_scalars=false)
+add!(a::FermionAdd, b::FermionAdd) = FermionAdd(a.coeff + b.coeff, _merge!(+, a.dict, b.dict; filter=iszero), filter_scalars=false)
+add!(a::FermionAdd, b::Number) = FermionAdd(a.coeff + b, a.dict, filter_scalars=false)
 Base.:+(a::FermionAdd, b::SM) = b + a
 Base.:/(a::SMA, b::Number) = inv(b) * a
 to_add(a::FermionMul, coeff=1) = Dict(FermionMul(1, a.factors) => a.coeff * coeff)
@@ -148,7 +152,10 @@ function allterms(a::FermionAdd)
     [a.coeff, [v * k for (k, v) in pairs(a.dict)]...]
 end
 function Base.:+(a::FermionAdd, b::FermionAdd)
-    a.coeff + foldr((f, b) -> f + b, fermionterms(a); init=b)
+    # a.coeff + foldr((f, b) -> f + b, fermionterms(a); init=b)
+    coeff = a.coeff + b.coeff
+    dict = _merge(+, a.dict, b.dict; filter=iszero)
+    FermionAdd(coeff, dict)
 end
 Base.:^(a::Union{FermionMul,FermionAdd}, b) = Base.power_by_squaring(a, b)
 
@@ -170,8 +177,15 @@ function Base.:*(a::FermionAdd, b::FermionAdd)
     a.coeff * b + sum((va * fa) * b for (fa, va) in a.dict)
 end
 
-Base.adjoint(x::FermionAdd) = adjoint(x.coeff) + sum(f' for f in fermionterms(x))
-
+function Base.adjoint(x::FermionAdd)
+    FermionAdd(adjoint(x.coeff), Dict(f' => v' for (f, v) in x.dict))
+    # copy(x.dict)
+    # adjoint(x.coeff) + sum(f' for f in fermionterms(x))
+end
+function OpSum(::Type{T}=Number) where T
+    FermionAdd(0, Dict{FermionMul,T}(); filter_scalars=false, check_length=false)
+end
+Base.zero(::FermionAdd{C,D}) where {C,D} = FermionAdd(zero(C), D(); filter_scalars=false, check_length=false)
 
 unordered_prod(a::FermionMul, b::FermionAdd) = b.coeff * a + sum(unordered_prod(a, f) for f in fermionterms(b))
 unordered_prod(a::FermionAdd, b::FermionMul) = a.coeff * b + sum(unordered_prod(f, b) for f in fermionterms(a))
@@ -246,18 +260,39 @@ function matrix_representation(op::Union{<:FermionMul,<:AbstractFermionSym}, lab
 end
 matrix_representation(op, labels, instates) = matrix_representation(op, labels, instates, instates)
 
-function operator_inds_amps!((outinds, ininds, amps), op::FermionMul{C}, label_to_site_index, outstates, instates, fock_to_outind) where {C}
+function operator_inds_amps!((outinds, ininds, amps), op, coeff, label_to_site_index, outstates::AbstractVector{SingleParticleState}, instates::AbstractVector{SingleParticleState}, fock_to_outind)
+    isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, coeff, label_to_site_index, outstates, instates, fock_to_outind)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, coeff, label_to_site_index, outstates, instates, fock_to_outind)
+end
+
+function operator_inds_amps!((outinds, ininds, amps), op, coeff, label_to_site_index, outstates, instates, fock_to_outind)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, coeff, label_to_site_index, outstates, instates, fock_to_outind)
+end
+
+function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::FermionMul, coeff, label_to_site_index, outstates::AbstractVector{SingleParticleState}, instates::AbstractVector{SingleParticleState}, fock_to_outind)
+    if length(op.factors) != 2
+        throw(ArgumentError("Only two-fermion operators supported for free fermions"))
+    end
+    fockstates = (SingleParticleState(label_to_site_index[op.factors[1].label]), SingleParticleState(label_to_site_index[op.factors[2].label]))
+    inind = findfirst(isequal(fockstates[2]), instates)
+    outind = findfirst(isequal(fockstates[1]), outstates)
+    sign = (-1)^op.factors[2].creation
+    push!(outinds, outind)
+    push!(ininds, inind)
+    push!(amps, sign * op.coeff * coeff)
+    return (outinds, ininds, amps)
+end
+
+function operator_inds_amps_generic!((outinds, ininds, amps), op::FermionMul, coeff, label_to_site_index, outstates, instates, fock_to_outind)
     digitpositions = collect(Iterators.reverse(label_to_site_index[f.label] for f in op.factors)) #reverse(siteindices(_labels(op), jw))
     daggers = collect(Iterators.reverse(s.creation for s in op.factors))
-    mc = -op.coeff
-    pc = op.coeff
+    mc = -op.coeff * coeff
+    pc = op.coeff * coeff
     for (n, f) in enumerate(instates)
         newfockstate, amp = togglefermions(digitpositions, daggers, f)
         if !iszero(amp)
-            # !haskey(fock_to_outind, newfockstate) && println.(keys(fock_to_outind))
-            # println(newfockstate)
             push!(outinds, fock_to_outind[newfockstate])
-            push!(amps, amp == 1 ? pc : mc)
+            push!(amps, isone(amp) ? pc : mc)
             push!(ininds, n)
         end
     end
@@ -272,12 +307,11 @@ function matrix_representation(op::FermionAdd{C}, label_to_site_index, outstates
     ininds = Int[]
     AT = valtype(op)
     amps = AT[]
-    N = length(op.dict)
-    sizehint!(outinds, N * length(instates))
-    sizehint!(ininds, N * length(instates))
-    sizehint!(amps, N * length(instates))
-    for (factor, coeff) in op.dict
-        operator_inds_amps!((outinds, ininds, amps), coeff * factor, label_to_site_index, outstates, instates, fock_to_outind)
+    sizehint!(outinds, length(instates))
+    sizehint!(ininds, length(instates))
+    sizehint!(amps, length(instates))
+    for (operator, coeff) in op.dict
+        operator_inds_amps!((outinds, ininds, amps), operator, coeff, label_to_site_index, outstates, instates, fock_to_outind)
     end
     if !iszero(op.coeff)
         append!(ininds, eachindex(instates))
@@ -286,7 +320,7 @@ function matrix_representation(op::FermionAdd{C}, label_to_site_index, outstates
     end
     return SparseArrays.sparse!(outinds, ininds, amps, length(outstates), length(instates))
 end
-operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, args...; kwargs...) = operator_inds_amps!((outinds, ininds, amps), FermionMul(1, [op]), args...; kwargs...)
+# operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, args...; kwargs...) = operator_inds_amps!((outinds, ininds, amps), FermionMul(1, [op]), args...; kwargs...)
 
 @testitem "Instantiating symbolic fermions" begin
     using SparseArrays, LinearAlgebra
@@ -351,11 +385,13 @@ TermInterface.maketerm(::Type{Q}, head::Type{T}, args, metadata) where {Q<:Union
 # _merge(f::F, d, others...; filter=x -> false) where {F} = _merge!(f, Dict{SM,Any}(d), others...; filter=filter)
 # _merge(f::F, d, others...; filter=x -> false) where {F} = _merge!(f, d, others...; filter=filter)
 # _merge(f::F, d, others...; filter=x -> false) where {F} = _merge!(f, Dict{SM,Union{promote_type(valtype(d), valtype.(others)...)}}(d), others...; filter)
-function _merge!(f, d::Dict{K,T0}, others...; filter=x -> false) where {K,T0}
+function _merge(f, d::Dict{K0,T0}, others...; filter=x -> false) where {K0,T0}
     T = Union{promote_type(T0, valtype.(others)...)}
-    if T !== T0
-        return __merge!(f, Dict{K,T}(d), others...; filter)
-    end
+    K = Union{K0,keytype.(others)...}
+    d2 = Dict{K,T}(d)
+    return __merge!(f, d2, others...; filter)
+end
+function _merge!(f, d::Dict{K0,T0}, others...; filter=x -> false) where {K0,T0}
     return __merge!(f, d, others...; filter)
 end
 function __merge!(f::F, d, others...; filter=x -> false) where {F}
