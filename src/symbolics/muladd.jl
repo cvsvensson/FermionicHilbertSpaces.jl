@@ -45,7 +45,7 @@ Base.hash(a::FermionMul, h::UInt) = hash(a.coeff, hash(a.factors, h))
 FermionMul(f::FermionMul) = f
 FermionMul(f::AbstractFermionSym) = FermionMul(1, [f])
 has_scalars(d) = any(isscalar, keys(d)) || any(iszero, values(d))
-struct FermionAdd{C,D}
+mutable struct FermionAdd{C,D}
     coeff::C
     dict::D
     function FermionAdd(coeff::C, dict::D; filter_scalars=true, check_length=true) where {C,D}
@@ -131,9 +131,16 @@ Base.:+(a::Number, b::SM) = iszero(a) ? b : FermionAdd(a, to_add(b))
 Base.:+(a::SM, b::Number) = b + a
 Base.:+(a::SM, b::SM) = FermionAdd(0, (_merge(+, to_add(a), to_add(b); filter=iszero)))
 Base.:+(a::SM, b::FermionAdd) = FermionAdd(b.coeff, (_merge(+, to_add(a), b.dict; filter=iszero)), filter_scalars=false)
-add!(a::FermionAdd, b::SM) = FermionAdd(a.coeff, _merge!(+, a.dict, to_add(b); filter=iszero), filter_scalars=false)
-add!(a::FermionAdd, b::FermionAdd) = FermionAdd(a.coeff + b.coeff, _merge!(+, a.dict, b.dict; filter=iszero), filter_scalars=false)
-add!(a::FermionAdd, b::Number) = FermionAdd(a.coeff + b, a.dict, filter_scalars=false)
+function add!(a::FermionAdd, b::FermionAdd)
+    a.coeff += b.coeff
+    a.dict = _merge!(+, a.dict, b.dict; filter=iszero)
+    return a
+end
+function add!(a::FermionAdd, b::SM)
+    a.dict = _merge!(+, a.dict, to_add(b); filter=iszero)
+    return a
+end
+add!(a::FermionAdd, b::Number) = (a.coeff += b; return a)
 Base.:+(a::FermionAdd, b::SM) = b + a
 Base.:/(a::SMA, b::Number) = inv(b) * a
 to_add(a::FermionMul, coeff=1) = Dict(FermionMul(1, a.factors) => a.coeff * coeff)
@@ -152,7 +159,6 @@ function allterms(a::FermionAdd)
     [a.coeff, [v * k for (k, v) in pairs(a.dict)]...]
 end
 function Base.:+(a::FermionAdd, b::FermionAdd)
-    # a.coeff + foldr((f, b) -> f + b, fermionterms(a); init=b)
     coeff = a.coeff + b.coeff
     dict = _merge(+, a.dict, b.dict; filter=iszero)
     FermionAdd(coeff, dict)
@@ -179,8 +185,6 @@ end
 
 function Base.adjoint(x::FermionAdd)
     FermionAdd(adjoint(x.coeff), Dict(f' => v' for (f, v) in x.dict))
-    # copy(x.dict)
-    # adjoint(x.coeff) + sum(f' for f in fermionterms(x))
 end
 function OpSum(::Type{T}=Number) where T
     FermionAdd(0, Dict{FermionMul,T}(); filter_scalars=false, check_length=false)
@@ -447,4 +451,19 @@ isquadratic(x::FermionAdd) = all(isquadratic, fermionterms(x))
     @test isquadratic(f[1]f[2])
     @test !isquadratic(f[1]f[2] * f[3])
     @test isquadratic(f[1]f[2] + f[3] * f[3]' + 1)
+end
+
+Base.copy(x::FermionAdd) = FermionAdd(copy(x.coeff), copy(x.dict))
+@testitem "Consistency between + and add!" begin
+    import FermionicHilbertSpaces: add!
+    @fermions f
+    a = 1.0 * f[2] * f[1] + 1
+    for b in [1.0, 1, f[1], 1.0 * f[1], f[2] * f[1], a]
+        a2 = copy(a)
+        a3 = add!(a2, b)
+        @test a + b == a3
+        @test a2 == a3
+        @test_throws InexactError add!(a, 1im * b)
+    end
+    @test a == 1.0 * f[2] * f[1] + 1
 end
