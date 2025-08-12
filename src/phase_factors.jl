@@ -179,7 +179,7 @@ end
         [[1], [2, 3]], [[3], [2, 1]], [[2], [1, 3]],
         [[1, 2, 3]], [[2], [1], [3]]]
     for p in partitions
-        subinds = map(p -> Tuple(getindices(p, jw)), p)
+        subinds = map(p -> Tuple(getindices(jw, p)), p)
         @test h(p, fockstates, jw) == phf(fockstates, subinds, N)
     end
 
@@ -188,7 +188,7 @@ end
     fockstates = sort(map(FockNumber, 0:2^N-1), by=Base.Fix2(bits, N))
     partitions = [[[3, 2, 7, 5, 1], [4, 6]], [[7, 3, 2], [1, 5], [4, 6]]]
     for p in partitions
-        subinds = map(p -> Tuple(getindices(p, jw)), p)
+        subinds = map(p -> Tuple(getindices(jw, p)), p)
         local N = length(jw)
         @test h(p, fockstates, jw) == phf(fockstates, subinds, N)
     end
