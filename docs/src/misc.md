@@ -1,6 +1,34 @@
 
 # Misc
 
+## Single particle hilbert spaces
+A quadratic fermionic hamiltonian with number conservation can be written as 
+$$
+H = E\mathbf{1} + \sum_{ij} c_i^\dagger\, h_{ij}  c_j.
+$$
+The matrix element between two single particle states with modes $n$ and $m$ occupied is
+$$
+ \bra{m}H\ket{n} = E\delta_{nm} + h_{nm}.
+$$
+
+One can manually define the hilbert space using only the single particle states as
+```@example single_particle_hilbert_space
+using FermionicHilbertSpaces
+N = 2
+H = hilbert_space(1:N, FermionicHilbertSpaces.SingleParticleState.(1:N))
+@fermions c
+h = rand(N,N)
+E = rand()
+op = E*I + sum(c[i]'*h[i,j] * c[j] for i in 1:N, j in 1:N)
+matrix_representation(op,H) == h + E*I
+```
+Often, $h_{nm}$ is of interest because diagonalizing it gives information on the quasiparticles in the system.
+
+For convenience, `single_particle_hilbert_space` can be used define the hilbert space which will give only the single particle states, and will remove the contribution of the identity operator when calling `matrix_representation`:
+```@example single_particle_hilbert_space
+H = single_particle_hilbert_space(1:N)
+matrix_representation(op,H) == h
+```
 
 ## Subregion
 The function subregion can be used to extract the Hilbert space of a subregion.
