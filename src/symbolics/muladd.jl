@@ -128,7 +128,8 @@ end
 print_num(io::IO, x) = isreal(x) ? print(io, real(x)) : print(io, "(", x, ")")
 
 Base.:+(a::Number, b::SM) = iszero(a) ? b : FermionAdd(a, to_add(b))
-Base.:+(a::SM, b::Number) = b + a
+Base.:+(a::UniformScaling, b::SM) = iszero(a) ? b : FermionAdd(a.λ, to_add(b))
+Base.:+(a::SM, b::Union{Number,UniformScaling}) = b + a
 Base.:+(a::SM, b::SM) = FermionAdd(0, (_merge(+, to_add(a), to_add(b); filter=iszero)))
 Base.:+(a::SM, b::FermionAdd) = FermionAdd(b.coeff, (_merge(+, to_add(a), b.dict; filter=iszero)), filter_scalars=false)
 function add!(a::FermionAdd, b::FermionAdd)
@@ -141,16 +142,16 @@ function add!(a::FermionAdd, b::SM)
     return a
 end
 add!(a::FermionAdd, b::Number) = (a.coeff += b; return a)
-Base.:+(a::FermionAdd, b::SM) = b + a
-Base.:/(a::SMA, b::Number) = inv(b) * a
+add!(a::FermionAdd, b::UniformScaling) = (a.coeff += b.λ; return a)
 to_add(a::FermionMul, coeff=1) = Dict(FermionMul(1, a.factors) => a.coeff * coeff)
 to_add(a::AbstractFermionSym, coeff=1) = Dict(FermionMul(a) => coeff)
 
 Base.:+(a::Number, b::FermionAdd) = iszero(a) ? b : FermionAdd(a + b.coeff, b.dict)
-Base.:+(a::FermionAdd, b::Number) = b + a
-Base.:-(a::Number, b::SMA) = a + (-b)
-Base.:-(a::SMA, b::Number) = a + (-b)
-Base.:-(a::SMA, b::SMA) = a + (-b)
+Base.:+(a::UniformScaling, b::FermionAdd) = iszero(a) ? b : FermionAdd(a.λ + b.coeff, b.dict)
+Base.:+(a::FermionAdd, b::Union{Number,SM,UniformScaling}) = b + a
+Base.:/(a::SMA, b::Number) = inv(b) * a
+Base.:-(a::Union{Number,UniformScaling}, b::SMA) = a + (-b)
+Base.:-(a::SMA, b::Union{Number,SMA,UniformScaling}) = a + (-b)
 Base.:-(a::SMA) = -1 * a
 function fermionterms(a::FermionAdd)
     [v * k for (k, v) in pairs(a.dict)]

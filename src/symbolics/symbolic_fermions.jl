@@ -103,7 +103,7 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
 
 
 @testitem "SymbolicFermions" begin
-    using Symbolics
+    using Symbolics, LinearAlgebra
     @fermions f c
     @fermions b
     @variables a::Real z::Complex
@@ -162,6 +162,11 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
     @test (1 * f1) * (1 * f2) == f1 * f2
     @test f1 * f2 == f1 * (1 * f2) == f1 * f2
     @test f1 - 1 == (1 * f1) - 1 == (0.5 + f1) - 1.5
+
+    for op in [f1, f1 + f2, f1' * f2, f1 * f2 + 1]
+        @test op + 1.0I == op + 1.0
+        @test op - 1.0I == op - 1.0 == -(1.0I - op) == -(1.0 - op)
+    end
 
     ex = 2 * f1
     @test FermionicHilbertSpaces.head(ex) == (*)
