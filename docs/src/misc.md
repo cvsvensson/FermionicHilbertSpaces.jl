@@ -13,7 +13,7 @@ $$
 
 One can manually define the hilbert space using only the single particle states as
 ```@example single_particle_hilbert_space
-using FermionicHilbertSpaces
+using FermionicHilbertSpaces, LinearAlgebra
 N = 2
 H = hilbert_space(1:N, FermionicHilbertSpaces.SingleParticleState.(1:N))
 @fermions c
