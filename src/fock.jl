@@ -117,16 +117,20 @@ end
 FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_bp(jws, jw)
 (fm::FockMapperBitPermutations)(fs) = concatenate_and_permute(fs, fm.widths, fm.permutation)
 
-function concatenate_and_permute(masks, widths, permutation)
-    mask = concatenate_bitmasks(masks, widths)
-    bitpermute(mask, permutation)
+function concatenate_and_permute(fs, widths, permutation)
+    mask = foldl(concatenate, zip(fs, widths); init=(zero(first(fs)), 0)) |> first
+    # mask = concatenate_bitmasks(masks, widths)
+    permute(mask, permutation)
 end
-function concatenate_bitmasks(masks, widths)
-    result = zero(first(masks))
-    return foldl(((result, lastwidth), (mask, width)) -> (result | (mask << lastwidth), lastwidth + width), zip(masks, widths); init=(result, 0)) |> first
+function concatenate((lastf, lastwidth)::Tuple{FockNumber,Int}, (f, width)::Tuple{FockNumber,Int})
+    return (lastf | (f << lastwidth), lastwidth + width)
 end
+# function concatenate_bitmasks(masks, widths)
+#     result = zero(first(masks))
+#     return foldl(((result, lastwidth), (mask, width)) -> (result | (mask << lastwidth), lastwidth + width), zip(masks, widths); init=(result, 0)) |> first
+# end
 
-BitPermutations.bitpermute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
+permute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
 
 shift_right(f::FockNumber, M) = FockNumber(f.f << M)
 FockSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(mode_ordering(H), map(mode_ordering, Hs))
@@ -203,16 +207,19 @@ _bit(f::FockNumber, k) = Bool((f.f >> (k - 1)) & 1)
 
 function FockSplitter(jw::JordanWignerOrdering, jws)
     fermionpositions = Tuple(map(Base.Fix2(siteindices, jw) ∘ Tuple ∘ collect ∘ keys, jws))
-    Base.Fix2(split_focknumber, fermionpositions)
+    Base.Fix2(split_state, fermionpositions)
 end
-function split_focknumber(f::FockNumber, fermionpositions)
-    map(positions -> focknbr_from_bits(Iterators.map(i -> _bit(f, i), positions)), fermionpositions)
+# function split_focknumber(f::FockNumber, fermionpositions)
+#     map(positions -> focknbr_from_bits(Iterators.map(i -> _bit(f, i), positions)), fermionpositions)
+# end
+function split_state(f::AbstractFockState, fermionpositions)
+    map(site_indices -> substate(site_indices, f), fermionpositions)
 end
-function split_focknumber(f::FockNumber, fockmapper::FockMapper)
-    split_focknumber(f, fockmapper.fermionpositions)
+function split_state(f::AbstractFockState, fockmapper::FockMapper)
+    split_state(f, fockmapper.fermionpositions)
 end
-function split_focknumber(f::FockNumber, fockmapper::FockMapperBitPermutations)
-    split_focknumber(f, fockmapper.fermionpositions)
+function split_state(f::AbstractFockState, fockmapper::FockMapperBitPermutations)
+    split_state(f, fockmapper.fermionpositions)
 end
 combine_states(f1::FockNumber, f2::FockNumber, H1, H2) = f1 + shift_right(f2, length(H1.jw))
 
@@ -278,12 +285,15 @@ end
 
 ## N-particle fock state
 using TupleTools
-struct FixedNumberFockState{N}
+struct FixedNumberFockState{N} <: AbstractFockState
     sites::NTuple{N,Int}
+    FixedNumberFockState{N}(sites::NTuple{N,Int}) where N = new{N}(TupleTools.sort(sites))
 end
-FixedNumberFockState(sites::NTuple{N}) where N = FixedNumberFockState{N}(TupleTools.sort(sites))
+FixedNumberFockState(sites::NTuple{N,Int}) where N = FixedNumberFockState{N}(TupleTools.sort(sites))
 Base.:(==)(f1::FixedNumberFockState, f2::FixedNumberFockState) = f1.sites == f2.sites
-Base.hash(f::FixedNumberFockState, h::UInt) = hash(f.sites, h)
+Base.hash(f::FixedNumberFockState, h::UInt) = hash(FockNumber(f), h)
+Base.:(==)(f1::FixedNumberFockState, f2::FockNumber) = f2 == f1
+Base.:(==)(f1::FockNumber, f2::FixedNumberFockState) = f1 == FockNumber(f2)
 const SingleParticleState = FixedNumberFockState{1}
 SingleParticleState(site::Int) = FixedNumberFockState((site,))
 function jwstring_left(site, f::FixedNumberFockState)
@@ -321,9 +331,21 @@ function FixedNumberFockState{N}(f::FockNumber) where N
     FixedNumberFockState{N}(Tuple(sites))
 end
 combine_states(f1::FixedNumberFockState, f2::FixedNumberFockState, H1, H2) = FixedNumberFockState((f1.sites..., f2.sites...))
+_bit(f::FixedNumberFockState, k) = k in f.sites
+function substate(siteindices, f::FixedNumberFockState)
+    # subsite = 0
+    subsites = Int[]
+    for (n, site) in enumerate(siteindices)
+        site in f.sites && push!(subsites, n)
+    end
+    # sites = filter(s -> s in siteindices, f.sites)
+    return FixedNumberFockState(Tuple(subsites))
+end
+
+Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.sites
 
 @testitem "FixedNumberFockState" begin
-    import FermionicHilbertSpaces: jwstring_left, jwstring_right, FixedNumberFockState, FockNumber, SingleParticleState
+    import FermionicHilbertSpaces: jwstring_left, jwstring_right, FixedNumberFockState, FockNumber, SingleParticleState, _bit, substate
     f = FixedNumberFockState((1, 3, 5))
     f2 = FockNumber(f)
     @test f == FixedNumberFockState(f2)
@@ -331,6 +353,33 @@ combine_states(f1::FixedNumberFockState, f2::FixedNumberFockState, H1, H2) = Fix
     @test jwstring_left(4, f) == 1 == jwstring_left(4, f2)
     @test jwstring_right(2, f) == 1 == jwstring_right(2, f2)
     @test jwstring_right(4, f) == -1 == jwstring_right(4, f2)
+
+    # test _bit
+    @test _bit(f, 1) == true == _bit(f2, 1)
+    @test _bit(f, 2) == false == _bit(f2, 2)
+    @test _bit(f, 3) == true == _bit(f2, 3)
+    @test _bit(f, 4) == false == _bit(f2, 4)
+    @test _bit(f, 5) == true == _bit(f2, 5)
+
+    # test substate
+    @test substate((1,), FixedNumberFockState((1,))) == FixedNumberFockState((1,))
+    @test substate((2,), FixedNumberFockState((2,))) == FixedNumberFockState((1,))
+    @test substate((2,), FixedNumberFockState((1,))) == FixedNumberFockState(())
+    @test substate((1, 2, 3), FixedNumberFockState((1, 3, 5))) == FixedNumberFockState((1, 3))
+    @test substate((5, 10, 100, 20), FixedNumberFockState((1, 10, 100))) == FixedNumberFockState((2, 3))
+
+    # test permutation and FockMapper
+    H1 = hilbert_space(1:2)
+    H2 = hilbert_space(3:4)
+    H12 = hilbert_space((4, 2, 1, 3))
+    fm = FermionicHilbertSpaces.FockMapper((H1, H2), H12)
+    for (f1, f2) in Base.product(basisstates(H1), basisstates(H2))
+        f1fix = FixedNumberFockState(f1)
+        f2fix = FixedNumberFockState(f2)
+        f12 = fm((f1, f2))
+        f12fix = fm((f1fix, f2fix))
+        @test f12 == FockNumber(f12fix)
+    end
 
     @fermions f
     h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
@@ -392,16 +441,46 @@ function togglefermions(sites, daggers, f::FixedNumberFockState)
     sort!(fsites)
     return FixedNumberFockState(Tuple(fsites)), fermionstatistics
 end
+Base.zero(::FixedNumberFockState) = FixedNumberFockState(())
+function concatenate((lastf, lastwidth)::Tuple{FixedNumberFockState,Int}, (f, width)::Tuple{FixedNumberFockState,Int})
+    return (FixedNumberFockState((lastf.sites..., (lastwidth .+ f.sites)...)), lastwidth + width)
+end
+function concatenate((lastf, lastwidth)::Tuple{FixedNumberFockState,Int}, (f, width)::Tuple{FockNumber,Int})
+    concatenate((FockNumber(lastf), lastwidth), (f, width))
+end
+function permute(f::FixedNumberFockState, permutation::BitPermutations.AbstractBitPermutation)
+    p = Vector(permutation')
+    return FixedNumberFockState(map(s -> p[s], f.sites))
+end
 
-# struct SingleParticleHilbertSpace{H} <: AbstractFockHilbertSpace
-#     parent::H
-#     function SingleParticleHilbertSpace(labels)
-#         states = [SingleParticleState(i) for (i, label) in enumerate(labels)]
-#         H = hilbert_space(labels, states)
-#         return new{typeof(H)}(H)
-#     end
-# end
-# Base.size(h::SingleParticleHilbertSpace) = size(h.parent)
-# Base.size(h::SingleParticleHilbertSpace, dim) = size(h.parent, dim)
-# mode_ordering(h::SingleParticleHilbertSpace) = mode_ordering(h.parent)
-single_particle_hilbert_space(labels) = hilbert_space(labels, SingleParticleState.(eachindex(labels)))
+struct SingleParticleHilbertSpace{H} <: AbstractFockHilbertSpace
+    parent::H
+    function SingleParticleHilbertSpace(labels)
+        states = [SingleParticleState(i) for (i, label) in enumerate(labels)]
+        H = hilbert_space(labels, states)
+        return new{typeof(H)}(H)
+    end
+end
+Base.size(h::SingleParticleHilbertSpace) = size(h.parent)
+Base.size(h::SingleParticleHilbertSpace, dim) = size(h.parent, dim)
+Base.parent(h::SingleParticleHilbertSpace) = h.parent
+Base.keys(h::SingleParticleHilbertSpace) = keys(h.parent)
+mode_ordering(h::SingleParticleHilbertSpace) = mode_ordering(h.parent)
+modes(h::SingleParticleHilbertSpace) = modes(h.parent)
+basisstates(h::SingleParticleHilbertSpace) = basisstates(h.parent)
+single_particle_hilbert_space(labels) = SingleParticleHilbertSpace(labels)
+matrix_representation(op, H::SingleParticleHilbertSpace) = matrix_representation(remove_identity(op), parent(H))
+basisstate(ind, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
+state_index(state::AbstractFockState, H::SingleParticleHilbertSpace) = state_index(state, parent(H))
+
+@testitem "Single particle hilbert space" begin
+    @fermions f
+    H = single_particle_hilbert_space(1:2)
+    opmul = f[1]' * f[2]
+    @test matrix_representation(opmul, H) ≈ matrix_representation(opmul, parent(H))
+    opadd = opmul + hc
+    ham = matrix_representation(opadd, H)
+    @test ham ≈ matrix_representation(opadd, parent(H))
+    @test matrix_representation(opadd + I, H) == matrix_representation(opadd, H)
+    @test matrix_representation(opadd + I, H) == matrix_representation(opadd + I, parent(H)) - I
+end

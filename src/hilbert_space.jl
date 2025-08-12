@@ -76,7 +76,7 @@ end
 Base.keys(H::FockHilbertSpace) = keys(H.jw)
 basisstates(H::FockHilbertSpace) = H.basisstates
 basisstate(ind, H::FockHilbertSpace) = basisstates(H)[ind]
-state_index(fockstate::AbstractFockState, H::FockHilbertSpace) = H.state_index[fockstate]
+state_index(fockstate::AbstractFockState, H::FockHilbertSpace) = get(H.state_index, fockstate, missing)
 function Base.:(==)(H1::FockHilbertSpace, H2::FockHilbertSpace)
     if H1 === H2
         return true
@@ -208,41 +208,54 @@ function subregion(modes, H::SimpleFockHilbertSpace)
     SimpleFockHilbertSpace(modes)
 end
 
-function subregion(modes, H::FockHilbertSpace)
+function subregion(submodes, H::AbstractFockHilbertSpace)
     if !isorderedsubsystem(submodes, mode_ordering(H))
         throw(ArgumentError("The modes $(submodes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
-    # loop through all basisstates in H and collect the fock states that are in the subsystem
-    outinds = siteindices(modes, H.jw)
-    outbits(f) = Iterators.map(i -> _bit(f, i), outinds)
-    subfocks = eltype(H.basisstates)[]
-    for f in basisstates(H)
-        subbits = outbits(f)
-        subfock = focknbr_from_bits(subbits)
-        push!(subfocks, subfock)
-    end
-    sort!(unique!(subfocks), by=f -> f.f)
-    FockHilbertSpace(modes, subfocks)
+    states = substates(submodes, H)
+    sort!(unique!(states))
+    FockHilbertSpace(submodes, states)
 end
 
-complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace) = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
-
-function subregion(modes, H::SymmetricFockHilbertSpace)
-    if !isorderedsubsystem(modes, H.jw)
-        throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
-    end
-    # loop through all basisstates in H and collect the fock states that are in the subsystem
-    outinds = siteindices(modes, H.jw)
-    outbits(f) = Iterators.map(i -> _bit(f, i), outinds)
-    subfocks = eltype(H.symmetry.basisstates)[]
-    for f in basisstates(H)
-        subbits = outbits(f)
-        subfock = focknbr_from_bits(subbits)
-        push!(subfocks, subfock)
-    end
-    sort!(unique!(subfocks), by=f -> f.f)
-    FockHilbertSpace(modes, subfocks)
+function substates(modes, H::AbstractHilbertSpace)
+    subsites = siteindices(modes, H)
+    substates = map(f -> substate(subsites, f), basisstates(H))
 end
+function substate(siteindices, f::FockNumber)
+    subbits = Iterators.map(i -> _bit(f, i), siteindices)
+    return focknbr_from_bits(subbits)
+end
+
+# complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace) = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
+# function complementary_subsystem(H::SingleParticleHilbertSpace, Hsub::SingleParticleHilbertSpace)
+#     single_particle_hilbert_space(setdiff(collect(keys(H)), collect(keys(Hsub))))
+# end
+function complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace)
+    _Hbar = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
+    split = StateSplitter(H, (Hsub, _Hbar))
+    states = unique!(map(basisstates(H)) do f
+        fsub, fbar = split(f)
+        fbar
+    end)
+    FockHilbertSpace(modes(_Hbar), states)
+end
+
+# function subregion(modes, H::SymmetricFockHilbertSpace)
+#     if !isorderedsubsystem(modes, H.jw)
+#         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
+#     end
+#     # loop through all basisstates in H and collect the fock states that are in the subsystem
+#     outinds = siteindices(modes, H.jw)
+#     outbits(f) = Iterators.map(i -> _bit(f, i), outinds)
+#     subfocks = eltype(H.symmetry.basisstates)[]
+#     for f in basisstates(H)
+#         subbits = outbits(f)
+#         subfock = focknbr_from_bits(subbits)
+#         push!(subfocks, subfock)
+#     end
+#     sort!(unique!(subfocks))
+#     FockHilbertSpace(modes, subfocks)
+# end
 
 @testitem "subregion function" begin
     using FermionicHilbertSpaces
