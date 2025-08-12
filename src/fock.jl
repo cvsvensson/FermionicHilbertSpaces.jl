@@ -33,6 +33,7 @@ Base.eltype(::JordanWignerOrdering{L}) where L = L
 
 siteindex(label, ordering::JordanWignerOrdering) = ordering.ordering[label]
 siteindices(labels, jw::JordanWignerOrdering) = map(Base.Fix2(siteindex, jw), labels)
+siteindices(labels, H::AbstractFockHilbertSpace) = siteindices(labels, mode_ordering(H))
 
 label_at_site(n, ordering::JordanWignerOrdering) = ordering.labels[n]
 focknbr_from_site_label(label, jw::JordanWignerOrdering) = focknbr_from_site_index(siteindex(label, jw))
@@ -103,7 +104,7 @@ struct FockMapperBitPermutations{P1,P2}
 end
 FockMapper_collect(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)) #faster construction
 FockMapper_tuple(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ Tuple ∘ keys, jws)) #faster application, but type instability
-FockMapper(Hs, H::AbstractFockHilbertSpace) = FockMapper(map(b -> b.jw, Hs), H.jw)
+FockMapper(Hs, H::AbstractFockHilbertSpace) = FockMapper(map(mode_ordering, Hs), mode_ordering(H))
 StateExtender(Hs, H::AbstractFockHilbertSpace) = FockMapper(Hs, H)
 
 function FockMapper_bp(jws, jw)
@@ -127,7 +128,7 @@ end
 BitPermutations.bitpermute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
 
 shift_right(f::FockNumber, M) = FockNumber(f.f << M)
-FockSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H.jw, map(b -> b.jw, Hs))
+FockSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(mode_ordering(H), map(mode_ordering, Hs))
 StateSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H, Hs)
 
 

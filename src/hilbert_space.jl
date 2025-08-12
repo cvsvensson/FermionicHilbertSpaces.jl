@@ -20,9 +20,9 @@ ispartition(Hs, H::AbstractFockHilbertSpace) = ispartition(map(modes, Hs), H.jw)
 
 siteindices(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = siteindices(H.jw, jw)
 
-mode_ordering(H::AbstractFockHilbertSpace) = H.jw.ordering
-mode_ordering(jw::JordanWignerOrdering) = jw.ordering
-mode_ordering(v::AbstractVector) = v
+mode_ordering(H::AbstractFockHilbertSpace) = H.jw
+# mode_ordering(jw::JordanWignerOrdering) = jw
+# mode_ordering(v::AbstractVector) = JordanWignerOrdering(v)
 modes(H::AbstractFockHilbertSpace) = H.jw.labels
 modes(jw::JordanWignerOrdering) = jw.labels
 modes(v::AbstractVector) = v
@@ -209,8 +209,8 @@ function subregion(modes, H::SimpleFockHilbertSpace)
 end
 
 function subregion(modes, H::FockHilbertSpace)
-    if !isorderedsubsystem(modes, H.jw)
-        throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
+    if !isorderedsubsystem(submodes, mode_ordering(H))
+        throw(ArgumentError("The modes $(submodes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
     # loop through all basisstates in H and collect the fock states that are in the subsystem
     outinds = siteindices(modes, H.jw)

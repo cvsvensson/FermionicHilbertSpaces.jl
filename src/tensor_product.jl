@@ -480,7 +480,7 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::
     M = length(keys(H))
     labels = collect(keys(Hout))
     if phase_factors
-        consistent_ordering(labels, H.jw) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
+        consistent_ordering(labels, mode_ordering(H)) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
     end
     N = length(labels)
     fill!(mout, zero(eltype(mout)))
