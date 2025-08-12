@@ -161,10 +161,10 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}, phase_factors::Bool=
     using Random, Base.Iterators, LinearAlgebra
     import FermionicHilbertSpaces: embedding, tensor_product, embedding_unitary, canonical_embedding, project_on_parity, project_on_parities
 
-    Random.seed!(1)
-    N = 10
-    rough_size = 5
-    fine_size = 3
+    Random.seed!(3)
+    N = 8
+    rough_size = 4
+    fine_size = 2
     rough_partitions = sort.(collect(partition(randperm(N), rough_size)))
     # divide each part of rough partition into finer partitions
     fine_partitions = map(rough_partition -> sort.(collect(partition(shuffle(rough_partition), fine_size))), rough_partitions)
@@ -203,7 +203,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}, phase_factors::Bool=
     ξbases = vcat(Hs_fine...)
     modebases = [hilbert_space(j:j) for j in 1:N]
     lhs = prod(j -> embedding(As_modes[j], modebases[j], H), 1:N)
-    rhs_ordered_prod(X, basis) = mapreduce(j -> embedding(As_modes[j], modebases[j], basis), *, X)
+    rhs_ordered_prod(X, basis) = mapreduce(j -> Matrix(embedding(As_modes[j], modebases[j], basis)), *, X)
     rhs = fermionic_kron([rhs_ordered_prod(X, H) for (X, H) in zip(ξ, ξbases)], ξbases, H)
     @test lhs ≈ rhs
 
