@@ -9,6 +9,7 @@ end
 FockNumber(f::FockNumber) = f
 Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
 Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
+Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
 
 """
     JordanWignerOrdering
@@ -57,9 +58,9 @@ Base.zero(::FockNumber{T}) where T = zero(FockNumber{T})
 Base.zero(::Type{FockNumber{T}}) where T = FockNumber(zero(T))
 
 
-focknbr_from_bits(bits, ::Type{T}=(length(bits) > 63 ? BigInt : Int)) where T = FockNumber(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
-focknbr_from_site_index(site::Integer) = FockNumber(1 << (site - 1))
-focknbr_from_site_indices(sites) = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber(0))
+focknbr_from_bits(bits, ::Type{T}=(length(bits) > 63 ? BigInt : Int)) where T = FockNumber{T}(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
+focknbr_from_site_index(site::Integer, ::Type{T}=site > 63 ? BigInt : Int) where T = FockNumber{T}(T(1) << (site - 1))
+focknbr_from_site_indices(sites, ::Type{T}=(maximum(sites, init=0) > 63 ? BigInt : Int)) where T = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber(zero(T)))
 
 bits(f::FockNumber, N) = digits(Bool, f.f, base=2, pad=N)
 parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
@@ -134,7 +135,7 @@ StateSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H, Hs)
 
 @testitem "Fock" begin
     using Random
-    using FermionicHilbertSpaces: bits, _bit, focknbr_from_bits, focknbr_from_site_indices
+    using FermionicHilbertSpaces: bits, _bit, focknbr_from_bits, focknbr_from_site_indices, focknbr_from_site_index
     Random.seed!(1234)
 
     N = 6
@@ -187,6 +188,13 @@ StateSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H, Hs)
     @test length(fs) == binomial(10, 5)
     @test allunique(fs)
     @test all(FermionicHilbertSpaces.fermionnumber.(fs) .== 5)
+
+    @testset "Large site indices" begin
+        f = focknbr_from_site_indices((1, 1000,))
+        f isa FockNumber{BigInt}
+        f.f == 1 + BigInt(2)^(1000 - 1)
+        focknbr_from_site_index(1000).f == f.f - 1
+    end
 end
 
 
