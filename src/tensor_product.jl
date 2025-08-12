@@ -40,14 +40,14 @@ tensor_product(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace) = simple_
     H2 = SymmetricFockHilbertSpace(3:4, FermionConservation())
     Hw = tensor_product(H1, H2)
     H3 = SymmetricFockHilbertSpace(1:4, FermionConservation())
-    @test sort(basisstates(Hw), by=f -> f.f) == sort(basisstates(H3), by=f -> f.f)
+    @test sort(basisstates(Hw)) == sort(basisstates(H3))
     @test size(H1) .* size(H2) == size(Hw)
 
     H1 = SymmetricFockHilbertSpace(1:2, ParityConservation())
     H2 = SymmetricFockHilbertSpace(3:4, ParityConservation())
     Hw = tensor_product(H1, H2)
     H3 = SymmetricFockHilbertSpace(1:4, ParityConservation())
-    @test sort(basisstates(Hw), by=f -> f.f) == sort(basisstates(H3), by=f -> f.f)
+    @test sort(basisstates(Hw)) == sort(basisstates(H3))
     @test size(H1) .* size(H2) == size(Hw)
 
 end

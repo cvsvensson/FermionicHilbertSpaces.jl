@@ -71,6 +71,6 @@ H2 = hilbert_space(keys(H), qn2)
 
 This gives the same states but with a different ordering.
 ```@example double_occupation
-sort(basisstates(H2), by = f->f.f) == sort(basisstates(H), by = f->f.f)
+sort(basisstates(H2)) == sort(basisstates(H))
 ```
 
