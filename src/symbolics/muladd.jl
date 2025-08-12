@@ -265,20 +265,20 @@ function matrix_representation(op::Union{<:FermionMul,<:AbstractFermionSym}, lab
 end
 matrix_representation(op, labels, instates) = matrix_representation(op, labels, instates, instates)
 
-function operator_inds_amps!((outinds, ininds, amps), op, label_to_site_index, outstates::AbstractVector{SingleParticleState}, instates::AbstractVector{SingleParticleState}, fock_to_outind)
-    isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, label_to_site_index, outstates, instates, fock_to_outind)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, label_to_site_index, outstates, instates, fock_to_outind)
+function operator_inds_amps!((outinds, ininds, amps), op, ordering, outstates::AbstractVector{SingleParticleState}, instates::AbstractVector{SingleParticleState}, fock_to_outind)
+    isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, ordering, outstates, instates, fock_to_outind)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, outstates, instates, fock_to_outind)
 end
 
-function operator_inds_amps!((outinds, ininds, amps), op, label_to_site_index, outstates, instates, fock_to_outind)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, label_to_site_index, outstates, instates, fock_to_outind)
+function operator_inds_amps!((outinds, ininds, amps), op, ordering, outstates, instates, fock_to_outind)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, outstates, instates, fock_to_outind)
 end
 
-function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::FermionMul, label_to_site_index, outstates::AbstractVector{SingleParticleState}, instates::AbstractVector{SingleParticleState}, fock_to_outind)
+function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::FermionMul, ordering, outstates::AbstractVector{SingleParticleState}, instates::AbstractVector{SingleParticleState}, fock_to_outind)
     if length(op.factors) != 2
         throw(ArgumentError("Only two-fermion operators supported for free fermions"))
     end
-    fockstates = (SingleParticleState(label_to_site_index[op.factors[1].label]), SingleParticleState(label_to_site_index[op.factors[2].label]))
+    fockstates = (SingleParticleState(getindex(ordering, op.factors[1].label)), SingleParticleState(getindex(ordering, op.factors[2].label)))
     inind = findfirst(isequal(fockstates[2]), instates)
     outind = findfirst(isequal(fockstates[1]), outstates)
     sign = (-1)^op.factors[2].creation
@@ -288,8 +288,8 @@ function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::FermionMu
     return (outinds, ininds, amps)
 end
 
-function operator_inds_amps_generic!((outinds, ininds, amps), op::FermionMul, label_to_site_index, outstates, instates, fock_to_outind)
-    digitpositions = collect(Iterators.reverse(label_to_site_index[f.label] for f in op.factors)) #reverse(siteindices(_labels(op), jw))
+function operator_inds_amps_generic!((outinds, ininds, amps), op::FermionMul, ordering, outstates, instates, fock_to_outind)
+    digitpositions = collect(Iterators.reverse(getindex(ordering, f.label) for f in op.factors)) 
     daggers = collect(Iterators.reverse(s.creation for s in op.factors))
     mc = -op.coeff
     pc = op.coeff
@@ -306,7 +306,7 @@ end
 
 # promote_array(v) = convert(Array{eltype(promote(map(zero, unique(typeof(v) for v in v))...))}, v)
 
-function matrix_representation(op::FermionAdd{C}, label_to_site_index, outstates, instates) where C
+function matrix_representation(op::FermionAdd{C}, ordering, outstates, instates) where C
     fock_to_outind = Dict(Iterators.map(reverse, enumerate(outstates)))
     outinds = Int[]
     ininds = Int[]
@@ -316,7 +316,7 @@ function matrix_representation(op::FermionAdd{C}, label_to_site_index, outstates
     sizehint!(ininds, length(instates))
     sizehint!(amps, length(instates))
     for (operator, coeff) in op.dict
-        operator_inds_amps!((outinds, ininds, amps), coeff * operator, label_to_site_index, outstates, instates, fock_to_outind)
+        operator_inds_amps!((outinds, ininds, amps), coeff * operator, ordering, outstates, instates, fock_to_outind)
     end
     if !iszero(op.coeff)
         append!(ininds, eachindex(instates))

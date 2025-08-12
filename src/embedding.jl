@@ -20,7 +20,7 @@ function embedding_unitary(_partition, basisstates, jw::JordanWignerOrdering)
         mask = focknbr_from_site_labels(Xs, jw)
         for (r, Xr) in Iterators.drop(enumerate(partition), s)
             for li in Xr
-                i = siteindex(li, jw)
+                i = getindex(jw, li)
                 for (n, f) in zip(eachindex(phases), basisstates)
                     if _bit(f, i)
                         phases[n] *= jwstring_anti(i, mask & f)
@@ -40,7 +40,7 @@ function bipartite_embedding_unitary(_X, _Xbar, basisstates, jw::JordanWignerOrd
     phases = ones(Int, length(basisstates))
     mask = focknbr_from_site_labels(X, jw)
     for li in Xbar
-        i = siteindex(li, jw)
+        i = getindex(jw, li)
         for (n, f) in zip(eachindex(phases), basisstates)
             if _bit(f, i)
                 phases[n] *= jwstring_anti(i, mask & f)

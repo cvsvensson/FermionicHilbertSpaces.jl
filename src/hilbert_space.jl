@@ -18,7 +18,7 @@ consistent_ordering(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertS
 focknbr_from_site_labels(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(H), jw)
 ispartition(Hs, H::AbstractFockHilbertSpace) = ispartition(map(modes, Hs), H.jw)
 
-siteindices(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = siteindices(H.jw, jw)
+# getindices(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = siteindices(H.jw, jw)
 
 mode_ordering(H::AbstractFockHilbertSpace) = H.jw
 # mode_ordering(jw::JordanWignerOrdering) = jw
@@ -218,7 +218,7 @@ function subregion(submodes, H::AbstractFockHilbertSpace)
 end
 
 function substates(modes, H::AbstractHilbertSpace)
-    subsites = siteindices(modes, H)
+    subsites = getindices(H, modes)
     substates = map(f -> substate(subsites, f), basisstates(H))
 end
 function substate(siteindices, f::FockNumber)

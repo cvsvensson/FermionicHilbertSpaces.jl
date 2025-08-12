@@ -8,6 +8,7 @@ import OrderedCollections: OrderedDict
 using TestItems
 using TermInterface
 using BitPermutations
+using TupleTools
 
 export FockNumber, JordanWignerOrdering, hc, basisstates
 export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subregion
@@ -46,6 +47,7 @@ const hc = HC()
 
 ## Files
 include("fock.jl")
+include("fixednumberfock.jl")
 include("phase_factors.jl")
 include("symmetry.jl")
 include("hilbert_space.jl")

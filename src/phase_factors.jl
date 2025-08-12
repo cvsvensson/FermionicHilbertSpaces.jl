@@ -104,7 +104,7 @@ function phase_factor_h(f1, f2, partition, jw::JordanWignerOrdering)::Int
             masked_f1 = Xpmask & f1
             masked_f2 = Xpmask & f2
             for li in X
-                i = siteindex(li, jw)
+                i = getindex(jw, li)
                 if _bit(f2, i)
                     phase *= jwstring_anti(i, masked_f1) * jwstring_anti(i, masked_f2)
                 end
@@ -114,7 +114,7 @@ function phase_factor_h(f1, f2, partition, jw::JordanWignerOrdering)::Int
     return phase
 end
 @testitem "Phase factor f" begin
-    import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, siteindices, bits
+    import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, getindices, bits
 
     ## Appendix A.2
     N = 2
@@ -143,7 +143,7 @@ end
 
 @testitem "Phase factor h" begin
     # Appendix B.1
-    import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, siteindices, bits
+    import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, getindices, bits
     N = 2
     jw = JordanWignerOrdering(1:N)
     fockstates = sort(map(FockNumber, 0:2^N-1), by=Base.Fix2(bits, N))
@@ -157,7 +157,7 @@ end
     phf(f1, f2, subinds, N) = prod(s -> phase_factor_f(f1, f2, s), subinds) * phase_factor_f(f1, f2, N)
     phf(fockstates, subinds, N) = [phf(f1, f2, subinds, N) for f1 in fockstates, f2 in fockstates]
     let part = [[1], [2]]
-        subinds = map(p -> Tuple(siteindices(p, jw)), part)
+        subinds = map(p -> Tuple(getindices(jw, p)), part)
         N = length(jw)
         @test h(part, fockstates, jw) == phf(fockstates, subinds, N)
     end
@@ -179,7 +179,7 @@ end
         [[1], [2, 3]], [[3], [2, 1]], [[2], [1, 3]],
         [[1, 2, 3]], [[2], [1], [3]]]
     for p in partitions
-        subinds = map(p -> Tuple(siteindices(p, jw)), p)
+        subinds = map(p -> Tuple(getindices(p, jw)), p)
         @test h(p, fockstates, jw) == phf(fockstates, subinds, N)
     end
 
@@ -188,7 +188,7 @@ end
     fockstates = sort(map(FockNumber, 0:2^N-1), by=Base.Fix2(bits, N))
     partitions = [[[3, 2, 7, 5, 1], [4, 6]], [[7, 3, 2], [1, 5], [4, 6]]]
     for p in partitions
-        subinds = map(p -> Tuple(siteindices(p, jw)), p)
+        subinds = map(p -> Tuple(getindices(p, jw)), p)
         local N = length(jw)
         @test h(p, fockstates, jw) == phf(fockstates, subinds, N)
     end
@@ -202,7 +202,7 @@ function phase_factor_l(f1, f2, X, Xbar, jw)::Int
     masked_f1 = Xmask & f1
     masked_f2 = Xmask & f2
     for li in Xbar
-        i = siteindex(li, jw)
+        i = getindex(jw, li)
         if xor(_bit(f1, i), _bit(f2, i))
             phase *= jwstring_anti(i, masked_f1) * jwstring_anti(i, masked_f2)
         end
