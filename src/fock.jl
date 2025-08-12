@@ -31,6 +31,7 @@ Base.keys(jw::JordanWignerOrdering) = jw.labels
 Base.iterate(jw::JordanWignerOrdering) = iterate(jw.labels)
 Base.iterate(jw::JordanWignerOrdering, state) = iterate(jw.labels, state)
 Base.eltype(::JordanWignerOrdering{L}) where L = L
+Base.getindex(jw::JordanWignerOrdering, key) = getindex(jw.ordering, key)
 
 siteindex(label, ordering::JordanWignerOrdering) = ordering.ordering[label]
 siteindices(labels, jw::JordanWignerOrdering) = map(Base.Fix2(siteindex, jw), labels)
@@ -474,6 +475,7 @@ basisstate(ind, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
 state_index(state::AbstractFockState, H::SingleParticleHilbertSpace) = state_index(state, parent(H))
 
 @testitem "Single particle hilbert space" begin
+    using LinearAlgebra
     @fermions f
     H = single_particle_hilbert_space(1:2)
     opmul = f[1]' * f[2]

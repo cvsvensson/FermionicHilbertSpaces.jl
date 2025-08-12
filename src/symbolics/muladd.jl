@@ -249,7 +249,7 @@ Base.valtype(::AbstractFermionSym) = Int
 
 ## Instantiating sparse matrices
 _labels(a::FermionMul) = [s.label for s in a.factors]
-matrix_representation(op, H::AbstractFockHilbertSpace) = matrix_representation(op, modes(H), basisstates(H), basisstates(H))
+matrix_representation(op, H::AbstractFockHilbertSpace) = matrix_representation(op, mode_ordering(H), basisstates(H), basisstates(H))
 matrix_representation(op::Number, H::AbstractFockHilbertSpace) = op * I(size(H, 1))
 
 function matrix_representation(op::Union{<:FermionMul,<:AbstractFermionSym}, labels, outstates, instates)
