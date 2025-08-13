@@ -191,9 +191,15 @@ Base.:*(a::SM, b::FermionAdd) = a * b.coeff + sum((v * a) * f for (f, v) in b.di
 Base.:*(a::FermionAdd, b::SM) = a.coeff * b + sum((v * f) * (b) for (f, v) in a.dict)
 Base.:*(a::FermionAdd, b::FermionAdd) = a.coeff * b + sum((va * fa) * b for (fa, va) in a.dict)
 
+#TODO: these adjoints can probably be made faster with less allocations
 Base.adjoint(x::FermionMul) = length(x.factors) == 0 ? FermionMul(adjoint(x.coeff), x.factors) : adjoint(x.coeff) * foldr(*, reverse(adjoint.(x.factors)))
 function Base.adjoint(x::FermionAdd)
-    FermionAdd(adjoint(x.coeff), Dict(f' => v' for (f, v) in x.dict))
+    newx = zero(x)
+    newx.coeff = adjoint(x.coeff)
+    for (f, v) in x.dict
+        add!(newx, v'*f')
+    end
+    newx
 end
 function OpSum(::Type{T}=Number) where T
     FermionAdd(0, Dict{FermionMul,T}(); filter_scalars=false, check_length=false)
