@@ -4,7 +4,7 @@ unordered_prod(a::AbstractFermionSym, b::AbstractFermionSym) = FermionMul(1, [a,
 
 struct FermionMul{C,S<:AbstractFermionSym}
     coeff::C
-    factors::AbstractVector{S}
+    factors::Vector{S}
     ordered::Bool
     function FermionMul(coeff::C, factors) where {C}
         (iszero(coeff) || iszero(length(factors))) && return coeff
