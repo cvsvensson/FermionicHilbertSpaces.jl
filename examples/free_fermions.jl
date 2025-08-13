@@ -5,7 +5,7 @@ import FermionicHilbertSpaces: add! # Import add! for efficient Hamiltonian cons
 using Arpack # For sparse eigenvalue decomposition
 # ## Define a grid 
 # We'll look at a system defined on a disc. Let's define a square grid and then cut out a disc in the middle
-N = 40
+N = 200
 xs, ys = -N:N, -N:N
 indomain(xy) = norm(xy) < N
 square_grid = [indomain(xy) ? xy : missing for xy in Iterators.product(xs, ys)]
@@ -39,7 +39,7 @@ hopping(xy1, xy2) = N
 # Since we are dealing with many fermions, symbolic sums may take a long time. To get better performance, we will use the function `add!` to update the symbolic hamiltonian in place. For this, it is important to initialize the Hamiltonian with the correct type. We do this by making a simple hamiltonian and then call `zero` to get an empty hamiltonian of a matching type.
 ham = zero(1.0 * f[0, 0] * f[1, 1] + 1.0)
 # Now we can build the hamiltonian
-for xy in disc
+@time for xy in disc
     add!(ham, potential(xy) * f[xy]' * f[xy])
     for nbr in neighbours(xy...)
         add!(ham, hopping(nbr, xy) * f[nbr]' * f[xy] + hc)

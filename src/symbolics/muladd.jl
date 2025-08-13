@@ -43,7 +43,7 @@ Base.:(==)(a::FermionMul, b::AbstractFermionSym) = isone(a.coeff) && length(a.fa
 Base.:(==)(b::AbstractFermionSym, a::FermionMul) = a == b
 Base.hash(a::FermionMul, h::UInt) = hash(a.coeff, hash(a.factors, h))
 FermionMul(f::FermionMul) = f
-FermionMul(f::AbstractFermionSym) = FermionMul(1, (f,))
+FermionMul(f::AbstractFermionSym) = FermionMul(1, [f])
 has_scalars(d) = any(isscalar, keys(d)) || any(iszero, values(d))
 mutable struct FermionAdd{C,D}
     coeff::C
@@ -133,9 +133,9 @@ Base.:+(a::SM, b::Union{Number,UniformScaling}) = b + a
 Base.:+(a::FermionMul, b::AbstractFermionSym) = a + 1 * b
 Base.:+(a::AbstractFermionSym, b::FermionMul) = 1 * a + b
 Base.:+(a::AbstractFermionSym, b::AbstractFermionSym) = (1 * a) + (1 * b)
-function Base.:+(a::FermionMul{CA,FA}, b::FermionMul{CB,FB}) where {CA,FA,CB,FB}
+function Base.:+(a::FermionMul{CA,SA,FA}, b::FermionMul{CB,SB,FB}) where {CA,SA,FA,CB,SB,FB}
     at, bt = to_add_tuple(a), to_add_tuple(b)
-    K = Union{FermionMul{Int,FA},FermionMul{Int,FB}}
+    K = Union{FermionMul{Int,SA,FA},FermionMul{Int,SB,FB}}
     V = promote_type(CA, CB)
     d = Dict{K,V}()
     sizehint!(d, 2)
@@ -179,7 +179,7 @@ function Base.:+(a::FermionAdd, b::FermionAdd)
 end
 Base.:^(a::Union{FermionMul,FermionAdd}, b) = Base.power_by_squaring(a, b)
 
-Base.:*(x::Number, a::AbstractFermionSym) = iszero(x) ? 0 : FermionMul(x, (a,))
+Base.:*(x::Number, a::AbstractFermionSym) = iszero(x) ? 0 : FermionMul(x, [a])
 Base.:*(x::Number, a::FermionMul) = iszero(x) ? 0 : FermionMul(x * a.coeff, a.factors)
 Base.:*(x::Number, a::FermionAdd) = iszero(x) ? 0 : FermionAdd(x * a.coeff, Dict(k => v * x for (k, v) in collect(a.dict)))
 Base.:*(a::SMA, x::Number) = x * a
@@ -192,7 +192,6 @@ Base.:*(a::FermionAdd, b::SM) = a.coeff * b + sum((v * f) * (b) for (f, v) in a.
 Base.:*(a::FermionAdd, b::FermionAdd) = a.coeff * b + sum((va * fa) * b for (fa, va) in a.dict)
 
 Base.adjoint(x::FermionMul) = length(x.factors) == 0 ? FermionMul(adjoint(x.coeff), x.factors) : adjoint(x.coeff) * foldr(*, reverse(adjoint.(x.factors)))
-# Base.adjoint(x::FermionMul) = length(x.factors) == 0 ? FermionMul(adjoint(x.coeff), x.factors) : adjoint(x.coeff) * order_mul(foldr(unordered_prod, reverse(adjoint.(x.factors))))
 function Base.adjoint(x::FermionAdd)
     FermionAdd(adjoint(x.coeff), Dict(f' => v' for (f, v) in x.dict))
 end
@@ -204,7 +203,7 @@ Base.zero(::FermionAdd{C,D}) where {C,D} = FermionAdd(zero(C), D(); filter_scala
 unordered_prod(a::FermionMul, b::FermionAdd) = b.coeff * a + sum(unordered_prod(a, f) for f in fermionterms(b))
 unordered_prod(a::FermionAdd, b::FermionMul) = a.coeff * b + sum(unordered_prod(f, b) for f in fermionterms(a))
 unordered_prod(a::FermionAdd, b::FermionAdd) = sum(unordered_prod(f, g) for f in allterms(a), g in allterms(b))
-unordered_prod(a::FermionMul, b::FermionMul) = FermionMul(a.coeff * b.coeff, TupleTools.vcat(a.factors, b.factors))#[a.factors..., b.factors...])#vcat(a.factors, b.factors))
+unordered_prod(a::FermionMul, b::FermionMul) = FermionMul(a.coeff * b.coeff, vcat(a.factors, b.factors))
 unordered_prod(a, b, xs...) = foldl(*, xs; init=(*)(a, b))
 unordered_prod(x::Number, a::SMA) = x * a
 unordered_prod(a::SMA, x::Number) = x * a
