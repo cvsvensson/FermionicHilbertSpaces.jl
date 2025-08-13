@@ -74,9 +74,9 @@ function ordered_prod(a::MajoranaSym, b::MajoranaSym)
     if a == b
         1
     elseif a < b
-        FermionMul(1, [a, b])
+        FermionMul(1, (a, b))
     elseif a > b
-        FermionMul((-1)^(a.basis.universe == b.basis.universe), [b, a]) + Int(a.label == b.label && a.basis == b.basis)
+        FermionMul((-1)^(a.basis.universe == b.basis.universe), (b, a)) + Int(a.label == b.label && a.basis == b.basis)
     else
         throw(ArgumentError("Don't know how to multiply $a * $b"))
     end
@@ -88,7 +88,7 @@ TermInterface.arguments(a::MajoranaSym) = [a.label, a.basis]
 TermInterface.children(a::MajoranaSym) = arguments(a)
 
 Base.valtype(::AbstractMajoranaSym) = Complex{Int}
-Base.valtype(::FermionMul{C,F}) where {C,F<:AbstractMajoranaSym} = complex(C)
+Base.valtype(::FermionMul{C}) where {C} = complex(C)
 
 @testitem "MajoranaSym" begin
     using Symbolics

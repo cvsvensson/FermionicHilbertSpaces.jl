@@ -1,15 +1,15 @@
 abstract type AbstractFermionSym end
 Base.:*(a::AbstractFermionSym, b::AbstractFermionSym) = ordered_prod(a, b)
-unordered_prod(a::AbstractFermionSym, b::AbstractFermionSym) = FermionMul(1, [a, b])
+unordered_prod(a::AbstractFermionSym, b::AbstractFermionSym) = FermionMul(1, (a, b))
 
-struct FermionMul{C,F<:AbstractFermionSym}
+struct FermionMul{C,F}
     coeff::C
-    factors::Vector{F}
+    factors::F
     ordered::Bool
     function FermionMul(coeff::C, factors) where {C}
         (iszero(coeff) || iszero(length(factors))) && return coeff
         ordered = issorted(factors) && sorted_noduplicates(factors)
-        new{C,eltype(factors)}(coeff, factors, ordered)
+        new{C,typeof(factors)}(coeff, factors, ordered)
     end
 end
 function Base.show(io::IO, x::FermionMul)
@@ -43,7 +43,7 @@ Base.:(==)(a::FermionMul, b::AbstractFermionSym) = isone(a.coeff) && length(a.fa
 Base.:(==)(b::AbstractFermionSym, a::FermionMul) = a == b
 Base.hash(a::FermionMul, h::UInt) = hash(a.coeff, hash(a.factors, h))
 FermionMul(f::FermionMul) = f
-FermionMul(f::AbstractFermionSym) = FermionMul(1, [f])
+FermionMul(f::AbstractFermionSym) = FermionMul(1, (f,))
 has_scalars(d) = any(isscalar, keys(d)) || any(iszero, values(d))
 mutable struct FermionAdd{C,D}
     coeff::C
@@ -76,7 +76,7 @@ const SMA = Union{AbstractFermionSym,FermionMul,FermionAdd}
 function show_compact_sum(io, x::FermionAdd, max_terms=3)
     println(io, "Sum with ", length(x.dict), " terms: ")
     N = min(max_terms, length(x.dict))
-    args = sum(sorted_arguments(x)[1:N])
+    args = sum(v * k for (k, v) in Iterators.take(pairs(x.dict), N))
     show(io, args)
     if N < length(x.dict)
         print(io, " + ...")
@@ -88,7 +88,7 @@ function Base.show(io::IO, x::FermionAdd)
         return show_compact_sum(io, x)
     end
     compact = get(io, :compact, false)
-    args = sorted_arguments(x)
+    args = arguments(x)
     print_one = !iszero(x.coeff)
     if print_one
         if isreal(x.coeff)
@@ -130,21 +130,34 @@ print_num(io::IO, x) = isreal(x) ? print(io, real(x)) : print(io, "(", x, ")")
 Base.:+(a::Number, b::SM) = iszero(a) ? b : FermionAdd(a, to_add(b))
 Base.:+(a::UniformScaling, b::SM) = iszero(a) ? b : FermionAdd(a.λ, to_add(b))
 Base.:+(a::SM, b::Union{Number,UniformScaling}) = b + a
-Base.:+(a::SM, b::SM) = FermionAdd(0, (_merge(+, to_add(a), to_add(b); filter=iszero)))
+Base.:+(a::FermionMul, b::AbstractFermionSym) = a + 1 * b
+Base.:+(a::AbstractFermionSym, b::FermionMul) = 1 * a + b
+Base.:+(a::AbstractFermionSym, b::AbstractFermionSym) = (1 * a) + (1 * b)
+function Base.:+(a::FermionMul{CA,FA}, b::FermionMul{CB,FB}) where {CA,FA,CB,FB}
+    at, bt = to_add_tuple(a), to_add_tuple(b)
+    K = Union{FermionMul{Int,FA},FermionMul{Int,FB}}
+    V = promote_type(CA, CB)
+    d = Dict{K,V}()
+    sizehint!(d, 2)
+    __merge!(+, d, at, bt; filter=iszero)
+    FermionAdd(0, d)
+end
 Base.:+(a::SM, b::FermionAdd) = FermionAdd(b.coeff, (_merge(+, to_add(a), b.dict; filter=iszero)), filter_scalars=false)
 function add!(a::FermionAdd, b::FermionAdd)
     a.coeff += b.coeff
-    a.dict = _merge!(+, a.dict, b.dict; filter=iszero)
+    a.dict = __merge!(+, a.dict, b.dict; filter=iszero)
     return a
 end
 function add!(a::FermionAdd, b::SM)
-    a.dict = _merge!(+, a.dict, to_add(b); filter=iszero)
+    a.dict = __merge!(+, a.dict, to_add_tuple(b); filter=iszero)
     return a
 end
 add!(a::FermionAdd, b::Number) = (a.coeff += b; return a)
 add!(a::FermionAdd, b::UniformScaling) = (a.coeff += b.λ; return a)
 to_add(a::FermionMul, coeff=1) = Dict(FermionMul(1, a.factors) => a.coeff * coeff)
 to_add(a::AbstractFermionSym, coeff=1) = Dict(FermionMul(a) => coeff)
+to_add_tuple(a::FermionMul, coeff=1) = (FermionMul(1, a.factors) => a.coeff * coeff,)
+to_add_tuple(a::AbstractFermionSym, coeff=1) = (FermionMul(a) => coeff,)
 
 Base.:+(a::Number, b::FermionAdd) = iszero(a) ? b : FermionAdd(a + b.coeff, b.dict)
 Base.:+(a::UniformScaling, b::FermionAdd) = iszero(a) ? b : FermionAdd(a.λ + b.coeff, b.dict)
@@ -166,24 +179,20 @@ function Base.:+(a::FermionAdd, b::FermionAdd)
 end
 Base.:^(a::Union{FermionMul,FermionAdd}, b) = Base.power_by_squaring(a, b)
 
-
-Base.:*(x::Number, a::AbstractFermionSym) = iszero(x) ? 0 : FermionMul(x, [a])
+Base.:*(x::Number, a::AbstractFermionSym) = iszero(x) ? 0 : FermionMul(x, (a,))
 Base.:*(x::Number, a::FermionMul) = iszero(x) ? 0 : FermionMul(x * a.coeff, a.factors)
 Base.:*(x::Number, a::FermionAdd) = iszero(x) ? 0 : FermionAdd(x * a.coeff, Dict(k => v * x for (k, v) in collect(a.dict)))
 Base.:*(a::SMA, x::Number) = x * a
 
 Base.:*(a::AbstractFermionSym, bs::FermionMul) = (1 * a) * bs
-Base.:*(as::FermionMul, b::AbstractFermionSym) = (b' * as')'
+Base.:*(as::FermionMul, b::AbstractFermionSym) = as * (1 * b)
 Base.:*(as::FermionMul, bs::FermionMul) = order_mul(unordered_prod(as, bs))
-Base.adjoint(x::FermionMul) = length(x.factors) == 0 ? FermionMul(adjoint(x.coeff), x.factors) : adjoint(x.coeff) * foldr(*, reverse(adjoint.(x.factors)))
-Base.:*(a::FermionAdd, b::SM) = (b' * a')'
-function Base.:*(a::SM, b::FermionAdd)
-    a * b.coeff + sum((v * a) * f for (f, v) in b.dict)
-end
-function Base.:*(a::FermionAdd, b::FermionAdd)
-    a.coeff * b + sum((va * fa) * b for (fa, va) in a.dict)
-end
+Base.:*(a::SM, b::FermionAdd) = a * b.coeff + sum((v * a) * f for (f, v) in b.dict)
+Base.:*(a::FermionAdd, b::SM) = a.coeff * b + sum((v * f) * (b) for (f, v) in a.dict)
+Base.:*(a::FermionAdd, b::FermionAdd) = a.coeff * b + sum((va * fa) * b for (fa, va) in a.dict)
 
+Base.adjoint(x::FermionMul) = length(x.factors) == 0 ? FermionMul(adjoint(x.coeff), x.factors) : adjoint(x.coeff) * foldr(*, reverse(adjoint.(x.factors)))
+# Base.adjoint(x::FermionMul) = length(x.factors) == 0 ? FermionMul(adjoint(x.coeff), x.factors) : adjoint(x.coeff) * order_mul(foldr(unordered_prod, reverse(adjoint.(x.factors))))
 function Base.adjoint(x::FermionAdd)
     FermionAdd(adjoint(x.coeff), Dict(f' => v' for (f, v) in x.dict))
 end
@@ -195,7 +204,7 @@ Base.zero(::FermionAdd{C,D}) where {C,D} = FermionAdd(zero(C), D(); filter_scala
 unordered_prod(a::FermionMul, b::FermionAdd) = b.coeff * a + sum(unordered_prod(a, f) for f in fermionterms(b))
 unordered_prod(a::FermionAdd, b::FermionMul) = a.coeff * b + sum(unordered_prod(f, b) for f in fermionterms(a))
 unordered_prod(a::FermionAdd, b::FermionAdd) = sum(unordered_prod(f, g) for f in allterms(a), g in allterms(b))
-unordered_prod(a::FermionMul, b::FermionMul) = FermionMul(a.coeff * b.coeff, vcat(a.factors, b.factors))
+unordered_prod(a::FermionMul, b::FermionMul) = FermionMul(a.coeff * b.coeff, TupleTools.vcat(a.factors, b.factors))#[a.factors..., b.factors...])#vcat(a.factors, b.factors))
 unordered_prod(a, b, xs...) = foldl(*, xs; init=(*)(a, b))
 unordered_prod(x::Number, a::SMA) = x * a
 unordered_prod(a::SMA, x::Number) = x * a
@@ -324,7 +333,7 @@ function matrix_representation(op::FermionAdd{C}, ordering, states, fock_to_ind)
     end
     return SparseArrays.sparse!(outinds, ininds, amps, length(states), length(states))
 end
-operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, args...; kwargs...) = operator_inds_amps!((outinds, ininds, amps), FermionMul(1, [op]), args...; kwargs...)
+operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, args...; kwargs...) = operator_inds_amps!((outinds, ininds, amps), FermionMul(1, (op,)), args...; kwargs...)
 
 @testitem "Instantiating symbolic fermions" begin
     using SparseArrays, LinearAlgebra
@@ -389,15 +398,25 @@ TermInterface.maketerm(::Type{Q}, head::Type{T}, args, metadata) where {Q<:Union
 # _merge(f::F, d, others...; filter=x -> false) where {F} = _merge!(f, Dict{SM,Any}(d), others...; filter=filter)
 # _merge(f::F, d, others...; filter=x -> false) where {F} = _merge!(f, d, others...; filter=filter)
 # _merge(f::F, d, others...; filter=x -> false) where {F} = _merge!(f, Dict{SM,Union{promote_type(valtype(d), valtype.(others)...)}}(d), others...; filter)
-function _merge(f, d::Dict{K0,T0}, others...; filter=x -> false) where {K0,T0}
-    T = Union{promote_type(T0, valtype.(others)...)}
-    K = Union{K0,keytype.(others)...}
+# function _merge(f, d::Dict{K0,T0}, others...; filter=x -> false) where {K0,T0}
+#     T = Union{promote_type(T0, valtype.(others)...)}
+#     K = Union{K0,keytype.(others)...}
+#     d2 = Dict{K,T}(d)
+#     return __merge!(f, d2, others...; filter)
+# end
+
+# function _merge(f, d::NTuple{Any,Pair{K,V}}, others...; filter=x -> false) where {K,V}
+
+
+function _merge(f, d, others...; filter=x -> false)
+    T = Union{promote_type(valtype(d), valtype.(others)...)}
+    K = Union{keytype(d),keytype.(others)...}
     d2 = Dict{K,T}(d)
     return __merge!(f, d2, others...; filter)
 end
-function _merge!(f, d::Dict{K0,T0}, others...; filter=x -> false) where {K0,T0}
-    return __merge!(f, d, others...; filter)
-end
+# function _merge!(f, d, others...; filter=x -> false)
+#     return __merge!(f, d, others...; filter)
+# end
 function __merge!(f::F, d, others...; filter=x -> false) where {F}
     acc = d
     for other in others
@@ -457,7 +476,7 @@ Base.copy(x::FermionAdd) = FermionAdd(copy(x.coeff), copy(x.dict))
 @testitem "Consistency between + and add!" begin
     import FermionicHilbertSpaces: add!
     @fermions f
-    a = 1.0 * f[2] * f[1] + 1
+    a = 1.0 * f[2] * f[1] + 1 + f[1]
     for b in [1.0, 1, f[1], 1.0 * f[1], f[2] * f[1], a]
         a2 = copy(a)
         a3 = add!(a2, b)
@@ -465,5 +484,5 @@ Base.copy(x::FermionAdd) = FermionAdd(copy(x.coeff), copy(x.dict))
         @test a2 == a3
         @test_throws InexactError add!(a, 1im * b)
     end
-    @test a == 1.0 * f[2] * f[1] + 1
+    @test a == 1.0 * f[2] * f[1] + 1 + f[1]
 end

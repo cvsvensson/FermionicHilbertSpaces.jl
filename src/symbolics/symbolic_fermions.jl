@@ -68,9 +68,9 @@ function ordered_prod(a::FermionSym, b::FermionSym)
     if a == b
         0
     elseif a < b
-        FermionMul(1, [a, b])
+        FermionMul(1, (a, b))
     elseif a > b
-        FermionMul((-1)^(a_uni == b_uni), [b, a]) + Int(a.label == b.label && a.basis == b.basis)
+        FermionMul((-1)^(a_uni == b_uni), (b, a)) + Int(a.label == b.label && a.basis == b.basis)
     else
         throw(ArgumentError("Don't know how to multiply $a * $b"))
     end
