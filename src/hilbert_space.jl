@@ -226,10 +226,13 @@ function substate(siteindices, f::FockNumber)
     return focknbr_from_bits(subbits)
 end
 
-# complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace) = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
+# complementary_subsystem(H::SimpleFockHilbertSpace, Hsub::AbstractFockHilbertSpace) = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
 # function complementary_subsystem(H::SingleParticleHilbertSpace, Hsub::SingleParticleHilbertSpace)
 #     single_particle_hilbert_space(setdiff(collect(keys(H)), collect(keys(Hsub))))
 # end
+function simple_complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace)
+    SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
+end
 function complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace)
     _Hbar = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
     split = StateSplitter(H, (Hsub, _Hbar))
@@ -239,23 +242,6 @@ function complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFock
     end)
     FockHilbertSpace(modes(_Hbar), states)
 end
-
-# function subregion(modes, H::SymmetricFockHilbertSpace)
-#     if !isorderedsubsystem(modes, H.jw)
-#         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
-#     end
-#     # loop through all basisstates in H and collect the fock states that are in the subsystem
-#     outinds = siteindices(modes, H.jw)
-#     outbits(f) = Iterators.map(i -> _bit(f, i), outinds)
-#     subfocks = eltype(H.symmetry.basisstates)[]
-#     for f in basisstates(H)
-#         subbits = outbits(f)
-#         subfock = focknbr_from_bits(subbits)
-#         push!(subfocks, subfock)
-#     end
-#     sort!(unique!(subfocks))
-#     FockHilbertSpace(modes, subfocks)
-# end
 
 @testitem "subregion function" begin
     using FermionicHilbertSpaces

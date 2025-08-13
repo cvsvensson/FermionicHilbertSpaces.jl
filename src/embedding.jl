@@ -101,35 +101,33 @@ end
 
 
 """
-    embedding(m, H, Hnew)
+    embedding(m, Hsub, H; complement = simple_complementary_subsystem(H, Hsub), kwargs...)
 
 Compute the fermionic embedding of a matrix `m` in the basis `Hsub` into the basis `H`.
 """
-function embedding(m, Hsub::AbstractFockHilbertSpace, H, phase_factors::Bool=true)
+function embedding(m, Hsub::AbstractFockHilbertSpace, H; complement=simple_complementary_subsystem(H, Hsub), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedsubsystem(Hsub, H) || throw(ArgumentError("Can't embed $Hsub into $H"))
-    Hbar = complementary_subsystem(H, Hsub)
-    return fermionic_kron((m, I), (Hsub, Hbar), H, phase_factors)
+    return fermionic_kron((m, I), (Hsub, complement), H; kwargs...)
 end
 const PairWithHilbertSpaces = Pair{<:AbstractFockHilbertSpace,<:AbstractFockHilbertSpace}
-embedding(Hs::PairWithHilbertSpaces, phase_factors::Bool=true) = m -> embedding(m, first(Hs), last(Hs), phase_factors)
-embedding(m, Hs::PairWithHilbertSpaces, phase_factors::Bool=true) = embedding(m, first(Hs), last(Hs), phase_factors)
+embedding(Hs::PairWithHilbertSpaces; kwargs...) = m -> embedding(m, first(Hs), last(Hs); kwargs...)
+embedding(m, Hs::PairWithHilbertSpaces; kwargs...) = embedding(m, first(Hs), last(Hs); kwargs...)
 
 """
-    extension(m, H, Hbar[, phase_factors])
+    extension(m, H, Hbar, Hout = tensor_product((H, Hbar)); kwargs...)
 Extend an operator or state `m` from Hilbert space `H` into a disjoint space `Hbar`.
 """
-function extension(m, H::AbstractFockHilbertSpace, Hbar, phase_factors::Bool=true)
+function extension(m, H::AbstractFockHilbertSpace, Hbar, Hout=tensor_product((H, Hbar)); kwargs...)
     isdisjoint(keys(H), keys(Hbar)) || throw(ArgumentError("The bases of the two Hilbert spaces must be disjoint"))
     Hs = (H, Hbar)
-    Hout = tensor_product(Hs)
-    return fermionic_kron((m, I), Hs, Hout, phase_factors)
+    return fermionic_kron((m, I), Hs, Hout; kwargs...)
 end
-extension(Hs::PairWithHilbertSpaces, phase_factors::Bool=true) = m -> extension(m, first(Hs), last(Hs), phase_factors)
-extension(m, Hs::PairWithHilbertSpaces, phase_factors::Bool=true) = extension(m, first(Hs), last(Hs), phase_factors)
+extension(Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = m -> extension(m, first(Hs), last(Hs), Hout; kwargs...)
+extension(m, Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = extension(m, first(Hs), last(Hs), Hout; kwargs...)
 
 
 ## kron, i.e. tensor_product without phase factors
-Base.kron(ms, bs, b::AbstractHilbertSpace; kwargs...) = fermionic_kron(ms, bs, b, false; kwargs...)
+Base.kron(ms, bs, b::AbstractHilbertSpace; kwargs...) = fermionic_kron(ms, bs, b; phase_factors=false, kwargs...)
 
-canonical_embedding(m, b, bnew) = embedding(m, b, bnew, false)
+canonical_embedding(m, b, bnew) = embedding(m, b, bnew; phase_factors=false)

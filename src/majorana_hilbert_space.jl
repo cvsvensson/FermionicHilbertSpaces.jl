@@ -31,7 +31,7 @@ function subregion(modes, H::MajoranaHilbertSpace)
 end
 partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hout::MajoranaHilbertSpace, phase_factors::Bool=true) = partial_trace!(mout, m, H.parent, Hout.parent, phase_factors)
 isorderedpartition(Hs, H::MajoranaHilbertSpace) = isorderedpartition(map(parent, Hs), H.parent)
-embedding(m, H::MajoranaHilbertSpace, Hnew::MajoranaHilbertSpace, phase_factors::Bool=true) = embedding(m, H.parent, Hnew.parent, phase_factors)
+embedding(m, H::MajoranaHilbertSpace, Hnew::MajoranaHilbertSpace; kwargs...) = embedding(m, H.parent, Hnew.parent; kwargs...)
 function tensor_product(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace)
     Hf = tensor_product(H1.parent, H2.parent)
     majoranaindices = OrderedDict(mapreduce((ntup) -> [ntup[2][1] => 2ntup[1] - 1, ntup[2][2] => 2ntup[1]], vcat, enumerate(keys(Hf))))
