@@ -1,15 +1,15 @@
 abstract type AbstractFermionSym end
 Base.:*(a::AbstractFermionSym, b::AbstractFermionSym) = ordered_prod(a, b)
-unordered_prod(a::AbstractFermionSym, b::AbstractFermionSym) = FermionMul(1, (a, b))
+unordered_prod(a::AbstractFermionSym, b::AbstractFermionSym) = FermionMul(1, [a, b])
 
-struct FermionMul{C,S<:AbstractFermionSym,F}
+struct FermionMul{C,S<:AbstractFermionSym}
     coeff::C
-    factors::F
+    factors::AbstractVector{S}
     ordered::Bool
     function FermionMul(coeff::C, factors) where {C}
         (iszero(coeff) || iszero(length(factors))) && return coeff
         ordered = issorted(factors) && sorted_noduplicates(factors)
-        new{C,eltype(factors),typeof(factors)}(coeff, factors, ordered)
+        new{C,eltype(factors)}(coeff, factors, ordered)
     end
 end
 function Base.show(io::IO, x::FermionMul)
@@ -133,9 +133,9 @@ Base.:+(a::SM, b::Union{Number,UniformScaling}) = b + a
 Base.:+(a::FermionMul, b::AbstractFermionSym) = a + 1 * b
 Base.:+(a::AbstractFermionSym, b::FermionMul) = 1 * a + b
 Base.:+(a::AbstractFermionSym, b::AbstractFermionSym) = (1 * a) + (1 * b)
-function Base.:+(a::FermionMul{CA,SA,FA}, b::FermionMul{CB,SB,FB}) where {CA,SA,FA,CB,SB,FB}
+function Base.:+(a::FermionMul{CA,SA}, b::FermionMul{CB,SB}) where {CA,SA,CB,SB}
     at, bt = to_add_tuple(a), to_add_tuple(b)
-    K = Union{FermionMul{Int,SA,FA},FermionMul{Int,SB,FB}}
+    K = Union{FermionMul{Int,SA},FermionMul{Int,SB}}
     V = promote_type(CA, CB)
     d = Dict{K,V}()
     sizehint!(d, 2)
