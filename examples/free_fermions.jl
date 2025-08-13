@@ -11,7 +11,7 @@ indomain(xy) = norm(xy) < N
 square_grid = [indomain(xy) ? xy : missing for xy in Iterators.product(xs, ys)]
 disc = collect(skipmissing(square_grid))
 shifts = [(1, 0), (0, 1), (-1, 0), (0, -1)]
-neighbours(Nx, Ny) = [(Nx + dx, Ny + dy) for (dx, dy) in shifts if (Nx + dx, Ny + dy) in disc]
+neighbours(Nx, Ny) = ((Nx + dx, Ny + dy) for (dx, dy) in shifts if indomain((Nx + dx, Ny + dy)))
 H = single_particle_hilbert_space(disc)
 # For plotting heatmaps later, we need a function to map a vector over the disc to a matrix on the 2d grid
 function vec_to_square_grid(v::AbstractVector{T}) where T
@@ -37,14 +37,12 @@ end
 hopping(xy1, xy2) = N
 @fermions f
 # Since we are dealing with many fermions, symbolic sums may take a long time. To get better performance, we will use the function `add!` to update the symbolic hamiltonian in place. For this, it is important to initialize the Hamiltonian with the correct type. We do this by making a simple hamiltonian and then call `zero` to get an empty hamiltonian of a matching type.
-ham = zero(1.0 * f[0, 0] + 1.0)
+ham = zero(1.0 * f[0, 0] * f[1, 1] + 1.0)
 # Now we can build the hamiltonian
 for xy in disc
     add!(ham, potential(xy) * f[xy]' * f[xy])
     for nbr in neighbours(xy...)
-        if nbr in disc
-            add!(ham, hopping(nbr, xy) * f[nbr]' * f[xy] + hc)
-        end
+        add!(ham, hopping(nbr, xy) * f[nbr]' * f[xy] + hc)
     end
 end
 # And get a matrix representation of it on the single particle hilbert space
@@ -52,7 +50,7 @@ mat = matrix_representation(ham, H)
 
 # ## Compute eigenstates and momentum operators and plot results
 # Compute a few eigenvalues/eigenvectors (lowest energy states)
-vals, vecs = eigs(mat; nev=3^2, which=:SR, v0=map(x -> eltype(mat)(first(x)), disc)[:]);
+vals, vecs = eigs(mat; nev=1^2, which=:SR, v0=map(x -> eltype(mat)(first(x)), disc)[:]);
 # Calculate momentum operators px, py and define a function to calculate angular momentum density
 px = zero(1im * ham)
 py = zero(px)
