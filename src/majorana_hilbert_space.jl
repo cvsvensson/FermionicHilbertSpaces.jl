@@ -1,4 +1,4 @@
-struct MajoranaHilbertSpace{L,H} <: AbstractHilbertSpace
+struct MajoranaHilbertSpace{L,H} <: AbstractFockHilbertSpace
     majoranaindices::L
     parent::H
 end
