@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="800" height="400" viewBox="0 0 3200 1600">
 <defs>
-  <clipPath id="clip120">
+  <clipPath id="clip230">
     <rect x="0" y="0" width="3200" height="1600"/>
   </clipPath>
 </defs>
-<path clip-path="url(#clip120)" d="M0 1600 L3200 1600 L3200 0 L0 0  Z" fill="#000000" fill-rule="evenodd" fill-opacity="1"/>
+<path clip-path="url(#clip230)" d="M0 1600 L3200 1600 L3200 0 L0 0  Z" fill="#000000" fill-rule="evenodd" fill-opacity="1"/>
 <defs>
-  <clipPath id="clip121">
+  <clipPath id="clip231">
     <rect x="640" y="0" width="2241" height="1600"/>
   </clipPath>
 </defs>
-<path clip-path="url(#clip120)" d="M0 1600 L1600 1600 L1600 0 L0 0  Z" fill="#000000" fill-rule="evenodd" fill-opacity="1"/>
+<path clip-path="url(#clip230)" d="M0 1600 L1600 1600 L1600 0 L0 0  Z" fill="#000000" fill-rule="evenodd" fill-opacity="1"/>
 <defs>
-  <clipPath id="clip122">
+  <clipPath id="clip232">
     <rect x="0" y="0" width="1601" height="1600"/>
   </clipPath>
 </defs>
-<polyline clip-path="url(#clip120)" style="stroke:#000000; stroke-linecap:round; stroke-linejoin:round; stroke-width:4; stroke-opacity:1; fill:none" points="0,1600 1600,1600 "/>
-<polyline clip-path="url(#clip120)" style="stroke:#000000; stroke-linecap:round; stroke-linejoin:round; stroke-width:4; stroke-opacity:1; fill:none" points="0,1600 0,0 "/>
-<g clip-path="url(#clip122)">
+<polyline clip-path="url(#clip230)" style="stroke:#000000; stroke-linecap:round; stroke-linejoin:round; stroke-width:4; stroke-opacity:1; fill:none" points="0,1600 1600,1600 "/>
+<polyline clip-path="url(#clip230)" style="stroke:#000000; stroke-linecap:round; stroke-linejoin:round; stroke-width:4; stroke-opacity:1; fill:none" points="0,1600 0,0 "/>
+<g clip-path="url(#clip232)">
 <image width="1600" height="1600" xlink:href="data:image/png;base64,
 iVBORw0KGgoAAAANSUhEUgAABkAAAAZACAYAAAAhDI6nAAAgAElEQVR4nOzb6ZIcSXYd4BtLLlWF
 KgAFoBeN0Ujj+7+LzLSYJBMlG5IjzrBnuhuNrZbMjNCPpoz6w214eipx8X0PcMwj08PdI05mFQAA
@@ -553,15 +553,15 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 33gBeCglBJDAZ/YAAAAASUVORK5CYII=
 " transform="translate(0, 0)"/>
 </g>
-<path clip-path="url(#clip120)" d="M1600 1600 L3200 1600 L3200 0 L1600 0  Z" fill="#000000" fill-rule="evenodd" fill-opacity="1"/>
+<path clip-path="url(#clip230)" d="M1600 1600 L3200 1600 L3200 0 L1600 0  Z" fill="#000000" fill-rule="evenodd" fill-opacity="1"/>
 <defs>
-  <clipPath id="clip123">
+  <clipPath id="clip233">
     <rect x="1600" y="0" width="1601" height="1600"/>
   </clipPath>
 </defs>
-<polyline clip-path="url(#clip120)" style="stroke:#000000; stroke-linecap:round; stroke-linejoin:round; stroke-width:4; stroke-opacity:1; fill:none" points="1600,1600 3200,1600 "/>
-<polyline clip-path="url(#clip120)" style="stroke:#000000; stroke-linecap:round; stroke-linejoin:round; stroke-width:4; stroke-opacity:1; fill:none" points="1600,1600 1600,0 "/>
-<g clip-path="url(#clip123)">
+<polyline clip-path="url(#clip230)" style="stroke:#000000; stroke-linecap:round; stroke-linejoin:round; stroke-width:4; stroke-opacity:1; fill:none" points="1600,1600 3200,1600 "/>
+<polyline clip-path="url(#clip230)" style="stroke:#000000; stroke-linecap:round; stroke-linejoin:round; stroke-width:4; stroke-opacity:1; fill:none" points="1600,1600 1600,0 "/>
+<g clip-path="url(#clip233)">
 <image width="1600" height="1600" xlink:href="data:image/png;base64,
 iVBORw0KGgoAAAANSUhEUgAABkAAAAZACAYAAAAhDI6nAAAgAElEQVR4nOzbWY8k2Xke4O9EZGYt
 vc0Mi5RpUrBgQoB0VXPF+v+XTQgG24ApeAEsG9pZHA17eqmqzIzwxQjQlSVq8PZUzlfP8wNenNjO
