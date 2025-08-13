@@ -30,6 +30,18 @@ function subregion(modes, H::MajoranaHilbertSpace)
     MajoranaHilbertSpace(majorana_position, subregion(pairs, H.parent))
 end
 partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hout::MajoranaHilbertSpace, phase_factors::Bool=true) = partial_trace!(mout, m, H.parent, Hout.parent, phase_factors)
+function simple_complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace)
+    complement_labels = setdiff(keys(H.majoranaindices), keys(Hsub.majoranaindices))
+    complement_fermionic_space = simple_complementary_subsystem(H.parent, Hsub.parent)
+    majorana_position = OrderedDict(label => n for (n, label) in enumerate(complement_labels))
+    MajoranaHilbertSpace(majorana_position, complement_fermionic_space)
+end
+function complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace)
+    complement_labels = setdiff(keys(H.majoranaindices), keys(Hsub.majoranaindices))
+    complement_fermionic_space = complementary_subsystem(H.parent, Hsub.parent)
+    majorana_position = OrderedDict(label => n for (n, label) in enumerate(complement_labels))
+    MajoranaHilbertSpace(majorana_position, complement_fermionic_space)
+end
 isorderedpartition(Hs, H::MajoranaHilbertSpace) = isorderedpartition(map(parent, Hs), H.parent)
 embedding(m, H::MajoranaHilbertSpace, Hnew::MajoranaHilbertSpace; kwargs...) = embedding(m, H.parent, Hnew.parent; kwargs...)
 function tensor_product(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace)
