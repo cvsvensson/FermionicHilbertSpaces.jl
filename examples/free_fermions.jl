@@ -5,7 +5,7 @@ import FermionicHilbertSpaces: add! # Import add! for efficient Hamiltonian cons
 using Arpack # For sparse eigenvalue decomposition
 # ## Define a grid 
 # We'll look at a system defined on a disc. Let's define a square grid and then cut out a disc in the middle
-N = 200
+N = 40
 xs, ys = -N:N, -N:N
 indomain(xy) = norm(xy) < N
 square_grid = [indomain(xy) ? xy : missing for xy in Iterators.product(xs, ys)]
