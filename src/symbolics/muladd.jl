@@ -249,38 +249,38 @@ Base.valtype(::AbstractFermionSym) = Int
 
 ## Instantiating sparse matrices
 _labels(a::FermionMul) = [s.label for s in a.factors]
-matrix_representation(op, H::AbstractFockHilbertSpace) = matrix_representation(op, mode_ordering(H), basisstates(H), basisstates(H))
+matrix_representation(op, H::AbstractFockHilbertSpace) = matrix_representation(op, mode_ordering(H), basisstates(H), Dict(Iterators.map(reverse, enumerate(basisstates(H)))))
 matrix_representation(op::Number, H::AbstractFockHilbertSpace) = op * I(size(H, 1))
 
-function matrix_representation(op::Union{<:FermionMul,<:AbstractFermionSym}, labels, outstates, instates)
+function matrix_representation(op::Union{<:FermionMul,<:AbstractFermionSym}, labels, states, fock_to_ind)
     outinds = Int[]
     ininds = Int[]
     AT = valtype(op)
     amps = AT[]
-    sizehint!(outinds, length(instates))
-    sizehint!(ininds, length(instates))
-    sizehint!(amps, length(instates))
-    operator_inds_amps!((outinds, ininds, amps), op, labels, outstates, instates, Dict(map(reverse, enumerate(outstates))))
-    SparseArrays.sparse!(outinds, ininds, identity.(amps), length(outstates), length(instates))
+    sizehint!(outinds, length(states))
+    sizehint!(ininds, length(states))
+    sizehint!(amps, length(states))
+    operator_inds_amps!((outinds, ininds, amps), op, labels, states, fock_to_ind)
+    SparseArrays.sparse!(outinds, ininds, identity.(amps), length(states), length(states))
 end
-matrix_representation(op, labels, instates) = matrix_representation(op, labels, instates, instates)
+matrix_representation(op, labels, states) = matrix_representation(op, labels, states, Dict(Iterators.map(reverse, enumerate(states))))
 
-function operator_inds_amps!((outinds, ininds, amps), op, ordering, outstates::AbstractVector{SingleParticleState}, instates::AbstractVector{SingleParticleState}, fock_to_outind)
-    isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, ordering, outstates, instates, fock_to_outind)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, outstates, instates, fock_to_outind)
-end
-
-function operator_inds_amps!((outinds, ininds, amps), op, ordering, outstates, instates, fock_to_outind)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, outstates, instates, fock_to_outind)
+function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{SingleParticleState}, fock_to_ind)
+    isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
 end
 
-function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::FermionMul, ordering, outstates::AbstractVector{SingleParticleState}, instates::AbstractVector{SingleParticleState}, fock_to_outind)
+function operator_inds_amps!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
+end
+
+function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::FermionMul, ordering, states::AbstractVector{SingleParticleState}, fock_to_ind)
     if length(op.factors) != 2
         throw(ArgumentError("Only two-fermion operators supported for free fermions"))
     end
     fockstates = (SingleParticleState(getindex(ordering, op.factors[1].label)), SingleParticleState(getindex(ordering, op.factors[2].label)))
-    inind = findfirst(isequal(fockstates[2]), instates)
-    outind = findfirst(isequal(fockstates[1]), outstates)
+    inind = fock_to_ind[fockstates[2]]
+    outind = fock_to_ind[fockstates[1]]
     sign = (-1)^op.factors[2].creation
     push!(outinds, outind)
     push!(ininds, inind)
@@ -288,15 +288,15 @@ function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::FermionMu
     return (outinds, ininds, amps)
 end
 
-function operator_inds_amps_generic!((outinds, ininds, amps), op::FermionMul, ordering, outstates, instates, fock_to_outind)
-    digitpositions = collect(Iterators.reverse(getindex(ordering, f.label) for f in op.factors)) 
+function operator_inds_amps_generic!((outinds, ininds, amps), op::FermionMul, ordering, states, fock_to_ind)
+    digitpositions = collect(Iterators.reverse(getindex(ordering, f.label) for f in op.factors))
     daggers = collect(Iterators.reverse(s.creation for s in op.factors))
     mc = -op.coeff
     pc = op.coeff
-    for (n, f) in enumerate(instates)
+    for (n, f) in enumerate(states)
         newfockstate, amp = togglefermions(digitpositions, daggers, f)
         if !iszero(amp)
-            push!(outinds, fock_to_outind[newfockstate])
+            push!(outinds, fock_to_ind[newfockstate])
             push!(amps, isone(amp) ? pc : mc)
             push!(ininds, n)
         end
@@ -306,24 +306,23 @@ end
 
 # promote_array(v) = convert(Array{eltype(promote(map(zero, unique(typeof(v) for v in v))...))}, v)
 
-function matrix_representation(op::FermionAdd{C}, ordering, outstates, instates) where C
-    fock_to_outind = Dict(Iterators.map(reverse, enumerate(outstates)))
+function matrix_representation(op::FermionAdd{C}, ordering, states, fock_to_ind) where C
     outinds = Int[]
     ininds = Int[]
     AT = valtype(op)
     amps = AT[]
-    sizehint!(outinds, length(instates))
-    sizehint!(ininds, length(instates))
-    sizehint!(amps, length(instates))
+    sizehint!(outinds, length(states))
+    sizehint!(ininds, length(states))
+    sizehint!(amps, length(states))
     for (operator, coeff) in op.dict
-        operator_inds_amps!((outinds, ininds, amps), coeff * operator, ordering, outstates, instates, fock_to_outind)
+        operator_inds_amps!((outinds, ininds, amps), coeff * operator, ordering, states, fock_to_ind)
     end
     if !iszero(op.coeff)
-        append!(ininds, eachindex(instates))
-        append!(outinds, eachindex(outstates))
-        append!(amps, fill(op.coeff, length(instates)))
+        append!(ininds, eachindex(states))
+        append!(outinds, eachindex(states))
+        append!(amps, fill(op.coeff, length(states)))
     end
-    return SparseArrays.sparse!(outinds, ininds, amps, length(outstates), length(instates))
+    return SparseArrays.sparse!(outinds, ininds, amps, length(states), length(states))
 end
 operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, args...; kwargs...) = operator_inds_amps!((outinds, ininds, amps), FermionMul(1, [op]), args...; kwargs...)
 
