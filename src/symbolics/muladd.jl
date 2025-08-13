@@ -338,7 +338,7 @@ function matrix_representation(op::FermionAdd{C}, ordering, states, fock_to_ind)
     end
     return SparseArrays.sparse!(outinds, ininds, amps, length(states), length(states))
 end
-operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, args...; kwargs...) = operator_inds_amps!((outinds, ininds, amps), FermionMul(1, (op,)), args...; kwargs...)
+operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, args...; kwargs...) = operator_inds_amps!((outinds, ininds, amps), FermionMul(1, [op]), args...; kwargs...)
 
 @testitem "Instantiating symbolic fermions" begin
     using SparseArrays, LinearAlgebra
