@@ -4,9 +4,8 @@ struct FixedNumberFockState{N} <: AbstractFockState
 end
 FixedNumberFockState(sites::NTuple{N,Int}) where N = FixedNumberFockState{N}(TupleTools.sort(sites))
 Base.:(==)(f1::FixedNumberFockState, f2::FixedNumberFockState) = f1.sites == f2.sites
-Base.hash(f::FixedNumberFockState, h::UInt) = hash(FockNumber(f), h)
-Base.:(==)(f1::FixedNumberFockState, f2::FockNumber) = f2 == f1
-Base.:(==)(f1::FockNumber, f2::FixedNumberFockState) = f1 == FockNumber(f2)
+Base.hash(f::FixedNumberFockState, h::UInt) = hash(f.sites, h)
+
 const SingleParticleState = FixedNumberFockState{1}
 SingleParticleState(site::Int) = FixedNumberFockState((site,))
 function jwstring_left(site, f::FixedNumberFockState)

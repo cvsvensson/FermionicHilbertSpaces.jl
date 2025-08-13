@@ -1,8 +1,10 @@
-struct NambuState
+struct NambuState <: AbstractBasisState
     state::SingleParticleState
     hole::Bool
 end
 NambuState(i::Integer, hole::Bool) = NambuState(SingleParticleState(i), hole)
+Base.:(==)(n1::NambuState, n2::NambuState) = n1.state == n2.state && n1.hole == n2.hole
+Base.hash(n::NambuState, h::UInt) = (-1)^(n.hole) * hash(n.state, h)
 
 function togglefermions(sites, daggers, f::NambuState)
     (length(sites) == 2 == length(daggers)) || throw(ArgumentError("Must act with exactly two fermions on a NambuState"))
@@ -37,17 +39,38 @@ Base.size(h::BdGHilbertSpace, dim) = size(h.parent, dim)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
 modes(H::BdGHilbertSpace) = modes(H.parent)
 Base.keys(h::BdGHilbertSpace) = keys(h.parent)
+basisstates(h::BdGHilbertSpace) = basisstates(h.parent)
 
 function matrix_representation(op, H::BdGHilbertSpace)
     isquadratic(op) || throw(ArgumentError("Operator must be quadratic in fermions to be represented on a BdG Hilbert space."))
     normal_order_to_bdg(matrix_representation(remove_identity(op), H.parent))
 end
 
+function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{NambuState}, fock_to_ind)
+    isquadratic(op) && return operator_inds_amps_bdg!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
+end
+
+function operator_inds_amps_bdg!((outinds, ininds, amps), op::FermionMul, ordering, states, fock_to_ind)
+    if length(op.factors) != 2
+        throw(ArgumentError("Only two-fermion operators supported for free fermions"))
+    end
+    nambustates = (NambuState(getindex(ordering, op.factors[1].label), op.factors[1].creation),
+        NambuState(getindex(ordering, op.factors[2].label), !op.factors[2].creation))
+    # inind = findfirst(isequal(nambustates[2]), instates)
+    # outind = findfirst(isequal(nambustates[1]), instates)
+    inind = fock_to_ind[nambustates[2]]
+    outind = fock_to_ind[nambustates[1]]
+    push!(outinds, outind)
+    push!(ininds, inind)
+    push!(amps, op.coeff)
+    return (outinds, ininds, amps)
+end
+
 @testitem "BdG" begin
-    import FermionicHilbertSpaces: BdGHilbertSpace
     @fermions f
     h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
-    H = BdGHilbertSpace(1:2)
+    H = bdg_hilbert_space(1:2)
     @test matrix_representation(h + 1, H) == matrix_representation(h, H)
 end
 
