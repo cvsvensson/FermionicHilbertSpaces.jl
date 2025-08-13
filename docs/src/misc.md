@@ -3,13 +3,13 @@
 
 ## Single particle hilbert spaces
 A quadratic fermionic hamiltonian with number conservation can be written as 
-$$
+```math
 H = E\mathbf{1} + \sum_{ij} c_i^\dagger\, h_{ij}  c_j.
-$$
+```
 The matrix element between two single particle states with modes $n$ and $m$ occupied is
-$$
+```math
  \bra{m}H\ket{n} = E\delta_{nm} + h_{nm}.
-$$
+```
 
 One can manually define the hilbert space using only the single particle states as
 ```@example single_particle_hilbert_space
