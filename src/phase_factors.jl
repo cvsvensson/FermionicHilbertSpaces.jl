@@ -1,3 +1,4 @@
+##https://iopscience.iop.org/article/10.1088/1751-8121/ac0646/pdf (10c)
 function phase_factor_f(focknbr1, focknbr2, subinds::NTuple)::Int
     bitmask = focknbr_from_site_indices(subinds)
     pf = 1
@@ -13,7 +14,6 @@ function phase_factor_f(focknbr1, focknbr2, N::Int)::Int
     end
     return pf
 end
-
 function _phase_factor_f(focknbr1, focknbr2, i::Int)::Int
     _bit(focknbr2, i) ? (jwstring_anti(i, focknbr1) * jwstring_anti(i, focknbr2)) : 1
 end

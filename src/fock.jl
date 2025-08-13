@@ -119,16 +119,11 @@ FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_bp(jws, jw)
 
 function concatenate_and_permute(fs, widths, permutation)
     mask = foldl(concatenate, zip(fs, widths); init=(zero(first(fs)), 0)) |> first
-    # mask = concatenate_bitmasks(masks, widths)
     permute(mask, permutation)
 end
 function concatenate((lastf, lastwidth)::Tuple{FockNumber,Int}, (f, width)::Tuple{FockNumber,Int})
     return (lastf | (f << lastwidth), lastwidth + width)
 end
-# function concatenate_bitmasks(masks, widths)
-#     result = zero(first(masks))
-#     return foldl(((result, lastwidth), (mask, width)) -> (result | (mask << lastwidth), lastwidth + width), zip(masks, widths); init=(result, 0)) |> first
-# end
 
 permute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
 
@@ -201,17 +196,12 @@ StateSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H, Hs)
     end
 end
 
-
-##https://iopscience.iop.org/article/10.1088/1751-8121/ac0646/pdf (10c)
 _bit(f::FockNumber, k) = Bool((f.f >> (k - 1)) & 1)
 
 function FockSplitter(jw::JordanWignerOrdering, jws)
     fermionpositions = Tuple(map(Base.Fix1(getindices, jw) ∘ Tuple ∘ collect ∘ keys, jws))
     Base.Fix2(split_state, fermionpositions)
 end
-# function split_focknumber(f::FockNumber, fermionpositions)
-#     map(positions -> focknbr_from_bits(Iterators.map(i -> _bit(f, i), positions)), fermionpositions)
-# end
 function split_state(f::AbstractFockState, fermionpositions)
     map(site_indices -> substate(site_indices, f), fermionpositions)
 end

@@ -239,8 +239,7 @@ function canonicalize_particle_pair(vs::AbstractMatrix, ::SVDCanon)
     mat = Symmetric(transpose(vs) * [0I I(n); I(n) 0I] * vs)
     U, D = symmetric_SVD(mat)
     # check D ≈ I ?
-    particles = vs * conj(U) * [1 1; 1im -1im] / sqrt(2)
-    (particles)
+    vs * conj(U) * [1 1; 1im -1im] / sqrt(2)
 end
 
 
