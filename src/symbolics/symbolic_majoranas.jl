@@ -88,7 +88,7 @@ TermInterface.arguments(a::MajoranaSym) = [a.label, a.basis]
 TermInterface.children(a::MajoranaSym) = arguments(a)
 
 Base.valtype(::AbstractMajoranaSym) = Complex{Int}
-Base.valtype(::FermionMul{C}) where {C} = complex(C)
+Base.valtype(::FermionMul{C,S}) where {C,S<:AbstractMajoranaSym} = complex(C)
 
 @testitem "MajoranaSym" begin
     using Symbolics

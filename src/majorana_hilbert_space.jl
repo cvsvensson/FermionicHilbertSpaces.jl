@@ -53,7 +53,7 @@ end
 matrix_representation(op, H::MajoranaHilbertSpace) = matrix_representation(op, H.majoranaindices, basisstates(H))
 matrix_representation(op::Number, H::MajoranaHilbertSpace) = matrix_representation(op, H.parent)
 
-function operator_inds_amps_generic!((outinds, ininds, amps), op::FermionMul{C}, label_to_site, states, fock_to_ind) where {C}
+function operator_inds_amps_generic!((outinds, ininds, amps), op::FermionMul{C,S}, label_to_site, states, fock_to_ind) where {C,S<:AbstractMajoranaSym}
     majoranadigitpositions = Iterators.reverse(label_to_site[f.label] for f in op.factors)
     daggers = collect(iseven(pos) for pos in majoranadigitpositions)
     digitpositions = map(n -> div(n + 1, 2), majoranadigitpositions)

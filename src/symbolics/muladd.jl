@@ -2,14 +2,14 @@ abstract type AbstractFermionSym end
 Base.:*(a::AbstractFermionSym, b::AbstractFermionSym) = ordered_prod(a, b)
 unordered_prod(a::AbstractFermionSym, b::AbstractFermionSym) = FermionMul(1, (a, b))
 
-struct FermionMul{C,F}
+struct FermionMul{C,S<:AbstractFermionSym,F}
     coeff::C
     factors::F
     ordered::Bool
     function FermionMul(coeff::C, factors) where {C}
         (iszero(coeff) || iszero(length(factors))) && return coeff
         ordered = issorted(factors) && sorted_noduplicates(factors)
-        new{C,typeof(factors)}(coeff, factors, ordered)
+        new{C,eltype(factors),typeof(factors)}(coeff, factors, ordered)
     end
 end
 function Base.show(io::IO, x::FermionMul)
