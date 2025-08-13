@@ -108,8 +108,13 @@ end
         @test overlaps ≈ I
         @test rank(mapreduce(vec, hcat, majbasis)) == length(majbasis)
     end
-
-    for (qn1, qn2, qn3) in Base.product(qns, qns, qns)
+    qns_iterator = [[NoSymmetry(), NoSymmetry(), NoSymmetry()],
+        [ParityConservation(), ParityConservation(), ParityConservation()],
+        [FermionConservation(), FermionConservation(), FermionConservation()],
+        [NoSymmetry(), ParityConservation(), FermionConservation()],
+        [FermionConservation(), FermionConservation(), NoSymmetry()],
+        [ParityConservation(), ParityConservation(), FermionConservation()]]
+    for (qn1, qn2, qn3) in qns_iterator
         H1 = hilbert_space((1, 3), qn1)
         H2 = hilbert_space((2, 4), qn2)
         d1 = 4
