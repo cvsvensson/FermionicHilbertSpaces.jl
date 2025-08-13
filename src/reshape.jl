@@ -108,13 +108,8 @@ end
         @test overlaps ≈ I
         @test rank(mapreduce(vec, hcat, majbasis)) == length(majbasis)
     end
-    qns_iterator = [[NoSymmetry(), NoSymmetry(), NoSymmetry()],
-        [ParityConservation(), ParityConservation(), ParityConservation()],
-        [FermionConservation(), FermionConservation(), FermionConservation()],
-        [NoSymmetry(), ParityConservation(), FermionConservation()],
-        [FermionConservation(), FermionConservation(), NoSymmetry()],
-        [ParityConservation(), ParityConservation(), FermionConservation()]]
-    for (qn1, qn2, qn3) in qns_iterator
+
+    function test_reshape(qn1, qn2, qn3)
         H1 = hilbert_space((1, 3), qn1)
         H2 = hilbert_space((2, 4), qn2)
         d1 = 4
@@ -245,6 +240,16 @@ end
         t = reshape(m, H => Hs)
         @test ndims(t) == 6
         @test m ≈ reshape(t, Hs, H)
+    end
+
+    qns_iterator = [[NoSymmetry(), NoSymmetry(), NoSymmetry()],
+        [ParityConservation(), ParityConservation(), ParityConservation()],
+        [FermionConservation(), FermionConservation(), FermionConservation()],
+        [NoSymmetry(), ParityConservation(), FermionConservation()],
+        [FermionConservation(), FermionConservation(), NoSymmetry()],
+        [ParityConservation(), ParityConservation(), FermionConservation()]]
+    for qns in qns_iterator
+        test_reshape(qns...)
     end
 end
 
