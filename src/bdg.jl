@@ -57,8 +57,6 @@ function operator_inds_amps_bdg!((outinds, ininds, amps), op::FermionMul, orderi
     end
     nambustates = (NambuState(getindex(ordering, op.factors[1].label), op.factors[1].creation),
         NambuState(getindex(ordering, op.factors[2].label), !op.factors[2].creation))
-    # inind = findfirst(isequal(nambustates[2]), instates)
-    # outind = findfirst(isequal(nambustates[1]), instates)
     inind = fock_to_ind[nambustates[2]]
     outind = fock_to_ind[nambustates[1]]
     push!(outinds, outind)
@@ -72,6 +70,16 @@ end
     h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
     H = bdg_hilbert_space(1:2)
     @test matrix_representation(h + 1, H) == matrix_representation(h, H)
+
+    h = rand(ComplexF64, 2, 2) + hc
+    Δ = rand(ComplexF64, 2, 2)
+    Δ = Δ - transpose(Δ)
+    bdg_ham = [h/2 Δ/2
+        -conj(Δ)/2 -conj(h / 2)]
+    op = sum(f[n]' * h[n, m] * f[m] for n in 1:2, m in 1:2) +
+         sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:2, m in 1:2)
+    bdg_ham2 = matrix_representation(op, H)
+    @test bdg_ham ≈ bdg_ham2
 end
 
 
