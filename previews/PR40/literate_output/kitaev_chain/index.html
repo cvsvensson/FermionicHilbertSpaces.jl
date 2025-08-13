@@ -22,99 +22,99 @@ t = 1.0
  -4.0
  -4.0
  -4.0</code></pre><p>We can now construct the Hamiltonian using symbolic fermions for a symbolic representation</p><pre><code class="language-julia hljs">hsym = kitaev_chain(f, N, μ, t, Δ, U)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Sum with 67 terms: 
- - 2.6*f†[1]*f†[2] - 4.0*f†[1]*f†[2]*f[1]*f[2] - 2.0*f†[1]*f[1] + ...</code></pre><p>To convert the symbolic Hamiltonian to a matrix representation, we can use the <code>matrix_representation</code> function.</p><pre><code class="language-julia hljs">matrix_representation(hsym, H)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4096×4096 SparseArrays.SparseMatrixCSC{Float64, Int64} with 49151 stored entries:
-⎡⢿⣷⣷⡈⠳⠄⠀⠘⢦⡀⠀⠀⠀⠀⠀⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎤
-⎢⡙⠻⣿⣿⣴⢦⡀⠀⠀⠙⠂⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⠙⠆⠰⣟⠿⣧⣝⣦⠠⣄⣄⠀⠀⠀⠀⠀⠀⠀⠈⠳⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⣀⠀⠀⠈⠳⣽⣿⣿⣦⢈⠉⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⠈⠳⣄⠀⠀⢦⡈⢛⣿⣿⡅⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⠀⠀⠈⠀⠀⠙⢧⡀⠁⠉⣿⣿⣷⡈⠻⠅⠀⠘⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⡙⠻⣿⣿⣶⢦⡀⠀⠀⠙⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⢤⡀⠀⠀⠀⠀⠀⠀⠀⠙⠟⠆⠸⣟⠿⣧⣽⣦⠠⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⣀⠀⠀⠈⠳⣿⣿⣿⣦⣈⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠈⠳⣄⠀⠀⢦⡈⢻⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣧⡈⠳⠀⠀⠙⢦⡀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡉⠻⣿⣿⣿⢦⡀⠀⠀⠉⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠂⠻⣟⢻⣶⣽⡆⠰⣴⣄⠀⠀⠀⠀⠀⠀⠀⠈⠓⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣄⠀⠀⠈⠳⠿⣿⣿⣦⣌⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⡄⠀⢐⣦⡈⢿⣿⣿⣀⢀⠈⢳⣄⠀⠀⡀⠀⠀⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⢘⣿⣿⣥⡈⠳⠀⠀⠙⢦⡀⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⣀⡁⠻⣿⣿⣟⢦⡀⠀⠀⠉⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢦⡀⠀⠀⠀⠀⠀⠀⠀⠙⠙⠂⠻⣝⢻⣶⣽⠆⠰⣄⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠠⣄⠀⠀⠈⠳⠟⣿⣿⣦⣌⎥
-⎣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⠀⠀⠀⠀⠀⠈⠳⡄⠀⠐⢦⡈⢿⢿⣷⎦</code></pre><p>Now, let&#39;s diagonalize the system. Since parity is conserved, we can work in the even and odd parity sectors separately. To do this, we can create two new Hilbert spaces for the even and odd sectors</p><pre><code class="language-julia hljs">Heven = hilbert_space(1:N, ParityConservation(1))
+ - 4.0*f†[6]*f[6] - 4.0*f†[5]*f†[6]*f[5]*f[6] + 2.6*f[4]*f[5] + ...</code></pre><p>To convert the symbolic Hamiltonian to a matrix representation, we can use the <code>matrix_representation</code> function.</p><pre><code class="language-julia hljs">matrix_representation(hsym, H)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4096×4096 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 24576 stored entries:
+⎡⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎤
+⎢⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⎥
+⎣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⎦</code></pre><p>Now, let&#39;s diagonalize the system. Since parity is conserved, we can work in the even and odd parity sectors separately. To do this, we can create two new Hilbert spaces for the even and odd sectors</p><pre><code class="language-julia hljs">Heven = hilbert_space(1:N, ParityConservation(1))
 Hodd = hilbert_space(1:N, ParityConservation(-1))
 heven = matrix_representation(hsym, Heven)
-hodd = matrix_representation(hsym, Hodd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2048×2048 SparseArrays.SparseMatrixCSC{Float64, Int64} with 24576 stored entries:
-⎡⢿⣷⣷⡈⠳⠄⠀⠘⢦⡀⠀⠀⠀⠀⠀⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⎤
-⎢⡙⠻⣿⣿⣴⢦⡀⠀⠀⠙⠂⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⎥
-⎢⠙⠆⠰⣟⠿⣧⣝⣦⠠⣄⣄⠀⠀⠀⠀⠀⠀⠀⠈⠳⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⎥
-⎢⣀⠀⠀⠈⠳⣽⣿⣿⣦⢈⠉⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⎥
-⎢⠈⠳⣄⠀⠀⢦⡈⢛⣿⣿⡅⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⎥
-⎢⠀⠀⠈⠀⠀⠙⢧⡀⠁⠉⣿⣿⣷⡈⠻⠅⠀⠘⢦⡀⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⡙⠻⣿⣿⣶⢦⡀⠀⠀⠙⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⢤⡀⠀⠀⠀⠀⠀⠀⠀⠙⠟⠆⠸⣟⠿⣧⣽⣦⠠⣄⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⣀⠀⠀⠈⠳⣿⣿⣿⣦⣈⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠈⠳⣄⠀⠀⢦⡈⢻⣿⣿⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣧⡈⠳⠀⠀⠙⢦⡀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⡉⠻⣿⣿⣿⢦⡀⠀⠀⠉⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠙⠂⠻⣟⢻⣶⣽⡆⠰⣴⣄⠀⠀⠀⠀⠀⠀⠀⠈⠓⎥
-⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⣄⠀⠀⠈⠳⠿⣿⣿⣦⣌⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⎥
-⎢⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⠈⠳⡄⠀⢐⣦⡈⢿⣿⣿⣀⢀⠈⢳⣄⠀⠀⡀⠀⠀⎥
-⎢⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⢘⣿⣿⣥⡈⠳⠀⠀⠙⢦⡀⎥
-⎢⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⣀⡁⠻⣿⣿⣟⢦⡀⠀⠀⠉⎥
-⎢⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢦⡀⠀⠀⠀⠀⠀⠀⠀⠙⠙⠂⠻⣝⢻⣶⣽⠆⠰⣄⎥
-⎢⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠠⣄⠀⠀⠈⠳⠟⣿⣿⣦⣌⎥
-⎣⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⠀⠀⠀⠀⠀⠈⠳⡄⠀⠐⢦⡈⢿⢿⣷⎦</code></pre><p>and then diagonalize each sector separately.</p><pre><code class="language-julia hljs">oddeigs = eigs(hodd; nev=1, which=:SR)
+hodd = matrix_representation(hsym, Hodd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2048×2048 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 12288 stored entries:
+⎡⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎤
+⎢⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠈⠻⢆⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠱⣦⡀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⡀⠀⎥
+⎣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣦⎦</code></pre><p>and then diagonalize each sector separately.</p><pre><code class="language-julia hljs">oddeigs = eigs(hodd; nev=1, which=:SR)
 eveneigs = eigs(heven; nev=1, which=:SR)
 oddvec = oddeigs[2][:, 1] # odd ground state
-evenvec = eveneigs[2][:, 1] # even ground state</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2048-element Vector{Float64}:
-  0.015608274175071248
-  0.016060979381801645
- -0.01996274836346006
-  0.01786437579224462
-  0.018905344284311718
- -0.021406546465997184
-  0.016692660286701376
-  0.01624211725860512
- -0.01892709491454756
-  0.02030074674863281
-  ⋮
- -0.018927094914547606
-  0.016242117258605148
-  0.016692660286701418
- -0.021406546465997045
-  0.018905344284311825
-  0.017864375792244647
- -0.01996274836346016
-  0.016060979381801885
-  0.015608274175071112</code></pre><p>The ground states are almost degenerate, as expected.</p><pre><code class="language-julia hljs">first(oddeigs[1]) - first(eveneigs[1])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1.964735383808147e-5</code></pre><p>Now, we construct the ground state Majoranas. First, we need to embed the lowest energy odd and even states into the full Hilbert space.</p><pre><code class="language-julia hljs">function extend(v, p)
+evenvec = eveneigs[2][:, 1] # even ground state</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2048-element Vector{ComplexF64}:
+ -1.8050119873467384e-17 + 4.46617080974927e-17im
+   3.574659542653451e-18 - 1.167273525700602e-18im
+  -7.780691031367755e-18 - 5.298954015509815e-18im
+ -2.8306687876376286e-18 - 1.2447998144812144e-18im
+ -1.3889402669173158e-17 + 6.432335211258603e-18im
+   3.254469672405525e-17 + 4.539642281930601e-18im
+  -5.554287834265472e-18 + 5.417865996771495e-18im
+   -0.001842596027300738 - 0.001081285693712508im
+ -2.6867399802496118e-18 + 2.0637341395024155e-19im
+   4.154130716769338e-18 + 2.9951972504376832e-18im
+                         ⋮
+   4.043952925401174e-17 - 2.641426404698543e-17im
+ -2.0440204511917567e-17 - 9.613572907230827e-18im
+   1.988326284991847e-18 + 2.030820110063858e-18im
+    3.67493571812016e-18 + 5.2933852142423795e-20im
+ -1.2267403053864996e-18 - 6.4319620253684e-20im
+   4.725450599762178e-17 + 2.95890504798221e-17im
+    0.013653322623774857 - 0.011348497097210298im
+  -2.311948106103184e-19 + 6.398430382628887e-19im
+   4.460959655852541e-18 - 5.796702222533146e-18im</code></pre><p>The ground states are almost degenerate, as expected.</p><pre><code class="language-julia hljs">first(oddeigs[1]) - first(eveneigs[1])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">-2.7732187492960954e-31 + 1.7763568394002513e-15im</code></pre><p>Now, we construct the ground state Majoranas. First, we need to embed the lowest energy odd and even states into the full Hilbert space.</p><pre><code class="language-julia hljs">function extend(v, p)
     mapreduce(H -&gt; H == first(p) ? v : zeros(size(H, 1)), vcat, last(p))
 end
 
 Hsum = (Hodd, Heven)
 o = extend(oddvec, Hodd =&gt; Hsum) # odd ground state in the full Hilbert space
-e = extend(evenvec, Heven =&gt; Hsum) # even ground state in the full Hilbert space</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4096-element Vector{Float64}:
-  0.0
-  0.0
-  0.0
-  0.0
-  0.0
-  0.0
-  0.0
-  0.0
-  0.0
-  0.0
-  ⋮
- -0.018927094914547606
-  0.016242117258605148
-  0.016692660286701418
- -0.021406546465997045
-  0.018905344284311825
-  0.017864375792244647
- -0.01996274836346016
-  0.016060979381801885
-  0.015608274175071112</code></pre><p>Then, we can construct the ground state Majorana operators as γ = o * e&#39; + hc γ̃ = 1im * o * e&#39; + hc but that takes a lot of memory for large systems. Let&#39;s make a quick struct representing a rank-1 matrix and use that instead.</p><pre><code class="language-julia hljs">struct Rank1Matrix{T} &lt;: AbstractMatrix{T}
+e = extend(evenvec, Heven =&gt; Hsum) # even ground state in the full Hilbert space</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4096-element Vector{ComplexF64}:
+                     0.0 + 0.0im
+                     0.0 + 0.0im
+                     0.0 + 0.0im
+                     0.0 + 0.0im
+                     0.0 + 0.0im
+                     0.0 + 0.0im
+                     0.0 + 0.0im
+                     0.0 + 0.0im
+                     0.0 + 0.0im
+                     0.0 + 0.0im
+                         ⋮
+   4.043952925401174e-17 - 2.641426404698543e-17im
+ -2.0440204511917567e-17 - 9.613572907230827e-18im
+   1.988326284991847e-18 + 2.030820110063858e-18im
+    3.67493571812016e-18 + 5.2933852142423795e-20im
+ -1.2267403053864996e-18 - 6.4319620253684e-20im
+   4.725450599762178e-17 + 2.95890504798221e-17im
+    0.013653322623774857 - 0.011348497097210298im
+  -2.311948106103184e-19 + 6.398430382628887e-19im
+   4.460959655852541e-18 - 5.796702222533146e-18im</code></pre><p>Then, we can construct the ground state Majorana operators as γ = o * e&#39; + hc γ̃ = 1im * o * e&#39; + hc but that takes a lot of memory for large systems. Let&#39;s make a quick struct representing a rank-1 matrix and use that instead.</p><pre><code class="language-julia hljs">struct Rank1Matrix{T} &lt;: AbstractMatrix{T}
     vec1::Vector{T}
     vec2::Vector{T}
 end
@@ -123,45 +123,45 @@ Base.size(m::Rank1Matrix) = (length(m.vec1), length(m.vec2))
 
 oe = Rank1Matrix(o, e)
 ee = Rank1Matrix(e, e)
-oo = Rank1Matrix(o, o)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4096×4096 Main.Rank1Matrix{Float64}:
-  0.000295814  -0.000319025  …  -0.0  -0.0  -0.0  -0.0  -0.0  -0.0
- -0.000319025   0.000344058      0.0   0.0   0.0   0.0   0.0   0.0
-  0.000290497  -0.000313291     -0.0  -0.0  -0.0  -0.0  -0.0  -0.0
-  0.000278521  -0.000300375     -0.0  -0.0  -0.0  -0.0  -0.0  -0.0
- -0.000294891   0.00031803       0.0   0.0   0.0   0.0   0.0   0.0
- -0.000309109   0.000333364  …   0.0   0.0   0.0   0.0   0.0   0.0
-  0.00033036   -0.000356282     -0.0  -0.0  -0.0  -0.0  -0.0  -0.0
- -0.000307465   0.00033159       0.0   0.0   0.0   0.0   0.0   0.0
-  0.000296137  -0.000319373     -0.0  -0.0  -0.0  -0.0  -0.0  -0.0
-  0.000304175  -0.000328042     -0.0  -0.0  -0.0  -0.0  -0.0  -0.0
-  ⋮                          ⋱   ⋮                             ⋮
- -0.0           0.0              0.0   0.0   0.0   0.0   0.0   0.0
- -0.0           0.0              0.0   0.0   0.0   0.0   0.0   0.0
- -0.0           0.0              0.0   0.0   0.0   0.0   0.0   0.0
- -0.0           0.0          …   0.0   0.0   0.0   0.0   0.0   0.0
- -0.0           0.0              0.0   0.0   0.0   0.0   0.0   0.0
- -0.0           0.0              0.0   0.0   0.0   0.0   0.0   0.0
- -0.0           0.0              0.0   0.0   0.0   0.0   0.0   0.0
- -0.0           0.0              0.0   0.0   0.0   0.0   0.0   0.0
- -0.0           0.0          …   0.0   0.0   0.0   0.0   0.0   0.0</code></pre><p>Now we can compute the reduction of the Majorana operators to each mode.</p><pre><code class="language-julia hljs">Hmodes = [hilbert_space(i:i) for i in 1:N]
+oo = Rank1Matrix(o, o)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4096×4096 Main.Rank1Matrix{ComplexF64}:
+  1.09168e-35+0.0im          …  -0.0+0.0im  -0.0+0.0im  -0.0+0.0im
+ -1.27096e-35+2.42127e-35im      0.0-0.0im   0.0-0.0im   0.0-0.0im
+   -6.677e-37+9.77653e-36im      0.0-0.0im   0.0-0.0im   0.0-0.0im
+  8.49629e-20-2.52413e-19im      0.0+0.0im   0.0+0.0im   0.0+0.0im
+  -6.1569e-36-4.33151e-36im      0.0+0.0im   0.0+0.0im   0.0+0.0im
+  7.25978e-36-2.48353e-35im  …   0.0+0.0im   0.0+0.0im   0.0+0.0im
+ -1.68847e-35+3.24845e-35im      0.0-0.0im   0.0-0.0im   0.0-0.0im
+   1.2412e-35+2.45555e-36im     -0.0+0.0im  -0.0+0.0im  -0.0+0.0im
+   1.0125e-35+2.28448e-35im     -0.0+0.0im  -0.0+0.0im  -0.0+0.0im
+  2.40624e-35-1.16745e-35im      0.0+0.0im   0.0+0.0im   0.0+0.0im
+             ⋮               ⋱                              ⋮
+         -0.0+0.0im              0.0+0.0im   0.0+0.0im   0.0+0.0im
+         -0.0+0.0im              0.0+0.0im   0.0+0.0im   0.0+0.0im
+         -0.0+0.0im              0.0+0.0im   0.0+0.0im   0.0+0.0im
+         -0.0+0.0im          …   0.0+0.0im   0.0+0.0im   0.0+0.0im
+         -0.0+0.0im              0.0+0.0im   0.0+0.0im   0.0+0.0im
+         -0.0+0.0im              0.0+0.0im   0.0+0.0im   0.0+0.0im
+         -0.0+0.0im              0.0+0.0im   0.0+0.0im   0.0+0.0im
+         -0.0+0.0im              0.0+0.0im   0.0+0.0im   0.0+0.0im
+         -0.0+0.0im          …   0.0+0.0im   0.0+0.0im   0.0+0.0im</code></pre><p>Now we can compute the reduction of the Majorana operators to each mode.</p><pre><code class="language-julia hljs">Hmodes = [hilbert_space(i:i) for i in 1:N]
 eoR = [partial_trace(oe, H =&gt; Hmode) for Hmode in Hmodes];
 eeR = [partial_trace(ee, H =&gt; Hmode) for Hmode in Hmodes];
 ooR = [partial_trace(oo, H =&gt; Hmode) for Hmode in Hmodes];
 γ_reductions = [norm(svdvals(eoR + hc), 1) for eoR in eoR]
 γ̃_reductions = [norm(svdvals(1im * eoR + hc), 1) for eoR in eoR]
 LD = [norm(svdvals(ooR - eeR), 1) for (ooR, eeR) in zip(ooR, eeR)]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">12-element Vector{Float64}:
- 7.66053886991358e-15
- 2.7755575615628914e-15
- 8.881784197001252e-16
- 5.551115123125783e-16
- 1.942890293094024e-15
- 4.996003610813204e-16
- 1.1102230246251565e-15
- 6.661338147750939e-16
- 7.771561172376096e-16
- 1.7208456881689926e-15
- 2.275957200481571e-15
- 4.9960036108132044e-15</code></pre><p>We can plot the reductions to visualize the localization of the Majorana modes.</p><pre><code class="language-julia hljs">#
+ 0.030194754630161524
+ 0.5783441026659144
+ 0.6758998635420789
+ 0.5274307134808974
+ 0.07133335050753548
+ 0.030194754630161524
+ 0.1470590477419228
+ 0.10109051572526928
+ 0.05483911356733501
+ 0.1871638743424523
+ 0.11158565041038121
+ 0.0928430315955569</code></pre><p>We can plot the reductions to visualize the localization of the Majorana modes.</p><pre><code class="language-julia hljs">#
 lw = 4
 legendfontsize = 15
 marker = true
@@ -169,4 +169,4 @@ markerstrokewidth = 2
 plot(xlabel=&quot;Site&quot;, title=&quot;Majorana quality measures&quot;; frame=:box, size=(500, 300), xticks=1:3:N, yscale=:identity, legendfontsize, ylims=(-1e-1, 2), legendposition=:top, labelfontsize=15)
 plot!(1:N, γ_reductions; label=&quot;‖γₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)
 plot!(1:N, γ̃_reductions; label=&quot;‖γ̃ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)
-plot!(1:N, LD; label=&quot;‖(iγγ̃)ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)</code></pre><img src="0d0174fb.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../docstrings/">« Functions</a><a class="docs-footer-nextpage" href="../free_fermions/">Free fermions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Wednesday 13 August 2025 11:15">Wednesday 13 August 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+plot!(1:N, LD; label=&quot;‖(iγγ̃)ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)</code></pre><img src="973856bd.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../docstrings/">« Functions</a><a class="docs-footer-nextpage" href="../free_fermions/">Free fermions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Wednesday 13 August 2025 13:03">Wednesday 13 August 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
