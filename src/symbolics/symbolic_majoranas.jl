@@ -70,7 +70,7 @@ function Base.:^(a::MajoranaSym, b)
         throw(ArgumentError("Invalid exponent $b"))
     end
 end
-function ordered_prod(a::MajoranaSym, b::MajoranaSym)
+function ordered_product(a::MajoranaSym, b::MajoranaSym, ::NormalOrdering)
     if a == b
         1
     elseif a < b

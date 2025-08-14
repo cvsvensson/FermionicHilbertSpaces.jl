@@ -62,7 +62,7 @@ end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
 
-function ordered_prod(a::FermionSym, b::FermionSym)
+function ordered_product(a::FermionSym, b::FermionSym, ::NormalOrdering)
     a_uni = a.basis.universe
     b_uni = b.basis.universe
     if a == b

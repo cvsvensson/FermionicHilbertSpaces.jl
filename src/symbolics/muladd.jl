@@ -1,6 +1,9 @@
+abstract type AbstractOrdering end
+struct NormalOrdering <: AbstractOrdering end
+struct NaiveOrdering <: AbstractOrdering end
+
 abstract type AbstractFermionSym end
-Base.:*(a::AbstractFermionSym, b::AbstractFermionSym) = ordered_prod(a, b)
-unordered_prod(a::AbstractFermionSym, b::AbstractFermionSym) = FermionMul(1, [a, b])
+ordered_product(a::AbstractFermionSym, b::AbstractFermionSym, ::NaiveOrdering) = FermionMul(1, [a, b])
 
 struct FermionMul{C,S<:AbstractFermionSym}
     coeff::C
@@ -47,31 +50,37 @@ Base.hash(a::FermionMul, h::UInt) = hash(a.coeff, hash(a.factors, h))
 FermionMul(f::FermionMul) = f
 FermionMul(f::AbstractFermionSym) = FermionMul(1, [f])
 has_scalars(d) = any(isscalar, keys(d)) || any(iszero, values(d))
+function filter_scalars!(dict::Dict)
+    for (k, v) in dict
+        if isscalar(k)
+            coeff += k.coeff * v
+            delete!(dict, k)
+        end
+    end
+    dict
+end
+
 mutable struct FermionAdd{C,D}
     coeff::C
     dict::D
-    function FermionAdd(coeff::C, dict::D; filter_scalars=true, check_length=true) where {C,D}
-        if filter_scalars
-            for (k, v) in dict
-                if isscalar(k)
-                    coeff += k.coeff * v
-                    delete!(dict, k)
-                end
-            end
-        end
-        if check_length && length(dict) == 0
-            coeff
-        elseif length(dict) == 1 && iszero(coeff)
-            k, v = first(dict)
-            v * k
-        else
-            new{C,D}(coeff, dict)
-        end
-    end
 end
 Base.:(==)(a::FermionAdd, b::FermionAdd) = a.coeff == b.coeff && a.dict == b.dict
 Base.hash(a::FermionAdd, h::UInt) = hash(a.coeff, hash(a.dict, h))
 
+function canonicalize!(f::FermionAdd{C,D}, filter_scalars=true) where {C,D}
+    filter_scalars && filter_scalars!(f.dict)
+    if length(f.dict) == 0
+        return f.coeff
+    elseif length(f.dict) == 1 && iszero(f.coeff)
+        k, v = only(f.dict)
+        return v * k
+    else
+        return FermionAdd{C,D}(f.coeff, f.dict)
+    end
+end
+canonicalize!(a::FermionMul) = iszero(a.coeff) ? a.coeff : a
+canonicalize!(a::AbstractFermionSym) = a
+canonicalize!(a::Number) = a
 const SM = Union{AbstractFermionSym,FermionMul}
 const SMA = Union{AbstractFermionSym,FermionMul,FermionAdd}
 
@@ -141,12 +150,12 @@ function Base.:+(a::FermionMul{CA,KA}, b::FermionMul{CB,KB}) where {CA,CB,KA,KB}
     D = Dict{K,C}
     if a.factors == b.factors
         coeff = a.coeff + b.coeff
-        return FermionAdd(0, D(FermionMul(1, a.factors) => coeff))
+        return canonicalize!(FermionAdd(0, D(FermionMul(1, a.factors) => coeff)))
     end
     at, bt = to_add_tuple(a), to_add_tuple(b)
-    return FermionAdd(0, D(at..., bt...))
+    return canonicalize!(FermionAdd(0, D(at..., bt...)))
 end
-Base.:+(a::SM, b::FermionAdd) = FermionAdd(b.coeff, (_merge(+, to_add(a), b.dict; filter=iszero)), filter_scalars=false)
+Base.:+(a::SM, b::FermionAdd) = canonicalize!(FermionAdd(b.coeff, (_merge(+, to_add(a), b.dict; filter=iszero))))
 function add!(a::FermionAdd, b::FermionAdd)
     a.coeff += b.coeff
     a.dict = __merge!(+, a.dict, b.dict; filter=iszero)
@@ -171,8 +180,10 @@ Base.:-(a::Union{Number,UniformScaling}, b::SMA) = a + (-b)
 Base.:-(a::SMA, b::Union{Number,SMA,UniformScaling}) = a + (-b)
 Base.:-(a::SMA) = -1 * a
 function fermionterms(a::FermionAdd)
-    [v * k for (k, v) in pairs(a.dict)]
+    (v * k for (k, v) in pairs(a.dict))
 end
+fermionterms(a::FermionMul) = (a,)
+fermionterms(a::AbstractFermionSym) = (a,)
 function allterms(a::FermionAdd)
     [a.coeff, [v * k for (k, v) in pairs(a.dict)]...]
 end
@@ -183,19 +194,70 @@ function Base.:+(a::FermionAdd, b::FermionAdd)
 end
 Base.:^(a::Union{FermionMul,FermionAdd}, b) = Base.power_by_squaring(a, b)
 
-Base.:*(x::Number, a::AbstractFermionSym) = iszero(x) ? 0 : FermionMul(x, [a])
-Base.:*(x::Number, a::FermionMul) = iszero(x) ? 0 : FermionMul(x * a.coeff, a.factors)
-Base.:*(x::Number, a::FermionAdd) = iszero(x) ? 0 : FermionAdd(x * a.coeff, Dict(k => v * x for (k, v) in collect(a.dict)))
-Base.:*(a::SMA, x::Number) = x * a
+ordered_product(x::Number, y::Number, ordering) = x * y
+ordered_product(x::Number, a::AbstractFermionSym, ordering) = iszero(x) ? 0 : FermionMul(x, [a])
+ordered_product(x::Number, a::FermionMul, ordering) = iszero(x) ? 0 : FermionMul(x * a.coeff, a.factors)
+ordered_product(x::Number, a::FermionAdd, ordering) = iszero(x) ? 0 : FermionAdd(x * a.coeff, Dict(k => v * x for (k, v) in a.dict))
+ordered_product(a::FermionMul, b::FermionMul, ::NaiveOrdering) = FermionMul(a.coeff * b.coeff, vcat(a.factors, b.factors))
+ordered_product(a::SMA, x::Number, ordering) = ordered_product(x, a, ordering)
 
-Base.:*(a::AbstractFermionSym, bs::FermionMul) = (1 * a) * bs
-Base.:*(as::FermionMul, b::AbstractFermionSym) = as * (1 * b)
-Base.:*(as::FermionMul, bs::FermionMul) = order_mul(unordered_prod(as, bs))
-Base.:*(a::SM, b::FermionAdd) = a * b.coeff + sum((v * a) * f for (f, v) in b.dict)
-Base.:*(a::FermionAdd, b::SM) = a.coeff * b + sum((v * f) * (b) for (f, v) in a.dict)
-Base.:*(a::FermionAdd, b::FermionAdd) = a.coeff * b + sum((va * fa) * b for (fa, va) in a.dict)
+ordered_product(a::AbstractFermionSym, bs::FermionMul, ordering) = ordered_product(1 * a, bs, ordering)
+ordered_product(as::FermionMul, b::AbstractFermionSym, ordering) = ordered_product(as, 1 * b, ordering)
+ordered_product(as::FermionMul, bs::FermionMul, ::NormalOrdering) = canonicalize!(normal_order(ordered_product(as, bs, NaiveOrdering())))
+additive_coeff(a::FermionAdd) = a.coeff
+additive_coeff(a::SM) = 0
 
-#TODO: these adjoints can probably be made faster with less allocations
+Base.:*(a::SMA, b::SMA) = ordered_product(a, b, NormalOrdering())
+Base.:*(a::SMA, x::Number) = ordered_product(x, a, NaiveOrdering())
+Base.:*(x::Number, a::SMA) = ordered_product(x, a, NaiveOrdering())
+function ordered_product(a::FermionAdd, b::SM, ordering::AbstractOrdering)
+    c = zero(a)
+    return trymul!(c, a, b, ordering)
+end
+function ordered_product(a::SM, b::FermionAdd, ordering)
+    c = zero(b)
+    return trymul!(c, a, b, ordering)
+end
+function ordered_product(a::FermionAdd, b::FermionAdd, ordering)
+    c = zero(a)
+    return trymul!(c, a, b, ordering)
+end
+function trymul!(c::FermionAdd, a::SMA, b::SMA, ordering)
+    acoeff = additive_coeff(a)
+    bcoeff = additive_coeff(b)
+    if !iszero(acoeff)
+        c = tryadd!(c, ordered_product(acoeff, b, ordering))
+    end
+    if !iszero(bcoeff)
+        c = tryadd!(c, ordered_product(a, bcoeff, ordering))
+        c = tryadd!(c, -acoeff * bcoeff) # We've double counted this term so subtract it
+    end
+    for bterm in fermionterms(b)
+        for aterm in fermionterms(a)
+            newterm = ordered_product(aterm, bterm, ordering)
+            c = tryadd!(c, newterm)
+        end
+    end
+    return canonicalize!(c)
+end
+
+"""
+    tryadd!(c::FermionAdd, term)
+
+This function tries to add `term` to `c` in place. If it fails, it catches the error and returns the out of place sum.
+"""
+function tryadd!(c::FermionAdd, term)
+    try
+        return add!(c, term)
+    catch e
+        @debug e
+    end
+    c + term
+end
+tryadd!(c::SM, term) = c + term
+tryadd!(c::Number, term) = c + term
+
+
 Base.adjoint(x::FermionMul) = length(x.factors) == 0 ? FermionMul(adjoint(x.coeff), x.factors) : adjoint(x.coeff) * foldr(*, Iterators.reverse(Iterators.map(adjoint, x.factors)))
 function Base.adjoint(x::FermionAdd)
     newx = zero(x)
@@ -205,19 +267,42 @@ function Base.adjoint(x::FermionAdd)
     end
     newx
 end
-function OpSum(::Type{T}=Number) where T
-    FermionAdd(0, Dict{FermionMul,T}(); filter_scalars=false, check_length=false)
-end
-Base.zero(::FermionAdd{C,D}) where {C,D} = FermionAdd(zero(C), D(); filter_scalars=false, check_length=false)
+Base.zero(::FermionAdd{C,D}) where {C,D} = FermionAdd(zero(C), D())
 
-unordered_prod(a::FermionMul, b::FermionAdd) = b.coeff * a + sum(unordered_prod(a, f) for f in fermionterms(b))
-unordered_prod(a::FermionAdd, b::FermionMul) = a.coeff * b + sum(unordered_prod(f, b) for f in fermionterms(a))
-unordered_prod(a::FermionAdd, b::FermionAdd) = sum(unordered_prod(f, g) for f in allterms(a), g in allterms(b))
-unordered_prod(a::FermionMul, b::FermionMul) = FermionMul(a.coeff * b.coeff, vcat(a.factors, b.factors))
-unordered_prod(a, b, xs...) = foldl(*, xs; init=(*)(a, b))
-unordered_prod(x::Number, a::SMA) = x * a
-unordered_prod(a::SMA, x::Number) = x * a
-unordered_prod(x::Number, y::Number) = x * y
+# unordered_prod(a::FermionMul, b::FermionAdd) = b.coeff * a + sum(unordered_prod(a, f) for f in fermionterms(b))
+# unordered_prod(a::FermionAdd, b::FermionMul) = a.coeff * b + sum(unordered_prod(f, b) for f in fermionterms(a))
+# unordered_prod(a::FermionAdd, b::FermionAdd) = sum(unordered_prod(f, g) for f in allterms(a), g in allterms(b))
+# function unordered_prod(a::FermionAdd, b::SM)
+#     c = zero(a)
+#     return try_unordered_prod!(c, a, b)
+# end
+# function unordered_prod(a::SM, b::FermionAdd)
+#     c = zero(b)
+#     return try_unordered_prod!(c, a, b)
+# end
+# function unordered_prod(a::FermionAdd, b::FermionAdd)
+#     c = zero(a)
+#     return try_unordered_prod!(c, a, b)
+# end
+# function try_unordered_prod!(c::FermionAdd, a::SMA, b::SMA)
+#     acoeff = additive_coeff(a)
+#     bcoeff = additive_coeff(b)
+#     c.coeff = acoeff * bcoeff
+#     if !iszero(acoeff)
+#         c = tryadd!(c, acoeff * b)
+#     end
+#     if !iszero(bcoeff)
+#         c = tryadd!(c, bcoeff * a)
+#     end
+#     for bterm in fermionterms(b)
+#         for aterm in fermionterms(a)
+#             newterm = unordered_prod(aterm, bterm)
+#             c = tryadd!(c, newterm)
+#         end
+#     end
+#     return canonicalize(c)
+# end
+# unordered_prod(a, b, xs...) = foldl(unordered_prod, xs; init=unordered_prod(a, b))
 
 function sorted_noduplicates(v)
     I = eachindex(v)
@@ -228,34 +313,42 @@ function sorted_noduplicates(v)
 end
 
 ## Normal ordering
-ordering_product(ordered_leftmul::Number, right_mul) = ordered_leftmul * order_mul(right_mul)
-bubble_sort(a::FermionAdd) = a.coeff + sum(bubble_sort(f) for f in fermionterms(a))
+function bubble_sort(a::FermionAdd)
+    c = zero(a)
+    c.coeff = a.coeff
+    for term in fermionterms(a)
+        newterm = bubble_sort(term)
+        add!(c, newterm)
+    end
+    return c
+end
 
 function bubble_sort(a::FermionMul)
     if a.ordered || length(a.factors) == 1
         return a
     end
-    swapped = true
+    # swapped = true
     muloraddvec::Union{Number,SMA} = a
 
     swapped = false
     i = first(eachindex(a.factors)) - 1
+    triple_prod(a, b, c) = ordered_product(ordered_product(a, b, NaiveOrdering()), c, NaiveOrdering())
     while !swapped && i < length(eachindex(a.factors)) - 1
         i += 1
         if a.factors[i] > a.factors[i+1] || isequal(a.factors[i], a.factors[i+1])
             swapped = true
-            product = a.factors[i] * a.factors[i+1]
+            product = ordered_product(a.factors[i], a.factors[i+1], NormalOrdering())
             left_factors = FermionMul(a.coeff, a.factors[1:i-1])
             right_factors = FermionMul(1, a.factors[i+2:end])
-            muloraddvec = unordered_prod(left_factors, product, right_factors)
+            muloraddvec = triple_prod(left_factors, product, right_factors)
         end
     end
     bubble_sort(muloraddvec)
 end
-bubble_sort(a::Number) = a
 
-order_mul(a::FermionMul) = bubble_sort(a)
-order_mul(x::Number) = x
+normal_order(a::SMA) = bubble_sort(a)
+normal_order(a::Number) = a
+bubble_sort(a::Number) = a
 
 isscalar(x::FermionMul) = iszero(x.coeff) || (length(x.factors) == 0)
 isscalar(x::FermionAdd) = length(x.dict) == 0 || all(isscalar, keys(x.dict)) || all(iszero(values(x.dict)))
@@ -404,28 +497,12 @@ TermInterface.maketerm(::Type{Q}, head::Type{T}, args, metadata) where {Q<:Union
 
 
 #From SymbolicUtils
-# _merge(f::F, d, others...; filter=x -> false) where {F} = _merge!(f, Dict{SM,Any}(d), others...; filter=filter)
-# _merge(f::F, d, others...; filter=x -> false) where {F} = _merge!(f, d, others...; filter=filter)
-# _merge(f::F, d, others...; filter=x -> false) where {F} = _merge!(f, Dict{SM,Union{promote_type(valtype(d), valtype.(others)...)}}(d), others...; filter)
-# function _merge(f, d::Dict{K0,T0}, others...; filter=x -> false) where {K0,T0}
-#     T = Union{promote_type(T0, valtype.(others)...)}
-#     K = Union{K0,keytype.(others)...}
-#     d2 = Dict{K,T}(d)
-#     return __merge!(f, d2, others...; filter)
-# end
-
-# function _merge(f, d::NTuple{Any,Pair{K,V}}, others...; filter=x -> false) where {K,V}
-
-
 function _merge(f, d, others...; filter=x -> false)
     T = Union{promote_type(valtype(d), valtype.(others)...)}
     K = Union{keytype(d),keytype.(others)...}
     d2 = Dict{K,T}(d)
     return __merge!(f, d2, others...; filter)
 end
-# function _merge!(f, d, others...; filter=x -> false)
-#     return __merge!(f, d, others...; filter)
-# end
 function __merge!(f::F, d, others...; filter=x -> false) where {F}
     acc = d
     for other in others
