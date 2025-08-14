@@ -3,6 +3,7 @@ struct SymbolicFermionBasis
     name::Symbol
     universe::UInt64
 end
+Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.universe, h))
 
 """
     @fermions a b ...
@@ -60,9 +61,8 @@ function Base.isless(a::FermionSym, b::FermionSym)
 end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
-Base.hash(a::FermionSym) = hash(a.creation, hash(a.label, hash(a.basis)))
 
-function ordered_prod(a::FermionSym, b::FermionSym)
+function ordered_product(a::FermionSym, b::FermionSym, ::NormalOrdering)
     a_uni = a.basis.universe
     b_uni = b.basis.universe
     if a == b
@@ -103,7 +103,7 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
 
 
 @testitem "SymbolicFermions" begin
-    using Symbolics
+    using Symbolics, LinearAlgebra
     @fermions f c
     @fermions b
     @variables a::Real z::Complex
@@ -162,6 +162,11 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
     @test (1 * f1) * (1 * f2) == f1 * f2
     @test f1 * f2 == f1 * (1 * f2) == f1 * f2
     @test f1 - 1 == (1 * f1) - 1 == (0.5 + f1) - 1.5
+
+    for op in [f1, f1 + f2, f1' * f2, f1 * f2 + 1]
+        @test op + 1.0I == op + 1.0
+        @test op - 1.0I == op - 1.0 == -(1.0I - op) == -(1.0 - op)
+    end
 
     ex = 2 * f1
     @test FermionicHilbertSpaces.head(ex) == (*)

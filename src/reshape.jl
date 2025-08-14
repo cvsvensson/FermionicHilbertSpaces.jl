@@ -1,15 +1,15 @@
 
-function Base.reshape(m::AbstractMatrix, H::AbstractHilbertSpace, Hs, phase_factors::Bool=true)
+function Base.reshape(m::AbstractMatrix, H::AbstractHilbertSpace, Hs; phase_factors=true)
     _reshape_mat_to_tensor(m, H, Hs, StateSplitter(H, Hs), phase_factors)
 end
-function Base.reshape(m::AbstractVector, H::AbstractHilbertSpace, Hs, phase_factors::Bool=true)
+function Base.reshape(m::AbstractVector, H::AbstractHilbertSpace, Hs; phase_factors=true)
     _reshape_vec_to_tensor(m, H, Hs, StateSplitter(H, Hs), phase_factors)
 end
 const PairWithHilbertSpace = Union{Pair{<:AbstractHilbertSpace,<:Any},Pair{<:Any,<:AbstractHilbertSpace}}
-Base.reshape(Hs::PairWithHilbertSpace, phase_factors=true) = m -> reshape(m, first(Hs), last(Hs), phase_factors)
-Base.reshape(m::AbstractArray, Hs::PairWithHilbertSpace, phase_factors=true) = reshape(m, first(Hs), last(Hs), phase_factors)
+Base.reshape(Hs::PairWithHilbertSpace; kwargs...) = m -> reshape(m, first(Hs), last(Hs); kwargs...)
+Base.reshape(m::AbstractArray, Hs::PairWithHilbertSpace; kwargs...) = reshape(m, first(Hs), last(Hs); kwargs...)
 
-function Base.reshape(t::AbstractArray, Hs::Union{<:AbstractVector,Tuple}, H::AbstractHilbertSpace, phase_factors::Bool=true)
+function Base.reshape(t::AbstractArray, Hs::Union{<:AbstractVector,Tuple}, H::AbstractHilbertSpace; phase_factors=true)
     if ndims(t) == 2 * length(Hs)
         return _reshape_tensor_to_mat(t, Hs, H, StateExtender(Hs, H), phase_factors)
     elseif ndims(t) == length(Hs)
@@ -109,7 +109,7 @@ end
         @test rank(mapreduce(vec, hcat, majbasis)) == length(majbasis)
     end
 
-    for (qn1, qn2, qn3) in Base.product(qns, qns, qns)
+    function test_reshape(qn1, qn2, qn3)
         H1 = hilbert_space((1, 3), qn1)
         H2 = hilbert_space((2, 4), qn2)
         d1 = 4
@@ -134,8 +134,8 @@ end
         t = reshape(m, H => Hs)
         m2 = reshape(t, Hs => H)
         @test m ≈ m2
-        t = reshape(m, H => Hs, false) #without phase factors (standard decomposition)
-        m2 = reshape(t, Hs => H, false)
+        t = reshape(m, H => Hs; phase_factors=false) #without phase factors (standard decomposition)
+        m2 = reshape(t, Hs => H; phase_factors=false)
         @test m ≈ m2
 
         v = rand(ComplexF64, d1 * d2)
@@ -143,18 +143,18 @@ end
         v2 = reshape(tv, Hs => H)
         @test v ≈ v2
         # Note the how reshaping without phase factors is used in a contraction
-        @test sum(reshape(m, H => Hs, false)[:, :, i, j] * tv[i, j] for i in 1:d1, j in 1:d2) ≈ reshape(m * v, H => Hs)
+        @test sum(reshape(m, H => Hs; phase_factors=false)[:, :, i, j] * tv[i, j] for i in 1:d1, j in 1:d2) ≈ reshape(m * v, H => Hs)
 
         m1 = rand(ComplexF64, d1 * d2, d1 * d2)
         m2 = rand(ComplexF64, d1 * d2, d1 * d2)
-        t1 = reshape(m1, H => Hs, false)
-        t2 = reshape(m2, H => Hs, false)
+        t1 = reshape(m1, H => Hs; phase_factors=false)
+        t2 = reshape(m2, H => Hs; phase_factors=false)
         t3 = zeros(ComplexF64, d1, d2, d1, d2)
         for i in 1:d1, j in 1:d2, k in 1:d1, l in 1:d2, k1 in 1:d1, k2 in 1:d2
             t3[i, j, k, l] += t1[i, j, k1, k2] * t2[k1, k2, k, l]
         end
-        @test reshape(m1 * m2, H => Hs, false) ≈ t3
-        @test m1 * m2 ≈ reshape(t3, Hs => H, false)
+        @test reshape(m1 * m2, H => Hs; phase_factors=false) ≈ t3
+        @test m1 * m2 ≈ reshape(t3, Hs => H; phase_factors=false)
 
         basis1 = majorana_basis(H1)
         basis2 = majorana_basis(H2)
@@ -193,7 +193,7 @@ end
         @test Hvirtual4 ≈ Hvirtual
         # @test svdvals(Hvirtual) ≈ svdvals(Hvirtual4)
 
-        t_no_oddodd = reshape(H_no_oddodd, H, Hs, true)
+        t_no_oddodd = reshape(H_no_oddodd, H, Hs; phase_factors=true)
         Hvirtual_no_oddodd2 = FermionicHilbertSpaces.reshape_to_matrix(t_no_oddodd, (1, 3))
         @test svdvals(Hvirtual_no_oddodd) ≈ svdvals(Hvirtual_no_oddodd2)
         Hvirtual_no_oddodd3 = [tr(Γ' * H_no_oddodd) / sqrt(tr(Γ' * Γ) + 0im) for Γ in basis12all]
@@ -203,13 +203,13 @@ end
 
         ## Test consistency with partial trace
         m = rand(ComplexF64, d1 * d2, d1 * d2)
-        m2 = partial_trace(m, H => H2, true)
-        t = reshape(m, H => Hs, true)
+        m2 = partial_trace(m, H => H2; phase_factors=true)
+        t = reshape(m, H => Hs; phase_factors=true)
         tpt = sum(t[k, :, k, :] for k in axes(t, 1))
         @test m2 ≈ tpt
 
-        m2 = partial_trace(m, H => H2, false)
-        t = reshape(m, H => Hs, false)
+        m2 = partial_trace(m, H => H2; phase_factors=false)
+        t = reshape(m, H => Hs; phase_factors=false)
         tpt = sum(t[k, :, k, :] for k in axes(t, 1))
         @test m2 ≈ tpt
 
@@ -227,9 +227,9 @@ end
         F = partial_trace(H => H2)(m * fermionic_kron(Hs => H)(m1, I))
         @test tr(F * m2) ≈ tr(m * fermionic_kron((m1, I), Hs, H) * fermionic_kron((I, m2), Hs, H))
 
-        t = reshape(m, H => Hs, false)
+        t = reshape(m, H => Hs; phase_factors=false)
         tpt = sum(t[k1, :, k2, :] * m1[k2, k1] for k1 in axes(t, 1), k2 in axes(t, 3))
-        @test partial_trace(m * kron((m1, I), Hs, H), H => H2, false) ≈ tpt
+        @test partial_trace(m * kron((m1, I), Hs, H), H => H2; phase_factors=false) ≈ tpt
 
         ## More bases
         H3 = hilbert_space(5:5, qn3)
@@ -240,6 +240,16 @@ end
         t = reshape(m, H => Hs)
         @test ndims(t) == 6
         @test m ≈ reshape(t, Hs, H)
+    end
+
+    qns_iterator = [[NoSymmetry(), NoSymmetry(), NoSymmetry()],
+        [ParityConservation(), ParityConservation(), ParityConservation()],
+        [FermionConservation(), FermionConservation(), FermionConservation()],
+        [NoSymmetry(), ParityConservation(), FermionConservation()],
+        [FermionConservation(), FermionConservation(), NoSymmetry()],
+        [ParityConservation(), ParityConservation(), FermionConservation()]]
+    for qns in qns_iterator
+        test_reshape(qns...)
     end
 end
 

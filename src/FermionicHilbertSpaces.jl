@@ -8,6 +8,7 @@ import OrderedCollections: OrderedDict
 using TestItems
 using TermInterface
 using BitPermutations
+using TupleTools
 
 export FockNumber, JordanWignerOrdering, hc, basisstates
 export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subregion
@@ -16,7 +17,7 @@ export parityoperator, numberoperator, fermions, majoranas, matrix_representatio
 export partial_trace, fermionic_kron, tensor_product, embedding, extension
 export @fermions, @majoranas
 export FermionConservation, NoSymmetry, ParityConservation, IndexConservation
-export majorana_hilbert_space
+export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
 
 ## Symbolics extension
 """
@@ -46,6 +47,7 @@ const hc = HC()
 
 ## Files
 include("fock.jl")
+include("fixednumberfock.jl")
 include("phase_factors.jl")
 include("symmetry.jl")
 include("hilbert_space.jl")
@@ -61,6 +63,7 @@ include("symbolics/symbolic_fermions.jl")
 include("symbolics/symbolic_majoranas.jl")
 
 include("majorana_hilbert_space.jl")
+include("bdg.jl")
 
 import PrecompileTools
 

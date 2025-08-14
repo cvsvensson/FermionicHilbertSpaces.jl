@@ -52,12 +52,12 @@ qubit_operator(c, ::QubitOp{:H}) = 1 / sqrt(2) * (qubit_operator(c, QubitOp{:Z}(
     H1 = hilbert_space(1:1)
     H2 = hilbert_space(2:3)
     H = tensor_product(H1, H2)
-    @test sort(svdvals(reshape(v2, H, (H1, H2), false)) .^ 2) ≈ eigvals(partial_trace(v2 * v2', H, H1, false))
+    @test sort(svdvals(reshape(v2, H, (H1, H2); phase_factors=false)) .^ 2) ≈ eigvals(partial_trace(v2 * v2', H, H1; phase_factors=false))
 
     ## Test that partial trace is the adjoint of embedding
     using LinearMaps
-    ptmap = LinearMap(rhovec -> vec(partial_trace(reshape(rhovec, size(H)), H, H1, false)), prod(size(H1)), prod(size(H)))
-    embeddingmap = LinearMap(rhovec -> vec(embedding(reshape(rhovec, size(H1)), H1, H, false)), prod(size(H)), prod(size(H1)))
+    ptmap = LinearMap(rhovec -> vec(partial_trace(reshape(rhovec, size(H)), H, H1; phase_factors=false)), prod(size(H1)), prod(size(H)))
+    embeddingmap = LinearMap(rhovec -> vec(embedding(reshape(rhovec, size(H1)), H1, H; phase_factors=false)), prod(size(H)), prod(size(H1)))
     @test Matrix(ptmap) ≈ Matrix(embeddingmap)'
 
 end

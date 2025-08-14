@@ -2,6 +2,8 @@ struct SymbolicMajoranaBasis
     name::Symbol
     universe::UInt64
 end
+Base.hash(x::SymbolicMajoranaBasis, h::UInt) = hash(x.name, hash(x.universe, h))
+
 abstract type AbstractMajoranaSym <: AbstractFermionSym end
 """
     @majoranas a b ...
@@ -68,7 +70,7 @@ function Base.:^(a::MajoranaSym, b)
         throw(ArgumentError("Invalid exponent $b"))
     end
 end
-function ordered_prod(a::MajoranaSym, b::MajoranaSym)
+function ordered_product(a::MajoranaSym, b::MajoranaSym, ::NormalOrdering)
     if a == b
         1
     elseif a < b
@@ -86,7 +88,7 @@ TermInterface.arguments(a::MajoranaSym) = [a.label, a.basis]
 TermInterface.children(a::MajoranaSym) = arguments(a)
 
 Base.valtype(::AbstractMajoranaSym) = Complex{Int}
-Base.valtype(::FermionMul{C,F}) where {C,F<:AbstractMajoranaSym} = complex(C)
+Base.valtype(::FermionMul{C,S}) where {C,S<:AbstractMajoranaSym} = complex(C)
 
 @testitem "MajoranaSym" begin
     using Symbolics
@@ -137,7 +139,7 @@ Base.valtype(::FermionMul{C,F}) where {C,F<:AbstractMajoranaSym} = complex(C)
     @test substitute(f1', f1 => f2) == f1'
 
     @test substitute(γ[1], 1 => 2) == γ[2]
-    @test substitute(γ[:a] * γ[:b] + 1, :a => :b) == 2
+    @test FermionicHilbertSpaces.canonicalize!(substitute(γ[:a] * γ[:b] + 1, :a => :b)) == 2
 
     r = (@rule ~x::(x -> x isa FermionicHilbertSpaces.AbstractFermionSym) => (~x).basis[min((~x).label + 1, 10)])
     @test r(f[1]) == f[2]

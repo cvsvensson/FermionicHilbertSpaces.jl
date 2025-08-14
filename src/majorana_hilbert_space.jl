@@ -1,9 +1,10 @@
-struct MajoranaHilbertSpace{L,H} <: AbstractHilbertSpace
+struct MajoranaHilbertSpace{L,H} <: AbstractFockHilbertSpace
     majoranaindices::L
     parent::H
 end
 Base.size(H::MajoranaHilbertSpace) = size(H.parent)
 mode_ordering(H::MajoranaHilbertSpace) = mode_ordering(H.parent)
+modes(H::MajoranaHilbertSpace) = modes(H.parent)
 Base.:(==)(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace) = H1.majoranaindices == H2.majoranaindices && H1.parent == H2.parent
 basisstates(m::MajoranaHilbertSpace) = basisstates(m.parent)
 Base.parent(H::MajoranaHilbertSpace) = H.parent
@@ -28,19 +29,31 @@ function subregion(modes, H::MajoranaHilbertSpace)
     majorana_position = OrderedDict(label => n for (n, label) in enumerate(modes))
     MajoranaHilbertSpace(majorana_position, subregion(pairs, H.parent))
 end
-partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hout::MajoranaHilbertSpace, phase_factors::Bool=true) = partial_trace!(mout, m, H.parent, Hout.parent, phase_factors)
+partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, phase_factors::Bool=true, complement::MajoranaHilbertSpace=simple_complementary_subsystem(H, Hsub)) = partial_trace!(mout, m, H.parent, Hsub.parent, phase_factors, complement.parent)
+function simple_complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace)
+    complement_labels = setdiff(keys(H.majoranaindices), keys(Hsub.majoranaindices))
+    complement_fermionic_space = simple_complementary_subsystem(H.parent, Hsub.parent)
+    majorana_position = OrderedDict(label => n for (n, label) in enumerate(complement_labels))
+    MajoranaHilbertSpace(majorana_position, complement_fermionic_space)
+end
+function complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace)
+    complement_labels = setdiff(keys(H.majoranaindices), keys(Hsub.majoranaindices))
+    complement_fermionic_space = complementary_subsystem(H.parent, Hsub.parent)
+    majorana_position = OrderedDict(label => n for (n, label) in enumerate(complement_labels))
+    MajoranaHilbertSpace(majorana_position, complement_fermionic_space)
+end
 isorderedpartition(Hs, H::MajoranaHilbertSpace) = isorderedpartition(map(parent, Hs), H.parent)
-embedding(m, H::MajoranaHilbertSpace, Hnew::MajoranaHilbertSpace, phase_factors::Bool=true) = embedding(m, H.parent, Hnew.parent, phase_factors)
+embedding(m, H::MajoranaHilbertSpace, Hnew::MajoranaHilbertSpace; kwargs...) = embedding(m, H.parent, Hnew.parent; kwargs...)
 function tensor_product(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace)
     Hf = tensor_product(H1.parent, H2.parent)
     majoranaindices = OrderedDict(mapreduce((ntup) -> [ntup[2][1] => 2ntup[1] - 1, ntup[2][2] => 2ntup[1]], vcat, enumerate(keys(Hf))))
     MajoranaHilbertSpace(majoranaindices, Hf)
 end
 ## Define matrix representations of symbolic majorana operators on Majorana Hilbert spaces.
-matrix_representation(op, H::MajoranaHilbertSpace) = matrix_representation(op, H.majoranaindices, basisstates(H), basisstates(H))
+matrix_representation(op, H::MajoranaHilbertSpace) = matrix_representation(op, H.majoranaindices, basisstates(H))
 matrix_representation(op::Number, H::MajoranaHilbertSpace) = matrix_representation(op, H.parent)
 
-function operator_inds_amps!((outinds, ininds, amps), op::FermionMul{C,F}, label_to_site, outstates, instates; fock_to_outind=Dict(map(reverse, enumerate(outstates)))) where {C,F<:AbstractMajoranaSym}
+function operator_inds_amps_generic!((outinds, ininds, amps), op::FermionMul{C,S}, label_to_site, states, fock_to_ind) where {C,S<:AbstractMajoranaSym}
     majoranadigitpositions = Iterators.reverse(label_to_site[f.label] for f in op.factors)
     daggers = collect(iseven(pos) for pos in majoranadigitpositions)
     digitpositions = map(n -> div(n + 1, 2), majoranadigitpositions)
@@ -48,10 +61,10 @@ function operator_inds_amps!((outinds, ininds, amps), op::FermionMul{C,F}, label
     mic = -1im * op.coeff
     pc = op.coeff
     pic = 1im * op.coeff
-    for (n, f) in enumerate(instates)
+    for (n, f) in enumerate(states)
         newfockstate, amp = togglemajoranas(digitpositions, daggers, f)
         if !iszero(amp)
-            push!(outinds, fock_to_outind[newfockstate])
+            push!(outinds, fock_to_ind[newfockstate])
             if amp == 1
                 push!(amps, pc)
             elseif amp == -1

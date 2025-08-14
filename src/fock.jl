@@ -7,6 +7,10 @@ struct FockNumber{I<:Integer} <: AbstractFockState
     f::I
 end
 FockNumber(f::FockNumber) = f
+Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
+Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
+Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
+
 """
     JordanWignerOrdering
 A type representing the ordering of fermionic modes.
@@ -28,17 +32,19 @@ Base.iterate(jw::JordanWignerOrdering) = iterate(jw.labels)
 Base.iterate(jw::JordanWignerOrdering, state) = iterate(jw.labels, state)
 Base.eltype(::JordanWignerOrdering{L}) where L = L
 
-siteindex(label, ordering::JordanWignerOrdering) = ordering.ordering[label]
-siteindices(labels, jw::JordanWignerOrdering) = map(Base.Fix2(siteindex, jw), labels)
+Base.getindex(ordering::JordanWignerOrdering, label) = ordering.ordering[label]
+getindices(jw::JordanWignerOrdering, labels) = map(Base.Fix1(getindex, jw), labels)
+getindices(H::AbstractFockHilbertSpace, labels) = getindices(mode_ordering(H), labels)
 
 label_at_site(n, ordering::JordanWignerOrdering) = ordering.labels[n]
-focknbr_from_site_label(label, jw::JordanWignerOrdering) = focknbr_from_site_index(siteindex(label, jw))
+focknbr_from_site_label(label, jw::JordanWignerOrdering) = focknbr_from_site_index(getindex(jw, label))
 focknbr_from_site_labels(labels, jw::JordanWignerOrdering) = mapreduce(Base.Fix2(focknbr_from_site_label, jw), +, labels, init=FockNumber(0))
 focknbr_from_site_labels(labels::JordanWignerOrdering, jw::JordanWignerOrdering) = focknbr_from_site_labels(labels.labels, jw)
 
 Base.:+(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f + f2.f)
 Base.:-(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f - f2.f)
 Base.:⊻(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f ⊻ f2.f)
+Base.:⊻(f1::Integer, f2::FockNumber) = FockNumber(f1 ⊻ f2.f)
 Base.:&(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f & f2.f)
 Base.:&(f1::Integer, f2::FockNumber) = FockNumber(f1 & f2.f)
 Base.:|(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f | f2.f)
@@ -52,9 +58,9 @@ Base.zero(::FockNumber{T}) where T = zero(FockNumber{T})
 Base.zero(::Type{FockNumber{T}}) where T = FockNumber(zero(T))
 
 
-focknbr_from_bits(bits, ::Type{T}=(length(bits) > 63 ? BigInt : Int)) where T = FockNumber(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
-focknbr_from_site_index(site::Integer) = FockNumber(1 << (site - 1))
-focknbr_from_site_indices(sites) = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber(0))
+focknbr_from_bits(bits, ::Type{T}=(length(bits) > 63 ? BigInt : Int)) where T = FockNumber{T}(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
+focknbr_from_site_index(site::Integer, ::Type{T}=site > 63 ? BigInt : Int) where T = FockNumber{T}(T(1) << (site - 1))
+focknbr_from_site_indices(sites, ::Type{T}=(maximum(sites, init=0) > 63 ? BigInt : Int)) where T = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber(zero(T)))
 
 bits(f::FockNumber, N) = digits(Bool, f.f, base=2, pad=N)
 parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
@@ -97,39 +103,38 @@ struct FockMapperBitPermutations{P1,P2}
     widths::Vector{Int}
     permutation::P2
 end
-FockMapper_collect(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)) #faster construction
-FockMapper_tuple(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix2(siteindices, jw) ∘ Tuple ∘ keys, jws)) #faster application, but type instability
-FockMapper(Hs, H::AbstractFockHilbertSpace) = FockMapper(map(b -> b.jw, Hs), H.jw)
+FockMapper_collect(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix1(getindices, jw) ∘ collect ∘ keys, jws)) #faster construction
+FockMapper_tuple(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix1(getindices, jw) ∘ Tuple ∘ keys, jws)) #faster application, but type instability
+FockMapper(Hs, H::AbstractFockHilbertSpace) = FockMapper(map(mode_ordering, Hs), mode_ordering(H))
 StateExtender(Hs, H::AbstractFockHilbertSpace) = FockMapper(Hs, H)
 
 function FockMapper_bp(jws, jw)
     widths = collect(map(length, jws))
-    fermionpositions = map(Base.Fix2(siteindices, jw) ∘ collect ∘ keys, jws)
+    fermionpositions = map(Base.Fix1(getindices, jw) ∘ collect ∘ keys, jws)
     permutation = BitPermutation{UInt}(reduce(vcat, fermionpositions))
     FockMapperBitPermutations(fermionpositions, widths, permutation')
 end
 FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_bp(jws, jw)
 (fm::FockMapperBitPermutations)(fs) = concatenate_and_permute(fs, fm.widths, fm.permutation)
 
-function concatenate_and_permute(masks, widths, permutation)
-    mask = concatenate_bitmasks(masks, widths)
-    bitpermute(mask, permutation)
+function concatenate_and_permute(fs, widths, permutation)
+    mask = foldl(concatenate, zip(fs, widths); init=(zero(first(fs)), 0)) |> first
+    permute(mask, permutation)
 end
-function concatenate_bitmasks(masks, widths)
-    result = zero(first(masks))
-    return foldl(((result, lastwidth), (mask, width)) -> (result | (mask << lastwidth), lastwidth + width), zip(masks, widths); init=(result, 0)) |> first
+function concatenate((lastf, lastwidth)::Tuple{FockNumber,Int}, (f, width)::Tuple{FockNumber,Int})
+    return (lastf | (f << lastwidth), lastwidth + width)
 end
 
-BitPermutations.bitpermute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
+permute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
 
 shift_right(f::FockNumber, M) = FockNumber(f.f << M)
-FockSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H.jw, map(b -> b.jw, Hs))
+FockSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(mode_ordering(H), map(mode_ordering, Hs))
 StateSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H, Hs)
 
 
 @testitem "Fock" begin
     using Random
-    using FermionicHilbertSpaces: bits, _bit, focknbr_from_bits, focknbr_from_site_indices
+    using FermionicHilbertSpaces: bits, _bit, focknbr_from_bits, focknbr_from_site_indices, focknbr_from_site_index
     Random.seed!(1234)
 
     N = 6
@@ -182,25 +187,32 @@ StateSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H, Hs)
     @test length(fs) == binomial(10, 5)
     @test allunique(fs)
     @test all(FermionicHilbertSpaces.fermionnumber.(fs) .== 5)
+
+    @testset "Large site indices" begin
+        f = focknbr_from_site_indices((1, 1000,))
+        f isa FockNumber{BigInt}
+        f.f == 1 + BigInt(2)^(1000 - 1)
+        focknbr_from_site_index(1000).f == f.f - 1
+    end
 end
 
-
-##https://iopscience.iop.org/article/10.1088/1751-8121/ac0646/pdf (10c)
 _bit(f::FockNumber, k) = Bool((f.f >> (k - 1)) & 1)
 
 function FockSplitter(jw::JordanWignerOrdering, jws)
-    fermionpositions = Tuple(map(Base.Fix2(siteindices, jw) ∘ Tuple ∘ collect ∘ keys, jws))
-    Base.Fix2(split_focknumber, fermionpositions)
+    fermionpositions = Tuple(map(Base.Fix1(getindices, jw) ∘ Tuple ∘ collect ∘ keys, jws))
+    Base.Fix2(split_state, fermionpositions)
 end
-function split_focknumber(f::FockNumber, fermionpositions)
-    map(positions -> focknbr_from_bits(Iterators.map(i -> _bit(f, i), positions)), fermionpositions)
+function split_state(f::AbstractFockState, fermionpositions)
+    map(site_indices -> substate(site_indices, f), fermionpositions)
 end
-function split_focknumber(f::FockNumber, fockmapper::FockMapper)
-    split_focknumber(f, fockmapper.fermionpositions)
+function split_state(f::AbstractFockState, fockmapper::FockMapper)
+    split_state(f, fockmapper.fermionpositions)
 end
-function split_focknumber(f::FockNumber, fockmapper::FockMapperBitPermutations)
-    split_focknumber(f, fockmapper.fermionpositions)
+function split_state(f::AbstractFockState, fockmapper::FockMapperBitPermutations)
+    split_state(f, fockmapper.fermionpositions)
 end
+combine_states(f1::FockNumber, f2::FockNumber, H1, H2) = f1 + shift_right(f2, length(H1.jw))
+
 @testitem "Split and join focknumbers" begin
     import FermionicHilbertSpaces: focknbr_from_site_indices as fock
     jw1 = JordanWignerOrdering((1, 3))
@@ -217,7 +229,7 @@ end
     @test focksplitter(fock((3, 4))) == (fock((2,)), fock((2,)))
 
     fockmapper = FermionicHilbertSpaces.FockMapper((jw1, jw2), jw)
-    @test FermionicHilbertSpaces.split_focknumber(fock((1, 2, 4)), fockmapper) == focksplitter(fock((1, 2, 4)))
+    @test FermionicHilbertSpaces.split_state(fock((1, 2, 4)), fockmapper) == focksplitter(fock((1, 2, 4)))
 
     # test all cases above with fockmapper
     @test fock((1, 2, 3, 4)) == fockmapper((fock((1, 2)), fock((1, 2))))
@@ -243,7 +255,7 @@ end
 
     # test all cases above with fockmapper
     fockmapper = FermionicHilbertSpaces.FockMapper((jw1, jw2), jw)
-    @test FermionicHilbertSpaces.split_focknumber(fock((1, 2, 3)), fockmapper) == focksplitter(fock((1, 2, 3)))
+    @test FermionicHilbertSpaces.split_state(fock((1, 2, 3)), fockmapper) == focksplitter(fock((1, 2, 3)))
     @test fock((1, 3)) == fockmapper((fock((1,)), fock((1,))))
     @test fock((1, 2)) == fockmapper((fock((1, 2)), fock(())))
     @test fock((2,)) == fockmapper((fock((2,)), fock(())))

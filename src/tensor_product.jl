@@ -16,8 +16,7 @@ tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace) = tensor_prod
 function tensor_product_combine_basisstates(H1, H2)
     isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
     newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
-    M1 = length(H1.jw)
-    newbasisstates = vec([f1 + shift_right(f2, M1) for f1 in basisstates(H1), f2 in basisstates(H2)])
+    newbasisstates = vec([combine_states(f1, f2, H1, H2) for f1 in basisstates(H1), f2 in basisstates(H2)])
     FockHilbertSpace(newlabels, newbasisstates)
 end
 
@@ -41,14 +40,14 @@ tensor_product(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace) = simple_
     H2 = SymmetricFockHilbertSpace(3:4, FermionConservation())
     Hw = tensor_product(H1, H2)
     H3 = SymmetricFockHilbertSpace(1:4, FermionConservation())
-    @test sort(basisstates(Hw), by=f -> f.f) == sort(basisstates(H3), by=f -> f.f)
+    @test sort(basisstates(Hw)) == sort(basisstates(H3))
     @test size(H1) .* size(H2) == size(Hw)
 
     H1 = SymmetricFockHilbertSpace(1:2, ParityConservation())
     H2 = SymmetricFockHilbertSpace(3:4, ParityConservation())
     Hw = tensor_product(H1, H2)
     H3 = SymmetricFockHilbertSpace(1:4, ParityConservation())
-    @test sort(basisstates(Hw), by=f -> f.f) == sort(basisstates(H3), by=f -> f.f)
+    @test sort(basisstates(Hw)) == sort(basisstates(H3))
     @test size(H1) .* size(H2) == size(Hw)
 
 end
@@ -67,7 +66,7 @@ end
 
 Compute the fermionic tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the tensor_product product of `Hs`.
 """
-function fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs), phase_factors::Bool=true)
+function fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); phase_factors=true)
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs)
     extend_state = FockMapper(Hs, H)
@@ -79,8 +78,8 @@ function fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs), phas
     throw(ArgumentError("Only 1D or 2D arrays are supported"))
 end
 
-fermionic_kron(Hs::Pair, phase_factors::Bool=true) = (ms...) -> fermionic_kron(ms, Hs, phase_factors)
-fermionic_kron(ms, Hs::Pair, phase_factors::Bool=true) = fermionic_kron(ms, first(Hs), last(Hs), phase_factors)
+fermionic_kron(Hs::Pair; kwargs...) = (ms...) -> fermionic_kron(ms, Hs; kwargs...)
+fermionic_kron(ms, Hs::Pair; kwargs...) = fermionic_kron(ms, first(Hs), last(Hs); kwargs...)
 
 
 uniform_to_sparse_type(::Type{UniformScaling{T}}) where {T} = SparseMatrixCSC{T,Int}
@@ -107,7 +106,7 @@ function fermionic_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::A
     fill!(mout, zero(T))
     ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
     phase_factors && (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
-  
+
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     for I in inds
         I1 = map(i -> i[1], I)
@@ -144,17 +143,18 @@ function fermionic_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertS
 end
 
 """
-    tensor_product(ms, Hs, H::AbstractHilbertSpace, phase_factors=true)
+    tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
 
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
+`kwargs` can be passed a bool `phase_factors` and a hilbert space `complement`.
 """
-function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace, phase_factors::Bool=true)
+function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
-    return mapreduce(((m, fine_basis),) -> embedding(m, fine_basis, H, phase_factors), *, zip(ms, Hs))
+    return mapreduce(((m, fine_basis),) -> embedding(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
 end
-tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractFockHilbertSpace}, phase_factors::Bool=true) = tensor_product(ms, first(HsH), last(HsH), phase_factors)
-tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}, phase_factors::Bool=true) = (ms...) -> tensor_product(ms, first(HsH), last(HsH), phase_factors)
+tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
+tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
 
 @testitem "Fermionic tensor product properties" begin
     # Properties from J. Phys. A: Math. Theor. 54 (2021) 393001
@@ -162,10 +162,10 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}, phase_factors::Bool=
     using Random, Base.Iterators, LinearAlgebra
     import FermionicHilbertSpaces: embedding, tensor_product, embedding_unitary, canonical_embedding, project_on_parity, project_on_parities
 
-    Random.seed!(1)
-    N = 10
-    rough_size = 5
-    fine_size = 3
+    Random.seed!(3)
+    N = 8
+    rough_size = 4
+    fine_size = 2
     rough_partitions = sort.(collect(partition(randperm(N), rough_size)))
     # divide each part of rough partition into finer partitions
     fine_partitions = map(rough_partition -> sort.(collect(partition(shuffle(rough_partition), fine_size))), rough_partitions)
@@ -204,7 +204,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}, phase_factors::Bool=
     ξbases = vcat(Hs_fine...)
     modebases = [hilbert_space(j:j) for j in 1:N]
     lhs = prod(j -> embedding(As_modes[j], modebases[j], H), 1:N)
-    rhs_ordered_prod(X, basis) = mapreduce(j -> embedding(As_modes[j], modebases[j], basis), *, X)
+    rhs_ordered_prod(X, basis) = mapreduce(j -> Matrix(embedding(As_modes[j], modebases[j], basis)), *, X)
     rhs = fermionic_kron([rhs_ordered_prod(X, H) for (X, H) in zip(ξ, ξbases)], ξbases, H)
     @test lhs ≈ rhs
 
@@ -460,38 +460,38 @@ end
 
 
 """
-    partial_trace(m::AbstractMatrix,  bHfull::AbstractHilbertSpace, Hsub::AbstractHilbertSpace)
+    partial_trace(m::AbstractMatrix,  Hfull::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors = true, complement)
 
-Compute the partial trace of a matrix `m`, leaving the subsystem defined by the basis `bsub`.
+Compute the partial trace of a matrix `m`, leaving the subsystem defined by the basis `Hsub`.
 """
-function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool=true) where {T}
+function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=true, complement=simple_complementary_subsystem(H, Hsub)) where {T}
     mout = zeros(T, size(Hsub))
-    partial_trace!(mout, m, H, Hsub, phase_factors)
+    partial_trace!(mout, m, H, Hsub, phase_factors, complement)
 end
 
-partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, phase_factors::Bool=true) = m -> partial_trace(m, Hs..., phase_factors)
-partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, phase_factors::Bool=true) = partial_trace(m, Hs..., phase_factors)
+partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = m -> partial_trace(m, Hs...; kwargs...)
+partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
 
 """
-    partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::AbstractHilbertSpace, phase_factors)
+    partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors, complement)
 
-Compute the fermionic partial trace of a matrix `m` in basis `H`, leaving only the subsystems specified by `labels`. The result is stored in `mout`, and `Hout` determines the ordering of the basis states.
+Compute the fermionic partial trace of a matrix `m` in basis `H`, leaving only the subsystems specified by `labels`. The result is stored in `mout`, and `Hsub` determines the ordering of the basis states.
 """
-function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hout::AbstractHilbertSpace, phase_factors::Bool=true, Hbar=complementary_subsystem(H, Hout))
+function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement)
     M = length(keys(H))
-    labels = collect(keys(Hout))
+    labels = collect(keys(Hsub))
     if phase_factors
-        consistent_ordering(labels, H.jw) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
+        consistent_ordering(labels, mode_ordering(H)) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
     end
     N = length(labels)
     fill!(mout, zero(eltype(mout)))
-    subfockstates = basisstates(Hout)
-    barfockstates = basisstates(Hbar)
-    fm = StateExtender((Hout, Hbar), H)
+    subfockstates = basisstates(Hsub)
+    barfockstates = basisstates(complement)
+    fm = StateExtender((Hsub, complement), H)
     for f1 in subfockstates, f2 in subfockstates
         s2 = phase_factors ? phase_factor_f(f1, f2, N) : 1
-        I1 = state_index(f1, Hout)
-        I2 = state_index(f2, Hout)
+        I1 = state_index(f1, Hsub)
+        I2 = state_index(f2, Hsub)
         for fbar in barfockstates
             fullf1 = fm((f1, fbar))
             fullf2 = fm((f2, fbar))

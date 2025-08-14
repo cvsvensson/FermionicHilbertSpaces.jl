@@ -12,7 +12,7 @@ function embedding_unitary(_partition, basisstates, jw::JordanWignerOrdering)
     #for locally physical algebra, ie only for even operators or states of well-defined parity
     #if ξ is ordered, the phases are +1. 
     # Note that the jordan wigner modes are ordered in reverse from the labels, but this is taken care of by direction of the jwstring below
-    partition = map(mode_ordering, _partition)
+    partition = map(modes, _partition)
     isorderedpartition(partition, jw) || throw(ArgumentError("The partition must be ordered according to jw"))
 
     phases = ones(Int, length(basisstates))
@@ -20,7 +20,7 @@ function embedding_unitary(_partition, basisstates, jw::JordanWignerOrdering)
         mask = focknbr_from_site_labels(Xs, jw)
         for (r, Xr) in Iterators.drop(enumerate(partition), s)
             for li in Xr
-                i = siteindex(li, jw)
+                i = getindex(jw, li)
                 for (n, f) in zip(eachindex(phases), basisstates)
                     if _bit(f, i)
                         phases[n] *= jwstring_anti(i, mask & f)
@@ -34,13 +34,13 @@ end
 
 function bipartite_embedding_unitary(_X, _Xbar, basisstates, jw::JordanWignerOrdering)
     #(122a)
-    X = mode_ordering(_X)
-    Xbar = mode_ordering(_Xbar)
+    X = modes(_X)
+    Xbar = modes(_Xbar)
     ispartition((X, Xbar), jw) || throw(ArgumentError("The partition must be ordered according to jw"))
     phases = ones(Int, length(basisstates))
     mask = focknbr_from_site_labels(X, jw)
     for li in Xbar
-        i = siteindex(li, jw)
+        i = getindex(jw, li)
         for (n, f) in zip(eachindex(phases), basisstates)
             if _bit(f, i)
                 phases[n] *= jwstring_anti(i, mask & f)
@@ -101,35 +101,33 @@ end
 
 
 """
-    embedding(m, H, Hnew)
+    embedding(m, Hsub, H; complement = simple_complementary_subsystem(H, Hsub), kwargs...)
 
 Compute the fermionic embedding of a matrix `m` in the basis `Hsub` into the basis `H`.
 """
-function embedding(m, Hsub::AbstractFockHilbertSpace, H, phase_factors::Bool=true)
+function embedding(m, Hsub::AbstractFockHilbertSpace, H; complement=simple_complementary_subsystem(H, Hsub), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedsubsystem(Hsub, H) || throw(ArgumentError("Can't embed $Hsub into $H"))
-    Hbar = complementary_subsystem(H, Hsub)
-    return fermionic_kron((m, I), (Hsub, Hbar), H, phase_factors)
+    return fermionic_kron((m, I), (Hsub, complement), H; kwargs...)
 end
 const PairWithHilbertSpaces = Pair{<:AbstractFockHilbertSpace,<:AbstractFockHilbertSpace}
-embedding(Hs::PairWithHilbertSpaces, phase_factors::Bool=true) = m -> embedding(m, first(Hs), last(Hs), phase_factors)
-embedding(m, Hs::PairWithHilbertSpaces, phase_factors::Bool=true) = embedding(m, first(Hs), last(Hs), phase_factors)
+embedding(Hs::PairWithHilbertSpaces; kwargs...) = m -> embedding(m, first(Hs), last(Hs); kwargs...)
+embedding(m, Hs::PairWithHilbertSpaces; kwargs...) = embedding(m, first(Hs), last(Hs); kwargs...)
 
 """
-    extension(m, H, Hbar[, phase_factors])
+    extension(m, H, Hbar, Hout = tensor_product((H, Hbar)); kwargs...)
 Extend an operator or state `m` from Hilbert space `H` into a disjoint space `Hbar`.
 """
-function extension(m, H::AbstractFockHilbertSpace, Hbar, phase_factors::Bool=true)
+function extension(m, H::AbstractFockHilbertSpace, Hbar, Hout=tensor_product((H, Hbar)); kwargs...)
     isdisjoint(keys(H), keys(Hbar)) || throw(ArgumentError("The bases of the two Hilbert spaces must be disjoint"))
     Hs = (H, Hbar)
-    Hout = tensor_product(Hs)
-    return fermionic_kron((m, I), Hs, Hout, phase_factors)
+    return fermionic_kron((m, I), Hs, Hout; kwargs...)
 end
-extension(Hs::PairWithHilbertSpaces, phase_factors::Bool=true) = m -> extension(m, first(Hs), last(Hs), phase_factors)
-extension(m, Hs::PairWithHilbertSpaces, phase_factors::Bool=true) = extension(m, first(Hs), last(Hs), phase_factors)
+extension(Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = m -> extension(m, first(Hs), last(Hs), Hout; kwargs...)
+extension(m, Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = extension(m, first(Hs), last(Hs), Hout; kwargs...)
 
 
 ## kron, i.e. tensor_product without phase factors
-Base.kron(ms, bs, b::AbstractHilbertSpace; kwargs...) = fermionic_kron(ms, bs, b, false; kwargs...)
+Base.kron(ms, bs, b::AbstractHilbertSpace; kwargs...) = fermionic_kron(ms, bs, b; phase_factors=false, kwargs...)
 
-canonical_embedding(m, b, bnew) = embedding(m, b, bnew, false)
+canonical_embedding(m, b, bnew) = embedding(m, b, bnew; phase_factors=false)
