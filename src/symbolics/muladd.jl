@@ -8,14 +8,19 @@ ordered_product(a::AbstractFermionSym, b::AbstractFermionSym, ::NaiveOrdering) =
 struct FermionMul{C,S<:AbstractFermionSym}
     coeff::C
     factors::Vector{S}
-    ordered::Bool
     function FermionMul(coeff::C, factors) where {C}
-        (iszero(coeff) || iszero(length(factors))) && return coeff
-        ordered = issorted(factors) && sorted_noduplicates(factors)
-        new{C,eltype(factors)}(coeff, factors, ordered)
+        new{C,eltype(factors)}(coeff, factors)
     end
 end
 Base.convert(::Type{FermionMul{C,S}}, x::FermionMul{<:Any,S}) where {C,S} = FermionMul(convert(C, x.coeff), x.factors)
+function canonicalize!(a::FermionMul)
+    if iszero(a.coeff)
+        return a.coeff
+    elseif length(a.factors) == 1 && isone(a.coeff)
+        return only(a.factors)
+    end
+    return a
+end
 
 function Base.show(io::IO, x::FermionMul)
     isscalar(x) && print(io, x.coeff)
@@ -49,26 +54,25 @@ Base.:(==)(b::AbstractFermionSym, a::FermionMul) = a == b
 Base.hash(a::FermionMul, h::UInt) = hash(a.coeff, hash(a.factors, h))
 FermionMul(f::FermionMul) = f
 FermionMul(f::AbstractFermionSym) = FermionMul(1, [f])
-has_scalars(d) = any(isscalar, keys(d)) || any(iszero, values(d))
-function filter_scalars!(dict::Dict)
-    for (k, v) in dict
-        if isscalar(k)
-            coeff += k.coeff * v
-            delete!(dict, k)
-        end
-    end
-    dict
-end
-
 mutable struct FermionAdd{C,D}
     coeff::C
     dict::D
 end
 Base.:(==)(a::FermionAdd, b::FermionAdd) = a.coeff == b.coeff && a.dict == b.dict
 Base.hash(a::FermionAdd, h::UInt) = hash(a.coeff, hash(a.dict, h))
-
-function canonicalize!(f::FermionAdd{C,D}, filter_scalars=true) where {C,D}
-    filter_scalars && filter_scalars!(f.dict)
+function filter_scalars!(f::FermionAdd)
+    for (k, v) in f.dict
+        if isscalar(k)
+            f.coeff += k.coeff * v
+            delete!(f.dict, k)
+        end
+    end
+    f
+end
+function canonicalize!(_f::FermionAdd{_C,D}, filter_scalars=true) where {_C,D}
+    C = promote_type(_C, valtype(D))
+    f = FermionAdd(C(_f.coeff), _f.dict)
+    filter_scalars && filter_scalars!(f)
     if length(f.dict) == 0
         return f.coeff
     elseif length(f.dict) == 1 && iszero(f.coeff)
@@ -78,7 +82,6 @@ function canonicalize!(f::FermionAdd{C,D}, filter_scalars=true) where {C,D}
         return FermionAdd{C,D}(f.coeff, f.dict)
     end
 end
-canonicalize!(a::FermionMul) = iszero(a.coeff) ? a.coeff : a
 canonicalize!(a::AbstractFermionSym) = a
 canonicalize!(a::Number) = a
 const SM = Union{AbstractFermionSym,FermionMul}
