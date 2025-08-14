@@ -141,7 +141,7 @@ function Base.:+(a::FermionMul{CA,KA}, b::FermionMul{CB,KB}) where {CA,CB,KA,KB}
     D = Dict{K,C}
     if a.factors == b.factors
         coeff = a.coeff + b.coeff
-        return FermionAdd(0, D(a.factors => coeff))
+        return FermionAdd(0, D(FermionMul(1, a.factors) => coeff))
     end
     at, bt = to_add_tuple(a), to_add_tuple(b)
     return FermionAdd(0, D(at..., bt...))
@@ -252,51 +252,6 @@ function bubble_sort(a::FermionMul)
     end
     bubble_sort(muloraddvec)
 end
-# function bubble_sort(a::FermionMul)
-#     if a.ordered || length(a.factors) <= 1
-#         return a
-#     end
-
-#     factors = copy(a.factors)
-#     coeff = a.coeff
-#     n = length(factors)
-
-#     for i in 1:n-1
-#         swapped = false
-#         for j in 1:n-i
-#             if factors[j] > factors[j+1] || isequal(factors[j], factors[j+1])
-#                 # Handle the swap/annihilation
-#                 product = factors[j] * factors[j+1]
-
-#                 if isa(product, Number)
-#                     # Annihilation case - remove both factors
-#                     coeff *= product
-#                     deleteat!(factors, j:j+1)
-#                     n -= 2
-#                     swapped = true
-#                     break
-#                 else
-#                     # Anti-commutation case
-#                     if isa(product, FermionAdd)
-#                         # Handle anti-commutation returning sum
-#                         left_part = FermionMul(coeff, factors[1:j-1])
-#                         right_part = FermionMul(1, factors[j+2:end])
-#                         return bubble_sort(unordered_prod(left_part, product, right_part))
-#                     else
-#                         # Simple swap with sign change
-#                         factors[j], factors[j+1] = factors[j+1], factors[j]
-#                         coeff *= -1  # Fermionic anti-commutation
-#                         swapped = true
-#                     end
-#                 end
-#             end
-#         end
-#         !swapped && break
-#     end
-
-#     return FermionMul(coeff, factors)
-# end
-
 bubble_sort(a::Number) = a
 
 order_mul(a::FermionMul) = bubble_sort(a)
