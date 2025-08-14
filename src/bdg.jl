@@ -4,7 +4,7 @@ struct NambuState <: AbstractBasisState
 end
 NambuState(i::Integer, hole::Bool) = NambuState(SingleParticleState(i), hole)
 Base.:(==)(n1::NambuState, n2::NambuState) = n1.state == n2.state && n1.hole == n2.hole
-Base.hash(n::NambuState, h::UInt) = (-1)^(n.hole) * hash(n.state, h)
+Base.hash(n::NambuState, h::UInt) = hash(n.hole, hash(n.state, h))
 
 function togglefermions(sites, daggers, f::NambuState)
     (length(sites) == 2 == length(daggers)) || throw(ArgumentError("Must act with exactly two fermions on a NambuState"))
