@@ -139,7 +139,7 @@ Base.valtype(::FermionMul{C,S}) where {C,S<:AbstractMajoranaSym} = complex(C)
     @test substitute(f1', f1 => f2) == f1'
 
     @test substitute(γ[1], 1 => 2) == γ[2]
-    @test substitute(γ[:a] * γ[:b] + 1, :a => :b) == 2
+    @test FermionicHilbertSpaces.canonicalize!(substitute(γ[:a] * γ[:b] + 1, :a => :b)) == 2
 
     r = (@rule ~x::(x -> x isa FermionicHilbertSpaces.AbstractFermionSym) => (~x).basis[min((~x).label + 1, 10)])
     @test r(f[1]) == f[2]
