@@ -63,7 +63,7 @@ mutable struct FermionAdd{C,D}
             k, v = first(dict)
             v * k
         else
-            new{typeof(coeff),D}(coeff, dict)
+            new{C,D}(coeff, dict)
         end
     end
 end
@@ -133,14 +133,13 @@ Base.:+(a::SM, b::Union{Number,UniformScaling}) = b + a
 Base.:+(a::FermionMul, b::AbstractFermionSym) = a + 1 * b
 Base.:+(a::AbstractFermionSym, b::FermionMul) = 1 * a + b
 Base.:+(a::AbstractFermionSym, b::AbstractFermionSym) = (1 * a) + (1 * b)
-function Base.:+(a::FermionMul{CA,SA}, b::FermionMul{CB,SB}) where {CA,SA,CB,SB}
+function Base.:+(a::FermionMul, b::FermionMul)
+    if a.factors == b.factors
+        coeff = a.coeff + b.coeff
+        return FermionAdd(0, Dict(a.factors => coeff))
+    end
     at, bt = to_add_tuple(a), to_add_tuple(b)
-    K = Union{FermionMul{Int,SA},FermionMul{Int,SB}}
-    V = promote_type(CA, CB)
-    d = Dict{K,V}()
-    sizehint!(d, 2)
-    __merge!(+, d, at, bt; filter=iszero)
-    FermionAdd(0, d)
+    return FermionAdd(0, Dict(at..., bt...))
 end
 Base.:+(a::SM, b::FermionAdd) = FermionAdd(b.coeff, (_merge(+, to_add(a), b.dict; filter=iszero)), filter_scalars=false)
 function add!(a::FermionAdd, b::FermionAdd)
@@ -192,12 +191,12 @@ Base.:*(a::FermionAdd, b::SM) = a.coeff * b + sum((v * f) * (b) for (f, v) in a.
 Base.:*(a::FermionAdd, b::FermionAdd) = a.coeff * b + sum((va * fa) * b for (fa, va) in a.dict)
 
 #TODO: these adjoints can probably be made faster with less allocations
-Base.adjoint(x::FermionMul) = length(x.factors) == 0 ? FermionMul(adjoint(x.coeff), x.factors) : adjoint(x.coeff) * foldr(*, reverse(adjoint.(x.factors)))
+Base.adjoint(x::FermionMul) = length(x.factors) == 0 ? FermionMul(adjoint(x.coeff), x.factors) : adjoint(x.coeff) * foldr(*, Iterators.reverse(Iterators.map(adjoint, x.factors)))
 function Base.adjoint(x::FermionAdd)
     newx = zero(x)
     newx.coeff = adjoint(x.coeff)
     for (f, v) in x.dict
-        add!(newx, v'*f')
+        add!(newx, v' * f')
     end
     newx
 end

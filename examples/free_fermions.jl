@@ -50,7 +50,7 @@ mat = matrix_representation(ham, H)
 
 # ## Compute eigenstates and momentum operators and plot results
 # Compute a few eigenvalues/eigenvectors (lowest energy states)
-vals, vecs = eigs(mat; nev=1^2, which=:SR, v0=map(x -> eltype(mat)(first(x)), disc)[:]);
+vals, vecs = eigs(mat; nev=3^2, which=:SR, v0=map(x -> eltype(mat)(first(x)), disc)[:]);
 # Calculate momentum operators px, py and define a function to calculate angular momentum density
 px = zero(1im * ham)
 py = zero(px)
