@@ -275,11 +275,11 @@ end
 
 
 @testitem "BdG Canonicalization" begin
-    using FermionicHilbertSpaces: canonicalize_particle_pair, SVDCanon, ProjectionCanon, quasiparticle_adjoint, BdGHilbertSpace, BdGEigen, isbdgmatrix
+    using FermionicHilbertSpaces: canonicalize_particle_pair, SVDCanon, ProjectionCanon, quasiparticle_adjoint, BdGEigen, isbdgmatrix
     using LinearAlgebra
     @fermions f
     N = 4
-    H = BdGHilbertSpace(1:N)
+    H = bdg_hilbert_space(1:N)
     ham = sum(rand(ComplexF64) * f[n]'f[k] + rand(ComplexF64) * f[n]'f[k]' + hc for (n, k) in Iterators.product(1:N, 1:N))
     h = matrix_representation(ham, H)
     @test ishermitian(h)
