@@ -269,41 +269,6 @@ function Base.adjoint(x::FermionAdd)
 end
 Base.zero(::FermionAdd{C,D}) where {C,D} = FermionAdd(zero(C), D())
 
-# unordered_prod(a::FermionMul, b::FermionAdd) = b.coeff * a + sum(unordered_prod(a, f) for f in fermionterms(b))
-# unordered_prod(a::FermionAdd, b::FermionMul) = a.coeff * b + sum(unordered_prod(f, b) for f in fermionterms(a))
-# unordered_prod(a::FermionAdd, b::FermionAdd) = sum(unordered_prod(f, g) for f in allterms(a), g in allterms(b))
-# function unordered_prod(a::FermionAdd, b::SM)
-#     c = zero(a)
-#     return try_unordered_prod!(c, a, b)
-# end
-# function unordered_prod(a::SM, b::FermionAdd)
-#     c = zero(b)
-#     return try_unordered_prod!(c, a, b)
-# end
-# function unordered_prod(a::FermionAdd, b::FermionAdd)
-#     c = zero(a)
-#     return try_unordered_prod!(c, a, b)
-# end
-# function try_unordered_prod!(c::FermionAdd, a::SMA, b::SMA)
-#     acoeff = additive_coeff(a)
-#     bcoeff = additive_coeff(b)
-#     c.coeff = acoeff * bcoeff
-#     if !iszero(acoeff)
-#         c = tryadd!(c, acoeff * b)
-#     end
-#     if !iszero(bcoeff)
-#         c = tryadd!(c, bcoeff * a)
-#     end
-#     for bterm in fermionterms(b)
-#         for aterm in fermionterms(a)
-#             newterm = unordered_prod(aterm, bterm)
-#             c = tryadd!(c, newterm)
-#         end
-#     end
-#     return canonicalize(c)
-# end
-# unordered_prod(a, b, xs...) = foldl(unordered_prod, xs; init=unordered_prod(a, b))
-
 function sorted_noduplicates(v)
     I = eachindex(v)
     for i in I[1:end-1]
@@ -313,25 +278,23 @@ function sorted_noduplicates(v)
 end
 
 ## Normal ordering
-function bubble_sort(a::FermionAdd)
+function bubble_sort(a::FermionAdd; start=1)
     c = zero(a)
     c.coeff = a.coeff
     for term in fermionterms(a)
-        newterm = bubble_sort(term)
-        add!(c, newterm)
+        add!(c, bubble_sort(term; start))
     end
     return c
 end
 
-function bubble_sort(a::FermionMul)
-    if a.ordered || length(a.factors) == 1
+function bubble_sort(a::FermionMul; start=1)
+    if length(a.factors) == 1
         return a
     end
-    # swapped = true
     muloraddvec::Union{Number,SMA} = a
 
     swapped = false
-    i = first(eachindex(a.factors)) - 1
+    i = max(0, start - 1)
     triple_prod(a, b, c) = ordered_product(ordered_product(a, b, NaiveOrdering()), c, NaiveOrdering())
     while !swapped && i < length(eachindex(a.factors)) - 1
         i += 1
@@ -343,12 +306,15 @@ function bubble_sort(a::FermionMul)
             muloraddvec = triple_prod(left_factors, product, right_factors)
         end
     end
-    bubble_sort(muloraddvec)
+    if !swapped
+        return a
+    end
+    bubble_sort(muloraddvec; start=i - 1)
 end
 
 normal_order(a::SMA) = bubble_sort(a)
 normal_order(a::Number) = a
-bubble_sort(a::Number) = a
+bubble_sort(a::Number; kwargs...) = a
 
 isscalar(x::FermionMul) = iszero(x.coeff) || (length(x.factors) == 0)
 isscalar(x::FermionAdd) = length(x.dict) == 0 || all(isscalar, keys(x.dict)) || all(iszero(values(x.dict)))
