@@ -74,7 +74,7 @@ end
 
     function test_adjoint(Hsub, H)
         pt = partial_trace(H => Hsub)
-        embed = embed(Hsub => H)
+        emb = embed(Hsub => H)
         ptmap = LinearMap(rhovec -> vec(pt(reshape(rhovec, size(H)))), prod(size(Hsub)), prod(size(H)))
         embeddingmap = LinearMap(rhovec -> vec(embed(reshape(rhovec, size(Hsub)))), prod(size(H)), prod(size(Hsub)))
         @test Matrix(ptmap) ≈ Matrix(embeddingmap)'
