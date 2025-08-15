@@ -36,10 +36,10 @@ tensor_product(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace) = simple_
     @test Hw == H3
     @test size(H1) .* size(H2) == size(Hw)
 
-    H1 = SymmetricFockHilbertSpace(1:2, FermionConservation())
-    H2 = SymmetricFockHilbertSpace(3:4, FermionConservation())
+    H1 = SymmetricFockHilbertSpace(1:2, NumberConservation())
+    H2 = SymmetricFockHilbertSpace(3:4, NumberConservation())
     Hw = tensor_product(H1, H2)
-    H3 = SymmetricFockHilbertSpace(1:4, FermionConservation())
+    H3 = SymmetricFockHilbertSpace(1:4, NumberConservation())
     @test sort(basisstates(Hw)) == sort(basisstates(H3))
     @test size(H1) .* size(H2) == size(Hw)
 
@@ -342,7 +342,7 @@ end
     import SparseArrays: SparseMatrixCSC
     Random.seed!(1234)
 
-    for qn in [NoSymmetry(), ParityConservation(), FermionConservation()]
+    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
         H1 = hilbert_space(1:1, qn)
         H2 = hilbert_space(1:3, qn)
         @test_throws ArgumentError tensor_product(H1, H2)

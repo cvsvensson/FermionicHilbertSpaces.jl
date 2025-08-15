@@ -99,7 +99,7 @@ end
         map(Hermitian ∘ (x -> x / sqrt(complex(tr(x * x)))), basisops)
     end
 
-    qns = [NoSymmetry(), ParityConservation(), FermionConservation()]
+    qns = [NoSymmetry(), ParityConservation(), NumberConservation()]
     for qn in qns
         H = hilbert_space(1:2, qn)
         majbasis = majorana_basis(H)
@@ -244,10 +244,10 @@ end
 
     qns_iterator = [[NoSymmetry(), NoSymmetry(), NoSymmetry()],
         [ParityConservation(), ParityConservation(), ParityConservation()],
-        [FermionConservation(), FermionConservation(), FermionConservation()],
-        [NoSymmetry(), ParityConservation(), FermionConservation()],
-        [FermionConservation(), FermionConservation(), NoSymmetry()],
-        [ParityConservation(), ParityConservation(), FermionConservation()]]
+        [NumberConservation(), NumberConservation(), NumberConservation()],
+        [NoSymmetry(), ParityConservation(), NumberConservation()],
+        [NumberConservation(), NumberConservation(), NoSymmetry()],
+        [ParityConservation(), ParityConservation(), NumberConservation()]]
     for qns in qns_iterator
         test_reshape(qns...)
     end
