@@ -50,8 +50,8 @@ H = tensor_product(H1, H2)
 c1 = matrix_representation(c[1], H1)
 c3 = matrix_representation(c[3], H2)
 c1c3 = matrix_representation(c[1] * c[3], H)
-# Use embedding to embed operators into a larger space
-embedding(c1, H1 => H) * embedding(c3, H2 => H) ≈ c1c3 #true 
+# Use embed to embed operators into a larger space
+embed(c1, H1 => H) * embed(c3, H2 => H) ≈ c1c3 #true 
 # Or call tensor_product to combine operators from different spaces
 tensor_product((c1, c3), (H1, H2) => H) ≈ c1c3 
 ```
@@ -64,12 +64,12 @@ size(Hsub, 1) / size(H, 1) * partial_trace(c1c3, H => Hsub) ≈ matrix_represent
 ## Conserved quantum numbers
 This package also includes some functionality for working with conserved quantum numbers. If we have for example number conservation, we might want to get a block structure of the hamiltonian. Here's how one can do that:
 ```@example intro
-H = hilbert_space(labels, FermionConservation())
+H = hilbert_space(labels, NumberConservation())
 matrix_representation(ham, H)
 ```
 This has a block structure corresponding to the different sectors. To only look at some sectors, for example the sectors with 0, 2 and 4 particles, use
 ```@example intro
-H = hilbert_space(labels, FermionConservation([0, 2, 4]))
+H = hilbert_space(labels, NumberConservation([0, 2, 4]))
 matrix_representation(ham, H)
 ```
 

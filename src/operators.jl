@@ -125,7 +125,7 @@ end
     @test parityoperator(H) == Diagonal([-1, -1, 1, 1])
     @test numberoperator(H) == Diagonal([1, 1, 0, 2]) == numopvariant(H)
 
-    H = SymmetricFockHilbertSpace(1:2, FermionConservation())
+    H = SymmetricFockHilbertSpace(1:2, NumberConservation())
     @test parityoperator(H) == Diagonal([1, -1, -1, 1])
     @test numberoperator(H) == Diagonal([0, 1, 1, 2]) == numopvariant(H)
 
@@ -168,7 +168,7 @@ end
 
 @testitem "CAR" begin
     using LinearAlgebra
-    for qn in [NoSymmetry(), ParityConservation(), FermionConservation()]
+    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
         c = fermions(hilbert_space(1:2, qn))
         @test c[1] * c[1] == 0I
         @test c[1]' * c[1] + c[1] * c[1]' == I

@@ -91,43 +91,43 @@ end
     c = fermions(H)
     Hs = (HA, HB)
     @test embedding_unitary(Hs, H) == embedding_unitary([[1, 3], [2, 4]], H)
-    @test embedding(cA[1], HA, H) ≈ fermionic_kron((cA[1], I), Hs, H) ≈ fermionic_kron((I, cA[1]), (HB, HA), H)
+    @test embed(cA[1], HA, H) ≈ fermionic_kron((cA[1], I), Hs, H) ≈ fermionic_kron((I, cA[1]), (HB, HA), H)
     Ux = embedding_unitary(Hs, H)
     Ux2 = bipartite_embedding_unitary(HA, HB, H)
     @test Ux ≈ Ux2
-    @test embedding(cA[1], HA, H) ≈ Ux * canonical_embedding(cA[1], HA, H) * Ux'
+    @test embed(cA[1], HA, H) ≈ Ux * canonical_embedding(cA[1], HA, H) * Ux'
 end
 
 
 
 """
-    embedding(m, Hsub, H; complement = simple_complementary_subsystem(H, Hsub), kwargs...)
+    embed(m, Hsub, H; complement = simple_complementary_subsystem(H, Hsub), kwargs...)
 
 Compute the fermionic embedding of a matrix `m` in the basis `Hsub` into the basis `H`.
 """
-function embedding(m, Hsub::AbstractFockHilbertSpace, H; complement=simple_complementary_subsystem(H, Hsub), kwargs...)
+function embed(m, Hsub::AbstractFockHilbertSpace, H; complement=simple_complementary_subsystem(H, Hsub), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedsubsystem(Hsub, H) || throw(ArgumentError("Can't embed $Hsub into $H"))
     return fermionic_kron((m, I), (Hsub, complement), H; kwargs...)
 end
 const PairWithHilbertSpaces = Pair{<:AbstractFockHilbertSpace,<:AbstractFockHilbertSpace}
-embedding(Hs::PairWithHilbertSpaces; kwargs...) = m -> embedding(m, first(Hs), last(Hs); kwargs...)
-embedding(m, Hs::PairWithHilbertSpaces; kwargs...) = embedding(m, first(Hs), last(Hs); kwargs...)
+embed(Hs::PairWithHilbertSpaces; kwargs...) = m -> embed(m, first(Hs), last(Hs); kwargs...)
+embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
 """
-    extension(m, H, Hbar, Hout = tensor_product((H, Hbar)); kwargs...)
+    extend(m, H, Hbar, Hout = tensor_product((H, Hbar)); kwargs...)
 Extend an operator or state `m` from Hilbert space `H` into a disjoint space `Hbar`.
 """
-function extension(m, H::AbstractFockHilbertSpace, Hbar, Hout=tensor_product((H, Hbar)); kwargs...)
+function extend(m, H::AbstractFockHilbertSpace, Hbar, Hout=tensor_product((H, Hbar)); kwargs...)
     isdisjoint(keys(H), keys(Hbar)) || throw(ArgumentError("The bases of the two Hilbert spaces must be disjoint"))
     Hs = (H, Hbar)
     return fermionic_kron((m, I), Hs, Hout; kwargs...)
 end
-extension(Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = m -> extension(m, first(Hs), last(Hs), Hout; kwargs...)
-extension(m, Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = extension(m, first(Hs), last(Hs), Hout; kwargs...)
+extend(Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = m -> extend(m, first(Hs), last(Hs), Hout; kwargs...)
+extend(m, Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = extend(m, first(Hs), last(Hs), Hout; kwargs...)
 
 
 ## kron, i.e. tensor_product without phase factors
 Base.kron(ms, bs, b::AbstractHilbertSpace; kwargs...) = fermionic_kron(ms, bs, b; phase_factors=false, kwargs...)
 
-canonical_embedding(m, b, bnew) = embedding(m, b, bnew; phase_factors=false)
+canonical_embedding(m, b, bnew) = embed(m, b, bnew; phase_factors=false)

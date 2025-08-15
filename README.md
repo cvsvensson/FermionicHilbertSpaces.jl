@@ -40,13 +40,13 @@ entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
 The hamiltonian above conserves the number of fermions, which we can exploit as
 
 ````julia
-Hcons = hilbert_space(1:4, FermionConservation(2))
+Hcons = hilbert_space(1:4, NumberConservation(2))
 ````
 
 ````
 6⨯6 SymmetricFockHilbertSpace:
 modes: [1, 2, 3, 4]
-FermionConservation([2])
+NumberConservation([2])
 ````
 
 This hilbert space contains only states with two fermions. We can use it just as before to get a matrix representation of the hamiltonian

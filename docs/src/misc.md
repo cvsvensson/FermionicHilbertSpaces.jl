@@ -11,7 +11,7 @@ Hsub = subregion(1:2, H)
 
 When the Hilbert space has a restricted set of fock states, the Hilbert space of the subregion will only include fock states compatible with this restriction. In the example below, the total number of particles 1, and the subregion will have three possible states: (1,0), (0,1), and (0,0).
 ```@example subregion
-H = hilbert_space(1:4, FermionConservation(1))
+H = hilbert_space(1:4, NumberConservation(1))
 Hsub = subregion(1:2, H)
 basisstates(Hsub)
 ``` 
@@ -26,7 +26,7 @@ N = 2 # number of fermions
 space = 1:N 
 spin = (:↑,:↓)
 # labels = Base.product(space, spin) 
-Hs = [hilbert_space([(k, s) for s in spin], FermionConservation(0:1)) for k in space]
+Hs = [hilbert_space([(k, s) for s in spin], NumberConservation(0:1)) for k in space]
 H = tensor_product(Hs)
 ```
 

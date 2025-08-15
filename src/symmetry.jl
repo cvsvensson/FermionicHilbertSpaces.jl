@@ -78,15 +78,15 @@ function fixed_particle_number_fockstates(M, n, ::Type{T}=(M > 63 ? BigInt : Int
 end
 
 """
-    FermionConservation
+    NumberConservation
 A symmetry type representing conservation of total fermion number.
 """
-struct FermionConservation <: AbstractSymmetry
+struct NumberConservation <: AbstractSymmetry
     sectors::Union{Vector{Int},Missing}
 end
-FermionConservation(s::Int) = FermionConservation([s])
-FermionConservation() = FermionConservation(missing)
-sectors(qn::FermionConservation) = qn.sectors
+NumberConservation(s::Int) = NumberConservation([s])
+NumberConservation() = NumberConservation(missing)
+sectors(qn::NumberConservation) = qn.sectors
 
 struct FermionSubsetConservation <: AbstractSymmetry
     mask::FockNumber
@@ -119,17 +119,17 @@ FermionSubsetConservation(labels, jw::JordanWignerOrdering, sectors=0:length(lab
 FermionSubsetConservation(labels, sectors=0:length(labels)) = UninstantiatedFermionSubsetConservation(labels, sectors)
 instantiate(qn::UninstantiatedFermionSubsetConservation, jw::JordanWignerOrdering) = FermionSubsetConservation(qn.labels, jw, qn.sectors)
 instantiate(qn::FermionSubsetConservation, ::JordanWignerOrdering) = qn
-instantiate(qn::FermionConservation, ::JordanWignerOrdering) = qn
+instantiate(qn::NumberConservation, ::JordanWignerOrdering) = qn
 
 (qn::FermionSubsetConservation)(fs) = fermionnumber(fs, qn.mask)
-(qn::FermionConservation)(fs) = fermionnumber(fs)
+(qn::NumberConservation)(fs) = fermionnumber(fs)
 
 @testitem "ConservedFermions" begin
     import FermionicHilbertSpaces: FermionSubsetConservation
     labels = 1:4
     conservedlabels = 1:4
     c1 = hilbert_space(labels, FermionSubsetConservation(conservedlabels))
-    c2 = hilbert_space(labels, FermionConservation())
+    c2 = hilbert_space(labels, NumberConservation())
     @test c1 == c2
 
     conservedlabels = 2:2
@@ -170,7 +170,7 @@ sectors(qn::ParityConservation) = qn.sectors
 @testitem "ProductSymmetry" begin
     import FermionicHilbertSpaces: FermionSubsetConservation
     labels = 1:4
-    qn = FermionConservation() * ParityConservation()
+    qn = NumberConservation() * ParityConservation()
     H = hilbert_space(labels, qn)
     @test keys(H.symmetry.qntofockstates).values == [(n, (-1)^n) for n in 0:4]
     qn = prod(FermionSubsetConservation([l], H.jw) for l in labels)
@@ -257,7 +257,7 @@ function basisstates(jw::JordanWignerOrdering, qn::ParityConservation)
     filt = in(s) ∘ parity
     filter!(filt, fs)
 end
-function basisstates(jw::JordanWignerOrdering, qn::FermionConservation)
+function basisstates(jw::JordanWignerOrdering, qn::NumberConservation)
     s = sectors(qn)
     ismissing(s) && return basisstates(jw, NoSymmetry())
     N = length(jw)
@@ -311,8 +311,8 @@ end
     # Test that an invalid sector throws an error
     @test_throws ArgumentError sector(m, 99, H)
 
-    # Test with FermionConservation
-    qn_f = FermionConservation([1, 2])
+    # Test with NumberConservation
+    qn_f = NumberConservation([1, 2])
     Hf = hilbert_space(labels, qn_f)
     n_f = length(basisstates(Hf.symmetry))
     m_f = reshape(1:(n_f^2), n_f, n_f)
