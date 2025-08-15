@@ -21,12 +21,13 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-        "Misc" => "misc.md",
-        "Functions" => "docstrings.md",
-        "Tutorials" => [
+        "Non interacting systems" => "non_interacting.md",
+        "Examples" => [
             "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
             "Free fermions" => "literate_output/free_fermions.md"
         ],
+        "Misc" => "misc.md",
+        "Functions" => "docstrings.md",
     ],
 )
 
