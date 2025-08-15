@@ -3,7 +3,7 @@ using FermionicHilbertSpaces
 using SparseArrays
 using Random
 const SUITE = BenchmarkGroup()
-seed!(1)
+Random.seed!(1)
 
 N = 12
 H = hilbert_space(1:N, ParityConservation())
