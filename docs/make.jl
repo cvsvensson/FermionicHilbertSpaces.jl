@@ -1,3 +1,4 @@
+# To build docs with LiveServer and avoid infinite loop with literate, run `servedocs(skip_dir = "docs/src/literate_output")`
 using FermionicHilbertSpaces
 using Documenter
 using Literate
