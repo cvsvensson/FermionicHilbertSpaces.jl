@@ -1,3 +1,4 @@
+# Non-interacting hamiltonians
 
 ## Number conserving non-interacting hamiltonians
 A quadratic fermionic hamiltonian with number conservation can be written as 
@@ -24,11 +25,13 @@ matrix_representation(op, H) == h + E * I
 Often, $h_{nm}$ is of interest because diagonalizing it gives information on the quasiparticles in the system.
 
 !!! tip "Use `single_particle_hilbert_space` instead"
-For convenience, `single_particle_hilbert_space` can be used define the hilbert space which will give only the single particle states, and will remove the contribution of the identity operator when calling `matrix_representation`:
-```@example single_particle_hilbert_space
-H = single_particle_hilbert_space(1:N)
-matrix_representation(op,H) == h
-```
+    For convenience, `single_particle_hilbert_space` can be used define the hilbert space which will give only the single particle states, and will remove the contribution of the identity operator when calling `matrix_representation`:
+    ```julia
+    H = single_particle_hilbert_space(1:N)
+    matrix_representation(op,H) == h # true
+    ```
+
+See [Free fermions on a 2D grid](@ref) for an example of how to use this.
 
 ## Non-interacting hamiltonians without number conservation
 A general non-interacting hermitian operator respecting super-selection can be written as
@@ -39,7 +42,7 @@ where ``h`` is hermitian, ``E`` is real and ``\Delta`` is antisymmetric. We can 
 ```math
 H = E\mathbf{1} + \sum_{ij} \Psi_i^\dagger\, \mathcal{H}_{ij} \Psi_j.
 ```
-Since we introduced a redundancy by doubling the single particle states, ``\mathcal{H}_{ij}`` is not unique. One common choice is to use the representation 
+Since we introduced a redundancy by doubling the single particle states, ``\mathcal{H}`` is not unique. One common choice is to use the representation 
 ```math
 \mathcal{H} = \begin{pmatrix}
 h & \Delta \\
@@ -62,8 +65,14 @@ FermionicHilbertSpaces.isbdgmatrix(ℋ)
 ```
 The matrix returned by `matrix_representation` will depend on the ordering of operators in the symbolic operator `op`. If it is normal ordered (which is the default), one can use `FermionicHilbertSpaces.normal_order_to_bdg` to convert it to the choice above.
 !!! tip "Use `bdg_hilbert_space` instead"
-By defining the hilbert space using `bdg_hilbert_space`, one automatically gets the Nambu states and the operator will automatically be converted to the choice above:
-```@example single_particle_hilbert_space
-Hbdg = bdg_hilbert_space(1:N)
-matrix_representation(op, Hbdg)
-```
+    By defining the hilbert space using `bdg_hilbert_space`, one automatically gets the Nambu states and `matrix_representation` will return a matrix of the form above without the need to manually convert it:
+    ```julia
+    Hbdg = bdg_hilbert_space(1:N)
+    matrix_representation(op, Hbdg)
+    #= example output
+    4×4 SparseArrays.SparseMatrixCSC{Float64, Int64} with 12 stored entries:
+    0.449635   0.297613    ⋅         0.18844
+    0.297613   0.169731  -0.18844     ⋅
+    ⋅        -0.18844   -0.449635  -0.297613
+    0.18844     ⋅        -0.297613  -0.169731 =#
+    ```
