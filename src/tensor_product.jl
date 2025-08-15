@@ -151,7 +151,7 @@ Compute the ordered product of the fermionic embeddings of the matrices `ms` in 
 function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
-    return mapreduce(((m, fine_basis),) -> embedding(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
+    return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
 end
 tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
 tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
@@ -160,7 +160,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     # Properties from J. Phys. A: Math. Theor. 54 (2021) 393001
     # Eq. 16
     using Random, Base.Iterators, LinearAlgebra
-    import FermionicHilbertSpaces: embedding, tensor_product, embedding_unitary, canonical_embedding, project_on_parity, project_on_parities
+    import FermionicHilbertSpaces: embedding_unitary, canonical_embedding, project_on_parity, project_on_parities
 
     Random.seed!(3)
     N = 8
@@ -203,16 +203,16 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     ξ = vcat(fine_partitions...)
     ξbases = vcat(Hs_fine...)
     modebases = [hilbert_space(j:j) for j in 1:N]
-    lhs = prod(j -> embedding(As_modes[j], modebases[j], H), 1:N)
-    rhs_ordered_prod(X, basis) = mapreduce(j -> Matrix(embedding(As_modes[j], modebases[j], basis)), *, X)
+    lhs = prod(j -> embed(As_modes[j], modebases[j], H), 1:N)
+    rhs_ordered_prod(X, basis) = mapreduce(j -> Matrix(embed(As_modes[j], modebases[j], basis)), *, X)
     rhs = fermionic_kron([rhs_ordered_prod(X, H) for (X, H) in zip(ξ, ξbases)], ξbases, H)
     @test lhs ≈ rhs
 
     # Associativity (Eq. 21)
-    @test embedding(embedding(ops_fine[1][1], Hs_fine[1][1], Hs_rough[1]), Hs_rough[1], H) ≈ embedding(ops_fine[1][1], Hs_fine[1][1], H)
+    @test embed(embed(ops_fine[1][1], Hs_fine[1][1], Hs_rough[1]), Hs_rough[1], H) ≈ embed(ops_fine[1][1], Hs_fine[1][1], H)
     @test all(map(Hs_rough, Hs_fine, ops_fine) do cr, cfs, ofs
         all(map(cfs, ofs) do cf, of
-            embedding(embedding(of, cf, cr), cr, H) ≈ embedding(of, cf, H)
+            embed(embed(of, cf, cr), cr, H) ≈ embed(of, cf, H)
         end)
     end)
 
@@ -221,7 +221,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     Ux = embedding_unitary(rough_partitions, H)
     A = ops_rough[1]
     @test Ux !== I
-    @test embedding(A, HX, H) ≈ Ux * canonical_embedding(A, HX, H) * Ux'
+    @test embed(A, HX, H) ≈ Ux * canonical_embedding(A, HX, H) * Ux'
     # Eq. 93
     @test tensor_product(physical_ops_rough, Hs_rough, H) ≈ Ux * kron(physical_ops_rough, Hs_rough, H) * Ux'
 
@@ -231,13 +231,13 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     A = ops_rough[1]
     B = rand(ComplexF64, 2^length(X), 2^length(X))
     #Eq 5a and 5br are satisfied also when embedding matrices in larger subsystems
-    @test embedding(A, HX, H)' ≈ embedding(A', HX, H)
+    @test embed(A, HX, H)' ≈ embed(A', HX, H)
     @test canonical_embedding(A, HX, H) * canonical_embedding(B, HX, H) ≈ canonical_embedding(A * B, HX, H)
     for cmode in modebases
         #Eq 5bl
         local A = rand(ComplexF64, 2, 2)
         local B = rand(ComplexF64, 2, 2)
-        @test embedding(A, cmode, H) * embedding(B, cmode, H) ≈ embedding(A * B, cmode, H)
+        @test embed(A, cmode, H) * embed(B, cmode, H) ≈ embed(A * B, cmode, H)
     end
 
     # Ordered product of embeddings
@@ -248,7 +248,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     Xbar = setdiff(1:N, X)
     HX = Hs_rough[1]
     HXbar = hilbert_space(Xbar)
-    corr = embedding(A, HX, H)
+    corr = embed(A, HX, H)
     @test corr ≈ fermionic_kron([A, I], [HX, HXbar], H) ≈ tensor_product([A, I], [HX, HXbar], H) ≈ tensor_product([I, A], [HXbar, HX], H)
 
     # Eq. 32
@@ -261,7 +261,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     A = ops_rough[1]
     B = rand(ComplexF64, 2^N, 2^N)
     HX = Hs_rough[1]
-    lhs = tr(embedding(A, HX, H)' * B)
+    lhs = tr(embed(A, HX, H)' * B)
     rhs = tr(A' * partial_trace(B, H, HX))
     @test lhs ≈ rhs
 
@@ -516,7 +516,7 @@ function project_on_parities(op::AbstractMatrix, H, Hs, parities)
 end
 
 function project_on_subparity(op::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, parity)
-    P = embedding(parityoperator(Hsub), Hsub, H)
+    P = embed(parityoperator(Hsub), Hsub, H)
     return project_on_parity(op, P, parity)
 end
 

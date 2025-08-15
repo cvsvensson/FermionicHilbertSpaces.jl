@@ -14,7 +14,7 @@ export FockNumber, JordanWignerOrdering, hc, basisstates
 export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subregion
 export parityoperator, numberoperator, fermions, majoranas, matrix_representation
 
-export partial_trace, fermionic_kron, tensor_product, embedding, extension
+export partial_trace, fermionic_kron, tensor_product, embed, extend
 export @fermions, @majoranas
 export FermionConservation, NoSymmetry, ParityConservation, IndexConservation
 export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
@@ -76,8 +76,8 @@ PrecompileTools.@compile_workload begin
         c2 = fermions(H2)
         partial_trace(m + hc, H1 => hilbert_space(1:1))
         H = tensor_product(H1, H2)
-        extension(c1[1], H1 => H2)
-        embedding(c1[1], H1 => H)
+        extend(c1[1], H1 => H2)
+        embed(c1[1], H1 => H)
         @fermions f
         FermionicHilbertSpaces.eval_in_basis((f[1] * f[2]' + 1 + f[1])^2 * 2.0 + hc, c1)
         matrix_representation((f[1] * f[2]' + 1 + f[1])^2 * 2.0, H1)

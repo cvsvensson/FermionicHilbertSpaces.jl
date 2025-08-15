@@ -38,7 +38,7 @@ using TestItemRunner
 
     using LinearMaps
     ptmap = LinearMap(rhovec -> vec(partial_trace(reshape(rhovec, size(H)), H, H1)), prod(size(H1)), prod(size(H)))
-    embeddingmap = LinearMap(rhovec -> vec(embedding(reshape(rhovec, size(H1)), H1, H)), prod(size(H)), prod(size(H1)))
+    embeddingmap = LinearMap(rhovec -> vec(embed(reshape(rhovec, size(H1)), H1, H)), prod(size(H)), prod(size(H1)))
     @test Matrix(ptmap) ≈ Matrix(embeddingmap)'
 
     H = hilbert_space(Base.product(1:2, (:a, :b)))
@@ -74,7 +74,7 @@ end
 
     function test_adjoint(Hsub, H)
         pt = partial_trace(H => Hsub)
-        embed = embedding(Hsub => H)
+        embed = embed(Hsub => H)
         ptmap = LinearMap(rhovec -> vec(pt(reshape(rhovec, size(H)))), prod(size(Hsub)), prod(size(H)))
         embeddingmap = LinearMap(rhovec -> vec(embed(reshape(rhovec, size(Hsub)))), prod(size(H)), prod(size(Hsub)))
         @test Matrix(ptmap) ≈ Matrix(embeddingmap)'

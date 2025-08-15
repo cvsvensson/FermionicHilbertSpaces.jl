@@ -50,8 +50,8 @@ H = tensor_product(H1, H2)
 c1 = matrix_representation(c[1], H1)
 c3 = matrix_representation(c[3], H2)
 c1c3 = matrix_representation(c[1] * c[3], H)
-# Use embedding to embed operators into a larger space
-embedding(c1, H1 => H) * embedding(c3, H2 => H) ≈ c1c3 #true 
+# Use embed to embed operators into a larger space
+embed(c1, H1 => H) * embed(c3, H2 => H) ≈ c1c3 #true 
 # Or call tensor_product to combine operators from different spaces
 tensor_product((c1, c3), (H1, H2) => H) ≈ c1c3 
 ```
