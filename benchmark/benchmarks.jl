@@ -30,7 +30,7 @@ SUITE["matrix_representation_bdg"] = @benchmarkable matrix_representation($opsp_
 
 SUITE["partial_trace"] = @benchmarkable partial_trace($m, $(H => Hsub))
 msub = rand(ComplexF64, size(Hsub))
-SUITE["embed"] = @benchmarkable FermionicHilbertSpaces.embedding($msub, $(Hsub => H))
+SUITE["embed"] = @benchmarkable embed($msub, $(Hsub => H))
 
 # using Symbolics
 # @variables x
