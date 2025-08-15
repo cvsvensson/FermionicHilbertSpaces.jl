@@ -4,13 +4,13 @@ struct NaiveOrdering <: AbstractOrdering end
 
 abstract type AbstractFermionSym end
 ordered_product(a::AbstractFermionSym, b::AbstractFermionSym, ::NaiveOrdering) = FermionMul(1, [a, b])
-
-struct FermionMul{C,S<:AbstractFermionSym}
+using AutoHashEquals
+@auto_hash_equals cache=true struct FermionMul{C,S<:AbstractFermionSym}
     coeff::C
     factors::Vector{S}
-    function FermionMul(coeff::C, factors) where {C}
-        new{C,eltype(factors)}(coeff, factors)
-    end
+end
+function FermionMul(coeff::C, factors) where {C}
+    new{C,eltype(factors)}(coeff, factors)
 end
 Base.convert(::Type{FermionMul{C,S}}, x::FermionMul{<:Any,S}) where {C,S} = FermionMul(convert(C, x.coeff), x.factors)
 function canonicalize!(a::FermionMul)
@@ -48,10 +48,10 @@ end
 Base.iszero(x::FermionMul) = iszero(x.coeff)
 
 Base.:(==)(a::FermionMul, b::Number) = isscalar(a) && a.coeff == b
-Base.:(==)(a::FermionMul, b::FermionMul) = a.coeff == b.coeff && a.factors == b.factors
+# Base.:(==)(a::FermionMul, b::FermionMul) = a.coeff == b.coeff && a.factors == b.factors
 Base.:(==)(a::FermionMul, b::AbstractFermionSym) = isone(a.coeff) && length(a.factors) == 1 && only(a.factors) == b
 Base.:(==)(b::AbstractFermionSym, a::FermionMul) = a == b
-Base.hash(a::FermionMul, h::UInt) = hash(a.coeff, hash(a.factors, h))
+# Base.hash(a::FermionMul, h::UInt) = hash(a.coeff, hash(a.factors, h))
 FermionMul(f::FermionMul) = f
 FermionMul(f::AbstractFermionSym) = FermionMul(1, [f])
 mutable struct FermionAdd{C,D}

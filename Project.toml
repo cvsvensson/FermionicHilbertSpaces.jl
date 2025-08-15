@@ -4,6 +4,7 @@ authors = ["Viktor Svensson", "William Samuelson"]
 version = "0.5.0"
 
 [deps]
+AutoHashEquals = "15f4f7f2-30c1-5605-9d31-71845cf9641f"
 BitPermutations = "81206824-6155-40a8-95f7-18696067be4d"
 Dictionaries = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
 FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
@@ -23,6 +24,7 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 FermionicHilbertSpacesSymbolicsExt = "Symbolics"
 
 [compat]
+AutoHashEquals = "2.2.0"
 BitPermutations = "0.3.0"
 Dictionaries = "0.4.5"
 FillArrays = "1"
