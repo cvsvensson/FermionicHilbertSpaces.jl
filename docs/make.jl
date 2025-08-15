@@ -1,3 +1,4 @@
+# To build docs with LiveServer and avoid infinite loop with literate, run `servedocs(skip_dir = "docs/src/literate_output")`
 using FermionicHilbertSpaces
 using Documenter
 using Literate
@@ -21,12 +22,13 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-        "Misc" => "misc.md",
-        "Functions" => "docstrings.md",
-        "Tutorials" => [
+        "Non interacting systems" => "non_interacting.md",
+        "Examples" => [
             "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
             "Free fermions" => "literate_output/free_fermions.md"
         ],
+        "Misc" => "misc.md",
+        "Functions" => "docstrings.md",
     ],
 )
 
