@@ -61,31 +61,28 @@ function Base.isless(a::FermionSym, b::FermionSym)
 end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
-
-function ordered_product(a::FermionSym, b::FermionSym, ::NormalOrdering)
-    a_uni = a.basis.universe
-    b_uni = b.basis.universe
+struct NormalLabelOrder end
+function mul_effect(a::FermionSym, b::FermionSym, ::NormalLabelOrder)
     if a == b
         0
     elseif a < b
-        FermionMul(1, [a, b])
+        nothing
     elseif a > b
-        FermionMul((-1)^(a_uni == b_uni), [b, a]) + Int(a.label == b.label && a.basis == b.basis)
+        swap = Swap((-1)^(a.basis.universe == b.basis.universe))
+        if a.label == b.label && a.basis == b.basis
+            return AddTerms((swap, 1))
+        else
+            return swap
+        end
     else
         throw(ArgumentError("Don't know how to multiply $a * $b"))
     end
 end
-function Base.:^(a::FermionSym, b)
-    if b isa Number && iszero(b)
-        1
-    elseif b isa Number && b == 1
-        a
-    elseif b isa Integer && b >= 2
-        0
-    else
-        throw(ArgumentError("Invalid exponent $b"))
-    end
-end
+
+Base.valtype(::AbstractFermionSym) = Int
+Base.valtype(::Type{S}) where {S<:AbstractFermionSym} = Int
+
+@nc_eager FermionSym NormalLabelOrder()
 
 """ 
     eval_in_basis(a, f)
@@ -131,10 +128,8 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
 
     @test iszero(f1 - f1)
     @test iszero(f1 * f1)
-    @test f1 * f2 isa FermionicHilbertSpaces.FermionMul
     @test iszero(2 * f1 - 2 * f1)
     @test iszero(0 * f1)
-    @test 2 * f1 isa FermionicHilbertSpaces.FermionMul
     @test iszero(f1 * 0)
     @test iszero(f1^2)
     @test iszero(0 * (f1 + f2))
@@ -146,8 +141,6 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
     @test iszero(f12' * f12')
     nf1 = f1' * f1
     @test nf1^2 == nf1
-    @test f1' * f1 isa FermionicHilbertSpaces.FermionMul
-    @test f1 * f1' isa FermionicHilbertSpaces.FermionAdd
 
     @test 1 + (f1 + f2) == 1 + f1 + f2 == f1 + f2 + 1 == f1 + 1 + f2 == 1 * f1 + f2 + 1 == f1 + 0.5 * f2 + 1 + (0 * f1 + 0.5 * f2) == (0.5 + 0.5 * f1 + 0.2 * f2) + 0.5 + (0.5 * f1 + 0.8 * f2) == (1 + f1' + (1 * f2)')'
     @test iszero((2 * f1) * (2 * f1))

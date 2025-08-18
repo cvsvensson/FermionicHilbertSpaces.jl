@@ -59,36 +59,26 @@ function Base.isless(a::MajoranaSym, b::MajoranaSym)
         a.basis.name < b.basis.name
     end
 end
-function Base.:^(a::MajoranaSym, b)
-    if b isa Number && iszero(b)
-        1
-    elseif b isa Number && b == 1
-        a
-    elseif b isa Integer && b >= 2
-        1
-    else
-        throw(ArgumentError("Invalid exponent $b"))
-    end
-end
-function ordered_product(a::MajoranaSym, b::MajoranaSym, ::NormalOrdering)
+function mul_effect(a::MajoranaSym, b::MajoranaSym, ::NormalLabelOrder)
     if a == b
         1
     elseif a < b
-        FermionMul(1, [a, b])
+        nothing
     elseif a > b
-        FermionMul((-1)^(a.basis.universe == b.basis.universe), [b, a]) + Int(a.label == b.label && a.basis == b.basis)
+        swap = Swap((-1)^(a.basis.universe == b.basis.universe))
+        if a.label == b.label && a.basis == b.basis
+            return AddTerms((swap, 1))
+        else
+            return swap
+        end
     else
         throw(ArgumentError("Don't know how to multiply $a * $b"))
     end
 end
 eval_in_basis(a::MajoranaSym, f) = f[a.label]
 
-TermInterface.operation(::MajoranaSym) = MajoranaSym
-TermInterface.arguments(a::MajoranaSym) = [a.label, a.basis]
-TermInterface.children(a::MajoranaSym) = arguments(a)
-
-Base.valtype(::AbstractMajoranaSym) = Complex{Int}
-Base.valtype(::FermionMul{C,S}) where {C,S<:AbstractMajoranaSym} = complex(C)
+Base.valtype(::Type{S}) where {S<:AbstractMajoranaSym} = Complex{Int}
+@nc_eager MajoranaSym NormalLabelOrder()
 
 @testitem "MajoranaSym" begin
     using Symbolics

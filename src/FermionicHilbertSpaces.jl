@@ -9,6 +9,9 @@ using TestItems
 using TermInterface
 using BitPermutations
 using TupleTools
+using NonCommutativeProducts
+import NonCommutativeProducts: mul_effect, @nc_eager, Swap, NCAdd, NCMul, NCterms
+
 
 export FockNumber, JordanWignerOrdering, hc, basisstates
 export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subregion
