@@ -13,6 +13,9 @@ end
 
 
 function bubble_sort(a::NCMul, ordering)
+    return bubble_sort!(copy(a), ordering)
+end
+function bubble_sort!(a::NCMul, ordering)
     if length(a.factors) <= 1
         return a
     end
@@ -20,7 +23,10 @@ function bubble_sort(a::NCMul, ordering)
     return res
 end
 function bubble_sort(ncadd::NCAdd, ordering)
-    terms = collect(NCMul(v, copy(k.factors)) for (k, v) in pairs(ncadd.dict))
+    return bubble_sort!(copy(ncadd), ordering)
+end
+function bubble_sort!(ncadd::NCAdd, ordering)
+    terms = collect(NCMul(v, k.factors) for (k, v) in pairs(ncadd.dict))
     res = add!!(_bubble_sort!(terms, ordering), ncadd.coeff)
 end
 function _bubble_sort!(terms::AbstractVector{T}, ordering) where {T<:NCMul}
