@@ -62,7 +62,7 @@ end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
 struct NormalLabelOrder end
-function mul_effect(a::FermionSym, b::FermionSym, ::NormalLabelOrder)
+function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym, ::NormalLabelOrder)
     if a == b
         0
     elseif a < b
@@ -161,43 +161,4 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
         @test op - 1.0I == op - 1.0 == -(1.0I - op) == -(1.0 - op)
     end
 
-    ex = 2 * f1
-    @test FermionicHilbertSpaces.head(ex) == (*)
-    @test FermionicHilbertSpaces.children(ex) == [2, ex.factors...]
-    @test FermionicHilbertSpaces.operation(ex) == (*)
-    @test FermionicHilbertSpaces.arguments(ex) == [2, ex.factors...]
-    @test FermionicHilbertSpaces.isexpr(ex)
-    @test FermionicHilbertSpaces.iscall(ex)
-    ex = 2 * f1 + 1
-    @test FermionicHilbertSpaces.head(ex) == (+)
-    @test FermionicHilbertSpaces.children(ex) == [1, 2 * f1]
-    @test FermionicHilbertSpaces.operation(ex) == (+)
-    @test FermionicHilbertSpaces.arguments(ex) == [1, 2 * f1]
-    @test FermionicHilbertSpaces.isexpr(ex)
-    @test FermionicHilbertSpaces.iscall(ex)
-
-    ex = f1
-    @test FermionicHilbertSpaces.head(ex) <: FermionicHilbertSpaces.FermionSym
-    @test FermionicHilbertSpaces.children(ex) == [false, :a, f]
-    @test FermionicHilbertSpaces.operation(ex) == FermionicHilbertSpaces.FermionSym
-    @test FermionicHilbertSpaces.arguments(ex) == [false, :a, f]
-    @test FermionicHilbertSpaces.isexpr(ex)
-    @test FermionicHilbertSpaces.iscall(ex)
-
-    @test substitute(f1, f1 => f2) == f2
-    @test substitute(f1', f1' => f2) == f2
-    @test substitute(f1', f1 => f2) == f1'
-    @test substitute(f1 + f2, f1 => f2) == 2 * f2
-
-    @test substitute(2 * f1, 2 => 3) == 3 * f1
-    @test iszero(substitute(a * f1 + 1, a => a^2) - (a^2 * f1 + 1))
-    @test iszero(substitute(a * f1 * f2 - f1 + 1 + 0.5 * f2' * f2, f1 => f2) - (a * f2 * f2 - f2 + 1 + 0.5 * f2' * f2))
-    @test iszero(substitute(a * f1 + a + a * f1 * f2 * f1', a => 0))
-
-    @test substitute(f[1], 1 => 2) == f[2]
-    @test substitute(f[:a]' * f[:b] + 1, :a => :b) == f[:b]' * f[:b] + 1
 end
-
-TermInterface.operation(::FermionSym) = FermionSym
-TermInterface.arguments(a::FermionSym) = [a.creation, a.label, a.basis]
-TermInterface.children(a::FermionSym) = arguments(a)

@@ -155,15 +155,16 @@ isquadratic(x::NCAdd) = all(isquadratic, NCterms(x))
 end
 
 @testitem "Consistency between + and add!" begin
-    import FermionicHilbertSpaces: add!
+    import FermionicHilbertSpaces.NonCommutativeProducts.add!!
     @fermions f
     a = 1.0 * f[2] * f[1] + 1 + f[1]
     for b in [1.0, 1, f[1], 1.0 * f[1], f[2] * f[1], a]
         a2 = copy(a)
-        a3 = add!(a2, b)
+        a3 = add!!(a2, b) # Should mutate
         @test a + b == a3
         @test a2 == a3
-        @test_throws InexactError add!(a, 1im * b)
+        anew = add!!(a, 1im * b) #Should not mutate
+        @test a2 !== anew
     end
     @test a == 1.0 * f[2] * f[1] + 1 + f[1]
 end
