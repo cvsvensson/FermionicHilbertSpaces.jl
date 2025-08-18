@@ -154,7 +154,7 @@ isquadratic(x::NCAdd) = all(isquadratic, NCterms(x))
     @test isquadratic(f[1]f[2] + f[3] * f[3]' + 1)
 end
 
-@testitem "Consistency between + and add!" begin
+@testitem "Consistency between + and add!!" begin
     import FermionicHilbertSpaces.NonCommutativeProducts.add!!
     @fermions f
     a = 1.0 * f[2] * f[1] + 1 + f[1]
