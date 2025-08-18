@@ -16,6 +16,9 @@ SplitApplyCombine = "03a91e81-4c3e-53e1-a0a4-9c0c8f19dd66"
 TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
 TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 
+[sources]
+NonCommutativeProducts = {url = "https://github.com/cvsvensson/NonCommutativeProducts.jl"}
+
 [weakdeps]
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 
