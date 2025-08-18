@@ -23,8 +23,11 @@ function bubble_sort(ncadd::NCAdd, ordering)
     terms = collect(NCMul(v, copy(k.factors)) for (k, v) in pairs(ncadd.dict))
     res = add!!(_bubble_sort!(terms, ordering), ncadd.coeff)
 end
-function _bubble_sort!(terms::AbstractVector{<:NCMul}, ordering)
+function _bubble_sort!(terms::AbstractVector{T}, ordering) where {T<:NCMul}
     sorted_terms = __bubble_sort!(terms, ordering)
+    if length(sorted_terms) == 0
+        return NCAdd(0, Dict{T,Int}())
+    end
     newadd = NCAdd(0, to_add(first(sorted_terms)))
     for term in Iterators.drop(sorted_terms, 1)
         newadd = add!!(newadd, term)

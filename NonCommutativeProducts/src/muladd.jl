@@ -27,7 +27,7 @@ to_add(a::NCMul, coeff=1) = Dict(NCMul(1, a.factors) => a.coeff * coeff)
 # to_add_tuple(a::NCMul, coeff=1) = (NCMul(1, a.factors) => a.coeff * coeff,)
 # to_add_tuple(a, coeff=1) = (NCMul(a) => coeff,)
 
-Base.:^(a::Union{NCMul,NCAdd}, b) = Base.power_by_squaring(a, b)
+Base.:^(a::Union{NCMul,NCAdd}, b) = Base.power_by_squaring(a, b) #prod(a for _ in 1:b)#
 
 macro nc(T)
     quote
@@ -58,8 +58,14 @@ macro nc(T)
         Base.:(==)(a::Union{NCMul,NCAdd}, b::$(esc(T))) = b == a
     end
 end
+eager(::Type{NCMul{C,T,F}}) where {C,T,F} = eager(T)
 eager(::NCMul{C,T}) where {C,T} = eager(T)
+eager(::NCAdd{C,S}) where {C,S} = eager(S)
+
 Ordering(::NCMul{C,T}) where {C,T} = Ordering(T)
+Ordering(::Type{NCMul{C,T,F}}) where {C,T,F} = Ordering(T)
+Ordering(::NCAdd{C,S}) where {C,S} = Ordering(S)
+
 macro nc_eager(T, ordering)
     quote
         NonCommutativeProducts.NCMul(f::$(esc(T))) = NCMul(1, [f])
