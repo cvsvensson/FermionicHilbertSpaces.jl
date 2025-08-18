@@ -12,23 +12,27 @@ struct Swap{T}
 end
 
 
-function bubble_sort(a::NCMul, ordering; kwargs...)
-    if length(a.factors) == 0
+function bubble_sort(a::NCMul, ordering)
+    if length(a.factors) <= 1
         return a
     end
-    bubble_sort(NCAdd(0, to_add(a)), ordering; kwargs...)
+    res = _bubble_sort!([a], ordering)
+    return res
 end
 function bubble_sort(ncadd::NCAdd, ordering)
-    terms = collect(v * copy(k) for (k, v) in pairs(ncadd.dict))
-    sorted_terms = bubble_sort!(terms, ordering)
-    newadd = zero(ncadd)
-    for term in sorted_terms
+    terms = collect(NCMul(v, copy(k.factors)) for (k, v) in pairs(ncadd.dict))
+    res = add!!(_bubble_sort!(terms, ordering), ncadd.coeff)
+end
+function _bubble_sort!(terms::AbstractVector{<:NCMul}, ordering)
+    sorted_terms = __bubble_sort!(terms, ordering)
+    newadd = NCAdd(0, to_add(first(sorted_terms)))
+    for term in Iterators.drop(sorted_terms, 1)
         newadd = add!!(newadd, term)
     end
-    return filter_scalars!(filter_zeros!(ncadd.coeff + newadd))
+    return filter_scalars!(filter_zeros!(newadd))
 end
 
-function bubble_sort!(terms::AbstractVector{<:NCMul}, ordering)
+function __bubble_sort!(terms::AbstractVector{<:NCMul}, ordering)
     n = 1
     while n <= length(terms)
         done = false
@@ -36,23 +40,19 @@ function bubble_sort!(terms::AbstractVector{<:NCMul}, ordering)
         start = 1
         while !done && n <= length(terms)
             count += 1
-            terms, done, start = bubble_sort!(terms, n, ordering; start)
+            terms, done, start = __bubble_sort!(terms, n, ordering; start)
             if iszero(terms[n].coeff)
                 done = false
                 start = 1
                 deleteat!(terms, n)
             end
-            # if count > 100
-            #     @warn "Bubble sort took too long, stopping early"
-            #     break
-            # end
         end
         n += 1
     end
     return terms
 end
 
-function bubble_sort!(terms::AbstractVector{<:NCMul}, index, ordering; start=1)
+function __bubble_sort!(terms::AbstractVector{NCMul{C,S,F}}, index, ordering; start=1) where {C,S,F}
     no_effect = true
     ncmul = terms[index]
     if length(ncmul.factors) <= 1
@@ -62,7 +62,7 @@ function bubble_sort!(terms::AbstractVector{<:NCMul}, index, ordering; start=1)
     i = max(0, start - 1)
     while no_effect && i < length(ncmul.factors) - 1
         i += 1
-        a, b = ncmul.factors[i], ncmul.factors[i+1]
+        a, b = ncmul.factors[i]::S, ncmul.factors[i+1]::S
         effect = mul_effect(a, b, ordering)
         isnothing(effect) && continue
 
