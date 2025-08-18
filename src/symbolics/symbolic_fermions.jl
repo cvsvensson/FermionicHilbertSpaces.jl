@@ -108,6 +108,11 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
     f2 = f[:b]
     f3 = f[1, :↑]
 
+    @test 1 * f1 == f1
+    @test 1 * f1 + 0 == f1
+    @test 1 * f1 + 0 == 1 * f1
+    @test hash(f1) == hash(1 * f1) == hash(1 * f1 + 0)
+
     # Test canonical commutation relations
     @test f1' * f1 + f1 * f1' == 1
     @test iszero(f1 * f2 + f2 * f1)

@@ -86,6 +86,12 @@ Base.valtype(::Type{S}) where {S<:AbstractMajoranaSym} = Complex{Int}
     @variables a::Real z::Complex
 
     @majoranas γ f
+
+    @test 1 * γ[1] == γ[1]
+    @test 1 * γ[1] + 0 == γ[1]
+    @test 1 * γ[1] + 0 == 1 * γ[1]
+    @test hash(γ[1]) == hash(1 * γ[1]) == hash(1 * γ[1] + 0)
+
     #test canonical anticommutation relations
     @test γ[1] * γ[1] == 1
     @test γ[1] * γ[2] == -γ[2] * γ[1]
