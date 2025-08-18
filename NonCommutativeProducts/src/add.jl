@@ -32,7 +32,7 @@ function NCAdd(coeff::C, dict::Dict{K,V}; kwargs...) where {C,K,V}
 end
 const MulAdd = Union{NCMul,NCAdd}
 function filter_scalars!(x::NCAdd)
-    x += filter_scalars!(x.dict)
+    add!!(x, filter_scalars!(x.dict))
 end
 filter_zeros!(x::NCAdd) = (filter_zeros!(x.dict); return x)
 Base.iszero(x::NCAdd) = iszero(x.coeff) && all(iszero, values(x.dict))
@@ -181,17 +181,14 @@ function mul!!(c::NCAdd, a::MulAdd, b::MulAdd)
     for bterm in NCterms(b)
         for aterm in NCterms(a)
             newterm = aterm * bterm
-            if eager(aterm)
-                newterm = bubble_sort(newterm, Ordering(aterm))
-            elseif eager(bterm)
-                newterm = bubble_sort(newterm, Ordering(bterm))
-            end
             c = add!!(c, newterm)
         end
     end
+    if eager(c)
+        c = bubble_sort(c, Ordering(c))
+    end
     return c
 end
-
 add!!(c::NCMul, term) = c + term
 add!!(c::Number, term) = c + term
 
