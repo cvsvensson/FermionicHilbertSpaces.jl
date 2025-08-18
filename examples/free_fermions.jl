@@ -39,6 +39,7 @@ hopping(xy1, xy2) = N
 # Since we are dealing with many fermions, symbolic sums may take a long time. To get better performance, we will use the function `add!` to update the symbolic hamiltonian in place. For this, it is important to initialize the Hamiltonian with the correct type. We do this by making a simple hamiltonian and then call `zero` to get an empty hamiltonian of a matching type.
 ham = zero(1.0 * f[0, 0] * f[1, 1] + 1.0)
 # Now we can build the hamiltonian
+for xy in disc
     add!!(ham, potential(xy) * f[xy]' * f[xy])
     for nbr in neighbours(xy...)
         add!!(ham, hopping(nbr, xy) * f[nbr]' * f[xy] + hc)
