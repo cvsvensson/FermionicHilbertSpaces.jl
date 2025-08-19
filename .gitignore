@@ -3,6 +3,7 @@
 *.jl.mem
 /Manifest*.toml
 examples/Manifest*.toml
+benchmark/Manifest*.toml
 /docs/Manifest*.toml
 /docs/build/
 /docs/src/literate_output/*
