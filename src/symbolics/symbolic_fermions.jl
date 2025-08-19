@@ -65,9 +65,9 @@ struct NormalLabelOrder end
 function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym, ::NormalLabelOrder)
     if a == b
         0
-    elseif a < b
-        nothing
-    elseif a > b
+        # elseif a < b
+        # nothing
+    elseif a.creation < b.creation #a > b
         swap = Swap((-1)^(a.basis.universe == b.basis.universe))
         if a.label == b.label && a.basis == b.basis
             return AddTerms((swap, 1))
@@ -75,7 +75,8 @@ function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym, ::Norma
             return swap
         end
     else
-        throw(ArgumentError("Don't know how to multiply $a * $b"))
+        return nothing
+        # throw(ArgumentError("Don't know how to multiply $a * $b"))
     end
 end
 
