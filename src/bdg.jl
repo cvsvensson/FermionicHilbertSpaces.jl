@@ -18,7 +18,7 @@ function normal_order_to_bdg(m::AbstractMatrix)
     h = m[1:n÷2, 1:n÷2] / 2
     δ = m[1:n÷2, n÷2+1:end]
     δd = m[n÷2+1:end, 1:n÷2]
-    Δ = (δ + δd') / 2
+    Δ = (δ - transpose(δ) + (δd - transpose(δd))') / 4
     [h Δ
         -conj(Δ) -conj(h)]
 end
@@ -49,7 +49,7 @@ function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::Abst
     return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
 end
 
-function operator_inds_amps_bdg!((outinds, ininds, amps), op::FermionMul, ordering, states, fock_to_ind)
+function operator_inds_amps_bdg!((outinds, ininds, amps), op::NCMul, ordering, states, fock_to_ind)
     if length(op.factors) != 2
         throw(ArgumentError("Only two-fermion operators supported for free fermions"))
     end

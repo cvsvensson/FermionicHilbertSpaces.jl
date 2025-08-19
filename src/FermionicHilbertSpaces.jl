@@ -6,9 +6,11 @@ using Dictionaries: dictionary, Dictionary
 import FillArrays: Zeros
 import OrderedCollections: OrderedDict
 using TestItems
-using TermInterface
 using BitPermutations
 using TupleTools
+using NonCommutativeProducts
+import NonCommutativeProducts: @nc_eager, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
+
 
 export FockNumber, JordanWignerOrdering, hc, basisstates
 export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subregion

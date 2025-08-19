@@ -61,31 +61,28 @@ function Base.isless(a::FermionSym, b::FermionSym)
 end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
-
-function ordered_product(a::FermionSym, b::FermionSym, ::NormalOrdering)
-    a_uni = a.basis.universe
-    b_uni = b.basis.universe
+struct TotalNormalOrder end
+function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym, ::TotalNormalOrder)
     if a == b
         0
     elseif a < b
-        FermionMul(1, [a, b])
+        nothing
     elseif a > b
-        FermionMul((-1)^(a_uni == b_uni), [b, a]) + Int(a.label == b.label && a.basis == b.basis)
+        swap = Swap((-1)^(a.basis.universe == b.basis.universe))
+        if a.label == b.label && a.basis == b.basis
+            return AddTerms((swap, 1))
+        else
+            return swap
+        end
     else
-        throw(ArgumentError("Don't know how to multiply $a * $b"))
+        return nothing
     end
 end
-function Base.:^(a::FermionSym, b)
-    if b isa Number && iszero(b)
-        1
-    elseif b isa Number && b == 1
-        a
-    elseif b isa Integer && b >= 2
-        0
-    else
-        throw(ArgumentError("Invalid exponent $b"))
-    end
-end
+
+Base.valtype(::AbstractFermionSym) = Int
+Base.valtype(::Type{S}) where {S<:AbstractFermionSym} = Int
+
+@nc_eager FermionSym TotalNormalOrder()
 
 """ 
     eval_in_basis(a, f)
@@ -111,6 +108,11 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
     f2 = f[:b]
     f3 = f[1, :↑]
 
+    @test 1 * f1 == f1
+    @test 1 * f1 + 0 == f1
+    @test 1 * f1 + 0 == 1 * f1
+    @test hash(f1) == hash(1 * f1) == hash(1 * f1 + 0)
+
     # Test canonical commutation relations
     @test f1' * f1 + f1 * f1' == 1
     @test iszero(f1 * f2 + f2 * f1)
@@ -131,10 +133,8 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
 
     @test iszero(f1 - f1)
     @test iszero(f1 * f1)
-    @test f1 * f2 isa FermionicHilbertSpaces.FermionMul
     @test iszero(2 * f1 - 2 * f1)
     @test iszero(0 * f1)
-    @test 2 * f1 isa FermionicHilbertSpaces.FermionMul
     @test iszero(f1 * 0)
     @test iszero(f1^2)
     @test iszero(0 * (f1 + f2))
@@ -146,8 +146,6 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
     @test iszero(f12' * f12')
     nf1 = f1' * f1
     @test nf1^2 == nf1
-    @test f1' * f1 isa FermionicHilbertSpaces.FermionMul
-    @test f1 * f1' isa FermionicHilbertSpaces.FermionAdd
 
     @test 1 + (f1 + f2) == 1 + f1 + f2 == f1 + f2 + 1 == f1 + 1 + f2 == 1 * f1 + f2 + 1 == f1 + 0.5 * f2 + 1 + (0 * f1 + 0.5 * f2) == (0.5 + 0.5 * f1 + 0.2 * f2) + 0.5 + (0.5 * f1 + 0.8 * f2) == (1 + f1' + (1 * f2)')'
     @test iszero((2 * f1) * (2 * f1))
@@ -168,43 +166,4 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
         @test op - 1.0I == op - 1.0 == -(1.0I - op) == -(1.0 - op)
     end
 
-    ex = 2 * f1
-    @test FermionicHilbertSpaces.head(ex) == (*)
-    @test FermionicHilbertSpaces.children(ex) == [2, ex.factors...]
-    @test FermionicHilbertSpaces.operation(ex) == (*)
-    @test FermionicHilbertSpaces.arguments(ex) == [2, ex.factors...]
-    @test FermionicHilbertSpaces.isexpr(ex)
-    @test FermionicHilbertSpaces.iscall(ex)
-    ex = 2 * f1 + 1
-    @test FermionicHilbertSpaces.head(ex) == (+)
-    @test FermionicHilbertSpaces.children(ex) == [1, 2 * f1]
-    @test FermionicHilbertSpaces.operation(ex) == (+)
-    @test FermionicHilbertSpaces.arguments(ex) == [1, 2 * f1]
-    @test FermionicHilbertSpaces.isexpr(ex)
-    @test FermionicHilbertSpaces.iscall(ex)
-
-    ex = f1
-    @test FermionicHilbertSpaces.head(ex) <: FermionicHilbertSpaces.FermionSym
-    @test FermionicHilbertSpaces.children(ex) == [false, :a, f]
-    @test FermionicHilbertSpaces.operation(ex) == FermionicHilbertSpaces.FermionSym
-    @test FermionicHilbertSpaces.arguments(ex) == [false, :a, f]
-    @test FermionicHilbertSpaces.isexpr(ex)
-    @test FermionicHilbertSpaces.iscall(ex)
-
-    @test substitute(f1, f1 => f2) == f2
-    @test substitute(f1', f1' => f2) == f2
-    @test substitute(f1', f1 => f2) == f1'
-    @test substitute(f1 + f2, f1 => f2) == 2 * f2
-
-    @test substitute(2 * f1, 2 => 3) == 3 * f1
-    @test iszero(substitute(a * f1 + 1, a => a^2) - (a^2 * f1 + 1))
-    @test iszero(substitute(a * f1 * f2 - f1 + 1 + 0.5 * f2' * f2, f1 => f2) - (a * f2 * f2 - f2 + 1 + 0.5 * f2' * f2))
-    @test iszero(substitute(a * f1 + a + a * f1 * f2 * f1', a => 0))
-
-    @test substitute(f[1], 1 => 2) == f[2]
-    @test substitute(f[:a]' * f[:b] + 1, :a => :b) == f[:b]' * f[:b] + 1
 end
-
-TermInterface.operation(::FermionSym) = FermionSym
-TermInterface.arguments(a::FermionSym) = [a.creation, a.label, a.basis]
-TermInterface.children(a::FermionSym) = arguments(a)

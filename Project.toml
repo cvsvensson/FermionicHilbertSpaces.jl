@@ -1,38 +1,34 @@
 name = "FermionicHilbertSpaces"
 uuid = "82e5dd95-83c3-46b2-a303-acc930c81756"
 authors = ["Viktor Svensson", "William Samuelson"]
-version = "0.6.0"
+version = "0.7.0"
 
 [deps]
 BitPermutations = "81206824-6155-40a8-95f7-18696067be4d"
 Dictionaries = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
 FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+NonCommutativeProducts = "a9a0a982-c603-4485-bf80-6b61b825abb4"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 SplitApplyCombine = "03a91e81-4c3e-53e1-a0a4-9c0c8f19dd66"
-TermInterface = "8ea1fca8-c5ef-4a55-8b96-4e9afe9c9a3c"
 TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
 TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
-
-[weakdeps]
-Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
-
-[extensions]
-FermionicHilbertSpacesSymbolicsExt = "Symbolics"
 
 [compat]
 BitPermutations = "0.3.0"
 Dictionaries = "0.4.5"
 FillArrays = "1"
 LinearAlgebra = "1.11.0"
+NonCommutativeProducts = "0.3"
 OrderedCollections = "1"
 PrecompileTools = "1.2.1"
 SparseArrays = "1"
 SplitApplyCombine = "1"
-Symbolics = "6"
-TermInterface = "2.0.0"
 TestItems = "1.0.0"
 TupleTools = "1.6.0"
 julia = "1.10"
+
+[sources]
+NonCommutativeProducts = {url = "https://github.com/cvsvensson/NonCommutativeProducts.jl"}

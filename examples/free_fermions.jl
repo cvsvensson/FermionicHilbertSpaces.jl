@@ -1,7 +1,7 @@
 # # Free fermions on a 2D grid
 # For free fermions, one can work in the single particle picture to get a better scaling with the size of the system. FermionicHilbertSpaces.jl contains some features to help with this.
 using FermionicHilbertSpaces, Plots, LinearAlgebra
-import FermionicHilbertSpaces: add! # Import add! for efficient Hamiltonian construction
+import FermionicHilbertSpaces: add!! # Import add!! for efficient Hamiltonian construction
 using Arpack # For sparse eigenvalue decomposition
 # ## Define a grid 
 # We'll look at a system defined on a disc. Let's define a square grid and then cut out a disc in the middle
@@ -36,13 +36,13 @@ function potential(xy)
 end
 hopping(xy1, xy2) = N
 @fermions f
-# Since we are dealing with many fermions, symbolic sums may take a long time. To get better performance, we will use the function `add!` to update the symbolic hamiltonian in place. For this, it is important to initialize the Hamiltonian with the correct type. We do this by making a simple hamiltonian and then call `zero` to get an empty hamiltonian of a matching type.
+# Since we are dealing with many fermions, symbolic sums may take a long time. To get better performance, we will use the function `add!!` to update the symbolic hamiltonian in place. For this, it is important to initialize the Hamiltonian with the correct type. We do this by making a simple hamiltonian and then call `zero` to get an empty hamiltonian of a matching type.
 ham = zero(1.0 * f[0, 0] * f[1, 1] + 1.0)
 # Now we can build the hamiltonian
 for xy in disc
-    add!(ham, potential(xy) * f[xy]' * f[xy])
+    add!!(ham, potential(xy) * f[xy]' * f[xy])
     for nbr in neighbours(xy...)
-        add!(ham, hopping(nbr, xy) * f[nbr]' * f[xy] + hc)
+        add!!(ham, hopping(nbr, xy) * f[nbr]' * f[xy] + hc)
     end
 end
 # And get a matrix representation of it on the single particle hilbert space
@@ -55,8 +55,8 @@ vals, vecs = eigs(mat; nev=3^2, which=:SR, v0=map(x -> eltype(mat)(first(x)), di
 px = zero(1im * ham)
 py = zero(px)
 for xy in disc
-    xy .+ (1, 0) in disc && add!(px, 1im * f[xy.+(1, 0)]' * f[xy] + hc)
-    xy .+ (0, 1) in disc && add!(py, 1im * f[xy.+(0, 1)]' * f[xy] + hc)
+    xy .+ (1, 0) in disc && add!!(px, 1im * f[xy.+(1, 0)]' * f[xy] + hc)
+    xy .+ (0, 1) in disc && add!!(py, 1im * f[xy.+(0, 1)]' * f[xy] + hc)
 end
 pxmat = matrix_representation(px, H)
 pymat = matrix_representation(py, H);
