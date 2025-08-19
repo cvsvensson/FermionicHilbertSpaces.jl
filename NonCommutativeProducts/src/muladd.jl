@@ -27,9 +27,13 @@ to_add(a::NCMul, coeff=1) = Dict(NCMul(1, a.factors) => a.coeff * coeff)
 # to_add_tuple(a::NCMul, coeff=1) = (NCMul(1, a.factors) => a.coeff * coeff,)
 # to_add_tuple(a, coeff=1) = (NCMul(a) => coeff,)
 
-Base.:^(a::Union{NCMul,NCAdd}, b) = Base.power_by_squaring(a, b) #prod(a for _ in 1:b)#
+function Base.:^(a::Union{NCMul,NCAdd}, b)
+    ret = Base.power_by_squaring(a, b) #prod(a for _ in 1:b)#
+    eager(ret) && return bubble_sort!(ret, Ordering(ret))
+    return ret
+end
 
-macro nc(T)
+macro nc0(T)
     quote
         NonCommutativeProducts.NCMul(f::$(esc(T))) = NCMul(1, [f])
 
@@ -38,26 +42,33 @@ macro nc(T)
         Base.:+(x::Union{Number,UniformScaling,NCMul,NCAdd}, y::$(esc(T))) = y + x
 
         NonCommutativeProducts.add!!(x::NCAdd, y::$(esc(T))) = add!!(x, NCMul(y))
-        NonCommutativeProducts.eager(::T) where T<:$(esc(T)) = eager(T)
-        NonCommutativeProducts.eager(::Type{<:$(esc(T))}) = false
 
         Base.:-(x::$(esc(T)), y::$(esc(T))) = NCMul(x) - NCMul(y)
         Base.:-(x::$(esc(T))) = NCMul(-1, [x])
         Base.:-(x::Union{Number,UniformScaling,NCAdd}, y::$(esc(T))) = x - NCMul(y)
         Base.:-(x::$(esc(T)), y::Union{Number,UniformScaling,NCAdd}) = NCMul(x) - y
 
-        Base.:*(x::$(esc(T)), y::$(esc(T))) = NCMul(1, [x, y])
         Base.:*(x::Union{Number,UniformScaling,NCAdd}, y::$(esc(T))) = x * NCMul(y)
         Base.:*(x::$(esc(T)), y::Union{Number,UniformScaling,NCAdd}) = NCMul(x) * y
-        Base.:*(x::$(esc(T)), y::NCMul) = NCMul(y.coeff, pushfirst!!(copy(y.factors), x))
-        Base.:*(x::NCMul, y::$(esc(T))) = NCMul(x.coeff, push!!(copy(x.factors), y))
-        Base.:^(a::$(esc(T)), b) = Base.power_by_squaring(a, b)
+
+        Base.:^(a::$(esc(T)), b) = NCMul(a)^b
         Base.convert(::Type{NCMul{C,S,F}}, x::$(esc(T))) where {C,S<:$(esc(T)),F} = NCMul(one(C), S[x])
 
         Base.:(==)(a::$(esc(T)), b::Union{NCMul,NCAdd}) = NCMul(a) == b
         Base.:(==)(a::Union{NCMul,NCAdd}, b::$(esc(T))) = b == a
     end
 end
+macro nc(T)
+    quote
+        @nc0 $(esc(T))
+        Base.:*(x::$(esc(T)), y::$(esc(T))) = NCMul(1, [x, y])
+        Base.:*(x::$(esc(T)), y::NCMul) = NCMul(y.coeff, pushfirst!!(copy(y.factors), x))
+        Base.:*(x::NCMul, y::$(esc(T))) = NCMul(x.coeff, push!!(copy(x.factors), y))
+        NonCommutativeProducts.eager(::A) where A<:$(esc(T)) = eager(A)
+        NonCommutativeProducts.eager(::Type{<:$(esc(T))}) = false
+    end
+end
+
 eager(::Type{NCMul{C,T,F}}) where {C,T,F} = eager(T)
 eager(::NCMul{C,T}) where {C,T} = eager(T)
 eager(::NCAdd{C,S}) where {C,S} = eager(S)
@@ -68,33 +79,34 @@ Ordering(::NCAdd{C,S}) where {C,S} = Ordering(S)
 
 macro nc_eager(T, ordering)
     quote
-        NonCommutativeProducts.NCMul(f::$(esc(T))) = NCMul(1, [f])
-        Base.:+(x::$(esc(T)), y::$(esc(T))) = NCMul(x) + NCMul(y)
-        Base.:+(x::$(esc(T)), y::Union{Number,UniformScaling,NCMul,NCAdd}) = NCMul(x) + y
-        Base.:+(x::Union{Number,UniformScaling,NCMul,NCAdd}, y::$(esc(T))) = y + x
+        @nc0 $(esc(T))
+        # NonCommutativeProducts.NCMul(f::$(esc(T))) = NCMul(1, [f])
+        # Base.:+(x::$(esc(T)), y::$(esc(T))) = NCMul(x) + NCMul(y)
+        # Base.:+(x::$(esc(T)), y::Union{Number,UniformScaling,NCMul,NCAdd}) = NCMul(x) + y
+        # Base.:+(x::Union{Number,UniformScaling,NCMul,NCAdd}, y::$(esc(T))) = y + x
 
-        NonCommutativeProducts.add!!(x::NCAdd, y::$(esc(T))) = add!!(x, NCMul(y))
+        # NonCommutativeProducts.add!!(x::NCAdd, y::$(esc(T))) = add!!(x, NCMul(y))
 
-        NonCommutativeProducts.Ordering(::T) where T<:$(esc(T)) = Ordering(T)
+        NonCommutativeProducts.Ordering(::A) where A<:$(esc(T)) = Ordering(A)
         NonCommutativeProducts.Ordering(::Type{<:$(esc(T))}) = $(esc(ordering))
-        NonCommutativeProducts.eager(::T) where T<:$(esc(T)) = eager(T)
+        NonCommutativeProducts.eager(::A) where A<:$(esc(T)) = eager(A)
         NonCommutativeProducts.eager(::Type{<:$(esc(T))}) = true
+        Base.:*(x::$(esc(T)), y::$(esc(T))) = bubble_sort!(NCMul(1, [x, y]), $(esc(ordering)))
 
-        Base.:-(x::$(esc(T)), y::$(esc(T))) = NCMul(x) - NCMul(y)
-        Base.:-(x::$(esc(T))) = NCMul(-1, [x])
-        Base.:-(x::Union{Number,UniformScaling,NCAdd}, y::$(esc(T))) = x - NCMul(y)
-        Base.:-(x::$(esc(T)), y::Union{Number,UniformScaling,NCAdd}) = NCMul(x) - y
+        # Base.:-(x::$(esc(T)), y::$(esc(T))) = NCMul(x) - NCMul(y)
+        # Base.:-(x::$(esc(T))) = NCMul(-1, [x])
+        # Base.:-(x::Union{Number,UniformScaling,NCAdd}, y::$(esc(T))) = x - NCMul(y)
+        # Base.:-(x::$(esc(T)), y::Union{Number,UniformScaling,NCAdd}) = NCMul(x) - y
 
-        Base.:*(x::$(esc(T)), y::$(esc(T))) = bubble_sort(NCMul(1, [x, y]), $(esc(ordering)))
-        Base.:*(x::Union{Number,UniformScaling,NCAdd}, y::$(esc(T))) = bubble_sort(x * NCMul(y), $(esc(ordering)))
-        Base.:*(x::$(esc(T)), y::Union{Number,UniformScaling,NCAdd}) = bubble_sort(NCMul(x) * y, $(esc(ordering)))
-        Base.:*(x::$(esc(T)), y::NCMul) = bubble_sort(NCMul(y.coeff, pushfirst!!(copy(y.factors), x)), $(esc(ordering)))
-        Base.:*(x::NCMul, y::$(esc(T))) = bubble_sort(NCMul(x.coeff, push!!(copy(x.factors), y)), $(esc(ordering)))
-        Base.:^(a::$(esc(T)), b) = bubble_sort(Base.power_by_squaring(a, b), $(esc(ordering)))
-        Base.convert(::Type{NCMul{C,S,F}}, x::$(esc(T))) where {C,S<:$(esc(T)),F} = NCMul(one(C), S[x])
+        # Base.:*(x::Union{Number,UniformScaling,NCAdd}, y::$(esc(T))) = bubble_sort(x * NCMul(y), $(esc(ordering)))
+        # Base.:*(x::$(esc(T)), y::Union{Number,UniformScaling,NCAdd}) = bubble_sort(NCMul(x) * y, $(esc(ordering)))
+        Base.:*(x::$(esc(T)), y::NCMul) = NCMul(x) * y
+        Base.:*(x::NCMul, y::$(esc(T))) = x * NCMul(y)
+        # Base.:^(a::$(esc(T)), b) = bubble_sort(Base.power_by_squaring(a, b), $(esc(ordering)))
+        # Base.convert(::Type{NCMul{C,S,F}}, x::$(esc(T))) where {C,S<:$(esc(T)),F} = NCMul(one(C), S[x])
 
-        Base.:(==)(a::$(esc(T)), b::Union{NCMul,NCAdd}) = NCMul(a) == b
-        Base.:(==)(a::Union{NCMul,NCAdd}, b::$(esc(T))) = b == a
+        # Base.:(==)(a::$(esc(T)), b::Union{NCMul,NCAdd}) = NCMul(a) == b
+        # Base.:(==)(a::Union{NCMul,NCAdd}, b::$(esc(T))) = b == a
     end
 end
 
