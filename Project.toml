@@ -4,11 +4,11 @@ authors = ["Viktor Svensson", "William Samuelson"]
 version = "0.6.0"
 
 [deps]
-BangBang = "198e06fe-97b7-11e9-32a5-e1d131e6ad66"
 BitPermutations = "81206824-6155-40a8-95f7-18696067be4d"
 Dictionaries = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
 FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+NonCommutativeProducts = "a9a0a982-c603-4485-bf80-6b61b825abb4"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
@@ -23,11 +23,11 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 FermionicHilbertSpacesSymbolicsExt = "Symbolics"
 
 [compat]
-BangBang = "0.4.4"
 BitPermutations = "0.3.0"
 Dictionaries = "0.4.5"
 FillArrays = "1"
 LinearAlgebra = "1.11.0"
+NonCommutativeProducts = "0.3.2"
 OrderedCollections = "1"
 PrecompileTools = "1.2.1"
 SparseArrays = "1"

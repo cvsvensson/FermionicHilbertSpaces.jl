@@ -8,11 +8,8 @@ import OrderedCollections: OrderedDict
 using TestItems
 using BitPermutations
 using TupleTools
-
-
-include("..//NonCommutativeProducts//src//NonCommutativeProducts.jl")
-using .NonCommutativeProducts
-import .NonCommutativeProducts: @nc_eager, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
+using NonCommutativeProducts
+import NonCommutativeProducts: @nc_eager, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 
 
 export FockNumber, JordanWignerOrdering, hc, basisstates
