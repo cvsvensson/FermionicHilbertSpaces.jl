@@ -61,13 +61,13 @@ function Base.isless(a::FermionSym, b::FermionSym)
 end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
-struct NormalLabelOrder end
-function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym, ::NormalLabelOrder)
+struct TotalNormalOrder end
+function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym, ::TotalNormalOrder)
     if a == b
         0
-        # elseif a < b
-        # nothing
-    elseif a.creation < b.creation #a > b
+    elseif a < b
+        nothing
+    elseif a > b
         swap = Swap((-1)^(a.basis.universe == b.basis.universe))
         if a.label == b.label && a.basis == b.basis
             return AddTerms((swap, 1))
@@ -76,14 +76,13 @@ function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym, ::Norma
         end
     else
         return nothing
-        # throw(ArgumentError("Don't know how to multiply $a * $b"))
     end
 end
 
 Base.valtype(::AbstractFermionSym) = Int
 Base.valtype(::Type{S}) where {S<:AbstractFermionSym} = Int
 
-@nc_eager FermionSym NormalLabelOrder()
+@nc_eager FermionSym TotalNormalOrder()
 
 """ 
     eval_in_basis(a, f)
