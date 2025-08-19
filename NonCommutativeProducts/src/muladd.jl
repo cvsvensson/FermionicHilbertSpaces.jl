@@ -27,9 +27,10 @@ to_add(a::NCMul, coeff=1) = Dict(NCMul(1, a.factors) => a.coeff * coeff)
 # to_add_tuple(a::NCMul, coeff=1) = (NCMul(1, a.factors) => a.coeff * coeff,)
 # to_add_tuple(a, coeff=1) = (NCMul(a) => coeff,)
 
-function Base.:^(a::Union{NCMul,NCAdd}, b)
-    ret = Base.power_by_squaring(a, b) #prod(a for _ in 1:b)#
-    eager(ret) && return bubble_sort!(ret, Ordering(ret))
+
+function Base.:^(a::Union{NCAdd,NCMul}, b::Int)
+    ret = Base.power_by_squaring(a, b)
+    eager(ret) && return bubble_sort(ret, Ordering(ret))
     return ret
 end
 

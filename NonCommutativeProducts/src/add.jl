@@ -180,12 +180,12 @@ function mul!!(c::NCAdd, a::MulAdd, b::MulAdd)
     end
     for bterm in NCterms(b)
         for aterm in NCterms(a)
-            newterm = cat(aterm, bterm)
+            newterm = catenate(aterm, bterm)
             c = add!!(c, newterm)
         end
     end
     if eager(c)
-        c = bubble_sort!(c, Ordering(c))
+        c = bubble_sort(c, Ordering(c))
     end
     return c
 end

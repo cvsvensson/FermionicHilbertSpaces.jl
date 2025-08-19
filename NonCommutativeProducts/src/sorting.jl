@@ -23,10 +23,7 @@ function bubble_sort!(a::NCMul, ordering)
     return res
 end
 function bubble_sort(ncadd::NCAdd, ordering)
-    return bubble_sort!(copy(ncadd), ordering)
-end
-function bubble_sort!(ncadd::NCAdd, ordering)
-    terms = collect(NCMul(v, k.factors) for (k, v) in pairs(ncadd.dict))
+    terms = collect(NCMul(v, copy(k.factors)) for (k, v) in pairs(ncadd.dict))
     res = add!!(_bubble_sort!(terms, ordering), ncadd.coeff)
 end
 function _bubble_sort!(terms::Vector{T}, ordering) where {T<:NCMul}
