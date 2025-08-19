@@ -29,7 +29,7 @@ function bubble_sort!(ncadd::NCAdd, ordering)
     terms = collect(NCMul(v, k.factors) for (k, v) in pairs(ncadd.dict))
     res = add!!(_bubble_sort!(terms, ordering), ncadd.coeff)
 end
-function _bubble_sort!(terms::AbstractVector{T}, ordering) where {T<:NCMul}
+function _bubble_sort!(terms::Vector{T}, ordering) where {T<:NCMul}
     sorted_terms = __bubble_sort!(terms, ordering)
     if length(sorted_terms) == 0
         return NCAdd(0, Dict{T,Int}())
@@ -41,7 +41,7 @@ function _bubble_sort!(terms::AbstractVector{T}, ordering) where {T<:NCMul}
     return filter_scalars!(filter_zeros!(newadd))
 end
 
-function __bubble_sort!(terms::AbstractVector{<:NCMul}, ordering)
+function __bubble_sort!(terms::Vector{T}, ordering) where {T<:NCMul}
     n = 1
     while n <= length(terms)
         done = false
@@ -61,15 +61,16 @@ function __bubble_sort!(terms::AbstractVector{<:NCMul}, ordering)
     return terms
 end
 
-function __bubble_sort!(terms::AbstractVector{NCMul{C,S,F}}, index, ordering; start=1) where {C,S,F}
+function __bubble_sort!(terms::Vector{NCMul{C,S,F}}, index, ordering, starts) where {C,S,F}
     no_effect = true
     ncmul = terms[index]
     if length(ncmul.factors) <= 1
         done = true
         return terms, done, start
     end
-    i = max(0, start - 1)
-    while no_effect && i < length(ncmul.factors) - 1
+    i::Int = max(0, start - 1)
+    N::Int = length(ncmul.factors)
+    while no_effect && i < N - 1
         i += 1
         a, b = ncmul.factors[i]::S, ncmul.factors[i+1]::S
         effect = mul_effect(a, b, ordering)
@@ -83,8 +84,7 @@ function __bubble_sort!(terms::AbstractVector{NCMul{C,S,F}}, index, ordering; st
         terms = setindex!!(terms, ncmul, index)
     end
     done = no_effect
-    newstart = i - 1
-    return terms, done, newstart
+    return terms::Vector{NCMul{C,S,F}}, done
 end
 
 
