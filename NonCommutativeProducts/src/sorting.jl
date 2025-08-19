@@ -45,11 +45,10 @@ function __bubble_sort!(terms::Vector{T}, ordering) where {T<:NCMul}
     n = 1
     while n <= length(terms)
         done = false
-        count = 0
         start = 1
         while !done && n <= length(terms)
             count += 1
-            terms, done, start = __bubble_sort!(terms, n, ordering; start)
+            terms, done, start = __bubble_sort!(terms, n, ordering, start)
             if iszero(terms[n].coeff)
                 done = false
                 start = 1
@@ -61,7 +60,7 @@ function __bubble_sort!(terms::Vector{T}, ordering) where {T<:NCMul}
     return terms
 end
 
-function __bubble_sort!(terms::Vector{NCMul{C,S,F}}, index, ordering, starts) where {C,S,F}
+function __bubble_sort!(terms::Vector{NCMul{C,S,F}}, index, ordering, start) where {C,S,F}
     no_effect = true
     ncmul = terms[index]
     if length(ncmul.factors) <= 1
@@ -84,7 +83,8 @@ function __bubble_sort!(terms::Vector{NCMul{C,S,F}}, index, ordering, starts) wh
         terms = setindex!!(terms, ncmul, index)
     end
     done = no_effect
-    return terms::Vector{NCMul{C,S,F}}, done
+    newstart = i - 1
+    return terms::Vector{NCMul{C,S,F}}, done, newstart
 end
 
 
