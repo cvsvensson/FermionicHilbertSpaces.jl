@@ -1,7 +1,7 @@
 name = "FermionicHilbertSpaces"
 uuid = "82e5dd95-83c3-46b2-a303-acc930c81756"
 authors = ["Viktor Svensson", "William Samuelson"]
-version = "0.6.0"
+version = "0.7.0"
 
 [deps]
 BitPermutations = "81206824-6155-40a8-95f7-18696067be4d"
