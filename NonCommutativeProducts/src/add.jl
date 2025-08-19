@@ -180,7 +180,7 @@ function mul!!(c::NCAdd, a::MulAdd, b::MulAdd)
     end
     for bterm in NCterms(b)
         for aterm in NCterms(a)
-            newterm = aterm * bterm
+            newterm = cat(aterm, bterm)
             c = add!!(c, newterm)
         end
     end
