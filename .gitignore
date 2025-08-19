@@ -4,6 +4,7 @@
 /Manifest*.toml
 examples/Manifest*.toml
 /docs/Manifest*.toml
+/benchmark/Manifest*.toml
 /docs/build/
 /docs/src/literate_output/*
 .vscode/
