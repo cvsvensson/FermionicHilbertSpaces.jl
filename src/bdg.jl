@@ -18,7 +18,7 @@ function normal_order_to_bdg(m::AbstractMatrix)
     h = m[1:n÷2, 1:n÷2] / 2
     δ = m[1:n÷2, n÷2+1:end]
     δd = m[n÷2+1:end, 1:n÷2]
-    Δ = (δ + δd') / 2
+    Δ = (δ - transpose(δ) + (δd - transpose(δd))') / 4
     [h Δ
         -conj(Δ) -conj(h)]
 end
