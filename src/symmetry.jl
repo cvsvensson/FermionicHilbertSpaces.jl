@@ -198,7 +198,7 @@ end
 sectors(qn::IndexConservation) = qn.sectors
 IndexConservation(labels) = IndexConservation(labels, missing)
 instantiate(qn::IndexConservation, jw::JordanWignerOrdering) = IndexConservation(qn.labels, jw, qn.sectors)
-IndexConservation(indices, jw::JordanWignerOrdering, sectors) = FermionSubsetConservation(filter(label -> any((index in label || index == label) for index in indices), jw.labels), jw, sectors)
+IndexConservation(indices, jw::JordanWignerOrdering, sectors) = FermionSubsetConservation(filter(label -> any((index in label || index == label) for index in indices), keys(jw)), jw, sectors)
 
 @testitem "IndexConservation" begin
     import FermionicHilbertSpaces: FermionSubsetConservation
