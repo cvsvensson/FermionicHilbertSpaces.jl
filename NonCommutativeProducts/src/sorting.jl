@@ -47,7 +47,6 @@ function __bubble_sort!(terms::Vector{T}, ordering) where {T<:NCMul}
         done = false
         start = 1
         while !done && n <= length(terms)
-            count += 1
             terms, done, start = __bubble_sort!(terms, n, ordering, start)
             if iszero(terms[n].coeff)
                 done = false

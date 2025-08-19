@@ -80,33 +80,14 @@ Ordering(::NCAdd{C,S}) where {C,S} = Ordering(S)
 macro nc_eager(T, ordering)
     quote
         @nc0 $(esc(T))
-        # NonCommutativeProducts.NCMul(f::$(esc(T))) = NCMul(1, [f])
-        # Base.:+(x::$(esc(T)), y::$(esc(T))) = NCMul(x) + NCMul(y)
-        # Base.:+(x::$(esc(T)), y::Union{Number,UniformScaling,NCMul,NCAdd}) = NCMul(x) + y
-        # Base.:+(x::Union{Number,UniformScaling,NCMul,NCAdd}, y::$(esc(T))) = y + x
-
-        # NonCommutativeProducts.add!!(x::NCAdd, y::$(esc(T))) = add!!(x, NCMul(y))
-
         NonCommutativeProducts.Ordering(::A) where A<:$(esc(T)) = Ordering(A)
         NonCommutativeProducts.Ordering(::Type{<:$(esc(T))}) = $(esc(ordering))
         NonCommutativeProducts.eager(::A) where A<:$(esc(T)) = eager(A)
         NonCommutativeProducts.eager(::Type{<:$(esc(T))}) = true
         Base.:*(x::$(esc(T)), y::$(esc(T))) = bubble_sort!(NCMul(1, [x, y]), $(esc(ordering)))
 
-        # Base.:-(x::$(esc(T)), y::$(esc(T))) = NCMul(x) - NCMul(y)
-        # Base.:-(x::$(esc(T))) = NCMul(-1, [x])
-        # Base.:-(x::Union{Number,UniformScaling,NCAdd}, y::$(esc(T))) = x - NCMul(y)
-        # Base.:-(x::$(esc(T)), y::Union{Number,UniformScaling,NCAdd}) = NCMul(x) - y
-
-        # Base.:*(x::Union{Number,UniformScaling,NCAdd}, y::$(esc(T))) = bubble_sort(x * NCMul(y), $(esc(ordering)))
-        # Base.:*(x::$(esc(T)), y::Union{Number,UniformScaling,NCAdd}) = bubble_sort(NCMul(x) * y, $(esc(ordering)))
         Base.:*(x::$(esc(T)), y::NCMul) = NCMul(x) * y
         Base.:*(x::NCMul, y::$(esc(T))) = x * NCMul(y)
-        # Base.:^(a::$(esc(T)), b) = bubble_sort(Base.power_by_squaring(a, b), $(esc(ordering)))
-        # Base.convert(::Type{NCMul{C,S,F}}, x::$(esc(T))) where {C,S<:$(esc(T)),F} = NCMul(one(C), S[x])
-
-        # Base.:(==)(a::$(esc(T)), b::Union{NCMul,NCAdd}) = NCMul(a) == b
-        # Base.:(==)(a::Union{NCMul,NCAdd}, b::$(esc(T))) = b == a
     end
 end
 
