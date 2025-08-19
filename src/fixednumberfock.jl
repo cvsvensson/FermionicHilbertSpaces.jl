@@ -157,9 +157,9 @@ Base.zero(::FixedNumberFockState) = FixedNumberFockState(())
 function concatenate((lastf, lastwidth)::Tuple{FixedNumberFockState,Int}, (f, width)::Tuple{FixedNumberFockState,Int})
     return (FixedNumberFockState((lastf.sites..., (lastwidth .+ f.sites)...)), lastwidth + width)
 end
-function concatenate((lastf, lastwidth)::Tuple{FixedNumberFockState,Int}, (f, width)::Tuple{FockNumber,Int})
-    concatenate((FockNumber(lastf), lastwidth), (f, width))
-end
+# function concatenate((lastf, lastwidth)::Tuple{FixedNumberFockState,Int}, (f, width)::Tuple{FockNumber,Int})
+#     concatenate((FockNumber(lastf), lastwidth), (f, width))
+# end
 function permute(f::FixedNumberFockState, permutation::BitPermutations.AbstractBitPermutation)
     p = Vector(permutation')
     return FixedNumberFockState(map(s -> p[s], f.sites))
@@ -197,3 +197,40 @@ state_index(state::AbstractFockState, H::SingleParticleHilbertSpace) = state_ind
     @test matrix_representation(opadd + I, H) == matrix_representation(opadd, H)
     @test matrix_representation(opadd + I, H) == matrix_representation(opadd + I, parent(H)) - I
 end
+
+@testitem "Partial trace consistency: FockNumber vs FixedNumberFockState" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: FixedNumberFockState
+    # Define Hilbert spaces for 5 sites, 2 particles
+    N = 5
+    n_particles = 2
+    # FockNumber-based Hilbert space
+    H_fock = hilbert_space(1:N, NumberConservation(n_particles))
+    # FixedNumberFockState-based Hilbert space
+    H_fixed = hilbert_space(1:N, FixedNumberFockState{n_particles}.(basisstates(H_fock)))
+
+    # Define a random Hermitian operator
+    @fermions f
+    sym_ham = sum(rand() * f[n]'f[n] for n in 1:N) + sum(f[n+1]'f[n] + hc for n in 1:N-1)
+    ham_fock = matrix_representation(sym_ham, H_fock)
+    ham_fixed = matrix_representation(sym_ham, H_fixed)
+    @test ham_fock ≈ ham_fixed
+    # Diagonalize to get ground state
+    Ψ_fock = eigvecs(collect(ham_fock))[:, 1]
+    Ψ_fixed = eigvecs(collect(ham_fixed))[:, 1]
+
+    # Subregion: first two sites
+    sub = [1, 3, 5]
+    Hsub_fock = subregion(sub, H_fock)
+    Hsub_fixed = subregion(sub, H_fixed)
+    @test FockNumber.(basisstates(Hsub_fixed)) == basisstates(Hsub_fock)
+
+    # Partial trace
+    ρsub_fock = partial_trace(Ψ_fock * Ψ_fock', H_fock => Hsub_fock)
+    ρsub_fixed = partial_trace(Ψ_fixed * Ψ_fixed', H_fixed => Hsub_fixed)
+    @test ρsub_fock ≈ ρsub_fixed
+
+    ρsub_fixed = partial_trace(Ψ_fixed * Ψ_fixed', H_fixed => Hsub_fixed; complement=FermionicHilbertSpaces.complementary_subsystem(H_fixed, Hsub_fixed))
+    @test ρsub_fock ≈ ρsub_fixed
+end
+
