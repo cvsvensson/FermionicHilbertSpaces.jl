@@ -59,7 +59,32 @@ function check_tensor_product_basis_compatibility(b1::AbstractHilbertSpace, b2::
     end
 end
 
-##
+size_compatibility(m::AbstractMatrix, H) = size(m) == size(H)
+size_compatibility(m::UniformScaling, H) = true
+size_compatibility(m::AbstractVector, H) = length(m) == size(H, 1)
+kron_sizes_compatibility(ms, Hs) = all(size_compatibility(m, H) for (m, H) in zip(ms, Hs))
+
+@testitem "Size compatibility" begin
+    using LinearAlgebra, Random
+    import FermionicHilbertSpaces: kron_sizes_compatibility
+    Random.seed!(1234)
+    H1 = hilbert_space(1:2)
+    H2 = hilbert_space(3:3)
+    H3 = hilbert_space(4:6)
+    Hs = [H1, H2, H3]
+    ms = m1, m2, m3 = [rand(size(H)...) for H in Hs]
+    vs = v1, v2, v3 = [rand(size(H, 1)) for H in Hs]
+    @test kron_sizes_compatibility(ms, Hs)
+    @test kron_sizes_compatibility([I, I, m3], Hs)
+    @test !kron_sizes_compatibility(ms, reverse(Hs))
+    @test !kron_sizes_compatibility([I, I, m2], Hs)
+    @test kron_sizes_compatibility(vs, Hs)
+    @test !kron_sizes_compatibility(vs, reverse(Hs))
+    @test_throws ArgumentError fermionic_kron(ms, reverse(Hs))
+    H12 = tensor_product(H1, H2)
+    m_too_large = rand(size(H12, 1) + 1, size(H12, 2) + 1)
+    @test_throws ArgumentError partial_trace(m_too_large, H12 => H1)
+end
 
 """
     fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
@@ -67,6 +92,7 @@ end
 Compute the fermionic tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the tensor_product product of `Hs`.
 """
 function fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); phase_factors=true)
+    kron_sizes_compatibility(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs)
     extend_state = FockMapper(Hs, H)
@@ -80,7 +106,6 @@ end
 
 fermionic_kron(Hs::Pair; kwargs...) = (ms...) -> fermionic_kron(ms, Hs; kwargs...)
 fermionic_kron(ms, Hs::Pair; kwargs...) = fermionic_kron(ms, first(Hs), last(Hs); kwargs...)
-
 
 uniform_to_sparse_type(::Type{UniformScaling{T}}) where {T} = SparseMatrixCSC{T,Int}
 uniform_to_sparse_type(::Type{T}) where {T} = T
@@ -465,6 +490,7 @@ end
 Compute the partial trace of a matrix `m`, leaving the subsystem defined by the basis `Hsub`.
 """
 function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=true, complement=simple_complementary_subsystem(H, Hsub)) where {T}
+    size_compatibility(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
     mout = zeros(T, size(Hsub))
     partial_trace!(mout, m, H, Hsub, phase_factors, complement)
 end
