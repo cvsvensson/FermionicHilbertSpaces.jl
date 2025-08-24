@@ -57,6 +57,7 @@ include("operators.jl")
 include("tensor_product.jl")
 include("embedding.jl")
 include("reshape.jl")
+include("sectors.jl")
 
 include("qubit.jl")
 
