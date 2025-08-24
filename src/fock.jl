@@ -16,30 +16,28 @@ Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
 A type representing the ordering of fermionic modes.
 """
 struct JordanWignerOrdering{L}
-    labels::Vector{L}
     ordering::OrderedDict{L,Int}
     function JordanWignerOrdering(labels)
-        ls = vec(collect(labels))
-        dict = OrderedDict(zip(ls, Base.OneTo(length(ls))))
-        new{eltype(ls)}(ls, dict)
+        dict = OrderedDict(zip(labels, Base.OneTo(length(labels))))
+        new{keytype(dict)}(dict)
     end
 end
 JordanWignerOrdering(jw::JordanWignerOrdering) = jw
-Base.length(jw::JordanWignerOrdering) = length(jw.labels)
-Base.:(==)(jw1::JordanWignerOrdering, jw2::JordanWignerOrdering) = jw1.labels == jw2.labels && jw1.ordering == jw2.ordering
-Base.keys(jw::JordanWignerOrdering) = jw.labels
-Base.iterate(jw::JordanWignerOrdering) = iterate(jw.labels)
-Base.iterate(jw::JordanWignerOrdering, state) = iterate(jw.labels, state)
+Base.length(jw::JordanWignerOrdering) = length(jw.ordering)
+Base.:(==)(jw1::JordanWignerOrdering, jw2::JordanWignerOrdering) = jw1.ordering == jw2.ordering
+Base.keys(jw::JordanWignerOrdering) = jw.ordering.keys
+Base.iterate(jw::JordanWignerOrdering) = iterate(keys(jw))
+Base.iterate(jw::JordanWignerOrdering, state) = iterate(keys(jw), state)
 Base.eltype(::JordanWignerOrdering{L}) where L = L
 
 Base.getindex(ordering::JordanWignerOrdering, label) = ordering.ordering[label]
 getindices(jw::JordanWignerOrdering, labels) = map(Base.Fix1(getindex, jw), labels)
 getindices(H::AbstractFockHilbertSpace, labels) = getindices(mode_ordering(H), labels)
 
-label_at_site(n, ordering::JordanWignerOrdering) = ordering.labels[n]
+label_at_site(n, jw::JordanWignerOrdering) = keys(jw)[n]
 focknbr_from_site_label(label, jw::JordanWignerOrdering) = focknbr_from_site_index(getindex(jw, label))
 focknbr_from_site_labels(labels, jw::JordanWignerOrdering) = mapreduce(Base.Fix2(focknbr_from_site_label, jw), +, labels, init=FockNumber(0))
-focknbr_from_site_labels(labels::JordanWignerOrdering, jw::JordanWignerOrdering) = focknbr_from_site_labels(labels.labels, jw)
+focknbr_from_site_labels(labels::JordanWignerOrdering, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(labels), jw)
 
 Base.:+(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f + f2.f)
 Base.:-(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f - f2.f)
