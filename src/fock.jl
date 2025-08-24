@@ -7,6 +7,7 @@ struct FockNumber{I<:Integer} <: AbstractFockState
     f::I
 end
 FockNumber(f::FockNumber) = f
+FockNumber{I}(f::FockNumber) where I<:Integer = FockNumber{I}(f.f)
 Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
 Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
 Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f

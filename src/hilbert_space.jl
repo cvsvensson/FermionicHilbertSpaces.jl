@@ -34,11 +34,11 @@ bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_em
     SimpleFockHilbertSpace
 A type representing a simple Fock Hilbert space with all fock states included.
 """
-struct SimpleFockHilbertSpace{L} <: AbstractFockHilbertSpace
+struct SimpleFockHilbertSpace{F,L} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
-    function SimpleFockHilbertSpace(labels)
+    function SimpleFockHilbertSpace(labels, ::Type{F}=FockNumber{Int}) where F
         jw = JordanWignerOrdering(labels)
-        new{eltype(jw)}(jw)
+        new{F,eltype(jw)}(jw)
     end
 end
 Base.keys(H::SimpleFockHilbertSpace) = keys(H.jw)
@@ -46,9 +46,9 @@ Base.keys(H::SimpleFockHilbertSpace) = keys(H.jw)
     basisstates(H)
 Return an iterator over all basis states for the given Hilbert space `H`.
 """
-basisstates(H::SimpleFockHilbertSpace) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
-basisstate(ind, ::SimpleFockHilbertSpace) = FockNumber(ind - 1)
-state_index(focknbr::FockNumber, ::SimpleFockHilbertSpace) = focknbr.f + 1
+basisstates(H::SimpleFockHilbertSpace{F}) where F = Iterators.map(F ∘ FockNumber, 0:2^length(H.jw)-1)
+basisstate(ind, ::SimpleFockHilbertSpace{F}) where F = (F ∘ FockNumber)(ind - 1)
+state_index(state, ::SimpleFockHilbertSpace{F}) where F = FockNumber(state).f + 1
 function Base.:(==)(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace)
     if H1 === H2
         return true
@@ -201,11 +201,11 @@ end
 
 Return a subregion of the Hilbert space `H` that is spanned by the modes in `modes`. Only substates in `H` are included.
 """
-function subregion(modes, H::SimpleFockHilbertSpace)
+function subregion(modes, H::SimpleFockHilbertSpace{F}) where F
     if !isorderedsubsystem(modes, H.jw)
         throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
-    SimpleFockHilbertSpace(modes)
+    SimpleFockHilbertSpace(modes, F)
 end
 
 function subregion(submodes, H::AbstractFockHilbertSpace)
@@ -213,7 +213,7 @@ function subregion(submodes, H::AbstractFockHilbertSpace)
         throw(ArgumentError("The modes $(submodes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
     states = substates(submodes, H)
-    sort!(unique!(states))
+    unique!(states)
     FockHilbertSpace(submodes, states)
 end
 
@@ -230,11 +230,18 @@ end
 # function complementary_subsystem(H::SingleParticleHilbertSpace, Hsub::SingleParticleHilbertSpace)
 #     single_particle_hilbert_space(setdiff(collect(keys(H)), collect(keys(Hsub))))
 # end
+statetype(::SimpleFockHilbertSpace{F}) where F = F
+statetype(::FockHilbertSpace{<:Any,<:V}) where V = eltype(V)
+statetype(::SymmetricFockHilbertSpace{<:Any,S}) where S = statetype(S)
+statetype(::FockSymmetry{V}) where V = eltype(v)
+statetype(::Type{<:FockSymmetry{V}}) where V = eltype(V)
 function simple_complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace)
-    SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
+    F = promote_type(statetype(H), statetype(Hsub))
+    SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))), F)
 end
 function complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace)
-    _Hbar = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
+    F = promote_type(statetype(H), statetype(Hsub))
+    _Hbar = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))), F)
     split = StateSplitter(H, (Hsub, _Hbar))
     states = unique!(map(basisstates(H)) do f
         fsub, fbar = split(f)
