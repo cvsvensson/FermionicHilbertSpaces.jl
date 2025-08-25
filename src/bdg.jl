@@ -23,7 +23,7 @@ function normal_order_to_bdg(m::AbstractMatrix)
         -conj(Δ) -conj(h)]
 end
 
-struct BdGHilbertSpace{H} <: AbstractFockHilbertSpace
+struct BdGHilbertSpace{H}
     parent::H
     function BdGHilbertSpace(labels)
         states = vec([NambuState(i, hole) for (i, label) in enumerate(labels), hole in (true, false)])

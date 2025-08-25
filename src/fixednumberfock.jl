@@ -165,7 +165,7 @@ function permute(f::FixedNumberFockState, permutation::BitPermutations.AbstractB
     return FixedNumberFockState(map(s -> p[s], f.sites))
 end
 
-struct SingleParticleHilbertSpace{H} <: AbstractFockHilbertSpace
+struct SingleParticleHilbertSpace{H} 
     parent::H
     function SingleParticleHilbertSpace(labels)
         states = [SingleParticleState(i) for (i, label) in enumerate(labels)]
