@@ -31,7 +31,7 @@ H = tensor_product(Hs)
 ```
 
 ```@example double_occupation
-size(H,1) == 3^N
+dim(H) == 3^N
 ```
 
 Can also take product of symmetries

@@ -173,7 +173,7 @@ struct SingleParticleHilbertSpace{H} <: AbstractFockHilbertSpace
         return new{typeof(H)}(H)
     end
 end
-dim(h::SingleParticleHilbertSpace) = size(h.parent)
+dim(h::SingleParticleHilbertSpace) = dim(h.parent)
 Base.parent(h::SingleParticleHilbertSpace) = h.parent
 Base.keys(h::SingleParticleHilbertSpace) = keys(h.parent)
 mode_ordering(h::SingleParticleHilbertSpace) = mode_ordering(h.parent)
