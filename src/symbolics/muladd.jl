@@ -24,7 +24,7 @@ function matrix_representation(op::Union{<:NCMul,<:AbstractFermionSym}, labels, 
     SparseArrays.sparse!(outinds, ininds, identity.(amps), length(states), length(states))
 end
 matrix_representation(op, labels, states) = matrix_representation(op, labels, states, Dict(Iterators.map(reverse, enumerate(states))))
-matrix_representation(op::Union{UniformScaling,Number}, labels, states, dict) = op * I(length(states))
+matrix_representation(op::Union{UniformScaling,Number}, H::AbstractFockHilbertSpace) = op * I(dim(H))
 
 function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{SingleParticleState}, fock_to_ind)
     isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, ordering, states, fock_to_ind)

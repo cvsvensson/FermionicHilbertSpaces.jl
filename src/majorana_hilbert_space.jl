@@ -57,6 +57,7 @@ function tensor_product(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace)
 end
 ## Define matrix representations of symbolic majorana operators on Majorana Hilbert spaces.
 matrix_representation(op, H::MajoranaHilbertSpace) = matrix_representation(op, H.majoranaindices, basisstates(H))
+matrix_representation(op::Union{UniformScaling,Number}, H::MajoranaHilbertSpace) = op * I(dim(H))
 
 function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,S}, label_to_site, states, fock_to_ind) where {C,S<:AbstractMajoranaSym}
     majoranadigitpositions = Iterators.reverse(label_to_site[f.label] for f in op.factors)
