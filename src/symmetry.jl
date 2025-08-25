@@ -178,7 +178,7 @@ sectors(qn::ParityConservation) = qn.sectors
 end
 
 """
-    IndexConservation
+    IndexConservation(labels, sectors)
 A symmetry type representing conservation of the numbers of modes which contains a specific index or set of indices."""
 struct IndexConservation{L} <: AbstractSymmetry
     labels::L

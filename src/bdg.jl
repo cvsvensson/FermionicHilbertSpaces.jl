@@ -40,8 +40,7 @@ This hilbert space uses Nambu states to describe non-interacting systems with su
 where H is hermitian and Δ is antisymmetric.
 """
 bdg_hilbert_space(labels) = BdGHilbertSpace(labels)
-Base.size(h::BdGHilbertSpace) = size(h.parent)
-Base.size(h::BdGHilbertSpace, dim) = size(h.parent, dim)
+dim(h::BdGHilbertSpace) = dim(h.parent)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
 modes(H::BdGHilbertSpace) = modes(H.parent)
 Base.keys(h::BdGHilbertSpace) = keys(h.parent)

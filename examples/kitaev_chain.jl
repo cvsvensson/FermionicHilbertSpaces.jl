@@ -56,7 +56,7 @@ first(oddeigs[1]) - first(eveneigs[1])
 # Now, we construct the ground state Majoranas.
 # First, we need to embed the lowest energy odd and even states into the full Hilbert space.
 function extend(v, p)
-    mapreduce(H -> H == first(p) ? v : zeros(size(H, 1)), vcat, last(p))
+    mapreduce(H -> H == first(p) ? v : zeros(dim(H)), vcat, last(p))
 end
 
 Hsum = (Hodd, Heven)

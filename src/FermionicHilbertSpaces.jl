@@ -12,7 +12,7 @@ using NonCommutativeProducts
 import NonCommutativeProducts: @nc_eager, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 
 
-export FockNumber, JordanWignerOrdering, hc, basisstates
+export FockNumber, JordanWignerOrdering, hc, basisstates, dim
 export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subregion
 export parityoperator, numberoperator, fermions, majoranas, matrix_representation
 

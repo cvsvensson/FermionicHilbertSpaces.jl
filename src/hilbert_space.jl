@@ -1,13 +1,13 @@
 function Base.show(io::IO, H::Htype) where Htype<:AbstractFockHilbertSpace
-    n, m = size(H)
-    println(io, "$(n)⨯$m $(Htype.name.name):")
-    print(io, "modes: ")
+    d = dim(H)
+    N = length(keys(H))
+    println(io, "$(d)-dimensional $(Htype.name.name):")
+    print(io, "$N fermions: ")
     print(IOContext(io, :compact => true), modes(H))
 end
 Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 
-Base.size(H::AbstractHilbertSpace) = (length(basisstates(H)), length(basisstates(H)))
-Base.size(H::AbstractHilbertSpace, i) = i == 1 || i == 2 ? length(basisstates(H)) : throw(BoundsError(H, (i,)))
+dim(H::AbstractHilbertSpace) = length(basisstates(H))
 isorderedpartition(Hs, H::AbstractFockHilbertSpace) = isorderedpartition(map(modes, Hs), H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = isorderedsubsystem(Hsub.jw, H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = isorderedsubsystem(Hsub.jw, jw)
@@ -112,9 +112,10 @@ function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetr
 end
 
 function Base.show(io::IO, H::SymmetricFockHilbertSpace)
-    n, m = size(H)
-    println(io, "$(n)⨯$m SymmetricFockHilbertSpace:")
-    print(io, "modes: ")
+    d = dim(H)
+    N = length(keys(H))
+    println(io, "$(d)-dimensional SymmetricFockHilbertSpace:")
+    print(io, "$N fermions: ")
     println(IOContext(io, :compact => true), modes(H))
     show(io, H.symmetry)
 end
