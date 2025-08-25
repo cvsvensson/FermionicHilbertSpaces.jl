@@ -48,7 +48,7 @@ tensor_product((c1, c3), (H1, H2) => H) ≈ c1c3
 Let's partial trace to sites 1 and 3. Let's get a Hilbert space for those sites by using the function `subregion`, and then we can partial trace to that space with `partial_trace`.
 ```@example intro
 Hsub = subregion([1,3], H)
-size(Hsub, 1) / size(H, 1) * partial_trace(c1c3, H => Hsub) ≈ matrix_representation(c[1] * c[3], Hsub)
+dim(Hsub) / dim(H) * partial_trace(c1c3, H => Hsub) ≈ matrix_representation(c[1] * c[3], Hsub)
 ```
 
 ## Conserved quantum numbers

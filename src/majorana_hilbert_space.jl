@@ -2,7 +2,7 @@ struct MajoranaHilbertSpace{L,H} <: AbstractFockHilbertSpace
     majoranaindices::L
     parent::H
 end
-Base.size(H::MajoranaHilbertSpace) = size(H.parent)
+dim(H::MajoranaHilbertSpace) = dim(H.parent)
 mode_ordering(H::MajoranaHilbertSpace) = mode_ordering(H.parent)
 modes(H::MajoranaHilbertSpace) = modes(H.parent)
 Base.:(==)(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace) = H1.majoranaindices == H2.majoranaindices && H1.parent == H2.parent
@@ -106,7 +106,7 @@ end
     Hsub = subregion(1:2, H)
     Hf = H.parent
     Hfsub = subregion([(1, 2)], Hf)
-    m = rand(size(H)...)
+    m = rand(dim(H), dim(H))
     @test partial_trace(m, H => Hsub) == partial_trace(m, Hf => Hfsub)
     Hsub2 = subregion(3:4, H)
     Hfsub2 = subregion([(3, 4)], Hf)
@@ -114,7 +114,7 @@ end
     Hprod = tensor_product(Hsub, Hsub2)
     @test parent(Hprod) == tensor_product(Hfsub, Hfsub2)
 
-    m1 = rand(size(Hsub)...)
-    m2 = rand(size(Hsub2)...)
+    m1 = rand(dim(Hsub), dim(Hsub))
+    m2 = rand(dim(Hsub2), dim(Hsub2))
     @test tensor_product((m1, m2), (Hsub, Hsub2), Hprod) == tensor_product((m1, m2), (Hfsub, Hfsub2) => parent(Hprod))
 end

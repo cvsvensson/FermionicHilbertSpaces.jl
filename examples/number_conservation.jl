@@ -28,7 +28,7 @@ Base.size(m::Rank1Matrix) = (length(m.vec), length(m.vec))
 rho = Rank1Matrix(vecs[1]);
 subrho = partial_trace(rho, H => Hsub)
 sum(v -> -v * log(abs(v)), eigvals(subrho))
-size(Hsub, 1) / size(H, 1) * partial_trace(c1c3, H => Hsub) ≈ matrix_representation(c[1] * c[3], Hsub)
+dim(Hsub) / dim(H) * partial_trace(c1c3, H => Hsub) ≈ matrix_representation(c[1] * c[3], Hsub)
 
 H = hilbert_space(labels, NumberConservation([2, 4]))
 matrix_representation(ham, H)
