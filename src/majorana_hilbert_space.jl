@@ -57,7 +57,6 @@ function tensor_product(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace)
 end
 ## Define matrix representations of symbolic majorana operators on Majorana Hilbert spaces.
 matrix_representation(op, H::MajoranaHilbertSpace) = matrix_representation(op, H.majoranaindices, basisstates(H))
-matrix_representation(op::Number, H::MajoranaHilbertSpace) = matrix_representation(op, H.parent)
 
 function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,S}, label_to_site, states, fock_to_ind) where {C,S<:AbstractMajoranaSym}
     majoranadigitpositions = Iterators.reverse(label_to_site[f.label] for f in op.factors)
@@ -87,7 +86,8 @@ function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,S}, la
 end
 
 @testitem "Majorana matrix representations" begin
-    H = FermionicHilbertSpaces.majorana_hilbert_space(1:2)
+    using LinearAlgebra
+    H = majorana_hilbert_space(1:2)
     Hf = H.parent
     @majoranas γ
     @fermions f
@@ -100,7 +100,7 @@ end
     y(f) = f.creation ? -1im * f + hc : f + hc
     @test matrix_representation(γ[1], H) == matrix_representation(y(f[(1, 2)]), Hf)
     @test matrix_representation(γ[2], H) == matrix_representation(y(f[(1, 2)]'), Hf)
-    @test matrix_representation(1, H) == matrix_representation(1, Hf)
+    @test matrix_representation(1, H) == matrix_representation(1, Hf) == matrix_representation(1I, H) == matrix_representation(1I, Hf)
     @test matrix_representation(γ[1] * γ[2], H) == matrix_representation(y(f[(1, 2)]) * y(f[(1, 2)]'), Hf)
     @test matrix_representation(1 + γ[1] + 1im * γ[2] + 0.2 * γ[1] * γ[2], H) ==
           matrix_representation(1 + y(f[(1, 2)]) + 1im * y(f[(1, 2)]') + 0.2 * y(f[(1, 2)]) * y(f[(1, 2)]'), Hf)
