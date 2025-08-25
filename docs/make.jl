@@ -22,6 +22,7 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
+        "Conserved quantities" => "conservation.md",
         "Non interacting systems" => "non_interacting.md",
         "Examples" => [
             "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
