@@ -6,7 +6,7 @@ Base.valtype(::Type{NCMul{C,S,F}}) where {C,S<:AbstractFermionSym,F} = promote_t
 
 ## Instantiating sparse matrices
 matrix_representation(op, H::AbstractFockHilbertSpace) = matrix_representation(op, mode_ordering(H), basisstates(H), Dict(Iterators.map(reverse, enumerate(basisstates(H)))))
-matrix_representation(op::Number, H::AbstractFockHilbertSpace) = op * I(size(H, 1))
+matrix_representation(op::Number, H::AbstractFockHilbertSpace) = op * I(dim(H))
 
 function matrix_representation(op::Union{<:NCMul,<:AbstractFermionSym}, labels, states, fock_to_ind)
     outinds = Int[]
