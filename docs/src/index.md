@@ -8,16 +8,6 @@ CurrentModule = FermionicHilbertSpaces
 [[1]](#fermion_information_article) 
 
 
-# Installation 
-```julia
-using Pkg; Pkg.add(url="https://github.com/cvsvensson/FermionicHilbertSpaces.jl")
-```
-or by adding a registry to your julia environment and then installing the package
-```julia
-using Pkg; Pkg.Registry.add(RegistrySpec(url = "https://github.com/williamesamuelson/PackageRegistry"))
-Pkg.add("FermionicHilbertSpaces")
-```
-
 # Introduction
 
 The following example demonstrates how to define a fermionic Hilbert space and construct a simple Hamiltonian.
