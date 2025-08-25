@@ -180,6 +180,11 @@ Base.keys(h::SingleParticleHilbertSpace) = keys(h.parent)
 mode_ordering(h::SingleParticleHilbertSpace) = mode_ordering(h.parent)
 modes(h::SingleParticleHilbertSpace) = modes(h.parent)
 basisstates(h::SingleParticleHilbertSpace) = basisstates(h.parent)
+"""
+    single_particle_hilbert_space(labels)
+
+A hilbert space suitable for non-interacting systems with fermion number conservation. Matrix representations of symbolic operators give the single particle hamiltonian, without any contribution from the identity matrix.
+"""
 single_particle_hilbert_space(labels) = SingleParticleHilbertSpace(labels)
 matrix_representation(op, H::SingleParticleHilbertSpace) = matrix_representation(remove_identity(op), parent(H))
 basisstate(ind, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))

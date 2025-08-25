@@ -31,6 +31,14 @@ struct BdGHilbertSpace{H} <: AbstractFockHilbertSpace
         return new{typeof(H)}(H)
     end
 end
+"""
+    bdg_hilbert_space(labels)
+
+This hilbert space uses Nambu states to describe non-interacting systems with superconductive pairing. Matrix representations of quadratic operators take the form \\
+    [H  Δ; 
+-Δ*  -H*] \\
+where H is hermitian and Δ is antisymmetric.
+"""
 bdg_hilbert_space(labels) = BdGHilbertSpace(labels)
 Base.size(h::BdGHilbertSpace) = size(h.parent)
 Base.size(h::BdGHilbertSpace, dim) = size(h.parent, dim)

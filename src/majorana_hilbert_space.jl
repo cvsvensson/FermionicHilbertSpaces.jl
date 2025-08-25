@@ -13,6 +13,12 @@ function majoranas(H::MajoranaHilbertSpace)
     @majoranas γ
     OrderedDict(l => matrix_representation(γ[l], H) for l in keys(H.majoranaindices))
 end
+
+"""
+    majorana_hilbert_space(labels, qn)
+
+Represents a hilbert space for majoranas. `labels` must be an even number of unique labels.
+"""
 function majorana_hilbert_space(labels, qn=NoSymmetry())
     iseven(length(labels)) || throw(ArgumentError("Must be an even number of Majoranas to define a Hilbert space."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
