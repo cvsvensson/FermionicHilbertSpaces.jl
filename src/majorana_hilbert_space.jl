@@ -13,6 +13,12 @@ function majoranas(H::MajoranaHilbertSpace)
     @majoranas γ
     OrderedDict(l => matrix_representation(γ[l], H) for l in keys(H.majoranaindices))
 end
+
+"""
+    majorana_hilbert_space(labels, qn)
+
+Represents a hilbert space for majoranas. `labels` must be an even number of unique labels.
+"""
 function majorana_hilbert_space(labels, qn=NoSymmetry())
     iseven(length(labels)) || throw(ArgumentError("Must be an even number of Majoranas to define a Hilbert space."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
@@ -51,7 +57,7 @@ function tensor_product(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace)
 end
 ## Define matrix representations of symbolic majorana operators on Majorana Hilbert spaces.
 matrix_representation(op, H::MajoranaHilbertSpace) = matrix_representation(op, H.majoranaindices, basisstates(H))
-matrix_representation(op::Number, H::MajoranaHilbertSpace) = matrix_representation(op, H.parent)
+matrix_representation(op::Union{UniformScaling,Number}, H::MajoranaHilbertSpace) = op * I(dim(H))
 
 function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,S}, label_to_site, states, fock_to_ind) where {C,S<:AbstractMajoranaSym}
     majoranadigitpositions = Iterators.reverse(label_to_site[f.label] for f in op.factors)
@@ -81,7 +87,8 @@ function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,S}, la
 end
 
 @testitem "Majorana matrix representations" begin
-    H = FermionicHilbertSpaces.majorana_hilbert_space(1:2)
+    using LinearAlgebra
+    H = majorana_hilbert_space(1:2)
     Hf = H.parent
     @majoranas γ
     @fermions f
@@ -94,7 +101,7 @@ end
     y(f) = f.creation ? -1im * f + hc : f + hc
     @test matrix_representation(γ[1], H) == matrix_representation(y(f[(1, 2)]), Hf)
     @test matrix_representation(γ[2], H) == matrix_representation(y(f[(1, 2)]'), Hf)
-    @test matrix_representation(1, H) == matrix_representation(1, Hf)
+    @test matrix_representation(1, H) == matrix_representation(1, Hf) == matrix_representation(1I, H) == matrix_representation(1I, Hf)
     @test matrix_representation(γ[1] * γ[2], H) == matrix_representation(y(f[(1, 2)]) * y(f[(1, 2)]'), Hf)
     @test matrix_representation(1 + γ[1] + 1im * γ[2] + 0.2 * γ[1] * γ[2], H) ==
           matrix_representation(1 + y(f[(1, 2)]) + 1im * y(f[(1, 2)]') + 0.2 * y(f[(1, 2)]) * y(f[(1, 2)]'), Hf)

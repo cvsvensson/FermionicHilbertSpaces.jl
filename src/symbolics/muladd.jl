@@ -1,12 +1,16 @@
 abstract type AbstractFermionSym end
 
-Base.valtype(::NCAdd{C,S}) where {C,S} = promote_type(C, valtype(S))
+Base.valtype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S<:AbstractFermionSym,F} = promote_type(C, valtype(S))
 Base.valtype(::NCMul{C,S}) where {C,S<:AbstractFermionSym} = promote_type(C, valtype(S))
 Base.valtype(::Type{NCMul{C,S,F}}) where {C,S<:AbstractFermionSym,F} = promote_type(C, valtype(S))
 
 ## Instantiating sparse matrices
+"""
+    matrix_representation(op, H::AbstractFockHilbertSpace)
+
+Return the matrix representation of the symbolic operator `op` on the hilbert space `H`.
+"""
 matrix_representation(op, H::AbstractFockHilbertSpace) = matrix_representation(op, mode_ordering(H), basisstates(H), Dict(Iterators.map(reverse, enumerate(basisstates(H)))))
-matrix_representation(op::Number, H::AbstractFockHilbertSpace) = op * I(dim(H))
 
 function matrix_representation(op::Union{<:NCMul,<:AbstractFermionSym}, labels, states, fock_to_ind)
     outinds = Int[]
@@ -20,6 +24,7 @@ function matrix_representation(op::Union{<:NCMul,<:AbstractFermionSym}, labels, 
     SparseArrays.sparse!(outinds, ininds, identity.(amps), length(states), length(states))
 end
 matrix_representation(op, labels, states) = matrix_representation(op, labels, states, Dict(Iterators.map(reverse, enumerate(states))))
+matrix_representation(op::Union{UniformScaling,Number}, H::AbstractFockHilbertSpace) = op * I(dim(H))
 
 function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{SingleParticleState}, fock_to_ind)
     isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, ordering, states, fock_to_ind)

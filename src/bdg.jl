@@ -23,7 +23,7 @@ function normal_order_to_bdg(m::AbstractMatrix)
         -conj(Δ) -conj(h)]
 end
 
-struct BdGHilbertSpace{H} <: AbstractFockHilbertSpace
+struct BdGHilbertSpace{H}
     parent::H
     function BdGHilbertSpace(labels)
         states = vec([NambuState(i, hole) for (i, label) in enumerate(labels), hole in (true, false)])
@@ -31,6 +31,14 @@ struct BdGHilbertSpace{H} <: AbstractFockHilbertSpace
         return new{typeof(H)}(H)
     end
 end
+"""
+    bdg_hilbert_space(labels)
+
+This hilbert space uses Nambu states to describe non-interacting systems with superconductive pairing. Matrix representations of quadratic operators take the form \\
+    [H  Δ; 
+-Δ*  -H*] \\
+where H is hermitian and Δ is antisymmetric.
+"""
 bdg_hilbert_space(labels) = BdGHilbertSpace(labels)
 dim(h::BdGHilbertSpace) = dim(h.parent)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)

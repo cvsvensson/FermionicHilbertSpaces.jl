@@ -45,6 +45,10 @@ Represents the Hermitian conjugate.
 struct HC end
 Base.:+(m, ::HC) = (m + m')
 Base.:-(m, ::HC) = (m - m')
+"""
+    hc
+Adding this is equivalent to adding the hermitian conjugate.
+"""
 const hc = HC()
 
 ## Files
