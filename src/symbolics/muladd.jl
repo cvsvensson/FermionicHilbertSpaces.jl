@@ -1,6 +1,6 @@
 abstract type AbstractFermionSym end
 
-Base.valtype(::NCAdd{C,S}) where {C,S} = promote_type(C, valtype(S))
+Base.valtype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S<:AbstractFermionSym,F} = promote_type(C, valtype(S))
 Base.valtype(::NCMul{C,S}) where {C,S<:AbstractFermionSym} = promote_type(C, valtype(S))
 Base.valtype(::Type{NCMul{C,S,F}}) where {C,S<:AbstractFermionSym,F} = promote_type(C, valtype(S))
 
@@ -24,6 +24,7 @@ function matrix_representation(op::Union{<:NCMul,<:AbstractFermionSym}, labels, 
     SparseArrays.sparse!(outinds, ininds, identity.(amps), length(states), length(states))
 end
 matrix_representation(op, labels, states) = matrix_representation(op, labels, states, Dict(Iterators.map(reverse, enumerate(states))))
+matrix_representation(op::Union{UniformScaling,Number}, labels, states, dict) = op * I(length(states))
 
 function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{SingleParticleState}, fock_to_ind)
     isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
