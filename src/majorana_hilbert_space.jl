@@ -55,6 +55,8 @@ function tensor_product(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace)
     majoranaindices = OrderedDict(mapreduce((ntup) -> [ntup[2][1] => 2ntup[1] - 1, ntup[2][2] => 2ntup[1]], vcat, enumerate(keys(Hf))))
     MajoranaHilbertSpace(majoranaindices, Hf)
 end
+
+state_index(state::AbstractFockState, H::MajoranaHilbertSpace) = state_index(state, H.parent)
 ## Define matrix representations of symbolic majorana operators on Majorana Hilbert spaces.
 matrix_representation(op, H::MajoranaHilbertSpace) = matrix_representation(op, H.majoranaindices, basisstates(H))
 matrix_representation(op::Union{UniformScaling,Number}, H::MajoranaHilbertSpace) = op * I(dim(H))

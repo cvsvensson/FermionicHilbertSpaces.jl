@@ -147,7 +147,7 @@ end
 Return a dictionary of fermionic annihilation operators for the Hilbert space `H`.
 """
 function fermions(H::AbstractFockHilbertSpace)
-    M = length(H.jw)
+    M = length(modes(H))
     labelvec = keys(H)
     reps = [fermion_sparse_matrix(n, H) for n in 1:M]
     OrderedDict(zip(labelvec, reps))
