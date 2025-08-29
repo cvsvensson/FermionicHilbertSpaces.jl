@@ -41,16 +41,16 @@ function project(m::AbstractVecOrMat, p::PairWithHilbertSpaces)
     return ndims(m) == 1 ? m[inds] : m[inds, inds]
 end
 
-@testitem "pad and project" begin
+@testitem "Pad and project" begin
     import FermionicHilbertSpaces: sector, paddable
     H = hilbert_space(1:3, NumberConservation())
     Hsub = sector(1, H)
     Hsubsym = hilbert_space(1:3, NumberConservation(1))
     @test paddable(Hsub => H)
     @test !paddable(H => Hsub)
-    v = rand(dim(Hsub))
+    v = rand(ComplexF64, dim(Hsub))
     @test v[Hsub => Hsub] == v
-    m = rand(dim(Hsub), dim(Hsub))
+    m = rand(ComplexF64, dim(Hsub), dim(Hsub))
     @test v[Hsub => H][H => Hsub] == v
     @test m[Hsub => H][H => Hsub] == m
     @test v[Hsubsym => H][H => Hsubsym] == v
