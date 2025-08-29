@@ -173,3 +173,10 @@ end
     end
     @test a == 1.0 * f[2] * f[1] + 1 + f[1]
 end
+
+function partial_trace(m::NCMul{C, <:MajoranaSym}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where C
+    sub_modes = Set(Iterators.flatten(modes(Hsub)))
+    # go through factors
+    # if any label is not in sub_modes, return 0
+    # otherwise, return m but normalized
+end
