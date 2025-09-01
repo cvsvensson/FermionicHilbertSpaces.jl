@@ -46,7 +46,7 @@ Base.keys(H::SimpleFockHilbertSpace) = keys(H.jw)
     basisstates(H)
 Return an iterator over all basis states for the given Hilbert space `H`.
 """
-basisstates(H::SimpleFockHilbertSpace{F}) where F = Iterators.map(F ∘ FockNumber, 0:2^length(H.jw)-1)
+basisstates(H::SimpleFockHilbertSpace{F}) where F = Iterators.map(F ∘ FockNumber, UnitRange{UInt64}(0, 2^length(H.jw) - 1))
 basisstate(ind, ::SimpleFockHilbertSpace{F}) where F = (F ∘ FockNumber)(ind - 1)
 state_index(state, ::SimpleFockHilbertSpace{F}) where F = FockNumber(state).f + 1
 function Base.:(==)(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace)
@@ -67,7 +67,7 @@ struct FockHilbertSpace{L,F,I} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
     basisstates::F
     state_index::I
-    function FockHilbertSpace(labels, basisstates::F=map(FockNumber, 0:2^length(labels)-1)) where F
+    function FockHilbertSpace(labels, basisstates::F=map(FockNumber, UnitRange{UInt64}(0, 2^length(labels) - 1))) where F
         jw = JordanWignerOrdering(labels)
         state_index = Dict(reverse(pair) for pair in enumerate(basisstates))
         new{eltype(jw),F,typeof(state_index)}(jw, basisstates, state_index)
@@ -125,7 +125,7 @@ Base.keys(H::SymmetricFockHilbertSpace) = keys(H.jw)
 basisstate(ind, H::SymmetricFockHilbertSpace) = basisstate(ind, H.symmetry)
 state_index(f::AbstractFockState, H::SymmetricFockHilbertSpace) = state_index(f, H.symmetry)
 basisstates(H::SymmetricFockHilbertSpace) = basisstates(H.symmetry)
-basisstates(H::SymmetricFockHilbertSpace{<:Any,NoSymmetry}) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
+basisstates(H::SymmetricFockHilbertSpace{<:Any,NoSymmetry}) = Iterators.map(FockNumber, UnitRange{UInt64}(0, 2^length(H.jw)-1))
 
 function Base.:(==)(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
     if H1 === H2

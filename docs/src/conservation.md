@@ -21,14 +21,14 @@ H = hilbert_space(labels)
 ```
 If spin is conserved, one can use 
 ```@example spin
-H = hilbert_space(labels, IndexConservation(:↑)*IndexConservation(:↓))
+H = hilbert_space(labels, number_conservation(index = :↑) * number_conservation(index = :↓))
 ```
 to sort states according to the number of fermions with spin up and down. However, this package can't help to sort states into sectors with different total angular momentum, because that requires taking superpositions of different fock states.
 
 To pick out the sector with 2 fermions with spin up and 0 fermions with spin down, one can extract it from the hilbert space defined above using `sector`, or construct it directly
 ```@example spin
 FermionicHilbertSpaces.sector((2,0), H)
-hilbert_space(labels, IndexConservation(:↑, 2)*IndexConservation(:↓, 0))
+hilbert_space(labels, number_conservation(2, index = :↑) * number_conservation(0, index = :↓))
 ```
 
 ## No double occupation
@@ -40,7 +40,7 @@ using FermionicHilbertSpaces, LinearAlgebra
 N = 2 # number of fermions
 space = 1:N 
 spin = (:↑,:↓)
-Hs = [hilbert_space([(k, s) for s in spin], NumberConservation(0:1)) for k in space]
+Hs = [hilbert_space([(k, s) for s in spin], number_conservation(0:1)) for k in space]
 H = tensor_product(Hs)
 ```
 
@@ -50,7 +50,7 @@ dim(H) == 3^N
 
 Can also take product of symmetries
 ```@example double_occupation
-qn2 = prod(IndexConservation(k,0:1) for k in space)
+qn2 = prod(number_conservation(0:1; index = k) for k in space)
 H2 = hilbert_space(keys(H), qn2)
 ```
 

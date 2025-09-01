@@ -11,7 +11,7 @@ FockNumber{I}(f::FockNumber) where I<:Integer = FockNumber{I}(f.f)
 Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
 Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
 Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
-
+Base.show(io::IO, f::FockNumber{T}) where T = get(io, :compact, false) ? print(io, "FockNumber{T}(", f.f, ")") : print(io, "FockNumber(", f.f, ")")
 """
     JordanWignerOrdering
 A type representing the ordering of fermionic modes.

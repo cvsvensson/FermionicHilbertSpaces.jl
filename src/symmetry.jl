@@ -100,7 +100,7 @@ instantiate(qn::NumberConservation, ::JordanWignerOrdering) = qn
     labels = 1:4
     conservedlabels = 1:4
     c1 = hilbert_space(labels, number_conservation(; labels=conservedlabels))
-    c2 = hilbert_space(labels, NumberConservation())
+    c2 = hilbert_space(labels, number_conservation())
     @test c1 == c2
 
     conservedlabels = 2:2
@@ -141,40 +141,18 @@ sectors(qn::ParityConservation) = qn.sectors
 @testitem "ProductSymmetry" begin
     import FermionicHilbertSpaces: number_conservation
     labels = 1:4
-    qn = NumberConservation() * ParityConservation()
+    qn = number_conservation() * ParityConservation()
     H = hilbert_space(labels, qn)
     @test keys(H.symmetry.qntofockstates).values == [(n, (-1)^n) for n in 0:4]
     qn = prod(number_conservation(; labels=[l]) for l in labels)
     @test all(length.(hilbert_space(labels, qn).symmetry.qntofockstates) .== 1)
 end
 
-# """
-#     IndexConservation(labels, sectors)
-# A symmetry type representing conservation of the numbers of modes which contains a specific index or set of indices."""
-# struct IndexConservation{L} <: AbstractSymmetry
-#     labels::L
-#     sectors::Union{Vector{Int},Missing}
-#     function IndexConservation(labels::_L, sectors) where _L
-#         if !Base.isiterable(_L)
-#             labels = (labels,)
-#         end
-#         L = typeof(labels)
-#         ismissing(sectors) && return new{L}(labels, missing)
-#         allunique(labels) || throw(ArgumentError("IndexConservation labels must be unique."))
-#         allunique(sectors) || throw(ArgumentError("IndexConservation sectors must be unique."))
-#         sectorvec = sort!(Int[sectors...])
-#         new{L}(labels, sectorvec)
-#     end
-# end
-# sectors(qn::IndexConservation) = qn.sectors
-# IndexConservation(labels) = IndexConservation(labels, missing)
-# instantiate(qn::IndexConservation, jw::JordanWignerOrdering) = IndexConservation(qn.labels, jw, qn.sectors)
-# IndexConservation(indices, jw::JordanWignerOrdering, sectors) = FermionSubsetConservation(filter(label -> any((index in label || index == label) for index in indices), keys(jw)), jw, sectors)
 
 @testitem "IndexConservation" begin
     import FermionicHilbertSpaces: number_conservation
     labels = 1:4
-    qn = number_conservation(; index=1) #IndexConservation(1)
+    qn = number_conservation(; index=1)
     qn2 = number_conservation(; labels=1:1)
     H = hilbert_space(labels, qn)
     H2 = hilbert_space(labels, qn2)
@@ -183,14 +161,14 @@ end
     spatial_labels = 1:1
     spin_labels = (:↑, :↓)
     all_labels = Base.product(spatial_labels, spin_labels)
-    qn = number_conservation(; index=:↑) * number_conservation(; index=:↓) #IndexConservation(:↑) * IndexConservation(:↓)
+    qn = number_conservation(; index=:↑) * number_conservation(; index=:↓)
     H = hilbert_space(all_labels, qn)
     @test all(length.(H.symmetry.qntofockstates) .== 1)
 
     spatial_labels = 1:2
     spin_labels = (:↑, :↓)
     all_labels = Base.product(spatial_labels, spin_labels)
-    qn = number_conservation(; index=:↑, sectors=1)#IndexConservation(:↑, 1)
+    qn = number_conservation(1; index=:↑)
     H = hilbert_space(all_labels, qn)
     @test length(basisstates(H)) == 2^3
 end
@@ -211,7 +189,7 @@ function instantiate_and_get_basisstates(jw::JordanWignerOrdering, _qn)
     fs = basisstates(jw, qn)
     return qn, fs
 end
-basisstates(jw::JordanWignerOrdering, ::NoSymmetry) = map(FockNumber, 0:2^length(jw)-1)
+basisstates(jw::JordanWignerOrdering, ::NoSymmetry) = map(FockNumber, UnitRange{UInt64}(0, 2^length(jw)-1))
 function basisstates(jw::JordanWignerOrdering, qn::ParityConservation)
     s = sectors(qn)
     fs = basisstates(jw, NoSymmetry())
@@ -243,19 +221,21 @@ struct NumberConservations{M,S} <: AbstractSymmetry
         new{M,typeof(canon_sectors)}(masks, canon_sectors)
     end
 end
+Base.show(io::IO, qn::NumberConservations) = print(io, "NumberConservation: ", length(qn.masks), " sets")
 (qn::NumberConservations)(f::FockNumber) = map((m -> fermionnumber(f, m)), qn.masks)
-function number_conservation(; labels=missing, sectors=missing, indices=missing, index=missing)
+function number_conservation(sectors=missing, extra_condition=missing; labels=missing, indices=missing, index=missing)
     !ismissing(index) && !ismissing(indices) && throw(ArgumentError("Cannot specify both `index` and `indices`."))
+    ismissing(labels) && ismissing(index) && ismissing(indices) && ismissing(extra_condition) && return NumberConservation(sectors)
     label_condition(label, all_labels) = in(label, labels)
     index_condition(label, all_labels) = index in label || index == label
     indices_condition(label, all_labels) = any((index in label || index == label) for index in indices)
-    conditions = (label_condition, index_condition, indices_condition)
-    functions = Tuple(cond for (input, cond) in zip((labels, index, indices), conditions) if !ismissing(input))
+    conditions = (label_condition, index_condition, indices_condition, extra_condition)
+    functions = Tuple(cond for (input, cond) in zip((labels, index, indices, extra_condition), conditions) if !ismissing(input))
     UninstantiatedNumberConservations((functions,), (sectors,))
 end
 Base.:*(qn1::UninstantiatedNumberConservations, qn2::UninstantiatedNumberConservations) = UninstantiatedNumberConservations((qn1.f..., qn2.f...), (qn1.sectors..., qn2.sectors...))
 
-canonicalize_sector(sectors::Missing, mask, N) = 0:mask_region_size(mask)
+canonicalize_sector(::Missing, mask, N) = 0:mask_region_size(mask)
 canonicalize_sector(sectors::Integer, mask, N) = (sectors,)
 canonicalize_sector(sector::AbstractVector{<:Integer}, mask, N) = sector
 canonicalize_sector(sector::NTuple{M,<:Integer}, mask, N) where M = sector

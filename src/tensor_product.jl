@@ -434,9 +434,9 @@ function phase_map(fockstates, M::Int)
     end
     PhaseMap(phases, fockstates)
 end
-phase_map(N::Int) = phase_map(map(FockNumber, 0:2^N-1), N)
+phase_map(N::Int) = phase_map(map(FockNumber, UnitRange{UInt64}(0, 2^N - 1)), N)
 phase_map(H::AbstractFockHilbertSpace) = phase_map(collect(basisstates(H)), length(H.jw))
-LazyPhaseMap(N::Int) = LazyPhaseMap{N,FockNumber{Int}}(map(FockNumber, 0:2^N-1))
+LazyPhaseMap(N::Int) = (states = map(FockNumber, UnitRange{UInt64}(0, 2^N - 1)); LazyPhaseMap{N,eltype(states)}(states))
 SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest...) = SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(rest...)
 (p::PhaseMap)(op::AbstractMatrix) = p.phases .* op
 (p::LazyPhaseMap)(op::AbstractMatrix) = p .* op
