@@ -48,13 +48,16 @@ end
 function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,C2,S<:AbstractMajoranaSym,F}
     return sum(partial_trace(term, H, Hsub) for term in NCterms(m))
 end
+function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, Hs::Pair{<:MajoranaHilbertSpace,<:MajoranaHilbertSpace}) where {C,C2,S<:AbstractMajoranaSym,F}
+    return partial_trace(m, Hs...)
+end
 
 @testitem "Partial trace of symbolic Majoranas" begin
     @majoranas y
     H = majorana_hilbert_space(1:6)
-    Hsub = subregion(5:6, H)
-    op = 3y[1] + 2y[5] + 3y[2]*y[5] - y[5]*y[6]
-    @test partial_trace(op, H, Hsub) == 8y[5] - 4y[5]*y[6]
+    Hsub = subregion(3:4, H)
+    op = 3y[1] + 2y[3] + 3y[4]*y[1] + y[3]*y[4]
+    @test matrix_representation(partial_trace(op, H => Hsub), Hsub) == partial_trace(matrix_representation(op, H), H => Hsub)
 end
 
 function simple_complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace)
