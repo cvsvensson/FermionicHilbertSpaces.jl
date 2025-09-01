@@ -7,7 +7,7 @@ function Base.show(io::IO, H::Htype) where Htype<:AbstractFockHilbertSpace
 end
 Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 
-dim(H::AbstractHilbertSpace) = length(basisstates(H))
+dim(H::AbstractHilbertSpace) = Int(length(basisstates(H)))
 isorderedpartition(Hs, H::AbstractFockHilbertSpace) = isorderedpartition(map(modes, Hs), H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = isorderedsubsystem(Hsub.jw, H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = isorderedsubsystem(Hsub.jw, jw)
@@ -17,8 +17,6 @@ consistent_ordering(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrderin
 consistent_ordering(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = consistent_ordering(subsystem.jw, H.jw)
 focknbr_from_site_labels(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(H), jw)
 ispartition(Hs, H::AbstractFockHilbertSpace) = ispartition(map(modes, Hs), H.jw)
-
-# getindices(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = siteindices(H.jw, jw)
 
 mode_ordering(H::AbstractFockHilbertSpace) = H.jw
 # mode_ordering(jw::JordanWignerOrdering) = jw
