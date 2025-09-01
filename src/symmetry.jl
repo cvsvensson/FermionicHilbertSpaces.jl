@@ -221,17 +221,23 @@ struct NumberConservations{M,S} <: AbstractSymmetry
         new{M,typeof(canon_sectors)}(masks, canon_sectors)
     end
 end
-Base.show(io::IO, qn::NumberConservations) = print(io, "NumberConservation: ", length(qn.masks), " sets")
+Base.show(io::IO, qn::NumberConservations) = print(io, "Number conservation for ", length(qn.masks), " subsets")
 (qn::NumberConservations)(f::FockNumber) = length(qn.masks) == 1 ? fermionnumber(f, only(qn.masks)) : map((m -> fermionnumber(f, m)), qn.masks)
-function number_conservation(sectors=missing, extra_condition=missing; labels=missing, indices=missing, index=missing)
-    !ismissing(index) && !ismissing(indices) && throw(ArgumentError("Cannot specify both `index` and `indices`."))
-    ismissing(labels) && ismissing(index) && ismissing(indices) && ismissing(extra_condition) && return NumberConservation(sectors)
-    label_condition(label, all_labels) = in(label, labels)
-    index_condition(label, all_labels) = index in label || index == label
-    indices_condition(label, all_labels) = any((index in label || index == label) for index in indices)
-    conditions = (label_condition, index_condition, indices_condition, extra_condition)
-    functions = Tuple(cond for (input, cond) in zip((labels, index, indices, extra_condition), conditions) if !ismissing(input))
-    UninstantiatedNumberConservations((functions,), (sectors,))
+function number_conservation(sectors=missing, label_condition=missing; labels=missing, indices=missing, index=missing)
+    inputs = (labels, index, indices, label_condition)
+    ns = findall(!ismissing, inputs)
+    length(ns) == 0 && return NumberConservation(sectors)
+    length(ns) <= 1 || throw(ArgumentError("Can only specify one of `labels`, `index`, `indices` or `label_condition`."))
+    condition = if only(ns) == 1
+        (label, all_labels) -> in(label, labels)
+    elseif only(ns) == 2
+        (label, all_labels) -> index in label || index == label
+    elseif only(ns) == 3
+        (label, all_labels) -> any((index in label || index == label) for index in indices)
+    elseif only(ns) == 4
+        label_condition
+    end
+    UninstantiatedNumberConservations((condition,), (sectors,))
 end
 Base.:*(qn1::UninstantiatedNumberConservations, qn2::UninstantiatedNumberConservations) = UninstantiatedNumberConservations((qn1.f..., qn2.f...), (qn1.sectors..., qn2.sectors...))
 
@@ -246,7 +252,7 @@ instantiate(qn::UninstantiatedNumberConservations, jw::JordanWignerOrdering,) = 
 function instantiate(qn::UninstantiatedNumberConservations, labels)
     N = length(labels)
     T = default_fock_representation(N)
-    masks = map(f -> focknbr_from_bits(map(l -> all(f -> f(l, labels), f), labels), T), qn.f)
+    masks = map(f -> focknbr_from_bits(map(l -> f(l, labels), labels), T), qn.f)
     NumberConservations(masks, qn.sectors, N)
 end
 basisstates(jw::JordanWignerOrdering, qn::NumberConservations) = sort!(generate_states(qn.masks, qn.sectors, length(jw)))

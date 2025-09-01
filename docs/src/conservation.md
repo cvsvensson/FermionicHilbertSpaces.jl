@@ -1,16 +1,19 @@
 
 # Conserved quantum numbers
-The basis states of a Hilbert space can be organized into sectors with different quantum numbers. Only quantum numbers which are diagonal in the fock state basis are supported. Use `hilbert_space(labels, qn)`, where `qn` can be e.g.
+The basis states of a Hilbert space can be organized into sectors with different quantum numbers. Only quantum numbers which are diagonal in the fock state basis are supported. 
+
+Use `hilbert_space(labels, qn)`, where `qn` can be e.g.
 - `ParityConservation()`: Puts all states with odd parity first, then all states with even parity.
 - `ParityConservation(p::Int)`: Only contains states with parity `p` (-1 for odd and 1 for even).
-- `NumberConservation()`: Sorts basis states by the number of fermions.
-- `NumberConservation(n::Int)`: Only contains states with `n` fermions.
-- `NumberConservation(sectors::Vector{Int})`: Only contains states with the numbers in the list `sectors`.
-- `IndexConservation(label, sectors::Vector{Int})`: Number conservation for particles that include `label`. See examples below.
-- Products of the above quantum numbers, which sorts states according to each factor in the product. See examples below.
+- `number_conservation()`: Sorts basis states by the number of fermions.
+- `number_conservation(sectors::Union{Int,Vector{Int}})`: Only contains states with the number(s) in the list `sectors`.
+- `number_conservation(sectors; index)`: Number conservation for fermions whose label contain `index`.
+- `number_conservation(sectors; labels)`: Number conservation for fermions whose label are included in `labels`.
+- `number_conservation(sectors; indices)`: Number conservation for fermions whose label contain any of `indices`.
+- `number_conservation(sectors, condition)`: Number conservation for fermions whose label satisfies `condition(label,all_labels) == true`.
+- Products of the above quantum numbers, which sorts states according to each factor in the product.
 
-
-
+Using `number_conservation` with small sectors avoids the exponentially large Hilbert space.
 
 ## Spin
 This package does not know anything about spin, but one can treat spin just as an extra label as follows:
