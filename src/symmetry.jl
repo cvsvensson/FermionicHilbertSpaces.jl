@@ -222,7 +222,7 @@ struct NumberConservations{M,S} <: AbstractSymmetry
     end
 end
 Base.show(io::IO, qn::NumberConservations) = print(io, "NumberConservation: ", length(qn.masks), " sets")
-(qn::NumberConservations)(f::FockNumber) = map((m -> fermionnumber(f, m)), qn.masks)
+(qn::NumberConservations)(f::FockNumber) = length(qn.masks) == 1 ? fermionnumber(f, only(qn.masks)) : map((m -> fermionnumber(f, m)), qn.masks)
 function number_conservation(sectors=missing, extra_condition=missing; labels=missing, indices=missing, index=missing)
     !ismissing(index) && !ismissing(indices) && throw(ArgumentError("Cannot specify both `index` and `indices`."))
     ismissing(labels) && ismissing(index) && ismissing(indices) && ismissing(extra_condition) && return NumberConservation(sectors)
