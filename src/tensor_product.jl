@@ -2,7 +2,7 @@
 """
     tensor_product(Hs)
 
-Compute the tensor_product product hilbert spaces `Hs`. The symmetry of the resulting basis is computed by promote_symmetry.
+Compute the tensor_product product hilbert spaces `Hs`.
 """
 tensor_product(Hs::AbstractVector{<:AbstractHilbertSpace}) = foldl(tensor_product, Hs)
 tensor_product(Hs::Tuple) = foldl(tensor_product, Hs)

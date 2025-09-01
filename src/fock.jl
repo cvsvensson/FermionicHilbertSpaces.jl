@@ -3,7 +3,7 @@ abstract type AbstractFockState <: AbstractBasisState end
     FockNumber
 A type representing a Fock state as the bitstring of an integer.
 """
-struct FockNumber{I<:Integer} <: AbstractFockState
+struct FockNumber{I} <: AbstractFockState
     f::I
 end
 FockNumber(f::FockNumber) = f
@@ -57,17 +57,16 @@ Base.zero(::FockNumber{T}) where T = zero(FockNumber{T})
 Base.zero(::Type{FockNumber{T}}) where T = FockNumber(zero(T))
 
 
-focknbr_from_bits(bits, ::Type{T}=(length(bits) > 63 ? BigInt : Int)) where T = FockNumber{T}(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
-focknbr_from_site_index(site::Integer, ::Type{T}=site > 63 ? BigInt : Int) where T = FockNumber{T}(T(1) << (site - 1))
-focknbr_from_site_indices(sites, ::Type{T}=(maximum(sites, init=0) > 63 ? BigInt : Int)) where T = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber(zero(T)))
+focknbr_from_bits(bits, ::Type{T}=default_fock_representation(length(bits))) where T = FockNumber{T}(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
+focknbr_from_site_index(site::Integer, ::Type{T}=default_fock_representation(site)) where T = FockNumber{T}(one(T) << (site - 1))
+focknbr_from_site_indices(sites, ::Type{T}=default_fock_representation(maximum(sites, init=0))) where T = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber{T}(zero(T)))
 
 bits(f::FockNumber, N) = digits(Bool, f.f, base=2, pad=N)
 parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
 
-fermionnumber(f::FockNumber{<:Integer}, mask::Integer) = count_ones(f.f & mask)
-fermionnumber(f::FockNumber{<:BitVector}, mask::BitVector) = count(identity, f.f[mask])
+fermionnumber(f::FockNumber{<:Integer}, mask) = count_ones(f.f & mask)
 
 """
     jwstring(site, focknbr)
