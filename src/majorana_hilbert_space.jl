@@ -36,6 +36,27 @@ function subregion(modes, H::MajoranaHilbertSpace)
     MajoranaHilbertSpace(majorana_position, subregion(pairs, H.parent))
 end
 partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, phase_factors::Bool=true, complement::MajoranaHilbertSpace=simple_complementary_subsystem(H, Hsub)) = partial_trace!(mout, m, H.parent, Hsub.parent, phase_factors, complement.parent)
+function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,S<:AbstractMajoranaSym,F}
+    sub_modes = Set(Iterators.flatten(modes(Hsub)))
+    for f in m.factors
+        if f.label ∉ sub_modes
+            return 0 * m
+        end
+    end
+    return m * dim(H) / dim(Hsub)
+end
+function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,C2,S<:AbstractMajoranaSym,F}
+    return sum(partial_trace(term, H, Hsub) for term in NCterms(m))
+end
+
+@testitem "Partial trace of symbolic Majoranas" begin
+    @majoranas y
+    H = majorana_hilbert_space(1:6)
+    Hsub = subregion(5:6, H)
+    op = 3y[1] + 2y[5] + 3y[2]*y[5] - y[5]*y[6]
+    @test partial_trace(op, H, Hsub) == 8y[5] - 4y[5]*y[6]
+end
+
 function simple_complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace)
     complement_labels = setdiff(keys(H.majoranaindices), keys(Hsub.majoranaindices))
     complement_fermionic_space = simple_complementary_subsystem(H.parent, Hsub.parent)
