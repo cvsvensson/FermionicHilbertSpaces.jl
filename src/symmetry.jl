@@ -67,7 +67,7 @@ end
 Generate a list of Fock states with `n` occupied fermions in a system with `M` different fermions.
 """
 function fixed_particle_number_fockstates(M, n, ::Type{T}=default_fock_representation(M)) where T
-    iszero(n) && return [FockNumber{T}, zero(T)]
+    iszero(n) && return [FockNumber{T}(zero(T))]
     v = focknbr_from_bits([k <= n for k in 1:M])
     maxv = v << (M - n)
     states = Vector{FockNumber{T}}(undef, binomial(M, n))
