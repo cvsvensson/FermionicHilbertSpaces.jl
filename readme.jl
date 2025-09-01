@@ -37,7 +37,7 @@ entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
 
 # ### Conserved quantities
 # The hamiltonian above conserves the number of fermions, which we can exploit as
-Hcons = hilbert_space(1:4, NumberConservation(2))
+Hcons = hilbert_space(1:4, number_conservation(2))
 # This hilbert space contains only states with two fermions. We can use it just as before to get a matrix representation of the hamiltonian
 ham = matrix_representation(sym_ham, Hcons)
 # and we can calculate the partial trace as before

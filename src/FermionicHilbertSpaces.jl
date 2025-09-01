@@ -18,7 +18,7 @@ export parityoperator, numberoperator, fermions, majoranas, matrix_representatio
 
 export partial_trace, fermionic_kron, tensor_product, embed, extend
 export @fermions, @majoranas
-export NumberConservation, NoSymmetry, ParityConservation, IndexConservation
+export number_conservation, NoSymmetry, ParityConservation
 export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
 
 ## Symbolics extension

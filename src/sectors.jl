@@ -3,9 +3,9 @@ sector(qn, H::SymmetricFockHilbertSpace) = hilbert_space(keys(H), H.symmetry.qnt
 @testitem "Sector" begin
     import FermionicHilbertSpaces: sector
     N = 4
-    H = hilbert_space(1:N, NumberConservation())
+    H = hilbert_space(1:N, number_conservation())
     for n in 1:N
-        Hn = hilbert_space(1:N, NumberConservation(n))
+        Hn = hilbert_space(1:N, number_conservation(n))
         @test basisstates(Hn) == basisstates(sector(n, H))
     end
 end

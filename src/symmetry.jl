@@ -301,7 +301,7 @@ end
     @test_throws ArgumentError sector(m, 99, H)
 
     # Test with NumberConservation
-    qn_f = NumberConservation([1, 2])
+    qn_f = number_conservation([1, 2])
     Hf = hilbert_space(labels, qn_f)
     n_f = length(basisstates(Hf.symmetry))
     m_f = reshape(1:(n_f^2), n_f, n_f)
