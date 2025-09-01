@@ -189,7 +189,7 @@ function instantiate_and_get_basisstates(jw::JordanWignerOrdering, _qn)
     fs = basisstates(jw, qn)
     return qn, fs
 end
-basisstates(jw::JordanWignerOrdering, ::NoSymmetry) = map(FockNumber, UnitRange{UInt64}(0, 2^length(jw)-1))
+basisstates(jw::JordanWignerOrdering, ::NoSymmetry) = map(FockNumber, UnitRange{UInt64}(0, 2^length(jw) - 1))
 function basisstates(jw::JordanWignerOrdering, qn::ParityConservation)
     s = sectors(qn)
     fs = basisstates(jw, NoSymmetry())
@@ -268,7 +268,7 @@ end
     @test length(collect(basisstates(H.jw, ParityConservation([-1, 1])))) == 2^5
 
     ## ProductSymmetry
-    qn, fs = instantiate_and_get_basisstates(H.jw, ParityConservation([1]) * number_conservation(; labels=1:3, sectors=1:1))
+    qn, fs = instantiate_and_get_basisstates(H.jw, ParityConservation([1]) * number_conservation(1:1; labels=1:3))
     @test all(iseven ∘ fermionnumber, fs)
     @test all(fermionnumber(f, qn.symmetries[2].masks[1]) == 1 for f in fs)
 end
