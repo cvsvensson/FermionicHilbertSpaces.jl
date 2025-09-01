@@ -66,7 +66,8 @@ parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
 
-fermionnumber(fs::FockNumber, mask) = count_ones(fs & mask)
+fermionnumber(f::FockNumber{<:Integer}, mask::Integer) = count_ones(f.f & mask)
+fermionnumber(f::FockNumber{<:BitVector}, mask::BitVector) = count(identity, f.f[mask])
 
 """
     jwstring(site, focknbr)

@@ -121,8 +121,8 @@ instantiate(qn::UninstantiatedFermionSubsetConservation, jw::JordanWignerOrderin
 instantiate(qn::FermionSubsetConservation, ::JordanWignerOrdering) = qn
 instantiate(qn::NumberConservation, ::JordanWignerOrdering) = qn
 
-(qn::FermionSubsetConservation)(fs) = fermionnumber(fs, qn.mask)
-(qn::NumberConservation)(fs) = fermionnumber(fs)
+(qn::FermionSubsetConservation)(f) = fermionnumber(f, qn.mask)
+(qn::NumberConservation)(f) = fermionnumber(f)
 
 @testitem "ConservedFermions" begin
     import FermionicHilbertSpaces: FermionSubsetConservation
@@ -224,7 +224,7 @@ IndexConservation(indices, jw::JordanWignerOrdering, sectors) = FermionSubsetCon
     @test length(basisstates(H)) == 2^3
 end
 
-instantiate(f::F, labels) where {F} = f
+# instantiate(f::F, labels) where {F} = f
 
 
 promote_symmetry(s1::FockSymmetry{<:Any,<:Any,<:Any,F}, s2::FockSymmetry{<:Any,<:Any,<:Any,F}) where {F} = s1.conserved_quantity
@@ -263,16 +263,65 @@ function basisstates(jw::JordanWignerOrdering, qn::NumberConservation)
     N = length(jw)
     mapreduce(n -> fixed_particle_number_fockstates(N, n), vcat, s)
 end
-function basisstates(jw::JordanWignerOrdering, qn::FermionSubsetConservation)
-    s = sectors(qn)
-    mask = qn.mask
-    fs = basisstates(jw, NoSymmetry())
-    ismissing(s) && return fs
-    filt = in(s) ∘ fermionnumber ∘ (f -> f & mask)
-    filter!(filt, fs)
-end
+
 function basisstates(jw::JordanWignerOrdering, sym::ProductSymmetry)
-    filter!(f -> allowed_qn(sym(f), sym), basisstates(jw, NoSymmetry()))
+    filter!(f -> allowed_qn(sym(f), sym), basisstates(jw, first(sym.symmetries)))
+end
+
+struct UninstantiatedNumberConservations{F,S} <: AbstractSymmetry
+    f::F
+    sectors::S
+end
+struct NumberConservations{M,S} <: AbstractSymmetry
+    masks::M
+    sectors::S
+    function NumberConservations(masks::M, sectors, N) where M
+        length(masks) == length(sectors) || throw(ArgumentError("Number of masks must match number of sectors."))
+        canon_sectors = map((s, m) -> collect(canonicalize_sector(s, m, N)), sectors, masks)
+        new{M,typeof(canon_sectors)}(masks, canon_sectors)
+    end
+end
+(qn::NumberConservations)(f::FockNumber) = map((m -> fermionnumber(f, m)), qn.masks)
+function number_conservation(; labels=missing, sectors=missing, indices=missing, index=missing)
+    !ismissing(index) && !ismissing(indices) && throw(ArgumentError("Cannot specify both `index` and `indices`."))
+    label_condition(label, all_labels) = in(label, labels)
+    index_condition(label, all_labels) = index in label || index == label
+    indices_condition(label, all_labels) = any((index in label || index == label) for index in indices)
+    conditions = (label_condition, index_condition, indices_condition)
+    functions = Tuple(cond for (input, cond) in zip((labels, index, indices), conditions) if !ismissing(input))
+    UninstantiatedNumberConservations((functions,), (sectors,))
+end
+Base.:*(qn1::UninstantiatedNumberConservations, qn2::UninstantiatedNumberConservations) = UninstantiatedNumberConservations((qn1.f..., qn2.f...), (qn1.sectors..., qn2.sectors...))
+
+canonicalize_sector(sectors::Missing, mask, N) = 0:mask_region_size(mask)
+canonicalize_sector(sectors::Integer, mask, N) = (sectors,)
+canonicalize_sector(sector::AbstractVector{<:Integer}, mask, N) = sector
+canonicalize_sector(sector::NTuple{M,<:Integer}, mask, N) where M = sector
+# canonicalize_sector(sector, mask) = sector # Hope for the best
+
+default_fock_representation(N) = N < 64 ? UInt64 : BitVector
+function default_fock_representation(bits::Vector{Bool}, N)
+    if default_fock_representation(N) == UInt64
+        sum(UInt64(1) << (i - 1) for (i, b) in enumerate(bits) if b; init=UInt64(0))
+    elseif default_fock_representation(N) == BitVector
+        BitVector(bits)
+    else
+        throw(ArgumentError("Unsupported fock representation"))
+    end
+end
+instantiate(qn::UninstantiatedNumberConservations, jw::JordanWignerOrdering,) = instantiate(qn, keys(jw))
+function instantiate(qn::UninstantiatedNumberConservations, labels)
+    N = length(labels)
+    masks = map(f -> default_fock_representation(map(l -> all(f -> f(l, labels), f), labels), N), qn.f)
+    NumberConservations(masks, qn.sectors, N)
+end
+basisstates(jw::JordanWignerOrdering, qn::NumberConservations) = map(FockNumber, generate_numbers(qn.masks, qn.sectors, length(jw)))
+function allowed_qn(qn, sym::NumberConservations)
+    for (q, sector) in zip(qn, sym.sectors)
+        ismissing(sector) && continue
+        in(q, sector) || return false
+    end
+    return true
 end
 
 @testitem "Symmetry basisstates" begin
@@ -349,32 +398,36 @@ end
 end
 
 
-
-function generate_numbers(constraints, max_bits)
-    region_lengths = map(count_ones ∘ first, constraints)
+mask_region_size(mask::Integer) = count_ones(mask)
+mask_region_size(mask::BitVector) = count(identity, mask)
+get_bit(mask::Integer, pos) = ((mask >> (pos - 1)) & 1) == 1
+get_bit(mask::BitVector, pos) = mask[pos]
+set_bit!(num::Integer, pos, value::Bool) = value ? (num | (1 << (pos - 1))) : (num & ~(1 << (pos - 1)))
+set_bit!(num::BitVector, pos, value::Bool) = (num[pos] = value; num)
+function generate_numbers(masks, allowed_ones, max_bits, T=default_fock_representation(max_bits))
+    region_lengths = map(mask_region_size, masks)
     any(rl > max_bits for rl in region_lengths) && error("Constraint mask exceeds max_bits")
-    filled_ones = [0 for _ in constraints]
-    filled_zeros = [0 for _ in constraints]
-    allowed_ones = map(last, constraints)
-    allowed_zeros = [rl .- ao for (rl, ao) in zip(region_lengths, allowed_ones)]
-    remaining_bits = copy(region_lengths)
-    numbers = Int[]
+    filled_ones = [0 for _ in masks]
+    filled_zeros = [0 for _ in masks]
+    remaining_bits = collect(region_lengths)
+    numbers = T[]
     count = 0
     num = 0
     bit_position = 1
 
     # Build dependency mapping
     affected_constraints = [Int[] for _ in 1:max_bits]
-    for (k, cons) in enumerate(constraints)
-        mask, _ = cons
+    for (k, mask) in enumerate(masks)
         for bit_pos in 1:(max_bits)
-            if (mask >> (bit_pos - 1)) & 1 == 1
+            if get_bit(mask, bit_pos)
                 push!(affected_constraints[bit_pos], k)
             end
         end
     end
 
     operation_stack = [:put_one, :put_zero] # Stack to keep track of operations
+    sizehint!(operation_stack, max_bits * 3)
+
     while !isempty(operation_stack)
         count += 1
         op = pop!(operation_stack)
@@ -399,13 +452,11 @@ function generate_numbers(constraints, max_bits)
             continue
         end
 
-        # Let's try to put a zero at bit_position
-        # check that all constraints can still be satisfied
         if op == :put_zero
-            feasible = affected_constraints_can_be_satisfied(false, affected_constraints[bit_position], allowed_ones, allowed_zeros, filled_ones, filled_zeros, remaining_bits)
+            feasible = affected_constraints_can_be_satisfied(false, affected_constraints[bit_position], allowed_ones, region_lengths, filled_ones, filled_zeros, remaining_bits)
             if feasible
                 # Put a zero at bit_position
-                num &= ~(1 << (bit_position - 1))
+                num = set_bit!(num, bit_position, false)
                 if bit_position == max_bits
                     push!(numbers, num)
                     continue
@@ -423,11 +474,11 @@ function generate_numbers(constraints, max_bits)
         end
 
         if op == :put_one
-            feasible = affected_constraints_can_be_satisfied(true, affected_constraints[bit_position], allowed_ones, allowed_zeros, filled_ones, filled_zeros, remaining_bits)
+            feasible = affected_constraints_can_be_satisfied(true, affected_constraints[bit_position], allowed_ones, region_lengths, filled_ones, filled_zeros, remaining_bits)
 
             if feasible
                 # Put a one at bit_position
-                num |= (1 << (bit_position - 1))
+                num = set_bit!(num, bit_position, true)
                 if bit_position == max_bits
                     push!(numbers, num)
                     continue
@@ -443,26 +494,28 @@ function generate_numbers(constraints, max_bits)
             end
         end
     end
-    println(count)
+    # println(count)
     return numbers
 end
 
 ##
-function affected_constraint_can_be_satisfied(testbit, allowed_ones, allowed_zeros, filled_ones, filled_zeros, remaining_bits)
-    newones = filled_ones + testbit
-    newzeros = filled_zeros + !testbit
-    for (target_ones, target_zeros) in zip(allowed_ones, allowed_zeros)
-        newones <= target_ones <= newones + remaining_bits && newzeros <= target_zeros <= newzeros + remaining_bits && return true
-    end
-    return false
-end
-@inline function affected_constraints_can_be_satisfied(testbit, ks, allowed_ones, allowed_zeros, filled_ones, filled_zeros, remaining_bits)
+# function affected_constraint_can_be_satisfied(testbit, allowed_ones, region_lengths, filled_ones, filled_zeros, remaining_bits)
+#     newones = filled_ones + testbit
+#     newzeros = filled_zeros + !testbit
+#     for (target_ones, target_zeros) in zip(allowed_ones, allowed_zeros)
+#         newones <= target_ones <= newones + remaining_bits && newzeros <= target_zeros <= newzeros + remaining_bits && return true
+#     end
+#     return false
+# end
+@inline function affected_constraints_can_be_satisfied(testbit, ks, allowed_ones, region_lengths, filled_ones, filled_zeros, remaining_bits)
     for k in ks
         feasible = false
         newones = filled_ones[k] + testbit
         newzeros = filled_zeros[k] + !testbit
-        for (target_ones, target_zeros) in zip(allowed_ones[k], allowed_zeros[k])
-            newones <= target_ones <= newones + remaining_bits[k] && newzeros <= target_zeros <= newzeros + remaining_bits[k] && (feasible = true) && break
+        remaining = remaining_bits[k] - 1
+        rl = region_lengths[k]
+        for target_ones in allowed_ones[k]
+            newones <= target_ones <= newones + remaining && (feasible = true) && break
         end
         !feasible && return false
     end
