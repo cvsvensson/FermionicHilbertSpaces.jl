@@ -347,3 +347,124 @@ end
     # Check that the type is FockNumber{BigInt} for large M
     @test all(f -> f isa FockNumber{BigInt}, states)
 end
+
+
+
+function generate_numbers(constraints, max_bits)
+    region_lengths = map(count_ones ∘ first, constraints)
+    any(rl > max_bits for rl in region_lengths) && error("Constraint mask exceeds max_bits")
+    filled_ones = [0 for _ in constraints]
+    filled_zeros = [0 for _ in constraints]
+    allowed_ones = map(last, constraints)
+    allowed_zeros = [rl .- ao for (rl, ao) in zip(region_lengths, allowed_ones)]
+    remaining_bits = copy(region_lengths)
+    numbers = Int[]
+    count = 0
+    num = 0
+    bit_position = 1
+
+    # Build dependency mapping
+    affected_constraints = [Int[] for _ in 1:max_bits]
+    for (k, cons) in enumerate(constraints)
+        mask, _ = cons
+        for bit_pos in 1:(max_bits)
+            if (mask >> (bit_pos - 1)) & 1 == 1
+                push!(affected_constraints[bit_pos], k)
+            end
+        end
+    end
+
+    operation_stack = [:put_one, :put_zero] # Stack to keep track of operations
+    while !isempty(operation_stack)
+        count += 1
+        op = pop!(operation_stack)
+
+        if op == :revert_zero
+            # Revert putting a zero at bit_position - 1
+            for k in affected_constraints[bit_position-1]
+                filled_zeros[k] -= 1
+                remaining_bits[k] += 1
+            end
+            bit_position -= 1
+            continue
+        end
+
+        if op == :revert_one
+            # Revert putting a one at bit_position - 1
+            for k in affected_constraints[bit_position-1]
+                filled_ones[k] -= 1
+                remaining_bits[k] += 1
+            end
+            bit_position -= 1
+            continue
+        end
+
+        # Let's try to put a zero at bit_position
+        # check that all constraints can still be satisfied
+        if op == :put_zero
+            feasible = affected_constraints_can_be_satisfied(false, affected_constraints[bit_position], allowed_ones, allowed_zeros, filled_ones, filled_zeros, remaining_bits)
+            if feasible
+                # Put a zero at bit_position
+                num &= ~(1 << (bit_position - 1))
+                if bit_position == max_bits
+                    push!(numbers, num)
+                    continue
+                end
+                push!(operation_stack, :revert_zero)
+                for k in affected_constraints[bit_position]
+                    filled_zeros[k] += 1
+                    remaining_bits[k] -= 1
+                end
+                bit_position += 1
+                push!(operation_stack, :put_one)
+                push!(operation_stack, :put_zero)
+            end
+            continue
+        end
+
+        if op == :put_one
+            feasible = affected_constraints_can_be_satisfied(true, affected_constraints[bit_position], allowed_ones, allowed_zeros, filled_ones, filled_zeros, remaining_bits)
+
+            if feasible
+                # Put a one at bit_position
+                num |= (1 << (bit_position - 1))
+                if bit_position == max_bits
+                    push!(numbers, num)
+                    continue
+                end
+                push!(operation_stack, :revert_one)
+                for k in affected_constraints[bit_position]
+                    filled_ones[k] += 1
+                    remaining_bits[k] -= 1
+                end
+                bit_position += 1
+                push!(operation_stack, :put_one)
+                push!(operation_stack, :put_zero)
+            end
+        end
+    end
+    println(count)
+    return numbers
+end
+
+##
+function affected_constraint_can_be_satisfied(testbit, allowed_ones, allowed_zeros, filled_ones, filled_zeros, remaining_bits)
+    newones = filled_ones + testbit
+    newzeros = filled_zeros + !testbit
+    for (target_ones, target_zeros) in zip(allowed_ones, allowed_zeros)
+        newones <= target_ones <= newones + remaining_bits && newzeros <= target_zeros <= newzeros + remaining_bits && return true
+    end
+    return false
+end
+@inline function affected_constraints_can_be_satisfied(testbit, ks, allowed_ones, allowed_zeros, filled_ones, filled_zeros, remaining_bits)
+    for k in ks
+        feasible = false
+        newones = filled_ones[k] + testbit
+        newzeros = filled_zeros[k] + !testbit
+        for (target_ones, target_zeros) in zip(allowed_ones[k], allowed_zeros[k])
+            newones <= target_ones <= newones + remaining_bits[k] && newzeros <= target_zeros <= newzeros + remaining_bits[k] && (feasible = true) && break
+        end
+        !feasible && return false
+    end
+    return true
+end
