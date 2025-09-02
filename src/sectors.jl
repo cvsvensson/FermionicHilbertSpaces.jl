@@ -13,9 +13,9 @@ end
     H = hilbert_space(1:N, NumberConservation())
     @test quantumnumbers(H) == collect(0:N)
     Hns = sectors(H)
-    for n in quantumnumbers(H)
+    for (ind, n) in enumerate(quantumnumbers(H))
         Hn = hilbert_space(1:N, NumberConservation(n))
-        @test basisstates(Hn) == basisstates(Hns[n + 1]) # Hn ≠ Hns[N + 1] since Hn is a SymmetricFockHilbertSpace
+        @test basisstates(Hn) == basisstates(Hns[ind]) # Hn ≠ Hns[ind] since Hn is a SymmetricFockHilbertSpace
         @test basisstates(Hn) == basisstates(sector(n, H))
         @test basisstates(Hn) == basisstates(H)[indices(Hn, H)]
         @test basisstates(Hn) == basisstates(H)[indices(n, H)]
