@@ -2,8 +2,9 @@ function sector(qn::QN, H::SymmetricFockHilbertSpace{L,FockSymmetry{IF,FI,QN,I,Q
     return hilbert_space(modes(H), H.symmetry.qntofockstates[qn])
 end
 function sector(qn::QN, H::MajoranaHilbertSpace{LA, SymmetricFockHilbertSpace{L,FockSymmetry{IF,FI,QN,I,QNfunc}}}) where {QN,LA,L,IF,FI,I,QNfunc}
-    return sector(qn, H.parent)
+    return MajoranaHilbertSpace(H.majoranaindices, sector(qn, H.parent))
 end
+sector(n::Nothing, H::MajoranaHilbertSpace) = MajoranaHilbertSpace(H.majoranaindices, sector(n, H.parent))
 sector(::Nothing, H::AbstractHilbertSpace) = hilbert_space(modes(H), basisstates(H))
 quantumnumbers(H::SymmetricFockHilbertSpace) = collect(keys(H.symmetry.qntofockstates))
 quantumnumbers(::AbstractHilbertSpace) = (nothing,)
@@ -20,7 +21,7 @@ end
 indices(::Nothing, H::AbstractHilbertSpace) = collect(1:dim(H))
 
 @testitem "Sector" begin
-    import FermionicHilbertSpaces: sector, sectors, indices, quantumnumbers, majorana_hilbert_space
+    import FermionicHilbertSpaces: sector, sectors, indices, quantumnumbers, majorana_hilbert_space, MajoranaHilbertSpace
     N = 4
     H = hilbert_space(1:N, NumberConservation())
     @test quantumnumbers(H) == collect(0:N)
@@ -38,11 +39,13 @@ indices(::Nothing, H::AbstractHilbertSpace) = collect(1:dim(H))
     @test indices(only(quantumnumbers(Hnoqn)), Hnoqn) == collect(1:dim(Hnoqn))
     @test indices(only(quantumnumbers(HMnoqn)), HMnoqn) == collect(1:dim(HMnoqn))
     @test length(sectors(Hnoqn)) == length(sectors(HMnoqn)) == 1
+    @test eltype(sectors(HMnoqn)) <: MajoranaHilbertSpace
     # Majorana hilbert spaces
-    Hm = majorana_hilbert_space(1:N, NumberConservation())
-    @test quantumnumbers(Hm) == collect(0:N ÷ 2)
+    HM = majorana_hilbert_space(1:N, NumberConservation())
+    @test quantumnumbers(HM) == collect(0:N ÷ 2)
     qn = 1
-    Hmqn = majorana_hilbert_space(1:N, NumberConservation(qn))
-    @test basisstates(Hmqn) == basisstates(Hm)[indices(qn, Hm)]
-    @test length(sectors(Hm)) == N ÷ 2 + 1
+    HMqn = majorana_hilbert_space(1:N, NumberConservation(qn))
+    @test basisstates(HMqn) == basisstates(HM)[indices(qn, HM)]
+    @test length(sectors(HM)) == N ÷ 2 + 1
+    @test eltype(sectors(HM)) <: MajoranaHilbertSpace
 end
