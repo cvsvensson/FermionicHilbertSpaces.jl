@@ -56,7 +56,7 @@ end
     @majoranas y
     H = majorana_hilbert_space(1:6)
     Hsub = subregion(3:4, H)
-    op = 3y[1] + 2y[3] + 3y[4]*y[1] + y[3]*y[4]
+    op = 1 + 3y[1] + 2y[3] + 4y[1]*y[6] + 3y[4]*y[1] + y[3]*y[4] + y[1]*y[3]*y[4] + y[1]*y[2]*y[6]
     @test matrix_representation(partial_trace(op, H => Hsub), Hsub) == partial_trace(matrix_representation(op, H), H => Hsub)
 end
 
