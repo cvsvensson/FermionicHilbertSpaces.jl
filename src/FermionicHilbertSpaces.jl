@@ -61,7 +61,6 @@ include("operators.jl")
 include("tensor_product.jl")
 include("embedding.jl")
 include("reshape.jl")
-include("sectors.jl")
 
 include("qubit.jl")
 
@@ -72,6 +71,7 @@ include("symbolics/symbolic_majoranas.jl")
 include("majorana_hilbert_space.jl")
 include("bdg.jl")
 
+include("sectors.jl")
 import PrecompileTools
 
 PrecompileTools.@compile_workload begin
