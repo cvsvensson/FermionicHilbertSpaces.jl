@@ -9,7 +9,7 @@ using TestItemRunner
     H = hilbert_space(1:N)
     B = fermions(H)
     # @test FermionicHilbertSpaces.nbr_of_modes(B) == N
-    Hspin = hilbert_space(Base.product(1:N, (:↑, :↓)), NumberConservation())
+    Hspin = hilbert_space(Base.product(1:N, (:↑, :↓)), number_conservation())
     Bspin = fermions(Hspin)
     # @test FermionicHilbertSpaces.nbr_of_modes(Bspin) == 2N
     @test B[1] isa SparseMatrixCSC
@@ -83,7 +83,7 @@ end
         embeddingmap = LinearMap(rhovec -> vec(emb(reshape(rhovec, (dsub, dsub)))), d^2, dsub^2)
         @test Matrix(ptmap) ≈ Matrix(embeddingmap)'
     end
-    qns = [NoSymmetry(), ParityConservation(), NumberConservation()]
+    qns = [NoSymmetry(), ParityConservation(), number_conservation()]
     for qn in qns
         H = hilbert_space(1:3, qn)
         H1 = hilbert_space(1:1, qn)

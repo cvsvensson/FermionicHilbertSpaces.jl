@@ -54,12 +54,12 @@ dim(Hsub) / dim(H) * partial_trace(c1c3, H => Hsub) ≈ matrix_representation(c[
 ## Conserved quantum numbers
 This package also includes some functionality for working with conserved quantum numbers. If we have for example number conservation, we might want to get a block structure of the hamiltonian. Here's how one can do that:
 ```@example intro
-H = hilbert_space(labels, NumberConservation())
+H = hilbert_space(labels, number_conservation())
 matrix_representation(ham, H)
 ```
 This has a block structure corresponding to the different sectors. To only look at some sectors, for example the sectors with 0, 2 and 4 particles, use
 ```@example intro
-H = hilbert_space(labels, NumberConservation([0, 2, 4]))
+H = hilbert_space(labels, number_conservation([0, 2, 4]))
 matrix_representation(ham, H)
 ```
 
