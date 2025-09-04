@@ -18,13 +18,13 @@ end
 function indices(qn::QN, H::MajoranaHilbertSpace{LA,SymmetricFockHilbertSpace{L,FockSymmetry{IF,FI,QN,I,QNfunc}}}) where {QN,LA,L,IF,FI,I,QNfunc}
     return indices(qn, H.parent)
 end
-indices(::Nothing, H::AbstractHilbertSpace) = collect(1:dim(H))
+indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
 
 @testitem "Sector" begin
     import FermionicHilbertSpaces: sector, sectors, indices, quantumnumbers, majorana_hilbert_space, MajoranaHilbertSpace
     N = 4
     H = hilbert_space(1:N, NumberConservation())
-    @test quantumnumbers(H) == collect(0:N)
+    @test quantumnumbers(H) == 0:N
     Hns = sectors(H)
     for (ind, n) in enumerate(quantumnumbers(H))
         Hn = hilbert_space(1:N, NumberConservation(n))
@@ -36,8 +36,8 @@ indices(::Nothing, H::AbstractHilbertSpace) = collect(1:dim(H))
     # no qns
     Hnoqn = hilbert_space(1:N)
     HMnoqn = majorana_hilbert_space(1:N)
-    @test indices(only(quantumnumbers(Hnoqn)), Hnoqn) == collect(1:dim(Hnoqn))
-    @test indices(only(quantumnumbers(HMnoqn)), HMnoqn) == collect(1:dim(HMnoqn))
+    @test indices(only(quantumnumbers(Hnoqn)), Hnoqn) == 1:dim(Hnoqn)
+    @test indices(only(quantumnumbers(HMnoqn)), HMnoqn) == 1:dim(HMnoqn)
     @test length(sectors(Hnoqn)) == length(sectors(HMnoqn)) == 1
     @test eltype(sectors(HMnoqn)) <: MajoranaHilbertSpace
     # Majorana hilbert spaces
