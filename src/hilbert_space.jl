@@ -48,7 +48,7 @@ Return an iterator over all basis states for the given Hilbert space `H`.
 """
 basisstates(H::SimpleFockHilbertSpace{F}) where F = Iterators.map(F ∘ FockNumber, 0:2^length(H.jw)-1)
 basisstate(ind, ::SimpleFockHilbertSpace{F}) where F = (F ∘ FockNumber)(ind - 1)
-state_index(state, ::SimpleFockHilbertSpace{F}) where F = FockNumber(state).f + 1
+state_index(state::FockNumber, ::SimpleFockHilbertSpace) = state.f + 1
 function Base.:(==)(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace)
     if H1 === H2
         return true
