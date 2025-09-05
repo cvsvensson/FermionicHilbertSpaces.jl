@@ -8,6 +8,7 @@
 # We start by importing the necessary packages.
 using FermionicHilbertSpaces, LinearAlgebra, Plots
 using Arpack
+import FermionicHilbertSpaces: dim, indices
 # Then we define the Hilbert space with `N` sites and parity conservation.
 N = 12
 H = hilbert_space(1:N, ParityConservation())
@@ -54,14 +55,12 @@ evenvec = eveneigs[2][:, 1] # even ground state
 first(oddeigs[1]) - first(eveneigs[1])
 
 # Now, we construct the ground state Majoranas.
-# First, we need to embed the lowest energy odd and even states into the full Hilbert space.
-function extend(v, p)
-    mapreduce(H -> H == first(p) ? v : zeros(dim(H)), vcat, last(p))
-end
+# First, we need to pad the lowest energy odd and even states into the full Hilbert space.
+o = zeros(eltype(oddvec), dim(H))
+e = zeros(eltype(evenvec), dim(H))
+o[indices(Hodd, H)] = oddvec
+e[indices(Heven, H)] = evenvec
 
-Hsum = (Hodd, Heven)
-o = extend(oddvec, Hodd => Hsum) # odd ground state in the full Hilbert space
-e = extend(evenvec, Heven => Hsum) # even ground state in the full Hilbert space
 # Then, we can construct the ground state Majorana operators as
 # γ = o * e' + hc
 # γ̃ = 1im * o * e' + hc
