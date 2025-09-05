@@ -1,7 +1,7 @@
 function sector(qn::QN, H::SymmetricFockHilbertSpace{L,FockSymmetry{IF,FI,QN,I,QNfunc}}) where {QN,L,IF,FI,I,QNfunc}
     return hilbert_space(modes(H), H.symmetry.qntofockstates[qn])
 end
-function sector(qn::QN, H::MajoranaHilbertSpace{LA, SymmetricFockHilbertSpace{L,FockSymmetry{IF,FI,QN,I,QNfunc}}}) where {QN,LA,L,IF,FI,I,QNfunc}
+function sector(qn::QN, H::MajoranaHilbertSpace{LA,SymmetricFockHilbertSpace{L,FockSymmetry{IF,FI,QN,I,QNfunc}}}) where {QN,LA,L,IF,FI,I,QNfunc}
     return MajoranaHilbertSpace(H.majoranaindices, sector(qn, H.parent))
 end
 sector(n::Nothing, H::MajoranaHilbertSpace) = MajoranaHilbertSpace(H.majoranaindices, sector(n, H.parent))
@@ -42,7 +42,7 @@ indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
     @test eltype(sectors(HMnoqn)) <: MajoranaHilbertSpace
     # Majorana hilbert spaces
     HM = majorana_hilbert_space(1:N, NumberConservation())
-    @test quantumnumbers(HM) == collect(0:N ÷ 2)
+    @test quantumnumbers(HM) == 0:N÷2
     qn = 1
     HMqn = majorana_hilbert_space(1:N, NumberConservation(qn))
     @test basisstates(HMqn) == basisstates(HM)[indices(qn, HM)]
