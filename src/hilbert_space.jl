@@ -1,3 +1,201 @@
+struct GenericHilbertSpace{L,S} <: AbstractHilbertSpace
+    label::L
+    basisstates::S
+end
+Base.:(==)(H1::GenericHilbertSpace, H2::GenericHilbertSpace) = H1 === H2 || (H1.label == H2.label && H1.basisstates == H2.basisstates)
+Base.hash(H::GenericHilbertSpace, h::UInt) = hash((H.label, H.basisstates), h)
+basisstates(H::GenericHilbertSpace) = H.basisstates
+label(H::GenericHilbertSpace) = H.label
+state_index(state, H::GenericHilbertSpace) = findfirst(==(state), H.basisstates)
+
+struct ProductState{F,O} <: AbstractBasisState
+    fock_state::F
+    other_states::O
+end
+Base.:(==)(s1::ProductState, s2::ProductState) = s1 === s2 || (s1.fock_state == s2.fock_state && s1.other_states == s2.other_states)
+Base.hash(s::ProductState, h::UInt) = hash((s.fock_state, s.other_states), h)
+ProductState{Nothing}(other_states) = ProductState{Nothing,typeof(other_states)}(nothing, other_states)
+Base.show(io::IO, s::ProductState) = print(io, "ProductState(", s.fock_state, ", ", s.other_states, ")")
+Base.show(io::IO, s::ProductState{Nothing}) = print(io, "ProductState(", s.other_states, ")")
+
+struct ProductSpace{HF,HS} <: AbstractHilbertSpace
+    fock_space::HF
+    other_spaces::HS
+    function ProductSpace(fspace::HF, ospaces::HS) where {HF<:Union{<:AbstractFockHilbertSpace,Nothing},HS}
+        length(ospaces) == 0 && return fspace
+        if isnothing(fspace) && length(ospaces) == 1
+            return only(ospaces)
+        end
+        new{HF,HS}(fspace, ospaces)
+    end
+end
+Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1 === H2 || (H1.fock_space == H2.fock_space && H1.other_spaces == H2.other_spaces)
+Base.hash(H::ProductSpace, h::UInt) = hash((H.fock_space, H.other_spaces), h)
+ProductSpace{Nothing}(other_spaces) = ProductSpace(nothing, other_spaces)
+function ProductSpace(spaces::HS) where HS
+    fspaces = AbstractFockHilbertSpace[]
+    other_spaces = AbstractHilbertSpace[]
+    for H in spaces
+        if H isa AbstractFockHilbertSpace
+            push!(fspaces, H)
+        elseif H isa ProductSpace
+            isnothing(H.fock_space) || push!(fspaces, H.fock_space)
+            append!(other_spaces, H.other_spaces)
+        elseif H isa AbstractHilbertSpace
+            push!(other_spaces, H)
+        else
+            throw(ArgumentError("All spaces in the product must be subtypes of AbstractHilbertSpace. Got $(typeof(H))"))
+        end
+    end
+    map(H -> label(H), other_spaces) |> allunique || throw(ArgumentError("All Hilbert spaces in the product must have unique labels. $(map(H -> label(H), other_spaces))"))
+    fspace = length(fspaces) > 0 ? tensor_product(fspaces) : nothing
+    ospaces = map(identity, other_spaces)
+    ProductSpace(fspace, ospaces)
+end
+label(H::ProductSpace) = (label(H.fock_space), map(label, H.other_spaces)...)
+label(H::ProductSpace{Nothing}) = map(label, H.other_spaces)
+label(H::AbstractFockHilbertSpace) = keys(H)
+basisstates(H::ProductSpace) = Iterators.map(s -> ProductState(s...), Iterators.product(basisstates(H.fock_space), Iterators.product(map(basisstates, H.other_spaces)...)))
+basisstates(H::ProductSpace{Nothing}) = Iterators.map(ProductState{Nothing}, Iterators.product(map(basisstates, H.other_spaces)...))
+dim(H::ProductSpace{Nothing}) = prod(dim, H.other_spaces; init=1)
+dim(H::ProductSpace) = dim(H.fock_space) * prod(dim, H.other_spaces; init=1)
+function state_index(state::ProductState, H::ProductSpace)
+    ind = state_index(state.fock_state, H.fock_space)
+    n = ind
+    dimprod = dim(H.fock_space)
+    for (state, space) in zip(state.other_states, H.other_spaces)
+        n += (state_index(state, space) - 1) * dimprod
+        dimprod *= dim(space)
+    end
+    return n
+end
+function state_index(state::ProductState{Nothing}, H::ProductSpace{Nothing})
+    n = 1
+    dimprod = 1
+    for (state, space) in zip(state.other_states, H.other_spaces)
+        n += (state_index(state, space) - 1) * dimprod
+        dimprod *= dim(space)
+    end
+    return n
+end
+
+simple_complementary_subsystem(H::ProductSpace, Hsub::AbstractHilbertSpace) = complementary_subsystem(H, Hsub)
+function complementary_subsystem(H::ProductSpace, Hsub::AbstractHilbertSpace)
+    spaces = [H.other_spaces[i] for i in eachindex(H.other_spaces) if H.other_spaces[i] != Hsub]
+    length(spaces) + 1 == length(H.other_spaces) || throw(ArgumentError("Hsub must be one of the spaces in the product space H"))
+    ProductSpace(H.fock_space, spaces)
+end
+function complementary_subsystem(H::ProductSpace, Hsub::AbstractFockHilbertSpace)
+    fcomp = complementary_subsystem(H.fock_space, Hsub)
+    ProductSpace(fcomp, H.other_spaces)
+end
+function complementary_subsystem(H::ProductSpace, Hsub::ProductSpace)
+    other_spaces = [H.other_spaces[i] for i in eachindex(H.other_spaces) if H.other_spaces[i] != Hsub]
+    length(other_spaces) + 1 == length(H.other_spaces) || throw(ArgumentError("Hsub must be one of the spaces in the product space H"))
+    fcomp = complementary_subsystem(H.fock_space, Hsub.fock_space)
+    ProductSpace(fcomp, other_spaces)
+end
+function Base.show(io::IO, H::ProductSpace{Nothing})
+    d = dim(H)
+    dimstring = ""
+    for (n, H) in enumerate(H.other_spaces)
+        n > 1 && (dimstring *= "×")
+        dimstring *= "$(dim(H))"
+    end
+    println(io, "$(d)-dimensional ProductSpace($dimstring)")
+    n = length(H.other_spaces)
+    print(io, "$n spaces: ", map(label, H.other_spaces))
+end
+function Base.show(io::IO, H::ProductSpace)
+    d = dim(H)
+    dimstring = "$(dim(H.fock_space))"
+    for (n, H) in enumerate(H.other_spaces)
+        (dimstring *= "×")
+        dimstring *= "$(dim(H))"
+    end
+    println(io, "$(d)-dimensional ProductSpace($dimstring)")
+    N = length(keys(H.fock_space))
+    println(io, "$N fermions: ", keys(H.fock_space))
+    n = length(H.other_spaces)
+    print(io, "$n other spaces: ", map(label, H.other_spaces))
+end
+
+flat_non_fock_spaces(Hs) = foldl(_flat_non_fock_spaces, Hs; init=())
+_flat_non_fock_spaces(acc, H::AbstractHilbertSpace) = (acc..., H)
+_flat_non_fock_spaces(acc, ::AbstractFockHilbertSpace) = acc
+_flat_non_fock_spaces(acc, P::ProductSpace) = (acc..., P.other_spaces...)
+flat_fock_spaces(Hs) = foldl(_flat_fock_spaces, Hs; init=())
+_flat_fock_spaces(acc, H::AbstractFockHilbertSpace) = (acc..., H)
+_flat_fock_spaces(acc, ::AbstractHilbertSpace) = acc
+_flat_fock_spaces(acc, P::ProductSpace) = (acc..., P.fock_space)
+_flat_fock_spaces(acc, ::ProductSpace{Nothing}) = acc
+flat_fock_states(states) = foldl(_flat_fock_states, states; init=())
+_flat_fock_states(acc, s::AbstractFockState) = (acc..., s)
+_flat_fock_states(acc, ::Any) = acc
+_flat_fock_states(acc, s::ProductState) = (acc..., s.fock_state)
+_flat_fock_states(acc, ::ProductState{Nothing}) = acc
+flat_non_fock_states(states) = foldl(_flat_non_fock_states, states; init=())
+_flat_non_fock_states(acc, ::AbstractFockState) = acc
+_flat_non_fock_states(acc, s::Any) = (acc..., s)
+_flat_non_fock_states(acc, s::ProductState) = (acc..., s.other_states...)
+
+
+function StateExtender(Hs, H::ProductSpace{Nothing})
+    ospaces = flat_non_fock_spaces(Hs)
+    sublabels = map(label, ospaces)
+    labels = map(label, H.other_spaces)
+    perm = [findfirst(==(l), sublabels) for l in labels]
+    function extender(states)
+        ostates = flat_non_fock_states(states)
+        ProductState{Nothing}(ntuple(i -> ostates[perm[i]], length(perm)))
+    end
+end
+function StateExtender(Hs, H::ProductSpace)
+    fock_spaces = flat_fock_spaces(Hs)
+    fockstateextender = length(fock_spaces) > 1 ? StateExtender(filter(!isnothing, fock_spaces), H.fock_space) : only
+    ospaces = flat_non_fock_spaces(Hs)
+    sublabels = map(label, ospaces)
+    labels = map(label, H.other_spaces)
+    perm::Vector{Int} = [findfirst(==(l), sublabels) for l in labels]
+    function extender(states)
+        fockstates = flat_fock_states(states)
+        ostates = flat_non_fock_states(states)
+        fstate = fockstateextender(fockstates)
+        ProductState(fstate, ntuple(i -> ostates[perm[i]], length(perm)))
+    end
+end
+fock_part(H::AbstractFockHilbertSpace) = H
+fock_part(::AbstractHilbertSpace) = nothing
+fock_part(P::ProductSpace) = P.fock_space
+fock_part(P::ProductState) = P.fock_state
+fock_part(s::Any) = nothing
+fock_part(s::AbstractFockState) = s
+non_fock_part(H::AbstractFockHilbertSpace) = nothing
+non_fock_part(H::AbstractHilbertSpace) = H
+non_fock_part(P::ProductSpace) = ProductSpace{Nothing}(P.other_spaces)
+non_fock_part(P::ProductState) = ProductState{Nothing}(P.other_states)
+non_fock_part(s::Any) = s
+non_fock_part(s::AbstractFockState) = nothing
+
+@testitem "GenericHilbertSpace, ProductSpace" begin
+    using FermionicHilbertSpaces
+    using FermionicHilbertSpaces: ProductSpace, GenericHilbertSpace
+    H1 = GenericHilbertSpace(:A, [:a, :b])
+    H2 = GenericHilbertSpace(:B, [:c, :d])
+    P = ProductSpace((H1, H2))
+    @test dim(P) == dim(H1) * dim(H2)
+    @test 2 * I(2) == partial_trace(1.0 * I(4), P => H1)
+
+    Hf = hilbert_space(1:2)
+    P2 = ProductSpace((Hf, H1, H2))
+    @test dim(P2) / dim(H1) * I(2) == partial_trace(1.0 * I(dim(P2)), P2 => H1)
+
+    P3 = ProductSpace((Hf, P))
+    @test P3 == P2
+    @test_throws ArgumentError ProductSpace((Hf, P2))
+end
+
+
 function Base.show(io::IO, H::Htype) where Htype<:AbstractFockHilbertSpace
     d = dim(H)
     N = length(keys(H))
