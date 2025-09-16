@@ -533,23 +533,22 @@ use_phase_factors(H::AbstractFockHilbertSpace) = true
 
 Compute the fermionic partial trace of a matrix `m` in basis `H`, leaving only the subsystems specified by `labels`. The result is stored in `mout`, and `Hsub` determines the ordering of the basis states.
 """
-function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement)
+function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H))
     if phase_factors
         # labels = collect(keys(Hsub))
         # consistent_ordering(labels, mode_ordering(H)) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
         consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
     end
     fill!(mout, zero(eltype(mout)))
-    subfockstates = basisstates(Hsub)
-    barfockstates = basisstates(complement)
-    fm = StateExtender((Hsub, complement), H)
-    for f1 in subfockstates, f2 in subfockstates
+    substates = basisstates(Hsub)
+    barstates = basisstates(complement)
+    for f1 in substates, f2 in substates
         s2 = phase_factors ? phase_factor_f(f1, f2, length(keys(Hsub))) : 1
         I1 = state_index(f1, Hsub)
         I2 = state_index(f2, Hsub)
-        for fbar in barfockstates
-            fullf1 = fm((f1, fbar))
-            fullf2 = fm((f2, fbar))
+        for fbar in barstates
+            fullf1 = extend_state((f1, fbar))
+            fullf2 = extend_state((f2, fbar))
             s1 = phase_factors ? phase_factor_f(fullf1, fullf2, length(keys(H))) : 1
             s = s2 * s1
             J1 = state_index(fullf1, H)

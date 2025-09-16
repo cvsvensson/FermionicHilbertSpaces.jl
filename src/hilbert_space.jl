@@ -49,7 +49,7 @@ function ProductSpace(spaces::HS) where HS
     end
     map(H -> label(H), other_spaces) |> allunique || throw(ArgumentError("All Hilbert spaces in the product must have unique labels. $(map(H -> label(H), other_spaces))"))
     fspace = length(fspaces) > 0 ? tensor_product(fspaces) : nothing
-    ospaces = map(identity, other_spaces)
+    ospaces = Tuple(other_spaces)
     ProductSpace(fspace, ospaces)
 end
 label(H::ProductSpace) = (label(H.fock_space), map(label, H.other_spaces)...)
@@ -144,10 +144,10 @@ function StateExtender(Hs, H::ProductSpace{Nothing})
     ospaces = flat_non_fock_spaces(Hs)
     sublabels = map(label, ospaces)
     labels = map(label, H.other_spaces)
-    perm = [findfirst(==(l), sublabels) for l in labels]
+    perm = map(l -> findfirst(==(l), sublabels)::Int, labels)
     function extender(states)
         ostates = flat_non_fock_states(states)
-        ProductState{Nothing}(ntuple(i -> ostates[perm[i]], length(perm)))
+        ProductState{Nothing}(TupleTools.permute(ostates, perm))
     end
 end
 function StateExtender(Hs, H::ProductSpace)
@@ -156,12 +156,12 @@ function StateExtender(Hs, H::ProductSpace)
     ospaces = flat_non_fock_spaces(Hs)
     sublabels = map(label, ospaces)
     labels = map(label, H.other_spaces)
-    perm::Vector{Int} = [findfirst(==(l), sublabels) for l in labels]
+    perm = map(l -> findfirst(==(l), sublabels)::Int, labels)
     function extender(states)
         fockstates = flat_fock_states(states)
         ostates = flat_non_fock_states(states)
         fstate = fockstateextender(fockstates)
-        ProductState(fstate, ntuple(i -> ostates[perm[i]], length(perm)))
+        ProductState(fstate, TupleTools.permute(ostates, perm))
     end
 end
 fock_part(H::AbstractFockHilbertSpace) = H

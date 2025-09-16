@@ -10,6 +10,7 @@ using BitPermutations
 using TupleTools
 using NonCommutativeProducts
 import NonCommutativeProducts: @nc_eager, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
+import UUIDs: uuid4
 
 
 export FockNumber, JordanWignerOrdering, hc, basisstates, dim
@@ -74,6 +75,10 @@ include("majorana_hilbert_space.jl")
 include("bdg.jl")
 
 include("sectors.jl")
+
+include("spin.jl")
+
+
 import PrecompileTools
 
 PrecompileTools.@compile_workload begin
