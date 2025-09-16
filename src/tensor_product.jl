@@ -517,7 +517,7 @@ end
 
 Compute the partial trace of a matrix `m`, leaving the subsystem defined by the basis `Hsub`.
 """
-function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=true, complement=simple_complementary_subsystem(H, Hsub)) where {T}
+function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=simple_complementary_subsystem(H, Hsub)) where {T}
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
     mout = zeros(T, dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, phase_factors, complement)
@@ -525,6 +525,8 @@ end
 
 partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = m -> partial_trace(m, Hs...; kwargs...)
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
+use_phase_factors(H::AbstractHilbertSpace) = false
+use_phase_factors(H::AbstractFockHilbertSpace) = true
 
 """
     partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors, complement)
@@ -532,24 +534,23 @@ partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs
 Compute the fermionic partial trace of a matrix `m` in basis `H`, leaving only the subsystems specified by `labels`. The result is stored in `mout`, and `Hsub` determines the ordering of the basis states.
 """
 function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement)
-    M = length(keys(H))
-    labels = collect(keys(Hsub))
     if phase_factors
-        consistent_ordering(labels, mode_ordering(H)) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
+        # labels = collect(keys(Hsub))
+        # consistent_ordering(labels, mode_ordering(H)) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
+        consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
     end
-    N = length(labels)
     fill!(mout, zero(eltype(mout)))
     subfockstates = basisstates(Hsub)
     barfockstates = basisstates(complement)
     fm = StateExtender((Hsub, complement), H)
     for f1 in subfockstates, f2 in subfockstates
-        s2 = phase_factors ? phase_factor_f(f1, f2, N) : 1
+        s2 = phase_factors ? phase_factor_f(f1, f2, length(keys(Hsub))) : 1
         I1 = state_index(f1, Hsub)
         I2 = state_index(f2, Hsub)
         for fbar in barfockstates
             fullf1 = fm((f1, fbar))
             fullf2 = fm((f2, fbar))
-            s1 = phase_factors ? phase_factor_f(fullf1, fullf2, M) : 1
+            s1 = phase_factors ? phase_factor_f(fullf1, fullf2, length(keys(H))) : 1
             s = s2 * s1
             J1 = state_index(fullf1, H)
             ismissing(J1) && continue
