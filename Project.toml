@@ -15,6 +15,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 SplitApplyCombine = "03a91e81-4c3e-53e1-a0a4-9c0c8f19dd66"
 TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
 TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
+UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [compat]
 BitPermutations = "0.3.0"
@@ -28,4 +29,5 @@ SparseArrays = "1"
 SplitApplyCombine = "1"
 TestItems = "1.0.0"
 TupleTools = "1.6.0"
+UUIDs = "1.11.0"
 julia = "1.10"
