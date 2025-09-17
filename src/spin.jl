@@ -58,11 +58,11 @@ end
     @test S[:X] * S[:Y] - S[:Y] * S[:X] ≈ im * S[:Z]
     @test S[:Y] * S[:Z] - S[:Z] * S[:Y] ≈ im * S[:X]
     @test S[:Z] * S[:X] - S[:X] * S[:Z] ≈ im * S[:Y]
-    Hs = [SpinSpace{1 // 2}() for k in 1:2]
-    P = FermionicHilbertSpaces.ProductSpace(Hs)
-    @test partial_trace(1.0 * I(dim(P)), P => Hs[1]) ≈ dim(P) / dim(Hs[1]) * I(dim(Hs[1]))
+    H1, H2 = [SpinSpace{1 // 2}() for k in 1:2]
+    P = tensor_product(H1, H2)
+    @test partial_trace(1.0 * I(dim(P)), P => H1) ≈ dim(P) / dim(H1) * I(dim(H1))
 
-    _embed(op1) = kron(I(dim(Hs[2])), op1)
-    ops1 = operators(Hs[1])
-    @test all(partial_trace(_embed(op), P => Hs[1]) ≈ dim(Hs[2]) * op for op in values(ops1))
+    _embed(op1) = kron(I(dim(H2)), op1)
+    ops1 = operators(H1)
+    @test all(partial_trace(_embed(op), P => H1) ≈ dim(H2) * op for op in values(ops1))
 end

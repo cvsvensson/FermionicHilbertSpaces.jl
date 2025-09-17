@@ -2,16 +2,26 @@
 """
     tensor_product(Hs)
 
-Compute the tensor_product product hilbert spaces `Hs`. The symmetry of the resulting basis is computed by promote_symmetry.
+Return the tensor product space of hilbert spaces `Hs`.
 """
 tensor_product(Hs::AbstractVector{<:AbstractHilbertSpace}) = foldl(tensor_product, Hs)
 tensor_product(Hs::Tuple) = foldl(tensor_product, Hs)
+tensor_product(H1, H2, Hs...) = tensor_product(tensor_product(H1, H2), Hs...)
 
 function tensor_product(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
     tensor_product_combine_basisstates(H1, H2)
 end
+tensor_product(H1::AbstractFockHilbertSpace, H2::AbstractFockHilbertSpace) = tensor_product_combine_basisstates(H1, H2)
 
-tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace) = tensor_product_combine_basisstates(H1, H2)
+tensor_product(H1::AbstractFockHilbertSpace, H2::AbstractHilbertSpace) = ProductSpace(H1, (H2,))
+tensor_product(H1::AbstractHilbertSpace, H2::AbstractFockHilbertSpace) = ProductSpace(H2, (H1,))
+tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace) = ProductSpace(nothing, (H1, H2))
+tensor_product(H::ProductSpace, H2::AbstractHilbertSpace) = ProductSpace(H.fock_space, (H.other_spaces..., H2))
+tensor_product(H1::AbstractHilbertSpace, H::ProductSpace) = ProductSpace(H.fock_space, (H1, H.other_spaces...))
+tensor_product(H1::AbstractFockHilbertSpace, H::ProductSpace) = ProductSpace(tensor_product(H1, H.fock_space), H.other_spaces)
+tensor_product(H::ProductSpace, H2::AbstractFockHilbertSpace) = ProductSpace(tensor_product(H.fock_space, H2), H.other_spaces)
+tensor_product(H::AbstractHilbertSpace, ::Nothing) = H
+tensor_product(::Nothing, H::AbstractHilbertSpace) = H
 
 function tensor_product_combine_basisstates(H1, H2)
     isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
