@@ -105,12 +105,12 @@ end
 
 Compute the fermionic embedding of a matrix `m` in the basis `Hsub` into the basis `H`.
 """
-function embed(m, Hsub::AbstractFockHilbertSpace, H; complement=simple_complementary_subsystem(H, Hsub), kwargs...)
+function embed(m, Hsub::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace; complement=simple_complementary_subsystem(H, Hsub), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedsubsystem(Hsub, H) || throw(ArgumentError("Can't embed $Hsub into $H"))
     return fermionic_kron((m, I), (Hsub, complement), H; kwargs...)
 end
-const PairWithHilbertSpaces = Pair{<:AbstractFockHilbertSpace,<:AbstractFockHilbertSpace}
+const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}
 embed(Hs::PairWithHilbertSpaces; kwargs...) = m -> embed(m, first(Hs), last(Hs); kwargs...)
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
@@ -118,7 +118,7 @@ embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); k
     extend(m, H, Hbar, Hout = tensor_product((H, Hbar)); kwargs...)
 Extend an operator or state `m` from Hilbert space `H` into a disjoint space `Hbar`.
 """
-function extend(m, H::AbstractFockHilbertSpace, Hbar, Hout=tensor_product((H, Hbar)); kwargs...)
+function extend(m, H::AbstractFockHilbertSpace, Hbar::AbstractFockHilbertSpace, Hout=tensor_product((H, Hbar)); kwargs...)
     isdisjoint(keys(H), keys(Hbar)) || throw(ArgumentError("The bases of the two Hilbert spaces must be disjoint"))
     Hs = (H, Hbar)
     return fermionic_kron((m, I), Hs, Hout; kwargs...)
@@ -131,3 +131,18 @@ extend(m, Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs)));
 Base.kron(ms, bs, b::AbstractHilbertSpace; kwargs...) = fermionic_kron(ms, bs, b; phase_factors=false, kwargs...)
 
 canonical_embedding(m, b, bnew) = embed(m, b, bnew; phase_factors=false)
+
+function embed(m, Hsub::AbstractHilbertSpace, H::ProductSpace)
+    @assert isnothing(fock_part(Hsub))
+    ns = findall(==(Hsub), H.other_spaces)
+    length(ns) == 1 || throw(ArgumentError("Hsub must be one of the non-fock parts of H"))
+    n = only(ns)
+    Is = Any[I(dim(Hs)) for Hs in H.other_spaces]
+    Is[n] = m
+    return kron(reverse(Is)...)
+end
+
+function embed(m, Hsub::AbstractFockHilbertSpace, H::ProductSpace; kwargs...)
+    mf = embed(m, Hsub, fock_part(H); kwargs...)
+    return kron(I(prod(dim, non_fock_part(H))), mf)
+end
