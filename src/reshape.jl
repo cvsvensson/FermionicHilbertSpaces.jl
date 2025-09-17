@@ -158,7 +158,7 @@ end
 
         basis1 = majorana_basis(H1)
         basis2 = majorana_basis(H2)
-        basis12all = [fermionic_kron((Γ1, Γ2), Hs => H) for (Γ1, Γ2) in Base.product(basis1, basis2)]
+        basis12all = [generalized_kron((Γ1, Γ2), Hs => H) for (Γ1, Γ2) in Base.product(basis1, basis2)]
         basis12oddodd = [project_on_parities(Γ, H, Hs, (-1, -1)) for Γ in basis12all]
         basis12oddeven = [project_on_parities(Γ, H, Hs, (-1, 1)) for Γ in basis12all]
         basis12evenodd = [project_on_parities(Γ, H, Hs, (1, -1)) for Γ in basis12all]
@@ -224,8 +224,8 @@ end
         mEE = project_on_parities(m, H, Hs, (1, 1))
         mOO = project_on_parities(m, H, Hs, (-1, -1))
 
-        F = partial_trace(H => H2)(m * fermionic_kron(Hs => H)(m1, I))
-        @test tr(F * m2) ≈ tr(m * fermionic_kron((m1, I), Hs, H) * fermionic_kron((I, m2), Hs, H))
+        F = partial_trace(H => H2)(m * generalized_kron(Hs => H)(m1, I))
+        @test tr(F * m2) ≈ tr(m * generalized_kron((m1, I), Hs, H) * generalized_kron((I, m2), Hs, H))
 
         t = reshape(m, H => Hs; phase_factors=false)
         tpt = sum(t[k1, :, k2, :] * m1[k2, k1] for k1 in axes(t, 1), k2 in axes(t, 3))

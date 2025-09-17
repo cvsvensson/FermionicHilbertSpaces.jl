@@ -13,7 +13,8 @@ struct SpinSpace{J,S,L} <: AbstractHilbertSpace
     end
 end
 basisstates(H::SpinSpace) = H.basisstates
-label(H::SpinSpace) = H.label
+basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
+Base.keys(H::SpinSpace) = (H.label,)
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{J,S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
 
@@ -74,4 +75,7 @@ end
     mf1 = rand(2, 2)
     Hf1 = hilbert_space(1:1)
     @test partial_trace(embed(mf1, Hf1 => Pf), Pf => Hf) ≈ dim(P) * embed(mf1, Hf1 => Hf)
+
+    mp = rand(4, 4)
+    @test embed(mp, P => Pf) ≈ extend(mp, P => Hf)
 end

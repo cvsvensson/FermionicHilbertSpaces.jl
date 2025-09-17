@@ -5,7 +5,7 @@ end
 Base.:(==)(H1::GenericHilbertSpace, H2::GenericHilbertSpace) = H1 === H2 || (H1.label == H2.label && H1.basisstates == H2.basisstates)
 Base.hash(H::GenericHilbertSpace, h::UInt) = hash((H.label, H.basisstates), h)
 basisstates(H::GenericHilbertSpace) = H.basisstates
-label(H::GenericHilbertSpace) = H.label
+Base.keys(H::GenericHilbertSpace) = (H.label,)
 state_index(state, H::GenericHilbertSpace) = findfirst(==(state), H.basisstates)
 
 struct ProductState{F,O} <: AbstractBasisState
@@ -29,15 +29,26 @@ struct ProductSpace{HF,HS} <: AbstractHilbertSpace
         new{HF,HS}(fspace, ospaces)
     end
 end
+Base.keys(H::ProductSpace{Nothing}) = mapreduce(keys, TupleTools.vcat, H.other_spaces)
+Base.keys(H::ProductSpace) = vcat(keys(H.fock_space), [mapreduce(keys, TupleTools.vcat, H.other_spaces)...])
 Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1 === H2 || (H1.fock_space == H2.fock_space && H1.other_spaces == H2.other_spaces)
 Base.hash(H::ProductSpace, h::UInt) = hash((H.fock_space, H.other_spaces), h)
 ProductSpace{Nothing}(other_spaces) = ProductSpace(nothing, other_spaces)
 
-label(H::ProductSpace) = (label(H.fock_space), map(label, H.other_spaces)...)
-label(H::ProductSpace{Nothing}) = map(label, H.other_spaces)
-label(H::AbstractFockHilbertSpace) = keys(H)
+# label(H::ProductSpace) = (label(H.fock_space), map(label, H.other_spaces)...)
+# label(H::ProductSpace{Nothing}) = map(label, H.other_spaces)
+# label(H::AbstractFockHilbertSpace) = keys(H)
 basisstates(H::ProductSpace) = Iterators.map(s -> ProductState(s...), Iterators.product(basisstates(H.fock_space), Iterators.product(map(basisstates, H.other_spaces)...)))
 basisstates(H::ProductSpace{Nothing}) = Iterators.map(ProductState{Nothing}, Iterators.product(map(basisstates, H.other_spaces)...))
+
+function basisstate(n::Int, H::ProductSpace{Nothing})
+    I = CartesianIndices(map(dim, H.other_spaces))[n]
+    ProductState(nothing, ntuple(i -> basisstate(I[i], H.other_spaces[i]), length(H.other_spaces)))
+end
+function basisstate(n::Int, H::ProductSpace)
+    I = CartesianIndices((dim(H.fock_space), map(dim, H.other_spaces)...))[n]
+    ProductState(basisstate(I[1], H.fock_space), ntuple(i -> basisstate(I[i+1], H.other_spaces[i]), length(H.other_spaces)))
+end
 dim(H::ProductSpace{Nothing}) = prod(dim, H.other_spaces; init=1)
 dim(H::ProductSpace) = dim(H.fock_space) * prod(dim, H.other_spaces; init=1)
 function state_index(state::ProductState, H::ProductSpace)
@@ -71,9 +82,11 @@ function complementary_subsystem(H::ProductSpace, Hsub::AbstractFockHilbertSpace
     ProductSpace(fcomp, H.other_spaces)
 end
 function complementary_subsystem(H::ProductSpace, Hsub::ProductSpace)
-    other_spaces = [H.other_spaces[i] for i in eachindex(H.other_spaces) if H.other_spaces[i] != Hsub]
-    length(other_spaces) + 1 == length(H.other_spaces) || throw(ArgumentError("Hsub must be one of the spaces in the product space H"))
+    other_spaces = setdiff(H.other_spaces, Hsub.other_spaces)
     fcomp = complementary_subsystem(H.fock_space, Hsub.fock_space)
+    if length(other_spaces) == 0
+        return fcomp
+    end
     ProductSpace(fcomp, other_spaces)
 end
 function Base.show(io::IO, H::ProductSpace{Nothing})
@@ -85,7 +98,7 @@ function Base.show(io::IO, H::ProductSpace{Nothing})
     end
     println(io, "$(d)-dimensional ProductSpace($dimstring)")
     n = length(H.other_spaces)
-    print(io, "$n spaces: ", map(label, H.other_spaces))
+    print(io, "$n spaces: ", keys(H))
 end
 function Base.show(io::IO, H::ProductSpace)
     d = dim(H)
@@ -98,7 +111,7 @@ function Base.show(io::IO, H::ProductSpace)
     N = length(keys(H.fock_space))
     println(io, "$N fermions: ", keys(H.fock_space))
     n = length(H.other_spaces)
-    print(io, "$n other spaces: ", map(label, H.other_spaces))
+    print(io, "$n other spaces: ", map(keys, H.other_spaces))
 end
 
 flat_non_fock_spaces(Hs) = foldl(_flat_non_fock_spaces, Hs; init=())
@@ -123,8 +136,8 @@ _flat_non_fock_states(acc, s::ProductState) = (acc..., s.other_states...)
 
 function StateExtender(Hs, H::ProductSpace{Nothing})
     ospaces = flat_non_fock_spaces(Hs)
-    sublabels = map(label, ospaces)
-    labels = map(label, H.other_spaces)
+    sublabels = map(keys, ospaces)
+    labels = map(keys, H.other_spaces)
     perm = map(l -> findfirst(==(l), sublabels)::Int, labels)
     function extender(states)
         ostates = flat_non_fock_states(states)
@@ -133,10 +146,10 @@ function StateExtender(Hs, H::ProductSpace{Nothing})
 end
 function StateExtender(Hs, H::ProductSpace)
     fock_spaces = flat_fock_spaces(Hs)
-    fockstateextender = length(fock_spaces) > 1 ? StateExtender(filter(!isnothing, fock_spaces), H.fock_space) : only
+    fockstateextender = length(fock_spaces) > 1 ? StateExtender(fock_spaces, H.fock_space) : only
     ospaces = flat_non_fock_spaces(Hs)
-    sublabels = map(label, ospaces)
-    labels = map(label, H.other_spaces)
+    sublabels = map(keys, ospaces)
+    labels = map(keys, H.other_spaces)
     perm = map(l -> findfirst(==(l), sublabels)::Int, labels)
     function extender(states)
         fockstates = flat_fock_states(states)
@@ -190,8 +203,8 @@ dim(H::AbstractHilbertSpace) = Int(length(basisstates(H)))
 isorderedpartition(Hs, H::AbstractFockHilbertSpace) = isorderedpartition(map(modes, Hs), H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = isorderedsubsystem(Hsub.jw, H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = isorderedsubsystem(Hsub.jw, jw)
-issubsystem(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = issubsystem(subsystem.jw, jw)
-issubsystem(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = issubsystem(subsystem.jw, H.jw)
+# issubsystem(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = issubsystem(subsystem.jw, jw)
+# issubsystem(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = issubsystem(subsystem.jw, H.jw)
 consistent_ordering(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = consistent_ordering(subsystem.jw, jw)
 consistent_ordering(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = consistent_ordering(subsystem.jw, H.jw)
 focknbr_from_site_labels(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(H), jw)
@@ -435,6 +448,8 @@ function complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFock
     end)
     FockHilbertSpace(modes(_Hbar), states)
 end
+complementary_subsystem(H::AbstractFockHilbertSpace, ::Nothing) = H
+complementary_subsystem(::Nothing, Hsub::AbstractHilbertSpace) = nothing
 
 @testitem "subregion function" begin
     using FermionicHilbertSpaces
