@@ -44,6 +44,7 @@ end
 
 @testitem "Spin" begin
     using FermionicHilbertSpaces: spin_basisstates, SpinSpace, SpinState, operators
+    using LinearAlgebra
     @test spin_basisstates(1 // 2) == [SpinState{1 // 2}(-1 // 2), SpinState{1 // 2}(1 // 2)]
     @test spin_basisstates(1) == [SpinState{1}(-1), SpinState{1}(0), SpinState{1}(1)]
 
@@ -60,9 +61,17 @@ end
     @test S[:Z] * S[:X] - S[:X] * S[:Z] ≈ im * S[:Y]
     H1, H2 = [SpinSpace{1 // 2}() for k in 1:2]
     P = tensor_product(H1, H2)
-    @test partial_trace(1.0 * I(dim(P)), P => H1) ≈ dim(P) / dim(H1) * I(dim(H1))
+    @test partial_trace(1.0 * I(dim(P)), P => H1) ≈ dim(H2) * I(dim(H1))
 
-    _embed(op1) = kron(I(dim(H2)), op1)
     ops1 = operators(H1)
-    @test all(partial_trace(_embed(op), P => H1) ≈ dim(H2) * op for op in values(ops1))
+    @test all(partial_trace(embed(op, H1 => P), P => H1) ≈ dim(H2) * op for op in values(ops1))
+
+    Hf = hilbert_space(1:2)
+    mf = rand(dim(Hf), dim(Hf))
+    Pf = tensor_product(Hf, P)
+    @test partial_trace(embed(mf, Hf => Pf), Pf => Hf) ≈ dim(P) * mf
+
+    mf1 = rand(2, 2)
+    Hf1 = hilbert_space(1:1)
+    @test partial_trace(embed(mf1, Hf1 => Pf), Pf => Hf) ≈ dim(P) * embed(mf1, Hf1 => Hf)
 end

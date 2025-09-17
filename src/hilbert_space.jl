@@ -153,14 +153,14 @@ fock_part(::Any) = nothing
 fock_part(s::AbstractFockState) = s
 non_fock_part(::AbstractFockHilbertSpace) = nothing
 non_fock_part(H::AbstractHilbertSpace) = H
-non_fock_part(P::ProductSpace) = ProductSpace{Nothing}(P.other_spaces)
-non_fock_part(P::ProductState) = ProductState{Nothing}(P.other_states)
+non_fock_part(P::ProductSpace) = P.other_spaces
+non_fock_part(P::ProductState) = P.other_states
 non_fock_part(s::Any) = s
 non_fock_part(::AbstractFockState) = nothing
 
 @testitem "GenericHilbertSpace, ProductSpace" begin
-    using FermionicHilbertSpaces
     using FermionicHilbertSpaces: GenericHilbertSpace
+    using LinearAlgebra
     H1 = GenericHilbertSpace(:A, [:a, :b])
     H2 = GenericHilbertSpace(:B, [:c, :d])
     P = tensor_product(H1, H2)
