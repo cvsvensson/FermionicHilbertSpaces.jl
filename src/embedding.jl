@@ -128,9 +128,9 @@ extend(m, Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs)));
 
 
 ## kron, i.e. tensor_product without phase factors
-Base.kron(ms, bs, b::AbstractHilbertSpace; kwargs...) = generalized_kron(ms, bs, b; phase_factors=false, kwargs...)
+# Base.kron(ms, bs, b::AbstractHilbertSpace; kwargs...) = generalized_kron(ms, bs, b; phase_factors=false, kwargs...)
 
-canonical_embedding(m, b, bnew) = embed(m, b, bnew; phase_factors=false)
+# canonical_embedding(m, b, bnew) = embed(m, b, bnew; phase_factors=false)
 
 # function embed(m, Hsub::AbstractHilbertSpace, H::ProductSpace)
 #     @assert isnothing(fock_part(Hsub))

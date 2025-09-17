@@ -110,14 +110,7 @@ issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = issubsystem(k
 end
 
 
-phase_factor_h(f1, f2, Hs, H::ProductSpace{Nothing}) = 1
-phase_factor_h(f1, f2, Hs, H::AbstractHilbertSpace) = 1
-phase_factor_h(f1, f2, Hs, H::ProductSpace) = phase_factor_h(f1, f2, Hs, H.fock_space)
 phase_factor_h(f1, f2, Hs, H::AbstractFockHilbertSpace) = phase_factor_h(f1, f2, map(modes, flat_fock_spaces(Hs)), H.jw)
-
-phase_factor_h(f1::ProductState, f2::ProductState, partition, jw::JordanWignerOrdering) = phase_factor_h(f1.fock_state, f2.fock_state, partition, jw)
-phase_factor_h(f1::ProductState, f2::AbstractFockState, partition, jw::JordanWignerOrdering) = phase_factor_h(f1.fock_state, f2, partition, jw)
-phase_factor_h(f1::AbstractFockState, f2::ProductState, partition, jw::JordanWignerOrdering) = phase_factor_h(f1, f2.fock_state, partition, jw)
 function phase_factor_h(f1::AbstractFockState, f2::AbstractFockState, partition, jw::JordanWignerOrdering)::Int
     #(120b)
     phase = 1
