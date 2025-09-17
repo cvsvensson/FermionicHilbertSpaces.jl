@@ -32,26 +32,7 @@ end
 Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1 === H2 || (H1.fock_space == H2.fock_space && H1.other_spaces == H2.other_spaces)
 Base.hash(H::ProductSpace, h::UInt) = hash((H.fock_space, H.other_spaces), h)
 ProductSpace{Nothing}(other_spaces) = ProductSpace(nothing, other_spaces)
-function ProductSpace(spaces::HS) where HS
-    fspaces = AbstractFockHilbertSpace[]
-    other_spaces = AbstractHilbertSpace[]
-    for H in spaces
-        if H isa AbstractFockHilbertSpace
-            push!(fspaces, H)
-        elseif H isa ProductSpace
-            isnothing(H.fock_space) || push!(fspaces, H.fock_space)
-            append!(other_spaces, H.other_spaces)
-        elseif H isa AbstractHilbertSpace
-            push!(other_spaces, H)
-        else
-            throw(ArgumentError("All spaces in the product must be subtypes of AbstractHilbertSpace. Got $(typeof(H))"))
-        end
-    end
-    map(H -> label(H), other_spaces) |> allunique || throw(ArgumentError("All Hilbert spaces in the product must have unique labels. $(map(H -> label(H), other_spaces))"))
-    fspace = length(fspaces) > 0 ? tensor_product(fspaces) : nothing
-    ospaces = Tuple(other_spaces)
-    ProductSpace(fspace, ospaces)
-end
+
 label(H::ProductSpace) = (label(H.fock_space), map(label, H.other_spaces)...)
 label(H::ProductSpace{Nothing}) = map(label, H.other_spaces)
 label(H::AbstractFockHilbertSpace) = keys(H)
@@ -168,31 +149,31 @@ fock_part(H::AbstractFockHilbertSpace) = H
 fock_part(::AbstractHilbertSpace) = nothing
 fock_part(P::ProductSpace) = P.fock_space
 fock_part(P::ProductState) = P.fock_state
-fock_part(s::Any) = nothing
+fock_part(::Any) = nothing
 fock_part(s::AbstractFockState) = s
-non_fock_part(H::AbstractFockHilbertSpace) = nothing
+non_fock_part(::AbstractFockHilbertSpace) = nothing
 non_fock_part(H::AbstractHilbertSpace) = H
 non_fock_part(P::ProductSpace) = ProductSpace{Nothing}(P.other_spaces)
 non_fock_part(P::ProductState) = ProductState{Nothing}(P.other_states)
 non_fock_part(s::Any) = s
-non_fock_part(s::AbstractFockState) = nothing
+non_fock_part(::AbstractFockState) = nothing
 
 @testitem "GenericHilbertSpace, ProductSpace" begin
     using FermionicHilbertSpaces
-    using FermionicHilbertSpaces: ProductSpace, GenericHilbertSpace
+    using FermionicHilbertSpaces: GenericHilbertSpace
     H1 = GenericHilbertSpace(:A, [:a, :b])
     H2 = GenericHilbertSpace(:B, [:c, :d])
-    P = ProductSpace((H1, H2))
+    P = tensor_product(H1, H2)
     @test dim(P) == dim(H1) * dim(H2)
     @test 2 * I(2) == partial_trace(1.0 * I(4), P => H1)
 
     Hf = hilbert_space(1:2)
-    P2 = ProductSpace((Hf, H1, H2))
+    P2 = tensor_product(Hf, H1, H2)
     @test dim(P2) / dim(H1) * I(2) == partial_trace(1.0 * I(dim(P2)), P2 => H1)
 
-    P3 = ProductSpace((Hf, P))
+    P3 = tensor_product(Hf, P)
     @test P3 == P2
-    @test_throws ArgumentError ProductSpace((Hf, P2))
+    @test_throws ArgumentError tensor_product(Hf, P2)
 end
 
 
