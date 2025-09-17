@@ -90,32 +90,32 @@ kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, 
     @test !kron_sizes_compatible([I, I, m2], Hs)
     @test kron_sizes_compatible(vs, Hs)
     @test !kron_sizes_compatible(vs, reverse(Hs))
-    @test_throws ArgumentError fermionic_kron(ms, reverse(Hs))
+    @test_throws ArgumentError generalized_kron(ms, reverse(Hs))
     H12 = tensor_product(H1, H2)
     m_too_large = rand(dim(H12) + 1, dim(H12) + 1)
     @test_throws ArgumentError partial_trace(m_too_large, H12 => H1)
 end
 
 """
-    fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
+    generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
 
-Compute the fermionic tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the tensor_product product of `Hs`.
+Compute the tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the tensor_product product of `Hs`.
 """
-function fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); phase_factors=true)
+function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs)
-    extend_state = FockMapper(Hs, H)
+    extend_state = StateExtender(Hs, H)
     if N == 1
-        return fermionic_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state)
+        return generalized_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state)
     elseif N == 2
-        return fermionic_kron_mat!(mout, Tuple(ms), Tuple(Hs), H, extend_state, phase_factors)
+        return generalized_kron_mat!(mout, Tuple(ms), Tuple(Hs), H, extend_state)
     end
     throw(ArgumentError("Only 1D or 2D arrays are supported"))
 end
 
-fermionic_kron(Hs::Pair; kwargs...) = (ms...) -> fermionic_kron(ms, Hs; kwargs...)
-fermionic_kron(ms, Hs::Pair; kwargs...) = fermionic_kron(ms, first(Hs), last(Hs); kwargs...)
+generalized_kron(Hs::Pair; kwargs...) = (ms...) -> generalized_kron(ms, Hs; kwargs...)
+generalized_kron(ms, Hs::Pair; kwargs...) = generalized_kron(ms, first(Hs), last(Hs); kwargs...)
 
 uniform_to_sparse_type(::Type{UniformScaling{T}}) where {T} = SparseMatrixCSC{T,Int}
 uniform_to_sparse_type(::Type{T}) where {T} = T
@@ -134,13 +134,13 @@ function allocate_tensor_product_result(ms, bs)
     end
 end
 
-tensor_product_iterator(m, ::AbstractFockHilbertSpace) = findall(!iszero, m)
-tensor_product_iterator(::UniformScaling, H::AbstractFockHilbertSpace) = diagind(I(length(basisstates(H))), IndexCartesian())
+tensor_product_iterator(m, ::AbstractHilbertSpace) = findall(!iszero, m)
+tensor_product_iterator(::UniformScaling, H::AbstractHilbertSpace) = diagind(I(length(basisstates(H))), IndexCartesian())
 
-function fermionic_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state, phase_factors::Bool=true) where T
+function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state) where T
     fill!(mout, zero(T))
-    ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
-    phase_factors && (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
+    # ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
+    (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
 
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     for I in inds
@@ -152,7 +152,7 @@ function fermionic_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::A
         fock2 = map(basisstate, I2, Hs)
         fullfock2 = extend_state(fock2)
         outind2 = state_index(fullfock2, H)
-        s = phase_factors ? phase_factor_h(fullfock1, fullfock2, Hs, H) : 1
+        s = phase_factor_h(fullfock1, fullfock2, Hs, H)
         v = one(T)
         for (m, i1, i2) in zip(ms, I1, I2)
             v *= m[i1, i2]
@@ -162,7 +162,7 @@ function fermionic_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::A
     return mout
 end
 
-function fermionic_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state)
+function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state)
     fill!(mout, zero(eltype(mout)))
     U = embedding_unitary(Hs, H)
     dimlengths = map(length ∘ basisstates, Hs)
@@ -213,9 +213,9 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     ops_fine = map(f_p_list -> [rand(ComplexF64, 2^length(f_p), 2^length(f_p)) for f_p in f_p_list], fine_partitions)
 
     # Associativity (Eq. 16)
-    rhs = fermionic_kron(reduce(vcat, ops_fine), reduce(vcat, Hs_fine), H)
-    finetensor_products = [fermionic_kron(ops_vec, cs_vec, c_rough) for (ops_vec, cs_vec, c_rough) in zip(ops_fine, Hs_fine, Hs_rough)]
-    lhs = fermionic_kron(finetensor_products, Hs_rough, H)
+    rhs = generalized_kron(reduce(vcat, ops_fine), reduce(vcat, Hs_fine), H)
+    finetensor_products = [generalized_kron(ops_vec, cs_vec, c_rough) for (ops_vec, cs_vec, c_rough) in zip(ops_fine, Hs_fine, Hs_rough)]
+    lhs = generalized_kron(finetensor_products, Hs_rough, H)
     @test lhs ≈ rhs
 
     rhs = kron(reduce(vcat, ops_fine), reduce(vcat, Hs_fine), H)
@@ -227,7 +227,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     # Eq. 18
     As = ops_rough
     Bs = map(r_p -> rand(ComplexF64, 2^length(r_p), 2^length(r_p)), rough_partitions)
-    lhs = tr(fermionic_kron(As, Hs_rough, H)' * fermionic_kron(Bs, Hs_rough, H))
+    lhs = tr(generalized_kron(As, Hs_rough, H)' * generalized_kron(Bs, Hs_rough, H))
     rhs = mapreduce((A, B) -> tr(A' * B), *, As, Bs)
     @test lhs ≈ rhs
 
@@ -240,7 +240,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     modebases = [hilbert_space(j:j) for j in 1:N]
     lhs = prod(j -> embed(As_modes[j], modebases[j], H), 1:N)
     rhs_ordered_prod(X, basis) = mapreduce(j -> Matrix(embed(As_modes[j], modebases[j], basis)), *, X)
-    rhs = fermionic_kron([rhs_ordered_prod(X, H) for (X, H) in zip(ξ, ξbases)], ξbases, H)
+    rhs = generalized_kron([rhs_ordered_prod(X, H) for (X, H) in zip(ξ, ξbases)], ξbases, H)
     @test lhs ≈ rhs
 
     # Associativity (Eq. 21)
@@ -284,10 +284,10 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     HX = Hs_rough[1]
     HXbar = hilbert_space(Xbar)
     corr = embed(A, HX, H)
-    @test corr ≈ fermionic_kron([A, I], [HX, HXbar], H) ≈ tensor_product([A, I], [HX, HXbar], H) ≈ tensor_product([I, A], [HXbar, HX], H)
+    @test corr ≈ generalized_kron([A, I], [HX, HXbar], H) ≈ tensor_product([A, I], [HX, HXbar], H) ≈ tensor_product([I, A], [HXbar, HX], H)
 
     # Eq. 32
-    @test tensor_product(As_modes, modebases, H) ≈ fermionic_kron(As_modes, modebases, H)
+    @test tensor_product(As_modes, modebases, H) ≈ generalized_kron(As_modes, modebases, H)
 
     ## Fermionic partial trace
 
@@ -304,7 +304,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     B = rand(ComplexF64, 2^length(Xbar), 2^length(Xbar))
     Hs = [HX, HXbar]
     ops = [A, B]
-    @test partial_trace(fermionic_kron(ops, Hs, H), H, HX) ≈ partial_trace(tensor_product(ops, Hs, H), H, HX) ≈ partial_trace(tensor_product(reverse(ops), reverse(Hs), H), H, HX) ≈ A * tr(B)
+    @test partial_trace(generalized_kron(ops, Hs, H), H, HX) ≈ partial_trace(tensor_product(ops, Hs, H), H, HX) ≈ partial_trace(tensor_product(reverse(ops), reverse(Hs), H), H, HX) ≈ A * tr(B)
 
     # Eq. 39
     A = rand(ComplexF64, 2^N, 2^N)
@@ -486,7 +486,7 @@ SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest..
     @test FermionicHilbertSpaces.fermionic_tensor_product_with_kron_and_maps((I(2), c2[2]), (p1, p1), p2) == c12[2]
 
     ms = (rand(2, 2), rand(2, 2))
-    @test FermionicHilbertSpaces.fermionic_tensor_product_with_kron_and_maps(ms, (p1, p1), p2) == fermionic_kron(ms, (H1, H2), H12)
+    @test FermionicHilbertSpaces.fermionic_tensor_product_with_kron_and_maps(ms, (p1, p1), p2) == generalized_kron(ms, (H1, H2), H12)
 end
 
 function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)

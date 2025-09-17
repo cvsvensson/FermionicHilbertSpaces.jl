@@ -17,7 +17,7 @@ export FockNumber, JordanWignerOrdering, hc, basisstates, dim
 export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subregion
 export parityoperator, numberoperator, fermions, majoranas, matrix_representation
 
-export partial_trace, fermionic_kron, tensor_product, embed, extend
+export partial_trace, generalized_kron, tensor_product, embed, extend
 export @fermions, @majoranas
 export NumberConservation, NoSymmetry, ParityConservation, IndexConservation
 export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
