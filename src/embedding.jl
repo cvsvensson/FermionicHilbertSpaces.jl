@@ -52,7 +52,7 @@ end
 
 @testitem "Embedding unitary" begin
     # Appendix C.4
-    import FermionicHilbertSpaces: embedding_unitary, canonical_embedding, bipartite_embedding_unitary, bits
+    import FermionicHilbertSpaces: embedding_unitary, bipartite_embedding_unitary, bits
     using LinearAlgebra
     jw = JordanWignerOrdering(1:2)
     fockstates = sort(map(FockNumber, 0:3), by=Base.Fix2(bits, 2))
@@ -81,7 +81,7 @@ end
 
 @testitem "Embedding unitary action" begin
     # Appendix C.4
-    import FermionicHilbertSpaces: embedding_unitary, canonical_embedding, bipartite_embedding_unitary
+    import FermionicHilbertSpaces: embedding_unitary, bipartite_embedding_unitary
     using LinearAlgebra
     HA = hilbert_space((1, 3))
     HB = hilbert_space((2, 4))
@@ -95,7 +95,7 @@ end
     Ux = embedding_unitary(Hs, H)
     Ux2 = bipartite_embedding_unitary(HA, HB, H)
     @test Ux ≈ Ux2
-    @test embed(cA[1], HA, H) ≈ Ux * canonical_embedding(cA[1], HA, H) * Ux'
+    @test embed(cA[1], HA, H) ≈ Ux * embed(cA[1], HA, H; phase_factors=false) * Ux'
 end
 
 

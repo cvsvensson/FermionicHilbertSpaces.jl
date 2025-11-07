@@ -43,11 +43,15 @@ basisstates(H::ProductSpace{Nothing}) = Iterators.map(ProductState{Nothing}, Ite
 
 function basisstate(n::Int, H::ProductSpace{Nothing})
     I = CartesianIndices(map(dim, H.other_spaces))[n]
-    ProductState(nothing, ntuple(i -> basisstate(I[i], H.other_spaces[i]), length(H.other_spaces)))
+    states = [basisstate(I[i], H.other_spaces[i]) for i in 1:length(H.other_spaces)]
+    # states = (basisstate(I[i], H.other_spaces[i]) for i in 1:length(H.other_spaces)
+    # states = ntuple(i -> basisstate(I[i], H.other_spaces[i]),length(H.other_spaces))
+    ProductState(nothing, states)
 end
 function basisstate(n::Int, H::ProductSpace)
     I = CartesianIndices((dim(H.fock_space), map(dim, H.other_spaces)...))[n]
-    ProductState(basisstate(I[1], H.fock_space), ntuple(i -> basisstate(I[i+1], H.other_spaces[i]), length(H.other_spaces)))
+    states = [basisstate(I[i+1], H.other_spaces[i]) for i in 1:length(H.other_spaces)]
+    ProductState(basisstate(I[1], H.fock_space), states)
 end
 dim(H::ProductSpace{Nothing}) = prod(dim, H.other_spaces; init=1)
 dim(H::ProductSpace) = dim(H.fock_space) * prod(dim, H.other_spaces; init=1)
@@ -73,7 +77,8 @@ end
 
 simple_complementary_subsystem(H::ProductSpace, Hsub::AbstractHilbertSpace) = complementary_subsystem(H, Hsub)
 function complementary_subsystem(H::ProductSpace, Hsub::AbstractHilbertSpace)
-    spaces = [H.other_spaces[i] for i in eachindex(H.other_spaces) if H.other_spaces[i] != Hsub]
+    # spaces = [H.other_spaces[i] for i in eachindex(H.other_spaces) if H.other_spaces[i] != Hsub]
+    spaces = filter(Hn -> Hn != Hsub, H.other_spaces)
     length(spaces) + 1 == length(H.other_spaces) || throw(ArgumentError("Hsub must be one of the spaces in the product space H"))
     ProductSpace(H.fock_space, spaces)
 end
@@ -81,6 +86,7 @@ function complementary_subsystem(H::ProductSpace, Hsub::AbstractFockHilbertSpace
     fcomp = complementary_subsystem(H.fock_space, Hsub)
     ProductSpace(fcomp, H.other_spaces)
 end
+complementary_subsystem(::Nothing, ::Nothing) = nothing
 function complementary_subsystem(H::ProductSpace, Hsub::ProductSpace)
     other_spaces = setdiff(H.other_spaces, Hsub.other_spaces)
     fcomp = complementary_subsystem(H.fock_space, Hsub.fock_space)
@@ -133,29 +139,45 @@ _flat_non_fock_states(acc, ::AbstractFockState) = acc
 _flat_non_fock_states(acc, s::Any) = (acc..., s)
 _flat_non_fock_states(acc, s::ProductState) = (acc..., s.other_states...)
 
+_num_non_fock_spaces(H::AbstractHilbertSpace) = 1
+_num_non_fock_spaces(::AbstractFockHilbertSpace) = 0
+_num_non_fock_spaces(P::ProductSpace) = length(P.other_spaces)
+_substate(s::AbstractBasisState, n::Int) = n == 1 ? s : error("Substate index out of bounds")
+_substate(s::Any, n::Int) = n == 1 ? s : error("Substate index out of bounds")
+_substate(s::ProductState, n::Int) = s.other_states[n]
+
+#_permute!!(states::Tuple, perm) = TupleTools.permute(states, perm)
+#_permute!!(states::Vector, perm) = permute!(states, perm)
 
 function StateExtender(Hs, H::ProductSpace{Nothing})
     ospaces = flat_non_fock_spaces(Hs)
     sublabels = map(keys, ospaces)
     labels = map(keys, H.other_spaces)
-    perm = map(l -> findfirst(==(l), sublabels)::Int, labels)
+    perm = (map(l -> findfirst(==(l), sublabels)::Int, labels))
+    spacelengths = map(_num_non_fock_spaces, Hs)
+    cumulative_spacelengths = (0, cumsum(spacelengths)...)
+    accessors = map(perm) do n
+        which_space = findfirst(i -> cumulative_spacelengths[i] < n <= cumulative_spacelengths[i+1], 1:length(Hs))
+        which_subspace = n - cumulative_spacelengths[which_space]
+        states -> _substate(states[which_space], which_subspace)
+    end
     function extender(states)
-        ostates = flat_non_fock_states(states)
-        ProductState{Nothing}(TupleTools.permute(ostates, perm))
+        ostates = map(acc -> acc(states), accessors)
+        ProductState{Nothing}(ostates)
     end
 end
 function StateExtender(Hs, H::ProductSpace)
     fock_spaces = flat_fock_spaces(Hs)
     fockstateextender = length(fock_spaces) > 1 ? StateExtender(fock_spaces, H.fock_space) : only
     ospaces = flat_non_fock_spaces(Hs)
-    sublabels = map(keys, ospaces)
-    labels = map(keys, H.other_spaces)
-    perm = map(l -> findfirst(==(l), sublabels)::Int, labels)
+    non_fock_space = ProductSpace{Nothing}(H.other_spaces)
+    non_fock_extender = StateExtender(ospaces, non_fock_space)
     function extender(states)
         fockstates = flat_fock_states(states)
         ostates = flat_non_fock_states(states)
+        eostates = non_fock_extender(ostates).other_states
         fstate = fockstateextender(fockstates)
-        ProductState(fstate, TupleTools.permute(ostates, perm))
+        ProductState(fstate, eostates)#TupleTools.permute(ostates, perm))
     end
 end
 fock_part(H::AbstractFockHilbertSpace) = H
@@ -210,10 +232,10 @@ Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 dim(H::AbstractHilbertSpace) = Int(length(basisstates(H)))
 isorderedpartition(Hs, H::AbstractFockHilbertSpace) = isorderedpartition(map(modes, Hs), H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = isorderedsubsystem(Hsub.jw, H.jw)
-isorderedsubsystem(Hsub::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = isorderedsubsystem(Hsub.jw, jw)
+# isorderedsubsystem(Hsub::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = isorderedsubsystem(Hsub.jw, jw)
 # issubsystem(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = issubsystem(subsystem.jw, jw)
 # issubsystem(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = issubsystem(subsystem.jw, H.jw)
-consistent_ordering(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = consistent_ordering(subsystem.jw, jw)
+# consistent_ordering(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = consistent_ordering(subsystem.jw, jw)
 consistent_ordering(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = consistent_ordering(subsystem.jw, H.jw)
 focknbr_from_site_labels(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(H), jw)
 ispartition(Hs, H::AbstractFockHilbertSpace) = ispartition(map(modes, Hs), H.jw)
@@ -371,18 +393,16 @@ hilbert_space(labels, qn::AbstractSymmetry, basisstates) = SymmetricFockHilbertS
     @test issubsystem(Hsub1, H)
     @test issubsystem(Hsub2, H)
     @test !issubsystem(Hsub5, H)
-    @test issubsystem(Hsub1, H.jw)
-    @test !issubsystem(Hsub5, H.jw)
 
     # consistent_ordering
     @test consistent_ordering(Hsub1, H)
-    @test consistent_ordering(Hsub2, H.jw)
+    # @test consistent_ordering(Hsub2, H.jw)
     @test !consistent_ordering(Hsub3, H)
-    @test !consistent_ordering(Hsub4, H.jw)
+    # @test !consistent_ordering(Hsub4, H.jw)
 
     # isorderedsubsystem
     @test isorderedsubsystem(Hsub1, H)
-    @test isorderedsubsystem(Hsub2, H.jw)
+    # @test isorderedsubsystem(Hsub2, H.jw)
     @test !isorderedsubsystem(Hsub3, H)
     @test !isorderedsubsystem(Hsub4, H)
     @test !isorderedsubsystem(Hsub5, H)

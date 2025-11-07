@@ -229,7 +229,7 @@ end
 
         t = reshape(m, H => Hs; phase_factors=false)
         tpt = sum(t[k1, :, k2, :] * m1[k2, k1] for k1 in axes(t, 1), k2 in axes(t, 3))
-        @test partial_trace(m * kron((m1, I), Hs, H), H => H2; phase_factors=false) ≈ tpt
+        @test partial_trace(m * generalized_kron((m1, I), Hs, H; phase_factors=false), H => H2; phase_factors=false) ≈ tpt
 
         ## More bases
         H3 = hilbert_space(5:5, qn3)
