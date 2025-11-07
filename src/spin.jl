@@ -8,8 +8,8 @@ struct SpinSpace{J,S,L} <: AbstractHilbertSpace
     basisstates::Vector{SpinState{J,S}}
     label::L
     function SpinSpace{J}(label::L=uuid4()) where {J,L}
-        states = spin_basisstates(J)
-        new{J,_labeltype(eltype(states)),L}(states, label)
+        states = spin_basisstates(Val(J))
+        new{J,typeof(J),L}(states, label)
     end
 end
 basisstates(H::SpinSpace) = H.basisstates
@@ -18,15 +18,16 @@ Base.keys(H::SpinSpace) = (H.label,)
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{J,S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
 
-function spin_basisstates(j)
-    states = [SpinState{j}(i - j) for i in 0:2j]
+function spin_basisstates(::Val{J}) where {J}
+    states = [SpinState{J,typeof(J)}(i - J) for i in 0:2J]
     return states
 end
+spin_basisstates(j) = spin_basisstates(Val(j))
 
 function operators(H::SpinSpace{J,S}) where {J,S}
-    Splus = zeros(Float64, dim(H), dim(H))
-    Sminus = zeros(Float64, dim(H), dim(H))
-    Sz = zeros(Float64, dim(H), dim(H))
+    Splus = spzeros(Float64, dim(H), dim(H))
+    Sminus = spzeros(Float64, dim(H), dim(H))
+    Sz = spzeros(Float64, dim(H), dim(H))
     for state in H.basisstates
         m = state.m
         i = state_index(state, H)

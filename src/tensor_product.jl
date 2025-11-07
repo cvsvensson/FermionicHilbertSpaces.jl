@@ -6,13 +6,14 @@ Return the tensor product space of hilbert spaces `Hs`.
 """
 tensor_product(Hs::AbstractVector{<:AbstractHilbertSpace}) = foldl(tensor_product, Hs)
 tensor_product(Hs::Tuple) = foldl(tensor_product, Hs)
-tensor_product(H1, H2, Hs...) = tensor_product(tensor_product(H1, H2), Hs...)
+tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace, Hs...) = tensor_product(tensor_product(H1, H2), Hs...)
 
 function tensor_product(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
     tensor_product_combine_basisstates(H1, H2)
 end
 tensor_product(H1::AbstractFockHilbertSpace, H2::AbstractFockHilbertSpace) = tensor_product_combine_basisstates(H1, H2)
 
+tensor_product(H1::AbstractHilbertSpace) = H1
 tensor_product(H1::AbstractFockHilbertSpace, H2::AbstractHilbertSpace) = ProductSpace(H1, (H2,))
 tensor_product(H1::AbstractHilbertSpace, H2::AbstractFockHilbertSpace) = ProductSpace(H2, (H1,))
 tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace) = ProductSpace(nothing, (H1, H2))
@@ -101,15 +102,15 @@ end
 
 Compute the tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the tensor_product product of `Hs`.
 """
-function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
+function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kwargs...)
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs)
     extend_state = StateExtender(Hs, H)
     if N == 1
-        return generalized_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state)
+        return generalized_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
     elseif N == 2
-        return generalized_kron_mat!(mout, Tuple(ms), Tuple(Hs), H, extend_state)
+        return generalized_kron_mat!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
     end
     throw(ArgumentError("Only 1D or 2D arrays are supported"))
 end
@@ -137,7 +138,7 @@ end
 tensor_product_iterator(m, ::AbstractHilbertSpace) = findall(!iszero, m)
 tensor_product_iterator(::UniformScaling, H::AbstractHilbertSpace) = diagind(I(length(basisstates(H))), IndexCartesian())
 
-function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state) where T
+function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors=true) where T
     fill!(mout, zero(T))
     # ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
     (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
@@ -148,11 +149,11 @@ function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H:
         I2 = map(i -> i[2], I)
         fock1 = map(basisstate, I1, Hs)
         fullfock1 = extend_state(fock1)
-        outind1 = state_index(fullfock1, H)
         fock2 = map(basisstate, I2, Hs)
         fullfock2 = extend_state(fock2)
+        outind1 = state_index(fullfock1, H)
         outind2 = state_index(fullfock2, H)
-        s = phase_factor_h(fullfock1, fullfock2, Hs, H)
+        s = phase_factors ? phase_factor_h(fullfock1, fullfock2, Hs, H) : 1
         v = one(T)
         for (m, i1, i2) in zip(ms, I1, I2)
             v *= m[i1, i2]
@@ -162,7 +163,7 @@ function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H:
     return mout
 end
 
-function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state)
+function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors=true)
     fill!(mout, zero(eltype(mout)))
     U = embedding_unitary(Hs, H)
     dimlengths = map(length ∘ basisstates, Hs)
@@ -176,6 +177,7 @@ function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilber
     end
     return U * mout
 end
+embedding_unitary(Hs, H::ProductSpace{Nothing}) = I
 
 """
     tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
@@ -183,19 +185,23 @@ end
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
 `kwargs` can be passed a bool `phase_factors` and a hilbert space `complement`.
 """
-function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
+function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractFockHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
     return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
 end
-tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
-tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
+tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
+tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
+
+function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::ProductSpace{Nothing}; kwargs...)
+    generalized_kron(ms, Hs, H; kwargs...)
+end
 
 @testitem "Fermionic tensor product properties" begin
     # Properties from J. Phys. A: Math. Theor. 54 (2021) 393001
     # Eq. 16
     using Random, Base.Iterators, LinearAlgebra
-    import FermionicHilbertSpaces: embedding_unitary, canonical_embedding, project_on_parity, project_on_parities
+    import FermionicHilbertSpaces: embedding_unitary, project_on_parity, project_on_parities
 
     Random.seed!(3)
     N = 8
@@ -216,10 +222,6 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     rhs = generalized_kron(reduce(vcat, ops_fine), reduce(vcat, Hs_fine), H)
     finetensor_products = [generalized_kron(ops_vec, cs_vec, c_rough) for (ops_vec, cs_vec, c_rough) in zip(ops_fine, Hs_fine, Hs_rough)]
     lhs = generalized_kron(finetensor_products, Hs_rough, H)
-    @test lhs ≈ rhs
-
-    rhs = kron(reduce(vcat, ops_fine), reduce(vcat, Hs_fine), H)
-    lhs = kron([kron(ops_vec, cs_vec, c_rough) for (ops_vec, cs_vec, c_rough) in zip(ops_fine, Hs_fine, Hs_rough)], Hs_rough, H)
     @test lhs ≈ rhs
 
     physical_ops_rough = [project_on_parity(op, H, 1) for (op, H) in zip(ops_rough, Hs_rough)]
@@ -256,9 +258,9 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     Ux = embedding_unitary(rough_partitions, H)
     A = ops_rough[1]
     @test Ux !== I
-    @test embed(A, HX, H) ≈ Ux * canonical_embedding(A, HX, H) * Ux'
+    @test embed(A, HX, H) ≈ Ux * embed(A, HX, H; phase_factors=false) * Ux'
     # Eq. 93
-    @test tensor_product(physical_ops_rough, Hs_rough, H) ≈ Ux * kron(physical_ops_rough, Hs_rough, H) * Ux'
+    @test tensor_product(physical_ops_rough, Hs_rough, H) ≈ Ux * generalized_kron(physical_ops_rough, Hs_rough, H; phase_factors=false) * Ux'
 
     # Eq. 23
     X = rough_partitions[1]
@@ -267,7 +269,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     B = rand(ComplexF64, 2^length(X), 2^length(X))
     #Eq 5a and 5br are satisfied also when embedding matrices in larger subsystems
     @test embed(A, HX, H)' ≈ embed(A', HX, H)
-    @test canonical_embedding(A, HX, H) * canonical_embedding(B, HX, H) ≈ canonical_embedding(A * B, HX, H)
+    @test embed(A, HX, H; phase_factors=false) * embed(B, HX, H; phase_factors=false) ≈ embed(A * B, HX, H; phase_factors=false)
     for cmode in modebases
         #Eq 5bl
         local A = rand(ComplexF64, 2, 2)
@@ -337,7 +339,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     Hs = reduce(vcat, Hs_fine)
     physical_ops = [project_on_parity(op, H, 1) for (op, H) in zip(ops, Hs)]
     # Eq. 93 implies that the unitary equivalence holds for the physical operators
-    @test svdvals(Matrix(tensor_product(physical_ops, Hs, H))) ≈ svdvals(Matrix(kron(physical_ops, Hs, H)))
+    @test svdvals(Matrix(tensor_product(physical_ops, Hs, H))) ≈ svdvals(Matrix(generalized_kron(physical_ops, Hs, H; phase_factors=false)))
     # However, it is more general. The unitary equivalence holds as long as all except at most one of the operators has a definite parity:
 
     numberops = map(numberoperator, Hs)
@@ -347,7 +349,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
         projected_ops = [project_on_parity(op, H, p) for (op, H, p) in zip(ops, Hs, parities)] # project on local parity
         opsk = [[projected_ops[1:k-1]..., ops[k], projected_ops[k+1:end]...] for k in 1:length(ops)] # switch out one operator of definite parity for an operator of indefinite parity
         embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
-        kron_prods = [kron(ops, Hs, H) for ops in opsk]
+        kron_prods = [generalized_kron(ops, Hs, H; phase_factors=false) for ops in opsk]
 
         @test all(svdvals(Matrix(op1)) ≈ svdvals(Matrix(op2)) for (op1, op2) in zip(embedding_prods, kron_prods))
     end
@@ -366,7 +368,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     opsk = [[physical_ops[1:k-1]..., ops[k], physical_ops[k+1:end]...] for k in 1:length(ops)]
     unitaries = [Diagonal([phase(k, f) for f in basisstates(H)]) * Uemb for k in 1:length(opsk)]
     embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
-    kron_prods = [kron(ops, Hs, H) for ops in opsk]
+    kron_prods = [generalized_kron(ops, Hs, H; phase_factors=false) for ops in opsk]
     @test all(op1 ≈ U * op2 * U for (op1, op2, U) in zip(embedding_prods, kron_prods, unitaries))
 
 end
@@ -392,11 +394,11 @@ end
 
         #test that they keep sparsity
         @test typeof(tensor_product((b1[1], b2[2]), Hs => H3)) == typeof(b1[1])
-        @test typeof(kron((b1[1], b2[2]), Hs, H3)) == typeof(b1[1])
+        @test typeof(generalized_kron((b1[1], b2[2]), Hs, H3)) == typeof(b1[1])
         @test typeof(tensor_product((b1[1], I), Hs => H3)) == typeof(b1[1])
-        @test typeof(kron((b1[1], I), Hs, H3)) == typeof(b1[1])
+        @test typeof(generalized_kron((b1[1], I), Hs, H3)) == typeof(b1[1])
         @test tensor_product((I, I), Hs => H3) isa SparseMatrixCSC
-        @test kron((I, I), Hs, H3) isa SparseMatrixCSC
+        @test generalized_kron((I, I), Hs, H3) isa SparseMatrixCSC
 
         # Test zero-mode tensor_product
         H1 = hilbert_space(1:0, qn)
@@ -501,6 +503,9 @@ Compute the partial trace of a matrix `m`, leaving the subsystem defined by the 
 """
 function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=simple_complementary_subsystem(H, Hsub)) where {T}
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
+    if H == Hsub
+        return copy(m)
+    end
     mout = zeros(T, dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, phase_factors, complement)
 end
