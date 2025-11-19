@@ -3,6 +3,7 @@ uuid = "82e5dd95-83c3-46b2-a303-acc930c81756"
 authors = ["Viktor Svensson", "William Samuelson"]
 version = "0.9.0"
 
+
 [deps]
 BitPermutations = "81206824-6155-40a8-95f7-18696067be4d"
 Dictionaries = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"

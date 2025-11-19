@@ -186,7 +186,7 @@ function enforce_ph_symmetry(_es, _ops, canon_alg=ProjectionCanon(); cutoff=DEFA
             ops[:, k] .= v1
             ops[:, k2] .= v2 ./ ph_overlap
         else
-            o1, o2 = canonicalize_particle_pair(v1, v2, canon_alg)
+            o1, o2 = eachcol(canonicalize_particle_pair(v1, v2, canon_alg))
             if abs(dot(o1, v1)) > abs(dot(o2, v1))
                 ops[:, k] = o1
                 ops[:, k2] = o2

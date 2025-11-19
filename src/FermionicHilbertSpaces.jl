@@ -64,6 +64,7 @@ include("reshape.jl")
 include("sectors.jl")
 include("generate_constrained_states.jl")
 
+
 include("qubit.jl")
 
 include("symbolics/muladd.jl")
@@ -73,6 +74,7 @@ include("symbolics/symbolic_majoranas.jl")
 include("majorana_hilbert_space.jl")
 include("bdg.jl")
 
+include("sectors.jl")
 import PrecompileTools
 
 PrecompileTools.@compile_workload begin
