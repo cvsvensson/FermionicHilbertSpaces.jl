@@ -16,6 +16,9 @@ function generate_states(masks::Union{Vector{<:K},NTuple{N,<:K}}, allowed_ones, 
     remaining_bits = collect(region_lengths)
     states = T[]
     num = zero(T)
+    if max_bits == 0
+        return [T(0)]
+    end
     bit_position = 1
     # Build dependency mapping
     affected_constraints = [Int[] for _ in 1:max_bits]
@@ -167,6 +170,9 @@ function generate_states_weighted_constraints(weights, allowed_sums, max_bits, T
 
     states = T[]
     num = zero(T)
+    if max_bits == 0
+        return [T(0)]
+    end
     bit_position = 1
 
     # Build dependency mapping (which constraints are affected by each bit position)
