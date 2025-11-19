@@ -3,7 +3,7 @@ abstract type AbstractFockState <: AbstractBasisState end
     FockNumber
 A type representing a Fock state as the bitstring of an integer.
 """
-struct FockNumber{I<:Integer} <: AbstractFockState
+struct FockNumber{I} <: AbstractFockState
     f::I
 end
 FockNumber(f::FockNumber) = f
@@ -11,7 +11,7 @@ FockNumber{I}(f::FockNumber) where I<:Integer = FockNumber{I}(f.f)
 Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
 Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
 Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
-
+Base.show(io::IO, f::FockNumber{T}) where T = get(io, :compact, false) ? print(io, "FockNumber{T}(", f.f, ")") : print(io, "FockNumber(", f.f, ")")
 """
     JordanWignerOrdering
 A type representing the ordering of fermionic modes.
@@ -57,16 +57,19 @@ Base.zero(::FockNumber{T}) where T = zero(FockNumber{T})
 Base.zero(::Type{FockNumber{T}}) where T = FockNumber(zero(T))
 
 
-focknbr_from_bits(bits, ::Type{T}=(length(bits) > 63 ? BigInt : Int)) where T = FockNumber{T}(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
-focknbr_from_site_index(site::Integer, ::Type{T}=site > 63 ? BigInt : Int) where T = FockNumber{T}(T(1) << (site - 1))
-focknbr_from_site_indices(sites, ::Type{T}=(maximum(sites, init=0) > 63 ? BigInt : Int)) where T = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber(zero(T)))
+integer_from_bits(bits, ::Type{T}=default_fock_representation(length(bits))) where T = reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T))
+focknbr_from_bits(bits, ::Type{T}=default_fock_representation(length(bits))) where T = FockNumber{T}(integer_from_bits(bits, T))
+focknbr_from_site_index(site::Integer, ::Type{T}=default_fock_representation(site)) where T = FockNumber{T}(one(T) << (site - 1))
+focknbr_from_site_indices(sites, ::Type{T}=default_fock_representation(maximum(sites, init=0))) where T = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber{T}(zero(T)))
 
 bits(f::FockNumber, N) = digits(Bool, f.f, base=2, pad=N)
 parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
 
-fermionnumber(fs::FockNumber, mask) = count_ones(fs & mask)
+fermionnumber(f::FockNumber{<:Integer}, mask) = count_weighted_ones(f.f, mask)
+count_weighted_ones(x, mask::Integer) = count_ones(x & mask)
+count_weighted_ones(x, weights::Union{Vector,Tuple}) = sum(w for (i, w) in enumerate(weights) if _bit(x, i))
 
 """
     jwstring(site, focknbr)
@@ -196,6 +199,7 @@ StateSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H, Hs)
 end
 
 _bit(f::FockNumber, k) = Bool((f.f >> (k - 1)) & 1)
+_bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
 
 function FockSplitter(jw::JordanWignerOrdering, jws)
     fermionpositions = Tuple(map(Base.Fix1(getindices, jw) ∘ Tuple ∘ collect ∘ keys, jws))

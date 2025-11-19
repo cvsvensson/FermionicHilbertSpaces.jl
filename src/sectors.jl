@@ -23,11 +23,11 @@ indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
 @testitem "Sector" begin
     import FermionicHilbertSpaces: sector, sectors, indices, quantumnumbers, majorana_hilbert_space, MajoranaHilbertSpace
     N = 4
-    H = hilbert_space(1:N, NumberConservation())
+    H = hilbert_space(1:N, number_conservation())
     @test quantumnumbers(H) == 0:N
     Hns = sectors(H)
     for (ind, n) in enumerate(quantumnumbers(H))
-        Hn = hilbert_space(1:N, NumberConservation(n))
+        Hn = hilbert_space(1:N, number_conservation(n))
         @test basisstates(Hn) == basisstates(Hns[ind]) # Hn ≠ Hns[ind] since Hn is a SymmetricFockHilbertSpace
         @test basisstates(Hn) == basisstates(sector(n, H))
         @test basisstates(Hn) == basisstates(H)[indices(Hn, H)]

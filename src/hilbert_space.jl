@@ -7,7 +7,7 @@ function Base.show(io::IO, H::Htype) where Htype<:AbstractFockHilbertSpace
 end
 Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 
-dim(H::AbstractHilbertSpace) = length(basisstates(H))
+dim(H::AbstractHilbertSpace) = Int(length(basisstates(H)))
 isorderedpartition(Hs, H::AbstractFockHilbertSpace) = isorderedpartition(map(modes, Hs), H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = isorderedsubsystem(Hsub.jw, H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = isorderedsubsystem(Hsub.jw, jw)
@@ -17,8 +17,6 @@ consistent_ordering(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrderin
 consistent_ordering(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = consistent_ordering(subsystem.jw, H.jw)
 focknbr_from_site_labels(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(H), jw)
 ispartition(Hs, H::AbstractFockHilbertSpace) = ispartition(map(modes, Hs), H.jw)
-
-# getindices(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = siteindices(H.jw, jw)
 
 mode_ordering(H::AbstractFockHilbertSpace) = H.jw
 # mode_ordering(jw::JordanWignerOrdering) = jw
@@ -36,7 +34,7 @@ A type representing a simple Fock Hilbert space with all fock states included.
 """
 struct SimpleFockHilbertSpace{F,L} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
-    function SimpleFockHilbertSpace(labels, ::Type{F}=FockNumber{Int}) where F
+    function SimpleFockHilbertSpace(labels, ::Type{F}=FockNumber{default_fock_representation(length(labels))}) where F
         jw = JordanWignerOrdering(labels)
         new{F,eltype(jw)}(jw)
     end
@@ -46,7 +44,7 @@ Base.keys(H::SimpleFockHilbertSpace) = keys(H.jw)
     basisstates(H)
 Return an iterator over all basis states for the given Hilbert space `H`.
 """
-basisstates(H::SimpleFockHilbertSpace{F}) where F = Iterators.map(F ∘ FockNumber, 0:2^length(H.jw)-1)
+basisstates(H::SimpleFockHilbertSpace{F}) where F = Iterators.map(F ∘ FockNumber, UnitRange{UInt64}(0, 2^length(H.jw) - 1))
 basisstate(ind, ::SimpleFockHilbertSpace{F}) where F = (F ∘ FockNumber)(ind - 1)
 state_index(state::FockNumber, ::SimpleFockHilbertSpace) = state.f + 1
 function Base.:(==)(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace)
@@ -67,7 +65,7 @@ struct FockHilbertSpace{L,F,I} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
     basisstates::F
     state_index::I
-    function FockHilbertSpace(labels, basisstates::F=map(FockNumber, 0:2^length(labels)-1)) where F
+    function FockHilbertSpace(labels, basisstates::F=map(FockNumber, UnitRange{UInt64}(0, 2^length(labels) - 1))) where F
         jw = JordanWignerOrdering(labels)
         state_index = Dict(reverse(pair) for pair in enumerate(basisstates))
         new{eltype(jw),F,typeof(state_index)}(jw, basisstates, state_index)
@@ -110,6 +108,13 @@ function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetr
     sym_concrete = focksymmetry(basisstates, labelled_symmetry)
     SymmetricFockHilbertSpace{eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
 end
+SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry, basisstates) = SymmetricFockHilbertSpace(JordanWignerOrdering(labels), qn, basisstates)
+function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry, basisstates)
+    labelled_symmetry = instantiate(qn, jw)
+    sym_concrete = focksymmetry(basisstates, labelled_symmetry)
+    SymmetricFockHilbertSpace{eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
+end
+
 
 function Base.show(io::IO, H::SymmetricFockHilbertSpace)
     d = dim(H)
@@ -125,7 +130,7 @@ Base.keys(H::SymmetricFockHilbertSpace) = keys(H.jw)
 basisstate(ind, H::SymmetricFockHilbertSpace) = basisstate(ind, H.symmetry)
 state_index(f::AbstractFockState, H::SymmetricFockHilbertSpace) = state_index(f, H.symmetry)
 basisstates(H::SymmetricFockHilbertSpace) = basisstates(H.symmetry)
-basisstates(H::SymmetricFockHilbertSpace{<:Any,NoSymmetry}) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
+basisstates(H::SymmetricFockHilbertSpace{<:Any,NoSymmetry}) = Iterators.map(FockNumber, UnitRange{UInt64}(0, 2^length(H.jw) - 1))
 
 function Base.:(==)(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
     if H1 === H2
@@ -149,6 +154,7 @@ hilbert_space(labels, basisstates) = FockHilbertSpace(labels, basisstates)
 hilbert_space(labels, ::NoSymmetry) = SimpleFockHilbertSpace(labels)
 hilbert_space(labels, ::NoSymmetry, basisstates) = FockHilbertSpace(labels, basisstates)
 hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, qn)
+hilbert_space(labels, qn::AbstractSymmetry, basisstates) = SymmetricFockHilbertSpace(labels, qn, basisstates)
 
 #= Tests for isorderedsubsystem, issubsystem, and consistent_ordering for Hilbert spaces =#
 @testitem "Hilbert space subsystem and ordering" begin

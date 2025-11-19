@@ -100,7 +100,7 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
 
     N = 10
     H = hilbert_space(1:N, SingleParticleState.(1:N))
-    Hf = hilbert_space(1:N, NumberConservation(1))
+    Hf = hilbert_space(1:N, number_conservation(1))
     @test length(basisstates(H)) == length(basisstates(Hf)) == N
 
     @fermions f
@@ -165,7 +165,7 @@ function permute(f::FixedNumberFockState, permutation::BitPermutations.AbstractB
     return FixedNumberFockState(map(s -> p[s], f.sites))
 end
 
-struct SingleParticleHilbertSpace{H} 
+struct SingleParticleHilbertSpace{H}
     parent::H
     function SingleParticleHilbertSpace(labels)
         states = [SingleParticleState(i) for (i, label) in enumerate(labels)]
@@ -209,7 +209,7 @@ end
     N = 5
     n_particles = 2
     # FockNumber-based Hilbert space
-    H_fock = hilbert_space(1:N, NumberConservation(n_particles))
+    H_fock = hilbert_space(1:N, number_conservation(n_particles))
     # FixedNumberFockState-based Hilbert space
     H_fixed = hilbert_space(1:N, FixedNumberFockState{n_particles}.(basisstates(H_fock)))
 

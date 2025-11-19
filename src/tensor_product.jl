@@ -2,7 +2,7 @@
 """
     tensor_product(Hs)
 
-Compute the tensor_product product hilbert spaces `Hs`. The symmetry of the resulting basis is computed by promote_symmetry.
+Compute the tensor_product product hilbert spaces `Hs`.
 """
 tensor_product(Hs::AbstractVector{<:AbstractHilbertSpace}) = foldl(tensor_product, Hs)
 tensor_product(Hs::Tuple) = foldl(tensor_product, Hs)
@@ -36,10 +36,10 @@ tensor_product(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace) = simple_
     @test Hw == H3
     @test dim(H1) * dim(H2) == dim(Hw)
 
-    H1 = SymmetricFockHilbertSpace(1:2, NumberConservation())
-    H2 = SymmetricFockHilbertSpace(3:4, NumberConservation())
+    H1 = SymmetricFockHilbertSpace(1:2, number_conservation())
+    H2 = SymmetricFockHilbertSpace(3:4, number_conservation())
     Hw = tensor_product(H1, H2)
-    H3 = SymmetricFockHilbertSpace(1:4, NumberConservation())
+    H3 = SymmetricFockHilbertSpace(1:4, number_conservation())
     @test sort(basisstates(Hw)) == sort(basisstates(H3))
     @test dim(H1) * dim(H2) == dim(Hw)
 
@@ -395,7 +395,7 @@ end
     import SparseArrays: SparseMatrixCSC
     Random.seed!(1234)
 
-    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
+    for qn in [NoSymmetry(), ParityConservation(), number_conservation()]
         H1 = hilbert_space(1:1, qn)
         H2 = hilbert_space(1:3, qn)
         @test_throws ArgumentError tensor_product(H1, H2)
@@ -462,9 +462,9 @@ function phase_map(fockstates, M::Int)
     end
     PhaseMap(phases, fockstates)
 end
-phase_map(N::Int) = phase_map(map(FockNumber, 0:2^N-1), N)
+phase_map(N::Int) = phase_map(map(FockNumber, UnitRange{UInt64}(0, 2^N - 1)), N)
 phase_map(H::AbstractFockHilbertSpace) = phase_map(collect(basisstates(H)), length(H.jw))
-LazyPhaseMap(N::Int) = LazyPhaseMap{N,FockNumber{Int}}(map(FockNumber, 0:2^N-1))
+LazyPhaseMap(N::Int) = (states = map(FockNumber, UnitRange{UInt64}(0, 2^N - 1)); LazyPhaseMap{N,eltype(states)}(states))
 SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest...) = SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(rest...)
 (p::PhaseMap)(op::AbstractMatrix) = p.phases .* op
 (p::LazyPhaseMap)(op::AbstractMatrix) = p .* op

@@ -53,7 +53,10 @@ basisstates(sym::FockSymmetry) = sym.basisstates
 state_index(fs::FockNumber, ::NoSymmetry) = fs.f + 1
 basisstate(ind, ::NoSymmetry) = FockNumber(ind - 1)
 
-function nextfockstate_with_same_number(v)
+function nextfockstate_with_same_number(f::FockNumber{T}) where T
+    FockNumber{T}(nextfockstate_with_same_number(f.f))
+end
+function nextfockstate_with_same_number(v::Integer)
     #http://graphics.stanford.edu/~seander/bithacks.html#NextBitPermutation
     t = (v | (v - 1)) + 1
     t | (((div((t & -t), (v & -v))) >> 1) - 1)
@@ -63,18 +66,18 @@ end
 
 Generate a list of Fock states with `n` occupied fermions in a system with `M` different fermions.
 """
-function fixed_particle_number_fockstates(M, n, ::Type{T}=(M > 63 ? BigInt : Int)) where T
-    iszero(n) && return map(FockNumber{T}, [0])
-    v = T(focknbr_from_bits([true for _ in 1:n]).f)
+function fixed_particle_number_fockstates(M, n, ::Type{T}=default_fock_representation(M)) where T
+    iszero(n) && return [FockNumber{T}(zero(T))]
+    v = focknbr_from_bits([k <= n for k in 1:M])
     maxv = v << (M - n)
-    states = Vector{T}(undef, binomial(M, n))
+    states = Vector{FockNumber{T}}(undef, binomial(M, n))
     count = 1
     while v <= maxv
         states[count] = v
         v = nextfockstate_with_same_number(v)
         count += 1
     end
-    map(FockNumber{T}, states)
+    states
 end
 
 """
@@ -88,52 +91,20 @@ NumberConservation(s::Int) = NumberConservation([s])
 NumberConservation() = NumberConservation(missing)
 sectors(qn::NumberConservation) = qn.sectors
 
-struct FermionSubsetConservation <: AbstractSymmetry
-    mask::FockNumber
-    sectors::Union{Vector{Int},Missing}
-    function FermionSubsetConservation(mask::FockNumber, sectors::Union{<:AbstractVector{Int},Missing})
-        allunique(sectors) || throw(ArgumentError("FermionSubsetConservation sectors must be unique."))
-        sectorvec = sort!(Int[sectors...])
-        new(mask, sectorvec)
-    end
-    FermionSubsetConservation(mask::FockNumber, sectors::Missing) = new(mask, missing)
-end
-sectors(qn::FermionSubsetConservation) = qn.sectors
-
-struct UninstantiatedFermionSubsetConservation{L} <: AbstractSymmetry
-    labels::L
-    sectors::Union{Vector{Int},Missing}
-    function UninstantiatedFermionSubsetConservation(labels::L, sectors=missing) where L
-        ismissing(sectors) && new{L}(labels, missing)
-        allunique(labels) || throw(ArgumentError("FermionSubsetConservation labels must be unique."))
-        allunique(sectors) || throw(ArgumentError("FermionSubsetConservation sectors must be unique."))
-        allowed_qns = Set(0:length(labels))
-        all(in(allowed_qns), sectors) || throw(ArgumentError("FermionSubsetConservation can only have sectors 0 up to the number of particles."))
-        sectorvec = sort!(Int[sectors...])
-        new{L}(labels, sectorvec)
-    end
-
-end
-FermionSubsetConservation(::Nothing) = NoSymmetry()
-FermionSubsetConservation(labels, jw::JordanWignerOrdering, sectors=0:length(labels)) = FermionSubsetConservation(focknbr_from_site_labels(labels, jw), sectors)
-FermionSubsetConservation(labels, sectors=0:length(labels)) = UninstantiatedFermionSubsetConservation(labels, sectors)
-instantiate(qn::UninstantiatedFermionSubsetConservation, jw::JordanWignerOrdering) = FermionSubsetConservation(qn.labels, jw, qn.sectors)
-instantiate(qn::FermionSubsetConservation, ::JordanWignerOrdering) = qn
 instantiate(qn::NumberConservation, ::JordanWignerOrdering) = qn
 
-(qn::FermionSubsetConservation)(fs) = fermionnumber(fs, qn.mask)
-(qn::NumberConservation)(fs) = fermionnumber(fs)
+(qn::NumberConservation)(f) = fermionnumber(f)
 
 @testitem "ConservedFermions" begin
-    import FermionicHilbertSpaces: FermionSubsetConservation
+    import FermionicHilbertSpaces: number_conservation
     labels = 1:4
     conservedlabels = 1:4
-    c1 = hilbert_space(labels, FermionSubsetConservation(conservedlabels))
-    c2 = hilbert_space(labels, NumberConservation())
+    c1 = hilbert_space(labels, number_conservation(label -> label in conservedlabels))
+    c2 = hilbert_space(labels, number_conservation())
     @test c1 == c2
 
     conservedlabels = 2:2
-    c1 = hilbert_space(labels, FermionSubsetConservation(conservedlabels))
+    c1 = hilbert_space(labels, number_conservation(label -> label in conservedlabels))
     @test all(length.(c1.symmetry.qntofockstates) .== 2^(length(labels) - length(conservedlabels)))
 end
 
@@ -168,43 +139,21 @@ ParityConservation() = ParityConservation([-1, 1])
 sectors(qn::ParityConservation) = qn.sectors
 
 @testitem "ProductSymmetry" begin
-    import FermionicHilbertSpaces: FermionSubsetConservation
+    import FermionicHilbertSpaces: number_conservation
     labels = 1:4
-    qn = NumberConservation() * ParityConservation()
+    qn = number_conservation() * ParityConservation()
     H = hilbert_space(labels, qn)
     @test keys(H.symmetry.qntofockstates).values == [(n, (-1)^n) for n in 0:4]
-    qn = prod(FermionSubsetConservation([l], H.jw) for l in labels)
+    qn = prod(number_conservation(label -> label == l) for l in labels)
     @test all(length.(hilbert_space(labels, qn).symmetry.qntofockstates) .== 1)
 end
 
-"""
-    IndexConservation(labels, sectors)
-A symmetry type representing conservation of the numbers of modes which contains a specific index or set of indices."""
-struct IndexConservation{L} <: AbstractSymmetry
-    labels::L
-    sectors::Union{Vector{Int},Missing}
-    function IndexConservation(labels::_L, sectors) where _L
-        if !Base.isiterable(_L)
-            labels = (labels,)
-        end
-        L = typeof(labels)
-        ismissing(sectors) && return new{L}(labels, missing)
-        allunique(labels) || throw(ArgumentError("IndexConservation labels must be unique."))
-        allunique(sectors) || throw(ArgumentError("IndexConservation sectors must be unique."))
-        sectorvec = sort!(Int[sectors...])
-        new{L}(labels, sectorvec)
-    end
-end
-sectors(qn::IndexConservation) = qn.sectors
-IndexConservation(labels) = IndexConservation(labels, missing)
-instantiate(qn::IndexConservation, jw::JordanWignerOrdering) = IndexConservation(qn.labels, jw, qn.sectors)
-IndexConservation(indices, jw::JordanWignerOrdering, sectors) = FermionSubsetConservation(filter(label -> any((index in label || index == label) for index in indices), keys(jw)), jw, sectors)
 
 @testitem "IndexConservation" begin
-    import FermionicHilbertSpaces: FermionSubsetConservation
+    import FermionicHilbertSpaces: number_conservation
     labels = 1:4
-    qn = IndexConservation(1)
-    qn2 = FermionSubsetConservation(1:1)
+    qn = number_conservation(==(1))
+    qn2 = number_conservation(label -> label in 1:1)
     H = hilbert_space(labels, qn)
     H2 = hilbert_space(labels, qn2)
     @test H == H2
@@ -212,26 +161,17 @@ IndexConservation(indices, jw::JordanWignerOrdering, sectors) = FermionSubsetCon
     spatial_labels = 1:1
     spin_labels = (:↑, :↓)
     all_labels = Base.product(spatial_labels, spin_labels)
-    qn = IndexConservation(:↑) * IndexConservation(:↓)
+    qn = number_conservation(label -> label[2] == :↑) * number_conservation(label -> label[2] == :↓)
     H = hilbert_space(all_labels, qn)
     @test all(length.(H.symmetry.qntofockstates) .== 1)
 
     spatial_labels = 1:2
     spin_labels = (:↑, :↓)
     all_labels = Base.product(spatial_labels, spin_labels)
-    qn = IndexConservation(:↑, 1)
+    qn = number_conservation(1, label -> label[2] == :↑)
     H = hilbert_space(all_labels, qn)
     @test length(basisstates(H)) == 2^3
 end
-
-instantiate(f::F, labels) where {F} = f
-
-
-promote_symmetry(s1::FockSymmetry{<:Any,<:Any,<:Any,F}, s2::FockSymmetry{<:Any,<:Any,<:Any,F}) where {F} = s1.conserved_quantity
-promote_symmetry(s1::FockSymmetry{<:Any,<:Any,<:Any,F1}, s2::FockSymmetry{<:Any,<:Any,<:Any,F2}) where {F1,F2} = s1 == s2 ? s1.conserved_quantity : NoSymmetry()
-promote_symmetry(::NoSymmetry, ::S) where {S} = NoSymmetry()
-promote_symmetry(::S, ::NoSymmetry) where {S} = NoSymmetry()
-promote_symmetry(::NoSymmetry, ::NoSymmetry) = NoSymmetry()
 
 function allowed_qn(qn, sym::ProductSymmetry)
     for (q, sym) in zip(qn, sym.symmetries)
@@ -249,7 +189,7 @@ function instantiate_and_get_basisstates(jw::JordanWignerOrdering, _qn)
     fs = basisstates(jw, qn)
     return qn, fs
 end
-basisstates(jw::JordanWignerOrdering, ::NoSymmetry) = map(FockNumber, 0:2^length(jw)-1)
+basisstates(jw::JordanWignerOrdering, ::NoSymmetry) = map(FockNumber, UnitRange{UInt64}(0, 2^length(jw) - 1))
 function basisstates(jw::JordanWignerOrdering, qn::ParityConservation)
     s = sectors(qn)
     fs = basisstates(jw, NoSymmetry())
@@ -263,20 +203,76 @@ function basisstates(jw::JordanWignerOrdering, qn::NumberConservation)
     N = length(jw)
     mapreduce(n -> fixed_particle_number_fockstates(N, n), vcat, s)
 end
-function basisstates(jw::JordanWignerOrdering, qn::FermionSubsetConservation)
-    s = sectors(qn)
-    mask = qn.mask
-    fs = basisstates(jw, NoSymmetry())
-    ismissing(s) && return fs
-    filt = in(s) ∘ fermionnumber ∘ (f -> f & mask)
-    filter!(filt, fs)
-end
+
 function basisstates(jw::JordanWignerOrdering, sym::ProductSymmetry)
-    filter!(f -> allowed_qn(sym(f), sym), basisstates(jw, NoSymmetry()))
+    filter!(f -> allowed_qn(sym(f), sym), basisstates(jw, first(sym.symmetries)))
+end
+
+struct UninstantiatedNumberConservations{F,S} <: AbstractSymmetry
+    weight_functions::F
+    sectors::S
+end
+struct NumberConservations{M,S} <: AbstractSymmetry
+    weights::M
+    sectors::S
+    function NumberConservations(weights::M, sectors, N) where M
+        length(weights) == length(sectors) || throw(ArgumentError("Number of masks must match number of sectors."))
+        canon_sectors = map((s, m) -> collect(canonicalize_sector(s, m, N)), sectors, weights)
+        # check if all weights are 0 or 1, if so, convert to Integer masks
+        for m in weights
+            all(w -> w == 0 || w == 1, m) && continue
+            return new{M,typeof(canon_sectors)}(weights, canon_sectors)
+        end
+        intmasks = map(m -> integer_from_bits(m, default_fock_representation(N)), weights)
+        new{typeof(intmasks),typeof(canon_sectors)}(intmasks, canon_sectors)
+    end
+end
+instantiate(qn::NumberConservations, ::JordanWignerOrdering) = qn
+Base.show(io::IO, qn::NumberConservations) = print(io, "Number conservation for ", length(qn.weights), " subsets")
+(qn::NumberConservations)(f::FockNumber) = length(qn.weights) == 1 ? fermionnumber(f, only(qn.weights)) : map((m -> fermionnumber(f, m)), qn.weights)
+(qn::NumberConservations)(f::Integer) = length(qn.weights) == 1 ? count_weighted_ones(f, only(qn.weights)) : map((m -> count_weighted_ones(f, m)), qn.weights)
+
+
+"""
+    number_conservation(sectors=missing, weight_function=label -> true)
+
+Constructs a `UninstantiatedNumberConservations` symmetry object that represents conservation of fermion number. 'sectors' can be an integer or a collection of integers specifying the allowed fermion numbers. 'weight_function' is a function that takes a label and returns an integer weight (which can be negative) indicating how that label contributes to the fermion number.
+"""
+function number_conservation(sectors=missing, weight_function=:alltrue)
+    if weight_function == :alltrue
+        return NumberConservation(sectors)
+    end
+    UninstantiatedNumberConservations((weight_function,), (sectors,))
+end
+number_conservation(weight_function::F) where F<:Function = number_conservation(missing, weight_function)
+
+Base.:*(qn1::UninstantiatedNumberConservations, qn2::UninstantiatedNumberConservations) = UninstantiatedNumberConservations((qn1.weight_functions..., qn2.weight_functions...), (qn1.sectors..., qn2.sectors...))
+
+canonicalize_sector(::Missing, mask, N) = 0:mask_region_size(mask)
+canonicalize_sector(sectors::Integer, mask, N) = (sectors,)
+canonicalize_sector(sector::AbstractVector{<:Integer}, mask, N) = sector
+canonicalize_sector(sector::NTuple{M,<:Integer}, mask, N) where M = sector
+
+default_fock_representation(N) = N < 64 ? UInt64 : BigInt
+
+instantiate(qn::UninstantiatedNumberConservations, jw::JordanWignerOrdering,) = instantiate(qn, keys(jw))
+function instantiate(qn::UninstantiatedNumberConservations, labels)
+    N = length(labels)
+    # T = default_fock_representation(N)
+    weights = map(f -> map(l -> f(l), labels), qn.weight_functions)
+    NumberConservations(weights, qn.sectors, N)
+end
+basisstates(jw::JordanWignerOrdering, qn::NumberConservations, ::Type{F}=FockNumber) where F = sort!(map(F, generate_states(qn.weights, qn.sectors, length(jw))))
+function allowed_qn(qn, sym::NumberConservations)
+    for (q, sector) in zip(qn, sym.sectors)
+        ismissing(sector) && continue
+        in(q, sector) || return false
+    end
+    return true
 end
 
 @testitem "Symmetry basisstates" begin
-    import FermionicHilbertSpaces: instantiate_and_get_basisstates, fermionnumber, FermionSubsetConservation
+    import FermionicHilbertSpaces: instantiate_and_get_basisstates, fermionnumber, number_conservation
     H = hilbert_space(1:5)
     @test length(collect(basisstates(H.jw, ParityConservation()))) == 2^5
     @test length(collect(basisstates(H.jw, ParityConservation(1)))) == 2^4
@@ -285,9 +281,11 @@ end
     @test length(collect(basisstates(H.jw, ParityConservation([-1, 1])))) == 2^5
 
     ## ProductSymmetry
-    qn, fs = instantiate_and_get_basisstates(H.jw, ParityConservation([1]) * FermionSubsetConservation(1:3, 1:1))
+    qn, fs = instantiate_and_get_basisstates(H.jw, ParityConservation([1]) * number_conservation(1:2, in(1:3)))
+    H2 = hilbert_space(1:5, qn, fs)
+    @test sort(basisstates(H2)) == sort(fs)
     @test all(iseven ∘ fermionnumber, fs)
-    @test all(fermionnumber(f & qn.symmetries[2].mask) == 1 for f in fs)
+    @test all(fermionnumber(f, qn.symmetries[2].weights[1]) in 1:2 for f in fs)
 end
 
 @testitem "sector" begin
@@ -312,7 +310,7 @@ end
     @test_throws ArgumentError sector(m, 99, H)
 
     # Test with NumberConservation
-    qn_f = NumberConservation([1, 2])
+    qn_f = number_conservation([1, 2])
     Hf = hilbert_space(labels, qn_f)
     n_f = length(basisstates(Hf.symmetry))
     m_f = reshape(1:(n_f^2), n_f, n_f)
@@ -349,21 +347,18 @@ end
 end
 
 @testitem "No double occupation projection" begin
-    @fermions f
     N = 4
     Nup = 2
     Ndn = 1
     spins = (:↑, :↓)
     spatial_labels = 1:N
     labels = Base.product(spatial_labels, spins)
-    spin_conservation = prod(IndexConservation(σ, Nσ) for (σ, Nσ) in zip(spins, (Nup, Ndn)))
-    no_double_occupation = prod(IndexConservation(k, 0:1) for k in spatial_labels)
-    # When number conservation is overhauled, use:
-    # spin_conservation = prod(number_conservation(Nσ, label -> label[2] == σ) for (σ,Nσ) in zip(spins, (Nup, Ndn)))
-    # no_double_occupation = prod(number_conservation(0:1, label -> k in label) for k in spatial_labels)
+    spin_conservation = prod(number_conservation(Nσ, label -> label[2] == σ) for (σ, Nσ) in zip(spins, (Nup, Ndn)))
+    no_double_occupation = prod(number_conservation(0:1, label -> k in label) for k in spatial_labels)
 
     qn = spin_conservation * no_double_occupation
     H = hilbert_space(labels, qn)
+    @fermions f
     hopping_symham = sum(zip(spatial_labels, spatial_labels[2:end])) do (i, j)
         sum(spins) do σ
             f[(i, σ)]' * f[(j, σ)] + hc
