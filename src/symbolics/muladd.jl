@@ -10,7 +10,7 @@ Base.valtype(::Type{NCMul{C,S,F}}) where {C,S<:AbstractFermionSym,F} = promote_t
 
 Return the matrix representation of the symbolic operator `op` on the hilbert space `H`.
 """
-matrix_representation(op, H::AbstractFockHilbertSpace; projection=false) = matrix_representation(op, mode_ordering(H), basisstates(H), Dict(Iterators.map(reverse, enumerate(basisstates(H)))); projection)
+matrix_representation(op, H::AbstractFockHilbertSpace; kwargs...) = matrix_representation(op, mode_ordering(H), basisstates(H), Dict(Iterators.map(reverse, enumerate(basisstates(H)))); kwargs...)
 
 function matrix_representation(op::Union{<:NCMul,<:AbstractFermionSym}, labels, states, fock_to_ind; kwargs...)
     outinds = Int[]
@@ -23,7 +23,7 @@ function matrix_representation(op::Union{<:NCMul,<:AbstractFermionSym}, labels, 
     operator_inds_amps!((outinds, ininds, amps), op, labels, states, fock_to_ind; kwargs...)
     SparseArrays.sparse!(outinds, ininds, identity.(amps), length(states), length(states))
 end
-matrix_representation(op, labels, states; projection=false) = matrix_representation(op, labels, states, Dict(Iterators.map(reverse, enumerate(states))); projection)
+matrix_representation(op, labels, states; kwargs...) = matrix_representation(op, labels, states, Dict(Iterators.map(reverse, enumerate(states))); kwargs...)
 matrix_representation(op::Union{UniformScaling,Number}, H::AbstractFockHilbertSpace; kwargs...) = op * I(dim(H); kwargs...)
 
 function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{SingleParticleState}, fock_to_ind; kwargs...)
@@ -49,7 +49,7 @@ function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::NCMul, or
     return (outinds, ininds, amps)
 end
 
-function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul, ordering, states, fock_to_ind; projection)
+function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,F}, ordering, states, fock_to_ind; projection=false) where {C,F<:AbstractFermionSym}
     digitpositions = collect(Iterators.reverse(getindex(ordering, f.label) for f in op.factors))
     daggers = collect(Iterators.reverse(s.creation for s in op.factors))
     mc = -op.coeff

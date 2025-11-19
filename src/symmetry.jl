@@ -347,3 +347,28 @@ end
     # Check that the type is FockNumber{BigInt} for large M
     @test all(f -> f isa FockNumber{BigInt}, states)
 end
+
+@testitem "No double occupation projection" begin
+    @fermions f
+    N = 4
+    Nup = 2
+    Ndn = 1
+    spins = (:↑, :↓)
+    spatial_labels = 1:N
+    labels = Base.product(spatial_labels, spins)
+    spin_conservation = prod(IndexConservation(σ, Nσ) for (σ, Nσ) in zip(spins, (Nup, Ndn)))
+    no_double_occupation = prod(IndexConservation(k, 0:1) for k in spatial_labels)
+    # When number conservation is overhauled, use:
+    # spin_conservation = prod(number_conservation(Nσ, label -> label[2] == σ) for (σ,Nσ) in zip(spins, (Nup, Ndn)))
+    # no_double_occupation = prod(number_conservation(0:1, label -> k in label) for k in spatial_labels)
+
+    qn = spin_conservation * no_double_occupation
+    H = hilbert_space(labels, qn)
+    hopping_symham = sum(zip(spatial_labels, spatial_labels[2:end])) do (i, j)
+        sum(spins) do σ
+            f[(i, σ)]' * f[(j, σ)] + hc
+        end
+    end
+    @test_throws KeyError matrix_representation(hopping_symham, H)
+    @test size(matrix_representation(hopping_symham, H; projection=true), 1) == dim(H)
+end
