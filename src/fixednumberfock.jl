@@ -100,7 +100,7 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
 
     N = 10
     H = hilbert_space(1:N, SingleParticleState.(1:N))
-    Hf = hilbert_space(1:N, number_conservation(; sectors = 1))
+    Hf = hilbert_space(1:N, number_conservation(1))
     @test length(basisstates(H)) == length(basisstates(Hf)) == N
 
     @fermions f

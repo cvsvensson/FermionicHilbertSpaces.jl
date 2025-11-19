@@ -59,7 +59,7 @@ matrix_representation(ham, H)
 ```
 This has a block structure corresponding to the different sectors. To only look at some sectors, for example the sectors with 0, 2 and 4 particles, use
 ```@example intro
-H = hilbert_space(labels, number_conservation(; sectors = [0, 2, 4]))
+H = hilbert_space(labels, number_conservation([0, 2, 4]))
 matrix_representation(ham, H)
 ```
 

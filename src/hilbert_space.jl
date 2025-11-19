@@ -34,7 +34,7 @@ A type representing a simple Fock Hilbert space with all fock states included.
 """
 struct SimpleFockHilbertSpace{F,L} <: AbstractFockHilbertSpace
     jw::JordanWignerOrdering{L}
-    function SimpleFockHilbertSpace(labels, ::Type{F}=FockNumber{Int}) where F
+    function SimpleFockHilbertSpace(labels, ::Type{F}=FockNumber{default_fock_representation(length(labels))}) where F
         jw = JordanWignerOrdering(labels)
         new{F,eltype(jw)}(jw)
     end
@@ -108,6 +108,13 @@ function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetr
     sym_concrete = focksymmetry(basisstates, labelled_symmetry)
     SymmetricFockHilbertSpace{eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
 end
+SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry, basisstates) = SymmetricFockHilbertSpace(JordanWignerOrdering(labels), qn, basisstates)
+function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry, basisstates)
+    labelled_symmetry = instantiate(qn, jw)
+    sym_concrete = focksymmetry(basisstates, labelled_symmetry)
+    SymmetricFockHilbertSpace{eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
+end
+
 
 function Base.show(io::IO, H::SymmetricFockHilbertSpace)
     d = dim(H)
@@ -147,6 +154,7 @@ hilbert_space(labels, basisstates) = FockHilbertSpace(labels, basisstates)
 hilbert_space(labels, ::NoSymmetry) = SimpleFockHilbertSpace(labels)
 hilbert_space(labels, ::NoSymmetry, basisstates) = FockHilbertSpace(labels, basisstates)
 hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, qn)
+hilbert_space(labels, qn::AbstractSymmetry, basisstates) = SymmetricFockHilbertSpace(labels, qn, basisstates)
 
 #= Tests for isorderedsubsystem, issubsystem, and consistent_ordering for Hilbert spaces =#
 @testitem "Hilbert space subsystem and ordering" begin

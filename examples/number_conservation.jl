@@ -3,7 +3,7 @@ using FermionicHilbertSpaces
 N = 62 # Can't do more than 63, because of Int64
 n = 3
 
-H = hilbert_space(1:N, number_conservation(; sectors=n)) # Spans all states with n fermions on N sites
+H = hilbert_space(1:N, number_conservation(n)) # Spans all states with n fermions on N sites
 @fermions c
 
 # Define a Hamiltonian that conserves the number of fermions
