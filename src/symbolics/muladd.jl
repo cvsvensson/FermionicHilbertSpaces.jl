@@ -10,9 +10,9 @@ Base.valtype(::Type{NCMul{C,S,F}}) where {C,S<:AbstractFermionSym,F} = promote_t
 
 Return the matrix representation of the symbolic operator `op` on the hilbert space `H`.
 """
-matrix_representation(op, H::AbstractFockHilbertSpace) = matrix_representation(op, mode_ordering(H), basisstates(H), Dict(Iterators.map(reverse, enumerate(basisstates(H)))))
+matrix_representation(op, H::AbstractFockHilbertSpace; kwargs...) = matrix_representation(op, mode_ordering(H), basisstates(H), Dict(Iterators.map(reverse, enumerate(basisstates(H)))); kwargs...)
 
-function matrix_representation(op::Union{<:NCMul,<:AbstractFermionSym}, labels, states, fock_to_ind)
+function matrix_representation(op::Union{<:NCMul,<:AbstractFermionSym}, labels, states, fock_to_ind; kwargs...)
     outinds = Int[]
     ininds = Int[]
     AT = valtype(op)
@@ -20,19 +20,19 @@ function matrix_representation(op::Union{<:NCMul,<:AbstractFermionSym}, labels, 
     sizehint!(outinds, length(states))
     sizehint!(ininds, length(states))
     sizehint!(amps, length(states))
-    operator_inds_amps!((outinds, ininds, amps), op, labels, states, fock_to_ind)
+    operator_inds_amps!((outinds, ininds, amps), op, labels, states, fock_to_ind; kwargs...)
     SparseArrays.sparse!(outinds, ininds, identity.(amps), length(states), length(states))
 end
-matrix_representation(op, labels, states) = matrix_representation(op, labels, states, Dict(Iterators.map(reverse, enumerate(states))))
-matrix_representation(op::Union{UniformScaling,Number}, H::AbstractFockHilbertSpace) = op * I(dim(H))
+matrix_representation(op, labels, states; kwargs...) = matrix_representation(op, labels, states, Dict(Iterators.map(reverse, enumerate(states))); kwargs...)
+matrix_representation(op::Union{UniformScaling,Number}, H::AbstractFockHilbertSpace; kwargs...) = op * I(dim(H); kwargs...)
 
-function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{SingleParticleState}, fock_to_ind)
+function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{SingleParticleState}, fock_to_ind; kwargs...)
     isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind; kwargs...)
 end
 
-function operator_inds_amps!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
+function operator_inds_amps!((outinds, ininds, amps), op, ordering, states, fock_to_ind; kwargs...)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind; kwargs...)
 end
 
 function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::NCMul, ordering, states::AbstractVector{SingleParticleState}, fock_to_ind)
@@ -49,7 +49,7 @@ function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::NCMul, or
     return (outinds, ininds, amps)
 end
 
-function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul, ordering, states, fock_to_ind)
+function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,F}, ordering, states, fock_to_ind; projection=false) where {C,F<:AbstractFermionSym}
     digitpositions = collect(Iterators.reverse(getindex(ordering, f.label) for f in op.factors))
     daggers = collect(Iterators.reverse(s.creation for s in op.factors))
     mc = -op.coeff
@@ -57,9 +57,11 @@ function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul, orderin
     for (n, f) in enumerate(states)
         newfockstate, amp = togglefermions(digitpositions, daggers, f)
         if !iszero(amp)
-            push!(outinds, fock_to_ind[newfockstate])
-            push!(amps, isone(amp) ? pc : mc)
-            push!(ininds, n)
+            if !projection || haskey(fock_to_ind, newfockstate)
+                push!(outinds, fock_to_ind[newfockstate])
+                push!(amps, isone(amp) ? pc : mc)
+                push!(ininds, n)
+            end
         end
     end
     return (outinds, ininds, amps)
@@ -67,7 +69,7 @@ end
 
 # promote_array(v) = convert(Array{eltype(promote(map(zero, unique(typeof(v) for v in v))...))}, v)
 
-function matrix_representation(op::NCAdd{C}, ordering, states, fock_to_ind) where C
+function matrix_representation(op::NCAdd{C}, ordering, states, fock_to_ind; kwargs...) where C
     outinds = Int[]
     ininds = Int[]
     AT = valtype(op)
@@ -76,7 +78,7 @@ function matrix_representation(op::NCAdd{C}, ordering, states, fock_to_ind) wher
     sizehint!(ininds, length(states))
     sizehint!(amps, length(states))
     for (operator, coeff) in op.dict
-        operator_inds_amps!((outinds, ininds, amps), coeff * operator, ordering, states, fock_to_ind)
+        operator_inds_amps!((outinds, ininds, amps), coeff * operator, ordering, states, fock_to_ind; kwargs...)
     end
     if !iszero(op.coeff)
         append!(ininds, eachindex(states))

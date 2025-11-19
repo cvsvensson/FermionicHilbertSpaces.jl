@@ -51,9 +51,9 @@ function matrix_representation(op, H::BdGHilbertSpace)
     normal_order_to_bdg(matrix_representation(remove_identity(op), H.parent))
 end
 
-function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{NambuState}, fock_to_ind)
+function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{NambuState}, fock_to_ind; kwargs...)
     isquadratic(op) && return operator_inds_amps_bdg!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind; kwargs...)
 end
 
 function operator_inds_amps_bdg!((outinds, ininds, amps), op::NCMul, ordering, states, fock_to_ind)
