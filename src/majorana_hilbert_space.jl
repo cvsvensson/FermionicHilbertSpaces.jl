@@ -46,7 +46,7 @@ function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaH
     return m * dim(H) / dim(Hsub)
 end
 function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,C2,S<:AbstractMajoranaSym,F}
-    return sum(partial_trace(term, H, Hsub) for term in NCterms(m); init=0*m) + m.coeff * dim(H) / dim(Hsub)
+    return sum(partial_trace(term, H, Hsub) for term in NCterms(m); init=0 * m) + m.coeff * dim(H) / dim(Hsub)
 end
 function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, Hs::Pair{<:MajoranaHilbertSpace,<:MajoranaHilbertSpace}) where {C,C2,S<:AbstractMajoranaSym,F}
     return partial_trace(m, Hs...)
@@ -56,7 +56,7 @@ end
     @majoranas y
     H = majorana_hilbert_space(1:6)
     Hsub = subregion(3:4, H)
-    op = 1 + 3y[1] + 2y[3] + 4y[1]*y[6] + 3y[4]*y[1] + y[3]*y[4] + y[1]*y[3]*y[4] + y[1]*y[2]*y[6]
+    op = 1 + 3y[1] + 2y[3] + 4y[1] * y[6] + 3y[4] * y[1] + y[3] * y[4] + y[1] * y[3] * y[4] + y[1] * y[2] * y[6]
     op2 = 3 + 0y[1] # NCterms(op2) is empty
     @test matrix_representation(partial_trace(op, H => Hsub), Hsub) == partial_trace(matrix_representation(op, H), H => Hsub)
     @test matrix_representation(partial_trace(op2, H => Hsub), Hsub) == partial_trace(matrix_representation(op2, H), H => Hsub)
@@ -84,10 +84,10 @@ end
 
 state_index(state::AbstractFockState, H::MajoranaHilbertSpace) = state_index(state, H.parent)
 ## Define matrix representations of symbolic majorana operators on Majorana Hilbert spaces.
-matrix_representation(op, H::MajoranaHilbertSpace) = matrix_representation(op, H.majoranaindices, basisstates(H))
-matrix_representation(op::Union{UniformScaling,Number}, H::MajoranaHilbertSpace) = op * I(dim(H))
+matrix_representation(op, H::MajoranaHilbertSpace; kwargs...) = matrix_representation(op, H.majoranaindices, basisstates(H); kwargs...)
+matrix_representation(op::Union{UniformScaling,Number}, H::MajoranaHilbertSpace; kwargs...) = op * I(dim(H))
 
-function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,S}, label_to_site, states, fock_to_ind) where {C,S<:AbstractMajoranaSym}
+function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,S}, label_to_site, states, fock_to_ind; projection=false) where {C,S<:AbstractMajoranaSym}
     majoranadigitpositions = Iterators.reverse(label_to_site[f.label] for f in op.factors)
     daggers = collect(iseven(pos) for pos in majoranadigitpositions)
     digitpositions = map(n -> div(n + 1, 2), majoranadigitpositions)
@@ -98,17 +98,19 @@ function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,S}, la
     for (n, f) in enumerate(states)
         newfockstate, amp = togglemajoranas(digitpositions, daggers, f)
         if !iszero(amp)
-            push!(outinds, fock_to_ind[newfockstate])
-            if amp == 1
-                push!(amps, pc)
-            elseif amp == -1
-                push!(amps, mc)
-            elseif amp == 1im
-                push!(amps, pic)
-            elseif amp == -1im
-                push!(amps, mic)
+            if !projection || haskey(fock_to_ind, newfockstate)
+                push!(outinds, fock_to_ind[newfockstate])
+                if amp == 1
+                    push!(amps, pc)
+                elseif amp == -1
+                    push!(amps, mc)
+                elseif amp == 1im
+                    push!(amps, pic)
+                elseif amp == -1im
+                    push!(amps, mic)
+                end
+                push!(ininds, n)
             end
-            push!(ininds, n)
         end
     end
     return (outinds, ininds, amps)
