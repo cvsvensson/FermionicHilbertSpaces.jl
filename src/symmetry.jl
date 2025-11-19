@@ -168,7 +168,7 @@ end
     spatial_labels = 1:2
     spin_labels = (:↑, :↓)
     all_labels = Base.product(spatial_labels, spin_labels)
-    qn = number_conservation(label -> label[2] == :↑)
+    qn = number_conservation(1, label -> label[2] == :↑)
     H = hilbert_space(all_labels, qn)
     @test length(basisstates(H)) == 2^3
 end
@@ -239,10 +239,10 @@ Base.show(io::IO, qn::NumberConservations) = print(io, "Number conservation for 
 Constructs a `UninstantiatedNumberConservations` symmetry object that represents conservation of fermion number. 'sectors' can be an integer or a collection of integers specifying the allowed fermion numbers. 'weight_function' is a function that takes a label and returns an integer weight (which can be negative) indicating how that label contributes to the fermion number.
 """
 function number_conservation(sectors=missing, weight_function=x -> true)
+    if weight_function == x -> true
+        return NumberConservation(sectors)
+    end
     UninstantiatedNumberConservations((weight_function,), (sectors,))
-end
-function number_conservation(sectors=missing)
-    NumberConservation(sectors)
 end
 number_conservation(weight_function::F) where F<:Function = number_conservation(missing, weight_function)
 
