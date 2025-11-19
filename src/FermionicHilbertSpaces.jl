@@ -61,7 +61,6 @@ include("operators.jl")
 include("tensor_product.jl")
 include("embedding.jl")
 include("reshape.jl")
-include("sectors.jl")
 include("generate_constrained_states.jl")
 
 
