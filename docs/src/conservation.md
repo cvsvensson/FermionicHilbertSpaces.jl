@@ -41,7 +41,7 @@ using FermionicHilbertSpaces, LinearAlgebra
 N = 2 # number of fermions
 space = 1:N 
 spin = (:↑,:↓)
-Hs = [hilbert_space([(k, s) for s in spin], number_conservation(0:1) for k in space]
+Hs = [hilbert_space([(k, s) for s in spin], number_conservation(0:1)) for k in space]
 H = tensor_product(Hs)
 ```
 
