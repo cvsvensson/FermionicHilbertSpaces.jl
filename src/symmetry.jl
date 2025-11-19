@@ -341,7 +341,11 @@ end
 mask_region_size(mask::FockNumber) = mask_region_size(mask.f)
 mask_region_size(mask::Integer) = count_ones(mask)
 
-set_bit!(num::FockNumber{T}, pos, value::Bool) where T = FockNumber{T}(value ? (num.f | (one(T) << (pos - 1))) : (num.f & ~(one(T) << (pos - 1))))
+function set_bit!(num::FockNumber{T}, pos::Int, value::Bool) where T
+    mask = one(T) << (pos - 1)          # single-bit mask
+    newf = value ? (num.f | mask) : (num.f & ~mask)
+    FockNumber{T}(newf)
+end
 function generate_states(masks, allowed_ones, max_bits, T=default_fock_representation(max_bits))
     region_lengths = map(mask_region_size, masks)
     any(rl > max_bits for rl in region_lengths) && error("Constraint mask exceeds max_bits")
