@@ -57,7 +57,8 @@ Base.zero(::FockNumber{T}) where T = zero(FockNumber{T})
 Base.zero(::Type{FockNumber{T}}) where T = FockNumber(zero(T))
 
 
-focknbr_from_bits(bits, ::Type{T}=default_fock_representation(length(bits))) where T = FockNumber{T}(reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T)))
+integer_from_bits(bits, ::Type{T}=default_fock_representation(length(bits))) where T = reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T))
+focknbr_from_bits(bits, ::Type{T}=default_fock_representation(length(bits))) where T = FockNumber{T}(integer_from_bits(bits, T))
 focknbr_from_site_index(site::Integer, ::Type{T}=default_fock_representation(site)) where T = FockNumber{T}(one(T) << (site - 1))
 focknbr_from_site_indices(sites, ::Type{T}=default_fock_representation(maximum(sites, init=0))) where T = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber{T}(zero(T)))
 
@@ -66,7 +67,9 @@ parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
 
-fermionnumber(f::FockNumber{<:Integer}, mask) = count_ones(f.f & mask)
+fermionnumber(f::FockNumber{<:Integer}, mask) = count_weighted_ones(f.f, mask)
+count_weighted_ones(x, mask::Integer) = count_ones(x & mask)
+count_weighted_ones(x, weights::Union{Vector,Tuple}) = sum(w for (i, w) in enumerate(weights) if _bit(x, i))
 
 """
     jwstring(site, focknbr)
@@ -196,6 +199,7 @@ StateSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H, Hs)
 end
 
 _bit(f::FockNumber, k) = Bool((f.f >> (k - 1)) & 1)
+_bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
 
 function FockSplitter(jw::JordanWignerOrdering, jws)
     fermionpositions = Tuple(map(Base.Fix1(getindices, jw) ∘ Tuple ∘ collect ∘ keys, jws))

@@ -123,7 +123,7 @@ Base.keys(H::SymmetricFockHilbertSpace) = keys(H.jw)
 basisstate(ind, H::SymmetricFockHilbertSpace) = basisstate(ind, H.symmetry)
 state_index(f::AbstractFockState, H::SymmetricFockHilbertSpace) = state_index(f, H.symmetry)
 basisstates(H::SymmetricFockHilbertSpace) = basisstates(H.symmetry)
-basisstates(H::SymmetricFockHilbertSpace{<:Any,NoSymmetry}) = Iterators.map(FockNumber, UnitRange{UInt64}(0, 2^length(H.jw)-1))
+basisstates(H::SymmetricFockHilbertSpace{<:Any,NoSymmetry}) = Iterators.map(FockNumber, UnitRange{UInt64}(0, 2^length(H.jw) - 1))
 
 function Base.:(==)(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
     if H1 === H2

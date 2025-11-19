@@ -184,9 +184,9 @@ function allowed_qn(qn, sym::AbstractSymmetry)
     in(qn, sectors(sym)) || return false
     return true
 end
-function instantiate_and_get_basisstates(jw::JordanWignerOrdering, _qn)
+function instantiate_and_get_basisstates(jw::JordanWignerOrdering, _qn, ::Type{F}=FockNumber) where F
     qn = instantiate(_qn, jw)
-    fs = basisstates(jw, qn)
+    fs = map(F, basisstates(jw, qn))
     return qn, fs
 end
 basisstates(jw::JordanWignerOrdering, ::NoSymmetry) = map(FockNumber, UnitRange{UInt64}(0, 2^length(jw) - 1))
@@ -209,37 +209,39 @@ function basisstates(jw::JordanWignerOrdering, sym::ProductSymmetry)
 end
 
 struct UninstantiatedNumberConservations{F,S} <: AbstractSymmetry
-    f::F
+    weight_functions::F
     sectors::S
 end
 struct NumberConservations{M,S} <: AbstractSymmetry
-    masks::M
+    weights::M
     sectors::S
-    function NumberConservations(masks::M, sectors, N) where M
-        length(masks) == length(sectors) || throw(ArgumentError("Number of masks must match number of sectors."))
-        canon_sectors = map((s, m) -> collect(canonicalize_sector(s, m, N)), sectors, masks)
-        new{M,typeof(canon_sectors)}(masks, canon_sectors)
+    function NumberConservations(weights::M, sectors, N) where M
+        length(weights) == length(sectors) || throw(ArgumentError("Number of masks must match number of sectors."))
+        canon_sectors = map((s, m) -> collect(canonicalize_sector(s, m, N)), sectors, weights)
+        # check if all weights are 0 or 1, if so, convert to Integer masks
+        for m in weights
+            all(w -> w == 0 || w == 1, m) && continue
+            return new{M,typeof(canon_sectors)}(weights, canon_sectors)
+        end
+        intmasks = map(m -> integer_from_bits(m, default_fock_representation(N)), weights)
+        new{typeof(intmasks),typeof(canon_sectors)}(intmasks, canon_sectors)
     end
 end
-Base.show(io::IO, qn::NumberConservations) = print(io, "Number conservation for ", length(qn.masks), " subsets")
-(qn::NumberConservations)(f::FockNumber) = length(qn.masks) == 1 ? fermionnumber(f, only(qn.masks)) : map((m -> fermionnumber(f, m)), qn.masks)
-function number_conservation(sectors=missing, label_condition=missing; labels=missing, indices=missing, index=missing)
-    inputs = (labels, index, indices, label_condition)
-    ns = findall(!ismissing, inputs)
-    length(ns) == 0 && return NumberConservation(sectors)
-    length(ns) <= 1 || throw(ArgumentError("Can only specify one of `labels`, `index`, `indices` or `label_condition`."))
-    condition = if only(ns) == 1
-        (label, all_labels) -> in(label, labels)
-    elseif only(ns) == 2
-        (label, all_labels) -> index in label || index == label
-    elseif only(ns) == 3
-        (label, all_labels) -> any((index in label || index == label) for index in indices)
-    elseif only(ns) == 4
-        label_condition
-    end
-    UninstantiatedNumberConservations((condition,), (sectors,))
+Base.show(io::IO, qn::NumberConservations) = print(io, "Number conservation for ", length(qn.weights), " subsets")
+(qn::NumberConservations)(f::FockNumber) = length(qn.weights) == 1 ? fermionnumber(f, only(qn.weights)) : map((m -> fermionnumber(f, m)), qn.weights)
+(qn::NumberConservations)(f::Integer) = length(qn.weights) == 1 ? count_weighted_ones(f, only(qn.weights)) : map((m -> count_weighted_ones(f, m)), qn.weights)
+
+
+"""
+    number_conservation(weight_function=x -> true; sectors=missing)
+
+Constructs a `UninstantiatedNumberConservations` symmetry object that represents conservation of fermion number. 'sectors' can be an integer or a collection of integers specifying the allowed fermion numbers. 'weight_function' is a function that takes a label and returns an integer weight (which can be negative) indicating how that label contributes to the fermion number.
+"""
+function number_conservation(weight_function=x -> true; sectors=missing)
+    UninstantiatedNumberConservations((weight_function,), (sectors,))
 end
-Base.:*(qn1::UninstantiatedNumberConservations, qn2::UninstantiatedNumberConservations) = UninstantiatedNumberConservations((qn1.f..., qn2.f...), (qn1.sectors..., qn2.sectors...))
+
+Base.:*(qn1::UninstantiatedNumberConservations, qn2::UninstantiatedNumberConservations) = UninstantiatedNumberConservations((qn1.weight_functions..., qn2.weight_functions...), (qn1.sectors..., qn2.sectors...))
 
 canonicalize_sector(::Missing, mask, N) = 0:mask_region_size(mask)
 canonicalize_sector(sectors::Integer, mask, N) = (sectors,)
@@ -252,10 +254,10 @@ instantiate(qn::UninstantiatedNumberConservations, jw::JordanWignerOrdering,) = 
 function instantiate(qn::UninstantiatedNumberConservations, labels)
     N = length(labels)
     T = default_fock_representation(N)
-    masks = map(f -> focknbr_from_bits(map(l -> f(l, labels), labels), T), qn.f)
-    NumberConservations(masks, qn.sectors, N)
+    weights = map(f -> map(l -> f(l), labels), qn.weight_functions)
+    NumberConservations(weights, qn.sectors, N)
 end
-basisstates(jw::JordanWignerOrdering, qn::NumberConservations) = sort!(generate_states(qn.masks, qn.sectors, length(jw)))
+basisstates(jw::JordanWignerOrdering, qn::NumberConservations) = sort!(generate_states(qn.weights, qn.sectors, length(jw)))
 function allowed_qn(qn, sym::NumberConservations)
     for (q, sector) in zip(qn, sym.sectors)
         ismissing(sector) && continue
@@ -276,7 +278,7 @@ end
     ## ProductSymmetry
     qn, fs = instantiate_and_get_basisstates(H.jw, ParityConservation([1]) * number_conservation(1:1; labels=1:3))
     @test all(iseven ∘ fermionnumber, fs)
-    @test all(fermionnumber(f, qn.symmetries[2].masks[1]) == 1 for f in fs)
+    @test all(fermionnumber(f, qn.symmetries[2].weights[1]) == 1 for f in fs)
 end
 
 @testitem "sector" begin
@@ -335,120 +337,4 @@ end
     @test all(f -> f.f >= 0, states)
     # Check that the type is FockNumber{BigInt} for large M
     @test all(f -> f isa FockNumber{BigInt}, states)
-end
-
-
-mask_region_size(mask::FockNumber) = mask_region_size(mask.f)
-mask_region_size(mask::Integer) = count_ones(mask)
-
-function set_bit!(num::FockNumber{T}, pos::Int, value::Bool) where T
-    mask = one(T) << (pos - 1)          # single-bit mask
-    newf = value ? (num.f | mask) : (num.f & ~mask)
-    FockNumber{T}(newf)
-end
-function generate_states(masks, allowed_ones, max_bits, T=default_fock_representation(max_bits))
-    region_lengths = map(mask_region_size, masks)
-    any(rl > max_bits for rl in region_lengths) && error("Constraint mask exceeds max_bits")
-    filled_ones = [0 for _ in masks]
-    filled_zeros = [0 for _ in masks]
-    remaining_bits = collect(region_lengths)
-    states = FockNumber{T}[]
-    num = zero(FockNumber{T})
-    bit_position = 1
-    # Build dependency mapping
-    affected_constraints = [Int[] for _ in 1:max_bits]
-    for (k, mask) in enumerate(masks)
-        for bit_pos in 1:(max_bits)
-            if _bit(mask, bit_pos)
-                push!(affected_constraints[bit_pos], k)
-            end
-        end
-    end
-
-    operation_stack = [:put_one, :put_zero] # Stack to keep track of operations
-    sizehint!(operation_stack, max_bits * 3)
-
-    # count = 0
-    while !isempty(operation_stack)
-        # count += 1
-        op = pop!(operation_stack)
-
-        if op == :revert_zero
-            # Revert putting a zero at bit_position - 1
-            for k in affected_constraints[bit_position-1]
-                filled_zeros[k] -= 1
-                remaining_bits[k] += 1
-            end
-            bit_position -= 1
-            continue
-        end
-
-        if op == :revert_one
-            # Revert putting a one at bit_position - 1
-            for k in affected_constraints[bit_position-1]
-                filled_ones[k] -= 1
-                remaining_bits[k] += 1
-            end
-            bit_position -= 1
-            continue
-        end
-
-        if op == :put_zero
-            feasible = affected_constraints_can_be_satisfied(false, affected_constraints[bit_position], allowed_ones, region_lengths, filled_ones, filled_zeros, remaining_bits)
-            if feasible
-                # Put a zero at bit_position
-                num = set_bit!(num, bit_position, false)
-                if bit_position == max_bits
-                    push!(states, num)
-                    continue
-                end
-                push!(operation_stack, :revert_zero)
-                for k in affected_constraints[bit_position]
-                    filled_zeros[k] += 1
-                    remaining_bits[k] -= 1
-                end
-                bit_position += 1
-                push!(operation_stack, :put_one)
-                push!(operation_stack, :put_zero)
-            end
-            continue
-        end
-
-        if op == :put_one
-            feasible = affected_constraints_can_be_satisfied(true, affected_constraints[bit_position], allowed_ones, region_lengths, filled_ones, filled_zeros, remaining_bits)
-
-            if feasible
-                # Put a one at bit_position
-                num = set_bit!(num, bit_position, true)
-                if bit_position == max_bits
-                    push!(states, num)
-                    continue
-                end
-                push!(operation_stack, :revert_one)
-                for k in affected_constraints[bit_position]
-                    filled_ones[k] += 1
-                    remaining_bits[k] -= 1
-                end
-                bit_position += 1
-                push!(operation_stack, :put_one)
-                push!(operation_stack, :put_zero)
-            end
-        end
-    end
-    return states
-end
-
-@inline function affected_constraints_can_be_satisfied(testbit, ks, allowed_ones, region_lengths, filled_ones, filled_zeros, remaining_bits)
-    for k in ks
-        feasible = false
-        newones = filled_ones[k] + testbit
-        newzeros = filled_zeros[k] + !testbit
-        remaining = remaining_bits[k] - 1
-        rl = region_lengths[k]
-        for target_ones in allowed_ones[k]
-            newones <= target_ones <= newones + remaining && (feasible = true) && break
-        end
-        !feasible && return false
-    end
-    return true
 end

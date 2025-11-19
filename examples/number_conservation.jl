@@ -3,7 +3,7 @@ using FermionicHilbertSpaces
 N = 62 # Can't do more than 63, because of Int64
 n = 3
 
-H = hilbert_space(1:N, number_conservation(n)) # Spans all states with n fermions on N sites
+H = hilbert_space(1:N, number_conservation(; sectors=n)) # Spans all states with n fermions on N sites
 @fermions c
 
 # Define a Hamiltonian that conserves the number of fermions
@@ -28,7 +28,3 @@ Base.size(m::Rank1Matrix) = (length(m.vec), length(m.vec))
 rho = Rank1Matrix(vecs[1]);
 subrho = partial_trace(rho, H => Hsub)
 sum(v -> -v * log(abs(v)), eigvals(subrho))
-dim(Hsub) / dim(H) * partial_trace(c1c3, H => Hsub) ≈ matrix_representation(c[1] * c[3], Hsub)
-
-H = hilbert_space(labels, number_conservation([2, 4]))
-matrix_representation(ham, H)
