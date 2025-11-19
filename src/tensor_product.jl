@@ -501,7 +501,7 @@ end
 
 Compute the partial trace of a matrix `m`, leaving the subsystem defined by the basis `Hsub`.
 """
-function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=simple_complementary_subsystem(H, Hsub)) where {T}
+function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub)) where {T}
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
     if H == Hsub
         return copy(m)
