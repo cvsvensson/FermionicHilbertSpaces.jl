@@ -140,8 +140,8 @@ tensor_product_iterator(::UniformScaling, H::AbstractHilbertSpace) = diagind(I(l
 
 function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors=true) where T
     fill!(mout, zero(T))
-    ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
-    phase_factors && (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
+    # ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
+    (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
 
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     for I in inds
