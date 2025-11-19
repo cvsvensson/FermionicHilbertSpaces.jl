@@ -234,12 +234,12 @@ Base.show(io::IO, qn::NumberConservations) = print(io, "Number conservation for 
 
 
 """
-    number_conservation(sectors=missing, weight_function=x -> true)
+    number_conservation(sectors=missing, weight_function=label -> true)
 
 Constructs a `UninstantiatedNumberConservations` symmetry object that represents conservation of fermion number. 'sectors' can be an integer or a collection of integers specifying the allowed fermion numbers. 'weight_function' is a function that takes a label and returns an integer weight (which can be negative) indicating how that label contributes to the fermion number.
 """
-function number_conservation(sectors=missing, weight_function=x -> true)
-    if weight_function == x -> true
+function number_conservation(sectors=missing, weight_function=:alltrue)
+    if weight_function == :alltrue
         return NumberConservation(sectors)
     end
     UninstantiatedNumberConservations((weight_function,), (sectors,))
