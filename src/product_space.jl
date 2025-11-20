@@ -26,17 +26,12 @@ Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1 === H2 || (H1.fock_space == 
 Base.hash(H::ProductSpace, h::UInt) = hash((H.fock_space, H.other_spaces), h)
 ProductSpace{Nothing}(other_spaces) = ProductSpace(nothing, other_spaces)
 
-# label(H::ProductSpace) = (label(H.fock_space), map(label, H.other_spaces)...)
-# label(H::ProductSpace{Nothing}) = map(label, H.other_spaces)
-# label(H::AbstractFockHilbertSpace) = keys(H)
 basisstates(H::ProductSpace) = Iterators.map(s -> ProductState(s...), Iterators.product(basisstates(H.fock_space), Iterators.product(map(basisstates, H.other_spaces)...)))
 basisstates(H::ProductSpace{Nothing}) = Iterators.map(ProductState{Nothing}, Iterators.product(map(basisstates, H.other_spaces)...))
 
 function basisstate(n::Int, H::ProductSpace{Nothing})
     I = CartesianIndices(map(dim, H.other_spaces))[n]
     states = [basisstate(I[i], H.other_spaces[i]) for i in 1:length(H.other_spaces)]
-    # states = (basisstate(I[i], H.other_spaces[i]) for i in 1:length(H.other_spaces)
-    # states = ntuple(i -> basisstate(I[i], H.other_spaces[i]),length(H.other_spaces))
     ProductState(nothing, states)
 end
 function basisstate(n::Int, H::ProductSpace)
@@ -68,7 +63,6 @@ end
 
 simple_complementary_subsystem(H::ProductSpace, Hsub::AbstractHilbertSpace) = complementary_subsystem(H, Hsub)
 function complementary_subsystem(H::ProductSpace, Hsub::AbstractHilbertSpace)
-    # spaces = [H.other_spaces[i] for i in eachindex(H.other_spaces) if H.other_spaces[i] != Hsub]
     spaces = filter(Hn -> Hn != Hsub, H.other_spaces)
     length(spaces) + 1 == length(H.other_spaces) || throw(ArgumentError("Hsub must be one of the spaces in the product space H"))
     ProductSpace(H.fock_space, spaces)
@@ -137,9 +131,6 @@ _substate(s::AbstractBasisState, n::Int) = n == 1 ? s : error("Substate index ou
 _substate(s::Any, n::Int) = n == 1 ? s : error("Substate index out of bounds")
 _substate(s::ProductState, n::Int) = s.other_states[n]
 
-#_permute!!(states::Tuple, perm) = TupleTools.permute(states, perm)
-#_permute!!(states::Vector, perm) = permute!(states, perm)
-
 function StateExtender(Hs, H::ProductSpace{Nothing})
     ospaces = flat_non_fock_spaces(Hs)
     sublabels = map(keys, ospaces)
@@ -168,7 +159,7 @@ function StateExtender(Hs, H::ProductSpace)
         ostates = flat_non_fock_states(states)
         eostates = non_fock_extender(ostates).other_states
         fstate = fockstateextender(fockstates)
-        ProductState(fstate, eostates)#TupleTools.permute(ostates, perm))
+        ProductState(fstate, eostates) 
     end
 end
 fock_part(H::AbstractFockHilbertSpace) = H
@@ -185,7 +176,6 @@ non_fock_part(s::Any) = s
 non_fock_part(::AbstractFockState) = nothing
 
 phase_factor_h(f1, f2, Hs, H::ProductSpace{Nothing}) = 1
-# phase_factor_h(f1, f2, Hs, H::AbstractHilbertSpace) = 1
 phase_factor_h(f1, f2, Hs, H::ProductSpace) = phase_factor_h(f1, f2, Hs, H.fock_space)
 
 phase_factor_h(f1::ProductState, f2::ProductState, partition, jw::JordanWignerOrdering) = phase_factor_h(f1.fock_state, f2.fock_state, partition, jw)

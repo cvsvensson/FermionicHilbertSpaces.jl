@@ -157,9 +157,6 @@ Base.zero(::FixedNumberFockState) = FixedNumberFockState(())
 function concatenate((lastf, lastwidth)::Tuple{FixedNumberFockState,Int}, (f, width)::Tuple{FixedNumberFockState,Int})
     return (FixedNumberFockState((lastf.sites..., (lastwidth .+ f.sites)...)), lastwidth + width)
 end
-# function concatenate((lastf, lastwidth)::Tuple{FixedNumberFockState,Int}, (f, width)::Tuple{FockNumber,Int})
-#     concatenate((FockNumber(lastf), lastwidth), (f, width))
-# end
 function permute(f::FixedNumberFockState, permutation::BitPermutations.AbstractBitPermutation)
     p = Vector(permutation')
     return FixedNumberFockState(map(s -> p[s], f.sites))

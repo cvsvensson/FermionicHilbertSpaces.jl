@@ -21,17 +21,11 @@ Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 dim(H::AbstractHilbertSpace) = Int(length(basisstates(H)))
 isorderedpartition(Hs, H::AbstractFockHilbertSpace) = isorderedpartition(map(modes, Hs), H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = isorderedsubsystem(Hsub.jw, H.jw)
-# isorderedsubsystem(Hsub::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = isorderedsubsystem(Hsub.jw, jw)
-# issubsystem(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = issubsystem(subsystem.jw, jw)
-# issubsystem(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = issubsystem(subsystem.jw, H.jw)
-# consistent_ordering(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = consistent_ordering(subsystem.jw, jw)
 consistent_ordering(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = consistent_ordering(subsystem.jw, H.jw)
 focknbr_from_site_labels(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(H), jw)
 ispartition(Hs, H::AbstractFockHilbertSpace) = ispartition(map(modes, Hs), H.jw)
 
 mode_ordering(H::AbstractFockHilbertSpace) = H.jw
-# mode_ordering(jw::JordanWignerOrdering) = jw
-# mode_ordering(v::AbstractVector) = JordanWignerOrdering(v)
 modes(H::AbstractFockHilbertSpace) = keys(H)
 modes(jw::JordanWignerOrdering) = jw.ordering.keys
 modes(v::AbstractVector) = v
@@ -243,10 +237,6 @@ function substate(siteindices, f::FockNumber)
     return focknbr_from_bits(subbits)
 end
 
-# complementary_subsystem(H::SimpleFockHilbertSpace, Hsub::AbstractFockHilbertSpace) = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
-# function complementary_subsystem(H::SingleParticleHilbertSpace, Hsub::SingleParticleHilbertSpace)
-#     single_particle_hilbert_space(setdiff(collect(keys(H)), collect(keys(Hsub))))
-# end
 statetype(::SimpleFockHilbertSpace{F}) where F = F
 statetype(::FockHilbertSpace{<:Any,<:V}) where V = eltype(V)
 statetype(::SymmetricFockHilbertSpace{<:Any,S}) where S = statetype(S)

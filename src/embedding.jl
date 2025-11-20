@@ -125,27 +125,3 @@ function extend(m, H::AbstractHilbertSpace, Hbar::AbstractHilbertSpace, Hout=ten
 end
 extend(Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = m -> extend(m, first(Hs), last(Hs), Hout; kwargs...)
 extend(m, Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = extend(m, first(Hs), last(Hs), Hout; kwargs...)
-
-
-## kron, i.e. tensor_product without phase factors
-# Base.kron(ms, bs, b::AbstractHilbertSpace; kwargs...) = generalized_kron(ms, bs, b; phase_factors=false, kwargs...)
-
-# canonical_embedding(m, b, bnew) = embed(m, b, bnew; phase_factors=false)
-
-# function embed(m, Hsub::AbstractHilbertSpace, H::ProductSpace)
-#     @assert isnothing(fock_part(Hsub))
-#     sublabels = _labels(Hsub)
-#     labels = _labels(H)
-#     all(in(labels), sublabels) || throw(ArgumentError("Hsub must be a subsystem of H"))
-#     ns = [findfirst(==(l), labels)::Int for l in sublabels]
-#     # length(ns) == 1 || throw(ArgumentError("Hsub must be one of the non-fock parts of H"))
-#     # n = only(ns)
-#     Is = Any[m in ns ?  for m in eachindex(H.other_spaces)]
-#     Is[n] = m
-#     return kron(reverse(Is)...)
-# end
-
-# function embed(m, Hsub::AbstractFockHilbertSpace, H::ProductSpace; kwargs...)
-#     mf = embed(m, Hsub, fock_part(H); kwargs...)
-#     return kron(I(prod(dim, non_fock_part(H))), mf)
-# end

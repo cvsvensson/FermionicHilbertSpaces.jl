@@ -28,13 +28,7 @@ function consistent_ordering(subsystem, jw::JordanWignerOrdering)::Bool
     end
     return true
 end
-# function ispartition(partition, jw::JordanWignerOrdering)
-#     modes = union(partition...)
-#     length(jw) == length(modes) || return false
-#     injw = Base.Fix1(haskey, jw.ordering)
-#     all(injw, modes) || return false
-#     return true
-# end
+
 ispartition(Hs, H::AbstractHilbertSpace) = ispartition(map(keys, Hs), keys(H))
 function ispartition(partition, labels)
     modes = union(partition...)
