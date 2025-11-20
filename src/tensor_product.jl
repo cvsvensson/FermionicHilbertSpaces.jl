@@ -521,13 +521,13 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
     phi(kron(reverse(map((phi, op) -> phi(op), phis, ops))...))
 end
 
-function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub)) where {T}
+function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement)) where {T}
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
     if H == Hsub
         return copy(m)
     end
     mout = zeros(T, dim(Hsub), dim(Hsub))
-    partial_trace!(mout, m, H, Hsub, phase_factors, complement)
+    partial_trace!(mout, m, H, Hsub, phase_factors, complement, alg)
 end
 
 """
@@ -539,12 +539,17 @@ partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs
 use_phase_factors(H::AbstractHilbertSpace) = false
 use_phase_factors(H::AbstractFockHilbertSpace) = true
 
+
+struct SubsystemPartialTraceAlg end
+struct FullPartialTraceAlg end
+default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+
 """
     partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H))
 
 Compute the partial trace of `m` from `H` to `Hsub`. 
 """
-function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H))
+function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, ::SubsystemPartialTraceAlg, extend_state=StateExtender((Hsub, complement), H),)
     if phase_factors
         consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
     end
@@ -569,6 +574,33 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::
     end
     return mout
 end
+function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, ::FullPartialTraceAlg, split_state=StateSplitter(H, (Hsub, complement)))
+    if phase_factors
+        consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
+    end
+    fill!(mout, zero(eltype(mout)))
+    states = basisstates(H)
+    M = length(keys(H))
+    N = length(keys(Hsub))
+    for f1 in states, f2 in states
+        f1sub, f1bar = split_state(f1)
+        f2sub, f2bar = split_state(f2)
+        if f1bar != f2bar
+            continue
+        end
+        s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
+        s2 = phase_factors ? phase_factor_f(f1sub, f2sub, N) : 1
+        s = s2 * s1
+        J1 = state_index(f1sub, Hsub)
+        ismissing(J1) && continue
+        J2 = state_index(f2sub, Hsub)
+        ismissing(J2) && continue
+        I1 = state_index(f1, H)
+        I2 = state_index(f2, H)
+        mout[J1, J2] += s * m[I1, I2]
+    end
+    return mout
+end
 
 """
     partial_trace(H => Hsub; kwargs...)
@@ -576,10 +608,10 @@ end
 Compute the partial trace map from `H` to `Hsub`, represented by a sparse matrix of dimension `dim(Hsub)^2 x dim(H)^2` that can be multiplied with a vectorized density matrix. 
 """
 partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace_map(Hs...; kwargs...)
-function partial_trace_map(H, Hsub; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub))
-    partial_trace_map(H, Hsub, phase_factors, complement)
+function partial_trace_map(H, Hsub; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement))
+    partial_trace_map(H, Hsub, phase_factors, complement, alg)
 end
-function partial_trace_map(H, Hsub, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H))
+function partial_trace_map(H, Hsub, phase_factors::Bool, complement, ::SubsystemPartialTraceAlg, extend_state=StateExtender((Hsub, complement), H))
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
     indI = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
@@ -604,6 +636,40 @@ function partial_trace_map(H, Hsub, phase_factors::Bool, complement, extend_stat
             push!(Js, indJ[J1, J2])
             push!(Vs, s)
         end
+    end
+    return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
+end
+
+function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, ::FullPartialTraceAlg, split_state=StateSplitter(H, (Hsub, complement)))
+    if phase_factors
+        consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
+    end
+    states = basisstates(H)
+    M = length(keys(H))
+    N = length(keys(Hsub))
+    indI = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
+    indJ = LinearIndices((1:dim(H), 1:dim(H)))
+    Is = Int[]
+    Js = Int[]
+    Vs = Int[]
+    for f1 in states, f2 in states
+        f1sub, f1bar = split_state(f1)
+        f2sub, f2bar = split_state(f2)
+        if f1bar != f2bar
+            continue
+        end
+        s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
+        s2 = phase_factors ? phase_factor_f(f1sub, f2sub, N) : 1
+        s = s2 * s1
+        J1 = state_index(f1sub, Hsub)
+        ismissing(J1) && continue
+        J2 = state_index(f2sub, Hsub)
+        ismissing(J2) && continue
+        I1 = state_index(f1, H)
+        I2 = state_index(f2, H)
+        push!(Is, indI[J1, J2])
+        push!(Js, indJ[I1, I2])
+        push!(Vs, s)
     end
     return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
