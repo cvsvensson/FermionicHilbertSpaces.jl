@@ -521,12 +521,6 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
     phi(kron(reverse(map((phi, op) -> phi(op), phis, ops))...))
 end
 
-
-"""
-    partial_trace(m::AbstractMatrix,  H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub))
-
-Compute the partial trace of a matrix `m` in `H` down to subsystem `Hsub`.
-"""
 function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub)) where {T}
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
     if H == Hsub
@@ -537,18 +531,18 @@ function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::Abst
 end
 
 """
-    partial_trace(m, H => Hsub; kwargs...)
+    partial_trace(m, H => Hsub; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub))
 
-Compute the partial trace of a matrix `m` in `H` down to subsystem `Hsub`.
+Compute the partial trace of `m` from `H` to `Hsub`. Fermionic phase factors are included if both `H` and `Hsub` are Fermionic, unless specified otherwise in `kwargs`.
 """
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
 use_phase_factors(H::AbstractHilbertSpace) = false
 use_phase_factors(H::AbstractFockHilbertSpace) = true
 
 """
-    partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors, complement)
+    partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H))
 
-Compute the fermionic partial trace of a matrix `m` in basis `H`, leaving only the subsystems specified by `labels`. The result is stored in `mout`, and `Hsub` determines the ordering of the basis states.
+Compute the partial trace of `m` from `H` to `Hsub`. 
 """
 function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H))
     if phase_factors
