@@ -58,8 +58,9 @@ qubit_operator(c, ::QubitOp{:H}) = 1 / sqrt(2) * (qubit_operator(c, QubitOp{:Z}(
     using LinearMaps
     d1 = dim(H1)
     d = dim(H)
-    ptmap = LinearMap(rhovec -> vec(partial_trace(reshape(rhovec, (d, d)), H, H1; phase_factors=false)), d1^2, d^2)
-    embeddingmap = LinearMap(rhovec -> vec(embed(reshape(rhovec, (d1, d1)), H1, H; phase_factors=false)), d^2, d1^2)
-    @test Matrix(ptmap) ≈ Matrix(embeddingmap)'
-
+    ptmap = Matrix(LinearMap(rhovec -> vec(partial_trace(reshape(rhovec, (d, d)), H, H1; phase_factors=false)), d1^2, d^2))
+    embeddingmap = Matrix(LinearMap(rhovec -> vec(embed(reshape(rhovec, (d1, d1)), H1, H; phase_factors=false)), d^2, d1^2))
+    @test ptmap ≈ embeddingmap'
+    @test ptmap ≈ partial_trace(H => H1; phase_factors=false)
+    @test embeddingmap ≈ embed(H1 => H; phase_factors=false)
 end

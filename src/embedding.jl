@@ -99,29 +99,53 @@ end
 end
 
 
-
-"""
-    embed(m, Hsub, H; complement = simple_complementary_subsystem(H, Hsub), kwargs...)
-
-Compute the fermionic embedding of a matrix `m` in the basis `Hsub` into the basis `H`.
-"""
 function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=simple_complementary_subsystem(H, Hsub), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedsubsystem(Hsub, H) || throw(ArgumentError("Can't embed $Hsub into $H"))
     return generalized_kron((m, I), (Hsub, complement), H; kwargs...)
 end
 const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}
-embed(Hs::PairWithHilbertSpaces; kwargs...) = m -> embed(m, first(Hs), last(Hs); kwargs...)
+
+"""
+    embed(m, Hsub => H; complement=simple_complementary_subsystem(H, Hsub), kwargs...)
+
+Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces. 
+"""
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
 """
-    extend(m, H, Hbar, Hout = tensor_product((H, Hbar)); kwargs...)
-Extend an operator or state `m` from Hilbert space `H` into a disjoint space `Hbar`.
+    embed(Hsub => H; kwargs...)
+
+Compute the embedding map from `Hsub` into `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces. 
 """
+embed(Hs::PairWithHilbertSpaces; kwargs...) = embed_map(first(Hs), last(Hs); kwargs...)
+embed_map(Hsub, H; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub)) = partial_trace_map(H, Hsub; phase_factors=phase_factors, complement=complement)'
+
 function extend(m, H::AbstractHilbertSpace, Hbar::AbstractHilbertSpace, Hout=tensor_product(H, Hbar); kwargs...)
     isdisjoint(keys(H), keys(Hbar)) || throw(ArgumentError("The bases of the two Hilbert spaces must be disjoint"))
     Hs = (H, Hbar)
     return generalized_kron((m, I), Hs, Hout; kwargs...)
 end
-extend(Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = m -> extend(m, first(Hs), last(Hs), Hout; kwargs...)
+
+"""
+    extend(m, H => Hbar, Hout = tensor_product((H, Hbar)); kwargs...)
+Extend an operator or state `m` from Hilbert space `H` into a disjoint space `Hbar`.
+"""
 extend(m, Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = extend(m, first(Hs), last(Hs), Hout; kwargs...)
+"""
+    extend(H => Hbar, Hout = tensor_product((H, Hbar)); kwargs...)
+Compute the extend map from `H` into a disjoint space `Hbar`.
+"""
+extend(Hs::PairWithHilbertSpaces, Hout=tensor_product((first(Hs), last(Hs))); kwargs...) = extend_map(first(Hs), last(Hs), Hout; kwargs...)
+extend_map(H, Hbar, Hout=tensor_product((H, Hbar)); phase_factors=use_phase_factors(H) && use_phase_factors(Hbar)) = embed_map(H, Hout; phase_factors=phase_factors)
+
+@testitem "Partial trace, embed, extend" begin
+    H = hilbert_space(1:4)
+    Hsub = subregion((2, 4), H)
+    Hcomp = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
+    pt = partial_trace(H => Hsub)
+    emb = embed(Hsub => H)
+    ext = extend(Hsub => Hcomp, H)
+    @test ext == emb
+    @test pt' == emb
+end
