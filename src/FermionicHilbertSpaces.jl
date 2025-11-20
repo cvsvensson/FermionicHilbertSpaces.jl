@@ -1,8 +1,8 @@
 module FermionicHilbertSpaces
 
 using LinearAlgebra, SparseArrays
-using SplitApplyCombine: group, sortkeys!
-using Dictionaries: dictionary, Dictionary
+using FlexiGroups: group
+import Dictionaries: dictionary, Dictionary, sortkeys!, getindices
 import FillArrays: Zeros
 import OrderedCollections: OrderedDict
 using TestItems
