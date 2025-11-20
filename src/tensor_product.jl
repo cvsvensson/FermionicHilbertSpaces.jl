@@ -523,9 +523,9 @@ end
 
 
 """
-    partial_trace(m::AbstractMatrix,  Hfull::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors = true, complement)
+    partial_trace(m::AbstractMatrix,  H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub))
 
-Compute the partial trace of a matrix `m`, leaving the subsystem defined by the basis `Hsub`.
+Compute the partial trace of a matrix `m` in `H` down to subsystem `Hsub`.
 """
 function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub)) where {T}
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
@@ -536,6 +536,11 @@ function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::Abst
     partial_trace!(mout, m, H, Hsub, phase_factors, complement)
 end
 
+"""
+    partial_trace(m, H => Hsub; kwargs...)
+
+Compute the partial trace of a matrix `m` in `H` down to subsystem `Hsub`.
+"""
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
 use_phase_factors(H::AbstractHilbertSpace) = false
 use_phase_factors(H::AbstractFockHilbertSpace) = true
@@ -571,6 +576,11 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::
     return mout
 end
 
+"""
+    partial_trace(H => Hsub; kwargs...)
+
+Compute the partial trace map from `H` to `Hsub`, represented by a sparse matrix of dimension `dim(Hsub)^2 x dim(H)^2` that can be multiplied with a vectorized density matrix. 
+"""
 partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace_map(Hs...; kwargs...)
 function partial_trace_map(H, Hsub; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub))
     partial_trace_map(H, Hsub, phase_factors, complement)
