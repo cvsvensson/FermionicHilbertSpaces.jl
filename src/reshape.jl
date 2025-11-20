@@ -224,7 +224,7 @@ end
         mEE = project_on_parities(m, H, Hs, (1, 1))
         mOO = project_on_parities(m, H, Hs, (-1, -1))
 
-        F = partial_trace(H => H2)(m * generalized_kron(Hs => H)(m1, I))
+        F = partial_trace(m * generalized_kron((m1, I), Hs => H), H => H2)
         @test tr(F * m2) ≈ tr(m * generalized_kron((m1, I), Hs, H) * generalized_kron((I, m2), Hs, H))
 
         t = reshape(m, H => Hs; phase_factors=false)

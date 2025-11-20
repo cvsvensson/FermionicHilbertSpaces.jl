@@ -536,7 +536,6 @@ function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::Abst
     partial_trace!(mout, m, H, Hsub, phase_factors, complement)
 end
 
-partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = m -> partial_trace(m, Hs...; kwargs...)
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
 use_phase_factors(H::AbstractHilbertSpace) = false
 use_phase_factors(H::AbstractFockHilbertSpace) = true
@@ -572,10 +571,11 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::
     return mout
 end
 
+partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace_map(Hs...; kwargs...)
 function partial_trace_map(H, Hsub; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub))
     partial_trace_map(H, Hsub, phase_factors, complement)
 end
-function partial_trace_map(H, Hsub, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H)) where T
+function partial_trace_map(H, Hsub, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H))
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
     indI = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
@@ -649,13 +649,12 @@ end
 end
 
 @testitem "Partial trace map" begin
-    using FermionicHilbertSpaces: partial_trace_map
     H = hilbert_space(1:4)
     Hsub = hilbert_space([2, 4])
     m = rand(ComplexF64, dim(H), dim(H))
 
     msub = partial_trace(m, H => Hsub)
-    pt = partial_trace_map(H, Hsub)
+    pt = partial_trace(H => Hsub)
     msub_map = pt * reshape(m, (dim(H)^2))
     @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
 
@@ -663,7 +662,7 @@ end
     Hsub = subregion([1, 3, 4], H)
     m = rand(ComplexF64, dim(H), dim(H))
     msub = partial_trace(m, H => Hsub)
-    pt = partial_trace_map(H, Hsub)
+    pt = partial_trace(H => Hsub)
     msub_map = pt * reshape(m, (dim(H)^2))
     @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
 end

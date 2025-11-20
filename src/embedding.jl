@@ -111,8 +111,10 @@ function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
     return generalized_kron((m, I), (Hsub, complement), H; kwargs...)
 end
 const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}
-embed(Hs::PairWithHilbertSpaces; kwargs...) = m -> embed(m, first(Hs), last(Hs); kwargs...)
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
+
+embed(Hs::PairWithHilbertSpaces; kwargs...) = embed_map(first(Hs), last(Hs); kwargs...)
+embed_map(Hsub, H; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub)) = partial_trace_map(H, Hsub; phase_factors=phase_factors, complement=complement)'
 
 """
     extend(m, H, Hbar, Hout = tensor_product((H, Hbar)); kwargs...)
