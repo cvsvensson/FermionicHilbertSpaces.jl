@@ -70,49 +70,49 @@ hodd = matrix_representation(hsym, Hodd)</code></pre><pre class="documenter-exam
 eveneigs = eigs(heven; nev=1, which=:SR)
 oddvec = oddeigs[2][:, 1] # odd ground state
 evenvec = eveneigs[2][:, 1] # even ground state</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2048-element Vector{Float64}:
-  0.015608274175071248
-  0.016060979381801645
- -0.01996274836346006
-  0.01786437579224462
-  0.018905344284311718
- -0.021406546465997184
-  0.016692660286701376
-  0.01624211725860512
- -0.01892709491454756
-  0.02030074674863281
+  0.015608274175070993
+  0.016060979381801815
+ -0.01996274836346
+  0.0178643757922445
+  0.01890534428431163
+ -0.021406546465996688
+  0.016692660286701307
+  0.016242117258604978
+ -0.018927094914547516
+  0.020300746748632536
   ⋮
- -0.018927094914547606
-  0.016242117258605148
-  0.016692660286701418
- -0.021406546465997045
-  0.018905344284311825
-  0.017864375792244647
- -0.01996274836346016
-  0.016060979381801885
-  0.015608274175071112</code></pre><p>The ground states are almost degenerate, as expected.</p><pre><code class="language-julia hljs">first(oddeigs[1]) - first(eveneigs[1])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1.964735383808147e-5</code></pre><p>Now, we construct the ground state Majoranas. First, we need to pad the lowest energy odd and even states into the full Hilbert space.</p><pre><code class="language-julia hljs">o = zeros(eltype(oddvec), dim(H))
+ -0.01892709491454752
+  0.016242117258605086
+  0.016692660286701414
+ -0.02140654646599704
+  0.018905344284311613
+  0.017864375792244536
+ -0.019962748363459733
+  0.01606097938180169
+  0.015608274175071157</code></pre><p>The ground states are almost degenerate, as expected.</p><pre><code class="language-julia hljs">first(oddeigs[1]) - first(eveneigs[1])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1.964735386650318e-5</code></pre><p>Now, we construct the ground state Majoranas. First, we need to pad the lowest energy odd and even states into the full Hilbert space.</p><pre><code class="language-julia hljs">o = zeros(eltype(oddvec), dim(H))
 e = zeros(eltype(evenvec), dim(H))
 o[indices(Hodd, H)] = oddvec
 e[indices(Heven, H)] = evenvec</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2048-element Vector{Float64}:
-  0.015608274175071248
-  0.016060979381801645
- -0.01996274836346006
-  0.01786437579224462
-  0.018905344284311718
- -0.021406546465997184
-  0.016692660286701376
-  0.01624211725860512
- -0.01892709491454756
-  0.02030074674863281
+  0.015608274175070993
+  0.016060979381801815
+ -0.01996274836346
+  0.0178643757922445
+  0.01890534428431163
+ -0.021406546465996688
+  0.016692660286701307
+  0.016242117258604978
+ -0.018927094914547516
+  0.020300746748632536
   ⋮
- -0.018927094914547606
-  0.016242117258605148
-  0.016692660286701418
- -0.021406546465997045
-  0.018905344284311825
-  0.017864375792244647
- -0.01996274836346016
-  0.016060979381801885
-  0.015608274175071112</code></pre><p>Then, we can construct the ground state Majorana operators as γ = o * e&#39; + hc γ̃ = 1im * o * e&#39; + hc but that takes a lot of memory for large systems. Let&#39;s make a quick struct representing a rank-1 matrix and use that instead.</p><pre><code class="language-julia hljs">struct Rank1Matrix{T} &lt;: AbstractMatrix{T}
+ -0.01892709491454752
+  0.016242117258605086
+  0.016692660286701414
+ -0.02140654646599704
+  0.018905344284311613
+  0.017864375792244536
+ -0.019962748363459733
+  0.01606097938180169
+  0.015608274175071157</code></pre><p>Then, we can construct the ground state Majorana operators as γ = o * e&#39; + hc γ̃ = 1im * o * e&#39; + hc but that takes a lot of memory for large systems. Let&#39;s make a quick struct representing a rank-1 matrix and use that instead.</p><pre><code class="language-julia hljs">struct Rank1Matrix{T} &lt;: AbstractMatrix{T}
     vec1::Vector{T}
     vec2::Vector{T}
 end
@@ -148,18 +148,18 @@ ooR = [partial_trace(oo, H =&gt; Hmode) for Hmode in Hmodes];
 γ_reductions = [norm(svdvals(eoR + hc), 1) for eoR in eoR]
 γ̃_reductions = [norm(svdvals(1im * eoR + hc), 1) for eoR in eoR]
 LD = [norm(svdvals(ooR - eeR), 1) for (ooR, eeR) in zip(ooR, eeR)]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">12-element Vector{Float64}:
- 7.66053886991358e-15
- 2.7755575615628914e-15
- 8.881784197001252e-16
- 5.551115123125783e-16
- 1.942890293094024e-15
+ 4.107825191113079e-15
+ 3.9968028886505635e-15
+ 3.3306690738754696e-15
+ 3.0531133177191805e-15
+ 2.220446049250313e-16
+ 1.2212453270876722e-15
+ 6.106226635438361e-16
  4.996003610813204e-16
- 1.1102230246251565e-15
- 6.661338147750939e-16
- 7.771561172376096e-16
- 1.7208456881689926e-15
- 2.275957200481571e-15
- 4.9960036108132044e-15</code></pre><p>We can plot the reductions to visualize the localization of the Majorana modes.</p><pre><code class="language-julia hljs">#
+ 1.2212453270876722e-15
+ 1.3322676295501878e-15
+ 4.996003610813204e-16
+ 1.1657341758564144e-15</code></pre><p>We can plot the reductions to visualize the localization of the Majorana modes.</p><pre><code class="language-julia hljs">#
 lw = 4
 legendfontsize = 15
 marker = true
@@ -167,4 +167,4 @@ markerstrokewidth = 2
 plot(xlabel=&quot;Site&quot;, title=&quot;Majorana quality measures&quot;; frame=:box, size=(500, 300), xticks=1:3:N, yscale=:identity, legendfontsize, ylims=(-1e-1, 2), legendposition=:top, labelfontsize=15)
 plot!(1:N, γ_reductions; label=&quot;‖γₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)
 plot!(1:N, γ̃_reductions; label=&quot;‖γ̃ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)
-plot!(1:N, LD; label=&quot;‖(iγγ̃)ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)</code></pre><img src="f3c0f230.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../non_interacting/">« Non interacting systems</a><a class="docs-footer-nextpage" href="../free_fermions/">Free fermions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.0 on <span class="colophon-date" title="Thursday 20 November 2025 12:38">Thursday 20 November 2025</span>. Using Julia version 1.12.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+plot!(1:N, LD; label=&quot;‖(iγγ̃)ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)</code></pre><img src="7c689e59.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../non_interacting/">« Non interacting systems</a><a class="docs-footer-nextpage" href="../free_fermions/">Free fermions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.0 on <span class="colophon-date" title="Thursday 20 November 2025 13:30">Thursday 20 November 2025</span>. Using Julia version 1.12.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
