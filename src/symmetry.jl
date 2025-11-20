@@ -97,6 +97,7 @@ instantiate(qn::NumberConservation, ::JordanWignerOrdering) = qn
 
 function (qn::NumberConservation)(f)
     n = fermionnumber(f)
+    ismissing(qn.sectors) && return n
     n in qn.sectors ? n : missing
 end
 
@@ -117,7 +118,11 @@ struct ProductSymmetry{T} <: AbstractSymmetry
     symmetries::T
 end
 instantiate(qn::ProductSymmetry, labels) = prod(instantiate(sym, labels) for sym in qn.symmetries)
-(qn::ProductSymmetry)(fs) = map(sym -> sym(fs), qn.symmetries)
+function (qn::ProductSymmetry)(fs)
+    qns = map(sym -> sym(fs), qn.symmetries)
+    any(ismissing, qns) && return missing
+    return qns
+end
 Base.:*(sym1::AbstractSymmetry, sym2::AbstractSymmetry) = ProductSymmetry((sym1, sym2))
 Base.:*(sym1::AbstractSymmetry, sym2::ProductSymmetry) = ProductSymmetry((sym1, sym2.symmetries...))
 Base.:*(sym1::ProductSymmetry, sym2::AbstractSymmetry) = ProductSymmetry((sym1.symmetries..., sym2))
@@ -140,6 +145,7 @@ struct ParityConservation <: AbstractSymmetry
 end
 function (qn::ParityConservation)(fs)
     p = parity(fs)
+    # ismissing(qn.sectors) && return p
     p in qn.sectors ? p : missing
 end
 instantiate(qn::ParityConservation, labels) = qn
@@ -240,6 +246,7 @@ Base.show(io::IO, qn::NumberConservations) = print(io, "Number conservation for 
 function (qn::NumberConservations)(f::FockNumber)
     if length(qn.weights) == 1
         n = fermionnumber(f, only(qn.weights))
+        # ismissing(only(qn.sectors)) && return n
         return n in only(qn.sectors) ? n : missing
     else
         ns = map((m -> fermionnumber(f, m)), qn.weights)
