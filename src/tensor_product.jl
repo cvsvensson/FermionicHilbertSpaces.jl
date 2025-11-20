@@ -2,16 +2,27 @@
 """
     tensor_product(Hs)
 
-Compute the tensor_product product hilbert spaces `Hs`.
+Return the tensor product space of hilbert spaces `Hs`.
 """
 tensor_product(Hs::AbstractVector{<:AbstractHilbertSpace}) = foldl(tensor_product, Hs)
 tensor_product(Hs::Tuple) = foldl(tensor_product, Hs)
+tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace, Hs...) = tensor_product(tensor_product(H1, H2), Hs...)
 
 function tensor_product(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
     tensor_product_combine_basisstates(H1, H2)
 end
+tensor_product(H1::AbstractFockHilbertSpace, H2::AbstractFockHilbertSpace) = tensor_product_combine_basisstates(H1, H2)
 
-tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace) = tensor_product_combine_basisstates(H1, H2)
+tensor_product(H1::AbstractHilbertSpace) = H1
+tensor_product(H1::AbstractFockHilbertSpace, H2::AbstractHilbertSpace) = ProductSpace(H1, (H2,))
+tensor_product(H1::AbstractHilbertSpace, H2::AbstractFockHilbertSpace) = ProductSpace(H2, (H1,))
+tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace) = ProductSpace(nothing, (H1, H2))
+tensor_product(H::ProductSpace, H2::AbstractHilbertSpace) = ProductSpace(H.fock_space, (H.other_spaces..., H2))
+tensor_product(H1::AbstractHilbertSpace, H::ProductSpace) = ProductSpace(H.fock_space, (H1, H.other_spaces...))
+tensor_product(H1::AbstractFockHilbertSpace, H::ProductSpace) = ProductSpace(tensor_product(H1, H.fock_space), H.other_spaces)
+tensor_product(H::ProductSpace, H2::AbstractFockHilbertSpace) = ProductSpace(tensor_product(H.fock_space, H2), H.other_spaces)
+tensor_product(H::AbstractHilbertSpace, ::Nothing) = H
+tensor_product(::Nothing, H::AbstractHilbertSpace) = H
 
 function tensor_product_combine_basisstates(H1, H2)
     isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
@@ -80,32 +91,32 @@ kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, 
     @test !kron_sizes_compatible([I, I, m2], Hs)
     @test kron_sizes_compatible(vs, Hs)
     @test !kron_sizes_compatible(vs, reverse(Hs))
-    @test_throws ArgumentError fermionic_kron(ms, reverse(Hs))
+    @test_throws ArgumentError generalized_kron(ms, reverse(Hs))
     H12 = tensor_product(H1, H2)
     m_too_large = rand(dim(H12) + 1, dim(H12) + 1)
     @test_throws ArgumentError partial_trace(m_too_large, H12 => H1)
 end
 
 """
-    fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
+    generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
 
-Compute the fermionic tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the tensor_product product of `Hs`.
+Compute the tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the tensor_product product of `Hs`.
 """
-function fermionic_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); phase_factors=true)
+function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kwargs...)
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs)
-    extend_state = FockMapper(Hs, H)
+    extend_state = StateExtender(Hs, H)
     if N == 1
-        return fermionic_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state)
+        return generalized_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
     elseif N == 2
-        return fermionic_kron_mat!(mout, Tuple(ms), Tuple(Hs), H, extend_state, phase_factors)
+        return generalized_kron_mat!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
     end
     throw(ArgumentError("Only 1D or 2D arrays are supported"))
 end
 
-fermionic_kron(Hs::Pair; kwargs...) = (ms...) -> fermionic_kron(ms, Hs; kwargs...)
-fermionic_kron(ms, Hs::Pair; kwargs...) = fermionic_kron(ms, first(Hs), last(Hs); kwargs...)
+generalized_kron(Hs::Pair; kwargs...) = (ms...) -> generalized_kron(ms, Hs; kwargs...)
+generalized_kron(ms, Hs::Pair; kwargs...) = generalized_kron(ms, first(Hs), last(Hs); kwargs...)
 
 uniform_to_sparse_type(::Type{UniformScaling{T}}) where {T} = SparseMatrixCSC{T,Int}
 uniform_to_sparse_type(::Type{T}) where {T} = T
@@ -124,13 +135,13 @@ function allocate_tensor_product_result(ms, bs)
     end
 end
 
-tensor_product_iterator(m, ::AbstractFockHilbertSpace) = findall(!iszero, m)
-tensor_product_iterator(::UniformScaling, H::AbstractFockHilbertSpace) = diagind(I(length(basisstates(H))), IndexCartesian())
+tensor_product_iterator(m, ::AbstractHilbertSpace) = findall(!iszero, m)
+tensor_product_iterator(::UniformScaling, H::AbstractHilbertSpace) = diagind(I(length(basisstates(H))), IndexCartesian())
 
-function fermionic_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state, phase_factors::Bool=true) where T
+function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true) where T
     fill!(mout, zero(T))
-    ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
     phase_factors && (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
+    !phase_factors && (ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system")))
 
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     for I in inds
@@ -138,9 +149,9 @@ function fermionic_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::A
         I2 = map(i -> i[2], I)
         fock1 = map(basisstate, I1, Hs)
         fullfock1 = extend_state(fock1)
-        outind1 = state_index(fullfock1, H)
         fock2 = map(basisstate, I2, Hs)
         fullfock2 = extend_state(fock2)
+        outind1 = state_index(fullfock1, H)
         outind2 = state_index(fullfock2, H)
         s = phase_factors ? phase_factor_h(fullfock1, fullfock2, Hs, H) : 1
         v = one(T)
@@ -152,11 +163,9 @@ function fermionic_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::A
     return mout
 end
 
-
-function fermionic_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state, phase_factors::Bool=true) where T
-    ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
+function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state, phase_factors::Bool=true) where T
     phase_factors && (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
-
+    !phase_factors && (ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system")))
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     Is, Js, Vs = Int[], Int[], T[]
     for I in inds
@@ -180,7 +189,7 @@ function fermionic_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H::
     return mout .= sparse(Is, Js, Vs, size(mout, 1), size(mout, 2))
 end
 
-function fermionic_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state)
+function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors=true)
     fill!(mout, zero(eltype(mout)))
     U = embedding_unitary(Hs, H)
     dimlengths = map(length ∘ basisstates, Hs)
@@ -194,6 +203,7 @@ function fermionic_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertS
     end
     return U * mout
 end
+embedding_unitary(Hs, H::ProductSpace{Nothing}) = I
 
 """
     tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
@@ -201,19 +211,23 @@ end
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
 `kwargs` can be passed a bool `phase_factors` and a hilbert space `complement`.
 """
-function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
+function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractFockHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
     return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
 end
-tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
-tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
+tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
+tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
+
+function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::ProductSpace{Nothing}; kwargs...)
+    generalized_kron(ms, Hs, H; kwargs...)
+end
 
 @testitem "Fermionic tensor product properties" begin
     # Properties from J. Phys. A: Math. Theor. 54 (2021) 393001
     # Eq. 16
     using Random, Base.Iterators, LinearAlgebra
-    import FermionicHilbertSpaces: embedding_unitary, canonical_embedding, project_on_parity, project_on_parities
+    import FermionicHilbertSpaces: embedding_unitary, project_on_parity, project_on_parities
 
     Random.seed!(3)
     N = 8
@@ -231,13 +245,9 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     ops_fine = map(f_p_list -> [rand(ComplexF64, 2^length(f_p), 2^length(f_p)) for f_p in f_p_list], fine_partitions)
 
     # Associativity (Eq. 16)
-    rhs = fermionic_kron(reduce(vcat, ops_fine), reduce(vcat, Hs_fine), H)
-    finetensor_products = [fermionic_kron(ops_vec, cs_vec, c_rough) for (ops_vec, cs_vec, c_rough) in zip(ops_fine, Hs_fine, Hs_rough)]
-    lhs = fermionic_kron(finetensor_products, Hs_rough, H)
-    @test lhs ≈ rhs
-
-    rhs = kron(reduce(vcat, ops_fine), reduce(vcat, Hs_fine), H)
-    lhs = kron([kron(ops_vec, cs_vec, c_rough) for (ops_vec, cs_vec, c_rough) in zip(ops_fine, Hs_fine, Hs_rough)], Hs_rough, H)
+    rhs = generalized_kron(reduce(vcat, ops_fine), reduce(vcat, Hs_fine), H)
+    finetensor_products = [generalized_kron(ops_vec, cs_vec, c_rough) for (ops_vec, cs_vec, c_rough) in zip(ops_fine, Hs_fine, Hs_rough)]
+    lhs = generalized_kron(finetensor_products, Hs_rough, H)
     @test lhs ≈ rhs
 
     physical_ops_rough = [project_on_parity(op, H, 1) for (op, H) in zip(ops_rough, Hs_rough)]
@@ -245,7 +255,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     # Eq. 18
     As = ops_rough
     Bs = map(r_p -> rand(ComplexF64, 2^length(r_p), 2^length(r_p)), rough_partitions)
-    lhs = tr(fermionic_kron(As, Hs_rough, H)' * fermionic_kron(Bs, Hs_rough, H))
+    lhs = tr(generalized_kron(As, Hs_rough, H)' * generalized_kron(Bs, Hs_rough, H))
     rhs = mapreduce((A, B) -> tr(A' * B), *, As, Bs)
     @test lhs ≈ rhs
 
@@ -258,7 +268,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     modebases = [hilbert_space(j:j) for j in 1:N]
     lhs = prod(j -> embed(As_modes[j], modebases[j], H), 1:N)
     rhs_ordered_prod(X, basis) = mapreduce(j -> Matrix(embed(As_modes[j], modebases[j], basis)), *, X)
-    rhs = fermionic_kron([rhs_ordered_prod(X, H) for (X, H) in zip(ξ, ξbases)], ξbases, H)
+    rhs = generalized_kron([rhs_ordered_prod(X, H) for (X, H) in zip(ξ, ξbases)], ξbases, H)
     @test lhs ≈ rhs
 
     # Associativity (Eq. 21)
@@ -274,9 +284,9 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     Ux = embedding_unitary(rough_partitions, H)
     A = ops_rough[1]
     @test Ux !== I
-    @test embed(A, HX, H) ≈ Ux * canonical_embedding(A, HX, H) * Ux'
+    @test embed(A, HX, H) ≈ Ux * embed(A, HX, H; phase_factors=false) * Ux'
     # Eq. 93
-    @test tensor_product(physical_ops_rough, Hs_rough, H) ≈ Ux * kron(physical_ops_rough, Hs_rough, H) * Ux'
+    @test tensor_product(physical_ops_rough, Hs_rough, H) ≈ Ux * generalized_kron(physical_ops_rough, Hs_rough, H; phase_factors=false) * Ux'
 
     # Eq. 23
     X = rough_partitions[1]
@@ -285,7 +295,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     B = rand(ComplexF64, 2^length(X), 2^length(X))
     #Eq 5a and 5br are satisfied also when embedding matrices in larger subsystems
     @test embed(A, HX, H)' ≈ embed(A', HX, H)
-    @test canonical_embedding(A, HX, H) * canonical_embedding(B, HX, H) ≈ canonical_embedding(A * B, HX, H)
+    @test embed(A, HX, H; phase_factors=false) * embed(B, HX, H; phase_factors=false) ≈ embed(A * B, HX, H; phase_factors=false)
     for cmode in modebases
         #Eq 5bl
         local A = rand(ComplexF64, 2, 2)
@@ -302,10 +312,10 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     HX = Hs_rough[1]
     HXbar = hilbert_space(Xbar)
     corr = embed(A, HX, H)
-    @test corr ≈ fermionic_kron([A, I], [HX, HXbar], H) ≈ tensor_product([A, I], [HX, HXbar], H) ≈ tensor_product([I, A], [HXbar, HX], H)
+    @test corr ≈ generalized_kron([A, I], [HX, HXbar], H) ≈ tensor_product([A, I], [HX, HXbar], H) ≈ tensor_product([I, A], [HXbar, HX], H)
 
     # Eq. 32
-    @test tensor_product(As_modes, modebases, H) ≈ fermionic_kron(As_modes, modebases, H)
+    @test tensor_product(As_modes, modebases, H) ≈ generalized_kron(As_modes, modebases, H)
 
     ## Fermionic partial trace
 
@@ -322,7 +332,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     B = rand(ComplexF64, 2^length(Xbar), 2^length(Xbar))
     Hs = [HX, HXbar]
     ops = [A, B]
-    @test partial_trace(fermionic_kron(ops, Hs, H), H, HX) ≈ partial_trace(tensor_product(ops, Hs, H), H, HX) ≈ partial_trace(tensor_product(reverse(ops), reverse(Hs), H), H, HX) ≈ A * tr(B)
+    @test partial_trace(generalized_kron(ops, Hs, H), H, HX) ≈ partial_trace(tensor_product(ops, Hs, H), H, HX) ≈ partial_trace(tensor_product(reverse(ops), reverse(Hs), H), H, HX) ≈ A * tr(B)
 
     # Eq. 39
     A = rand(ComplexF64, 2^N, 2^N)
@@ -355,7 +365,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     Hs = reduce(vcat, Hs_fine)
     physical_ops = [project_on_parity(op, H, 1) for (op, H) in zip(ops, Hs)]
     # Eq. 93 implies that the unitary equivalence holds for the physical operators
-    @test svdvals(Matrix(tensor_product(physical_ops, Hs, H))) ≈ svdvals(Matrix(kron(physical_ops, Hs, H)))
+    @test svdvals(Matrix(tensor_product(physical_ops, Hs, H))) ≈ svdvals(Matrix(generalized_kron(physical_ops, Hs, H; phase_factors=false)))
     # However, it is more general. The unitary equivalence holds as long as all except at most one of the operators has a definite parity:
 
     numberops = map(numberoperator, Hs)
@@ -365,7 +375,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
         projected_ops = [project_on_parity(op, H, p) for (op, H, p) in zip(ops, Hs, parities)] # project on local parity
         opsk = [[projected_ops[1:k-1]..., ops[k], projected_ops[k+1:end]...] for k in 1:length(ops)] # switch out one operator of definite parity for an operator of indefinite parity
         embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
-        kron_prods = [kron(ops, Hs, H) for ops in opsk]
+        kron_prods = [generalized_kron(ops, Hs, H; phase_factors=false) for ops in opsk]
 
         @test all(svdvals(Matrix(op1)) ≈ svdvals(Matrix(op2)) for (op1, op2) in zip(embedding_prods, kron_prods))
     end
@@ -384,7 +394,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractFockHilbertSpace}; kwargs...) = (ms...)
     opsk = [[physical_ops[1:k-1]..., ops[k], physical_ops[k+1:end]...] for k in 1:length(ops)]
     unitaries = [Diagonal([phase(k, f) for f in basisstates(H)]) * Uemb for k in 1:length(opsk)]
     embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
-    kron_prods = [kron(ops, Hs, H) for ops in opsk]
+    kron_prods = [generalized_kron(ops, Hs, H; phase_factors=false) for ops in opsk]
     @test all(op1 ≈ U * op2 * U for (op1, op2, U) in zip(embedding_prods, kron_prods, unitaries))
 
 end
@@ -410,11 +420,11 @@ end
 
         #test that they keep sparsity
         @test typeof(tensor_product((b1[1], b2[2]), Hs => H3)) == typeof(b1[1])
-        @test typeof(kron((b1[1], b2[2]), Hs, H3)) == typeof(b1[1])
+        @test typeof(generalized_kron((b1[1], b2[2]), Hs, H3)) == typeof(b1[1])
         @test typeof(tensor_product((b1[1], I), Hs => H3)) == typeof(b1[1])
-        @test typeof(kron((b1[1], I), Hs, H3)) == typeof(b1[1])
+        @test typeof(generalized_kron((b1[1], I), Hs, H3)) == typeof(b1[1])
         @test tensor_product((I, I), Hs => H3) isa SparseMatrixCSC
-        @test kron((I, I), Hs, H3) isa SparseMatrixCSC
+        @test generalized_kron((I, I), Hs, H3) isa SparseMatrixCSC
 
         # Test zero-mode tensor_product
         H1 = hilbert_space(1:0, qn)
@@ -504,7 +514,7 @@ SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest..
     @test FermionicHilbertSpaces.fermionic_tensor_product_with_kron_and_maps((I(2), c2[2]), (p1, p1), p2) == c12[2]
 
     ms = (rand(2, 2), rand(2, 2))
-    @test FermionicHilbertSpaces.fermionic_tensor_product_with_kron_and_maps(ms, (p1, p1), p2) == fermionic_kron(ms, (H1, H2), H12)
+    @test FermionicHilbertSpaces.fermionic_tensor_product_with_kron_and_maps(ms, (p1, p1), p2) == generalized_kron(ms, (H1, H2), H12)
 end
 
 function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
@@ -517,39 +527,42 @@ end
 
 Compute the partial trace of a matrix `m`, leaving the subsystem defined by the basis `Hsub`.
 """
-function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=true, complement=simple_complementary_subsystem(H, Hsub)) where {T}
+function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub)) where {T}
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
+    if H == Hsub
+        return copy(m)
+    end
     mout = zeros(T, dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, phase_factors, complement)
 end
 
 partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = m -> partial_trace(m, Hs...; kwargs...)
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
+use_phase_factors(H::AbstractHilbertSpace) = false
+use_phase_factors(H::AbstractFockHilbertSpace) = true
 
 """
     partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors, complement)
 
 Compute the fermionic partial trace of a matrix `m` in basis `H`, leaving only the subsystems specified by `labels`. The result is stored in `mout`, and `Hsub` determines the ordering of the basis states.
 """
-function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement)
-    M = length(keys(H))
-    labels = collect(keys(Hsub))
+function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H))
     if phase_factors
-        consistent_ordering(labels, mode_ordering(H)) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
+        # labels = collect(keys(Hsub))
+        # consistent_ordering(labels, mode_ordering(H)) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
+        consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
     end
-    N = length(labels)
     fill!(mout, zero(eltype(mout)))
-    subfockstates = basisstates(Hsub)
-    barfockstates = basisstates(complement)
-    fm = StateExtender((Hsub, complement), H)
-    for f1 in subfockstates, f2 in subfockstates
-        s2 = phase_factors ? phase_factor_f(f1, f2, N) : 1
+    substates = basisstates(Hsub)
+    barstates = basisstates(complement)
+    for f1 in substates, f2 in substates
+        s2 = phase_factors ? phase_factor_f(f1, f2, length(keys(Hsub))) : 1
         I1 = state_index(f1, Hsub)
         I2 = state_index(f2, Hsub)
-        for fbar in barfockstates
-            fullf1 = fm((f1, fbar))
-            fullf2 = fm((f2, fbar))
-            s1 = phase_factors ? phase_factor_f(fullf1, fullf2, M) : 1
+        for fbar in barstates
+            fullf1 = extend_state((f1, fbar))
+            fullf2 = extend_state((f2, fbar))
+            s1 = phase_factors ? phase_factor_f(fullf1, fullf2, length(keys(H))) : 1
             s = s2 * s1
             J1 = state_index(fullf1, H)
             ismissing(J1) && continue

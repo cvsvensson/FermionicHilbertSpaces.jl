@@ -200,17 +200,6 @@ end
     @test length(basisstates(H)) == 2^3
 end
 
-# function allowed_qn(qn, sym::ProductSymmetry)
-#     for (q, sym) in zip(qn, sym.symmetries)
-#         allowed_qn(q, sym) || return false
-#     end
-#     return true
-# end
-# function allowed_qn(qn, sym::AbstractSymmetry)
-#     ismissing(sectors(sym)) && return true
-#     in(qn, sectors(sym)) || return false
-#     return true
-# end
 function instantiate_and_get_basisstates(jw::JordanWignerOrdering, _qn)
     qn = instantiate(_qn, jw)
     fs = basisstates(jw, qn)
@@ -296,18 +285,10 @@ default_fock_representation(N) = N < 64 ? UInt64 : BigInt
 instantiate(qn::UninstantiatedNumberConservations, jw::JordanWignerOrdering,) = instantiate(qn, keys(jw))
 function instantiate(qn::UninstantiatedNumberConservations, labels)
     N = length(labels)
-    # T = default_fock_representation(N)
     weights = map(f -> map(l -> f(l), labels), qn.weight_functions)
     NumberConservations(weights, qn.sectors, N)
 end
 basisstates(jw::JordanWignerOrdering, qn::NumberConservations, ::Type{F}=FockNumber) where F = sort!(map(F, generate_states(qn.weights, qn.sectors, length(jw))))
-# function allowed_qn(qn, sym::NumberConservations)
-#     for (q, sector) in zip(qn, sym.sectors)
-#         ismissing(sector) && continue
-#         in(q, sector) || return false
-#     end
-#     return true
-# end
 
 @testitem "Symmetry basisstates" begin
     import FermionicHilbertSpaces: instantiate_and_get_basisstates, fermionnumber, number_conservation

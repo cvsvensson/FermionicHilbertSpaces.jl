@@ -28,11 +28,12 @@ function consistent_ordering(subsystem, jw::JordanWignerOrdering)::Bool
     end
     return true
 end
-function ispartition(partition, jw::JordanWignerOrdering)
+
+ispartition(Hs, H::AbstractHilbertSpace) = ispartition(map(keys, Hs), keys(H))
+function ispartition(partition, labels)
     modes = union(partition...)
-    length(jw) == length(modes) || return false
-    injw = Base.Fix1(haskey, jw.ordering)
-    all(injw, modes) || return false
+    length(labels) == length(modes) || return false
+    all(in(labels), modes) || return false
     return true
 end
 function isorderedpartition(partition, jw::JordanWignerOrdering)
@@ -42,15 +43,26 @@ function isorderedpartition(partition, jw::JordanWignerOrdering)
     end
     return true
 end
+isorderedpartition(Hs, H::AbstractHilbertSpace) = isorderedpartition(flat_fock_spaces(Hs), fock_part(H)) && ispartition(Hs, H)
+ispartition(::Any, ::Nothing) = true
+isorderedpartition(::Any, ::Nothing) = true
 function isorderedsubsystem(subsystem, jw::JordanWignerOrdering)
     consistent_ordering(subsystem, jw) || return false
     issubsystem(subsystem, jw) || return false
     return true
 end
+isorderedsubsystem(H::AbstractHilbertSpace, H2::AbstractHilbertSpace) = isorderedsubsystem(fock_part(H), fock_part(H2)) && issubsystem(H, H2)
+isorderedsubsystem(::Nothing, ::Nothing) = true
+isorderedsubsystem(::Nothing, ::AbstractHilbertSpace) = true
 function issubsystem(subsystem, jw::JordanWignerOrdering)
     all(in(s, jw) for s in subsystem) || return false
     return true
 end
+function issubsystem(sublabels, labels)
+    all(in(s, labels) for s in sublabels) || return false
+    return true
+end
+issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = issubsystem(keys(Hsub), keys(H))
 
 @testitem "partition" begin
     import FermionicHilbertSpaces: ispartition, isorderedpartition
@@ -91,8 +103,9 @@ end
     @test isorderedpart([[2], [1, 3]])
 end
 
-phase_factor_h(f1, f2, Hs, H::AbstractFockHilbertSpace) = phase_factor_h(f1, f2, map(modes, Hs), H.jw)
-function phase_factor_h(f1, f2, partition, jw::JordanWignerOrdering)::Int
+
+phase_factor_h(f1, f2, Hs, H::AbstractFockHilbertSpace) = phase_factor_h(f1, f2, map(modes, flat_fock_spaces(Hs)), H.jw)
+function phase_factor_h(f1::AbstractFockState, f2::AbstractFockState, partition, jw::JordanWignerOrdering)::Int
     #(120b)
     phase = 1
     for X in partition

@@ -1,3 +1,14 @@
+struct GenericHilbertSpace{L,S} <: AbstractHilbertSpace
+    label::L
+    basisstates::S
+end
+Base.:(==)(H1::GenericHilbertSpace, H2::GenericHilbertSpace) = H1 === H2 || (H1.label == H2.label && H1.basisstates == H2.basisstates)
+Base.hash(H::GenericHilbertSpace, h::UInt) = hash((H.label, H.basisstates), h)
+basisstates(H::GenericHilbertSpace) = H.basisstates
+Base.keys(H::GenericHilbertSpace) = (H.label,)
+state_index(state, H::GenericHilbertSpace) = findfirst(==(state), H.basisstates)
+
+
 function Base.show(io::IO, H::Htype) where Htype<:AbstractFockHilbertSpace
     d = dim(H)
     N = length(keys(H))
@@ -10,17 +21,11 @@ Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 dim(H::AbstractHilbertSpace) = Int(length(basisstates(H)))
 isorderedpartition(Hs, H::AbstractFockHilbertSpace) = isorderedpartition(map(modes, Hs), H.jw)
 isorderedsubsystem(Hsub::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = isorderedsubsystem(Hsub.jw, H.jw)
-isorderedsubsystem(Hsub::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = isorderedsubsystem(Hsub.jw, jw)
-issubsystem(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = issubsystem(subsystem.jw, jw)
-issubsystem(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = issubsystem(subsystem.jw, H.jw)
-consistent_ordering(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = consistent_ordering(subsystem.jw, jw)
 consistent_ordering(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = consistent_ordering(subsystem.jw, H.jw)
 focknbr_from_site_labels(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(H), jw)
 ispartition(Hs, H::AbstractFockHilbertSpace) = ispartition(map(modes, Hs), H.jw)
 
 mode_ordering(H::AbstractFockHilbertSpace) = H.jw
-# mode_ordering(jw::JordanWignerOrdering) = jw
-# mode_ordering(v::AbstractVector) = JordanWignerOrdering(v)
 modes(H::AbstractFockHilbertSpace) = keys(H)
 modes(jw::JordanWignerOrdering) = jw.ordering.keys
 modes(v::AbstractVector) = v
@@ -172,18 +177,16 @@ hilbert_space(labels, qn::AbstractSymmetry, basisstates) = SymmetricFockHilbertS
     @test issubsystem(Hsub1, H)
     @test issubsystem(Hsub2, H)
     @test !issubsystem(Hsub5, H)
-    @test issubsystem(Hsub1, H.jw)
-    @test !issubsystem(Hsub5, H.jw)
 
     # consistent_ordering
     @test consistent_ordering(Hsub1, H)
-    @test consistent_ordering(Hsub2, H.jw)
+    # @test consistent_ordering(Hsub2, H.jw)
     @test !consistent_ordering(Hsub3, H)
-    @test !consistent_ordering(Hsub4, H.jw)
+    # @test !consistent_ordering(Hsub4, H.jw)
 
     # isorderedsubsystem
     @test isorderedsubsystem(Hsub1, H)
-    @test isorderedsubsystem(Hsub2, H.jw)
+    # @test isorderedsubsystem(Hsub2, H.jw)
     @test !isorderedsubsystem(Hsub3, H)
     @test !isorderedsubsystem(Hsub4, H)
     @test !isorderedsubsystem(Hsub5, H)
@@ -234,10 +237,6 @@ function substate(siteindices, f::FockNumber)
     return focknbr_from_bits(subbits)
 end
 
-# complementary_subsystem(H::SimpleFockHilbertSpace, Hsub::AbstractFockHilbertSpace) = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))))
-# function complementary_subsystem(H::SingleParticleHilbertSpace, Hsub::SingleParticleHilbertSpace)
-#     single_particle_hilbert_space(setdiff(collect(keys(H)), collect(keys(Hsub))))
-# end
 statetype(::SimpleFockHilbertSpace{F}) where F = F
 statetype(::FockHilbertSpace{<:Any,<:V}) where V = eltype(V)
 statetype(::SymmetricFockHilbertSpace{<:Any,S}) where S = statetype(S)
@@ -248,15 +247,20 @@ function simple_complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::Abstr
     SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))), F)
 end
 function complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace)
-    F = promote_type(statetype(H), statetype(Hsub))
-    _Hbar = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))), F)
-    split = StateSplitter(H, (Hsub, _Hbar))
-    states = unique!(map(basisstates(H)) do f
-        fsub, fbar = split(f)
-        fbar
-    end)
-    FockHilbertSpace(modes(_Hbar), states)
+    if dim(H) / dim(Hsub) < 2^(length(keys(H)) - length(keys(Hsub))) / 2 # roughly check if we gain anything by constructing the full complementary space
+        F = promote_type(statetype(H), statetype(Hsub))
+        _Hbar = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))), F)
+        split = StateSplitter(H, (Hsub, _Hbar))
+        Hstates = basisstates(H)
+        states = [fbar for (fsub, fbar) in Iterators.map(split, Hstates) if !ismissing(state_index(fsub, Hsub))]
+        unique!(states)
+        FockHilbertSpace(modes(_Hbar), states)
+    else
+        simple_complementary_subsystem(H, Hsub)
+    end
 end
+complementary_subsystem(H::AbstractFockHilbertSpace, ::Nothing) = H
+complementary_subsystem(::Nothing, Hsub::AbstractHilbertSpace) = nothing
 
 @testitem "subregion function" begin
     using FermionicHilbertSpaces

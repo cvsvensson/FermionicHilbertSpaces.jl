@@ -10,13 +10,14 @@ using BitPermutations
 using TupleTools
 using NonCommutativeProducts
 import NonCommutativeProducts: @nc_eager, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
+import UUIDs: uuid4
 
 
 export FockNumber, JordanWignerOrdering, hc, basisstates, dim
 export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subregion
 export parityoperator, numberoperator, fermions, majoranas, matrix_representation
 
-export partial_trace, fermionic_kron, tensor_product, embed, extend
+export partial_trace, generalized_kron, tensor_product, embed, extend
 export @fermions, @majoranas
 export number_conservation, NoSymmetry, ParityConservation, NumberConservation
 export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
@@ -45,6 +46,7 @@ include("fixednumberfock.jl")
 include("phase_factors.jl")
 include("symmetry.jl")
 include("hilbert_space.jl")
+include("product_space.jl")
 include("operators.jl")
 include("tensor_product.jl")
 include("embedding.jl")
@@ -62,6 +64,10 @@ include("majorana_hilbert_space.jl")
 include("bdg.jl")
 
 include("sectors.jl")
+
+include("spin.jl")
+
+
 import PrecompileTools
 
 PrecompileTools.@compile_workload begin
