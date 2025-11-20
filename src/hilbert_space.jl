@@ -251,10 +251,9 @@ function complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFock
         F = promote_type(statetype(H), statetype(Hsub))
         _Hbar = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))), F)
         split = StateSplitter(H, (Hsub, _Hbar))
-        states = unique!(map(basisstates(H)) do f
-            fsub, fbar = split(f)
-            fbar
-        end)
+        Hstates = basisstates(H)
+        states = [fbar for (fsub, fbar) in Iterators.map(split, Hstates) if !ismissing(state_index(fsub, Hsub))]
+        unique!(states)
         FockHilbertSpace(modes(_Hbar), states)
     else
         simple_complementary_subsystem(H, Hsub)
