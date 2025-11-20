@@ -64,17 +64,11 @@ e[indices(Heven, H)] = evenvec
 # Then, we can construct the ground state Majorana operators as
 # γ = o * e' + hc
 # γ̃ = 1im * o * e' + hc
-# but that takes a lot of memory for large systems. Let's make a quick struct representing a rank-1 matrix and use that instead.
-struct Rank1Matrix{T} <: AbstractMatrix{T}
-    vec1::Vector{T}
-    vec2::Vector{T}
-end
-Base.getindex(m::Rank1Matrix, i::Int, j::Int) = m.vec1[i] * conj(m.vec2[j])
-Base.size(m::Rank1Matrix) = (length(m.vec1), length(m.vec2))
-
-oe = Rank1Matrix(o, e)
-ee = Rank1Matrix(e, e)
-oo = Rank1Matrix(o, o)
+# but that takes a lot of memory for large systems. We can use Kronecker.jl to avoid this
+using Kronecker
+oe = o ⊗ e'
+ee = e ⊗ e'
+oo = o ⊗ o'
 
 # Now we can compute the reduction of the Majorana operators to each mode.
 Hmodes = [hilbert_space(i:i) for i in 1:N]
