@@ -6,6 +6,19 @@ A symmetry type indicating no symmetry constraints.
 """
 struct NoSymmetry <: AbstractSymmetry end
 
+""" 
+    FockSymmetryFunction{F} <: AbstractSymmetry
+
+FockSymmetryFunction represents a symmetry defined by a function that maps Fock states to quantum numbers. The function should return 'missing' for states which should be discarded from the hilbert space.
+"""
+struct FockSymmetryFunction{F} <: AbstractSymmetry
+    qn::F
+end
+focksymmetry(f) = FockSymmetryFunction(f)
+instantiate_and_get_basisstates(jw::JordanWignerOrdering, sym::FockSymmetryFunction) = focksymmetry(basisstates(jw, NoSymmetry()), sym.qn)
+instantiate(sym::FockSymmetryFunction, ::JordanWignerOrdering) = sym
+(qn::FockSymmetryFunction)(f) = qn.qn(f)
+
 """
     struct FockSymmetry{IF,FI,QN,QNfunc} <: AbstractSymmetry
 
@@ -246,16 +259,15 @@ Base.show(io::IO, qn::NumberConservations) = print(io, "Number conservation for 
 function (qn::NumberConservations)(f::FockNumber)
     if length(qn.weights) == 1
         n = fermionnumber(f, only(qn.weights))
-        # ismissing(only(qn.sectors)) && return n
         return n in only(qn.sectors) ? n : missing
     else
-        ns = map((m -> fermionnumber(f, m)), qn.weights)
-        for (n, sector) in zip(ns, qn.sectors)
-            in(n, sector) || return missing
+        ns = map(qn.weights, qn.sectors) do w, sec
+            n = fermionnumber(f, w)
+            !in(n, sec) && return missing
+            n
         end
         return ns
     end
-    # n = length(qn.weights) == 1 ? fermionnumber(f, only(qn.weights)) : map((m -> fermionnumber(f, m)), qn.weights)
 end
 (qn::NumberConservations)(f::Integer) = qn(FockNumber(f))
 
@@ -394,6 +406,7 @@ end
     @test size(matrix_representation(hopping_symham, H; projection=true), 1) == dim(H)
 end
 
+symmetrize(H::AbstractFockHilbertSpace, f::Function) = symmetrize(H, FockSymmetryFunction(f))
 function symmetrize(H::AbstractFockHilbertSpace, qn::AbstractSymmetry)
     qn_instantiated = instantiate(qn, H.jw)
     sym = focksymmetry(basisstates(H), qn_instantiated)
@@ -408,4 +421,9 @@ end
     @test all(fermionnumber(f) == 2 for f in basisstates(H_sym))
     @test dim(H_sym) == binomial(length(labels), 2)
     @test H_sym == hilbert_space(labels, number_conservation(2))
+
+    qn = FermionicHilbertSpaces.focksymmetry(f -> fermionnumber(f) == 1 ? :a : missing)
+    H2 = symmetrize(H, qn)
+    @test H2 == symmetrize(H, qn.qn)
+    @test all(fermionnumber(f) == 1 for f in basisstates(H2))
 end
