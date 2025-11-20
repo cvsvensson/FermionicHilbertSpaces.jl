@@ -138,10 +138,10 @@ end
 tensor_product_iterator(m, ::AbstractHilbertSpace) = findall(!iszero, m)
 tensor_product_iterator(::UniformScaling, H::AbstractHilbertSpace) = diagind(I(length(basisstates(H))), IndexCartesian())
 
-function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors=true) where T
+function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true) where T
     fill!(mout, zero(T))
-    # ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
-    (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
+    phase_factors && isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system"))
+    !phase_factors && ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
 
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     for I in inds
@@ -161,6 +161,32 @@ function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H:
         mout[outind1, outind2] += v * s
     end
     return mout
+end
+
+function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state, phase_factors::Bool=true) where T
+    phase_factors && (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
+    !phase_factors && ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system"))
+    inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
+    Is, Js, Vs = Int[], Int[], T[]
+    for I in inds
+        I1 = map(i -> i[1], I)
+        I2 = map(i -> i[2], I)
+        fock1 = map(basisstate, I1, Hs)
+        fullfock1 = extend_state(fock1)
+        outind1 = state_index(fullfock1, H)
+        fock2 = map(basisstate, I2, Hs)
+        fullfock2 = extend_state(fock2)
+        outind2 = state_index(fullfock2, H)
+        s = phase_factors ? phase_factor_h(fullfock1, fullfock2, Hs, H) : 1
+        v = one(T)
+        for (m, i1, i2) in zip(ms, I1, I2)
+            v *= m[i1, i2]
+        end
+        push!(Is, outind1)
+        push!(Js, outind2)
+        push!(Vs, v * s)
+    end
+    return mout .= sparse(Is, Js, Vs, size(mout, 1), size(mout, 2))
 end
 
 function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors=true)
