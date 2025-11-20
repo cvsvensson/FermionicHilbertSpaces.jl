@@ -39,9 +39,10 @@ using TestItemRunner
     using LinearMaps
     d = dim(H)
     d1 = dim(H1)
-    ptmap = LinearMap(rhovec -> vec(partial_trace(reshape(rhovec, (d, d)), H, H1)), d1^2, d^2)
+    ptmap = Matrix(LinearMap(rhovec -> vec(partial_trace(reshape(rhovec, (d, d)), H, H1)), d1^2, d^2))
     embeddingmap = LinearMap(rhovec -> vec(embed(reshape(rhovec, (d1, d1)), H1, H)), d^2, d1^2)
-    @test Matrix(ptmap) ≈ Matrix(embeddingmap)'
+    @test ptmap ≈ Matrix(embeddingmap)'
+    @test ptmap ≈ FermionicHilbertSpaces.partial_trace_map(H, H1)
 
     H = hilbert_space(Base.product(1:2, (:a, :b)))
     Hparity = hilbert_space(Base.product(1:2, (:a, :b)), ParityConservation())
@@ -73,15 +74,16 @@ end
 
 @testitem "Fermionic partial trace" begin
     using LinearAlgebra, LinearMaps
-    
+
     function test_adjoint(Hsub, H)
         pt = partial_trace(H => Hsub)
         emb = embed(Hsub => H)
         dsub = dim(Hsub)
         d = dim(H)
-        ptmap = LinearMap(rhovec -> vec(pt(reshape(rhovec, (d, d)))), dsub^2, d^2)
+        ptmap = Matrix(LinearMap(rhovec -> vec(pt(reshape(rhovec, (d, d)))), dsub^2, d^2))
         embeddingmap = LinearMap(rhovec -> vec(emb(reshape(rhovec, (dsub, dsub)))), d^2, dsub^2)
-        @test Matrix(ptmap) ≈ Matrix(embeddingmap)'
+        @test ptmap ≈ Matrix(embeddingmap)'
+        @test ptmap ≈ FermionicHilbertSpaces.partial_trace_map(H, Hsub)
     end
     qns = [NoSymmetry(), ParityConservation(), number_conservation()]
     for qn in qns

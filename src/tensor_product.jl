@@ -548,8 +548,6 @@ Compute the fermionic partial trace of a matrix `m` in basis `H`, leaving only t
 """
 function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H))
     if phase_factors
-        # labels = collect(keys(Hsub))
-        # consistent_ordering(labels, mode_ordering(H)) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
         consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
     end
     fill!(mout, zero(eltype(mout)))
@@ -572,6 +570,38 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::
         end
     end
     return mout
+end
+
+function partial_trace_map(H, Hsub; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub))
+    partial_trace_map(H, Hsub, phase_factors, complement)
+end
+function partial_trace_map(H, Hsub, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H)) where T
+    substates = basisstates(Hsub)
+    barstates = basisstates(complement)
+    indI = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
+    indJ = LinearIndices((1:dim(H), 1:dim(H)))
+    Is = Int[]
+    Js = Int[]
+    Vs = Int[]
+    for f1 in substates, f2 in substates
+        s2 = phase_factors ? phase_factor_f(f1, f2, length(keys(Hsub))) : 1
+        I1 = state_index(f1, Hsub)
+        I2 = state_index(f2, Hsub)
+        for fbar in barstates
+            fullf1 = extend_state((f1, fbar))
+            fullf2 = extend_state((f2, fbar))
+            s1 = phase_factors ? phase_factor_f(fullf1, fullf2, length(keys(H))) : 1
+            s = s2 * s1
+            J1 = state_index(fullf1, H)
+            ismissing(J1) && continue
+            J2 = state_index(fullf2, H)
+            ismissing(J2) && continue
+            push!(Is, indI[I1, I2])
+            push!(Js, indJ[J1, J2])
+            push!(Vs, s)
+        end
+    end
+    return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
 
 function project_on_parities(op::AbstractMatrix, H, Hs, parities)
@@ -616,4 +646,24 @@ end
         local op = tensor_product(projected_ops, Hs, H)
         @test op ≈ project_on_parities(op, H, Hs, parities)
     end
+end
+
+@testitem "Partial trace map" begin
+    using FermionicHilbertSpaces: partial_trace_map
+    H = hilbert_space(1:4)
+    Hsub = hilbert_space([2, 4])
+    m = rand(ComplexF64, dim(H), dim(H))
+
+    msub = partial_trace(m, H => Hsub)
+    pt = partial_trace_map(H, Hsub)
+    msub_map = pt * reshape(m, (dim(H)^2))
+    @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
+
+    H = hilbert_space(1:4, number_conservation(2))
+    Hsub = subregion([1, 3, 4], H)
+    m = rand(ComplexF64, dim(H), dim(H))
+    msub = partial_trace(m, H => Hsub)
+    pt = partial_trace_map(H, Hsub)
+    msub_map = pt * reshape(m, (dim(H)^2))
+    @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
 end
