@@ -1,8 +1,8 @@
 module FermionicHilbertSpaces
 
 using LinearAlgebra, SparseArrays
-using SplitApplyCombine: group, sortkeys!
-using Dictionaries: dictionary, Dictionary
+using FlexiGroups: group
+import Dictionaries: dictionary, Dictionary, sortkeys!, getindices
 import FillArrays: Zeros
 import OrderedCollections: OrderedDict
 using TestItems
@@ -21,18 +21,6 @@ export partial_trace, generalized_kron, tensor_product, embed, extend
 export @fermions, @majoranas
 export number_conservation, NoSymmetry, ParityConservation, NumberConservation
 export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
-
-## Symbolics extension
-"""
-    fermion_to_majorana(expr)
-Convert symbolic fermions to symbolic majoranas.
-"""
-function fermion_to_majorana end
-"""
-    majorana_to_fermion(expr)
-Convert symbolic majoranas to symbolic fermions.
-"""
-function majorana_to_fermion end
 
 ## Some types
 abstract type AbstractHilbertSpace end

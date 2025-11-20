@@ -67,6 +67,7 @@ parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
 
+occupation(f::AbstractFockState, label, H::AbstractFockHilbertSpace) = _bit(f, getindex(mode_ordering(H), label))
 fermionnumber(f::FockNumber{<:Integer}, mask) = count_weighted_ones(f.f, mask)
 count_weighted_ones(x, mask::Integer) = count_ones(x & mask)
 count_weighted_ones(x, weights::Union{Vector,Tuple}) = sum(w for (i, w) in enumerate(weights) if _bit(x, i))

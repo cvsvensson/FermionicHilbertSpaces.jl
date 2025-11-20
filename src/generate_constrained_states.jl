@@ -13,11 +13,14 @@ function generate_states(masks::Union{Vector{<:K},NTuple{N,<:K}}, allowed_ones, 
     any(rl > max_bits for rl in region_lengths) && error("Constraint mask exceeds max_bits")
     filled_ones = [0 for _ in masks]
     filled_zeros = [0 for _ in masks]
-    remaining_bits = collect(region_lengths)
+    remaining_bits::Vector{Int} = collect(region_lengths)
     states = T[]
     num = zero(T)
     if max_bits == 0
         return [T(0)]
+    end
+    if max_bits < 0
+        error("max_bits must be non-negative")
     end
     bit_position = 1
     # Build dependency mapping
@@ -172,6 +175,9 @@ function generate_states_weighted_constraints(weights, allowed_sums, max_bits, T
     num = zero(T)
     if max_bits == 0
         return [T(0)]
+    end
+    if max_bits < 0
+        error("max_bits must be non-negative")
     end
     bit_position = 1
 
