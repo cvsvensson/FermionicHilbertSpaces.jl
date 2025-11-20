@@ -6,10 +6,23 @@ A symmetry type indicating no symmetry constraints.
 """
 struct NoSymmetry <: AbstractSymmetry end
 
+""" 
+    FockSymmetryFunction{F} <: AbstractSymmetry
+
+FockSymmetryFunction represents a symmetry defined by a function that maps Fock states to quantum numbers. The function should return 'missing' for states which should be discarded from the hilbert space.
+"""
+struct FockSymmetryFunction{F} <: AbstractSymmetry
+    qn::F
+end
+focksymmetry(f) = FockSymmetryFunction(f)
+instantiate_and_get_basisstates(jw::JordanWignerOrdering, sym::FockSymmetryFunction) = focksymmetry(basisstates(jw, NoSymmetry()), sym.qn)
+instantiate(sym::FockSymmetryFunction, ::JordanWignerOrdering) = sym
+(qn::FockSymmetryFunction)(f) = qn.qn(f)
+
 """
     struct FockSymmetry{IF,FI,QN,QNfunc} <: AbstractSymmetry
 
-FockSymmetry represents a symmetry that is diagonal in fock space, i.e. particle number conservation, parity, spin consvervation.
+FockSymmetry represents a symmetry that is diagonal in fock space, i.e. particle number conservation, parity, spin conservation.
 
 ## Fields
 - `basisstates::IF`: A vector of Fock numbers, which are integers representing the occupation of each mode.
@@ -17,15 +30,14 @@ FockSymmetry represents a symmetry that is diagonal in fock space, i.e. particle
 - `qntofockstates::Dictionary{QN,Vector{Int}}`: A dictionary mapping quantum numbers to Fock states.
 - `conserved_quantity::QNfunc`: A function that computes the conserved quantity from a fock number.
 """
-struct FockSymmetry{IF,FI,QN,I,QNfunc} <: AbstractSymmetry
+struct FockSymmetry{IF,FI,QN,V,QNfunc} <: AbstractSymmetry
     basisstates::IF
     state_indexdict::FI
-    qntofockstates::Dictionary{QN,Vector{FockNumber{I}}}
+    qntofockstates::Dictionary{QN,V}
     conserved_quantity::QNfunc
 end
 
 Base.:(==)(sym1::FockSymmetry, sym2::FockSymmetry) = sym1.basisstates == sym2.basisstates && sym1.state_indexdict == sym2.state_indexdict && sym1.qntofockstates == sym2.qntofockstates
-
 
 """
     focksymmetry(basisstates, qn)
@@ -37,9 +49,12 @@ Constructs a `FockSymmetry` object that represents the symmetry of a many-body s
 - `qn`: A function that takes an integer representing a fock state and returns corresponding quantum number.
 """
 function focksymmetry(basisstates, qn)
-    qntofockstates = group(f -> qn(f), basisstates)
+    _qntofockstates = group(f -> qn(f), basisstates)
+    inds = keys(_qntofockstates)
+    filt_inds = (filter(!ismissing, inds))
+    qntofockstates = getindices(_qntofockstates, filt_inds)
     sortkeys!(qntofockstates)
-    ordered_fockstates = vcat(qntofockstates...)
+    ordered_fockstates = reduce(vcat, qntofockstates)
     state_indexdict = Dictionary(ordered_fockstates, 1:length(ordered_fockstates))
     FockSymmetry(ordered_fockstates, state_indexdict, qntofockstates, qn)
 end
@@ -93,7 +108,11 @@ sectors(qn::NumberConservation) = qn.sectors
 
 instantiate(qn::NumberConservation, ::JordanWignerOrdering) = qn
 
-(qn::NumberConservation)(f) = fermionnumber(f)
+function (qn::NumberConservation)(f)
+    n = fermionnumber(f)
+    ismissing(qn.sectors) && return n
+    n in qn.sectors ? n : missing
+end
 
 @testitem "ConservedFermions" begin
     import FermionicHilbertSpaces: number_conservation
@@ -112,7 +131,11 @@ struct ProductSymmetry{T} <: AbstractSymmetry
     symmetries::T
 end
 instantiate(qn::ProductSymmetry, labels) = prod(instantiate(sym, labels) for sym in qn.symmetries)
-(qn::ProductSymmetry)(fs) = map(sym -> sym(fs), qn.symmetries)
+function (qn::ProductSymmetry)(fs)
+    qns = map(sym -> sym(fs), qn.symmetries)
+    any(ismissing, qns) && return missing
+    return qns
+end
 Base.:*(sym1::AbstractSymmetry, sym2::AbstractSymmetry) = ProductSymmetry((sym1, sym2))
 Base.:*(sym1::AbstractSymmetry, sym2::ProductSymmetry) = ProductSymmetry((sym1, sym2.symmetries...))
 Base.:*(sym1::ProductSymmetry, sym2::AbstractSymmetry) = ProductSymmetry((sym1.symmetries..., sym2))
@@ -133,7 +156,11 @@ struct ParityConservation <: AbstractSymmetry
         new(sectorvec)
     end
 end
-(qn::ParityConservation)(fs) = parity(fs)
+function (qn::ParityConservation)(fs)
+    p = parity(fs)
+    # ismissing(qn.sectors) && return p
+    p in qn.sectors ? p : missing
+end
 instantiate(qn::ParityConservation, labels) = qn
 ParityConservation() = ParityConservation([-1, 1])
 sectors(qn::ParityConservation) = qn.sectors
@@ -173,17 +200,17 @@ end
     @test length(basisstates(H)) == 2^3
 end
 
-function allowed_qn(qn, sym::ProductSymmetry)
-    for (q, sym) in zip(qn, sym.symmetries)
-        allowed_qn(q, sym) || return false
-    end
-    return true
-end
-function allowed_qn(qn, sym::AbstractSymmetry)
-    ismissing(sectors(sym)) && return true
-    in(qn, sectors(sym)) || return false
-    return true
-end
+# function allowed_qn(qn, sym::ProductSymmetry)
+#     for (q, sym) in zip(qn, sym.symmetries)
+#         allowed_qn(q, sym) || return false
+#     end
+#     return true
+# end
+# function allowed_qn(qn, sym::AbstractSymmetry)
+#     ismissing(sectors(sym)) && return true
+#     in(qn, sectors(sym)) || return false
+#     return true
+# end
 function instantiate_and_get_basisstates(jw::JordanWignerOrdering, _qn)
     qn = instantiate(_qn, jw)
     fs = basisstates(jw, qn)
@@ -205,7 +232,7 @@ function basisstates(jw::JordanWignerOrdering, qn::NumberConservation)
 end
 
 function basisstates(jw::JordanWignerOrdering, sym::ProductSymmetry)
-    filter!(f -> allowed_qn(sym(f), sym), basisstates(jw, first(sym.symmetries)))
+    filter!(f -> !ismissing(sym(f)), basisstates(jw, first(sym.symmetries)))
 end
 
 struct UninstantiatedNumberConservations{F,S} <: AbstractSymmetry
@@ -229,9 +256,20 @@ struct NumberConservations{M,S} <: AbstractSymmetry
 end
 instantiate(qn::NumberConservations, ::JordanWignerOrdering) = qn
 Base.show(io::IO, qn::NumberConservations) = print(io, "Number conservation for ", length(qn.weights), " subsets")
-(qn::NumberConservations)(f::FockNumber) = length(qn.weights) == 1 ? fermionnumber(f, only(qn.weights)) : map((m -> fermionnumber(f, m)), qn.weights)
-(qn::NumberConservations)(f::Integer) = length(qn.weights) == 1 ? count_weighted_ones(f, only(qn.weights)) : map((m -> count_weighted_ones(f, m)), qn.weights)
-
+function (qn::NumberConservations)(f::FockNumber)
+    if length(qn.weights) == 1
+        n = fermionnumber(f, only(qn.weights))
+        return n in only(qn.sectors) ? n : missing
+    else
+        ns = map(qn.weights, qn.sectors) do w, sec
+            n = fermionnumber(f, w)
+            !in(n, sec) && return missing
+            n
+        end
+        return ns
+    end
+end
+(qn::NumberConservations)(f::Integer) = qn(FockNumber(f))
 
 """
     number_conservation(sectors=missing, weight_function=label -> true)
@@ -263,13 +301,13 @@ function instantiate(qn::UninstantiatedNumberConservations, labels)
     NumberConservations(weights, qn.sectors, N)
 end
 basisstates(jw::JordanWignerOrdering, qn::NumberConservations, ::Type{F}=FockNumber) where F = sort!(map(F, generate_states(qn.weights, qn.sectors, length(jw))))
-function allowed_qn(qn, sym::NumberConservations)
-    for (q, sector) in zip(qn, sym.sectors)
-        ismissing(sector) && continue
-        in(q, sector) || return false
-    end
-    return true
-end
+# function allowed_qn(qn, sym::NumberConservations)
+#     for (q, sector) in zip(qn, sym.sectors)
+#         ismissing(sector) && continue
+#         in(q, sector) || return false
+#     end
+#     return true
+# end
 
 @testitem "Symmetry basisstates" begin
     import FermionicHilbertSpaces: instantiate_and_get_basisstates, fermionnumber, number_conservation
@@ -366,4 +404,26 @@ end
     end
     @test_throws KeyError matrix_representation(hopping_symham, H)
     @test size(matrix_representation(hopping_symham, H; projection=true), 1) == dim(H)
+end
+
+symmetrize(H::AbstractFockHilbertSpace, f::Function) = symmetrize(H, FockSymmetryFunction(f))
+function symmetrize(H::AbstractFockHilbertSpace, qn::AbstractSymmetry)
+    qn_instantiated = instantiate(qn, H.jw)
+    sym = focksymmetry(basisstates(H), qn_instantiated)
+    hilbert_space(H.jw, sym)
+end
+
+@testitem "symmetrize" begin
+    import FermionicHilbertSpaces: symmetrize, number_conservation, fermionnumber
+    labels = 1:4
+    H = hilbert_space(labels)
+    H_sym = symmetrize(H, number_conservation(2))
+    @test all(fermionnumber(f) == 2 for f in basisstates(H_sym))
+    @test dim(H_sym) == binomial(length(labels), 2)
+    @test H_sym == hilbert_space(labels, number_conservation(2))
+
+    qn = FermionicHilbertSpaces.focksymmetry(f -> fermionnumber(f) == 1 ? :a : missing)
+    H2 = symmetrize(H, qn)
+    @test H2 == symmetrize(H, qn.qn)
+    @test all(fermionnumber(f) == 1 for f in basisstates(H2))
 end

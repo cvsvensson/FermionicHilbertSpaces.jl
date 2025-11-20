@@ -114,6 +114,7 @@ function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetr
     sym_concrete = focksymmetry(basisstates, labelled_symmetry)
     SymmetricFockHilbertSpace{eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
 end
+SymmetricFockHilbertSpace(jw::JordanWignerOrdering{L}, qn::QN) where {L,QN<:FockSymmetry} = SymmetricFockHilbertSpace{L,QN}(jw, qn)
 
 
 function Base.show(io::IO, H::SymmetricFockHilbertSpace)
@@ -124,7 +125,7 @@ function Base.show(io::IO, H::SymmetricFockHilbertSpace)
     println(IOContext(io, :compact => true), modes(H))
     show(io, H.symmetry)
 end
-Base.show(io::IO, sym::FockSymmetry) = print(io, sym.conserved_quantity)
+Base.show(io::IO, sym::FockSymmetry) = print(io, "FockSymmetry(", sym.conserved_quantity, ")")
 
 Base.keys(H::SymmetricFockHilbertSpace) = keys(H.jw)
 basisstate(ind, H::SymmetricFockHilbertSpace) = basisstate(ind, H.symmetry)
