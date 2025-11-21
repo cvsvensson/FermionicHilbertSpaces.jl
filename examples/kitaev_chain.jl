@@ -8,7 +8,6 @@
 # We start by importing the necessary packages.
 using FermionicHilbertSpaces, LinearAlgebra, Plots
 using Arpack
-import FermionicHilbertSpaces: dim, indices
 # Then we define the Hilbert space with `N` sites and parity conservation.
 N = 12
 H = hilbert_space(1:N, ParityConservation())
@@ -40,30 +39,21 @@ matrix_representation(hsym, H)
 
 
 # Now, let's diagonalize the system.
-# Since parity is conserved, we can work in the even and odd parity sectors separately.
-# To do this, we can create two new Hilbert spaces for the even and odd sectors
-Heven = hilbert_space(1:N, ParityConservation(1))
-Hodd = hilbert_space(1:N, ParityConservation(-1))
-heven = matrix_representation(hsym, Heven)
-hodd = matrix_representation(hsym, Hodd)
-# and then diagonalize each sector separately.
-oddeigs = eigs(hodd; nev=1, which=:SR)
-eveneigs = eigs(heven; nev=1, which=:SR)
-oddvec = oddeigs[2][:, 1] # odd ground state
-evenvec = eveneigs[2][:, 1] # even ground state
+# Since parity is conserved, we can work in the even and odd parity sectors separately. 
+import FermionicHilbertSpaces: indices, sector, quantumnumbers
+(Eo, o), (Ee, e) = map(quantumnumbers(H)) do parity
+    Hsec = sector(parity, H)
+    ham = matrix_representation(hsym, Hsec)
+    vals, vecs = eigs(ham; nev=1, which=:SR)
+    inds = indices(Hsec, H)
+    ground_state = zeros(eltype(vecs), dim(H))
+    ground_state[inds] = vecs[:, 1]
+    (; energy=first(vals), ground_state)
+end
 # The ground states are almost degenerate, as expected.
-first(oddeigs[1]) - first(eveneigs[1])
-
-# Now, we construct the ground state Majoranas.
-# First, we need to pad the lowest energy odd and even states into the full Hilbert space.
-o = zeros(eltype(oddvec), dim(H))
-e = zeros(eltype(evenvec), dim(H))
-o[indices(Hodd, H)] = oddvec
-e[indices(Heven, H)] = evenvec
-
 # Then, we can construct the ground state Majorana operators as
-# γ = o * e' + hc
-# γ̃ = 1im * o * e' + hc
+# `γ = o * e' + hc` and 
+# `γ̃ = 1im * o * e' + hc`
 # but that takes a lot of memory for large systems. We can use LowRankMatrices.jl to avoid this
 using LowRankMatrices
 γ = LowRankMatrix(o, e) + hc
