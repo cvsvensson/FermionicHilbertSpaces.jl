@@ -17,9 +17,8 @@ vals, vecs = eigsolve(v -> ham * v, rand(size(ham, 1)), 1)
 
 ## Partial trace to half the system
 Hsub = subregion(1:div(N, 2), H)
-#vecs[1]*vecs[1]' runs out of memory for large N, so let's use Kronecker.jl
-using Kronecker
-sparse_vec = sparse(round.(vecs[1]; digits=6))
-rho = sparse_vec ⊗ sparse_vec'
+#vecs[1]*vecs[1]' runs out of memory for large N, so let's use LowRankMatrices.jl
+using LowRankMatrices
+rho = LowRankMatrix(vecs[1], vecs[1])
 @time subrho = partial_trace(rho, H => Hsub);
 sum(v -> -v * log(abs(v) + 1e-16), eigvals(subrho))

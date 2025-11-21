@@ -64,20 +64,20 @@ e[indices(Heven, H)] = evenvec
 # Then, we can construct the ground state Majorana operators as
 # γ = o * e' + hc
 # γ̃ = 1im * o * e' + hc
-# but that takes a lot of memory for large systems. We can use Kronecker.jl to avoid this
-using Kronecker
-oe = o ⊗ e'
-ee = e ⊗ e'
-oo = o ⊗ o'
+# but that takes a lot of memory for large systems. We can use LowRankMatrices.jl to avoid this
+using LowRankMatrices
+γ = LowRankMatrix(o, e) + hc
+γ̃ = 1im * LowRankMatrix(o, e) + hc
+δρ = LowRankMatrix(o, o) - LowRankMatrix(e, e)
 
 # Now we can compute the reduction of the Majorana operators to each mode.
 Hmodes = [hilbert_space(i:i) for i in 1:N]
-eoR = [partial_trace(oe, H => Hmode) for Hmode in Hmodes];
-eeR = [partial_trace(ee, H => Hmode) for Hmode in Hmodes];
-ooR = [partial_trace(oo, H => Hmode) for Hmode in Hmodes];
-γ_reductions = [norm(svdvals(eoR + hc), 1) for eoR in eoR]
-γ̃_reductions = [norm(svdvals(1im * eoR + hc), 1) for eoR in eoR]
-LD = [norm(svdvals(ooR - eeR), 1) for (ooR, eeR) in zip(ooR, eeR)]
+γR = [partial_trace(γ, H => Hmode) for Hmode in Hmodes];
+γ̃R = [partial_trace(γ̃, H => Hmode) for Hmode in Hmodes];
+δρR = [partial_trace(δρ, H => Hmode) for Hmode in Hmodes];
+γ_reductions = [norm(svdvals(γ), 1) for γ in γR]
+γ̃_reductions = [norm(svdvals(γ̃), 1) for γ̃ in γ̃R]
+LD = [norm(svdvals(δρ), 1) for δρ in δρR]
 # We can plot the reductions to visualize the localization of the Majorana modes.
 ##
 lw = 4
