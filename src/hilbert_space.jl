@@ -240,7 +240,7 @@ end
 statetype(::SimpleFockHilbertSpace{F}) where F = F
 statetype(::FockHilbertSpace{<:Any,<:V}) where V = eltype(V)
 statetype(::SymmetricFockHilbertSpace{<:Any,S}) where S = statetype(S)
-statetype(::FockSymmetry{V}) where V = eltype(v)
+statetype(::FockSymmetry{V}) where V = eltype(V)
 statetype(::Type{<:FockSymmetry{V}}) where V = eltype(V)
 function simple_complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace)
     F = promote_type(statetype(H), statetype(Hsub))
@@ -255,8 +255,9 @@ function complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFock
     unique!(states)
     hilbert_space(modes(_Hbar), qn, states)
 end
-complementary_subsystem(H::AbstractFockHilbertSpace, ::Nothing) = H
-complementary_subsystem(::Nothing, Hsub::AbstractHilbertSpace) = nothing
+complementary_subsystem(H::AbstractFockHilbertSpace, ::Nothing, qn::AbstractSymmetry=NoSymmetry()) = H
+complementary_subsystem(::Nothing, Hsub::AbstractHilbertSpace, qn::AbstractSymmetry=NoSymmetry()) = nothing
+complementary_subsystem(H::SimpleFockHilbertSpace, Hsub::SimpleFockHilbertSpace, ::NoSymmetry) = simple_complementary_subsystem(H, Hsub)
 
 @testitem "subregion function" begin
     using FermionicHilbertSpaces

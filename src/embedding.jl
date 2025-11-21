@@ -99,7 +99,7 @@ end
 end
 
 
-function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=simple_complementary_subsystem(H, Hsub), kwargs...)
+function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedsubsystem(Hsub, H) || throw(ArgumentError("Can't embed $Hsub into $H"))
     return generalized_kron((m, I), (Hsub, complement), H; kwargs...)
@@ -107,7 +107,7 @@ end
 const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}
 
 """
-    embed(m, Hsub => H; complement=simple_complementary_subsystem(H, Hsub), kwargs...)
+    embed(m, Hsub => H; complement=complementary_subsystem(H, Hsub), kwargs...)
 
 Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces. 
 """

@@ -69,9 +69,9 @@ function simple_complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaH
     majorana_position = OrderedDict(label => n for (n, label) in enumerate(complement_labels))
     MajoranaHilbertSpace(majorana_position, complement_fermionic_space)
 end
-function complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace)
+function complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, qn::AbstractSymmetry=NoSymmetry())
     complement_labels = setdiff(keys(H.majoranaindices), keys(Hsub.majoranaindices))
-    complement_fermionic_space = complementary_subsystem(H.parent, Hsub.parent)
+    complement_fermionic_space = complementary_subsystem(H.parent, Hsub.parent, qn)
     majorana_position = OrderedDict(label => n for (n, label) in enumerate(complement_labels))
     MajoranaHilbertSpace(majorana_position, complement_fermionic_space)
 end
