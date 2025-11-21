@@ -219,13 +219,13 @@ function subregion(modes, H::SimpleFockHilbertSpace{F}) where F
     SimpleFockHilbertSpace(modes, F)
 end
 
-function subregion(submodes, H::AbstractFockHilbertSpace)
+function subregion(submodes, H::AbstractFockHilbertSpace, qn::AbstractSymmetry=NoSymmetry())
     if !isorderedsubsystem(submodes, mode_ordering(H))
         throw(ArgumentError("The modes $(submodes) are not an ordered subsystem of the Hilbert space $(H)"))
     end
     states = substates(submodes, H)
     unique!(states)
-    FockHilbertSpace(submodes, states)
+    hilbert_space(submodes, qn, states)
 end
 
 function substates(modes, H::AbstractHilbertSpace)
@@ -246,18 +246,14 @@ function simple_complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::Abstr
     F = promote_type(statetype(H), statetype(Hsub))
     SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))), F)
 end
-function complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace)
-    if dim(H) / dim(Hsub) < 2^(length(keys(H)) - length(keys(Hsub))) / 2 # roughly check if we gain anything by constructing the full complementary space
-        F = promote_type(statetype(H), statetype(Hsub))
-        _Hbar = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))), F)
-        split = StateSplitter(H, (Hsub, _Hbar))
-        Hstates = basisstates(H)
-        states = [fbar for (fsub, fbar) in Iterators.map(split, Hstates) if !ismissing(state_index(fsub, Hsub))]
-        unique!(states)
-        FockHilbertSpace(modes(_Hbar), states)
-    else
-        simple_complementary_subsystem(H, Hsub)
-    end
+function complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace, qn::AbstractSymmetry=NoSymmetry())
+    F = promote_type(statetype(H), statetype(Hsub))
+    _Hbar = SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))), F)
+    split = StateSplitter(H, (Hsub, _Hbar))
+    Hstates = basisstates(H)
+    states = [fbar for (fsub, fbar) in Iterators.map(split, Hstates) if !ismissing(state_index(fsub, Hsub))]
+    unique!(states)
+    hilbert_space(modes(_Hbar), qn, states)
 end
 complementary_subsystem(H::AbstractFockHilbertSpace, ::Nothing) = H
 complementary_subsystem(::Nothing, Hsub::AbstractHilbertSpace) = nothing
@@ -325,4 +321,16 @@ end
         show(io, H_sym)
         true
     end
+end
+
+@testitem "Complementary system" begin
+    using FermionicHilbertSpaces: complementary_subsystem
+    H = hilbert_space(1:4)
+    H1 = hilbert_space(1:2, number_conservation(1))
+    H2 = complementary_subsystem(H, H1)
+    H20 = hilbert_space(3:4, number_conservation(1))
+    H2qn = complementary_subsystem(H, H1, number_conservation(1))
+    @test dim(H2) == 4
+    @test dim(H20) == 2
+    @test H20 == H2qn
 end
