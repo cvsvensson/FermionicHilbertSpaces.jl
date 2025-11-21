@@ -35,7 +35,8 @@ function subregion(modes, H::MajoranaHilbertSpace)
     majorana_position = OrderedDict(label => n for (n, label) in enumerate(modes))
     MajoranaHilbertSpace(majorana_position, subregion(pairs, H.parent))
 end
-partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, phase_factors::Bool=true, complement::MajoranaHilbertSpace=simple_complementary_subsystem(H, Hsub)) = partial_trace!(mout, m, H.parent, Hsub.parent, phase_factors, complement.parent)
+partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, phase_factors::Bool, complement::MajoranaHilbertSpace, alg::FullPartialTraceAlg) = partial_trace!(mout, m, H.parent, Hsub.parent, phase_factors, complement.parent, alg)
+partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, phase_factors::Bool, complement::MajoranaHilbertSpace, alg::SubsystemPartialTraceAlg) = partial_trace!(mout, m, H.parent, Hsub.parent, phase_factors, complement.parent, alg)
 function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,S<:AbstractMajoranaSym,F}
     sub_modes = Set(Iterators.flatten(modes(Hsub)))
     for f in m.factors
@@ -68,9 +69,9 @@ function simple_complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaH
     majorana_position = OrderedDict(label => n for (n, label) in enumerate(complement_labels))
     MajoranaHilbertSpace(majorana_position, complement_fermionic_space)
 end
-function complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace)
+function complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, qn::AbstractSymmetry=NoSymmetry())
     complement_labels = setdiff(keys(H.majoranaindices), keys(Hsub.majoranaindices))
-    complement_fermionic_space = complementary_subsystem(H.parent, Hsub.parent)
+    complement_fermionic_space = complementary_subsystem(H.parent, Hsub.parent, qn)
     majorana_position = OrderedDict(label => n for (n, label) in enumerate(complement_labels))
     MajoranaHilbertSpace(majorana_position, complement_fermionic_space)
 end
