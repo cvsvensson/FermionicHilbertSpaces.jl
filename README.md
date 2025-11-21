@@ -46,7 +46,7 @@ Hcons = hilbert_space(1:4, number_conservation(2))
 ````
 6-dimensional SymmetricFockHilbertSpace:
 4 fermions: [1, 2, 3, 4]
-FermionicHilbertSpaces.NumberConservation([2])
+FockSymmetry(NumberConservation([2]))
 ````
 
 This hilbert space contains only states with two fermions. We can use it just as before to get a matrix representation of the hamiltonian
