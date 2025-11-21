@@ -549,7 +549,7 @@ default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 
 
 Compute the partial trace of `m` from `H` to `Hsub`. 
 """
-function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, ::SubsystemPartialTraceAlg, extend_state=StateExtender((Hsub, complement), H),)
+function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, ::SubsystemPartialTraceAlg, extend_state=StateExtender((Hsub, complement), H))
     if phase_factors
         consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
     end
