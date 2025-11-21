@@ -70,9 +70,8 @@ function check_tensor_product_basis_compatibility(b1::AbstractHilbertSpace, b2::
     end
 end
 
-size_compatible(m::AbstractMatrix, H) = size(m) == (dim(H), dim(H))
+size_compatible(m, H) = size(m) == size(m) == ntuple(_ -> dim(H), ndims(m))
 size_compatible(m::UniformScaling, H) = true
-size_compatible(m::AbstractVector, H) = length(m) == dim(H)
 kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, Hs))
 
 @testitem "Size compatible" begin
@@ -521,12 +520,12 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
     phi(kron(reverse(map((phi, op) -> phi(op), phis, ops))...))
 end
 
-function partial_trace(m::AbstractMatrix{T}, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement)) where {T}
+function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement))
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
     if H == Hsub
         return copy(m)
     end
-    mout = zeros(T, dim(Hsub), dim(Hsub))
+    mout = zeros(eltype(m), dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, phase_factors, complement, alg)
 end
 
@@ -545,11 +544,11 @@ struct FullPartialTraceAlg end
 default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 
 """
-    partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H))
+    partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H))
 
 Compute the partial trace of `m` from `H` to `Hsub`. 
 """
-function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, ::SubsystemPartialTraceAlg, extend_state=StateExtender((Hsub, complement), H))
+function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, ::SubsystemPartialTraceAlg, extend_state=StateExtender((Hsub, complement), H))
     if phase_factors
         consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
     end
