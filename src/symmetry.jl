@@ -250,10 +250,9 @@ function (qn::NumberConservations)(f::FockNumber)
         n = fermionnumber(f, only(qn.weights))
         return n in only(qn.sectors) ? n : missing
     else
-        ns = map(qn.weights, qn.sectors) do w, sec
-            n = fermionnumber(f, w)
+        ns = map(Base.Fix1(fermionnumber, f), qn.weights)
+        for (n, sec) in zip(ns, qn.sectors)
             !in(n, sec) && return missing
-            n
         end
         return ns
     end
