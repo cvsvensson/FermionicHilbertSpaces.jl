@@ -35,12 +35,12 @@ msub = rand(ComplexF64, d, d)
 SUITE["embed"] = @benchmarkable embed($msub, $(Hsub => H))
 
 N = 60
-weights = [floor.(2sin.(1:N)), sign.((1:N) .- div(N, 2)), ones(N)]
+weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
 allowed_ones = [[0, 1], [-1, 0], [2]]
 SUITE["generate_states"]["int"] = @benchmarkable FermionicHilbertSpaces.generate_states($weights, $allowed_ones, $N)
 
 N = 64
-weights = [floor.(2sin.(1:N)), sign.((1:N) .- div(N, 2)), ones(N)]
+weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
 allowed_ones = [[0, 1], [-1, 0], [2]]
 SUITE["generate_states"]["big_int"] = @benchmarkable FermionicHilbertSpaces.generate_states($weights, $allowed_ones, $N)
 
