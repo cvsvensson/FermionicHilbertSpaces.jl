@@ -54,47 +54,47 @@ t = 1.0
 end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{@NamedTuple{energy::Float64, ground_state::Vector{Float64}}}:
  (energy = -30.884311784513145, ground_state = [-0.017199243203262955, 0.018548790166372505, -0.016890092086739104, -0.016193789793343894, 0.01714560172625716, 0.017972271430228014, -0.01920782861443464, 0.017876658689792282, -0.017218005481788635, -0.01768536815029698  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
  (energy = -30.884331431867007, ground_state = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  -0.02030074674863275, 0.01892709491454754, -0.016242117258605027, -0.016692660286701425, 0.021406546465997038, -0.01890534428431171, -0.017864375792244636, 0.01996274836346002, -0.0160609793818018, -0.015608274175071086])</code></pre><p>The ground states are almost degenerate, as expected. Then, we can construct the ground state Majorana operators as <code>γ = o * e&#39; + hc</code> and <code>γ̃ = 1im * o * e&#39; + hc</code> but that takes a lot of memory for large systems. We can use LowRankMatrices.jl to avoid this</p><pre><code class="language-julia hljs">using LowRankMatrices
-γ = LowRankMatrix(o, e) + hc
-γ̃ = 1im * LowRankMatrix(o, e) + hc
-δρ = LowRankMatrix(o, o) - LowRankMatrix(e, e)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4096×4096 LowRankMatrices.LowRankMatrix{Float64}:
-  0.000295814  -0.000319025   0.000290497  …   0.0           0.0
- -0.000319025   0.000344058  -0.000313291      0.0           0.0
-  0.000290497  -0.000313291   0.000285275      0.0           0.0
-  0.000278521  -0.000300375   0.000273515      0.0           0.0
- -0.000294891   0.00031803   -0.000289591      0.0           0.0
- -0.000309109   0.000333364  -0.000303553  …   0.0           0.0
-  0.00033036   -0.000356282   0.000324422      0.0           0.0
- -0.000307465   0.00033159   -0.000301938      0.0           0.0
-  0.000296137  -0.000319373   0.000290814      0.0           0.0
-  0.000304175  -0.000328042   0.000298707      0.0           0.0
-  ⋮                                        ⋱                 ⋮
-  0.0           0.0           0.0              0.000303988   0.000295419
-  0.0           0.0           0.0             -0.000260864  -0.000253511
-  0.0           0.0           0.0             -0.0002681    -0.000260544
-  0.0           0.0           0.0          …   0.00034381    0.000334119
-  0.0           0.0           0.0             -0.000303638  -0.00029508
-  0.0           0.0           0.0             -0.000286919  -0.000278832
-  0.0           0.0           0.0              0.000320621   0.000311584
-  0.0           0.0           0.0             -0.000257955  -0.000250684
-  0.0           0.0           0.0          …  -0.000250684  -0.000243618</code></pre><p>Now we can compute the reduction of the Majorana operators to each mode.</p><pre><code class="language-julia hljs">Hmodes = [hilbert_space(i:i) for i in 1:N]
+γ = LowRankMatrix(o, conj(e)) + hc
+γ̃ = 1im * LowRankMatrix(o, conj(e)) + hc
+δρ = LowRankMatrix(o, conj(e)) - LowRankMatrix(e, conj(e))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4096×4096 LowRankMatrices.LowRankMatrix{Float64}:
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  …   0.000276237   0.000268451
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0     -0.000297912  -0.000289515
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0      0.000271271   0.000263625
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0      0.000260088   0.000252757
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0     -0.000275375  -0.000267613
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  …  -0.000288652  -0.000280516
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0      0.000308497   0.000299801
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0     -0.000287117  -0.000279024
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0      0.000276538   0.000268743
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0      0.000284044   0.000276038
+ ⋮                        ⋮                   ⋱                 ⋮
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0      0.000303988   0.000295419
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0     -0.000260864  -0.000253511
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0     -0.0002681    -0.000260544
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  …   0.00034381    0.000334119
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0     -0.000303638  -0.00029508
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0     -0.000286919  -0.000278832
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0      0.000320621   0.000311584
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0     -0.000257955  -0.000250684
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  …  -0.000250684  -0.000243618</code></pre><p>Now we can compute the reduction of the Majorana operators to each mode.</p><pre><code class="language-julia hljs">Hmodes = [hilbert_space(i:i) for i in 1:N]
 γR = [partial_trace(γ, H =&gt; Hmode) for Hmode in Hmodes];
 γ̃R = [partial_trace(γ̃, H =&gt; Hmode) for Hmode in Hmodes];
 δρR = [partial_trace(δρ, H =&gt; Hmode) for Hmode in Hmodes];
 γ_reductions = [norm(svdvals(γ), 1) for γ in γR]
 γ̃_reductions = [norm(svdvals(γ̃), 1) for γ̃ in γ̃R]
 LD = [norm(svdvals(δρ), 1) for δρ in δρR]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">12-element Vector{Float64}:
- 1.7474086413948875e-15
- 1.7477881121552574e-15
- 1.7476796919380089e-15
- 1.7425297316187027e-15
- 1.7476254818293846e-15
- 1.7238272441433278e-15
- 1.7804768076556954e-15
- 1.6936322136396065e-15
- 1.8340363949764793e-15
- 1.5994150448506161e-15
- 1.3148119745731712e-15
- 1.1504469252243688e-15</code></pre><p>We can plot the reductions to visualize the localization of the Majorana modes.</p><pre><code class="language-julia hljs">#
+ 1.4079523464810186
+ 1.0000000000000009
+ 1.0078698071698393
+ 1.0000000000000009
+ 1.0001499175805586
+ 1.0000000000000009
+ 1.0000028500668168
+ 1.0000000000000009
+ 1.000000054175825
+ 1.0000000000000007
+ 1.0000000010149646
+ 1.0</code></pre><p>We can plot the reductions to visualize the localization of the Majorana modes.</p><pre><code class="language-julia hljs">#
 lw = 4
 legendfontsize = 15
 marker = true
@@ -102,4 +102,4 @@ markerstrokewidth = 2
 plot(xlabel=&quot;Site&quot;, title=&quot;Majorana quality measures&quot;; frame=:box, size=(500, 300), xticks=1:3:N, yscale=:identity, legendfontsize, ylims=(-1e-1, 2), legendposition=:top, labelfontsize=15)
 plot!(1:N, γ_reductions; label=&quot;‖γₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)
 plot!(1:N, γ̃_reductions; label=&quot;‖γ̃ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)
-plot!(1:N, LD; label=&quot;‖(iγγ̃)ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)</code></pre><img src="e3e5c3cc.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../non_interacting/">« Non interacting systems</a><a class="docs-footer-nextpage" href="../free_fermions/">Free fermions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Wednesday 11 February 2026 13:05">Wednesday 11 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+plot!(1:N, LD; label=&quot;‖(iγγ̃)ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)</code></pre><img src="094ffb6b.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../non_interacting/">« Non interacting systems</a><a class="docs-footer-nextpage" href="../free_fermions/">Free fermions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Monday 16 February 2026 08:00">Monday 16 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
