@@ -19,6 +19,6 @@ vals, vecs = eigsolve(v -> ham * v, rand(size(ham, 1)), 1)
 Hsub = subregion(1:div(N, 2), H)
 #vecs[1]*vecs[1]' runs out of memory for large N, so let's use LowRankMatrices.jl
 using LowRankMatrices
-rho = LowRankMatrix(vecs[1], vecs[1])
+rho = LowRankMatrix(vecs[1], conj(vecs[1]))
 @time subrho = partial_trace(rho, H => Hsub);
 sum(v -> -v * log(abs(v) + 1e-16), eigvals(subrho))

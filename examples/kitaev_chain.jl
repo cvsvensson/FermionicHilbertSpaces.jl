@@ -56,9 +56,9 @@ end
 # `γ̃ = 1im * o * e' + hc`
 # but that takes a lot of memory for large systems. We can use LowRankMatrices.jl to avoid this
 using LowRankMatrices
-γ = LowRankMatrix(o, e) + hc
-γ̃ = 1im * LowRankMatrix(o, e) + hc
-δρ = LowRankMatrix(o, o) - LowRankMatrix(e, e)
+γ = LowRankMatrix(o, conj(e)) + hc
+γ̃ = 1im * LowRankMatrix(o, conj(e)) + hc
+δρ = LowRankMatrix(o, conj(e)) - LowRankMatrix(e, conj(e))
 
 # Now we can compute the reduction of the Majorana operators to each mode.
 Hmodes = [hilbert_space(i:i) for i in 1:N]
