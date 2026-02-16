@@ -2,8 +2,8 @@
 mask_region_size(weights::Vector) = count(!=(0), weights)
 mask_region_size(mask::FockNumber) = mask_region_size(mask.f)
 mask_region_size(mask::Integer) = count_ones(mask)
-set_bit!(num::FockNumber{T}, pos::Int, value::Bool) where T = FockNumber{T}(set_bit!(num.f, pos, value))
-function set_bit!(num::T, pos::Int, value::Bool) where T
+set_bit(num::FockNumber{T}, pos::Int, value::Bool) where T = FockNumber{T}(set_bit(num.f, pos, value))
+function set_bit(num::T, pos::Int, value::Bool) where T
     mask = one(T) << (pos - 1)          # single-bit mask
     newf = value ? (num | mask) : (num & ~mask)
     T(newf)
@@ -12,7 +12,7 @@ function generate_states(masks::Union{Vector{<:K},NTuple{N,<:K}}, allowed_ones, 
     region_lengths = map(mask_region_size, masks)
     any(rl > max_bits for rl in region_lengths) && error("Constraint mask exceeds max_bits")
     filled_ones = [0 for _ in masks]
-    filled_zeros = [0 for _ in masks]
+    #filled_zeros = [0 for _ in masks]
     remaining_bits::Vector{Int} = collect(region_lengths)
     states = T[]
     num = zero(T)
@@ -44,7 +44,7 @@ function generate_states(masks::Union{Vector{<:K},NTuple{N,<:K}}, allowed_ones, 
         if op == :revert_zero
             # Revert putting a zero at bit_position - 1
             for k in affected_constraints[bit_position-1]
-                filled_zeros[k] -= 1
+                #filled_zeros[k] -= 1
                 remaining_bits[k] += 1
             end
             bit_position -= 1
@@ -62,17 +62,17 @@ function generate_states(masks::Union{Vector{<:K},NTuple{N,<:K}}, allowed_ones, 
         end
 
         if op == :put_zero
-            feasible = affected_constraints_can_be_satisfied(false, affected_constraints[bit_position], allowed_ones, region_lengths, filled_ones, filled_zeros, remaining_bits)
+            feasible = affected_constraints_can_be_satisfied(false, affected_constraints[bit_position], allowed_ones, filled_ones, remaining_bits)
             if feasible
                 # Put a zero at bit_position
-                num = set_bit!(num, bit_position, false)
+                num = set_bit(num, bit_position, false)
                 if bit_position == max_bits
                     push!(states, num)
                     continue
                 end
                 push!(operation_stack, :revert_zero)
                 for k in affected_constraints[bit_position]
-                    filled_zeros[k] += 1
+                    #filled_zeros[k] += 1
                     remaining_bits[k] -= 1
                 end
                 bit_position += 1
@@ -83,11 +83,11 @@ function generate_states(masks::Union{Vector{<:K},NTuple{N,<:K}}, allowed_ones, 
         end
 
         if op == :put_one
-            feasible = affected_constraints_can_be_satisfied(true, affected_constraints[bit_position], allowed_ones, region_lengths, filled_ones, filled_zeros, remaining_bits)
+            feasible = affected_constraints_can_be_satisfied(true, affected_constraints[bit_position], allowed_ones, filled_ones, remaining_bits)
 
             if feasible
                 # Put a one at bit_position
-                num = set_bit!(num, bit_position, true)
+                num = set_bit(num, bit_position, true)
                 if bit_position == max_bits
                     push!(states, num)
                     continue
@@ -106,13 +106,11 @@ function generate_states(masks::Union{Vector{<:K},NTuple{N,<:K}}, allowed_ones, 
     return states
 end
 
-@inline function affected_constraints_can_be_satisfied(testbit, ks, allowed_ones, region_lengths, filled_ones, filled_zeros, remaining_bits)
+@inline function affected_constraints_can_be_satisfied(testbit, ks, allowed_ones, filled_ones, remaining_bits)
     for k in ks
         feasible = false
         newones = filled_ones[k] + testbit
-        newzeros = filled_zeros[k] + !testbit
         remaining = remaining_bits[k] - 1
-        rl = region_lengths[k]
         for target_ones in allowed_ones[k]
             newones <= target_ones <= newones + remaining && (feasible = true) && break
         end
@@ -150,7 +148,7 @@ function generate_states_weighted_constraints(weights, allowed_sums, max_bits, T
     any(rl > max_bits for rl in region_lengths) && error("Constraint region exceeds max_bits")
 
     current_sums = [0 for _ in weights]
-    remaining_bits = collect(region_lengths)
+    # remaining_bits = collect(region_lengths)
 
     # Precompute min/max possible contributions from remaining bits
     remaining_min = [zeros(Int, max_bits + 1) for _ in weights]
@@ -199,7 +197,7 @@ function generate_states_weighted_constraints(weights, allowed_sums, max_bits, T
 
         if op == :revert_zero
             for k in affected_constraints[bit_position-1]
-                remaining_bits[k] += 1
+                # remaining_bits[k] += 1
             end
             bit_position -= 1
             continue
@@ -208,7 +206,7 @@ function generate_states_weighted_constraints(weights, allowed_sums, max_bits, T
         if op == :revert_one
             for k in affected_constraints[bit_position-1]
                 current_sums[k] -= weights[k][bit_position-1]
-                remaining_bits[k] += 1
+                # remaining_bits[k] += 1
             end
             bit_position -= 1
             continue
@@ -220,14 +218,14 @@ function generate_states_weighted_constraints(weights, allowed_sums, max_bits, T
                 allowed_sums, weights, current_sums, remaining_min, remaining_max
             )
             if feasible
-                num = set_bit!(num, bit_position, false)
+                num = set_bit(num, bit_position, false)
                 if bit_position == max_bits
                     push!(states, num)
                     continue
                 end
                 push!(operation_stack, :revert_zero)
                 for k in affected_constraints[bit_position]
-                    remaining_bits[k] -= 1
+                    # remaining_bits[k] -= 1
                 end
                 bit_position += 1
                 push!(operation_stack, :put_one)
@@ -242,7 +240,7 @@ function generate_states_weighted_constraints(weights, allowed_sums, max_bits, T
                 allowed_sums, weights, current_sums, remaining_min, remaining_max
             )
             if feasible
-                num = set_bit!(num, bit_position, true)
+                num = set_bit(num, bit_position, true)
                 if bit_position == max_bits
                     push!(states, num)
                     continue
@@ -250,7 +248,7 @@ function generate_states_weighted_constraints(weights, allowed_sums, max_bits, T
                 push!(operation_stack, :revert_one)
                 for k in affected_constraints[bit_position]
                     current_sums[k] += weights[k][bit_position]
-                    remaining_bits[k] -= 1
+                    # remaining_bits[k] -= 1
                 end
                 bit_position += 1
                 push!(operation_stack, :put_one)
@@ -270,11 +268,8 @@ end
         new_sum = current_sums[k] + (testbit ? weights[k][bit_position] : 0)
 
         # Get min/max possible sum from remaining bits after this position
-        min_additional = bit_position < length(remaining_min[k]) - 1 ? remaining_min[k][bit_position+1] : 0
-        max_additional = bit_position < length(remaining_max[k]) - 1 ? remaining_max[k][bit_position+1] : 0
-
-        min_possible = new_sum + min_additional
-        max_possible = new_sum + max_additional
+        min_possible = new_sum + remaining_min[k][bit_position+1]
+        max_possible = new_sum + remaining_max[k][bit_position+1]
 
         for target_sum in allowed_sums[k]
             min_possible <= target_sum <= max_possible && (feasible = true) && break
