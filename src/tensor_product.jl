@@ -578,25 +578,29 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::
         consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
     end
     fill!(mout, zero(eltype(mout)))
-    states = basisstates(H)
+    inds = tensor_product_iterator(m, H)
+    states1 = map(i -> basisstate(i[1], H), inds)
+    states2 = map(i -> basisstate(i[2], H), inds)
+    substates2 = map(split_state, states2)
     M = length(keys(H))
     N = length(keys(Hsub))
-    for f1 in states, f2 in states
+    for f1 in states1
         f1sub, f1bar = split_state(f1)
-        f2sub, f2bar = split_state(f2)
-        if f1bar != f2bar
-            continue
-        end
-        s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
-        s2 = phase_factors ? phase_factor_f(f1sub, f2sub, N) : 1
-        s = s2 * s1
+        I1 = state_index(f1, H)
         J1 = state_index(f1sub, Hsub)
         ismissing(J1) && continue
-        J2 = state_index(f2sub, Hsub)
-        ismissing(J2) && continue
-        I1 = state_index(f1, H)
-        I2 = state_index(f2, H)
-        mout[J1, J2] += s * m[I1, I2]
+        for (f2, (f2sub, f2bar)) in zip(states2, substates2)
+            if f1bar != f2bar
+                continue
+            end
+            s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
+            s2 = phase_factors ? phase_factor_f(f1sub, f2sub, N) : 1
+            s = s2 * s1
+            J2 = state_index(f2sub, Hsub)
+            ismissing(J2) && continue
+            I2 = state_index(f2, H)
+            mout[J1, J2] += s * m[I1, I2]
+        end
     end
     return mout
 end
