@@ -579,28 +579,24 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::
     end
     fill!(mout, zero(eltype(mout)))
     inds = tensor_product_iterator(m, H)
-    states1 = map(i -> basisstate(i[1], H), inds)
-    states2 = map(i -> basisstate(i[2], H), inds)
-    substates2 = map(split_state, states2)
     M = length(keys(H))
     N = length(keys(Hsub))
-    for f1 in states1
+    for I in inds
+        f1 = basisstate(I[1], H)
+        f2 = basisstate(I[2], H)
         f1sub, f1bar = split_state(f1)
-        I1 = state_index(f1, H)
+        f2sub, f2bar = split_state(f2)
+        if f1bar != f2bar
+            continue
+        end
+        s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
+        s2 = phase_factors ? phase_factor_f(f1sub, f2sub, N) : 1
+        s = s2 * s1
         J1 = state_index(f1sub, Hsub)
         ismissing(J1) && continue
-        for (f2, (f2sub, f2bar)) in zip(states2, substates2)
-            if f1bar != f2bar
-                continue
-            end
-            s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
-            s2 = phase_factors ? phase_factor_f(f1sub, f2sub, N) : 1
-            s = s2 * s1
-            J2 = state_index(f2sub, Hsub)
-            ismissing(J2) && continue
-            I2 = state_index(f2, H)
-            mout[J1, J2] += s * m[I1, I2]
-        end
+        J2 = state_index(f2sub, Hsub)
+        ismissing(J2) && continue
+        mout[J1, J2] += s * m[I[1], I[2]]
     end
     return mout
 end
@@ -655,24 +651,26 @@ function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, 
     Is = Int[]
     Js = Int[]
     Vs = Int[]
-    for f1 in states, f2 in states
+    substates2 = map(split_state, states)
+    for f1 in states
         f1sub, f1bar = split_state(f1)
-        f2sub, f2bar = split_state(f2)
-        if f1bar != f2bar
-            continue
-        end
-        s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
-        s2 = phase_factors ? phase_factor_f(f1sub, f2sub, N) : 1
-        s = s2 * s1
         J1 = state_index(f1sub, Hsub)
         ismissing(J1) && continue
-        J2 = state_index(f2sub, Hsub)
-        ismissing(J2) && continue
         I1 = state_index(f1, H)
-        I2 = state_index(f2, H)
-        push!(Is, indI[J1, J2])
-        push!(Js, indJ[I1, I2])
-        push!(Vs, s)
+        for (f2, (f2sub, f2bar)) in zip(states, substates2)
+            if f1bar != f2bar
+                continue
+            end
+            s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
+            s2 = phase_factors ? phase_factor_f(f1sub, f2sub, N) : 1
+            s = s2 * s1
+            J2 = state_index(f2sub, Hsub)
+            ismissing(J2) && continue
+            I2 = state_index(f2, H)
+            push!(Is, indI[I1, I2])
+            push!(Js, indJ[J1, J2])
+            push!(Vs, s)
+        end
     end
     return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
