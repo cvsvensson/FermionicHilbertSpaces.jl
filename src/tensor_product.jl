@@ -208,11 +208,19 @@ embedding_unitary(Hs, H::ProductSpace{Nothing}) = I
     tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
 
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
-`kwargs` can be passed a bool `phase_factors` and a hilbert space `complement`.
+`kwargs` can be passed a bool `phase_factors`.
 """
-function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractFockHilbertSpace; kwargs...)
+function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractFockHilbertSpace; physical_algebra=false, kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
+    if physical_algebra
+        return generalized_kron(ms, Hs, H; kwargs...)
+    end
+
+    if length(Hs) == 2
+        complements = reverse(Hs)
+        return mapreduce(((m, fine_basis, complement),) -> embed(m, fine_basis, H; complement, kwargs...), *, zip(ms, Hs, complements))
+    end
     return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
 end
 tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
