@@ -44,7 +44,58 @@ weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, 
 allowed_ones = [[0, 1], [-1, 0], [2]]
 SUITE["generate_states"]["big_int"] = @benchmarkable FermionicHilbertSpaces.generate_states($weights, $allowed_ones, $N)
 
-# using Symbolics
-# @variables x
-# symop = x * op
-# SUITE["matrix_representation_symbolic"] = @benchmarkable matrix_representation($symop, $H)
+## Benchmark partial trace algorithms
+# This scenario highlights cases where FullPartialTraceAlg is expected to be faster.
+N = 30
+H = hilbert_space(1:N, NumberConservation(2))
+# Define a subsystem for the first 10 modes
+Hsub = subregion(1:10, H)
+# Create a random Hermitian matrix on the full Hilbert space
+d = dim(H)
+mat = rand(ComplexF64, d, d)
+
+SUITE["partial_trace_algorithms"]["qn"]["subsystem_alg"] = @benchmarkable partial_trace(
+    $mat,
+    $H,
+    $Hsub,
+    alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg(),
+)
+
+SUITE["partial_trace_algorithms"]["qn"]["full_alg"] = @benchmarkable partial_trace(
+    $mat,
+    $H,
+    $Hsub,
+    alg=FermionicHilbertSpaces.FullPartialTraceAlg()
+)
+SUITE["partial_trace_algorithms"]["qn"]["default_alg"] = @benchmarkable partial_trace(
+    $mat,
+    $H,
+    $Hsub
+)
+
+# Setup for Standard Full Fock Space (No Symmetry)
+# This scenario tests the standard case where SubsystemPartialTraceAlg is typically efficient.
+N_std = 12
+H_std = hilbert_space(1:N_std)
+Hsub_std = subregion(1:2, H_std)
+d_std = dim(H_std)
+m_std = rand(ComplexF64, d_std, d_std)
+
+SUITE["partial_trace_algorithms"]["full"]["subsystem_alg"] = @benchmarkable partial_trace(
+    $m_std,
+    $H_std,
+    $Hsub_std,
+    alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg()
+)
+
+SUITE["partial_trace_algorithms"]["full"]["full_alg"] = @benchmarkable partial_trace(
+    $m_std,
+    $H_std,
+    $Hsub_std,
+    alg=FermionicHilbertSpaces.FullPartialTraceAlg()
+)
+SUITE["partial_trace_algorithms"]["full"]["default_alg"] = @benchmarkable partial_trace(
+    $m_std,
+    $H_std,
+    $Hsub_std
+)
