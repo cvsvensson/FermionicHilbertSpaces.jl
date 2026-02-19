@@ -104,7 +104,7 @@ Compute the tensor product of matrices or vectors in `ms` with respect to the sp
 function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kwargs...)
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
     N = ndims(first(ms))
-    mout = allocate_tensor_product_result(ms, Hs)
+    mout = allocate_tensor_product_result(ms, Hs, H)
     extend_state = StateExtender(Hs, H)
     if N == 1
         return generalized_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
@@ -119,13 +119,13 @@ generalized_kron(ms, Hs::Pair; kwargs...) = generalized_kron(ms, first(Hs), last
 
 uniform_to_sparse_type(::Type{UniformScaling{T}}) where {T} = SparseMatrixCSC{T,Int}
 uniform_to_sparse_type(::Type{T}) where {T} = T
-function allocate_tensor_product_result(ms, bs)
+function allocate_tensor_product_result(ms, Hs, H)
     T = Base.promote_eltype(ms...)
     N = ndims(first(ms))
     types = map(uniform_to_sparse_type ∘ typeof, ms)
     MT = Base.promote_op(kron, types...)
-    dimlengths = map(length ∘ basisstates, bs)
-    Nout = prod(dimlengths)
+    # dimlengths = map(length ∘ basisstates, Hs)
+    Nout = dim(H)
     _mout = Zeros(T, ntuple(j -> Nout, N))
     try
         convert(MT, _mout)
