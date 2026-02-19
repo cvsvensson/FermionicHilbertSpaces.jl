@@ -53,24 +53,33 @@ Hsub = subregion(1:10, H)
 # Create a random Hermitian matrix on the full Hilbert space
 d = dim(H)
 mat = rand(ComplexF64, d, d)
-
-SUITE["partial_trace_algorithms"]["qn"]["subsystem_alg"] = @benchmarkable partial_trace(
+matsparse = sprand(ComplexF64, d, d, 0.01)
+Hcomp = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
+alg = FermionicHilbertSpaces.default_partial_trace_alg(Hsub, H, Hcomp)
+SUITE["partial_trace_algorithms"]["default=$alg"]["Sparse space"]["Dense"]["subsystem_alg"] = @benchmarkable partial_trace(
     $mat,
     $H,
     $Hsub,
     alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg(),
 )
 
-SUITE["partial_trace_algorithms"]["qn"]["full_alg"] = @benchmarkable partial_trace(
+SUITE["partial_trace_algorithms"]["default=$alg"]["Sparse space"]["Dense"]["full_alg"] = @benchmarkable partial_trace(
     $mat,
     $H,
     $Hsub,
     alg=FermionicHilbertSpaces.FullPartialTraceAlg()
 )
-SUITE["partial_trace_algorithms"]["qn"]["default_alg"] = @benchmarkable partial_trace(
-    $mat,
+SUITE["partial_trace_algorithms"]["default=$alg"]["Sparse space"]["Sparse"]["subsystem_alg"] = @benchmarkable partial_trace(
+    $matsparse,
     $H,
-    $Hsub
+    $Hsub,
+    alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg(),
+)
+SUITE["partial_trace_algorithms"]["default=$alg"]["Sparse space"]["Sparse"]["full_alg"] = @benchmarkable partial_trace(
+    $matsparse,
+    $H,
+    $Hsub,
+    alg=FermionicHilbertSpaces.FullPartialTraceAlg()
 )
 
 # Setup for Standard Full Fock Space (No Symmetry)
@@ -80,22 +89,30 @@ H_std = hilbert_space(1:N_std)
 Hsub_std = subregion(1:2, H_std)
 d_std = dim(H_std)
 m_std = rand(ComplexF64, d_std, d_std)
-
-SUITE["partial_trace_algorithms"]["full"]["subsystem_alg"] = @benchmarkable partial_trace(
+m_sparse = sprand(ComplexF64, d_std, d_std, 0.01)
+Hcomp = FermionicHilbertSpaces.complementary_subsystem(H_std, Hsub_std)
+alg = FermionicHilbertSpaces.default_partial_trace_alg(Hsub_std, H_std, Hcomp)
+SUITE["partial_trace_algorithms"]["default=$alg"]["Full space"]["Dense"]["subsystem_alg"] = @benchmarkable partial_trace(
     $m_std,
     $H_std,
     $Hsub_std,
     alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg()
 )
-
-SUITE["partial_trace_algorithms"]["full"]["full_alg"] = @benchmarkable partial_trace(
+SUITE["partial_trace_algorithms"]["default=$alg"]["Full space"]["Dense"]["full_alg"] = @benchmarkable partial_trace(
     $m_std,
     $H_std,
     $Hsub_std,
     alg=FermionicHilbertSpaces.FullPartialTraceAlg()
 )
-SUITE["partial_trace_algorithms"]["full"]["default_alg"] = @benchmarkable partial_trace(
-    $m_std,
+SUITE["partial_trace_algorithms"]["default=$alg"]["Full space"]["Sparse"]["subsystem_alg"] = @benchmarkable partial_trace(
+    $m_sparse,
     $H_std,
-    $Hsub_std
+    $Hsub_std,
+    alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg()
+)
+SUITE["partial_trace_algorithms"]["default=$alg"]["Full space"]["Sparse"]["full_alg"] = @benchmarkable partial_trace(
+    $m_sparse,
+    $H_std,
+    $Hsub_std,
+    alg=FermionicHilbertSpaces.FullPartialTraceAlg()
 )
