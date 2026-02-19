@@ -214,11 +214,7 @@ Compute the ordered product of the fermionic embeddings of the matrices `ms` in 
 function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractFockHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
-    complements = map(Hs) do Hsub
-        complement_spaces = filter(Hother -> Hother != Hsub, Hs)
-        tensor_product(complement_spaces...)
-    end
-    return mapreduce(((m, fine_basis, complement),) -> embed(m, fine_basis, H; complement, kwargs...), *, zip(ms, Hs, complements))
+    return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H, kwargs...), *, zip(ms, Hs))
 end
 tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
 tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
