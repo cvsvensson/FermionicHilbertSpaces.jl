@@ -210,18 +210,14 @@ embedding_unitary(Hs, H::ProductSpace{Nothing}) = I
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
 `kwargs` can be passed a bool `phase_factors`.
 """
-function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractFockHilbertSpace; physical_algebra=false, kwargs...)
+function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractFockHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
-    if physical_algebra
-        return generalized_kron(ms, Hs, H; kwargs...)
+    complements = map(Hs) do Hsub
+        complement_spaces = filter(Hother -> Hother != Hsub, Hs)
+        tensor_product(complement_spaces...)
     end
-
-    if length(Hs) == 2
-        complements = reverse(Hs)
-        return mapreduce(((m, fine_basis, complement),) -> embed(m, fine_basis, H; complement, kwargs...), *, zip(ms, Hs, complements))
-    end
-    return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
+    return mapreduce(((m, fine_basis, complement),) -> embed(m, fine_basis, H; complement, kwargs...), *, zip(ms, Hs, complements))
 end
 tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
 tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
@@ -367,8 +363,6 @@ end
     @test lhs1 ≈ rhs1
     @test tensor_product(Asphys, Hs_rough, H)' ≈ tensor_product(adjoint.(Asphys), Hs_rough, H)
 
-    # Physical algebra 
-    @test tensor_product(Asphys, Hs_rough, H; physical_algebra=true) ≈ tensor_product(Asphys, Hs_rough, H; physical_algebra=false)
 
     ## Unitary equivalence between tensor_product and kron
     ops = reduce(vcat, ops_fine)
