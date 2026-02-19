@@ -367,6 +367,9 @@ end
     @test lhs1 ≈ rhs1
     @test tensor_product(Asphys, Hs_rough, H)' ≈ tensor_product(adjoint.(Asphys), Hs_rough, H)
 
+    # Physical algebra 
+    @test tensor_product(Asphys, Hs_rough, H; physical_algebra=true) ≈ tensor_product(Asphys, Hs_rough, H; physical_algebra=false)
+
     ## Unitary equivalence between tensor_product and kron
     ops = reduce(vcat, ops_fine)
     Hs = reduce(vcat, Hs_fine)
