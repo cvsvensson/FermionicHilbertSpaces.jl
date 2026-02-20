@@ -7,6 +7,7 @@ mode_ordering(H::MajoranaHilbertSpace) = mode_ordering(H.parent)
 modes(H::MajoranaHilbertSpace) = modes(H.parent)
 Base.:(==)(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace) = H1.majoranaindices == H2.majoranaindices && H1.parent == H2.parent
 basisstates(m::MajoranaHilbertSpace) = basisstates(m.parent)
+basisstate(i, m::MajoranaHilbertSpace) = basisstate(i, m.parent)
 Base.parent(H::MajoranaHilbertSpace) = H.parent
 
 function majoranas(H::MajoranaHilbertSpace)

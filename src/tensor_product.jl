@@ -104,7 +104,7 @@ Compute the tensor product of matrices or vectors in `ms` with respect to the sp
 function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kwargs...)
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
     N = ndims(first(ms))
-    mout = allocate_tensor_product_result(ms, Hs)
+    mout = allocate_tensor_product_result(ms, Hs, H)
     extend_state = StateExtender(Hs, H)
     if N == 1
         return generalized_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
@@ -119,13 +119,13 @@ generalized_kron(ms, Hs::Pair; kwargs...) = generalized_kron(ms, first(Hs), last
 
 uniform_to_sparse_type(::Type{UniformScaling{T}}) where {T} = SparseMatrixCSC{T,Int}
 uniform_to_sparse_type(::Type{T}) where {T} = T
-function allocate_tensor_product_result(ms, bs)
+function allocate_tensor_product_result(ms, Hs, H)
     T = Base.promote_eltype(ms...)
     N = ndims(first(ms))
     types = map(uniform_to_sparse_type ∘ typeof, ms)
     MT = Base.promote_op(kron, types...)
-    dimlengths = map(length ∘ basisstates, bs)
-    Nout = prod(dimlengths)
+    # dimlengths = map(length ∘ basisstates, Hs)
+    Nout = dim(H)
     _mout = Zeros(T, ntuple(j -> Nout, N))
     try
         convert(MT, _mout)
@@ -134,7 +134,8 @@ function allocate_tensor_product_result(ms, bs)
     end
 end
 
-tensor_product_iterator(m, ::AbstractHilbertSpace) = findall(!iszero, m)
+tensor_product_iterator(m::SparseArrays.AbstractSparseVecOrMat, ::AbstractHilbertSpace) = zip(findnz(m)[1:2]...) 
+tensor_product_iterator(m::AbstractArray, ::AbstractHilbertSpace) = CartesianIndices(m)
 tensor_product_iterator(::UniformScaling, H::AbstractHilbertSpace) = diagind(I(length(basisstates(H))), IndexCartesian())
 
 function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true) where T
@@ -208,12 +209,12 @@ embedding_unitary(Hs, H::ProductSpace{Nothing}) = I
     tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
 
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
-`kwargs` can be passed a bool `phase_factors` and a hilbert space `complement`.
+`kwargs` can be passed a bool `phase_factors`.
 """
 function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractFockHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
-    return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
+    return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H, kwargs...), *, zip(ms, Hs))
 end
 tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
 tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
@@ -358,6 +359,7 @@ end
     rhs1 = tensor_product(Asphys .* Bsphys, Hs_rough, H)
     @test lhs1 ≈ rhs1
     @test tensor_product(Asphys, Hs_rough, H)' ≈ tensor_product(adjoint.(Asphys), Hs_rough, H)
+
 
     ## Unitary equivalence between tensor_product and kron
     ops = reduce(vcat, ops_fine)
@@ -578,10 +580,12 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::
         consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
     end
     fill!(mout, zero(eltype(mout)))
-    states = basisstates(H)
+    inds = tensor_product_iterator(m, H)
     M = length(keys(H))
     N = length(keys(Hsub))
-    for f1 in states, f2 in states
+    for I in inds
+        f1 = basisstate(I[1], H)
+        f2 = basisstate(I[2], H)
         f1sub, f1bar = split_state(f1)
         f2sub, f2bar = split_state(f2)
         if f1bar != f2bar
@@ -594,9 +598,7 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::
         ismissing(J1) && continue
         J2 = state_index(f2sub, Hsub)
         ismissing(J2) && continue
-        I1 = state_index(f1, H)
-        I2 = state_index(f2, H)
-        mout[J1, J2] += s * m[I1, I2]
+        mout[J1, J2] += s * m[I[1], I[2]]
     end
     return mout
 end
@@ -651,24 +653,26 @@ function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, 
     Is = Int[]
     Js = Int[]
     Vs = Int[]
-    for f1 in states, f2 in states
+    substates2 = map(split_state, states)
+    for f1 in states
         f1sub, f1bar = split_state(f1)
-        f2sub, f2bar = split_state(f2)
-        if f1bar != f2bar
-            continue
-        end
-        s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
-        s2 = phase_factors ? phase_factor_f(f1sub, f2sub, N) : 1
-        s = s2 * s1
         J1 = state_index(f1sub, Hsub)
         ismissing(J1) && continue
-        J2 = state_index(f2sub, Hsub)
-        ismissing(J2) && continue
         I1 = state_index(f1, H)
-        I2 = state_index(f2, H)
-        push!(Is, indI[J1, J2])
-        push!(Js, indJ[I1, I2])
-        push!(Vs, s)
+        for (f2, (f2sub, f2bar)) in zip(states, substates2)
+            if f1bar != f2bar
+                continue
+            end
+            s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
+            s2 = phase_factors ? phase_factor_f(f1sub, f2sub, N) : 1
+            s = s2 * s1
+            J2 = state_index(f2sub, Hsub)
+            ismissing(J2) && continue
+            I2 = state_index(f2, H)
+            push!(Is, indI[I1, I2])
+            push!(Js, indJ[J1, J2])
+            push!(Vs, s)
+        end
     end
     return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
