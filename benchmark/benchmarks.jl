@@ -45,6 +45,7 @@ allowed_ones = [[0, 1], [-1, 0], [2]]
 SUITE["generate_states"]["big_int"] = @benchmarkable FermionicHilbertSpaces.generate_states($weights, $allowed_ones, $N)
 
 ## Benchmark partial trace algorithms
+import FermionicHilbertSpaces: FullPartialTraceAlg, SubsystemPartialTraceAlg, default_partial_trace_alg
 # This scenario highlights cases where FullPartialTraceAlg is expected to be faster.
 N = 30
 H = hilbert_space(1:N, NumberConservation(2))
@@ -55,32 +56,22 @@ d = dim(H)
 mat = rand(ComplexF64, d, d)
 matsparse = sprand(ComplexF64, d, d, 0.01)
 Hcomp = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
-alg = FermionicHilbertSpaces.default_partial_trace_alg(Hsub, H, Hcomp)
-SUITE["partial_trace_algorithms"]["default=$alg"]["Sparse space"]["Dense"]["subsystem_alg"] = @benchmarkable partial_trace(
-    $mat,
-    $H,
-    $Hsub,
-    alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg(),
-)
+alg = default_partial_trace_alg(Hsub, H, Hcomp)
+SUITE["partial_trace_algorithms"]["default=$alg"]["Sparse space"]["Dense"]["subsystem_alg"] =
+    @benchmarkable partial_trace($mat, $H, $Hsub,
+        alg=SubsystemPartialTraceAlg(),)
 
-SUITE["partial_trace_algorithms"]["default=$alg"]["Sparse space"]["Dense"]["full_alg"] = @benchmarkable partial_trace(
-    $mat,
-    $H,
-    $Hsub,
-    alg=FermionicHilbertSpaces.FullPartialTraceAlg()
-)
-SUITE["partial_trace_algorithms"]["default=$alg"]["Sparse space"]["Sparse"]["subsystem_alg"] = @benchmarkable partial_trace(
-    $matsparse,
-    $H,
-    $Hsub,
-    alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg(),
-)
-SUITE["partial_trace_algorithms"]["default=$alg"]["Sparse space"]["Sparse"]["full_alg"] = @benchmarkable partial_trace(
-    $matsparse,
-    $H,
-    $Hsub,
-    alg=FermionicHilbertSpaces.FullPartialTraceAlg()
-)
+SUITE["partial_trace_algorithms"]["default=$alg"]["Sparse space"]["Dense"]["full_alg"] =
+    @benchmarkable partial_trace($mat, $H, $Hsub,
+        alg=FullPartialTraceAlg())
+
+SUITE["partial_trace_algorithms"]["default=$alg"]["Sparse space"]["Sparse"]["subsystem_alg"] =
+    @benchmarkable partial_trace($matsparse, $H, $Hsub,
+        alg=SubsystemPartialTraceAlg())
+
+SUITE["partial_trace_algorithms"]["default=$alg"]["Sparse space"]["Sparse"]["full_alg"] =
+    @benchmarkable partial_trace($matsparse, $H, $Hsub,
+        alg=FullPartialTraceAlg())
 
 # Setup for Standard Full Fock Space (No Symmetry)
 # This scenario tests the standard case where SubsystemPartialTraceAlg is typically efficient.
@@ -91,28 +82,19 @@ d_std = dim(H_std)
 m_std = rand(ComplexF64, d_std, d_std)
 m_sparse = sprand(ComplexF64, d_std, d_std, 0.01)
 Hcomp = FermionicHilbertSpaces.complementary_subsystem(H_std, Hsub_std)
-alg = FermionicHilbertSpaces.default_partial_trace_alg(Hsub_std, H_std, Hcomp)
-SUITE["partial_trace_algorithms"]["default=$alg"]["Full space"]["Dense"]["subsystem_alg"] = @benchmarkable partial_trace(
-    $m_std,
-    $H_std,
-    $Hsub_std,
-    alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg()
-)
-SUITE["partial_trace_algorithms"]["default=$alg"]["Full space"]["Dense"]["full_alg"] = @benchmarkable partial_trace(
-    $m_std,
-    $H_std,
-    $Hsub_std,
-    alg=FermionicHilbertSpaces.FullPartialTraceAlg()
-)
-SUITE["partial_trace_algorithms"]["default=$alg"]["Full space"]["Sparse"]["subsystem_alg"] = @benchmarkable partial_trace(
-    $m_sparse,
-    $H_std,
-    $Hsub_std,
-    alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg()
-)
-SUITE["partial_trace_algorithms"]["default=$alg"]["Full space"]["Sparse"]["full_alg"] = @benchmarkable partial_trace(
-    $m_sparse,
-    $H_std,
-    $Hsub_std,
-    alg=FermionicHilbertSpaces.FullPartialTraceAlg()
-)
+alg = default_partial_trace_alg(Hsub_std, H_std, Hcomp)
+SUITE["partial_trace_algorithms"]["default=$alg"]["Full space"]["Dense"]["subsystem_alg"] =
+    @benchmarkable partial_trace($m_std, $H_std, $Hsub_std,
+        alg=SubsystemPartialTraceAlg())
+
+SUITE["partial_trace_algorithms"]["default=$alg"]["Full space"]["Dense"]["full_alg"] =
+    @benchmarkable partial_trace($m_std, $H_std, $Hsub_std,
+        alg=FullPartialTraceAlg())
+
+SUITE["partial_trace_algorithms"]["default=$alg"]["Full space"]["Sparse"]["subsystem_alg"] =
+    @benchmarkable partial_trace($m_sparse, $H_std, $Hsub_std,
+        alg=SubsystemPartialTraceAlg())
+
+SUITE["partial_trace_algorithms"]["default=$alg"]["Full space"]["Sparse"]["full_alg"] =
+    @benchmarkable partial_trace($m_sparse, $H_std, $Hsub_std,
+        alg=FullPartialTraceAlg())
