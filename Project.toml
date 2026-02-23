@@ -1,6 +1,6 @@
 name = "FermionicHilbertSpaces"
 uuid = "82e5dd95-83c3-46b2-a303-acc930c81756"
-version = "0.9.1"
+version = "0.9.2"
 authors = ["Viktor Svensson", "William Samuelson"]
 
 [deps]
