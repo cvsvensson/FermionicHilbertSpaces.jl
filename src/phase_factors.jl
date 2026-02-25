@@ -30,19 +30,48 @@ function consistent_ordering(subsystem, jw::JordanWignerOrdering)::Bool
 end
 
 ispartition(Hs, H::AbstractHilbertSpace) = ispartition(map(keys, Hs), keys(H))
+
+function _find_position(label, labels::JordanWignerOrdering)
+    get(labels.ordering, label, 0)
+end
+function _find_position(label, labels)
+    pos = findfirst(==(label), labels)
+    isnothing(pos) && return 0
+    return pos
+end
+
 function ispartition(partition, labels)
-    modes = union(partition...)
-    length(labels) == length(modes) || return false
-    all(in(labels), modes) || return false
-    return true
-end
-function isorderedpartition(partition, jw::JordanWignerOrdering)
-    ispartition(partition, jw) || return false
+    n = length(labels)
+    covered = falses(n)
     for subsystem in partition
-        consistent_ordering(subsystem, jw) || return false
+        for label in subsystem
+            pos = _find_position(label, labels)
+            pos == 0 && return false
+            covered[pos] && return false
+            covered[pos] = true
+        end
     end
+    return all(covered)
+end
+
+function isorderedpartition(partition, jw::JordanWignerOrdering)
+    n = length(jw)
+    covered = falses(n)
+    for subsystem in partition
+        lastpos = 0
+        for label in subsystem
+            pos = get(jw.ordering, label, 0)
+            pos == 0 && return false
+            pos > lastpos || return false
+            covered[pos] && return false
+            covered[pos] = true
+            lastpos = pos
+        end
+    end
+    all(covered) || return false
     return true
 end
+
 isorderedpartition(Hs, H::AbstractHilbertSpace) = isorderedpartition(flat_fock_spaces(Hs), fock_part(H)) && ispartition(Hs, H)
 ispartition(::Any, ::Nothing) = true
 isorderedpartition(::Any, ::Nothing) = true
@@ -76,14 +105,37 @@ issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = issubsystem(k
     @test !ispart([[1], [2, 3, 4]])
     @test ispart([[1, 2, 3]])
     @test !ispart([[1, 2]])
-
     @test ispart([[2], [1], [3]])
     @test ispart([[2], [3], [1]])
     @test ispart([[1, 3], [2]])
     @test ispart([[3, 1], [2]])
     @test !ispart([[3, 1], [2, 4]])
     @test ispart([[2], [1, 3]])
+    @test !ispart([[2], [2, 3]])
+    @test ispart([[], [1, 2, 3]])
+    @test !ispart([[1], [1, 2, 3]])
 
+    ## same for ispartvec
+    ispartvec = Base.Fix2(ispartition, keys(jw))
+    @test ispartvec([[1], [2], [3]])
+    @test !ispartvec([[1], [2]])
+    @test !ispartvec([[1, 1, 1]])
+    @test !ispartvec([[1], [1], [2]])
+    @test ispartvec([[1], [2, 3]])
+    @test !ispartvec([[1], [2, 3, 4]])
+    @test ispartvec([[1, 2, 3]])
+    @test !ispartvec([[1, 2]])
+    @test ispartvec([[2], [1], [3]])
+    @test ispartvec([[2], [3], [1]])
+    @test ispartvec([[1, 3], [2]])
+    @test ispartvec([[3, 1], [2]])
+    @test !ispartvec([[3, 1], [2, 4]])
+    @test ispartvec([[2], [1, 3]])
+    @test !ispartvec([[2], [2, 3]])
+    @test ispartvec([[], [1, 2, 3]])
+    @test !ispartvec([[1], [1, 2, 3]])
+
+    ## Ordered partition
     isorderedpart = Base.Fix2(isorderedpartition, jw)
 
     @test isorderedpart([[1], [2], [3]])
@@ -101,6 +153,9 @@ issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = issubsystem(k
     @test !isorderedpart([[1], [3, 1]])
     @test !isorderedpart([[3], [2, 1]])
     @test isorderedpart([[2], [1, 3]])
+    @test !isorderedpart([[2], [2, 3]])
+    @test isorderedpart([[], [1, 2, 3]])
+    @test !isorderedpart([[1], [1, 2, 3]])
 end
 
 
