@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Conserved quantities · FermionicHilbertSpaces.jl</title><meta name="title" content="Conserved quantities · FermionicHilbertSpaces.jl"/><meta property="og:title" content="Conserved quantities · FermionicHilbertSpaces.jl"/><meta property="twitter:title" content="Conserved quantities · FermionicHilbertSpaces.jl"/><meta name="description" content="Documentation for FermionicHilbertSpaces.jl."/><meta property="og:description" content="Documentation for FermionicHilbertSpaces.jl."/><meta property="twitter:description" content="Documentation for FermionicHilbertSpaces.jl."/><meta property="og:url" content="https://cvsvensson.github.io/FermionicHilbertSpaces.jl/conservation/"/><meta property="twitter:url" content="https://cvsvensson.github.io/FermionicHilbertSpaces.jl/conservation/"/><link rel="canonical" href="https://cvsvensson.github.io/FermionicHilbertSpaces.jl/conservation/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">FermionicHilbertSpaces.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li class="is-active"><a class="tocitem" href>Conserved quantities</a><ul class="internal"><li><a class="tocitem" href="#Spin"><span>Spin</span></a></li><li><a class="tocitem" href="#Small-subspaces-in-large-systems"><span>Small subspaces in large systems</span></a></li><li><a class="tocitem" href="#More-advanced-use-of-conserved-quantities:-Fractionalized-hilbert-space"><span>More advanced use of conserved quantities: Fractionalized hilbert space</span></a></li></ul></li><li><a class="tocitem" href="../non_interacting/">Non interacting systems</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../literate_output/kitaev_chain/">Interacting Kitaev chain</a></li><li><a class="tocitem" href="../literate_output/free_fermions/">Free fermions</a></li></ul></li><li><a class="tocitem" href="../misc/">Misc</a></li><li><a class="tocitem" href="../docstrings/">Functions</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Conserved quantities</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Conserved quantities</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/cvsvensson/FermionicHilbertSpaces.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/cvsvensson/FermionicHilbertSpaces.jl/blob/main/docs/src/conservation.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Conserved-quantum-numbers"><a class="docs-heading-anchor" href="#Conserved-quantum-numbers">Conserved quantum numbers</a><a id="Conserved-quantum-numbers-1"></a><a class="docs-heading-anchor-permalink" href="#Conserved-quantum-numbers" title="Permalink"></a></h1><p>The basis states of a Hilbert space can be organized into sectors with different quantum numbers. Only quantum numbers which are diagonal in the fock state basis are supported. </p><p>Use <code>hilbert_space(labels, qn)</code>, where <code>qn</code> can be e.g.</p><ul><li><code>ParityConservation()</code>: Puts all states with odd parity first, then all states with even parity.</li><li><code>ParityConservation(p::Int)</code>: Only contains states with parity <code>p</code> (-1 for odd and 1 for even).</li><li><code>number_conservation()</code>: Sorts basis states by the number of fermions.</li><li><code>number_conservation(sectors::Union{Int,Vector{Int}})</code>: Only contains states with the number(s) in the list <code>sectors</code>.</li><li><code>number_conservation(sectors, weight_function)</code>: &#39;weight_function&#39; is a function that takes a label and returns an integer weight that represents the contribution of that fermion to the total number. The returned states will have total weighted number of fermions contained in <code>sectors</code>.</li><li><code>number_conservation(weight_function)</code>: As above, but allowing all sectors.</li><li>Products of the above quantum numbers, which sorts states according to each factor in the product.</li></ul><p>Using <code>number_conservation</code> with small sectors avoids the exponentially large Hilbert space.</p><h2 id="Spin"><a class="docs-heading-anchor" href="#Spin">Spin</a><a id="Spin-1"></a><a class="docs-heading-anchor-permalink" href="#Spin" title="Permalink"></a></h2><p>This package does not know anything about spin, but one can treat spin just as an extra label as follows:</p><pre><code class="language-julia hljs">using FermionicHilbertSpaces
+labels = Base.product(1:4, (:↑,:↓))
+H = hilbert_space(labels)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">256-dimensional SimpleFockHilbertSpace:
+8 fermions: [(1, :↑), (2, :↑), (3, :↑), (4, :↑), (1, :↓), (2, :↓), (3, :↓), (4, :↓)]</code></pre><p>If spin is conserved, one can use </p><pre><code class="language-julia hljs">H = hilbert_space(labels, number_conservation(label -&gt; :↑ in label) * number_conservation(label -&gt; :↓ in label))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">256-dimensional SymmetricFockHilbertSpace:
+8 fermions: [(1, :↑), (2, :↑), (3, :↑), (4, :↑), (1, :↓), (2, :↓), (3, :↓), (4, :↓)]
+FockSymmetry(Number conservation for 2 subsets)</code></pre><p>to sort states according to the number of fermions with spin up and down. However, this package can&#39;t help to sort states into sectors with different total angular momentum, because that requires taking superpositions of different fock states.</p><p>To pick out the sector with 2 fermions with spin up and 0 fermions with spin down, one can extract it from the hilbert space defined above using <code>sector</code>, or construct it directly</p><pre><code class="language-julia hljs">FermionicHilbertSpaces.sector((2,0), H)
+hilbert_space(labels, number_conservation(2, label -&gt; :↑ in label) * number_conservation(0, label -&gt; :↓ in label))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">6-dimensional SymmetricFockHilbertSpace:
+8 fermions: [(1, :↑), (2, :↑), (3, :↑), (4, :↑), (1, :↓), (2, :↓), (3, :↓), (4, :↓)]
+FockSymmetry(Number conservation for 2 subsets)</code></pre><h2 id="Small-subspaces-in-large-systems"><a class="docs-heading-anchor" href="#Small-subspaces-in-large-systems">Small subspaces in large systems</a><a id="Small-subspaces-in-large-systems-1"></a><a class="docs-heading-anchor-permalink" href="#Small-subspaces-in-large-systems" title="Permalink"></a></h2><p>For N fermions, the full hilbert space is exponentially large in N. However, due to conservation laws, we may be interested in only a small subspace. If you use a quantum number which consists of only products of number conservations, this package attempts to find the subspaces without enumerating the full hilbert space.</p><p>As an example, consider the Hubbard model on N sites </p><p class="math-container">\[H = -t \sum_{i,\sigma} (c_{i,\sigma}^\dagger c_{i+1,\sigma} + \mathrm{h.c}) + U \sum_i n_{i,↑} n_{i,↓}.\]</p><p>which conserves the number of spin up and spin down fermions separately. Let&#39;s define a function to get the hamiltonian with symbolic fermions </p><pre><code class="language-julia hljs">using FermionicHilbertSpaces
+function hubbard_hamiltonian(N, t, U)
+    @fermions c
+    spins = (:↑,:↓)
+    sum(-t * c[i,σ]&#39; * c[i+1,σ] + hc for σ in spins for i in 1:N-1) + sum(U * c[i,:↑]&#39;c[i,:↑] * c[i,:↓]&#39;c[i,:↓] for i in 1:N)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">hubbard_hamiltonian (generic function with 1 method)</code></pre><p>Let&#39;s find the matrix representation of the hamiltonian in the sector with <code>N_up</code> spin up fermions and <code>N_down</code> spin down fermions. To find this subspace we do</p><pre><code class="language-julia hljs">N = 20
+labels = Base.product(1:N, (:↑,:↓))
+N_up = 2
+N_down = 1
+qn_spin = number_conservation(N_up, label -&gt; :↑ in label) * number_conservation(N_down, label -&gt; :↓ in label)
+H = hilbert_space(labels, qn_spin)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3800-dimensional SymmetricFockHilbertSpace:
+40 fermions: [(1, :↑), (2, :↑), (3, :↑), (4, :↑), (5, :↑), (6, :↑), (7, :↑), (8, :↑), (9, :↑), (10, :↑)  …  (11, :↓), (12, :↓), (13, :↓), (14, :↓), (15, :↓), (16, :↓), (17, :↓), (18, :↓), (19, :↓), (20, :↓)]
+FockSymmetry(Number conservation for 2 subsets)</code></pre><p>The full hilbert space is of size <code>4^20 ≈ 10^12</code>, but the sector with 2 spin up and 1 spin down fermion is only of size <code>3800</code> and is generated without constructing the full hilbert space. Finally, we can get the matrix representation of the hamiltonian in this sector as</p><pre><code class="language-julia hljs">symham = hubbard_hamiltonian(N, 1.0, 4.0)
+ham = matrix_representation(symham, H)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3800×3800 SparseArrays.SparseMatrixCSC{Float64, Int64} with 21280 stored entries:
+⎡⠻⣦⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎤
+⎢⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⎥
+⎣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢮⠻⣦⎦</code></pre><h3 id="No-double-occupation"><a class="docs-heading-anchor" href="#No-double-occupation">No double occupation</a><a id="No-double-occupation-1"></a><a class="docs-heading-anchor-permalink" href="#No-double-occupation" title="Permalink"></a></h3><p>When the onsite Coulomb interaction is very strong, there is a large energy penalty for double occupation of a site. In that case, we can restrict the Hilbert space to not allow double occupation of any site. Consider the site <code>k</code>, which has two labels <code>(k, :↑)</code> and <code>(k, :↓)</code>. We can use <code>number_conservation(0:1, label -&gt; label[1] == k)</code> which says that the sum of occupation numbers of all labels where the first element of the label equals <code>k</code> is contained in the set <code>0:1</code>. To impose this for all sites, we take the product over all sites.</p><pre><code class="language-julia hljs">qn_no_double_occ = prod(number_conservation(0:1, label -&gt; label[1] == k) for k in 1:N)
+qn = qn_spin * qn_no_double_occ
+H_ndo = hilbert_space(labels, qn)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3420-dimensional SymmetricFockHilbertSpace:
+40 fermions: [(1, :↑), (2, :↑), (3, :↑), (4, :↑), (5, :↑), (6, :↑), (7, :↑), (8, :↑), (9, :↑), (10, :↑)  …  (11, :↓), (12, :↓), (13, :↓), (14, :↓), (15, :↓), (16, :↓), (17, :↓), (18, :↓), (19, :↓), (20, :↓)]
+FockSymmetry(Number conservation for 22 subsets)</code></pre><p>This quantum number is a product of number conservations, so the sector is constructed without enumerating the full Hilbert space.</p><p>The matrix representation of the hamiltonian in this sector can be constructed as before, but now we need to specify <code>projection = true</code> as the symbolic hamiltonian maps states in the subspace to states outside the subspace. The keyword <code>projection = true</code> says to ignore those terms.</p><pre><code class="language-julia hljs">symham = hubbard_hamiltonian(N, 1, 0)
+ham_ndo = matrix_representation(symham, H_ndo; projection = true)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3420×3420 SparseArrays.SparseMatrixCSC{Int64, Int64} with 17442 stored entries:
+⎡⢻⣶⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎤
+⎢⠀⠙⢿⣷⣤⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠻⡿⣯⡳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠙⢮⡻⣮⡳⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠙⢮⠻⣦⡙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠈⠳⣌⠻⣦⡉⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢧⡈⠻⣦⡈⠓⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⠈⠻⣦⡀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠈⠻⣦⡀⠉⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⡄⠈⠻⣦⡀⠈⠳⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠈⠻⣦⡀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⠀⠈⠻⣦⡀⠀⠙⢦⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠈⠻⣦⡀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠈⠻⣦⡄⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⢦⡀⠀⠉⠻⣦⡀⠀⠈⠓⢦⡀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠈⠻⣦⡀⠀⠀⠙⢦⡀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⠀⠀⠈⢿⣷⡀⠀⠀⠙⢦⡀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠈⠻⣦⡀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠈⠻⣦⣄⠀⎥
+⎣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⠀⠀⠀⠙⢿⣷⎦</code></pre><h2 id="More-advanced-use-of-conserved-quantities:-Fractionalized-hilbert-space"><a class="docs-heading-anchor" href="#More-advanced-use-of-conserved-quantities:-Fractionalized-hilbert-space">More advanced use of conserved quantities: Fractionalized hilbert space</a><a id="More-advanced-use-of-conserved-quantities:-Fractionalized-hilbert-space-1"></a><a class="docs-heading-anchor-permalink" href="#More-advanced-use-of-conserved-quantities:-Fractionalized-hilbert-space" title="Permalink"></a></h2><p>The <span>$t-J_z$</span> model is</p><p class="math-container">\[H = -t \sum_{i,\sigma} (c_{i,\sigma}^\dagger c_{i+1,\sigma} + \mathrm{h.c}) + J_z \sum_{i} S^z_i S^z_{i+1},\]</p><p>where <span>$S^z_i = n_{i,↑} - n_{i,↓}$</span> and double occupation is forbidden. This model features a fractionalized hilbert space where the Hilbert space splits into exponentially many dynamically disconnected sectors, see <a href="https://arxiv.org/abs/1910.06341">[1910.06341]</a>. We implement the hamiltonian as</p><pre><code class="language-julia hljs">function tjz(N,t,Jz)
+    @fermions c
+    spins = (:↑,:↓)
+    Sz(i) = c[i,:↑]&#39;c[i,:↑] - c[i,:↓]&#39;c[i,:↓]
+    -t*sum(c[i,σ]&#39;c[i+1,σ] + hc for σ in spins for i in 1:N-1) + Jz*sum(Sz(i)Sz(i+1) for i in 1:N-1)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">tjz (generic function with 1 method)</code></pre><p>To construct the hilbert space for this model, we first use the same conservation as above to restrict to no double occupation and conserve spin. This gives a conserved quantum numbers which is a product of number conservations and so it is efficient in generating states.</p><pre><code class="language-julia hljs">N = 12
+N_up = 4
+N_down = 1
+labels = Base.product(1:N, (:↑,:↓))
+qn_spin = number_conservation(N_up, label -&gt; :↑ in label) * number_conservation(N_down, label -&gt; :↓ in label)
+qn = qn_spin * qn_no_double_occ
+H = hilbert_space(labels, qn)
+symham = tjz(N, 1, 1/4)
+ham = matrix_representation(symham, H; projection = true)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3960×3960 SparseArrays.SparseMatrixCSC{Float64, Int64} with 26780 stored entries:
+⎡⢻⣶⡄⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎤
+⎢⠀⢭⡻⣮⣳⠀⢠⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠙⠚⢿⣷⡀⠙⠢⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠲⣄⠈⠻⣦⣄⠙⠂⠀⠐⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠈⠢⣄⠙⠿⣧⡳⣄⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠈⠀⠙⢮⡻⣮⣄⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠰⣄⠀⠀⠀⠙⠻⣦⣀⠀⠀⠀⠙⠂⠀⠀⠀⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠘⢿⣷⡲⣄⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠘⢮⡻⣮⣅⠳⣄⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⠀⠀⠀⢥⡙⠻⣦⡈⠳⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡈⢿⣷⣦⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠠⣄⠀⠀⠀⠀⠀⠀⠈⠛⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠙⠦⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠈⢿⣷⡤⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⢯⡻⣮⣓⠰⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⢙⡘⠿⣧⡈⠳⡄⢀⡀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠙⢦⡈⢻⣶⣤⡀⠙⢦⡀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⡄⠀⠀⠀⠀⠀⢉⠀⠻⠿⣧⡀⠀⠙⢦⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠈⢻⣶⣄⡀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⠹⣿⣿⣦⡀⎥
+⎣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⠻⣦⎦</code></pre><p>This space fragments into more sectors, which are labelled by the order of occupied spins. By defining a function that maps states to the spin order, we can split the hilbert space into those fragments. The function can be defined as</p><pre><code class="language-julia hljs">function spin_order(state, H)
+    N = length(keys(H)) ÷ 2
+    occupations = map(1:N) do n
+        if FermionicHilbertSpaces.occupation(state, (n, :↑), H)
+            :↑
+        elseif FermionicHilbertSpaces.occupation(state, (n, :↓), H)
+            :↓
+        else
+            :hole
+        end
+    end
+    filter(x -&gt; x != :hole, occupations)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">spin_order (generic function with 1 method)</code></pre><p>We can then construct the fractionalized hilbert space as</p><pre><code class="language-julia hljs">qnfrac = Base.Fix2(spin_order, H)
+Hfrac = FermionicHilbertSpaces.symmetrize(H, qnfrac)
+Hfrac.symmetry.qntofockstates</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5-element Dictionaries.Dictionary{Vector{Symbol}, SubArray{FockNumber{UInt64}, 1, Vector{FockNumber{UInt64}}, Tuple{UnitRange{Int64}}, true}}:
+ [:↑, :↑, :↑, :↑, :↓] │ FockNumber{UInt64}[FockNumber(8390528), FockNumber(8390…
+ [:↑, :↑, :↑, :↓, :↑] │ FockNumber{UInt64}[FockNumber(4197248), FockNumber(4197…
+ [:↑, :↑, :↓, :↑, :↑] │ FockNumber{UInt64}[FockNumber(2100608), FockNumber(2100…
+ [:↑, :↓, :↑, :↑, :↑] │ FockNumber{UInt64}[FockNumber(1052288), FockNumber(1052…
+ [:↓, :↑, :↑, :↑, :↑] │ FockNumber{UInt64}[FockNumber(528128), FockNumber(26598…</code></pre><p>This splits the space of dimension 3960 into 5 fragments each of size 792. </p><p>Let&#39;s find the half-chain entanglement entropy of the ground state in each sector. We can iterate over sectors by calling <code>sectors(H)</code>, and we can use <code>subregion</code> to find the hilbert space of a subsystem. </p><pre><code class="language-julia hljs">using Arpack, LinearAlgebra
+using FermionicHilbertSpaces: sectors
+left_labels = Base.product(1:(N÷2), (:↑,:↓))
+entropy(ρ) = sum(-λ * log(λ) for λ in eigvals(Hermitian(ρ)) if λ &gt; 1e-12)
+map(sectors(Hfrac)) do Hsec
+    ham = matrix_representation(symham, Hsec; projection = true)
+    vals, vecs = eigs(ham, nev = 1)
+    Hleft = subregion(left_labels, Hsec)
+    rholeft = partial_trace(vecs[:,1]*vecs[:,1]&#39;, Hsec =&gt; Hleft)
+    entropy(rholeft)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5-element Vector{Float64}:
+ 0.7764915118824811
+ 0.7577846594935103
+ 0.7671196796227888
+ 0.7577846594935123
+ 0.7764915118824796</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../non_interacting/">Non interacting systems »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Wednesday 25 February 2026 10:21">Wednesday 25 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
