@@ -51,6 +51,9 @@ function state_index(state::ProductState, H::ProductSpace)
     end
     return n
 end
+function state_index(state::ProductState, H::AbstractHilbertSpace)
+    dim(fock_part(H)) == 1 && fock_part(state) == FockNumber(0) && return state_index(non_fock_part(state), H)
+end
 function state_index(state::ProductState{Nothing}, H::ProductSpace{Nothing})
     n = 1
     dimprod = 1
@@ -159,7 +162,7 @@ function StateExtender(Hs, H::ProductSpace)
         ostates = flat_non_fock_states(states)
         eostates = non_fock_extender(ostates).other_states
         fstate = fockstateextender(fockstates)
-        ProductState(fstate, eostates) 
+        ProductState(fstate, eostates)
     end
 end
 fock_part(H::AbstractFockHilbertSpace) = H
@@ -174,6 +177,48 @@ non_fock_part(P::ProductSpace) = P.other_spaces
 non_fock_part(P::ProductState) = P.other_states
 non_fock_part(s::Any) = s
 non_fock_part(::AbstractFockState) = nothing
+
+function StateSplitter(H::ProductSpace{Nothing}, Hs)
+    perm = map(Hsub -> findfirst(==(Hsub), H.other_spaces), Hs)
+    isperm(perm) || throw(ArgumentError("The spaces in Hs must be a permutation of the spaces in H"))
+    function splitter(state)
+        map(p -> _substate(state, p), perm)
+    end
+end
+function StateSplitter(H::ProductSpace, Hs)
+    non_fock_spaces = flat_non_fock_spaces(Hs)
+    non_fock_splitter = StateSplitter(ProductSpace{Nothing}(H.other_spaces), filter(!isnothing, non_fock_spaces))
+    fock_spaces = map(fock_part, Hs)
+    has_fock = map(!isnothing, fock_spaces)
+    has_other = map(!isnothing, non_fock_spaces)
+    fock_splitter = StateSplitter(H.fock_space, filter(!isnothing, fock_spaces))
+    function splitter(state)
+        fockstate = fock_part(state)
+        non_fock_state = ProductState{Nothing}(non_fock_part(state))
+        split_non_fock_states = non_fock_splitter(non_fock_state)
+        split_fock_states = fock_splitter(fockstate)
+        fock_space_counter = 1
+        other_counter = 1
+        map(1:length(Hs)) do i
+            if has_fock[i] && has_other[i]
+                s = ProductState(split_fock_states[fock_space_counter], split_non_fock_states[other_counter])
+                fock_space_counter += 1
+                other_counter += 1
+                return s
+            elseif has_fock[i]
+                s = split_fock_states[fock_space_counter]
+                fock_space_counter += 1
+                return s
+            elseif has_other[i]
+                s = split_non_fock_states[other_counter]
+                other_counter += 1
+                return s
+            else
+                throw(ArgumentError("Each space in Hs must have either a non-fock part, a fock part, or both"))
+            end
+        end
+    end
+end
 
 phase_factor_h(f1, f2, Hs, H::ProductSpace{Nothing}) = 1
 phase_factor_h(f1, f2, Hs, H::ProductSpace) = phase_factor_h(f1, f2, Hs, H.fock_space)
