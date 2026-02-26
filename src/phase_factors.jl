@@ -158,21 +158,55 @@ issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = issubsystem(k
     @test !isorderedpart([[1], [1, 2, 3]])
 end
 
-
+default_fock_type(jw::JordanWignerOrdering) = FockNumber{default_fock_representation(length(jw))}
+function phase_factor_h(Hs, H::AbstractFockHilbertSpace)
+    partition = map(modes, flat_fock_spaces(Hs))
+    phase_factor_h(partition, H.jw)
+end
+function phase_factor_h(partition, jw::JordanWignerOrdering)
+    isorderedpartition(partition, jw) || error("Partition is not ordered")
+    T = default_fock_type(jw)
+    masks = map(Xp -> focknbr_from_site_labels(Xp, jw)::T, partition)
+    inds = map(partition) do X
+        [getindex(jw, li) for li in X]
+    end
+    function pfh(f1, f2)
+        phase_factor_h(f1, f2, partition, masks, inds)
+    end
+end
 phase_factor_h(f1, f2, Hs, H::AbstractFockHilbertSpace) = phase_factor_h(f1, f2, map(modes, flat_fock_spaces(Hs)), H.jw)
 function phase_factor_h(f1::AbstractFockState, f2::AbstractFockState, partition, jw::JordanWignerOrdering)::Int
     #(120b)
     phase = 1
-    for X in partition
-        for Xp in partition
-            if X == Xp
+    for Xp in partition
+        Xpmask = focknbr_from_site_labels(Xp, jw)
+        masked_f1 = Xpmask & f1
+        masked_f2 = Xpmask & f2
+        for X in partition
+            if X === Xp
                 continue
             end
-            Xpmask = focknbr_from_site_labels(Xp, jw)
-            masked_f1 = Xpmask & f1
-            masked_f2 = Xpmask & f2
             for li in X
                 i = getindex(jw, li)
+                if _bit(f2, i)
+                    phase *= jwstring_anti(i, masked_f1) * jwstring_anti(i, masked_f2)
+                end
+            end
+        end
+    end
+    return phase
+end
+function phase_factor_h(f1::AbstractFockState, f2::AbstractFockState, partition, masks, inds)::Int
+    #(120b)
+    phase = 1
+    for (Xp, Xpmask) in zip(partition, masks)
+        masked_f1 = Xpmask & f1
+        masked_f2 = Xpmask & f2
+        for (X, Xinds) in zip(partition, inds)
+            if X === Xp
+                continue
+            end
+            for i in Xinds
                 if _bit(f2, i)
                     phase *= jwstring_anti(i, masked_f1) * jwstring_anti(i, masked_f2)
                 end
@@ -216,7 +250,16 @@ end
     jw = JordanWignerOrdering(1:N)
     fockstates = sort(map(FockNumber, 0:2^N-1), by=Base.Fix2(bits, N))
     h(p, fockstates, jw) = [phase_factor_h(f1, f2, p, jw) for f1 in fockstates, f2 in fockstates]
+    h_fast(p, fockstates, jw) = begin
+        _h = phase_factor_h(p, jw)
+        [_h(f1, f2) for f1 in fockstates, f2 in fockstates]
+    end
     @test h([[1], [2]], fockstates, jw) ==
+          [1 1 1 -1;
+        1 1 -1 1;
+        1 1 1 -1;
+        1 1 -1 1]
+    @test h_fast([[1], [2]], fockstates, jw) ==
           [1 1 1 -1;
         1 1 -1 1;
         1 1 1 -1;
@@ -234,6 +277,14 @@ end
     jw = JordanWignerOrdering(1:N)
     fockstates = sort(map(FockNumber, 0:2^N-1), by=Base.Fix2(bits, N))
     @test h([[1, 3], [2]], fockstates, jw) == [1 1 1 -1 1 1 -1 1;
+        1 1 -1 1 1 1 1 -1;
+        1 1 1 -1 -1 -1 1 -1;
+        1 1 -1 1 -1 -1 -1 1;
+        1 1 1 -1 1 1 -1 1;
+        1 1 -1 1 1 1 1 -1;
+        1 1 1 -1 -1 -1 1 -1;
+        1 1 -1 1 -1 -1 -1 1]
+    @test h_fast([[1, 3], [2]], fockstates, jw) == [1 1 1 -1 1 1 -1 1;
         1 1 -1 1 1 1 1 -1;
         1 1 1 -1 -1 -1 1 -1;
         1 1 -1 1 -1 -1 -1 1;
