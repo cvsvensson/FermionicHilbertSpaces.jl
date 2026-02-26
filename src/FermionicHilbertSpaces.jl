@@ -67,6 +67,8 @@ include("sectors.jl")
 
 include("spin.jl")
 
+include("basisarray.jl")
+
 
 import PrecompileTools
 
