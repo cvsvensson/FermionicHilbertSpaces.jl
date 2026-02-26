@@ -37,29 +37,21 @@ end
 Return (newfocknbr, fermionstatistics) where `newfocknbr` is the state obtained by toggling fermions at `digitpositions` with `daggers` in the Fock state `f`, and `fermionstatistics` is the phase from the Jordan-Wigner string. If the operation puts two fermions one the same site, the resulting state is undefined.
 """
 function togglefermions(digitpositions, daggers, focknbr::FockNumber{I}) where I
-    newfocknbr = 0
-    allowed = true
+    newfocknbr = focknbr
     fermionstatistics = 1
-    for (digitpos, dagger) in zip(digitpositions, daggers)
-        op = (one(I) << (digitpos - 1)) #2^(digitpos - 1) but faster
-        if dagger
-            newfocknbr = op | focknbr
-            # Check if there already was a fermion at the site.
-            allowed = iszero(op & focknbr)
-        else
-            newfocknbr = op ⊻ focknbr
-            # Check if the site was empty.
-            allowed = !iszero(op & focknbr)
+    for (dagger, digitpos) in zip(daggers, digitpositions)
+        op = one(I) << (digitpos - 1)
+        occupied = !iszero(op & newfocknbr)
+        if dagger == occupied  # creation on occupied OR annihilation on empty
+            return newfocknbr, 0
         end
-        # return directly if we create/annihilate an occupied/empty state
-        if !allowed
-            return newfocknbr, allowed * fermionstatistics
-        end
-        fermionstatistics *= jwstring(digitpos, focknbr)
-        focknbr = newfocknbr
+        fermionstatistics *= jwstring(digitpos, newfocknbr)
+        # Apply operator: both cases reduce to XOR
+        # creation:     0|op  XOR focknbr sets the bit (since bit was 0)
+        # annihilation: op    XOR focknbr clears the bit (since bit was 1)
+        newfocknbr = op ⊻ newfocknbr
     end
-    # fermionstatistics better way?
-    return newfocknbr, allowed * fermionstatistics
+    return newfocknbr, fermionstatistics
 end
 
 function togglemajoranas(digitpositions, daggers, focknbr)
