@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Interacting Kitaev chain · FermionicHilbertSpaces.jl</title><meta name="title" content="Interacting Kitaev chain · FermionicHilbertSpaces.jl"/><meta property="og:title" content="Interacting Kitaev chain · FermionicHilbertSpaces.jl"/><meta property="twitter:title" content="Interacting Kitaev chain · FermionicHilbertSpaces.jl"/><meta name="description" content="Documentation for FermionicHilbertSpaces.jl."/><meta property="og:description" content="Documentation for FermionicHilbertSpaces.jl."/><meta property="twitter:description" content="Documentation for FermionicHilbertSpaces.jl."/><meta property="og:url" content="https://cvsvensson.github.io/FermionicHilbertSpaces.jl/literate_output/kitaev_chain/"/><meta property="twitter:url" content="https://cvsvensson.github.io/FermionicHilbertSpaces.jl/literate_output/kitaev_chain/"/><link rel="canonical" href="https://cvsvensson.github.io/FermionicHilbertSpaces.jl/literate_output/kitaev_chain/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">FermionicHilbertSpaces.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../conservation/">Conserved quantities</a></li><li><a class="tocitem" href="../../non_interacting/">Non interacting systems</a></li><li><span class="tocitem">Examples</span><ul><li class="is-active"><a class="tocitem" href>Interacting Kitaev chain</a></li><li><a class="tocitem" href="../free_fermions/">Free fermions</a></li></ul></li><li><a class="tocitem" href="../../misc/">Misc</a></li><li><a class="tocitem" href="../../docstrings/">Functions</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Interacting Kitaev chain</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Interacting Kitaev chain</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/cvsvensson/FermionicHilbertSpaces.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/cvsvensson/FermionicHilbertSpaces.jl/blob/main/examples/kitaev_chain.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Interacting-Kitaev-Chain-Tutorial"><a class="docs-heading-anchor" href="#Interacting-Kitaev-Chain-Tutorial">Interacting Kitaev Chain Tutorial</a><a id="Interacting-Kitaev-Chain-Tutorial-1"></a><a class="docs-heading-anchor-permalink" href="#Interacting-Kitaev-Chain-Tutorial" title="Permalink"></a></h1><p>In this example, we study the interacting Kitaev chain. We show how the Hamiltonian can be constructed symbolically or by using matrix representations of the fermionic operators, and how to restrict the Hilbert space to a subspace of a given parity. We solve for the ground states and characterize the locality of the many-body Majoranas.</p><p>We start by importing the necessary packages.</p><pre><code class="language-julia hljs">using FermionicHilbertSpaces, LinearAlgebra, Plots
+using Arpack</code></pre><p>Then we define the Hilbert space with <code>N</code> sites and parity conservation.</p><pre><code class="language-julia hljs">N = 12
+H = hilbert_space(1:N, ParityConservation())</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4096-dimensional SymmetricFockHilbertSpace:
+12 fermions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+FockSymmetry(ParityConservation([-1, 1]))</code></pre><p>Symbolic fermions can be defined using the <code>@fermions</code> macro,</p><pre><code class="language-julia hljs">@fermions f</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(FermionicHilbertSpaces.SymbolicFermionBasis(:f, 0x39415815c723b896),)</code></pre><p>Let&#39;s define the interacting Kitaev chain Hamiltonian. It is a function of the fermions <code>f</code> and parameters <code>N</code>, <code>μ</code>, <code>t</code>, <code>Δ</code>, and <code>U</code>, representing the number of sites, chemical potential, hopping amplitude, pairing amplitude, and interaction strength, respectively. Note the use of the Hermitian conjugate <code>hc</code>, which simplifies the expression for the Hamiltonian.</p><pre><code class="language-julia hljs">kitaev_chain(f, N, μ, t, Δ, U) = sum(t * f[i]&#39; * f[i+1] + hc for i in 1:N-1) +
+                                 sum(Δ * f[i] * f[i+1] + hc for i in 1:N-1) +
+                                 sum(U * f[i]&#39; * f[i] * f[i+1]&#39; * f[i+1] for i in 1:N-1) +
+                                 sum(μ[i] * f[i]&#39; * f[i] for i in 1:N)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">kitaev_chain (generic function with 1 method)</code></pre><p>Define parameters close to the sweet spot with perfectly localized Majoranas.</p><pre><code class="language-julia hljs">U = 4.0
+t = 1.0
+δΔ = 0.4
+Δ = t + U / 2 - δΔ # slightly detuned from the sweet spot
+μ = fill(-U / 2, N) # edge chemical potential
+μ[2:N-1] .= -U # bulk chemical potential</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">10-element view(::Vector{Float64}, 2:11) with eltype Float64:
+ -4.0
+ -4.0
+ -4.0
+ -4.0
+ -4.0
+ -4.0
+ -4.0
+ -4.0
+ -4.0
+ -4.0</code></pre><p>We can now construct the Hamiltonian using symbolic fermions for a symbolic representation</p><pre><code class="language-julia hljs">hsym = kitaev_chain(f, N, μ, t, Δ, U)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Sum with 67 terms: 
+-4.0*f†[8]*f†[9]*f[8]*f[9]+f†[4]*f[3]+2.6*f[4]*f[5] + ...</code></pre><p>To convert the symbolic Hamiltonian to a matrix representation, we can use the <code>matrix_representation</code> function.</p><pre><code class="language-julia hljs">matrix_representation(hsym, H)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4096×4096 SparseArrays.SparseMatrixCSC{Float64, Int64} with 49151 stored entries:
+⎡⢿⣷⣷⡈⠳⠄⠀⠘⢦⡀⠀⠀⠀⠀⠀⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎤
+⎢⡙⠻⣿⣿⣴⢦⡀⠀⠀⠙⠂⠀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠙⠆⠰⣟⠿⣧⣝⣦⠠⣄⣄⠀⠀⠀⠀⠀⠀⠀⠈⠳⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⣀⠀⠀⠈⠳⣽⣿⣿⣦⢈⠉⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠈⠳⣄⠀⠀⢦⡈⢛⣿⣿⡅⠀⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠈⠀⠀⠙⢧⡀⠁⠉⣿⣿⣷⡈⠻⠅⠀⠘⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⡙⠻⣿⣿⣶⢦⡀⠀⠀⠙⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⢤⡀⠀⠀⠀⠀⠀⠀⠀⠙⠟⠆⠸⣟⠿⣧⣽⣦⠠⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⣀⠀⠀⠈⠳⣿⣿⣿⣦⣈⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠈⠳⣄⠀⠀⢦⡈⢻⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣧⡈⠳⠀⠀⠙⢦⡀⠀⠀⠀⠀⠈⠳⣄⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡉⠻⣿⣿⣿⢦⡀⠀⠀⠉⠀⠀⠀⠀⠀⠀⠈⠳⣄⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠂⠻⣟⢻⣶⣽⡆⠰⣴⣄⠀⠀⠀⠀⠀⠀⠀⠈⠓⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣄⠀⠀⠈⠳⠿⣿⣿⣦⣌⠈⠳⣄⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⡄⠀⢐⣦⡈⢿⣿⣿⣀⢀⠈⢳⣄⠀⠀⡀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⢘⣿⣿⣥⡈⠳⠀⠀⠙⢦⡀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⣀⡁⠻⣿⣿⣟⢦⡀⠀⠀⠉⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢦⡀⠀⠀⠀⠀⠀⠀⠀⠙⠙⠂⠻⣝⢻⣶⣽⠆⠰⣄⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠠⣄⠀⠀⠈⠳⠟⣿⣿⣦⣌⎥
+⎣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⠀⠀⠀⠀⠀⠈⠳⡄⠀⠐⢦⡈⢿⢿⣷⎦</code></pre><p>Now, let&#39;s diagonalize the system. Since parity is conserved, we can work in the even and odd parity sectors separately.</p><pre><code class="language-julia hljs">import FermionicHilbertSpaces: indices, sector, quantumnumbers
+(Eo, o), (Ee, e) = map(quantumnumbers(H)) do parity
+    Hsec = sector(parity, H)
+    ham = matrix_representation(hsym, Hsec)
+    vals, vecs = eigs(ham; nev=1, which=:SR)
+    inds = indices(Hsec, H)
+    ground_state = zeros(eltype(vecs), dim(H))
+    ground_state[inds] = vecs[:, 1]
+    (; energy=first(vals), ground_state)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{@NamedTuple{energy::Float64, ground_state::Vector{Float64}}}:
+ (energy = -30.884311784513145, ground_state = [-0.017199243203262955, 0.018548790166372505, -0.016890092086739104, -0.016193789793343894, 0.01714560172625716, 0.017972271430228014, -0.01920782861443464, 0.017876658689792282, -0.017218005481788635, -0.01768536815029698  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+ (energy = -30.884331431867007, ground_state = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  -0.02030074674863275, 0.01892709491454754, -0.016242117258605027, -0.016692660286701425, 0.021406546465997038, -0.01890534428431171, -0.017864375792244636, 0.01996274836346002, -0.0160609793818018, -0.015608274175071086])</code></pre><p>The ground states are almost degenerate, as expected. Then, we can construct the ground state Majorana operators as <code>γ = o * e&#39; + hc</code> and <code>γ̃ = 1im * o * e&#39; + hc</code> but that takes a lot of memory for large systems. We can use LowRankMatrices.jl to avoid this</p><pre><code class="language-julia hljs">using LowRankMatrices
+γ = LowRankMatrix(o, conj(e)) + hc
+γ̃ = 1im * LowRankMatrix(o, conj(e)) + hc
+δρ = LowRankMatrix(o, conj(o)) - LowRankMatrix(e, conj(e))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4096×4096 LowRankMatrices.LowRankMatrix{Float64}:
+  0.000295814  -0.000319025   0.000290497  …   0.0           0.0
+ -0.000319025   0.000344058  -0.000313291      0.0           0.0
+  0.000290497  -0.000313291   0.000285275      0.0           0.0
+  0.000278521  -0.000300375   0.000273515      0.0           0.0
+ -0.000294891   0.00031803   -0.000289591      0.0           0.0
+ -0.000309109   0.000333364  -0.000303553  …   0.0           0.0
+  0.00033036   -0.000356282   0.000324422      0.0           0.0
+ -0.000307465   0.00033159   -0.000301938      0.0           0.0
+  0.000296137  -0.000319373   0.000290814      0.0           0.0
+  0.000304175  -0.000328042   0.000298707      0.0           0.0
+  ⋮                                        ⋱                 ⋮
+  0.0           0.0           0.0              0.000303988   0.000295419
+  0.0           0.0           0.0             -0.000260864  -0.000253511
+  0.0           0.0           0.0             -0.0002681    -0.000260544
+  0.0           0.0           0.0          …   0.00034381    0.000334119
+  0.0           0.0           0.0             -0.000303638  -0.00029508
+  0.0           0.0           0.0             -0.000286919  -0.000278832
+  0.0           0.0           0.0              0.000320621   0.000311584
+  0.0           0.0           0.0             -0.000257955  -0.000250684
+  0.0           0.0           0.0          …  -0.000250684  -0.000243618</code></pre><p>Now we can compute the reduction of the Majorana operators to each mode.</p><pre><code class="language-julia hljs">Hmodes = [hilbert_space(i:i) for i in 1:N]
+γR = [partial_trace(γ, H =&gt; Hmode) for Hmode in Hmodes];
+γ̃R = [partial_trace(γ̃, H =&gt; Hmode) for Hmode in Hmodes];
+δρR = [partial_trace(δρ, H =&gt; Hmode) for Hmode in Hmodes];
+γ_reductions = [norm(svdvals(γ), 1) for γ in γR]
+γ̃_reductions = [norm(svdvals(γ̃), 1) for γ̃ in γ̃R]
+LD = [norm(svdvals(δρ), 1) for δρ in δρR]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">12-element Vector{Float64}:
+ 1.7474086413948875e-15
+ 1.7477881121552574e-15
+ 1.7476796919380089e-15
+ 1.7425297316187027e-15
+ 1.7476254818293846e-15
+ 1.7238272441433278e-15
+ 1.7804768076556954e-15
+ 1.6936322136396065e-15
+ 1.8340363949764793e-15
+ 1.5994150448506161e-15
+ 1.3148119745731712e-15
+ 1.1504469252243688e-15</code></pre><p>We can plot the reductions to visualize the localization of the Majorana modes.</p><pre><code class="language-julia hljs">#
+lw = 4
+legendfontsize = 15
+marker = true
+markerstrokewidth = 2
+plot(xlabel=&quot;Site&quot;, title=&quot;Majorana quality measures&quot;; frame=:box, size=(500, 300), xticks=1:3:N, yscale=:identity, legendfontsize, ylims=(-1e-1, 2), legendposition=:top, labelfontsize=15)
+plot!(1:N, γ_reductions; label=&quot;‖γₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)
+plot!(1:N, γ̃_reductions; label=&quot;‖γ̃ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)
+plot!(1:N, LD; label=&quot;‖(iγγ̃)ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)</code></pre><img src="5eceec4c.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../non_interacting/">« Non interacting systems</a><a class="docs-footer-nextpage" href="../free_fermions/">Free fermions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 26 February 2026 09:57">Thursday 26 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
