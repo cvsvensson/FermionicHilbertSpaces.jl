@@ -44,7 +44,7 @@ function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractHilbertSpace, Hs, 
     Is = map(f -> state_index(f, H), fs)
     Iouts = map(f -> state_index.(statesplitter(f), Hs), fs)
     t = Array{eltype(m),2 * length(Hs)}(undef, dims..., dims...)
-    pfh = phase_factors ? phase_factor_h(Hs, H) : x -> 1
+    pfh = phase_factors ? phase_factor_h(Hs, H) : (f1, f2) -> 1
     for (I1, Iout1, f1) in zip(Is, Iouts, fs)
         for (I2, Iout2, f2) in zip(Is, Iouts, fs)
             s = pfh(f1, f2)
@@ -63,7 +63,7 @@ function _reshape_tensor_to_mat(t, Hs, H::AbstractHilbertSpace, stateextender, p
     Is = map(f -> state_index.(f, Hs), fs)
     Iouts = map(f -> state_index(f, H), fsb)
     m = Matrix{eltype(t)}(undef, length(fsb), length(fsb))
-    pfh = phase_factors ? phase_factor_h(Hs, H) : x -> 1
+    pfh = phase_factors ? phase_factor_h(Hs, H) : (f1, f2) -> 1
     for (I1, Iout1, f1) in zip(Is, Iouts, fsb)
         for (I2, Iout2, f2) in zip(Is, Iouts, fsb)
             s = pfh(f1, f2)

@@ -159,9 +159,10 @@ issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = issubsystem(k
 end
 
 default_fock_type(jw::JordanWignerOrdering) = FockNumber{default_fock_representation(length(jw))}
-function phase_factor_h(Hs, H::AbstractFockHilbertSpace)
+function phase_factor_h(Hs, H)
     partition = map(modes, flat_fock_spaces(Hs))
-    phase_factor_h(partition, H.jw)
+    isnothing(fock_part(H)) && return (f1, f2) -> 1
+    phase_factor_h(partition, fock_part(H).jw)
 end
 function phase_factor_h(partition, jw::JordanWignerOrdering)
     isorderedpartition(partition, jw) || error("Partition is not ordered")
