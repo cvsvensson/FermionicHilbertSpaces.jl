@@ -37,7 +37,7 @@ getindices(H::AbstractFockHilbertSpace, labels) = getindices(mode_ordering(H), l
 
 label_at_site(n, jw::JordanWignerOrdering) = keys(jw)[n]
 focknbr_from_site_label(label, jw::JordanWignerOrdering) = focknbr_from_site_index(getindex(jw, label))
-focknbr_from_site_labels(labels, jw::JordanWignerOrdering) = mapreduce(Base.Fix2(focknbr_from_site_label, jw), +, labels, init=FockNumber(0))
+focknbr_from_site_labels(labels, jw::JordanWignerOrdering) = mapreduce(Base.Fix2(focknbr_from_site_label, jw), +, labels, init=FockNumber(zero(default_fock_representation(length(jw)))))
 focknbr_from_site_labels(labels::JordanWignerOrdering, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(labels), jw)
 
 Base.:+(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f + f2.f)
