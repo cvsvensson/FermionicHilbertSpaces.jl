@@ -167,12 +167,15 @@ function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H:
     return mout
 end
 
-function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H::AbstractFockHilbertSpace, extend_state; phase_factors::Bool=true, skipmissing=false) where T
+function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true, skipmissing=false) where T
     phase_factors && (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
     !phase_factors && (ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system")))
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     pfh = phase_factors ? phase_factor_h(Hs, H) : (f1, f2) -> 1
     Is, Js, Vs = Int[], Int[], T[]
+    sizehint!(Is, length(inds))
+    sizehint!(Js, length(inds))
+    sizehint!(Vs, length(inds))
     for I in inds
         I1 = map(i -> i[1], I)
         I2 = map(i -> i[2], I)
