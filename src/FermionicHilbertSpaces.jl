@@ -9,7 +9,7 @@ using TestItems
 using BitPermutations
 using TupleTools
 using NonCommutativeProducts
-import NonCommutativeProducts: @nc_eager, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
+import NonCommutativeProducts: @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 import UUIDs: uuid4
 
 
@@ -18,7 +18,7 @@ export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilb
 export parityoperator, numberoperator, fermions, majoranas, matrix_representation
 
 export partial_trace, generalized_kron, tensor_product, embed, extend
-export @fermions, @majoranas
+export @fermions, @majoranas, @bosons, @spins
 export number_conservation, NoSymmetry, ParityConservation, NumberConservation
 export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
 
@@ -59,6 +59,8 @@ include("qubit.jl")
 include("symbolics/muladd.jl")
 include("symbolics/symbolic_fermions.jl")
 include("symbolics/symbolic_majoranas.jl")
+include("symbolics/symbolic_bosons.jl")
+include("symbolics/symbolic_spin.jl")
 
 include("majorana_hilbert_space.jl")
 include("bdg.jl")
@@ -66,6 +68,10 @@ include("bdg.jl")
 include("sectors.jl")
 
 include("spin.jl")
+
+function __init__()
+    NonCommutativeProducts.enable_autosort!()
+end
 
 
 import PrecompileTools

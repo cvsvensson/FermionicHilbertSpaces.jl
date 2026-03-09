@@ -59,7 +59,7 @@ function Base.isless(a::MajoranaSym, b::MajoranaSym)
         a.basis.name < b.basis.name
     end
 end
-function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym, ::TotalNormalOrder)
+function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym)
     if a == b
         1
     elseif a < b
@@ -79,7 +79,7 @@ eval_in_basis(a::MajoranaSym, f) = f[a.label]
 
 Base.valtype(::S) where {S<:AbstractMajoranaSym} = Complex{Int}
 Base.valtype(::Type{S}) where {S<:AbstractMajoranaSym} = Complex{Int}
-@nc_eager MajoranaSym TotalNormalOrder()
+@nc MajoranaSym
 
 @testitem "MajoranaSym" begin
     using Symbolics
