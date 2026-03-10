@@ -4,12 +4,14 @@ end
 SpinState{J}(m::M) where {J,M} = SpinState{J,M}(m)
 _labeltype(::Type{<:SpinState{J,S}}) where {J,S} = S
 
-struct SpinSpace{J,S,L} <: AbstractHilbertSpace
+struct SpinSpace{J,S,L} <: AbstractHilbertSpace{SpinState{J,S}}
     basisstates::Vector{SpinState{J,S}}
     label::L
+    state_index::Dict{SpinState{J,S},Int}
     function SpinSpace{J}(label::L=uuid4()) where {J,L}
         states = spin_basisstates(Val(J))
-        new{J,typeof(J),L}(states, label)
+        state_index = Dict(s => i for (i, s) in enumerate(states))
+        new{J,typeof(J),L}(states, label, state_index)
     end
 end
 basisstates(H::SpinSpace) = H.basisstates

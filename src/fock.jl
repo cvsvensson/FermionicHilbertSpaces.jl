@@ -1,4 +1,3 @@
-abstract type AbstractFockState <: AbstractBasisState end
 """
     FockNumber
 A type representing a Fock state as the bitstring of an integer.

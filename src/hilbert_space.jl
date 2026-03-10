@@ -1,6 +1,11 @@
-struct GenericHilbertSpace{L,S} <: AbstractHilbertSpace
+struct GenericHilbertSpace{B,L,S} <: AbstractHilbertSpace{B}
     label::L
     basisstates::S
+    state_index::Dict{B,Int}
+    function GenericHilbertSpace(label, basisstates, state_index=Dict(reverse(pair) for pair in enumerate(basisstates)))
+        B = eltype(basisstates)
+        new{B,eltype(label),typeof(basisstates)}(label, basisstates, state_index)
+    end
 end
 Base.:(==)(H1::GenericHilbertSpace, H2::GenericHilbertSpace) = H1 === H2 || (H1.label == H2.label && H1.basisstates == H2.basisstates)
 Base.hash(H::GenericHilbertSpace, h::UInt) = hash((H.label, H.basisstates), h)
@@ -38,7 +43,7 @@ bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_em
     SimpleFockHilbertSpace
 A type representing a simple Fock Hilbert space with all fock states included.
 """
-struct SimpleFockHilbertSpace{F,L} <: AbstractFockHilbertSpace
+struct SimpleFockHilbertSpace{F,L} <: AbstractFockHilbertSpace{F}
     jw::JordanWignerOrdering{L}
     function SimpleFockHilbertSpace(labels, ::Type{F}=FockNumber{default_fock_representation(length(labels))}) where F
         jw = JordanWignerOrdering(labels)
@@ -67,14 +72,16 @@ end
     FockHilbertSpace
 A type representing a Fock Hilbert space with a given set of modes and Fock states.
 """
-struct FockHilbertSpace{L,F,I} <: AbstractFockHilbertSpace
+struct FockHilbertSpace{B,L,F} <: AbstractFockHilbertSpace{B}
     jw::JordanWignerOrdering{L}
     basisstates::F
-    state_index::I
-    function FockHilbertSpace(labels, basisstates::F=map(FockNumber, UnitRange{UInt64}(0, 2^length(labels) - 1))) where F
+    state_index::Dict{B,Int}
+    function FockHilbertSpace(labels, basisstates=map(FockNumber, UnitRange{UInt64}(0, 2^length(labels) - 1)))
         jw = JordanWignerOrdering(labels)
-        state_index = Dict(reverse(pair) for pair in enumerate(basisstates))
-        new{eltype(jw),F,typeof(state_index)}(jw, basisstates, state_index)
+        states = collect(basisstates)
+        B = eltype(states)
+        state_index = Dict(reverse(pair) for pair in enumerate(states))
+        new{B,eltype(jw),typeof(states)}(jw, states, state_index)
     end
 end
 Base.keys(H::FockHilbertSpace) = keys(H.jw)
@@ -102,7 +109,7 @@ end
     SymmetricFockHilbertSpace
 A type representing a Fock Hilbert space with fockstates organized by their quantum number.
 """
-struct SymmetricFockHilbertSpace{L,S} <: AbstractFockHilbertSpace
+struct SymmetricFockHilbertSpace{B,L,S} <: AbstractFockHilbertSpace{B}
     jw::JordanWignerOrdering{L}
     symmetry::S
 end
@@ -112,15 +119,17 @@ end
 function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry)
     labelled_symmetry, basisstates = instantiate_and_get_basisstates(jw, qn)
     sym_concrete = focksymmetry(basisstates, labelled_symmetry)
-    SymmetricFockHilbertSpace{eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
+    B = statetype(sym_concrete)
+    SymmetricFockHilbertSpace{B,eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
 end
 SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry, basisstates) = SymmetricFockHilbertSpace(JordanWignerOrdering(labels), qn, basisstates)
 function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry, basisstates)
     labelled_symmetry = instantiate(qn, jw)
     sym_concrete = focksymmetry(basisstates, labelled_symmetry)
-    SymmetricFockHilbertSpace{eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
+    B = statetype(sym_concrete)
+    SymmetricFockHilbertSpace{B,eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
 end
-SymmetricFockHilbertSpace(jw::JordanWignerOrdering{L}, qn::QN) where {L,QN<:FockSymmetry} = SymmetricFockHilbertSpace{L,QN}(jw, qn)
+SymmetricFockHilbertSpace(jw::JordanWignerOrdering{L}, qn::QN) where {L,QN<:FockSymmetry} = SymmetricFockHilbertSpace{statetype(qn),L,QN}(jw, qn)
 
 
 function Base.show(io::IO, H::SymmetricFockHilbertSpace)
@@ -238,11 +247,8 @@ function substate(siteindices, f::FockNumber)
     return focknbr_from_bits(subbits)
 end
 
-statetype(::SimpleFockHilbertSpace{F}) where F = F
-statetype(::FockHilbertSpace{<:Any,<:V}) where V = eltype(V)
-statetype(::SymmetricFockHilbertSpace{<:Any,S}) where S = statetype(S)
-statetype(::FockSymmetry{V}) where V = eltype(V)
-statetype(::Type{<:FockSymmetry{V}}) where V = eltype(V)
+statetype(::AbstractHilbertSpace{F}) where F = F
+statetype(::Nothing) = Nothing
 function simple_complementary_subsystem(H::AbstractFockHilbertSpace, Hsub::AbstractFockHilbertSpace)
     F = promote_type(statetype(H), statetype(Hsub))
     SimpleFockHilbertSpace(setdiff(collect(keys(H)), collect(keys(Hsub))), F)

@@ -36,8 +36,8 @@ struct FockSymmetry{IF,FI,QN,V,QNfunc} <: AbstractSymmetry
     qntofockstates::Dictionary{QN,V}
     conserved_quantity::QNfunc
 end
-
 Base.:(==)(sym1::FockSymmetry, sym2::FockSymmetry) = sym1.basisstates == sym2.basisstates && sym1.state_indexdict == sym2.state_indexdict && sym1.qntofockstates == sym2.qntofockstates
+statetype(sym::FockSymmetry) = eltype(sym.basisstates)
 
 """
     focksymmetry(basisstates, qn)
@@ -382,7 +382,7 @@ end
             f[(i, σ)]' * f[(j, σ)] + hc
         end
     end
-    @test_throws KeyError matrix_representation(hopping_symham, H)
+    @test_throws ArgumentError matrix_representation(hopping_symham, H)
     @test size(matrix_representation(hopping_symham, H; projection=true), 1) == dim(H)
 end
 

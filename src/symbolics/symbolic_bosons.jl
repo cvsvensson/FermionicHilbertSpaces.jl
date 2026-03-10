@@ -32,6 +32,7 @@ function Base.show(io::IO, x::BosonSym)
 end
 Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && a.basis == b.basis
 Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, h)))
+get_symbolic_basis(f::BosonSym) = f.basis
 
 function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
     if a.label == b.label && a.basis == b.basis
@@ -111,3 +112,6 @@ NonCommutativeProducts.@commutative MajoranaSym BosonSym
     @test 1 + (b1 + b2) == 1 + b1 + b2 == b1 + b2 + 1 == b1 + 1 + b2
     @test (b1 * b2) * b1' == b1 * (b2 * b1')
 end
+
+# _sym_space_match(basis::SymbolicBosonBasis, space::BosonicHilbertSpace) = true
+_sym_space_match(basis::SymbolicBosonBasis, space::SymbolicBosonBasis) = false

@@ -4,61 +4,47 @@ Base.valtype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S<:AbstractFermionSym,F} = pr
 Base.valtype(::NCMul{C,S}) where {C,S<:AbstractFermionSym} = promote_type(C, valtype(S))
 Base.valtype(::Type{NCMul{C,S,F}}) where {C,S<:AbstractFermionSym,F} = promote_type(C, valtype(S))
 
-## Instantiating sparse matrices
-"""
-    matrix_representation(op, H::AbstractFockHilbertSpace)
-
-Return the matrix representation of the symbolic operator `op` on the hilbert space `H`.
-"""
-matrix_representation(op, H::AbstractFockHilbertSpace; kwargs...) = matrix_representation(op, mode_ordering(H), basisstates(H), Dict(Iterators.map(reverse, enumerate(basisstates(H)))); kwargs...)
-
-function matrix_representation(op::Union{<:NCMul,<:AbstractFermionSym}, labels, states, fock_to_ind; kwargs...)
-    outinds = Int[]
-    ininds = Int[]
-    AT = valtype(op)
-    amps = AT[]
-    sizehint!(outinds, length(states))
-    sizehint!(ininds, length(states))
-    sizehint!(amps, length(states))
-    operator_inds_amps!((outinds, ininds, amps), op, labels, states, fock_to_ind; kwargs...)
-    SparseArrays.sparse!(outinds, ininds, identity.(amps), length(states), length(states))
+function Base.valtype(ncmul::NCMul{C,Any}) where C
+    factor_valtypes = [valtype(f) for f in ncmul.factors]
+    return promote_type(C, factor_valtypes...)
 end
-matrix_representation(op, labels, states; kwargs...) = matrix_representation(op, labels, states, Dict(Iterators.map(reverse, enumerate(states))); kwargs...)
-matrix_representation(op::Union{UniformScaling,Number}, H::AbstractFockHilbertSpace; kwargs...) = op * I(dim(H); kwargs...)
-
-function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{SingleParticleState}, fock_to_ind; kwargs...)
-    isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind; kwargs...)
+function Base.valtype(ncadd::NCAdd{C,<:NCMul}) where C
+    term_valtypes = [valtype(term) for term in NCterms(ncadd)]
+    return promote_type(C, term_valtypes...)
 end
 
-function operator_inds_amps!((outinds, ininds, amps), op, ordering, states, fock_to_ind; kwargs...)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind; kwargs...)
+function operator_inds_amps!((outinds, ininds, amps), op, H::AbstractHilbertSpace; kwargs...)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, H; kwargs...)
 end
 
-function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::NCMul, ordering, states::AbstractVector{SingleParticleState}, fock_to_ind)
-    if length(op.factors) != 2
-        throw(ArgumentError("Only two-fermion operators supported for free fermions"))
+function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,F}, space::AbstractHilbertSpace; projection=false) where {C,F}
+    for (n, state) in enumerate(basisstates(space))
+        newstate, amp = apply_local_operators(op.factors, state, space)
+        if !iszero(amp)
+            outind = state_index(newstate, space)
+            if !projection || !ismissing(outind)
+                push!(outinds, outind)
+                push!(amps, amp * op.coeff)
+                push!(ininds, n)
+            end
+        end
     end
-    fockstates = (SingleParticleState(getindex(ordering, op.factors[1].label)), SingleParticleState(getindex(ordering, op.factors[2].label)))
-    inind = fock_to_ind[fockstates[2]]
-    outind = fock_to_ind[fockstates[1]]
-    sign = (-1)^op.factors[2].creation
-    push!(outinds, outind)
-    push!(ininds, inind)
-    push!(amps, sign * op.coeff)
     return (outinds, ininds, amps)
 end
 
-function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,F}, ordering, states, fock_to_ind; projection=false) where {C,F<:AbstractFermionSym}
+function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,F}, H::AbstractFockHilbertSpace; projection=false) where {C,F<:AbstractFermionSym}
+    ordering = mode_ordering(H)
     digitpositions = collect(Iterators.reverse(getindex(ordering, f.label) for f in op.factors))
     daggers = collect(Iterators.reverse(s.creation for s in op.factors))
     mc = -op.coeff
     pc = op.coeff
-    for (n, f) in enumerate(states)
-        newfockstate, amp = togglefermions(digitpositions, daggers, f)
+    for (n, f) in enumerate(basisstates(H))
+        newstate, amp = togglefermions(digitpositions, daggers, f)
         if !iszero(amp)
-            if !projection || haskey(fock_to_ind, newfockstate)
-                push!(outinds, fock_to_ind[newfockstate])
+            outind = state_index(newstate, H)
+            if !projection || !ismissing(outind)
+                ismissing(outind) && throw(ArgumentError("State $newstate not found in basis."))
+                push!(outinds, outind)
                 push!(amps, isone(amp) ? pc : mc)
                 push!(ininds, n)
             end
@@ -67,9 +53,8 @@ function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,F}, or
     return (outinds, ininds, amps)
 end
 
-# promote_array(v) = convert(Array{eltype(promote(map(zero, unique(typeof(v) for v in v))...))}, v)
 
-function matrix_representation(op::NCAdd{C}, ordering, states, fock_to_ind; kwargs...) where C
+function _matrix_representation(op::NCAdd{C}, ordering, states, fock_to_ind; kwargs...) where C
     outinds = Int[]
     ininds = Int[]
     AT = valtype(op)
@@ -109,8 +94,6 @@ operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, args...; kw
     newmat = get_mat(sum(f[l]' * f[l] for l in labels))
     mat = sum(fmb[l]' * fmb[l] for l in labels)
     @test newmat == mat
-
-    @test all(matrix_representation(sum(f[l]' * f[l] for l in labels), H.jw.ordering, FermionicHilbertSpaces.fixed_particle_number_fockstates(N, n)) == n * I for n in 1:N)
 
     @test all(eval_in_basis(f[l], fmb) == fmb[l] for l in labels)
     @test all(eval_in_basis(f[l]', fmb) == fmb[l]' for l in labels)
@@ -174,4 +157,233 @@ end
         @test a2 !== anew
     end
     @test a == 1.0 * f[2] * f[1] + 1 + f[1]
+end
+
+"""
+    partition_factors_by_basis(factors::Vector, bases::Vector)
+
+Partition a vector of operator factors into groups by their symbolic basis.
+"""
+function partition_factors_by_basis(factors::Vector, bases::Vector)
+    partition = map(bases) do basis
+        [filter(==(basis) ∘ get_symbolic_basis, factors)...]
+    end
+    sum(length, partition) == length(factors) || throw(ArgumentError("Not all factors were assigned to a basis."))
+    return partition
+end
+
+"""
+    matrix_representation(op, basis_space_pairs::AbstractVector{<:Pair})
+
+Compute the matrix representation of a symbolic operator on a product hilbert space.The `basis_space_pairs` argument is a vector of pairs `symbolic_basis => hilbert_space`, where each symbolic basis (e.g., from `@fermions f`, `@spins s`, etc.) is mapped to its corresponding Hilbert space.
+
+# Example
+```julia
+@fermions f
+@spins s
+Hf = FockHilbertSpace([1, 2])
+Hs = SpinSpace{1//2}(0)
+op = f[1]' * f[1] * s[0](:z)
+M = matrix_representation(op, [f => Hf, s => Hs])
+```
+"""
+function matrix_representation(op, basis_space_pairs::AbstractVector{<:Pair}; kwargs...)
+    bases = [first(p) for p in basis_space_pairs]
+    spaces = [last(p) for p in basis_space_pairs]
+    matrix_representation(op, bases, spaces; kwargs...)
+end
+
+function matrix_representation(op::NCMul, bases, spaces; kwargs...)
+    partitioned = partition_factors_by_basis(op.factors, bases)
+    matrices = map(partitioned, spaces) do factors, space
+        if isempty(factors)
+            return I(dim(space))
+        else
+            local_matrix_representation(NCMul(1, factors), space; kwargs...)
+        end
+    end
+    length(spaces) == 1 && return op.coeff * only(matrices)
+    op.coeff * kron(matrices...)
+end
+
+function matrix_representation(op::NCAdd, bases, spaces; kwargs...)
+    sum(matrix_representation(term, bases, spaces; kwargs...) for term in NCterms(op)) + op.coeff * I(prod(dim.(spaces)))
+end
+function matrix_representation(op, bases, spaces; kwargs...) #Assume op is a single symbolic operator
+    matrix_representation(NCMul(1, [op]), bases, spaces; kwargs...)
+end
+
+function local_matrix_representation(op, H::AbstractHilbertSpace; kwargs...)
+    _outinds = Int[]
+    _ininds = Int[]
+    AT = valtype(op)
+    _amps = AT[]
+    N = dim(H)
+    sizehint!(_outinds, N)
+    sizehint!(_ininds, N)
+    sizehint!(_amps, N)
+    (outinds, ininds, amps) = operator_inds_amps!((_outinds, _ininds, _amps), op, H; kwargs...)
+    return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
+end
+
+
+function apply_local_operator(op::NCMul{C,F}, state::FockNumber, space::AbstractFockHilbertSpace; kwargs...) where {C,F<:AbstractFermionSym}
+    # Apply sequence of fermion operators (homogeneous type)
+    ordering = mode_ordering(space)
+    digitpositions = collect(Iterators.reverse(getindex(ordering, f.label) for f in op.factors))
+    daggers = collect(Iterators.reverse(s.creation for s in op.factors))
+    new_state, amp = togglefermions(digitpositions, daggers, state)
+    return (new_state, amp)
+end
+
+# Fallback for other types
+function apply_local_operator(op, state, space; kwargs...)
+    error("apply_local_operator not implemented for operator type $(typeof(op)) on space type $(typeof(space))")
+end
+
+## Automatic basis inference from operator
+"""
+    extract_symbolic_bases(op)
+
+Extract all unique symbolic bases from an operator expression.
+Returns a vector of unique bases found in the operator.
+"""
+function extract_symbolic_bases(op::NCMul)
+    bases = Set()
+    for factor in op.factors
+        basis = get_symbolic_basis(factor)
+        push!(bases, basis)
+    end
+    return collect(bases)
+end
+
+function extract_symbolic_bases(op::NCAdd)
+    bases = Set()
+    for (term, coeff) in op.dict
+        term_bases = extract_symbolic_bases(term)
+        union!(bases, term_bases)
+    end
+    return collect(bases)
+end
+
+function extract_symbolic_bases(op)
+    [get_symbolic_basis(op)]
+end
+
+function infer_basis_space_pairs(op, spaces::AbstractVector{<:AbstractHilbertSpace})
+    # Extract bases from operator
+    bases = extract_symbolic_bases(op)
+    # Match them to basis
+    length(bases) == length(spaces) || throw(ArgumentError("Number of unique symbolic bases in operator ($(length(bases))) does not match number of provided spaces ($(length(spaces)))"))
+    new_spaces = map(bases) do basis
+        matches = filter(space -> _sym_space_match(basis, space), spaces)
+        if length(matches) == 1
+            return matches[1]
+        else
+            throw(ArgumentError("Could not uniquely match basis $basis to a space. Matches found: $matches"))
+        end
+    end
+    bases, new_spaces
+end
+
+"""
+    matrix_representation(op, spaces::AbstractVector{<:AbstractHilbertSpace})
+
+Compute the matrix representation with automatic basis inference.
+The function will attempt to match symbolic bases in the operator to the provided spaces.
+
+# Example
+```julia
+@fermions f
+@spins s
+H_f = FockHilbertSpace([1, 2])
+H_s = SpinSpace{1//2}(0)
+op = f[1]' * f[1] * s[0](:z)
+M = matrix_representation(op, [H_f, H_s])
+```
+"""
+function matrix_representation(op, spaces::AbstractVector{<:AbstractHilbertSpace}; kwargs...)
+    if trivial_operator(op)
+        return get_trivial_op_coeff(op) * I(prod(dim.(spaces)))
+    end
+    bases, spaces = infer_basis_space_pairs(op, spaces)
+    return matrix_representation(op, bases, spaces; kwargs...)
+end
+function matrix_representation(op, space::AbstractHilbertSpace; kwargs...)
+    if trivial_operator(op)
+        return get_trivial_op_coeff(op) * I(dim(space))
+    end
+    bases, spaces = infer_basis_space_pairs(op, [space])
+    return matrix_representation(op, bases, spaces; kwargs...)
+end
+trivial_operator(op::Union{UniformScaling,Number}) = true
+trivial_operator(op::NCMul) = length(op.factors) == 0
+trivial_operator(op::NCAdd) = length(op.dict) == 0
+trivial_operator(op) = false
+get_trivial_op_coeff(op::NCMul) = op.coeff
+get_trivial_op_coeff(op::NCAdd) = op.coeff
+get_trivial_op_coeff(op) = op
+
+@testitem "Multi-space matrix representation" begin
+    using SparseArrays, LinearAlgebra
+    using FermionicHilbertSpaces: SpinSpace, SpinState
+
+    # Test 1: Fermion ⊗ Spin system
+    @fermions f
+    @spins s
+
+    Nf = 2
+    Hf = FockHilbertSpace(1:Nf)
+    Hs = SpinSpace{1 // 2}(:label)
+
+    # Test simple product operator: f[1]' * f[1] ⊗ S_z
+    op = f[1]' * f[1] * s[:label](:z)
+    M = matrix_representation(op, [f => Hf, s => Hs])
+    @test M == matrix_representation(op, [Hf, Hs])
+
+    # Verify dimensions: (2^2) × 2 = 8×8
+    @test size(M) == (8, 8)
+
+    # Check that the matrix is sparse
+    @test M isa SparseMatrixCSC
+
+    # Test 2: Sum of mixed operators
+    op_mixed = f[1]' * f[1] * s[:label](:z) + f[2]' * f[2] * s[:label](:+)
+    M_mixed = matrix_representation(op_mixed, [f => Hf, s => Hs])
+    @test size(M_mixed) == (8, 8)
+    @test M_mixed == matrix_representation(op_mixed, [Hf, Hs])
+
+
+    # Test 3: Verify the result is hermitian for hermitian operators
+    op_herm = f[1]' * f[2] * s[:label](:z) + hc
+    M_herm = matrix_representation(op_herm, [f => Hf, s => Hs])
+    @test M_herm ≈ M_herm'  # Should be hermitian
+    @test M_herm == matrix_representation(op_herm, [Hf, Hs])
+end
+
+@testitem "Three-space product" begin
+    using SparseArrays, LinearAlgebra
+    using FermionicHilbertSpaces: SpinSpace
+
+    @fermions f
+    @fermions g  # Different fermion species, commuting with f
+    @spins s
+
+    Hf = FockHilbertSpace([1])
+    Hg = FockHilbertSpace([1])
+    Hs = SpinSpace{1 // 2}(:a)
+
+    # Operator acting on all three spaces
+    op = f[1]' * f[1] * g[1]' * g[1] * s[:a](:z)
+    M = matrix_representation(op, [f => Hf, g => Hg, s => Hs])
+    @test M == kron(matrix_representation(f[1]' * f[1], Hf), matrix_representation(g[1]' * g[1], Hg), matrix_representation(s[:a](:z), Hs))
+
+    # Should have dimension 2 × 2 × 2 = 8
+    @test size(M) == (8, 8)
+    @test M isa SparseMatrixCSC
+
+    @test_throws ArgumentError matrix_representation(op, [f => Hs])
+    @test_throws ArgumentError matrix_representation(op, [f => Hf])
+    @test_throws ArgumentError matrix_representation(op, [f => Hg])
+    @test_throws MethodError matrix_representation(op, [f => Hf, g => Hs, s => Hf])
 end

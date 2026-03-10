@@ -42,6 +42,7 @@ Base.:(==)(a::MajoranaSym, b::MajoranaSym) = a.label == b.label && a.basis == b.
 Base.hash(a::MajoranaSym, h::UInt) = hash(a.label, hash(a.basis, h))
 Base.adjoint(x::MajoranaSym) = MajoranaSym(x.label, x.basis)
 Base.iszero(x::MajoranaSym) = false
+get_symbolic_basis(f::AbstractMajoranaSym) = f.basis
 function Base.show(io::IO, x::MajoranaSym)
     print(io, x.basis.name)
     if Base.isiterable(typeof(x.label))

@@ -1,4 +1,4 @@
-struct NambuState <: AbstractBasisState
+struct NambuState <: AbstractFockState
     state::SingleParticleState
     hole::Bool
 end
@@ -23,12 +23,13 @@ function normal_order_to_bdg(m::AbstractMatrix)
         -conj(Δ) -conj(h)]
 end
 
-struct BdGHilbertSpace{H}
+struct BdGHilbertSpace{B,H} <: AbstractHilbertSpace{B}
     parent::H
     function BdGHilbertSpace(labels)
         states = vec([NambuState(i, hole) for (i, label) in enumerate(labels), hole in (true, false)])
         H = hilbert_space(labels, states)
-        return new{typeof(H)}(H)
+        B = statetype(H)
+        return new{B,typeof(H)}(H)
     end
 end
 """
@@ -51,19 +52,15 @@ function matrix_representation(op, H::BdGHilbertSpace)
     normal_order_to_bdg(matrix_representation(remove_identity(op), H.parent))
 end
 
-function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{NambuState}, fock_to_ind; kwargs...)
-    isquadratic(op) && return operator_inds_amps_bdg!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind; kwargs...)
-end
-
-function operator_inds_amps_bdg!((outinds, ininds, amps), op::NCMul, ordering, states, fock_to_ind)
+function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::AbstractFockHilbertSpace{<:NambuState}; kwargs...)
     if length(op.factors) != 2
         throw(ArgumentError("Only two-fermion operators supported for free fermions"))
     end
+    ordering = mode_ordering(H)
     nambustates = (NambuState(getindex(ordering, op.factors[1].label), op.factors[1].creation),
         NambuState(getindex(ordering, op.factors[2].label), !op.factors[2].creation))
-    inind = fock_to_ind[nambustates[2]]
-    outind = fock_to_ind[nambustates[1]]
+    inind = state_index(nambustates[2], H)
+    outind = state_index(nambustates[1], H)
     push!(outinds, outind)
     push!(ininds, inind)
     push!(amps, op.coeff)

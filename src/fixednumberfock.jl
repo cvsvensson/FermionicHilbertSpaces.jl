@@ -96,7 +96,7 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     @fermions f
     h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
     H = hilbert_space(1:2, FermionicHilbertSpaces.SingleParticleState.(1:3))
-    @test_throws KeyError matrix_representation(h, H)
+    @test_throws ArgumentError matrix_representation(h, H)
 
     N = 10
     H = hilbert_space(1:N, SingleParticleState.(1:N))
@@ -235,3 +235,21 @@ end
     @test ρsub_fock ≈ ρsub_fixed
 end
 
+function operator_inds_amps!((outinds, ininds, amps), op, H::AbstractFockHilbertSpace{<:SingleParticleState}; kwargs...)
+    isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, H; kwargs...)
+    return operator_inds_amps_generic!((outinds, ininds, amps), op, H; kwargs...)
+end
+function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::NCMul, H::AbstractFockHilbertSpace)
+    ordering = mode_ordering(H)
+    if length(op.factors) != 2
+        throw(ArgumentError("Only two-fermion operators supported for free fermions"))
+    end
+    fockstates = (SingleParticleState(getindex(ordering, op.factors[1].label)), SingleParticleState(getindex(ordering, op.factors[2].label)))
+    inind = state_index(fockstates[2], H)
+    outind = state_index(fockstates[1], H)
+    sign = (-1)^op.factors[2].creation
+    push!(outinds, outind)
+    push!(ininds, inind)
+    push!(amps, sign * op.coeff)
+    return (outinds, ininds, amps)
+end

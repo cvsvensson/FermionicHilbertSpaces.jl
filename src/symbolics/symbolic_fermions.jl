@@ -61,6 +61,7 @@ function Base.isless(a::FermionSym, b::FermionSym)
 end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
+get_symbolic_basis(f::FermionSym) = f.basis
 
 function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     if a == b
@@ -82,7 +83,7 @@ end
 Base.valtype(::AbstractFermionSym) = Int
 Base.valtype(::Type{S}) where {S<:AbstractFermionSym} = Int
 
-@nc FermionSym 
+@nc FermionSym
 
 """ 
     eval_in_basis(a, f)
@@ -167,3 +168,23 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
     end
 
 end
+
+"""
+    apply_local_operator(op, state, space) -> (new_state, amplitude)
+
+Apply a local operator (single factor or product) to a state in a single Hilbert space.
+Returns the resulting state and amplitude.
+
+Type-specific implementations are defined in their respective files (e.g., symbolic_spin.jl).
+"""
+function apply_local_operator(op::FermionSym, state::FockNumber, space::AbstractFockHilbertSpace)
+    # Convert single FermionSym to NCMul and use existing machinery
+    ordering = mode_ordering(space)
+    digitpos = getindex(ordering, op.label)
+    dagger = op.creation
+    new_state, amp = togglefermions([digitpos], [dagger], state)
+    return (new_state, amp)
+end
+
+_sym_space_match(basis::SymbolicFermionBasis, space::AbstractFockHilbertSpace) = true
+_sym_space_match(basis::SymbolicFermionBasis, space::AbstractHilbertSpace) = false

@@ -9,7 +9,7 @@ ProductState{Nothing}(other_states) = ProductState{Nothing,typeof(other_states)}
 Base.show(io::IO, s::ProductState) = print(io, "ProductState(", s.fock_state, ", ", s.other_states, ")")
 Base.show(io::IO, s::ProductState{Nothing}) = print(io, "ProductState(", s.other_states, ")")
 
-struct ProductSpace{HF,HS} <: AbstractHilbertSpace
+struct ProductSpace{HF,HS,B} <: AbstractHilbertSpace{B}
     fock_space::HF
     other_spaces::HS
     function ProductSpace(fspace::HF, ospaces::HS) where {HF<:Union{<:AbstractFockHilbertSpace,Nothing},HS}
@@ -17,7 +17,8 @@ struct ProductSpace{HF,HS} <: AbstractHilbertSpace
         if isnothing(fspace) && length(ospaces) == 1
             return only(ospaces)
         end
-        new{HF,HS}(fspace, ospaces)
+        B = Tuple{statetype(fspace),statetype.(ospaces)...}
+        new{HF,HS,B}(fspace, ospaces)
     end
 end
 Base.keys(H::ProductSpace{Nothing}) = mapreduce(keys, TupleTools.vcat, H.other_spaces)

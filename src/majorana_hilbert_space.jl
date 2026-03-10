@@ -1,6 +1,10 @@
-struct MajoranaHilbertSpace{L,H} <: AbstractFockHilbertSpace
+struct MajoranaHilbertSpace{B,L,H} <: AbstractFockHilbertSpace{B}
     majoranaindices::L
     parent::H
+    function MajoranaHilbertSpace(majoranaindices::L, parent::H) where {L,H}
+        B = statetype(parent)
+        new{B,L,H}(majoranaindices, parent)
+    end
 end
 dim(H::MajoranaHilbertSpace) = dim(H.parent)
 mode_ordering(H::MajoranaHilbertSpace) = mode_ordering(H.parent)
@@ -87,11 +91,10 @@ function tensor_product(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace)
 end
 
 state_index(state::AbstractFockState, H::MajoranaHilbertSpace) = state_index(state, H.parent)
-## Define matrix representations of symbolic majorana operators on Majorana Hilbert spaces.
-matrix_representation(op, H::MajoranaHilbertSpace; kwargs...) = matrix_representation(op, H.majoranaindices, basisstates(H); kwargs...)
-matrix_representation(op::Union{UniformScaling,Number}, H::MajoranaHilbertSpace; kwargs...) = op * I(dim(H))
 
-function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,S}, label_to_site, states, fock_to_ind; projection=false) where {C,S<:AbstractMajoranaSym}
+
+function operator_inds_amps!((outinds, ininds, amps), op::NCMul{C,S}, H::MajoranaHilbertSpace; projection=false) where {C,S<:AbstractMajoranaSym}
+    label_to_site = H.majoranaindices
     majoranadigitpositions = Iterators.reverse(label_to_site[f.label] for f in op.factors)
     daggers = collect(iseven(pos) for pos in majoranadigitpositions)
     digitpositions = map(n -> div(n + 1, 2), majoranadigitpositions)
@@ -99,11 +102,12 @@ function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,S}, la
     mic = -1im * op.coeff
     pc = op.coeff
     pic = 1im * op.coeff
-    for (n, f) in enumerate(states)
+    for (n, f) in enumerate(basisstates(H))
         newfockstate, amp = togglemajoranas(digitpositions, daggers, f)
         if !iszero(amp)
-            if !projection || haskey(fock_to_ind, newfockstate)
-                push!(outinds, fock_to_ind[newfockstate])
+            outind = state_index(newfockstate, H)
+            if !projection || !ismissing(outind) 
+                push!(outinds, outind)
                 if amp == 1
                     push!(amps, pc)
                 elseif amp == -1
@@ -159,3 +163,6 @@ end
     m2 = rand(dim(Hsub2), dim(Hsub2))
     @test tensor_product((m1, m2), (Hsub, Hsub2), Hprod) == tensor_product((m1, m2), (Hfsub, Hfsub2) => parent(Hprod))
 end
+
+_sym_space_match(basis::SymbolicMajoranaBasis, space::MajoranaHilbertSpace) = true
+_sym_space_match(basis::SymbolicMajoranaBasis, space::AbstractHilbertSpace) = false

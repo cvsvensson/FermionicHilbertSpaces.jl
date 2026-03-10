@@ -23,9 +23,10 @@ export number_conservation, NoSymmetry, ParityConservation, NumberConservation
 export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
 
 ## Some types
-abstract type AbstractHilbertSpace end
-abstract type AbstractFockHilbertSpace <: AbstractHilbertSpace end
 abstract type AbstractBasisState end
+abstract type AbstractFockState <: AbstractBasisState end
+abstract type AbstractHilbertSpace{S} end
+abstract type AbstractFockHilbertSpace{F<:AbstractFockState} <: AbstractHilbertSpace{F} end
 
 """
     HC
@@ -60,6 +61,8 @@ include("symbolics/muladd.jl")
 include("symbolics/symbolic_fermions.jl")
 include("symbolics/symbolic_majoranas.jl")
 include("symbolics/symbolic_bosons.jl")
+
+include("spin.jl")
 include("symbolics/symbolic_spin.jl")
 
 include("majorana_hilbert_space.jl")
@@ -67,7 +70,6 @@ include("bdg.jl")
 
 include("sectors.jl")
 
-include("spin.jl")
 
 function __init__()
     NonCommutativeProducts.enable_autosort!()
