@@ -1,15 +1,23 @@
-abstract type AbstractFermionSym end
+abstract type AbstractSym end
+abstract type AbstractFermionSym <: AbstractSym end
 
-Base.valtype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S<:AbstractFermionSym,F} = promote_type(C, valtype(S))
-Base.valtype(::NCMul{C,S}) where {C,S<:AbstractFermionSym} = promote_type(C, valtype(S))
-Base.valtype(::Type{NCMul{C,S,F}}) where {C,S<:AbstractFermionSym,F} = promote_type(C, valtype(S))
+function mat_eltype(ncadd::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S<:AbstractSym,F} 
+    isconcretetype(S) &&  return promote_type(C, mat_eltype(S))
+    return _mat_eltype(ncadd)
+end
+function mat_eltype(ncmul::NCMul{C,S,F}) where {C,S<:AbstractSym,F} 
+    isconcretetype(S) && return promote_type(C, mat_eltype(S))
+    return _mat_eltype(ncmul)
+end
+mat_eltype(::Type{NCMul{C,S,F}}) where {C,S<:AbstractSym,F} = promote_type(C, mat_eltype(S))
+mat_eltype(::S) where {S<:AbstractSym} = mat_eltype(S)
 
-function Base.valtype(ncmul::NCMul{C,Any}) where C
-    factor_valtypes = [valtype(f) for f in ncmul.factors]
+function _mat_eltype(ncmul::NCMul{C}) where C
+    factor_valtypes = [mat_eltype(f) for f in ncmul.factors]
     return promote_type(C, factor_valtypes...)
 end
-function Base.valtype(ncadd::NCAdd{C,<:NCMul}) where C
-    term_valtypes = [valtype(term) for term in NCterms(ncadd)]
+function _mat_eltype(ncadd::NCAdd{C,<:NCMul}) where C
+    term_valtypes = [mat_eltype(term) for term in NCterms(ncadd)]
     return promote_type(C, term_valtypes...)
 end
 
@@ -57,7 +65,7 @@ end
 function _matrix_representation(op::NCAdd{C}, ordering, states, fock_to_ind; kwargs...) where C
     outinds = Int[]
     ininds = Int[]
-    AT = valtype(op)
+    AT = mat_eltype(op)
     amps = AT[]
     sizehint!(outinds, length(states))
     sizehint!(ininds, length(states))
@@ -203,7 +211,7 @@ function matrix_representation(op::NCMul, bases, spaces; kwargs...)
         end
     end
     length(spaces) == 1 && return op.coeff * only(matrices)
-    op.coeff * kron(matrices...)
+    op.coeff * kron(reverse(matrices)...)
 end
 
 function matrix_representation(op::NCAdd, bases, spaces; kwargs...)
@@ -216,7 +224,7 @@ end
 function local_matrix_representation(op, H::AbstractHilbertSpace; kwargs...)
     _outinds = Int[]
     _ininds = Int[]
-    AT = valtype(op)
+    AT = mat_eltype(op)
     _amps = AT[]
     N = dim(H)
     sizehint!(_outinds, N)

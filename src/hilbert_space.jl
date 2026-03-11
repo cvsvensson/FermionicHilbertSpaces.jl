@@ -76,9 +76,9 @@ struct FockHilbertSpace{B,L,F} <: AbstractFockHilbertSpace{B}
     jw::JordanWignerOrdering{L}
     basisstates::F
     state_index::Dict{B,Int}
-    function FockHilbertSpace(labels, basisstates=map(FockNumber, UnitRange{UInt64}(0, 2^length(labels) - 1)))
+    function FockHilbertSpace(labels, _states=map(FockNumber, UnitRange{UInt64}(0, 2^length(labels) - 1)))
         jw = JordanWignerOrdering(labels)
-        states = collect(basisstates)
+        states = collect(_states)
         B = eltype(states)
         state_index = Dict(reverse(pair) for pair in enumerate(states))
         new{B,eltype(jw),typeof(states)}(jw, states, state_index)
@@ -117,15 +117,15 @@ function SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry)
     SymmetricFockHilbertSpace(JordanWignerOrdering(labels), qn)
 end
 function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry)
-    labelled_symmetry, basisstates = instantiate_and_get_basisstates(jw, qn)
-    sym_concrete = focksymmetry(basisstates, labelled_symmetry)
+    labelled_symmetry, states = instantiate_and_get_basisstates(jw, qn)
+    sym_concrete = focksymmetry(states, labelled_symmetry)
     B = statetype(sym_concrete)
     SymmetricFockHilbertSpace{B,eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
 end
-SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry, basisstates) = SymmetricFockHilbertSpace(JordanWignerOrdering(labels), qn, basisstates)
-function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry, basisstates)
+SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry, states) = SymmetricFockHilbertSpace(JordanWignerOrdering(labels), qn, states)
+function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry, states)
     labelled_symmetry = instantiate(qn, jw)
-    sym_concrete = focksymmetry(basisstates, labelled_symmetry)
+    sym_concrete = focksymmetry(states, labelled_symmetry)
     B = statetype(sym_concrete)
     SymmetricFockHilbertSpace{B,eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
 end

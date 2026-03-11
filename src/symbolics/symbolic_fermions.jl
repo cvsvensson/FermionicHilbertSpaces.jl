@@ -80,8 +80,7 @@ function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     end
 end
 
-Base.valtype(::AbstractFermionSym) = Int
-Base.valtype(::Type{S}) where {S<:AbstractFermionSym} = Int
+mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
 
 @nc FermionSym
 

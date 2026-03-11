@@ -54,18 +54,14 @@ include("embedding.jl")
 include("reshape.jl")
 include("generate_constrained_states.jl")
 
-
-include("qubit.jl")
-
 include("symbolics/muladd.jl")
 include("symbolics/symbolic_fermions.jl")
-include("symbolics/symbolic_majoranas.jl")
-include("symbolics/symbolic_bosons.jl")
 
+include("majoranas.jl")
+include("bosons.jl")
 include("spin.jl")
-include("symbolics/symbolic_spin.jl")
+include("qubit.jl")
 
-include("majorana_hilbert_space.jl")
 include("bdg.jl")
 
 include("sectors.jl")

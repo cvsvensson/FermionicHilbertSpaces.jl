@@ -122,13 +122,13 @@ end
     @test numberoperator(H) == Diagonal([0, 1, 1, 2]) == numopvariant(H)
 
     ## Truncated Hilbert space
-    basisstates = map(FockNumber, 0:2)
-    H = FockHilbertSpace(1:2, basisstates)
+    states = map(FockNumber, 0:2)
+    H = FockHilbertSpace(1:2, states)
     @test parityoperator(H) == Diagonal([1, -1, -1])
     @test numberoperator(H) == Diagonal([0, 1, 1])
 
-    basisstates = map(FockNumber, 2:2)
-    H = FockHilbertSpace(1:2, basisstates)
+    states = map(FockNumber, 2:2)
+    H = FockHilbertSpace(1:2, states)
     @test parityoperator(H) == Diagonal([-1])
     @test numberoperator(H) == Diagonal([1])
 end
