@@ -272,24 +272,24 @@ end
     extract_symbolic_bases(op)
 
 Extract all unique symbolic bases from an operator expression.
-Returns a vector of unique bases found in the operator.
+Returns a set of unique bases found in the operator.
 """
 function extract_symbolic_bases(op::NCMul)
-    bases = Set()
+    bases = IdSet()
     for factor in op.factors
         basis = get_symbolic_basis(factor)
         push!(bases, basis)
     end
-    return collect(bases)
+    return bases
 end
 
 function extract_symbolic_bases(op::NCAdd)
-    bases = Set()
+    bases = IdSet()
     for (term, coeff) in op.dict
         term_bases = extract_symbolic_bases(term)
         union!(bases, term_bases)
     end
-    return collect(bases)
+    return bases
 end
 
 function extract_symbolic_bases(op)
@@ -298,7 +298,7 @@ end
 
 function infer_basis_space_pairs(op, spaces::AbstractVector{<:AbstractHilbertSpace})
     # Extract bases from operator
-    bases = extract_symbolic_bases(op)
+    bases = collect(extract_symbolic_bases(op))
     # Match them to basis
     length(bases) == length(spaces) || throw(ArgumentError("Number of unique symbolic bases in operator ($(length(bases))) does not match number of provided spaces ($(length(spaces)))"))
     new_spaces = map(bases) do basis
