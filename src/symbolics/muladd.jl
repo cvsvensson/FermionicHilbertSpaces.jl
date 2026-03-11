@@ -1,11 +1,11 @@
 abstract type AbstractSym end
 abstract type AbstractFermionSym <: AbstractSym end
 
-function mat_eltype(ncadd::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S<:AbstractSym,F} 
-    isconcretetype(S) &&  return promote_type(C, mat_eltype(S))
+function mat_eltype(ncadd::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S<:AbstractSym,F}
+    isconcretetype(S) && return promote_type(C, mat_eltype(S))
     return _mat_eltype(ncadd)
 end
-function mat_eltype(ncmul::NCMul{C,S,F}) where {C,S<:AbstractSym,F} 
+function mat_eltype(ncmul::NCMul{C,S,F}) where {C,S<:AbstractSym,F}
     isconcretetype(S) && return promote_type(C, mat_eltype(S))
     return _mat_eltype(ncmul)
 end
@@ -215,7 +215,25 @@ function matrix_representation(op::NCMul, bases, spaces; kwargs...)
 end
 
 function matrix_representation(op::NCAdd, bases, spaces; kwargs...)
+    if length(spaces) == 1
+        return _matrix_representation_single_space(op, only(spaces); kwargs...)
+    end
     sum(matrix_representation(term, bases, spaces; kwargs...) for term in NCterms(op)) + op.coeff * I(prod(dim.(spaces)))
+end
+function _matrix_representation_single_space(op::NCAdd, space; kwargs...)
+    outinds = Int[]
+    ininds = Int[]
+    AT = mat_eltype(op)
+    amps = AT[]
+    N = dim(space)
+    sizehint!(outinds, N)
+    sizehint!(ininds, N)
+    sizehint!(amps, N)
+    for (term, coeff) in op.dict
+        operator_inds_amps!((outinds, ininds, amps), coeff * term, space; kwargs...)
+    end
+    return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
+
 end
 function matrix_representation(op, bases, spaces; kwargs...) #Assume op is a single symbolic operator
     matrix_representation(NCMul(1, [op]), bases, spaces; kwargs...)
