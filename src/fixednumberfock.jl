@@ -182,7 +182,6 @@ basisstates(h::SingleParticleHilbertSpace) = basisstates(h.parent)
 A hilbert space suitable for non-interacting systems with fermion number conservation. Matrix representations of symbolic operators give the single particle hamiltonian, without any contribution from the identity matrix.
 """
 single_particle_hilbert_space(labels) = SingleParticleHilbertSpace(labels)
-matrix_representation(op, H::SingleParticleHilbertSpace) = matrix_representation(remove_identity(op), parent(H))
 basisstate(ind, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
 state_index(state::AbstractFockState, H::SingleParticleHilbertSpace) = state_index(state, parent(H))
 
@@ -235,11 +234,13 @@ end
     @test ρsub_fock ≈ ρsub_fixed
 end
 
-function operator_inds_amps!((outinds, ininds, amps), op, H::AbstractFockHilbertSpace{<:SingleParticleState}; kwargs...)
-    isquadratic(op) && isnumberconserving(op) && return operator_inds_amps_free_fermion!((outinds, ininds, amps), op, H; kwargs...)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, H; kwargs...)
+
+function matrix_representation(op, H::SingleParticleHilbertSpace)
+    isquadratic(op) && isnumberconserving(op) || throw(ArgumentError("Only quadratic, number conserving operators supported for SingleParticleHilbertSpace"))
+    _matrix_representation_single_space(remove_identity(op), H)
 end
-function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::NCMul, H::AbstractFockHilbertSpace)
+
+function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::SingleParticleHilbertSpace; kwargs...)
     ordering = mode_ordering(H)
     if length(op.factors) != 2
         throw(ArgumentError("Only two-fermion operators supported for free fermions"))
@@ -253,3 +254,5 @@ function operator_inds_amps_free_fermion!((outinds, ininds, amps), op::NCMul, H:
     push!(amps, sign * op.coeff)
     return (outinds, ininds, amps)
 end
+
+_sym_space_match(basis::SymbolicFermionBasis, space::SingleParticleHilbertSpace) = true

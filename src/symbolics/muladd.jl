@@ -76,7 +76,7 @@ function _matrix_representation(op::NCAdd{C}, ordering, states, fock_to_ind; kwa
     if !iszero(op.coeff)
         append!(ininds, eachindex(states))
         append!(outinds, eachindex(states))
-        append!(amps, fill(op.coeff, length(states)))
+        append!(amps, Fill(op.coeff, length(states)))
     end
     return SparseArrays.sparse!(outinds, ininds, amps, length(states), length(states))
 end
@@ -196,29 +196,30 @@ M = matrix_representation(op, [f => Hf, s => Hs])
 ```
 """
 function matrix_representation(op, basis_space_pairs::AbstractVector{<:Pair}; kwargs...)
+    all(pair -> _sym_space_match(pair...), basis_space_pairs) || throw(ArgumentError("Incompatible symbolic basis and space pairs."))
     bases = [first(p) for p in basis_space_pairs]
     spaces = [last(p) for p in basis_space_pairs]
-    matrix_representation(op, bases, spaces; kwargs...)
+    _matrix_representation(op, bases, spaces; kwargs...)
 end
 
-function matrix_representation(op::NCMul, bases, spaces; kwargs...)
+function _matrix_representation(op::NCMul, bases, spaces; kwargs...)
     partitioned = partition_factors_by_basis(op.factors, bases)
     matrices = map(partitioned, spaces) do factors, space
         if isempty(factors)
             return I(dim(space))
         else
-            local_matrix_representation(NCMul(1, factors), space; kwargs...)
+            _term_matrix_representation(NCMul(1, factors), space; kwargs...)
         end
     end
     length(spaces) == 1 && return op.coeff * only(matrices)
     op.coeff * kron(reverse(matrices)...)
 end
 
-function matrix_representation(op::NCAdd, bases, spaces; kwargs...)
+function _matrix_representation(op::NCAdd, bases, spaces; kwargs...)
     if length(spaces) == 1
         return _matrix_representation_single_space(op, only(spaces); kwargs...)
     end
-    sum(matrix_representation(term, bases, spaces; kwargs...) for term in NCterms(op)) + op.coeff * I(prod(dim.(spaces)))
+    sum(_matrix_representation(term, bases, spaces; kwargs...) for term in NCterms(op)) + op.coeff * I(prod(dim.(spaces)))
 end
 function _matrix_representation_single_space(op::NCAdd, space; kwargs...)
     outinds = Int[]
@@ -232,14 +233,18 @@ function _matrix_representation_single_space(op::NCAdd, space; kwargs...)
     for (term, coeff) in op.dict
         operator_inds_amps!((outinds, ininds, amps), coeff * term, space; kwargs...)
     end
+    if !iszero(op.coeff)
+        append!(ininds, 1:N)
+        append!(outinds, 1:N)
+        append!(amps, Fill(op.coeff, N))
+    end
     return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
-
 end
-function matrix_representation(op, bases, spaces; kwargs...) #Assume op is a single symbolic operator
-    matrix_representation(NCMul(1, [op]), bases, spaces; kwargs...)
+function _matrix_representation(op, bases, spaces; kwargs...) #Assume op is a single symbolic operator
+    _matrix_representation(NCMul(1, [op]), bases, spaces; kwargs...)
 end
 
-function local_matrix_representation(op, H::AbstractHilbertSpace; kwargs...)
+function _term_matrix_representation(op, H::AbstractHilbertSpace; kwargs...)
     _outinds = Int[]
     _ininds = Int[]
     AT = mat_eltype(op)
@@ -333,14 +338,14 @@ function matrix_representation(op, spaces::AbstractVector{<:AbstractHilbertSpace
         return get_trivial_op_coeff(op) * I(prod(dim.(spaces)))
     end
     bases, spaces = infer_basis_space_pairs(op, spaces)
-    return matrix_representation(op, bases, spaces; kwargs...)
+    return _matrix_representation(op, bases, spaces; kwargs...)
 end
 function matrix_representation(op, space::AbstractHilbertSpace; kwargs...)
     if trivial_operator(op)
         return get_trivial_op_coeff(op) * I(dim(space))
     end
     bases, spaces = infer_basis_space_pairs(op, [space])
-    return matrix_representation(op, bases, spaces; kwargs...)
+    return _matrix_representation(op, bases, spaces; kwargs...)
 end
 trivial_operator(op::Union{UniformScaling,Number}) = true
 trivial_operator(op::NCMul) = length(op.factors) == 0
@@ -402,14 +407,14 @@ end
     # Operator acting on all three spaces
     op = f[1]' * f[1] * g[1]' * g[1] * s[:a](:z)
     M = matrix_representation(op, [f => Hf, g => Hg, s => Hs])
-    @test M == kron(matrix_representation(f[1]' * f[1], Hf), matrix_representation(g[1]' * g[1], Hg), matrix_representation(s[:a](:z), Hs))
+    @test M == kron(reverse([matrix_representation(f[1]' * f[1], Hf), matrix_representation(g[1]' * g[1], Hg), matrix_representation(s[:a](:z), Hs)])...)
 
     # Should have dimension 2 × 2 × 2 = 8
     @test size(M) == (8, 8)
     @test M isa SparseMatrixCSC
 
     @test_throws ArgumentError matrix_representation(op, [f => Hs])
-    @test_throws ArgumentError matrix_representation(op, [f => Hf])
-    @test_throws ArgumentError matrix_representation(op, [f => Hg])
-    @test_throws MethodError matrix_representation(op, [f => Hf, g => Hs, s => Hf])
+    @test_throws FieldError matrix_representation(op, [f => Hf])
+    @test_throws FieldError matrix_representation(op, [f => Hg])
+    @test_throws ArgumentError matrix_representation(op, [f => Hf, g => Hs, s => Hf])
 end

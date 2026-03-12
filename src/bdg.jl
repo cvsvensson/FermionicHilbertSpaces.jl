@@ -46,16 +46,17 @@ mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
 modes(H::BdGHilbertSpace) = modes(H.parent)
 Base.keys(h::BdGHilbertSpace) = keys(h.parent)
 basisstates(h::BdGHilbertSpace) = basisstates(h.parent)
+Base.parent(h::BdGHilbertSpace) = h.parent
+state_index(state::NambuState, H::BdGHilbertSpace) = state_index(state, parent(H))
 
 function matrix_representation(op, H::BdGHilbertSpace)
     isquadratic(op) || throw(ArgumentError("Operator must be quadratic in fermions to be represented on a BdG Hilbert space."))
-    normal_order_to_bdg(matrix_representation(remove_identity(op), H.parent))
+    normal_order_to_bdg(_matrix_representation_single_space(remove_identity(op), H))
 end
 
-function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::AbstractFockHilbertSpace{<:NambuState}; kwargs...)
-    if length(op.factors) != 2
-        throw(ArgumentError("Only two-fermion operators supported for free fermions"))
-    end
+_sym_space_match(basis::SymbolicFermionBasis, space::BdGHilbertSpace) = true
+
+function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::BdGHilbertSpace; kwargs...)
     ordering = mode_ordering(H)
     nambustates = (NambuState(getindex(ordering, op.factors[1].label), op.factors[1].creation),
         NambuState(getindex(ordering, op.factors[2].label), !op.factors[2].creation))
