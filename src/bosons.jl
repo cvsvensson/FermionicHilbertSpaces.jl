@@ -1,42 +1,28 @@
 
-struct SymbolicBosonBasis
-    name::Symbol
-end
-Base.hash(x::SymbolicBosonBasis, h::UInt) = hash(x.name, h)
-
-macro bosons(x)
-    Expr(:block, :($(esc(x)) = SymbolicBosonBasis($(Expr(:quote, x)))),
+macro boson(x)
+    Expr(:block, :($(esc(x)) = BosonSym($(Expr(:quote, x)), -1)),
         :($(esc(x))))
 end
-Base.:(==)(a::SymbolicBosonBasis, b::SymbolicBosonBasis) = a.name == b.name
-Base.getindex(f::SymbolicBosonBasis, is...) = BosonSym(f, is, -1)
-Base.getindex(f::SymbolicBosonBasis, i) = BosonSym(f, i, -1)
 
-struct BosonSym{B,L} <: AbstractSym
-    basis::B
-    label::L
+struct BosonSym{B} <: AbstractSym
+    label::B
     exp::Int
 end
-Base.adjoint(x::BosonSym) = BosonSym(x.basis, x.label, -x.exp)
+Base.adjoint(x::BosonSym) = BosonSym(x.label, -x.exp)
 Base.iszero(x::BosonSym) = false
 function Base.show(io::IO, x::BosonSym)
-    print(io, x.basis.name, x.exp > 0 ? "†" : "")
-    if Base.isiterable(typeof(x.label))
-        Base.show_delim_array(io, x.label, "[", ",", "]", false)
-    else
-        print(io, "[", x.label, "]")
-    end
+    print(io, x.label, x.exp > 0 ? "†" : "")
     if abs(x.exp) !== 1
         print(io, "^", abs(x.exp))
     end
 end
-Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && a.basis == b.basis
-Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, h)))
+Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label
+Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, h))
 
 function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
-    if a.label == b.label && a.basis == b.basis
+    if a.label == b.label
         if sign(a.exp) == sign(b.exp)
-            return BosonSym(a.basis, a.label, a.exp + b.exp)
+            return BosonSym(a.label, a.exp + b.exp)
         else
             if a.exp < 0 && b.exp > 0
                 return AddTerms((Swap(1), 1))
@@ -45,16 +31,11 @@ function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
             end
         end
     end
-    if a.basis.name > b.basis.name
+    if a.label > b.label
         return Swap(1)
-    elseif a.basis.name == b.basis.name
-        if a.label > b.label
-            return Swap(1)
-        else
-            return nothing
-        end
+    else
+        return nothing
     end
-    throw(ArgumentError("mul_effect undefined for $a * $b"))
 end
 
 @nc BosonSym
@@ -65,12 +46,10 @@ NonCommutativeProducts.@commutative MajoranaSym BosonSym
     using Symbolics
     @variables a::Real z::Complex
 
-    @bosons b
+    @boson b1
+    @boson b2
     @fermions f
     @majoranas γ
-
-    b1 = b[1]
-    b2 = b[2]
 
     @test 1 * b1 == b1
     @test 1 * b1 + 0 == b1
@@ -122,8 +101,9 @@ struct TruncatedBosonicHilbertSpace{L} <: AbstractHilbertSpace{BosonicFockState}
         new{L}(max_occupancy, label)
     end
 end
+TruncatedBosonicHilbertSpace(max_occupancy, sym::BosonSym) = TruncatedBosonicHilbertSpace(max_occupancy, sym.label)
 basisstates(H::TruncatedBosonicHilbertSpace) = map(BosonicFockState, 0:H.max_occupancy)
-function basisstate(n::Int, H::TruncatedBosonicHilbertSpace) 
+function basisstate(n::Int, H::TruncatedBosonicHilbertSpace)
     if n < 1 || n > H.max_occupancy + 1
         throw(ArgumentError("Basis state index $n is out of bounds for Hilbert space with max occupancy $(H.max_occupancy)"))
     end
@@ -166,9 +146,11 @@ function apply_local_operators(factors, state::BosonicFockState, space::Truncate
     return (BosonicFockState(n), amplitude)
 end
 
-_sym_space_match(basis::SymbolicBosonBasis, space::TruncatedBosonicHilbertSpace) = true
-_sym_space_match(basis::SymbolicBosonBasis, space::AbstractHilbertSpace) = false
-get_symbolic_basis(f::BosonSym) = f.basis
+
+label(sym::BosonSym) = sym.label
+label(space::TruncatedBosonicHilbertSpace) = space.label
+
+get_symbolic_basis(f::BosonSym) = BosonSym(f.label, 0)
 mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
 
 @testitem "Bosonic hilbert space" begin
@@ -190,8 +172,8 @@ end
     using SparseArrays, LinearAlgebra
     using FermionicHilbertSpaces: TruncatedBosonicHilbertSpace
 
-    @bosons b
-    H = TruncatedBosonicHilbertSpace(3)
+    @boson b
+    H = TruncatedBosonicHilbertSpace(3, b)
 
     d = dim(H)
     a = spzeros(Float64, d, d)
@@ -199,15 +181,15 @@ end
         a[n, n+1] = sqrt(n)
     end
 
-    ma = matrix_representation(b[1], H)
-    madag = matrix_representation(b[1]', H)
+    ma = matrix_representation(b, H)
+    madag = matrix_representation(b', H)
 
     @test ma isa SparseMatrixCSC
     @test madag isa SparseMatrixCSC
     @test ma == a
     @test madag == a'
-    @test matrix_representation(b[1], [b => H]) == ma
-    @test madag * ma + 1im * I ≈ matrix_representation(b[1]' * b[1] + 1im, H)
+    @test matrix_representation(b, [b => H]) == ma
+    @test madag * ma + 1im * I ≈ matrix_representation(b' * b + 1im, H)
 end
 
 @testitem "Fermion-spin-boson mixed spaces" begin
@@ -215,24 +197,28 @@ end
     using FermionicHilbertSpaces: SpinSpace, TruncatedBosonicHilbertSpace
 
     @fermions f
-    @spins S
-    @bosons b
+    @spin S
+    @boson b
 
     Hf = hilbert_space(1:1)
-    Hs = SpinSpace{1 // 2}(:s)
-    Hb = TruncatedBosonicHilbertSpace(2, :b)
+    Hs = SpinSpace{1 // 2}(S)
+    Hb = TruncatedBosonicHilbertSpace(2, b)
     H = tensor_product(Hf, Hs, Hb)
 
     f_expr = f[1]' * f[1] + 0.5 * (f[1] + f[1]') + 1
-    s_expr = S[:s](:z) + 0.5 * (S[:s](:x) + S[:s](:y)) + 1
-    b_expr = b[1]' * b[1] + 0.5 * (b[1] + b[1]') + 1
+    s_expr = S[:z] + 0.5 * (S[:x] + S[:y]) + 1
+    b_expr = b' * b + 0.5 * (b + b') + 1
     fmat = matrix_representation(f_expr, Hf)
     smat = matrix_representation(s_expr, Hs)
     bmat = matrix_representation(b_expr, Hb)
     op = f_expr * s_expr * b_expr
     mop = matrix_representation(op, [Hf, Hs, Hb])
+    mop2 = matrix_representation(op, [f => Hf, S => Hs, b => Hb])
     expected = kron(reverse([fmat, smat, bmat])...)
     @test mop ≈ expected
+    @test mop2 ≈ expected
+
+    @test_throws ArgumentError matrix_representation(s_expr, SpinSpace{1 // 2}(:Not))
 
     Hsb = tensor_product(Hs, Hb)
     @test partial_trace(1.0 * I(dim(Hsb)), Hsb => Hs) ≈ dim(Hb) * I(dim(Hs))

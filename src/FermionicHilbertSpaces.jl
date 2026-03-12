@@ -18,7 +18,7 @@ export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilb
 export parityoperator, numberoperator, fermions, majoranas, matrix_representation
 
 export partial_trace, generalized_kron, tensor_product, embed, extend
-export @fermions, @majoranas, @bosons, @spins
+export @fermions, @majoranas, @boson, @spin, @spins
 export number_conservation, NoSymmetry, ParityConservation, NumberConservation
 export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
 

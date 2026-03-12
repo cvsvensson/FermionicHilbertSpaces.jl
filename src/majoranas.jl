@@ -82,9 +82,6 @@ mat_eltype(::Type{S}) where {S<:AbstractMajoranaSym} = Complex{Int}
 @nc MajoranaSym
 
 @testitem "MajoranaSym" begin
-    using Symbolics
-    @variables a::Real z::Complex
-
     @majoranas γ f
 
     @test 1 * γ[1] == γ[1]
@@ -298,5 +295,7 @@ end
     @test tensor_product((m1, m2), (Hsub, Hsub2), Hprod) == tensor_product((m1, m2), (Hfsub, Hfsub2) => parent(Hprod))
 end
 
+function _sym_space_match(sym::AbstractMajoranaSym, space::MajoranaHilbertSpace)
+    label(sym) in keys(space)
+end
 _sym_space_match(basis::SymbolicMajoranaBasis, space::MajoranaHilbertSpace) = true
-_sym_space_match(basis::SymbolicMajoranaBasis, space::AbstractHilbertSpace) = false

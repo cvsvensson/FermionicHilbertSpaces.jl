@@ -255,4 +255,4 @@ function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::SinglePartic
     return (outinds, ininds, amps)
 end
 
-_sym_space_match(basis::SymbolicFermionBasis, space::SingleParticleHilbertSpace) = true
+# _sym_space_match(basis::SymbolicFermionBasis, space::SingleParticleHilbertSpace) = true

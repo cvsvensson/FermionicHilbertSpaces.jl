@@ -19,6 +19,7 @@ basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
 Base.keys(H::SpinSpace) = (H.label,)
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{J,S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
+label(S::SpinSpace) = S.label
 
 function spin_basisstates(::Val{J}) where {J}
     states = [SpinState{J,typeof(J)}(i - J) for i in 0:2J]
@@ -88,25 +89,30 @@ struct SymbolicSpinBasis
     name::Symbol
 end
 Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.name, h)
+label(S::SymbolicSpinBasis) = S.name
 
-macro spins(x)
+macro spin(x)
     Expr(:block, :($(esc(x)) = SymbolicSpinBasis($(Expr(:quote, x)))),
         :($(esc(x))))
 end
+macro spins(name, labels)
+    Expr(:block,
+        :($(esc(name)) = [SymbolicSpinBasis(Symbol($(Expr(:quote, name)), l)) for l in $(esc(labels))]),
+        :($(esc(name))))
+end
 Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.name == b.name
-Base.getindex(s::SymbolicSpinBasis, i) = op -> SpinSym(i, op, s)
+Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
 
-struct SpinSym{L,B} <: AbstractSym
-    label::L
+struct SpinSym{B} <: AbstractSym
     op::Symbol
     basis::B
-    function SpinSym(label::L, op, basis::B=nothing) where {L,B}
+    function SpinSym(op, basis::B) where {B}
         if op in _spin_x_aliases
-            return (new{L,B}(label, :+, basis) + new{L,B}(label, :-, basis)) / 2
+            return (new{B}(:+, basis) + new{B}(:-, basis)) / 2
         elseif op in _spin_y_aliases
-            return (new{L,B}(label, :+, basis) - new{L,B}(label, :-, basis)) / (2im)
+            return (new{B}(:+, basis) - new{B}(:-, basis)) / (2im)
         else
-            return new{L,B}(label, _canonical_spin_alias(op), basis)
+            return new{B}(_canonical_spin_alias(op), basis)
         end
     end
 end
@@ -127,19 +133,20 @@ function _canonical_spin_alias(op)
     end
 end
 
-Base.show(io::IO, x::SpinSym) = print(io, "S", x.op, "[$(x.label)]")
+Base.show(io::IO, x::SpinSym) = print(io, x.basis.name, "[$(x.op)]")
 
-Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.label == b.label
-Base.hash(a::SpinSym, h::UInt) = hash(a.op, hash(a.label, h))
-get_symbolic_basis(f::SpinSym) = f.basis  
+Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.basis == b.basis
+Base.hash(a::SpinSym, h::UInt) = hash(a.op, hash(a.basis, h))
+get_symbolic_basis(f::SpinSym) = f.basis
+get_symbolic_basis(f::SymbolicSpinBasis) = f
 
-mat_eltype(::Type{<:SpinSym}) = Rational{Int}
+mat_eltype(::Type{<:SpinSym}) = Float64
 
 function Base.adjoint(x::SpinSym)
     if x.op == :+
-        SpinSym(x.label, :-, x.basis)
+        SpinSym(:-, x.basis)
     elseif x.op == :-
-        SpinSym(x.label, :+, x.basis)
+        SpinSym(:+, x.basis)
     elseif x.op == :z
         x
     else
@@ -148,11 +155,10 @@ function Base.adjoint(x::SpinSym)
 end
 
 function NonCommutativeProducts.mul_effect(a::SpinSym, b::SpinSym)
-    a.basis == b.basis || return nothing  # Operators from different bases commute
-    if a.label > b.label
+    if a.basis.name > b.basis.name
         return Swap(1)
     end
-    if a.label < b.label
+    if a.basis.name < b.basis.name
         return nothing
     end
 
@@ -160,13 +166,13 @@ function NonCommutativeProducts.mul_effect(a::SpinSym, b::SpinSym)
     # Canonical order: :z < :+ < :-
     if a.op == :+ && b.op == :z
         # S+ Sz = Sz S+ - S+
-        return AddTerms((Swap(1), -SpinSym(a.label, :+, a.basis)))
+        return AddTerms((Swap(1), -SpinSym(:+, a.basis)))
     elseif a.op == :- && b.op == :z
         # S- Sz = Sz S- + S-
-        return AddTerms((Swap(1), SpinSym(a.label, :-, a.basis)))
+        return AddTerms((Swap(1), SpinSym(:-, a.basis)))
     elseif a.op == :- && b.op == :+
         # S- S+ = S+ S- - 2Sz
-        return AddTerms((Swap(1), -2 * SpinSym(a.label, :z, a.basis)))
+        return AddTerms((Swap(1), -2 * SpinSym(:z, a.basis)))
     else
         return nothing
     end
@@ -218,7 +224,6 @@ Apply a sequence of spin operators (product) to a spin state. Operators are appl
 function apply_local_operators(factors, state::SpinState{J}, space::SpinSpace) where J
     newstate = state
     amplitude = one(typeof(sqrt(J * (J + 1))))  # Start with 1.0 to handle mixed numeric types
-
     # Apply factors in reverse order (from right to left)
     for factor in reverse(factors)
         newstate, factor_amp = apply_local_operator(factor, newstate)
@@ -231,23 +236,21 @@ function apply_local_operators(factors, state::SpinState{J}, space::SpinSpace) w
 end
 
 @testitem "SpinSym" begin
-    using Symbolics
-    @variables a::Real z::Complex
-
-    @spins S
+    @spin S1
+    @spin S2
     @fermions f
     @majoranas γ
-    @bosons b
+    @boson b
 
-    Sz1 = S[1](:z)
-    Sp1 = S[1](:+)
-    Sm1 = S[1](:-)
-    Sx1 = S[1](:x)
-    Sy1 = S[1](:y)
+    Sz1 = S1[:z]
+    Sp1 = S1[:+]
+    Sm1 = S1[:-]
+    Sx1 = S1[:x]
+    Sy1 = S1[:y]
 
-    Sz2 = S[2](:z)
-    Sp2 = S[2](:+)
-    Sm2 = S[2](:-)
+    Sz2 = S2[:z]
+    Sp2 = S2[:+]
+    Sm2 = S2[:-]
 
     @test 1 * Sz1 == Sz1
     @test 1 * Sz1 + 0 == Sz1
@@ -281,10 +284,10 @@ end
     @test Sp1 * γ[1] - γ[1] * Sp1 == 0
 
     # Spins commute with bosons
-    @test Sz1 * b[1] - b[1] * Sz1 == 0
-    @test Sp1 * b[1] - b[1] * Sp1 == 0
-    @test Sz1 * b[1]' - b[1]' * Sz1 == 0
-    @test Sp1 * b[1]' - b[1]' * Sp1 == 0
+    @test Sz1 * b - b * Sz1 == 0
+    @test Sp1 * b - b * Sp1 == 0
+    @test Sz1 * b' - b' * Sz1 == 0
+    @test Sp1 * b' - b' * Sp1 == 0
 
     # Test adjoint
     @test Sp1' == Sm1
@@ -302,5 +305,28 @@ end
     @test 1 + (Sp1 + Sm1) == 1 + Sp1 + Sm1 == Sp1 + Sm1 + 1 == Sp1 + 1 + Sm1
 end
 
-_sym_space_match(basis::SymbolicSpinBasis, space::SpinSpace) = true
-_sym_space_match(basis::SymbolicSpinBasis, space::AbstractHilbertSpace) = false
+function SpinSpace{J}(basis::SymbolicSpinBasis) where {J}
+    SpinSpace{J}(basis.name)
+end
+
+@testitem "Spin chain basis matching" begin
+    import FermionicHilbertSpaces: SpinSpace
+    N = 3
+    @spins S 1:N
+    Hs = SpinSpace{1 // 2}.(S)
+    pairs = map(=>, S, Hs)
+    ## Heisenberg chain
+    ham = sum(S[k][op] * S[k+1][op] for k in 1:N-1 for op in (:x, :y, :z))
+    M = matrix_representation(ham, pairs)
+    M2 = matrix_representation(ham, Hs)
+    @test M == M2
+
+    ## Try spin 1
+    Hs = SpinSpace{1}.(S)
+    pairs = map(=>, S, Hs)
+    ## Heisenberg chain
+    ham = sum(S[k][op] * S[k+1][op] for k in 1:N-1 for op in (:x, :y, :z))
+    M = matrix_representation(ham, pairs)
+    M2 = matrix_representation(ham, Hs)
+    @test M == M2
+end

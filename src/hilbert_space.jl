@@ -12,7 +12,7 @@ Base.hash(H::GenericHilbertSpace, h::UInt) = hash((H.label, H.basisstates), h)
 basisstates(H::GenericHilbertSpace) = H.basisstates
 basisstate(ind, H::GenericHilbertSpace) = H.basisstates[ind]
 Base.keys(H::GenericHilbertSpace) = (H.label,)
-state_index(state, H::GenericHilbertSpace) = findfirst(==(state), H.basisstates)
+state_index(state, H::GenericHilbertSpace) = get(H.state_index, state, missing)
 
 
 function Base.show(io::IO, H::Htype) where Htype<:AbstractFockHilbertSpace

@@ -62,6 +62,7 @@ end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
 get_symbolic_basis(f::FermionSym) = f.basis
+get_symbolic_basis(f::SymbolicFermionBasis) = f
 
 function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     if a == b
@@ -187,3 +188,11 @@ end
 
 _sym_space_match(basis::SymbolicFermionBasis, space::AbstractFockHilbertSpace) = true
 _sym_space_match(basis::SymbolicFermionBasis, space::AbstractHilbertSpace) = false
+
+label(H::AbstractFockHilbertSpace) = mode_ordering(H)
+function _sym_space_match(sym, space::AbstractHilbertSpace)
+    label(sym) == label(space)
+end
+function _sym_space_match(sym::AbstractFermionSym, space::AbstractFockHilbertSpace)
+    label(sym) in keys(space)
+end

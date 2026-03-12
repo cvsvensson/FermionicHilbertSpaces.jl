@@ -54,7 +54,7 @@ function matrix_representation(op, H::BdGHilbertSpace)
     normal_order_to_bdg(_matrix_representation_single_space(remove_identity(op), H))
 end
 
-_sym_space_match(basis::SymbolicFermionBasis, space::BdGHilbertSpace) = true
+# _sym_space_match(basis::SymbolicFermionBasis, space::BdGHilbertSpace) = true
 
 function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::BdGHilbertSpace; kwargs...)
     ordering = mode_ordering(H)

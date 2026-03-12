@@ -183,12 +183,12 @@ end
 """
     matrix_representation(op, basis_space_pairs::AbstractVector{<:Pair})
 
-Compute the matrix representation of a symbolic operator on a product hilbert space.The `basis_space_pairs` argument is a vector of pairs `symbolic_basis => hilbert_space`, where each symbolic basis (e.g., from `@fermions f`, `@spins s`, etc.) is mapped to its corresponding Hilbert space.
+Compute the matrix representation of a symbolic operator on a product hilbert space.The `basis_space_pairs` argument is a vector of pairs `symbolic_basis => hilbert_space`, where each symbolic basis (e.g., from `@fermions f`, `@spin s`, etc.) is mapped to its corresponding Hilbert space.
 
 # Example
 ```julia
 @fermions f
-@spins s
+@spin s
 Hf = FockHilbertSpace([1, 2])
 Hs = SpinSpace{1//2}(0)
 op = f[1]' * f[1] * s[0](:z)
@@ -196,8 +196,7 @@ M = matrix_representation(op, [f => Hf, s => Hs])
 ```
 """
 function matrix_representation(op, basis_space_pairs::AbstractVector{<:Pair}; kwargs...)
-    all(pair -> _sym_space_match(pair...), basis_space_pairs) || throw(ArgumentError("Incompatible symbolic basis and space pairs."))
-    bases = [first(p) for p in basis_space_pairs]
+    bases = [get_symbolic_basis(first(p)) for p in basis_space_pairs] # we call get_symbolic_basis because for e.g. a boson 'b', it represents both the basis and the operator, so we need to extract an invariant
     spaces = [last(p) for p in basis_space_pairs]
     _matrix_representation(op, bases, spaces; kwargs...)
 end
@@ -280,7 +279,7 @@ Extract all unique symbolic bases from an operator expression.
 Returns a set of unique bases found in the operator.
 """
 function extract_symbolic_bases(op::NCMul)
-    bases = IdSet()
+    bases = Set()
     for factor in op.factors
         basis = get_symbolic_basis(factor)
         push!(bases, basis)
@@ -289,7 +288,7 @@ function extract_symbolic_bases(op::NCMul)
 end
 
 function extract_symbolic_bases(op::NCAdd)
-    bases = IdSet()
+    bases = Set()
     for (term, coeff) in op.dict
         term_bases = extract_symbolic_bases(term)
         union!(bases, term_bases)
@@ -303,18 +302,18 @@ end
 
 function infer_basis_space_pairs(op, spaces::AbstractVector{<:AbstractHilbertSpace})
     # Extract bases from operator
-    bases = collect(extract_symbolic_bases(op))
-    # Match them to basis
-    length(bases) == length(spaces) || throw(ArgumentError("Number of unique symbolic bases in operator ($(length(bases))) does not match number of provided spaces ($(length(spaces)))"))
-    new_spaces = map(bases) do basis
-        matches = filter(space -> _sym_space_match(basis, space), spaces)
+    unique_bases = collect(extract_symbolic_bases(op))
+    # Match them to spaces
+    length(unique_bases) == length(spaces) || throw(ArgumentError("Number of unique symbolic bases in operator ($(length(unique_bases))) does not match number of provided spaces ($(length(spaces)))"))
+    bases = map(spaces) do space
+        matches = filter(basis -> _sym_space_match(basis, space), unique_bases)
         if length(matches) == 1
             return matches[1]
         else
-            throw(ArgumentError("Could not uniquely match basis $basis to a space. Matches found: $matches"))
+            throw(ArgumentError("Could not uniquely match space $space to a basis. Matches found: $matches"))
         end
     end
-    bases, new_spaces
+    bases, spaces
 end
 
 """
@@ -326,7 +325,7 @@ The function will attempt to match symbolic bases in the operator to the provide
 # Example
 ```julia
 @fermions f
-@spins s
+@spin s
 H_f = FockHilbertSpace([1, 2])
 H_s = SpinSpace{1//2}(0)
 op = f[1]' * f[1] * s[0](:z)
@@ -361,14 +360,14 @@ get_trivial_op_coeff(op) = op
 
     # Test 1: Fermion ⊗ Spin system
     @fermions f
-    @spins s
+    @spin s
 
     Nf = 2
     Hf = FockHilbertSpace(1:Nf)
-    Hs = SpinSpace{1 // 2}(:label)
+    Hs = SpinSpace{1 // 2}(s)
 
     # Test simple product operator: f[1]' * f[1] ⊗ S_z
-    op = f[1]' * f[1] * s[:label](:z)
+    op = f[1]' * f[1] * s[:z]
     M = matrix_representation(op, [f => Hf, s => Hs])
     @test M == matrix_representation(op, [Hf, Hs])
 
@@ -379,14 +378,14 @@ get_trivial_op_coeff(op) = op
     @test M isa SparseMatrixCSC
 
     # Test 2: Sum of mixed operators
-    op_mixed = f[1]' * f[1] * s[:label](:z) + f[2]' * f[2] * s[:label](:+)
+    op_mixed = f[1]' * f[1] * s[:z] + f[2]' * f[2] * s[:+]
     M_mixed = matrix_representation(op_mixed, [f => Hf, s => Hs])
     @test size(M_mixed) == (8, 8)
     @test M_mixed == matrix_representation(op_mixed, [Hf, Hs])
 
 
     # Test 3: Verify the result is hermitian for hermitian operators
-    op_herm = f[1]' * f[2] * s[:label](:z) + hc
+    op_herm = f[1]' * f[2] * s[:z] + hc
     M_herm = matrix_representation(op_herm, [f => Hf, s => Hs])
     @test M_herm ≈ M_herm'  # Should be hermitian
     @test M_herm == matrix_representation(op_herm, [Hf, Hs])
@@ -398,23 +397,23 @@ end
 
     @fermions f
     @fermions g  # Different fermion species, commuting with f
-    @spins s
+    @spin s
 
     Hf = FockHilbertSpace([1])
     Hg = FockHilbertSpace([1])
-    Hs = SpinSpace{1 // 2}(:a)
+    Hs = SpinSpace{1 // 2}(s.name)
 
     # Operator acting on all three spaces
-    op = f[1]' * f[1] * g[1]' * g[1] * s[:a](:z)
+    op = f[1]' * f[1] * g[1]' * g[1] * s[:z]
     M = matrix_representation(op, [f => Hf, g => Hg, s => Hs])
-    @test M == kron(reverse([matrix_representation(f[1]' * f[1], Hf), matrix_representation(g[1]' * g[1], Hg), matrix_representation(s[:a](:z), Hs)])...)
+    @test M == kron(reverse([matrix_representation(f[1]' * f[1], Hf), matrix_representation(g[1]' * g[1], Hg), matrix_representation(s[:z], Hs)])...)
 
     # Should have dimension 2 × 2 × 2 = 8
     @test size(M) == (8, 8)
     @test M isa SparseMatrixCSC
 
-    @test_throws ArgumentError matrix_representation(op, [f => Hs])
+    @test_throws MethodError matrix_representation(op, [f => Hs])
     @test_throws FieldError matrix_representation(op, [f => Hf])
     @test_throws FieldError matrix_representation(op, [f => Hg])
-    @test_throws ArgumentError matrix_representation(op, [f => Hf, g => Hs, s => Hf])
+    @test_throws MethodError matrix_representation(op, [f => Hf, g => Hs, s => Hf])
 end
