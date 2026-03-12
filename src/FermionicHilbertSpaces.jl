@@ -81,11 +81,12 @@ PrecompileTools.@compile_workload begin
     PrecompileTools.@compile_workload begin
         H1 = hilbert_space(1:2)
         H2 = hilbert_space(3:3, ParityConservation())
-        partial_trace(m + hc, H1 => hilbert_space(1:1))
+        partial_trace(m + hc, H1 => hilbert_space(1:1, NumberConservation()))
         H = tensor_product(H1, H2)
-        extend(c1[1], H1 => H2)
-        embed(c1[1], H1 => H)
         @fermions f
+        c = matrix_representation(f[1], H1)
+        extend(c, H1 => H2)
+        embed(c, H1 => H)
         matrix_representation((f[1] * f[2]' + 1 + f[1])^2 * 2.0, H1)
         @majoranas γ
         (γ[1] * γ[2] + 1.0 + γ[1])^2
