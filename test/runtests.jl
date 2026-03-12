@@ -1,5 +1,5 @@
 using TestItemRunner
-@run_package_tests verbose=true
+@run_package_tests verbose = true
 
 
 @testitem "Basis" begin
@@ -8,10 +8,8 @@ using TestItemRunner
     N = 2
     H = hilbert_space(1:N)
     B = fermions(H)
-    # @test FermionicHilbertSpaces.nbr_of_modes(B) == N
     Hspin = hilbert_space(Base.product(1:N, (:↑, :↓)), number_conservation())
     Bspin = fermions(Hspin)
-    # @test FermionicHilbertSpaces.nbr_of_modes(Bspin) == 2N
     @test B[1] isa SparseMatrixCSC
     @test Bspin[1, :↑] isa SparseMatrixCSC
     @test parityoperator(H) isa SparseMatrixCSC
@@ -119,4 +117,14 @@ end
         test_adjoint(H13, H)
         test_adjoint(H23, H)
     end
+end
+
+@testitem "Identity in matrix_representation" begin
+    using LinearAlgebra
+    @fermions f
+    H = hilbert_space(1:2)
+    @test matrix_representation(1 + 0 * f[1], H) == I
+    @test matrix_representation(1, H) == I
+    @test matrix_representation(I, H) == I
+    @test matrix_representation(1 + f[1], H) == I + matrix_representation(f[1], H)
 end
