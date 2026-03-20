@@ -94,14 +94,13 @@ end
 struct BosonicFockState
     n::Int
 end
-struct TruncatedBosonicHilbertSpace{L} <: AbstractHilbertSpace{BosonicFockState}
+struct TruncatedBosonicHilbertSpace{B} <: AbstractAtomicHilbertSpace{BosonicFockState}
+    sym::BosonSym{B}
     max_occupancy::Int
-    label::L
-    function TruncatedBosonicHilbertSpace(max_occupancy, label::L=uuid4()) where {L}
-        new{L}(max_occupancy, label)
+    function TruncatedBosonicHilbertSpace(sym::BosonSym{B}, max_occupancy) where B
+        new{B}(sym, max_occupancy)
     end
 end
-TruncatedBosonicHilbertSpace(max_occupancy, sym::BosonSym) = TruncatedBosonicHilbertSpace(max_occupancy, sym.label)
 basisstates(H::TruncatedBosonicHilbertSpace) = map(BosonicFockState, 0:H.max_occupancy)
 function basisstate(n::Int, H::TruncatedBosonicHilbertSpace)
     if n < 1 || n > H.max_occupancy + 1
@@ -109,7 +108,6 @@ function basisstate(n::Int, H::TruncatedBosonicHilbertSpace)
     end
     BosonicFockState(n - 1)
 end
-Base.keys(H::TruncatedBosonicHilbertSpace) = (H.label,)
 dim(H::TruncatedBosonicHilbertSpace) = H.max_occupancy + 1
 function state_index(s::BosonicFockState, H::TruncatedBosonicHilbertSpace)
     if s.n < 0 || s.n > H.max_occupancy
@@ -147,25 +145,23 @@ function apply_local_operators(factors, state::BosonicFockState, space::Truncate
 end
 
 
-label(sym::BosonSym) = sym.label
-label(space::TruncatedBosonicHilbertSpace) = space.label
+# label(sym::BosonSym) = sym.label
+# label(space::TruncatedBosonicHilbertSpace) = space.label
 
-get_symbolic_basis(f::BosonSym) = BosonSym(f.label, 0)
+atomic_group(f::BosonSym) = BosonSym(f.label, 0)
+atomic_group(H::TruncatedBosonicHilbertSpace) = atomic_group(H.sym)
 mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
 
 @testitem "Bosonic hilbert space" begin
     using FermionicHilbertSpaces: TruncatedBosonicHilbertSpace, BosonicFockState, state_index, basisstate
-
-    H = TruncatedBosonicHilbertSpace(3)
+    @boson b
+    H = TruncatedBosonicHilbertSpace(b, 3)
     @test basisstates(H) == [BosonicFockState(0), BosonicFockState(1), BosonicFockState(2), BosonicFockState(3)]
     @test dim(H) == 4
     @test basisstate(1, H) == BosonicFockState(0)
     @test basisstate(4, H) == BosonicFockState(3)
     @test state_index(BosonicFockState(0), H) == 1
     @test state_index(BosonicFockState(3), H) == 4
-
-    Hlabel = TruncatedBosonicHilbertSpace(2, :left)
-    @test keys(Hlabel) == (:left,)
 end
 
 @testitem "Bosonic matrix representations" begin
@@ -173,7 +169,7 @@ end
     using FermionicHilbertSpaces: TruncatedBosonicHilbertSpace
 
     @boson b
-    H = TruncatedBosonicHilbertSpace(3, b)
+    H = TruncatedBosonicHilbertSpace(b, 3)
 
     d = dim(H)
     a = spzeros(Float64, d, d)
@@ -188,7 +184,7 @@ end
     @test madag isa SparseMatrixCSC
     @test ma == a
     @test madag == a'
-    @test matrix_representation(b, [b => H]) == ma
+    @test matrix_representation(b, H) == ma
     @test madag * ma + 1im * I ≈ matrix_representation(b' * b + 1im, H)
 end
 
@@ -200,9 +196,9 @@ end
     @spin S
     @boson b
 
-    Hf = hilbert_space(1:1)
+    Hf = hilbert_space(f, 1:1)
     Hs = SpinSpace{1 // 2}(S)
-    Hb = TruncatedBosonicHilbertSpace(2, b)
+    Hb = TruncatedBosonicHilbertSpace(b, 2)
     H = tensor_product(Hf, Hs, Hb)
 
     f_expr = f[1]' * f[1] + 0.5 * (f[1] + f[1]') + 1
@@ -212,11 +208,9 @@ end
     smat = matrix_representation(s_expr, Hs)
     bmat = matrix_representation(b_expr, Hb)
     op = f_expr * s_expr * b_expr
-    mop = matrix_representation(op, [Hf, Hs, Hb])
-    mop2 = matrix_representation(op, [f => Hf, S => Hs, b => Hb])
+    mop = matrix_representation(op, H)
     expected = kron(reverse([fmat, smat, bmat])...)
     @test mop ≈ expected
-    @test mop2 ≈ expected
 
     @test_throws ArgumentError matrix_representation(s_expr, SpinSpace{1 // 2}(:Not))
 
@@ -227,6 +221,7 @@ end
     trf = tr(fmat)
     trs = tr(smat)
     trb = tr(bmat)
+    partial_trace(mop, H => Hf; complement=Hsb) ≈ trb * trs * fmat
     @test partial_trace(mop, H => Hf) ≈ trb * trs * fmat
     @test partial_trace(mop, H => Hs) ≈ trb * trf * smat
     @test partial_trace(mop, H => Hb) ≈ trs * trf * bmat

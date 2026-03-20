@@ -16,7 +16,7 @@ end
 
 Return the fermionic parity operator for the Hilbert space `H`.
 """
-function parityoperator(H::AbstractFockHilbertSpace)
+function parityoperator(H::Union{<:AbstractFockHilbertSpace,<:AbstractHilbertSpace{<:AbstractFockState}})
     sparse_fockoperator(f -> (f, parity(f)), H)
 end
 
@@ -26,7 +26,7 @@ end
 
 Return the number operator for the Hilbert space `H`.
 """
-function numberoperator(H::AbstractFockHilbertSpace)
+function numberoperator(H::Union{<:AbstractFockHilbertSpace,<:AbstractHilbertSpace{<:AbstractFockState}})
     sparse_fockoperator(f -> (f, fermionnumber(f)), H)
 end
 
@@ -72,15 +72,17 @@ function togglemajoranas(digitpositions, daggers, focknbr)
     return newfocknbr, allowed * fermionstatistics * amp
 end
 
-function apply_local_operators(factors, state::FockNumber{I}, space::AbstractFockHilbertSpace) where I
+
+
+function apply_local_operators(factors, state::FockNumber{I}, space::AbstractHilbertSpace) where I
     newfocknbr = state
     fermionstatistics = 1
     for op in reverse(factors)
         dagger = op.creation
-        digitpos = getindex(space.jw, op.label)
+        digitpos = _find_position(op, space)
         op = one(I) << (digitpos - 1)
         occupied = !iszero(op & newfocknbr)
-        if dagger == occupied 
+        if dagger == occupied
             return newfocknbr, 0
         end
         fermionstatistics *= jwstring(digitpos, newfocknbr)
@@ -95,12 +97,12 @@ end
 
 Constructs a sparse matrix of size representing a fermionic annihilation operator at bit position `fermion_number` on the Hilbert space H. 
 """
-function fermion_sparse_matrix(fermion_number, H::AbstractFockHilbertSpace)
+function fermion_sparse_matrix(fermion_number, H::Union{<:AbstractFockHilbertSpace,<:AbstractHilbertSpace{<:AbstractFockState}})
     sparse_fockoperator(Base.Fix1(removefermion, fermion_number), H)
 end
 
 
-function sparse_fockoperator(op, H::AbstractFockHilbertSpace)
+function sparse_fockoperator(op, H::Union{<:AbstractFockHilbertSpace,<:AbstractHilbertSpace{<:AbstractFockState}})
     fs = basisstates(H)
     N = length(fs)
     amps = Int[]
@@ -155,9 +157,9 @@ end
 
 Return a dictionary of fermionic annihilation operators for the Hilbert space `H`.
 """
-function fermions(H::AbstractFockHilbertSpace)
+function fermions(H::FermionCluster)
     M = length(modes(H))
-    labelvec = keys(H)
+    labelvec = map(label,modes(H))
     reps = [fermion_sparse_matrix(n, H) for n in 1:M]
     OrderedDict(zip(labelvec, reps))
 end

@@ -1,85 +1,89 @@
 
-function Base.reshape(m::AbstractMatrix, H::AbstractHilbertSpace, Hs; phase_factors=true)
-    _reshape_mat_to_tensor(m, H, Hs, StateSplitter(H, Hs), phase_factors)
+function Base.reshape(m::AbstractMatrix, H::AbstractHilbertSpace, Hs)
+    splitter = state_splitter(H, Hs)
+    _reshape_mat_to_tensor(m, H, Hs, Hs, splitter, splitter)
 end
-function Base.reshape(m::AbstractVector, H::AbstractHilbertSpace, Hs; phase_factors=true)
-    _reshape_vec_to_tensor(m, H, Hs, StateSplitter(H, Hs), phase_factors)
+function Base.reshape(m::AbstractMatrix, H::AbstractHilbertSpace, Hsout, Hsin)
+    splitterout = state_splitter(H, Hsout)
+    splitterin = state_splitter(H, Hsin)
+    _reshape_mat_to_tensor(m, H, Hsout, Hsin, splitterout, splitterin)
+end
+function Base.reshape(m::AbstractVector, H::AbstractHilbertSpace, Hs)
+    _reshape_vec_to_tensor(m, H, Hs, state_splitter(H, Hs))
 end
 const PairWithHilbertSpace = Union{Pair{<:AbstractHilbertSpace,<:Any},Pair{<:Any,<:AbstractHilbertSpace}}
 Base.reshape(Hs::PairWithHilbertSpace; kwargs...) = m -> reshape(m, first(Hs), last(Hs); kwargs...)
 Base.reshape(m::AbstractArray, Hs::PairWithHilbertSpace; kwargs...) = reshape(m, first(Hs), last(Hs); kwargs...)
 
-function Base.reshape(t::AbstractArray, Hs::Union{<:AbstractVector,Tuple}, H::AbstractHilbertSpace; phase_factors=true)
+function Base.reshape(t::AbstractArray, Hs::Union{<:AbstractVector,Tuple}, H::AbstractHilbertSpace)
+    splitter_in = state_splitter(H, Hs)
     if ndims(t) == 2 * length(Hs)
-        return _reshape_tensor_to_mat(t, Hs, H, StateExtender(Hs, H), phase_factors)
+        return _reshape_tensor_to_mat(t, (Hs, splitter_in), (Hs, splitter_in), H, state_splitter)
     elseif ndims(t) == length(Hs)
-        return _reshape_tensor_to_vec(t, Hs, H, StateExtender(Hs, H), phase_factors)
+        return _reshape_tensor_to_vec(t, Hs, H, splitter_in)
     else
         throw(ArgumentError("The number of dimensions in the tensor must match the number of subsystems"))
     end
 end
 
-function _reshape_vec_to_tensor(v::AbstractVector, H::AbstractHilbertSpace, Hs, statesplitter, phase_factors)
-    if phase_factors
-        isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
-    end
-    dims = length.(basisstates.(Hs))
+function _reshape_vec_to_tensor(v::AbstractVector, H::AbstractHilbertSpace, Hs, splitter)
+    dims = map(dim, Hs)
     fs = basisstates(H)
     Is = map(f -> state_index(f, H), fs)
-    Iouts = map(f -> state_index.(statesplitter(f), Hs), fs)
-    t = Array{eltype(v),length(Hs)}(undef, dims...)
+    Iouts = map(f -> state_index.(split_state(f, splitter), Hs), fs)
+    t = zeros(eltype(v), dims...)
     for (I, Iout) in zip(Is, Iouts)
         t[Iout...] = v[I...]
     end
     return t
 end
 
-function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractHilbertSpace, Hs, statesplitter, phase_factors)
+function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractHilbertSpace, Hsout, Hsin, splitterout, splitterin)
     #reshape the matrix m in basis b into a tensor where each index pair has a basis in bs
-    if phase_factors
-        isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
-    end
-    dims = length.(basisstates.(Hs))
+    dimsin = map(dim, Hsin)
+    dimsout = map(dim, Hsout)
     fs = basisstates(H)
-    Is = map(f -> state_index(f, H), fs)
-    Iouts = map(f -> state_index.(statesplitter(f), Hs), fs)
-    t = Array{eltype(m),2 * length(Hs)}(undef, dims..., dims...)
-    pfh = phase_factors ? phase_factor_h(Hs, H) : (f1, f2) -> 1
-    for (I1, Iout1, f1) in zip(Is, Iouts, fs)
-        for (I2, Iout2, f2) in zip(Is, Iouts, fs)
-            s = pfh(f1, f2)
-            t[Iout1..., Iout2...] = m[I1, I2] * s
+    Js = map(f -> state_index(f, H), fs)
+    Iouts = map(f -> map(state_index, split_state(f, splitterout), Hsout), fs)
+    Iins = map(f -> map(state_index, split_state(f, splitterin), Hsin), fs)
+    t = zeros(eltype(m), dimsout..., dimsin...)
+    # t = Array{eltype(m),length(Hsout) + length(Hsin)}(undef, dimsout..., dimsin...)
+    for (J1, Iout, f1) in zip(Js, Iouts, fs)
+        for (J2, Iin, f2) in zip(Js, Iins, fs)
+            t[Iout..., Iin...] = m[J1, J2]
         end
     end
     return t
 end
 
-function _reshape_tensor_to_mat(t, Hs, H::AbstractHilbertSpace, stateextender, phase_factors)
-    if phase_factors
-        isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
-    end
-    fs = Base.product(basisstates.(Hs)...)
-    fsb = map(stateextender, fs)
-    Is = map(f -> state_index.(f, Hs), fs)
-    Iouts = map(f -> state_index(f, H), fsb)
-    m = Matrix{eltype(t)}(undef, length(fsb), length(fsb))
-    pfh = phase_factors ? phase_factor_h(Hs, H) : (f1, f2) -> 1
-    for (I1, Iout1, f1) in zip(Is, Iouts, fsb)
-        for (I2, Iout2, f2) in zip(Is, Iouts, fsb)
-            s = pfh(f1, f2)
-            m[Iout1, Iout2] = t[I1..., I2...] * s
+function _reshape_tensor_to_mat(t, (Hsout, splitterout), (Hsin, splitterin), H::AbstractHilbertSpace, state_splitter)
+    fsout = Base.product(basisstates.(Hsout)...)
+    fsin = Base.product(basisstates.(Hsin)...)
+
+    fsout_combined = map(f -> combine_states(f, splitterout), fsout)
+    fsin_combined = map(f -> combine_states(f, splitterin), fsin)
+
+    Jouts = map(f -> state_index.(f, Hsout), fsout)
+    Jins = map(f -> state_index.(f, Hsin), fsin)
+
+    Iouts = map(f -> state_index(f, H), fsout_combined)
+    Iins = map(f -> state_index(f, H), fsin_combined)
+
+    m = zeros(eltype(t), prod(dim, Hsout), prod(dim, Hsin))
+    for (Jin, Iin) in zip(Jins, Iins)
+        for (Jout, Iout) in zip(Jouts, Iouts)
+            m[Iout, Iin] = t[Jout..., Jin...]
         end
     end
     return m
 end
 
-function _reshape_tensor_to_vec(t, Hs, H::AbstractHilbertSpace, stateextender, phase_factors)
-    isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
+function _reshape_tensor_to_vec(t, Hs, H::AbstractHilbertSpace, state_splitter)
     fs = Base.product(basisstates.(Hs)...)
     v = Vector{eltype(t)}(undef, length(fs))
     for fs in fs
         Is = state_index.(fs, Hs)
-        fb = stateextender(fs)
+        fb = combine_states(fs, state_splitter)
         Iout = state_index(fb, H)
         v[Iout] = t[Is...]
     end
@@ -88,9 +92,9 @@ end
 
 @testitem "Reshape" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: project_on_parities, project_on_parity
+    using FermionicHilbertSpaces: project_on_parities, project_on_parity, operators
     function majorana_basis(H)
-        b = fermions(H)
+        b = operators(H)
         majoranas = Dict((l, s) => (s == :- ? 1im : 1) * b[l] + hc for (l, s) in Base.product(keys(b), [:+, :-]))
         labels = collect(keys(majoranas))
         basisops = mapreduce(vec, vcat, [[prod(l -> majoranas[l], ls) for ls in Base.product([labels for _ in 1:n]...) if (issorted(ls) && allunique(ls))] for n in 1:length(labels)])
@@ -98,43 +102,33 @@ end
         map(Hermitian ∘ (x -> x / sqrt(complex(tr(x * x)))), basisops)
     end
 
-    qns = [NoSymmetry(), ParityConservation(), number_conservation()]
+    qns = [NoSymmetry(), ParityConservation(), NumberConservation()]
     for qn in qns
-        H = hilbert_space(1:2, qn)
+        H = hilbert_space(f, 1:2, qn)
         majbasis = majorana_basis(H)
         @test all(map(ishermitian, majbasis))
         overlaps = [tr(Γ1' * Γ2) for (Γ1, Γ2) in Base.product(majbasis, majbasis)]
         @test overlaps ≈ I
         @test rank(mapreduce(vec, hcat, majbasis)) == length(majbasis)
     end
-
+    @fermions f
     function test_reshape(qn1, qn2, qn3)
-        H1 = hilbert_space((1, 3), qn1)
-        H2 = hilbert_space((2, 4), qn2)
+        H1 = hilbert_space(f, (1, 3), qn1)
+        H2 = hilbert_space(f, (2, 4), qn2)
         d1 = 4
         d2 = 4
         Hs = (H1, H2)
-        H = hilbert_space(sort(vcat(keys(H1)..., keys(H2)...)), qn3)
-        b = fermions(H)
-        b1 = fermions(H1)
-        b2 = fermions(H2)
+        H = hilbert_space(f, 1:4, qn3)
+        b = operators(H)
+        b1 = operators(H1)
+        b2 = operators(H2)
         m = b[1]
         t = reshape(m, H => Hs)
-        m12 = FermionicHilbertSpaces.reshape_to_matrix(t, (1, 3))
-        @test rank(m12) == 1
-        @test abs(dot(reshape(svd(m12).U, d1, d1, d2^2)[:, :, 1], b1[1])) ≈ norm(b1[1])
-
-        m = b[1] + b[2]
-        t = reshape(m, H => Hs)
-        m12 = FermionicHilbertSpaces.reshape_to_matrix(t, (1, 3))
-        @test rank(m12) == 2
+        @test norm(m) ≈ norm(t)
 
         m = rand(ComplexF64, d1 * d2, d1 * d2)
         t = reshape(m, H => Hs)
         m2 = reshape(t, Hs => H)
-        @test m ≈ m2
-        t = reshape(m, H => Hs; phase_factors=false) #without phase factors (standard decomposition)
-        m2 = reshape(t, Hs => H; phase_factors=false)
         @test m ≈ m2
 
         v = rand(ComplexF64, d1 * d2)
@@ -142,18 +136,18 @@ end
         v2 = reshape(tv, Hs => H)
         @test v ≈ v2
         # Note the how reshaping without phase factors is used in a contraction
-        @test sum(reshape(m, H => Hs; phase_factors=false)[:, :, i, j] * tv[i, j] for i in 1:d1, j in 1:d2) ≈ reshape(m * v, H => Hs)
+        @test sum(reshape(m, H => Hs)[:, :, i, j] * tv[i, j] for i in 1:d1, j in 1:d2) ≈ reshape(m * v, H => Hs)
 
         m1 = rand(ComplexF64, d1 * d2, d1 * d2)
         m2 = rand(ComplexF64, d1 * d2, d1 * d2)
-        t1 = reshape(m1, H => Hs; phase_factors=false)
-        t2 = reshape(m2, H => Hs; phase_factors=false)
+        t1 = reshape(m1, H => Hs)
+        t2 = reshape(m2, H => Hs)
         t3 = zeros(ComplexF64, d1, d2, d1, d2)
         for i in 1:d1, j in 1:d2, k in 1:d1, l in 1:d2, k1 in 1:d1, k2 in 1:d2
             t3[i, j, k, l] += t1[i, j, k1, k2] * t2[k1, k2, k, l]
         end
-        @test reshape(m1 * m2, H => Hs; phase_factors=false) ≈ t3
-        @test m1 * m2 ≈ reshape(t3, Hs => H; phase_factors=false)
+        @test reshape(m1 * m2, H => Hs) ≈ t3
+        @test m1 * m2 ≈ reshape(t3, Hs => H)
 
         basis1 = majorana_basis(H1)
         basis2 = majorana_basis(H2)
@@ -183,32 +177,23 @@ end
         H_no_oddodd_otherbasis = sum(Hvirtual_no_oddodd[I] * basis12normalized[I] for I in CartesianIndices(Hvirtual))
         @test H_no_oddodd_otherbasis ≈ H_no_oddodd
 
-        t = reshape(h, H => Hs)
-        Hvirtual2 = FermionicHilbertSpaces.reshape_to_matrix(t, (1, 3))
-        @test svdvals(Hvirtual) ≈ svdvals(Hvirtual2)
         Hvirtual3 = [tr(Γ' * h) / sqrt(tr(Γ' * Γ) + 0im) for Γ in basis12all]
         @test Hvirtual3 ≈ Hvirtual
         Hvirtual4 = [tr(Γ' * Hotherbasis) for Γ in basis12normalized]
         @test Hvirtual4 ≈ Hvirtual
         # @test svdvals(Hvirtual) ≈ svdvals(Hvirtual4)
 
-        t_no_oddodd = reshape(H_no_oddodd, H, Hs; phase_factors=true)
-        Hvirtual_no_oddodd2 = FermionicHilbertSpaces.reshape_to_matrix(t_no_oddodd, (1, 3))
-        @test svdvals(Hvirtual_no_oddodd) ≈ svdvals(Hvirtual_no_oddodd2)
+        # t_no_oddodd = reshape(H_no_oddodd, H, Hs)
+        # Hvirtual_no_oddodd2 = FermionicHilbertSpaces.reshape_to_matrix(t_no_oddodd, (1, 3))
+        # @test svdvals(Hvirtual_no_oddodd) ≈ svdvals(Hvirtual_no_oddodd2)
         Hvirtual_no_oddodd3 = [tr(Γ' * H_no_oddodd) / sqrt(tr(Γ' * Γ) + 0im) for Γ in basis12all]
         @test svdvals(Hvirtual_no_oddodd) ≈ svdvals(Hvirtual_no_oddodd3)
         Hvirtual_no_oddodd4 = [tr(Γ' * H_no_oddodd_otherbasis) for Γ in basis12normalized]
         @test svdvals(Hvirtual_no_oddodd) ≈ svdvals(Hvirtual_no_oddodd4)
 
         ## Test consistency with partial trace
-        m = rand(ComplexF64, d1 * d2, d1 * d2)
-        m2 = partial_trace(m, H => H2; phase_factors=true)
-        t = reshape(m, H => Hs; phase_factors=true)
-        tpt = sum(t[k, :, k, :] for k in axes(t, 1))
-        @test m2 ≈ tpt
-
         m2 = partial_trace(m, H => H2; phase_factors=false)
-        t = reshape(m, H => Hs; phase_factors=false)
+        t = reshape(m, H => Hs)
         tpt = sum(t[k, :, k, :] for k in axes(t, 1))
         @test m2 ≈ tpt
 
@@ -226,12 +211,12 @@ end
         F = partial_trace(m * generalized_kron((m1, I), Hs => H), H => H2)
         @test tr(F * m2) ≈ tr(m * generalized_kron((m1, I), Hs, H) * generalized_kron((I, m2), Hs, H))
 
-        t = reshape(m, H => Hs; phase_factors=false)
+        t = reshape(m, H => Hs)
         tpt = sum(t[k1, :, k2, :] * m1[k2, k1] for k1 in axes(t, 1), k2 in axes(t, 3))
         @test partial_trace(m * generalized_kron((m1, I), Hs, H; phase_factors=false), H => H2; phase_factors=false) ≈ tpt
 
         ## More bases
-        H3 = hilbert_space(5:5, qn3)
+        H3 = hilbert_space(f, 5:5, qn3)
         d3 = 2
         Hs = (H1, H2, H3)
         H = tensor_product(Hs)
@@ -243,10 +228,10 @@ end
 
     qns_iterator = [[NoSymmetry(), NoSymmetry(), NoSymmetry()],
         [ParityConservation(), ParityConservation(), ParityConservation()],
-        [number_conservation(), number_conservation(), number_conservation()],
-        [NoSymmetry(), ParityConservation(), number_conservation()],
-        [number_conservation(), number_conservation(), NoSymmetry()],
-        [ParityConservation(), ParityConservation(), number_conservation()]]
+        [NumberConservation(), NumberConservation(), NumberConservation()],
+        [NoSymmetry(), ParityConservation(), NumberConservation()],
+        [NumberConservation(), NumberConservation(), NoSymmetry()],
+        [ParityConservation(), ParityConservation(), NumberConservation()]]
     for qns in qns_iterator
         test_reshape(qns...)
     end

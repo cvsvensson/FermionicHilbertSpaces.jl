@@ -6,7 +6,8 @@ struct FockNumber{I} <: AbstractFockState
     f::I
 end
 FockNumber(f::FockNumber) = f
-FockNumber{I}(f::FockNumber) where I<:Integer = FockNumber{I}(f.f)
+FockNumber{I}(f::FockNumber) where I = FockNumber{I}(I(f.f))
+Base.convert(::Type{FockNumber{I}}, f::FockNumber) where {I} = FockNumber{I}(I(f.f))
 Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
 Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
 Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
@@ -65,6 +66,7 @@ bits(f::FockNumber, N) = digits(Bool, f.f, base=2, pad=N)
 parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
+Base.count_ones(f::FockNumber{Bool}) = f.f ? 1 : 0
 
 occupation(f::AbstractFockState, label, H::AbstractFockHilbertSpace) = _bit(f, getindex(mode_ordering(H), label))
 fermionnumber(f::FockNumber{<:Integer}, mask) = count_weighted_ones(f.f, mask)
@@ -81,12 +83,36 @@ jwstring_anti(site, focknbr) = jwstring_right(site, focknbr)
 jwstring_right(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f >> site)) ? 1 : -1
 jwstring_left(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f) - count_ones(focknbr.f >> (site - 1))) ? 1 : -1
 
-struct FockMapper{P}
-    fermionpositions::P
+jwstring_left(site, focknbr::FockNumber{Bool}) = jwstring_left(site, FockNumber{Int}(focknbr))
+jwstring_right(site, focknbr::FockNumber{Bool}) = jwstring_right(site, FockNumber{Int}(focknbr))
+
+# struct FockMapper{P}
+#     fermionpositions::P
+#     nbr_of_modes::Int
+#     FockMapper(fermionpositions::P) where P = new{P}(fermionpositions, maximum(maximum, fermionpositions))
+# end
+
+struct FockMapper{P1,W,P2}
+    fermionpositions::P1
+    widths::W
+    permutation::P2
+    nbr_of_modes::Int
+    FockMapper(fermionpositions::P1, widths::W, permutation::P2, nbr_of_modes::Int) where {P1,W,P2} = new{P1,W,P2}(fermionpositions, widths, permutation, nbr_of_modes)
+end
+function FockMapper(fermionpositions::P) where P
+    widths = map(length, fermionpositions)
+    nbr_of_modes = maximum(maximum, fermionpositions)
+    perm = reduce(vcat, fermionpositions)
+    permutation = isperm(perm) ? BitPermutation{UInt}(reduce(vcat, fermionpositions))' : nothing
+    FockMapper(fermionpositions, widths, permutation, nbr_of_modes)
 end
 
-(fm::FockMapper)(f::NTuple{N,<:FockNumber}) where {N} = mapreduce(insert_bits, +, f, fm.fermionpositions)
-
+function combine_states(f, fm::FockMapper)
+    T = default_fock_representation(fm.nbr_of_modes)
+    FockNumber{T}(mapreduce(insert_bits, +, f, fm.fermionpositions))
+end
+combine_states(fs, fm::FockMapper{<:Any,<:Any,<:BitPermutation}) = concatenate_and_permute(fs, fm.widths, fm.permutation)
+split_state(f::AbstractFockState, fm::FockMapper) = map(site_indices -> substate(site_indices, f), fm.fermionpositions)
 function insert_bits(_x::FockNumber, positions)
     x = _x.f
     result = 0
@@ -100,25 +126,6 @@ function insert_bits(_x::FockNumber, positions)
     return FockNumber(result)
 end
 
-struct FockMapperBitPermutations{P1,P2}
-    fermionpositions::P1
-    widths::Vector{Int}
-    permutation::P2
-end
-FockMapper_collect(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix1(getindices, jw) ∘ collect ∘ keys, jws)) #faster construction
-FockMapper_tuple(jws, jw::JordanWignerOrdering) = FockMapper(map(Base.Fix1(getindices, jw) ∘ Tuple ∘ keys, jws)) #faster application, but type instability
-FockMapper(Hs, H::AbstractFockHilbertSpace) = FockMapper(map(mode_ordering, Hs), mode_ordering(H))
-StateExtender(Hs, H::AbstractFockHilbertSpace) = FockMapper(Hs, H)
-
-function FockMapper_bp(jws, jw)
-    widths = collect(map(length, jws))
-    fermionpositions = map(Base.Fix1(getindices, jw) ∘ collect ∘ keys, jws)
-    permutation = BitPermutation{UInt}(reduce(vcat, fermionpositions))
-    FockMapperBitPermutations(fermionpositions, widths, permutation')
-end
-FockMapper(jws, jw::JordanWignerOrdering) = FockMapper_bp(jws, jw)
-(fm::FockMapperBitPermutations)(fs) = concatenate_and_permute(fs, fm.widths, fm.permutation)
-
 function concatenate_and_permute(fs, widths, permutation)
     mask = foldl(concatenate, zip(fs, widths); init=(zero(first(fs)), 0)) |> first
     permute(mask, permutation)
@@ -130,8 +137,8 @@ end
 permute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
 
 shift_right(f::FockNumber, M) = FockNumber(f.f << M)
-FockSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(mode_ordering(H), map(mode_ordering, Hs))
-StateSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H, Hs)
+# FockSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(mode_ordering(H), map(mode_ordering, Hs))
+# StateSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H, Hs)
 
 
 @testitem "Fock" begin
@@ -201,20 +208,20 @@ end
 _bit(f::FockNumber, k) = Bool((f.f >> (k - 1)) & 1)
 _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
 
-function FockSplitter(jw::JordanWignerOrdering, jws)
-    fermionpositions = Tuple(map(Base.Fix1(getindices, jw) ∘ Tuple ∘ collect ∘ keys, jws))
-    Base.Fix2(split_state, fermionpositions)
-end
-function split_state(f::AbstractFockState, fermionpositions)
-    map(site_indices -> substate(site_indices, f), fermionpositions)
-end
-function split_state(f::AbstractFockState, fockmapper::FockMapper)
-    split_state(f, fockmapper.fermionpositions)
-end
-function split_state(f::AbstractFockState, fockmapper::FockMapperBitPermutations)
-    split_state(f, fockmapper.fermionpositions)
-end
-combine_states(f1::FockNumber, f2::FockNumber, H1, H2) = f1 + shift_right(f2, length(H1.jw))
+# function FockSplitter(jw::JordanWignerOrdering, jws)
+#     fermionpositions = Tuple(map(Base.Fix1(getindices, jw) ∘ Tuple ∘ collect ∘ keys, jws))
+#     Base.Fix2(split_state, fermionpositions)
+# end
+# function split_state(f::AbstractFockState, fermionpositions)
+#     map(site_indices -> substate(site_indices, f), fermionpositions)
+# end
+# function split_state(f::AbstractFockState, fockmapper::FockMapper)
+#     split_state(f, fockmapper.fermionpositions)
+# end
+# function split_state(f::AbstractFockState, fockmapper::FockMapperBitPermutations)
+#     split_state(f, fockmapper.fermionpositions)
+# end
+# combine_states(f1::FockNumber, f2::FockNumber, H1, H2) = f1 + shift_right(f2, length(H1.jw))
 
 @testitem "Split and join focknumbers" begin
     import FermionicHilbertSpaces: focknbr_from_site_indices as fock
@@ -274,4 +281,20 @@ combine_states(f1::FockNumber, f2::FockNumber, H1, H2) = f1 + shift_right(f2, le
     fockmapper = FermionicHilbertSpaces.FockMapper((jw1, jw2, jw3), jw)
     ident = fockmapper ∘ focksplitter
     @test all(ident(FockNumber(k)) == FockNumber(k) for k in 0:2^length(jw)-1)
+end
+
+
+
+@testitem "fockstates handles large M without overflow or duplicates" begin
+    import FermionicHilbertSpaces: fixed_particle_number_fockstates
+    # For large M, fockstates should use BigInt and not overflow
+    M = 70
+    n = 3
+    states = fixed_particle_number_fockstates(M, n)
+    # All states should be unique
+    @test length(states) == length(unique(states))
+    # All states should be non-negative
+    @test all(f -> f.f >= 0, states)
+    # Check that the type is FockNumber{BigInt} for large M
+    @test all(f -> f isa FockNumber{BigInt}, states)
 end

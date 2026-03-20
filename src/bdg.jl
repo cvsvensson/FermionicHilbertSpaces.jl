@@ -25,9 +25,9 @@ end
 
 struct BdGHilbertSpace{B,H} <: AbstractHilbertSpace{B}
     parent::H
-    function BdGHilbertSpace(labels)
+    function BdGHilbertSpace(f::SymbolicFermionBasis, labels)
         states = vec([NambuState(i, hole) for (i, label) in enumerate(labels), hole in (true, false)])
-        H = hilbert_space(labels, states)
+        H = hilbert_space(f, labels, states)
         B = statetype(H)
         return new{B,typeof(H)}(H)
     end
@@ -40,14 +40,14 @@ This hilbert space uses Nambu states to describe non-interacting systems with su
 -Δ*  -H*] \\
 where H is hermitian and Δ is antisymmetric.
 """
-bdg_hilbert_space(labels) = BdGHilbertSpace(labels)
+bdg_hilbert_space(f, labels) = BdGHilbertSpace(f, labels)
 dim(h::BdGHilbertSpace) = dim(h.parent)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
 modes(H::BdGHilbertSpace) = modes(H.parent)
-Base.keys(h::BdGHilbertSpace) = keys(h.parent)
 basisstates(h::BdGHilbertSpace) = basisstates(h.parent)
 Base.parent(h::BdGHilbertSpace) = h.parent
 state_index(state::NambuState, H::BdGHilbertSpace) = state_index(state, parent(H))
+_find_position(op::FermionSym, H::BdGHilbertSpace) = _find_position(op, parent(H))
 
 function matrix_representation(op, H::BdGHilbertSpace)
     isquadratic(op) || throw(ArgumentError("Operator must be quadratic in fermions to be represented on a BdG Hilbert space."))
@@ -58,8 +58,8 @@ end
 
 function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::BdGHilbertSpace; kwargs...)
     ordering = mode_ordering(H)
-    nambustates = (NambuState(getindex(ordering, op.factors[1].label), op.factors[1].creation),
-        NambuState(getindex(ordering, op.factors[2].label), !op.factors[2].creation))
+    nambustates = (NambuState(_find_position(op.factors[1], H), op.factors[1].creation),
+        NambuState(_find_position(op.factors[2], H), !op.factors[2].creation))
     inind = state_index(nambustates[2], H)
     outind = state_index(nambustates[1], H)
     push!(outinds, outind)
@@ -71,7 +71,7 @@ end
 @testitem "BdG" begin
     @fermions f
     h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
-    H = bdg_hilbert_space(1:2)
+    H = bdg_hilbert_space(f, 1:2)
     @test matrix_representation(h + 1, H) == matrix_representation(h, H)
 
     h = rand(ComplexF64, 2, 2) + hc
@@ -282,7 +282,7 @@ end
     using LinearAlgebra
     @fermions f
     N = 4
-    H = bdg_hilbert_space(1:N)
+    H = bdg_hilbert_space(f, 1:N)
     ham = sum(rand(ComplexF64) * f[n]'f[k] + rand(ComplexF64) * f[n]'f[k]' + hc for (n, k) in Iterators.product(1:N, 1:N))
     h = matrix_representation(ham, H)
     @test ishermitian(h)

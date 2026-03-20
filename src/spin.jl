@@ -1,25 +1,45 @@
+struct SymbolicSpinBasis{L}
+    name::L
+end
+Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.name, h)
+label(S::SymbolicSpinBasis) = S.name
+Base.show(io::IO, S::SymbolicSpinBasis) = print(io, "SpinBasis(", S.name, ")")
+macro spin(x)
+    Expr(:block, :($(esc(x)) = SymbolicSpinBasis($(Expr(:quote, x)))),
+        :($(esc(x))))
+end
+macro spins(name, labels)
+    Expr(:block,
+        :($(esc(name)) = [SymbolicSpinBasis(Symbol($(Expr(:quote, name)), l)) for l in $(esc(labels))]),
+        :($(esc(name))))
+end
+Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.name == b.name
+Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
+
+
 struct SpinState{J,S} <: AbstractBasisState
     m::S
 end
 SpinState{J}(m::M) where {J,M} = SpinState{J,M}(m)
 _labeltype(::Type{<:SpinState{J,S}}) where {J,S} = S
 
-struct SpinSpace{J,S,L} <: AbstractHilbertSpace{SpinState{J,S}}
+struct SpinSpace{J,S,L} <: AbstractAtomicHilbertSpace{SpinState{J,S}}
     basisstates::Vector{SpinState{J,S}}
-    label::L
+    sym::SymbolicSpinBasis{L}
     state_index::Dict{SpinState{J,S},Int}
-    function SpinSpace{J}(label::L=uuid4()) where {J,L}
+    function SpinSpace{J}(sym::SymbolicSpinBasis{L}) where {J,L}
         states = spin_basisstates(Val(J))
         state_index = Dict(s => i for (i, s) in enumerate(states))
-        new{J,typeof(J),L}(states, label, state_index)
+        new{J,typeof(J),L}(states, sym, state_index)
     end
 end
+SpinSpace{J}(label) where J = SpinSpace{J}(SymbolicSpinBasis(label))
 basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
-Base.keys(H::SpinSpace) = (H.label,)
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{J,S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
-label(S::SpinSpace) = S.label
+atomic_group(H::SpinSpace) = atomic_group(H.sym)
+Base.show(io::IO, H::SpinSpace) = print(io, "SpinSpace{", eltype(H.basisstates).parameters[1], "}(", H.sym, ")")
 
 function spin_basisstates(::Val{J}) where {J}
     states = [SpinState{J,typeof(J)}(i - J) for i in 0:2J]
@@ -53,7 +73,8 @@ end
     @test spin_basisstates(1 // 2) == [SpinState{1 // 2}(-1 // 2), SpinState{1 // 2}(1 // 2)]
     @test spin_basisstates(1) == [SpinState{1}(-1), SpinState{1}(0), SpinState{1}(1)]
 
-    H = SpinSpace{1 // 2}()
+    @spin s
+    H = SpinSpace{1 // 2}(s)
     S = operators(H)
     @test S[:+] == [0 0; 1 0]
     @test S[:-] == [0 1; 0 0]
@@ -64,44 +85,26 @@ end
     @test S[:X] * S[:Y] - S[:Y] * S[:X] ≈ im * S[:Z]
     @test S[:Y] * S[:Z] - S[:Z] * S[:Y] ≈ im * S[:X]
     @test S[:Z] * S[:X] - S[:X] * S[:Z] ≈ im * S[:Y]
-    H1, H2 = [SpinSpace{1 // 2}() for k in 1:2]
+    H1, H2 = [SpinSpace{1 // 2}(k) for k in 1:2]
     P = tensor_product(H1, H2)
     @test partial_trace(1.0 * I(dim(P)), P => H1) ≈ dim(H2) * I(dim(H1))
 
     ops1 = operators(H1)
     @test all(partial_trace(embed(op, H1 => P), P => H1) ≈ dim(H2) * op for op in values(ops1))
 
-    Hf = hilbert_space(1:2)
+    @fermions f
+    Hf = hilbert_space(f, 1:2)
     mf = rand(dim(Hf), dim(Hf))
     Pf = tensor_product(Hf, P)
     @test partial_trace(embed(mf, Hf => Pf), Pf => Hf) ≈ dim(P) * mf
 
     mf1 = rand(2, 2)
-    Hf1 = hilbert_space(1:1)
+    Hf1 = hilbert_space(f, 1:1)
     @test partial_trace(embed(mf1, Hf1 => Pf), Pf => Hf) ≈ dim(P) * embed(mf1, Hf1 => Hf)
 
     mp = rand(4, 4)
     @test embed(mp, P => Pf) ≈ extend(mp, P => Hf)
 end
-
-
-struct SymbolicSpinBasis
-    name::Symbol
-end
-Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.name, h)
-label(S::SymbolicSpinBasis) = S.name
-
-macro spin(x)
-    Expr(:block, :($(esc(x)) = SymbolicSpinBasis($(Expr(:quote, x)))),
-        :($(esc(x))))
-end
-macro spins(name, labels)
-    Expr(:block,
-        :($(esc(name)) = [SymbolicSpinBasis(Symbol($(Expr(:quote, name)), l)) for l in $(esc(labels))]),
-        :($(esc(name))))
-end
-Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.name == b.name
-Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
 
 struct SpinSym{B} <: AbstractSym
     op::Symbol
@@ -137,8 +140,8 @@ Base.show(io::IO, x::SpinSym) = print(io, x.basis.name, "[$(x.op)]")
 
 Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.basis == b.basis
 Base.hash(a::SpinSym, h::UInt) = hash(a.op, hash(a.basis, h))
-get_symbolic_basis(f::SpinSym) = f.basis
-get_symbolic_basis(f::SymbolicSpinBasis) = f
+atomic_group(f::SpinSym) = f.basis
+atomic_group(f::SymbolicSpinBasis) = f
 
 mat_eltype(::Type{<:SpinSym}) = Float64
 
@@ -305,9 +308,9 @@ end
     @test 1 + (Sp1 + Sm1) == 1 + Sp1 + Sm1 == Sp1 + Sm1 + 1 == Sp1 + 1 + Sm1
 end
 
-function SpinSpace{J}(basis::SymbolicSpinBasis) where {J}
-    SpinSpace{J}(basis.name)
-end
+# function SpinSpace{J}(basis::SymbolicSpinBasis) where {J}
+#     SpinSpace{J}(basis)
+# end
 
 @testitem "Spin chain basis matching" begin
     import FermionicHilbertSpaces: SpinSpace
@@ -324,7 +327,6 @@ end
     ## Try spin 1
     Hs = SpinSpace{1}.(S)
     pairs = map(=>, S, Hs)
-    ## Heisenberg chain
     ham = sum(S[k][op] * S[k+1][op] for k in 1:N-1 for op in (:x, :y, :z))
     M = matrix_representation(ham, pairs)
     M2 = matrix_representation(ham, Hs)

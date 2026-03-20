@@ -27,6 +27,13 @@ abstract type AbstractBasisState end
 abstract type AbstractFockState <: AbstractBasisState end
 abstract type AbstractHilbertSpace{S} end
 abstract type AbstractFockHilbertSpace{F<:AbstractFockState} <: AbstractHilbertSpace{F} end
+abstract type AbstractAtomicHilbertSpace{B} <: AbstractHilbertSpace{B} end
+abstract type AbstractProductHilbertSpace{B} <: AbstractHilbertSpace{B} end
+abstract type AbstractClusterHilbertSpace{B} <: AbstractProductHilbertSpace{B} end
+abstract type AbstractFermionicClusterHilbertSpace{B} <: AbstractClusterHilbertSpace{B} end
+atomic_factors(H::AbstractAtomicHilbertSpace) = (H,)
+factors(H::AbstractClusterHilbertSpace) = atomic_factors(H)
+factors(H::AbstractAtomicHilbertSpace) = (H,)
 
 """
     HC
@@ -46,8 +53,10 @@ include("fock.jl")
 include("phase_factors.jl")
 include("symmetry.jl")
 include("hilbert_space.jl")
-include("product_space.jl")
+include("fermions.jl")
 
+include("kron_product_space.jl")
+include("constrained_space.jl")
 include("operators.jl")
 include("tensor_product.jl")
 include("embedding.jl")
@@ -66,7 +75,8 @@ include("qubit.jl")
 
 include("bdg.jl")
 
-include("sectors.jl")
+# include("sectors.jl")
+
 
 
 function __init__()
@@ -79,17 +89,17 @@ import PrecompileTools
 PrecompileTools.@compile_workload begin
     m = rand(4, 4)
     PrecompileTools.@compile_workload begin
-        H1 = hilbert_space(1:2)
-        H2 = hilbert_space(3:3, ParityConservation())
-        partial_trace(m + hc, H1 => hilbert_space(1:1, NumberConservation()))
-        H = tensor_product(H1, H2)
-        @fermions f
-        c = matrix_representation(f[1], H1)
-        extend(c, H1 => H2)
-        embed(c, H1 => H)
-        matrix_representation((f[1] * f[2]' + 1 + f[1])^2 * 2.0, H1)
-        @majoranas γ
-        (γ[1] * γ[2] + 1.0 + γ[1])^2
+        # H1 = hilbert_space(1:2)
+        # H2 = hilbert_space(3:3, ParityConservation())
+        # partial_trace(m + hc, H1 => hilbert_space(1:1, NumberConservation()))
+        # H = tensor_product(H1, H2)
+        # @fermions f
+        # c = matrix_representation(f[1], H1)
+        # extend(c, H1 => H2)
+        # embed(c, H1 => H)
+        # matrix_representation((f[1] * f[2]' + 1 + f[1])^2 * 2.0, H1)
+        # @majoranas γ
+        # (γ[1] * γ[2] + 1.0 + γ[1])^2
     end
 end
 

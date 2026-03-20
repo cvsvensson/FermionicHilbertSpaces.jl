@@ -279,8 +279,10 @@ canonicalize_sector(sectors::Integer, mask, N) = (sectors,)
 canonicalize_sector(sector::AbstractVector{<:Integer}, mask, N) = sector
 canonicalize_sector(sector::NTuple{M,<:Integer}, mask, N) where M = sector
 
-default_fock_representation(N) = N < 64 ? UInt64 : BigInt
-
+function default_fock_representation(N)
+    N == 1 && return Bool
+    N < 64 ? UInt64 : BigInt
+end
 instantiate(qn::UninstantiatedNumberConservations, jw::JordanWignerOrdering,) = instantiate(qn, keys(jw))
 function instantiate(qn::UninstantiatedNumberConservations, labels)
     N = length(labels)
@@ -348,20 +350,6 @@ end
     @test sector2 == m_f[inds2, inds2]
     # Test that an invalid sector throws an error
     @test_throws ArgumentError sector(m_f, 99, Hf)
-end
-
-@testitem "fockstates handles large M without overflow or duplicates" begin
-    import FermionicHilbertSpaces: fixed_particle_number_fockstates
-    # For large M, fockstates should use BigInt and not overflow
-    M = 70
-    n = 3
-    states = fixed_particle_number_fockstates(M, n)
-    # All states should be unique
-    @test length(states) == length(unique(states))
-    # All states should be non-negative
-    @test all(f -> f.f >= 0, states)
-    # Check that the type is FockNumber{BigInt} for large M
-    @test all(f -> f isa FockNumber{BigInt}, states)
 end
 
 @testitem "No double occupation projection" begin

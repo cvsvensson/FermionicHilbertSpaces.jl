@@ -240,7 +240,8 @@ phase_factor_h(f1::AbstractFockState, f2::ProductState, partition, jw::JordanWig
 
     @test embed(I, H1 => P) == I(4)
 
-    Hf = hilbert_space(1:2)
+    @fermions f
+    Hf = hilbert_space(f, 1:2)
     P2 = tensor_product(Hf, H1, H2)
     @test dim(P2) / dim(H1) * I(2) == partial_trace(1.0 * I(dim(P2)), P2 => H1)
 

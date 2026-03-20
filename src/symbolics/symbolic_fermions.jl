@@ -1,10 +1,11 @@
 
 struct SymbolicFermionBasis
     name::Symbol
-    universe::UInt64
+    group::FermionicGroup
 end
-Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.universe, h))
-
+Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.group, h))
+atomic_group(h::SymbolicFermionBasis) = fermionic_group(h)
+fermionic_group(b::SymbolicFermionBasis) = b.group
 """
     @fermions a b ...
 
@@ -23,14 +24,14 @@ and commute with fermions in other `@fermions` blocks.
 See also [`@majoranas`](@ref), [`FermionicHilbertSpaces.eval_in_basis`](@ref).
 """
 macro fermions(xs...)
-    universe = hash(xs)
+    group = FermionicGroup(hash(xs))
     defs = map(xs) do x
-        :($(esc(x)) = SymbolicFermionBasis($(Expr(:quote, x)), $universe))
+        :($(esc(x)) = SymbolicFermionBasis($(Expr(:quote, x)), $group))
     end
     Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
 end
-Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.universe == b.universe
+Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.group == b.group
 Base.getindex(f::SymbolicFermionBasis, is...) = FermionSym(false, is, f)
 Base.getindex(f::SymbolicFermionBasis, i) = FermionSym(false, i, f)
 
@@ -41,6 +42,8 @@ struct FermionSym{L,B} <: AbstractFermionSym
 end
 Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.label, x.basis)
 Base.iszero(x::FermionSym) = false
+atomic_group(h::FermionSym) = atomic_group(h.basis)
+
 function Base.show(io::IO, x::FermionSym)
     print(io, x.basis.name, x.creation ? "†" : "")
     if Base.isiterable(typeof(x.label))
@@ -50,8 +53,8 @@ function Base.show(io::IO, x::FermionSym)
     end
 end
 function Base.isless(a::FermionSym, b::FermionSym)
-    if a.basis.universe !== b.basis.universe
-        a.basis.universe < b.basis.universe
+    if a.basis.group !== b.basis.group
+        a.basis.group < b.basis.group
     elseif a.creation == b.creation
         a.basis.name == b.basis.name && return a.label < b.label
         a.basis.name < b.basis.name
@@ -61,8 +64,9 @@ function Base.isless(a::FermionSym, b::FermionSym)
 end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
-get_symbolic_basis(f::FermionSym) = f.basis
-get_symbolic_basis(f::SymbolicFermionBasis) = f
+# atomic_group(f::FermionSym) = f.basis
+# atomic_group(f::SymbolicFermionBasis) = f
+hilbert_space(f::FermionSym) = FermionicMode(f.label, f.basis)
 
 function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     if a == b
@@ -70,7 +74,7 @@ function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     elseif a < b
         nothing
     elseif a > b
-        swap = Swap((-1)^(a.basis.universe == b.basis.universe))
+        swap = Swap((-1)^(a.basis.group == b.basis.group))
         if a.label == b.label && a.basis == b.basis
             return AddTerms((swap, 1))
         else
@@ -189,10 +193,14 @@ end
 _sym_space_match(basis::SymbolicFermionBasis, space::AbstractFockHilbertSpace) = true
 _sym_space_match(basis::SymbolicFermionBasis, space::AbstractHilbertSpace) = false
 
-label(H::AbstractFockHilbertSpace) = mode_ordering(H)
+label(H::AbstractFockHilbertSpace) = only(mode_ordering(H))
 function _sym_space_match(sym, space::AbstractHilbertSpace)
     label(sym) == label(space)
 end
 function _sym_space_match(sym::AbstractFermionSym, space::AbstractFockHilbertSpace)
     label(sym) in keys(space)
 end
+FermionicMode(f::FermionSym) = FermionicMode(f.label, f.basis)
+_find_position(f::FermionSym, H::AbstractHilbertSpace) = _find_position(FermionicMode(f), H)
+hilbert_space(a::SymbolicFermionBasis, labels) = tensor_product(map(l -> FermionicMode(a[l]), labels))
+hilbert_space(a::SymbolicFermionBasis, labels, constraint) = constrain_space(hilbert_space(a, labels), constraint)
