@@ -125,7 +125,7 @@ function apply_local_operators(factors, state::BosonicFockState, space::Truncate
         k = abs(factor.exp)
         if factor.exp < 0
             if n < k
-                return (state, 0.0)
+                return ((state, 0.0),)
             end
             for i in 0:(k-1)
                 amplitude *= sqrt(n - i)
@@ -139,9 +139,9 @@ function apply_local_operators(factors, state::BosonicFockState, space::Truncate
         end
     end
     if n > max_occupancy
-        return (state, 0.0)
+        return ((state, 0.0),)
     end
-    return (BosonicFockState(n), amplitude)
+    return ((BosonicFockState(n), amplitude),)
 end
 
 

@@ -536,10 +536,6 @@ default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 
 Compute the partial trace of `m` from `H` to `Hsub`. 
 """
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::SubsystemPartialTraceAlg, splitter=state_splitter(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
-    #skipmissing is true be default, to allow for the complement to include more states than strictly necessary
-    # if phase_factors
-    #     consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
-    # end
     fill!(mout, zero(eltype(mout)))
 
     substates = basisstates(Hsub)
@@ -572,9 +568,6 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
 end
 # partial_trace_phase_factor(f1, f2, H::AbstractFockHilbertSpace) = phase_factor_f(f1, f2, nbr_of_modes(H))
 function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::FullPartialTraceAlg, splitter=state_splitter(H, (Hsub, complement)); phase_factors=true, skipmissing=false)
-    # if phase_factors
-    #     consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
-    # end
     fill!(mout, zero(eltype(mout)))
     inds = tensor_product_iterator(m, H)
     for I in inds
@@ -612,7 +605,7 @@ partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...
 function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
     partial_trace_map(H, Hsub, complement, alg; kwargs...)
 end
-function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, extend_state=StateExtender((Hsub, complement), H); skipmissing=false, phase_factors=true)
+function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, splitter=state_splitter(H,(Hsub, complement)); skipmissing=false, phase_factors=true)
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
     indI = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
@@ -625,8 +618,8 @@ function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, exte
         I1 = state_index(f1, Hsub)
         I2 = state_index(f2, Hsub)
         for fbar in barstates
-            fullf1 = extend_state((f1, fbar))
-            fullf2 = extend_state((f2, fbar))
+            fullf1 = combine_states((f1, fbar), splitter)
+            fullf2 = combine_states((f2, fbar), splitter)
             s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
             s = s2 * s1
             J1 = state_index(fullf1, H)
@@ -648,12 +641,7 @@ function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, exte
 end
 
 function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::FullPartialTraceAlg, splitter=state_splitter(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
-    # if phase_factors
-    #     consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
-    # end
     states = basisstates(H)
-    # M = length(keys(H))
-    # N = length(keys(Hsub))
     indI = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
     Is = Int[]

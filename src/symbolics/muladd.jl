@@ -27,13 +27,15 @@ end
 
 function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,F}, space::AbstractHilbertSpace; projection=false) where {C,F}
     for (n, state) in enumerate(basisstates(space))
-        newstate, amp = apply_local_operators(op.factors, state, space)
-        if !iszero(amp)
-            outind = state_index(newstate, space)
-            if !projection || !ismissing(outind)
-                push!(outinds, outind)
-                push!(amps, amp * op.coeff)
-                push!(ininds, n)
+        newstate_amps = apply_local_operators(op.factors, state, space)
+        for (newstate, amp) in newstate_amps
+            if !iszero(amp)
+                outind = state_index(newstate, space)
+                if !projection || !ismissing(outind)
+                    push!(outinds, outind)
+                    push!(amps, amp * op.coeff)
+                    push!(ininds, n)
+                end
             end
         end
     end
@@ -48,68 +50,30 @@ function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space:
         op = ops[i]
         subst = state.states[i]
         space = factors(space)[i]
-        new_local_state, local_amp = apply_local_operators(op.factors, subst, space)
+        new_state_amps = apply_local_operators(op.factors, subst, space)
+        new_local_state, local_amp = only(new_state_amps) #TODO: add support for multiple terms here
         amp *= local_amp
         new_local_state
     end)
-    return newstate, amp
+    return ((newstate, amp),)
 end
 function operator_inds_amps_generic!((outinds, ininds, amps), ops::Vector{<:NCMul}, space::AbstractHilbertSpace; projection=false)
     coeff = prod(op.coeff for op in ops)
     for (n, state) in enumerate(basisstates(space))
-        newstate, amp = apply_local_operators(ops, state, space)
-        if !iszero(amp)
-            outind = state_index(newstate, space)
-            if !projection || !ismissing(outind)
-                push!(outinds, outind)
-                push!(amps, amp * coeff)
-                push!(ininds, n)
+        newstate_amps = apply_local_operators(ops, state, space)
+        for (newstate, amp) in newstate_amps
+            if !iszero(amp)
+                outind = state_index(newstate, space)
+                if !projection || !ismissing(outind)
+                    push!(outinds, outind)
+                    push!(amps, amp * coeff)
+                    push!(ininds, n)
+                end
             end
         end
     end
     return (outinds, ininds, amps)
 end
-
-
-# function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,F}, H::Union{<:AbstractFockHilbertSpace,<:AbstractHilbertSpace{<:AbstractFockState},<:AbstractFermionicClusterHilbertSpace}; projection=false) where {C,F<:AbstractFermionSym}
-#     digitpositions = collect(Iterators.reverse(_find_position(f, H) for f in op.factors))
-#     daggers = collect(Iterators.reverse(s.creation for s in op.factors))
-#     mc = -op.coeff
-#     pc = op.coeff
-#     for (n, f) in enumerate(basisstates(H))
-#         newstate, amp = togglefermions(digitpositions, daggers, f)
-#         if !iszero(amp)
-#             outind = state_index(newstate, H)
-#             if !projection || !ismissing(outind)
-#                 ismissing(outind) && throw(ArgumentError("State $newstate not found in basis."))
-#                 push!(outinds, outind)
-#                 push!(amps, isone(amp) ? pc : mc)
-#                 push!(ininds, n)
-#             end
-#         end
-#     end
-#     return (outinds, ininds, amps)
-# end
-
-# function _matrix_representation(op::NCAdd{C}, ordering, states, fock_to_ind; kwargs...) where C
-#     outinds = Int[]
-#     ininds = Int[]
-#     AT = mat_eltype(op)
-#     amps = AT[]
-#     sizehint!(outinds, length(states))
-#     sizehint!(ininds, length(states))
-#     sizehint!(amps, length(states))
-#     for (operator, coeff) in op.dict
-#         operator_inds_amps!((outinds, ininds, amps), coeff * operator, ordering, states, fock_to_ind; kwargs...)
-#     end
-#     if !iszero(op.coeff)
-#         append!(ininds, eachindex(states))
-#         append!(outinds, eachindex(states))
-#         append!(amps, Fill(op.coeff, length(states)))
-#     end
-#     return SparseArrays.sparse!(outinds, ininds, amps, length(states), length(states))
-# end
-# operator_inds_amps!((outinds, ininds, amps), op::AbstractFermionSym, args...; kwargs...) = operator_inds_amps!((outinds, ininds, amps), NCMul(1, [op]), args...; kwargs...)
 
 ## 
 remove_identity(a::NCMul) = a
@@ -262,7 +226,7 @@ function _factorized_term_matrix_representation(ops::Vector, H; kwargs...)
     return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
 end
 
-function apply_local_operator(op::NCMul{C,F}, state::FockNumber, space::AbstractFockHilbertSpace; kwargs...) where {C,F<:AbstractFermionSym}
+function apply_local_operator(op::NCMul{C,F}, state::AbstractFockState, space::AbstractHilbertSpace; kwargs...) where {C,F<:AbstractFermionSym}
     # Apply sequence of fermion operators (homogeneous type)
     digitpositions = collect(Iterators.reverse(_find_position(f, space) for f in op.factors))
     daggers = collect(Iterators.reverse(s.creation for s in op.factors))
@@ -304,29 +268,6 @@ function atomic_groups(op)
     [atomic_group(op)]
 end
 
-# function infer_basis_space_pairs(op, spaces::AbstractVector{<:AbstractHilbertSpace})
-#     # Extract bases from operator
-#     unique_bases = collect(extract_symbolic_bases(op))
-#     # Match them to spaces
-#     length(unique_bases) == length(spaces) || throw(ArgumentError("Number of unique symbolic bases in operator ($(length(unique_bases))) does not match number of provided spaces ($(length(spaces)))"))
-#     bases = map(spaces) do space
-#         matches = filter(basis -> _sym_space_match(basis, space), unique_bases)
-#         if length(matches) == 1
-#             return matches[1]
-#         else
-#             throw(ArgumentError("Could not uniquely match space $space to a basis. Matches found: $matches"))
-#         end
-#     end
-#     bases, spaces
-# end
-
-# function matrix_representation(op, spaces::AbstractVector{<:AbstractHilbertSpace}; kwargs...)
-#     if trivial_operator(op)
-#         return get_trivial_op_coeff(op) * I(prod(dim.(spaces)))
-#     end
-#     bases, spaces = infer_basis_space_pairs(op, spaces)
-#     return _matrix_representation(op, bases, spaces; kwargs...)
-# end
 """
     matrix_representation(op, space::AbstractHilbertSpace; kwargs...)
 

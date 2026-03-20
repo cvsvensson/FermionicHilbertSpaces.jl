@@ -12,6 +12,11 @@ Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
 Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
 Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
 Base.show(io::IO, f::FockNumber{T}) where T = get(io, :compact, false) ? print(io, "FockNumber{$T}(", f.f, ")") : print(io, "FockNumber(", f.f, ")")
+function default_fock_representation(N)
+    N == 1 && return Bool
+    N < 64 ? UInt64 : BigInt
+end
+
 """
     JordanWignerOrdering
 A type representing the ordering of fermionic modes.
@@ -86,11 +91,6 @@ jwstring_left(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f) - count_
 jwstring_left(site, focknbr::FockNumber{Bool}) = jwstring_left(site, FockNumber{Int}(focknbr))
 jwstring_right(site, focknbr::FockNumber{Bool}) = jwstring_right(site, FockNumber{Int}(focknbr))
 
-# struct FockMapper{P}
-#     fermionpositions::P
-#     nbr_of_modes::Int
-#     FockMapper(fermionpositions::P) where P = new{P}(fermionpositions, maximum(maximum, fermionpositions))
-# end
 
 struct FockMapper{P1,W,P2}
     fermionpositions::P1
@@ -108,8 +108,8 @@ function FockMapper(fermionpositions::P) where P
 end
 
 function combine_states(f, fm::FockMapper)
-    T = default_fock_representation(fm.nbr_of_modes)
-    FockNumber{T}(mapreduce(insert_bits, +, f, fm.fermionpositions))
+    # T = default_fock_representation(fm.nbr_of_modes)
+    mapreduce(insert_bits, +, f, fm.fermionpositions)
 end
 combine_states(fs, fm::FockMapper{<:Any,<:Any,<:BitPermutation}) = concatenate_and_permute(fs, fm.widths, fm.permutation)
 split_state(f::AbstractFockState, fm::FockMapper) = map(site_indices -> substate(site_indices, f), fm.fermionpositions)
@@ -207,21 +207,6 @@ end
 
 _bit(f::FockNumber, k) = Bool((f.f >> (k - 1)) & 1)
 _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
-
-# function FockSplitter(jw::JordanWignerOrdering, jws)
-#     fermionpositions = Tuple(map(Base.Fix1(getindices, jw) ∘ Tuple ∘ collect ∘ keys, jws))
-#     Base.Fix2(split_state, fermionpositions)
-# end
-# function split_state(f::AbstractFockState, fermionpositions)
-#     map(site_indices -> substate(site_indices, f), fermionpositions)
-# end
-# function split_state(f::AbstractFockState, fockmapper::FockMapper)
-#     split_state(f, fockmapper.fermionpositions)
-# end
-# function split_state(f::AbstractFockState, fockmapper::FockMapperBitPermutations)
-#     split_state(f, fockmapper.fermionpositions)
-# end
-# combine_states(f1::FockNumber, f2::FockNumber, H1, H2) = f1 + shift_right(f2, length(H1.jw))
 
 @testitem "Split and join focknumbers" begin
     import FermionicHilbertSpaces: focknbr_from_site_indices as fock

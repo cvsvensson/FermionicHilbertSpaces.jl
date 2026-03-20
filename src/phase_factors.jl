@@ -21,29 +21,37 @@ function _phase_factor_f(focknbr1, focknbr2, i::Int)::Int
     _bit(focknbr2, i) ? (jwstring_anti(i, focknbr1) * jwstring_anti(i, focknbr2)) : 1
 end
 
-function consistent_ordering(subsystem, jw::JordanWignerOrdering)::Bool
-    lastpos = 0
-    for label in subsystem
-        haskey(jw.ordering, label) || return false
-        newpos = jw.ordering[label]
-        newpos > lastpos || return false
-        lastpos = newpos
-    end
+
+_find_position(n::L, labels::JordanWignerOrdering{L}) where L = get(labels.ordering, n, 0)
+_find_position(n, v::AbstractVector) = (pos = findfirst(==(n), v); isnothing(pos) ? 0 : pos)
+
+issubsystem(Hsub::AbstractHilbertSpace, H::AbstractFermionicClusterHilbertSpace) = isorderedsubsystem(Hsub, H)
+function isorderedsubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
+    positions = [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)]
+    all(pos -> pos > 0, positions) || return false
+    issorted(positions) || return false
     return true
 end
+function issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
+    positions = [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)]
+    all(pos -> pos > 0, positions)
+end
+function ispartition(partition, H::AbstractHilbertSpace)
+    partition_inds = [_find_atom_position(atom, H) for part in partition for atom in atomic_factors(part)]
+    ispartition(partition_inds, length(atomic_factors(H)))
+end
 
-# ispartition(Hs, H::AbstractHilbertSpace) = ispartition(map(keys, Hs), keys(H))
-
-# function _find_position(label, labels::JordanWignerOrdering)
-#     get(labels.ordering, label, 0)
-# end
-# function _find_position(label, labels)
-#     pos = findfirst(==(label), labels)
-#     isnothing(pos) && return 0
-#     return pos
-# end
-
-
+function ispartition(partition, N::Int)
+    covered = falses(N)
+    for subsystem in partition
+        for pos in subsystem
+            pos == 0 && return false
+            covered[pos] && return false
+            covered[pos] = true
+        end
+    end
+    return all(covered)
+end
 function ispartition(partition, labels)
     n = length(labels)
     covered = falses(n)
@@ -57,46 +65,9 @@ function ispartition(partition, labels)
     end
     return all(covered)
 end
-_find_position(n::L, labels::JordanWignerOrdering{L}) where L = get(labels.ordering, n, 0)
-_find_position(n::Int, v::AbstractVector) = (pos = findfirst(==(n), v); isnothing(pos) ? 0 : pos)
-# function isorderedpartition(partition, ordering::AbstractDict)
-#     n = length(ordering)
-#     covered = falses(n)
-#     for subsystem in partition
-#         lastpos = 0
-#         for label in subsystem
-#             pos = get(ordering, label, 0)
-#             pos == 0 && return false
-#             pos > lastpos || return false
-#             covered[pos] && return false
-#             covered[pos] = true
-#             lastpos = pos
-#         end
-#     end
-#     all(covered) || return false
-#     return true
-# end
 
-# isorderedpartition(Hs, H::AbstractHilbertSpace) = isorderedpartition(flat_fock_spaces(Hs), fock_part(H)) && ispartition(Hs, H)
-# ispartition(::Any, ::Nothing) = true
-# isorderedpartition(::Any, ::Nothing) = true
-function isorderedsubsystem(subsystem, jw::JordanWignerOrdering)
-    consistent_ordering(subsystem, jw) || return false
-    issubsystem(subsystem, jw) || return false
-    return true
-end
-# isorderedsubsystem(H::AbstractHilbertSpace, H2::AbstractHilbertSpace) = isorderedsubsystem(fock_part(H), fock_part(H2)) && issubsystem(H, H2)
-isorderedsubsystem(::Nothing, ::Nothing) = true
-isorderedsubsystem(::Nothing, ::AbstractHilbertSpace) = true
-function issubsystem(subsystem, jw::JordanWignerOrdering)
-    all(in(s, jw) for s in subsystem) || return false
-    return true
-end
-function issubsystem(sublabels, labels)
-    all(in(s, labels) for s in sublabels) || return false
-    return true
-end
-issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = issubsystem(keys(Hsub), keys(H))
+_find_atom_position(atom, H::AbstractClusterHilbertSpace) = _find_position(atom, H)
+_find_atom_position(atom, H::AbstractHilbertSpace) = _find_position(atom, atomic_factors(H))
 
 @testitem "partition" begin
     import FermionicHilbertSpaces: ispartition, isorderedpartition
@@ -163,7 +134,7 @@ issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = issubsystem(k
     @test !isorderedpart([[1], [1, 2, 3]])
 end
 
-default_fock_type(jw::JordanWignerOrdering) = FockNumber{default_fock_representation(length(jw))}
+# default_fock_type(jw::JordanWignerOrdering) = FockNumber{default_fock_representation(length(jw))}
 
 function kron_phase_factor(state_splitter::FockMapper)
     inds = state_splitter.fermionpositions
@@ -176,15 +147,6 @@ function kron_phase_factor(state_splitter::FockMapper)
     end
 end
 
-# function phase_factor_h(Hs, H)
-#     partition = map(modes, flat_fock_spaces(Hs))
-#     isnothing(fock_part(H)) && return (f1, f2) -> 1
-#     phase_factor_h(partition, fock_part(H).jw)
-# end
-# function phase_factor_h(partition, jw::FermionCluster)
-#     part = map(p -> map(a -> _find_position(a, jw), atomic_factors(p)), partition)
-#     phase_factor_h(part, JordanWignerOrdering(1:nbr_of_modes(jw)))
-# end
 
 function phase_factor_h(partition, jw::JordanWignerOrdering)
     isorderedpartition(partition, jw) || error("Partition is not ordered")
@@ -242,25 +204,6 @@ function phase_factor_h(f1::AbstractFockState, f2::AbstractFockState, partition,
     end
     return phase
 end
-# function phase_factor_h(f1::AbstractFockState, f2::AbstractFockState, partition, masks, inds)::Int
-#     #(120b)
-#     phase = 1
-#     for (Xp, Xpmask) in zip(partition, masks)
-#         masked_f1 = Xpmask & f1
-#         masked_f2 = Xpmask & f2
-#         for (X, Xinds) in zip(partition, inds)
-#             if X === Xp
-#                 continue
-#             end
-#             for i in Xinds
-#                 if _bit(f2, i)
-#                     phase *= jwstring_anti(i, masked_f1) * jwstring_anti(i, masked_f2)
-#                 end
-#             end
-#         end
-#     end
-#     return phase
-# end
 @testitem "Phase factor f" begin
     import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, getindices, bits
 

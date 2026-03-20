@@ -62,7 +62,7 @@ function mul_effect(::FloquetNumber, ::FloquetLadder)
 end
 function FermionicHilbertSpaces.apply_local_operators(factors, state::FloquetState, space)
     state, amp = foldr((op, (state, amp)) -> apply_local_operator(op, state, amp), factors, init=(state, 1))
-    return state, amp
+    return ((state, amp),)
 end
 apply_local_operator(op::FloquetLadder, state::FloquetState, amp) = (FloquetState(state.mode + op.shift), amp)
 function apply_local_operator(op::FloquetNumber, state::FloquetState, amp)

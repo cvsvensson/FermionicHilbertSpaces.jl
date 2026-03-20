@@ -8,7 +8,7 @@ using TestItemRunner
     N = 2
     H = hilbert_space(1:N)
     B = fermions(H)
-    Hspin = hilbert_space(Base.product(1:N, (:↑, :↓)), number_conservation())
+    Hspin = hilbert_space(Base.product(1:N, (:↑, :↓)), NumberConservation())
     Bspin = fermions(Hspin)
     @test B[1] isa SparseMatrixCSC
     @test Bspin[1, :↑] isa SparseMatrixCSC
@@ -86,14 +86,15 @@ end
         @test embeddingmap ≈ embed(Hsub => H)
 
     end
-    qns = [NoSymmetry(), ParityConservation(), number_conservation()]
+    qns = [NoSymmetry(), ParityConservation(), NumberConservation()]
+    @fermions f
     for qn in qns
-        H = hilbert_space(1:3, qn)
-        H1 = hilbert_space(1:1, qn)
-        H2 = hilbert_space(2:2, qn)
-        H12 = hilbert_space(1:2, qn)
-        H13 = hilbert_space(1:3, qn)
-        H23 = hilbert_space(2:3, qn)
+        H = hilbert_space(f, 1:3, qn)
+        H1 = hilbert_space(f, 1:1, qn)
+        H2 = hilbert_space(f, 2:2, qn)
+        H12 = hilbert_space(f, 1:2, qn)
+        H13 = hilbert_space(f, 1:3, qn)
+        H23 = hilbert_space(f, 2:3, qn)
         c = fermions(H)
         c1 = fermions(H1)
         c2 = fermions(H2)
@@ -122,7 +123,7 @@ end
 @testitem "Identity in matrix_representation" begin
     using LinearAlgebra
     @fermions f
-    H = hilbert_space(1:2)
+    H = hilbert_space(f, 1:2)
     @test matrix_representation(1 + 0 * f[1], H) == I
     @test matrix_representation(1, H) == I
     @test matrix_representation(I, H) == I

@@ -83,12 +83,12 @@ function apply_local_operators(factors, state::FockNumber{I}, space::AbstractHil
         op = one(I) << (digitpos - 1)
         occupied = !iszero(op & newfocknbr)
         if dagger == occupied
-            return newfocknbr, 0
+            return ((newfocknbr, 0),)
         end
         fermionstatistics *= jwstring(digitpos, newfocknbr)
         newfocknbr = op ⊻ newfocknbr
     end
-    return newfocknbr, fermionstatistics
+    return ((newfocknbr, fermionstatistics),)
 end
 
 
@@ -159,7 +159,7 @@ Return a dictionary of fermionic annihilation operators for the Hilbert space `H
 """
 function fermions(H::FermionCluster)
     M = length(modes(H))
-    labelvec = map(label,modes(H))
+    labelvec = map(label, modes(H))
     reps = [fermion_sparse_matrix(n, H) for n in 1:M]
     OrderedDict(zip(labelvec, reps))
 end
@@ -179,8 +179,9 @@ end
 
 @testitem "CAR" begin
     using LinearAlgebra
-    for qn in [NoSymmetry(), ParityConservation(), number_conservation()]
-        c = fermions(hilbert_space(1:2, qn))
+    @fermions f
+    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
+        c = operators(hilbert_space(f, 1:2, qn))
         @test c[1] * c[1] == 0I
         @test c[1]' * c[1] + c[1] * c[1]' == I
         @test c[1]' * c[2] + c[2] * c[1]' == 0I
@@ -191,7 +192,8 @@ end
 @testitem "Majorana operators" begin
     using LinearAlgebra
     using FermionicHilbertSpaces: majoranas
-    H = hilbert_space(1:2)
+    @majoranas f
+    H = hilbert_space(f, 1:2)
     γ = majoranas(H)
     # There should be 4 Majorana operators for 2 modes
     @test length(γ) == 4

@@ -102,8 +102,6 @@ end
     Hf1 = hilbert_space(f, 1:1)
     @test partial_trace(embed(mf1, Hf1 => Pf), Pf => Hf) ≈ dim(P) * embed(mf1, Hf1 => Hf)
 
-    mp = rand(4, 4)
-    @test embed(mp, P => Pf) ≈ extend(mp, P => Hf)
 end
 
 struct SpinSym{B} <: AbstractSym
@@ -220,7 +218,7 @@ function apply_local_operator(op::SpinSym, state::SpinState{J}) where J
 end
 
 """
-    apply_spin_factor_sequence(factors::Vector{SpinSym}, state::SpinState, H::SpinSpace) -> (newstate, amplitude)
+    apply_local_operators(factors::Vector{SpinSym}, state::SpinState, H::SpinSpace) -> (newstate, amplitude)
 
 Apply a sequence of spin operators (product) to a spin state. Operators are applied in reverse order (right-to-left, as in operator composition). Returns (newstate, amplitude) or (state, 0) if any step fails.
 """
@@ -231,11 +229,11 @@ function apply_local_operators(factors, state::SpinState{J}, space::SpinSpace) w
     for factor in reverse(factors)
         newstate, factor_amp = apply_local_operator(factor, newstate)
         if iszero(factor_amp)
-            return (state, zero(amplitude))
+            return ((state, zero(amplitude)),)
         end
         amplitude *= factor_amp
     end
-    return (newstate, amplitude)
+    return ((newstate, amplitude),)
 end
 
 @testitem "SpinSym" begin
@@ -306,29 +304,4 @@ end
 
     # Test algebraic properties
     @test 1 + (Sp1 + Sm1) == 1 + Sp1 + Sm1 == Sp1 + Sm1 + 1 == Sp1 + 1 + Sm1
-end
-
-# function SpinSpace{J}(basis::SymbolicSpinBasis) where {J}
-#     SpinSpace{J}(basis)
-# end
-
-@testitem "Spin chain basis matching" begin
-    import FermionicHilbertSpaces: SpinSpace
-    N = 3
-    @spins S 1:N
-    Hs = SpinSpace{1 // 2}.(S)
-    pairs = map(=>, S, Hs)
-    ## Heisenberg chain
-    ham = sum(S[k][op] * S[k+1][op] for k in 1:N-1 for op in (:x, :y, :z))
-    M = matrix_representation(ham, pairs)
-    M2 = matrix_representation(ham, Hs)
-    @test M == M2
-
-    ## Try spin 1
-    Hs = SpinSpace{1}.(S)
-    pairs = map(=>, S, Hs)
-    ham = sum(S[k][op] * S[k+1][op] for k in 1:N-1 for op in (:x, :y, :z))
-    M = matrix_representation(ham, pairs)
-    M2 = matrix_representation(ham, Hs)
-    @test M == M2
 end

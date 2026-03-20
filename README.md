@@ -40,7 +40,7 @@ entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
 The hamiltonian above conserves the number of fermions, which we can exploit as
 
 ````julia
-Hcons = hilbert_space(1:4, number_conservation(2))
+Hcons = hilbert_space(1:4, NumberConservation(2))
 ````
 
 ````

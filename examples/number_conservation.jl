@@ -3,7 +3,7 @@ using FermionicHilbertSpaces, LinearAlgebra, SparseArrays
 N = 62 # If you go above 62, BigInt is used which is slower
 n = 2
 
-H = hilbert_space(1:N, number_conservation(n)) # Spans all states with n fermions on N sites
+H = hilbert_space(1:N, NumberConservation(n)) # Spans all states with n fermions on N sites
 @fermions c
 
 # Define a Hamiltonian that conserves the number of fermions

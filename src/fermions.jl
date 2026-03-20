@@ -65,6 +65,7 @@ mode_ordering(H::FermionCluster) = H.mode_ordering
 modes(H::FermionCluster) = H.modes
 _find_position(f::FermionicMode, H::FermionCluster) = get(H.mode_ordering, f, 0)
 _find_position(f::FermionicMode, H::FermionicMode) = f == H ? 1 : 0
+_find_position(H::AbstractHilbertSpace, ordering::AbstractDict) = get(ordering, H, 0)
 operators(H::FermionCluster) = fermions(H)
 operators(H::FermionicMode) = fermions(H)
 
@@ -90,43 +91,90 @@ function Base.show(io::IO, c::FermionCluster)
     print(io, ")")
 end
 
-embedding_unitary(partition, H::FermionCluster) = embedding_unitary(partition, basisstates(H), H.mode_ordering)
-bipartite_embedding_unitary(X, Xbar, H::FermionCluster) = bipartite_embedding_unitary(X, Xbar, basisstates(H), H.mode_ordering)
-isorderedpartition(partition, H::FermionCluster) = isorderedpartition(map(atomic_factors, partition), mode_ordering(H))
+function embedding_unitary(partition, states, H::FermionCluster)
+    atoms = atomic_factors(H)
+    positions = [[_find_position(atom, atoms) for atom in atomic_factors(cluster)] for cluster in partition]
+    embedding_unitary(positions, states)
+end
+function bipartite_embedding_unitary(X, Xbar, states, H::FermionCluster)
+    atoms = atomic_factors(H)
+    Xpos = [_find_position(atom, atoms) for atom in atomic_factors(X)]
+    Xbarpos = [_find_position(atom, atoms) for atom in atomic_factors(Xbar)]
+    bipartite_embedding_unitary(Xpos, Xbarpos, states)
+end
+embedding_unitary(partition, H::FermionCluster) = embedding_unitary(partition, basisstates(H), H)
+bipartite_embedding_unitary(X, Xbar, H::FermionCluster) = bipartite_embedding_unitary(X, Xbar, basisstates(H), H)
+# isorderedpartition(partition, H::FermionCluster) = isorderedpartition(map(atomic_factors, partition), mode_ordering(H))
 partial_trace_phase_factor(f1, f2, H::FermionCluster) = phase_factor_f(f1, f2, nbr_of_modes(H))
 
-
-struct NumberConservation{T,H}
+struct NumberConservation{T,H} <: AbstractConstraint
     total::T
     subspaces::H
 end
 NumberConservation(n) = NumberConservation(n, nothing)
 NumberConservation() = NumberConservation(nothing, nothing)
-function constrain_space(space::Union{<:FermionCluster,<:FermionicMode}, constraint::NumberConservation{T,H}) where {T,H}
-    subspaces = H <: Nothing ? atomic_factors(space) : constraint.subspaces
-    total = T <: Nothing ? (0:sum(maximum_particles, subspaces)) : constraint.total
-    constraint = unweighted_number_branch_constraint(total, subspaces, atomic_factors(space))
-    constrain_space(space, constraint; leaf_processor=CombineFockNumbersProcessor(), sortby=particle_number)
-end
 
-struct ParityConservation{H}
+struct ParityConservation{H} <: AbstractConstraint
     allowed_parities::Vector{Int}
     subspaces::H
 end
 ParityConservation() = ParityConservation([-1, 1], nothing)
 ParityConservation(ps::AbstractVector{Int}) = ParityConservation(Vector{Int}(ps), nothing)
 ParityConservation(p::Int) = ParityConservation([p], nothing)
-function constrain_space(H::FermionCluster, constraint::ParityConservation)
+
+function instantiate(constraint::ParityConservation, H::Union{<:FermionCluster,<:FermionicMode})
     possible_numbers = isnothing(constraint.subspaces) ? (0:nbr_of_modes(H)) : (0:sum(nbr_of_modes, constraint.subspaces))
     allowed_numbers = filter(n -> any(p -> p == (-1)^n, constraint.allowed_parities), possible_numbers)
-    constraint = unweighted_number_branch_constraint(allowed_numbers, constraint.subspaces, H.modes)
-    constrain_space(H, constraint; leaf_processor=CombineFockNumbersProcessor(), sortby=parity)
+    constraint = unweighted_number_branch_constraint(allowed_numbers, constraint.subspaces, atomic_factors(H))
+end
+
+function instantiate(constraint::NumberConservation{T,H}, space::Union{<:FermionCluster,<:FermionicMode}) where {T,H}
+    subspaces = H <: Nothing ? atomic_factors(space) : constraint.subspaces
+    total = T <: Nothing ? (0:sum(maximum_particles, subspaces)) : constraint.total
+    constraint = unweighted_number_branch_constraint(total, subspaces, atomic_factors(space))
+end
+function constrain_space(space, constraint::AbstractConstraint)
+    new_constraint = instantiate(constraint, space)
+    constrain_space(space, new_constraint; leaf_processor=default_processor(space, constraint, new_constraint), sortby=default_sorter(space, constraint, new_constraint))
+end
+default_processor(space::Union{<:FermionCluster,<:FermionicMode}, _, _) = CombineFockNumbersProcessor()
+default_processor(space, _, _) = nothing
+default_sorter(space, constraint, new_constraint) = nothing
+default_sorter(space::Union{<:FermionCluster,<:FermionicMode}, constraint::ParityConservation, new_constraint) = f -> (parity(f), f)
+default_sorter(space::Union{<:FermionCluster,<:FermionicMode}, constraint::NumberConservation, new_constraint) = f -> (particle_number(f), f)
+
+
+@testitem "ProductSymmetry" begin
+    labels = 1:4
+    qn = NumberConservation() * ParityConservation()
+    @fermions f
+    H = hilbert_space(f, labels, qn)
+    @test keys(H.symmetry.qntofockstates).values == [(n, (-1)^n) for n in 0:4]
+    qn = prod(number_conservation(label -> label == l) for l in labels)
+    @test all(length.(hilbert_space(labels, qn).symmetry.qntofockstates) .== 1)
 end
 
 
-# combine_atoms(f::Tuple{FockNumber{Bool}}, ::FermionicMode{Int64}) = f[1]
+@testitem "IndexConservation" begin
+    import FermionicHilbertSpaces: number_conservation
+    labels = 1:4
+    qn = number_conservation(==(1))
+    qn2 = number_conservation(label -> label in 1:1)
+    H = hilbert_space(labels, qn)
+    H2 = hilbert_space(labels, qn2)
+    @test H == H2
 
-# function split_and_combine_atoms(state::FockNumber, positions)
-#     subbits = Iterators.map(i -> _bit(state, i), positions)
-#     return focknbr_from_bits(subbits)
-# end
+    spatial_labels = 1:1
+    spin_labels = (:↑, :↓)
+    all_labels = Base.product(spatial_labels, spin_labels)
+    qn = number_conservation(label -> label[2] == :↑) * number_conservation(label -> label[2] == :↓)
+    H = hilbert_space(all_labels, qn)
+    @test all(length.(H.symmetry.qntofockstates) .== 1)
+
+    spatial_labels = 1:2
+    spin_labels = (:↑, :↓)
+    all_labels = Base.product(spatial_labels, spin_labels)
+    qn = number_conservation(1, label -> label[2] == :↑)
+    H = hilbert_space(all_labels, qn)
+    @test length(basisstates(H)) == 2^3
+end

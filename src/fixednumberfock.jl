@@ -42,15 +42,21 @@ function FixedNumberFockState{N}(f::FockNumber) where N
     end
     FixedNumberFockState{N}(Tuple(sites))
 end
-combine_states(f1::FixedNumberFockState, f2::FixedNumberFockState, H1, H2) = FixedNumberFockState((f1.sites..., f2.sites...))
+# combine_states(f1::FixedNumberFockState, f2::FixedNumberFockState, H1, H2) = FixedNumberFockState((f1.sites..., f2.sites...))
+# function combine_states(fs::Union{<:AbstractVector{<:FixedNumberFockState},<:NTuple{N,<:FixedNumberFockState}}, fm::FockMapper) where N
+#     FixedNumberFockState(combine_states(map(FockNumber, fs), fm))
+# end
+function insert_bits(f::FixedNumberFockState, positions)
+    FixedNumberFockState(insert_bits(FockNumber(f), positions))
+end
+Base.:(+)(f1::FixedNumberFockState, f2::FixedNumberFockState) = FixedNumberFockState((f1.sites..., f2.sites...))
+
 _bit(f::FixedNumberFockState, k) = k in f.sites
 function substate(siteindices, f::FixedNumberFockState)
-    # subsite = 0
     subsites = Int[]
     for (n, site) in enumerate(siteindices)
         site in f.sites && push!(subsites, n)
     end
-    # sites = filter(s -> s in siteindices, f.sites)
     return FixedNumberFockState(Tuple(subsites))
 end
 
@@ -58,6 +64,7 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
 
 @testitem "FixedNumberFockState" begin
     import FermionicHilbertSpaces: jwstring_left, jwstring_right, FixedNumberFockState, FockNumber, SingleParticleState, _bit, substate
+    @fermions a
     f = FixedNumberFockState((1, 3, 5))
     f2 = FockNumber(f)
     @test f == FixedNumberFockState(f2)
@@ -81,33 +88,36 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     @test substate((5, 10, 100, 20), FixedNumberFockState((1, 10, 100))) == FixedNumberFockState((2, 3))
 
     # test permutation and FockMapper
-    H1 = hilbert_space(1:2)
-    H2 = hilbert_space(3:4)
-    H12 = hilbert_space((4, 2, 1, 3))
-    fm = FermionicHilbertSpaces.FockMapper((H1, H2), H12)
+    H1 = hilbert_space(a, 1:2)
+    H2 = hilbert_space(a, 3:4)
+    H12 = hilbert_space(a, (4, 2, 1, 3))
+    fm = FermionicHilbertSpaces.state_splitter(H12, (H1, H2))
     for (f1, f2) in Base.product(basisstates(H1), basisstates(H2))
         f1fix = FixedNumberFockState(f1)
         f2fix = FixedNumberFockState(f2)
-        f12 = fm((f1, f2))
-        f12fix = fm((f1fix, f2fix))
+        f12 = FermionicHilbertSpaces.combine_states((f1, f2), fm)
+        f12fix = FermionicHilbertSpaces.combine_states((f1fix, f2fix), fm)
         @test f12 == FockNumber(f12fix)
     end
 
-    @fermions f
-    h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
-    H = hilbert_space(1:2, FermionicHilbertSpaces.SingleParticleState.(1:3))
-    @test_throws ArgumentError matrix_representation(h, H)
+    h = a[1]' * a[2] + 1im * a[1]' * a[2]' + hc
+    H = hilbert_space(a, 1:2, FermionicHilbertSpaces.SingleParticleState.(1:3))
+    @test_throws MethodError matrix_representation(h, H)
 
     N = 10
-    H = hilbert_space(1:N, SingleParticleState.(1:N))
-    Hf = hilbert_space(1:N, number_conservation(1))
+    H = hilbert_space(a, 1:N, SingleParticleState.(1:N))
+    Hf = hilbert_space(a, 1:N, NumberConservation(1))
     @test length(basisstates(H)) == length(basisstates(Hf)) == N
-
-    @fermions f
-    op = sum(rand() * f[k1]'f[k2] + rand(ComplexF64) * f[k1]f[k2]' for (k1, k2) in Base.product(1:N, 1:N))
+    @test map(FockNumber, basisstates(H)) == basisstates(Hf)
+    op = sum(rand() * a[k1]'a[k2] + rand(ComplexF64) * a[k1]a[k2]' for (k1, k2) in Base.product(1:N, 1:N))
     @test matrix_representation(op, H) ≈ matrix_representation(op, Hf)
 end
 
+function apply_local_operators(ops, f::FixedNumberFockState, H::AbstractHilbertSpace; kwargs...)
+    sites = Iterators.map(op -> _find_position(op, H), reverse(ops))
+    daggers = Iterators.map(op -> op.creation, reverse(ops))
+    return (togglefermions(sites, daggers, f),)
+end
 function togglefermions(sites, daggers, f::FixedNumberFockState)
     # Check if operation results in vacuum or not,
     # short circuiting if so to avoid allocating fsites
@@ -201,16 +211,16 @@ end
 @testitem "Partial trace consistency: FockNumber vs FixedNumberFockState" begin
     using LinearAlgebra
     import FermionicHilbertSpaces: FixedNumberFockState
+    @fermions f
     # Define Hilbert spaces for 5 sites, 2 particles
     N = 5
     n_particles = 2
     # FockNumber-based Hilbert space
-    H_fock = hilbert_space(1:N, number_conservation(n_particles))
+    H_fock = hilbert_space(f, 1:N, NumberConservation(n_particles))
     # FixedNumberFockState-based Hilbert space
-    H_fixed = hilbert_space(1:N, FixedNumberFockState{n_particles}.(basisstates(H_fock)))
+    H_fixed = hilbert_space(f, 1:N, FixedNumberFockState{n_particles}.(basisstates(H_fock)))
 
     # Define a random Hermitian operator
-    @fermions f
     sym_ham = sum(rand() * f[n]'f[n] for n in 1:N) + sum(f[n+1]'f[n] + hc for n in 1:N-1)
     ham_fock = matrix_representation(sym_ham, H_fock)
     ham_fixed = matrix_representation(sym_ham, H_fixed)

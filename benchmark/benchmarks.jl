@@ -39,10 +39,18 @@ weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, 
 allowed_ones = [[0, 1], [-1, 0], [2]]
 SUITE["generate_states"]["int"] = @benchmarkable FermionicHilbertSpaces.generate_states($weights, $allowed_ones, $N)
 
+Hs = [hilbert_space(n:n) for n in 1:N]
+constraint = prod(FermionicHilbertSpaces.weighted_number_branch_constraint(allowed, w, Hs) for (allowed, w) in zip(allowed_ones, weights))
+SUITE["generate_states2"]["int"] = @benchmarkable FermionicHilbertSpaces.generate_states($Hs, $constraint; leaf_processor = FermionicHilbertSpaces.CombineFockNumbersProcessor())
+
 N = 64
 weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
 allowed_ones = [[0, 1], [-1, 0], [2]]
 SUITE["generate_states"]["big_int"] = @benchmarkable FermionicHilbertSpaces.generate_states($weights, $allowed_ones, $N)
+
+Hs = [hilbert_space(n:n) for n in 1:N]
+constraint = prod(FermionicHilbertSpaces.weighted_number_branch_constraint(allowed, w, Hs) for (allowed, w) in zip(allowed_ones, weights))
+SUITE["generate_states2"]["big_int"] = @benchmarkable FermionicHilbertSpaces.generate_states($Hs, $constraint; leaf_processor = FermionicHilbertSpaces.CombineFockNumbersProcessor())
 
 ## Benchmark partial trace algorithms
 import FermionicHilbertSpaces: FullPartialTraceAlg, SubsystemPartialTraceAlg, default_partial_trace_alg

@@ -194,19 +194,14 @@ function majorana_hilbert_space(y::SymbolicMajoranaBasis, labels, args...)
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
     f = SymbolicFermionBasis(Symbol(y.name, "_fermions",), y.group.id)
     H = hilbert_space(f, pairs, args...)
-    # majorana_position = OrderedDict(label => div(n + 1, 2) for (n, label) in enumerate(labels))
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
     MajoranaHilbertSpace(majorana_position, H, y)
 end
 Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace: ", m.sym); show(IOContext(io, :compact => true), m.parent))
 
 function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
-    # iseven(length(modes)) || throw(ArgumentError("Must be an even number of Majoranas to define a subregion."))
     parent_subregion = subregion(parent(Hsub), parent(H))
     MajoranaHilbertSpace(Hsub.majoranaindices, parent_subregion, Hsub.sym)
-    # pairs = [(modes[i], modes[i+1]) for i in 1:2:length(modes)-1]
-    # majorana_position = OrderedDict(label => n for (n, label) in enumerate(modes))
-    # MajoranaHilbertSpace(majorana_position, subregion(pairs, H.parent))
 end
 
 partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg::FullPartialTraceAlg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
@@ -230,7 +225,7 @@ end
 
 @testitem "Partial trace of symbolic Majoranas" begin
     @majoranas y
-    H = majorana_hilbert_space(1:6)
+    H = majorana_hilbert_space(y, 1:6)
     Hsub = subregion(3:4, H)
     op = 1 + 3y[1] + 2y[3] + 4y[1] * y[6] + 3y[4] * y[1] + y[3] * y[4] + y[1] * y[3] * y[4] + y[1] * y[2] * y[6]
     op2 = 3 + 0y[1] # NCterms(op2) is empty
@@ -239,55 +234,16 @@ end
 end
 
 
-# function complementary_subsystem(H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace)
-#     complement_labels = setdiff(keys(H.majoranaindices), keys(Hsub.majoranaindices))
-#     complement_fermionic_space = complementary_subsystem(H.parent, Hsub.parent)
-#     majorana_position = OrderedDict(label => n for (n, label) in enumerate(complement_labels))
-#     MajoranaHilbertSpace(majorana_position, complement_fermionic_space)
-# end
-
-# isorderedpartition(Hs, H::MajoranaHilbertSpace) = isorderedpartition(map(parent, Hs), H.parent)
-# embed(m, H::MajoranaHilbertSpace, Hnew::MajoranaHilbertSpace; kwargs...) = embed(m, H.parent, Hnew.parent; kwargs...)
-# function tensor_product(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace)
-#     Hf = tensor_product(H1.parent, H2.parent)
-#     majoranaindices = OrderedDict(mapreduce((ntup) -> [ntup[2][1] => 2ntup[1] - 1, ntup[2][2] => 2ntup[1]], vcat, enumerate(keys(Hf))))
-#     MajoranaHilbertSpace(majoranaindices, Hf)
-# end
-
-
 state_index(state::AbstractFockState, H::MajoranaHilbertSpace) = state_index(state, H.parent)
 _find_position(f::MajoranaSym, H::MajoranaHilbertSpace) = get(H.majoranaindices, f, 0)
 
-function operator_inds_amps!((outinds, ininds, amps), op::NCMul{C,S}, H::MajoranaHilbertSpace; projection=false) where {C,S<:AbstractMajoranaSym}
-    label_to_site = H.majoranaindices
-    majoranadigitpositions = Iterators.reverse(_find_position(f, H) for f in op.factors)
+function apply_local_operators(ops, f::FockNumber, H::MajoranaHilbertSpace; kwargs...)
+    majoranadigitpositions = Iterators.reverse(_find_position(f, H) for f in ops)
     daggers = collect(iseven(pos) for pos in majoranadigitpositions)
     digitpositions = map(n -> div(n + 1, 2), majoranadigitpositions)
-    mc = -op.coeff
-    mic = -1im * op.coeff
-    pc = op.coeff
-    pic = 1im * op.coeff
-    for (n, f) in enumerate(basisstates(H))
-        newfockstate, amp = togglemajoranas(digitpositions, daggers, f)
-        if !iszero(amp)
-            outind = state_index(newfockstate, H)
-            if !projection || !ismissing(outind)
-                push!(outinds, outind)
-                if amp == 1
-                    push!(amps, pc)
-                elseif amp == -1
-                    push!(amps, mc)
-                elseif amp == 1im
-                    push!(amps, pic)
-                elseif amp == -1im
-                    push!(amps, mic)
-                end
-                push!(ininds, n)
-            end
-        end
-    end
-    return (outinds, ininds, amps)
+    return (togglemajoranas(digitpositions, daggers, f),)
 end
+
 function atomic_factors(H::MajoranaHilbertSpace)
     parent_atoms = atomic_factors(H.parent)
     # convert to majoranas

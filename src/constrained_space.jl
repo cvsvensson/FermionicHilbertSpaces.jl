@@ -57,21 +57,6 @@ end
 state_splitter(H::ConstrainedSpace, Hs) = state_splitter(parent(H), Hs)
 
 
-# function issubsystem(Hsub, H::ConstrainedSpace)
-#     iter = Iterators.map(a -> atom_position(a, H), atomic_factors(Hsub))
-#     allunique(iter) && all(pos -> pos > 0, iter)
-# end
-# function isorderedsubsystem(Hsub, H::ConstrainedSpace)
-#     iter = Iterators.map(a -> atom_position(a, H), atomic_factors(Hsub))
-#     lastpos = 0
-#     for pos in iter
-#         pos > 0 || return false
-#         pos > lastpos || return false
-#         lastpos = pos
-#     end
-#     allunique(iter)
-# end
-# atom_position(atom, H::ConstrainedSpace) = get(H.atom_ordering, atom, 0)
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
 operators(H::ConstrainedSpace) = operators(parent(H))
 @testitem "Constrained space" begin
@@ -95,7 +80,7 @@ operators(H::ConstrainedSpace) = operators(parent(H))
 
 
     @test m == numberoperator(H)
-    H2 = hilbert_space(1:N, number_conservation(1))
+    H2 = hilbert_space(1:N, NumberConservation(1))
     m2 = matrix_representation(sym, [f => H2])
 
     @fermions f

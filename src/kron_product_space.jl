@@ -22,10 +22,7 @@ struct ProductSpace{B,C,A} <: AbstractProductHilbertSpace{B}
         new{B,C,A}(clusters, atoms, atom_ordering)
     end
 end
-function ProductSpace(clusters::C) where {C}
-    atoms = mapreduce(atomic_factors, vcat, clusters)
-    ProductSpace(clusters, atoms)
-end
+
 tensor_product(H::AbstractHilbertSpace) = H
 """
     tensor_product(spaces...)
@@ -113,26 +110,7 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
         return constrain_space(Hcomp, states)
     end
     return Hcomp
-    # #  Hsub = tensor_product(Hs)
-    # # isconstrained(H) || return Hsub
-    # # splitter = state_splitter(H, (Hsub,))
-    # # function se(state)
-    # #     only(split_state(state, splitter))
-    # # end
-    # # states = unique!(vec(map(se, basisstates(H))))
-    # # ConstrainedSpace(Hsub, states)
 
-    # # Hcomp = subregion(remaining, H)
-    # if isconstrained(H)
-    #     #restrict states in Hcomp to those compatible with states in Hsub
-    #     splitter = state_splitter(H, (Hsub, Hcomp))
-    #     states = filter(basisstates(H)) do state
-    #         substate, compstate = split_state(state, splitter)
-    #         !ismissing(state_index(substate, Hsub)) && !ismissing(state_index(compstate, Hcomp))
-    #     end
-    #     return ConstrainedSpace(Hcomp, states)
-    # end
-    # return Hcomp
 end
 
 
@@ -415,15 +393,7 @@ end
 cluster_target_sub_idx(target, catoms, a2t, ti) = _find_position(cluster_target_subspace(target, catoms, a2t, ti), target)
 _find_position(target::AbstractAtomicHilbertSpace, parent::AbstractAtomicHilbertSpace) = target == parent ? 1 : 0
 _find_position(target::AbstractClusterHilbertSpace, parent::AbstractClusterHilbertSpace) = target == parent ? 1 : 0
-# cluster_target_sub_idx(target::AbstractAtomicHilbertSpace, catoms, a2t, ti) = 1
-# cluster_target_sub_idx(target::AbstractClusterHilbertSpace, catoms, a2t, ti) = 1
-# function cluster_target_sub_idx(target::ProductSpace, catoms, a2t, ti)
-#     overlap = [a for a in catoms if get(a2t, a, nothing) == ti]
-#     for (ki, sub) in enumerate(factors(target))
-#         atomic_factors(sub) == overlap && return ki
-#     end
-#     throw(ArgumentError("No sub-space with atoms $overlap in target"))
-# end
+
 
 # Extract the k-th sub-state (for ProductState) or the state itself (for atomic/cluster)
 extract_substate(state::ProductState, k) = state.states[k]
@@ -506,6 +476,7 @@ Hsub = subregion((H1, H3), H)
 """
 function subregion(Hs, H::AbstractHilbertSpace)
     Hsub = tensor_product(Hs)
+    issubsystem(Hsub, H) || throw(ArgumentError("The spaces in Hs must be a subsystem of H"))
     isconstrained(H) || return Hsub
     splitter = state_splitter(H, (Hsub,))
     function se(state)
@@ -515,32 +486,6 @@ function subregion(Hs, H::AbstractHilbertSpace)
     constrain_space(Hsub, states)
 end
 
-
-# function ispartition(Hs, H::AbstractProductHilbertSpace)
-#     all_atoms = atomic_factors(H)
-#     iters = [map(a -> atom_position(a, H), (atomic_factors(Hsub))) for Hsub in Hs]
-#     ispartition(iters, all_atoms)
-# end
-# function isorderedpartition(Hs, H::AbstractProductHilbertSpace)
-#     iters = [atomic_factors(Hsub) for Hsub in Hs]
-#     isorderedpartition(iters, H.atom_ordering)
-# end
-# function isorderedsubsystem(Hsub, H::AbstractProductHilbertSpace)
-#     consistent_ordering(Hsub, H) || return false
-#     issubsystem(Hsub, H) || return false
-#     return true
-# end
-
-# function consistent_ordering(subsystem, jw::Dict)::Bool
-#     lastpos = 0
-#     for label in subsystem
-#         haskey(jw, label) || return false
-#         newpos = jw[label]
-#         newpos > lastpos || return false
-#         lastpos = newpos
-#     end
-#     return true
-# end
 
 function isorderedpartition(partition, order)
     n = length(order)
@@ -575,64 +520,3 @@ function isorderedpartition(partition)
     return true
 end
 atom_position(atom, H::AbstractProductHilbertSpace) = _find_position(atom, atomic_factors(H))
-
-# function SubStateExtender(Hs, H::AbstractProductHilbertSpace)
-#     perm = map(space -> findfirst(==(space), Hs), H.spaces)
-#     isperm(perm) || throw(ArgumentError("The spaces in Hs must be a permutation of the spaces in H"))
-#     return function extender(states)
-#         combine_states(map(p -> states[p], perm), H)
-#     end
-# end
-# function StateExtender(Hs, H::AbstractProductHilbertSpace)
-#     # ispartition(Hs, H) || throw(ArgumentError("The spaces in Hs must form a partition of the spaces in H"))
-#     # println(Hs)
-#     # println(H)
-#     # println(map(h -> _find_position(h, H), Hs))
-#     if all(h -> _find_position(h, H) > 0, Hs)
-#         return SubStateExtender(Hs, H)
-#     end
-#     ## Check
-#     return AtomicStateExtender(Hs, H)
-# end
-# function AtomicStateExtender(Hs, H::AbstractProductHilbertSpace)
-#     atoms = atomic_factors(H)
-#     subatoms = Iterators.flatten(map(atomic_factors, Hs))
-#     grouped_atoms = map(atomic_factors, factors(H))
-#     # find position of each atom in each group in grouped_atoms in subtoms
-#     positions = map(grouped_atoms) do group
-#         map(group) do atom
-#             for (Hpos, Hsub) in enumerate(Hs)
-#                 pos = atom_position(atom, Hsub)
-#                 if pos > 0
-#                     return (Hpos, pos)
-#                 end
-#             end
-#             throw(ArgumentError("Each atomic factor in the full space must belong to one of the subspaces"))
-#         end
-#     end
-#     return function extender(substates)
-#         ## Split each substate into its atomic factors, then combine the atomic factors according to the grouping in the full space
-#         state_atoms = map(atomic_factors, substates, Hs)
-#         combined_atoms = map(positions) do group
-#             map(pos -> state_atoms[pos[1]][pos[2]], group)
-#         end
-#         substates = map(combine_atoms, combined_atoms, factors(H))
-#         combine_states(substates, H)
-#     end
-
-# end
-# function complementary_subsystem1(H::AbstractProductHilbertSpace, Hsub::AbstractHilbertSpace)
-#     # check if Hsub matches a single space in H
-#     subspace_ind = _find_position(Hsub, H)
-#     if subspace_ind > 0
-#         other_spaces = deleteat!(collect(factors(H)), subspace_ind)
-#         return subregion(other_spaces, H)
-#     end
-#     # otherwise we need to split into atoms and find which atoms belong to the subspace
-#     atoms = collect(atomic_factors(H))
-#     subatoms = collect(atomic_factors(Hsub))
-#     other_atoms = setdiff(atoms, subatoms)
-#     subregion(other_atoms, H)
-# end
-
-# StateSplitter(H::ConstrainedSpace, Hs) = StateExtractor(H, Hs)

@@ -8,12 +8,11 @@
 # We start by importing the necessary packages.
 using FermionicHilbertSpaces, LinearAlgebra, Plots
 using Arpack
-# Then we define the Hilbert space with `N` sites and parity conservation.
-N = 12
-H = hilbert_space(1:N, ParityConservation())
-
 # Symbolic fermions can be defined using the `@fermions` macro,
 @fermions f
+# Then we define the Hilbert space with `N` sites and parity conservation.
+N = 12
+H = hilbert_space(f, 1:N, ParityConservation())
 
 # Let's define the interacting Kitaev chain Hamiltonian.
 # It is a function of the fermions `f` and parameters `N`, `μ`, `t`, `Δ`, and `U`,
