@@ -15,3 +15,14 @@ H = hilbert_space(1:4, NumberConservation(1))
 Hsub = subregion(1:2, H)
 basisstates(Hsub)
 ``` 
+
+## State splitter interface
+
+Internal tensor/reshape/partial-trace routines use a common splitter protocol:
+
+- `state_splitter(H, Hs)` returns a splitter object.
+- `split_state(state, splitter)` returns a tuple with one entry per target subsystem.
+- Each tuple entry is a weighted collection `((substate, weight), ...)`.
+- `combine_states(substates, splitter)` returns a weighted collection `((state, weight), ...)`.
+
+This package does not require a single concrete container type for weighted collections; callers should treat them as iterable collections of `(state, weight)` outcomes.

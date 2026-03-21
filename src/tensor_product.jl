@@ -108,31 +108,32 @@ tensor_product_iterator(::UniformScaling, H::AbstractHilbertSpace) = diagind(I(l
 
 function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true, skipmissing=false) where T
     fill!(mout, zero(T))
-    # phase_factors && (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
-    # !phase_factors && (ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system")))
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     pfh = phase_factors ? kron_phase_factor(extend_state) : (f1, f2) -> 1
     for I in inds
         I1 = map(i -> i[1], I)
         I2 = map(i -> i[2], I)
-        fock1 = map(basisstate, I1, Hs)
-        fullfock1 = combine_states(fock1, extend_state)
-        fock2 = map(basisstate, I2, Hs)
-        fullfock2 = combine_states(fock2, extend_state)
-        outind1 = state_index(fullfock1, H)
-        if ismissing(outind1)
-            skipmissing && continue
-            throw(ArgumentError("The state $fullfock1 does not exist in the full Hilbert space"))
+        state1 = map(basisstate, I1, Hs)
+        state2 = map(basisstate, I2, Hs)
+        fullstates1 = combine_states(state1, extend_state)
+        fullstates2 = combine_states(state2, extend_state)
+        for (fullstate1, w1) in fullstates1
+            outind1 = state_index(fullstate1, H)
+            if ismissing(outind1)
+                skipmissing && continue
+                throw(ArgumentError("The state $fullstate1 does not exist in the full Hilbert space"))
+            end
+            for (fullstate2, w2) in fullstates2
+                outind2 = state_index(fullstate2, H)
+                if ismissing(outind2)
+                    skipmissing && continue
+                    throw(ArgumentError("The state $fullstate2 does not exist in the full Hilbert space"))
+                end
+                s = pfh(fullstate1, fullstate2)
+                v = prod(ntuple(i -> ms[i][I1[i], I2[i]], length(ms)))
+                mout[outind1, outind2] += w1 * w2 * v * s
+            end
         end
-        outind2 = state_index(fullfock2, H)
-        if ismissing(outind2)
-            skipmissing && continue
-            throw(ArgumentError("The state $fullfock2 does not exist in the full Hilbert space"))
-        end
-        s = pfh(fullfock1, fullfock2)
-        # s == pfh2(fullfock1, fullfock2) || error("The phase factor from kron_phase_factor does not match the phase factor from phase_factor_h. This should not happen. Please report this as a bug.")
-        v = prod(ntuple(i -> ms[i][I1[i], I2[i]], length(ms)))
-        mout[outind1, outind2] += v * s
     end
     return mout
 end
@@ -150,27 +151,31 @@ function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H
     for I in inds
         I1 = map(i -> i[1], I)
         I2 = map(i -> i[2], I)
-        fock1 = map(basisstate, I1, Hs)
-        fullfock1 = combine_states(fock1, extend_state)
-        outind1 = state_index(fullfock1, H)
+        state1 = map(basisstate, I1, Hs)
+        state2 = map(basisstate, I2, Hs)
+        fullstates1 = combine_states(state1, extend_state)
+        fullstates2 = combine_states(state2, extend_state)
+        for (fullstate1, w1) in fullstates1
+            outind1 = state_index(fullstate1, H)
 
-        if ismissing(outind1)
-            skipmissing && continue
-            throw(ArgumentError("The state $fullfock1 does not exist in the full Hilbert space"))
-        end
-        fock2 = map(basisstate, I2, Hs)
-        fullfock2 = combine_states(fock2, extend_state)
-        outind2 = state_index(fullfock2, H)
-        if ismissing(outind2)
-            skipmissing && continue
-            throw(ArgumentError("The state $fullfock2 does not exist in the full Hilbert space"))
-        end
-        s = pfh(fullfock1, fullfock2)
+            if ismissing(outind1)
+                skipmissing && continue
+                throw(ArgumentError("The state $fullstate1 does not exist in the full Hilbert space"))
+            end
+            for (fullstate2, w2) in fullstates2
+                outind2 = state_index(fullstate2, H)
+                if ismissing(outind2)
+                    skipmissing && continue
+                    throw(ArgumentError("The state $fullstate2 does not exist in the full Hilbert space"))
+                end
+                s = pfh(fullstate1, fullstate2)
 
-        v = prod(ntuple(i -> ms[i][I1[i], I2[i]], length(ms)))
-        push!(Is, outind1)
-        push!(Js, outind2)
-        push!(Vs, v * s)
+                v = prod(ntuple(i -> ms[i][I1[i], I2[i]], length(ms)))
+                push!(Is, outind1)
+                push!(Js, outind2)
+                push!(Vs, w1 * w2 * v * s)
+            end
+        end
     end
     return mout .= sparse(Is, Js, Vs, size(mout, 1), size(mout, 2))
 end
@@ -183,9 +188,10 @@ function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpa
     for I in inds
         TI = Tuple(I)
         fock = map(basisstate, TI, Hs)
-        fullfock = combine_states(fock, extend_state)
-        outind = state_index(fullfock, H)
-        mout[outind] += mapreduce((i1, m) -> m[i1], *, TI, ms)
+        for (fullfock, w) in combine_states(fock, extend_state)
+            outind = state_index(fullfock, H)
+            mout[outind] += w * mapreduce((i1, m) -> m[i1], *, TI, ms)
+        end
     end
     return U * mout
 end
@@ -546,21 +552,25 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
             s2 = phase_factors ? partial_trace_phase_factor(f1, f2, Hsub) : 1
             I2 = state_index(f2, Hsub)
             for fbar in barstates
-                fullf1 = combine_states((f1, fbar), splitter)
-                fullf2 = combine_states((f2, fbar), splitter)
-                s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
-                s = s2 * s1
-                J1 = state_index(fullf1, H)
-                if ismissing(J1)
-                    skipmissing && continue
-                    throw(ArgumentError("The state $fullf1 is not in the full Hilbert space"))
+                fullstates1 = combine_states((f1, fbar), splitter)
+                fullstates2 = combine_states((f2, fbar), splitter)
+                for (fullf1, w1) in fullstates1
+                    J1 = state_index(fullf1, H)
+                    if ismissing(J1)
+                        skipmissing && continue
+                        throw(ArgumentError("The state $fullf1 is not in the full Hilbert space"))
+                    end
+                    for (fullf2, w2) in fullstates2
+                        J2 = state_index(fullf2, H)
+                        if ismissing(J2)
+                            skipmissing && continue
+                            throw(ArgumentError("The state $fullf2 is not in the full Hilbert space"))
+                        end
+                        s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
+                        s = s2 * s1
+                        mout[I1, I2] += w1 * w2 * s * m[J1, J2]
+                    end
                 end
-                J2 = state_index(fullf2, H)
-                if ismissing(J2)
-                    skipmissing && continue
-                    throw(ArgumentError("The state $fullf2 is not in the full Hilbert space"))
-                end
-                mout[I1, I2] += s * m[J1, J2]
             end
         end
     end
@@ -573,25 +583,27 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::
     for I in inds
         f1 = basisstate(I[1], H)
         f2 = basisstate(I[2], H)
-        f1sub, f1bar = split_state(f1, splitter)
-        f2sub, f2bar = split_state(f2, splitter)
-        if f1bar != f2bar
-            continue
+        split1 = split_state(f1, splitter)
+        split2 = split_state(f2, splitter)
+        for ((f1sub, f1bar), w1) in split1
+            J1 = state_index(f1sub, Hsub)
+            if ismissing(J1)
+                skipmissing && continue
+                throw(ArgumentError("The state $f1sub is not in the subsystem Hilbert space"))
+            end
+            for ((f2sub, f2bar), w2) in split2
+                f1bar != f2bar && continue
+                J2 = state_index(f2sub, Hsub)
+                if ismissing(J2)
+                    skipmissing && continue
+                    throw(ArgumentError("The state $f2sub is not in the subsystem Hilbert space"))
+                end
+                s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
+                s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
+                s = s2 * s1
+                mout[J1, J2] += w1 * w2 * s * m[I[1], I[2]]
+            end
         end
-        s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
-        s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
-        s = s2 * s1
-        J1 = state_index(f1sub, Hsub)
-        if ismissing(J1)
-            skipmissing && continue
-            throw(ArgumentError("The state $f1sub is not in the subsystem Hilbert space"))
-        end
-        J2 = state_index(f2sub, Hsub)
-        if ismissing(J2)
-            skipmissing && continue
-            throw(ArgumentError("The state $f2sub is not in the subsystem Hilbert space"))
-        end
-        mout[J1, J2] += s * m[I[1], I[2]]
     end
     return mout
 end
@@ -605,7 +617,7 @@ partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...
 function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
     partial_trace_map(H, Hsub, complement, alg; kwargs...)
 end
-function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, splitter=state_splitter(H,(Hsub, complement)); skipmissing=false, phase_factors=true)
+function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, splitter=state_splitter(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
     indI = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
@@ -618,23 +630,27 @@ function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, spli
         I1 = state_index(f1, Hsub)
         I2 = state_index(f2, Hsub)
         for fbar in barstates
-            fullf1 = combine_states((f1, fbar), splitter)
-            fullf2 = combine_states((f2, fbar), splitter)
-            s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
-            s = s2 * s1
-            J1 = state_index(fullf1, H)
-            if ismissing(J1)
-                skipmissing && continue
-                throw(ArgumentError("The state $fullf1 is not in the full Hilbert space"))
+            fullstates1 = combine_states((f1, fbar), splitter)
+            fullstates2 = combine_states((f2, fbar), splitter)
+            for (fullf1, w1) in fullstates1
+                J1 = state_index(fullf1, H)
+                if ismissing(J1)
+                    skipmissing && continue
+                    throw(ArgumentError("The state $fullf1 is not in the full Hilbert space"))
+                end
+                for (fullf2, w2) in fullstates2
+                    J2 = state_index(fullf2, H)
+                    if ismissing(J2)
+                        skipmissing && continue
+                        throw(ArgumentError("The state $fullf2 is not in the full Hilbert space"))
+                    end
+                    s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
+                    s = s2 * s1
+                    push!(Is, indI[I1, I2])
+                    push!(Js, indJ[J1, J2])
+                    push!(Vs, w1 * w2 * s)
+                end
             end
-            J2 = state_index(fullf2, H)
-            if ismissing(J2)
-                skipmissing && continue
-                throw(ArgumentError("The state $fullf2 is not in the full Hilbert space"))
-            end
-            push!(Is, indI[I1, I2])
-            push!(Js, indJ[J1, J2])
-            push!(Vs, s)
         end
     end
     return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
@@ -649,29 +665,33 @@ function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, 
     Vs = Int[]
     substates2 = map(Base.Fix2(split_state, splitter), states)
     for f1 in states
-        f1sub, f1bar = split_state(f1, splitter)
-        J1 = state_index(f1sub, Hsub)
-        if ismissing(J1)
-            skipmissing && continue
-            throw(ArgumentError("The state $f1sub is not in the subsystem Hilbert space"))
-        end
         I1 = state_index(f1, H)
-        for (f2, (f2sub, f2bar)) in zip(states, substates2)
-            if f1bar != f2bar
-                continue
-            end
-            s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
-            s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
-            s = s2 * s1
-            J2 = state_index(f2sub, Hsub)
-            if ismissing(J2)
+        split1 = split_state(f1, splitter)
+        for ((f1sub, f1bar), w1) in split1
+            J1 = state_index(f1sub, Hsub)
+            if ismissing(J1)
                 skipmissing && continue
-                throw(ArgumentError("The state $f2sub is not in the subsystem Hilbert space"))
+                throw(ArgumentError("The state $f1sub is not in the subsystem Hilbert space"))
             end
-            I2 = state_index(f2, H)
-            push!(Is, indI[I1, I2])
-            push!(Js, indJ[J1, J2])
-            push!(Vs, s)
+            for (f2, states2) in zip(states, substates2)
+                for ((f2sub, f2bar), w) in states2
+                    if f1bar != f2bar
+                        continue
+                    end
+                    s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
+                    s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
+                    s = s2 * s1
+                    J2 = state_index(f2sub, Hsub)
+                    if ismissing(J2)
+                        skipmissing && continue
+                        throw(ArgumentError("The state $f2sub is not in the subsystem Hilbert space"))
+                    end
+                    I2 = state_index(f2, H)
+                    push!(Is, indI[I1, I2])
+                    push!(Js, indJ[J1, J2])
+                    push!(Vs, s)
+                end
+            end
         end
     end
     return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)

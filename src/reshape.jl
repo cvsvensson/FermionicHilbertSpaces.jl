@@ -30,10 +30,12 @@ function _reshape_vec_to_tensor(v::AbstractVector, H::AbstractHilbertSpace, Hs, 
     dims = map(dim, Hs)
     fs = basisstates(H)
     Is = map(f -> state_index(f, H), fs)
-    Iouts = map(f -> state_index.(split_state(f, splitter), Hs), fs)
     t = zeros(eltype(v), dims...)
-    for (I, Iout) in zip(Is, Iouts)
-        t[Iout...] = v[I...]
+    for (f, I) in zip(fs, Is)
+        for (substates, w) in split_state(f, splitter)
+            Iout = state_index.(substates, Hs)
+            t[Iout...] += w * v[I]
+        end
     end
     return t
 end
@@ -44,13 +46,16 @@ function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractHilbertSpace, Hsou
     dimsout = map(dim, Hsout)
     fs = basisstates(H)
     Js = map(f -> state_index(f, H), fs)
-    Iouts = map(f -> map(state_index, split_state(f, splitterout), Hsout), fs)
-    Iins = map(f -> map(state_index, split_state(f, splitterin), Hsin), fs)
     t = zeros(eltype(m), dimsout..., dimsin...)
-    # t = Array{eltype(m),length(Hsout) + length(Hsin)}(undef, dimsout..., dimsin...)
-    for (J1, Iout, f1) in zip(Js, Iouts, fs)
-        for (J2, Iin, f2) in zip(Js, Iins, fs)
-            t[Iout..., Iin...] = m[J1, J2]
+    for (J1, f1) in zip(Js, fs)
+        for (substatesout, wout) in split_state(f1, splitterout)
+            Iout = map(state_index, substatesout, Hsout)
+            for (J2, f2) in zip(Js, fs)
+                for (substatesin, win) in split_state(f2, splitterin)
+                    Iin = map(state_index, substatesin, Hsin)
+                    t[Iout..., Iin...] += wout * win * m[J1, J2]
+                end
+            end
         end
     end
     return t
@@ -60,19 +65,19 @@ function _reshape_tensor_to_mat(t, (Hsout, splitterout), (Hsin, splitterin), H::
     fsout = Base.product(basisstates.(Hsout)...)
     fsin = Base.product(basisstates.(Hsin)...)
 
-    fsout_combined = map(f -> combine_states(f, splitterout), fsout)
-    fsin_combined = map(f -> combine_states(f, splitterin), fsin)
-
     Jouts = map(f -> state_index.(f, Hsout), fsout)
     Jins = map(f -> state_index.(f, Hsin), fsin)
 
-    Iouts = map(f -> state_index(f, H), fsout_combined)
-    Iins = map(f -> state_index(f, H), fsin_combined)
-
     m = zeros(eltype(t), prod(dim, Hsout), prod(dim, Hsin))
-    for (Jin, Iin) in zip(Jins, Iins)
-        for (Jout, Iout) in zip(Jouts, Iouts)
-            m[Iout, Iin] = t[Jout..., Jin...]
+    for (fsin_tuple, Jin) in zip(fsin, Jins)
+        for (fullf_in, win) in combine_states(fsin_tuple, splitterin)
+            Iin = state_index(fullf_in, H)
+            for (fsout_tuple, Jout) in zip(fsout, Jouts)
+                for (fullf_out, wout) in combine_states(fsout_tuple, splitterout)
+                    Iout = state_index(fullf_out, H)
+                    m[Iout, Iin] += wout * win * t[Jout..., Jin...]
+                end
+            end
         end
     end
     return m
@@ -81,11 +86,14 @@ end
 function _reshape_tensor_to_vec(t, Hs, H::AbstractHilbertSpace, state_splitter)
     fs = Base.product(basisstates.(Hs)...)
     v = Vector{eltype(t)}(undef, length(fs))
-    for fs in fs
-        Is = state_index.(fs, Hs)
-        fb = combine_states(fs, state_splitter)
-        Iout = state_index(fb, H)
-        v[Iout] = t[Is...]
+    fill!(v, zero(eltype(v)))
+    for fstuple in fs
+        Is = state_index.(fstuple, Hs)
+        for (fb, w) in combine_states(fstuple, state_splitter)
+            Iout = state_index(fb, H)
+            ismissing(Iout) && continue
+            v[Iout] += w * t[Is...]
+        end
     end
     return v
 end

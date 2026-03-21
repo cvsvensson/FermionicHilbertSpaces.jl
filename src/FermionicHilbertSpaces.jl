@@ -20,6 +20,7 @@ export parityoperator, numberoperator, fermions, majoranas, matrix_representatio
 export partial_trace, generalized_kron, tensor_product, embed
 export @fermions, @majoranas, @boson, @spin, @spins
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
+export BlockHilbertSpace, quantumnumbers, sector, sectors, indices
 export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
 
 ## Some types
@@ -49,6 +50,7 @@ Adding this is equivalent to adding the hermitian conjugate.
 const hc = HC()
 
 ## Files
+include("state_splitter.jl")
 include("fock.jl")
 include("phase_factors.jl")
 # include("symmetry.jl")
@@ -56,6 +58,7 @@ include("hilbert_space.jl")
 include("generate_constrained_states.jl")
 include("kron_product_space.jl")
 include("constrained_space.jl")
+include("sectors.jl")
 
 include("fermions.jl")
 
@@ -75,8 +78,6 @@ include("spin.jl")
 include("qubit.jl")
 
 include("bdg.jl")
-
-# include("sectors.jl")
 
 
 

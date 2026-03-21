@@ -92,7 +92,7 @@ jwstring_left(site, focknbr::FockNumber{Bool}) = jwstring_left(site, FockNumber{
 jwstring_right(site, focknbr::FockNumber{Bool}) = jwstring_right(site, FockNumber{Int}(focknbr))
 
 
-struct FockMapper{P1,W,P2}
+struct FockMapper{P1,W,P2} <: AbstractStateSplitter
     fermionpositions::P1
     widths::W
     permutation::P2
@@ -109,10 +109,10 @@ end
 
 function combine_states(f, fm::FockMapper)
     # T = default_fock_representation(fm.nbr_of_modes)
-    mapreduce(insert_bits, +, f, fm.fermionpositions)
+    ((mapreduce(insert_bits, +, f, fm.fermionpositions), 1),)
 end
-combine_states(fs, fm::FockMapper{<:Any,<:Any,<:BitPermutation}) = concatenate_and_permute(fs, fm.widths, fm.permutation)
-split_state(f::AbstractFockState, fm::FockMapper) = map(site_indices -> substate(site_indices, f), fm.fermionpositions)
+combine_states(fs, fm::FockMapper{<:Any,<:Any,<:BitPermutation}) = ((concatenate_and_permute(fs, fm.widths, fm.permutation), 1),)
+split_state(f::AbstractFockState, fm::FockMapper) = ((map(site_indices -> substate(site_indices, f), fm.fermionpositions), 1),)
 function insert_bits(_x::FockNumber, positions)
     x = _x.f
     result = 0

@@ -46,7 +46,7 @@ function tensor_product(spaces)
     full_space = ProductSpace(Tuple(clusters), collect(atoms))
     if any(isconstrained, spaces)
         splitter = state_splitter(full_space, spaces)
-        states = [combine_states(states, splitter) for states in Iterators.product(map(basisstates, spaces)...)]
+        states = [only(combine_states(states, splitter))[1] for states in Iterators.product(map(basisstates, spaces)...)]
         if length(full_space.clusters) == 1
             return constrain_space(only(full_space.clusters), vec(map(s -> only(s.states), states)))
         end
@@ -106,7 +106,9 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
     if isconstrained(H)
         #restrict states in Hcomp to those compatible with states in Hsub
         splitter = state_splitter(H, (Hsub, Hcomp))
-        states = unique!([compstate for (substate, compstate) in Iterators.map(Base.Fix2(split_state, splitter), basisstates(H)) if !ismissing(state_index(substate, Hsub))])
+        states = unique!([compstate for state in basisstates(H)
+                          for ((substate, compstate), _amp) in split_state(state, splitter)
+                          if !ismissing(state_index(substate, Hsub))])
         return constrain_space(Hcomp, states)
     end
     return Hcomp
@@ -114,16 +116,16 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
 end
 
 
-struct AtomicStateSplitter end
+struct AtomicStateSplitter <: AbstractStateSplitter end
 function state_splitter(H::AbstractAtomicHilbertSpace, Hs)
     only(Hs) == H || throw(ArgumentError("For atomic subspaces, the only valid partition is the whole space"))
     AtomicStateSplitter()
 end
 function split_state(state, ::AtomicStateSplitter)
-    (state,)
+    (((state,), 1),)
 end
 function combine_states(states, ::AtomicStateSplitter)
-    only(states)
+    ((only(states), 1),)
 end
 kron_phase_factor(::AtomicStateSplitter) = (f1, f2) -> 1
 
@@ -304,7 +306,7 @@ kron_phase_factor(::AtomicStateSplitter) = (f1, f2) -> 1
 end
 
 ##
-struct ProductSpaceSplitter{CS,TP,CP,TS}
+struct ProductSpaceSplitter{CS,TP,CP,TS} <: AbstractStateSplitter
     # For each source cluster: splitter into per-target pieces, or nothing if uncovered
     cluster_splitters::CS
 
@@ -408,15 +410,16 @@ function split_state(state::ProductState, sp::ProductSpaceSplitter)
         split_state(state.states[i], sp.cluster_splitters[i])
     end
     # For each target, collect pieces already in target-cluster order (guaranteed by sort above)
-    ntuple(length(sp.target_spaces)) do j
+    outstates = ntuple(length(sp.target_spaces)) do j
         sources = sp.target_piece_sources[j]
         gathered = ntuple(k -> cluster_pieces[sources[k][1]][sources[k][2]], length(sources))
-        combine_states(gathered, sp.target_spaces[j])
+        only(combine_states(gathered, sp.target_spaces[j])) #TODO: handle multiple outcomes from combine_states 
     end
+    ((outstates, 1),)
 end
 
 function combine_states(substates::Tuple, sp::ProductSpaceSplitter)
-    ProductState(ntuple(length(sp.cluster_splitters)) do i
+    outstate = ProductState(ntuple(length(sp.cluster_splitters)) do i
         isnothing(sp.cluster_splitters[i]) &&
             error("Cannot reconstruct state: cluster $i has no atoms in any target")
 
@@ -424,15 +427,16 @@ function combine_states(substates::Tuple, sp::ProductSpaceSplitter)
         gathered = ntuple(k -> extract_substate(substates[piece_destinations[k][1]],
                 piece_destinations[k][2]),
             length(piece_destinations))
-        combine_states(gathered, sp.cluster_splitters[i])
+        only(combine_states(gathered, sp.cluster_splitters[i]))[1] #TODO: handle multiple outcomes from combine_states
     end)
+    ((outstate, 1),)
 end
 
 
 extract_piece(state, ::Int) = state
 extract_piece(state::ProductState, idx::Int) = state.states[idx]
 
-combine_states(states::Tuple, ::ProductSpace{ProductState{B}}) where B = ProductState{B}(B(states))
+combine_states(states::Tuple, ::ProductSpace{ProductState{B}}) where B = ((ProductState{B}(B(states)), 1),)
 
 
 function kron_phase_factor(state_splitter::ProductSpaceSplitter)
@@ -480,7 +484,8 @@ function subregion(Hs, H::AbstractHilbertSpace)
     isconstrained(H) || return Hsub
     splitter = state_splitter(H, (Hsub,))
     function se(state)
-        only(split_state(state, splitter))
+        (substate, _amp) = only(split_state(state, splitter))
+        only(substate)
     end
     states = unique!(vec(map(se, basisstates(H))))
     constrain_space(Hsub, states)

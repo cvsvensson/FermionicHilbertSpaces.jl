@@ -29,7 +29,7 @@ factors(H::ConstrainedSpace) = (parent(H),)
 isconstrained(H::ConstrainedSpace) = true
 cluster_target_subspace(target::ConstrainedSpace, args...) = cluster_target_subspace(parent(target), args...)
 cluster_target_sub_idx(target::ConstrainedSpace, catoms, a2t, ti) = cluster_target_sub_idx(parent(target), catoms, a2t, ti)
-combine_states(substates::Tuple, sp::ConstrainedSpace) = combine_states(substates, parent(sp))
+combine_states(substates, sp::ConstrainedSpace) = combine_states(substates, parent(sp))
 partial_trace_phase_factor(s1, s2, sp::ConstrainedSpace) = partial_trace_phase_factor(s1, s2, parent(sp))
 
 function constrain_space(H::ConstrainedSpace, constraint; kwargs...)
