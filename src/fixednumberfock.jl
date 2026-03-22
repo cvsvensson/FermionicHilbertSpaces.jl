@@ -63,7 +63,7 @@ end
 Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.sites
 
 @testitem "FixedNumberFockState" begin
-    import FermionicHilbertSpaces: jwstring_left, jwstring_right, FixedNumberFockState, FockNumber, SingleParticleState, _bit, substate
+    import FermionicHilbertSpaces: jwstring_left, jwstring_right, FixedNumberFockState, FockNumber, SingleParticleState, _bit, substate, state_splitter, combine_states
     @fermions a
     f = FixedNumberFockState((1, 3, 5))
     f2 = FockNumber(f)
@@ -90,13 +90,13 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     # test permutation and FockMapper
     H1 = hilbert_space(a, 1:2)
     H2 = hilbert_space(a, 3:4)
-    H12 = hilbert_space(a, (4, 2, 1, 3))
-    fm = FermionicHilbertSpaces.state_splitter(H12, (H1, H2))
+    H12 = hilbert_space(a, (1, 3, 2, 4))
+    fm = state_splitter(H12, (H1, H2))
     for (f1, f2) in Base.product(basisstates(H1), basisstates(H2))
         f1fix = FixedNumberFockState(f1)
         f2fix = FixedNumberFockState(f2)
-        f12 = FermionicHilbertSpaces.combine_states((f1, f2), fm)
-        f12fix = FermionicHilbertSpaces.combine_states((f1fix, f2fix), fm)
+        f12 = first(only(combine_states((f1, f2), fm)))
+        f12fix = first(only(combine_states((f1fix, f2fix), fm)))
         @test f12 == FockNumber(f12fix)
     end
 
@@ -174,9 +174,9 @@ end
 
 struct SingleParticleHilbertSpace{H}
     parent::H
-    function SingleParticleHilbertSpace(labels)
+    function SingleParticleHilbertSpace(f::SymbolicFermionBasis, labels)
         states = [SingleParticleState(i) for (i, label) in enumerate(labels)]
-        H = hilbert_space(labels, states)
+        H = hilbert_space(f, labels, states)
         return new{typeof(H)}(H)
     end
 end
@@ -191,14 +191,14 @@ basisstates(h::SingleParticleHilbertSpace) = basisstates(h.parent)
 
 A hilbert space suitable for non-interacting systems with fermion number conservation. Matrix representations of symbolic operators give the single particle hamiltonian, without any contribution from the identity matrix.
 """
-single_particle_hilbert_space(labels) = SingleParticleHilbertSpace(labels)
+single_particle_hilbert_space(f::SymbolicFermionBasis, labels) = SingleParticleHilbertSpace(f, labels)
 basisstate(ind, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
 state_index(state::AbstractFockState, H::SingleParticleHilbertSpace) = state_index(state, parent(H))
 
 @testitem "Single particle hilbert space" begin
     using LinearAlgebra
     @fermions f
-    H = single_particle_hilbert_space(1:2)
+    H = single_particle_hilbert_space(f, 1:2)
     opmul = f[1]' * f[2]
     @test matrix_representation(opmul, H) ≈ matrix_representation(opmul, parent(H))
     opadd = opmul + hc
@@ -230,9 +230,9 @@ end
     Ψ_fixed = eigvecs(collect(ham_fixed))[:, 1]
 
     # Subregion: first two sites
-    sub = [1, 3, 5]
-    Hsub_fock = subregion(sub, H_fock)
-    Hsub_fixed = subregion(sub, H_fixed)
+    Hsub = hilbert_space(f, [1, 3, 5])
+    Hsub_fock = subregion(Hsub, H_fock)
+    Hsub_fixed = subregion(Hsub, H_fixed)
     @test FockNumber.(basisstates(Hsub_fixed)) == basisstates(Hsub_fock)
 
     # Partial trace
@@ -249,13 +249,13 @@ function matrix_representation(op, H::SingleParticleHilbertSpace)
     isquadratic(op) && isnumberconserving(op) || throw(ArgumentError("Only quadratic, number conserving operators supported for SingleParticleHilbertSpace"))
     _matrix_representation_single_space(remove_identity(op), H)
 end
-
+_find_position(op, H::SingleParticleHilbertSpace) = _find_position(op, parent(H))
 function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::SingleParticleHilbertSpace; kwargs...)
     ordering = mode_ordering(H)
     if length(op.factors) != 2
         throw(ArgumentError("Only two-fermion operators supported for free fermions"))
     end
-    fockstates = (SingleParticleState(getindex(ordering, op.factors[1].label)), SingleParticleState(getindex(ordering, op.factors[2].label)))
+    fockstates = (SingleParticleState(_find_position(op.factors[1], H)), SingleParticleState(_find_position(op.factors[2], H)))
     inind = state_index(fockstates[2], H)
     outind = state_index(fockstates[1], H)
     sign = (-1)^op.factors[2].creation

@@ -46,10 +46,11 @@ end
 apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::ConstrainedSpace) = apply_local_operators(ops, state, space.parent)
 function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::AbstractHilbertSpace)
     amp = 1
+    spaces = clusters(space)
     newstate = ProductState(ntuple(length(state.states)) do i
         op = ops[i]
         subst = state.states[i]
-        space = factors(space)[i]
+        space = spaces[i]
         new_state_amps = apply_local_operators(op.factors, subst, space)
         new_local_state, local_amp = only(new_state_amps) #TODO: add support for multiple terms here
         amp *= local_amp
@@ -156,7 +157,7 @@ function _matrix_representation(op::NCMul, bases, space::ProductSpace; kwargs...
     length(spaces) == 1 && return op.coeff * only(matrices)
     op.coeff * kron(reverse(matrices)...)
 end
-function _matrix_representation(op::NCMul, bases, space::Union{<:AbstractAtomicHilbertSpace,<:AbstractClusterHilbertSpace,<:ConstrainedSpace}; kwargs...)
+function _matrix_representation(op::NCMul, bases, space::Union{<:AbstractAtomicHilbertSpace,<:AbstractClusterHilbertSpace,<:ConstrainedSpace,<:BlockHilbertSpace}; kwargs...)
     if isempty(op.factors)
         return op.coeff * I(dim(space))
     else
@@ -174,7 +175,7 @@ end
 function _matrix_representation(op::NCAdd, bases, space::ProductSpace; kwargs...)
     sum(_matrix_representation(term, bases, space; kwargs...) for term in NCterms(op)) + op.coeff * I(dim(space))
 end
-function _matrix_representation(op::NCAdd, bases, space::ConstrainedSpace; kwargs...)
+function _matrix_representation(op::NCAdd, bases, space::Union{<:ConstrainedSpace,<:BlockHilbertSpace}; kwargs...)
     sum(_matrix_representation(term, bases, space; kwargs...) for term in NCterms(op)) + op.coeff * I(dim(space))
 end
 

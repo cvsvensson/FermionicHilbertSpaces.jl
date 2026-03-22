@@ -25,10 +25,10 @@ basisstates(H::ConstrainedSpace) = H.states
 basisstate(n::Int, H::ConstrainedSpace) = H.states[n]
 state_index(state, H::ConstrainedSpace) = get(H.state_index, state, missing)
 atomic_factors(H::ConstrainedSpace) = atomic_factors(parent(H))
+clusters(H::ConstrainedSpace) = clusters(parent(H))
 factors(H::ConstrainedSpace) = (parent(H),)
 isconstrained(H::ConstrainedSpace) = true
-cluster_target_subspace(target::ConstrainedSpace, args...) = cluster_target_subspace(parent(target), args...)
-cluster_target_sub_idx(target::ConstrainedSpace, catoms, a2t, ti) = cluster_target_sub_idx(parent(target), catoms, a2t, ti)
+# cluster_target_subspace(target::ConstrainedSpace, args...) = cluster_target_subspace(parent(target), args...)
 combine_states(substates, sp::ConstrainedSpace) = combine_states(substates, parent(sp))
 partial_trace_phase_factor(s1, s2, sp::ConstrainedSpace) = partial_trace_phase_factor(s1, s2, parent(sp))
 
@@ -44,12 +44,12 @@ function Base.show(io::IO, H::ConstrainedSpace)
     print(io, "Underlying space: ")
     show(IOContext(io, :compact => true), parent(H))
 end
-constrain_space(H,::NoSymmetry) = H
-function constrain_space(H, constraint; sortby=nothing, kwargs...)
-    states = generate_states(H, constraint; kwargs...)
-    isnothing(sortby) || sort!(states, by=sortby)
-    ConstrainedSpace(H, states)
-end
+constrain_space(H, ::NoSymmetry) = H
+# function constrain_space(H, constraint::AbstractConstraint; sortby=nothing, kwargs...)
+#     states = generate_states(H, constraint; kwargs...)
+#     isnothing(sortby) || sort!(states, by=sortby)
+#     ConstrainedSpace(H, states)
+# end
 function constrain_space(H::AbstractHilbertSpace, states::AbstractVector{B}) where B<:AbstractBasisState
     ConstrainedSpace(H, states)
 end

@@ -5,7 +5,8 @@ struct BlockHilbertSpace{B,P,Q} <: AbstractHilbertSpace{B}
     qn_to_states::Dictionary{Q,Vector{B}}
 end
 BlockHilbertSpace(space::P, ordered_basis_states::AbstractVector{B}, state_to_index::Dictionary{B,Int}, qn_to_states::Dictionary{Q,Vector{B}}) where {B,P,Q} = BlockHilbertSpace{B,P,Q}(space, ordered_basis_states, state_to_index, qn_to_states)
-
+Base.hash(H::BlockHilbertSpace, h::UInt) = hash((H.parent, H.ordered_basis_states, H.state_to_index, H.qn_to_states), h)
+Base.:(==)(H1::BlockHilbertSpace, H2::BlockHilbertSpace) = H1 === H2 || (H1.parent == H2.parent && H1.ordered_basis_states == H2.ordered_basis_states && H1.state_to_index == H2.state_to_index && H1.qn_to_states == H2.qn_to_states)
 
 function block_space(space, states, qn)
     _qntostates = group(state -> sector(state, qn), states)
@@ -20,11 +21,12 @@ end
 
 dim(H::BlockHilbertSpace) = length(H.ordered_basis_states)
 atomic_factors(H::BlockHilbertSpace) = atomic_factors(H.parent)
-factors(H::BlockHilbertSpace) = factors(H.parent)
 isconstrained(H::BlockHilbertSpace) = true
 basisstates(H::BlockHilbertSpace) = H.ordered_basis_states
 Base.parent(H::BlockHilbertSpace) = H.parent
 _find_position(Hsub::AbstractHilbertSpace, H::BlockHilbertSpace) = _find_position(Hsub, H.parent)
+clusters(H::BlockHilbertSpace) = clusters(H.parent)
+factors(H::BlockHilbertSpace) = factors(H.parent)
 # cluster_target_subspace(target::BlockHilbertSpace, args...) = cluster_target_subspace(parent(target), args...)
 # cluster_target_sub_idx(target::BlockHilbertSpace, catoms, a2t, ti) = cluster_target_sub_idx(parent(target), catoms, a2t, ti)
 combine_states(substates, H::BlockHilbertSpace) = combine_states(substates, parent(H))
@@ -64,7 +66,7 @@ indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
 
     H = hilbert_space(f, 1:4, NumberConservation())
     @test H isa BlockHilbertSpace
-    @test quantumnumbers(H) == collect(0:4)
+    @test collect(quantumnumbers(H)) == 0:4
 
     for n in 0:4
         Hn = sector(n, H)

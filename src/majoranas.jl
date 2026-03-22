@@ -148,8 +148,8 @@ struct MajoranaHilbertSpace{B,L,H} <: AbstractClusterHilbertSpace{B}
     end
 end
 dim(H::MajoranaHilbertSpace) = dim(H.parent)
-mode_ordering(H::MajoranaHilbertSpace) = mode_ordering(H.parent)
-modes(H::MajoranaHilbertSpace) = modes(H.parent)
+mode_ordering(H::MajoranaHilbertSpace) = H.majoranaindices
+modes(H::MajoranaHilbertSpace) = keys(H.majoranaindices)
 Base.:(==)(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace) = H1.majoranaindices == H2.majoranaindices && H1.parent == H2.parent && H1.sym == H2.sym
 Base.hash(H::MajoranaHilbertSpace, h::UInt) = hash(H.majoranaindices, hash(H.parent, hash(H.sym, h)))
 basisstates(m::MajoranaHilbertSpace) = basisstates(m.parent)
@@ -208,9 +208,9 @@ partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaH
 partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg::SubsystemPartialTraceAlg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
 
 function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,S<:AbstractMajoranaSym,F}
-    sub_modes = Set(Iterators.flatten(modes(Hsub)))
+    sub_modes = modes(Hsub)
     for f in m.factors
-        if f.label ∉ sub_modes
+        if f ∉ sub_modes
             return 0 * m
         end
     end
@@ -226,7 +226,7 @@ end
 @testitem "Partial trace of symbolic Majoranas" begin
     @majoranas y
     H = majorana_hilbert_space(y, 1:6)
-    Hsub = subregion(3:4, H)
+    Hsub = subregion(majorana_hilbert_space(y, 3:4), H)
     op = 1 + 3y[1] + 2y[3] + 4y[1] * y[6] + 3y[4] * y[1] + y[3] * y[4] + y[1] * y[3] * y[4] + y[1] * y[2] * y[6]
     op2 = 3 + 0y[1] # NCterms(op2) is empty
     @test matrix_representation(partial_trace(op, H => Hsub), Hsub) == partial_trace(matrix_representation(op, H), H => Hsub)

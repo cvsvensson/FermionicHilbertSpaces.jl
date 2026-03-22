@@ -103,6 +103,7 @@ function FockMapper(fermionpositions::P) where P
     widths = map(length, fermionpositions)
     nbr_of_modes = maximum(maximum, fermionpositions)
     perm = reduce(vcat, fermionpositions)
+    all(issorted, fermionpositions) || throw(ArgumentError("The order of fermions in each subsystem should be ordered as in the full system, but the provided fermion positions are not sorted: $fermionpositions"))
     permutation = isperm(perm) ? BitPermutation{UInt}(reduce(vcat, fermionpositions))' : nothing
     FockMapper(fermionpositions, widths, permutation, nbr_of_modes)
 end

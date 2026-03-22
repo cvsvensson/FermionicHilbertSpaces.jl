@@ -77,7 +77,7 @@ end
 function apply_local_operators(factors, state::FockNumber{I}, space::AbstractHilbertSpace) where I
     newfocknbr = state
     fermionstatistics = 1
-    for op in reverse(factors)
+    for op in Iterators.reverse(factors)
         dagger = op.creation
         digitpos = _find_position(op, space)
         op = one(I) << (digitpos - 1)

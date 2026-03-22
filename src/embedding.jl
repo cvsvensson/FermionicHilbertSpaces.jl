@@ -16,7 +16,7 @@ function embedding_unitary(partition, basisstates)
 
 
     # assumes partition is a list of list of indices
-    isorderedpartition(partition) || throw(ArgumentError("Must be an ordered partition to calculate embedding unitary"))
+    isorderedpartition(partition, sum(length, partition)) || throw(ArgumentError("Must be an ordered partition to calculate embedding unitary"))
     phases = ones(Int, length(basisstates))
     for (s, Xs) in enumerate(partition)
         mask = focknbr_from_site_indices(Xs)

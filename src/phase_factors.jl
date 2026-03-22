@@ -32,6 +32,10 @@ function isorderedsubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
     issorted(positions) || return false
     return true
 end
+function isorderedpartition(Hsubs, H::AbstractHilbertSpace)
+    positions = map(Hsub -> [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)], Hsubs)
+    isorderedpartition(positions, length(atomic_factors(H)))
+end
 function issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
     positions = [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)]
     all(pos -> pos > 0, positions)
@@ -139,7 +143,6 @@ end
 function kron_phase_factor(state_splitter::FockMapper)
     inds = state_splitter.fermionpositions
     N = sum(length, inds)
-    isorderedpartition(inds) || error("Partition is not ordered")
     T = FockNumber{default_fock_representation(N)}
     masks = map(Xp -> T(focknbr_from_site_indices(Xp)), inds)
     function pfh(f1, f2)

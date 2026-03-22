@@ -50,7 +50,7 @@ function tensor_product(spaces)
         if length(full_space.clusters) == 1
             return constrain_space(only(full_space.clusters), vec(map(s -> only(s.states), states)))
         end
-        full_space = constrain_space(full_space, states)
+        full_space = constrain_space(full_space, vec(states))
     elseif length(clusters) == 1
         return only(clusters)
     end
@@ -62,6 +62,7 @@ Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1.clusters == H2.clusters && H
 Base.hash(H::ProductSpace, h::UInt) = hash(H.clusters, hash(H.atoms, h))
 atomic_factors(H::ProductSpace) = H.atoms
 factors(H::ProductSpace) = H.clusters
+clusters(H::ProductSpace) = H.clusters
 dim(H::ProductSpace) = prod(dim, H.clusters)
 
 basisstates(H::ProductSpace) = collect(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.clusters)...)))
@@ -122,7 +123,7 @@ function state_splitter(H::AbstractAtomicHilbertSpace, Hs)
     AtomicStateSplitter()
 end
 function split_state(state, ::AtomicStateSplitter)
-    (((state,), 1),)
+    (((state, 1),),)
 end
 function combine_states(states, ::AtomicStateSplitter)
     ((only(states), 1),)
@@ -148,7 +149,8 @@ kron_phase_factor(::AtomicStateSplitter) = (f1, f2) -> 1
     @test atomic_factors(Hab) == [Ha, Hb]
     @test dim(Hab) == dim(Ha) * dim(Hb)
 
-    Hboson = TruncatedBosonicHilbertSpace(2)
+    @boson boson
+    Hboson = TruncatedBosonicHilbertSpace(boson, 2)
     H2 = tensor_product([H, Hboson])
     @test dim(H2) == dim(H) * dim(Hboson)
     @test length(H2.clusters) == 3
@@ -161,11 +163,11 @@ kron_phase_factor(::AtomicStateSplitter) = (f1, f2) -> 1
 
     splitter = state_splitter(H, (Ha, Hb))
     for state in basisstates(H)
-        @test split_state(state, splitter) == (substate(1, state.states[1]), substate(2, state.states[1]))
+        @test first(only(split_state(state, splitter))) == (substate(1, state.states[1]), substate(2, state.states[1]))
     end
     splitter = state_splitter(H, (Ha, Hc))
     for state in basisstates(H)
-        @test split_state(state, splitter) == (substate(1, state.states[1]), state.states[2])
+        @test first(only(split_state(state, splitter))) == (substate(1, state.states[1]), state.states[2])
     end
 
 
@@ -177,41 +179,41 @@ kron_phase_factor(::AtomicStateSplitter) = (f1, f2) -> 1
     # Test 1: Trivial partition (whole space as one group)
     p_trivial = state_splitter(H, (H,))
     for state in basisstates(H)
-        split = split_state(state, p_trivial)
+        split = first(only(split_state(state, p_trivial)))
         @test only(split) == state
-        @test combine_states(split, p_trivial) == state
+        @test first(only(combine_states(split, p_trivial))) == state
     end
 
     # Test 2: Binary partition with whole-cluster passthrough
     p_binary = state_splitter(H, (Hab, Hc))
     for state in basisstates(H)
-        substates = split_state(state, p_binary)
+        substates = first(only(split_state(state, p_binary)))
         @test length(substates) == 2
-        @test combine_states(substates, p_binary) == state
+        @test first(only(combine_states(substates, p_binary))) == state
     end
 
     # Test 3: Partition that fractures a fermionic cluster
     # Split the (Ha, Hb) cluster by grouping [Ha] and [Hb, Hc]
-    p_split = state_splitter(H, [Ha, ProductSpace([Hb, Hc])])
+    p_split = state_splitter(H, [Ha, tensor_product((Hb, Hc))])
     for state in basisstates(H)
-        substates = split_state(state, p_split)
+        substates = first(only(split_state(state, p_split)))
         @test length(substates) == 2
-        @test combine_states(substates, p_split) == state
+        @test first(only(combine_states(substates, p_split))) == state
     end
 
     # Test 4: Three-way partition
     p_three = state_splitter(H, [Ha, Hb, Hc])
     for state in basisstates(H)
-        substates = split_state(state, p_three)
+        substates = first(only(split_state(state, p_three)))
         @test length(substates) == 3
-        @test combine_states(substates, p_three) == state
+        @test first(only(combine_states(substates, p_three))) == state
     end
 
     # Test 5: Partition with bosonic space
-    p_mixed = state_splitter(H2, [Hab, ProductSpace([Hc, Hboson])])
+    p_mixed = state_splitter(H2, [Hab, tensor_product((Hc, Hboson))])
     for state in basisstates(H2)
-        substates = split_state(state, p_mixed)
-        @test combine_states(substates, p_mixed) == state
+        substates = first(only(split_state(state, p_mixed)))
+        @test first(only(combine_states(substates, p_mixed))) == state
     end
 
     # Test 6: Validation errors
@@ -221,23 +223,23 @@ kron_phase_factor(::AtomicStateSplitter) = (f1, f2) -> 1
     # Test splitting to subsystems
     p_fermion_incomplete = state_splitter(H, [Ha])
     @test Set(basisstates(Ha)) == Set(map(basisstates(H)) do state
-        only(split_state(state, p_fermion_incomplete))
+        only(first(only(split_state(state, p_fermion_incomplete)))) # first(only()) to get the single outcome, only() to get the substate for Ha
     end)
     p_fermion_incomplete = state_splitter(H, [Hab])
     @test Set(basisstates(Hab)) == Set(map(basisstates(H)) do state
-        only(split_state(state, p_fermion_incomplete))
+        only(first(only(split_state(state, p_fermion_incomplete))))
     end)
 
     # test state_splitter for FermionCluster
     p_fermion = state_splitter(Hab, [Ha, Hb])
     for state in basisstates(Hab)
-        substates = split_state(state, p_fermion)
-        @test combine_states(substates, p_fermion) == state
+        substates = first(only(split_state(state, p_fermion)))
+        @test first(only(combine_states(substates, p_fermion))) == state
     end
 
     p_fermion_incomplete = state_splitter(Hab, [Ha])
     @test Set(basisstates(Ha)) == Set(map(basisstates(Hab)) do state
-        only(split_state(state, p_fermion_incomplete))
+        first(first(only(split_state(state, p_fermion_incomplete)))) # first(only()) to get the single outcome, first() to get the substate for Ha
     end)
 
     # Complement
@@ -305,6 +307,14 @@ kron_phase_factor(::AtomicStateSplitter) = (f1, f2) -> 1
 
 end
 
+@testitem "Fermion ordering" begin
+    import FermionicHilbertSpaces: state_splitter
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    @test_throws ArgumentError state_splitter(H, hilbert_space(f, [2, 1]))
+    @test_throws ArgumentError state_splitter(H, hilbert_space(f, [3, 1]))
+    @test_throws ArgumentError state_splitter(H, hilbert_space(f, [3, 2]))
+end
 ##
 struct ProductSpaceSplitter{CS,TP,CP,TS} <: AbstractStateSplitter
     # For each source cluster: splitter into per-target pieces, or nothing if uncovered
@@ -338,7 +348,7 @@ function state_splitter(source::ProductSpace, targets)
 
     for (ci, cluster) in enumerate(source.clusters)
         catoms = atomic_factors(cluster)
-        covered_targets = unique(atom_to_target[a] for a in catoms if haskey(atom_to_target, a))
+        covered_targets = Tuple(unique(atom_to_target[a] for a in catoms if haskey(atom_to_target, a)))
 
         if isempty(covered_targets)
             push!(cluster_splitters, nothing)
@@ -346,13 +356,26 @@ function state_splitter(source::ProductSpace, targets)
             continue
         end
 
-        subspaces = [cluster_target_subspace(targets[ti], catoms, atom_to_target, ti)
-                     for ti in covered_targets]
+        # println(covered_targets)
+        # println([targets[ti] for ti in covered_targets])
+        piece_destinations = map(covered_targets) do ti
+            (ti, findfirst(cluster -> all(in(catoms), atomic_factors(cluster)), clusters(targets[ti])))
+        end
+        # println(piece_destinations)
+        subspaces = [clusters(targets[ti])[dest] for (ti, dest) in piece_destinations]
+        # print("--")
+        # println(subspaces)
+        # [_find_position(target_cluster, clusters(targets[ti])] for ti in covered_targets]
+        # piece_destinations = Tuple((ti, findfirst(issubspace(atomic_factors(targets[ti])), catoms, atom_to_target, ti)) for ti in covered_targets)
+        # subspaces = [cluster_target_subspace(targets[ti], catoms, atom_to_target, ti)
+        #              for ti in covered_targets]
+        # println(subspaces)
         push!(cluster_splitters, state_splitter(cluster, subspaces))
 
         # Store where each piece goes: (ti, sub_idx_in_target)
-        piece_destinations = Tuple((ti, cluster_target_sub_idx(targets[ti], catoms, atom_to_target, ti))
-                                   for ti in covered_targets)
+        # # piece_destinations = Tuple((ti, cluster_target_sub_idx(targets[ti], catoms, atom_to_target, ti))
+        # #                            for ti in covered_targets)
+        # println(piece_destinations)
         push!(cluster_piece_targets, piece_destinations)
 
         # Accumulate for sorting
@@ -378,21 +401,22 @@ end
 # ─── helpers ───────────────────────────────────────────────────────────────────
 
 # Sub-space of `target` corresponding to the atoms of catoms that belong to target ti
-cluster_target_subspace(target::AbstractAtomicHilbertSpace, catoms, a2t, ti) = target
-cluster_target_subspace(target::AbstractClusterHilbertSpace, catoms, a2t, ti) = target
-function cluster_target_subspace(target::ProductSpace, catoms, a2t, ti)
-    overlap = [a for a in catoms if get(a2t, a, nothing) == ti]
-    inoverlap = in(Set(overlap))
-    for sub in factors(target)
-        atoms = atomic_factors(sub)
-        all(inoverlap, atoms) && length(overlap) == length(atoms) && return sub
-    end
-    throw(ArgumentError("No sub-space with atoms $overlap in target"))
-end
+# cluster_target_subspace(target::AbstractAtomicHilbertSpace, catoms, a2t, ti) = target
+# cluster_target_subspace(target::AbstractClusterHilbertSpace, catoms, a2t, ti) = target
+# issubspace(atoms, target) = all(a -> a in Set(atomic_factors(target)), atoms)
+# function cluster_target_subspace(target, catoms, a2t, ti)
+#     overlap = [a for a in catoms if get(a2t, a, nothing) == ti]
+#     inoverlap = in(Set(overlap))
+#     for sub in clusters(target)
+#         atoms = atomic_factors(sub)
+#         all(inoverlap, atoms) && length(overlap) == length(atoms) && return sub
+#     end
+#     throw(ArgumentError("No sub-space with atoms $overlap in target"))
+# end
 
 # Index of that sub-space within target (1 for atomic/cluster targets)
 # cluster_target_sub_idx(::Any, catoms, a2t, ti) = 1
-cluster_target_sub_idx(target, catoms, a2t, ti) = _find_position(cluster_target_subspace(target, catoms, a2t, ti), target)
+# cluster_target_sub_idx(target, catoms, a2t, ti) = _find_position(cluster_target_subspace(target, catoms, a2t, ti), target)
 _find_position(target::AbstractAtomicHilbertSpace, parent::AbstractAtomicHilbertSpace) = target == parent ? 1 : 0
 _find_position(target::AbstractClusterHilbertSpace, parent::AbstractClusterHilbertSpace) = target == parent ? 1 : 0
 
@@ -406,14 +430,16 @@ extract_substate(state, k) = state
 function split_state(state::ProductState, sp::ProductSpaceSplitter)
     # Split each source cluster into its pieces
     cluster_pieces = ntuple(length(sp.cluster_splitters)) do i
+        # println("Splitting cluster $i with splitter $(sp.cluster_splitters[i])")
+        # println("Result: ", split_state(state.states[i], sp.cluster_splitters[i]))
         isnothing(sp.cluster_splitters[i]) ? () :
-        split_state(state.states[i], sp.cluster_splitters[i])
+        first(only(split_state(state.states[i], sp.cluster_splitters[i]))) #TODO: handle multiple outcomes from split_state. The use of first(only()) assumes that each cluster splitter produces exactly one piece per target
     end
     # For each target, collect pieces already in target-cluster order (guaranteed by sort above)
     outstates = ntuple(length(sp.target_spaces)) do j
         sources = sp.target_piece_sources[j]
         gathered = ntuple(k -> cluster_pieces[sources[k][1]][sources[k][2]], length(sources))
-        only(combine_states(gathered, sp.target_spaces[j])) #TODO: handle multiple outcomes from combine_states 
+        first(only(combine_states(gathered, sp.target_spaces[j]))) #TODO: handle multiple outcomes from combine_states 
     end
     ((outstates, 1),)
 end
@@ -509,9 +535,8 @@ function isorderedpartition(partition, order)
     all(covered) || return false
     return true
 end
-function isorderedpartition(partition)
-    n = sum(length, partition)
-    covered = falses(n)
+function isorderedpartition(partition, N::Int)
+    covered = falses(N)
     for subsystem in partition
         lastpos = 0
         for pos in subsystem

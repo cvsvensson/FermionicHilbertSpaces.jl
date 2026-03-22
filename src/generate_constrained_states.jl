@@ -64,10 +64,6 @@ function generate_states(space, constraints; partial_processor=nothing, leaf_pro
     spaces = factors(space)
     results = _init_results(spaces, leaf_processor)
 
-    if isempty(spaces)
-        push!(results, process_leaf(leaf_processor, (), spaces))
-        return results
-    end
     all_statetypes = statetype.(spaces)
     # Start backtracking
     partial = Vector{Union{all_statetypes...}}(undef, length(spaces))

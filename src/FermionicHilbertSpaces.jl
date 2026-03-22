@@ -32,9 +32,11 @@ abstract type AbstractAtomicHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractProductHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractClusterHilbertSpace{B} <: AbstractProductHilbertSpace{B} end
 abstract type AbstractFermionicClusterHilbertSpace{B} <: AbstractClusterHilbertSpace{B} end
+factors(H::AbstractAtomicHilbertSpace) = (H,)
+clusters(H::AbstractAtomicHilbertSpace) = (H,)
 atomic_factors(H::AbstractAtomicHilbertSpace) = (H,)
 factors(H::AbstractClusterHilbertSpace) = atomic_factors(H)
-factors(H::AbstractAtomicHilbertSpace) = (H,)
+clusters(H::AbstractClusterHilbertSpace) = (H,)
 
 """
     HC
@@ -75,7 +77,6 @@ include("fixednumberfock.jl")
 include("majoranas.jl")
 include("bosons.jl")
 include("spin.jl")
-include("qubit.jl")
 
 include("bdg.jl")
 

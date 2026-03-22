@@ -5,34 +5,33 @@ using TestItemRunner
 @testitem "Basis" begin
     using SparseArrays, LinearAlgebra, Random
     Random.seed!(1234)
+    @fermions f
     N = 2
-    H = hilbert_space(1:N)
+    H = hilbert_space(f, 1:N)
     B = fermions(H)
-    Hspin = hilbert_space(Base.product(1:N, (:↑, :↓)), NumberConservation())
-    Bspin = fermions(Hspin)
+    Hspin = hilbert_space(f, Base.product(1:N, (:↑, :↓)), NumberConservation())
     @test B[1] isa SparseMatrixCSC
-    @test Bspin[1, :↑] isa SparseMatrixCSC
     @test parityoperator(H) isa SparseMatrixCSC
     @test parityoperator(Hspin) isa SparseMatrixCSC
 
-    H = hilbert_space(1:3)
+    H = hilbert_space(f, 1:3)
     a = fermions(H)
-    Hs = (hilbert_space(1:1), hilbert_space(2:2), hilbert_space(3:3))
+    Hs = (hilbert_space(f, 1:1), hilbert_space(f, 2:2), hilbert_space(f, 3:3))
     Hw = tensor_product(Hs)
 
-    v = [FermionicHilbertSpaces.basisstate(i, H) for i in 1:8]
+    v = [FermionicHilbertSpaces.basisstate(i, H).f for i in 1:8]
     t1 = reshape(v, H, Hs)
     t2 = [i1 + 2i2 + 4i3 for i1 in (0, 1), i2 in (0, 1), i3 in (0, 1)]
-    @test t1 == FockNumber.(t2)
+    @test t1 == (t2)
 
     qn = ParityConservation()
-    H1 = hilbert_space(2:2, qn)
-    H2 = hilbert_space((1, 3), qn)
-    H = hilbert_space(1:3, qn)
-    v = [FermionicHilbertSpaces.basisstate(i, H) for i in 1:8]
+    H1 = hilbert_space(f, 2:2, qn)
+    H2 = hilbert_space(f, (1, 3), qn)
+    H = hilbert_space(f, 1:3, qn)
+    v = [FermionicHilbertSpaces.basisstate(i, H).f for i in 1:8]
     t1 = reshape(v, H, Hs)
     t2 = [i1 + 2i2 + 4i3 for i1 in (0, 1), i2 in (0, 1), i3 in (0, 1)]
-    @test t1 == FockNumber.(t2)
+    @test t1 == (t2)
 
     using LinearMaps
     d = dim(H)
@@ -43,8 +42,8 @@ using TestItemRunner
     @test ptmap ≈ partial_trace(H => H1)
     @test embeddingmap ≈ embed(H1 => H)
 
-    H = hilbert_space(Base.product(1:2, (:a, :b)))
-    Hparity = hilbert_space(Base.product(1:2, (:a, :b)), ParityConservation())
+    H = hilbert_space(f, Base.product(1:2, (:a, :b)))
+    Hparity = hilbert_space(f, Base.product(1:2, (:a, :b)), ParityConservation())
     ρ = Matrix(Hermitian(rand(2^4, 2^4) .- 0.5))
     ρ = ρ / tr(ρ)
     function bilinears(H, labels)
@@ -53,13 +52,13 @@ using TestItemRunner
         return [op1 * op2 for (op1, op2) in Base.product(ops, ops)]
     end
     function bilinear_equality(H, Hsub, ρ)
-        subsystem = Tuple(keys(Hsub))
+        subsystem = Tuple(atomic_factors(Hsub))
         ρsub = partial_trace(ρ, H, Hsub)
         @test tr(ρsub) ≈ 1
         all((tr(op1 * ρ) ≈ tr(op2 * ρsub)) for (op1, op2) in zip(bilinears(H, subsystem), bilinears(Hsub, subsystem)))
     end
     function get_subsystems(c, N)
-        t = collect(Base.product(ntuple(i -> keys(c), N)...))
+        t = collect(Base.product(ntuple(i -> atomic_factors(c), N)...))
         (t[I] for I in CartesianIndices(t) if issorted(Tuple(I)) && allunique(Tuple(I)))
     end
     for N in 1:4
@@ -103,15 +102,13 @@ end
         c23 = fermions(H23)
 
         γ = Hermitian([0I rand(ComplexF64, 4, 4); rand(ComplexF64, 4, 4) 0I])
-        f = c[1]
-        @test tr(c1[1] * partial_trace(γ, H, H1)) ≈ tr(f * γ)
-        @test tr(c12[1] * partial_trace(γ, H, H12)) ≈ tr(f * γ)
-        @test tr(c13[1] * partial_trace(γ, H, H13)) ≈ tr(f * γ)
+        @test tr(c1[1] * partial_trace(γ, H, H1)) ≈ tr(c[1] * γ)
+        @test tr(c12[1] * partial_trace(γ, H, H12)) ≈ tr(c[1] * γ)
+        @test tr(c13[1] * partial_trace(γ, H, H13)) ≈ tr(c[1] * γ)
 
-        f = c[2]
-        @test tr(c2[2] * partial_trace(γ, H, H2)) ≈ tr(f * γ)
-        @test tr(c12[2] * partial_trace(γ, H, H12)) ≈ tr(f * γ)
-        @test tr(c23[2] * partial_trace(γ, H, H23)) ≈ tr(f * γ)
+        @test tr(c2[2] * partial_trace(γ, H, H2)) ≈ tr(c[2] * γ)
+        @test tr(c12[2] * partial_trace(γ, H, H12)) ≈ tr(c[2] * γ)
+        @test tr(c23[2] * partial_trace(γ, H, H23)) ≈ tr(c[2] * γ)
 
         test_adjoint(H1, H)
         test_adjoint(H12, H)

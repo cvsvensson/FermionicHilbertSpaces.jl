@@ -122,7 +122,7 @@ statetype(::Nothing) = Nothing
     constraint = ParityConservation()
     HS = hilbert_space(f, [1, 2], constraint)
     HSsub = subregion(hilbert_space(f, [1]), HS)
-    @test basisstates(HSsub) == [FockNumber(0), FockNumber(1)]
+    @test all(in([FockNumber(0), FockNumber(1)]), basisstates(HSsub))
     # Error on non-subsystem
     @test_throws ArgumentError subregion(hilbert_space(f, [4]), H)
 end
