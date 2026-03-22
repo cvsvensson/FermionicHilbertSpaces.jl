@@ -23,9 +23,9 @@ end
 
 instantiate(constraints::ProductConstraint, H) = prod(instantiate(cons, H) for cons in constraints.constraints)
 Base.:*(sym1::AbstractConstraint, sym2::AbstractConstraint) = ProductConstraint((sym1, sym2))
-Base.:*(sym1::AbstractConstraint, sym2::ProductConstraint) = ProductConstraint((sym1, sym2.symmetries...))
-Base.:*(sym1::ProductConstraint, sym2::AbstractConstraint) = ProductConstraint((sym1.symmetries..., sym2))
-Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint((sym1.symmetries..., sym2.symmetries...))
+Base.:*(sym1::AbstractConstraint, sym2::ProductConstraint) = ProductConstraint((sym1, sym2.constraints...))
+Base.:*(sym1::ProductConstraint, sym2::AbstractConstraint) = ProductConstraint((sym1.constraints..., sym2))
+Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint((sym1.constraints..., sym2.constraints...))
 generate_states(space, constraint::ProductConstraint; kwargs...) = generate_states(space, constraint.constraints; kwargs...)
 
 struct BranchConstraint{F} <: AbstractBranchConstraint
@@ -52,7 +52,7 @@ _init_results(spaces, ::typeof(identity)) = Tuple{statetype.(spaces)...}[]
 _init_results(spaces, leaf_processor) = Any[]
 
 """
-    generate_states(spaces, constraint::AbstractBranchConstraint; partial_processor=nothing, leaf_processor=identity)
+    generate_states(spaces, constraints; partial_processor=nothing, leaf_processor=identity)
 
 Generate all tensor product states from `spaces` satisfying `constraint`.
 Uses backtracking with pruning via `valid_branch`.
@@ -60,10 +60,11 @@ Uses backtracking with pruning via `valid_branch`.
 `partial_processor(partial_state, depth, spaces)` is called whenever a branch is accepted.
 `leaf_processor(full_state, spaces)` can transform each completed state before storing it.
 """
-function generate_states(space, constraints; partial_processor=nothing, leaf_processor=identity)
+generate_states(space, constraint::AbstractConstraint; kwargs...) = generate_states(space, (constraint,); kwargs...)
+function generate_states(space, _constraints; partial_processor=nothing, leaf_processor=identity)
     spaces = factors(space)
+    constraints = map(c -> branch_constraint(c, space), _constraints)
     results = _init_results(spaces, leaf_processor)
-
     all_statetypes = statetype.(spaces)
     # Start backtracking
     partial = Vector{Union{all_statetypes...}}(undef, length(spaces))

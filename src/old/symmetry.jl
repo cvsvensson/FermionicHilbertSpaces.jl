@@ -303,97 +303,82 @@ basisstates(jw::JordanWignerOrdering, qn::NumberConservations, ::Type{F}=FockNum
     @test dim(constrain_space(H, ParityConservation([-1, 1]))) == 2^5
 
     ## ProductSymmetry
-    qn, fs = instantiate_and_get_basisstates(H.jw, ParityConservation([1]) * number_conservation(1:2, in(1:3)))
-    H2 = hilbert_space(1:5, qn, fs)
-    @test sort(basisstates(H2)) == sort(fs)
-    @test all(iseven ∘ fermionnumber, fs)
-    @test all(fermionnumber(f, qn.symmetries[2].weights[1]) in 1:2 for f in fs)
+    qn = ParityConservation([1]) * NumberConservation(1:2, H.modes[1:3])
+    states = FermionicHilbertSpaces.generate_states(H, qn)
+    H2 = hilbert_space(f, 1:5, qn)
+    @test sort(basisstates(H2)) == sort(map(state -> FermionicHilbertSpaces.catenate_fock_states(state, H.modes), states))
+    @test all(iseven ∘ fermionnumber, basisstates(H2))
 end
 
-# @testitem "sector" begin
-#     import FermionicHilbertSpaces: sector
-#     # Create a Hilbert space with parity symmetry
-#     labels = 1:3
-#     qn = ParityConservation()
-#     H = hilbert_space(labels, qn)
-#     n = length(basisstates(H.symmetry))
-#     m = reshape(1:(n^2), n, n)  # simple test matrix
-#     # Get the sector for parity = 1
-#     even_sector = sector(m, 1, H)
-#     # The size of the even sector block should match the number of even-parity states
-#     even_states = [f for f in basisstates(H) if qn(f) == 1]
-#     @test size(even_sector, 1) == length(even_states)
-#     @test size(even_sector, 2) == length(even_states)
-#     # The values should match the corresponding block in m
-#     # Get the indices of even states in the full basisstates list
-#     even_inds = findall(f -> qn(f) == 1, basisstates(H.symmetry))
-#     @test even_sector == m[even_inds, even_inds]
-#     # Test that an invalid sector throws an error
-#     @test_throws ArgumentError sector(m, 99, H)
+@testitem "sector" begin
+    import FermionicHilbertSpaces: sector, parity
+    # Create a Hilbert space with parity symmetry
+    @fermions f
+    labels = 1:3
+    qn = ParityConservation()
+    H = hilbert_space(f, labels, qn)
+    n = length(basisstates(H))
+    m = reshape(1:(n^2), n, n)  # simple test matrix
+    # Get the sector for parity = 1
+    even_inds = indices(1, H)
+    even_sector = m[even_inds, even_inds]
+    # The size of the even sector block should match the number of even-parity states
+    even_states = [f for f in basisstates(H) if parity(f) == 1]
+    @test size(even_sector, 1) == length(even_states)
+    # The values should match the corresponding block in m
+    # Get the indices of even states in the full basisstates list
+    even_inds = findall(f -> parity(f) == 1, basisstates(H))
+    @test even_sector == m[even_inds, even_inds]
 
-#     # Test with NumberConservation
-#     qn_f = number_conservation([1, 2])
-#     Hf = hilbert_space(labels, qn_f)
-#     n_f = length(basisstates(Hf.symmetry))
-#     m_f = reshape(1:(n_f^2), n_f, n_f)
-#     # Test sector for fermion number = 1
-#     sector1 = sector(m_f, 1, Hf)
-#     states1 = [f for f in basisstates(Hf) if qn_f(f) == 1]
-#     inds1 = findall(f -> qn_f(f) == 1, basisstates(Hf.symmetry))
-#     @test size(sector1, 1) == length(states1)
-#     @test size(sector1, 2) == length(states1)
-#     @test sector1 == m_f[inds1, inds1]
-#     # Test sector for fermion number = 2
-#     sector2 = sector(m_f, 2, Hf)
-#     states2 = [f for f in basisstates(Hf) if qn_f(f) == 2]
-#     inds2 = findall(f -> qn_f(f) == 2, basisstates(Hf.symmetry))
-#     @test size(sector2, 1) == length(states2)
-#     @test size(sector2, 2) == length(states2)
-#     @test sector2 == m_f[inds2, inds2]
-#     # Test that an invalid sector throws an error
-#     @test_throws ArgumentError sector(m_f, 99, Hf)
-# end
+    # Test with NumberConservation
+    import FermionicHilbertSpaces: fermionnumber
+    qn_f = NumberConservation([1, 2])
+    Hf = hilbert_space(f, labels, qn_f)
+    n_f = length(basisstates(Hf))
+    m_f = reshape(1:(n_f^2), n_f, n_f)
+    # Test sector for fermion number = 1
+    sector1_inds = indices(1, Hf)
+    sector1 = m_f[sector1_inds, sector1_inds]
+    states1 = [f for f in basisstates(Hf) if fermionnumber(f) == 1]
+    inds1 = findall(f -> fermionnumber(f) == 1, basisstates(H))
+    @test size(sector1, 1) == length(states1)
+    @test sector1 == m_f[inds1, inds1]
+    # Test sector for fermion number = 2
+    sector2_inds = indices(2, Hf)
+    sector2 = m_f[sector2_inds, sector2_inds]
+    states2 = [f for f in basisstates(Hf) if fermionnumber(f) == 2]
+    inds2 = findall(f -> fermionnumber(f) == 2, basisstates(Hf))
+    @test size(sector2, 1) == length(states2)
+    @test sector2 == m_f[inds2, inds2]
+    # Test that an invalid sector throws an error
+    @test_throws "Dictionaries.IndexError" sector(99, Hf)
+    @test_throws "Dictionaries.IndexError" indices(99, Hf)
+end
 
 @testitem "No double occupation projection" begin
+    @fermions f
     N = 4
     Nup = 2
     Ndn = 1
     spins = (:↑, :↓)
     spatial_labels = 1:N
-    labels = Base.product(spatial_labels, spins)
-    spin_conservation = prod(number_conservation(Nσ, label -> label[2] == σ) for (σ, Nσ) in zip(spins, (Nup, Ndn)))
-    no_double_occupation = prod(number_conservation(0:1, label -> k in label) for k in spatial_labels)
+    labels = collect(Base.product(spatial_labels, spins))
+    spin_up_sites = filter(label -> label[2] == :↑, labels)
+    spin_up_conservation = NumberConservation(Nup, hilbert_space(f, spin_up_sites))
+    spin_down_sites = filter(label -> label[2] == :↓, labels)
+    spin_down_conservation = NumberConservation(Ndn, hilbert_space(f, spin_down_sites))
+    no_double_occupation = prod(NumberConservation(0:1, hilbert_space(f, [(k, σ) for σ in spins])) for k in spatial_labels)
+    # no_double_occupation = prod(number_conservation(0:1, label -> k in label) for k in spatial_labels)
 
-    qn = spin_conservation * no_double_occupation
-    H = hilbert_space(labels, qn)
-    @fermions f
+    qn = spin_up_conservation * spin_down_conservation * no_double_occupation
+    H = hilbert_space(f, labels, qn)
+    H = hilbert_space(f, labels)
+    func = FermionicHilbertSpaces.sector_function(qn, H)
     hopping_symham = sum(zip(spatial_labels, spatial_labels[2:end])) do (i, j)
         sum(spins) do σ
             f[(i, σ)]' * f[(j, σ)] + hc
         end
     end
-    @test_throws ArgumentError matrix_representation(hopping_symham, H)
+    @test_throws MethodError matrix_representation(hopping_symham, H)
     @test size(matrix_representation(hopping_symham, H; projection=true), 1) == dim(H)
-end
-
-symmetrize(H::AbstractFockHilbertSpace, f::Function) = symmetrize(H, FockSymmetryFunction(f))
-function symmetrize(H::AbstractFockHilbertSpace, qn::AbstractSymmetry)
-    qn_instantiated = instantiate(qn, H.jw)
-    sym = focksymmetry(basisstates(H), qn_instantiated)
-    hilbert_space(H.jw, sym)
-end
-
-@testitem "symmetrize" begin
-    import FermionicHilbertSpaces: symmetrize, number_conservation, fermionnumber
-    labels = 1:4
-    H = hilbert_space(labels)
-    H_sym = symmetrize(H, number_conservation(2))
-    @test all(fermionnumber(f) == 2 for f in basisstates(H_sym))
-    @test dim(H_sym) == binomial(length(labels), 2)
-    @test H_sym == hilbert_space(labels, number_conservation(2))
-
-    qn = FermionicHilbertSpaces.focksymmetry(f -> fermionnumber(f) == 1 ? :a : missing)
-    H2 = symmetrize(H, qn)
-    @test H2 == symmetrize(H, qn.qn)
-    @test all(fermionnumber(f) == 1 for f in basisstates(H2))
 end

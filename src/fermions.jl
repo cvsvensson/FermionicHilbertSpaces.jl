@@ -20,7 +20,7 @@ function Base.show(io::IO, c::FermionicMode)
     get(io, :compact, false) || return print(io, "FermionicMode(", c.symbolic_basis.name, "[", c.label, "])")
     print(io, c.symbolic_basis.name, "[", c.label, "]")
 end
-combine_into_cluster(group::FermionicGroup, fermions) = FermionCluster(fermions, group)
+combine_into_cluster(group::FermionicGroup, fermions) = all(f->atomic_group(f) == group, fermions) ? FermionCluster(fermions, group) : throw(ArgumentError("Not all fermions belong to the same group"))
 function basisstate(n::Int, H::FermionicMode)
     n == 1 && return FockNumber(false)
     n == 2 && return FockNumber(true)
@@ -38,7 +38,6 @@ atomic_factors(H::FermionicMode) = (H,)
 atom_position(atom, H::FermionicMode) = atom == H ? 1 : 0
 
 label(H::FermionicMode) = H.label
-fermionic_hilbert_space(label) = FermionicMode(label)
 nbr_of_modes(H::FermionicMode) = 1
 dim(H::FermionicMode) = 2
 
@@ -52,6 +51,7 @@ struct FermionCluster{F,L} <: AbstractFermionicClusterHilbertSpace{F}
         new{F,L}(modes, mode_ordering, group)
     end
 end
+FermionCluster(modes::AbstractVector{FermionicMode}) = FermionCluster(modes, unique(map(atomic_group, modes)))
 Base.:(==)(c1::FermionCluster, c2::FermionCluster) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionCluster, h::UInt) = hash(c.modes, hash(c.group, h))
 basisstates(H::FermionCluster{F}) where F = Iterators.map(F ∘ FockNumber, UnitRange{UInt64}(0, dim(H) - 1))
@@ -113,6 +113,8 @@ struct NumberConservation{T,H} <: AbstractConstraint
 end
 NumberConservation(n) = NumberConservation(n, nothing)
 NumberConservation() = NumberConservation(nothing, nothing)
+NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(total, (subspace,))
+NumberConservation(total, subspace::AbstractClusterHilbertSpace) = NumberConservation(total, atomic_factors(subspace))
 
 struct ParityConservation{H} <: AbstractConstraint
     allowed_parities::Vector{Int}
@@ -121,17 +123,38 @@ end
 ParityConservation() = ParityConservation([-1, 1], nothing)
 ParityConservation(ps::AbstractVector{Int}) = ParityConservation(Vector{Int}(ps), nothing)
 ParityConservation(p::Int) = ParityConservation([p], nothing)
+ParityConservation(ps, subspace::AbstractHilbertSpace) = ParityConservation(ps, (subspace,))
 
-function instantiate(constraint::ParityConservation, H::Union{<:FermionCluster,<:FermionicMode})
+function branch_constraint(constraint::ParityConservation, H::Union{<:FermionCluster,<:FermionicMode})
     possible_numbers = isnothing(constraint.subspaces) ? (0:nbr_of_modes(H)) : (0:sum(nbr_of_modes, constraint.subspaces))
     allowed_numbers = filter(n -> any(p -> p == (-1)^n, constraint.allowed_parities), possible_numbers)
-    constraint = unweighted_number_branch_constraint(allowed_numbers, constraint.subspaces, atomic_factors(H))
+    unweighted_number_branch_constraint(allowed_numbers, constraint.subspaces, atomic_factors(H))
 end
 
-function instantiate(constraint::NumberConservation{T,H}, space::Union{<:FermionCluster,<:FermionicMode}) where {T,H}
+function branch_constraint(constraint::NumberConservation{T,H}, space::Union{<:FermionCluster,<:FermionicMode}) where {T,H}
     subspaces = H <: Nothing ? atomic_factors(space) : constraint.subspaces
     total = T <: Nothing ? (0:sum(maximum_particles, subspaces)) : constraint.total
-    constraint = unweighted_number_branch_constraint(total, subspaces, atomic_factors(space))
+    unweighted_number_branch_constraint(total, subspaces, atomic_factors(space))
+end
+function sector_function(constraint::NumberConservation{T,Nothing}, space) where {T}
+    f -> particle_number(f)
+end
+function sector_function(constraint::ParityConservation{Nothing}, space)
+    f -> parity(f)
+end
+function sector_function(constraint::NumberConservation, space)
+    positions = map(Base.Fix2(_find_position, space), constraint.subspaces)
+    mask = focknbr_from_site_indices(positions)
+    f -> particle_number(f & mask)
+end
+function sector_function(constraint::ParityConservation, space)
+    positions = map(Base.Fix2(_find_position, space), constraint.subspaces)
+    mask = focknbr_from_site_indices(positions)
+    f -> parity(f & mask)
+end
+function sector_function(constraint::ProductConstraint, space)
+    subspace_functions = map(cons -> sector_function(cons, space), constraint.constraints)
+    state -> map(f -> f(state), subspace_functions)
 end
 sectors(::AbstractConstraint) = nothing
 has_sectors(N::NumberConservation) = true
@@ -139,32 +162,31 @@ has_sectors(P::ParityConservation) = true
 has_sectors(c::ProductConstraint) = any(has_sectors, c.constraints)
 
 function constrain_space(space, constraint::AbstractConstraint)
-    # constrained = constrain_space(space, new_constraint; leaf_processor=default_processor(space, constraint, new_constraint), sortby=default_sorter(space, constraint, new_constraint))
     sortby = default_sorter(space, constraint)
     leaf_processor = default_processor(space, constraint)
-    # new_constraint = instantiate(constraint, space)
-    states = generate_states(space, instantiate(constraint, space); leaf_processor)
+    states = generate_states(space, constraint; leaf_processor)
     isnothing(sortby) || sort!(states, by=sortby)
     has_sectors(constraint) || return ConstrainedSpace(space, states)
-    block_space(space, states, constraint)
+    block_space(space, states, sector_function(constraint, space))
 end
 default_processor(space::Union{<:FermionCluster,<:FermionicMode}, _) = CombineFockNumbersProcessor()
 default_processor(space, _, _) = nothing
 default_sorter(space, constraint) = nothing
 default_sorter(space::Union{<:FermionCluster,<:FermionicMode}, constraint::ParityConservation) = f -> (parity(f), f)
 default_sorter(space::Union{<:FermionCluster,<:FermionicMode}, constraint::NumberConservation) = f -> (particle_number(f), f)
-
-sector(f::FockNumber, qn::ParityConservation) = parity(f)
-sector(f::FockNumber, qn::NumberConservation) = particle_number(f)
-sector(state, c::ProductConstraint) = map(q -> sector(state, q), c.constraints)
+# sector(f::FockNumber, qn::ParityConservation{Nothing}) = parity(f)
+# sector(f::FockNumber, qn::NumberConservation{T,Nothing}) = particle_number(f)
+# sector(state, c::ProductConstraint) = map(q -> sector(state, q), c.constraints)
 @testitem "ProductSymmetry" begin
     labels = 1:4
     qn = NumberConservation() * ParityConservation()
     @fermions f
     H = hilbert_space(f, labels, qn)
-    @test keys(H.symmetry.qntofockstates).values == [(n, (-1)^n) for n in 0:4]
-    qn = prod(number_conservation(label -> label == l) for l in labels)
-    @test all(length.(hilbert_space(labels, qn).symmetry.qntofockstates) .== 1)
+    @test collect(quantumnumbers(H)) == [(n, (-1)^n) for n in 0:4]
+    qn = prod(NumberConservation(nothing, hilbert_space(f, l)) for l in labels)
+    H = hilbert_space(f, labels, qn)
+    @test dim(H) == 2^4
+    @test all(isone ∘ dim, sectors(H))
 end
 
 

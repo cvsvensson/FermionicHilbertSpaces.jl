@@ -163,6 +163,7 @@ function fermions(H::FermionCluster)
     reps = [fermion_sparse_matrix(n, H) for n in 1:M]
     OrderedDict(zip(labelvec, reps))
 end
+fermions(H::FermionicMode) = fermions(FermionCluster([H]))
 
 """
     majoranas(H)
@@ -179,6 +180,7 @@ end
 
 @testitem "CAR" begin
     using LinearAlgebra
+    import FermionicHilbertSpaces: operators
     @fermions f
     for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
         c = operators(hilbert_space(f, 1:2, qn))

@@ -59,9 +59,9 @@ embedding_unitary(partition, H::AbstractFockHilbertSpace) = embedding_unitary(pa
 bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_embedding_unitary(X, Xbar, basisstates(H), H.jw)
 
 
-#= Tests for isorderedsubsystem, issubsystem, and consistent_ordering for Hilbert spaces =#
+#= Tests for isorderedsubsystem and issubsystem for Hilbert spaces =#
 @testitem "Hilbert space subsystem and ordering" begin
-    import FermionicHilbertSpaces: isorderedsubsystem, issubsystem, consistent_ordering
+    import FermionicHilbertSpaces: isorderedsubsystem, issubsystem
     @fermions f
     # Simple Hilbert spaces
     H = hilbert_space(f, [1, 2, 3])

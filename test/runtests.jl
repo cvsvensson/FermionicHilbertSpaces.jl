@@ -42,6 +42,7 @@ using TestItemRunner
     @test ptmap ≈ partial_trace(H => H1)
     @test embeddingmap ≈ embed(H1 => H)
 
+    import FermionicHilbertSpaces: atomic_factors
     H = hilbert_space(f, Base.product(1:2, (:a, :b)))
     Hparity = hilbert_space(f, Base.product(1:2, (:a, :b)), ParityConservation())
     ρ = Matrix(Hermitian(rand(2^4, 2^4) .- 0.5))
