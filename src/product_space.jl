@@ -10,7 +10,7 @@ Base.:(==)(s1::ProductState, s2::ProductState) = s1.states == s2.states
 Base.hash(s::ProductState, h::UInt) = hash(s.states, h)
 
 #ClusterSpace consists of atoms. A cluster compresses states and has nontrivial phase factors
-atomic_group(h::AbstractAtomicHilbertSpace) = h
+symbolic_group(h::AbstractAtomicHilbertSpace) = h
 # ProductSpaces consists of a list of atomic spaces and clusters
 struct ProductSpace{B,C,A} <: AbstractProductHilbertSpace{B}
     clusters::C
@@ -40,7 +40,7 @@ function tensor_product(spaces)
         return only(spaces)
     end
     atoms = (Iterators.flatten(Iterators.map(atomic_factors, spaces)))
-    _groups = group(atomic_group, atoms)
+    _groups = group(symbolic_group, atoms)
     groups = (map(g -> map(identity, g), _groups)) #This can convert the groups into vectors of concrete types
     clusters = map(typegroup -> combine_into_cluster(typegroup...), pairs(groups))
     full_space = ProductSpace(Tuple(clusters), collect(atoms))
@@ -640,16 +640,16 @@ function isorderedpartition(partition, N::Int)
 end
 
 function _precomputation_before_operator_application(ops::Vector, space::ProductSpace)
-    map((subops, space) -> _precomputation_before_operator_application(subops, space), ops, space.spaces)
+    map((subops, space) -> _precomputation_before_operator_application(subops, space), ops, factors(space))
 end
-function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::ProductSpace, precomp)
+function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::ProductSpace, precomps)
     amp = 1
     spaces = clusters(space)
     newstate = ProductState(ntuple(length(state.states)) do i
         op = ops[i]
         subst = state.states[i]
         space = spaces[i]
-        new_state_amps = apply_local_operators(op.factors, subst, space, precomps[i])
+        new_state_amps = apply_local_operators(op, subst, space, precomps[i])
         new_local_state, local_amp = only(new_state_amps) #TODO: add support for multiple terms here
         amp *= local_amp
         new_local_state

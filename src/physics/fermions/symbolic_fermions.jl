@@ -4,7 +4,7 @@ struct SymbolicFermionBasis
     group::FermionicGroup
 end
 Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.group, h))
-atomic_group(h::SymbolicFermionBasis) = fermionic_group(h)
+symbolic_group(h::SymbolicFermionBasis) = fermionic_group(h)
 fermionic_group(b::SymbolicFermionBasis) = b.group
 """
     @fermions a b ...
@@ -42,7 +42,7 @@ struct FermionSym{L,B} <: AbstractFermionSym
 end
 Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.label, x.basis)
 Base.iszero(x::FermionSym) = false
-atomic_group(h::FermionSym) = atomic_group(h.basis)
+symbolic_group(h::FermionSym) = symbolic_group(h.basis)
 
 function Base.show(io::IO, x::FermionSym)
     print(io, x.basis.name, x.creation ? "†" : "")
@@ -64,8 +64,8 @@ function Base.isless(a::FermionSym, b::FermionSym)
 end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
-# atomic_group(f::FermionSym) = f.basis
-# atomic_group(f::SymbolicFermionBasis) = f
+# symbolic_group(f::FermionSym) = f.basis
+# symbolic_group(f::SymbolicFermionBasis) = f
 hilbert_space(f::FermionSym) = FermionicMode(f.label, f.basis)
 
 function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)

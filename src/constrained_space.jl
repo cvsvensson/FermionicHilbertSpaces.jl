@@ -60,7 +60,7 @@ default_processor(H::ConstrainedSpace, constraint) = default_processor(parent(H)
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
 
 apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::ConstrainedSpace, precomp) = apply_local_operators(ops, state, space.parent, precomp)
-
+_precomputation_before_operator_application(ops::Union{<:Any, <:NCMul}, space::ConstrainedSpace) = _precomputation_before_operator_application(ops, parent(space))
 
 @testitem "Constrained space" begin
     import FermionicHilbertSpaces: constrain_space, CombineFockNumbersProcessor, unweighted_number_branch_constraint, subregion, FermionicMode

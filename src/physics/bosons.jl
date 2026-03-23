@@ -130,16 +130,17 @@ end
 
 hilbert_space(sym::BosonSym{B}, max_occupancy) where B = TruncatedBosonicHilbertSpace(sym, max_occupancy)
 
-function apply_local_operators(factors, state::BosonicFockState, space::TruncatedBosonicHilbertSpace, precomp)
+function apply_local_operators(op::NCMul, state::BosonicFockState, space::TruncatedBosonicHilbertSpace, precomp)
+    factors = op.factors
     n = state.n
     max_occupancy = space.max_occupancy
-    amplitude = 1.0
+    amplitude = op.coeff
 
     for factor in Iterators.reverse(factors)
         k = abs(factor.exp)
         if factor.exp < 0
             if n < k
-                return ((state, 0.0),)
+                return ((state, 0 * amplitude),)
             end
             for i in 0:(k-1)
                 amplitude *= sqrt(n - i)
@@ -153,13 +154,13 @@ function apply_local_operators(factors, state::BosonicFockState, space::Truncate
         end
     end
     if n > max_occupancy
-        return ((state, 0.0),)
+        return ((state, 0 * amplitude),)
     end
     return ((BosonicFockState(n), amplitude),)
 end
 
-atomic_group(f::BosonSym) = BosonSym(f.label, 0)
-atomic_group(H::TruncatedBosonicHilbertSpace) = atomic_group(H.sym)
+symbolic_group(f::BosonSym) = BosonSym(f.label, 0)
+symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
 mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
 
 @testitem "Bosonic hilbert space" begin

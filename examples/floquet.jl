@@ -1,15 +1,15 @@
 using FermionicHilbertSpaces
-import FermionicHilbertSpaces.NonCommutativeProducts: @nc, Swap, NCAdd, NCMul, NCterms, AddTerms
+import FermionicHilbertSpaces.NonCommutativeProducts: @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, @commutative, mul_effect
+import FermionicHilbertSpaces: apply_local_operators, symbolic_group
 ##
-abstract type AbstractFloquetSym <: FermionicHilbertSpaces.AbstractSym end
 struct FloquetBasis
     id::Int
 end
-struct FloquetLadder <: AbstractFloquetSym
+struct FloquetLadder
     shift::Int
     basis::FloquetBasis
 end
-struct FloquetNumber <: AbstractFloquetSym
+struct FloquetNumber
     power::Int
     basis::FloquetBasis
 end
@@ -60,19 +60,17 @@ function mul_effect(::FloquetNumber, ::FloquetLadder)
     end
     return nothing
 end
-function FermionicHilbertSpaces.apply_local_operators(factors, state::FloquetState, space, precomp)
-    state, amp = foldr((op, (state, amp)) -> apply_local_operator(op, state, amp), factors, init=(state, 1))
+function apply_local_operators(op, state::FloquetState, space, precomp)
+    state, amp = foldr((op, (state, amp)) -> apply_local_operator(op, state, amp), op.factors, init=(state, 1))
     return ((state, amp),)
 end
 apply_local_operator(op::FloquetLadder, state::FloquetState, amp) = (FloquetState(state.mode + op.shift), amp)
 function apply_local_operator(op::FloquetNumber, state::FloquetState, amp)
     (state, amp * state.mode^op.power)
 end
-FermionicHilbertSpaces.atomic_group(f::FloquetLadder) = f.basis
-FermionicHilbertSpaces.atomic_group(f::FloquetNumber) = f.basis
-FermionicHilbertSpaces.atomic_group(f::FloquetBasis) = f
-FermionicHilbertSpaces.mat_eltype(::Type{FloquetLadder}) = Int
-FermionicHilbertSpaces.mat_eltype(::Type{FloquetNumber}) = Int
+symbolic_group(f::FloquetLadder) = f.basis
+symbolic_group(f::FloquetNumber) = f.basis
+symbolic_group(f::FloquetBasis) = f
 
 ##
 @spin σ

@@ -1,40 +1,30 @@
 abstract type AbstractSym end
 abstract type AbstractFermionSym <: AbstractSym end
 
-function mat_eltype(ncadd::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S<:AbstractSym,F}
-    isconcretetype(S) && return promote_type(C, mat_eltype(S))
-    return _mat_eltype(ncadd)
+function mat_eltype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S,F}
+    promote_type(C, mat_eltype(S))
 end
-function mat_eltype(ncmul::NCMul{C,S,F}) where {C,S<:AbstractSym,F}
-    isconcretetype(S) && return promote_type(C, mat_eltype(S))
-    return _mat_eltype(ncmul)
+function mat_eltype(::NCMul{C,S,F}) where {C,S,F}
+    promote_type(C, mat_eltype(S))
 end
-mat_eltype(::Type{NCMul{C,S,F}}) where {C,S<:AbstractSym,F} = promote_type(C, mat_eltype(S))
-mat_eltype(::S) where {S<:AbstractSym} = mat_eltype(S)
-
-function _mat_eltype(ncmul::NCMul{C}) where C
-    factor_valtypes = [mat_eltype(f) for f in ncmul.factors]
-    return promote_type(C, factor_valtypes...)
-end
-function _mat_eltype(ncadd::NCAdd{C,<:NCMul}) where C
-    term_valtypes = [mat_eltype(term) for term in NCterms(ncadd)]
-    return promote_type(C, term_valtypes...)
-end
+mat_eltype(::Type{NCMul{C,S,F}}) where {C,S,F} = promote_type(C, mat_eltype(S))
+mat_eltype(::S) where {S} = mat_eltype(S)
+mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors if a complex number is expected. Override it for specific types if needed.
 
 function operator_inds_amps!((outinds, ininds, amps), op, H::AbstractHilbertSpace; kwargs...)
     return operator_inds_amps_generic!((outinds, ininds, amps), op, H; kwargs...)
 end
 _precomputation_before_operator_application(factors, space) = nothing
-function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,F}, space::AbstractHilbertSpace; projection=false) where {C,F}
-    precomp = _precomputation_before_operator_application(op.factors, space)
+function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul, space::AbstractHilbertSpace; projection=false)
+    precomp = _precomputation_before_operator_application(op, space)
     for (n, state) in enumerate(basisstates(space))
-        newstate_amps = apply_local_operators(op.factors, state, space, precomp)
+        newstate_amps = apply_local_operators(op, state, space, precomp)
         for (newstate, amp) in newstate_amps
             if !iszero(amp)
                 outind = state_index(newstate, space)
                 if !projection || !ismissing(outind)
                     push!(outinds, outind)
-                    push!(amps, amp * op.coeff)
+                    push!(amps, amp)
                     push!(ininds, n)
                 end
             end
@@ -104,7 +94,7 @@ Partition a vector of operator factors into groups by their symbolic basis.
 """
 function partition_factors_by_basis(factors::Vector, bases)
     partition = map(bases) do basis
-        filter(==(atomic_group(basis)) ∘ atomic_group, factors)
+        filter(==(symbolic_group(basis)) ∘ symbolic_group, factors)
     end
     sum(length, partition) == length(factors) || throw(ArgumentError("Not all factors were assigned to a basis."))
     return partition
@@ -124,7 +114,7 @@ function _matrix_representation(op::NCMul, bases, space::ProductSpace; kwargs...
     length(spaces) == 1 && return op.coeff * only(matrices)
     op.coeff * kron(reverse(matrices)...)
 end
-function _matrix_representation(op::NCMul, bases, space::Union{<:AbstractAtomicHilbertSpace,<:AbstractClusterHilbertSpace,<:ConstrainedSpace,<:BlockHilbertSpace}; kwargs...)
+function _matrix_representation(op::NCMul, bases, space; kwargs...)
     if isempty(op.factors)
         return op.coeff * I(dim(space))
     else
@@ -136,17 +126,20 @@ function _matrix_representation(op::NCMul, bases, space::Union{<:AbstractAtomicH
         end
     end
 end
-function _matrix_representation(op::NCAdd, bases, space::Union{<:AbstractAtomicHilbertSpace,<:AbstractClusterHilbertSpace}; kwargs...)
-    return _matrix_representation_single_space(op, space; kwargs...)
-end
-function _matrix_representation(op::NCAdd, bases, space::ProductSpace; kwargs...)
-    sum(_matrix_representation(term, bases, space; kwargs...) for term in NCterms(op)) + op.coeff * I(dim(space))
-end
-function _matrix_representation(op::NCAdd, bases, space::Union{<:ConstrainedSpace,<:BlockHilbertSpace}; kwargs...)
+# function _matrix_representation(op::NCAdd, bases, space::Union{<:AbstractAtomicHilbertSpace,<:AbstractClusterHilbertSpace}; kwargs...)
+#     return _matrix_representation_single_space(op, space; kwargs...)
+# end
+# function _matrix_representation(op::NCAdd, bases, space::ProductSpace; kwargs...)
+#     sum(_matrix_representation(term, bases, space; kwargs...) for term in NCterms(op)) + op.coeff * I(dim(space))
+# end
+function _matrix_representation(op::NCAdd, bases, space; kwargs...)
     if length(bases) == 1
         return _matrix_representation_single_space(op, space; kwargs...)
     end
     sum(_matrix_representation(term, bases, space; kwargs...) for term in NCterms(op)) + op.coeff * I(dim(space))
+end
+function _matrix_representation(op, bases, space; kwargs...) #Assume op is a single symbolic operator
+    _matrix_representation(NCMul(1, [op]), bases, space; kwargs...)
 end
 
 function _matrix_representation_single_space(op::NCAdd, space; kwargs...)
@@ -168,9 +161,7 @@ function _matrix_representation_single_space(op::NCAdd, space; kwargs...)
     end
     return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
 end
-function _matrix_representation(op::AbstractSym, bases, space; kwargs...) #Assume op is a single symbolic operator
-    _matrix_representation(NCMul(1, [op]), bases, space; kwargs...)
-end
+
 
 function _term_matrix_representation(op, H::AbstractHilbertSpace; kwargs...)
     _outinds = Int[]
@@ -217,26 +208,26 @@ end
 Extract all unique symbolic bases from an operator expression.
 Returns a set of unique bases found in the operator.
 """
-function atomic_groups(op::NCMul)
+function symbolic_groups(op::NCMul)
     bases = Set()
     for factor in op.factors
-        basis = atomic_group(factor)
+        basis = symbolic_group(factor)
         push!(bases, basis)
     end
     return bases
 end
 
-function atomic_groups(op::NCAdd)
+function symbolic_groups(op::NCAdd)
     bases = Set()
     for (term, coeff) in op.dict
-        term_bases = atomic_groups(term)
+        term_bases = symbolic_groups(term)
         union!(bases, term_bases)
     end
     return bases
 end
 
-function atomic_groups(op)
-    [atomic_group(op)]
+function symbolic_groups(op)
+    [symbolic_group(op)]
 end
 
 """
@@ -260,8 +251,8 @@ function matrix_representation(op, space::AbstractHilbertSpace; kwargs...)
     if trivial_operator(op)
         return get_trivial_op_coeff(op) * I(dim(space))
     end
-    op_groups = atomic_groups(op)
-    space_groups = unique(map(atomic_group, atomic_factors(space)))
+    op_groups = symbolic_groups(op)
+    space_groups = unique(map(symbolic_group, atomic_factors(space)))
     all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
     return _matrix_representation(op, space_groups, space; kwargs...)
 end

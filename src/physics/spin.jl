@@ -40,7 +40,7 @@ basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{J,S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
-atomic_group(H::SpinSpace) = atomic_group(H.sym)
+symbolic_group(H::SpinSpace) = symbolic_group(H.sym)
 function Base.show(io::IO, H::SpinSpace)
     J = eltype(H.basisstates).parameters[1]
     if get(io, :compact, false)
@@ -152,8 +152,8 @@ Base.show(io::IO, x::SpinSym) = print(io, x.basis.name, "[$(x.op)]")
 
 Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.basis == b.basis
 Base.hash(a::SpinSym, h::UInt) = hash(a.op, hash(a.basis, h))
-atomic_group(f::SpinSym) = f.basis
-atomic_group(f::SymbolicSpinBasis) = f
+symbolic_group(f::SpinSym) = f.basis
+symbolic_group(f::SymbolicSpinBasis) = f
 
 mat_eltype(::Type{<:SpinSym}) = Float64
 
@@ -236,11 +236,11 @@ end
 
 Apply a sequence of spin operators (product) to a spin state. Operators are applied in reverse order (right-to-left, as in operator composition). Returns (newstate, amplitude) or (state, 0) if any step fails.
 """
-function apply_local_operators(factors, state::SpinState{J}, space::SpinSpace, precomp) where J
+function apply_local_operators(op, state::SpinState{J}, space::SpinSpace, precomp) where J
     newstate = state
-    amplitude = one(typeof(sqrt(J * (J + 1))))  # Start with 1.0 to handle mixed numeric types
+    amplitude = op.coeff * one(typeof(sqrt(J * (J + 1))))  # Start with 1.0 to handle mixed numeric types
     # Apply factors in reverse order (from right to left)
-    for factor in reverse(factors)
+    for factor in reverse(op.factors)
         newstate, factor_amp = apply_local_operator(factor, newstate)
         if iszero(factor_amp)
             return ((state, zero(amplitude)),)

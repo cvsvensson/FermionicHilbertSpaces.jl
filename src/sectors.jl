@@ -93,7 +93,7 @@ end
 indices(qn, H::AbstractHilbertSpace) = indices(sector(qn, H), H)
 indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
 
-
+_precomputation_before_operator_application(ops, space::BlockHilbertSpace) = _precomputation_before_operator_application(ops, parent(space))
 
 @testitem "BlockHilbertSpace sectors" begin
     @fermions f

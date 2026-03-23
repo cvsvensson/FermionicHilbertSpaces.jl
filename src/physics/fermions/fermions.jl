@@ -4,13 +4,13 @@ struct FermionicGroup
 end
 Base.hash(x::FermionicGroup, h::UInt) = hash(x.id, h)
 Base.:(==)(a::FermionicGroup, b::FermionicGroup) = a.id == b.id
-atomic_group(g::FermionicGroup) = g
+symbolic_group(g::FermionicGroup) = g
 Base.isless(g1::FermionicGroup, g2::FermionicGroup) = g1.id < g2.id
 struct FermionicMode{L,S} <: AbstractAtomicHilbertSpace{FockNumber{Bool}}
     label::L
     symbolic_basis::S
 end
-atomic_group(h::FermionicMode) = fermionic_group(h)
+symbolic_group(h::FermionicMode) = fermionic_group(h)
 fermionic_group(h::FermionicMode) = fermionic_group(h.symbolic_basis)
 combine_states(states, ::AbstractAtomicHilbertSpace) = ((only(states), 1),)
 modes(H::FermionicMode) = (H.symbolic_basis[H.label],)
@@ -20,7 +20,7 @@ function Base.show(io::IO, c::FermionicMode)
     get(io, :compact, false) || return print(io, "FermionicMode(", c.symbolic_basis.name, "[", c.label, "])")
     print(io, c.symbolic_basis.name, "[", c.label, "]")
 end
-combine_into_cluster(group::FermionicGroup, fermions) = all(f -> atomic_group(f) == group, fermions) ? FermionCluster(fermions, group) : throw(ArgumentError("Not all fermions belong to the same group"))
+combine_into_cluster(group::FermionicGroup, fermions) = all(f -> symbolic_group(f) == group, fermions) ? FermionCluster(fermions, group) : throw(ArgumentError("Not all fermions belong to the same group"))
 function basisstate(n::Int, H::FermionicMode)
     n == 1 && return FockNumber(false)
     n == 2 && return FockNumber(true)
@@ -55,7 +55,7 @@ FermionCluster(mode::FermionicMode) = mode
 function FermionCluster(modes::Union{<:AbstractVector{<:FermionicMode},NTuple{N,<:FermionicMode}}) where N
     length(modes) == 0 && throw(ArgumentError("Cannot create a FermionCluster with no modes"))
     length(modes) == 1 && return only(modes)
-    FermionCluster(modes, only(unique(map(atomic_group, modes))))
+    FermionCluster(modes, only(unique(map(symbolic_group, modes))))
 end
 maximum_particles(H::FermionCluster) = nbr_of_modes(H)
 Base.:(==)(c1::FermionCluster, c2::FermionCluster) = c1.modes == c2.modes && c1.group == c2.group
@@ -66,7 +66,7 @@ state_index(state::FockNumber, ::FermionCluster) = state.f + 1
 dim(H::FermionCluster) = 2^nbr_of_modes(H)
 atomic_factors(H::FermionCluster) = H.modes
 nbr_of_modes(H::FermionCluster) = length(H.modes)
-atomic_group(H::FermionCluster) = H.group
+symbolic_group(H::FermionCluster) = H.group
 mode_ordering(H::FermionCluster) = H.mode_ordering
 modes(H::FermionCluster) = H.modes
 _find_position(f::FermionicMode, H::FermionCluster) = get(H.mode_ordering, f, 0)
@@ -83,7 +83,7 @@ function subregion(Hsub::FermionCluster, H::FermionCluster)
 end
 isconstrained(H::FermionCluster) = false
 
-combine_states(states, H::FermionCluster{F}) where F = ((F(catenate_fock_states(states, H.modes)), 1),)
+combine_states(states, H::FermionCluster{F}) where F = ((catenate_fock_states(states, H.modes, F), 1),)
 state_splitter(H::FermionCluster, Hs::AbstractHilbertSpace) = state_splitter(H, (Hs,))
 function state_splitter(H::FermionCluster, Hs)
     fermionpositions = [[_find_position(atom, H) for atom in atomic_factors(cluster)] for cluster in Hs]
@@ -154,11 +154,13 @@ focknbr_from_site_label(mode::FermionicMode, H::FermionCluster) = focknbr_from_s
 focknbr_from_site_labels(Hsub::FermionCluster, H::FermionCluster) = mapreduce(Base.Fix2(focknbr_from_site_label, H), +, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
 
 
-_precomputation_before_operator_application(ops, space::AbstractHilbertSpace{B}) where {B<:FockNumber} = map(op -> _find_position(op, space), ops)
-function apply_local_operators(factors, state::FockNumber{I}, space::AbstractHilbertSpace, digitpos) where I
+# _precomputation_before_operator_application(op::NCMul, space::AbstractHilbertSpace{B}) where {B<:FockNumber} = map(op -> _find_position(op, space), op.factors)
+_precomputation_before_operator_application(op::NCMul, space::Union{<:FermionicMode,<:FermionCluster{B}}) where {B<:FockNumber} = map(op -> _find_position(op, space), op.factors)
+function apply_local_operators(op::NCMul, state::FockNumber{I}, space::AbstractHilbertSpace, fermionpositions) where I
+    factors = op.factors
     newfocknbr = state
-    fermionstatistics = 1
-    for (op, digitpos) in Iterators.reverse(zip(factors, digitpos))
+    fermionstatistics = op.coeff
+    for (op, digitpos) in Iterators.reverse(zip(factors, fermionpositions))
         dagger = op.creation
         op = one(I) << (digitpos - 1)
         occupied = !iszero(op & newfocknbr)

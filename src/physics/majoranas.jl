@@ -3,14 +3,14 @@ struct MajoranaGroup
 end
 Base.hash(x::MajoranaGroup, h::UInt) = hash(MajoranaGroup, hash(x.id, h))
 Base.:(==)(a::MajoranaGroup, b::MajoranaGroup) = a.id == b.id
-atomic_group(g::MajoranaGroup) = g
+symbolic_group(g::MajoranaGroup) = g
 Base.isless(g1::MajoranaGroup, g2::MajoranaGroup) = g1.id < g2.id
 struct SymbolicMajoranaBasis
     name::Symbol
     group::MajoranaGroup
 end
 Base.hash(x::SymbolicMajoranaBasis, h::UInt) = hash(x.name, hash(x.group, h))
-atomic_group(f::SymbolicMajoranaBasis) = f.group
+symbolic_group(f::SymbolicMajoranaBasis) = f.group
 Base.show(io::IO, x::SymbolicMajoranaBasis) = print(io, "SymbolicMajoranaBasis(", x.name, ")")
 
 abstract type AbstractMajoranaSym <: AbstractFermionSym end
@@ -51,7 +51,7 @@ Base.:(==)(a::MajoranaSym, b::MajoranaSym) = a.label == b.label && a.basis == b.
 Base.hash(a::MajoranaSym, h::UInt) = hash(a.label, hash(a.basis, h))
 Base.adjoint(x::MajoranaSym) = MajoranaSym(x.label, x.basis)
 Base.iszero(x::MajoranaSym) = false
-atomic_group(f::AbstractMajoranaSym) = atomic_group(f.basis)
+symbolic_group(f::AbstractMajoranaSym) = symbolic_group(f.basis)
 function Base.show(io::IO, x::MajoranaSym)
     print(io, x.basis.name)
     if Base.isiterable(typeof(x.label))
@@ -163,7 +163,7 @@ basisstate(i, m::MajoranaHilbertSpace) = basisstate(i, m.parent)
 Base.parent(H::MajoranaHilbertSpace) = H.parent
 nbr_of_modes(H::MajoranaHilbertSpace) = nbr_of_modes(H.parent)
 isconstrained(H::MajoranaHilbertSpace) = isconstrained(H.parent)
-atomic_group(H::MajoranaHilbertSpace) = atomic_group(H.sym)
+symbolic_group(H::MajoranaHilbertSpace) = symbolic_group(H.sym)
 
 quantumnumbers(H::MajoranaHilbertSpace) = quantumnumbers(H.parent)
 indices(qn, H::MajoranaHilbertSpace) = indices(qn, parent(H))
@@ -257,12 +257,21 @@ end
 state_index(state::AbstractFockState, H::MajoranaHilbertSpace) = state_index(state, H.parent)
 _find_position(f::MajoranaSym, H::MajoranaHilbertSpace) = get(H.majoranaindices, f, 0)
 
-function apply_local_operators(ops, f::FockNumber, H::MajoranaHilbertSpace, majoranadigitpositions; kwargs...)
+function _precomputation_before_operator_application(op::NCMul, space::MajoranaHilbertSpace)
+    # find positions of all majoranas in the operator
+    majoranapositions = map(f -> _find_position(f, space), op.factors)
+    fermionpositions = map(n -> div(n + 1, 2), majoranapositions)
+    daggers = map(iseven, majoranapositions)
+    return fermionpositions, daggers
+end
+function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace, (fpos, daggers); kwargs...)
     # majoranadigitpositions = Iterators.reverse(_find_position(f, H) for f in ops)
-    daggers = Iterators.reverse(Iterators.map(iseven, majoranadigitpositions))
+    # println(majoranadigitpositions)
+    # daggers = Iterators.reverse(Iterators.map(iseven, majoranadigitpositions))
     # digitpositions = Iterators.reverse(Iterators.map(n -> div(n + 1, 2), majoranadigitpositions))
-    digitpositions = Iterators.reverse(Iterators.map(n -> div(n + 1, 2), majoranadigitpositions))
-    return (togglemajoranas(digitpositions, daggers, f),)
+    # digitpositions = Iterators.reverse(Iterators.map(n -> div(n + 1, 2), majoranadigitpositions))
+    state, amp = togglemajoranas(Iterators.reverse(fpos), Iterators.reverse(daggers), f)
+    return ((state, amp * op.coeff),)
 end
 
 function atomic_factors(H::MajoranaHilbertSpace)
@@ -286,13 +295,13 @@ end
     y2 = matrix_representation(γ[2], H)
     @test y1 * y2 == matrix_representation(γ[1] * γ[2], H)
 
-    y(f) = f.creation ? -1im * f + hc : f + hc
-    @test matrix_representation(γ[1], H) == matrix_representation(y(f[(1, 2)]), Hf)
-    @test matrix_representation(γ[2], H) == matrix_representation(y(f[(1, 2)]'), Hf)
+    maj(f) = f.creation ? -1im * f + hc : f + hc
+    @test matrix_representation(γ[1], H) == matrix_representation(maj(f[(1, 2)]), Hf)
+    @test matrix_representation(γ[2], H) == matrix_representation(maj(f[(1, 2)]'), Hf)
     @test matrix_representation(1, H) == matrix_representation(1, Hf) == matrix_representation(1I, H) == matrix_representation(1I, Hf)
-    @test matrix_representation(γ[1] * γ[2], H) == matrix_representation(y(f[(1, 2)]) * y(f[(1, 2)]'), Hf)
+    @test matrix_representation(γ[1] * γ[2], H) == matrix_representation(maj(f[(1, 2)]) * maj(f[(1, 2)]'), Hf)
     @test matrix_representation(1 + γ[1] + 1im * γ[2] + 0.2 * γ[1] * γ[2], H) ==
-          matrix_representation(1 + y(f[(1, 2)]) + 1im * y(f[(1, 2)]') + 0.2 * y(f[(1, 2)]) * y(f[(1, 2)]'), Hf)
+          matrix_representation(1 + maj(f[(1, 2)]) + 1im * maj(f[(1, 2)]') + 0.2 * maj(f[(1, 2)]) * maj(f[(1, 2)]'), Hf)
 end
 
 @testitem "Majorana hilbert space" begin

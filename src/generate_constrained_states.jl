@@ -65,8 +65,6 @@ function backtrack!(results, partial, spaces, depth, constraints, partial_proces
 end
 
 function catenate_fock_states(full_state, spaces, T)
-    # T = default_fock_representation(sum(nbr_of_modes, spaces))
-    # T = promote_type(map(typeof, full_state)...)
     num = zero(T)
     shift = 0
     for (state, space) in zip(full_state, spaces)

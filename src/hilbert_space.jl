@@ -13,7 +13,7 @@ basisstates(H::GenericHilbertSpace) = H.basisstates
 basisstate(ind, H::GenericHilbertSpace) = H.basisstates[ind]
 Base.keys(H::GenericHilbertSpace) = (H.label,)
 state_index(state, H::GenericHilbertSpace) = get(H.state_index, state, missing)
-atomic_group(H::GenericHilbertSpace) = H.label
+symbolic_group(H::GenericHilbertSpace) = H.label
 
 function Base.show(io::IO, H::GenericHilbertSpace)
     if get(io, :compact, false)
