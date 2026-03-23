@@ -79,13 +79,9 @@ F = FloquetLadder(floquet_basis)
 N = FloquetNumber(1, floquet_basis)
 ##
 function Heff(ħω, V)
-    z = exp(1im * ħω)
     h0 = σ[:z]
-    hV = V * σ[:x] * (F + F')
-    # hp1 = (hV + hc) / 2
     hp1 = V * σ[:x] * F
     hm1 = V * σ[:x] * F'
-    # hm1 = hp1'
     h0 + ħω * N + 1 / ħω * (hp1 * hm1 - hm1 * hp1) + 1 / ħω * (h0 * hp1 - hp1 * h0) - 1 / ħω * (h0 * hm1 - hm1 * h0)
 end
 ##
