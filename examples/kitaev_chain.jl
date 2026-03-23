@@ -6,8 +6,8 @@
 # We solve for the ground states and characterize the locality of the many-body Majoranas.
 
 # We start by importing the necessary packages.
-using FermionicHilbertSpaces, LinearAlgebra, Plots
-using Arpack
+using FermionicHilbertSpaces
+using Arpack, LinearAlgebra, Plots
 # Symbolic fermions can be defined using the `@fermions` macro,
 @fermions f
 # Then we define the Hilbert space with `N` sites and parity conservation.
@@ -60,7 +60,7 @@ using LowRankMatrices
 δρ = LowRankMatrix(o, conj(o)) - LowRankMatrix(e, conj(e))
 
 # Now we can compute the reduction of the Majorana operators to each mode.
-Hmodes = [hilbert_space(i:i) for i in 1:N]
+Hmodes = [hilbert_space(f, i:i) for i in 1:N]
 γR = [partial_trace(γ, H => Hmode) for Hmode in Hmodes];
 γ̃R = [partial_trace(γ̃, H => Hmode) for Hmode in Hmodes];
 δρR = [partial_trace(δρ, H => Hmode) for Hmode in Hmodes];
