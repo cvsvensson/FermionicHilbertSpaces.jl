@@ -4,6 +4,7 @@ using TestItemRunner
 
 @testitem "Basis" begin
     using SparseArrays, LinearAlgebra, Random
+    import FermionicHilbertSpaces: fermions
     Random.seed!(1234)
     @fermions f
     N = 2
@@ -63,10 +64,10 @@ using TestItemRunner
         (t[I] for I in CartesianIndices(t) if issorted(Tuple(I)) && allunique(Tuple(I)))
     end
     for N in 1:4
-        @test all(bilinear_equality(H, hilbert_space(subsystem), ρ) for subsystem in get_subsystems(H, N))
-        @test all(bilinear_equality(H, hilbert_space(subsystem, ParityConservation()), ρ) for subsystem in get_subsystems(H, N))
-        @test all(bilinear_equality(H, hilbert_space(subsystem, ParityConservation()), ρ) for subsystem in get_subsystems(Hparity, N))
-        @test all(bilinear_equality(H, hilbert_space(subsystem), ρ) for subsystem in get_subsystems(Hparity, N))
+        @test all(bilinear_equality(H, hilbert_space(f, subsystem), ρ) for subsystem in get_subsystems(H, N))
+        @test all(bilinear_equality(H, hilbert_space(f, subsystem, ParityConservation()), ρ) for subsystem in get_subsystems(H, N))
+        @test all(bilinear_equality(H, hilbert_space(f, subsystem, ParityConservation()), ρ) for subsystem in get_subsystems(Hparity, N))
+        @test all(bilinear_equality(H, hilbert_space(f, subsystem), ρ) for subsystem in get_subsystems(Hparity, N))
     end
 end
 
@@ -88,12 +89,14 @@ end
     end
     qns = [NoSymmetry(), ParityConservation(), NumberConservation()]
     @fermions f
+    import FermionicHilbertSpaces: fermions
     for qn in qns
         H = hilbert_space(f, 1:3, qn)
         H1 = hilbert_space(f, 1:1, qn)
         H2 = hilbert_space(f, 2:2, qn)
         H12 = hilbert_space(f, 1:2, qn)
-        H13 = hilbert_space(f, 1:3, qn)
+        H123 = hilbert_space(f, 1:3, qn)
+        H13 = hilbert_space(f, [1, 3], qn)
         H23 = hilbert_space(f, 2:3, qn)
         c = fermions(H)
         c1 = fermions(H1)
@@ -101,12 +104,13 @@ end
         c12 = fermions(H12)
         c13 = fermions(H13)
         c23 = fermions(H23)
+        c123 = fermions(H123)
 
         γ = Hermitian([0I rand(ComplexF64, 4, 4); rand(ComplexF64, 4, 4) 0I])
         @test tr(c1[1] * partial_trace(γ, H, H1)) ≈ tr(c[1] * γ)
         @test tr(c12[1] * partial_trace(γ, H, H12)) ≈ tr(c[1] * γ)
         @test tr(c13[1] * partial_trace(γ, H, H13)) ≈ tr(c[1] * γ)
-
+        @test tr(c123[1] * partial_trace(γ, H, H123)) ≈ tr(c[1] * γ)
         @test tr(c2[2] * partial_trace(γ, H, H2)) ≈ tr(c[2] * γ)
         @test tr(c12[2] * partial_trace(γ, H, H12)) ≈ tr(c[2] * γ)
         @test tr(c23[2] * partial_trace(γ, H, H23)) ≈ tr(c[2] * γ)

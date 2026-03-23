@@ -21,7 +21,7 @@ and commute with fermions in other `@fermions` blocks.
     - `a[1]' * a[1] + a[1] * a[1]' == 1`
     - `a[1] * b[1] - b[1] * a[1] == 0`
 
-See also [`@majoranas`](@ref), [`FermionicHilbertSpaces.eval_in_basis`](@ref).
+See also [`@majoranas`](@ref).
 """
 macro fermions(xs...)
     group = FermionicGroup(hash(xs))
@@ -88,21 +88,6 @@ end
 mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
 
 @nc FermionSym
-
-""" 
-    eval_in_basis(a, f)
-
-Evaluate an expression with fermions in a basis `f`. 
-
-# Examples
-```julia
-@fermions a
-f = fermions(hilbert_space(1:2))
-FermionicHilbertSpaces.eval_in_basis(a[1]'*a[2] + hc, f)
-```
-"""
-eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
-
 
 @testitem "SymbolicFermions" begin
     using Symbolics, LinearAlgebra
@@ -202,5 +187,7 @@ function _sym_space_match(sym::AbstractFermionSym, space::AbstractFockHilbertSpa
 end
 FermionicMode(f::FermionSym) = FermionicMode(f.label, f.basis)
 _find_position(f::FermionSym, H::AbstractHilbertSpace) = _find_position(FermionicMode(f), H)
-hilbert_space(a::SymbolicFermionBasis, labels) = tensor_product(map(l -> FermionicMode(a[l]), labels))
+hilbert_space(a::SymbolicFermionBasis, labels) = FermionCluster(map(l -> FermionicMode(a[l]), labels))
 hilbert_space(a::SymbolicFermionBasis, labels, constraint) = constrain_space(hilbert_space(a, labels), constraint)
+
+issubsystem(Hsub::AbstractHilbertSpace, H::FermionCluster) = isorderedsubsystem(Hsub, H)

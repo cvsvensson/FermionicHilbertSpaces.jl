@@ -94,6 +94,8 @@ end
 struct BosonicFockState
     n::Int
 end
+Base.:(==)(a::BosonicFockState, b::BosonicFockState) = a.n == b.n
+Base.hash(x::BosonicFockState, h::UInt) = hash(x.n, h)
 struct TruncatedBosonicHilbertSpace{B} <: AbstractAtomicHilbertSpace{BosonicFockState}
     sym::BosonSym{B}
     max_occupancy::Int
@@ -101,6 +103,8 @@ struct TruncatedBosonicHilbertSpace{B} <: AbstractAtomicHilbertSpace{BosonicFock
         new{B}(sym, max_occupancy)
     end
 end
+Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.max_occupancy == b.max_occupancy)
+Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.max_occupancy, h))
 basisstates(H::TruncatedBosonicHilbertSpace) = map(BosonicFockState, 0:H.max_occupancy)
 function basisstate(n::Int, H::TruncatedBosonicHilbertSpace)
     if n < 1 || n > H.max_occupancy + 1
@@ -109,6 +113,14 @@ function basisstate(n::Int, H::TruncatedBosonicHilbertSpace)
     BosonicFockState(n - 1)
 end
 dim(H::TruncatedBosonicHilbertSpace) = H.max_occupancy + 1
+function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
+    if get(io, :compact, false)
+        print(io, "Bosons(", H.sym.label, ", max=", H.max_occupancy, ")")
+    else
+        print(io, "$(dim(H))-dimensional TruncatedBosonicHilbertSpace\n")
+        print(io, "Label: ", H.sym.label, ", max_occupancy: ", H.max_occupancy)
+    end
+end
 function state_index(s::BosonicFockState, H::TruncatedBosonicHilbertSpace)
     if s.n < 0 || s.n > H.max_occupancy
         throw(ArgumentError("State $s is not in the Hilbert space"))
@@ -116,7 +128,9 @@ function state_index(s::BosonicFockState, H::TruncatedBosonicHilbertSpace)
     s.n + 1
 end
 
-function apply_local_operators(factors, state::BosonicFockState, space::TruncatedBosonicHilbertSpace)
+hilbert_space(sym::BosonSym{B}, max_occupancy) where B = TruncatedBosonicHilbertSpace(sym, max_occupancy)
+
+function apply_local_operators(factors, state::BosonicFockState, space::TruncatedBosonicHilbertSpace, precomp)
     n = state.n
     max_occupancy = space.max_occupancy
     amplitude = 1.0
@@ -143,10 +157,6 @@ function apply_local_operators(factors, state::BosonicFockState, space::Truncate
     end
     return ((BosonicFockState(n), amplitude),)
 end
-
-
-# label(sym::BosonSym) = sym.label
-# label(space::TruncatedBosonicHilbertSpace) = space.label
 
 atomic_group(f::BosonSym) = BosonSym(f.label, 0)
 atomic_group(H::TruncatedBosonicHilbertSpace) = atomic_group(H.sym)

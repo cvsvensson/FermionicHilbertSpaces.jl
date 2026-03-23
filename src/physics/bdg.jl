@@ -43,6 +43,8 @@ where H is hermitian and Δ is antisymmetric.
 bdg_hilbert_space(f, labels) = BdGHilbertSpace(f, labels)
 dim(h::BdGHilbertSpace) = dim(h.parent)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
+Base.:(==)(a::BdGHilbertSpace, b::BdGHilbertSpace) = a === b || a.parent == b.parent
+Base.hash(x::BdGHilbertSpace, h::UInt) = hash(x.parent, h)
 modes(H::BdGHilbertSpace) = modes(H.parent)
 basisstates(h::BdGHilbertSpace) = basisstates(h.parent)
 Base.parent(h::BdGHilbertSpace) = h.parent
@@ -54,7 +56,6 @@ function matrix_representation(op, H::BdGHilbertSpace)
     normal_order_to_bdg(_matrix_representation_single_space(remove_identity(op), H))
 end
 
-# _sym_space_match(basis::SymbolicFermionBasis, space::BdGHilbertSpace) = true
 
 function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::BdGHilbertSpace; kwargs...)
     ordering = mode_ordering(H)

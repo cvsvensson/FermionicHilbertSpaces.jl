@@ -27,13 +27,32 @@ Base.parent(H::BlockHilbertSpace) = H.parent
 _find_position(Hsub::AbstractHilbertSpace, H::BlockHilbertSpace) = _find_position(Hsub, H.parent)
 clusters(H::BlockHilbertSpace) = clusters(H.parent)
 factors(H::BlockHilbertSpace) = factors(H.parent)
-# cluster_target_subspace(target::BlockHilbertSpace, args...) = cluster_target_subspace(parent(target), args...)
-# cluster_target_sub_idx(target::BlockHilbertSpace, catoms, a2t, ti) = cluster_target_sub_idx(parent(target), catoms, a2t, ti)
 combine_states(substates, H::BlockHilbertSpace) = combine_states(substates, parent(H))
 partial_trace_phase_factor(s1, s2, H::BlockHilbertSpace) = partial_trace_phase_factor(s1, s2, parent(H))
 state_splitter(H::BlockHilbertSpace, Hs) = state_splitter(parent(H), Hs)
 mode_ordering(H::BlockHilbertSpace) = mode_ordering(parent(H))
-operators(H::BlockHilbertSpace) = operators(parent(H))
+default_sorter(H::BlockHilbertSpace, constraint) = default_sorter(parent(H), constraint)
+default_processor(H::BlockHilbertSpace, constraint) = default_processor(parent(H), constraint)
+
+function Base.show(io::IO, H::BlockHilbertSpace)
+    if get(io, :compact, false)
+        print(io, "BlockHilbertSpace(")
+        show(IOContext(io, :compact => true), H.parent)
+        print(io, ", $(dim(H))-dim)")
+    else
+        print(io, "$(dim(H))-dimensional BlockHilbertSpace\n")
+        print(io, "Parent: ")
+        show(IOContext(io, :compact => true), H.parent)
+        qns = collect(keys(H.qn_to_states))
+        if !isempty(qns)
+            print(io, "\nSectors: ")
+            for (i, qn) in enumerate(qns)
+                i > 1 && print(io, ", ")
+                print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
+            end
+        end
+    end
+end
 
 function basisstate(ind::Int, H::BlockHilbertSpace)
     (ind < 1 || ind > dim(H)) && throw(ArgumentError("Invalid state index $ind"))
@@ -51,13 +70,28 @@ sector(::Nothing, H::AbstractHilbertSpace) = H
 sectors(H::BlockHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 sectors(H::AbstractHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 
-indices(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = map(state -> state_index(state, H), basisstates(Hsub))
-function indices(qn, H::BlockHilbertSpace)
-    states = H.qn_to_states[qn]
-    map(state -> state_index(state, H), states)
+function indices(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
+    sector_list = collect(sectors(H))
+    indexin = findfirst(isequal(Hsub), sector_list)
+    # map(state -> state_index(state, H), basisstates(Hsub))
+    if indexin === nothing
+        throw(ArgumentError("Hilbert space $Hsub is not a sector of $H"))
+    end
+    qn = collect(quantumnumbers(H))[indexin]
+    indices(qn, H)
+end
+function indices(qn::Q, H::BlockHilbertSpace{B,P,Q}) where {B,P,Q}
+    dims = cumsum([length(H.qn_to_states[qn]) for qn in collect(quantumnumbers(H))])
+    qn_index = findfirst(isequal(qn), collect(quantumnumbers(H)))
+    if qn_index === nothing
+        throw(ArgumentError("Quantum number $qn not found in Hilbert space $H"))
+    end
+    start_index = qn_index == 1 ? 1 : dims[qn_index-1] + 1
+    end_index = dims[qn_index]
+    start_index:end_index
 end
 indices(qn, H::AbstractHilbertSpace) = indices(sector(qn, H), H)
-indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
+# indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
 
 
 
@@ -86,4 +120,43 @@ indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
     qns = quantumnumbers(Hprod)
     @test all(qn -> qn isa Tuple, qns)
     @test all(qn -> dim(sector(qn, Hprod)) > 0, qns)
+
+    ## test fermions on block spaces
+    import FermionicHilbertSpaces: fermions
+    N = 4
+    H = hilbert_space(f, 1:N, NumberConservation(0:N-1))
+    @test size(fermions(H)[1], 1) == 2^N - 1
+end
+
+
+@testitem "Sector" begin
+    import FermionicHilbertSpaces: sector, sectors, indices, quantumnumbers
+    N = 4
+    @fermions f
+    H = hilbert_space(f, 1:N, NumberConservation())
+    @test collect(quantumnumbers(H)) == 0:N
+    Hns = sectors(H)
+    for (ind, n) in enumerate(quantumnumbers(H))
+        Hn = hilbert_space(f, 1:N, NumberConservation(n))
+        @test basisstates(Hn) == basisstates(Hns[n]) # Hn ≠ Hns[ind] since Hn is a SymmetricFockHilbertSpace
+        @test basisstates(Hn) == basisstates(sector(n, H))
+        @test basisstates(Hn) == basisstates(H)[indices(Hn, H)]
+        @test basisstates(Hn) == basisstates(H)[indices(n, H)]
+    end
+    # no qns
+    @majoranas γ
+    Hnoqn = hilbert_space(f, 1:N)
+    HMnoqn = majorana_hilbert_space(γ, 1:N)
+    @test indices(only(quantumnumbers(Hnoqn)), Hnoqn) == 1:dim(Hnoqn)
+    @test indices(only(quantumnumbers(HMnoqn)), HMnoqn) == 1:dim(HMnoqn)
+    @test length(sectors(Hnoqn)) == length(sectors(HMnoqn)) == 1
+    @test eltype(sectors(HMnoqn)) <: MajoranaHilbertSpace
+    # Majorana hilbert spaces
+    HM = majorana_hilbert_space(1:N, NumberConservation())
+    @test quantumnumbers(HM) == 0:N÷2
+    qn = 1
+    HMqn = majorana_hilbert_space(1:N, NumberConservation(qn))
+    @test basisstates(HMqn) == basisstates(HM)[indices(qn, HM)]
+    @test length(sectors(HM)) == N ÷ 2 + 1
+    @test eltype(sectors(HM)) <: MajoranaHilbertSpace
 end

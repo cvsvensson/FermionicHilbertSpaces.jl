@@ -20,6 +20,8 @@ Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
 struct SpinState{J,S} <: AbstractBasisState
     m::S
 end
+Base.:(==)(a::SpinState{J}, b::SpinState{J}) where J = a.m == b.m
+Base.hash(x::SpinState{J}, h::UInt) where J = hash(J, hash(x.m, h))
 SpinState{J}(m::M) where {J,M} = SpinState{J,M}(m)
 _labeltype(::Type{<:SpinState{J,S}}) where {J,S} = S
 
@@ -39,7 +41,19 @@ basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{J,S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
 atomic_group(H::SpinSpace) = atomic_group(H.sym)
-Base.show(io::IO, H::SpinSpace) = print(io, "SpinSpace{", eltype(H.basisstates).parameters[1], "}(", H.sym, ")")
+function Base.show(io::IO, H::SpinSpace)
+    J = eltype(H.basisstates).parameters[1]
+    if get(io, :compact, false)
+        print(io, "SpinSpace{", J, "}(", H.sym, ")")
+    else
+        print(io, "$(dim(H))-dimensional SpinSpace{", J, "}\n")
+        print(io, "Label: ", H.sym)
+    end
+end
+
+hilbert_space(sym::SymbolicSpinBasis{L}, J) where L = SpinSpace{J}(sym)
+Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
+Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
 
 function spin_basisstates(::Val{J}) where {J}
     states = [SpinState{J,typeof(J)}(i - J) for i in 0:2J]

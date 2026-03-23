@@ -1,5 +1,3 @@
-partial_trace_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1
-
 
 ##https://iopscience.iop.org/article/10.1088/1751-8121/ac0646/pdf (10c)
 function phase_factor_f(focknbr1, focknbr2, subinds::NTuple)::Int
@@ -23,121 +21,6 @@ end
 
 
 _find_position(n::L, labels::JordanWignerOrdering{L}) where L = get(labels.ordering, n, 0)
-_find_position(n, v::AbstractVector) = (pos = findfirst(==(n), v); isnothing(pos) ? 0 : pos)
-
-issubsystem(Hsub::AbstractHilbertSpace, H::AbstractFermionicClusterHilbertSpace) = isorderedsubsystem(Hsub, H)
-function isorderedsubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
-    positions = [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)]
-    all(pos -> pos > 0, positions) || return false
-    issorted(positions) || return false
-    return true
-end
-function isorderedpartition(Hsubs, H::AbstractHilbertSpace)
-    positions = map(Hsub -> [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)], Hsubs)
-    isorderedpartition(positions, length(atomic_factors(H)))
-end
-function issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
-    positions = [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)]
-    all(pos -> pos > 0, positions)
-end
-function ispartition(partition, H::AbstractHilbertSpace)
-    partition_inds = [_find_atom_position(atom, H) for part in partition for atom in atomic_factors(part)]
-    ispartition(partition_inds, length(atomic_factors(H)))
-end
-
-function ispartition(partition, N::Int)
-    covered = falses(N)
-    for subsystem in partition
-        for pos in subsystem
-            pos == 0 && return false
-            covered[pos] && return false
-            covered[pos] = true
-        end
-    end
-    return all(covered)
-end
-function ispartition(partition, labels)
-    n = length(labels)
-    covered = falses(n)
-    for subsystem in partition
-        for label in subsystem
-            pos = _find_position(label, labels)
-            pos == 0 && return false
-            covered[pos] && return false
-            covered[pos] = true
-        end
-    end
-    return all(covered)
-end
-
-_find_atom_position(atom, H::AbstractClusterHilbertSpace) = _find_position(atom, H)
-_find_atom_position(atom, H::AbstractHilbertSpace) = _find_position(atom, atomic_factors(H))
-
-@testitem "partition" begin
-    import FermionicHilbertSpaces: ispartition, isorderedpartition
-    order = 1:3
-    ispart = Base.Fix2(ispartition, order)
-    @test ispart([[1], [2], [3]])
-    @test !ispart([[1], [2]])
-    @test !ispart([[1, 1, 1]])
-    @test !ispart([[1], [1], [2]])
-    @test ispart([[1], [2, 3]])
-    @test !ispart([[1], [2, 3, 4]])
-    @test ispart([[1, 2, 3]])
-    @test !ispart([[1, 2]])
-    @test ispart([[2], [1], [3]])
-    @test ispart([[2], [3], [1]])
-    @test ispart([[1, 3], [2]])
-    @test ispart([[3, 1], [2]])
-    @test !ispart([[3, 1], [2, 4]])
-    @test ispart([[2], [1, 3]])
-    @test !ispart([[2], [2, 3]])
-    @test ispart([[], [1, 2, 3]])
-    @test !ispart([[1], [1, 2, 3]])
-
-    ## same for ispartvec
-    ispartvec = Base.Fix2(ispartition, order)
-    @test ispartvec([[1], [2], [3]])
-    @test !ispartvec([[1], [2]])
-    @test !ispartvec([[1, 1, 1]])
-    @test !ispartvec([[1], [1], [2]])
-    @test ispartvec([[1], [2, 3]])
-    @test !ispartvec([[1], [2, 3, 4]])
-    @test ispartvec([[1, 2, 3]])
-    @test !ispartvec([[1, 2]])
-    @test ispartvec([[2], [1], [3]])
-    @test ispartvec([[2], [3], [1]])
-    @test ispartvec([[1, 3], [2]])
-    @test ispartvec([[3, 1], [2]])
-    @test !ispartvec([[3, 1], [2, 4]])
-    @test ispartvec([[2], [1, 3]])
-    @test !ispartvec([[2], [2, 3]])
-    @test ispartvec([[], [1, 2, 3]])
-    @test !ispartvec([[1], [1, 2, 3]])
-
-    ## Ordered partition
-    isorderedpart = Base.Fix2(isorderedpartition, order)
-
-    @test isorderedpart([[1], [2], [3]])
-    @test isorderedpart([[1], [2, 3]])
-    @test isorderedpart([[1, 2, 3]])
-    @test isorderedpart([[2], [1], [3]])
-    @test isorderedpart([[2], [3], [1]])
-    @test isorderedpart([[1, 3], [2]])
-    @test !isorderedpart([[3, 1], [2]])
-    @test isorderedpart([[2], [1, 3]])
-    @test !isorderedpart([[3, 1], [2, 4]])
-    @test isorderedpart([[2], [1, 3]])
-    @test !isorderedpart([[2], [3, 1]])
-    @test !isorderedpart([[1], [3, 2]])
-    @test !isorderedpart([[1], [3, 1]])
-    @test !isorderedpart([[3], [2, 1]])
-    @test isorderedpart([[2], [1, 3]])
-    @test !isorderedpart([[2], [2, 3]])
-    @test isorderedpart([[], [1, 2, 3]])
-    @test !isorderedpart([[1], [1, 2, 3]])
-end
-
 # default_fock_type(jw::JordanWignerOrdering) = FockNumber{default_fock_representation(length(jw))}
 
 function kron_phase_factor(state_splitter::FockMapper)
@@ -153,7 +36,7 @@ end
 
 function phase_factor_h(partition, jw::JordanWignerOrdering)
     isorderedpartition(partition, jw) || error("Partition is not ordered")
-    T = default_fock_type(jw)
+    T = FockNumber{default_fock_representation(length(jw))}
     masks = map(Xp -> focknbr_from_site_labels(Xp, jw)::T, partition)
     inds = map(partition) do X
         [getindex(jw, li) for li in X]

@@ -5,15 +5,15 @@ using Random
 const SUITE = BenchmarkGroup()
 Random.seed!(1)
 
-N = 12
-H = hilbert_space(1:N, ParityConservation())
 @fermions f
+N = 12
+H = hilbert_space(f, 1:N, ParityConservation())
 op = sum(rand() * f[n]' * f[n] for n in 1:N) + sum(1im * f[n]' * f[n+1] + hc for n in 1:N-1)
-Hsub = hilbert_space(1:div(N, 4), ParityConservation())
+Hsub = hilbert_space(f, 1:div(N, 4), ParityConservation())
 d = dim(H)
 m = sprand(ComplexF64, d, d, 1 / 2^N)
 
-SUITE["hilbert_space"] = @benchmarkable hilbert_space($(1:N), $ParityConservation())
+SUITE["hilbert_space"] = @benchmarkable hilbert_space($f, $(1:N), $ParityConservation())
 SUITE["symbolic"]["sum"] = @benchmarkable sum(f[n]' * f[n] + hc for n in 1:100)
 SUITE["symbolic"]["sum_square"] = @benchmarkable sum(f[n]' * f[n] + hc for n in 1:50)^2
 
@@ -21,7 +21,7 @@ labels = shuffle(1:10)
 SUITE["symbolic"]["deep_product"] = @benchmarkable prod(f[l] for l in labels) * prod(f[l]' for l in labels)
 SUITE["matrix_representation"]["standard"] = @benchmarkable matrix_representation($op, $H)
 
-Hsp = single_particle_hilbert_space(1:1000)
+Hsp = single_particle_hilbert_space(f, 1:1000)
 opsp = sum(rand() * f[n]' * f[n] for n in 1:1000) + sum(rand(ComplexF64) * f[n]' * f[n+1] + hc for n in 1:999)
 SUITE["matrix_representation"]["free_fermion"] = @benchmarkable matrix_representation($opsp, $Hsp)
 
@@ -39,18 +39,18 @@ weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, 
 allowed_ones = [[0, 1], [-1, 0], [2]]
 SUITE["generate_states"]["int"] = @benchmarkable FermionicHilbertSpaces.generate_states($weights, $allowed_ones, $N)
 
-Hs = [hilbert_space(n:n) for n in 1:N]
+Hs = [hilbert_space(f, n:n) for n in 1:N]
 constraint = prod(FermionicHilbertSpaces.weighted_number_branch_constraint(allowed, w, Hs) for (allowed, w) in zip(allowed_ones, weights))
-SUITE["generate_states2"]["int"] = @benchmarkable FermionicHilbertSpaces.generate_states($Hs, $constraint; leaf_processor = FermionicHilbertSpaces.CombineFockNumbersProcessor())
+SUITE["generate_states2"]["int"] = @benchmarkable FermionicHilbertSpaces.generate_states($Hs, $constraint; leaf_processor=FermionicHilbertSpaces.CombineFockNumbersProcessor())
 
 N = 64
 weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
 allowed_ones = [[0, 1], [-1, 0], [2]]
 SUITE["generate_states"]["big_int"] = @benchmarkable FermionicHilbertSpaces.generate_states($weights, $allowed_ones, $N)
 
-Hs = [hilbert_space(n:n) for n in 1:N]
+Hs = [hilbert_space(f, n:n) for n in 1:N]
 constraint = prod(FermionicHilbertSpaces.weighted_number_branch_constraint(allowed, w, Hs) for (allowed, w) in zip(allowed_ones, weights))
-SUITE["generate_states2"]["big_int"] = @benchmarkable FermionicHilbertSpaces.generate_states($Hs, $constraint; leaf_processor = FermionicHilbertSpaces.CombineFockNumbersProcessor())
+SUITE["generate_states2"]["big_int"] = @benchmarkable FermionicHilbertSpaces.generate_states($Hs, $constraint; leaf_processor=FermionicHilbertSpaces.CombineFockNumbersProcessor())
 
 ## Benchmark partial trace algorithms
 import FermionicHilbertSpaces: FullPartialTraceAlg, SubsystemPartialTraceAlg, default_partial_trace_alg
@@ -58,9 +58,9 @@ _name(::FullPartialTraceAlg) = "FullAlg"
 _name(::SubsystemPartialTraceAlg) = "SubAlg"
 # This scenario highlights cases where FullPartialTraceAlg is expected to be faster.
 N = 30
-H = hilbert_space(1:N, NumberConservation(2))
+H = hilbert_space(f, 1:N, NumberConservation(2))
 # Define a subsystem for the first 10 modes
-Hsub = subregion(1:10, H)
+Hsub = subregion(hilbert_space(f, 1:10), H)
 # Create a random Hermitian matrix on the full Hilbert space
 d = dim(H)
 mat = rand(ComplexF64, d, d)
@@ -79,8 +79,8 @@ end
 # Setup for Standard Full Fock Space (No Symmetry)
 # This scenario tests the standard case where SubsystemPartialTraceAlg is typically efficient.
 N_std = 10
-H_std = hilbert_space(1:N_std)
-Hsub_std = subregion(1:2, H_std)
+H_std = hilbert_space(f, 1:N_std)
+Hsub_std = subregion(hilbert_space(f, 1:2), H_std)
 d_std = dim(H_std)
 m_std = rand(ComplexF64, d_std, d_std)
 m_sparse = sprand(ComplexF64, d_std, d_std, 0.01)

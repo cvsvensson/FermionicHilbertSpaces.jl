@@ -1,7 +1,6 @@
 
 
-@testitem "tensor_product product of FermionicMode and FermionCluster" begin
-    using FermionicHilbertSpaces
+@testitem "Tensor product of FermionicMode and FermionCluster" begin
     import FermionicHilbertSpaces: constrain_space, FermionCluster
     @fermions a
 
@@ -42,7 +41,7 @@ size_compatible(m, H) = size(m) == size(m) == ntuple(_ -> dim(H), ndims(m))
 size_compatible(m::UniformScaling, H) = true
 kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, Hs))
 
-@testitem "Size compatible" begin
+@testitem "Kron size compatibility and error handling" begin
     using LinearAlgebra, Random
     import FermionicHilbertSpaces: kron_sizes_compatible
     Random.seed!(1234)
@@ -227,7 +226,6 @@ tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> 
     # divide each part of rough partition into finer partitions
     fine_partitions = map(rough_partition -> sort.(collect(partition(shuffle(rough_partition), fine_size))), rough_partitions)
     H = hilbert_space(a, 1:N)
-    # c = fermions(H)
     Hs_rough = [hilbert_space(a, r_p) for r_p in rough_partitions]
     Hs_fine = map(f_p_list -> Base.Fix1(hilbert_space, a).(f_p_list), fine_partitions)
 
@@ -373,11 +371,12 @@ tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> 
 
     # Explicit construction of unitary equivalence in case of all even (except one) 
     function phase(k, f)
-        Xkmask = FermionicHilbertSpaces.focknbr_from_site_labels(fine_partition[k], H.jw)
+        fines = collect(Iterators.flatten(Hs_fine))
+        Xkmask = FermionicHilbertSpaces.focknbr_from_site_labels(fines[k], H)
         iseven(count_ones(f & Xkmask)) && return 1
         phase = 1
         for r in 1:k-1
-            Xrmask = FermionicHilbertSpaces.focknbr_from_site_labels(fine_partition[r], H.jw)
+            Xrmask = FermionicHilbertSpaces.focknbr_from_site_labels(fines[r], H)
             phase *= (-1)^(count_ones(f & Xrmask))
         end
         return phase
@@ -391,9 +390,10 @@ tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> 
 end
 
 
-@testitem "tensor_product" begin
+@testitem "Tensor product of fermionic operators" begin
     using Random, LinearAlgebra
     import SparseArrays: SparseMatrixCSC
+    import FermionicHilbertSpaces: fermions
     Random.seed!(1234)
     @fermions f
     for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
@@ -405,9 +405,9 @@ end
         H3w = tensor_product(H1, H2)
         @test H3w == tensor_product((H1, H2)) == tensor_product([H1, H2])
         Hs = [H1, H2]
-        b1 = operators(H1)
-        b2 = operators(H2)
-        b3 = operators(H3w)
+        b1 = fermions(H1)
+        b2 = fermions(H2)
+        b3 = fermions(H3w)
 
         #test that they keep sparsity
         @test typeof(tensor_product((b1[1], b2[2]), Hs => H3)) == typeof(b1[1])
@@ -417,13 +417,8 @@ end
         @test tensor_product((I, I), Hs => H3) isa SparseMatrixCSC
         @test generalized_kron((I, I), Hs, H3) isa SparseMatrixCSC
 
-        # Test zero-mode tensor_product
-        H1 = hilbert_space(f, 1:0, qn)
-        H2 = hilbert_space(f, 1:1, qn)
-        c1 = operators(H1)
-        c2 = operators(H2)
-        @test tensor_product([I, I], [H1, H2], H2) == I
-        @test tensor_product([I, c2[1]], [H1, H2], H2) == c2[1]
+        # Test zero-mode error
+        @test_throws ArgumentError hilbert_space(f, 1:0, qn)
     end
 
     #Test basis compatibility
@@ -469,20 +464,21 @@ LazyPhaseMap(N::Int) = (states = map(FockNumber, UnitRange{UInt64}(0, 2^N - 1));
 SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest...) = SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(rest...)
 (p::PhaseMap)(op::AbstractMatrix) = p.phases .* op
 (p::LazyPhaseMap)(op::AbstractMatrix) = p .* op
-@testitem "phasemap" begin
+@testitem "Phase map: sign pattern structure" begin
     using LinearAlgebra
-    import FermionicHilbertSpaces: operators
+    import FermionicHilbertSpaces: fermions
     # see App 2 in https://arxiv.org/pdf/2006.03087
     ns = 1:4
     phis = Dict(zip(ns, FermionicHilbertSpaces.phase_map.(ns)))
     lazyphis = Dict(zip(ns, FermionicHilbertSpaces.LazyPhaseMap.(ns)))
     @test all(sum(phis[n].phases .== -1) == (2^n - 2) * 2^n / 2 for n in ns)
     @test all(sum(phis[n].phases .== -1) == (2^n - 2) * 2^n / 2 for n in ns)
-    @fermions F
+    @fermions f
     for N in ns
         H = hilbert_space(f, 1:N)
-        c = operators(H)
-        q = FermionicHilbertSpaces.QubitOperators(H)
+        c = fermions(H)
+        # Now let's make commuting fermions (hardcore bosons)
+        q = Dict(k => embed(only(fermions(hilbert_space(f, k)))[2], hilbert_space(f, k) => H; phase_factors=false) for k in 1:N)
         @test all(map(n -> q[n] == phis[N](c[n]), 1:N))
         c2 = map(n -> phis[N](c[n]), 1:N)
         @test phis[N](phis[N](c[1])) == c[1]
@@ -495,11 +491,11 @@ SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest..
     end
 
     H1 = hilbert_space(f, 1:1)
-    c1 = operators(H1)
+    c1 = fermions(H1)
     H2 = hilbert_space(f, 2:2)
-    c2 = operators(H2)
+    c2 = fermions(H2)
     H12 = hilbert_space(f, 1:2)
-    c12 = operators(H12)
+    c12 = fermions(H12)
     p1 = FermionicHilbertSpaces.LazyPhaseMap(1)
     p2 = FermionicHilbertSpaces.phase_map(2)
     @test FermionicHilbertSpaces.fermionic_tensor_product_with_kron_and_maps((c1[1], I(2)), (p1, p1), p2) == c12[1]
@@ -515,7 +511,8 @@ end
 
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
-    if H == Hsub
+    if isnothing(complement)
+        H == Hsub || throw(ArgumentError("If `complement` is not provided, `H` must be equal to `Hsub`"))
         return copy(m)
     end
     mout = zeros(eltype(m), dim(Hsub), dim(Hsub))
@@ -535,6 +532,7 @@ abstract type AbstractPartialTraceAlg end
 struct SubsystemPartialTraceAlg <: AbstractPartialTraceAlg end
 struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
 default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 
 """
     partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, extend_state=StateExtender((Hsub, complement), H); skipmissing=true, phase_factors=true)
@@ -754,7 +752,7 @@ end
     @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
 
     H = hilbert_space(f, 1:4, NumberConservation(2))
-    Hsub = subregion([1, 3, 4], H)
+    Hsub = subregion(hilbert_space(f, [1, 3, 4]), H)
     m = rand(ComplexF64, dim(H), dim(H))
     msub = partial_trace(m, H => Hsub)
     pt = partial_trace(H => Hsub)

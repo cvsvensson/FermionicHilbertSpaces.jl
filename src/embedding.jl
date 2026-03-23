@@ -77,7 +77,7 @@ end
 
 @testitem "Embedding unitary action" begin
     # Appendix C.4
-    import FermionicHilbertSpaces: embedding_unitary, bipartite_embedding_unitary
+    import FermionicHilbertSpaces: embedding_unitary, bipartite_embedding_unitary, fermions
     using LinearAlgebra
     @fermions f
     HA = hilbert_space(f, (1, 3))
@@ -96,10 +96,11 @@ end
     @test embed(cA[1], HA, H) ≈ Ux * embed(cA[1], HA, H; phase_factors=false) * Ux'
 end
 
-
 function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
-    # isorderedsubsystem(Hsub, H) || throw(ArgumentError("Can't embed $Hsub into $H"))
+    if isnothing(complement)
+        return m
+    end
     return generalized_kron((m, I), (Hsub, complement), H; kwargs...)
 end
 const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}
@@ -123,7 +124,7 @@ embed_map(Hsub, H; complement=complementary_subsystem(H, Hsub)) = partial_trace_
 @testitem "Partial trace, embed" begin
     @fermions f
     H = hilbert_space(f, 1:4)
-    Hsub = hilbert_space(f, (2,4))
+    Hsub = hilbert_space(f, (2, 4))
     Hcomp = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
     pt = partial_trace(H => Hsub)
     emb = embed(Hsub => H)

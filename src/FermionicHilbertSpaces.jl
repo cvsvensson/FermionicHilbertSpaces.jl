@@ -15,28 +15,13 @@ import UUIDs: uuid4
 
 export FockNumber, JordanWignerOrdering, hc, basisstates, dim
 export hilbert_space, subregion
-export parityoperator, numberoperator, fermions, majoranas, matrix_representation
+export parityoperator, numberoperator, matrix_representation
 
 export partial_trace, generalized_kron, tensor_product, embed
 export @fermions, @majoranas, @boson, @spin, @spins
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export BlockHilbertSpace, quantumnumbers, sector, sectors, indices
 export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
-
-## Some types
-abstract type AbstractBasisState end
-abstract type AbstractFockState <: AbstractBasisState end
-abstract type AbstractHilbertSpace{S} end
-abstract type AbstractFockHilbertSpace{F<:AbstractFockState} <: AbstractHilbertSpace{F} end
-abstract type AbstractAtomicHilbertSpace{B} <: AbstractHilbertSpace{B} end
-abstract type AbstractProductHilbertSpace{B} <: AbstractHilbertSpace{B} end
-abstract type AbstractClusterHilbertSpace{B} <: AbstractProductHilbertSpace{B} end
-abstract type AbstractFermionicClusterHilbertSpace{B} <: AbstractClusterHilbertSpace{B} end
-factors(H::AbstractAtomicHilbertSpace) = (H,)
-clusters(H::AbstractAtomicHilbertSpace) = (H,)
-atomic_factors(H::AbstractAtomicHilbertSpace) = (H,)
-factors(H::AbstractClusterHilbertSpace) = atomic_factors(H)
-clusters(H::AbstractClusterHilbertSpace) = (H,)
 
 """
     HC
@@ -52,35 +37,34 @@ Adding this is equivalent to adding the hermitian conjugate.
 const hc = HC()
 
 ## Files
+include("spaces.jl")
 include("state_splitter.jl")
-include("fock.jl")
-include("phase_factors.jl")
-# include("symmetry.jl")
 include("hilbert_space.jl")
-include("generate_constrained_states.jl")
-include("kron_product_space.jl")
-include("constrained_space.jl")
 include("sectors.jl")
-
-include("fermions.jl")
-
-include("operators.jl")
+include("product_space.jl")
 include("tensor_product.jl")
+
 include("embedding.jl")
 include("reshape.jl")
 
-include("symbolics/muladd.jl")
-include("symbolics/symbolic_fermions.jl")
+include("constraints.jl")
+include("constrained_space.jl")
+include("generate_constrained_states.jl")
 
-include("fixednumberfock.jl")
+include("matrix_representation.jl")
 
-include("majoranas.jl")
-include("bosons.jl")
-include("spin.jl")
+include("physics/fermions/fock.jl")
+include("physics/fermions/phase_factors.jl")
+include("physics/fermions/fermions.jl")
+include("physics/fermions/symbolic_fermions.jl")
+include("physics/fermions/fixednumberfock.jl")
+include("physics/fermions/operators.jl")
 
-include("bdg.jl")
 
-
+include("physics/majoranas.jl")
+include("physics/bosons.jl")
+include("physics/spin.jl")
+include("physics/bdg.jl")
 
 function __init__()
     NonCommutativeProducts.enable_autosort!()

@@ -13,26 +13,13 @@
 
 ##
 # Abstract type for constraints
-abstract type AbstractConstraint end
 abstract type AbstractBranchConstraint <: AbstractConstraint end
-struct NoSymmetry <: AbstractConstraint end
-
-struct ProductConstraint{C} <: AbstractConstraint
-    constraints::C
-end
-
-instantiate(constraints::ProductConstraint, H) = prod(instantiate(cons, H) for cons in constraints.constraints)
-Base.:*(sym1::AbstractConstraint, sym2::AbstractConstraint) = ProductConstraint((sym1, sym2))
-Base.:*(sym1::AbstractConstraint, sym2::ProductConstraint) = ProductConstraint((sym1, sym2.constraints...))
-Base.:*(sym1::ProductConstraint, sym2::AbstractConstraint) = ProductConstraint((sym1.constraints..., sym2))
-Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint((sym1.constraints..., sym2.constraints...))
-generate_states(space, constraint::ProductConstraint; kwargs...) = generate_states(space, constraint.constraints; kwargs...)
-
 struct BranchConstraint{F} <: AbstractBranchConstraint
     f::F
 end
 valid_branch(constraint::BranchConstraint, partial_state, depth, spaces) = constraint.f(partial_state, depth, spaces)
-
+branch_constraint(constraint::BranchConstraint, space) = constraint
+has_sectors(::AbstractConstraint) = false
 """
     valid_branch(constraint, partial_state, remaining_spaces) -> Bool
 
@@ -92,9 +79,10 @@ function backtrack!(results, partial, spaces, depth, constraints, partial_proces
     end
 end
 
-function catenate_fock_states(full_state, spaces)
-    T = default_fock_representation(sum(nbr_of_modes, spaces))
-    num = FockNumber(zero(T))
+function catenate_fock_states(full_state, spaces, T)
+    # T = default_fock_representation(sum(nbr_of_modes, spaces))
+    # T = promote_type(map(typeof, full_state)...)
+    num = zero(T)
     shift = 0
     for (state, space) in zip(full_state, spaces)
         num |= state << shift
@@ -103,13 +91,9 @@ function catenate_fock_states(full_state, spaces)
     num
 end
 
-struct CombineFockNumbersProcessor end
-function (processor::CombineFockNumbersProcessor)(full_state, spaces)
-    catenate_fock_states(full_state, spaces)
-end
-_init_results(spaces, ::CombineFockNumbersProcessor) = FockNumber{default_fock_representation(sum(nbr_of_modes, spaces))}[]
 unweighted_number_branch_constraint(allowed_numbers, ::Nothing, allspaces) = unweighted_number_branch_constraint(allowed_numbers, allspaces, allspaces)
 
+unweighted_number_branch_constraint(allowed_numbers, subspaces, allspaces::AbstractHilbertSpace) = unweighted_number_branch_constraint(allowed_numbers, subspaces, factors(allspaces))
 function unweighted_number_branch_constraint(allowed_numbers, subspaces, allspaces)
     issub = BitVector(map(s -> s in subspaces, allspaces))
     remaining_max_particles = Int[]
@@ -154,10 +138,6 @@ function weighted_number_branch_constraint(allowed_sums, weights, allspaces)
         return any(target -> min_possible <= target <= max_possible, allowed_sums)
     end)
 end
-
-maximum_particles(H::AbstractFockHilbertSpace) = nbr_of_modes(H)
-particle_number(s::FockNumber) = count_ones(s.f)
-particle_number(s::FockNumber{Bool}) = s.f ? 1 : 0
 
 
 @testitem "generate_states with BranchConstraint" begin
@@ -204,7 +184,7 @@ particle_number(s::FockNumber{Bool}) = s.f ? 1 : 0
     end
 
     cons2 = NumberConservation(allowed_ones[1], [Hs[2], Hs[4]]) * NumberConservation(allowed_ones[2], [Hs[1], Hs[3]])
-    @test states == generate_states(H, FermionicHilbertSpaces.instantiate(cons2, H); leaf_processor)
+    @test states == generate_states(H, cons2; leaf_processor)
 
     @test all([[[0], [2]], [[1], [1]], [[0], [0]], [[2], [2]]]) do allowed
         c1 = unweighted_number_branch_constraint(allowed[1], [Hs[2], Hs[4]], Hs)

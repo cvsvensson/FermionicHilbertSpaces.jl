@@ -31,6 +31,7 @@ end
 JordanWignerOrdering(jw::JordanWignerOrdering) = jw
 Base.length(jw::JordanWignerOrdering) = length(jw.ordering)
 Base.:(==)(jw1::JordanWignerOrdering, jw2::JordanWignerOrdering) = jw1.ordering == jw2.ordering
+Base.hash(jw::JordanWignerOrdering, h::UInt) = hash(jw.ordering, h)
 Base.keys(jw::JordanWignerOrdering) = jw.ordering.keys
 Base.iterate(jw::JordanWignerOrdering) = iterate(keys(jw))
 Base.iterate(jw::JordanWignerOrdering, state) = iterate(keys(jw), state)
@@ -38,7 +39,6 @@ Base.eltype(::JordanWignerOrdering{L}) where L = L
 
 Base.getindex(ordering::JordanWignerOrdering, label) = ordering.ordering[label]
 getindices(jw::JordanWignerOrdering, labels) = map(Base.Fix1(getindex, jw), labels)
-getindices(H::AbstractFockHilbertSpace, labels) = getindices(mode_ordering(H), labels)
 
 label_at_site(n, jw::JordanWignerOrdering) = keys(jw)[n]
 focknbr_from_site_label(label, jw::JordanWignerOrdering) = focknbr_from_site_index(getindex(jw, label))
@@ -72,8 +72,14 @@ parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
 Base.count_ones(f::FockNumber{Bool}) = f.f ? 1 : 0
+particle_number(s::FockNumber) = fermionnumber(s)
 
-occupation(f::AbstractFockState, label, H::AbstractFockHilbertSpace) = _bit(f, getindex(mode_ordering(H), label))
+function substate(siteindices, f::FockNumber)
+    subbits = Iterators.map(i -> _bit(f, i), siteindices)
+    return focknbr_from_bits(subbits)
+end
+
+# occupation(f::AbstractFockState, label, H::AbstractFockHilbertSpace) = _bit(f, getindex(mode_ordering(H), label))
 fermionnumber(f::FockNumber{<:Integer}, mask) = count_weighted_ones(f.f, mask)
 count_weighted_ones(x, mask::Integer) = count_ones(x & mask)
 count_weighted_ones(x, weights::Union{Vector,Tuple}) = sum(w for (i, w) in enumerate(weights) if _bit(x, i))
@@ -102,9 +108,9 @@ end
 function FockMapper(fermionpositions::P) where P
     widths = map(length, fermionpositions)
     nbr_of_modes = maximum(maximum, fermionpositions)
-    perm = reduce(vcat, fermionpositions)
+    perm = mapreduce(collect, vcat, fermionpositions)
     all(issorted, fermionpositions) || throw(ArgumentError("The order of fermions in each subsystem should be ordered as in the full system, but the provided fermion positions are not sorted: $fermionpositions"))
-    permutation = isperm(perm) ? BitPermutation{UInt}(reduce(vcat, fermionpositions))' : nothing
+    permutation = isperm(perm) ? BitPermutation{UInt}(perm)' : nothing
     FockMapper(fermionpositions, widths, permutation, nbr_of_modes)
 end
 
@@ -148,20 +154,22 @@ shift_right(f::FockNumber, M) = FockNumber(f.f << M)
     Random.seed!(1234)
 
     N = 6
-    focknumber = FockNumber(20) # = 16+4 = 00101
-    fbits = bits(focknumber, N)
-    @test fbits == [0, 0, 1, 0, 1, 0]
+    @testset "FockNumber bits and construction" begin
+        focknumber = FockNumber(20) # = 16+4 = 00101
+        fbits = bits(focknumber, N)
+        @test fbits == [0, 0, 1, 0, 1, 0]
 
-    @test focknbr_from_bits(fbits) == focknumber
-    @test focknbr_from_bits(Tuple(fbits)) == focknumber
-    @test !_bit(focknumber, 1)
-    @test !_bit(focknumber, 2)
-    @test _bit(focknumber, 3)
-    @test !_bit(focknumber, 4)
-    @test _bit(focknumber, 5)
+        @test focknbr_from_bits(fbits) == focknumber
+        @test focknbr_from_bits(Tuple(fbits)) == focknumber
+        @test !_bit(focknumber, 1)
+        @test !_bit(focknumber, 2)
+        @test _bit(focknumber, 3)
+        @test !_bit(focknumber, 4)
+        @test _bit(focknumber, 5)
 
-    @test focknbr_from_site_indices((3, 5)) == focknumber
-    @test focknbr_from_site_indices([3, 5]) == focknumber
+        @test focknbr_from_site_indices((3, 5)) == focknumber
+        @test focknbr_from_site_indices([3, 5]) == focknumber
+    end
 
     @testset "removefermion" begin
         focknbr = FockNumber(rand(1:2^N) - 1)
@@ -193,16 +201,18 @@ shift_right(f::FockNumber, M) = FockNumber(f.f << M)
         @test sign == 0
     end
 
-    fs = FermionicHilbertSpaces.fixed_particle_number_fockstates(10, 5)
-    @test length(fs) == binomial(10, 5)
-    @test allunique(fs)
-    @test all(FermionicHilbertSpaces.fermionnumber.(fs) .== 5)
+    @testset "Fixed particle number Fock states" begin
+        fs = FermionicHilbertSpaces.fixed_particle_number_fockstates(10, 5)
+        @test length(fs) == binomial(10, 5)
+        @test allunique(fs)
+        @test all(FermionicHilbertSpaces.fermionnumber.(fs) .== 5)
+    end
 
-    @testset "Large site indices" begin
+    @testset "Large site indices use BigInt" begin
         f = focknbr_from_site_indices((1, 1000,))
-        f isa FockNumber{BigInt}
-        f.f == 1 + BigInt(2)^(1000 - 1)
-        focknbr_from_site_index(1000).f == f.f - 1
+        @test f isa FockNumber{BigInt}
+        @test f.f == 1 + BigInt(2)^(1000 - 1)
+        @test focknbr_from_site_index(1000).f == f.f - 1
     end
 end
 
@@ -210,63 +220,69 @@ _bit(f::FockNumber, k) = Bool((f.f >> (k - 1)) & 1)
 _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
 
 @testitem "Split and join focknumbers" begin
-    import FermionicHilbertSpaces: focknbr_from_site_indices as fock
-    jw1 = JordanWignerOrdering((1, 3))
-    jw2 = JordanWignerOrdering((2, 4))
-    jw = JordanWignerOrdering(1:4)
-    focksplitter = FermionicHilbertSpaces.FockSplitter(jw, (jw1, jw2))
-    @test focksplitter(fock((1, 2, 3, 4))) == (fock((1, 2)), fock((1, 2)))
-    @test focksplitter(fock((1,))) == (fock((1,)), fock(()))
-    @test focksplitter(fock(())) == (fock(()), fock(()))
-    @test focksplitter(fock((1, 2, 3))) == (fock((1, 2)), fock((1,)))
-    @test focksplitter(fock((1, 3))) == (fock((1, 2)), fock(()))
-    @test focksplitter(fock((2, 4))) == (fock(()), fock((1, 2)))
-    @test focksplitter(fock((3, 2))) == (fock((2,)), fock((1,)))
-    @test focksplitter(fock((3, 4))) == (fock((2,)), fock((2,)))
+    import FermionicHilbertSpaces: FockMapper, split_state, combine_states, focknbr_from_site_indices as fock
+    fockmapper = FockMapper(((1, 3), (2, 4)))
+    _split(state, fockmapper) = first(only(split_state(state, fockmapper)))
+    _combine(states, fockmapper) = first(only(combine_states(states, fockmapper)))
 
-    fockmapper = FermionicHilbertSpaces.FockMapper((jw1, jw2), jw)
-    @test FermionicHilbertSpaces.split_state(fock((1, 2, 4)), fockmapper) == focksplitter(fock((1, 2, 4)))
+    split = Base.Fix2(_split, fockmapper)
+    combine = Base.Fix2(_combine, fockmapper)
+    @test split(fock((1, 2, 3, 4))) == (fock((1, 2)), fock((1, 2)))
+    @test split(fock((1,))) == (fock((1,)), fock(()))
+    @test split(fock(())) == (fock(()), fock(()))
+    @test split(fock((1, 2, 3))) == (fock((1, 2)), fock((1,)))
+    @test split(fock((1, 3))) == (fock((1, 2)), fock(()))
+    @test split(fock((2, 4))) == (fock(()), fock((1, 2)))
+    @test split(fock((3, 2))) == (fock((2,)), fock((1,)))
+    @test split(fock((3, 4))) == (fock((2,)), fock((2,)))
 
-    # test all cases above with fockmapper
-    @test fock((1, 2, 3, 4)) == fockmapper((fock((1, 2)), fock((1, 2))))
-    @test fock((1,)) == fockmapper((fock((1,)), fock(())))
-    @test fock(()) == fockmapper((fock(()), fock(())))
-    @test fock((1, 2, 3)) == fockmapper((fock((1, 2)), fock((1,))))
-    @test fock((1, 3)) == fockmapper((fock((1, 2)), fock(())))
-    @test fock((2, 4)) == fockmapper((fock(()), fock((1, 2))))
-    @test fock((3, 2)) == fockmapper((fock((2,)), fock((1,))))
-    @test fock((3, 4)) == fockmapper((fock((2,)), fock((2,))))
-
-    # test splitting with different sizes
-    jw1 = JordanWignerOrdering((1, 2))
-    jw2 = JordanWignerOrdering((3,))
-    jw = JordanWignerOrdering((1, 2, 3))
-    focksplitter = FermionicHilbertSpaces.FockSplitter(jw, (jw1, jw2))
-    @test focksplitter(fock((1, 2, 3))) == (fock((1, 2)), fock((1,)))
-    @test focksplitter(fock((1, 3))) == (fock((1,)), fock((1,)))
-    @test focksplitter(fock((1, 2))) == (fock((1, 2)), fock(()))
-    @test focksplitter(fock((2,))) == (fock((2,)), fock(()))
-    @test focksplitter(fock((2, 3))) == (fock((2,)), fock((1,)))
-    @test focksplitter(fock((3,))) == (fock(()), fock((1)))
-
-    # test all cases above with fockmapper
-    fockmapper = FermionicHilbertSpaces.FockMapper((jw1, jw2), jw)
-    @test FermionicHilbertSpaces.split_state(fock((1, 2, 3)), fockmapper) == focksplitter(fock((1, 2, 3)))
-    @test fock((1, 3)) == fockmapper((fock((1,)), fock((1,))))
-    @test fock((1, 2)) == fockmapper((fock((1, 2)), fock(())))
-    @test fock((2,)) == fockmapper((fock((2,)), fock(())))
-    @test fock((2, 3)) == fockmapper((fock((2,)), fock((1,))))
-    @test fock((3,)) == fockmapper((fock(()), fock((1,))))
+    # test all cases above with combiner
+    @test fock((1, 2, 3, 4)) == combine((fock((1, 2)), fock((1, 2))))
+    @test fock((1,)) == combine((fock((1,)), fock(())))
+    @test fock(()) == combine((fock(()), fock(())))
+    @test fock((1, 2, 3)) == combine((fock((1, 2)), fock((1,))))
+    @test fock((1, 3)) == combine((fock((1, 2)), fock(())))
+    @test fock((2, 4)) == combine((fock(()), fock((1, 2))))
+    @test fock((3, 2)) == combine((fock((2,)), fock((1,))))
+    @test fock((3, 4)) == combine((fock((2,)), fock((2,))))
 
     # test splitting with different sizes
-    jw1 = JordanWignerOrdering((1, 4))
-    jw2 = JordanWignerOrdering((2,))
-    jw3 = JordanWignerOrdering((3,))
-    jw = JordanWignerOrdering(1:4)
-    focksplitter = FermionicHilbertSpaces.FockSplitter(jw, (jw1, jw2, jw3))
-    fockmapper = FermionicHilbertSpaces.FockMapper((jw1, jw2, jw3), jw)
-    ident = fockmapper ∘ focksplitter
-    @test all(ident(FockNumber(k)) == FockNumber(k) for k in 0:2^length(jw)-1)
+    fockmapper = FockMapper(((1, 2), (3,)))
+    split = Base.Fix2(_split, fockmapper)
+    combine = Base.Fix2(_combine, fockmapper)
+    @test split(fock((1, 2, 3))) == (fock((1, 2)), fock((1,)))
+    @test split(fock((1, 3))) == (fock((1,)), fock((1,)))
+    @test split(fock((1, 2))) == (fock((1, 2)), fock(()))
+    @test split(fock((2,))) == (fock((2,)), fock(()))
+    @test split(fock((2, 3))) == (fock((2,)), fock((1,)))
+    @test split(fock((3,))) == (fock(()), fock((1)))
+
+    # test all cases above with combine
+    @test fock((1, 3)) == combine((fock((1,)), fock((1,))))
+    @test fock((1, 2)) == combine((fock((1, 2)), fock(())))
+    @test fock((2,)) == combine((fock((2,)), fock(())))
+    @test fock((2, 3)) == combine((fock((2,)), fock((1,))))
+    @test fock((3,)) == combine((fock(()), fock((1,))))
+
+    # test splitting with different sizes
+    fockmapper = FockMapper(((1, 4), (2,), (3,)))
+    split = Base.Fix2(_split, fockmapper)
+    combine = Base.Fix2(_combine, fockmapper)
+    ident = combine ∘ split
+    @test all(ident(FockNumber(k)) == FockNumber(k) for k in 0:2^4-1)
+
+    # test subsystem splits
+    fockmapper = FockMapper(((1, 3),))
+    split = only ∘ Base.Fix2(_split, fockmapper)
+    # split(state) = only(first(only(split_state(state, fockmapper))))
+    @test split(fock((1, 2, 3, 4))) == fock((1, 2))
+    @test split(fock((1,))) == fock((1,))
+    @test split(fock(())) == fock(())
+    @test split(fock((1, 2, 3))) == fock((1, 2))
+    @test split(fock((1, 3))) == fock((1, 2))
+    @test split(fock((2, 4))) == fock(())
+    @test split(fock((3, 2))) == fock((2,))
+    @test split(fock((3, 4))) == fock((2,))
 end
 
 

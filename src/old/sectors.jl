@@ -19,33 +19,3 @@
 #     return indices(qn, H.parent)
 # end
 # indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
-
-# @testitem "Sector" begin
-#     import FermionicHilbertSpaces: sector, sectors, indices, quantumnumbers, majorana_hilbert_space, MajoranaHilbertSpace
-#     N = 4
-#     H = hilbert_space(1:N, number_conservation())
-#     @test quantumnumbers(H) == 0:N
-#     Hns = sectors(H)
-#     for (ind, n) in enumerate(quantumnumbers(H))
-#         Hn = hilbert_space(1:N, number_conservation(n))
-#         @test basisstates(Hn) == basisstates(Hns[ind]) # Hn ≠ Hns[ind] since Hn is a SymmetricFockHilbertSpace
-#         @test basisstates(Hn) == basisstates(sector(n, H))
-#         @test basisstates(Hn) == basisstates(H)[indices(Hn, H)]
-#         @test basisstates(Hn) == basisstates(H)[indices(n, H)]
-#     end
-#     # no qns
-#     Hnoqn = hilbert_space(1:N)
-#     HMnoqn = majorana_hilbert_space(1:N)
-#     @test indices(only(quantumnumbers(Hnoqn)), Hnoqn) == 1:dim(Hnoqn)
-#     @test indices(only(quantumnumbers(HMnoqn)), HMnoqn) == 1:dim(HMnoqn)
-#     @test length(sectors(Hnoqn)) == length(sectors(HMnoqn)) == 1
-#     @test eltype(sectors(HMnoqn)) <: MajoranaHilbertSpace
-#     # Majorana hilbert spaces
-#     HM = majorana_hilbert_space(1:N, NumberConservation())
-#     @test quantumnumbers(HM) == 0:N÷2
-#     qn = 1
-#     HMqn = majorana_hilbert_space(1:N, NumberConservation(qn))
-#     @test basisstates(HMqn) == basisstates(HM)[indices(qn, HM)]
-#     @test length(sectors(HM)) == N ÷ 2 + 1
-#     @test eltype(sectors(HM)) <: MajoranaHilbertSpace
-# end

@@ -100,9 +100,9 @@ end
 
 @testitem "Reshape" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: project_on_parities, project_on_parity, operators
+    using FermionicHilbertSpaces: project_on_parities, project_on_parity, fermions, majoranas
     function majorana_basis(H)
-        b = operators(H)
+        b = majoranas(fermions(H))
         majoranas = Dict((l, s) => (s == :- ? 1im : 1) * b[l] + hc for (l, s) in Base.product(keys(b), [:+, :-]))
         labels = collect(keys(majoranas))
         basisops = mapreduce(vec, vcat, [[prod(l -> majoranas[l], ls) for ls in Base.product([labels for _ in 1:n]...) if (issorted(ls) && allunique(ls))] for n in 1:length(labels)])
@@ -112,6 +112,7 @@ end
 
     qns = [NoSymmetry(), ParityConservation(), NumberConservation()]
     for qn in qns
+        @fermions f
         H = hilbert_space(f, 1:2, qn)
         majbasis = majorana_basis(H)
         @test all(map(ishermitian, majbasis))
@@ -119,17 +120,15 @@ end
         @test overlaps ≈ I
         @test rank(mapreduce(vec, hcat, majbasis)) == length(majbasis)
     end
-    @fermions f
     function test_reshape(qn1, qn2, qn3)
+        @fermions f
         H1 = hilbert_space(f, (1, 3), qn1)
         H2 = hilbert_space(f, (2, 4), qn2)
         d1 = 4
         d2 = 4
         Hs = (H1, H2)
         H = hilbert_space(f, 1:4, qn3)
-        b = operators(H)
-        b1 = operators(H1)
-        b2 = operators(H2)
+        b = fermions(H)
         m = b[1]
         t = reshape(m, H => Hs)
         @test norm(m) ≈ norm(t)

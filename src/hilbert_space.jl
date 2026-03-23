@@ -15,12 +15,13 @@ Base.keys(H::GenericHilbertSpace) = (H.label,)
 state_index(state, H::GenericHilbertSpace) = get(H.state_index, state, missing)
 atomic_group(H::GenericHilbertSpace) = H.label
 
-function Base.show(io::IO, H::Htype) where Htype<:AbstractFockHilbertSpace
-    d = dim(H)
-    N = nbr_of_modes(H)
-    println(io, "$(d)-dimensional $(Htype.name.name):")
-    print(io, "$N fermions: ")
-    print(IOContext(io, :compact => true), modes(H))
+function Base.show(io::IO, H::GenericHilbertSpace)
+    if get(io, :compact, false)
+        print(io, "GenericHilbertSpace(", H.label, ")")
+    else
+        print(io, "$(dim(H))-dimensional GenericHilbertSpace\n")
+        print(io, "Label: ", H.label)
+    end
 end
 Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 
@@ -55,8 +56,8 @@ Return the Hilbert-space dimension of `H`, i.e. the number of basis states.
 dim(H::AbstractHilbertSpace) = Int(length(basisstates(H)))
 
 
-embedding_unitary(partition, H::AbstractFockHilbertSpace) = embedding_unitary(partition, basisstates(H), H.jw)
-bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_embedding_unitary(X, Xbar, basisstates(H), H.jw)
+# embedding_unitary(partition, H::AbstractFockHilbertSpace) = embedding_unitary(partition, basisstates(H), H.jw)
+# bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_embedding_unitary(X, Xbar, basisstates(H), H.jw)
 
 
 #= Tests for isorderedsubsystem and issubsystem for Hilbert spaces =#
@@ -98,15 +99,11 @@ bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_em
     @test !isorderedpartition(Hs4, H)
 end
 
-function substate(siteindices, f::FockNumber)
-    subbits = Iterators.map(i -> _bit(f, i), siteindices)
-    return focknbr_from_bits(subbits)
-end
 
 statetype(::AbstractHilbertSpace{F}) where F = F
 statetype(::Nothing) = Nothing
 
-@testitem "subregion function" begin
+@testitem "Subregion of fermionic spaces with conservation laws" begin
     using FermionicHilbertSpaces: atomic_factors
     @fermions f
     H = hilbert_space(f, [1, 2, 3])

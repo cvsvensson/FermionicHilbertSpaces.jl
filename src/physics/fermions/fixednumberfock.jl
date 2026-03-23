@@ -113,8 +113,9 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     @test matrix_representation(op, H) ≈ matrix_representation(op, Hf)
 end
 
-function apply_local_operators(ops, f::FixedNumberFockState, H::AbstractHilbertSpace; kwargs...)
-    sites = Iterators.map(op -> _find_position(op, H), reverse(ops))
+_precomputation_before_operator_application(ops, space::AbstractHilbertSpace{F}) where F<:FixedNumberFockState = map(op -> _find_position(op, space), reverse(ops))
+function apply_local_operators(ops, f::FixedNumberFockState, H::AbstractHilbertSpace, sites; kwargs...)
+    # sites = Iterators.map(op -> _find_position(op, H), reverse(ops))
     daggers = Iterators.map(op -> op.creation, reverse(ops))
     return (togglefermions(sites, daggers, f),)
 end
@@ -186,6 +187,8 @@ Base.keys(h::SingleParticleHilbertSpace) = keys(h.parent)
 mode_ordering(h::SingleParticleHilbertSpace) = mode_ordering(h.parent)
 modes(h::SingleParticleHilbertSpace) = modes(h.parent)
 basisstates(h::SingleParticleHilbertSpace) = basisstates(h.parent)
+Base.:(==)(a::SingleParticleHilbertSpace, b::SingleParticleHilbertSpace) = a === b || a.parent == b.parent
+Base.hash(x::SingleParticleHilbertSpace, h::UInt) = hash(x.parent, h)
 """
     single_particle_hilbert_space(labels)
 
@@ -265,4 +268,30 @@ function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::SinglePartic
     return (outinds, ininds, amps)
 end
 
-# _sym_space_match(basis::SymbolicFermionBasis, space::SingleParticleHilbertSpace) = true
+
+function nextfockstate_with_same_number(f::FockNumber{T}) where T
+    FockNumber{T}(nextfockstate_with_same_number(f.f))
+end
+function nextfockstate_with_same_number(v::Integer)
+    #http://graphics.stanford.edu/~seander/bithacks.html#NextBitPermutation
+    t = (v | (v - 1)) + 1
+    t | (((div((t & -t), (v & -v))) >> 1) - 1)
+end
+"""
+    fixed_particle_number_fockstates(M, n)
+
+Generate a list of Fock states with `n` occupied fermions in a system with `M` different fermions.
+"""
+function fixed_particle_number_fockstates(M, n, ::Type{T}=default_fock_representation(M)) where T
+    iszero(n) && return [FockNumber{T}(zero(T))]
+    v = focknbr_from_bits([k <= n for k in 1:M])
+    maxv = v << (M - n)
+    states = Vector{FockNumber{T}}(undef, binomial(M, n))
+    count = 1
+    while v <= maxv
+        states[count] = v
+        v = nextfockstate_with_same_number(v)
+        count += 1
+    end
+    states
+end

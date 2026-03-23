@@ -24,10 +24,11 @@ end
 function operator_inds_amps!((outinds, ininds, amps), op, H::AbstractHilbertSpace; kwargs...)
     return operator_inds_amps_generic!((outinds, ininds, amps), op, H; kwargs...)
 end
-
+_precomputation_before_operator_application(factors, space) = nothing
 function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,F}, space::AbstractHilbertSpace; projection=false) where {C,F}
+    precomp = _precomputation_before_operator_application(op.factors, space)
     for (n, state) in enumerate(basisstates(space))
-        newstate_amps = apply_local_operators(op.factors, state, space)
+        newstate_amps = apply_local_operators(op.factors, state, space, precomp)
         for (newstate, amp) in newstate_amps
             if !iszero(amp)
                 outind = state_index(newstate, space)
@@ -41,17 +42,18 @@ function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,F}, sp
     end
     return (outinds, ininds, amps)
 end
-
-
+function _precomputation_before_operator_application(ops, space::ProductSpace)
+    map(space -> _precomputation_before_operator_application(ops, space), space.spaces)
+end
 apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::ConstrainedSpace) = apply_local_operators(ops, state, space.parent)
-function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::AbstractHilbertSpace)
+function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::AbstractHilbertSpace, precomp)
     amp = 1
     spaces = clusters(space)
     newstate = ProductState(ntuple(length(state.states)) do i
         op = ops[i]
         subst = state.states[i]
         space = spaces[i]
-        new_state_amps = apply_local_operators(op.factors, subst, space)
+        new_state_amps = apply_local_operators(op.factors, subst, space, precomps[i])
         new_local_state, local_amp = only(new_state_amps) #TODO: add support for multiple terms here
         amp *= local_amp
         new_local_state
@@ -176,6 +178,9 @@ function _matrix_representation(op::NCAdd, bases, space::ProductSpace; kwargs...
     sum(_matrix_representation(term, bases, space; kwargs...) for term in NCterms(op)) + op.coeff * I(dim(space))
 end
 function _matrix_representation(op::NCAdd, bases, space::Union{<:ConstrainedSpace,<:BlockHilbertSpace}; kwargs...)
+    if length(bases) == 1
+        return _matrix_representation_single_space(op, space; kwargs...)
+    end
     sum(_matrix_representation(term, bases, space; kwargs...) for term in NCterms(op)) + op.coeff * I(dim(space))
 end
 
@@ -292,9 +297,7 @@ function matrix_representation(op, space::AbstractHilbertSpace; kwargs...)
     end
     op_groups = atomic_groups(op)
     space_groups = unique(map(atomic_group, atomic_factors(space)))
-    # println("Operator groups: $op_groups")
-    # println("Space groups: $space_groups")
-    all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space."))
+    all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
     return _matrix_representation(op, space_groups, space; kwargs...)
 end
 trivial_operator(op::Union{UniformScaling,Number}) = true

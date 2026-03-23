@@ -83,10 +83,20 @@ end
 
 
 function Base.show(io::IO, H::ProductSpace)
-    println(io, "$(dim(H))-dimensional ProductSpace:")
-    print(io, "$(length(H.clusters)) clusters")
+    if get(io, :compact, false)
+        print(io, "ProductSpace($(dim(H))-dim, $(length(H.clusters)) clusters)")
+    else
+        print(io, "$(dim(H))-dimensional ProductSpace: ")
+        dims = map(dim, H.clusters)
+        println(io, "(", join(dims, "x"), ")")
+        print(io, "(")
+        for (i, c) in enumerate(H.clusters)
+            i > 1 && print(io, " ⊗ ")
+            show(IOContext(io, :compact => true), c)
+        end
+        print(io, ")")
+    end
 end
-
 function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
     sub_atoms = Set(atomic_factors(Hsub))
 
@@ -101,7 +111,8 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
 
     # Filter atoms preserving original order
     remaining = filter(a -> !(a in sub_atoms), atomic_factors(H))
-    isempty(remaining) && throw(ArgumentError("Complementary subsystem is empty"))
+    # isempty(remaining) && throw(ArgumentError("Complementary subsystem is empty"))
+    isempty(remaining) && return nothing
 
     Hcomp = tensor_product(remaining)
     if isconstrained(H)
@@ -115,7 +126,6 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
     return Hcomp
 
 end
-
 
 struct AtomicStateSplitter <: AbstractStateSplitter end
 function state_splitter(H::AbstractAtomicHilbertSpace, Hs)
@@ -356,26 +366,13 @@ function state_splitter(source::ProductSpace, targets)
             continue
         end
 
-        # println(covered_targets)
-        # println([targets[ti] for ti in covered_targets])
         piece_destinations = map(covered_targets) do ti
             (ti, findfirst(cluster -> all(in(catoms), atomic_factors(cluster)), clusters(targets[ti])))
         end
-        # println(piece_destinations)
         subspaces = [clusters(targets[ti])[dest] for (ti, dest) in piece_destinations]
-        # print("--")
-        # println(subspaces)
-        # [_find_position(target_cluster, clusters(targets[ti])] for ti in covered_targets]
-        # piece_destinations = Tuple((ti, findfirst(issubspace(atomic_factors(targets[ti])), catoms, atom_to_target, ti)) for ti in covered_targets)
-        # subspaces = [cluster_target_subspace(targets[ti], catoms, atom_to_target, ti)
-        #              for ti in covered_targets]
-        # println(subspaces)
         push!(cluster_splitters, state_splitter(cluster, subspaces))
 
         # Store where each piece goes: (ti, sub_idx_in_target)
-        # # piece_destinations = Tuple((ti, cluster_target_sub_idx(targets[ti], catoms, atom_to_target, ti))
-        # #                            for ti in covered_targets)
-        # println(piece_destinations)
         push!(cluster_piece_targets, piece_destinations)
 
         # Accumulate for sorting
@@ -400,26 +397,8 @@ end
 
 # ─── helpers ───────────────────────────────────────────────────────────────────
 
-# Sub-space of `target` corresponding to the atoms of catoms that belong to target ti
-# cluster_target_subspace(target::AbstractAtomicHilbertSpace, catoms, a2t, ti) = target
-# cluster_target_subspace(target::AbstractClusterHilbertSpace, catoms, a2t, ti) = target
-# issubspace(atoms, target) = all(a -> a in Set(atomic_factors(target)), atoms)
-# function cluster_target_subspace(target, catoms, a2t, ti)
-#     overlap = [a for a in catoms if get(a2t, a, nothing) == ti]
-#     inoverlap = in(Set(overlap))
-#     for sub in clusters(target)
-#         atoms = atomic_factors(sub)
-#         all(inoverlap, atoms) && length(overlap) == length(atoms) && return sub
-#     end
-#     throw(ArgumentError("No sub-space with atoms $overlap in target"))
-# end
-
-# Index of that sub-space within target (1 for atomic/cluster targets)
-# cluster_target_sub_idx(::Any, catoms, a2t, ti) = 1
-# cluster_target_sub_idx(target, catoms, a2t, ti) = _find_position(cluster_target_subspace(target, catoms, a2t, ti), target)
 _find_position(target::AbstractAtomicHilbertSpace, parent::AbstractAtomicHilbertSpace) = target == parent ? 1 : 0
 _find_position(target::AbstractClusterHilbertSpace, parent::AbstractClusterHilbertSpace) = target == parent ? 1 : 0
-
 
 # Extract the k-th sub-state (for ProductState) or the state itself (for atomic/cluster)
 extract_substate(state::ProductState, k) = state.states[k]
@@ -430,8 +409,6 @@ extract_substate(state, k) = state
 function split_state(state::ProductState, sp::ProductSpaceSplitter)
     # Split each source cluster into its pieces
     cluster_pieces = ntuple(length(sp.cluster_splitters)) do i
-        # println("Splitting cluster $i with splitter $(sp.cluster_splitters[i])")
-        # println("Result: ", split_state(state.states[i], sp.cluster_splitters[i]))
         isnothing(sp.cluster_splitters[i]) ? () :
         first(only(split_state(state.states[i], sp.cluster_splitters[i]))) #TODO: handle multiple outcomes from split_state. The use of first(only()) assumes that each cluster splitter produces exactly one piece per target
     end
@@ -517,6 +494,119 @@ function subregion(Hs, H::AbstractHilbertSpace)
     constrain_space(Hsub, states)
 end
 
+
+_find_position(n, v::AbstractVector) = (pos = findfirst(==(n), v); isnothing(pos) ? 0 : pos)
+
+_find_atom_position(atom, H::AbstractClusterHilbertSpace) = _find_position(atom, H)
+_find_atom_position(atom, H::AbstractHilbertSpace) = _find_position(atom, atomic_factors(H))
+
+function isorderedsubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
+    positions = [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)]
+    all(pos -> pos > 0, positions) || return false
+    issorted(positions) || return false
+    return true
+end
+function isorderedpartition(Hsubs, H::AbstractHilbertSpace)
+    positions = map(Hsub -> [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)], Hsubs)
+    isorderedpartition(positions, length(atomic_factors(H)))
+end
+function issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
+    positions = [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)]
+    all(pos -> pos > 0, positions)
+end
+function ispartition(partition, H::AbstractHilbertSpace)
+    partition_inds = [_find_atom_position(atom, H) for part in partition for atom in atomic_factors(part)]
+    ispartition(partition_inds, length(atomic_factors(H)))
+end
+function ispartition(partition, N::Int)
+    covered = falses(N)
+    for subsystem in partition
+        for pos in subsystem
+            pos == 0 && return false
+            covered[pos] && return false
+            covered[pos] = true
+        end
+    end
+    return all(covered)
+end
+function ispartition(partition, labels)
+    n = length(labels)
+    covered = falses(n)
+    for subsystem in partition
+        for label in subsystem
+            pos = _find_position(label, labels)
+            pos == 0 && return false
+            covered[pos] && return false
+            covered[pos] = true
+        end
+    end
+    return all(covered)
+end
+
+@testitem "Partition and ordered partition checks" begin
+    import FermionicHilbertSpaces: ispartition, isorderedpartition
+    order = 1:3
+    ispart = Base.Fix2(ispartition, order)
+    @test ispart([[1], [2], [3]])
+    @test !ispart([[1], [2]])
+    @test !ispart([[1, 1, 1]])
+    @test !ispart([[1], [1], [2]])
+    @test ispart([[1], [2, 3]])
+    @test !ispart([[1], [2, 3, 4]])
+    @test ispart([[1, 2, 3]])
+    @test !ispart([[1, 2]])
+    @test ispart([[2], [1], [3]])
+    @test ispart([[2], [3], [1]])
+    @test ispart([[1, 3], [2]])
+    @test ispart([[3, 1], [2]])
+    @test !ispart([[3, 1], [2, 4]])
+    @test ispart([[2], [1, 3]])
+    @test !ispart([[2], [2, 3]])
+    @test ispart([[], [1, 2, 3]])
+    @test !ispart([[1], [1, 2, 3]])
+
+    ## same for ispartvec
+    ispartvec = Base.Fix2(ispartition, order)
+    @test ispartvec([[1], [2], [3]])
+    @test !ispartvec([[1], [2]])
+    @test !ispartvec([[1, 1, 1]])
+    @test !ispartvec([[1], [1], [2]])
+    @test ispartvec([[1], [2, 3]])
+    @test !ispartvec([[1], [2, 3, 4]])
+    @test ispartvec([[1, 2, 3]])
+    @test !ispartvec([[1, 2]])
+    @test ispartvec([[2], [1], [3]])
+    @test ispartvec([[2], [3], [1]])
+    @test ispartvec([[1, 3], [2]])
+    @test ispartvec([[3, 1], [2]])
+    @test !ispartvec([[3, 1], [2, 4]])
+    @test ispartvec([[2], [1, 3]])
+    @test !ispartvec([[2], [2, 3]])
+    @test ispartvec([[], [1, 2, 3]])
+    @test !ispartvec([[1], [1, 2, 3]])
+
+    ## Ordered partition
+    isorderedpart = Base.Fix2(isorderedpartition, order)
+
+    @test isorderedpart([[1], [2], [3]])
+    @test isorderedpart([[1], [2, 3]])
+    @test isorderedpart([[1, 2, 3]])
+    @test isorderedpart([[2], [1], [3]])
+    @test isorderedpart([[2], [3], [1]])
+    @test isorderedpart([[1, 3], [2]])
+    @test !isorderedpart([[3, 1], [2]])
+    @test isorderedpart([[2], [1, 3]])
+    @test !isorderedpart([[3, 1], [2, 4]])
+    @test isorderedpart([[2], [1, 3]])
+    @test !isorderedpart([[2], [3, 1]])
+    @test !isorderedpart([[1], [3, 2]])
+    @test !isorderedpart([[1], [3, 1]])
+    @test !isorderedpart([[3], [2, 1]])
+    @test isorderedpart([[2], [1, 3]])
+    @test !isorderedpart([[2], [2, 3]])
+    @test isorderedpart([[], [1, 2, 3]])
+    @test !isorderedpart([[1], [1, 2, 3]])
+end
 
 function isorderedpartition(partition, order)
     n = length(order)
