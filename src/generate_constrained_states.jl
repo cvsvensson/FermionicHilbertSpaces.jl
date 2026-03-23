@@ -1,18 +1,3 @@
-
-
-# mask_region_size(weights::Vector) = count(!=(0), weights)
-# mask_region_size(mask::FockNumber) = mask_region_size(mask.f)
-# mask_region_size(mask::Integer) = count_ones(mask)
-# set_bit(num::FockNumber{T}, pos::Int, value::Bool) where T = FockNumber{T}(set_bit(num.f, pos, value))
-# function set_bit(num::T, pos::Int, value::Bool) where T
-#     mask = one(T) << (pos - 1)          # single-bit mask
-#     newf = value ? (num | mask) : (num & ~mask)
-#     T(newf)
-# end
-
-
-##
-# Abstract type for constraints
 abstract type AbstractBranchConstraint <: AbstractConstraint end
 struct BranchConstraint{F} <: AbstractBranchConstraint
     f::F
@@ -158,7 +143,7 @@ end
 
     # Partial and leaf processors are both applied
     visited_depths = Int[]
-    leaf_processor = FermionicHilbertSpaces.CombineFockNumbersProcessor()
+    leaf_processor = FermionicHilbertSpaces.CombineFockNumbersProcessor{FockNumber{Int}}()
     states_as_int = map(f -> f.f, generate_states(
         H,
         BranchConstraint((partial, depth, spaces) -> true);

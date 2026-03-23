@@ -484,7 +484,6 @@ Hsub = subregion((H1, H3), H)
 function subregion(Hs, H::AbstractHilbertSpace)
     Hsub = tensor_product(Hs)
     issubsystem(Hsub, H) || throw(ArgumentError("The spaces in Hs must be a subsystem of H"))
-    isconstrained(H) || return Hsub
     splitter = state_splitter(H, (Hsub,))
     function se(state)
         (substate, _amp) = only(split_state(state, splitter))
@@ -639,4 +638,40 @@ function isorderedpartition(partition, N::Int)
     all(covered) || return false
     return true
 end
-atom_position(atom, H::AbstractProductHilbertSpace) = _find_position(atom, atomic_factors(H))
+
+function _precomputation_before_operator_application(ops::Vector, space::ProductSpace)
+    map((subops, space) -> _precomputation_before_operator_application(subops, space), ops, space.spaces)
+end
+function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::ProductSpace, precomp)
+    amp = 1
+    spaces = clusters(space)
+    newstate = ProductState(ntuple(length(state.states)) do i
+        op = ops[i]
+        subst = state.states[i]
+        space = spaces[i]
+        new_state_amps = apply_local_operators(op.factors, subst, space, precomps[i])
+        new_local_state, local_amp = only(new_state_amps) #TODO: add support for multiple terms here
+        amp *= local_amp
+        new_local_state
+    end)
+    return ((newstate, amp),)
+end
+function operator_inds_amps_generic!((outinds, ininds, amps), ops::Vector{<:NCMul}, space::AbstractHilbertSpace; projection=false)
+    # This is for productspaces, where ops is a list of operators applying to each factor space
+    coeff = prod(op.coeff for op in ops)
+    precomp = _precomputation_before_operator_application(ops, space)
+    for (n, state) in enumerate(basisstates(space))
+        newstate_amps = apply_local_operators(ops, state, space, precomp)
+        for (newstate, amp) in newstate_amps
+            if !iszero(amp)
+                outind = state_index(newstate, space)
+                if !projection || !ismissing(outind)
+                    push!(outinds, outind)
+                    push!(amps, amp * coeff)
+                    push!(ininds, n)
+                end
+            end
+        end
+    end
+    return (outinds, ininds, amps)
+end

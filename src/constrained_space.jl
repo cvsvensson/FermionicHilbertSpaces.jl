@@ -58,6 +58,10 @@ default_sorter(H::ConstrainedSpace, constraint) = default_sorter(parent(H), cons
 default_processor(H::ConstrainedSpace, constraint) = default_processor(parent(H), constraint)
 
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
+
+apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::ConstrainedSpace, precomp) = apply_local_operators(ops, state, space.parent, precomp)
+
+
 @testitem "Constrained space" begin
     import FermionicHilbertSpaces: constrain_space, CombineFockNumbersProcessor, unweighted_number_branch_constraint, subregion, FermionicMode
     N = 5
@@ -70,7 +74,7 @@ mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
 
     #total number of particles is 1
     constraint = unweighted_number_branch_constraint([1], H.modes, H.modes)
-    combiner = CombineFockNumbersProcessor()
+    combiner = CombineFockNumbersProcessor{FockNumber{Int}}()
     Hc = constrain_space(H, constraint; leaf_processor=combiner)
     @test dim(Hc) == N
     mc = matrix_representation(sym, Hc)

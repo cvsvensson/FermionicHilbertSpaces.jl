@@ -67,7 +67,7 @@ quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 sector(qn, H::BlockHilbertSpace) = constrain_space(parent(H), H.qn_to_states[qn])
 sector(::Nothing, H::AbstractHilbertSpace) = H
 
-sectors(H::BlockHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
+# sectors(H::BlockHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 sectors(H::AbstractHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 
 function indices(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
@@ -91,7 +91,7 @@ function indices(qn::Q, H::BlockHilbertSpace{B,P,Q}) where {B,P,Q}
     start_index:end_index
 end
 indices(qn, H::AbstractHilbertSpace) = indices(sector(qn, H), H)
-# indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
+indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
 
 
 
@@ -138,25 +138,117 @@ end
     Hns = sectors(H)
     for (ind, n) in enumerate(quantumnumbers(H))
         Hn = hilbert_space(f, 1:N, NumberConservation(n))
-        @test basisstates(Hn) == basisstates(Hns[n]) # Hn ≠ Hns[ind] since Hn is a SymmetricFockHilbertSpace
+        @test basisstates(Hn) == basisstates(Hns[n])
         @test basisstates(Hn) == basisstates(sector(n, H))
-        @test basisstates(Hn) == basisstates(H)[indices(Hn, H)]
+        @test basisstates(Hn) == basisstates(H)[indices(Hns[n], H)]
         @test basisstates(Hn) == basisstates(H)[indices(n, H)]
     end
     # no qns
     @majoranas γ
     Hnoqn = hilbert_space(f, 1:N)
-    HMnoqn = majorana_hilbert_space(γ, 1:N)
+    HMnoqn = hilbert_space(γ, 1:N)
     @test indices(only(quantumnumbers(Hnoqn)), Hnoqn) == 1:dim(Hnoqn)
     @test indices(only(quantumnumbers(HMnoqn)), HMnoqn) == 1:dim(HMnoqn)
     @test length(sectors(Hnoqn)) == length(sectors(HMnoqn)) == 1
-    @test eltype(sectors(HMnoqn)) <: MajoranaHilbertSpace
+    @test eltype(sectors(HMnoqn)) <: FermionicHilbertSpaces.MajoranaHilbertSpace
     # Majorana hilbert spaces
-    HM = majorana_hilbert_space(1:N, NumberConservation())
-    @test quantumnumbers(HM) == 0:N÷2
+    HM = hilbert_space(γ, 1:N, NumberConservation())
+    @test collect(quantumnumbers(HM)) == 0:N÷2
     qn = 1
-    HMqn = majorana_hilbert_space(1:N, NumberConservation(qn))
+    HMqn = hilbert_space(γ, 1:N, NumberConservation(qn))
     @test basisstates(HMqn) == basisstates(HM)[indices(qn, HM)]
     @test length(sectors(HM)) == N ÷ 2 + 1
-    @test eltype(sectors(HM)) <: MajoranaHilbertSpace
+    @test eltype(sectors(HM)) <: FermionicHilbertSpaces.MajoranaHilbertSpace
+end
+
+
+@testitem "Symmetry basisstates" begin
+    import FermionicHilbertSpaces: fermionnumber
+    @fermions f
+    H = hilbert_space(f, 1:5)
+    Hcons = constrain_space(H, ParityConservation())
+    @test dim(Hcons) == 2^5
+    Hcons = constrain_space(H, ParityConservation(1))
+    @test dim(Hcons) == 2^4
+    odd_focks = basisstates(constrain_space(H, ParityConservation(-1)))
+    @test all(isodd ∘ fermionnumber, odd_focks)
+    @test dim(constrain_space(H, ParityConservation([-1, 1]))) == 2^5
+
+    ## ProductSymmetry
+    qn = ParityConservation([1]) * NumberConservation(1:2, H.modes[1:3])
+    states = FermionicHilbertSpaces.generate_states(H, qn)
+    H2 = hilbert_space(f, 1:5, qn)
+    T = FermionicHilbertSpaces.statetype(H2)
+    @test sort(basisstates(H2)) == sort(map(state -> FermionicHilbertSpaces.catenate_fock_states(state, H.modes, T), states))
+    @test all(iseven ∘ fermionnumber, basisstates(H2))
+end
+
+@testitem "sector" begin
+    import FermionicHilbertSpaces: sector, parity
+    # Create a Hilbert space with parity symmetry
+    @fermions f
+    labels = 1:3
+    qn = ParityConservation()
+    H = hilbert_space(f, labels, qn)
+    n = length(basisstates(H))
+    m = reshape(1:(n^2), n, n)  # simple test matrix
+    # Get the sector for parity = 1
+    even_inds = indices(1, H)
+    even_sector = m[even_inds, even_inds]
+    # The size of the even sector block should match the number of even-parity states
+    even_states = [f for f in basisstates(H) if parity(f) == 1]
+    @test size(even_sector, 1) == length(even_states)
+    # The values should match the corresponding block in m
+    # Get the indices of even states in the full basisstates list
+    even_inds = findall(f -> parity(f) == 1, basisstates(H))
+    @test even_sector == m[even_inds, even_inds]
+
+    # Test with NumberConservation
+    import FermionicHilbertSpaces: fermionnumber
+    qn_f = NumberConservation([1, 2])
+    Hf = hilbert_space(f, labels, qn_f)
+    n_f = length(basisstates(Hf))
+    m_f = reshape(1:(n_f^2), n_f, n_f)
+    # Test sector for fermion number = 1
+    sector1_inds = indices(1, Hf)
+    sector1 = m_f[sector1_inds, sector1_inds]
+    states1 = [f for f in basisstates(Hf) if fermionnumber(f) == 1]
+    inds1 = findall(f -> fermionnumber(f) == 1, basisstates(H))
+    @test size(sector1, 1) == length(states1)
+    @test sector1 == m_f[inds1, inds1]
+    # Test sector for fermion number = 2
+    sector2_inds = indices(2, Hf)
+    sector2 = m_f[sector2_inds, sector2_inds]
+    states2 = [f for f in basisstates(Hf) if fermionnumber(f) == 2]
+    inds2 = findall(f -> fermionnumber(f) == 2, basisstates(Hf))
+    @test size(sector2, 1) == length(states2)
+    @test sector2 == m_f[inds2, inds2]
+    # Test that an invalid sector throws an error
+    @test_throws "Dictionaries.IndexError" sector(99, Hf)
+    @test_throws ArgumentError indices(99, Hf)
+end
+
+@testitem "No double occupation projection" begin
+    @fermions f
+    N = 4
+    Nup = 2
+    Ndn = 1
+    spins = (:↑, :↓)
+    spatial_labels = 1:N
+    labels = vec(collect(Base.product(spatial_labels, spins)))
+    spin_up_sites = filter(label -> label[2] == :↑, labels)
+    spin_up_conservation = NumberConservation(Nup, hilbert_space(f, spin_up_sites))
+    spin_down_sites = filter(label -> label[2] == :↓, labels)
+    spin_down_conservation = NumberConservation(Ndn, hilbert_space(f, spin_down_sites))
+    no_double_occupation = prod(NumberConservation(0:1, hilbert_space(f, [(k, σ) for σ in spins])) for k in spatial_labels)
+
+    qn = spin_up_conservation * spin_down_conservation * no_double_occupation
+    H = hilbert_space(f, labels, qn)
+    hopping_symham = sum(zip(spatial_labels, spatial_labels[2:end])) do (i, j)
+        sum(spins) do σ
+            f[(i, σ)]' * f[(j, σ)] + hc
+        end
+    end
+    @test_throws MethodError matrix_representation(hopping_symham, H)
+    @test size(matrix_representation(hopping_symham, H; projection=true), 1) == dim(H)
 end

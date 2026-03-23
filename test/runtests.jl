@@ -10,7 +10,8 @@ using TestItemRunner
     N = 2
     H = hilbert_space(f, 1:N)
     B = fermions(H)
-    Hspin = hilbert_space(f, Base.product(1:N, (:↑, :↓)), NumberConservation())
+    labels = vec(collect(Base.product(1:N, (:↑, :↓))))
+    Hspin = hilbert_space(f, labels, NumberConservation())
     @test B[1] isa SparseMatrixCSC
     @test parityoperator(H) isa SparseMatrixCSC
     @test parityoperator(Hspin) isa SparseMatrixCSC
@@ -23,7 +24,7 @@ using TestItemRunner
     v = [FermionicHilbertSpaces.basisstate(i, H).f for i in 1:8]
     t1 = reshape(v, H, Hs)
     t2 = [i1 + 2i2 + 4i3 for i1 in (0, 1), i2 in (0, 1), i3 in (0, 1)]
-    @test t1 == (t2)
+    @test t1 == t2
 
     qn = ParityConservation()
     H1 = hilbert_space(f, 2:2, qn)
@@ -32,7 +33,7 @@ using TestItemRunner
     v = [FermionicHilbertSpaces.basisstate(i, H).f for i in 1:8]
     t1 = reshape(v, H, Hs)
     t2 = [i1 + 2i2 + 4i3 for i1 in (0, 1), i2 in (0, 1), i3 in (0, 1)]
-    @test t1 == (t2)
+    @test t1 == t2
 
     using LinearMaps
     d = dim(H)
@@ -44,8 +45,9 @@ using TestItemRunner
     @test embeddingmap ≈ embed(H1 => H)
 
     import FermionicHilbertSpaces: atomic_factors
-    H = hilbert_space(f, Base.product(1:2, (:a, :b)))
-    Hparity = hilbert_space(f, Base.product(1:2, (:a, :b)), ParityConservation())
+    labels = vec(collect(Base.product(1:N, (:↑, :↓))))
+    H = hilbert_space(f, labels)
+    Hparity = hilbert_space(f, labels, ParityConservation())
     ρ = Matrix(Hermitian(rand(2^4, 2^4) .- 0.5))
     ρ = ρ / tr(ρ)
     function bilinears(H, labels)
@@ -53,14 +55,15 @@ using TestItemRunner
         ops = reduce(vcat, [[c[l], c[l]'] for l in labels])
         return [op1 * op2 for (op1, op2) in Base.product(ops, ops)]
     end
+    getlabels(Hsub) = map(FermionicHilbertSpaces.label, atomic_factors(Hsub))
     function bilinear_equality(H, Hsub, ρ)
-        subsystem = Tuple(atomic_factors(Hsub))
+        subsystem = getlabels(Hsub)
         ρsub = partial_trace(ρ, H, Hsub)
         @test tr(ρsub) ≈ 1
         all((tr(op1 * ρ) ≈ tr(op2 * ρsub)) for (op1, op2) in zip(bilinears(H, subsystem), bilinears(Hsub, subsystem)))
     end
     function get_subsystems(c, N)
-        t = collect(Base.product(ntuple(i -> atomic_factors(c), N)...))
+        t = collect(Base.product(ntuple(i -> getlabels(c), N)...))
         (t[I] for I in CartesianIndices(t) if issorted(Tuple(I)) && allunique(Tuple(I)))
     end
     for N in 1:4

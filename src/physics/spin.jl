@@ -236,7 +236,7 @@ end
 
 Apply a sequence of spin operators (product) to a spin state. Operators are applied in reverse order (right-to-left, as in operator composition). Returns (newstate, amplitude) or (state, 0) if any step fails.
 """
-function apply_local_operators(factors, state::SpinState{J}, space::SpinSpace) where J
+function apply_local_operators(factors, state::SpinState{J}, space::SpinSpace, precomp) where J
     newstate = state
     amplitude = one(typeof(sqrt(J * (J + 1))))  # Start with 1.0 to handle mixed numeric types
     # Apply factors in reverse order (from right to left)

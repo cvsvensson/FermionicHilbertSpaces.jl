@@ -42,41 +42,6 @@ function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul{C,F}, sp
     end
     return (outinds, ininds, amps)
 end
-function _precomputation_before_operator_application(ops, space::ProductSpace)
-    map(space -> _precomputation_before_operator_application(ops, space), space.spaces)
-end
-apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::ConstrainedSpace) = apply_local_operators(ops, state, space.parent)
-function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::AbstractHilbertSpace, precomp)
-    amp = 1
-    spaces = clusters(space)
-    newstate = ProductState(ntuple(length(state.states)) do i
-        op = ops[i]
-        subst = state.states[i]
-        space = spaces[i]
-        new_state_amps = apply_local_operators(op.factors, subst, space, precomps[i])
-        new_local_state, local_amp = only(new_state_amps) #TODO: add support for multiple terms here
-        amp *= local_amp
-        new_local_state
-    end)
-    return ((newstate, amp),)
-end
-function operator_inds_amps_generic!((outinds, ininds, amps), ops::Vector{<:NCMul}, space::AbstractHilbertSpace; projection=false)
-    coeff = prod(op.coeff for op in ops)
-    for (n, state) in enumerate(basisstates(space))
-        newstate_amps = apply_local_operators(ops, state, space)
-        for (newstate, amp) in newstate_amps
-            if !iszero(amp)
-                outind = state_index(newstate, space)
-                if !projection || !ismissing(outind)
-                    push!(outinds, outind)
-                    push!(amps, amp * coeff)
-                    push!(ininds, n)
-                end
-            end
-        end
-    end
-    return (outinds, ininds, amps)
-end
 
 ## 
 remove_identity(a::NCMul) = a

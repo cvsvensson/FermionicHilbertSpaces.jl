@@ -35,7 +35,6 @@ function state_index(s::FockNumber, H::FermionicMode)
     throw(ArgumentError("Invalid state $s for FermionicMode"))
 end
 atomic_factors(H::FermionicMode) = (H,)
-atom_position(atom, H::FermionicMode) = atom == H ? 1 : 0
 
 label(H::FermionicMode) = H.label
 nbr_of_modes(H::FermionicMode) = 1

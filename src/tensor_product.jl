@@ -512,11 +512,27 @@ end
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
     if isnothing(complement)
-        H == Hsub || throw(ArgumentError("If `complement` is not provided, `H` must be equal to `Hsub`"))
-        return copy(m)
+        U = basis_transformation(Hsub, H)
+        return U * m * U'
     end
     mout = zeros(eltype(m), dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
+end
+function basis_transformation(H1, H2)
+    #transforms from the basis of H1 to the basis of H2. Assumes they are the same basis states, just ordered differently. If they are not the same, this will throw an error.
+    dim(H1) == dim(H2) || throw(ArgumentError("Hilbert spaces must have the same dimension for a basis transformation"))
+    I = Vector{Int}(undef, dim(H1))
+    J = Vector{Int}(undef, dim(H2))
+    V = ones(Int, dim(H1))
+    for (i, f1) in enumerate(basisstates(H1))
+        j = state_index(f1, H2)
+        if ismissing(j)
+            throw(ArgumentError("The state $f1 in the first Hilbert space does not exist in the second Hilbert space"))
+        end
+        J[i] = j
+        I[i] = i
+    end
+    return SparseArrays.sparse!(I, J, V)
 end
 
 """
@@ -525,8 +541,6 @@ end
 Compute the partial trace of `m` from `H` to `Hsub`. Fermionic phase factors are included if both `H` and `Hsub` are Fermionic, unless specified otherwise in `kwargs`.
 """
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
-# use_phase_factors(H::AbstractHilbertSpace) = false
-# use_phase_factors(H::AbstractFockHilbertSpace) = true
 
 abstract type AbstractPartialTraceAlg end
 struct SubsystemPartialTraceAlg <: AbstractPartialTraceAlg end

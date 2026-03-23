@@ -146,6 +146,13 @@ struct MajoranaHilbertSpace{B,L,H} <: AbstractClusterHilbertSpace{B}
         new{B,L,H}(majoranaindices, parent, sym)
     end
 end
+# function MajoranaHilbertSpace(majoranaindices::L, space::BlockHilbertSpace, sym::SymbolicMajoranaBasis) where {L}
+#     maj_space = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
+#     BlockHilbertSpace(maj_space, space.ordered_basis_states, space.state_to_index, space.qn_to_states)
+# end
+function BlockHilbertSpace(maj_space::MajoranaHilbertSpace, ordered_basis_states, state_to_index, qn_to_states)
+    MajoranaHilbertSpace(maj_space.majoranaindices, BlockHilbertSpace(parent(maj_space), ordered_basis_states, state_to_index, qn_to_states), maj_space.sym)
+end
 dim(H::MajoranaHilbertSpace) = dim(H.parent)
 mode_ordering(H::MajoranaHilbertSpace) = H.majoranaindices
 modes(H::MajoranaHilbertSpace) = keys(H.majoranaindices)
@@ -157,6 +164,18 @@ Base.parent(H::MajoranaHilbertSpace) = H.parent
 nbr_of_modes(H::MajoranaHilbertSpace) = nbr_of_modes(H.parent)
 isconstrained(H::MajoranaHilbertSpace) = isconstrained(H.parent)
 atomic_group(H::MajoranaHilbertSpace) = atomic_group(H.sym)
+
+quantumnumbers(H::MajoranaHilbertSpace) = quantumnumbers(H.parent)
+indices(qn, H::MajoranaHilbertSpace) = indices(qn, parent(H))
+function sector(qn, H::MajoranaHilbertSpace)
+    # get sector from parent, then convert to majorana
+    parent_sector = sector(qn, parent(H))
+    MajoranaHilbertSpace(H.majoranaindices, parent_sector, H.sym)
+end
+sector(::Nothing, H::MajoranaHilbertSpace) = H
+indices(Hsub::AbstractHilbertSpace, H::MajoranaHilbertSpace) = indices(Hsub, parent(H))
+indices(::Nothing, H::MajoranaHilbertSpace) = indices(nothing, parent(H))
+
 function combine_into_cluster(group::MajoranaGroup, spaces)
     fermionic_cluster = combine_into_cluster(group.id, map(parent, spaces))
     D = typeof(first(spaces).majoranaindices)
@@ -238,10 +257,11 @@ end
 state_index(state::AbstractFockState, H::MajoranaHilbertSpace) = state_index(state, H.parent)
 _find_position(f::MajoranaSym, H::MajoranaHilbertSpace) = get(H.majoranaindices, f, 0)
 
-function apply_local_operators(ops, f::FockNumber, H::MajoranaHilbertSpace; kwargs...)
-    majoranadigitpositions = Iterators.reverse(_find_position(f, H) for f in ops)
-    daggers = collect(iseven(pos) for pos in majoranadigitpositions)
-    digitpositions = map(n -> div(n + 1, 2), majoranadigitpositions)
+function apply_local_operators(ops, f::FockNumber, H::MajoranaHilbertSpace, majoranadigitpositions; kwargs...)
+    # majoranadigitpositions = Iterators.reverse(_find_position(f, H) for f in ops)
+    daggers = Iterators.reverse(Iterators.map(iseven, majoranadigitpositions))
+    # digitpositions = Iterators.reverse(Iterators.map(n -> div(n + 1, 2), majoranadigitpositions))
+    digitpositions = Iterators.reverse(Iterators.map(n -> div(n + 1, 2), majoranadigitpositions))
     return (togglemajoranas(digitpositions, daggers, f),)
 end
 

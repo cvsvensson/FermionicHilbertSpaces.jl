@@ -103,9 +103,9 @@ end
     using FermionicHilbertSpaces: project_on_parities, project_on_parity, fermions, majoranas
     function majorana_basis(H)
         b = majoranas(fermions(H))
-        majoranas = Dict((l, s) => (s == :- ? 1im : 1) * b[l] + hc for (l, s) in Base.product(keys(b), [:+, :-]))
-        labels = collect(keys(majoranas))
-        basisops = mapreduce(vec, vcat, [[prod(l -> majoranas[l], ls) for ls in Base.product([labels for _ in 1:n]...) if (issorted(ls) && allunique(ls))] for n in 1:length(labels)])
+        _majoranas = Dict((l, s) => (s == :- ? 1im : 1) * b[l] + hc for (l, s) in Base.product(keys(b), [:+, :-]))
+        labels = collect(keys(_majoranas))
+        basisops = mapreduce(vec, vcat, [[prod(l -> _majoranas[l], ls) for ls in Base.product([labels for _ in 1:n]...) if (issorted(ls) && allunique(ls))] for n in 1:length(labels)])
         pushfirst!(basisops, I + 0 * first(basisops))
         map(Hermitian ∘ (x -> x / sqrt(complex(tr(x * x)))), basisops)
     end
