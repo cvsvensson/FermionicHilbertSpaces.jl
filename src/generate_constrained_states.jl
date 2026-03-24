@@ -20,8 +20,9 @@ process_leaf(::Nothing, full_state, spaces) = Tuple(full_state)
 process_leaf(::typeof(identity), full_state, spaces) = Tuple(full_state)
 process_leaf(processor, full_state, spaces) = processor(full_state, spaces)
 
-_init_results(spaces, ::typeof(identity)) = Tuple{statetype.(spaces)...}[]
-_init_results(spaces, leaf_processor) = Any[]
+# _init_results(spaces, ::typeof(identity)) = Tuple{statetype.(spaces)...}[]
+# _init_results(spaces, leaf_processor) = Any[]
+# _init_results(space, spaces, ::Nothing) = 
 
 """
     generate_states(spaces, constraints; partial_processor=nothing, leaf_processor=identity)
@@ -33,10 +34,10 @@ Uses backtracking with pruning via `valid_branch`.
 `leaf_processor(full_state, spaces)` can transform each completed state before storing it.
 """
 generate_states(space::AbstractHilbertSpace, constraint::AbstractConstraint; kwargs...) = generate_states(space, (constraint,); kwargs...)
-function generate_states(space::AbstractHilbertSpace, _constraints; partial_processor=nothing, leaf_processor=identity)
+function generate_states(space::AbstractHilbertSpace, _constraints; partial_processor=nothing, leaf_processor=(full_state, spaces) -> first(only(combine_states(full_state, state_splitter(space, factors(space))))))
     spaces = factors(space)
     constraints = map(c -> branch_constraint(c, space), _constraints)
-    results = _init_results(spaces, leaf_processor)
+    results = statetype(space)[]
     all_statetypes = statetype.(spaces)
     # Start backtracking
     partial = Vector{Union{all_statetypes...}}(undef, length(spaces))
@@ -47,7 +48,6 @@ end
 
 function backtrack!(results, partial, spaces, depth, constraints, partial_processor, leaf_processor)
     n = length(spaces)
-
     if depth > n
         # All spaces assigned, add to results
         push!(results, process_leaf(leaf_processor, partial, spaces))

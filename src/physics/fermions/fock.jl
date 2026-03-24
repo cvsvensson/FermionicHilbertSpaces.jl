@@ -12,8 +12,10 @@ Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
 Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
 Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
 Base.show(io::IO, f::FockNumber{T}) where T = get(io, :compact, false) ? print(io, "FockNumber{$T}(", f.f, ")") : print(io, "FockNumber(", f.f, ")")
+function default_fock_representation(::Val{N}) where N
+    N < 64 ? UInt64 : BigInt
+end
 function default_fock_representation(N)
-    N == 1 && return Bool
     N < 64 ? UInt64 : BigInt
 end
 
@@ -71,7 +73,7 @@ bits(f::FockNumber, N) = digits(Bool, f.f, base=2, pad=N)
 parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
-Base.count_ones(f::FockNumber{Bool}) = f.f ? 1 : 0
+# Base.count_ones(f::FockNumber{Bool}) = f.f ? 1 : 0
 particle_number(s::FockNumber) = fermionnumber(s)
 
 function substate(siteindices, f::FockNumber)
@@ -94,16 +96,15 @@ jwstring_anti(site, focknbr) = jwstring_right(site, focknbr)
 jwstring_right(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f >> site)) ? 1 : -1
 jwstring_left(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f) - count_ones(focknbr.f >> (site - 1))) ? 1 : -1
 
-jwstring_left(site, focknbr::FockNumber{Bool}) = jwstring_left(site, FockNumber{Int}(focknbr))
-jwstring_right(site, focknbr::FockNumber{Bool}) = jwstring_right(site, FockNumber{Int}(focknbr))
+# jwstring_left(site, focknbr::FockNumber{Bool}) = jwstring_left(site, FockNumber{Int}(focknbr))
+# jwstring_right(site, focknbr::FockNumber{Bool}) = jwstring_right(site, FockNumber{Int}(focknbr))
 
 
-struct FockMapper{P1,W,P2} <: AbstractStateSplitter
+struct FockMapper{N,P1,W,P2} <: AbstractStateSplitter
     fermionpositions::P1
     widths::W
     permutation::P2
-    nbr_of_modes::Int
-    FockMapper(fermionpositions::P1, widths::W, permutation::P2, nbr_of_modes::Int) where {P1,W,P2} = new{P1,W,P2}(fermionpositions, widths, permutation, nbr_of_modes)
+    FockMapper(fermionpositions::P1, widths::W, permutation::P2, nbr_of_modes::Int) where {P1,W,P2} = new{nbr_of_modes,P1,W,P2}(fermionpositions, widths, permutation)
 end
 function FockMapper(fermionpositions::P) where P
     widths = map(length, fermionpositions)
@@ -114,11 +115,11 @@ function FockMapper(fermionpositions::P) where P
     FockMapper(fermionpositions, widths, permutation, nbr_of_modes)
 end
 
-function combine_states(f, fm::FockMapper)
-    # T = default_fock_representation(fm.nbr_of_modes)
-    ((mapreduce(insert_bits, +, f, fm.fermionpositions), 1),)
+function combine_states(f, fm::FockMapper{N}) where N
+    T = FockNumber{default_fock_representation(Val(N))}
+    ((mapreduce(insert_bits, +, f, fm.fermionpositions; init = zero(T)), 1),)
 end
-combine_states(fs, fm::FockMapper{<:Any,<:Any,<:BitPermutation}) = ((concatenate_and_permute(fs, fm.widths, fm.permutation), 1),)
+combine_states(fs, fm::FockMapper{N, <:Any,<:Any,<:BitPermutation}) where N = ((concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))}), 1),)
 split_state(f::AbstractFockState, fm::FockMapper) = ((map(site_indices -> substate(site_indices, f), fm.fermionpositions), 1),)
 function insert_bits(_x::FockNumber, positions)
     x = _x.f
@@ -133,8 +134,8 @@ function insert_bits(_x::FockNumber, positions)
     return FockNumber(result)
 end
 
-function concatenate_and_permute(fs, widths, permutation)
-    mask = foldl(concatenate, zip(fs, widths); init=(zero(first(fs)), 0)) |> first
+function concatenate_and_permute(fs, widths, permutation, ::Type{T}) where T
+    mask = foldl(concatenate, zip(fs, widths); init=(zero(T), 0)) |> first
     permute(mask, permutation)
 end
 function concatenate((lastf, lastwidth)::Tuple{FockNumber,Int}, (f, width)::Tuple{FockNumber,Int})

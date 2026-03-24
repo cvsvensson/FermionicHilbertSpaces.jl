@@ -97,6 +97,8 @@ function Base.show(io::IO, H::ProductSpace)
         print(io, ")")
     end
 end
+maximum_particles(H::ProductSpace) = sum(maximum_particles, factors(H))
+
 function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
     sub_atoms = Set(atomic_factors(Hsub))
 
@@ -421,7 +423,7 @@ function split_state(state::ProductState, sp::ProductSpaceSplitter)
     ((outstates, 1),)
 end
 
-function combine_states(substates::Tuple, sp::ProductSpaceSplitter)
+function combine_states(substates, sp::ProductSpaceSplitter)
     outstate = ProductState(ntuple(length(sp.cluster_splitters)) do i
         isnothing(sp.cluster_splitters[i]) &&
             error("Cannot reconstruct state: cluster $i has no atoms in any target")

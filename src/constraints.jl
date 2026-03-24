@@ -31,8 +31,13 @@ ParityConservation() = ParityConservation([-1, 1], nothing)
 ParityConservation(H::AbstractHilbertSpace) = ParityConservation([-1, 1], H)
 ParityConservation(ps::AbstractVector{Int}) = ParityConservation(Vector{Int}(ps), nothing)
 ParityConservation(p::Int) = ParityConservation([p], nothing)
-ParityConservation(ps, subspace::AbstractHilbertSpace) = ParityConservation(ps, (subspace,))
 
+function sector_function(constraint::NumberConservation{T,Nothing}, space::ProductSpace) where {T}
+    f -> sum(particle_number, f.states)
+end
+function sector_function(constraint::ParityConservation{Nothing}, space::ProductSpace)
+    f -> prod(parity, f.states)
+end
 function sector_function(constraint::NumberConservation{T,Nothing}, space) where {T}
     f -> particle_number(f)
 end
@@ -60,8 +65,8 @@ has_sectors(c::ProductConstraint) = any(has_sectors, c.constraints)
 
 function constrain_space(space, constraint::AbstractConstraint; kwargs...)
     sortby = default_sorter(space, constraint)
-    leaf_processor = default_processor(space, constraint)
-    states = generate_states(space, constraint; leaf_processor, kwargs...)
+    # leaf_processor = default_processor(space, constraint)
+    states = generate_states(space, constraint; kwargs...)
     isnothing(sortby) || sort!(states, by=sortby)
     has_sectors(constraint) || return ConstrainedSpace(space, states)
     block_space(space, states, sector_function(constraint, space))
