@@ -18,6 +18,7 @@ struct NumberConservation{T,H} <: AbstractConstraint
     subspaces::H
 end
 NumberConservation(n) = NumberConservation(n, nothing)
+NumberConservation(H::AbstractHilbertSpace) = NumberConservation(nothing, H)
 NumberConservation() = NumberConservation(nothing, nothing)
 NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(total, (subspace,))
 NumberConservation(total, subspace::AbstractClusterHilbertSpace) = NumberConservation(total, atomic_factors(subspace))
@@ -27,6 +28,7 @@ struct ParityConservation{H} <: AbstractConstraint
     subspaces::H
 end
 ParityConservation() = ParityConservation([-1, 1], nothing)
+ParityConservation(H::AbstractHilbertSpace) = ParityConservation([-1, 1], H)
 ParityConservation(ps::AbstractVector{Int}) = ParityConservation(Vector{Int}(ps), nothing)
 ParityConservation(p::Int) = ParityConservation([p], nothing)
 ParityConservation(ps, subspace::AbstractHilbertSpace) = ParityConservation(ps, (subspace,))
