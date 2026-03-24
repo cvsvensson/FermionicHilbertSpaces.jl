@@ -6,7 +6,6 @@ struct FermionicMode{L,S} <: AbstractAtomicHilbertSpace{FockNumber{UInt}}
 end
 symbolic_group(h::FermionicMode) = fermionic_group(h)
 fermionic_group(h::FermionicMode) = fermionic_group(h.symbolic_basis)
-combine_states(states, ::AbstractAtomicHilbertSpace) = ((only(states), 1),)
 modes(H::FermionicMode) = (H.symbolic_basis[H.label],)
 Base.:(==)(m1::FermionicMode, m2::FermionicMode) = m1.label == m2.label && m1.symbolic_basis == m2.symbolic_basis
 Base.hash(m::FermionicMode, h::UInt) = hash(m.label, hash(m.symbolic_basis, h))
@@ -99,7 +98,6 @@ function subregion(Hsub, H::FermionCluster)
 end
 isconstrained(H::FermionCluster) = false
 
-combine_states(states, H::FermionCluster{F}) where F = ((catenate_fock_states(states, H.modes, F), 1),)
 state_splitter(H::FermionCluster, Hs::AbstractHilbertSpace) = state_splitter(H, (Hs,))
 function state_splitter(H::FermionCluster, Hs)
     fermionpositions = [[_find_position(atom, H) for atom in atomic_factors(cluster)] for cluster in Hs]
@@ -153,16 +151,16 @@ bipartite_embedding_unitary(X, Xbar, H::FermionCluster) = bipartite_embedding_un
 partial_trace_phase_factor(f1, f2, H::FermionCluster) = phase_factor_f(f1, f2, nbr_of_modes(H))
 
 
-function branch_constraint(constraint::ParityConservation, H)
-    possible_numbers = isnothing(constraint.subspaces) ? (0:maximum_particles(H)) : (0:sum(nbr_of_modes, constraint.subspaces))
+function branch_constraint(constraint::ParityConservation, spaces)
+    possible_numbers = isnothing(constraint.subspaces) ? (0:sum(maximum_particles, spaces)) : (0:sum(nbr_of_modes, constraint.subspaces))
     allowed_numbers = filter(n -> any(p -> p == (-1)^n, constraint.allowed_parities), possible_numbers)
-    unweighted_number_branch_constraint(allowed_numbers, constraint.subspaces, atomic_factors(H))
+    unweighted_number_branch_constraint(allowed_numbers, constraint.subspaces, spaces)
 end
 
-function branch_constraint(constraint::NumberConservation{T,H}, space) where {T,H}
-    subspaces = H <: Nothing ? atomic_factors(space) : constraint.subspaces
+function branch_constraint(constraint::NumberConservation{T,H}, spaces) where {T,H}
+    subspaces = H <: Nothing ? spaces : constraint.subspaces
     total = T <: Nothing ? (0:sum(maximum_particles, subspaces)) : constraint.total
-    unweighted_number_branch_constraint(total, subspaces, atomic_factors(space))
+    unweighted_number_branch_constraint(total, subspaces, spaces)
 end
 
 

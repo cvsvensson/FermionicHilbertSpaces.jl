@@ -117,9 +117,10 @@ end
 
 function combine_states(f, fm::FockMapper{N}) where N
     T = FockNumber{default_fock_representation(Val(N))}
-    ((mapreduce(insert_bits, +, f, fm.fermionpositions; init = zero(T)), 1),)
+    state = mapreduce(insert_bits, +, f, fm.fermionpositions; init=zero(T))
+    ((state, 1),)
 end
-combine_states(fs, fm::FockMapper{N, <:Any,<:Any,<:BitPermutation}) where N = ((concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))}), 1),)
+combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:BitPermutation}) where N = ((concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))}), 1),)
 split_state(f::AbstractFockState, fm::FockMapper) = ((map(site_indices -> substate(site_indices, f), fm.fermionpositions), 1),)
 function insert_bits(_x::FockNumber, positions)
     x = _x.f

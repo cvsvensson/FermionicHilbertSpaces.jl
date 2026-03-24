@@ -10,7 +10,7 @@ Base.:*(sym1::AbstractConstraint, sym2::AbstractConstraint) = ProductConstraint(
 Base.:*(sym1::AbstractConstraint, sym2::ProductConstraint) = ProductConstraint((sym1, sym2.constraints...))
 Base.:*(sym1::ProductConstraint, sym2::AbstractConstraint) = ProductConstraint((sym1.constraints..., sym2))
 Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint((sym1.constraints..., sym2.constraints...))
-generate_states(space, constraint::ProductConstraint; kwargs...) = generate_states(space, constraint.constraints; kwargs...)
+branch_constraint(constraint::ProductConstraint, space) = ProductConstraint(map(cons -> branch_constraint(cons, space), constraint.constraints))
 
 
 struct NumberConservation{T,H} <: AbstractConstraint
