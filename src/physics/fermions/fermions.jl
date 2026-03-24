@@ -1,11 +1,5 @@
 
-struct FermionicGroup
-    id::UInt64
-end
-Base.hash(x::FermionicGroup, h::UInt) = hash(x.id, h)
-Base.:(==)(a::FermionicGroup, b::FermionicGroup) = a.id == b.id
-symbolic_group(g::FermionicGroup) = g
-Base.isless(g1::FermionicGroup, g2::FermionicGroup) = g1.id < g2.id
+
 struct FermionicMode{L,S} <: AbstractAtomicHilbertSpace{FockNumber{Bool}}
     label::L
     symbolic_basis::S
@@ -75,8 +69,30 @@ _find_position(H::AbstractHilbertSpace, ordering::AbstractDict) = get(ordering, 
 operators(H::FermionCluster) = fermions(H)
 operators(H::FermionicMode) = fermions(H)
 
-function subregion(Hsub::FermionCluster, H::FermionCluster)
-    positions = map(f -> _find_position(f, H), modes(Hsub))
+function fermion_submodes(sub::Vector{L}, H::FermionCluster{<:Any,L}) where L
+    return sub
+end
+function fermion_submodes(sub::FermionCluster{L}, H::FermionCluster{<:Any,L}) where L
+    return sub.modes
+end
+function fermion_submodes(sub::Vector{T}, H::FermionCluster{<:Any,<:FermionicMode{T}}) where T
+    bases = unique!(map(m -> m.symbolic_basis, atomic_factors(H)))
+    length(bases) == 1 || throw(ArgumentError("Specifying only labels is ambiguous when the cluster contains modes with different symbolic bases"))
+    basis = only(bases)
+    return map(s -> FermionicMode(basis[s]), sub)
+end
+function fermion_submodes(sub::Vector{<:FermionSym{T}}, H::FermionCluster{<:Any,<:FermionicMode{T}}) where T
+    bases = map(m -> m.symbolic_basis, atomic_factors(H))
+    modes = map(FermionicMode, sub)
+    for m in modes
+        m in H.modes || throw(ArgumentError("Mode $m is not part of the cluster $H"))
+    end
+    return modes
+end
+
+function subregion(Hsub, H::FermionCluster)
+    submodes = fermion_submodes(Hsub, H)
+    positions = map(f -> _find_position(f, H), submodes)
     all(x -> x > 0, positions) || throw(ArgumentError("The modes $(modes(Hsub)) are not an ordered subsystem of the Hilbert space $(H)"))
     issorted(positions) || throw(ArgumentError("The modes $(modes(Hsub)) are not an ordered subsystem of the Hilbert space $(H)"))
     Hsub
@@ -293,3 +309,21 @@ end
         @test anticom ≈ 2I * (γ1 == γ2)
     end
 end
+
+
+_sym_space_match(basis::SymbolicFermionBasis, space::AbstractFockHilbertSpace) = true
+_sym_space_match(basis::SymbolicFermionBasis, space::AbstractHilbertSpace) = false
+
+label(H::AbstractFockHilbertSpace) = only(mode_ordering(H))
+function _sym_space_match(sym, space::AbstractHilbertSpace)
+    label(sym) == label(space)
+end
+function _sym_space_match(sym::AbstractFermionSym, space::AbstractFockHilbertSpace)
+    label(sym) in keys(space)
+end
+FermionicMode(f::FermionSym) = FermionicMode(f.label, f.basis)
+_find_position(f::FermionSym, H::AbstractHilbertSpace) = _find_position(FermionicMode(f), H)
+hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionCluster(map(l -> FermionicMode(a[l]), labels))
+hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint) = constrain_space(hilbert_space(a, labels), constraint)
+
+issubsystem(Hsub::AbstractHilbertSpace, H::FermionCluster) = isorderedsubsystem(Hsub, H)

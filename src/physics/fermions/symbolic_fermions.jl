@@ -1,3 +1,10 @@
+struct FermionicGroup
+    id::UInt64
+end
+Base.hash(x::FermionicGroup, h::UInt) = hash(x.id, h)
+Base.:(==)(a::FermionicGroup, b::FermionicGroup) = a.id == b.id
+symbolic_group(g::FermionicGroup) = g
+Base.isless(g1::FermionicGroup, g2::FermionicGroup) = g1.id < g2.id
 
 struct SymbolicFermionBasis
     name::Symbol
@@ -174,20 +181,3 @@ function apply_local_operator(op::FermionSym, state::FockNumber, space::Abstract
     new_state, amp = togglefermions([digitpos], [dagger], state)
     return (new_state, amp)
 end
-
-_sym_space_match(basis::SymbolicFermionBasis, space::AbstractFockHilbertSpace) = true
-_sym_space_match(basis::SymbolicFermionBasis, space::AbstractHilbertSpace) = false
-
-label(H::AbstractFockHilbertSpace) = only(mode_ordering(H))
-function _sym_space_match(sym, space::AbstractHilbertSpace)
-    label(sym) == label(space)
-end
-function _sym_space_match(sym::AbstractFermionSym, space::AbstractFockHilbertSpace)
-    label(sym) in keys(space)
-end
-FermionicMode(f::FermionSym) = FermionicMode(f.label, f.basis)
-_find_position(f::FermionSym, H::AbstractHilbertSpace) = _find_position(FermionicMode(f), H)
-hilbert_space(a::SymbolicFermionBasis, labels) = FermionCluster(map(l -> FermionicMode(a[l]), labels))
-hilbert_space(a::SymbolicFermionBasis, labels, constraint) = constrain_space(hilbert_space(a, labels), constraint)
-
-issubsystem(Hsub::AbstractHilbertSpace, H::FermionCluster) = isorderedsubsystem(Hsub, H)

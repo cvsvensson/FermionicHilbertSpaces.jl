@@ -55,8 +55,8 @@ include("matrix_representation.jl")
 
 include("physics/fermions/fock.jl")
 include("physics/fermions/phase_factors.jl")
-include("physics/fermions/fermions.jl")
 include("physics/fermions/symbolic_fermions.jl")
+include("physics/fermions/fermions.jl")
 include("physics/fermions/fixednumberfock.jl")
 include("physics/fermions/operators.jl")
 
