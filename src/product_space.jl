@@ -89,12 +89,10 @@ function Base.show(io::IO, H::ProductSpace)
         print(io, "$(dim(H))-dimensional ProductSpace: ")
         dims = map(dim, H.clusters)
         println(io, "(", join(dims, "x"), ")")
-        print(io, "(")
         for (i, c) in enumerate(H.clusters)
             i > 1 && print(io, " ⊗ ")
             show(IOContext(io, :compact => true), c)
         end
-        print(io, ")")
     end
 end
 maximum_particles(H::ProductSpace) = sum(maximum_particles, factors(H))

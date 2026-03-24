@@ -109,13 +109,22 @@ end
 
 function _compact_fermionic_modes(io::IO, c::FermionCluster)
     isempty(c.modes) && return print(io, "FermionCluster()")
-    name = first(c.modes).symbolic_basis.name
-    print(io, name, "[")
-    for (i, m) in enumerate(c.modes)
-        i > 1 && print(io, ", ")
-        print(io, m.label)
+    i = firstindex(c.modes)
+    N = lastindex(c.modes)
+    print(io, "(")
+    while i <= N
+        m = c.modes[i]
+        name = m.symbolic_basis.name
+        print(io, name, "[", m.label)
+        i += 1
+        while i <= N && name == c.modes[i].symbolic_basis.name
+            print(io, ", ", c.modes[i].label)
+            i += 1
+        end
+        print(io, "]")
+        i <= N && print(io, ", ")
     end
-    print(io, "]")
+    print(io, ")")
 end
 
 function Base.show(io::IO, c::FermionCluster)
