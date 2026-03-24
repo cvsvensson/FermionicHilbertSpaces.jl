@@ -32,8 +32,8 @@ Uses backtracking with pruning via `valid_branch`.
 `partial_processor(partial_state, depth, spaces)` is called whenever a branch is accepted.
 `leaf_processor(full_state, spaces)` can transform each completed state before storing it.
 """
-generate_states(space, constraint::AbstractConstraint; kwargs...) = generate_states(space, (constraint,); kwargs...)
-function generate_states(space, _constraints; partial_processor=nothing, leaf_processor=identity)
+generate_states(space::AbstractHilbertSpace, constraint::AbstractConstraint; kwargs...) = generate_states(space, (constraint,); kwargs...)
+function generate_states(space::AbstractHilbertSpace, _constraints; partial_processor=nothing, leaf_processor=identity)
     spaces = factors(space)
     constraints = map(c -> branch_constraint(c, space), _constraints)
     results = _init_results(spaces, leaf_processor)
@@ -77,6 +77,7 @@ end
 unweighted_number_branch_constraint(allowed_numbers, ::Nothing, allspaces) = unweighted_number_branch_constraint(allowed_numbers, allspaces, allspaces)
 
 unweighted_number_branch_constraint(allowed_numbers, subspaces, allspaces::AbstractHilbertSpace) = unweighted_number_branch_constraint(allowed_numbers, subspaces, factors(allspaces))
+weighted_number_branch_constraint(allowed_numbers, subspaces, allspaces::AbstractHilbertSpace) = weighted_number_branch_constraint(allowed_numbers, subspaces, factors(allspaces))
 function unweighted_number_branch_constraint(allowed_numbers, subspaces, allspaces)
     issub = BitVector(map(s -> s in subspaces, allspaces))
     remaining_max_particles = Int[]
