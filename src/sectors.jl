@@ -45,15 +45,39 @@ function Base.show(io::IO, H::BlockHilbertSpace)
         show(IOContext(io, :compact => true), H.parent)
         print(io, ", $(dim(H))-dim)")
     else
-        print(io, "$(dim(H))-dimensional BlockHilbertSpace\n")
+        print(io, "H$(dim(H))-dimensional BlockHilbertSpace\n")
         print(io, "Parent: ")
         show(IOContext(io, :compact => true), H.parent)
+
         qns = collect(keys(H.qn_to_states))
+        nsectors = length(qns)
+
         if !isempty(qns)
-            print(io, "\nSectors: ")
-            for (i, qn) in enumerate(qns)
-                i > 1 && print(io, ", ")
-                print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
+            max_printed_sectors = 5
+            edge_sectors = 1
+
+            if nsectors > max_printed_sectors
+                print(io, "\nSectors: $nsectors total [")
+
+                for (i, qn) in enumerate(qns[1:edge_sectors])
+                    i > 1 && print(io, ", ")
+                    print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
+                end
+
+                print(io, ", ..., ")
+
+                for (i, qn) in enumerate(qns[end-edge_sectors+1:end])
+                    i > 1 && print(io, ", ")
+                    print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
+                end
+
+                print(io, "]")
+            else
+                print(io, "\nSectors: ")
+                for (i, qn) in enumerate(qns)
+                    i > 1 && print(io, ", ")
+                    print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
+                end
             end
         end
     end

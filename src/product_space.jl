@@ -8,7 +8,7 @@ substate(n::Int, state::ProductState) = state.states[n]
 atomic_factors(state::ProductState) = state.states
 Base.:(==)(s1::ProductState, s2::ProductState) = s1.states == s2.states
 Base.hash(s::ProductState, h::UInt) = hash(s.states, h)
-
+Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
 #ClusterSpace consists of atoms. A cluster compresses states and has nontrivial phase factors
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
 # ProductSpaces consists of a list of atomic spaces and clusters

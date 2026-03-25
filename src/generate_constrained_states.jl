@@ -29,7 +29,7 @@ function generate_states(space::AbstractHilbertSpace{B}, constraint; kwargs...) 
     process_result = (full_state, spaces) -> first(only(combine_states(full_state, splitter)))
     generate_states(atomic_factors(space), constraint, B; process_result)
 end
-function generate_states(spaces, _constraint, ::Type{B}=Any; partial_processor=nothing, process_result=(state, spaces) -> state) where B
+function generate_states(spaces, _constraint, ::Type{B}=Any; partial_processor=nothing, process_result=(state, spaces) -> copy(state)) where B
     constraint = branch_constraint(_constraint, spaces)
     all_statetypes = statetype.(spaces)
     partial = Vector{Union{all_statetypes...}}(undef, length(spaces))
@@ -142,7 +142,7 @@ end
     states = generate_states((H1, H2), constraint)
 
     # Should only get states where the first space is in its first basis state (|0>)
-    expected = [(basisstate(1, H1), basisstate(1, H2)), (basisstate(1, H1), basisstate(2, H2))]
+    expected = [[basisstate(1, H1), basisstate(1, H2)], [basisstate(1, H1), basisstate(2, H2)]]
     @test sort(states) == sort(expected)
 
     # Partial and full processors are both applied

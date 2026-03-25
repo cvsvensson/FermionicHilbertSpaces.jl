@@ -111,33 +111,38 @@ function state_splitter(H::FermionCluster, Hs)
     FockMapper(Tuple(fermionpositions))
 end
 
-function _compact_fermionic_modes(io::IO, c::FermionCluster)
+_truncate(items, max, edge) =
+    length(items) <= max ? items : [items[1:edge]; "..."; items[end-edge+1:end]]
+
+function _compact_fermionic_modes(io::IO, c::FermionCluster;
+    max_groups=typemax(Int), edge_groups=3,
+    max_labels_per_group=typemax(Int), edge_labels=3)
+
     isempty(c.modes) && return print(io, "FermionCluster()")
-    i = firstindex(c.modes)
-    N = lastindex(c.modes)
-    print(io, "(")
-    while i <= N
-        m = c.modes[i]
-        name = m.symbolic_basis.name
-        print(io, name, "[", m.label)
-        i += 1
-        while i <= N && name == c.modes[i].symbolic_basis.name
-            print(io, ", ", c.modes[i].label)
-            i += 1
+
+    # Group consecutive modes by symbolic basis name
+    groups = Tuple{Any,Vector{Any}}[]
+    for m in c.modes
+        if !isempty(groups) && last(groups)[1] == m.symbolic_basis.name
+            push!(last(groups)[2], m.label)
+        else
+            push!(groups, (m.symbolic_basis.name, Any[m.label]))
         end
-        print(io, "]")
-        i <= N && print(io, ", ")
     end
-    print(io, ")")
+
+    fmt((name, labels)) = "$name[$(join(_truncate(labels, max_labels_per_group, edge_labels), ", "))]"
+    print(io, "(", join(_truncate(map(fmt, groups), max_groups, edge_groups), ", "), ")")
 end
 
 function Base.show(io::IO, c::FermionCluster)
+    max_modes = 10
     if get(io, :compact, false)
-        _compact_fermionic_modes(io, c)
+        _compact_fermionic_modes(io, c; max_groups=4, edge_groups=2, max_labels_per_group=6, edge_labels=2)
     else
-        print(io, "$(dim(c))-dimensional FermionCluster\n")
-        print(io, "Modes: ")
-        _compact_fermionic_modes(io, c)
+        n = nbr_of_modes(c)
+        print(io, "$(dim(c))-dimensional FermionCluster\nModes: ")
+        n > max_modes && print(io, "$n total ")
+        _compact_fermionic_modes(io, c; (n > max_modes ? (max_groups=6, edge_groups=3, max_labels_per_group=8, edge_labels=3) : (;))...)
     end
 end
 
@@ -364,4 +369,20 @@ issubsystem(Hsub::AbstractHilbertSpace, H::FermionCluster) = isorderedsubsystem(
         matrix_representation(lindbladian, Hsector)
     end
     @test cat(blocks...; dims=(1, 2)) == matrix_representation(lindbladian, Hcons)
+end
+
+@testitem "FermionCluster show truncates long mode lists" begin
+    @fermions f
+
+    Hsmall = hilbert_space(f, 1:6)
+    shown_small = sprint(show, Hsmall)
+    @test occursin("Modes: (f[1, 2, 3, 4, 5, 6])", shown_small)
+    @test !occursin("total", shown_small)
+
+    Hlarge = hilbert_space(f, 1:20)
+    shown_large = sprint(show, Hlarge)
+    @test occursin("Modes: 20 total", shown_large)
+    @test occursin("...", shown_large)
+    @test occursin("f[1, 2, 3", shown_large)
+    @test occursin("18, 19, 20]", shown_large)
 end
