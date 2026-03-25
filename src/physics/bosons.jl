@@ -91,7 +91,7 @@ NonCommutativeProducts.@commutative MajoranaSym BosonSym
     @test (b1 * b2) * b1' == b1 * (b2 * b1')
 end
 
-struct BosonicFockState
+struct BosonicFockState <: AbstractBasisState
     n::Int
 end
 Base.:(==)(a::BosonicFockState, b::BosonicFockState) = a.n == b.n

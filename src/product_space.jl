@@ -407,29 +407,26 @@ extract_substate(state, k) = state
 
 function split_state(state::ProductState, sp::ProductSpaceSplitter)
     # Split each source cluster into its pieces
-    cluster_pieces = ntuple(length(sp.cluster_splitters)) do i
-        isnothing(sp.cluster_splitters[i]) ? () :
-        first(only(split_state(state.states[i], sp.cluster_splitters[i]))) #TODO: handle multiple outcomes from split_state. The use of first(only()) assumes that each cluster splitter produces exactly one piece per target
+    cluster_pieces = map(sp.cluster_splitters, state.states) do splitter, substate
+        isnothing(splitter) ? () :
+        first(only(split_state(substate, splitter))) #TODO: handle multiple outcomes from split_state. The use of first(only()) assumes that each cluster splitter produces exactly one piece per target
     end
-    # For each target, collect pieces already in target-cluster order (guaranteed by sort above)
-    outstates = ntuple(length(sp.target_spaces)) do j
-        sources = sp.target_piece_sources[j]
-        gathered = ntuple(k -> cluster_pieces[sources[k][1]][sources[k][2]], length(sources))
-        first(only(combine_states(gathered, sp.target_spaces[j]))) #TODO: handle multiple outcomes from combine_states 
+    outstates = map(sp.target_piece_sources, sp.target_spaces) do sources, target_space
+        gathered = map(sources) do source
+            cluster_pieces[source[1]][source[2]]
+        end
+        first(only(combine_states(gathered, target_space)))
     end
     ((outstates, 1),)
 end
 
 function combine_states(substates, sp::ProductSpaceSplitter)
-    outstate = ProductState(ntuple(length(sp.cluster_splitters)) do i
-        isnothing(sp.cluster_splitters[i]) &&
-            error("Cannot reconstruct state: cluster $i has no atoms in any target")
-
-        piece_destinations = sp.cluster_piece_targets[i]
-        gathered = ntuple(k -> extract_substate(substates[piece_destinations[k][1]],
-                piece_destinations[k][2]),
-            length(piece_destinations))
-        only(combine_states(gathered, sp.cluster_splitters[i]))[1] #TODO: handle multiple outcomes from combine_states
+    outstate = ProductState(map(sp.cluster_splitters, sp.cluster_piece_targets) do splitter, piece_destinations
+        isnothing(splitter) && error("Cannot reconstruct state: cluster $i has no atoms in any target")
+        gathered = map(piece_destinations) do dest
+            extract_substate(substates[dest[1]], dest[2])
+        end
+        first(only(combine_states(gathered, splitter))) #TODO: handle multiple outcomes from combine_states
     end)
     ((outstate, 1),)
 end

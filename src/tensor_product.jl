@@ -547,6 +547,7 @@ struct SubsystemPartialTraceAlg <: AbstractPartialTraceAlg end
 struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
 default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+#TODO: FullPartialTraceAlg explots sparsity of the matrix which should be taken into account.
 
 """
     partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, extend_state=StateExtender((Hsub, complement), H); skipmissing=true, phase_factors=true)
