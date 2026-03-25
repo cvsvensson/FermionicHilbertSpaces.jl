@@ -10,7 +10,7 @@ macro spin(x)
 end
 macro spins(name, labels)
     Expr(:block,
-        :($(esc(name)) = [SymbolicSpinBasis(Symbol($(Expr(:quote, name)), l)) for l in $(esc(labels))]),
+        :($(esc(name)) = Dict(l => SymbolicSpinBasis(Symbol($(Expr(:quote, name)), l)) for l in $(esc(labels)))),
         :($(esc(name))))
 end
 Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.name == b.name
