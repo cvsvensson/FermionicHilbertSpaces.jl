@@ -13,6 +13,7 @@ function Base.show(io::IO, c::FermionicMode)
     get(io, :compact, false) || return print(io, "FermionicMode(", c.symbolic_basis.name, "[", c.label, "])")
     print(io, c.symbolic_basis.name, "[", c.label, "]")
 end
+combine_states(states, ::AbstractAtomicHilbertSpace) = ((only(states), 1),)
 combine_into_cluster(group::FermionicGroup, fermions) = all(f -> symbolic_group(f) == group, fermions) ? FermionCluster(fermions, group) : throw(ArgumentError("Not all fermions belong to the same group"))
 function basisstate(n::Int, H::FermionicMode)
     n == 1 && return FockNumber(zero(default_fock_representation(1)))
@@ -71,8 +72,11 @@ operators(H::FermionicMode) = fermions(H)
 function fermion_submodes(sub::Vector{L}, H::FermionCluster{<:Any,L}) where L
     return sub
 end
-function fermion_submodes(sub::FermionCluster{L}, H::FermionCluster{<:Any,L}) where L
+function fermion_submodes(sub::FermionCluster{<:Any,L}, H::FermionCluster{<:Any,L}) where L
     return sub.modes
+end
+function fermion_submodes(sub::F, H::FermionCluster{<:Any,F}) where F
+    return (sub,)
 end
 function fermion_submodes(sub::Vector{T}, H::FermionCluster{<:Any,<:FermionicMode{T}}) where T
     bases = unique!(map(m -> m.symbolic_basis, atomic_factors(H)))
@@ -97,6 +101,7 @@ function subregion(Hsub, H::FermionCluster)
     Hsub
 end
 isconstrained(H::FermionCluster) = false
+combine_states(states, H::FermionCluster{F}) where F = ((catenate_fock_states(states, H.modes, F), 1),)
 
 state_splitter(H::FermionCluster, Hs::AbstractHilbertSpace) = state_splitter(H, (Hs,))
 function state_splitter(H::FermionCluster, Hs)
@@ -174,7 +179,7 @@ default_sorter(space::Union{<:FermionCluster,<:FermionicMode}, constraint::Parit
 default_sorter(space::Union{<:FermionCluster,<:FermionicMode}, constraint::NumberConservation) = f -> (particle_number(f), f)
 
 focknbr_from_site_label(mode::FermionicMode, H::FermionCluster) = focknbr_from_site_index(_find_position(mode, H))
-focknbr_from_site_labels(Hsub::FermionCluster, H::FermionCluster) = mapreduce(Base.Fix2(focknbr_from_site_label, H), +, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
+focknbr_from_site_labels(Hsub::FermionCluster, H::FermionCluster) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
 
 
 # _precomputation_before_operator_application(op::NCMul, space::AbstractHilbertSpace{B}) where {B<:FockNumber} = map(op -> _find_position(op, space), op.factors)

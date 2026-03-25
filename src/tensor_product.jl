@@ -253,7 +253,7 @@ tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> 
     As_modes = [rand(ComplexF64, 2, 2) for _ in 1:N]
     ξ = vcat(fine_partitions...)
     ξbases = vcat(Hs_fine...)
-    modebases = [hilbert_space(a, j) for j in 1:N]
+    modebases = [hilbert_space(a[j]) for j in 1:N]
     lhs = prod(j -> embed(As_modes[j], modebases[j], H), 1:N)
     rhs_ordered_prod(X, basis) = mapreduce(j -> Matrix(embed(As_modes[j], modebases[j], basis)), *, X)
     rhs = generalized_kron([rhs_ordered_prod(X, H) for (X, H) in zip(ξ, ξbases)], ξbases, H)
@@ -478,7 +478,7 @@ SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest..
         H = hilbert_space(f, 1:N)
         c = fermions(H)
         # Now let's make commuting fermions (hardcore bosons)
-        q = Dict(k => embed(only(fermions(hilbert_space(f, k)))[2], hilbert_space(f, k) => H; phase_factors=false) for k in 1:N)
+        q = Dict(k => embed(only(fermions(hilbert_space(f[k])))[2], hilbert_space(f[k]) => H; phase_factors=false) for k in 1:N)
         @test all(map(n -> q[n] == phis[N](c[n]), 1:N))
         c2 = map(n -> phis[N](c[n]), 1:N)
         @test phis[N](phis[N](c[1])) == c[1]

@@ -80,8 +80,8 @@ end
     import FermionicHilbertSpaces: embedding_unitary, bipartite_embedding_unitary, fermions
     using LinearAlgebra
     @fermions f
-    HA = hilbert_space(f, (1, 3))
-    HB = hilbert_space(f, (2, 4))
+    HA = hilbert_space(f, [1, 3])
+    HB = hilbert_space(f, [2, 4])
     cA = fermions(HA)
     cB = fermions(HB)
     H = hilbert_space(f, 1:4)
@@ -124,7 +124,7 @@ embed_map(Hsub, H; complement=complementary_subsystem(H, Hsub)) = partial_trace_
 @testitem "Partial trace, embed" begin
     @fermions f
     H = hilbert_space(f, 1:4)
-    Hsub = hilbert_space(f, (2, 4))
+    Hsub = hilbert_space(f, [2, 4])
     Hcomp = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
     pt = partial_trace(H => Hsub)
     emb = embed(Hsub => H)

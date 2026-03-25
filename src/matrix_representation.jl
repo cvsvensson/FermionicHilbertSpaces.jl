@@ -305,7 +305,6 @@ end
 
 @testitem "Three-space product" begin
     using SparseArrays, LinearAlgebra
-    using FermionicHilbertSpaces: SpinSpace
 
     @fermions f
     @fermions g  # Different fermion species, commuting with f
@@ -313,7 +312,7 @@ end
 
     Hf = hilbert_space(f[1])
     Hg = hilbert_space(g[1])
-    Hs = SpinSpace{1 // 2}(s)
+    Hs = hilbert_space(s, 1 // 2)
     H = tensor_product(Hf, Hg, Hs)
     # Operator acting on all three spaces
     op = f[1]' * f[1] * g[1]' * g[1] * s[:z]

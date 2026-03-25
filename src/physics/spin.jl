@@ -88,7 +88,7 @@ end
     @test spin_basisstates(1) == [SpinState{1}(-1), SpinState{1}(0), SpinState{1}(1)]
 
     @spin s
-    H = SpinSpace{1 // 2}(s)
+    H = hilbert_space(s, 1 // 2)
     S = operators(H)
     @test S[:+] == [0 0; 1 0]
     @test S[:-] == [0 1; 0 0]

@@ -28,7 +28,7 @@ using TestItemRunner
 
     qn = ParityConservation()
     H1 = hilbert_space(f, 2:2, qn)
-    H2 = hilbert_space(f, (1, 3), qn)
+    H2 = hilbert_space(f, [1, 3], qn)
     H = hilbert_space(f, 1:3, qn)
     v = [FermionicHilbertSpaces.basisstate(i, H).f for i in 1:8]
     t1 = reshape(v, H, Hs)
@@ -64,7 +64,7 @@ using TestItemRunner
     end
     function get_subsystems(c, N)
         t = collect(Base.product(ntuple(i -> getlabels(c), N)...))
-        (t[I] for I in CartesianIndices(t) if issorted(Tuple(I)) && allunique(Tuple(I)))
+        (collect(t[I]) for I in CartesianIndices(t) if issorted(Tuple(I)) && allunique(Tuple(I)))
     end
     for N in 1:4
         @test all(bilinear_equality(H, hilbert_space(f, subsystem), ρ) for subsystem in get_subsystems(H, N))

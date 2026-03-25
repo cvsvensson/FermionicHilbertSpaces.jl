@@ -130,7 +130,7 @@ end
     @fermions a
     import FermionicHilbertSpaces: state_splitter, kron_phase_factor
     h_splitter(p, fockstates, ordering) = begin
-        H = hilbert_space(a, ordering)
+        H = hilbert_space(a, collect(ordering))
         Hs = map(p) do part
             hilbert_space(a, part)
         end

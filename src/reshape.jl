@@ -121,8 +121,8 @@ end
     end
     function test_reshape(qn1, qn2, qn3)
         @fermions f
-        H1 = hilbert_space(f, (1, 3), qn1)
-        H2 = hilbert_space(f, (2, 4), qn2)
+        H1 = hilbert_space(f, [1, 3], qn1)
+        H2 = hilbert_space(f, [2, 4], qn2)
         d1 = 4
         d2 = 4
         Hs = (H1, H2)

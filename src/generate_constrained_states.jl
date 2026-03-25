@@ -2,14 +2,12 @@ abstract type AbstractBranchConstraint <: AbstractConstraint end
 struct BranchConstraint{F} <: AbstractBranchConstraint
     f::F
 end
-valid_branch(constraint::BranchConstraint, partial_state, depth, spaces) = constraint.f(partial_state, depth, spaces)
 branch_constraint(constraint::BranchConstraint, space) = constraint
 has_sectors(::AbstractConstraint) = false
 """
     valid_branch(constraint, partial_state, remaining_spaces) -> Bool
-
-Return `true` if the branch should be explored, `false` to prune.
-By default this calls `constraint.f(partial_state, remaining_spaces)`.
+    
+    Return `true` if the branch should be explored, `false` to prune. By default this calls `constraint.f(partial_state, remaining_spaces)`.
 """
 valid_branch(constraint::BranchConstraint, partial_state, depth, spaces) = constraint.f(partial_state, depth, spaces)
 valid_branch(constraint::ProductConstraint, partial_state, depth, spaces) = all(c -> valid_branch(c, partial_state, depth, spaces), constraint.constraints)

@@ -81,7 +81,7 @@ default_sorter(space, constraint) = nothing
     @fermions f
     H = hilbert_space(f, labels, qn)
     @test collect(quantumnumbers(H)) == [(n, (-1)^n) for n in 0:4]
-    qn = prod(NumberConservation(nothing, hilbert_space(f, l)) for l in labels)
+    qn = prod(NumberConservation(nothing, hilbert_space(f[l])) for l in labels)
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
     @test all(isone ∘ dim, sectors(H))

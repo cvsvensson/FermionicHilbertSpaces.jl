@@ -133,7 +133,6 @@ hilbert_space(sym::BosonSym{B}, max_occupancy) where B = TruncatedBosonicHilbert
 function apply_local_operators(op::NCMul, state::BosonicFockState, space::TruncatedBosonicHilbertSpace, precomp)
     factors = op.factors
     n = state.n
-    max_occupancy = space.max_occupancy
     amplitude = op.coeff
 
     for factor in Iterators.reverse(factors)
@@ -153,7 +152,7 @@ function apply_local_operators(op::NCMul, state::BosonicFockState, space::Trunca
             n += k
         end
     end
-    if n > max_occupancy
+    if n > space.max_occupancy
         return ((state, 0 * amplitude),)
     end
     return ((BosonicFockState(n), amplitude),)
@@ -201,15 +200,14 @@ end
 
 @testitem "Fermion-spin-boson mixed spaces" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: SpinSpace, TruncatedBosonicHilbertSpace
 
     @fermions f
     @spin S
     @boson b
 
     Hf = hilbert_space(f, 1:1)
-    Hs = SpinSpace{1 // 2}(S)
-    Hb = TruncatedBosonicHilbertSpace(b, 2)
+    Hs = hilbert_space(S, 1 // 2)
+    Hb = hilbert_space(b, 2)
     H = tensor_product(Hf, Hs, Hb)
 
     f_expr = f[1]' * f[1] + 0.5 * (f[1] + f[1]') + 1
@@ -223,7 +221,7 @@ end
     expected = kron(reverse([fmat, smat, bmat])...)
     @test mop ≈ expected
 
-    @test_throws ArgumentError matrix_representation(s_expr, SpinSpace{1 // 2}(:Not))
+    @test_throws ArgumentError matrix_representation(s_expr, FermionicHilbertSpaces.SpinSpace{1 // 2}(:Not))
 
     Hsb = tensor_product(Hs, Hb)
     @test partial_trace(1.0 * I(dim(Hsb)), Hsb => Hs) ≈ dim(Hb) * I(dim(Hs))

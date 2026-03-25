@@ -49,7 +49,8 @@ end
 function insert_bits(f::FixedNumberFockState, positions)
     FixedNumberFockState(insert_bits(FockNumber(f), positions))
 end
-Base.:(+)(f1::FixedNumberFockState, f2::FixedNumberFockState) = FixedNumberFockState((f1.sites..., f2.sites...))
+Base.:(|)(f1::FixedNumberFockState, f2::FixedNumberFockState) = FixedNumberFockState((f1.sites..., f2.sites...))
+Base.:(|)(f1::FixedNumberFockState, f2::FockNumber) = FixedNumberFockState(FockNumber(f1) | f2)
 
 _bit(f::FixedNumberFockState, k) = k in f.sites
 function substate(siteindices, f::FixedNumberFockState)
@@ -90,7 +91,7 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     # test permutation and FockMapper
     H1 = hilbert_space(a, 1:2)
     H2 = hilbert_space(a, 3:4)
-    H12 = hilbert_space(a, (1, 3, 2, 4))
+    H12 = hilbert_space(a, [1, 3, 2, 4])
     fm = state_splitter(H12, (H1, H2))
     for (f1, f2) in Base.product(basisstates(H1), basisstates(H2))
         f1fix = FixedNumberFockState(f1)

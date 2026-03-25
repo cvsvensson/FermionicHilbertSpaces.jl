@@ -176,7 +176,7 @@ end
 
     ## ProductSymmetry
     qn = ParityConservation([1]) * NumberConservation(1:2, H.modes[1:3])
-    states = FermionicHilbertSpaces.generate_states(H, qn)
+    states = FermionicHilbertSpaces.generate_states(H.modes, qn)
     H2 = hilbert_space(f, 1:5, qn)
     T = FermionicHilbertSpaces.statetype(H2)
     @test sort(basisstates(H2)) == sort(map(state -> FermionicHilbertSpaces.catenate_fock_states(state, H.modes, T), states))
@@ -253,4 +253,4 @@ end
     @test size(matrix_representation(hopping_symham, H; projection=true), 1) == dim(H)
 end
 
-apply_local_operators(ops, state, space::BlockHilbertSpace, precomp) = apply_local_operators(ops, state, space.parent, precomp)
+# apply_local_operators(ops::NCMul, state, space::BlockHilbertSpace, precomp) = apply_local_operators(ops, state, space.parent, precomp)

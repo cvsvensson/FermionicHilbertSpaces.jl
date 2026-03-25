@@ -44,11 +44,11 @@ getindices(jw::JordanWignerOrdering, labels) = map(Base.Fix1(getindex, jw), labe
 
 label_at_site(n, jw::JordanWignerOrdering) = keys(jw)[n]
 focknbr_from_site_label(label, jw::JordanWignerOrdering) = focknbr_from_site_index(getindex(jw, label))
-focknbr_from_site_labels(labels, jw::JordanWignerOrdering) = mapreduce(Base.Fix2(focknbr_from_site_label, jw), +, labels, init=FockNumber(zero(default_fock_representation(length(jw)))))
+focknbr_from_site_labels(labels, jw::JordanWignerOrdering) = mapreduce(Base.Fix2(focknbr_from_site_label, jw), |, labels, init=FockNumber(zero(default_fock_representation(length(jw)))))
 focknbr_from_site_labels(labels::JordanWignerOrdering, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(labels), jw)
 
-Base.:+(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f + f2.f)
-Base.:-(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f - f2.f)
+# Base.:+(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f + f2.f)
+# Base.:-(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f - f2.f)
 Base.:⊻(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f ⊻ f2.f)
 Base.:⊻(f1::Integer, f2::FockNumber) = FockNumber(f1 ⊻ f2.f)
 Base.:&(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f & f2.f)
@@ -67,7 +67,7 @@ Base.zero(::Type{FockNumber{T}}) where T = FockNumber(zero(T))
 integer_from_bits(bits, ::Type{T}=default_fock_representation(length(bits))) where T = reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T))
 focknbr_from_bits(bits, ::Type{T}=default_fock_representation(length(bits))) where T = FockNumber{T}(integer_from_bits(bits, T))
 focknbr_from_site_index(site::Integer, ::Type{T}=default_fock_representation(site)) where T = FockNumber{T}(one(T) << (site - 1))
-focknbr_from_site_indices(sites, ::Type{T}=default_fock_representation(maximum(sites, init=0))) where T = mapreduce(focknbr_from_site_index, +, sites, init=FockNumber{T}(zero(T)))
+focknbr_from_site_indices(sites, ::Type{T}=default_fock_representation(maximum(sites, init=0))) where T = mapreduce(focknbr_from_site_index, |, sites, init=FockNumber{T}(zero(T)))
 
 bits(f::FockNumber, N) = digits(Bool, f.f, base=2, pad=N)
 parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
@@ -117,7 +117,7 @@ end
 
 function combine_states(f, fm::FockMapper{N}) where N
     T = FockNumber{default_fock_representation(Val(N))}
-    state = mapreduce(insert_bits, +, f, fm.fermionpositions; init=zero(T))
+    state = mapfoldr(tup -> insert_bits(tup...), |, zip(f, fm.fermionpositions); init=zero(T))
     ((state, 1),)
 end
 combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:BitPermutation}) where N = ((concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))}), 1),)
@@ -177,7 +177,7 @@ shift_right(f::FockNumber, M) = FockNumber(f.f << M)
         focknbr = FockNumber(rand(1:2^N) - 1)
         fockbits = bits(focknbr, N)
         function test_remove(n)
-            FermionicHilbertSpaces.removefermion(n, focknbr) == (fockbits[n] ? (focknbr - FockNumber(2^(n - 1)), (-1)^sum(fockbits[1:n-1])) : (FockNumber(0), 0))
+            FermionicHilbertSpaces.removefermion(n, focknbr) == (fockbits[n] ? (FockNumber(focknbr.f - 2^(n - 1)), (-1)^sum(fockbits[1:n-1])) : (FockNumber(0), 0))
         end
         @test all([test_remove(n) for n in 1:N])
     end

@@ -142,7 +142,7 @@ kron_phase_factor(::AtomicStateSplitter) = (f1, f2) -> 1
 
 
 @testitem "ProductSpace" begin
-    import FermionicHilbertSpaces: state_index, basisstate, TruncatedBosonicHilbertSpace, state_splitter, ProductState, substate, complementary_subsystem, atomic_factors, split_state, tensor_product
+    import FermionicHilbertSpaces: state_index, basisstate, state_splitter, ProductState, substate, complementary_subsystem, atomic_factors, split_state, tensor_product
     @fermions a b
     @fermions c
     Ha = hilbert_space(a[1])
@@ -160,7 +160,7 @@ kron_phase_factor(::AtomicStateSplitter) = (f1, f2) -> 1
     @test dim(Hab) == dim(Ha) * dim(Hb)
 
     @boson boson
-    Hboson = TruncatedBosonicHilbertSpace(boson, 2)
+    Hboson = hilbert_space(boson, 2)
     H2 = tensor_product([H, Hboson])
     @test dim(H2) == dim(H) * dim(Hboson)
     @test length(H2.clusters) == 3
@@ -391,8 +391,7 @@ function state_splitter(source::ProductSpace, targets)
         Tuple(cluster_splitters),
         target_piece_sources,
         Tuple(cluster_piece_targets),
-        targets,
-    )
+        targets,)
 end
 
 # ─── helpers ───────────────────────────────────────────────────────────────────
