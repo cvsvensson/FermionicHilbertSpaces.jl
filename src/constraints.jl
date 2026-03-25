@@ -13,47 +13,41 @@ Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint((s
 branch_constraint(constraint::ProductConstraint, space) = ProductConstraint(map(cons -> branch_constraint(cons, space), constraint.constraints))
 
 
-struct NumberConservation{T,H} <: AbstractConstraint
+struct NumberConservation{T,H,W} <: AbstractConstraint
     total::T
     subspaces::H
+    weights::W
 end
-NumberConservation(n) = NumberConservation(n, nothing)
-NumberConservation(H::AbstractHilbertSpace) = NumberConservation(nothing, H)
-NumberConservation() = NumberConservation(nothing, nothing)
-NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(total, (subspace,))
-NumberConservation(total, subspace::AbstractClusterHilbertSpace) = NumberConservation(total, atomic_factors(subspace))
+NumberConservation(n) = NumberConservation(n, missing, missing)
+NumberConservation(H::AbstractHilbertSpace) = NumberConservation(missing, H, missing)
+NumberConservation() = NumberConservation(missing, missing, missing)
+NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(total, (subspace,), missing)
+NumberConservation(total, subspace::AbstractClusterHilbertSpace) = NumberConservation(total, atomic_factors(subspace), missing)
+NumberConservation(total, spaces) = NumberConservation(total, spaces, missing)
 
 struct ParityConservation{H} <: AbstractConstraint
     allowed_parities::Vector{Int}
     subspaces::H
 end
-ParityConservation() = ParityConservation([-1, 1], nothing)
+ParityConservation() = ParityConservation([-1, 1], missing)
 ParityConservation(H::AbstractHilbertSpace) = ParityConservation([-1, 1], H)
-ParityConservation(ps::AbstractVector{Int}) = ParityConservation(Vector{Int}(ps), nothing)
-ParityConservation(p::Int) = ParityConservation([p], nothing)
+ParityConservation(ps::AbstractVector{Int}) = ParityConservation(Vector{Int}(ps), missing)
+ParityConservation(p::Int) = ParityConservation([p], missing)
 
-function sector_function(constraint::NumberConservation{T,Nothing}, space::ProductSpace) where {T}
-    f -> sum(particle_number, f.states)
+function sector_function(cons::NumberConservation{T,S,W}, space) where {T,S,W}
+    subspaces = S === Missing ? factors(space) : cons.subspaces
+    issub = BitVector(map(in(subspaces), factors(space)))
+    _weights = W === Missing ? ones(Int, sum(issub)) : cons.weights
+    weights = zeros(eltype(_weights), length(factors(space)))
+    weights[issub] .= _weights
+    return f -> mapreduce((n, w) -> particle_number(substate(n, f)) * w, +, 1:length(weights), weights)
+    # return f -> mapreduce((f, w) -> particle_number(f) * w, +, f.states, weights)
 end
-function sector_function(constraint::ParityConservation{Nothing}, space::ProductSpace)
-    f -> prod(parity, f.states)
-end
-function sector_function(constraint::NumberConservation{T,Nothing}, space) where {T}
-    f -> particle_number(f)
-end
-function sector_function(constraint::ParityConservation{Nothing}, space)
-    f -> parity(f)
-end
-function sector_function(constraint::NumberConservation, space)
-    positions = map(Base.Fix2(_find_position, space), constraint.subspaces)
-    mask = focknbr_from_site_indices(positions)
-    f -> particle_number(f & mask)
-end
-function sector_function(constraint::ParityConservation, space)
-    positions = map(Base.Fix2(_find_position, space), constraint.subspaces)
-    mask = focknbr_from_site_indices(positions)
-    f -> parity(f & mask)
-end
+
+sector_function(::ParityConservation{Missing}, space::ProductSpace) = f -> prod(parity, f.states)
+sector_function(::NumberConservation{T,Missing,Missing}, space) where {T} = f -> particle_number(f)
+sector_function(::ParityConservation{Missing}, space) = f -> parity(f)
+
 function sector_function(constraint::ProductConstraint, space)
     subspace_functions = map(cons -> sector_function(cons, space), constraint.constraints)
     state -> map(f -> f(state), subspace_functions)
@@ -65,7 +59,6 @@ has_sectors(c::ProductConstraint) = any(has_sectors, c.constraints)
 
 function constrain_space(space, constraint::AbstractConstraint; kwargs...)
     sortby = default_sorter(space, constraint)
-    # leaf_processor = default_processor(space, constraint)
     states = generate_states(space, constraint; kwargs...)
     isnothing(sortby) || sort!(states, by=sortby)
     has_sectors(constraint) || return ConstrainedSpace(space, states)
@@ -81,7 +74,7 @@ default_sorter(space, constraint) = nothing
     @fermions f
     H = hilbert_space(f, labels, qn)
     @test collect(quantumnumbers(H)) == [(n, (-1)^n) for n in 0:4]
-    qn = prod(NumberConservation(nothing, hilbert_space(f[l])) for l in labels)
+    qn = prod(NumberConservation(missing, hilbert_space(f[l])) for l in labels)
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
     @test all(isone ∘ dim, sectors(H))

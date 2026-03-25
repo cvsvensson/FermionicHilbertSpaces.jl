@@ -60,10 +60,10 @@ default_processor(H::ConstrainedSpace, constraint) = default_processor(parent(H)
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
 
 apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::ConstrainedSpace, precomp) = apply_local_operators(ops, state, space.parent, precomp)
-_precomputation_before_operator_application(ops::Union{<:Any, <:NCMul}, space::ConstrainedSpace) = _precomputation_before_operator_application(ops, parent(space))
+_precomputation_before_operator_application(ops::Union{<:Any,<:NCMul}, space::ConstrainedSpace) = _precomputation_before_operator_application(ops, parent(space))
 
 @testitem "Constrained space" begin
-    import FermionicHilbertSpaces: constrain_space, CombineFockNumbersProcessor, unweighted_number_branch_constraint, subregion, FermionicMode
+    import FermionicHilbertSpaces: constrain_space, CombineFockNumbersProcessor, unweighted_number_branch_constraint, subregion
     N = 5
     @fermions f
     H = hilbert_space(f, 1:N)
@@ -75,7 +75,7 @@ _precomputation_before_operator_application(ops::Union{<:Any, <:NCMul}, space::C
     #total number of particles is 1
     constraint = unweighted_number_branch_constraint([1], H.modes, H.modes)
     combiner = CombineFockNumbersProcessor{FockNumber{Int}}()
-    Hc = constrain_space(H, constraint; leaf_processor=combiner)
+    Hc = constrain_space(H, constraint; process_result=combiner)
     @test dim(Hc) == N
     mc = matrix_representation(sym, Hc)
     @test size(mc) == (N, N)
@@ -90,3 +90,4 @@ _precomputation_before_operator_application(ops::Union{<:Any, <:NCMul}, space::C
     @test dim(Hsub) == Nsub + 1
 end
 
+apply_local_operators(ops::Vector{<:NCMul}, state, space::BlockHilbertSpace, precomp) = apply_local_operators(ops, state, space.parent, precomp)

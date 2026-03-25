@@ -15,31 +15,26 @@ valid_branch(constraint::ProductConstraint, partial_state, depth, spaces) = all(
 process_partial(::Nothing, partial_state, depth, spaces) = nothing
 process_partial(processor, partial_state, depth, spaces) = processor(partial_state, depth, spaces)
 
-process_leaf(::Nothing, full_state, spaces) = Tuple(full_state)
-process_leaf(::typeof(identity), full_state, spaces) = Tuple(full_state)
-process_leaf(processor, full_state, spaces) = processor(full_state, spaces)
-
-
 """
-    generate_states(spaces, constraints; partial_processor=nothing, leaf_processor=identity)
+    generate_states(spaces, constraints; partial_processor=nothing, process_result=(state, space) -> state)
 
 Generate all tensor product states from `spaces` satisfying `constraint`.
 Uses backtracking with pruning via `valid_branch`.
 
 `partial_processor(partial_state, depth, spaces)` is called whenever a branch is accepted.
-`leaf_processor(full_state, spaces)` can transform each completed state before storing it.
+`process_result(full_state, spaces)` can transform each completed state before storing it.
 """
-generate_states(space::AbstractHilbertSpace, constraint; leaf_processor=(full_state, spaces) -> first(only(combine_states(full_state, state_splitter(space, factors(space))))), kwargs...) = generate_states(factors(space), constraint; leaf_processor)
-function generate_states(spaces, _constraint; partial_processor=nothing, leaf_processor=identity)
+generate_states(space::AbstractHilbertSpace, constraint; process_result=(full_state, spaces) -> first(only(combine_states(full_state, state_splitter(space, factors(space))))), kwargs...) = generate_states(factors(space), constraint; process_result)
+function generate_states(spaces, _constraint; partial_processor=nothing, process_result=(state, space) -> state)
     constraint = branch_constraint(_constraint, spaces)
     all_statetypes = statetype.(spaces)
     partial = Vector{Union{all_statetypes...}}(undef, length(spaces))
     results = Tuple{all_statetypes...}[]
-    backtrack!(results, partial, spaces, 1, constraint, partial_processor, leaf_processor)
-    map(state -> process_leaf(leaf_processor, state, spaces), results)
+    backtrack!(results, partial, spaces, 1, constraint, partial_processor)
+    map(state -> process_result(state, spaces), results)
 end
 
-function backtrack!(results, partial, spaces, depth, constraint, partial_processor, leaf_processor)
+function backtrack!(results, partial, spaces, depth, constraint, partial_processor)
     n = length(spaces)
     if depth > n
         # All spaces assigned, add to results
@@ -52,7 +47,7 @@ function backtrack!(results, partial, spaces, depth, constraint, partial_process
         # Check if this branch is worth exploring
         if valid_branch(constraint, partial, depth, spaces)
             process_partial(partial_processor, partial, depth, spaces)
-            backtrack!(results, partial, spaces, depth + 1, constraint, partial_processor, leaf_processor)
+            backtrack!(results, partial, spaces, depth + 1, constraint, partial_processor)
         end
     end
 end
@@ -67,10 +62,9 @@ function catenate_fock_states(full_state, spaces, T)
     num
 end
 
-unweighted_number_branch_constraint(allowed_numbers, ::Nothing, allspaces) = unweighted_number_branch_constraint(allowed_numbers, allspaces, allspaces)
-
+unweighted_number_branch_constraint(allowed_numbers, ::Missing, allspaces) = unweighted_number_branch_constraint(allowed_numbers, allspaces, allspaces)
 unweighted_number_branch_constraint(allowed_numbers, subspaces, allspaces::AbstractHilbertSpace) = unweighted_number_branch_constraint(allowed_numbers, subspaces, factors(allspaces))
-weighted_number_branch_constraint(allowed_numbers, subspaces, allspaces::AbstractHilbertSpace) = weighted_number_branch_constraint(allowed_numbers, subspaces, factors(allspaces))
+
 function unweighted_number_branch_constraint(allowed_numbers, subspaces, allspaces)
     issub = BitVector(map(s -> s in subspaces, allspaces))
     remaining_max_particles = Int[]
@@ -86,7 +80,14 @@ function unweighted_number_branch_constraint(allowed_numbers, subspaces, allspac
         return feasible
     end)
 end
-function weighted_number_branch_constraint(allowed_sums, weights, allspaces)
+weighted_number_branch_constraint(allowed_sums, weights, ::Missing, allspaces) = weighted_number_branch_constraint(allowed_sums, weights, allspaces, allspaces)
+weighted_number_branch_constraint(allowed_sums, ::Missing, subspaces, allspaces) = unweighted_number_branch_constraint(allowed_sums, subspaces, allspaces)
+weighted_number_branch_constraint(allowed_sums, weights, subspaces, allspaces::AbstractHilbertSpace) = weighted_number_branch_constraint(allowed_sums, weights, subspaces, factors(allspaces))
+function weighted_number_branch_constraint(allowed_sums, _weights, subspaces, allspaces)
+    issub = BitVector(map(s -> s in subspaces, allspaces))
+    #extend weights to all spaces, filling non-subspaces with zeros
+    weights = zeros(eltype(_weights), length(allspaces))
+    weights[issub] .= _weights
     n = length(allspaces)
     length(weights) == n || error("weights must have same length as allspaces")
 
@@ -133,14 +134,14 @@ end
     expected = [(basisstate(1, H1), basisstate(1, H2)), (basisstate(1, H1), basisstate(2, H2))]
     @test sort(states) == sort(expected)
 
-    # Partial and leaf processors are both applied
+    # Partial and full processors are both applied
     visited_depths = Int[]
-    leaf_processor = FermionicHilbertSpaces.CombineFockNumbersProcessor{FockNumber{Int}}()
+    process_result = FermionicHilbertSpaces.CombineFockNumbersProcessor{FockNumber{Int}}()
     states_as_int = map(f -> f.f, generate_states(
         Hs,
         BranchConstraint((partial, depth, spaces) -> true);
         partial_processor=(partial, depth, spaces) -> push!(visited_depths, depth),
-        leaf_processor))
+        process_result))
     @test count(==(1), visited_depths) == 2
     @test count(==(2), visited_depths) == 4
     @test sort(states_as_int) == [0x00, 0x01, 0x02, 0x03]
@@ -152,7 +153,7 @@ end
     c1 = unweighted_number_branch_constraint(allowed_ones[1], [Hs[2], Hs[4]], Hs)
     c2 = unweighted_number_branch_constraint(allowed_ones[2], [Hs[1], Hs[3]], Hs)
     constraint = c1 * c2
-    states = generate_states(Hs, constraint; leaf_processor)
+    states = generate_states(Hs, constraint; process_result)
     # verify particle numbers 
     for state in states
         @test count_ones(state.f & masks[1]) in allowed_ones[1]
@@ -160,13 +161,13 @@ end
     end
 
     cons2 = NumberConservation(allowed_ones[1], [Hs[2], Hs[4]]) * NumberConservation(allowed_ones[2], [Hs[1], Hs[3]])
-    @test states == generate_states(Hs, cons2; leaf_processor)
+    @test states == generate_states(Hs, cons2; process_result)
 
     @test all([[[0], [2]], [[1], [1]], [[0], [0]], [[2], [2]]]) do allowed
         c1 = unweighted_number_branch_constraint(allowed[1], [Hs[2], Hs[4]], Hs)
         c2 = unweighted_number_branch_constraint(allowed[2], [Hs[1], Hs[3]], Hs)
         constraint = c1 * c2
-        states = generate_states(Hs, constraint; leaf_processor)
+        states = generate_states(Hs, constraint; process_result)
         for state in states
             count_ones(state.f & masks[1]) in allowed[1] || return false
             count_ones(state.f & masks[2]) in allowed[2] || return false

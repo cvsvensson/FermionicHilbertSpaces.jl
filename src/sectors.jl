@@ -253,4 +253,3 @@ end
     @test size(matrix_representation(hopping_symham, H; projection=true), 1) == dim(H)
 end
 
-# apply_local_operators(ops::NCMul, state, space::BlockHilbertSpace, precomp) = apply_local_operators(ops, state, space.parent, precomp)

@@ -40,6 +40,7 @@ struct FermionCluster{F,L} <: AbstractFermionicClusterHilbertSpace{F}
     mode_ordering::OrderedDict{L,Int}
     group::FermionicGroup
     function FermionCluster(modes::Union{<:AbstractVector{L},<:NTuple{N,L}}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(length(modes))}) where {F,L<:FermionicMode,N}
+        length(modes) == 1 && return only(modes)
         mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("Duplicate modes in fermionic group"))
         new{F,L}(collect(modes), mode_ordering, group)
@@ -157,15 +158,19 @@ partial_trace_phase_factor(f1, f2, H::FermionCluster) = phase_factor_f(f1, f2, n
 
 
 function branch_constraint(constraint::ParityConservation, spaces)
-    possible_numbers = isnothing(constraint.subspaces) ? (0:sum(maximum_particles, spaces)) : (0:sum(nbr_of_modes, constraint.subspaces))
+    possible_numbers = ismissing(constraint.subspaces) ? (0:sum(maximum_particles, spaces)) : (0:sum(nbr_of_modes, constraint.subspaces))
     allowed_numbers = filter(n -> any(p -> p == (-1)^n, constraint.allowed_parities), possible_numbers)
     unweighted_number_branch_constraint(allowed_numbers, constraint.subspaces, spaces)
 end
 
-function branch_constraint(constraint::NumberConservation{T,H}, spaces) where {T,H}
-    subspaces = H <: Nothing ? spaces : constraint.subspaces
-    total = T <: Nothing ? (0:sum(maximum_particles, subspaces)) : constraint.total
-    unweighted_number_branch_constraint(total, subspaces, spaces)
+function branch_constraint(constraint::NumberConservation{T,H,W}, spaces) where {T,H,W}
+    subspaces = H === Missing ? spaces : constraint.subspaces
+    if W === Missing
+        total = T === Missing ? (0:sum(maximum_particles, subspaces)) : constraint.total
+        return unweighted_number_branch_constraint(total, subspaces, spaces)
+    end
+    T === Missing && throw(ArgumentError("Total particle number must be specified when using weighted number branch constraint"))
+    weighted_number_branch_constraint(constraint.total, constraint.weights, subspaces, spaces)
 end
 
 
@@ -175,8 +180,10 @@ function (processor::CombineFockNumbersProcessor{T})(full_state, spaces) where T
 end
 _init_results(spaces, ::CombineFockNumbersProcessor{T}) where T = T[]
 default_processor(space::Union{<:FermionCluster,<:FermionicMode}, constraint) = CombineFockNumbersProcessor{FockNumber{default_fock_representation(nbr_of_modes(space))}}()
-default_sorter(space::Union{<:FermionCluster,<:FermionicMode}, constraint::ParityConservation) = f -> (parity(f), f)
-default_sorter(space::Union{<:FermionCluster,<:FermionicMode}, constraint::NumberConservation) = f -> (particle_number(f), f)
+function default_sorter(space::Union{<:FermionCluster,<:FermionicMode}, constraint::Union{<:ParityConservation,<:NumberConservation})
+    func = sector_function(constraint, space)
+    return f -> (func(f), f)
+end
 
 focknbr_from_site_label(mode::FermionicMode, H::FermionCluster) = focknbr_from_site_index(_find_position(mode, H))
 focknbr_from_site_labels(Hsub::FermionCluster, H::FermionCluster) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
