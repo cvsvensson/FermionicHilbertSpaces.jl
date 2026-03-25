@@ -342,6 +342,7 @@ function _sym_space_match(sym::AbstractFermionSym, space::AbstractFockHilbertSpa
 end
 FermionicMode(f::FermionSym) = FermionicMode(f.label, f.basis)
 _find_position(f::FermionSym, H::AbstractHilbertSpace) = _find_position(FermionicMode(f), H)
+_find_position(f::FermionSym, H::ProductSpace) = _find_position(FermionicMode(f), H)
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionCluster(map(l -> FermionicMode(a[l]), labels))
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint) = constrain_space(hilbert_space(a, labels), constraint)
 

@@ -48,6 +48,7 @@ function Base.show(io::IO, H::ConstrainedSpace)
     end
 end
 constrain_space(H, ::NoSymmetry; kwargs...) = H
+constrain_space(H::ConstrainedSpace, ::NoSymmetry; kwargs...) = H
 
 function constrain_space(H::AbstractHilbertSpace, states::AbstractVector{B}) where B<:AbstractBasisState
     ConstrainedSpace(H, states)

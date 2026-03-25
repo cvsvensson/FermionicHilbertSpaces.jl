@@ -40,7 +40,7 @@ Base.iterate(jw::JordanWignerOrdering, state) = iterate(keys(jw), state)
 Base.eltype(::JordanWignerOrdering{L}) where L = L
 
 Base.getindex(ordering::JordanWignerOrdering, label) = ordering.ordering[label]
-getindices(jw::JordanWignerOrdering, labels) = map(Base.Fix1(getindex, jw), labels)
+# getindices(jw::JordanWignerOrdering, labels) = map(Base.Fix1(getindex, jw), labels)
 
 label_at_site(n, jw::JordanWignerOrdering) = keys(jw)[n]
 focknbr_from_site_label(label, jw::JordanWignerOrdering) = focknbr_from_site_index(getindex(jw, label))

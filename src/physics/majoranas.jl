@@ -150,7 +150,8 @@ end
 #     maj_space = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 #     BlockHilbertSpace(maj_space, space.ordered_basis_states, space.state_to_index, space.qn_to_states)
 # end
-function BlockHilbertSpace(maj_space::MajoranaHilbertSpace, ordered_basis_states, state_to_index, qn_to_states)
+# function BlockHilbertSpace(maj_space::MajoranaHilbertSpace, ordered_basis_states, state_to_index, qn_to_states)
+function BlockHilbertSpace(maj_space::MajoranaHilbertSpace, ordered_basis_states::Vector{B}, ::Dictionary{B, Int64}, ::Dictionary{Q, Vector{B}}) where {B, Q}
     MajoranaHilbertSpace(maj_space.majoranaindices, BlockHilbertSpace(parent(maj_space), ordered_basis_states, state_to_index, qn_to_states), maj_space.sym)
 end
 dim(H::MajoranaHilbertSpace) = dim(H.parent)

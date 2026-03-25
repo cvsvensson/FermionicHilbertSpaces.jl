@@ -62,10 +62,12 @@ function catenate_fock_states(full_state, spaces, T)
     num
 end
 
-unweighted_number_branch_constraint(allowed_numbers, ::Missing, allspaces) = unweighted_number_branch_constraint(allowed_numbers, allspaces, allspaces)
-unweighted_number_branch_constraint(allowed_numbers, subspaces, allspaces::AbstractHilbertSpace) = unweighted_number_branch_constraint(allowed_numbers, subspaces, factors(allspaces))
-
-function unweighted_number_branch_constraint(allowed_numbers, subspaces, allspaces)
+function unweighted_number_branch_constraint(allowed_sums, _subspaces, _allspaces)
+    allspaces = _allspaces isa AbstractHilbertSpace ? factors(_allspaces) : _allspaces
+    subspaces = ismissing(_subspaces) ? allspaces : _subspaces
+    return _unweighted_number_branch_constraint(allowed_sums, subspaces, allspaces)
+end
+function _unweighted_number_branch_constraint(allowed_numbers, subspaces, allspaces)
     issub = BitVector(map(s -> s in subspaces, allspaces))
     remaining_max_particles = Int[]
     for depth in 0:length(allspaces)
@@ -80,10 +82,15 @@ function unweighted_number_branch_constraint(allowed_numbers, subspaces, allspac
         return feasible
     end)
 end
-weighted_number_branch_constraint(allowed_sums, weights, ::Missing, allspaces) = weighted_number_branch_constraint(allowed_sums, weights, allspaces, allspaces)
-weighted_number_branch_constraint(allowed_sums, ::Missing, subspaces, allspaces) = unweighted_number_branch_constraint(allowed_sums, subspaces, allspaces)
-weighted_number_branch_constraint(allowed_sums, weights, subspaces, allspaces::AbstractHilbertSpace) = weighted_number_branch_constraint(allowed_sums, weights, subspaces, factors(allspaces))
-function weighted_number_branch_constraint(allowed_sums, _weights, subspaces, allspaces)
+
+weighted_number_branch_constraint(allowed_sums, weights, allspaces) = weighted_number_branch_constraint(allowed_sums, weights, allspaces, allspaces)
+function weighted_number_branch_constraint(allowed_sums, _weights, _subspaces, _allspaces)
+    allspaces = _allspaces isa AbstractHilbertSpace ? factors(_allspaces) : _allspaces
+    subspaces = ismissing(_subspaces) ? allspaces : _subspaces
+    ismissing(_weights) && return unweighted_number_branch_constraint(allowed_sums, subspaces, allspaces)
+    return _weighted_number_branch_constraint(allowed_sums, _weights, subspaces, allspaces)
+end
+function _weighted_number_branch_constraint(allowed_sums, _weights, subspaces, allspaces)
     issub = BitVector(map(s -> s in subspaces, allspaces))
     #extend weights to all spaces, filling non-subspaces with zeros
     weights = zeros(eltype(_weights), length(allspaces))

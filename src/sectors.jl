@@ -66,6 +66,7 @@ quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 
 sector(qn, H::BlockHilbertSpace) = constrain_space(parent(H), H.qn_to_states[qn])
 sector(::Nothing, H::AbstractHilbertSpace) = H
+sector(::Nothing, ::BlockHilbertSpace) = constrain_space(parent(H), H.qn_to_states[qn])
 
 # sectors(H::BlockHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 sectors(H::AbstractHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
