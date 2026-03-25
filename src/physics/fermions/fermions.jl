@@ -346,3 +346,26 @@ hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionCluster(
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint) = constrain_space(hilbert_space(a, labels), constraint)
 
 issubsystem(Hsub::AbstractHilbertSpace, H::FermionCluster) = isorderedsubsystem(Hsub, H)
+
+@testitem "Commuting fermionic operators: Lindbladian and number conservation" begin
+    @fermions c_l
+    @fermions c_r
+
+    hamiltonian(c) = c[1]' * c[1]
+    jump_op(c) = c[1]'
+    lindbladian = let Hl = hamiltonian(c_l), Hr = hamiltonian(c_r), Ll = jump_op(c_l), Lr = jump_op(c_r)
+        1im * (Hl - Hr) + Ll * Lr - 0.5 * (Ll' * Ll + Lr' * Lr)
+    end
+
+    Hl = hilbert_space(c_l[1])
+    Hr = hilbert_space(c_r[1])
+    Hlr = tensor_product((Hl, Hr))
+    mat = matrix_representation(lindbladian, Hlr)
+    Hcons = constrain_space(Hlr, NumberConservation(-1:1, [Hl, Hr], [1, -1])) # The difference between left fermions and right fermions is conserved
+    @test size(matrix_representation(lindbladian, Hcons), 1) == dim(Hcons)
+
+    blocks = map(sectors(Hcons)) do Hsector
+        matrix_representation(lindbladian, Hsector)
+    end
+    @test cat(blocks...; dims=(1, 2)) == matrix_representation(lindbladian, Hcons)
+end
