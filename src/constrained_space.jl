@@ -28,6 +28,7 @@ factors(H::ConstrainedSpace) = (parent(H),)
 isconstrained(H::ConstrainedSpace) = true
 combine_states(substates, sp::ConstrainedSpace) = combine_states(substates, parent(sp))
 partial_trace_phase_factor(s1, s2, sp::ConstrainedSpace) = partial_trace_phase_factor(s1, s2, parent(sp))
+atomic_substate(n, f, space::ConstrainedSpace) = atomic_substate(n, f, parent(space))
 
 function constrain_space(H::ConstrainedSpace, constraint::AbstractConstraint; kwargs...)
     space = constrain_space(parent(H), constraint; kwargs...)
@@ -55,8 +56,6 @@ function constrain_space(H::AbstractHilbertSpace, states::AbstractVector{B}) whe
 end
 
 state_splitter(H::ConstrainedSpace, Hs) = state_splitter(parent(H), Hs)
-default_sorter(H::ConstrainedSpace, constraint) = default_sorter(parent(H), constraint)
-default_processor(H::ConstrainedSpace, constraint) = default_processor(parent(H), constraint)
 
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
 

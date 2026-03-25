@@ -31,9 +31,10 @@ struct NumberConservation{T,H,W} <: AbstractConstraint
     weights::W
 end
 NumberConservation(n) = NumberConservation(n, missing, missing)
-NumberConservation(H::AbstractHilbertSpace) = NumberConservation(missing, H, missing)
+NumberConservation(H::AbstractHilbertSpace) = NumberConservation(missing, atomic_factors(H), missing)
 NumberConservation() = NumberConservation(missing, missing, missing)
-NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(total, (subspace,), missing)
+# NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(total, (subspace,), missing)
+NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(total, atomic_factors(subspace), missing)
 NumberConservation(total, subspace::AbstractClusterHilbertSpace) = NumberConservation(total, atomic_factors(subspace), missing)
 NumberConservation(total, spaces) = NumberConservation(total, spaces, missing)
 
@@ -52,13 +53,25 @@ ParityConservation(ps::AbstractVector{Int}) = ParityConservation(Vector{Int}(ps)
 ParityConservation(p::Int) = ParityConservation([p], missing)
 
 function sector_function(cons::NumberConservation{T,S,W}, space) where {T,S,W}
-    subspaces = S === Missing ? factors(space) : cons.subspaces
-    issub = BitVector(map(in(subspaces), factors(space)))
+    subspaces = S === Missing ? atomic_factors(space) : cons.subspaces
+    issub = BitVector(map(in(subspaces), atomic_factors(space)))
     _weights = W === Missing ? ones(Int, sum(issub)) : cons.weights
-    weights = zeros(eltype(_weights), length(factors(space)))
+    weights = zeros(eltype(_weights), length(atomic_factors(space)))
+
     weights[issub] .= _weights
-    return f -> mapreduce((n, w) -> particle_number(substate(n, f)) * w, +, 1:length(weights), weights)
-    # return f -> mapreduce((f, w) -> particle_number(f) * w, +, f.states, weights)
+    return f -> mapreduce((n, w) -> particle_number(atomic_substate(n, f, space)) * w, +, 1:length(weights), weights)
+end
+
+function atomic_substate(n, f::ProductState, space::ProductSpace)
+    count = 0
+    for (k, s) in enumerate(factors(space))
+        add = length(atomic_factors(s))
+        if count < n <= count + add
+            return substate(n - count, substate(k, f))
+        end
+        count += add
+    end
+    throw(ArgumentError("Invalid substate index"))
 end
 
 sector_function(::ParityConservation{Missing}, space::ProductSpace) = f -> prod(parity, f.states)
@@ -90,9 +103,7 @@ Build a constrained Hilbert space from `space`, either by applying a constraint 
 by explicitly providing a list of allowed basis states.
 """
 constrain_space
-default_processor(space, _) = nothing
-default_sorter(space, constraint) = nothing
-
+default_sorter(space, constraint) = identity
 
 @testitem "ProductSymmetry" begin
     labels = 1:4

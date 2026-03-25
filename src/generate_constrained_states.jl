@@ -24,21 +24,25 @@ Uses backtracking with pruning via `valid_branch`.
 `partial_processor(partial_state, depth, spaces)` is called whenever a branch is accepted.
 `process_result(full_state, spaces)` can transform each completed state before storing it.
 """
-generate_states(space::AbstractHilbertSpace, constraint; process_result=(full_state, spaces) -> first(only(combine_states(full_state, state_splitter(space, factors(space))))), kwargs...) = generate_states(factors(space), constraint; process_result)
-function generate_states(spaces, _constraint; partial_processor=nothing, process_result=(state, space) -> state)
+function generate_states(space::AbstractHilbertSpace{B}, constraint; kwargs...) where B
+    splitter = state_splitter(space, atomic_factors(space))
+    process_result = (full_state, spaces) -> first(only(combine_states(full_state, splitter)))
+    generate_states(atomic_factors(space), constraint, B; process_result)
+end
+function generate_states(spaces, _constraint, ::Type{B}=Any; partial_processor=nothing, process_result=(state, spaces) -> state) where B
     constraint = branch_constraint(_constraint, spaces)
     all_statetypes = statetype.(spaces)
     partial = Vector{Union{all_statetypes...}}(undef, length(spaces))
-    results = Tuple{all_statetypes...}[]
-    backtrack!(results, partial, spaces, 1, constraint, partial_processor)
-    map(state -> process_result(state, spaces), results)
+    results = B[]
+    backtrack!(results, partial, spaces, 1, constraint, partial_processor, process_result)
+    return results
 end
 
-function backtrack!(results, partial, spaces, depth, constraint, partial_processor)
+function backtrack!(results, partial, spaces, depth, constraint, partial_processor, process_result)
     n = length(spaces)
     if depth > n
         # All spaces assigned, add to results
-        push!(results, Tuple(partial))
+        push!(results, process_result(partial, spaces))
         return
     end
 
@@ -47,7 +51,7 @@ function backtrack!(results, partial, spaces, depth, constraint, partial_process
         # Check if this branch is worth exploring
         if valid_branch(constraint, partial, depth, spaces)
             process_partial(partial_processor, partial, depth, spaces)
-            backtrack!(results, partial, spaces, depth + 1, constraint, partial_processor)
+            backtrack!(results, partial, spaces, depth + 1, constraint, partial_processor, process_result)
         end
     end
 end
@@ -63,8 +67,8 @@ function catenate_fock_states(full_state, spaces, T)
 end
 
 function unweighted_number_branch_constraint(allowed_sums, _subspaces, _allspaces)
-    allspaces = _allspaces isa AbstractHilbertSpace ? factors(_allspaces) : _allspaces
-    subspaces = ismissing(_subspaces) ? allspaces : _subspaces
+    allspaces = _allspaces isa AbstractHilbertSpace ? atomic_factors(_allspaces) : collect(Iterators.flatten(Iterators.map(atomic_factors, _allspaces)))
+    subspaces = ismissing(_subspaces) ? allspaces : collect(Iterators.flatten(Iterators.map(atomic_factors, _subspaces)))
     return _unweighted_number_branch_constraint(allowed_sums, subspaces, allspaces)
 end
 function _unweighted_number_branch_constraint(allowed_numbers, subspaces, allspaces)

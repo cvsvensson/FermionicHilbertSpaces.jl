@@ -17,19 +17,24 @@ Using `number_conservation` with small sectors avoids the exponentially large Hi
 This package does not know anything about spin, but one can treat spin just as an extra label as follows:
 ```@example spin
 using FermionicHilbertSpaces
-labels = Base.product(1:4, (:↑,:↓))
-H = hilbert_space(labels)
+@fermions f
+Hup = hilbert_space(f,  [(i, :↑) for i in 1:4])
+Hdn = hilbert_space(f, [(i, :↓) for i in 1:4])
+H = tensor_product(Hup, Hdn)
 ```
 If spin is conserved, one can use 
 ```@example spin
-H = hilbert_space(labels, number_conservation(label -> :↑ in label) * number_conservation(label -> :↓ in label))
+Hblocks = constrain_space(H, NumberConservation(Hup)*NumberConservation(Hdn))
 ```
 to sort states according to the number of fermions with spin up and down. However, this package can't help to sort states into sectors with different total angular momentum, because that requires taking superpositions of different fock states.
 
-To pick out the sector with 2 fermions with spin up and 0 fermions with spin down, one can extract it from the hilbert space defined above using `sector`, or construct it directly
+To pick out the sector with 2 fermions with spin up and 0 fermions with spin down, one can extract it from the hilbert space defined above using `sector` as
 ```@example spin
-FermionicHilbertSpaces.sector((2,0), H)
-hilbert_space(labels, number_conservation(2, label -> :↑ in label) * number_conservation(0, label -> :↓ in label))
+FermionicHilbertSpaces.sector((2,0), Hblocks)
+```
+or more efficiently by only constructing that specific sector in the first place
+```@example spin
+constrain_space(H, NumberConservation(2, Hup)*NumberConservation(0, Hdn))
 ```
 
 ## Small subspaces in large systems
@@ -42,39 +47,41 @@ H = -t \sum_{i,\sigma} (c_{i,\sigma}^\dagger c_{i+1,\sigma} + \mathrm{h.c}) + U 
 which conserves the number of spin up and spin down fermions separately. Let's define a function to get the hamiltonian with symbolic fermions 
 ```@example hubbard
 using FermionicHilbertSpaces
-function hubbard_hamiltonian(N, t, U)
-    @fermions c
+function hubbard_hamiltonian(c, N, t, U)
     spins = (:↑,:↓)
     sum(-t * c[i,σ]' * c[i+1,σ] + hc for σ in spins for i in 1:N-1) + sum(U * c[i,:↑]'c[i,:↑] * c[i,:↓]'c[i,:↓] for i in 1:N)
 end
 ```
 Let's find the matrix representation of the hamiltonian in the sector with `N_up` spin up fermions and `N_down` spin down fermions. To find this subspace we do
 ```@example hubbard
+@fermions f
 N = 20
-labels = Base.product(1:N, (:↑,:↓))
-N_up = 2
-N_down = 1
-qn_spin = number_conservation(N_up, label -> :↑ in label) * number_conservation(N_down, label -> :↓ in label)
-H = hilbert_space(labels, qn_spin)
+Nup = 2
+Ndn = 1
+Hup = hilbert_space(f,  [(i, :↑) for i in 1:N])
+Hdn = hilbert_space(f, [(i, :↓) for i in 1:N])
+H = tensor_product(Hup, Hdn)
+qn_spin = NumberConservation(Nup, Hup)*NumberConservation(Ndn, Hdn)
+Hblocks = constrain_space(H, qn_spin)
 ```
 The full hilbert space is of size `4^20 ≈ 10^12`, but the sector with 2 spin up and 1 spin down fermion is only of size `3800` and is generated without constructing the full hilbert space. Finally, we can get the matrix representation of the hamiltonian in this sector as
 ```@example hubbard
-symham = hubbard_hamiltonian(N, 1.0, 4.0)
-ham = matrix_representation(symham, H)
+symham = hubbard_hamiltonian(f, N, 1.0, 4.0)
+ham = matrix_representation(symham, Hblocks)
 ```
 
 ### No double occupation
 When the onsite Coulomb interaction is very strong, there is a large energy penalty for double occupation of a site. In that case, we can restrict the Hilbert space to not allow double occupation of any site. Consider the site `k`, which has two labels `(k, :↑)` and `(k, :↓)`. We can use `number_conservation(0:1, label -> label[1] == k)` which says that the sum of occupation numbers of all labels where the first element of the label equals `k` is contained in the set `0:1`. To impose this for all sites, we take the product over all sites.
 ```@example hubbard
-qn_no_double_occ = prod(number_conservation(0:1, label -> label[1] == k) for k in 1:N)
+qn_no_double_occ = prod(NumberConservation(0:1, hilbert_space(f,[(k, s) for s in (:↑,:↓)])) for k in 1:N)
 qn = qn_spin * qn_no_double_occ
-H_ndo = hilbert_space(labels, qn)
+H_ndo = constrain_space(H, qn)
 ```
 This quantum number is a product of number conservations, so the sector is constructed without enumerating the full Hilbert space.
 
 The matrix representation of the hamiltonian in this sector can be constructed as before, but now we need to specify `projection = true` as the symbolic hamiltonian maps states in the subspace to states outside the subspace. The keyword `projection = true` says to ignore those terms.
 ```@example hubbard
-symham = hubbard_hamiltonian(N, 1, 0)
+symham = hubbard_hamiltonian(f, N, 1, 0)
 ham_ndo = matrix_representation(symham, H_ndo; projection = true)
 ```
 
@@ -85,61 +92,57 @@ H = -t \sum_{i,\sigma} (c_{i,\sigma}^\dagger c_{i+1,\sigma} + \mathrm{h.c}) + J_
 ```
 where ``S^z_i = n_{i,↑} - n_{i,↓}`` and double occupation is forbidden. This model features a fractionalized hilbert space where the Hilbert space splits into exponentially many dynamically disconnected sectors, see [[1910.06341]](https://arxiv.org/abs/1910.06341). We implement the hamiltonian as
 ```@example hubbard
-function tjz(N,t,Jz)
-    @fermions c
+function tjz(c, N,t,Jz)
     spins = (:↑,:↓)
     Sz(i) = c[i,:↑]'c[i,:↑] - c[i,:↓]'c[i,:↓]
     -t*sum(c[i,σ]'c[i+1,σ] + hc for σ in spins for i in 1:N-1) + Jz*sum(Sz(i)Sz(i+1) for i in 1:N-1)
 end
 ```
+To construct the hilbert space in a specific sector, we need to go beyond simple particle number constraints. Each sector is defined by a spin ordering, e.g. '[:↑, :↑, :↓, :↑, :↓]'. Each state in this sector has three spin up electrons occupied, two spin down electrons occupied, and they come in that specific order with possible holes between them. 
 
-To construct the hilbert space for this model, we first use the same conservation as above to restrict to no double occupation and conserve spin. This gives a conserved quantum numbers which is a product of number conservations and so it is efficient in generating states.
+This package can help construct these small sectors while avoiding the exponentially large hilbert space, by 
 ```@example hubbard
-N = 12
-N_up = 4
-N_down = 1
-labels = Base.product(1:N, (:↑,:↓))
-qn_spin = number_conservation(N_up, label -> :↑ in label) * number_conservation(N_down, label -> :↓ in label)
-qn = qn_spin * qn_no_double_occ
-H = hilbert_space(labels, qn)
-symham = tjz(N, 1, 1/4)
-ham = matrix_representation(symham, H; projection = true)
-```
-This space fragments into more sectors, which are labelled by the order of occupied spins. By defining a function that maps states to the spin order, we can split the hilbert space into those fragments. The function can be defined as
-```@example hubbard
-function spin_order(state, H)
-    N = length(keys(H)) ÷ 2
-    occupations = map(1:N) do n
-        if FermionicHilbertSpaces.occupation(state, (n, :↑), H)
-            :↑
-        elseif FermionicHilbertSpaces.occupation(state, (n, :↓), H)
-            :↓
-        else
-            :hole
+function valid_state(partials, depth::Int, spaces, expected_order)
+    # partials is a list of 2N focknumbers, but only the ones up to 'depth' are assigned.
+    # spaces is a list of 2N fermionic modes
+    exc_count = 0
+    prev_site = 0
+    for n in 1:depth
+        if count_ones(partials[n]) == 1
+            exc_count += 1
+            site, spin = spaces[n].label
+            exc_count > length(expected_order) && return false # too many excitations
+            site == prev_site && return false # two excitations on the same site (this uses the fact that we ordered the spaces by site)
+            prev_site = site
+            expected_order[exc_count] == spin || return false # check if the spin of the excitation matches the expected order
         end
     end
-    filter(x -> x != :hole, occupations)
+    depth == length(spaces) && return exc_count == length(expected_order)
+    return true
 end
+using FermionicHilbertSpaces: BranchConstraint
+spin_order_constraint(order) = BranchConstraint((p,d,s) -> valid_state(p,d,s,order))
 ```
-We can then construct the fractionalized hilbert space as
-```@example hubbard
-qnfrac = Base.Fix2(spin_order, H)
-Hfrac = FermionicHilbertSpaces.symmetrize(H, qnfrac)
-Hfrac.symmetry.qntofockstates
-```
-This splits the space of dimension 3960 into 5 fragments each of size 792. 
 
-Let's find the half-chain entanglement entropy of the ground state in each sector. We can iterate over sectors by calling `sectors(H)`, and we can use `subregion` to find the hilbert space of a subsystem. 
 ```@example hubbard
-using Arpack, LinearAlgebra
-using FermionicHilbertSpaces: sectors
-left_labels = Base.product(1:(N÷2), (:↑,:↓))
-entropy(ρ) = sum(-λ * log(λ) for λ in eigvals(Hermitian(ρ)) if λ > 1e-12)
-map(sectors(Hfrac)) do Hsec
-    ham = matrix_representation(symham, Hsec; projection = true)
-    vals, vecs = eigs(ham, nev = 1)
-    Hleft = subregion(left_labels, Hsec)
-    rholeft = partial_trace(vecs[:,1]*vecs[:,1]', Hsec => Hleft)
-    entropy(rholeft)
-end
+N = 16
+Hfull = hilbert_space(f,  [(i, s) for i in 1:N for s in (:↑,:↓)])
 ```
+This space is too large to deal with directly, but we can constrain it to the sector with spin order '[:↑, :↑, :↓, :↑, :↓]' as
+```@example hubbard
+Hfrac = constrain_space(Hfull, spin_order_constraint([:↑, :↑, :↓, :↑, :↓]))
+```
+which has only dimension 4368. We can then construct hamiltonian in this sector by
+```@example hubbard
+symham = tjz(f, N, 1, 1/4)
+ham = matrix_representation(symham, Hfrac; projection = true)
+```
+We can use `subregion` to find the hilbert space of a subsystem, taking into account the constraint. The full hilbert space of the left half of the system is
+```@example hubbard
+Hsub_full = hilbert_space(f,  [(i, s) for i in 1:div(N,2) for s in (:↑,:↓)])
+```
+but taking into account the constraint, we have
+```@example hubbard
+Hsub_frac = subregion(Hsub_full, Hfrac)
+```
+and now one can do partial traces `partial_trace(mat, Hfrac => Hsub_frac)`.

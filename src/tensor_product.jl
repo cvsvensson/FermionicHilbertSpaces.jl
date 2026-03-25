@@ -515,7 +515,7 @@ function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; c
         U = basis_transformation(Hsub, H)
         return U * m * U'
     end
-    mout = zeros(eltype(m), dim(Hsub), dim(Hsub))
+    mout = zeros(eltype(m), dim(Hsub), dim(Hsub)) 
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
 function basis_transformation(H1, H2)
@@ -547,7 +547,7 @@ struct SubsystemPartialTraceAlg <: AbstractPartialTraceAlg end
 struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
 default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
-#TODO: FullPartialTraceAlg explots sparsity of the matrix which should be taken into account.
+#TODO: FullPartialTraceAlg exploits sparsity of the matrix which should be taken into account.
 
 """
     partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, extend_state=StateExtender((Hsub, complement), H); skipmissing=true, phase_factors=true)
@@ -630,7 +630,8 @@ partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...
 function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
     partial_trace_map(H, Hsub, complement, alg; kwargs...)
 end
-function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, splitter=state_splitter(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
+function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, splitter=state_splitter(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
+    # we use skipmissing = true here as the default, since there is if H has constraints, there may be combinations of states from Hsub and the complement that do not exist in H, even if every split state from H exists in Hsub and the complement.
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
     indI = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
@@ -649,13 +650,13 @@ function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, spli
                 J1 = state_index(fullf1, H)
                 if ismissing(J1)
                     skipmissing && continue
-                    throw(ArgumentError("The state $fullf1 is not in the full Hilbert space"))
+                    throw(ArgumentError("The state $fullf1 is not in the full Hilbert space."))
                 end
                 for (fullf2, w2) in fullstates2
                     J2 = state_index(fullf2, H)
                     if ismissing(J2)
                         skipmissing && continue
-                        throw(ArgumentError("The state $fullf2 is not in the full Hilbert space"))
+                        throw(ArgumentError("The state $fullf2 is not in the full Hilbert space."))
                     end
                     s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
                     s = s2 * s1

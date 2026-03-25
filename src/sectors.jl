@@ -13,6 +13,7 @@ end
 BlockHilbertSpace(space::P, ordered_basis_states::AbstractVector{B}, state_to_index::Dictionary{B,Int}, qn_to_states::Dictionary{Q,Vector{B}}) where {B,P,Q} = BlockHilbertSpace{B,P,Q}(space, ordered_basis_states, state_to_index, qn_to_states)
 Base.hash(H::BlockHilbertSpace, h::UInt) = hash((H.parent, H.ordered_basis_states, H.state_to_index, H.qn_to_states), h)
 Base.:(==)(H1::BlockHilbertSpace, H2::BlockHilbertSpace) = H1 === H2 || (H1.parent == H2.parent && H1.ordered_basis_states == H2.ordered_basis_states && H1.state_to_index == H2.state_to_index && H1.qn_to_states == H2.qn_to_states)
+atomic_substate(n, f, space::BlockHilbertSpace) = atomic_substate(n, f, parent(space))
 
 function block_space(space, states, sector_function)
     _qntostates = group(state -> sector_function(state), states)
@@ -37,8 +38,6 @@ combine_states(substates, H::BlockHilbertSpace) = combine_states(substates, pare
 partial_trace_phase_factor(s1, s2, H::BlockHilbertSpace) = partial_trace_phase_factor(s1, s2, parent(H))
 state_splitter(H::BlockHilbertSpace, Hs) = state_splitter(parent(H), Hs)
 mode_ordering(H::BlockHilbertSpace) = mode_ordering(parent(H))
-default_sorter(H::BlockHilbertSpace, constraint) = default_sorter(parent(H), constraint)
-default_processor(H::BlockHilbertSpace, constraint) = default_processor(parent(H), constraint)
 
 function Base.show(io::IO, H::BlockHilbertSpace)
     if get(io, :compact, false)

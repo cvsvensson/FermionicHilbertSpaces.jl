@@ -179,11 +179,6 @@ function (processor::CombineFockNumbersProcessor{T})(full_state, spaces) where T
     catenate_fock_states(full_state, spaces, T)
 end
 _init_results(spaces, ::CombineFockNumbersProcessor{T}) where T = T[]
-default_processor(space::Union{<:FermionCluster,<:FermionicMode}, constraint) = CombineFockNumbersProcessor{FockNumber{default_fock_representation(nbr_of_modes(space))}}()
-function default_sorter(space::Union{<:FermionCluster,<:FermionicMode}, constraint::Union{<:ParityConservation,<:NumberConservation})
-    func = sector_function(constraint, space)
-    return f -> (func(f), f)
-end
 
 focknbr_from_site_label(mode::FermionicMode, H::FermionCluster) = focknbr_from_site_index(_find_position(mode, H))
 focknbr_from_site_labels(Hsub::FermionCluster, H::FermionCluster) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
