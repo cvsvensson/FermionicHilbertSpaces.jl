@@ -40,6 +40,7 @@ struct FermionCluster{F,L} <: AbstractFermionicClusterHilbertSpace{F}
     mode_ordering::OrderedDict{L,Int}
     group::FermionicGroup
     function FermionCluster(modes::Union{<:AbstractVector{L},<:NTuple{N,L}}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(length(modes))}) where {F,L<:FermionicMode,N}
+        length(modes) == 0 && throw(ArgumentError("Cannot create a FermionCluster with no modes"))
         length(modes) == 1 && return only(modes)
         mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("Duplicate modes in fermionic group"))
@@ -47,9 +48,8 @@ struct FermionCluster{F,L} <: AbstractFermionicClusterHilbertSpace{F}
     end
 end
 FermionCluster(mode::FermionicMode) = mode
-function FermionCluster(modes::Union{<:AbstractVector{<:FermionicMode},NTuple{N,<:FermionicMode}}) where N
-    length(modes) == 0 && throw(ArgumentError("Cannot create a FermionCluster with no modes"))
-    length(modes) == 1 && return only(modes)
+function FermionCluster(modes::Union{<:AbstractVector{F},NTuple{N,F}}) where {N,F<:FermionicMode}
+
     FermionCluster(modes, only(unique(map(symbolic_group, modes))))
 end
 maximum_particles(H::FermionCluster) = nbr_of_modes(H)

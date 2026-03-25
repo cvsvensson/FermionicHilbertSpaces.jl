@@ -1,3 +1,9 @@
+"""
+    BlockHilbertSpace
+
+Hilbert space whose basis is grouped into sectors labeled by quantum numbers.
+Use `quantumnumbers`, `sector`, and `indices` to access individual blocks.
+"""
 struct BlockHilbertSpace{B,P,Q} <: AbstractHilbertSpace{B}
     parent::P
     ordered_basis_states::Vector{B}
@@ -61,16 +67,40 @@ end
 
 state_index(state, H::BlockHilbertSpace) = get(H.state_to_index, state, missing)
 
+"""
+    quantumnumbers(H)
+
+Return the quantum-number labels that define the sectors of `H`.
+For spaces without sector structure, this returns `(nothing,)`.
+"""
 quantumnumbers(H::BlockHilbertSpace) = keys(H.qn_to_states)
 quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 
+"""
+    sector(qn, H)
+
+Return the sector of `H` corresponding to quantum number `qn`.
+For `qn === nothing`, this returns `H` for non-block spaces.
+"""
 sector(qn, H::BlockHilbertSpace) = constrain_space(parent(H), H.qn_to_states[qn])
 sector(::Nothing, H::AbstractHilbertSpace) = H
 sector(::Nothing, ::BlockHilbertSpace) = constrain_space(parent(H), H.qn_to_states[qn])
 
 # sectors(H::BlockHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
+"""
+    sectors(H)
+
+Return all sectors of `H` in the same order as `quantumnumbers(H)`.
+"""
 sectors(H::AbstractHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 
+"""
+    indices(Hsub, H)
+    indices(qn, H)
+
+Return the basis-state indices in `H` belonging to a given sector, specified
+either by a sector Hilbert space `Hsub` or by a quantum number `qn`.
+"""
 function indices(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
     sector_list = collect(sectors(H))
     indexin = findfirst(isequal(Hsub), sector_list)

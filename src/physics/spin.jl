@@ -4,10 +4,24 @@ end
 Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.name, h)
 label(S::SymbolicSpinBasis) = S.name
 Base.show(io::IO, S::SymbolicSpinBasis) = print(io, "SpinBasis(", S.name, ")")
+
+"""
+    @spin s
+
+Create a symbolic spin basis `s` for constructing spin operators such as
+`s[:z]`, `s[:+]`, and `s[:-]`.
+"""
 macro spin(x)
     Expr(:block, :($(esc(x)) = SymbolicSpinBasis($(Expr(:quote, x)))),
         :($(esc(x))))
 end
+
+"""
+    @spins s labels
+
+Create an ordered dictionary of symbolic spin bases indexed by `labels`.
+Each entry can be used to construct local spin operators.
+"""
 macro spins(name, labels)
     Expr(:block,
         :($(esc(name)) = OrderedDict(l => SymbolicSpinBasis(Symbol($(Expr(:quote, name)), l)) for l in $(esc(labels)))),

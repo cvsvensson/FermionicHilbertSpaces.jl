@@ -1,5 +1,11 @@
 
 abstract type AbstractConstraint end
+
+"""
+    NoSymmetry()
+
+Constraint that leaves a Hilbert space unchanged.
+"""
 struct NoSymmetry <: AbstractConstraint end
 
 struct ProductConstraint{C} <: AbstractConstraint
@@ -13,6 +19,12 @@ Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint((s
 branch_constraint(constraint::ProductConstraint, space) = ProductConstraint(map(cons -> branch_constraint(cons, space), constraint.constraints))
 
 
+"""
+    NumberConservation(total=missing, subspaces=missing, weights=missing)
+
+Constraint enforcing conservation of a (possibly weighted) particle number.
+`total` can be a single value or collection of allowed values.
+"""
 struct NumberConservation{T,H,W} <: AbstractConstraint
     total::T
     subspaces::H
@@ -25,6 +37,11 @@ NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(t
 NumberConservation(total, subspace::AbstractClusterHilbertSpace) = NumberConservation(total, atomic_factors(subspace), missing)
 NumberConservation(total, spaces) = NumberConservation(total, spaces, missing)
 
+"""
+    ParityConservation(parities=[-1, 1], subspaces=missing)
+
+Constraint enforcing allowed fermion parities, optionally on selected subspaces.
+"""
 struct ParityConservation{H} <: AbstractConstraint
     allowed_parities::Vector{Int}
     subspaces::H
@@ -64,6 +81,15 @@ function constrain_space(space, constraint::AbstractConstraint; kwargs...)
     has_sectors(constraint) || return ConstrainedSpace(space, states)
     block_space(space, states, sector_function(constraint, space))
 end
+
+"""
+    constrain_space(space, constraint; kwargs...)
+    constrain_space(space, states)
+
+Build a constrained Hilbert space from `space`, either by applying a constraint or
+by explicitly providing a list of allowed basis states.
+"""
+constrain_space
 default_processor(space, _) = nothing
 default_sorter(space, constraint) = nothing
 

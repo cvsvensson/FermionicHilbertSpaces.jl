@@ -1,4 +1,10 @@
 
+"""
+    @boson b
+
+Create a symbolic bosonic annihilation operator `b`.
+Use `b'` for the corresponding creation operator.
+"""
 macro boson(x)
     Expr(:block, :($(esc(x)) = BosonSym($(Expr(:quote, x)), -1)),
         :($(esc(x))))
