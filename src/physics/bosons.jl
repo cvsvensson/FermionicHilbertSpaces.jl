@@ -106,6 +106,7 @@ struct BosonicFockState <: AbstractBasisState
     n::Int
 end
 Base.:(==)(a::BosonicFockState, b::BosonicFockState) = a.n == b.n
+Base.isless(a::BosonicFockState, b::BosonicFockState) = a.n < b.n
 Base.hash(x::BosonicFockState, h::UInt) = hash(x.n, h)
 struct TruncatedBosonicHilbertSpace{B} <: AbstractAtomicHilbertSpace{BosonicFockState}
     sym::BosonSym{B}
@@ -214,7 +215,7 @@ end
 
 @testitem "Boson product spaces and number conservation" begin
     using Combinatorics: binomial
-    using LinearAlgebra: norm
+    using LinearAlgebra: I, norm
 
     function constrained_boson_dim(nr_of_modes, max_occ, total_particles)
         L, nmax, M = nr_of_modes, max_occ, total_particles
