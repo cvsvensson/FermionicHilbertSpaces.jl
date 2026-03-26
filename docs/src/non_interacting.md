@@ -14,9 +14,9 @@ If ``H`` is hermitian so is ``h`` and ``E`` is real, but we don't have to restri
 One can manually define the hilbert space using only the single particle states as
 ```@example single_particle_hilbert_space
 using FermionicHilbertSpaces, LinearAlgebra
-N = 2
-H = hilbert_space(1:N, FermionicHilbertSpaces.SingleParticleState.(1:N))
 @fermions c
+N = 2
+H = hilbert_space(c, 1:N, FermionicHilbertSpaces.SingleParticleState.(1:N))
 h = rand(ComplexF64, N, N)
 E = rand(ComplexF64)
 op = E * I + sum(c[i]' * h[i, j] * c[j] for i in 1:N, j in 1:N)
@@ -27,7 +27,7 @@ Often, $h_{nm}$ is of interest because diagonalizing it gives information on the
 !!! tip "Use `single_particle_hilbert_space` instead"
     For convenience, `single_particle_hilbert_space` can be used define the hilbert space which will give only the single particle states, and will remove the contribution of the identity operator when calling `matrix_representation`:
     ```julia
-    H = single_particle_hilbert_space(1:N)
+    H = single_particle_hilbert_space(c, 1:N)
     matrix_representation(op,H) == h # true
     ```
 
@@ -53,9 +53,9 @@ We can get this representation manually as follows:
 ```@example bdg_particle_hilbert_space
 using FermionicHilbertSpaces, LinearAlgebra
 N = 2
-states = [FermionicHilbertSpaces.NambuState(n, hole) for (n, hole) in Base.product(1:N, (true, false))]
-H = hilbert_space(1:N, states)
+states = vec([FermionicHilbertSpaces.NambuState(n, hole) for (n, hole) in Base.product(1:N, (true, false))])
 @fermions c
+H = hilbert_space(c, 1:N, states)
 h = Hermitian(rand(N, N))
 Δ = rand(N, N) |> m -> m - transpose(m)
 E = rand()
@@ -67,7 +67,7 @@ The matrix returned by `matrix_representation` will depend on the ordering of op
 !!! tip "Use `bdg_hilbert_space` instead"
     By defining the hilbert space using `bdg_hilbert_space`, one automatically gets the Nambu states and `matrix_representation` will return a matrix of the form above without the need to manually convert it:
     ```julia
-    Hbdg = bdg_hilbert_space(1:N)
+    Hbdg = bdg_hilbert_space(c, 1:N)
     matrix_representation(op, Hbdg)
     #= example output
     4×4 SparseArrays.SparseMatrixCSC{Float64, Int64} with 12 stored entries:

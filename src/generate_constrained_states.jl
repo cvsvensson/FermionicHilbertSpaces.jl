@@ -27,7 +27,7 @@ Uses backtracking with pruning via `valid_branch`.
 function generate_states(space::AbstractHilbertSpace{B}, constraint; kwargs...) where B
     splitter = state_splitter(space, atomic_factors(space))
     process_result = (full_state, spaces) -> first(only(combine_states(full_state, splitter)))
-    generate_states(atomic_factors(space), constraint, B; process_result)
+    generate_states(atomic_factors(space), constraint, B; process_result, kwargs...)
 end
 function generate_states(spaces, _constraint, ::Type{B}=Any; partial_processor=nothing, process_result=(state, spaces) -> copy(state)) where B
     constraint = branch_constraint(_constraint, spaces)
@@ -65,7 +65,7 @@ function catenate_fock_states(full_state, spaces, T)
     end
     num
 end
-
+unweighted_number_branch_constraint(allowed_sums, allspaces) = _unweighted_number_branch_constraint(allowed_sums, atomic_factors(allspaces), allspaces)
 function unweighted_number_branch_constraint(allowed_sums, _subspaces, _allspaces)
     allspaces = _allspaces isa AbstractHilbertSpace ? atomic_factors(_allspaces) : collect(Iterators.flatten(Iterators.map(atomic_factors, _allspaces)))
     subspaces = ismissing(_subspaces) ? allspaces : collect(Iterators.flatten(Iterators.map(atomic_factors, _subspaces)))
@@ -87,10 +87,10 @@ function _unweighted_number_branch_constraint(allowed_numbers, subspaces, allspa
     end)
 end
 
-weighted_number_branch_constraint(allowed_sums, weights, allspaces) = weighted_number_branch_constraint(allowed_sums, weights, allspaces, allspaces)
+weighted_number_branch_constraint(allowed_sums, weights, allspaces) = weighted_number_branch_constraint(allowed_sums, weights, atomic_factors(allspaces), allspaces)
 function weighted_number_branch_constraint(allowed_sums, _weights, _subspaces, _allspaces)
-    allspaces = _allspaces isa AbstractHilbertSpace ? factors(_allspaces) : _allspaces
-    subspaces = ismissing(_subspaces) ? allspaces : _subspaces
+    allspaces = _allspaces isa AbstractHilbertSpace ? atomic_factors(_allspaces) : collect(Iterators.flatten(Iterators.map(atomic_factors, _allspaces)))
+    subspaces = ismissing(_subspaces) ? allspaces : collect(Iterators.flatten(Iterators.map(atomic_factors, _subspaces)))
     ismissing(_weights) && return unweighted_number_branch_constraint(allowed_sums, subspaces, allspaces)
     return _weighted_number_branch_constraint(allowed_sums, _weights, subspaces, allspaces)
 end
@@ -130,7 +130,7 @@ end
 
 
 @testitem "generate_states with BranchConstraint" begin
-    using FermionicHilbertSpaces: generate_states, BranchConstraint, basisstate, hilbert_space, _bit, unweighted_number_branch_constraint
+    using FermionicHilbertSpaces: generate_states, BranchConstraint, basisstate, hilbert_space, _bit, unweighted_number_branch_constraint, weighted_number_branch_constraint, CombineFockNumbersProcessor
 
     # Define a simple constraint: only allow states where the first space is in its first basis state
     @fermions f
@@ -147,7 +147,7 @@ end
 
     # Partial and full processors are both applied
     visited_depths = Int[]
-    process_result = FermionicHilbertSpaces.CombineFockNumbersProcessor{FockNumber{Int}}()
+    process_result = CombineFockNumbersProcessor{FockNumber{Int}}()
     states_as_int = map(f -> f.f, generate_states(
         Hs,
         BranchConstraint((partial, depth, spaces) -> true);
@@ -185,5 +185,19 @@ end
         end
         true
     end
+
+
+    # Test that large number of modes works
+    N = 80
+    H = hilbert_space(f, 1:N)
+    constraint = prod(unweighted_number_branch_constraint(allowed, H) for allowed in zip(allowed_ones))
+    states = generate_states(H, constraint)
+    @test all(s -> s.f >= 0, states)
+
+    weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
+    allowed_ones = [[0, 1], [-1, 0], [2]]
+    constraint = prod(weighted_number_branch_constraint(allowed, w, H) for (allowed, w) in zip(allowed_ones, weights))
+    states = generate_states(H, constraint)
+    @test all(s -> s.f >= 0, states)
 
 end

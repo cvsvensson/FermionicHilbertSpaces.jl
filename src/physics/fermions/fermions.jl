@@ -58,7 +58,10 @@ Base.hash(c::FermionCluster, h::UInt) = hash(c.modes, hash(c.group, h))
 basisstates(H::FermionCluster{F}) where F = Iterators.map(F ∘ FockNumber, UnitRange{UInt64}(0, dim(H) - 1))
 basisstate(ind, ::FermionCluster{F}) where F = (F ∘ FockNumber)(ind - 1)
 state_index(state::FockNumber, ::FermionCluster) = state.f + 1
-dim(H::FermionCluster) = 2^nbr_of_modes(H)
+function dim(H::FermionCluster)
+    N = nbr_of_modes(H)
+    N < 63 ? 2^N : BigInt(2)^N
+end
 atomic_factors(H::FermionCluster) = H.modes
 nbr_of_modes(H::FermionCluster) = length(H.modes)
 symbolic_group(H::FermionCluster) = H.group
@@ -99,7 +102,7 @@ function subregion(Hsub, H::FermionCluster)
     positions = map(f -> _find_position(f, H), submodes)
     all(x -> x > 0, positions) || throw(ArgumentError("The modes $(modes(Hsub)) are not an ordered subsystem of the Hilbert space $(H)"))
     issorted(positions) || throw(ArgumentError("The modes $(modes(Hsub)) are not an ordered subsystem of the Hilbert space $(H)"))
-    Hsub
+    tensor_product(submodes)
 end
 isconstrained(H::FermionCluster) = false
 combine_states(states, H::FermionCluster{F}) where F = ((catenate_fock_states(states, H.modes, F), 1),)
@@ -183,7 +186,7 @@ struct CombineFockNumbersProcessor{T} end
 function (processor::CombineFockNumbersProcessor{T})(full_state, spaces) where T
     catenate_fock_states(full_state, spaces, T)
 end
-_init_results(spaces, ::CombineFockNumbersProcessor{T}) where T = T[]
+# _init_results(spaces, ::CombineFockNumbersProcessor{T}) where T = T[]
 
 focknbr_from_site_label(mode::FermionicMode, H::FermionCluster) = focknbr_from_site_index(_find_position(mode, H))
 focknbr_from_site_labels(Hsub::FermionCluster, H::FermionCluster) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))

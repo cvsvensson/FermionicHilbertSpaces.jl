@@ -45,7 +45,7 @@ function Base.show(io::IO, H::BlockHilbertSpace)
         show(IOContext(io, :compact => true), H.parent)
         print(io, ", $(dim(H))-dim)")
     else
-        print(io, "H$(dim(H))-dimensional BlockHilbertSpace\n")
+        print(io, "$(dim(H))-dimensional BlockHilbertSpace\n")
         print(io, "Parent: ")
         show(IOContext(io, :compact => true), H.parent)
 

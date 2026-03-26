@@ -111,28 +111,31 @@ function FockMapper(fermionpositions::P) where P
     nbr_of_modes = maximum(maximum, fermionpositions)
     perm = mapreduce(collect, vcat, fermionpositions)
     all(issorted, fermionpositions) || throw(ArgumentError("The order of fermions in each subsystem should be ordered as in the full system, but the provided fermion positions are not sorted: $fermionpositions"))
-    permutation = isperm(perm) ? BitPermutation{UInt}(perm)' : nothing
+    permutation = isperm(perm) && nbr_of_modes < 64 ? BitPermutation{UInt}(perm)' : nothing
     FockMapper(fermionpositions, widths, permutation, nbr_of_modes)
 end
 
 function combine_states(f, fm::FockMapper{N}) where N
     T = FockNumber{default_fock_representation(Val(N))}
-    state = mapfoldr(tup -> insert_bits(tup...), |, zip(f, fm.fermionpositions); init=zero(T))
+    state = mapfoldr(tup -> insert_bits(T(tup[1]), tup[2]), |, zip(f, fm.fermionpositions); init=zero(T))
     ((state, 1),)
 end
-combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:BitPermutation}) where N = ((concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))}), 1),)
+function combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:BitPermutation}) where N
+    state = concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))})
+    ((state, 1),)
+end
 split_state(f::AbstractFockState, fm::FockMapper) = ((map(site_indices -> substate(site_indices, f), fm.fermionpositions), 1),)
-function insert_bits(_x::FockNumber, positions)
+function insert_bits(_x::FockNumber{T}, positions) where T
     x = _x.f
-    result = 0
+    result = zero(T)
     bit_index = 1
     for pos in positions
-        if x & (1 << (bit_index - 1)) != 0
-            result |= (1 << (pos - 1))
+        if x & (one(T) << (bit_index - 1)) != 0
+            result |= (one(T) << (pos - 1))
         end
         bit_index += 1
     end
-    return FockNumber(result)
+    return FockNumber{T}(result)
 end
 
 function concatenate_and_permute(fs, widths, permutation, ::Type{T}) where T

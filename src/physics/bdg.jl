@@ -57,8 +57,7 @@ function matrix_representation(op, H::BdGHilbertSpace)
 end
 
 
-function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::BdGHilbertSpace; kwargs...)
-    ordering = mode_ordering(H)
+function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::AbstractHilbertSpace{NambuState}; kwargs...)
     nambustates = (NambuState(_find_position(op.factors[1], H), op.factors[1].creation),
         NambuState(_find_position(op.factors[2], H), !op.factors[2].creation))
     inind = state_index(nambustates[2], H)
