@@ -17,6 +17,9 @@ atomic_substate(n, f, space::BlockHilbertSpace) = atomic_substate(n, f, parent(s
 
 function block_space(space, states, sector_function)
     _qntostates = group(state -> sector_function(state), states)
+    _block_space(space, _qntostates)
+end
+function _block_space(space, _qntostates)
     inds = keys(_qntostates)
     filt_inds = filter(!ismissing, inds)
     qn_to_states = map(collect, getindices(_qntostates, filt_inds))

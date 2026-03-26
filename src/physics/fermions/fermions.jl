@@ -338,6 +338,25 @@ _find_position(f::FermionSym, H::ProductSpace) = _find_position(FermionicMode(f)
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionCluster(map(l -> FermionicMode(a[l]), labels))
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint) = constrain_space(hilbert_space(a, labels), constraint)
 
+function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::ParityConservation{Missing})
+    H = hilbert_space(a, labels)
+    states = if constraint.allowed_parities == [-1, 1]
+        basisstates(H)
+    else
+        valid_parity = only(constraint.allowed_parities)
+        Iterators.filter(isequal(valid_parity) ∘ parity, basisstates(H))
+    end
+    block_space(H, states, parity)
+end
+function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::NumberConservation{T,Missing,Missing}) where T
+    H = hilbert_space(a, labels)
+    N = nbr_of_modes(H)
+    numbers = T === Missing ? (0:N) : constraint.total
+    state_blocks = map(n -> fixed_particle_number_fockstates(N, n), numbers)
+    dict = Dictionary(numbers, state_blocks)
+    _block_space(H, dict)
+end
+
 issubsystem(Hsub::AbstractHilbertSpace, H::FermionCluster) = isorderedsubsystem(Hsub, H)
 
 @testitem "Commuting fermionic operators: Lindbladian and number conservation" begin

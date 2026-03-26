@@ -30,6 +30,9 @@ struct NumberConservation{T,H,W} <: AbstractConstraint
     subspaces::H
     weights::W
 end
+function NumberConservation(total::Int, subspaces::H, weights::W) where {H,W}
+    NumberConservation([total], subspaces, weights)
+end
 NumberConservation(n) = NumberConservation(n, missing, missing)
 NumberConservation(H::AbstractHilbertSpace) = NumberConservation(missing, atomic_factors(H), missing)
 NumberConservation() = NumberConservation(missing, missing, missing)
