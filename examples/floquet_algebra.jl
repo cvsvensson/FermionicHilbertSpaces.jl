@@ -41,7 +41,7 @@ floquet_mul(::FloquetNumber, ::FloquetLadder) = return nothing
 
 function apply_local_operators(op, state::FloquetState, space, precomp)
     state, amp = foldr((op, (state, amp)) -> apply_local_operator(op, state, amp), op.factors, init=(state, 1))
-    return ((state, amp),)
+    return (state,), (amp,)
 end
 
 apply_local_operator(op::FloquetLadder, state::FloquetState, amp) = (FloquetState(state.mode + op.shift), amp)
