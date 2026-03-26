@@ -143,6 +143,7 @@ end
 hilbert_space(sym::BosonSym{B}, max_occupancy) where B = TruncatedBosonicHilbertSpace(sym, max_occupancy)
 hilbert_space(sym::BosonSym{B}, max_occupancy, constraint) where B = constrain_space(hilbert_space(sym, max_occupancy), constraint)
 particle_number(s::BosonicFockState) = s.n
+parity(s::BosonicFockState) = iseven(s.n) ? 1 : -1
 maximum_particles(H::TruncatedBosonicHilbertSpace) = H.max_occupancy
 
 function apply_local_operators(op::NCMul, state::BosonicFockState, space::TruncatedBosonicHilbertSpace, precomp)
