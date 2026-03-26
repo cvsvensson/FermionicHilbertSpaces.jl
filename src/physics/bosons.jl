@@ -140,6 +140,9 @@ function state_index(s::BosonicFockState, H::TruncatedBosonicHilbertSpace)
 end
 
 hilbert_space(sym::BosonSym{B}, max_occupancy) where B = TruncatedBosonicHilbertSpace(sym, max_occupancy)
+hilbert_space(sym::BosonSym{B}, max_occupancy, constraint) where B = constrain_space(hilbert_space(sym, max_occupancy), constraint)
+particle_number(s::BosonicFockState) = s.n
+maximum_particles(H::TruncatedBosonicHilbertSpace) = H.max_occupancy
 
 function apply_local_operators(op::NCMul, state::BosonicFockState, space::TruncatedBosonicHilbertSpace, precomp)
     factors = op.factors
@@ -207,6 +210,34 @@ end
     @test madag == a'
     @test matrix_representation(b, H) == ma
     @test madag * ma + 1im * I ≈ matrix_representation(b' * b + 1im, H)
+end
+
+@testitem "Boson product spaces and number conservation" begin
+    using Combinatorics: binomial
+    using LinearAlgebra: norm
+
+    function constrained_boson_dim(nr_of_modes, max_occ, total_particles)
+        L, nmax, M = nr_of_modes, max_occ, total_particles
+        (M < 0 || M > L*nmax) && return 0
+        s = 0
+        for k in 0:fld(M, nmax + 1)
+            s += (-1)^k * binomial(L, k) * binomial(M - k*(nmax + 1) + L - 1, L - 1)
+        end
+        return s
+    end
+
+    N = 6
+    total_particles = N
+    max_occupancy = 3
+    @bosons b 1:N
+
+    Hs = hilbert_space.(values(b), max_occupancy)
+    Hfull = tensor_product(Hs)
+    @test dim(Hfull) == (max_occupancy + 1)^N
+    H = constrain_space(Hfull, NumberConservation(total_particles))
+    @test dim(H) == constrained_boson_dim(N, max_occupancy, total_particles)
+    Nop = sum(b[i]'b[i] for i in 1:N)
+    @test norm(matrix_representation(Nop, H) - total_particles * I(dim(H))) < 1e-10
 end
 
 @testitem "Fermion-spin-boson mixed spaces" begin
