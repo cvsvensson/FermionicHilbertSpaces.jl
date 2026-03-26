@@ -411,7 +411,7 @@ end
 extract_piece(state, ::Int) = state
 extract_piece(state::ProductState, idx::Int) = state.states[idx]
 
-combine_states(states::Tuple, ::ProductSpace{ProductState{B}}) where B = ((ProductState{B}(B(states)), 1),)
+combine_states(states::Tuple, ::ProductSpace{ProductState{B}}) where B = (ProductState{B}(B(states)),), (1,)
 
 
 function kron_phase_factor(state_mapper::ProductSpaceMapper)
