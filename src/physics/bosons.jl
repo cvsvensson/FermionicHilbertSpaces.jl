@@ -9,26 +9,31 @@ macro boson(x)
     Expr(:block, :($(esc(x)) = BosonSym($(Expr(:quote, x)), -1)),
         :($(esc(x))))
 end
+macro bosons(name, labels)
+    Expr(:block,
+        :($(esc(name)) = OrderedDict(l => BosonSym(Symbol($(Expr(:quote, name)), l), -1) for l in $(esc(labels)))),
+        :($(esc(name))))
+end
 
 struct BosonSym{B} <: AbstractSym
-    label::B
+    name::B
     exp::Int
 end
-Base.adjoint(x::BosonSym) = BosonSym(x.label, -x.exp)
+Base.adjoint(x::BosonSym) = BosonSym(x.name, -x.exp)
 Base.iszero(x::BosonSym) = false
 function Base.show(io::IO, x::BosonSym)
-    print(io, x.label, x.exp > 0 ? "†" : "")
+    print(io, x.name, x.exp > 0 ? "†" : "")
     if abs(x.exp) !== 1
         print(io, "^", abs(x.exp))
     end
 end
-Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label
-Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, h))
+Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.name == b.name
+Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.name, h))
 
 function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
-    if a.label == b.label
+    if a.name == b.name
         if sign(a.exp) == sign(b.exp)
-            return BosonSym(a.label, a.exp + b.exp)
+            return BosonSym(a.name, a.exp + b.exp)
         else
             if a.exp < 0 && b.exp > 0
                 return AddTerms((Swap(1), 1))
@@ -37,7 +42,7 @@ function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
             end
         end
     end
-    if a.label > b.label
+    if a.name > b.name
         return Swap(1)
     else
         return nothing
@@ -121,10 +126,10 @@ end
 dim(H::TruncatedBosonicHilbertSpace) = H.max_occupancy + 1
 function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
     if get(io, :compact, false)
-        print(io, "Bosons(", H.sym.label, ", max=", H.max_occupancy, ")")
+        print(io, "Bosons(", H.sym.name, ", max=", H.max_occupancy, ")")
     else
         print(io, "$(dim(H))-dimensional TruncatedBosonicHilbertSpace\n")
-        print(io, "Label: ", H.sym.label, ", max_occupancy: ", H.max_occupancy)
+        print(io, "Label: ", H.sym.name, ", max_occupancy: ", H.max_occupancy)
     end
 end
 function state_index(s::BosonicFockState, H::TruncatedBosonicHilbertSpace)
@@ -164,7 +169,7 @@ function apply_local_operators(op::NCMul, state::BosonicFockState, space::Trunca
     return ((BosonicFockState(n), amplitude),)
 end
 
-symbolic_group(f::BosonSym) = BosonSym(f.label, 0)
+symbolic_group(f::BosonSym) = BosonSym(f.name, 0)
 symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
 mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
 

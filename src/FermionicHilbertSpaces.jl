@@ -18,7 +18,7 @@ export hilbert_space, subregion
 export parityoperator, numberoperator, matrix_representation
 
 export partial_trace, generalized_kron, tensor_product, embed
-export @fermions, @majoranas, @boson, @spin, @spins
+export @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export BlockHilbertSpace, quantumnumbers, sector, sectors, indices
 export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
