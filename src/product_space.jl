@@ -96,6 +96,7 @@ function Base.show(io::IO, H::ProductSpace)
     end
 end
 maximum_particles(H::ProductSpace) = sum(maximum_particles, factors(H))
+particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
 
 function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
     sub_atoms = Set(atomic_factors(Hsub))
