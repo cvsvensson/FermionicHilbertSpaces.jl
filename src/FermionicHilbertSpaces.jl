@@ -13,7 +13,7 @@ import NonCommutativeProducts: @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 import UUIDs: uuid4
 
 
-export FockNumber, JordanWignerOrdering, hc, basisstates, dim
+export FockNumber, hc, basisstates, dim
 export hilbert_space, subregion
 export parityoperator, numberoperator, matrix_representation
 

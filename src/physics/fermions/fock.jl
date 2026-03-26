@@ -19,36 +19,6 @@ function default_fock_representation(N)
     N < 64 ? UInt64 : BigInt
 end
 
-"""
-    JordanWignerOrdering
-A type representing the ordering of fermionic modes.
-"""
-struct JordanWignerOrdering{L}
-    ordering::OrderedDict{L,Int}
-    function JordanWignerOrdering(labels)
-        dict = OrderedDict(zip(labels, Base.OneTo(length(labels))))
-        new{keytype(dict)}(dict)
-    end
-end
-JordanWignerOrdering(jw::JordanWignerOrdering) = jw
-Base.length(jw::JordanWignerOrdering) = length(jw.ordering)
-Base.:(==)(jw1::JordanWignerOrdering, jw2::JordanWignerOrdering) = jw1.ordering == jw2.ordering
-Base.hash(jw::JordanWignerOrdering, h::UInt) = hash(jw.ordering, h)
-Base.keys(jw::JordanWignerOrdering) = jw.ordering.keys
-Base.iterate(jw::JordanWignerOrdering) = iterate(keys(jw))
-Base.iterate(jw::JordanWignerOrdering, state) = iterate(keys(jw), state)
-Base.eltype(::JordanWignerOrdering{L}) where L = L
-
-Base.getindex(ordering::JordanWignerOrdering, label) = ordering.ordering[label]
-# getindices(jw::JordanWignerOrdering, labels) = map(Base.Fix1(getindex, jw), labels)
-
-label_at_site(n, jw::JordanWignerOrdering) = keys(jw)[n]
-focknbr_from_site_label(label, jw::JordanWignerOrdering) = focknbr_from_site_index(getindex(jw, label))
-focknbr_from_site_labels(labels, jw::JordanWignerOrdering) = mapreduce(Base.Fix2(focknbr_from_site_label, jw), |, labels, init=FockNumber(zero(default_fock_representation(length(jw)))))
-focknbr_from_site_labels(labels::JordanWignerOrdering, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(labels), jw)
-
-# Base.:+(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f + f2.f)
-# Base.:-(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f - f2.f)
 Base.:⊻(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f ⊻ f2.f)
 Base.:⊻(f1::Integer, f2::FockNumber) = FockNumber(f1 ⊻ f2.f)
 Base.:&(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f & f2.f)
@@ -61,7 +31,7 @@ Base.:>>(f::FockNumber, n::Integer) = FockNumber(f.f >> n)
 Base.:<<(f::FockNumber, n::Integer) = FockNumber(f.f << n)
 Base.:|(n::Integer, f::FockNumber) = FockNumber(n | f.f)
 Base.zero(::FockNumber{T}) where T = zero(FockNumber{T})
-Base.zero(::Type{FockNumber{T}}) where T = FockNumber(zero(T))
+Base.zero(::Type{FockNumber{T}}) where T = FockNumber{T}(zero(T))
 
 
 integer_from_bits(bits, ::Type{T}=default_fock_representation(length(bits))) where T = reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T))
@@ -81,7 +51,6 @@ function substate(siteindices, f::FockNumber)
     return focknbr_from_bits(subbits)
 end
 
-# occupation(f::AbstractFockState, label, H::AbstractFockHilbertSpace) = _bit(f, getindex(mode_ordering(H), label))
 fermionnumber(f::FockNumber{<:Integer}, mask) = count_weighted_ones(f.f, mask)
 count_weighted_ones(x, mask::Integer) = count_ones(x & mask)
 count_weighted_ones(x, weights::Union{Vector,Tuple}) = sum(w for (i, w) in enumerate(weights) if _bit(x, i))
@@ -95,9 +64,6 @@ jwstring(site, focknbr) = jwstring_left(site, focknbr)
 jwstring_anti(site, focknbr) = jwstring_right(site, focknbr)
 jwstring_right(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f >> site)) ? 1 : -1
 jwstring_left(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f) - count_ones(focknbr.f >> (site - 1))) ? 1 : -1
-
-# jwstring_left(site, focknbr::FockNumber{Bool}) = jwstring_left(site, FockNumber{Int}(focknbr))
-# jwstring_right(site, focknbr::FockNumber{Bool}) = jwstring_right(site, FockNumber{Int}(focknbr))
 
 
 struct FockMapper{N,P1,W,P2} <: AbstractStateMapper
@@ -154,8 +120,6 @@ end
 permute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
 
 shift_right(f::FockNumber, M) = FockNumber(f.f << M)
-# FockMapper(H::AbstractFockHilbertSpace, Hs) = FockMapper(mode_ordering(H), map(mode_ordering, Hs))
-# StateMapper(H::AbstractFockHilbertSpace, Hs) = FockMapper(H, Hs)
 
 
 @testitem "Fock" begin

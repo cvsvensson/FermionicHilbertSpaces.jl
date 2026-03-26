@@ -326,8 +326,3 @@ end
     m2 = rand(dim(Hsub2), dim(Hsub2))
     @test tensor_product((m1, m2), (Hsub, Hsub2), Hprod) == embed(m1, Hsub => Hprod) * embed(m2, Hsub2 => Hprod)
 end
-
-function _sym_space_match(sym::AbstractMajoranaSym, space::MajoranaHilbertSpace)
-    label(sym) in keys(space)
-end
-_sym_space_match(basis::SymbolicMajoranaBasis, space::MajoranaHilbertSpace) = true

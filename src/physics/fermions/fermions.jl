@@ -332,17 +332,6 @@ end
     end
 end
 
-
-_sym_space_match(basis::SymbolicFermionBasis, space::AbstractFockHilbertSpace) = true
-_sym_space_match(basis::SymbolicFermionBasis, space::AbstractHilbertSpace) = false
-
-label(H::AbstractFockHilbertSpace) = only(mode_ordering(H))
-function _sym_space_match(sym, space::AbstractHilbertSpace)
-    label(sym) == label(space)
-end
-function _sym_space_match(sym::AbstractFermionSym, space::AbstractFockHilbertSpace)
-    label(sym) in keys(space)
-end
 FermionicMode(f::FermionSym) = FermionicMode(f.label, f.basis)
 _find_position(f::FermionSym, H::AbstractHilbertSpace) = _find_position(FermionicMode(f), H)
 _find_position(f::FermionSym, H::ProductSpace) = _find_position(FermionicMode(f), H)

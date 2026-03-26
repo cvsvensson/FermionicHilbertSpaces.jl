@@ -2,7 +2,6 @@
 abstract type AbstractBasisState end
 abstract type AbstractFockState <: AbstractBasisState end
 abstract type AbstractHilbertSpace{S} end
-abstract type AbstractFockHilbertSpace{F<:AbstractFockState} <: AbstractHilbertSpace{F} end
 abstract type AbstractAtomicHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractProductHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractClusterHilbertSpace{B} <: AbstractProductHilbertSpace{B} end

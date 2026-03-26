@@ -126,12 +126,6 @@ function _matrix_representation(op::NCMul, bases, space; kwargs...)
         end
     end
 end
-# function _matrix_representation(op::NCAdd, bases, space::Union{<:AbstractAtomicHilbertSpace,<:AbstractClusterHilbertSpace}; kwargs...)
-#     return _matrix_representation_single_space(op, space; kwargs...)
-# end
-# function _matrix_representation(op::NCAdd, bases, space::ProductSpace; kwargs...)
-#     sum(_matrix_representation(term, bases, space; kwargs...) for term in NCterms(op)) + op.coeff * I(dim(space))
-# end
 function _matrix_representation(op::NCAdd, bases, space; kwargs...)
     if length(bases) == 1
         return _matrix_representation_single_space(op, space; kwargs...)

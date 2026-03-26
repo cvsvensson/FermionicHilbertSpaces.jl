@@ -165,19 +165,19 @@ mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
 
 end
 
-"""
-    apply_local_operator(op, state, space) -> (new_state, amplitude)
+# """
+#     apply_local_operator(op, state, space) -> (new_state, amplitude)
 
-Apply a local operator (single factor or product) to a state in a single Hilbert space.
-Returns the resulting state and amplitude.
+# Apply a local operator (single factor or product) to a state in a single Hilbert space.
+# Returns the resulting state and amplitude.
 
-Type-specific implementations are defined in their respective files (e.g., symbolic_spin.jl).
-"""
-function apply_local_operator(op::FermionSym, state::FockNumber, space::AbstractFockHilbertSpace)
-    # Convert single FermionSym to NCMul and use existing machinery
-    ordering = mode_ordering(space)
-    digitpos = getindex(ordering, op.label)
-    dagger = op.creation
-    new_state, amp = togglefermions([digitpos], [dagger], state)
-    return (new_state, amp)
-end
+# Type-specific implementations are defined in their respective files (e.g., symbolic_spin.jl).
+# """
+# function apply_local_operator(op::FermionSym, state::FockNumber, space::AbstractFockHilbertSpace)
+#     # Convert single FermionSym to NCMul and use existing machinery
+#     ordering = mode_ordering(space)
+#     digitpos = getindex(ordering, op.label)
+#     dagger = op.creation
+#     new_state, amp = togglefermions([digitpos], [dagger], state)
+#     return (new_state, amp)
+# end

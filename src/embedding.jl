@@ -1,21 +1,16 @@
 
 """
-    embedding_unitary(partition, basisstates, jw)
+    embedding_unitary(partition, basisstates)
 
     Compute the unitary matrix that maps between the tensor embedding and the fermionic embedding in the physical subspace. 
     # Arguments
-    - `partition`: A partition of the labels in `jw` into disjoint sets.
+    - `partition`: A partition into disjoint sets, represented by a list of list of integers.
     - `basisstates`: The basis states in the basis
-    - `jw`: The Jordan-Wigner ordering.
 """
-# function embedding_unitary(partition, basisstates, jw::AbstractDict)
 function embedding_unitary(partition, basisstates)
     #for locally physical algebra, ie only for even operators or states of well-defined parity
     #if ξ is ordered, the phases are +1. 
-    # Note that the jordan wigner modes are ordered in reverse from the labels, but this is taken care of by direction of the jwstring below
-
-
-    # assumes partition is a list of list of indices
+    # Note that the fermions are ordered in reverse from the indices, but this is taken care of by direction of the jwstring below
     isorderedpartition(partition, sum(length, partition)) || throw(ArgumentError("Must be an ordered partition to calculate embedding unitary"))
     phases = ones(Int, length(basisstates))
     for (s, Xs) in enumerate(partition)
@@ -87,7 +82,6 @@ end
     H = hilbert_space(f, 1:4)
     c = fermions(H)
     Hs = (HA, HB)
-    jw = JordanWignerOrdering(1:4).ordering
     @test size(embedding_unitary(Hs, H)) == (dim(H), dim(H))
     @test embed(cA[1], HA, H) ≈ generalized_kron((cA[1], I), Hs, H) ≈ generalized_kron((I, cA[1]), (HB, HA), H)
     Ux = embedding_unitary(Hs, H)

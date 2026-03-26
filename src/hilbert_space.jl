@@ -56,11 +56,6 @@ Return the Hilbert-space dimension of `H`, i.e. the number of basis states.
 dim(H::AbstractHilbertSpace) = Int(length(basisstates(H)))
 
 
-# embedding_unitary(partition, H::AbstractFockHilbertSpace) = embedding_unitary(partition, basisstates(H), H.jw)
-# bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_embedding_unitary(X, Xbar, basisstates(H), H.jw)
-
-
-#= Tests for isorderedsubsystem and issubsystem for Hilbert spaces =#
 @testitem "Hilbert space subsystem and ordering" begin
     import FermionicHilbertSpaces: isorderedsubsystem, issubsystem
     @fermions f
