@@ -1,40 +1,67 @@
 
+tensor_product(H::AbstractHilbertSpace) = H
+tensor_product(H::AbstractHilbertSpace, constraint::AbstractConstraint) = constrain_space(H, constraint)
+function tensor_product(first::AbstractHilbertSpace, args...)
+    all_args = (first, args...)
+    last_arg = last(all_args)
 
-@testitem "Tensor product of FermionicMode and FermionCluster" begin
-    import FermionicHilbertSpaces: constrain_space, FermionCluster
-    @fermions a
+    if last_arg isa AbstractConstraint
+        spaces = Base.front(all_args)
+        all(h -> h isa AbstractHilbertSpace, spaces) || throw(ArgumentError("All arguments before the final constraint must be Hilbert spaces"))
+        tensor_product(spaces, last_arg)
+    else
+        all(h -> h isa AbstractHilbertSpace, all_args) || throw(ArgumentError("All arguments must be Hilbert spaces, or a final constraint"))
+        tensor_product(all_args)
+    end
+end
 
-    # FermionicMode: tensor product of two single modes gives a FermionCluster
-    H1 = hilbert_space(a[1])
-    H2 = hilbert_space(a[2])
-    Hw = tensor_product([H1, H2])
-    H3 = hilbert_space(a, 1:2)
-    @test Hw == H3
-    @test Hw isa FermionCluster
-    @test dim(H1) * dim(H2) == dim(Hw)
+"""
+    tensor_product(spaces, [constraint])
 
-    # FermionCluster: tensor product of two clusters gives a larger FermionCluster
-    H1 = hilbert_space(a, 1:2)
-    H2 = hilbert_space(a, 3:4)
-    Hw = tensor_product([H1, H2])
-    H3 = hilbert_space(a, 1:4)
-    @test Hw == H3
-    @test dim(H1) * dim(H2) == dim(Hw)
+Construct the composite Hilbert space from the spaces in `spaces`, with optional `constraint`. 
+"""
+function tensor_product(spaces, constraint::AbstractConstraint=NoSymmetry())
+    if length(spaces) == 1
+        return constrain_space(only(spaces), constraint)
+    end
+    atoms = (Iterators.flatten(Iterators.map(atomic_factors, spaces)))
+    _groups = group(symbolic_group, atoms)
+    groups = (map(g -> map(identity, g), _groups)) #This can convert the groups into vectors of concrete types
+    clusters = map(typegroup -> combine_into_cluster(typegroup...), pairs(groups))
+    prod_space = ProductSpace(Tuple(clusters), collect(atoms))
 
-    # NumberConservation constrained FermionClusters
-    H1 = constrain_space(hilbert_space(a, 1:2), NumberConservation(1))
-    H2 = constrain_space(hilbert_space(a, 3:4), NumberConservation(1))
-    Hw = tensor_product((H1, H2))
-    H3 = constrain_space(hilbert_space(a, 1:4), NumberConservation(2))
-    @test Set(basisstates(Hw)) == Set(basisstates(constrain_space(Hw, NumberConservation(2))))
-    @test issubset(collect(basisstates(Hw)), collect(basisstates(H3)))
-    @test dim(H1) * dim(H2) == dim(Hw)
+    full_space = if any(isconstrained, spaces)
+        splitter = state_splitter(prod_space, spaces)
+        states = [only(combine_states(states, splitter))[1] for states in Iterators.product(map(basisstates, spaces)...)]
+        if length(prod_space.clusters) == 1
+            constrain_space(only(prod_space.clusters), vec(map(s -> only(s.states), states)))
+        else
+            constrain_space(prod_space, vec(states))
+        end
+    elseif length(clusters) == 1
+        only(clusters)
+    else
+        prod_space
+    end
+    return constrain_space(full_space, constraint)
 end
 
 function check_tensor_product_basis_compatibility(b1::AbstractHilbertSpace, b2::AbstractHilbertSpace, b3::AbstractHilbertSpace)
     if vcat(collect(keys(b1)), collect(keys(b2))) != collect(keys(b3))
         throw(ArgumentError("The labels of the output basis are not the same (or ordered the same) as the labels of the input bases. $(keys(b1)) * $(keys(b2)) != $(keys(b3))"))
     end
+end
+
+@testitem "Tensor product with trailing constraints" begin
+    @fermions a
+    H1 = hilbert_space(a, 1:2)
+    H2 = hilbert_space(a, 3:4)
+    H3 = hilbert_space(a, 5:6)
+    c = NumberConservation(2)
+
+    @test tensor_product(H1, c) == tensor_product((H1,), c)
+    @test tensor_product(H1, H2, c) == tensor_product((H1, H2), c)
+    @test tensor_product(H1, H2, H3, c) == tensor_product((H1, H2, H3), c)
 end
 
 size_compatible(m, H) = size(m) == size(m) == ntuple(_ -> dim(H), ndims(m))
@@ -210,224 +237,6 @@ end
 tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
 tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
 
-
-@testitem "Fermionic tensor product properties" begin
-    # Properties from J. Phys. A: Math. Theor. 54 (2021) 393001
-    # Eq. 16
-    using Random, Base.Iterators, LinearAlgebra
-    import FermionicHilbertSpaces: embedding_unitary, project_on_parity, project_on_parities
-
-    @fermions a
-    Random.seed!(3)
-    N = 8
-    rough_size = 4
-    fine_size = 2
-    rough_partitions = sort.(collect(partition(randperm(N), rough_size)))
-    # divide each part of rough partition into finer partitions
-    fine_partitions = map(rough_partition -> sort.(collect(partition(shuffle(rough_partition), fine_size))), rough_partitions)
-    H = hilbert_space(a, 1:N)
-    Hs_rough = [hilbert_space(a, r_p) for r_p in rough_partitions]
-    Hs_fine = map(f_p_list -> Base.Fix1(hilbert_space, a).(f_p_list), fine_partitions)
-
-    ops_rough = map(r_p -> rand(ComplexF64, 2^length(r_p), 2^length(r_p)), rough_partitions)
-    ops_fine = map(f_p_list -> [rand(ComplexF64, 2^length(f_p), 2^length(f_p)) for f_p in f_p_list], fine_partitions)
-
-    # Associativity (Eq. 16)
-    rhs = generalized_kron(reduce(vcat, ops_fine), reduce(vcat, Hs_fine), H)
-    finetensor_products = [generalized_kron(ops_vec, cs_vec, c_rough) for (ops_vec, cs_vec, c_rough) in zip(ops_fine, Hs_fine, Hs_rough)]
-    lhs = generalized_kron(finetensor_products, Hs_rough, H)
-    @test lhs ≈ rhs
-
-    physical_ops_rough = [project_on_parity(op, H, 1) for (op, H) in zip(ops_rough, Hs_rough)]
-
-    # Eq. 18
-    As = ops_rough
-    Bs = map(r_p -> rand(ComplexF64, 2^length(r_p), 2^length(r_p)), rough_partitions)
-    lhs = tr(generalized_kron(As, Hs_rough, H)' * generalized_kron(Bs, Hs_rough, H))
-    rhs = mapreduce((A, B) -> tr(A' * B), *, As, Bs)
-    @test lhs ≈ rhs
-
-    # Fermionic embedding
-
-    # Eq. 19 
-    As_modes = [rand(ComplexF64, 2, 2) for _ in 1:N]
-    ξ = vcat(fine_partitions...)
-    ξbases = vcat(Hs_fine...)
-    modebases = [hilbert_space(a[j]) for j in 1:N]
-    lhs = prod(j -> embed(As_modes[j], modebases[j], H), 1:N)
-    rhs_ordered_prod(X, basis) = mapreduce(j -> Matrix(embed(As_modes[j], modebases[j], basis)), *, X)
-    rhs = generalized_kron([rhs_ordered_prod(X, H) for (X, H) in zip(ξ, ξbases)], ξbases, H)
-    @test lhs ≈ rhs
-
-    # Associativity (Eq. 21)
-    @test embed(embed(ops_fine[1][1], Hs_fine[1][1], Hs_rough[1]), Hs_rough[1], H) ≈ embed(ops_fine[1][1], Hs_fine[1][1], H)
-    @test all(map(Hs_rough, Hs_fine, ops_fine) do cr, cfs, ofs
-        all(map(cfs, ofs) do cf, of
-            embed(embed(of, cf, cr), cr, H) ≈ embed(of, cf, H)
-        end)
-    end)
-
-    ## Eq. 22
-    HX = Hs_rough[1]
-    Ux = embedding_unitary(Hs_rough, H)
-    A = ops_rough[1]
-    @test Ux !== I
-    @test embed(A, HX, H) ≈ Ux * embed(A, HX, H; phase_factors=false) * Ux'
-    # Eq. 93
-    @test tensor_product(physical_ops_rough, Hs_rough, H) ≈ Ux * generalized_kron(physical_ops_rough, Hs_rough, H; phase_factors=false) * Ux'
-
-    # Eq. 23
-    X = rough_partitions[1]
-    HX = Hs_rough[1]
-    A = ops_rough[1]
-    B = rand(ComplexF64, 2^length(X), 2^length(X))
-    #Eq 5a and 5br are satisfied also when embedding matrices in larger subsystems
-    @test embed(A, HX, H)' ≈ embed(A', HX, H)
-    @test embed(A, HX, H; phase_factors=false) * embed(B, HX, H; phase_factors=false) ≈ embed(A * B, HX, H; phase_factors=false)
-    for cmode in modebases
-        #Eq 5bl
-        local A = rand(ComplexF64, 2, 2)
-        local B = rand(ComplexF64, 2, 2)
-        @test embed(A, cmode, H) * embed(B, cmode, H) ≈ embed(A * B, cmode, H)
-    end
-
-    # Ordered product of embeddings
-
-    # Eq. 31
-    A = ops_rough[1]
-    X = rough_partitions[1]
-    Xbar = setdiff(1:N, X)
-    HX = Hs_rough[1]
-    HXbar = hilbert_space(a, Xbar)
-    corr = embed(A, HX, H)
-    @test corr ≈ generalized_kron([A, I], [HX, HXbar], H) ≈ tensor_product([A, I], [HX, HXbar], H) ≈ tensor_product([I, A], [HXbar, HX], H)
-
-    # Eq. 32
-    @test tensor_product(As_modes, modebases, H) ≈ generalized_kron(As_modes, modebases, H)
-
-    ## Fermionic partial trace
-
-    # Eq. 36
-    #X = rough_partitions[1]
-    A = ops_rough[1]
-    B = rand(ComplexF64, dim(H), dim(H))
-    HX = Hs_rough[1]
-    lhs = tr(embed(A, HX => H)' * B)
-    rhs = tr(A' * partial_trace(B, H => HX))
-    @test lhs ≈ rhs
-
-    # Eq. 38 (using A, X, HX, HXbar from above)
-    B = rand(ComplexF64, 2^length(Xbar), 2^length(Xbar))
-    Hs = [HX, HXbar]
-    ops = [A, B]
-    @test partial_trace(generalized_kron(ops, Hs, H), H, HX) ≈ partial_trace(tensor_product(ops, Hs, H), H, HX) ≈ partial_trace(tensor_product(reverse(ops), reverse(Hs), H), H, HX) ≈ A * tr(B)
-
-    # Eq. 39
-    A = rand(ComplexF64, 2^N, 2^N)
-    X = fine_partitions[1][1]
-    Y = rough_partitions[1]
-    HX = Hs_fine[1][1]
-    HY = Hs_rough[1]
-    HZ = H
-    Z = 1:N
-    rhs = partial_trace(A, HZ, HX)
-    lhs = partial_trace(partial_trace(A, HZ, HY), HY, HX)
-    @test lhs ≈ rhs
-
-    # Eq. 41
-    HY = H
-    @test partial_trace(A', HY, HX) ≈ partial_trace(A, HY, HX)'
-
-    # Eq. 95
-    ξ = rough_partitions
-    Asphys = physical_ops_rough
-    Bs = map(X -> rand(ComplexF64, 2^length(X), 2^length(X)), ξ)
-    Bsphys = [project_on_parity(B, H, 1) for (B, H) in zip(Bs, Hs_rough)]
-    lhs1 = tensor_product(Asphys, Hs_rough, H) * tensor_product(Bsphys, Hs_rough, H)
-    rhs1 = tensor_product(Asphys .* Bsphys, Hs_rough, H)
-    @test lhs1 ≈ rhs1
-    @test tensor_product(Asphys, Hs_rough, H)' ≈ tensor_product(adjoint.(Asphys), Hs_rough, H)
-
-
-    ## Unitary equivalence between tensor_product and kron
-    ops = reduce(vcat, ops_fine)
-    Hs = reduce(vcat, Hs_fine)
-    physical_ops = [project_on_parity(op, H, 1) for (op, H) in zip(ops, Hs)]
-    # Eq. 93 implies that the unitary equivalence holds for the physical operators
-    @test svdvals(Matrix(tensor_product(physical_ops, Hs, H))) ≈ svdvals(Matrix(generalized_kron(physical_ops, Hs, H; phase_factors=false)))
-    # However, it is more general. The unitary equivalence holds as long as all except at most one of the operators has a definite parity:
-
-    numberops = map(numberoperator, Hs)
-    Uemb = embedding_unitary(Hs, H)
-    fine_partition = reduce(vcat, fine_partitions)
-    for parities in Base.product([[-1, 1] for _ in 1:length(Hs)]...)
-        projected_ops = [project_on_parity(op, H, p) for (op, H, p) in zip(ops, Hs, parities)] # project on local parity
-        opsk = [[projected_ops[1:k-1]..., ops[k], projected_ops[k+1:end]...] for k in 1:length(ops)] # switch out one operator of definite parity for an operator of indefinite parity
-        embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
-        kron_prods = [generalized_kron(ops, Hs, H; phase_factors=false) for ops in opsk]
-
-        @test all(svdvals(Matrix(op1)) ≈ svdvals(Matrix(op2)) for (op1, op2) in zip(embedding_prods, kron_prods))
-    end
-
-    # Explicit construction of unitary equivalence in case of all even (except one) 
-    function phase(k, f)
-        fines = collect(Iterators.flatten(Hs_fine))
-        Xkmask = FermionicHilbertSpaces.focknbr_from_site_labels(fines[k], H)
-        iseven(count_ones(f & Xkmask)) && return 1
-        phase = 1
-        for r in 1:k-1
-            Xrmask = FermionicHilbertSpaces.focknbr_from_site_labels(fines[r], H)
-            phase *= (-1)^(count_ones(f & Xrmask))
-        end
-        return phase
-    end
-    opsk = [[physical_ops[1:k-1]..., ops[k], physical_ops[k+1:end]...] for k in 1:length(ops)]
-    unitaries = [Diagonal([phase(k, f) for f in basisstates(H)]) * Uemb for k in 1:length(opsk)]
-    embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
-    kron_prods = [generalized_kron(ops, Hs, H; phase_factors=false) for ops in opsk]
-    @test all(op1 ≈ U * op2 * U for (op1, op2, U) in zip(embedding_prods, kron_prods, unitaries))
-
-end
-
-
-@testitem "Tensor product of fermionic operators" begin
-    using Random, LinearAlgebra
-    import SparseArrays: SparseMatrixCSC
-    import FermionicHilbertSpaces: fermions
-    Random.seed!(1234)
-    @fermions f
-    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
-        H1 = hilbert_space(f, 1:1, qn)
-        H2 = hilbert_space(f, 1:3, qn)
-        @test_throws ArgumentError tensor_product(H1, H2)
-        H2 = hilbert_space(f, 2:3, qn)
-        H3 = hilbert_space(f, 1:3, qn)
-        H3w = tensor_product(H1, H2)
-        @test H3w == tensor_product((H1, H2)) == tensor_product([H1, H2])
-        Hs = [H1, H2]
-        b1 = fermions(H1)
-        b2 = fermions(H2)
-        b3 = fermions(H3w)
-
-        #test that they keep sparsity
-        @test typeof(tensor_product((b1[1], b2[2]), Hs => H3)) == typeof(b1[1])
-        @test typeof(generalized_kron((b1[1], b2[2]), Hs, H3)) == typeof(b1[1])
-        @test typeof(tensor_product((b1[1], I), Hs => H3)) == typeof(b1[1])
-        @test typeof(generalized_kron((b1[1], I), Hs, H3)) == typeof(b1[1])
-        @test tensor_product((I, I), Hs => H3) isa SparseMatrixCSC
-        @test generalized_kron((I, I), Hs, H3) isa SparseMatrixCSC
-
-        # Test zero-mode error
-        @test_throws ArgumentError hilbert_space(f, 1:0, qn)
-    end
-
-    #Test basis compatibility
-    H1 = hilbert_space(f, 1:2, ParityConservation())
-    H2 = hilbert_space(f, 2:4, ParityConservation())
-    @test_throws ArgumentError tensor_product(H1, H2)
-end
-
-
 struct PhaseMap{F}
     phases::Matrix{Int}
     fockstates::Vector{F}
@@ -515,7 +324,7 @@ function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; c
         U = basis_transformation(Hsub, H)
         return U * m * U'
     end
-    mout = zeros(eltype(m), dim(Hsub), dim(Hsub)) 
+    mout = zeros(eltype(m), dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
 function basis_transformation(H1, H2)

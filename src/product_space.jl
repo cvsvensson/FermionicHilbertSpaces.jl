@@ -23,40 +23,6 @@ struct ProductSpace{B,C,A} <: AbstractProductHilbertSpace{B}
     end
 end
 
-tensor_product(H::AbstractHilbertSpace) = H
-"""
-    tensor_product(spaces...)
-
-Construct the composite Hilbert space from the spaces in `spaces`.
-"""
-tensor_product(spaces...) = tensor_product(spaces)
-"""
-    tensor_product(spaces)
-
-Construct the composite Hilbert space from the spaces in `spaces`.
-"""
-function tensor_product(spaces)
-    if length(spaces) == 1
-        return only(spaces)
-    end
-    atoms = (Iterators.flatten(Iterators.map(atomic_factors, spaces)))
-    _groups = group(symbolic_group, atoms)
-    groups = (map(g -> map(identity, g), _groups)) #This can convert the groups into vectors of concrete types
-    clusters = map(typegroup -> combine_into_cluster(typegroup...), pairs(groups))
-    full_space = ProductSpace(Tuple(clusters), collect(atoms))
-    if any(isconstrained, spaces)
-        splitter = state_splitter(full_space, spaces)
-        states = [only(combine_states(states, splitter))[1] for states in Iterators.product(map(basisstates, spaces)...)]
-        if length(full_space.clusters) == 1
-            return constrain_space(only(full_space.clusters), vec(map(s -> only(s.states), states)))
-        end
-        full_space = constrain_space(full_space, vec(states))
-    elseif length(clusters) == 1
-        return only(clusters)
-    end
-    return full_space
-end
-isconstrained(H::AbstractAtomicHilbertSpace) = false
 isconstrained(H::ProductSpace) = false
 Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1.clusters == H2.clusters && H1.atoms == H2.atoms
 Base.hash(H::ProductSpace, h::UInt) = hash(H.clusters, hash(H.atoms, h))
@@ -128,18 +94,17 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
 
 end
 
-struct AtomicStateSplitter <: AbstractStateSplitter end
-function state_splitter(H::AbstractAtomicHilbertSpace, Hs)
-    only(Hs) == H || throw(ArgumentError("For atomic subspaces, the only valid partition is the whole space"))
-    AtomicStateSplitter()
+function atomic_substate(n, f::ProductState, space::ProductSpace)
+    count = 0
+    for (k, s) in enumerate(factors(space))
+        add = length(atomic_factors(s))
+        if count < n <= count + add
+            return substate(n - count, substate(k, f))
+        end
+        count += add
+    end
+    throw(ArgumentError("Invalid substate index"))
 end
-function split_state(state, ::AtomicStateSplitter)
-    (((state, 1),),)
-end
-function combine_states(states, ::AtomicStateSplitter)
-    ((only(states), 1),)
-end
-kron_phase_factor(::AtomicStateSplitter) = (f1, f2) -> 1
 
 
 @testitem "ProductSpace" begin
@@ -639,18 +604,16 @@ end
 function _precomputation_before_operator_application(ops::Vector, space::ProductSpace)
     map((subops, space) -> _precomputation_before_operator_application(subops, space), ops, factors(space))
 end
-function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::ProductSpace, precomps)
+function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState{B}, space::ProductSpace, precomps) where B
     amp = 1
     spaces = clusters(space)
-    newstate = ProductState(ntuple(length(state.states)) do i
-        op = ops[i]
-        subst = state.states[i]
-        space = spaces[i]
-        new_state_amps = apply_local_operators(op, subst, space, precomps[i])
+    newstates = map(state.states, spaces, ops, precomps) do subst, space, op, precomp
+        new_state_amps = apply_local_operators(op, subst, space, precomp)
         new_local_state, local_amp = only(new_state_amps) #TODO: add support for multiple terms here
         amp *= local_amp
         new_local_state
-    end)
+    end
+    newstate = ProductState{B}(Tuple(newstates))
     return ((newstate, amp),)
 end
 function operator_inds_amps_generic!((outinds, ininds, amps), ops::Vector{<:NCMul}, space::AbstractHilbertSpace; projection=false)

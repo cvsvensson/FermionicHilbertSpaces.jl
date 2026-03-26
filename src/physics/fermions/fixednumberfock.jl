@@ -27,6 +27,7 @@ function jwstring_right(site, f::FixedNumberFockState)
     return sign
 end
 FockNumber(f::FixedNumberFockState) = focknbr_from_site_indices(f.sites)
+FockNumber{I}(f::FixedNumberFockState) where I = FockNumber{I}(focknbr_from_site_indices(f.sites, I))
 FixedNumberFockState{N}(f::FixedNumberFockState{M}) where {M,N} = FixedNumberFockState{N}((f.sites))
 FixedNumberFockState(f::FockNumber) = FixedNumberFockState{count_ones(f)}(f)
 function FixedNumberFockState{N}(f::FockNumber) where N

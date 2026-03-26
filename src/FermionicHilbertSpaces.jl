@@ -42,13 +42,14 @@ include("state_splitter.jl")
 include("hilbert_space.jl")
 include("sectors.jl")
 include("product_space.jl")
-include("tensor_product.jl")
-
-include("embedding.jl")
-include("reshape.jl")
 
 include("constraints.jl")
 include("constrained_space.jl")
+
+include("tensor_product.jl")
+include("embedding.jl")
+include("reshape.jl")
+
 include("generate_constrained_states.jl")
 
 include("matrix_representation.jl")

@@ -65,7 +65,7 @@ function catenate_fock_states(full_state, spaces, T)
     end
     num
 end
-unweighted_number_branch_constraint(allowed_sums, allspaces) = _unweighted_number_branch_constraint(allowed_sums, atomic_factors(allspaces), allspaces)
+unweighted_number_branch_constraint(allowed_sums, allspaces) = unweighted_number_branch_constraint(allowed_sums, missing, allspaces)
 function unweighted_number_branch_constraint(allowed_sums, _subspaces, _allspaces)
     allspaces = _allspaces isa AbstractHilbertSpace ? atomic_factors(_allspaces) : collect(Iterators.flatten(Iterators.map(atomic_factors, _allspaces)))
     subspaces = ismissing(_subspaces) ? allspaces : collect(Iterators.flatten(Iterators.map(atomic_factors, _subspaces)))
@@ -87,7 +87,7 @@ function _unweighted_number_branch_constraint(allowed_numbers, subspaces, allspa
     end)
 end
 
-weighted_number_branch_constraint(allowed_sums, weights, allspaces) = weighted_number_branch_constraint(allowed_sums, weights, atomic_factors(allspaces), allspaces)
+weighted_number_branch_constraint(allowed_sums, weights, allspaces) = weighted_number_branch_constraint(allowed_sums, weights, missing, allspaces)
 function weighted_number_branch_constraint(allowed_sums, _weights, _subspaces, _allspaces)
     allspaces = _allspaces isa AbstractHilbertSpace ? atomic_factors(_allspaces) : collect(Iterators.flatten(Iterators.map(atomic_factors, _allspaces)))
     subspaces = ismissing(_subspaces) ? allspaces : collect(Iterators.flatten(Iterators.map(atomic_factors, _subspaces)))
@@ -190,12 +190,12 @@ end
     # Test that large number of modes works
     N = 80
     H = hilbert_space(f, 1:N)
-    constraint = prod(unweighted_number_branch_constraint(allowed, H) for allowed in zip(allowed_ones))
+    allowed_ones = [[0, 1], [-1, 0], [2]]
+    constraint = prod(unweighted_number_branch_constraint(allowed, H) for allowed in allowed_ones)
     states = generate_states(H, constraint)
     @test all(s -> s.f >= 0, states)
 
     weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
-    allowed_ones = [[0, 1], [-1, 0], [2]]
     constraint = prod(weighted_number_branch_constraint(allowed, w, H) for (allowed, w) in zip(allowed_ones, weights))
     states = generate_states(H, constraint)
     @test all(s -> s.f >= 0, states)

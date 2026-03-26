@@ -62,18 +62,6 @@ function sector_function(cons::NumberConservation{T,S,W}, space) where {T,S,W}
     return f -> mapreduce((n, w) -> particle_number(atomic_substate(n, f, space)) * w, +, 1:length(weights), weights)
 end
 
-function atomic_substate(n, f::ProductState, space::ProductSpace)
-    count = 0
-    for (k, s) in enumerate(factors(space))
-        add = length(atomic_factors(s))
-        if count < n <= count + add
-            return substate(n - count, substate(k, f))
-        end
-        count += add
-    end
-    throw(ArgumentError("Invalid substate index"))
-end
-
 sector_function(::ParityConservation{Missing}, space::ProductSpace) = f -> prod(parity, f.states)
 sector_function(::NumberConservation{T,Missing,Missing}, space) where {T} = f -> particle_number(f)
 sector_function(::ParityConservation{Missing}, space) = f -> parity(f)
