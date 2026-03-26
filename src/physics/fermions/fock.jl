@@ -37,18 +37,18 @@ Base.zero(::Type{FockNumber{T}}) where T = FockNumber{T}(zero(T))
 integer_from_bits(bits, ::Type{T}=default_fock_representation(length(bits))) where T = reduce((x, y) -> x << 1 + y, Iterators.reverse(bits); init=zero(T))
 focknbr_from_bits(bits, ::Type{T}=default_fock_representation(length(bits))) where T = FockNumber{T}(integer_from_bits(bits, T))
 focknbr_from_site_index(site::Integer, ::Type{T}=default_fock_representation(site)) where T = FockNumber{T}(one(T) << (site - 1))
-focknbr_from_site_indices(sites, ::Type{T}=default_fock_representation(maximum(sites, init=0))) where T = mapreduce(focknbr_from_site_index, |, sites, init=FockNumber{T}(zero(T)))
+focknbr_from_site_indices(sites, ::Type{T}=default_fock_representation(maximum(sites, init=0))) where T =
+    FockNumber{T}(reduce((acc, s) -> acc | (one(T) << (s - 1)), sites; init=zero(T)))
 
 bits(f::FockNumber, N) = digits(Bool, f.f, base=2, pad=N)
 parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
-# Base.count_ones(f::FockNumber{Bool}) = f.f ? 1 : 0
 particle_number(s::FockNumber) = fermionnumber(s)
 
-function substate(siteindices, f::FockNumber)
+function substate(siteindices, f::FockNumber{T}) where T
     subbits = Iterators.map(i -> _bit(f, i), siteindices)
-    return focknbr_from_bits(subbits)
+    return focknbr_from_bits(subbits, T)
 end
 
 fermionnumber(f::FockNumber{<:Integer}, mask) = count_weighted_ones(f.f, mask)
@@ -92,7 +92,7 @@ function combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:BitPermutation}) wher
     state = concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))})
     (state,), (1,)
 end
-function split_state(f::AbstractFockState, fm::FockMapper)
+function split_state(f::AbstractFockState, fm::FockMapper{N}) where N
     state = map(site_indices -> substate(site_indices, f), fm.fermionpositions)
     (state,), (1,)
 end
