@@ -32,7 +32,8 @@ function _reshape_vec_to_tensor(v::AbstractVector, H::AbstractHilbertSpace, Hs, 
     Is = map(f -> state_index(f, H), fs)
     t = zeros(eltype(v), dims...)
     for (f, I) in zip(fs, Is)
-        for (substates, w) in split_state(f, splitter)
+        states, amps = split_state(f, splitter)
+        for (substates, w) in zip(states, amps)
             Iout = state_index.(substates, Hs)
             t[Iout...] += w * v[I]
         end
@@ -48,10 +49,12 @@ function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractHilbertSpace, Hsou
     Js = map(f -> state_index(f, H), fs)
     t = zeros(eltype(m), dimsout..., dimsin...)
     for (J1, f1) in zip(Js, fs)
-        for (substatesout, wout) in split_state(f1, splitterout)
+        substatesout, wsout = split_state(f1, splitterout)
+        for (substatesout, wout) in zip(substatesout, wsout)
             Iout = map(state_index, substatesout, Hsout)
             for (J2, f2) in zip(Js, fs)
-                for (substatesin, win) in split_state(f2, splitterin)
+                substatesin, wsin = split_state(f2, splitterin)
+                for (substatesin, win) in zip(substatesin, wsin)
                     Iin = map(state_index, substatesin, Hsin)
                     t[Iout..., Iin...] += wout * win * m[J1, J2]
                 end
@@ -70,10 +73,12 @@ function _reshape_tensor_to_mat(t, (Hsout, splitterout), (Hsin, splitterin), H::
 
     m = zeros(eltype(t), prod(dim, Hsout), prod(dim, Hsin))
     for (fsin_tuple, Jin) in zip(fsin, Jins)
-        for (fullf_in, win) in combine_states(fsin_tuple, splitterin)
+        states_in, amps_in = combine_states(fsin_tuple, splitterin)
+        for (fullf_in, win) in zip(states_in, amps_in)
             Iin = state_index(fullf_in, H)
             for (fsout_tuple, Jout) in zip(fsout, Jouts)
-                for (fullf_out, wout) in combine_states(fsout_tuple, splitterout)
+                states_out, amps_out = combine_states(fsout_tuple, splitterout)
+                for (fullf_out, wout) in zip(states_out, amps_out)
                     Iout = state_index(fullf_out, H)
                     m[Iout, Iin] += wout * win * t[Jout..., Jin...]
                 end

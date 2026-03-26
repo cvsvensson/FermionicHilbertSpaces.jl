@@ -11,15 +11,15 @@ mat_eltype(::Type{NCMul{C,S,F}}) where {C,S,F} = promote_type(C, mat_eltype(S))
 mat_eltype(::S) where {S} = mat_eltype(S)
 mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors if a complex number is expected. Override it for specific types if needed.
 
-function operator_inds_amps!((outinds, ininds, amps), op, H::AbstractHilbertSpace; kwargs...)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, H; kwargs...)
+function operator_indices_and_amplitudes!((outinds, ininds, amps), op, H::AbstractHilbertSpace; kwargs...)
+    return operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, H; kwargs...)
 end
 _precomputation_before_operator_application(factors, space) = nothing
-function operator_inds_amps_generic!((outinds, ininds, amps), op::NCMul, space::AbstractHilbertSpace; projection=false)
+function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op::NCMul, space::AbstractHilbertSpace; projection=false)
     precomp = _precomputation_before_operator_application(op, space)
     for (n, state) in enumerate(basisstates(space))
-        newstate_amps = apply_local_operators(op, state, space, precomp)
-        for (newstate, amp) in newstate_amps
+        newstates, newamps = apply_local_operators(op, state, space, precomp)
+        for (newstate, amp) in zip(newstates, newamps)
             if !iszero(amp)
                 outind = state_index(newstate, space)
                 if !projection || !ismissing(outind)
@@ -152,7 +152,7 @@ function _matrix_representation_single_space(op::NCAdd, space; kwargs...)
     sizehint!(ininds, N)
     sizehint!(amps, N)
     for (term, coeff) in op.dict
-        operator_inds_amps!((outinds, ininds, amps), coeff * term, space; kwargs...)
+        operator_indices_and_amplitudes!((outinds, ininds, amps), coeff * term, space; kwargs...)
     end
     if !iszero(op.coeff)
         append!(ininds, 1:N)
@@ -172,7 +172,7 @@ function _term_matrix_representation(op, H::AbstractHilbertSpace; kwargs...)
     sizehint!(_outinds, N)
     sizehint!(_ininds, N)
     sizehint!(_amps, N)
-    (outinds, ininds, amps) = operator_inds_amps!((_outinds, _ininds, _amps), op, H; kwargs...)
+    (outinds, ininds, amps) = operator_indices_and_amplitudes!((_outinds, _ininds, _amps), op, H; kwargs...)
     return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
 end
 function _factorized_term_matrix_representation(ops::Vector, H; kwargs...)
@@ -184,7 +184,7 @@ function _factorized_term_matrix_representation(ops::Vector, H; kwargs...)
     sizehint!(_outinds, N)
     sizehint!(_ininds, N)
     sizehint!(_amps, N)
-    (outinds, ininds, amps) = operator_inds_amps!((_outinds, _ininds, _amps), ops, H; kwargs...)
+    (outinds, ininds, amps) = operator_indices_and_amplitudes!((_outinds, _ininds, _amps), ops, H; kwargs...)
     return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
 end
 

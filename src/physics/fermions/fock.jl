@@ -114,17 +114,22 @@ function FockMapper(fermionpositions::P) where P
     permutation = isperm(perm) && nbr_of_modes < 64 ? BitPermutation{UInt}(perm)' : nothing
     FockMapper(fermionpositions, widths, permutation, nbr_of_modes)
 end
+unique_split(::FockMapper) = true
+unique_combine(::FockMapper) = true
 
 function combine_states(f, fm::FockMapper{N}) where N
     T = FockNumber{default_fock_representation(Val(N))}
     state = mapfoldr(tup -> insert_bits(T(tup[1]), tup[2]), |, zip(f, fm.fermionpositions); init=zero(T))
-    ((state, 1),)
+    (state,), (1,)
 end
 function combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:BitPermutation}) where N
     state = concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))})
-    ((state, 1),)
+    (state,), (1,)
 end
-split_state(f::AbstractFockState, fm::FockMapper) = ((map(site_indices -> substate(site_indices, f), fm.fermionpositions), 1),)
+function split_state(f::AbstractFockState, fm::FockMapper)
+    state = map(site_indices -> substate(site_indices, f), fm.fermionpositions)
+    (state,), (1,)
+end
 function insert_bits(_x::FockNumber{T}, positions) where T
     x = _x.f
     result = zero(T)
@@ -227,8 +232,8 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
 @testitem "Split and join focknumbers" begin
     import FermionicHilbertSpaces: FockMapper, split_state, combine_states, focknbr_from_site_indices as fock
     fockmapper = FockMapper(((1, 3), (2, 4)))
-    _split(state, fockmapper) = first(only(split_state(state, fockmapper)))
-    _combine(states, fockmapper) = first(only(combine_states(states, fockmapper)))
+    _split(state, fockmapper) = only(first(split_state(state, fockmapper)))
+    _combine(states, fockmapper) = only(first(combine_states(states, fockmapper)))
 
     split = Base.Fix2(_split, fockmapper)
     combine = Base.Fix2(_combine, fockmapper)
@@ -279,7 +284,7 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
     # test subsystem splits
     fockmapper = FockMapper(((1, 3),))
     split = only ∘ Base.Fix2(_split, fockmapper)
-    # split(state) = only(first(only(split_state(state, fockmapper))))
+    # split(state) = only(only(first(split_state(state, fockmapper))))
     @test split(fock((1, 2, 3, 4))) == fock((1, 2))
     @test split(fock((1,))) == fock((1,))
     @test split(fock(())) == fock(())

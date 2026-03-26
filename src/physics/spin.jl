@@ -257,11 +257,11 @@ function apply_local_operators(op, state::SpinState{J}, space::SpinSpace, precom
     for factor in reverse(op.factors)
         newstate, factor_amp = apply_local_operator(factor, newstate)
         if iszero(factor_amp)
-            return ((state, zero(amplitude)),)
+            return (state,), (zero(amplitude),)
         end
         amplitude *= factor_amp
     end
-    return ((newstate, amplitude),)
+    return (newstate,), (amplitude,)
 end
 
 @testitem "SpinSym" begin

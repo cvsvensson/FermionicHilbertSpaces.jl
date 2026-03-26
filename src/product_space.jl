@@ -85,15 +85,21 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
     if isconstrained(H)
         #restrict states in Hcomp to those compatible with states in Hsub
         splitter = state_splitter(H, (Hsub, Hcomp))
-        states = unique!([compstate for state in basisstates(H)
-                          for ((substate, compstate), _amp) in split_state(state, splitter)
-                          if !ismissing(state_index(substate, Hsub))])
+        states = _find_compatible_complementary_states(H, Hsub, splitter)
         return constrain_space(Hcomp, states)
     end
     return Hcomp
-
 end
 
+function _find_compatible_complementary_states(H, Hsub, splitter)
+    split = Base.Fix2(split_state, splitter)
+    split_state_iterator = if unique_split(splitter)
+        Iterators.map(only ∘ first ∘ split, basisstates(H))
+    else
+        Iterators.flatten(Iterators.map(first ∘ split, basisstates(H)))
+    end
+    unique(fbar for (fsub, fbar) in split_state_iterator if !ismissing(state_index(fsub, Hsub)))
+end
 function atomic_substate(n, f::ProductState, space::ProductSpace)
     count = 0
     for (k, s) in enumerate(factors(space))
@@ -139,11 +145,11 @@ end
 
     splitter = state_splitter(H, (Ha, Hb))
     for state in basisstates(H)
-        @test first(only(split_state(state, splitter))) == (substate(1, state.states[1]), substate(2, state.states[1]))
+        @test only(first(split_state(state, splitter))) == (substate(1, state.states[1]), substate(2, state.states[1]))
     end
     splitter = state_splitter(H, (Ha, Hc))
     for state in basisstates(H)
-        @test first(only(split_state(state, splitter))) == (substate(1, state.states[1]), state.states[2])
+        @test only(first(split_state(state, splitter))) == (substate(1, state.states[1]), state.states[2])
     end
 
 
@@ -155,41 +161,41 @@ end
     # Test 1: Trivial partition (whole space as one group)
     p_trivial = state_splitter(H, (H,))
     for state in basisstates(H)
-        split = first(only(split_state(state, p_trivial)))
+        split = only(first(split_state(state, p_trivial)))
         @test only(split) == state
-        @test first(only(combine_states(split, p_trivial))) == state
+        @test only(first(combine_states(split, p_trivial))) == state
     end
 
     # Test 2: Binary partition with whole-cluster passthrough
     p_binary = state_splitter(H, (Hab, Hc))
     for state in basisstates(H)
-        substates = first(only(split_state(state, p_binary)))
+        substates = only(first(split_state(state, p_binary)))
         @test length(substates) == 2
-        @test first(only(combine_states(substates, p_binary))) == state
+        @test only(first(combine_states(substates, p_binary))) == state
     end
 
     # Test 3: Partition that fractures a fermionic cluster
     # Split the (Ha, Hb) cluster by grouping [Ha] and [Hb, Hc]
     p_split = state_splitter(H, [Ha, tensor_product((Hb, Hc))])
     for state in basisstates(H)
-        substates = first(only(split_state(state, p_split)))
+        substates = only(first(split_state(state, p_split)))
         @test length(substates) == 2
-        @test first(only(combine_states(substates, p_split))) == state
+        @test only(first(combine_states(substates, p_split))) == state
     end
 
     # Test 4: Three-way partition
     p_three = state_splitter(H, [Ha, Hb, Hc])
     for state in basisstates(H)
-        substates = first(only(split_state(state, p_three)))
+        substates = only(first(split_state(state, p_three)))
         @test length(substates) == 3
-        @test first(only(combine_states(substates, p_three))) == state
+        @test only(first(combine_states(substates, p_three))) == state
     end
 
     # Test 5: Partition with bosonic space
     p_mixed = state_splitter(H2, [Hab, tensor_product((Hc, Hboson))])
     for state in basisstates(H2)
-        substates = first(only(split_state(state, p_mixed)))
-        @test first(only(combine_states(substates, p_mixed))) == state
+        substates = only(first(split_state(state, p_mixed)))
+        @test only(first(combine_states(substates, p_mixed))) == state
     end
 
     # Test 6: Validation errors
@@ -199,23 +205,23 @@ end
     # Test splitting to subsystems
     p_fermion_incomplete = state_splitter(H, [Ha])
     @test Set(basisstates(Ha)) == Set(map(basisstates(H)) do state
-        only(first(only(split_state(state, p_fermion_incomplete)))) # first(only()) to get the single outcome, only() to get the substate for Ha
+        only(only(first(split_state(state, p_fermion_incomplete)))) # only(first()) to get the single outcome, only() to get the substate for Ha
     end)
     p_fermion_incomplete = state_splitter(H, [Hab])
     @test Set(basisstates(Hab)) == Set(map(basisstates(H)) do state
-        only(first(only(split_state(state, p_fermion_incomplete))))
+        only(only(first(split_state(state, p_fermion_incomplete))))
     end)
 
     # test state_splitter for FermionCluster
     p_fermion = state_splitter(Hab, [Ha, Hb])
     for state in basisstates(Hab)
-        substates = first(only(split_state(state, p_fermion)))
-        @test first(only(combine_states(substates, p_fermion))) == state
+        substates = only(first(split_state(state, p_fermion)))
+        @test only(first(combine_states(substates, p_fermion))) == state
     end
 
     p_fermion_incomplete = state_splitter(Hab, [Ha])
     @test Set(basisstates(Ha)) == Set(map(basisstates(Hab)) do state
-        first(first(only(split_state(state, p_fermion_incomplete)))) # first(only()) to get the single outcome, first() to get the substate for Ha
+        only(first(first(split_state(state, p_fermion_incomplete)))) # only(first()) to get the single outcome, first() to get the substate for Ha
     end)
 
     # Complement
@@ -305,6 +311,10 @@ struct ProductSpaceSplitter{CS,TP,CP,TS} <: AbstractStateSplitter
 
     target_spaces::TS
 end
+unique_split(::Any) = false
+unique_combine(::Any) = false
+unique_split(::ProductSpaceSplitter) = true
+unique_combine(::ProductSpaceSplitter) = true
 
 function state_splitter(source::ProductSpace, targets)
     targets = Tuple(targets)
@@ -375,15 +385,15 @@ function split_state(state::ProductState, sp::ProductSpaceSplitter)
     # Split each source cluster into its pieces
     cluster_pieces = map(sp.cluster_splitters, state.states) do splitter, substate
         isnothing(splitter) ? () :
-        first(only(split_state(substate, splitter))) #TODO: handle multiple outcomes from split_state. The use of first(only()) assumes that each cluster splitter produces exactly one piece per target
+        only(first(split_state(substate, splitter))) #TODO: handle multiple outcomes from split_state. The use of only(first()) assumes that each cluster splitter produces exactly one piece per target
     end
     outstates = map(sp.target_piece_sources, sp.target_spaces) do sources, target_space
         gathered = map(sources) do source
             cluster_pieces[source[1]][source[2]]
         end
-        first(only(combine_states(gathered, target_space)))
+        only(first(combine_states(gathered, target_space)))
     end
-    ((outstates, 1),)
+    (outstates,), (1,)
 end
 
 function combine_states(substates, sp::ProductSpaceSplitter)
@@ -392,9 +402,9 @@ function combine_states(substates, sp::ProductSpaceSplitter)
         gathered = map(piece_destinations) do dest
             extract_substate(substates[dest[1]], dest[2])
         end
-        first(only(combine_states(gathered, splitter))) #TODO: handle multiple outcomes from combine_states
+        only(first(combine_states(gathered, splitter))) #TODO: handle multiple outcomes from combine_states
     end)
-    ((outstate, 1),)
+    (outstate,), (1,)
 end
 
 
@@ -447,12 +457,17 @@ function subregion(Hs, H::AbstractHilbertSpace)
     Hsub = tensor_product(Hs)
     issubsystem(Hsub, H) || throw(ArgumentError("The spaces in Hs must be a subsystem of H"))
     splitter = state_splitter(H, (Hsub,))
-    function se(state)
-        (substate, _amp) = only(split_state(state, splitter))
-        only(substate)
-    end
-    states = unique!(vec(map(se, basisstates(H))))
+    states = _find_subregion_states(H, splitter)
     constrain_space(Hsub, states)
+end
+function _find_subregion_states(H, splitter)
+    split = Base.Fix2(split_state, splitter)
+    split_state_iterator = if unique_split(splitter)
+        Iterators.map(only ∘ only ∘ first ∘ split, basisstates(H))
+    else
+        Iterators.map(only, Iterators.flatten(Iterators.map(first ∘ split, basisstates(H))))
+    end
+    unique(split_state_iterator)
 end
 
 
@@ -608,21 +623,20 @@ function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState{B}, spa
     amp = 1
     spaces = clusters(space)
     newstates = map(state.states, spaces, ops, precomps) do subst, space, op, precomp
-        new_state_amps = apply_local_operators(op, subst, space, precomp)
-        new_local_state, local_amp = only(new_state_amps) #TODO: add support for multiple terms here
-        amp *= local_amp
-        new_local_state
+        new_local_states, local_amps = apply_local_operators(op, subst, space, precomp) #TODO: add support for multiple terms here
+        amp *= only(local_amps)
+        only(new_local_states)
     end
     newstate = ProductState{B}(Tuple(newstates))
-    return ((newstate, amp),)
+    return (newstate,), (amp,)
 end
-function operator_inds_amps_generic!((outinds, ininds, amps), ops::Vector{<:NCMul}, space::AbstractHilbertSpace; projection=false)
+function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), ops::Vector{<:NCMul}, space::AbstractHilbertSpace; projection=false)
     # This is for productspaces, where ops is a list of operators applying to each factor space
     coeff = prod(op.coeff for op in ops)
     precomp = _precomputation_before_operator_application(ops, space)
     for (n, state) in enumerate(basisstates(space))
-        newstate_amps = apply_local_operators(ops, state, space, precomp)
-        for (newstate, amp) in newstate_amps
+        newstates, newamps = apply_local_operators(ops, state, space, precomp)
+        for (newstate, amp) in zip(newstates, newamps)
             if !iszero(amp)
                 outind = state_index(newstate, space)
                 if !projection || !ismissing(outind)

@@ -75,10 +75,10 @@ function state_splitter(H::AbstractAtomicHilbertSpace, Hs)
     AtomicStateSplitter()
 end
 function split_state(state, ::AtomicStateSplitter)
-    (((state, 1),),)
+    # the return state here is a tuple of tuples because each state is a state in the tuple of subsystem and complement, but the complement is empty
+    ((state,),), (1,)
 end
 function combine_states(states, ::AtomicStateSplitter)
-    ((only(states), 1),)
+    (only(states),), (1,)
 end
 kron_phase_factor(::AtomicStateSplitter) = (f1, f2) -> 1
-

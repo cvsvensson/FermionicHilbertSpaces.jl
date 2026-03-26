@@ -151,7 +151,7 @@ end
 #     BlockHilbertSpace(maj_space, space.ordered_basis_states, space.state_to_index, space.qn_to_states)
 # end
 # function BlockHilbertSpace(maj_space::MajoranaHilbertSpace, ordered_basis_states, state_to_index, qn_to_states)
-function BlockHilbertSpace(maj_space::MajoranaHilbertSpace, ordered_basis_states::Vector{B}, ::Dictionary{B, Int64}, ::Dictionary{Q, Vector{B}}) where {B, Q}
+function BlockHilbertSpace(maj_space::MajoranaHilbertSpace, ordered_basis_states::Vector{B}, ::Dictionary{B,Int64}, ::Dictionary{Q,Vector{B}}) where {B,Q}
     MajoranaHilbertSpace(maj_space.majoranaindices, BlockHilbertSpace(parent(maj_space), ordered_basis_states, state_to_index, qn_to_states), maj_space.sym)
 end
 dim(H::MajoranaHilbertSpace) = dim(H.parent)
@@ -272,7 +272,7 @@ function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace
     # digitpositions = Iterators.reverse(Iterators.map(n -> div(n + 1, 2), majoranadigitpositions))
     # digitpositions = Iterators.reverse(Iterators.map(n -> div(n + 1, 2), majoranadigitpositions))
     state, amp = togglemajoranas(Iterators.reverse(fpos), Iterators.reverse(daggers), f)
-    return ((state, amp * op.coeff),)
+    return (state,), (amp * op.coeff,)
 end
 
 function atomic_factors(H::MajoranaHilbertSpace)

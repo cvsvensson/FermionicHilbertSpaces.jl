@@ -154,7 +154,7 @@ function apply_local_operators(op::NCMul, state::BosonicFockState, space::Trunca
         k = abs(factor.exp)
         if factor.exp < 0
             if n < k
-                return ((state, 0 * amplitude),)
+                return (state,), (zero(amplitude),)
             end
             for i in 0:(k-1)
                 amplitude *= sqrt(n - i)
@@ -168,9 +168,9 @@ function apply_local_operators(op::NCMul, state::BosonicFockState, space::Trunca
         end
     end
     if n > space.max_occupancy
-        return ((state, 0 * amplitude),)
+        return (state,), (zero(amplitude),)
     end
-    return ((BosonicFockState(n), amplitude),)
+    return (BosonicFockState(n),), (amplitude,)
 end
 
 symbolic_group(f::BosonSym) = BosonSym(f.name, 0)
@@ -219,10 +219,10 @@ end
 
     function constrained_boson_dim(nr_of_modes, max_occ, total_particles)
         L, nmax, M = nr_of_modes, max_occ, total_particles
-        (M < 0 || M > L*nmax) && return 0
+        (M < 0 || M > L * nmax) && return 0
         s = 0
         for k in 0:fld(M, nmax + 1)
-            s += (-1)^k * binomial(L, k) * binomial(M - k*(nmax + 1) + L - 1, L - 1)
+            s += (-1)^k * binomial(L, k) * binomial(M - k * (nmax + 1) + L - 1, L - 1)
         end
         return s
     end

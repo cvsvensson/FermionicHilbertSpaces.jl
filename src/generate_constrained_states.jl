@@ -26,7 +26,7 @@ Uses backtracking with pruning via `valid_branch`.
 """
 function generate_states(space::AbstractHilbertSpace{B}, constraint; kwargs...) where B
     splitter = state_splitter(space, atomic_factors(space))
-    process_result = (full_state, spaces) -> first(only(combine_states(full_state, splitter)))
+    process_result = (full_state, spaces) -> only(first(combine_states(full_state, splitter)))
     generate_states(atomic_factors(space), constraint, B; process_result, kwargs...)
 end
 function generate_states(spaces, _constraint, ::Type{B}=Any; partial_processor=nothing, process_result=(state, spaces) -> copy(state)) where B

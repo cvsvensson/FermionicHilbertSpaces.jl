@@ -203,12 +203,12 @@ function apply_local_operators(op::NCMul, state::FockNumber{I}, space::AbstractH
         op = one(I) << (digitpos - 1)
         occupied = !iszero(op & newfocknbr)
         if dagger == occupied
-            return ((newfocknbr, 0),)
+            return (newfocknbr,), (zero(fermionstatistics),)
         end
         fermionstatistics *= jwstring(digitpos, newfocknbr)
         newfocknbr = op ⊻ newfocknbr
     end
-    return ((newfocknbr, fermionstatistics),)
+    return (newfocknbr,), (fermionstatistics,)
 end
 
 

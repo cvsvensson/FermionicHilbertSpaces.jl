@@ -97,8 +97,8 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     for (f1, f2) in Base.product(basisstates(H1), basisstates(H2))
         f1fix = FixedNumberFockState(f1)
         f2fix = FixedNumberFockState(f2)
-        f12 = first(only(combine_states((f1, f2), fm)))
-        f12fix = first(only(combine_states((f1fix, f2fix), fm)))
+        f12 = only(first(combine_states((f1, f2), fm)))
+        f12fix = only(first(combine_states((f1fix, f2fix), fm)))
         @test f12 == FockNumber(f12fix)
     end
 
@@ -120,7 +120,7 @@ function apply_local_operators(op::NCMul, f::FixedNumberFockState, H::AbstractHi
     # sites = Iterators.map(op -> _find_position(op, H), reverse(ops))
     daggers = Iterators.map(op -> op.creation, reverse(op.factors))
     state, amp = togglefermions(Iterators.reverse(sites), daggers, f)
-    return ((state, amp * op.coeff),)
+    return (state,), (amp * op.coeff,)
 end
 function togglefermions(sites, daggers, f::FixedNumberFockState)
     # Check if operation results in vacuum or not,
@@ -256,7 +256,7 @@ function matrix_representation(op, H::SingleParticleHilbertSpace)
     _matrix_representation_single_space(remove_identity(op), H)
 end
 _find_position(op, H::SingleParticleHilbertSpace) = _find_position(op, parent(H))
-function operator_inds_amps!((outinds, ininds, amps), op::NCMul, H::SingleParticleHilbertSpace; kwargs...)
+function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::SingleParticleHilbertSpace; kwargs...)
     ordering = mode_ordering(H)
     if length(op.factors) != 2
         throw(ArgumentError("Only two-fermion operators supported for free fermions"))
