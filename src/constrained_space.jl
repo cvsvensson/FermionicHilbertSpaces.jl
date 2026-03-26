@@ -12,12 +12,12 @@ function ConstrainedSpace(space::ConstrainedSpace, states)
     intersect(states, space.states)
     ConstrainedSpace(parent(space), states)
 end
-
 function ConstrainedSpace(space::H, states::S) where {H,S}
     B = eltype(states)
     state_index = Dict{B,Int}(s => i for (i, s) in enumerate(states))
     ConstrainedSpace{B,H,S}(space, states, state_index)
 end
+
 dim(H::ConstrainedSpace) = length(H.states)
 basisstates(H::ConstrainedSpace) = H.states
 basisstate(n::Int, H::ConstrainedSpace) = H.states[n]
@@ -30,10 +30,21 @@ combine_states(substates, sp::ConstrainedSpace) = combine_states(substates, pare
 partial_trace_phase_factor(s1, s2, sp::ConstrainedSpace) = partial_trace_phase_factor(s1, s2, parent(sp))
 atomic_substate(n, f, space::ConstrainedSpace) = atomic_substate(n, f, parent(space))
 
+constrain_space(H, ::NoSymmetry; kwargs...) = H
+constrain_space(H::ConstrainedSpace, ::NoSymmetry; kwargs...) = H
 function constrain_space(H::ConstrainedSpace, constraint::AbstractConstraint; kwargs...)
     space = constrain_space(parent(H), constraint; kwargs...)
-    states = filter(state -> haskey(H.state_index, state), basisstates(space))
+    states = intersect(basisstates(H), basisstates(space))
     ConstrainedSpace(parent(H), states)
+end
+function constrain_space(H::AbstractHilbertSpace, states::AbstractVector{B}) where B<:AbstractBasisState
+    ConstrainedSpace(H, states)
+end
+function constrain_space(space, constraint::AbstractConstraint; sortby=default_sorter(space, constraint), kwargs...)
+    states = generate_states(space, constraint; kwargs...)
+    isnothing(sortby) || sort!(states, by=sortby)
+    has_sectors(constraint) || return ConstrainedSpace(space, states)
+    block_space(space, states, sector_function(constraint, space))
 end
 
 
@@ -47,12 +58,6 @@ function Base.show(io::IO, H::ConstrainedSpace)
         print(io, "Parent: ")
         show(IOContext(io, :compact => true), parent(H))
     end
-end
-constrain_space(H, ::NoSymmetry; kwargs...) = H
-constrain_space(H::ConstrainedSpace, ::NoSymmetry; kwargs...) = H
-
-function constrain_space(H::AbstractHilbertSpace, states::AbstractVector{B}) where B<:AbstractBasisState
-    ConstrainedSpace(H, states)
 end
 
 state_mapper(H::ConstrainedSpace, Hs) = state_mapper(parent(H), Hs)

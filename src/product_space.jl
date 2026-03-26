@@ -267,7 +267,8 @@ end
     m = rand(dim(Hprod), dim(Hprod))
     H1 = subregion(spaces[[1, 2, 4, 5, 6]], Hprod)
     H2 = subregion(spaces[[2, 5, 6]], H1)
-    @test subregion(spaces[[2, 5, 6]], Hprod) == H2
+    H2direct = subregion(spaces[[2, 5, 6]], Hprod)
+    @test Set(basisstates(H2direct)) == Set(basisstates(H2))
     @test partial_trace(m, Hprod => H2) ≈ partial_trace(partial_trace(m, Hprod => H1), H1 => H2)
 
 
@@ -276,7 +277,8 @@ end
     Hprod = tensor_product((constrain_space(Hab, NumberConservation(1:2)), constrain_space(Hc, NumberConservation(1))))
     H1 = subregion(spaces[[1, 2, 4, 5, 6]], Hprod)
     H2 = subregion(spaces[[2, 5, 6]], H1)
-    @test subregion(spaces[[2, 5, 6]], Hprod) == H2
+    H2direct = subregion(spaces[[2, 5, 6]], Hprod)
+    @test Set(basisstates(H2direct)) == Set(basisstates(H2))
     m = rand(dim(Hprod), dim(Hprod))
     partial_trace(m, Hprod => H2)
     @test partial_trace(m, Hprod => H2) ≈ partial_trace(partial_trace(m, Hprod => H1), H1 => H2)

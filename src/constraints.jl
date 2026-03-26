@@ -75,13 +75,6 @@ has_sectors(N::NumberConservation) = true
 has_sectors(P::ParityConservation) = true
 has_sectors(c::ProductConstraint) = any(has_sectors, c.constraints)
 
-function constrain_space(space, constraint::AbstractConstraint; kwargs...)
-    sortby = default_sorter(space, constraint)
-    states = generate_states(space, constraint; kwargs...)
-    isnothing(sortby) || sort!(states, by=sortby)
-    has_sectors(constraint) || return ConstrainedSpace(space, states)
-    block_space(space, states, sector_function(constraint, space))
-end
 
 """
     constrain_space(space, constraint; kwargs...)

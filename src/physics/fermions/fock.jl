@@ -46,10 +46,18 @@ fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
 particle_number(s::FockNumber) = fermionnumber(s)
 
+# function substate(siteindices, f::FockNumber{T}) where T
+#     subbits = Iterators.map(i -> _bit(f, i), siteindices)
+#     return focknbr_from_bits(subbits, T)
+# end
 function substate(siteindices, f::FockNumber{T}) where T
-    subbits = Iterators.map(i -> _bit(f, i), siteindices)
-    return focknbr_from_bits(subbits, T)
+    val = zero(T)
+    for idx in Iterators.reverse(siteindices)
+        val = (val << 1) | _bit(f, idx)
+    end
+    return FockNumber{T}(val)
 end
+
 
 fermionnumber(f::FockNumber{<:Integer}, mask) = count_weighted_ones(f.f, mask)
 count_weighted_ones(x, mask::Integer) = count_ones(x & mask)
@@ -82,12 +90,6 @@ function FockMapper(fermionpositions::P) where P
 end
 unique_split(::FockMapper) = true
 unique_combine(::FockMapper) = true
-
-function combine_states(f, fm::FockMapper{N}) where N
-    T = FockNumber{default_fock_representation(Val(N))}
-    state = mapfoldr(tup -> insert_bits(T(tup[1]), tup[2]), |, zip(f, fm.fermionpositions); init=zero(T))
-    (state,), (1,)
-end
 function combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:BitPermutation}) where N
     state = concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))})
     (state,), (1,)
@@ -96,6 +98,27 @@ function split_state(f::AbstractFockState, fm::FockMapper{N}) where N
     state = map(site_indices -> substate(site_indices, f), fm.fermionpositions)
     (state,), (1,)
 end
+
+
+function combine_states(f, fm::FockMapper{N}) where N
+    IT = default_fock_representation(Val(N))
+    result = zero(IT)
+    for (fock, positions) in zip(f, fm.fermionpositions)
+        remaining = FockNumber{IT}(fock).f
+        for pos in positions
+            iszero(remaining) && break
+            result |= (remaining & one(IT)) << (pos - 1)
+            remaining >>= one(IT)
+        end
+    end
+    (FockNumber{IT}(result),), (1,)
+end
+
+# function combine_states(f, fm::FockMapper{N}) where N
+#     T = FockNumber{default_fock_representation(Val(N))}
+#     state = mapfoldr(tup -> insert_bits(T(tup[1]), tup[2]), |, zip(f, fm.fermionpositions); init=zero(T))
+#     (state,), (1,)
+# end
 function insert_bits(_x::FockNumber{T}, positions) where T
     x = _x.f
     result = zero(T)
