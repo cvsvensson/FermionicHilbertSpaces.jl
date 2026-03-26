@@ -100,7 +100,7 @@ jwstring_left(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f) - count_
 # jwstring_right(site, focknbr::FockNumber{Bool}) = jwstring_right(site, FockNumber{Int}(focknbr))
 
 
-struct FockMapper{N,P1,W,P2} <: AbstractStateSplitter
+struct FockMapper{N,P1,W,P2} <: AbstractStateMapper
     fermionpositions::P1
     widths::W
     permutation::P2
@@ -154,8 +154,8 @@ end
 permute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
 
 shift_right(f::FockNumber, M) = FockNumber(f.f << M)
-# FockSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(mode_ordering(H), map(mode_ordering, Hs))
-# StateSplitter(H::AbstractFockHilbertSpace, Hs) = FockSplitter(H, Hs)
+# FockMapper(H::AbstractFockHilbertSpace, Hs) = FockMapper(mode_ordering(H), map(mode_ordering, Hs))
+# StateMapper(H::AbstractFockHilbertSpace, Hs) = FockMapper(H, Hs)
 
 
 @testitem "Fock" begin

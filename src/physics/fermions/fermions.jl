@@ -13,7 +13,7 @@ function Base.show(io::IO, c::FermionicMode)
     get(io, :compact, false) || return print(io, "FermionicMode(", c.symbolic_basis.name, "[", c.label, "])")
     print(io, c.symbolic_basis.name, "[", c.label, "]")
 end
-combine_states(states, ::AbstractAtomicHilbertSpace) = ((only(states), 1),)
+combine_states(states, ::AbstractAtomicHilbertSpace) = (only(states),), (1,)
 combine_into_cluster(group::FermionicGroup, fermions) = all(f -> symbolic_group(f) == group, fermions) ? FermionCluster(fermions, group) : throw(ArgumentError("Not all fermions belong to the same group"))
 function basisstate(n::Int, H::FermionicMode)
     n == 1 && return FockNumber(zero(default_fock_representation(1)))
@@ -105,10 +105,10 @@ function subregion(Hsub, H::FermionCluster)
     tensor_product(submodes)
 end
 isconstrained(H::FermionCluster) = false
-combine_states(states, H::FermionCluster{F}) where F = ((catenate_fock_states(states, H.modes, F), 1),)
+combine_states(states, H::FermionCluster{F}) where F = (catenate_fock_states(states, H.modes, F),), (1,)
 
-state_splitter(H::FermionCluster, Hs::AbstractHilbertSpace) = state_splitter(H, (Hs,))
-function state_splitter(H::FermionCluster, Hs)
+state_mapper(H::FermionCluster, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
+function state_mapper(H::FermionCluster, Hs)
     fermionpositions = [[_find_position(atom, H) for atom in atomic_factors(cluster)] for cluster in Hs]
     all(x -> x > 0, Iterators.flatten(fermionpositions)) || throw(ArgumentError("All subspaces must be part of the cluster"))
     FockMapper(Tuple(fermionpositions))

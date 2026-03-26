@@ -55,7 +55,7 @@ function constrain_space(H::AbstractHilbertSpace, states::AbstractVector{B}) whe
     ConstrainedSpace(H, states)
 end
 
-state_splitter(H::ConstrainedSpace, Hs) = state_splitter(parent(H), Hs)
+state_mapper(H::ConstrainedSpace, Hs) = state_mapper(parent(H), Hs)
 
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
 

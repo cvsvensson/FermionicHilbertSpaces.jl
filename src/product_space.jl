@@ -84,16 +84,16 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
     Hcomp = tensor_product(remaining)
     if isconstrained(H)
         #restrict states in Hcomp to those compatible with states in Hsub
-        splitter = state_splitter(H, (Hsub, Hcomp))
-        states = _find_compatible_complementary_states(H, Hsub, splitter)
+        mapper = state_mapper(H, (Hsub, Hcomp))
+        states = _find_compatible_complementary_states(H, Hsub, mapper)
         return constrain_space(Hcomp, states)
     end
     return Hcomp
 end
 
-function _find_compatible_complementary_states(H, Hsub, splitter)
-    split = Base.Fix2(split_state, splitter)
-    split_state_iterator = if unique_split(splitter)
+function _find_compatible_complementary_states(H, Hsub, mapper)
+    split = Base.Fix2(split_state, mapper)
+    split_state_iterator = if unique_split(mapper)
         Iterators.map(only ∘ first ∘ split, basisstates(H))
     else
         Iterators.flatten(Iterators.map(first ∘ split, basisstates(H)))
@@ -114,7 +114,7 @@ end
 
 
 @testitem "ProductSpace" begin
-    import FermionicHilbertSpaces: state_index, basisstate, state_splitter, ProductState, substate, complementary_subsystem, atomic_factors, split_state, tensor_product
+    import FermionicHilbertSpaces: state_index, basisstate, state_mapper, ProductState, substate, complementary_subsystem, atomic_factors, split_state, tensor_product
     @fermions a b
     @fermions c
     Ha = hilbert_space(a[1])
@@ -143,23 +143,23 @@ end
         @test basisstate(i, H) == state
     end
 
-    splitter = state_splitter(H, (Ha, Hb))
+    mapper = state_mapper(H, (Ha, Hb))
     for state in basisstates(H)
-        @test only(first(split_state(state, splitter))) == (substate(1, state.states[1]), substate(2, state.states[1]))
+        @test only(first(split_state(state, mapper))) == (substate(1, state.states[1]), substate(2, state.states[1]))
     end
-    splitter = state_splitter(H, (Ha, Hc))
+    mapper = state_mapper(H, (Ha, Hc))
     for state in basisstates(H)
-        @test only(first(split_state(state, splitter))) == (substate(1, state.states[1]), state.states[2])
+        @test only(first(split_state(state, mapper))) == (substate(1, state.states[1]), state.states[2])
     end
 
 
     # ══════════════════════════════════════════════════════════════
-    # state_splitter tests
+    # state_mapper tests
     # ══════════════════════════════════════════════════════════════
     import FermionicHilbertSpaces: combine_states
 
     # Test 1: Trivial partition (whole space as one group)
-    p_trivial = state_splitter(H, (H,))
+    p_trivial = state_mapper(H, (H,))
     for state in basisstates(H)
         split = only(first(split_state(state, p_trivial)))
         @test only(split) == state
@@ -167,7 +167,7 @@ end
     end
 
     # Test 2: Binary partition with whole-cluster passthrough
-    p_binary = state_splitter(H, (Hab, Hc))
+    p_binary = state_mapper(H, (Hab, Hc))
     for state in basisstates(H)
         substates = only(first(split_state(state, p_binary)))
         @test length(substates) == 2
@@ -176,7 +176,7 @@ end
 
     # Test 3: Partition that fractures a fermionic cluster
     # Split the (Ha, Hb) cluster by grouping [Ha] and [Hb, Hc]
-    p_split = state_splitter(H, [Ha, tensor_product((Hb, Hc))])
+    p_split = state_mapper(H, [Ha, tensor_product((Hb, Hc))])
     for state in basisstates(H)
         substates = only(first(split_state(state, p_split)))
         @test length(substates) == 2
@@ -184,7 +184,7 @@ end
     end
 
     # Test 4: Three-way partition
-    p_three = state_splitter(H, [Ha, Hb, Hc])
+    p_three = state_mapper(H, [Ha, Hb, Hc])
     for state in basisstates(H)
         substates = only(first(split_state(state, p_three)))
         @test length(substates) == 3
@@ -192,34 +192,34 @@ end
     end
 
     # Test 5: Partition with bosonic space
-    p_mixed = state_splitter(H2, [Hab, tensor_product((Hc, Hboson))])
+    p_mixed = state_mapper(H2, [Hab, tensor_product((Hc, Hboson))])
     for state in basisstates(H2)
         substates = only(first(split_state(state, p_mixed)))
         @test only(first(combine_states(substates, p_mixed))) == state
     end
 
     # Test 6: Validation errors
-    @test_throws ArgumentError state_splitter(H, [Ha, Ha])  # Duplicate atom
-    @test_throws ArgumentError state_splitter(H, [Ha, Hb, Hc, Hboson])  # Atom not in parent
+    @test_throws ArgumentError state_mapper(H, [Ha, Ha])  # Duplicate atom
+    @test_throws ArgumentError state_mapper(H, [Ha, Hb, Hc, Hboson])  # Atom not in parent
 
     # Test splitting to subsystems
-    p_fermion_incomplete = state_splitter(H, [Ha])
+    p_fermion_incomplete = state_mapper(H, [Ha])
     @test Set(basisstates(Ha)) == Set(map(basisstates(H)) do state
         only(only(first(split_state(state, p_fermion_incomplete)))) # only(first()) to get the single outcome, only() to get the substate for Ha
     end)
-    p_fermion_incomplete = state_splitter(H, [Hab])
+    p_fermion_incomplete = state_mapper(H, [Hab])
     @test Set(basisstates(Hab)) == Set(map(basisstates(H)) do state
         only(only(first(split_state(state, p_fermion_incomplete))))
     end)
 
-    # test state_splitter for FermionCluster
-    p_fermion = state_splitter(Hab, [Ha, Hb])
+    # test state_mapper for FermionCluster
+    p_fermion = state_mapper(Hab, [Ha, Hb])
     for state in basisstates(Hab)
         substates = only(first(split_state(state, p_fermion)))
         @test only(first(combine_states(substates, p_fermion))) == state
     end
 
-    p_fermion_incomplete = state_splitter(Hab, [Ha])
+    p_fermion_incomplete = state_mapper(Hab, [Ha])
     @test Set(basisstates(Ha)) == Set(map(basisstates(Hab)) do state
         only(first(first(split_state(state, p_fermion_incomplete)))) # only(first()) to get the single outcome, first() to get the substate for Ha
     end)
@@ -290,17 +290,17 @@ end
 end
 
 @testitem "Fermion ordering" begin
-    import FermionicHilbertSpaces: state_splitter
+    import FermionicHilbertSpaces: state_mapper
     @fermions f
     H = hilbert_space(f, 1:3)
-    @test_throws ArgumentError state_splitter(H, hilbert_space(f, [2, 1]))
-    @test_throws ArgumentError state_splitter(H, hilbert_space(f, [3, 1]))
-    @test_throws ArgumentError state_splitter(H, hilbert_space(f, [3, 2]))
+    @test_throws ArgumentError state_mapper(H, hilbert_space(f, [2, 1]))
+    @test_throws ArgumentError state_mapper(H, hilbert_space(f, [3, 1]))
+    @test_throws ArgumentError state_mapper(H, hilbert_space(f, [3, 2]))
 end
 ##
-struct ProductSpaceSplitter{CS,TP,CP,TS} <: AbstractStateSplitter
-    # For each source cluster: splitter into per-target pieces, or nothing if uncovered
-    cluster_splitters::CS
+struct ProductSpaceMapper{CS,TP,CP,TS} <: AbstractStateMapper
+    # For each source cluster: mapper into per-target pieces, or nothing if uncovered
+    cluster_mappers::CS
 
     # For each target j: (source_cluster_idx, piece_idx) pairs sorted by position in target j.
     # Invariant: gathered[k] corresponds to target_spaces[j].clusters[k].
@@ -313,10 +313,10 @@ struct ProductSpaceSplitter{CS,TP,CP,TS} <: AbstractStateSplitter
 end
 unique_split(::Any) = false
 unique_combine(::Any) = false
-unique_split(::ProductSpaceSplitter) = true
-unique_combine(::ProductSpaceSplitter) = true
+unique_split(::ProductSpaceMapper) = true
+unique_combine(::ProductSpaceMapper) = true
 
-function state_splitter(source::ProductSpace, targets)
+function state_mapper(source::ProductSpace, targets)
     targets = Tuple(targets)
 
     atom_to_target = Dict{eltype(source.atoms),Int}()
@@ -328,7 +328,7 @@ function state_splitter(source::ProductSpace, targets)
         end
     end
 
-    cluster_splitters = []
+    cluster_mappers = []
     cluster_piece_targets = []  # (ti, sub_idx) per piece, in piece-output order
     pending_pieces = [Tuple{Int,Int,Int}[] for _ in targets]
 
@@ -337,7 +337,7 @@ function state_splitter(source::ProductSpace, targets)
         covered_targets = Tuple(unique(atom_to_target[a] for a in catoms if haskey(atom_to_target, a)))
 
         if isempty(covered_targets)
-            push!(cluster_splitters, nothing)
+            push!(cluster_mappers, nothing)
             push!(cluster_piece_targets, ())
             continue
         end
@@ -346,7 +346,7 @@ function state_splitter(source::ProductSpace, targets)
             (ti, findfirst(cluster -> all(in(catoms), atomic_factors(cluster)), clusters(targets[ti])))
         end
         subspaces = [clusters(targets[ti])[dest] for (ti, dest) in piece_destinations]
-        push!(cluster_splitters, state_splitter(cluster, subspaces))
+        push!(cluster_mappers, state_mapper(cluster, subspaces))
 
         # Store where each piece goes: (ti, sub_idx_in_target)
         push!(cluster_piece_targets, piece_destinations)
@@ -363,8 +363,8 @@ function state_splitter(source::ProductSpace, targets)
         for pieces in pending_pieces
     )
 
-    ProductSpaceSplitter(
-        Tuple(cluster_splitters),
+    ProductSpaceMapper(
+        Tuple(cluster_mappers),
         target_piece_sources,
         Tuple(cluster_piece_targets),
         targets,)
@@ -381,11 +381,11 @@ extract_substate(state, k) = state
 
 # ─── split / combine ───────────────────────────────────────────────────────────
 
-function split_state(state::ProductState, sp::ProductSpaceSplitter)
+function split_state(state::ProductState, sp::ProductSpaceMapper)
     # Split each source cluster into its pieces
-    cluster_pieces = map(sp.cluster_splitters, state.states) do splitter, substate
-        isnothing(splitter) ? () :
-        only(first(split_state(substate, splitter))) #TODO: handle multiple outcomes from split_state. The use of only(first()) assumes that each cluster splitter produces exactly one piece per target
+    cluster_pieces = map(sp.cluster_mappers, state.states) do mapper, substate
+        isnothing(mapper) ? () :
+        only(first(split_state(substate, mapper))) #TODO: handle multiple outcomes from split_state. The use of only(first()) assumes that each cluster mapper produces exactly one piece per target
     end
     outstates = map(sp.target_piece_sources, sp.target_spaces) do sources, target_space
         gathered = map(sources) do source
@@ -396,13 +396,13 @@ function split_state(state::ProductState, sp::ProductSpaceSplitter)
     (outstates,), (1,)
 end
 
-function combine_states(substates, sp::ProductSpaceSplitter)
-    outstate = ProductState(map(sp.cluster_splitters, sp.cluster_piece_targets) do splitter, piece_destinations
-        isnothing(splitter) && error("Cannot reconstruct state: cluster $i has no atoms in any target")
+function combine_states(substates, sp::ProductSpaceMapper)
+    outstate = ProductState(map(sp.cluster_mappers, sp.cluster_piece_targets) do mapper, piece_destinations
+        isnothing(mapper) && error("Cannot reconstruct state: cluster $i has no atoms in any target")
         gathered = map(piece_destinations) do dest
             extract_substate(substates[dest[1]], dest[2])
         end
-        only(first(combine_states(gathered, splitter))) #TODO: handle multiple outcomes from combine_states
+        only(first(combine_states(gathered, mapper))) #TODO: handle multiple outcomes from combine_states
     end)
     (outstate,), (1,)
 end
@@ -414,14 +414,14 @@ extract_piece(state::ProductState, idx::Int) = state.states[idx]
 combine_states(states::Tuple, ::ProductSpace{ProductState{B}}) where B = ((ProductState{B}(B(states)), 1),)
 
 
-function kron_phase_factor(state_splitter::ProductSpaceSplitter)
-    length(state_splitter.target_spaces) == 2 || throw(ArgumentError("Phase factors currently only implemented for binary splits"))
-    splitters = state_splitter.cluster_splitters
-    phase_factor_maps = map(kron_phase_factor, splitters)
+function kron_phase_factor(state_mapper::ProductSpaceMapper)
+    length(state_mapper.target_spaces) == 2 || throw(ArgumentError("Phase factors currently only implemented for binary splits"))
+    mappers = state_mapper.cluster_mappers
+    phase_factor_maps = map(kron_phase_factor, mappers)
     function phase_factor(fullstate1, fullstate2)
         pf = 1
-        for (s1, s2, splitter, pfh) in zip(fullstate1.states, fullstate2.states, splitters, phase_factor_maps)
-            isnothing(splitter) && continue
+        for (s1, s2, mapper, pfh) in zip(fullstate1.states, fullstate2.states, mappers, phase_factor_maps)
+            isnothing(mapper) && continue
             pf *= pfh(s1, s2)
         end
         return pf
@@ -456,13 +456,13 @@ Hsub = subregion((H1, H3), H)
 function subregion(Hs, H::AbstractHilbertSpace)
     Hsub = tensor_product(Hs)
     issubsystem(Hsub, H) || throw(ArgumentError("The spaces in Hs must be a subsystem of H"))
-    splitter = state_splitter(H, (Hsub,))
-    states = _find_subregion_states(H, splitter)
+    mapper = state_mapper(H, (Hsub,))
+    states = _find_subregion_states(H, mapper)
     constrain_space(Hsub, states)
 end
-function _find_subregion_states(H, splitter)
-    split = Base.Fix2(split_state, splitter)
-    split_state_iterator = if unique_split(splitter)
+function _find_subregion_states(H, mapper)
+    split = Base.Fix2(split_state, mapper)
+    split_state_iterator = if unique_split(mapper)
         Iterators.map(only ∘ only ∘ first ∘ split, basisstates(H))
     else
         Iterators.map(only, Iterators.flatten(Iterators.map(first ∘ split, basisstates(H))))

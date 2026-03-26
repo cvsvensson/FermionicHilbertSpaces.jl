@@ -1,38 +1,38 @@
 
 function Base.reshape(m::AbstractMatrix, H::AbstractHilbertSpace, Hs)
-    splitter = state_splitter(H, Hs)
-    _reshape_mat_to_tensor(m, H, Hs, Hs, splitter, splitter)
+    mapper = state_mapper(H, Hs)
+    _reshape_mat_to_tensor(m, H, Hs, Hs, mapper, mapper)
 end
 function Base.reshape(m::AbstractMatrix, H::AbstractHilbertSpace, Hsout, Hsin)
-    splitterout = state_splitter(H, Hsout)
-    splitterin = state_splitter(H, Hsin)
-    _reshape_mat_to_tensor(m, H, Hsout, Hsin, splitterout, splitterin)
+    mapperout = state_mapper(H, Hsout)
+    mapperin = state_mapper(H, Hsin)
+    _reshape_mat_to_tensor(m, H, Hsout, Hsin, mapperout, mapperin)
 end
 function Base.reshape(m::AbstractVector, H::AbstractHilbertSpace, Hs)
-    _reshape_vec_to_tensor(m, H, Hs, state_splitter(H, Hs))
+    _reshape_vec_to_tensor(m, H, Hs, state_mapper(H, Hs))
 end
 const PairWithHilbertSpace = Union{Pair{<:AbstractHilbertSpace,<:Any},Pair{<:Any,<:AbstractHilbertSpace}}
 Base.reshape(Hs::PairWithHilbertSpace; kwargs...) = m -> reshape(m, first(Hs), last(Hs); kwargs...)
 Base.reshape(m::AbstractArray, Hs::PairWithHilbertSpace; kwargs...) = reshape(m, first(Hs), last(Hs); kwargs...)
 
 function Base.reshape(t::AbstractArray, Hs::Union{<:AbstractVector,Tuple}, H::AbstractHilbertSpace)
-    splitter_in = state_splitter(H, Hs)
+    mapper_in = state_mapper(H, Hs)
     if ndims(t) == 2 * length(Hs)
-        return _reshape_tensor_to_mat(t, (Hs, splitter_in), (Hs, splitter_in), H, state_splitter)
+        return _reshape_tensor_to_mat(t, (Hs, mapper_in), (Hs, mapper_in), H, state_mapper)
     elseif ndims(t) == length(Hs)
-        return _reshape_tensor_to_vec(t, Hs, H, splitter_in)
+        return _reshape_tensor_to_vec(t, Hs, H, mapper_in)
     else
         throw(ArgumentError("The number of dimensions in the tensor must match the number of subsystems"))
     end
 end
 
-function _reshape_vec_to_tensor(v::AbstractVector, H::AbstractHilbertSpace, Hs, splitter)
+function _reshape_vec_to_tensor(v::AbstractVector, H::AbstractHilbertSpace, Hs, mapper)
     dims = map(dim, Hs)
     fs = basisstates(H)
     Is = map(f -> state_index(f, H), fs)
     t = zeros(eltype(v), dims...)
     for (f, I) in zip(fs, Is)
-        states, amps = split_state(f, splitter)
+        states, amps = split_state(f, mapper)
         for (substates, w) in zip(states, amps)
             Iout = state_index.(substates, Hs)
             t[Iout...] += w * v[I]
@@ -41,7 +41,7 @@ function _reshape_vec_to_tensor(v::AbstractVector, H::AbstractHilbertSpace, Hs, 
     return t
 end
 
-function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractHilbertSpace, Hsout, Hsin, splitterout, splitterin)
+function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractHilbertSpace, Hsout, Hsin, mapperout, mapperin)
     #reshape the matrix m in basis b into a tensor where each index pair has a basis in bs
     dimsin = map(dim, Hsin)
     dimsout = map(dim, Hsout)
@@ -49,11 +49,11 @@ function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractHilbertSpace, Hsou
     Js = map(f -> state_index(f, H), fs)
     t = zeros(eltype(m), dimsout..., dimsin...)
     for (J1, f1) in zip(Js, fs)
-        substatesout, wsout = split_state(f1, splitterout)
+        substatesout, wsout = split_state(f1, mapperout)
         for (substatesout, wout) in zip(substatesout, wsout)
             Iout = map(state_index, substatesout, Hsout)
             for (J2, f2) in zip(Js, fs)
-                substatesin, wsin = split_state(f2, splitterin)
+                substatesin, wsin = split_state(f2, mapperin)
                 for (substatesin, win) in zip(substatesin, wsin)
                     Iin = map(state_index, substatesin, Hsin)
                     t[Iout..., Iin...] += wout * win * m[J1, J2]
@@ -64,7 +64,7 @@ function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractHilbertSpace, Hsou
     return t
 end
 
-function _reshape_tensor_to_mat(t, (Hsout, splitterout), (Hsin, splitterin), H::AbstractHilbertSpace, state_splitter)
+function _reshape_tensor_to_mat(t, (Hsout, mapperout), (Hsin, mapperin), H::AbstractHilbertSpace, state_mapper)
     fsout = Base.product(basisstates.(Hsout)...)
     fsin = Base.product(basisstates.(Hsin)...)
 
@@ -73,11 +73,11 @@ function _reshape_tensor_to_mat(t, (Hsout, splitterout), (Hsin, splitterin), H::
 
     m = zeros(eltype(t), prod(dim, Hsout), prod(dim, Hsin))
     for (fsin_tuple, Jin) in zip(fsin, Jins)
-        states_in, amps_in = combine_states(fsin_tuple, splitterin)
+        states_in, amps_in = combine_states(fsin_tuple, mapperin)
         for (fullf_in, win) in zip(states_in, amps_in)
             Iin = state_index(fullf_in, H)
             for (fsout_tuple, Jout) in zip(fsout, Jouts)
-                states_out, amps_out = combine_states(fsout_tuple, splitterout)
+                states_out, amps_out = combine_states(fsout_tuple, mapperout)
                 for (fullf_out, wout) in zip(states_out, amps_out)
                     Iout = state_index(fullf_out, H)
                     m[Iout, Iin] += wout * win * t[Jout..., Jin...]
@@ -88,16 +88,17 @@ function _reshape_tensor_to_mat(t, (Hsout, splitterout), (Hsin, splitterin), H::
     return m
 end
 
-function _reshape_tensor_to_vec(t, Hs, H::AbstractHilbertSpace, state_splitter)
+function _reshape_tensor_to_vec(t, Hs, H::AbstractHilbertSpace, state_mapper)
     fs = Base.product(basisstates.(Hs)...)
     v = Vector{eltype(t)}(undef, length(fs))
     fill!(v, zero(eltype(v)))
     for fstuple in fs
         Is = state_index.(fstuple, Hs)
-        for (fb, w) in combine_states(fstuple, state_splitter)
-            Iout = state_index(fb, H)
+        substates, amps = combine_states(fstuple, state_mapper)
+        for (substate, amp) in zip(substates, amps)
+            Iout = state_index(substate, H)
             ismissing(Iout) && continue
-            v[Iout] += w * t[Is...]
+            v[Iout] += amp * t[Is...]
         end
     end
     return v

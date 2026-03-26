@@ -192,8 +192,8 @@ function combine_into_cluster(group::MajoranaGroup, spaces)
     MajoranaHilbertSpace(majoranaindices, fermionic_cluster, first(spaces).sym)
 end
 
-function state_splitter(H::MajoranaHilbertSpace, Hs)
-    state_splitter(parent(H), Hs)
+function state_mapper(H::MajoranaHilbertSpace, Hs)
+    state_mapper(parent(H), Hs)
 end
 _find_position(f::MajoranaHilbertSpace, H::FermionCluster) = _find_position(f.parent, H)
 partial_trace_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_trace_phase_factor(f1, f2, H.parent)

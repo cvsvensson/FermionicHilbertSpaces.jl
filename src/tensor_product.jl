@@ -31,8 +31,8 @@ function tensor_product(spaces, constraint::AbstractConstraint=NoSymmetry())
     prod_space = ProductSpace(Tuple(clusters), collect(atoms))
 
     full_space = if any(isconstrained, spaces)
-        splitter = state_splitter(prod_space, spaces)
-        states = [only(first(combine_states(states, splitter))) for states in Iterators.product(map(basisstates, spaces)...)]
+        mapper = state_mapper(prod_space, spaces)
+        states = [only(first(combine_states(states, mapper))) for states in Iterators.product(map(basisstates, spaces)...)]
         if length(prod_space.clusters) == 1
             constrain_space(only(prod_space.clusters), vec(map(s -> only(s.states), states)))
         else
@@ -100,7 +100,7 @@ function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kw
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs, H)
-    extend_state = state_splitter(H, Hs)
+    extend_state = state_mapper(H, Hs)
     if N == 1
         return generalized_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
     elseif N == 2
@@ -364,7 +364,7 @@ default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? Subsyst
 
 Compute the partial trace of `m` from `H` to `Hsub`. 
 """
-function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::SubsystemPartialTraceAlg, splitter=state_splitter(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
+function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::SubsystemPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
     fill!(mout, zero(eltype(mout)))
 
     substates = basisstates(Hsub)
@@ -375,8 +375,8 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
             s2 = phase_factors ? partial_trace_phase_factor(f1, f2, Hsub) : 1
             I2 = state_index(f2, Hsub)
             for fbar in barstates
-                fullstates1, amps1 = combine_states((f1, fbar), splitter)
-                fullstates2, amps2 = combine_states((f2, fbar), splitter)
+                fullstates1, amps1 = combine_states((f1, fbar), mapper)
+                fullstates2, amps2 = combine_states((f2, fbar), mapper)
                 for (fullf1, w1) in zip(fullstates1, amps1)
                     J1 = state_index(fullf1, H)
                     if ismissing(J1)
@@ -400,14 +400,14 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
     return mout
 end
 
-function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::FullPartialTraceAlg, splitter=state_splitter(H, (Hsub, complement)); phase_factors=true, skipmissing=false)
+function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::FullPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); phase_factors=true, skipmissing=false)
     fill!(mout, zero(eltype(mout)))
     inds = tensor_product_iterator(m, H)
     for I in inds
         f1 = basisstate(I[1], H)
         f2 = basisstate(I[2], H)
-        splits1, amps1 = split_state(f1, splitter)
-        splits2, amps2 = split_state(f2, splitter)
+        splits1, amps1 = split_state(f1, mapper)
+        splits2, amps2 = split_state(f2, mapper)
         for ((f1sub, f1bar), w1) in zip(splits1, amps1)
             J1 = state_index(f1sub, Hsub)
             if ismissing(J1)
@@ -440,7 +440,7 @@ partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...
 function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
     partial_trace_map(H, Hsub, complement, alg; kwargs...)
 end
-function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, splitter=state_splitter(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
+function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
     # we use skipmissing = true here as the default, since there is if H has constraints, there may be combinations of states from Hsub and the complement that do not exist in H, even if every split state from H exists in Hsub and the complement.
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
@@ -454,8 +454,8 @@ function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, spli
         I1 = state_index(f1, Hsub)
         I2 = state_index(f2, Hsub)
         for fbar in barstates
-            fullstates1, amps1 = combine_states((f1, fbar), splitter)
-            fullstates2, amps2 = combine_states((f2, fbar), splitter)
+            fullstates1, amps1 = combine_states((f1, fbar), mapper)
+            fullstates2, amps2 = combine_states((f2, fbar), mapper)
             for (fullf1, w1) in zip(fullstates1, amps1)
                 J1 = state_index(fullf1, H)
                 if ismissing(J1)
@@ -480,17 +480,17 @@ function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, spli
     return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
 
-function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::FullPartialTraceAlg, splitter=state_splitter(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
+function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::FullPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
     states = basisstates(H)
     indI = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
     Is = Int[]
     Js = Int[]
     Vs = Int[]
-    substates2 = map(Base.Fix2(split_state, splitter), states)
+    substates2 = map(Base.Fix2(split_state, mapper), states)
     for f1 in states
         J1 = state_index(f1, H)
-        splits1, amps1 = split_state(f1, splitter)
+        splits1, amps1 = split_state(f1, mapper)
         for ((f1sub, f1bar), w1) in zip(splits1, amps1)
             I1 = state_index(f1sub, Hsub)
             if ismissing(I1)
@@ -595,7 +595,7 @@ end
     H = hilbert_space(a, 1:4, NumberConservation(2))
     m1 = rand(ComplexF64, dim(H1), dim(H1))
     m2 = rand(ComplexF64, dim(H2), dim(H2))
-    p = FermionicHilbertSpaces.state_splitter(H, (H1, H2))
+    p = FermionicHilbertSpaces.state_mapper(H, (H1, H2))
 
     m12 = tensor_product((m1, m2), (H1, H2) => H)
     m1ext = embed(m1, H1 => H)

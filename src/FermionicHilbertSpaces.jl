@@ -38,7 +38,6 @@ const hc = HC()
 
 ## Files
 include("spaces.jl")
-include("state_splitter.jl")
 include("hilbert_space.jl")
 include("sectors.jl")
 include("product_space.jl")
@@ -58,14 +57,14 @@ include("physics/fermions/fock.jl")
 include("physics/fermions/phase_factors.jl")
 include("physics/fermions/symbolic_fermions.jl")
 include("physics/fermions/fermions.jl")
-include("physics/fermions/fixednumberfock.jl")
 include("physics/fermions/operators.jl")
+include("physics/fermions/majoranas.jl")
+include("physics/fermions/fixednumberfock.jl")
+include("physics/fermions/bdg.jl")
 
 
-include("physics/majoranas.jl")
 include("physics/bosons.jl")
 include("physics/spin.jl")
-include("physics/bdg.jl")
 
 function __init__()
     NonCommutativeProducts.enable_autosort!()

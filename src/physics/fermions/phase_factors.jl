@@ -23,8 +23,8 @@ end
 _find_position(n::L, labels::JordanWignerOrdering{L}) where L = get(labels.ordering, n, 0)
 # default_fock_type(jw::JordanWignerOrdering) = FockNumber{default_fock_representation(length(jw))}
 
-function kron_phase_factor(state_splitter::FockMapper)
-    inds = state_splitter.fermionpositions
+function kron_phase_factor(state_mapper::FockMapper)
+    inds = state_mapper.fermionpositions
     N = sum(length, inds)
     T = FockNumber{default_fock_representation(N)}
     masks = map(Xp -> T(focknbr_from_site_indices(Xp)), inds)
@@ -47,7 +47,6 @@ function phase_factor_h(partition, jw::JordanWignerOrdering)
     end
 end
 
-# phase_factor_h(f1, f2, Hs, H::AbstractFockHilbertSpace) = phase_factor_h(f1, f2, map(modes, flat_fock_spaces(Hs)), H.jw)
 function phase_factor_h(f1::AbstractFockState, f2::AbstractFockState, partition, jw::JordanWignerOrdering)::Int
     #(120b)
     phase = 1
@@ -128,14 +127,14 @@ end
     end
 
     @fermions a
-    import FermionicHilbertSpaces: state_splitter, kron_phase_factor
-    h_splitter(p, fockstates, ordering) = begin
+    import FermionicHilbertSpaces: state_mapper, kron_phase_factor
+    h_mapper(p, fockstates, ordering) = begin
         H = hilbert_space(a, collect(ordering))
         Hs = map(p) do part
             hilbert_space(a, part)
         end
-        splitter = state_splitter(H, Hs)
-        _h = kron_phase_factor(splitter)
+        mapper = state_mapper(H, Hs)
+        _h = kron_phase_factor(mapper)
         [_h(f1, f2) for f1 in fockstates, f2 in fockstates]
     end
 
@@ -145,7 +144,7 @@ end
         1 1 -1 1]
     @test h([[1], [2]], fockstates, ordering) == result
     @test h_fast([[1], [2]], fockstates, ordering) == result
-    @test h_splitter([[1], [2]], fockstates, ordering) == result
+    @test h_mapper([[1], [2]], fockstates, ordering) == result
 
     phf(f1, f2, subinds, N) = prod(s -> phase_factor_f(f1, f2, s), subinds) * phase_factor_f(f1, f2, N)
     phf(fockstates, subinds, N) = [phf(f1, f2, subinds, N) for f1 in fockstates, f2 in fockstates]
@@ -167,7 +166,7 @@ end
         1 1 -1 1 -1 -1 -1 1]
     @test h([[1, 3], [2]], fockstates, ordering) == result
     @test h_fast([[1, 3], [2]], fockstates, ordering) == result
-    @test h_splitter([[1, 3], [2]], fockstates, ordering) == result
+    @test h_mapper([[1, 3], [2]], fockstates, ordering) == result
 
     partitions = [[[1], [2], [3]], [[2], [1], [3]], [[2], [3], [1]],
         [[1, 3], [2]], [[2, 3], [1]], [[3, 2], [1]], [[2, 1], [3]],

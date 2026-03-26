@@ -25,8 +25,8 @@ Uses backtracking with pruning via `valid_branch`.
 `process_result(full_state, spaces)` can transform each completed state before storing it.
 """
 function generate_states(space::AbstractHilbertSpace{B}, constraint; kwargs...) where B
-    splitter = state_splitter(space, atomic_factors(space))
-    process_result = (full_state, spaces) -> only(first(combine_states(full_state, splitter)))
+    mapper = state_mapper(space, atomic_factors(space))
+    process_result = (full_state, spaces) -> only(first(combine_states(full_state, mapper)))
     generate_states(atomic_factors(space), constraint, B; process_result, kwargs...)
 end
 function generate_states(spaces, _constraint, ::Type{B}=Any; partial_processor=nothing, process_result=(state, spaces) -> copy(state)) where B

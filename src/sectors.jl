@@ -36,7 +36,7 @@ clusters(H::BlockHilbertSpace) = clusters(H.parent)
 factors(H::BlockHilbertSpace) = factors(H.parent)
 combine_states(substates, H::BlockHilbertSpace) = combine_states(substates, parent(H))
 partial_trace_phase_factor(s1, s2, H::BlockHilbertSpace) = partial_trace_phase_factor(s1, s2, parent(H))
-state_splitter(H::BlockHilbertSpace, Hs) = state_splitter(parent(H), Hs)
+state_mapper(H::BlockHilbertSpace, Hs) = state_mapper(parent(H), Hs)
 mode_ordering(H::BlockHilbertSpace) = mode_ordering(parent(H))
 
 function Base.show(io::IO, H::BlockHilbertSpace)

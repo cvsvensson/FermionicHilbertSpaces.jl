@@ -43,10 +43,7 @@ function FixedNumberFockState{N}(f::FockNumber) where N
     end
     FixedNumberFockState{N}(Tuple(sites))
 end
-# combine_states(f1::FixedNumberFockState, f2::FixedNumberFockState, H1, H2) = FixedNumberFockState((f1.sites..., f2.sites...))
-# function combine_states(fs::Union{<:AbstractVector{<:FixedNumberFockState},<:NTuple{N,<:FixedNumberFockState}}, fm::FockMapper) where N
-#     FixedNumberFockState(combine_states(map(FockNumber, fs), fm))
-# end
+
 function insert_bits(f::FixedNumberFockState, positions)
     FixedNumberFockState(insert_bits(FockNumber(f), positions))
 end
@@ -65,7 +62,7 @@ end
 Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.sites
 
 @testitem "FixedNumberFockState" begin
-    import FermionicHilbertSpaces: jwstring_left, jwstring_right, FixedNumberFockState, FockNumber, SingleParticleState, _bit, substate, state_splitter, combine_states
+    import FermionicHilbertSpaces: jwstring_left, jwstring_right, FixedNumberFockState, FockNumber, SingleParticleState, _bit, substate, state_mapper, combine_states
     @fermions a
     f = FixedNumberFockState((1, 3, 5))
     f2 = FockNumber(f)
@@ -93,7 +90,7 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     H1 = hilbert_space(a, 1:2)
     H2 = hilbert_space(a, 3:4)
     H12 = hilbert_space(a, [1, 3, 2, 4])
-    fm = state_splitter(H12, (H1, H2))
+    fm = state_mapper(H12, (H1, H2))
     for (f1, f2) in Base.product(basisstates(H1), basisstates(H2))
         f1fix = FixedNumberFockState(f1)
         f2fix = FixedNumberFockState(f2)

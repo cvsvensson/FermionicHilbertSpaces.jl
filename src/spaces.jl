@@ -34,51 +34,51 @@ isconstrained(H::AbstractAtomicHilbertSpace) = false
 partial_trace_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1
 
 
-abstract type AbstractStateSplitter end
+abstract type AbstractStateMapper end
 """
-    state_splitter(H, Hs)
+    state_mapper(H, Hs)
 
-Create a splitter object for decomposing states in `H` into the target subsystems `Hs`.
-The returned object must subtype `AbstractStateSplitter`.
+Create a mapper object for decomposing states in `H` into the target subsystems `Hs`.
+The returned object must subtype `AbstractStateMapper`.
 """
-state_splitter(H, Hs) = throw(MethodError(state_splitter, (H, Hs)))
+state_mapper(H, Hs) = throw(MethodError(state_mapper, (H, Hs)))
 
 """
-    split_state(state, splitter)
+    split_state(state, mapper)
 
-Split a state using `splitter`.
+Split a state using `mapper`.
 
 Contract: returns a tuple with one entry per target subsystem. Each entry is a weighted
 collection `((substate, weight), ...)` for that target.
 """
-split_state(state, splitter::AbstractStateSplitter) = throw(MethodError(split_state, (state, splitter)))
+split_state(state, mapper::AbstractStateMapper) = throw(MethodError(split_state, (state, mapper)))
 
 """
-    combine_states(substates, splitter)
+    combine_states(substates, mapper)
 
-Combine subsystem states using `splitter`.
+Combine subsystem states using `mapper`.
 
-Contract: returns a weighted collection `((state, weight), ...)`.
+Contract: returns a states and weights `states, weights`.
 """
-combine_states(substates, splitter::AbstractStateSplitter) = throw(MethodError(combine_states, (substates, splitter)))
+combine_states(substates, mapper::AbstractStateMapper) = throw(MethodError(combine_states, (substates, mapper)))
 
 """
-    kron_phase_factor(splitter)
+    kron_phase_factor(mapper)
 
-Return phase-factor function associated with `splitter` for fermionic tensor products.
+Return phase-factor function associated with `mapper` for fermionic tensor products.
 """
-kron_phase_factor(splitter::AbstractStateSplitter) = throw(MethodError(kron_phase_factor, (splitter,)))
+kron_phase_factor(mapper::AbstractStateMapper) = throw(MethodError(kron_phase_factor, (mapper,)))
 
-struct AtomicStateSplitter <: AbstractStateSplitter end
-function state_splitter(H::AbstractAtomicHilbertSpace, Hs)
+struct AtomicStateMapper <: AbstractStateMapper end
+function state_mapper(H::AbstractAtomicHilbertSpace, Hs)
     only(Hs) == H || throw(ArgumentError("For atomic subspaces, the only valid partition is the whole space"))
-    AtomicStateSplitter()
+    AtomicStateMapper()
 end
-function split_state(state, ::AtomicStateSplitter)
+function split_state(state, ::AtomicStateMapper)
     # the return state here is a tuple of tuples because each state is a state in the tuple of subsystem and complement, but the complement is empty
     ((state,),), (1,)
 end
-function combine_states(states, ::AtomicStateSplitter)
+function combine_states(states, ::AtomicStateMapper)
     (only(states),), (1,)
 end
-kron_phase_factor(::AtomicStateSplitter) = (f1, f2) -> 1
+kron_phase_factor(::AtomicStateMapper) = (f1, f2) -> 1
