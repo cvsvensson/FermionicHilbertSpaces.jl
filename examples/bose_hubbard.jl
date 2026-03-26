@@ -1,4 +1,5 @@
-using FermionicHilbertSpaces, Arpack
+using FermionicHilbertSpaces
+using Arpack, LinearAlgebra
 
 N = 6
 max_occupancy = 3
@@ -6,30 +7,31 @@ total_particles = N
 @bosons b 1:N
 
 Hs = hilbert_space.(values(b), max_occupancy)
-Hfull = tensor_product(Hs)
-H = constrain_space(Hfull, NumberConservation(total_particles))
+H = tensor_product(Hs, NumberConservation(total_particles))
 
-function bose_hubbard_observables(U, t, N, H, nis, bijs)
+number_ops = [matrix_representation(b[i]'b[i], H) for i in 1:N]
+hopping_ops = [matrix_representation(b[i]'b[i+1], H) for i in 1:(N-1)]
+
+function bose_hubbard_observables(U, t)
     ham = -t * sum(b[i]'b[i+1] + hc for i in 1:(N-1)) +
           U * sum(b[i]'b[i] * (b[i]'b[i] - 1) for i in 1:N)
     M = matrix_representation(ham, H)
     _, vecs = eigs(M; nev=1, which=:SR)
     ψ = vecs[:, 1]
-    occ = sum(ψ' * ni * ψ for ni in nis) / N
-    fluct = sum(ψ' * ni^2 * ψ - (ψ' * ni * ψ)^2 for ni in nis) / N
-    coh = sum(ψ' * bij * ψ for bij in bijs) / (N - 1)
-    return (; occ, fluct, coh)
+    occupation = sum(dot(ψ, ni, ψ) for ni in number_ops) / N
+    fluctuation = sum(dot(ψ, ni^2, ψ) - dot(ψ, ni, ψ)^2 for ni in number_ops) / N
+    coherence = sum(dot(ψ, hij, ψ) for hij in hopping_ops) / (N - 1)
+    return (; occupation, fluctuation, coherence)
 end
-nis = [matrix_representation(b[i]'b[i], H) for i in 1:N]
-bijs = [matrix_representation(b[i]'b[i+1], H) for i in 1:(N-1)]
 
+##
 t = 1.0
 Us = range(0, 20, length=10)
-data = [bose_hubbard_observables(U, t, N, H, nis, bijs) for U in Us]
-
-occs   = getproperty.(data, :occ)
-flucts = getproperty.(data, :fluct)
-cohs   = getproperty.(data, :coh)
+data = [bose_hubbard_observables(U, t) for U in Us]
+##
+occs = getproperty.(data, :occupation)
+flucts = getproperty.(data, :fluctuation)
+cohs = getproperty.(data, :coherence)
 using Plots
 plot(Us, flucts, xlabel="U", label="Average Fluctuations")
 plot!(Us, occs, label="Average Occupation")
