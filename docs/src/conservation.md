@@ -60,22 +60,20 @@ Nup = 2
 Ndn = 1
 Hup = hilbert_space(f,  [(i, :↑) for i in 1:N])
 Hdn = hilbert_space(f, [(i, :↓) for i in 1:N])
-H = tensor_product(Hup, Hdn)
-qn_spin = NumberConservation(Nup, Hup)*NumberConservation(Ndn, Hdn)
-Hblocks = constrain_space(H, qn_spin)
+constraint = NumberConservation(Nup, Hup)*NumberConservation(Ndn, Hdn)
+H = tensor_product((Hup, Hdn), constraint)
 ```
 The full hilbert space is of size `4^20 ≈ 10^12`, but the sector with 2 spin up and 1 spin down fermion is only of size `3800` and is generated without constructing the full hilbert space. Finally, we can get the matrix representation of the hamiltonian in this sector as
 ```@example hubbard
 symham = hubbard_hamiltonian(f, N, 1.0, 4.0)
-ham = matrix_representation(symham, Hblocks)
+ham = matrix_representation(symham, H)
 ```
 
 ### No double occupation
 When the onsite Coulomb interaction is very strong, there is a large energy penalty for double occupation of a site. In that case, we can restrict the Hilbert space to not allow double occupation of any site. Consider the site `k`, which has two labels `(k, :↑)` and `(k, :↓)`. We can use `number_conservation(0:1, label -> label[1] == k)` which says that the sum of occupation numbers of all labels where the first element of the label equals `k` is contained in the set `0:1`. To impose this for all sites, we take the product over all sites.
 ```@example hubbard
-qn_no_double_occ = prod(NumberConservation(0:1, hilbert_space(f,[(k, s) for s in (:↑,:↓)])) for k in 1:N)
-qn = qn_spin * qn_no_double_occ
-H_ndo = constrain_space(H, qn)
+no_double_occ = prod(NumberConservation(0:1, hilbert_space(f,[(k, s) for s in (:↑,:↓)])) for k in 1:N)
+H_ndo = constrain_space(H, constraint * no_double_occ)
 ```
 This quantum number is a product of number conservations, so the sector is constructed without enumerating the full Hilbert space.
 
