@@ -142,7 +142,7 @@ branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_cons
 
 
 @testitem "generate_states with BranchConstraint" begin
-    using FermionicHilbertSpaces: generate_states, BranchConstraint, AdditiveConstraint, basisstate, hilbert_space, _bit, unweighted_number_branch_constraint, weighted_number_branch_constraint, CombineFockNumbersProcessor, constrain_space, quantumnumbers, particle_number
+    using FermionicHilbertSpaces: generate_states, BranchConstraint, AdditiveConstraint, basisstate, hilbert_space, _bit, CombineFockNumbersProcessor, constrain_space, quantumnumbers, particle_number
 
     # Define a simple constraint: only allow states where the first space is in its first basis state
     @fermions f

@@ -64,7 +64,7 @@ apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::Constrai
 _precomputation_before_operator_application(ops::Union{<:Any,<:NCMul}, space::ConstrainedSpace) = _precomputation_before_operator_application(ops, parent(space))
 
 @testitem "Constrained space" begin
-    import FermionicHilbertSpaces: constrain_space, CombineFockNumbersProcessor, unweighted_number_branch_constraint, subregion
+    import FermionicHilbertSpaces: constrain_space, CombineFockNumbersProcessor, subregion
     N = 5
     @fermions f
     H = hilbert_space(f, 1:N)
