@@ -32,10 +32,11 @@ atomic_substate(n, f, space::ConstrainedSpace) = atomic_substate(n, f, parent(sp
 constrain_space(space::AbstractHilbertSpace, constraint::NoSymmetry) = space
 constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}) where B<:AbstractBasisState = ConstrainedSpace(space, states)
 
-function constrain_space(space, constraint::NumberConservation{T,Missing,Missing}) where T
+function constrain_space(space, constraint::AbstractConstraint)
     allowed = in(Set(allowed_values(constraint, space)))
+    qn_func = sector_function(constraint, space, (space,))
     qn(state) = begin
-        n = particle_number(state)
+        n = qn_func(state)
         allowed(n) ? n : missing
     end
     block_space(space, basisstates(space), qn)
@@ -43,7 +44,39 @@ end
 
 allowed_values(::NumberConservation{Missing}, space) = 0:maximum_particles(space)
 allowed_values(constraint::NumberConservation{T}, space) where T = constraint.total
+allowed_values(p::ParityConservation, space) = p.allowed_parities
 
+@testitem "constrain_space" begin
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    @test dim(constrain_space(H, NumberConservation())) == 4
+    @test dim(constrain_space(H, NumberConservation(1))) == 2
+    @test dim(constrain_space(H, NumberConservation(0:1))) == 3
+
+    @test dim(constrain_space(H, ParityConservation())) == 4
+    @test dim(constrain_space(H, ParityConservation(1))) == 2
+
+    H1 = constrain_space(H, NumberConservation())
+    H2 = constrain_space(H1, NumberConservation(0:1))
+    H3 = constrain_space(H2, NumberConservation(1:2))
+    @test basisstates(H3) == basisstates(constrain_space(H, NumberConservation(1)))
+
+    #repeat for bosons
+    @bosons b 1:2
+    Hs = hilbert_space.(values(b), 2)
+    H = tensor_product(Hs...)
+    @test dim(constrain_space(H, NumberConservation())) == 4
+    @test dim(constrain_space(H, NumberConservation(1))) == 2
+    @test dim(constrain_space(H, NumberConservation(0:1))) == 3
+
+    @test dim(constrain_space(H, ParityConservation())) == 4
+    @test dim(constrain_space(H, ParityConservation(1))) == 2
+
+    H1 = constrain_space(H, NumberConservation())
+    H2 = constrain_space(H1, NumberConservation(0:1))
+    H3 = constrain_space(H2, NumberConservation(1:2))
+    @test basisstates(H3) == basisstates(constrain_space(H, NumberConservation(1)))
+end
 
 function Base.show(io::IO, H::ConstrainedSpace)
     if get(io, :compact, false)

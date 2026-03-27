@@ -110,41 +110,44 @@ Base.isless(a::BosonicFockState, b::BosonicFockState) = a.n < b.n
 Base.hash(x::BosonicFockState, h::UInt) = hash(x.n, h)
 struct TruncatedBosonicHilbertSpace{B} <: AbstractAtomicHilbertSpace{BosonicFockState}
     sym::BosonSym{B}
-    max_occupancy::Int
-    function TruncatedBosonicHilbertSpace(sym::BosonSym{B}, max_occupancy) where B
-        new{B}(sym, max_occupancy)
+    dimension::Int
+    function TruncatedBosonicHilbertSpace(sym::BosonSym{B}, dimension::Integer) where B
+        if dimension < 1
+            throw(ArgumentError("Bosonic Hilbert space dimension must be positive, got $dimension"))
+        end
+        new{B}(sym, Int(dimension))
     end
 end
-Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.max_occupancy == b.max_occupancy)
-Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.max_occupancy, h))
-basisstates(H::TruncatedBosonicHilbertSpace) = map(BosonicFockState, 0:H.max_occupancy)
+Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)
+Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.dimension, h))
+basisstates(H::TruncatedBosonicHilbertSpace) = map(BosonicFockState, 0:(dim(H) - 1))
 function basisstate(n::Int, H::TruncatedBosonicHilbertSpace)
-    if n < 1 || n > H.max_occupancy + 1
-        throw(ArgumentError("Basis state index $n is out of bounds for Hilbert space with max occupancy $(H.max_occupancy)"))
+    if n < 1 || n > dim(H)
+        throw(ArgumentError("Basis state index $n is out of bounds for Hilbert space with dimension $(dim(H))"))
     end
     BosonicFockState(n - 1)
 end
-dim(H::TruncatedBosonicHilbertSpace) = H.max_occupancy + 1
+dim(H::TruncatedBosonicHilbertSpace) = H.dimension
 function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
     if get(io, :compact, false)
-        print(io, "Bosons(", H.sym.name, ", max=", H.max_occupancy, ")")
+        print(io, "Bosons(", H.sym.name, ", dim=", dim(H), ")")
     else
         print(io, "$(dim(H))-dimensional TruncatedBosonicHilbertSpace\n")
-        print(io, "Label: ", H.sym.name, ", max_occupancy: ", H.max_occupancy)
+        print(io, "Label: ", H.sym.name, ", dimension: ", dim(H))
     end
 end
 function state_index(s::BosonicFockState, H::TruncatedBosonicHilbertSpace)
-    if s.n < 0 || s.n > H.max_occupancy
+    if s.n < 0 || s.n >= dim(H)
         throw(ArgumentError("State $s is not in the Hilbert space"))
     end
     s.n + 1
 end
 
-hilbert_space(sym::BosonSym{B}, max_occupancy) where B = TruncatedBosonicHilbertSpace(sym, max_occupancy)
-hilbert_space(sym::BosonSym{B}, max_occupancy, constraint) where B = constrain_space(hilbert_space(sym, max_occupancy), constraint)
+hilbert_space(sym::BosonSym{B}, dimension) where B = TruncatedBosonicHilbertSpace(sym, dimension)
+hilbert_space(sym::BosonSym{B}, dimension, constraint) where B = constrain_space(hilbert_space(sym, dimension), constraint)
 particle_number(s::BosonicFockState) = s.n
 parity(s::BosonicFockState) = iseven(s.n) ? 1 : -1
-maximum_particles(H::TruncatedBosonicHilbertSpace) = H.max_occupancy
+maximum_particles(H::TruncatedBosonicHilbertSpace) = dim(H) - 1
 
 function apply_local_operators(op::NCMul, state::BosonicFockState, space::TruncatedBosonicHilbertSpace, precomp)
     factors = op.factors
@@ -168,7 +171,7 @@ function apply_local_operators(op::NCMul, state::BosonicFockState, space::Trunca
             n += k
         end
     end
-    if n > space.max_occupancy
+    if n >= dim(space)
         return (state,), (zero(amplitude),)
     end
     return (BosonicFockState(n),), (amplitude,)
@@ -181,7 +184,7 @@ mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
 @testitem "Bosonic hilbert space" begin
     using FermionicHilbertSpaces: TruncatedBosonicHilbertSpace, BosonicFockState, state_index, basisstate
     @boson b
-    H = TruncatedBosonicHilbertSpace(b, 3)
+    H = TruncatedBosonicHilbertSpace(b, 4)
     @test basisstates(H) == [BosonicFockState(0), BosonicFockState(1), BosonicFockState(2), BosonicFockState(3)]
     @test dim(H) == 4
     @test basisstate(1, H) == BosonicFockState(0)
@@ -195,7 +198,7 @@ end
     using FermionicHilbertSpaces: TruncatedBosonicHilbertSpace
 
     @boson b
-    H = TruncatedBosonicHilbertSpace(b, 3)
+    H = TruncatedBosonicHilbertSpace(b, 4)
 
     d = dim(H)
     a = spzeros(Float64, d, d)
@@ -230,12 +233,13 @@ end
 
     N = 6
     total_particles = N
-    max_occupancy = 3
+    local_dimension = 4
+    max_occupancy = local_dimension - 1
     @bosons b 1:N
 
-    Hs = hilbert_space.(values(b), max_occupancy)
+    Hs = hilbert_space.(values(b), local_dimension)
     Hfull = tensor_product(Hs)
-    @test dim(Hfull) == (max_occupancy + 1)^N
+    @test dim(Hfull) == local_dimension^N
     H = constrain_space(Hfull, NumberConservation(total_particles))
     @test dim(H) == constrained_boson_dim(N, max_occupancy, total_particles)
     Nop = sum(b[i]'b[i] for i in 1:N)
@@ -251,7 +255,7 @@ end
 
     Hf = hilbert_space(f, 1:1)
     Hs = hilbert_space(S, 1 // 2)
-    Hb = hilbert_space(b, 2)
+    Hb = hilbert_space(b, 3)
     H = tensor_product(Hf, Hs, Hb)
 
     f_expr = f[1]' * f[1] + 0.5 * (f[1] + f[1]') + 1

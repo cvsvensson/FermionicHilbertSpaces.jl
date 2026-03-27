@@ -63,6 +63,7 @@ function Base.show(io::IO, H::ProductSpace)
 end
 maximum_particles(H::ProductSpace) = sum(maximum_particles, factors(H))
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
+parity(state::ProductState) = prod(parity, atomic_factors(state))
 
 function atomic_substate(n, f::ProductState, space::ProductSpace)
     count = 0

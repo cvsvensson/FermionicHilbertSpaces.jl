@@ -2,11 +2,11 @@ using FermionicHilbertSpaces
 using Arpack, LinearAlgebra
 
 N = 6
-max_occupancy = 3
+local_dimension = 4
 total_particles = N
 @bosons b 1:N
 
-Hs = hilbert_space.(values(b), max_occupancy)
+Hs = hilbert_space.(values(b), local_dimension)
 H = tensor_product(Hs, NumberConservation(total_particles))
 
 number_ops = [matrix_representation(b[i]'b[i], H) for i in 1:N]
