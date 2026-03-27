@@ -92,10 +92,9 @@ function sector_function(cons::C, space::AbstractHilbertSpace, spaces) where {C<
     subspaces = ismissing(cons.subspaces) ? spaces : cons.subspaces
     subspaces = ismissing(subspaces) ? (space,) : subspaces
     mapper = state_mapper(space, subspaces)
-    func = _function_on_substates(cons)
     function number(state)
         subs = unique_split_state(state, mapper)
-        _additive_function_application(subs, func)
+        _apply_constraint_function(subs, cons)
     end
 end
 function sector_function(constraint::ProductConstraint, space::AbstractHilbertSpace, spaces)
@@ -103,16 +102,20 @@ function sector_function(constraint::ProductConstraint, space::AbstractHilbertSp
     state -> map(f -> f(state), subspace_functions)
 end
 
-_function_on_substates(::NumberConservation{<:Any,<:Any,Missing}) = particle_number
-_function_on_substates(cons::NumberConservation{<:Any,<:Any,W}) where {W} = WeightedFunction(particle_number, cons.weights)
-_function_on_substates(::ParityConservation) = parity
-_function_on_substates(cons::AdditiveConstraint) = cons.functions
+_apply_constraint_function(substates, ::NumberConservation{<:Any,<:Any,Missing}) = sum(particle_number, substates)
+_apply_constraint_function(substates, cons::NumberConservation{<:Any,<:Any,W}) where {W} = mapreduce((s, w) -> particle_number(s) * w, +, substates, cons.weights)
+_apply_constraint_function(substates, ::ParityConservation) = prod(parity, substates)
+_apply_constraint_function(substates, cons::AdditiveConstraint{<:Any,<:Any,<:Function}) = sum(cons.f, substates)
+function _apply_constraint_function(substates, cons::AdditiveConstraint)
+    mapreduce((s, f) -> f(s), +, substates, cons.functions)
+end
 
 
 function branch_constraint(constraint::ParityConservation, spaces)
     possible_numbers = ismissing(constraint.subspaces) ? (0:sum(maximum_particles, spaces)) : (0:sum(nbr_of_modes, constraint.subspaces))
     allowed_numbers = filter(n -> any(p -> p == (-1)^n, constraint.allowed_parities), possible_numbers)
-    additive_branch_constraint(allowed_numbers, particle_number, constraint.subspaces, spaces)
+    cons = NumberConservation(allowed_numbers, constraint.subspaces, missing)
+    branch_constraint(cons, spaces)
 end
 
 function branch_constraint(constraint::NumberConservation{T,H,W}, spaces) where {T,H,W}

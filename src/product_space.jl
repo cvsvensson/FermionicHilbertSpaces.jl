@@ -17,6 +17,7 @@ struct ProductSpace{B,C,A} <: AbstractProductHilbertSpace{B}
     atoms::Vector{A}
     atom_ordering::Dict{A,Int}
     function ProductSpace(clusters::C, atoms::Vector{A}) where {C,A}
+        length(clusters) == 0 && throw(ArgumentError("Product space must have at least one cluster"))
         B = ProductState{Tuple{map(statetype, clusters)...}}
         atom_ordering = Dict{A,Int}(a => i for (i, a) in enumerate(atoms))
         new{B,C,A}(clusters, atoms, atom_ordering)
@@ -29,7 +30,7 @@ Base.hash(H::ProductSpace, h::UInt) = hash(H.clusters, hash(H.atoms, h))
 atomic_factors(H::ProductSpace) = H.atoms
 factors(H::ProductSpace) = H.clusters
 clusters(H::ProductSpace) = H.clusters
-dim(H::ProductSpace) = prod(dim, H.clusters)
+dim(H::ProductSpace) = prod(dim, H.clusters; init = 1)
 
 basisstates(H::ProductSpace) = collect(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.clusters)...)))
 function basisstate(n::Int, H::ProductSpace{B}) where B

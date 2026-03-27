@@ -251,10 +251,10 @@ end
     spatial_labels = 1:N
     labels = vec(collect(Base.product(spatial_labels, spins)))
     spin_up_sites = filter(label -> label[2] == :↑, labels)
-    spin_up_conservation = NumberConservation(Nup, hilbert_space(f, spin_up_sites))
+    spin_up_conservation = NumberConservation(Nup, map(l -> f[l], spin_up_sites))
     spin_down_sites = filter(label -> label[2] == :↓, labels)
-    spin_down_conservation = NumberConservation(Ndn, hilbert_space(f, spin_down_sites))
-    no_double_occupation = prod(NumberConservation(0:1, hilbert_space(f, [(k, σ) for σ in spins])) for k in spatial_labels)
+    spin_down_conservation = NumberConservation(Ndn, map(l -> f[l], spin_down_sites))
+    no_double_occupation = prod(NumberConservation(0:1, [f[(k, σ)] for σ in spins]) for k in spatial_labels)
 
     qn = spin_up_conservation * spin_down_conservation * no_double_occupation
     H = hilbert_space(f, labels, qn)
