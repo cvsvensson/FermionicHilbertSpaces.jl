@@ -55,8 +55,9 @@ struct NumberConservation{T,H,W} <: AbstractConstraint
     end
 end
 _normalize_constraint_subspace(subspace::AbstractHilbertSpace) = (subspace,)
-_normalize_constraint_subspace(subspaces) = subspaces
-
+_normalize_constraint_subspace(subspaces) = map(hilbert_space, subspaces)
+_normalize_constraint_subspace(subspaces::Missing) = subspaces
+NumberConservation(H::AbstractHilbertSpace) = NumberConservation(missing, (H,), missing)
 # NumberConservation(n) = NumberConservation(n, missing, missing)
 # NumberConservation(H::AbstractHilbertSpace) = NumberConservation(missing, atomic_factors(H), missing)
 # NumberConservation() = NumberConservation(missing, missing, missing)
@@ -132,17 +133,20 @@ function Base.show(io::IO, ac::AdditiveConstraint{T,H,F}) where {T,H,F}
 end
 
 function Base.show(io::IO, pc::ProductConstraint{C}) where {C}
+    nconstraints = length(pc.constraints)
+    nshow = min(nconstraints, 6)
     if get(io, :compact, false)
         print(io, "ProductConstraint(")
-        for (i, c) in enumerate(pc.constraints)
+        for (i, c) in enumerate(pc.constraints[1:nshow])
             i > 1 && print(io, " * ")
             show(IOContext(io, :compact => true), c)
         end
+        nconstraints > nshow && print(io, " * ... ($(nconstraints - nshow) more)")
         print(io, ")")
     else
         print(io, "ProductConstraint:\n")
-        for (i, c) in enumerate(pc.constraints)
-            is_last = i == length(pc.constraints)
+        for (i, c) in enumerate(pc.constraints[1:nshow])
+            is_last = (i == nshow) && (nconstraints == nshow)
             prefix = is_last ? "  └─ " : "  ├─ "
             if isa(c, ProductConstraint)
                 nested = join(split(sprint(show, c), '\n')[2:end], '\n')
@@ -151,6 +155,10 @@ function Base.show(io::IO, pc::ProductConstraint{C}) where {C}
                 print(io, prefix, sprint(show, c; context=:compact => true))
             end
             is_last || print(io, "\n")
+        end
+        if nconstraints > nshow
+            nshow > 0 && print(io, "\n")
+            print(io, "  └─ ... (", nconstraints - nshow, " more)")
         end
     end
 end
@@ -176,6 +184,7 @@ unique_split_state(state, mapper) = only(first(split_state(state, mapper)))
 # end
 function sector_function(cons::C, space::AbstractHilbertSpace, spaces) where {C<:Union{<:NumberConservation,<:ParityConservation,<:AdditiveConstraint}}
     subspaces = ismissing(cons.subspaces) ? spaces : cons.subspaces
+    subspaces = ismissing(subspaces) ? (space,) : subspaces
     mapper = state_mapper(space, subspaces)
     func = _function_on_substates(cons)
     function number(state)

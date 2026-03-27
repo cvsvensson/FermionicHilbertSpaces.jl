@@ -34,10 +34,19 @@ constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}) where B<
 
 function constrain_space(space, constraint::AbstractConstraint)
     allowed = in(Set(allowed_values(constraint, space)))
-    qn_func = sector_function(constraint, space, (space,))
+    qn_func = sector_function(constraint, space, missing)
     qn(state) = begin
         n = qn_func(state)
         allowed(n) ? n : missing
+    end
+    block_space(space, basisstates(space), qn)
+end
+function constrain_space(space, constraint::ProductConstraint)
+    alloweds = map(c -> in(Set(allowed_values(c, space))), constraint.constraints)
+    qn_funcs = map(c -> sector_function(c, space, missing), constraint.constraints)
+    qn(state) = begin
+        qns = map(qn_func -> qn_func(state), qn_funcs)
+        all(aq -> aq[1](aq[2]), zip(alloweds, qns)) ? qns : missing
     end
     block_space(space, basisstates(space), qn)
 end
@@ -45,11 +54,6 @@ end
 allowed_values(::NumberConservation{Missing}, space) = 0:maximum_particles(space)
 allowed_values(constraint::NumberConservation{T}, space) where T = constraint.total
 allowed_values(p::ParityConservation, space) = p.allowed_parities
-function allowed_values(p::ProductConstraint, space)
-    #all combinations of allowed tuples
-    vals = map(Base.Fix2(allowed_values, space), p.constraints)
-    collect(Iterators.product(vals...))
-end
 
 @testitem "constrain_space" begin
     @fermions f

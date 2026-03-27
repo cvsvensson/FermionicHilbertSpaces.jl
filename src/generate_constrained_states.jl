@@ -10,7 +10,7 @@ has_sectors(::AbstractConstraint) = false
     Return `true` if the branch should be explored, `false` to prune. By default this calls `constraint.f(partial_state, remaining_spaces)`.
 """
 valid_branch(constraint::BranchConstraint, partial_state, depth, spaces) = constraint.f(partial_state, depth, spaces)
-valid_branch(constraint::ProductConstraint, partial_state, depth, spaces) = all(c -> valid_branch(c, partial_state, depth, spaces), constraint.constraints)
+valid_branch(constraint::ProductConstraint, partial_state, depth, spaces) = all(map(c -> valid_branch(c, partial_state, depth, spaces), constraint.constraints))
 
 process_partial(::Nothing, partial_state, depth, spaces) = nothing
 process_partial(processor, partial_state, depth, spaces) = processor(partial_state, depth, spaces)
@@ -90,16 +90,21 @@ function __contribution_values(space, func)
     isempty(values) && throw(ArgumentError("Cannot build AdditiveConstraint from a space with no basis states"))
     values
 end
-
+hilbert_space(space::AbstractHilbertSpace) = space
 additive_branch_constraint(allowed_sums, functions, allspaces) = additive_branch_constraint(allowed_sums, functions, missing, allspaces)
 function additive_branch_constraint(allowed_sums, functions, _subspaces, allspaces)
     subspaces = ismissing(_subspaces) ? allspaces : _subspaces
     allowed_values = _normalize_constraint_values(allowed_sums)
-    _additive_branch_constraint(allowed_values, functions, subspaces, allspaces)
+    _additive_branch_constraint(allowed_values, functions, map(hilbert_space, subspaces), allspaces)
 end
 function _additive_branch_constraint(allowed_values, functions, subspaces, allspaces)
     positions = map(subspaces) do subspace
         pos = findfirst(isequal(subspace), allspaces)
+        if isnothing(pos)
+            println("Subspace: ", subspace)
+            println("All spaces: ", allspaces)
+        end
+
         isnothing(pos) && throw(ArgumentError("All AdditiveConstraint subspaces must be present in the generated space"))
         pos
     end

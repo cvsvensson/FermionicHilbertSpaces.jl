@@ -15,6 +15,7 @@ Base.hash(H::BlockHilbertSpace, h::UInt) = hash((H.parent, H.ordered_basis_state
 Base.:(==)(H1::BlockHilbertSpace, H2::BlockHilbertSpace) = H1 === H2 || (H1.parent == H2.parent && H1.ordered_basis_states == H2.ordered_basis_states && H1.state_to_index == H2.state_to_index && H1.qn_to_states == H2.qn_to_states)
 atomic_substate(n, f, space::BlockHilbertSpace) = atomic_substate(n, f, parent(space))
 
+block_space(space, states, ::Missing) = ConstrainedSpace(space, states)
 function block_space(space, states, sector_function)
     _qntostates = group(state -> sector_function(state), states)
     _block_space(space, _qntostates)

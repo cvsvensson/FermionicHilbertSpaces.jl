@@ -18,7 +18,7 @@ This package does not know anything about spin, but one can treat spin just as a
 ```@example spin
 using FermionicHilbertSpaces
 @fermions f
-Hup = hilbert_space(f,  [(i, :↑) for i in 1:4])
+Hup = hilbert_space(f, [(i, :↑) for i in 1:4])
 Hdn = hilbert_space(f, [(i, :↓) for i in 1:4])
 H = tensor_product(Hup, Hdn)
 ```
@@ -30,7 +30,7 @@ to sort states according to the number of fermions with spin up and down. Howeve
 
 To pick out the sector with 2 fermions with spin up and 0 fermions with spin down, one can extract it from the hilbert space defined above using `sector` as
 ```@example spin
-FermionicHilbertSpaces.sector((2,0), Hblocks)
+sector((2,0), Hblocks)
 ```
 or more efficiently by only constructing that specific sector in the first place
 ```@example spin
@@ -72,7 +72,7 @@ ham = matrix_representation(symham, H)
 ### No double occupation
 When the onsite Coulomb interaction is very strong, there is a large energy penalty for double occupation of a site. In that case, we can restrict the Hilbert space to not allow double occupation of any site. Consider the site `k`, which has two labels `(k, :↑)` and `(k, :↓)`. We can use `number_conservation(0:1, label -> label[1] == k)` which says that the sum of occupation numbers of all labels where the first element of the label equals `k` is contained in the set `0:1`. To impose this for all sites, we take the product over all sites.
 ```@example hubbard
-no_double_occ = prod(NumberConservation(0:1, hilbert_space(f,[(k, s) for s in (:↑,:↓)])) for k in 1:N)
+no_double_occ = prod(NumberConservation(0:1, [f[(k, s)] for s in (:↑,:↓)]) for k in 1:N)
 H_ndo = constrain_space(H, constraint * no_double_occ)
 ```
 This quantum number is a product of number conservations, so the sector is constructed without enumerating the full Hilbert space.
@@ -124,11 +124,12 @@ spin_order_constraint(order) = BranchConstraint((p,d,s) -> valid_state(p,d,s,ord
 
 ```@example hubbard
 N = 16
-Hfull = hilbert_space(f,  [(i, s) for i in 1:N for s in (:↑,:↓)])
+labels = [(i, s) for i in 1:N for s in (:↑,:↓)]
+Hfull = hilbert_space(f,  labels)
 ```
 This space is too large to deal with directly, but we can constrain it to the sector with spin order '[:↑, :↑, :↓, :↑, :↓]' as
 ```@example hubbard
-Hfrac = constrain_space(Hfull, spin_order_constraint([:↑, :↑, :↓, :↑, :↓]))
+Hfrac = hilbert_space(f, labels, spin_order_constraint([:↑, :↑, :↓, :↑, :↓]))
 ```
 which has only dimension 4368. We can then construct hamiltonian in this sector by
 ```@example hubbard
