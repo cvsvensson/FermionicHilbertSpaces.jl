@@ -47,17 +47,23 @@ struct NumberConservation{T,H,W} <: AbstractConstraint
     total::T
     subspaces::H
     weights::W
+    function NumberConservation(_total=missing, _subspaces=missing, _weights=missing)
+        total = _normalize_constraint_values(_total)
+        subspace = _normalize_constraint_subspace(_subspaces)
+        weights = _normalize_constraint_values(_weights)
+        new{typeof(total),typeof(subspace),typeof(weights)}(total, subspace, weights)
+    end
 end
-function NumberConservation(total::Int, subspaces::H, weights::W) where {H,W}
-    NumberConservation([total], subspaces, weights)
-end
-NumberConservation(n) = NumberConservation(n, missing, missing)
-NumberConservation(H::AbstractHilbertSpace) = NumberConservation(missing, atomic_factors(H), missing)
-NumberConservation() = NumberConservation(missing, missing, missing)
+_normalize_constraint_subspace(subspace::AbstractHilbertSpace) = (subspace,)
+_normalize_constraint_subspace(subspaces) = subspaces
+
+# NumberConservation(n) = NumberConservation(n, missing, missing)
+# NumberConservation(H::AbstractHilbertSpace) = NumberConservation(missing, atomic_factors(H), missing)
+# NumberConservation() = NumberConservation(missing, missing, missing)
 # NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(total, (subspace,), missing)
-NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(total, atomic_factors(subspace), missing)
-NumberConservation(total, subspace::AbstractClusterHilbertSpace) = NumberConservation(total, atomic_factors(subspace), missing)
-NumberConservation(total, spaces) = NumberConservation(total, spaces, missing)
+# NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(total, (subspace,), missing)
+# NumberConservation(total, subspace::AbstractClusterHilbertSpace) = NumberConservation(total, (subspace,), missing)
+# NumberConservation(total, spaces) = NumberConservation(total, spaces, missing)
 
 """
     ParityConservation(parities=[-1, 1], subspaces=missing)
@@ -67,49 +73,125 @@ Constraint enforcing allowed fermion parities, optionally on selected subspaces.
 struct ParityConservation{H} <: AbstractConstraint
     allowed_parities::Vector{Int}
     subspaces::H
+    function ParityConservation(_allowed=[-1, 1], _subspaces=missing)
+        allowed = _normalize_constraint_values(_allowed)
+        allowed in Set([[-1, 1], [1], [-1]]) || throw(ArgumentError("Allowed parities must be a subset of [-1, 1]"))
+        subspace = _normalize_constraint_subspace(_subspaces)
+        new{typeof(subspace)}(allowed, subspace)
+    end
 end
-ParityConservation() = ParityConservation([-1, 1], missing)
-ParityConservation(H::AbstractHilbertSpace) = ParityConservation([-1, 1], H)
-ParityConservation(ps::AbstractVector{Int}) = ParityConservation(Vector{Int}(ps), missing)
-ParityConservation(p::Int) = ParityConservation([p], missing)
+# ParityConservation() = ParityConservation([-1, 1], missing)
+# ParityConservation(H::AbstractHilbertSpace) = ParityConservation([-1, 1], H)
+# ParityConservation(ps::AbstractVector{Int}) = ParityConservation(Vector{Int}(ps), missing)
+# ParityConservation(p::Int) = ParityConservation([p], missing)
+
+_format_subspaces(s) = ismissing(s) ? nothing : isa(s, Union{Tuple,AbstractVector}) ? "$(length(s)) subspaces" : "subspaces"
+_indent(s, p) = join([(i > 1 ? p : "") * l for (i, l) in enumerate(split(s, '\n'))], '\n')
+_parity(p) = p == [-1, 1] ? "any" : p == [1] ? "even" : p == [-1] ? "odd" : string(p)
+
+function Base.show(io::IO, nc::NumberConservation{T,H,W}) where {T,H,W}
+    if get(io, :compact, false)
+        parts = filter(!isnothing, [
+            ismissing(nc.total) ? nothing : sprint(show, nc.total),
+            ismissing(nc.subspaces) ? nothing : _format_subspaces(nc.subspaces),
+            ismissing(nc.weights) ? nothing : "weighted"])
+        print(io, "NumberConservation(", join(parts, ", "), ")")
+    else
+        lines = filter(!isnothing, [
+            ismissing(nc.total) ? nothing : "total: " * (isa(nc.total, AbstractVector) && length(nc.total) == 1 ? string(only(nc.total)) : sprint(show, nc.total)),
+            ismissing(nc.subspaces) ? nothing : "$(_format_subspaces(nc.subspaces))",
+            ismissing(nc.weights) ? nothing : "weights: " * sprint(show, nc.weights)])
+        isempty(lines) ? print(io, "NumberConservation()") : print(io, "NumberConservation(", join(lines, ", "), ")")
+    end
+end
+
+function Base.show(io::IO, pc::ParityConservation{H}) where {H}
+    compact = get(io, :compact, false)
+    if compact
+        parts = [_parity(pc.allowed_parities)]
+        !ismissing(pc.subspaces) && push!(parts, "subspaces")
+        print(io, "ParityConservation(", join(parts, ", "), ")")
+    else
+        lines = ["allowed_parities: $(_parity(pc.allowed_parities))"]
+        !ismissing(pc.subspaces) && push!(lines, ", $(_format_subspaces(pc.subspaces))")
+        print(io, "ParityConservation(", join(lines, ""), ")")
+    end
+end
+
+function Base.show(io::IO, ac::AdditiveConstraint{T,H,F}) where {T,H,F}
+    nf = isa(ac.functions, Tuple) ? length(ac.functions) : 1
+    if get(io, :compact, false)
+        pre = ismissing(ac.allowed_values) ? "" : sprint(show, ac.allowed_values) * ", "
+        print(io, "AdditiveConstraint(", pre, "$nf function(s))")
+    else
+        lines = ["  allowed_values: " * (ismissing(ac.allowed_values) ? "missing" : sprint(show, ac.allowed_values)),
+            "  functions: $nf function(s)"]
+        !ismissing(ac.subspaces) && push!(lines, "  subspaces: $(_format_subspaces(ac.subspaces))")
+        print(io, "AdditiveConstraint(\n", join(lines, "\n"), "\n)")
+    end
+end
+
+function Base.show(io::IO, pc::ProductConstraint{C}) where {C}
+    if get(io, :compact, false)
+        print(io, "ProductConstraint(")
+        for (i, c) in enumerate(pc.constraints)
+            i > 1 && print(io, " * ")
+            show(IOContext(io, :compact => true), c)
+        end
+        print(io, ")")
+    else
+        print(io, "ProductConstraint:\n")
+        for (i, c) in enumerate(pc.constraints)
+            is_last = i == length(pc.constraints)
+            prefix = is_last ? "  └─ " : "  ├─ "
+            if isa(c, ProductConstraint)
+                nested = join(split(sprint(show, c), '\n')[2:end], '\n')
+                print(io, prefix, "ProductConstraint:\n", _indent(nested, is_last ? "     " : "  │  "))
+            else
+                print(io, prefix, sprint(show, c; context=:compact => true))
+            end
+            is_last || print(io, "\n")
+        end
+    end
+end
+
 unique_split_state(state, mapper) = only(first(split_state(state, mapper)))
 
-function sector_function(cons::NumberConservation{T,S,Missing}, space::AbstractHilbertSpace, spaces) where {T,S}
-    subspaces = S === Missing ? spaces : cons.subspaces
+# function sector_function(cons::NumberConservation{T,S,Missing}, space::AbstractHilbertSpace, spaces) where {T,S}
+#     subspaces = S === Missing ? spaces : cons.subspaces
+#     mapper = state_mapper(space, subspaces)
+#     function number(state)
+#         subs = unique_split_state(state, mapper)
+#         sum(particle_number, subs)
+#     end
+# end
+# function sector_function(cons::NumberConservation{T,S,W}, space::AbstractHilbertSpace, spaces) where {T,S,W}
+#     subspaces = S === Missing ? spaces : cons.subspaces
+#     mapper = state_mapper(space, subspaces)
+#     function number(state)
+#         subs = unique_split_state(state, mapper)
+#         # mapreduce((s, w) -> particle_number(s) * w, +, subs, cons.weights)
+#         _additive_function_application(subs, WeightedFunction(particle_number, cons.weights))
+#     end
+# end
+function sector_function(cons::C, space::AbstractHilbertSpace, spaces) where {C<:Union{<:NumberConservation,<:ParityConservation,<:AdditiveConstraint}}
+    subspaces = ismissing(cons.subspaces) ? spaces : cons.subspaces
     mapper = state_mapper(space, subspaces)
+    func = _function_on_substates(cons)
     function number(state)
         subs = unique_split_state(state, mapper)
-        sum(particle_number, subs)
+        _additive_function_application(subs, func)
     end
 end
-function sector_function(cons::NumberConservation{T,S,W}, space::AbstractHilbertSpace, spaces) where {T,S,W}
-    subspaces = S === Missing ? spaces : cons.subspaces
-    mapper = state_mapper(space, subspaces)
-    function number(state)
-        subs = unique_split_state(state, mapper)
-        mapreduce((s, w) -> particle_number(s) * w, +, subs, cons.weights)
-    end
+function sector_function(constraint::ProductConstraint, space::AbstractHilbertSpace, spaces)
+    subspace_functions = map(cons -> sector_function(cons, space, spaces), constraint.constraints)
+    state -> map(f -> f(state), subspace_functions)
 end
 
-function sector_function(cons::ParityConservation{S}, space::AbstractHilbertSpace, spaces) where {S}
-    subspaces = S === Missing ? spaces : cons.subspaces
-    mapper = state_mapper(space, subspaces)
-    function number(state)
-        subs = unique_split_state(state, mapper)
-        sum(parity, subs)
-    end
-end
-
-function sector_function(cons::AdditiveConstraint{T,S,F}, space::AbstractHilbertSpace, spaces) where {T,S,F}
-    subspaces = S === Missing ? spaces : cons.subspaces
-    # functions = _normalize_constraint_functions(cons.functions, length(subspaces))
-    mapper = state_mapper(space, subspaces)
-    function value(state)
-        subs = unique_split_state(state, mapper)
-        _additive_function_application(subs, cons.functions)
-        # mapreduce((s, func) -> func(s), +, subs, functions)
-    end
-end
+_function_on_substates(::NumberConservation{<:Any,<:Any,Missing}) = particle_number
+_function_on_substates(cons::NumberConservation{<:Any,<:Any,W}) where {W} = WeightedFunction(particle_number, cons.weights)
+_function_on_substates(::ParityConservation) = parity
+_function_on_substates(cons::AdditiveConstraint) = cons.functions
 
 
 function branch_constraint(constraint::ParityConservation, spaces)

@@ -102,13 +102,13 @@ NonCommutativeProducts.@commutative MajoranaSym BosonSym
     @test (b1 * b2) * b1' == b1 * (b2 * b1')
 end
 
-struct BosonicFockState <: AbstractBasisState
+struct BosonicState <: AbstractBasisState
     n::Int
 end
-Base.:(==)(a::BosonicFockState, b::BosonicFockState) = a.n == b.n
-Base.isless(a::BosonicFockState, b::BosonicFockState) = a.n < b.n
-Base.hash(x::BosonicFockState, h::UInt) = hash(x.n, h)
-struct TruncatedBosonicHilbertSpace{B} <: AbstractAtomicHilbertSpace{BosonicFockState}
+Base.:(==)(a::BosonicState, b::BosonicState) = a.n == b.n
+Base.isless(a::BosonicState, b::BosonicState) = a.n < b.n
+Base.hash(x::BosonicState, h::UInt) = hash(x.n, h)
+struct TruncatedBosonicHilbertSpace{B} <: AbstractAtomicHilbertSpace{BosonicState}
     sym::BosonSym{B}
     dimension::Int
     function TruncatedBosonicHilbertSpace(sym::BosonSym{B}, dimension::Integer) where B
@@ -120,12 +120,12 @@ struct TruncatedBosonicHilbertSpace{B} <: AbstractAtomicHilbertSpace{BosonicFock
 end
 Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)
 Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.dimension, h))
-basisstates(H::TruncatedBosonicHilbertSpace) = map(BosonicFockState, 0:(dim(H) - 1))
+basisstates(H::TruncatedBosonicHilbertSpace) = map(BosonicState, 0:(dim(H) - 1))
 function basisstate(n::Int, H::TruncatedBosonicHilbertSpace)
     if n < 1 || n > dim(H)
         throw(ArgumentError("Basis state index $n is out of bounds for Hilbert space with dimension $(dim(H))"))
     end
-    BosonicFockState(n - 1)
+    BosonicState(n - 1)
 end
 dim(H::TruncatedBosonicHilbertSpace) = H.dimension
 function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
@@ -136,7 +136,7 @@ function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
         print(io, "Label: ", H.sym.name, ", dimension: ", dim(H))
     end
 end
-function state_index(s::BosonicFockState, H::TruncatedBosonicHilbertSpace)
+function state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace)
     if s.n < 0 || s.n >= dim(H)
         throw(ArgumentError("State $s is not in the Hilbert space"))
     end
@@ -145,11 +145,11 @@ end
 
 hilbert_space(sym::BosonSym{B}, dimension) where B = TruncatedBosonicHilbertSpace(sym, dimension)
 hilbert_space(sym::BosonSym{B}, dimension, constraint) where B = constrain_space(hilbert_space(sym, dimension), constraint)
-particle_number(s::BosonicFockState) = s.n
-parity(s::BosonicFockState) = iseven(s.n) ? 1 : -1
+particle_number(s::BosonicState) = s.n
+parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 maximum_particles(H::TruncatedBosonicHilbertSpace) = dim(H) - 1
 
-function apply_local_operators(op::NCMul, state::BosonicFockState, space::TruncatedBosonicHilbertSpace, precomp)
+function apply_local_operators(op::NCMul, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp)
     factors = op.factors
     n = state.n
     amplitude = op.coeff
@@ -174,7 +174,7 @@ function apply_local_operators(op::NCMul, state::BosonicFockState, space::Trunca
     if n >= dim(space)
         return (state,), (zero(amplitude),)
     end
-    return (BosonicFockState(n),), (amplitude,)
+    return (BosonicState(n),), (amplitude,)
 end
 
 symbolic_group(f::BosonSym) = BosonSym(f.name, 0)
@@ -182,15 +182,15 @@ symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
 mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
 
 @testitem "Bosonic hilbert space" begin
-    using FermionicHilbertSpaces: TruncatedBosonicHilbertSpace, BosonicFockState, state_index, basisstate
+    using FermionicHilbertSpaces: TruncatedBosonicHilbertSpace, BosonicState, state_index, basisstate
     @boson b
     H = TruncatedBosonicHilbertSpace(b, 4)
-    @test basisstates(H) == [BosonicFockState(0), BosonicFockState(1), BosonicFockState(2), BosonicFockState(3)]
+    @test basisstates(H) == [BosonicState(0), BosonicState(1), BosonicState(2), BosonicState(3)]
     @test dim(H) == 4
-    @test basisstate(1, H) == BosonicFockState(0)
-    @test basisstate(4, H) == BosonicFockState(3)
-    @test state_index(BosonicFockState(0), H) == 1
-    @test state_index(BosonicFockState(3), H) == 4
+    @test basisstate(1, H) == BosonicState(0)
+    @test basisstate(4, H) == BosonicState(3)
+    @test state_index(BosonicState(0), H) == 1
+    @test state_index(BosonicState(3), H) == 4
 end
 
 @testitem "Bosonic matrix representations" begin

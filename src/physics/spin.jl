@@ -31,19 +31,20 @@ Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.name == b.name
 Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
 
 
-struct SpinState{J,S} <: AbstractBasisState
-    m::S
+struct SpinState{M} <: AbstractBasisState
+    m::M
 end
-Base.:(==)(a::SpinState{J}, b::SpinState{J}) where J = a.m == b.m
-Base.isless(a::SpinState{J}, b::SpinState{J}) where J = a.m < b.m
-Base.hash(x::SpinState{J}, h::UInt) where J = hash(J, hash(x.m, h))
-SpinState{J}(m::M) where {J,M} = SpinState{J,M}(m)
-_labeltype(::Type{<:SpinState{J,S}}) where {J,S} = S
+Base.:(==)(a::SpinState, b::SpinState) = a.m == b.m
+Base.isless(a::SpinState, b::SpinState) = a.m < b.m
+Base.hash(x::SpinState, h::UInt) = hash(x.m, h)
+function Base.show(io::IO, s::SpinState)
+    print(io, "Spin(", s.m, ")")
+end
 
-struct SpinSpace{J,S,L} <: AbstractAtomicHilbertSpace{SpinState{J,S}}
-    basisstates::Vector{SpinState{J,S}}
+struct SpinSpace{J,M,L} <: AbstractAtomicHilbertSpace{SpinState{M}}
+    basisstates::Vector{SpinState{M}}
     sym::SymbolicSpinBasis{L}
-    state_index::Dict{SpinState{J,S},Int}
+    state_index::Dict{SpinState{M},Int}
     function SpinSpace{J}(sym::SymbolicSpinBasis{L}) where {J,L}
         states = spin_basisstates(Val(J))
         state_index = Dict(s => i for (i, s) in enumerate(states))
@@ -54,15 +55,14 @@ SpinSpace{J}(label) where J = SpinSpace{J}(SymbolicSpinBasis(label))
 basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
-state_index(s::SpinState{J,S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
+state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
 symbolic_group(H::SpinSpace) = symbolic_group(H.sym)
-function Base.show(io::IO, H::SpinSpace)
-    J = eltype(H.basisstates).parameters[1]
+function Base.show(io::IO, H::SpinSpace{J}) where J
     if get(io, :compact, false)
-        print(io, "SpinSpace{", J, "}(", H.sym, ")")
+        print(io, "Spin{", J, "}(", label(H.sym), ")")
     else
-        print(io, "$(dim(H))-dimensional SpinSpace{", J, "}\n")
-        print(io, "Label: ", H.sym)
+        print(io, "$(dim(H))-dimensional Spin{", J, "}")
+        print(io, "(", label(H.sym), ")")
     end
 end
 
@@ -71,7 +71,7 @@ Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisst
 Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
 
 function spin_basisstates(::Val{J}) where {J}
-    states = [SpinState{J,typeof(J)}(i - J) for i in 0:2J]
+    states = [SpinState{typeof(J)}(i - J) for i in 0:2J]
     return states
 end
 spin_basisstates(j) = spin_basisstates(Val(j))
@@ -84,11 +84,11 @@ function operators(H::SpinSpace{J,S}) where {J,S}
         m = state.m
         i = state_index(state, H)
         if m < J
-            j = state_index(SpinState{J}(m + 1), H)
+            j = state_index(SpinState(m + 1), H)
             Splus[j, i] = sqrt(J * (J + 1) - m * (m + 1))
         end
         if m > -J
-            j = state_index(SpinState{J}(m - 1), H)
+            j = state_index(SpinState(m - 1), H)
             Sminus[j, i] = sqrt(J * (J + 1) - m * (m - 1))
         end
         Sz[i, i] = m
@@ -99,8 +99,8 @@ end
 @testitem "Spin" begin
     using FermionicHilbertSpaces: spin_basisstates, SpinSpace, SpinState, operators
     using LinearAlgebra
-    @test spin_basisstates(1 // 2) == [SpinState{1 // 2}(-1 // 2), SpinState{1 // 2}(1 // 2)]
-    @test spin_basisstates(1) == [SpinState{1}(-1), SpinState{1}(0), SpinState{1}(1)]
+    @test spin_basisstates(1 // 2) == [SpinState(-1 // 2), SpinState(1 // 2)]
+    @test spin_basisstates(1) == [SpinState(-1), SpinState(0), SpinState(1)]
 
     @spin s
     H = hilbert_space(s, 1 // 2)
@@ -214,11 +214,11 @@ NonCommutativeProducts.@commutative BosonSym SpinSym
 NonCommutativeProducts.@commutative MajoranaSym SpinSym
 
 """
-    apply_local_operator(op::SpinSym, state::SpinState{J}) -> (newstate, amplitude)
+    apply_local_operator(op::SpinSym, state::SpinState) -> (newstate, amplitude)
 
 Apply a single spin operator to a spin state. Returns (newstate, amplitude) where amplitude is 0 if the operation is not allowed, and a nonzero value otherwise.
 """
-function apply_local_operator(op::SpinSym, state::SpinState{J}) where J
+function apply_local_operator(op::SpinSym, state::SpinState, ::Val{J}) where J
     m = state.m
     if op.op == :z
         # S_z |m⟩ = m |m⟩
@@ -227,7 +227,7 @@ function apply_local_operator(op::SpinSym, state::SpinState{J}) where J
         # S_+ |m⟩ = √(J(J+1) - m(m+1)) |m+1⟩
         if m < J
             amplitude = sqrt(J * (J + 1) - m * (m + 1))
-            newstate = SpinState{J}(m + 1)
+            newstate = SpinState(m + 1)
             return (newstate, amplitude)
         else
             return (state, 0)
@@ -236,7 +236,7 @@ function apply_local_operator(op::SpinSym, state::SpinState{J}) where J
         # S_- |m⟩ = √(J(J+1) - m(m-1)) |m-1⟩
         if m > -J
             amplitude = sqrt(J * (J + 1) - m * (m - 1))
-            newstate = SpinState{J}(m - 1)
+            newstate = SpinState(m - 1)
             return (newstate, amplitude)
         else
             return (state, 0)
@@ -251,12 +251,12 @@ end
 
 Apply a sequence of spin operators (product) to a spin state. Operators are applied in reverse order (right-to-left, as in operator composition). Returns (newstate, amplitude) or (state, 0) if any step fails.
 """
-function apply_local_operators(op, state::SpinState{J}, space::SpinSpace, precomp) where J
+function apply_local_operators(op, state::SpinState, space::SpinSpace{J}, precomp) where J
     newstate = state
     amplitude = op.coeff * one(typeof(sqrt(J * (J + 1))))  # Start with 1.0 to handle mixed numeric types
     # Apply factors in reverse order (from right to left)
     for factor in reverse(op.factors)
-        newstate, factor_amp = apply_local_operator(factor, newstate)
+        newstate, factor_amp = apply_local_operator(factor, newstate, Val(J))
         if iszero(factor_amp)
             return (state,), (zero(amplitude),)
         end

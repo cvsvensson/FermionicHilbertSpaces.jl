@@ -65,13 +65,13 @@ function backtrack!(results, partial, spaces, depth, constraint, partial_process
     end
 end
 
-_normalize_constraint_values(values::AbstractVector) = collect(values)
-_normalize_constraint_values(values::Tuple) = collect(values)
-_normalize_constraint_values(values::AbstractRange) = collect(values)
+_normalize_constraint_values(values::AbstractVector) = values
+_normalize_constraint_values(values::Tuple) = values
+_normalize_constraint_values(values::AbstractRange) = values
 _normalize_constraint_values(value) = [value]
+_normalize_constraint_values(::Missing) = missing
 
-# _normalize_constraint_functions(f::Function, n) = ntuple(n -> f, n)
-# _normalize_constraint_functions(functions, n) = functions
+
 struct WeightedFunction{F,W}
     func::F
     weights::W
@@ -142,7 +142,7 @@ branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_cons
 
 
 @testitem "generate_states with BranchConstraint" begin
-    using FermionicHilbertSpaces: generate_states, BranchConstraint, AdditiveConstraint, basisstate, hilbert_space, _bit, CombineFockNumbersProcessor, constrain_space, quantumnumbers, particle_number
+    using FermionicHilbertSpaces: generate_states, BranchConstraint, AdditiveConstraint, basisstate, hilbert_space, _bit, CombineFockNumbersProcessor, constrain_space, quantumnumbers, particle_number, combine_states
 
     # Define a simple constraint: only allow states where the first space is in its first basis state
     @fermions f
@@ -263,7 +263,7 @@ branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_cons
     @boson b
     Hb = hilbert_space(b, 3)
     H = tensor_product((H1, H2, Hb))
-    mapper = state_mapper(H, (H1, H2, Hb))
+    mapper = FermionicHilbertSpaces.state_mapper(H, (H1, H2, Hb))
     constraint = NumberConservation(1)
     _states = generate_states((H1, H2, Hb), constraint)
     states = map(s -> only(first(combine_states(s, mapper))), _states)

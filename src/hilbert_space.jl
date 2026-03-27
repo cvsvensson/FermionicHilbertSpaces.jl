@@ -23,7 +23,6 @@ function Base.show(io::IO, H::GenericHilbertSpace)
         print(io, "Label: ", H.label)
     end
 end
-Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
 
 
 @testitem "GenericHilbertSpace, ProductSpace" begin

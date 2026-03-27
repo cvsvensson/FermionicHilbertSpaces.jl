@@ -9,6 +9,14 @@ atomic_factors(state::ProductState) = state.states
 Base.:(==)(s1::ProductState, s2::ProductState) = s1.states == s2.states
 Base.hash(s::ProductState, h::UInt) = hash(s.states, h)
 Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
+function Base.show(io::IO, state::ProductState)
+    print(io, "")
+    for (n, substate) in enumerate(state.states)
+        n > 1 && print(io, "⨯")
+        show(IOContext(io, :compact => true), substate)
+    end
+    print(io, "")
+end
 #ClusterSpace consists of atoms. A cluster compresses states and has nontrivial phase factors
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
 # ProductSpaces consists of a list of atomic spaces and clusters
@@ -54,9 +62,9 @@ function Base.show(io::IO, H::ProductSpace)
     else
         print(io, "$(dim(H))-dimensional ProductSpace: ")
         dims = map(dim, H.clusters)
-        println(io, "(", join(dims, "x"), ")")
+        println(io, "(", join(dims, "×"), ")")
         for (i, c) in enumerate(H.clusters)
-            i > 1 && print(io, " ⊗ ")
+            i > 1 && print(io, " ⨯ ")
             show(IOContext(io, :compact => true), c)
         end
     end
@@ -103,7 +111,7 @@ end
     @test length(H2.clusters) == 3
 
     @test basisstates(H2) == [ProductState((s_f.states..., s_b)) for s_f in basisstates(H), s_b in basisstates(Hboson)]
-    for (i, state) in enumerate(basisstates(H))
+     for (i, state) in enumerate(basisstates(H))
         @test state_index(state, H) == i
         @test basisstate(i, H) == state
     end

@@ -17,12 +17,14 @@ function Base.show(io::IO, f::FockNumber)
     digs = digits(Int, f.f, base=2)
     n = min(5, length(digs))
     join(io, digs[1:n], "")
-    print(io, "…⟩")
+    if length(digs) > 5
+        print(io, "…")
+    end
+    print(io, "⟩")
 end
 function Base.show(io::IO, ::MIME"text/plain", f::FockNumber{T}) where T
     get(io, :compact, false) && return show(io, f)
     print(io, "|",)
-    # n = min(5, length(digs))
     join(io, digits(Int, f.f, base=2), "")
     print(io, "⟩")
 end

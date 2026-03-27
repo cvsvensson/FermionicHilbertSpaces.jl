@@ -45,6 +45,11 @@ end
 allowed_values(::NumberConservation{Missing}, space) = 0:maximum_particles(space)
 allowed_values(constraint::NumberConservation{T}, space) where T = constraint.total
 allowed_values(p::ParityConservation, space) = p.allowed_parities
+function allowed_values(p::ProductConstraint, space)
+    #all combinations of allowed tuples
+    vals = map(Base.Fix2(allowed_values, space), p.constraints)
+    collect(Iterators.product(vals...))
+end
 
 @testitem "constrain_space" begin
     @fermions f
