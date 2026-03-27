@@ -24,25 +24,34 @@ Uses backtracking with pruning via `valid_branch`.
 `partial_processor(partial_state, depth, spaces)` is called whenever a branch is accepted.
 `process_result(full_state, spaces)` can transform each completed state before storing it.
 """
-function generate_states(space::AbstractHilbertSpace{B}, constraint; kwargs...) where B
-    mapper = state_mapper(space, atomic_factors(space))
-    process_result = (full_state, spaces) -> only(first(combine_states(full_state, mapper)))
-    generate_states(atomic_factors(space), constraint, B; process_result, kwargs...)
+function generate_states(spaces, constraint, full_space::AbstractHilbertSpace{B}; kwargs...) where B
+    mapper = state_mapper(full_space, spaces)
+    process_result = (state, spaces) -> only(first(combine_states(state, mapper)))
+    valid_final_state = if isconstrained(full_space)
+        state -> !ismissing(state_index(state, full_space)) # This might be redundant, if full_space is always constructed to only include valid states
+    else
+        state -> true
+    end
+    generate_states(spaces, constraint, B; process_result, valid_final_state, kwargs...)
 end
-function generate_states(spaces, _constraint, ::Type{B}=Any; partial_processor=nothing, process_result=(state, spaces) -> copy(state)) where B
+default_process_result(state, spaces) = copy(state)
+function generate_states(spaces, _constraint, ::Type{B}=Any; partial_processor=nothing, process_result=default_process_result, valid_final_state=state -> true) where B
     constraint = branch_constraint(_constraint, spaces)
     all_statetypes = statetype.(spaces)
     partial = Vector{Union{all_statetypes...}}(undef, length(spaces))
     results = B[]
-    backtrack!(results, partial, spaces, 1, constraint, partial_processor, process_result)
+    backtrack!(results, partial, spaces, 1, constraint, partial_processor, process_result, valid_final_state)
     return results
 end
 
-function backtrack!(results, partial, spaces, depth, constraint, partial_processor, process_result)
+function backtrack!(results, partial, spaces, depth, constraint, partial_processor, process_result, valid_final_state)
     n = length(spaces)
     if depth > n
         # All spaces assigned, add to results
-        push!(results, process_result(partial, spaces))
+        state = process_result(partial, spaces)
+        if valid_final_state(state)
+            push!(results, state)
+        end
         return
     end
 
@@ -51,86 +60,89 @@ function backtrack!(results, partial, spaces, depth, constraint, partial_process
         # Check if this branch is worth exploring
         if valid_branch(constraint, partial, depth, spaces)
             process_partial(partial_processor, partial, depth, spaces)
-            backtrack!(results, partial, spaces, depth + 1, constraint, partial_processor, process_result)
+            backtrack!(results, partial, spaces, depth + 1, constraint, partial_processor, process_result, valid_final_state)
         end
     end
 end
 
-function catenate_fock_states(full_state, spaces, T)
-    num = zero(T)
-    shift = 0
-    for (state, space) in zip(full_state, spaces)
-        num |= state << shift
-        shift += nbr_of_modes(space)
-    end
-    num
+_normalize_constraint_values(values::AbstractVector) = collect(values)
+_normalize_constraint_values(values::Tuple) = collect(values)
+_normalize_constraint_values(values::AbstractRange) = collect(values)
+_normalize_constraint_values(value) = [value]
+
+# _normalize_constraint_functions(f::Function, n) = ntuple(n -> f, n)
+# _normalize_constraint_functions(functions, n) = functions
+struct WeightedFunction{F,W}
+    func::F
+    weights::W
 end
-unweighted_number_branch_constraint(allowed_sums, allspaces) = unweighted_number_branch_constraint(allowed_sums, missing, allspaces)
-function unweighted_number_branch_constraint(allowed_sums, _subspaces, _allspaces)
-    allspaces = _allspaces isa AbstractHilbertSpace ? atomic_factors(_allspaces) : collect(Iterators.flatten(Iterators.map(atomic_factors, _allspaces)))
-    subspaces = ismissing(_subspaces) ? allspaces : collect(Iterators.flatten(Iterators.map(atomic_factors, _subspaces)))
-    return _unweighted_number_branch_constraint(allowed_sums, subspaces, allspaces)
+function _contribution_values(subspaces, functions)
+    map(__contribution_values, subspaces, functions)
 end
-function _unweighted_number_branch_constraint(allowed_numbers, subspaces, allspaces)
-    issub = BitVector(map(s -> s in subspaces, allspaces))
-    remaining_max_particles = Int[]
-    for depth in 0:length(allspaces)
-        remaining_spaces = allspaces[depth+1:end][issub[depth+1:end]]
-        max_particles = sum(maximum_particles, remaining_spaces, init=0)
-        push!(remaining_max_particles, max_particles)
-    end
-    BranchConstraint((partial, depth, spaces) -> begin
-        current = sum(n -> issub[n] ? particle_number(partial[n]) : 0, 1:depth)
-        remaining = remaining_max_particles[depth+1]
-        feasible = any(allowed -> current <= allowed <= current + remaining, allowed_numbers)
-        return feasible
-    end)
+function _contribution_values(subspaces, func::Function)
+    map(Base.Fix2(__contribution_values, func), subspaces)
+end
+function _contribution_values(subspaces, fw::WeightedFunction)
+    map((space, weight) -> __contribution_values(space, s -> weight * fw.func(s)), subspaces, fw.weights)
+end
+function __contribution_values(space, func)
+    values = unique(Iterators.map(func, basisstates(space)))
+    isempty(values) && throw(ArgumentError("Cannot build AdditiveConstraint from a space with no basis states"))
+    values
 end
 
-weighted_number_branch_constraint(allowed_sums, weights, allspaces) = weighted_number_branch_constraint(allowed_sums, weights, missing, allspaces)
-function weighted_number_branch_constraint(allowed_sums, _weights, _subspaces, _allspaces)
-    allspaces = _allspaces isa AbstractHilbertSpace ? atomic_factors(_allspaces) : collect(Iterators.flatten(Iterators.map(atomic_factors, _allspaces)))
-    subspaces = ismissing(_subspaces) ? allspaces : collect(Iterators.flatten(Iterators.map(atomic_factors, _subspaces)))
-    ismissing(_weights) && return unweighted_number_branch_constraint(allowed_sums, subspaces, allspaces)
-    return _weighted_number_branch_constraint(allowed_sums, _weights, subspaces, allspaces)
+additive_branch_constraint(allowed_sums, functions, allspaces) = additive_branch_constraint(allowed_sums, functions, missing, allspaces)
+function additive_branch_constraint(allowed_sums, functions, _subspaces, allspaces)
+    subspaces = ismissing(_subspaces) ? allspaces : _subspaces
+    allowed_values = _normalize_constraint_values(allowed_sums)
+    _additive_branch_constraint(allowed_values, functions, subspaces, allspaces)
 end
-function _weighted_number_branch_constraint(allowed_sums, _weights, subspaces, allspaces)
-    issub = BitVector(map(s -> s in subspaces, allspaces))
-    #extend weights to all spaces, filling non-subspaces with zeros
-    weights = zeros(eltype(_weights), length(allspaces))
-    weights[issub] .= _weights
+function _additive_branch_constraint(allowed_values, functions, subspaces, allspaces)
+    positions = map(subspaces) do subspace
+        pos = findfirst(isequal(subspace), allspaces)
+        isnothing(pos) && throw(ArgumentError("All AdditiveConstraint subspaces must be present in the generated space"))
+        pos
+    end
+    contribution_values = _contribution_values(subspaces, functions)
+    T = typeof(sum(first, contribution_values))
+    # T = mapreduce(eltype, promote_type, contribution_values; init=eltype(allowed_values))
     n = length(allspaces)
-    length(weights) == n || error("weights must have same length as allspaces")
-
-    # Precompute suffix min/max of weighted particle contributions
-    remaining_min = zeros(eltype(weights), n + 1)
-    remaining_max = zeros(eltype(weights), n + 1)
-    for i in n:-1:1
-        w = weights[i]
-        if w != 0
-            maxp = maximum_particles(allspaces[i])
-            remaining_min[i] = remaining_min[i+1] + min(zero(w), w * maxp)
-            remaining_max[i] = remaining_max[i+1] + max(zero(w), w * maxp)
-        else
-            remaining_min[i] = remaining_min[i+1]
-            remaining_max[i] = remaining_max[i+1]
-        end
+    contribution_min = zeros(T, n)
+    contribution_max = zeros(T, n)
+    for (pos, vals) in zip(positions, contribution_values)
+        contribution_min[pos] += minimum(vals)
+        contribution_max[pos] += maximum(vals)
     end
 
-    BranchConstraint((partial, depth, spaces) -> begin
-        current = zero(eltype(weights))
-        for i in 1:depth
-            weights[i] != 0 && (current += weights[i] * particle_number(partial[i]))
-        end
+    remaining_min = zeros(T, n + 1)
+    remaining_max = zeros(T, n + 1)
+    for i in n:-1:1
+        remaining_min[i] = remaining_min[i+1] + contribution_min[i]
+        remaining_max[i] = remaining_max[i+1] + contribution_max[i]
+    end
+    BranchConstraint((partial, depth, _) -> begin
+        current = _additive_function_application(partial, positions, functions, depth, T)
+        # current = sum(f(partial[pos]) for (pos, f) in zip(positions, functions) if pos <= depth; init=zero(T))
         min_possible = current + remaining_min[depth+1]
         max_possible = current + remaining_max[depth+1]
-        return any(target -> min_possible <= target <= max_possible, allowed_sums)
+        any(t -> min_possible <= t <= max_possible, allowed_values)
     end)
 end
+function _additive_function_application(substates, functions, ::Type{T}=Int) where T
+    sum(f(substate) for (substate, f) in zip(substates, functions); init=zero(T))
+end
+function _additive_function_application(partial, positions, functions, depth, ::Type{T}=Int) where T
+    substates = (partial[pos] for pos in positions if pos <= depth)
+    _additive_function_application(substates, functions, T)
+end
+_additive_function_application(substates, func::Function, ::Type{T}=Int) where T = sum(func, substates; init=zero(T))
+_additive_function_application(substates, fw::WeightedFunction, ::Type{T}=Int) where T = sum(w * fw.func(substate) for (substate, w) in zip(substates, fw.weights); init=zero(T))
+
+branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_constraint(constraint.allowed_values, constraint.functions, constraint.subspaces, spaces)
 
 
 @testitem "generate_states with BranchConstraint" begin
-    using FermionicHilbertSpaces: generate_states, BranchConstraint, basisstate, hilbert_space, _bit, unweighted_number_branch_constraint, weighted_number_branch_constraint, CombineFockNumbersProcessor
+    using FermionicHilbertSpaces: generate_states, BranchConstraint, AdditiveConstraint, basisstate, hilbert_space, _bit, unweighted_number_branch_constraint, weighted_number_branch_constraint, CombineFockNumbersProcessor, constrain_space, quantumnumbers, particle_number
 
     # Define a simple constraint: only allow states where the first space is in its first basis state
     @fermions f
@@ -161,11 +173,16 @@ end
     masks = [0b1010, 0b0101]
     allowed_ones = [[0], [2]]
     Hs = [hilbert_space(f, n:n) for n in 1:5]
-    c1 = unweighted_number_branch_constraint(allowed_ones[1], [Hs[2], Hs[4]], Hs)
-    c2 = unweighted_number_branch_constraint(allowed_ones[2], [Hs[1], Hs[3]], Hs)
+    c1 = NumberConservation(allowed_ones[1], [Hs[2], Hs[4]])
+    c2 = NumberConservation(allowed_ones[2], [Hs[1], Hs[3]])
     constraint = c1 * c2
-    states = generate_states(Hs, constraint; process_result)
+    states = generate_states(Hs, constraint)
     # verify particle numbers 
+    for state in states
+        @test count_ones(state[2].f) + count_ones(state[4].f) in allowed_ones[1]
+        @test count_ones(state[1].f) + count_ones(state[3].f) in allowed_ones[2]
+    end
+    states = generate_states(Hs, constraint; process_result) #Now for states combined into focknumbers
     for state in states
         @test count_ones(state.f & masks[1]) in allowed_ones[1]
         @test count_ones(state.f & masks[2]) in allowed_ones[2]
@@ -175,8 +192,8 @@ end
     @test states == generate_states(Hs, cons2; process_result)
 
     @test all([[[0], [2]], [[1], [1]], [[0], [0]], [[2], [2]]]) do allowed
-        c1 = unweighted_number_branch_constraint(allowed[1], [Hs[2], Hs[4]], Hs)
-        c2 = unweighted_number_branch_constraint(allowed[2], [Hs[1], Hs[3]], Hs)
+        c1 = NumberConservation(allowed[1], [Hs[2], Hs[4]])
+        c2 = NumberConservation(allowed[2], [Hs[1], Hs[3]])
         constraint = c1 * c2
         states = generate_states(Hs, constraint; process_result)
         for state in states
@@ -191,13 +208,65 @@ end
     N = 80
     H = hilbert_space(f, 1:N)
     allowed_ones = [[0, 1], [-1, 0], [2]]
-    constraint = prod(unweighted_number_branch_constraint(allowed, H) for allowed in allowed_ones)
-    states = generate_states(H, constraint)
+    constraint = prod(NumberConservation(allowed) for allowed in allowed_ones)
+    states = generate_states(H.modes, constraint, H)
     @test all(s -> s.f >= 0, states)
 
     weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
-    constraint = prod(weighted_number_branch_constraint(allowed, w, H) for (allowed, w) in zip(allowed_ones, weights))
-    states = generate_states(H, constraint)
+    constraint = prod(NumberConservation(allowed, missing, w) for (allowed, w) in zip(allowed_ones, weights))
+    states = generate_states(H.modes, constraint, H)
     @test all(s -> s.f >= 0, states)
 
+    H = tensor_product(Hs)
+    additive = AdditiveConstraint([1], (Hs[1], Hs[2], Hs[3]), (
+        s -> 2 * particle_number(s),
+        s -> -particle_number(s),
+        s -> particle_number(s),
+    ))
+    numcon = NumberConservation([1], (Hs[1], Hs[2], Hs[3]), (2, -1, 1))
+    Hnum = tensor_product(Hs, numcon)
+    Hadd = tensor_product(Hs, additive)
+    @test Hnum == Hadd
+    # states = generate_states(Hs, additive, H; process_result)
+    @test all(state -> begin
+            n1 = count_ones(state.f & 0b00001)
+            n2 = count_ones(state.f & 0b00010)
+            n3 = count_ones(state.f & 0b00100)
+            2n1 - n2 + n3 == 1
+        end, basisstates(Hadd))
+
+    additive_with_shared_function = AdditiveConstraint([0, 2], (Hs[4], Hs[5]), particle_number)
+    states = generate_states(Hs, additive_with_shared_function; process_result)
+    @test all(state -> begin
+            n4 = count_ones(state.f & 0b01000)
+            n5 = count_ones(state.f & 0b10000)
+            n4 + n5 in (0, 2)
+        end, states)
+
+    Hc = tensor_product(Hs, additive)
+    @test collect(quantumnumbers(Hc)) == [1]
+
+    compound = additive * AdditiveConstraint([1], (Hs[4], Hs[5]), particle_number)
+    states = generate_states(Hs, compound; process_result)
+    @test all(state -> begin
+            n1 = count_ones(state.f & 0b00001)
+            n2 = count_ones(state.f & 0b00010)
+            n3 = count_ones(state.f & 0b00100)
+            n4 = count_ones(state.f & 0b01000)
+            n5 = count_ones(state.f & 0b10000)
+            2n1 - n2 + n3 == 1 && n4 + n5 == 1
+        end, states)
+
+    # Test with clusters and mixed spaces
+    H1 = hilbert_space(f, 1:2)
+    H2 = hilbert_space(f, 3:3)
+    @boson b
+    Hb = hilbert_space(b, 3)
+    H = tensor_product((H1, H2, Hb))
+    mapper = state_mapper(H, (H1, H2, Hb))
+    constraint = NumberConservation(1)
+    _states = generate_states((H1, H2, Hb), constraint)
+    states = map(s -> only(first(combine_states(s, mapper))), _states)
+    states2 = basisstates(constrain_space(H, constraint))
+    @test Set(states) == Set(states2)
 end

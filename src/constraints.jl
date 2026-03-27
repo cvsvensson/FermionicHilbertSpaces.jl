@@ -20,6 +20,24 @@ branch_constraint(constraint::ProductConstraint, space) = ProductConstraint(map(
 
 
 """
+    AdditiveConstraint(allowed_values, subspaces=missing, functions)
+
+Constraint enforcing that the sum of user-specified per-subspace contributions lies
+in `allowed_values`.
+
+The constraint is evaluated on the factors used during state generation. For a
+composite Hilbert space this means `atomic_factors(space)`.
+"""
+struct AdditiveConstraint{T,H,F} <: AbstractConstraint
+    allowed_values::T
+    subspaces::H
+    functions::F
+end
+AdditiveConstraint(allowed_values, functions) = AdditiveConstraint(allowed_values, missing, functions)
+AdditiveConstraint(allowed_values, subspace::AbstractHilbertSpace, functions) = AdditiveConstraint(allowed_values, atomic_factors(subspace), functions)
+AdditiveConstraint(allowed_values, subspace::AbstractClusterHilbertSpace, functions) = AdditiveConstraint(allowed_values, atomic_factors(subspace), functions)
+
+"""
     NumberConservation(total=missing, subspaces=missing, weights=missing)
 
 Constraint enforcing conservation of a (possibly weighted) particle number.
@@ -54,27 +72,75 @@ ParityConservation() = ParityConservation([-1, 1], missing)
 ParityConservation(H::AbstractHilbertSpace) = ParityConservation([-1, 1], H)
 ParityConservation(ps::AbstractVector{Int}) = ParityConservation(Vector{Int}(ps), missing)
 ParityConservation(p::Int) = ParityConservation([p], missing)
+unique_split_state(state, mapper) = only(first(split_state(state, mapper)))
 
-function sector_function(cons::NumberConservation{T,S,W}, space) where {T,S,W}
-    subspaces = S === Missing ? atomic_factors(space) : cons.subspaces
-    issub = BitVector(map(in(subspaces), atomic_factors(space)))
-    _weights = W === Missing ? ones(Int, sum(issub)) : cons.weights
-    weights = zeros(eltype(_weights), length(atomic_factors(space)))
-
-    weights[issub] .= _weights
-    return f -> mapreduce((n, w) -> particle_number(atomic_substate(n, f, space)) * w, +, 1:length(weights), weights)
+function sector_function(cons::NumberConservation{T,S,Missing}, space::AbstractHilbertSpace, spaces) where {T,S}
+    subspaces = S === Missing ? spaces : cons.subspaces
+    mapper = state_mapper(space, subspaces)
+    function number(state)
+        subs = unique_split_state(state, mapper)
+        sum(particle_number, subs)
+    end
+end
+function sector_function(cons::NumberConservation{T,S,W}, space::AbstractHilbertSpace, spaces) where {T,S,W}
+    subspaces = S === Missing ? spaces : cons.subspaces
+    mapper = state_mapper(space, subspaces)
+    function number(state)
+        subs = unique_split_state(state, mapper)
+        mapreduce((s, w) -> particle_number(s) * w, +, subs, cons.weights)
+    end
 end
 
-sector_function(::ParityConservation{Missing}, space::ProductSpace) = f -> prod(parity, f.states)
-sector_function(::NumberConservation{T,Missing,Missing}, space) where {T} = f -> particle_number(f)
-sector_function(::ParityConservation{Missing}, space) = f -> parity(f)
-
-function sector_function(constraint::ProductConstraint, space)
-    subspace_functions = map(cons -> sector_function(cons, space), constraint.constraints)
-    state -> map(f -> f(state), subspace_functions)
+function sector_function(cons::ParityConservation{S}, space::AbstractHilbertSpace, spaces) where {S}
+    subspaces = S === Missing ? spaces : cons.subspaces
+    mapper = state_mapper(space, subspaces)
+    function number(state)
+        subs = unique_split_state(state, mapper)
+        sum(parity, subs)
+    end
 end
+
+function sector_function(cons::AdditiveConstraint{T,S,F}, space::AbstractHilbertSpace, spaces) where {T,S,F}
+    subspaces = S === Missing ? spaces : cons.subspaces
+    # functions = _normalize_constraint_functions(cons.functions, length(subspaces))
+    mapper = state_mapper(space, subspaces)
+    function value(state)
+        subs = unique_split_state(state, mapper)
+        _additive_function_application(subs, cons.functions)
+        # mapreduce((s, func) -> func(s), +, subs, functions)
+    end
+end
+
+
+function branch_constraint(constraint::ParityConservation, spaces)
+    possible_numbers = ismissing(constraint.subspaces) ? (0:sum(maximum_particles, spaces)) : (0:sum(nbr_of_modes, constraint.subspaces))
+    allowed_numbers = filter(n -> any(p -> p == (-1)^n, constraint.allowed_parities), possible_numbers)
+    # unweighted_number_branch_constraint(allowed_numbers, constraint.subspaces, spaces)
+    additive_branch_constraint(allowed_numbers, particle_number, constraint.subspaces, spaces)
+end
+
+function branch_constraint(constraint::NumberConservation{T,H,W}, spaces) where {T,H,W}
+    subspaces = H === Missing ? spaces : constraint.subspaces
+    if W === Missing
+        total = T === Missing ? (0:sum(maximum_particles, subspaces)) : constraint.total
+        return additive_branch_constraint(total, particle_number, subspaces, spaces)
+    end
+    T === Missing && throw(ArgumentError("Total particle number must be specified when using weighted number branch constraint"))
+    additive_branch_constraint(constraint.total, WeightedFunction(particle_number, constraint.weights), subspaces, spaces)
+end
+
+
+# sector_function(::ParityConservation{Missing}, space::ProductSpace) = f -> prod(parity, f.states)
+# sector_function(::NumberConservation{T,Missing,Missing}, space) where {T} = f -> particle_number(f)
+# sector_function(::ParityConservation{Missing}, space) = f -> parity(f)
+
+# function sector_function(constraint::ProductConstraint, space)
+#     subspace_functions = map(cons -> sector_function(cons, space), constraint.constraints)
+#     state -> map(f -> f(state), subspace_functions)
+# end
 sectors(::AbstractConstraint) = nothing
 has_sectors(N::NumberConservation) = true
+has_sectors(C::AdditiveConstraint) = true
 has_sectors(P::ParityConservation) = true
 has_sectors(c::ProductConstraint) = any(has_sectors, c.constraints)
 

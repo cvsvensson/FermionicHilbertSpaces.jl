@@ -114,6 +114,16 @@ function combine_states(f, fm::FockMapper{N}) where N
     (FockNumber{IT}(result),), (1,)
 end
 
+function catenate_fock_states(fock_states, spaces, T)
+    num = zero(T)
+    shift = 0
+    for (state, space) in zip(fock_states, spaces)
+        num |= state << shift
+        shift += nbr_of_modes(space)
+    end
+    num
+end
+
 # function combine_states(f, fm::FockMapper{N}) where N
 #     T = FockNumber{default_fock_representation(Val(N))}
 #     state = mapfoldr(tup -> insert_bits(T(tup[1]), tup[2]), |, zip(f, fm.fermionpositions); init=zero(T))

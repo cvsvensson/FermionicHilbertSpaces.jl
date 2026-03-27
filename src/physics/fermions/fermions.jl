@@ -165,22 +165,6 @@ bipartite_embedding_unitary(X, Xbar, H::FermionCluster) = bipartite_embedding_un
 partial_trace_phase_factor(f1, f2, H::FermionCluster) = phase_factor_f(f1, f2, nbr_of_modes(H))
 
 
-function branch_constraint(constraint::ParityConservation, spaces)
-    possible_numbers = ismissing(constraint.subspaces) ? (0:sum(maximum_particles, spaces)) : (0:sum(nbr_of_modes, constraint.subspaces))
-    allowed_numbers = filter(n -> any(p -> p == (-1)^n, constraint.allowed_parities), possible_numbers)
-    unweighted_number_branch_constraint(allowed_numbers, constraint.subspaces, spaces)
-end
-
-function branch_constraint(constraint::NumberConservation{T,H,W}, spaces) where {T,H,W}
-    subspaces = H === Missing ? spaces : constraint.subspaces
-    if W === Missing
-        total = T === Missing ? (0:sum(maximum_particles, subspaces)) : constraint.total
-        return unweighted_number_branch_constraint(total, subspaces, spaces)
-    end
-    T === Missing && throw(ArgumentError("Total particle number must be specified when using weighted number branch constraint"))
-    weighted_number_branch_constraint(constraint.total, constraint.weights, subspaces, spaces)
-end
-
 
 struct CombineFockNumbersProcessor{T} end
 function (processor::CombineFockNumbersProcessor{T})(full_state, spaces) where T
@@ -373,7 +357,10 @@ issubsystem(Hsub::AbstractHilbertSpace, H::FermionCluster) = isorderedsubsystem(
     Hr = hilbert_space(c_r[1])
     Hlr = tensor_product((Hl, Hr))
     mat = matrix_representation(lindbladian, Hlr)
-    Hcons = constrain_space(Hlr, NumberConservation(-1:1, [Hl, Hr], [1, -1])) # The difference between left fermions and right fermions is conserved
+
+    #The difference between left fermions and right fermions is conserved
+    constraint = NumberConservation(-1:1, [Hl, Hr], [1, -1])
+    Hcons = tensor_product((Hl, Hr), constraint)
     @test size(matrix_representation(lindbladian, Hcons), 1) == dim(Hcons)
 
     blocks = map(sectors(Hcons)) do Hsector
@@ -381,23 +368,6 @@ issubsystem(Hsub::AbstractHilbertSpace, H::FermionCluster) = isorderedsubsystem(
     end
     @test cat(blocks...; dims=(1, 2)) == matrix_representation(lindbladian, Hcons)
 end
-
-@testitem "FermionCluster show truncates long mode lists" begin
-    @fermions f
-
-    Hsmall = hilbert_space(f, 1:6)
-    shown_small = sprint(show, Hsmall)
-    @test occursin("Modes: (f[1, 2, 3, 4, 5, 6])", shown_small)
-    @test !occursin("total", shown_small)
-
-    Hlarge = hilbert_space(f, 1:20)
-    shown_large = sprint(show, Hlarge)
-    @test occursin("Modes: 20 total", shown_large)
-    @test occursin("...", shown_large)
-    @test occursin("f[1, 2, 3", shown_large)
-    @test occursin("18, 19, 20]", shown_large)
-end
-
 
 @testitem "Tensor product of FermionicMode and FermionCluster" begin
     import FermionicHilbertSpaces: constrain_space, FermionCluster

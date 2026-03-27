@@ -20,30 +20,33 @@ end
 
 Construct the composite Hilbert space from the spaces in `spaces`, with optional `constraint`. 
 """
-function tensor_product(spaces, constraint::AbstractConstraint=NoSymmetry())
-    if length(spaces) == 1
-        return constrain_space(only(spaces), constraint)
-    end
+function tensor_product(spaces)
     atoms = (Iterators.flatten(Iterators.map(atomic_factors, spaces)))
     _groups = group(symbolic_group, atoms)
     groups = (map(g -> map(identity, g), _groups)) #This can convert the groups into vectors of concrete types
     clusters = map(typegroup -> combine_into_cluster(typegroup...), pairs(groups))
-    prod_space = ProductSpace(Tuple(clusters), collect(atoms))
-
-    full_space = if any(isconstrained, spaces)
-        mapper = state_mapper(prod_space, spaces)
-        states = [only(first(combine_states(states, mapper))) for states in Iterators.product(map(basisstates, spaces)...)]
-        if length(prod_space.clusters) == 1
-            constrain_space(only(prod_space.clusters), vec(map(s -> only(s.states), states)))
-        else
-            constrain_space(prod_space, vec(states))
-        end
-    elseif length(clusters) == 1
+    space = if length(clusters) == 1
         only(clusters)
     else
-        prod_space
+        ProductSpace(Tuple(clusters), collect(atoms))
     end
-    return constrain_space(full_space, constraint)
+    if any(isconstrained, spaces)
+        mapper = state_mapper(space, spaces)
+        states = _find_combined_states(space, spaces, mapper)
+        return ConstrainedSpace(space, states)
+    end
+    return space
+end
+function tensor_product(spaces, constraint::AbstractConstraint)
+    if length(spaces) == 1
+        return constrain_space(only(spaces), constraint)
+    end
+    full_space = tensor_product(spaces)
+    constraint == NoSymmetry() && return full_space
+    # generate constrained states
+    states = generate_states(spaces, constraint, full_space)
+    return block_space(full_space, states, sector_function(constraint, full_space, spaces))
+
 end
 
 function check_tensor_product_basis_compatibility(b1::AbstractHilbertSpace, b2::AbstractHilbertSpace, b3::AbstractHilbertSpace)

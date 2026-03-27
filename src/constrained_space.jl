@@ -29,23 +29,20 @@ isconstrained(H::ConstrainedSpace) = true
 combine_states(substates, sp::ConstrainedSpace) = combine_states(substates, parent(sp))
 partial_trace_phase_factor(s1, s2, sp::ConstrainedSpace) = partial_trace_phase_factor(s1, s2, parent(sp))
 atomic_substate(n, f, space::ConstrainedSpace) = atomic_substate(n, f, parent(space))
+constrain_space(space::AbstractHilbertSpace, constraint::NoSymmetry) = space
+constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}) where B<:AbstractBasisState = ConstrainedSpace(space, states)
 
-constrain_space(H, ::NoSymmetry; kwargs...) = H
-constrain_space(H::ConstrainedSpace, ::NoSymmetry; kwargs...) = H
-function constrain_space(H::ConstrainedSpace, constraint::AbstractConstraint; kwargs...)
-    space = constrain_space(parent(H), constraint; kwargs...)
-    states = intersect(basisstates(H), basisstates(space))
-    ConstrainedSpace(parent(H), states)
+function constrain_space(space, constraint::NumberConservation{T,Missing,Missing}) where T
+    allowed = in(Set(allowed_values(constraint, space)))
+    qn(state) = begin
+        n = particle_number(state)
+        allowed(n) ? n : missing
+    end
+    block_space(space, basisstates(space), qn)
 end
-function constrain_space(H::AbstractHilbertSpace, states::AbstractVector{B}) where B<:AbstractBasisState
-    ConstrainedSpace(H, states)
-end
-function constrain_space(space, constraint::AbstractConstraint; sortby=default_sorter(space, constraint), kwargs...)
-    states = generate_states(space, constraint; kwargs...)
-    isnothing(sortby) || sort!(states, by=sortby)
-    has_sectors(constraint) || return ConstrainedSpace(space, states)
-    block_space(space, states, sector_function(constraint, space))
-end
+
+allowed_values(::NumberConservation{Missing}, space) = 0:maximum_particles(space)
+allowed_values(constraint::NumberConservation{T}, space) where T = constraint.total
 
 
 function Base.show(io::IO, H::ConstrainedSpace)
@@ -61,7 +58,6 @@ function Base.show(io::IO, H::ConstrainedSpace)
 end
 
 state_mapper(H::ConstrainedSpace, Hs) = state_mapper(parent(H), Hs)
-
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
 
 apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::ConstrainedSpace, precomp) = apply_local_operators(ops, state, space.parent, precomp)
@@ -78,9 +74,9 @@ _precomputation_before_operator_application(ops::Union{<:Any,<:NCMul}, space::Co
     @test size(m) == (2^N, 2^N)
 
     #total number of particles is 1
-    constraint = unweighted_number_branch_constraint([1], H.modes, H.modes)
-    combiner = CombineFockNumbersProcessor{FockNumber{Int}}()
-    Hc = constrain_space(H, constraint; process_result=combiner)
+    Hc = constrain_space(H, NumberConservation(1))
+    Hc2 = tensor_product(H.modes, NumberConservation(1))
+    @test Set(basisstates(Hc)) == Set(basisstates(Hc2))
     @test dim(Hc) == N
     mc = matrix_representation(sym, Hc)
     @test size(mc) == (N, N)

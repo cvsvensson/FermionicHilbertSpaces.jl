@@ -19,12 +19,12 @@ function block_space(space, states, sector_function)
     _qntostates = group(state -> sector_function(state), states)
     _block_space(space, _qntostates)
 end
-function _block_space(space, _qntostates)
+function _block_space(space, _qntostates::Dictionary{Q,<:AbstractVector{B}}) where {Q,B}
     inds = keys(_qntostates)
     filt_inds = filter(!ismissing, inds)
     qn_to_states = map(collect, getindices(_qntostates, filt_inds))
     sortkeys!(qn_to_states)
-    ordered_states = reduce(vcat, qn_to_states)
+    ordered_states = reduce(vcat, qn_to_states, init=B[])
     state_indexdict = Dictionary(ordered_states, 1:length(ordered_states))
     BlockHilbertSpace(space, ordered_states, state_indexdict, qn_to_states)
 end
@@ -310,3 +310,4 @@ end
     @test size(matrix_representation(hopping_symham, H; projection=true), 1) == dim(H)
 end
 
+maximum_particles(H::BlockHilbertSpace) = maximum_particles(parent(H))
