@@ -11,7 +11,21 @@ Base.convert(::Type{FockNumber{I}}, f::FockNumber) where {I} = FockNumber{I}(I(f
 Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
 Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
 Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
-Base.show(io::IO, f::FockNumber{T}) where T = get(io, :compact, false) ? print(io, "FockNumber{$T}(", f.f, ")") : print(io, "FockNumber(", f.f, ")")
+
+function Base.show(io::IO, f::FockNumber)
+    print(io, "|",)
+    digs = digits(Int, f.f, base=2)
+    n = min(5, length(digs))
+    join(io, digs[1:n], "")
+    print(io, "…⟩")
+end
+function Base.show(io::IO, ::MIME"text/plain", f::FockNumber{T}) where T
+    get(io, :compact, false) && return show(io, f)
+    print(io, "|",)
+    # n = min(5, length(digs))
+    join(io, digits(Int, f.f, base=2), "")
+    print(io, "⟩")
+end
 function default_fock_representation(::Val{N}) where N
     N < 64 ? UInt64 : BigInt
 end
