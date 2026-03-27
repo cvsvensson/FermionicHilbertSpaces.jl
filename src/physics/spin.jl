@@ -39,8 +39,6 @@ Base.isless(a::SpinState{J}, b::SpinState{J}) where J = a.m < b.m
 Base.hash(x::SpinState{J}, h::UInt) where J = hash(J, hash(x.m, h))
 SpinState{J}(m::M) where {J,M} = SpinState{J,M}(m)
 _labeltype(::Type{<:SpinState{J,S}}) where {J,S} = S
-particle_number(s::SpinState{J,S}) where {J,S} = s.m + J
-parity(s::SpinState{J,S}) where {J,S} = iseven(particle_number(s)) ? 1 : -1
 
 struct SpinSpace{J,S,L} <: AbstractAtomicHilbertSpace{SpinState{J,S}}
     basisstates::Vector{SpinState{J,S}}
@@ -58,7 +56,6 @@ basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{J,S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
 symbolic_group(H::SpinSpace) = symbolic_group(H.sym)
-maximum_particles(::SpinSpace{J}) where J = 2J
 function Base.show(io::IO, H::SpinSpace)
     J = eltype(H.basisstates).parameters[1]
     if get(io, :compact, false)
