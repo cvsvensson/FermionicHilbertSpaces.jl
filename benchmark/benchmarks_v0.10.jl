@@ -28,25 +28,30 @@ SUITE["matrix_representation"]["free_fermion"] = @benchmarkable matrix_represent
 opsp_bdg = opsp + sum(rand(ComplexF64) * f[n]' * f[n+1]' + hc for n in 1:999)
 Hbdg = bdg_hilbert_space(f, 1:1000)
 SUITE["matrix_representation"]["bdg"] = @benchmarkable matrix_representation($opsp_bdg, $Hbdg)
-SUITE["partial_trace"]["standard"] = @benchmarkable partial_trace($m, $(H => Hsub))
-SUITE["partial_trace"]["map"] = @benchmarkable partial_trace($(H => Hsub))
+
+SUITE["complement"]["fermions"] = @benchmarkable FermionicHilbertSpaces.complementary_subsystem($H, $Hsub)
+
+complement = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
+SUITE["partial_trace"]["fermions"]["map"] = @benchmarkable partial_trace($(H => Hsub); complement=$complement)
+SUITE["partial_trace"]["fermions"]["standard"] = @benchmarkable partial_trace($m, $(H => Hsub), complement=$complement)
+
 d = dim(Hsub)
 msub = rand(ComplexF64, d, d)
-SUITE["embed"] = @benchmarkable embed($msub, $(Hsub => H))
+SUITE["embed"]["fermions"] = @benchmarkable embed($msub, $(Hsub => H); complement=$complement)
 
 N = 60
 weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
 allowed_ones = [[0, 1], [-1, 0], [2]]
 H = hilbert_space(f, 1:N)
-constraint = prod(FermionicHilbertSpaces.weighted_number_branch_constraint(allowed, w, H) for (allowed, w) in zip(allowed_ones, weights))
-SUITE["generate_states"]["int"] = @benchmarkable FermionicHilbertSpaces.generate_states($H, $constraint; process_result=FermionicHilbertSpaces.CombineFockNumbersProcessor{FockNumber{Int}}())
+constraint = prod(NumberConservation(allowed, missing, w) for (allowed, w) in zip(allowed_ones, weights))
+SUITE["generate_states"]["int"] = @benchmarkable FermionicHilbertSpaces.generate_states($H.modes, $constraint, $H; process_result=FermionicHilbertSpaces.CombineFockNumbersProcessor{FockNumber{Int}}())
 
 N = 64
 weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
 allowed_ones = [[0, 1], [-1, 0], [2]]
 H = hilbert_space(f, 1:N)
-constraint = prod(FermionicHilbertSpaces.weighted_number_branch_constraint(allowed, w, H) for (allowed, w) in zip(allowed_ones, weights))
-SUITE["generate_states"]["big_int"] = @benchmarkable FermionicHilbertSpaces.generate_states($H, $constraint; process_result=FermionicHilbertSpaces.CombineFockNumbersProcessor{FockNumber{BigInt}}())
+constraint = prod(NumberConservation(allowed, missing, w) for (allowed, w) in zip(allowed_ones, weights))
+SUITE["generate_states"]["big_int"] = @benchmarkable FermionicHilbertSpaces.generate_states($H.modes, $constraint, $H; process_result=FermionicHilbertSpaces.CombineFockNumbersProcessor{FockNumber{Int}}())
 
 ## Benchmark partial trace algorithms
 import FermionicHilbertSpaces: FullPartialTraceAlg, SubsystemPartialTraceAlg, default_partial_trace_alg
@@ -90,3 +95,19 @@ for alg in [SubsystemPartialTraceAlg(), FullPartialTraceAlg()]
     SUITE["partial_trace_algorithms"]["default=$def"]["Full space"]["Sparse"]["$name"] =
         @benchmarkable partial_trace($m_sparse, $H_std, $Hsub_std; alg=$alg)
 end
+
+## Product spaces
+@fermions f
+@bosons b 1:4
+Hf = hilbert_space(f, 1:2)
+Hb = tensor_product(hilbert_space.(values(b), 3))
+H = tensor_product(Hf, Hb)
+Hsub = tensor_product(hilbert_space(f, 1:1), [hilbert_space(b[n], 3) for n in 1:2]...)
+SUITE["complement"]["product space"] = @benchmarkable FermionicHilbertSpaces.complementary_subsystem($H, $Hsub)
+
+complement = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
+SUITE["partial_trace"]["product space"]["map"] = @benchmarkable partial_trace($(H => Hsub); complement=$complement)
+m = rand(ComplexF64, dim(H), dim(H))
+SUITE["partial_trace"]["product space"]["standard"] = @benchmarkable partial_trace($m, $(H => Hsub); complement=$complement)
+msub = rand(ComplexF64, dim(Hsub), dim(Hsub))
+SUITE["embed"]["product space"] = @benchmarkable embed($msub, $(Hsub => H); complement=$complement)

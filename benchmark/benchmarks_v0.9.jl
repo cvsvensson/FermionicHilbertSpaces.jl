@@ -28,11 +28,16 @@ SUITE["matrix_representation"]["free_fermion"] = @benchmarkable matrix_represent
 opsp_bdg = opsp + sum(rand(ComplexF64) * f[n]' * f[n+1]' + hc for n in 1:999)
 Hbdg = bdg_hilbert_space(1:1000)
 SUITE["matrix_representation"]["bdg"] = @benchmarkable matrix_representation($opsp_bdg, $Hbdg)
-SUITE["partial_trace"]["standard"] = @benchmarkable partial_trace($m, $(H => Hsub))
-SUITE["partial_trace"]["map"] = @benchmarkable partial_trace($(H => Hsub))
+
+SUITE["complement"]["fermions"] = @benchmarkable FermionicHilbertSpaces.complementary_subsystem($H, $Hsub)
+
+complement = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
+SUITE["partial_trace"]["fermions"]["map"] = @benchmarkable partial_trace($(H => Hsub); complement=$complement)
+SUITE["partial_trace"]["fermions"]["standard"] = @benchmarkable partial_trace($m, $(H => Hsub), complement=$complement)
+
 d = dim(Hsub)
 msub = rand(ComplexF64, d, d)
-SUITE["embed"] = @benchmarkable embed($msub, $(Hsub => H))
+SUITE["embed"]["fermions"] = @benchmarkable embed($msub, $(Hsub => H))
 
 N = 60
 weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
