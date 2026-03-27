@@ -137,18 +137,6 @@ function _compact_fermionic_modes(io::IO, c::FermionCluster;
     print(io, "(", join(_truncate(map(fmt, groups), max_groups, edge_groups), ", "), ")")
 end
 
-function Base.show(io::IO, c::FermionCluster)
-    max_modes = 10
-    if get(io, :compact, false)
-        _compact_fermionic_modes(io, c; max_groups=4, edge_groups=2, max_labels_per_group=6, edge_labels=2)
-    else
-        n = nbr_of_modes(c)
-        print(io, "$(dim(c))-dimensional FermionCluster\nModes: ")
-        n > max_modes && print(io, "$n total ")
-        _compact_fermionic_modes(io, c; (n > max_modes ? (max_groups=6, edge_groups=3, max_labels_per_group=8, edge_labels=3) : (;))...)
-    end
-end
-
 function embedding_unitary(partition, states, H::FermionCluster)
     atoms = atomic_factors(H)
     positions = [[_find_position(atom, atoms) for atom in atomic_factors(cluster)] for cluster in partition]

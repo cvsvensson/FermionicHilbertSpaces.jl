@@ -87,18 +87,6 @@ allowed_values(p::ParityConservation, space) = p.allowed_parities
     @test basisstates(H3) == basisstates(constrain_space(H, NumberConservation(1)))
 end
 
-function Base.show(io::IO, H::ConstrainedSpace)
-    if get(io, :compact, false)
-        print(io, "ConstrainedSpace(")
-        show(IOContext(io, :compact => true), parent(H))
-        print(io, ", $(dim(H))-dim)")
-    else
-        print(io, "$(dim(H))-dimensional ConstrainedSpace\n")
-        print(io, "Parent: ")
-        show(IOContext(io, :compact => true), parent(H))
-    end
-end
-
 state_mapper(H::ConstrainedSpace, Hs) = state_mapper(parent(H), Hs)
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
 

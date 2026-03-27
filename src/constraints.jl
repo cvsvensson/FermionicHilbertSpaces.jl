@@ -86,102 +86,8 @@ end
 # ParityConservation(ps::AbstractVector{Int}) = ParityConservation(Vector{Int}(ps), missing)
 # ParityConservation(p::Int) = ParityConservation([p], missing)
 
-_format_subspaces(s) = ismissing(s) ? nothing : isa(s, Union{Tuple,AbstractVector}) ? "$(length(s)) subspaces" : "subspaces"
-_indent(s, p) = join([(i > 1 ? p : "") * l for (i, l) in enumerate(split(s, '\n'))], '\n')
-_parity(p) = p == [-1, 1] ? "any" : p == [1] ? "even" : p == [-1] ? "odd" : string(p)
-
-function Base.show(io::IO, nc::NumberConservation{T,H,W}) where {T,H,W}
-    if get(io, :compact, false)
-        parts = filter(!isnothing, [
-            ismissing(nc.total) ? nothing : sprint(show, nc.total),
-            ismissing(nc.subspaces) ? nothing : _format_subspaces(nc.subspaces),
-            ismissing(nc.weights) ? nothing : "weighted"])
-        print(io, "NumberConservation(", join(parts, ", "), ")")
-    else
-        lines = filter(!isnothing, [
-            ismissing(nc.total) ? nothing : "total: " * (isa(nc.total, AbstractVector) && length(nc.total) == 1 ? string(only(nc.total)) : sprint(show, nc.total)),
-            ismissing(nc.subspaces) ? nothing : "$(_format_subspaces(nc.subspaces))",
-            ismissing(nc.weights) ? nothing : "weights: " * sprint(show, nc.weights)])
-        isempty(lines) ? print(io, "NumberConservation()") : print(io, "NumberConservation(", join(lines, ", "), ")")
-    end
-end
-
-function Base.show(io::IO, pc::ParityConservation{H}) where {H}
-    compact = get(io, :compact, false)
-    if compact
-        parts = [_parity(pc.allowed_parities)]
-        !ismissing(pc.subspaces) && push!(parts, "subspaces")
-        print(io, "ParityConservation(", join(parts, ", "), ")")
-    else
-        lines = ["allowed_parities: $(_parity(pc.allowed_parities))"]
-        !ismissing(pc.subspaces) && push!(lines, ", $(_format_subspaces(pc.subspaces))")
-        print(io, "ParityConservation(", join(lines, ""), ")")
-    end
-end
-
-function Base.show(io::IO, ac::AdditiveConstraint{T,H,F}) where {T,H,F}
-    nf = isa(ac.functions, Tuple) ? length(ac.functions) : 1
-    if get(io, :compact, false)
-        pre = ismissing(ac.allowed_values) ? "" : sprint(show, ac.allowed_values) * ", "
-        print(io, "AdditiveConstraint(", pre, "$nf function(s))")
-    else
-        lines = ["  allowed_values: " * (ismissing(ac.allowed_values) ? "missing" : sprint(show, ac.allowed_values)),
-            "  functions: $nf function(s)"]
-        !ismissing(ac.subspaces) && push!(lines, "  subspaces: $(_format_subspaces(ac.subspaces))")
-        print(io, "AdditiveConstraint(\n", join(lines, "\n"), "\n)")
-    end
-end
-
-function Base.show(io::IO, pc::ProductConstraint{C}) where {C}
-    nconstraints = length(pc.constraints)
-    nshow = min(nconstraints, 6)
-    if get(io, :compact, false)
-        print(io, "ProductConstraint(")
-        for (i, c) in enumerate(pc.constraints[1:nshow])
-            i > 1 && print(io, " * ")
-            show(IOContext(io, :compact => true), c)
-        end
-        nconstraints > nshow && print(io, " * ... ($(nconstraints - nshow) more)")
-        print(io, ")")
-    else
-        print(io, "ProductConstraint:\n")
-        for (i, c) in enumerate(pc.constraints[1:nshow])
-            is_last = (i == nshow) && (nconstraints == nshow)
-            prefix = is_last ? "  └─ " : "  ├─ "
-            if isa(c, ProductConstraint)
-                nested = join(split(sprint(show, c), '\n')[2:end], '\n')
-                print(io, prefix, "ProductConstraint:\n", _indent(nested, is_last ? "     " : "  │  "))
-            else
-                print(io, prefix, sprint(show, c; context=:compact => true))
-            end
-            is_last || print(io, "\n")
-        end
-        if nconstraints > nshow
-            nshow > 0 && print(io, "\n")
-            print(io, "  └─ ... (", nconstraints - nshow, " more)")
-        end
-    end
-end
-
 unique_split_state(state, mapper) = only(first(split_state(state, mapper)))
 
-# function sector_function(cons::NumberConservation{T,S,Missing}, space::AbstractHilbertSpace, spaces) where {T,S}
-#     subspaces = S === Missing ? spaces : cons.subspaces
-#     mapper = state_mapper(space, subspaces)
-#     function number(state)
-#         subs = unique_split_state(state, mapper)
-#         sum(particle_number, subs)
-#     end
-# end
-# function sector_function(cons::NumberConservation{T,S,W}, space::AbstractHilbertSpace, spaces) where {T,S,W}
-#     subspaces = S === Missing ? spaces : cons.subspaces
-#     mapper = state_mapper(space, subspaces)
-#     function number(state)
-#         subs = unique_split_state(state, mapper)
-#         # mapreduce((s, w) -> particle_number(s) * w, +, subs, cons.weights)
-#         _additive_function_application(subs, WeightedFunction(particle_number, cons.weights))
-#     end
-# end
 function sector_function(cons::C, space::AbstractHilbertSpace, spaces) where {C<:Union{<:NumberConservation,<:ParityConservation,<:AdditiveConstraint}}
     subspaces = ismissing(cons.subspaces) ? spaces : cons.subspaces
     subspaces = ismissing(subspaces) ? (space,) : subspaces
@@ -219,15 +125,6 @@ function branch_constraint(constraint::NumberConservation{T,H,W}, spaces) where 
     additive_branch_constraint(constraint.total, WeightedFunction(particle_number, constraint.weights), subspaces, spaces)
 end
 
-
-# sector_function(::ParityConservation{Missing}, space::ProductSpace) = f -> prod(parity, f.states)
-# sector_function(::NumberConservation{T,Missing,Missing}, space) where {T} = f -> particle_number(f)
-# sector_function(::ParityConservation{Missing}, space) = f -> parity(f)
-
-# function sector_function(constraint::ProductConstraint, space)
-#     subspace_functions = map(cons -> sector_function(cons, space), constraint.constraints)
-#     state -> map(f -> f(state), subspace_functions)
-# end
 sectors(::AbstractConstraint) = nothing
 has_sectors(N::NumberConservation) = true
 has_sectors(C::AdditiveConstraint) = true
@@ -243,7 +140,6 @@ Build a constrained Hilbert space from `space`, either by applying a constraint 
 by explicitly providing a list of allowed basis states.
 """
 constrain_space
-default_sorter(space, constraint) = identity
 
 @testitem "ProductSymmetry" begin
     labels = 1:4

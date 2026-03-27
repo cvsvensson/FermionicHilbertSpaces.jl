@@ -66,6 +66,8 @@ include("physics/fermions/bdg.jl")
 include("physics/bosons.jl")
 include("physics/spin.jl")
 
+include("printing.jl")
+
 function __init__()
     NonCommutativeProducts.enable_autosort!()
 end

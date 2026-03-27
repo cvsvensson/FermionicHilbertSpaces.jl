@@ -100,11 +100,6 @@ end
 function _additive_branch_constraint(allowed_values, functions, subspaces, allspaces)
     positions = map(subspaces) do subspace
         pos = findfirst(isequal(subspace), allspaces)
-        if isnothing(pos)
-            println("Subspace: ", subspace)
-            println("All spaces: ", allspaces)
-        end
-
         isnothing(pos) && throw(ArgumentError("All AdditiveConstraint subspaces must be present in the generated space"))
         pos
     end

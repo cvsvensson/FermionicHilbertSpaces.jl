@@ -128,14 +128,6 @@ function basisstate(n::Int, H::TruncatedBosonicHilbertSpace)
     BosonicState(n - 1)
 end
 dim(H::TruncatedBosonicHilbertSpace) = H.dimension
-function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
-    if get(io, :compact, false)
-        print(io, "Bosons(", H.sym.name, ", dim=", dim(H), ")")
-    else
-        print(io, "$(dim(H))-dimensional TruncatedBosonicHilbertSpace\n")
-        print(io, "Label: ", H.sym.name, ", dimension: ", dim(H))
-    end
-end
 function state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace)
     if s.n < 0 || s.n >= dim(H)
         throw(ArgumentError("State $s is not in the Hilbert space"))

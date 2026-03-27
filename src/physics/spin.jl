@@ -57,14 +57,6 @@ basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
 symbolic_group(H::SpinSpace) = symbolic_group(H.sym)
-function Base.show(io::IO, H::SpinSpace{J}) where J
-    if get(io, :compact, false)
-        print(io, "Spin{", J, "}(", label(H.sym), ")")
-    else
-        print(io, "$(dim(H))-dimensional Spin{", J, "}")
-        print(io, "(", label(H.sym), ")")
-    end
-end
 
 hilbert_space(sym::SymbolicSpinBasis{L}, J) where L = SpinSpace{J}(sym)
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)

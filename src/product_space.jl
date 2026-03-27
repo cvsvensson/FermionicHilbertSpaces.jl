@@ -9,14 +9,6 @@ atomic_factors(state::ProductState) = state.states
 Base.:(==)(s1::ProductState, s2::ProductState) = s1.states == s2.states
 Base.hash(s::ProductState, h::UInt) = hash(s.states, h)
 Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
-function Base.show(io::IO, state::ProductState)
-    print(io, "")
-    for (n, substate) in enumerate(state.states)
-        n > 1 && print(io, "⨯")
-        show(IOContext(io, :compact => true), substate)
-    end
-    print(io, "")
-end
 #ClusterSpace consists of atoms. A cluster compresses states and has nontrivial phase factors
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
 # ProductSpaces consists of a list of atomic spaces and clusters
@@ -56,19 +48,6 @@ function _find_position(Hsub, H::ProductSpace)
 end
 
 
-function Base.show(io::IO, H::ProductSpace)
-    if get(io, :compact, false)
-        print(io, "ProductSpace($(dim(H))-dim, $(length(H.clusters)) clusters)")
-    else
-        print(io, "$(dim(H))-dimensional ProductSpace: ")
-        dims = map(dim, H.clusters)
-        println(io, "(", join(dims, "×"), ")")
-        for (i, c) in enumerate(H.clusters)
-            i > 1 && print(io, " ⨯ ")
-            show(IOContext(io, :compact => true), c)
-        end
-    end
-end
 maximum_particles(H::ProductSpace) = sum(maximum_particles, factors(H))
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
 parity(state::ProductState) = prod(parity, atomic_factors(state))
@@ -289,33 +268,6 @@ unique_split(::Any) = false
 unique_combine(::Any) = false
 unique_split(::ProductSpaceMapper) = true
 unique_combine(::ProductSpaceMapper) = true
-function Base.show(io::IO, sm::ProductSpaceMapper)
-    if get(io, :compact, false)
-        print(io, "ProductSpaceMapper(")
-        for (i, ts) in enumerate(sm.target_spaces)
-            i > 1 && print(io, " ⊗ ")
-            show(IOContext(io, :compact => true), ts)
-        end
-        print(io, ")")
-        return
-    end
-    println(io, "ProductSpaceMapper:")
-    print(io, "  Targets: ")
-    for (i, ts) in enumerate(sm.target_spaces)
-        i > 1 && print(io, " ⊗ ")
-        show(IOContext(io, :compact => true), ts)
-    end
-    for (ci, (mapper, piece_targets)) in enumerate(zip(sm.cluster_mappers, sm.cluster_piece_targets))
-        println(io)
-        if isnothing(mapper)
-            print(io, "  Cluster $ci: (unmapped)")
-        else
-            destinations = join(["target $(ti)[$(si)]" for (ti, si) in piece_targets], ", ")
-            print(io, "  Cluster $ci → $destinations: ")
-            show(IOContext(io, :compact => true), mapper)
-        end
-    end
-end
 
 function state_mapper(source::ProductSpace, targets)
     targets = Tuple(targets)

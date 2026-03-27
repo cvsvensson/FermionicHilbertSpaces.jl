@@ -218,7 +218,6 @@ function majorana_hilbert_space(y::SymbolicMajoranaBasis, labels, args...; kwarg
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
     MajoranaHilbertSpace(majorana_position, H, y)
 end
-Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace: ", m.sym); show(IOContext(io, :compact => true), m.parent))
 
 function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
     parent_subregion = subregion(parent(Hsub), parent(H))

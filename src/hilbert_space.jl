@@ -15,15 +15,6 @@ Base.keys(H::GenericHilbertSpace) = (H.label,)
 state_index(state, H::GenericHilbertSpace) = get(H.state_index, state, missing)
 symbolic_group(H::GenericHilbertSpace) = H.label
 
-function Base.show(io::IO, H::GenericHilbertSpace)
-    if get(io, :compact, false)
-        print(io, "GenericHilbertSpace(", H.label, ")")
-    else
-        print(io, "$(dim(H))-dimensional GenericHilbertSpace\n")
-        print(io, "Label: ", H.label)
-    end
-end
-
 
 @testitem "GenericHilbertSpace, ProductSpace" begin
     using FermionicHilbertSpaces: GenericHilbertSpace
