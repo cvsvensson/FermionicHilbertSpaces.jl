@@ -106,6 +106,11 @@ function FockMapper(fermionpositions::P) where P
 end
 unique_split(::FockMapper) = true
 unique_combine(::FockMapper) = true
+function Base.show(io::IO, fm::FockMapper{N}) where N
+    print(io, "FockMapper($N modes → ")
+    print(io, join(["[" * join(pos, ",") * "]" for pos in fm.fermionpositions], " ⊗ "))
+    print(io, ")")
+end
 function combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:BitPermutation}) where N
     state = concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))})
     (state,), (1,)

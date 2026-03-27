@@ -87,7 +87,7 @@ end
 
 
 @testitem "ProductSpace" begin
-    import FermionicHilbertSpaces: state_index, basisstate, state_mapper, ProductState, substate, complementary_subsystem, atomic_factors, split_state, tensor_product
+    import FermionicHilbertSpaces: state_index, basisstate, state_mapper, ProductState, substate, complementary_subsystem, atomic_factors, split_state
     @fermions a b
     @fermions c
     Ha = hilbert_space(a[1])
@@ -111,7 +111,7 @@ end
     @test length(H2.clusters) == 3
 
     @test basisstates(H2) == [ProductState((s_f.states..., s_b)) for s_f in basisstates(H), s_b in basisstates(Hboson)]
-     for (i, state) in enumerate(basisstates(H))
+    for (i, state) in enumerate(basisstates(H))
         @test state_index(state, H) == i
         @test basisstate(i, H) == state
     end
@@ -229,7 +229,6 @@ end
     @test embed(cmat, Hc => H) == matrix_representation(c[1], H)
 
     # Constrained spaces and subregion
-    import FermionicHilbertSpaces: constrain_space
     Habcons = constrain_space(Hab, NumberConservation(1))
     @test dim(Habcons) == 2
     @test dim(tensor_product((Habcons, Hc))) == dim(Hc) * dim(Habcons)
@@ -290,6 +289,33 @@ unique_split(::Any) = false
 unique_combine(::Any) = false
 unique_split(::ProductSpaceMapper) = true
 unique_combine(::ProductSpaceMapper) = true
+function Base.show(io::IO, sm::ProductSpaceMapper)
+    if get(io, :compact, false)
+        print(io, "ProductSpaceMapper(")
+        for (i, ts) in enumerate(sm.target_spaces)
+            i > 1 && print(io, " ⊗ ")
+            show(IOContext(io, :compact => true), ts)
+        end
+        print(io, ")")
+        return
+    end
+    println(io, "ProductSpaceMapper:")
+    print(io, "  Targets: ")
+    for (i, ts) in enumerate(sm.target_spaces)
+        i > 1 && print(io, " ⊗ ")
+        show(IOContext(io, :compact => true), ts)
+    end
+    for (ci, (mapper, piece_targets)) in enumerate(zip(sm.cluster_mappers, sm.cluster_piece_targets))
+        println(io)
+        if isnothing(mapper)
+            print(io, "  Cluster $ci: (unmapped)")
+        else
+            destinations = join(["target $(ti)[$(si)]" for (ti, si) in piece_targets], ", ")
+            print(io, "  Cluster $ci → $destinations: ")
+            show(IOContext(io, :compact => true), mapper)
+        end
+    end
+end
 
 function state_mapper(source::ProductSpace, targets)
     targets = Tuple(targets)
