@@ -43,6 +43,16 @@ where H is hermitian and Δ is antisymmetric.
 bdg_hilbert_space(f, labels) = BdGHilbertSpace(f, labels)
 dim(h::BdGHilbertSpace) = dim(h.parent)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
+function Base.show(io::IO, H::BdGHilbertSpace)
+    if get(io, :compact, false)
+        print(io, "BdGHilbertSpace($(dim(H))-dim, $(div(dim(H), 2)) modes)")
+    else
+        print(io, "$(dim(H))-dimensional BdGHilbertSpace\n")
+        print(io, "Physical modes: ", div(dim(H), 2), "\n")
+        print(io, "Parent: ")
+        show(IOContext(io, :compact => true), parent(H))
+    end
+end
 Base.:(==)(a::BdGHilbertSpace, b::BdGHilbertSpace) = a === b || a.parent == b.parent
 Base.hash(x::BdGHilbertSpace, h::UInt) = hash(x.parent, h)
 modes(H::BdGHilbertSpace) = modes(H.parent)
