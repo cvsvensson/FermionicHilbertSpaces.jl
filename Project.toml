@@ -1,6 +1,6 @@
 name = "FermionicHilbertSpaces"
 uuid = "82e5dd95-83c3-46b2-a303-acc930c81756"
-version = "0.9.3"
+version = "0.10.0"
 authors = ["Viktor Svensson", "William Samuelson"]
 
 [deps]
@@ -23,7 +23,7 @@ Dictionaries = "0.4.5"
 FillArrays = "1"
 FlexiGroups = "0.1"
 LinearAlgebra = "1.11"
-NonCommutativeProducts = "0.3"
+NonCommutativeProducts = "0.4"
 OrderedCollections = "1"
 PrecompileTools = "1.2"
 SparseArrays = "1"
