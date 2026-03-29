@@ -164,7 +164,11 @@ basisstate(i, m::MajoranaHilbertSpace) = basisstate(i, m.parent)
 Base.parent(H::MajoranaHilbertSpace) = H.parent
 nbr_of_modes(H::MajoranaHilbertSpace) = nbr_of_modes(H.parent)
 isconstrained(H::MajoranaHilbertSpace) = isconstrained(H.parent)
-symbolic_group(H::MajoranaHilbertSpace) = symbolic_group(H.sym)
+cluster_id(H::MajoranaHilbertSpace) = symbolic_group(H.sym)
+function atomic_id(H::MajoranaHilbertSpace)
+    length(h.majoranaindices) == 2 || throw(ArgumentError("Atomic ID is only defined for MajoranaHilbertSpaces with exactly 2 Majoranas."))
+    (H.sym, h.majoranaindices)
+end
 
 quantumnumbers(H::MajoranaHilbertSpace) = quantumnumbers(H.parent)
 indices(qn, H::MajoranaHilbertSpace) = indices(qn, parent(H))

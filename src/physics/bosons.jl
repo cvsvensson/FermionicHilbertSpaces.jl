@@ -193,11 +193,12 @@ function apply_local_operators(op::NCMul, state::BosonicState, space::TruncatedB
 end
 
 # symbolic_group(f::BosonSym{L,B}) = f.basis 
-symbolic_group(f::BosonSym) = (BosonSym, f.basis, f.label)
-atomic_id(f::BosonSym) = (f.basis, f.label)
+symbolic_group(f::BosonSym{<:Any,B}) where B = (f.basis, f.label)
+symbolic_group(f::BosonSym{<:Any,Nothing}) = (BosonSym, f.label)
+atomic_id(f::BosonSym) = symbolic_group(f)
 # symbolic_group(f::BosonSym{<:Any,Not}) = (BosonSym, f.label)
 symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
-atomic_id(H::TruncatedBosonicHilbertSpace) = (H.sym.basis, H.sym.label)
+atomic_id(H::TruncatedBosonicHilbertSpace) = atomic_id(H.sym)
 cluster_id(H::TruncatedBosonicHilbertSpace) = atomic_id(H)
 mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
 
