@@ -94,7 +94,7 @@ Partition a vector of operator factors into groups by their symbolic basis.
 """
 function partition_factors_by_basis(factors::Vector, bases)
     partition = map(bases) do basis
-        filter(==(symbolic_group(basis)) ∘ symbolic_group, factors)
+        filter(==(basis) ∘ symbolic_group, factors)
     end
     sum(length, partition) == length(factors) || throw(ArgumentError("Not all factors were assigned to a basis."))
     return partition

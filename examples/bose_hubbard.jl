@@ -4,10 +4,9 @@ using Arpack, LinearAlgebra
 N = 6
 local_dimension = 4
 total_particles = N
-@bosons b 1:N
+@bosons b
 
-Hs = hilbert_space.(values(b), local_dimension)
-H = tensor_product(Hs, NumberConservation(total_particles))
+H = hilbert_space(b, 1:6, local_dimension, NumberConservation(total_particles))
 
 number_ops = [matrix_representation(b[i]'b[i], H) for i in 1:N]
 hopping_ops = [matrix_representation(b[i]'b[i+1], H) for i in 1:(N-1)]

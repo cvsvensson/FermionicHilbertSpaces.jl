@@ -1,9 +1,25 @@
-struct SymbolicSpinBasis{L}
-    name::L
+struct SpinField
+    name::Symbol
 end
-Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.name, h)
-label(S::SymbolicSpinBasis) = S.name
-Base.show(io::IO, S::SymbolicSpinBasis) = print(io, "SpinBasis(", S.name, ")")
+Base.:(==)(a::SpinField, b::SpinField) = a.name == b.name
+Base.hash(b::SpinField, h::UInt) = hash(b.name, h)
+Base.show(io::IO, b::SpinField) = print(io, "SpinField(", b.name, ")")
+
+struct SymbolicSpinBasis{L,P}
+    label::L
+    field::P
+end
+SymbolicSpinBasis(label::L) where L = SymbolicSpinBasis(label, nothing)
+Base.getindex(s::SpinField, i) = SymbolicSpinBasis(i, s)
+Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(s.field, hash(x.label, h))
+label(S::SymbolicSpinBasis) = S.label
+function Base.show(io::IO, S::SymbolicSpinBasis)
+    if S.field isa Nothing
+        print(io, "SpinBasis(", S.label, ")")
+    else
+        print(io, "SpinBasis(", S.field.name, "[", S.label, "])")
+    end
+end
 
 """
     @spin s
@@ -17,19 +33,17 @@ macro spin(x)
 end
 
 """
-    @spins s labels
+    @spins s 
 
-Create an ordered dictionary of symbolic spin bases indexed by `labels`.
-Each entry can be used to construct local spin operators.
+Create a spin basis `s`. Index into it to get site-specific
+spin bases: `s[1][:z]` gives the z-operator on site 1.
 """
-macro spins(name, labels)
-    Expr(:block,
-        :($(esc(name)) = OrderedDict(l => SymbolicSpinBasis(Symbol($(Expr(:quote, name)), l)) for l in $(esc(labels)))),
-        :($(esc(name))))
+macro spins(name)
+    return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)))), :($(esc(name))))
 end
-Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.name == b.name
+Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field
+Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.label, hash(x.field, h))
 Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
-
 
 struct SpinState{M} <: AbstractBasisState
     m::M
@@ -37,18 +51,16 @@ end
 Base.:(==)(a::SpinState, b::SpinState) = a.m == b.m
 Base.isless(a::SpinState, b::SpinState) = a.m < b.m
 Base.hash(x::SpinState, h::UInt) = hash(x.m, h)
-function Base.show(io::IO, s::SpinState)
-    print(io, "Spin(", s.m, ")")
-end
 
-struct SpinSpace{J,M,L} <: AbstractAtomicHilbertSpace{SpinState{M}}
+
+struct SpinSpace{J,M,S} <: AbstractAtomicHilbertSpace{SpinState{M}}
     basisstates::Vector{SpinState{M}}
-    sym::SymbolicSpinBasis{L}
+    sym::S
     state_index::Dict{SpinState{M},Int}
-    function SpinSpace{J}(sym::SymbolicSpinBasis{L}) where {J,L}
+    function SpinSpace{J}(sym::S) where {J,S<:SymbolicSpinBasis}
         states = spin_basisstates(Val(J))
         state_index = Dict(s => i for (i, s) in enumerate(states))
-        new{J,typeof(J),L}(states, sym, state_index)
+        new{J,typeof(J),S}(states, sym, state_index)
     end
 end
 SpinSpace{J}(label) where J = SpinSpace{J}(SymbolicSpinBasis(label))
@@ -58,7 +70,8 @@ dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
 symbolic_group(H::SpinSpace) = symbolic_group(H.sym)
 
-hilbert_space(sym::SymbolicSpinBasis{L}, J) where L = SpinSpace{J}(sym)
+hilbert_space(sym::SymbolicSpinBasis, J) = SpinSpace{J}(sym)
+hilbert_space(sym::SpinField, labels, J, constraint=NoSymmetry()) = tensor_product([hilbert_space(sym[l], J) for l in labels], constraint)
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
 
@@ -155,12 +168,18 @@ function _canonical_spin_alias(op)
     end
 end
 
-Base.show(io::IO, x::SpinSym) = print(io, x.basis.name, "[$(x.op)]")
+function Base.show(io::IO, x::SpinSym)
+    if x.basis.field isa Nothing
+        print(io, x.basis.label, "[:$(x.op)]")
+    else
+        print(io, x.basis.field.name, "[", x.basis.label, "][:$(x.op)]")
+    end
+end
 
 Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.basis == b.basis
 Base.hash(a::SpinSym, h::UInt) = hash(a.op, hash(a.basis, h))
-symbolic_group(f::SpinSym) = f.basis
-symbolic_group(f::SymbolicSpinBasis) = f
+symbolic_group(f::SpinSym) = symbolic_group(f.basis)
+symbolic_group(f::SymbolicSpinBasis) = (SymbolicSpinBasis, f.field, f.label)
 
 mat_eltype(::Type{<:SpinSym}) = Float64
 
@@ -175,12 +194,12 @@ function Base.adjoint(x::SpinSym)
         throw(ArgumentError("Invalid spin operator symbol: $(x.op)."))
     end
 end
-
+_spin_name(a::SymbolicSpinBasis) = a.field isa Nothing ? a.label : Symbol(a.field.name, a.label)
 function NonCommutativeProducts.mul_effect(a::SpinSym, b::SpinSym)
-    if a.basis.name > b.basis.name
+    if _spin_name(a.basis) > _spin_name(b.basis)
         return Swap(1)
     end
-    if a.basis.name < b.basis.name
+    if _spin_name(a.basis) < _spin_name(b.basis)
         return nothing
     end
 

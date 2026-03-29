@@ -6,34 +6,56 @@ Create a symbolic bosonic annihilation operator `b`.
 Use `b'` for the corresponding creation operator.
 """
 macro boson(x)
-    Expr(:block, :($(esc(x)) = BosonSym($(Expr(:quote, x)), -1)),
+    Expr(:block, :($(esc(x)) = BosonSym($(Expr(:quote, x)), nothing, -1)),
         :($(esc(x))))
 end
-macro bosons(name, labels)
-    Expr(:block,
-        :($(esc(name)) = OrderedDict(l => BosonSym(Symbol($(Expr(:quote, name)), l), -1) for l in $(esc(labels)))),
+"""
+    @bosons b
+
+Create a bosonic basis `b`. Index into it to get bosonic mode operators:
+`b[i]` returns the annihilation operator for mode `i`, `b[i]'` for the creation operator.
+"""
+macro bosons(name)
+    Expr(:block, :($(esc(name)) = BosonField($(Expr(:quote, name)))),
         :($(esc(name))))
 end
 
-struct BosonSym{B} <: AbstractSym
-    name::B
+struct BosonField
+    name::Symbol
+end
+Base.:(==)(a::BosonField, b::BosonField) = a.name == b.name
+Base.hash(b::BosonField, h::UInt) = hash(b.name, h)
+Base.show(io::IO, b::BosonField) = print(io, "BosonField(", b.name, ")")
+
+struct BosonSym{L,B} <: AbstractSym
+    label::L
+    basis::B
     exp::Int
 end
-Base.adjoint(x::BosonSym) = BosonSym(x.name, -x.exp)
+Base.getindex(b::BosonField, i) = BosonSym(i, b, -1)
+Base.adjoint(x::BosonSym) = BosonSym(x.label, x.basis, -x.exp)
 Base.iszero(x::BosonSym) = false
 function Base.show(io::IO, x::BosonSym)
-    print(io, x.name, x.exp > 0 ? "†" : "")
+    if x.basis isa Nothing
+        print(io, x.label)
+    else
+        print(io, x.basis.name)
+    end
+    print(io, x.exp > 0 ? "†" : "")
     if abs(x.exp) !== 1
         print(io, "^", abs(x.exp))
     end
+    if !(x.basis isa Nothing)
+        print(io, "[", x.label, "]")
+    end
 end
-Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.name == b.name
-Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.name, h))
-
+Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && isequal(a.basis, b.basis)
+Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, h)))
+_boson_name(s::BosonSym) = s.basis isa Nothing ? (s.label) : Symbol(s.basis.name, s.label)
 function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
-    if a.name == b.name
+    if _boson_name(a) == _boson_name(b)
         if sign(a.exp) == sign(b.exp)
-            return BosonSym(a.name, a.exp + b.exp)
+            return BosonSym(a.label, a.basis, a.exp + b.exp)
         else
             if a.exp < 0 && b.exp > 0
                 return AddTerms((Swap(1), 1))
@@ -42,7 +64,7 @@ function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
             end
         end
     end
-    if a.name > b.name
+    if _boson_name(a) > _boson_name(b)
         return Swap(1)
     else
         return nothing
@@ -108,19 +130,19 @@ end
 Base.:(==)(a::BosonicState, b::BosonicState) = a.n == b.n
 Base.isless(a::BosonicState, b::BosonicState) = a.n < b.n
 Base.hash(x::BosonicState, h::UInt) = hash(x.n, h)
-struct TruncatedBosonicHilbertSpace{B} <: AbstractAtomicHilbertSpace{BosonicState}
-    sym::BosonSym{B}
+struct TruncatedBosonicHilbertSpace{L,B} <: AbstractAtomicHilbertSpace{BosonicState}
+    sym::BosonSym{L,B}
     dimension::Int
-    function TruncatedBosonicHilbertSpace(sym::BosonSym{B}, dimension::Integer) where B
+    function TruncatedBosonicHilbertSpace(sym::BosonSym{L,B}, dimension::Integer) where {L,B}
         if dimension < 1
             throw(ArgumentError("Bosonic Hilbert space dimension must be positive, got $dimension"))
         end
-        new{B}(sym, Int(dimension))
+        new{L,B}(sym, Int(dimension))
     end
 end
 Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)
 Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.dimension, h))
-basisstates(H::TruncatedBosonicHilbertSpace) = map(BosonicState, 0:(dim(H) - 1))
+basisstates(H::TruncatedBosonicHilbertSpace) = map(BosonicState, 0:(dim(H)-1))
 function basisstate(n::Int, H::TruncatedBosonicHilbertSpace)
     if n < 1 || n > dim(H)
         throw(ArgumentError("Basis state index $n is out of bounds for Hilbert space with dimension $(dim(H))"))
@@ -135,8 +157,9 @@ function state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace)
     s.n + 1
 end
 
-hilbert_space(sym::BosonSym{B}, dimension) where B = TruncatedBosonicHilbertSpace(sym, dimension)
-hilbert_space(sym::BosonSym{B}, dimension, constraint) where B = constrain_space(hilbert_space(sym, dimension), constraint)
+hilbert_space(sym::BosonField, labels, dimension::Int, constraint::AbstractConstraint=NoSymmetry()) = tensor_product([hilbert_space(sym[l], dimension) for l in labels], constraint)
+hilbert_space(sym::BosonSym, dimension::Int) = TruncatedBosonicHilbertSpace(sym, dimension)
+hilbert_space(sym::BosonSym, dimension::Int, constraint::AbstractConstraint) = constrain_space(hilbert_space(sym, dimension), constraint)
 particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 maximum_particles(H::TruncatedBosonicHilbertSpace) = dim(H) - 1
@@ -169,7 +192,9 @@ function apply_local_operators(op::NCMul, state::BosonicState, space::TruncatedB
     return (BosonicState(n),), (amplitude,)
 end
 
-symbolic_group(f::BosonSym) = BosonSym(f.name, 0)
+# symbolic_group(f::BosonSym{L,B}) = f.basis 
+symbolic_group(f::BosonSym) = (BosonSym, f.basis, f.label)
+# symbolic_group(f::BosonSym{<:Any,Not}) = (BosonSym, f.label)
 symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
 mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
 
@@ -227,14 +252,13 @@ end
     total_particles = N
     local_dimension = 4
     max_occupancy = local_dimension - 1
-    @bosons b 1:N
+    @bosons b
 
-    Hs = hilbert_space.(values(b), local_dimension)
-    Hfull = tensor_product(Hs)
+    Hfull = hilbert_space(b, 1:N, local_dimension)
     @test dim(Hfull) == local_dimension^N
     H = constrain_space(Hfull, NumberConservation(total_particles))
     @test dim(H) == constrained_boson_dim(N, max_occupancy, total_particles)
-    Nop = sum(b[i]'b[i] for i in 1:N)
+    Nop = sum(b[i]' * b[i] for i in 1:N)
     @test norm(matrix_representation(Nop, H) - total_particles * I(dim(H))) < 1e-10
 end
 

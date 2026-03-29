@@ -71,9 +71,8 @@ allowed_values(p::ParityConservation, space) = p.allowed_parities
     @test basisstates(H3) == basisstates(constrain_space(H, NumberConservation(1)))
 
     #repeat for bosons
-    @bosons b 1:2
-    Hs = hilbert_space.(values(b), 2)
-    H = tensor_product(Hs...)
+    @bosons b
+    H = hilbert_space(b, 1:2, 2)
     @test dim(constrain_space(H, NumberConservation())) == 4
     @test dim(constrain_space(H, NumberConservation(1))) == 2
     @test dim(constrain_space(H, NumberConservation(0:1))) == 3

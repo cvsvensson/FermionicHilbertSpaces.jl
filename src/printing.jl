@@ -206,22 +206,34 @@ function Base.show(io::IO, H::GenericHilbertSpace)
 end
 
 function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
+    sym = H.sym
+    lbl = sym.basis isa Nothing ? string(sym.label) : "$(sym.basis.name)[$(sym.label)]"
     if get(io, :compact, false)
-        print(io, "Bosons(", H.sym.name, ", dim=", dim(H), ")")
+        print(io, "Bosons(", lbl, ", dim=", dim(H), ")")
     else
         print(io, "$(dim(H))-dimensional TruncatedBosonicHilbertSpace\n")
-        print(io, "Label: ", H.sym.name, ", dimension: ", dim(H))
+        print(io, "Label: ", lbl, ", dimension: ", dim(H))
     end
 end
 
+function Base.show(io::IO, state::BosonicState)
+    print(io, "|",state.n, "⟩")
+end
+
 function Base.show(io::IO, H::SpinSpace{J}) where J
+    sym = H.sym
+    lbl = sym.field isa Nothing ? sym.label : "$(sym.field.name)[$(sym.label)]"
     if get(io, :compact, false)
-        print(io, "Spin{", J, "}(", label(H.sym), ")")
+        print(io, "Spin{", J, "}(", lbl, ")")
     else
         print(io, "$(dim(H))-dimensional Spin{", J, "}")
-        print(io, "(", label(H.sym), ")")
+        print(io, "(", lbl, ")")
     end
 end
+function Base.show(io::IO, s::SpinState)
+    print(io, "|", s.m, "⟩")
+end
+
 Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace: ", m.sym); show(IOContext(io, :compact => true), m.parent))
 
 
