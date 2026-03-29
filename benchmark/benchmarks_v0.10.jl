@@ -98,11 +98,11 @@ end
 
 ## Product spaces
 @fermions f
-@bosons b 1:4
+@bosons b
 Hf = hilbert_space(f, 1:2)
-Hb = tensor_product(hilbert_space.(values(b), 3))
+Hb = hilbert_space(b, 1:4, 2)
 H = tensor_product(Hf, Hb)
-Hsub = tensor_product(hilbert_space(f, 1:1), [hilbert_space(b[n], 3) for n in 1:2]...)
+Hsub = tensor_product(hilbert_space(f, 1:1), [hilbert_space(b[n], 2) for n in 1:2]...)
 SUITE["complement"]["product space"] = @benchmarkable FermionicHilbertSpaces.complementary_subsystem($H, $Hsub)
 
 complement = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
