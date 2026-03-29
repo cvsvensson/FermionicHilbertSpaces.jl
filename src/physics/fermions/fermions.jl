@@ -4,8 +4,10 @@ struct FermionicMode{L,S} <: AbstractAtomicHilbertSpace{FockNumber{UInt}}
     label::L
     symbolic_basis::S
 end
-symbolic_group(h::FermionicMode) = fermionic_group(h)
 fermionic_group(h::FermionicMode) = fermionic_group(h.symbolic_basis)
+cluster_id(h::FermionicMode) = fermionic_group(h)
+atomic_id(H::FermionicMode) = (H.symbolic_basis, H.label)
+
 modes(H::FermionicMode) = (H.symbolic_basis[H.label],)
 Base.:(==)(m1::FermionicMode, m2::FermionicMode) = m1.label == m2.label && m1.symbolic_basis == m2.symbolic_basis
 Base.hash(m::FermionicMode, h::UInt) = hash(m.label, hash(m.symbolic_basis, h))
@@ -14,7 +16,7 @@ function Base.show(io::IO, c::FermionicMode)
     print(io, c.symbolic_basis.name, "[", c.label, "]")
 end
 combine_states(states, ::AbstractAtomicHilbertSpace) = (only(states),), (1,)
-combine_into_cluster(group::FermionicGroup, fermions) = all(f -> symbolic_group(f) == group, fermions) ? FermionCluster(fermions, group) : throw(ArgumentError("Not all fermions belong to the same group"))
+combine_into_cluster(group::FermionicGroup, fermions) = all(f -> cluster_id(f) == group, fermions) ? FermionCluster(fermions, group) : throw(ArgumentError("Not all fermions belong to the same group"))
 function basisstate(n::Int, H::FermionicMode)
     n == 1 && return FockNumber(zero(default_fock_representation(1)))
     n == 2 && return FockNumber(one(default_fock_representation(1)))
@@ -50,7 +52,7 @@ end
 FermionCluster(mode::FermionicMode) = mode
 function FermionCluster(modes::Union{<:AbstractVector{F},NTuple{N,F}}) where {N,F<:FermionicMode}
 
-    FermionCluster(modes, only(unique(map(symbolic_group, modes))))
+    FermionCluster(modes, only(unique(map(cluster_id, modes))))
 end
 maximum_particles(H::FermionCluster) = nbr_of_modes(H)
 Base.:(==)(c1::FermionCluster, c2::FermionCluster) = c1.modes == c2.modes && c1.group == c2.group
@@ -64,7 +66,7 @@ function dim(H::FermionCluster)
 end
 atomic_factors(H::FermionCluster) = H.modes
 nbr_of_modes(H::FermionCluster) = length(H.modes)
-symbolic_group(H::FermionCluster) = H.group
+cluster_id(H::FermionCluster) = H.group
 mode_ordering(H::FermionCluster) = H.mode_ordering
 modes(H::FermionCluster) = H.modes
 _find_position(f::FermionicMode, H::FermionCluster) = get(H.mode_ordering, f, 0)
@@ -72,38 +74,6 @@ _find_position(f::FermionicMode, H::FermionicMode) = f == H ? 1 : 0
 _find_position(H::AbstractHilbertSpace, ordering::AbstractDict) = get(ordering, H, 0)
 operators(H::FermionCluster) = fermions(H)
 operators(H::FermionicMode) = fermions(H)
-
-function fermion_submodes(sub::Vector{L}, H::FermionCluster{<:Any,L}) where L
-    return sub
-end
-function fermion_submodes(sub::FermionCluster{<:Any,L}, H::FermionCluster{<:Any,L}) where L
-    return sub.modes
-end
-function fermion_submodes(sub::F, H::FermionCluster{<:Any,F}) where F
-    return (sub,)
-end
-function fermion_submodes(sub::Vector{T}, H::FermionCluster{<:Any,<:FermionicMode{T}}) where T
-    bases = unique!(map(m -> m.symbolic_basis, atomic_factors(H)))
-    length(bases) == 1 || throw(ArgumentError("Specifying only labels is ambiguous when the cluster contains modes with different symbolic bases"))
-    basis = only(bases)
-    return map(s -> FermionicMode(basis[s]), sub)
-end
-function fermion_submodes(sub::Vector{<:FermionSym{T}}, H::FermionCluster{<:Any,<:FermionicMode{T}}) where T
-    bases = map(m -> m.symbolic_basis, atomic_factors(H))
-    modes = map(FermionicMode, sub)
-    for m in modes
-        m in H.modes || throw(ArgumentError("Mode $m is not part of the cluster $H"))
-    end
-    return modes
-end
-
-function subregion(Hsub, H::FermionCluster)
-    submodes = fermion_submodes(Hsub, H)
-    positions = map(f -> _find_position(f, H), submodes)
-    all(x -> x > 0, positions) || throw(ArgumentError("The modes $(modes(Hsub)) are not an ordered subsystem of the Hilbert space $(H)"))
-    issorted(positions) || throw(ArgumentError("The modes $(modes(Hsub)) are not an ordered subsystem of the Hilbert space $(H)"))
-    tensor_product(submodes)
-end
 isconstrained(H::FermionCluster) = false
 combine_states(states, H::FermionCluster{F}) where F = (catenate_fock_states(states, H.modes, F),), (1,)
 

@@ -99,12 +99,53 @@ Hsub = subregion((H1, H3), H)
 ```
 """
 function subregion(Hs, H::AbstractHilbertSpace)
-    Hsub = tensor_product(Hs)
+    Hs_items = Hs isa Tuple || Hs isa AbstractVector ? Hs : (Hs,)
+    input_ids = map(atomic_id, Iterators.flatten(Iterators.map(atomic_factors, Hs_items)))
+    isempty(input_ids) && throw(ArgumentError("Hs must contain at least one space or symbolic operator"))
+    Hatoms = collect(atomic_factors(H))
+    Hatom_ids = map(atomic_id, Hatoms)
+    positions = map(id -> _find_position(id, Hatom_ids), input_ids)
+    all(>(0), positions) || throw(ArgumentError("The spaces/operators in Hs must match atomic factors in H, but the following were not found: $(input_ids[findall(==(0), positions)])."))
+    length(unique(positions)) == length(positions) || throw(ArgumentError("Hs contains duplicate atomic factors"))
+
+    Hsub = tensor_product(Hatoms[positions])
     issubsystem(Hsub, H) || throw(ArgumentError("The spaces in Hs must be a subsystem of H"))
-    mapper = state_mapper(H, (Hsub,))
+    mapper = state_mapper(H, (Hsub,)) #TODO: this is before the next line, only because it checks that the fermions are ordered correctly. We should probably split that check out into a separate function.
+    !isconstrained(H) && return Hsub
     states = _find_subregion_states(H, mapper)
     ConstrainedSpace(Hsub, states)
 end
+
+@testitem "Subregion: matching spaces with symbols" begin
+    @fermions f
+    @bosons b
+    Hf = hilbert_space(f, 1:3)
+    Hb = hilbert_space(b, 1:3, 2)
+    H = tensor_product(Hf, Hb)
+    Hfsub = subregion([f[1]], H)
+    Hbsub = subregion([b[2]], H)
+    Hsub = subregion([f[1], b[2]], H)
+    @test Hsub == tensor_product(Hfsub, Hbsub)
+    @test_throws ArgumentError subregion([f[2], f[1]], H)
+    @test_throws ArgumentError subregion([f[4]], H)
+    @test subregion(Hf, H) == Hf
+    @test subregion(Hb, H) == Hb
+
+    @test subregion([f[1]], Hf) == hilbert_space(f, 1:1)
+    @test subregion([b[1]], Hb) == hilbert_space(b, 1:1, 2)
+
+    H = tensor_product(Hf, Hb, NumberConservation(1))
+    Hfsub = subregion([f[1], f[2]], H)
+    Hbsub = subregion([b[2], b[3]], H)
+    @test dim(Hfsub) == 3
+    @test dim(Hbsub) == 3
+    
+    using FermionicHilbertSpaces: complementary_subsystem
+    @test complementary_subsystem(H, subregion([f[3], b[2]], H)) ==
+        subregion([f[1], f[2], b[1], b[3]], H) 
+    
+end
+
 function _find_subregion_states(H, mapper)
     split = Base.Fix2(split_state, mapper)
     split_state_iterator = if unique_split(mapper)

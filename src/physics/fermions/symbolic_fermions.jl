@@ -50,6 +50,7 @@ end
 Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.label, x.basis)
 Base.iszero(x::FermionSym) = false
 symbolic_group(h::FermionSym) = symbolic_group(h.basis)
+atomic_id(h::FermionSym) = (h.basis, h.label)
 
 function Base.show(io::IO, x::FermionSym)
     print(io, x.basis.name, x.creation ? "†" : "")

@@ -1,5 +1,6 @@
 abstract type AbstractSym end
 abstract type AbstractFermionSym <: AbstractSym end
+atomic_factors(f::AbstractSym) = (f,)
 
 function mat_eltype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S,F}
     promote_type(C, mat_eltype(S))
@@ -246,7 +247,7 @@ function matrix_representation(op, space::AbstractHilbertSpace; kwargs...)
         return get_trivial_op_coeff(op) * I(dim(space))
     end
     op_groups = symbolic_groups(op)
-    space_groups = unique(Iterators.map(symbolic_group, clusters(space)))
+    space_groups = unique(Iterators.map(cluster_id, clusters(space)))
     all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
     return _matrix_representation(op, space_groups, space; kwargs...)
 end

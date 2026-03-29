@@ -22,7 +22,7 @@ Construct the composite Hilbert space from the spaces in `spaces`, with optional
 """
 function tensor_product(spaces)
     atoms = Iterators.flatten(Iterators.map(atomic_factors, spaces))
-    groups = groupby(symbolic_group, atoms; sort=false)
+    groups = groupby(cluster_id, atoms; sort=false)
 
     clusters = map((id, atoms) -> combine_into_cluster(id, atoms), keys(groups), values(groups))
     space = if length(clusters) == 1

@@ -69,7 +69,8 @@ basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
-symbolic_group(H::SpinSpace) = symbolic_group(H.sym)
+cluster_id(H::SpinSpace) = symbolic_group(H.sym)
+atomic_id(H::SpinSpace) = symbolic_group(H.sym)
 
 hilbert_space(sym::SymbolicSpinBasis, J) = SpinSpace{J}(sym)
 hilbert_space(sym::SpinField, labels, J, constraint=NoSymmetry()) = tensor_product([hilbert_space(sym[l], J) for l in labels], constraint)
@@ -181,6 +182,7 @@ Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.basis == b.basis
 Base.hash(a::SpinSym, h::UInt) = hash(a.op, hash(a.basis, h))
 symbolic_group(f::SpinSym) = symbolic_group(f.basis)
 symbolic_group(f::SymbolicSpinBasis) = (SymbolicSpinBasis, f.field, f.label)
+atomic_id(f::SpinSym) = (SpinSpace, f.basis.field, f.basis.label)
 
 mat_eltype(::Type{<:SpinSym}) = Float64
 
