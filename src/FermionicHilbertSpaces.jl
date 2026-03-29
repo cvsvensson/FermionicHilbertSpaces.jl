@@ -1,8 +1,6 @@
 module FermionicHilbertSpaces
 
 using LinearAlgebra, SparseArrays
-using FlexiGroups: group
-import Dictionaries: dictionary, Dictionary, sortkeys!, getindices
 import FillArrays: Zeros, Fill
 import OrderedCollections: OrderedDict
 using TestItems
@@ -10,7 +8,6 @@ using BitPermutations
 using TupleTools
 using NonCommutativeProducts
 import NonCommutativeProducts: @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
-import UUIDs: uuid4
 
 
 export FockNumber, hc, basisstates, dim
@@ -35,6 +32,22 @@ Base.:-(m, ::HC) = (m - m')
 Adding this is equivalent to adding the hermitian conjugate.
 """
 const hc = HC()
+
+struct TypedIterator{T, I}
+    iter::I
+end
+
+# Constructor with explicit type
+TypedIterator{T}(iter) where T = TypedIterator{T, typeof(iter)}(iter)
+# Iterator interface
+Base.iterate(ti::TypedIterator) = iterate(ti.iter)
+Base.iterate(ti::TypedIterator, state) = iterate(ti.iter, state)
+Base.IteratorSize(::Type{<:TypedIterator{T,I}}) where {T,I} = Base.IteratorSize(I)
+Base.IteratorEltype(::Type{<:TypedIterator}) = Base.HasEltype()
+Base.eltype(::Type{<:TypedIterator{T}}) where T = T
+Base.length(ti::TypedIterator) = length(ti.iter)
+Base.size(ti::TypedIterator) = size(ti.iter)
+
 
 ## Files
 include("spaces.jl")

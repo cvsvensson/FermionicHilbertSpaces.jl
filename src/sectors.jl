@@ -7,26 +7,39 @@ Use `quantumnumbers`, `sector`, and `indices` to access individual blocks.
 struct BlockHilbertSpace{B,P,Q} <: AbstractHilbertSpace{B}
     parent::P
     ordered_basis_states::Vector{B}
-    state_to_index::Dictionary{B,Int}
-    qn_to_states::Dictionary{Q,Vector{B}}
+    state_to_index::OrderedDict{B,Int}
+    qn_to_states::OrderedDict{Q,Vector{B}}
 end
-BlockHilbertSpace(space::P, ordered_basis_states::AbstractVector{B}, state_to_index::Dictionary{B,Int}, qn_to_states::Dictionary{Q,Vector{B}}) where {B,P,Q} = BlockHilbertSpace{B,P,Q}(space, ordered_basis_states, state_to_index, qn_to_states)
+BlockHilbertSpace(space::P, ordered_basis_states::AbstractVector{B}, state_to_index::OrderedDict{B,Int}, qn_to_states::OrderedDict{Q,Vector{B}}) where {B,P,Q} = BlockHilbertSpace{B,P,Q}(space, ordered_basis_states, state_to_index, qn_to_states)
 Base.hash(H::BlockHilbertSpace, h::UInt) = hash((H.parent, H.ordered_basis_states, H.state_to_index, H.qn_to_states), h)
 Base.:(==)(H1::BlockHilbertSpace, H2::BlockHilbertSpace) = H1 === H2 || (H1.parent == H2.parent && H1.ordered_basis_states == H2.ordered_basis_states && H1.state_to_index == H2.state_to_index && H1.qn_to_states == H2.qn_to_states)
 atomic_substate(n, f, space::BlockHilbertSpace) = atomic_substate(n, f, parent(space))
 
 block_space(space, states, ::Missing) = ConstrainedSpace(space, states)
 function block_space(space, states, sector_function)
-    _qntostates = group(state -> sector_function(state), states)
+    B = eltype(states)
+    sort = Base.hasmethod(isless, Tuple{B,B})
+    _qntostates = groupby(sector_function, states; sort)
     _block_space(space, _qntostates)
 end
-function _block_space(space, _qntostates::Dictionary{Q,<:AbstractVector{B}}) where {Q,B}
-    inds = keys(_qntostates)
-    filt_inds = filter(!ismissing, inds)
-    qn_to_states = map(collect, getindices(_qntostates, filt_inds))
-    sortkeys!(qn_to_states)
-    ordered_states = reduce(vcat, qn_to_states, init=B[])
-    state_indexdict = Dictionary(ordered_states, 1:length(ordered_states))
+function groupby(f::F, itr; sort=false) where F
+    V = eltype(itr)
+    d = OrderedDict{Any,Vector{V}}()
+    for x in itr
+        key = f(x)
+        ismissing(key) && continue
+        push!(get!(d, key) do
+                V[]
+            end, x)
+    end
+    ks = sort ? sort!(collect(keys(d))) : collect(keys(d))
+    return OrderedDict(k => map(identity, d[k]) for k in ks)
+end
+
+
+function _block_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}) where {Q,B}
+    ordered_states = reduce(vcat, values(qn_to_states), init=B[])
+    state_indexdict = OrderedDict(zip(ordered_states, 1:length(ordered_states)))
     BlockHilbertSpace(space, ordered_states, state_indexdict, qn_to_states)
 end
 
@@ -56,7 +69,7 @@ state_index(state, H::BlockHilbertSpace) = get(H.state_to_index, state, missing)
 Return the quantum-number labels that define the sectors of `H`.
 For spaces without sector structure, this returns `(nothing,)`.
 """
-quantumnumbers(H::BlockHilbertSpace) = keys(H.qn_to_states)
+quantumnumbers(H::BlockHilbertSpace) = collect(keys(H.qn_to_states))
 quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 
 """
@@ -152,9 +165,9 @@ end
     Hns = sectors(H)
     for (ind, n) in enumerate(quantumnumbers(H))
         Hn = hilbert_space(f, 1:N, NumberConservation(n))
-        @test basisstates(Hn) == basisstates(Hns[n])
+        @test basisstates(Hn) == basisstates(Hns[ind])
         @test basisstates(Hn) == basisstates(sector(n, H))
-        @test basisstates(Hn) == basisstates(H)[indices(Hns[n], H)]
+        @test basisstates(Hn) == basisstates(H)[indices(Hns[ind], H)]
         @test basisstates(Hn) == basisstates(H)[indices(n, H)]
     end
     # no qns
@@ -238,7 +251,7 @@ end
     @test size(sector2, 1) == length(states2)
     @test sector2 == m_f[inds2, inds2]
     # Test that an invalid sector throws an error
-    @test_throws "Dictionaries.IndexError" sector(99, Hf)
+    @test_throws KeyError sector(99, Hf)
     @test_throws ArgumentError indices(99, Hf)
 end
 

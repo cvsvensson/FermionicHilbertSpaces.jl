@@ -52,7 +52,7 @@ function phase_factor_h(f1::AbstractFockState, f2::AbstractFockState, partition,
 end
 
 @testitem "Phase factor f" begin
-    import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, getindices, bits
+    import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, bits
 
     ## Appendix A.2
     N = 2
@@ -78,7 +78,7 @@ end
 
 @testitem "Phase factor h" begin
     # Appendix B.1
-    import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, getindices, bits
+    import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, bits
     @fermions a
     N = 2
     fockstates = sort(map(FockNumber, 0:2^N-1), by=Base.Fix2(bits, N))

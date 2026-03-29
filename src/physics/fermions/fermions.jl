@@ -55,7 +55,7 @@ end
 maximum_particles(H::FermionCluster) = nbr_of_modes(H)
 Base.:(==)(c1::FermionCluster, c2::FermionCluster) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionCluster, h::UInt) = hash(c.modes, hash(c.group, h))
-basisstates(H::FermionCluster{F}) where F = Iterators.map(F ∘ FockNumber, UnitRange{UInt64}(0, dim(H) - 1))
+basisstates(H::FermionCluster{F}) where F = TypedIterator{F}(Iterators.map(F, UnitRange{UInt64}(0, dim(H) - 1)))
 basisstate(ind, ::FermionCluster{F}) where F = (F ∘ FockNumber)(ind - 1)
 state_index(state::FockNumber, ::FermionCluster) = state.f + 1
 function dim(H::FermionCluster)
@@ -326,7 +326,7 @@ function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constrai
     N = nbr_of_modes(H)
     numbers = T === Missing ? (0:N) : constraint.total
     state_blocks = map(n -> fixed_particle_number_fockstates(N, n), numbers)
-    dict = Dictionary(numbers, state_blocks)
+    dict = OrderedDict(zip(numbers, state_blocks))
     _block_space(H, dict)
 end
 

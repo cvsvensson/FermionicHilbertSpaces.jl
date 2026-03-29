@@ -21,10 +21,10 @@ end
 Construct the composite Hilbert space from the spaces in `spaces`, with optional `constraint`. 
 """
 function tensor_product(spaces)
-    atoms = (Iterators.flatten(Iterators.map(atomic_factors, spaces)))
-    _groups = group(symbolic_group, atoms)
-    groups = (map(g -> map(identity, g), _groups)) #This can convert the groups into vectors of concrete types
-    clusters = map(typegroup -> combine_into_cluster(typegroup...), pairs(groups))
+    atoms = Iterators.flatten(Iterators.map(atomic_factors, spaces))
+    groups = groupby(symbolic_group, atoms; sort=false)
+
+    clusters = map((id, atoms) -> combine_into_cluster(id, atoms), keys(groups), values(groups))
     space = if length(clusters) == 1
         only(clusters)
     else

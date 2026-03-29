@@ -246,7 +246,7 @@ function matrix_representation(op, space::AbstractHilbertSpace; kwargs...)
         return get_trivial_op_coeff(op) * I(dim(space))
     end
     op_groups = symbolic_groups(op)
-    space_groups = unique(map(symbolic_group, atomic_factors(space)))
+    space_groups = unique(Iterators.map(symbolic_group, clusters(space)))
     all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
     return _matrix_representation(op, space_groups, space; kwargs...)
 end
