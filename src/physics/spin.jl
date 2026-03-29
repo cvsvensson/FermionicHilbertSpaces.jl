@@ -10,9 +10,12 @@ struct SymbolicSpinBasis{L,P}
     field::P
 end
 SymbolicSpinBasis(label::L) where L = SymbolicSpinBasis(label, nothing)
-Base.getindex(s::SpinField, i) = SymbolicSpinBasis(i, s)
-Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(s.field, hash(x.label, h))
+Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field
+Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
+Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.field, hash(x.label, h))
 label(S::SymbolicSpinBasis) = S.label
+Base.getindex(s::SpinField, i) = SymbolicSpinBasis(i, s)
+
 function Base.show(io::IO, S::SymbolicSpinBasis)
     if S.field isa Nothing
         print(io, "SpinBasis(", S.label, ")")
@@ -41,9 +44,7 @@ spin bases: `s[1][:z]` gives the z-operator on site 1.
 macro spins(name)
     return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)))), :($(esc(name))))
 end
-Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field
-Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.label, hash(x.field, h))
-Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
+
 
 struct SpinState{M} <: AbstractBasisState
     m::M
