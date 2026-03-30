@@ -1,17 +1,55 @@
 
-# Conserved quantum numbers
-The basis states of a Hilbert space can be organized into sectors with different quantum numbers. Only quantum numbers which are diagonal in the fock state basis are supported. 
+# Constrained Hilbert spaces and conserved quantum numbers
+The basis states of a Hilbert space can be restricted to a subset of states, and organized into sectors with different quantum numbers. 
 
-Use `hilbert_space(labels, qn)`, where `qn` can be e.g.
-- `ParityConservation()`: Puts all states with odd parity first, then all states with even parity.
-- `ParityConservation(p::Int)`: Only contains states with parity `p` (-1 for odd and 1 for even).
-- `number_conservation()`: Sorts basis states by the number of fermions.
-- `number_conservation(sectors::Union{Int,Vector{Int}})`: Only contains states with the number(s) in the list `sectors`.
-- `number_conservation(sectors, weight_function)`: 'weight_function' is a function that takes a label and returns an integer weight that represents the contribution of that fermion to the total number. The returned states will have total weighted number of fermions contained in `sectors`.
-- `number_conservation(weight_function)`: As above, but allowing all sectors.
-- Products of the above quantum numbers, which sorts states according to each factor in the product.
+You can apply a constraint either when constructing a space,
+`hilbert_space(f, labels, constraint)`,
+when doing tensor products
+`tensor_product((H1, H2, ...); constraint)`,
+or afterwards with
+`constrain_space(H, constraint)`.
 
-Using `number_conservation` with small sectors avoids the exponentially large Hilbert space.
+The main constraint types are:
+
+- `NumberConservation(total=missing, subspaces=missing, weights=missing)`:
+    Conserves a (possibly weighted) particle number.
+    - `total` can be a single integer or a collection of allowed values.
+    - `subspaces` can restrict the count to selected subspaces (or modes).
+    - `weights` lets each selected subspace contribute with a different integer weight.
+    Examples: `NumberConservation()`, `NumberConservation(2)`, `NumberConservation(0:1, Hup)`, `NumberConservation(-1:1, [Hl, Hr], [1, -1])`.
+
+- `ParityConservation(parities=[-1, 1], subspaces=missing)`:
+    Conserves fermionic parity.
+    - Allowed parities are `-1` (odd) and `1` (even).
+    - `ParityConservation()` keeps both sectors (odd first, then even).
+    - `ParityConservation([1])` or `ParityConservation(1)` keeps only even parity.
+    - `subspaces` lets you enforce parity on a specific part of a tensor-product space.
+
+- `FilterConstraint(...)`:
+    A flexible filtering constraint.
+    - `FilterConstraint(reducer)` applies `reducer(state)` and keeps states where it returns `true`.
+    - `FilterConstraint(subspaces, subspace_functions, reducer)` first applies the subspace_functions to the states in each subspace, then passes them to the `reducer` function.
+    Use this for custom selection rules that are easiest to express as a boolean test on complete states.
+
+- `BlockConstraint(...)`:
+    Like `FilterConstraint`, but for grouping states into sectors.
+    - The reducer should return a sector label/key (or `missing` to discard a state).
+    - States with the same returned key are collected into the same block.
+    Use this when you want an explicit block structure from a custom rule.
+
+- `BranchConstraint(f)`:
+    For efficient constrained generation using branch pruning.
+    - `f(partial_state, depth, spaces) -> Bool` is evaluated during state construction.
+    - Returning `false` prunes the branch immediately.
+    When branches can be pruned early, this avoids the exponentially large full Hilbert space.
+
+Constraints can be combined with products, for example
+`NumberConservation(2, Hup) * NumberConservation(1, Hdn)`
+or
+`ParityConservation([1]) * NumberConservation(0:4)`.
+This gives multi-index sectoring according to each factor.
+
+Using small `NumberConservation` sectors (and/or `BranchConstraint`) can avoid constructing the exponentially large full Hilbert space.
 
 ## Spin
 This package does not know anything about spin, but one can treat spin just as an extra label as follows:
@@ -108,7 +146,7 @@ function valid_state(partials, depth::Int, spaces, expected_order)
     for n in 1:depth
         if count_ones(partials[n]) == 1
             exc_count += 1
-            site, spin = spaces[n].label
+            site, spin = only(spaces[n].modes).label
             exc_count > length(expected_order) && return false # too many excitations
             site == prev_site && return false # two excitations on the same site (this uses the fact that we ordered the spaces by site)
             prev_site = site
