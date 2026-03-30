@@ -166,8 +166,8 @@ nbr_of_modes(H::MajoranaHilbertSpace) = nbr_of_modes(H.parent)
 isconstrained(H::MajoranaHilbertSpace) = isconstrained(H.parent)
 cluster_id(H::MajoranaHilbertSpace) = symbolic_group(H.sym)
 function atomic_id(H::MajoranaHilbertSpace)
-    length(h.majoranaindices) == 2 || throw(ArgumentError("Atomic ID is only defined for MajoranaHilbertSpaces with exactly 2 Majoranas."))
-    (H.sym, h.majoranaindices)
+    length(H.majoranaindices) == 2 || throw(ArgumentError("Atomic ID is only defined for MajoranaHilbertSpaces with exactly 2 Majoranas."))
+    (H.sym, H.majoranaindices)
 end
 
 quantumnumbers(H::MajoranaHilbertSpace) = quantumnumbers(H.parent)
