@@ -171,15 +171,15 @@ function atomic_id(H::MajoranaHilbertSpace)
 end
 
 quantumnumbers(H::MajoranaHilbertSpace) = quantumnumbers(H.parent)
-indices(qn, H::MajoranaHilbertSpace) = indices(qn, parent(H))
+indices(qn::Q, H::MajoranaHilbertSpace{<:Any,<:Any,BlockHilbertSpace{B,P,Q}}) where {B,P,Q} = indices(qn, parent(H))
 function sector(qn, H::MajoranaHilbertSpace)
     # get sector from parent, then convert to majorana
     parent_sector = sector(qn, parent(H))
     MajoranaHilbertSpace(H.majoranaindices, parent_sector, H.sym)
 end
-sector(::Nothing, H::MajoranaHilbertSpace) = H
-indices(Hsub::AbstractHilbertSpace, H::MajoranaHilbertSpace) = indices(Hsub, parent(H))
-indices(::Nothing, H::MajoranaHilbertSpace) = indices(nothing, parent(H))
+# sector(::Nothing, H::MajoranaHilbertSpace) = H
+# indices(Hsub::AbstractHilbertSpace, H::MajoranaHilbertSpace) = indices(Hsub, parent(H))
+# indices(::Nothing, H::MajoranaHilbertSpace) = indices(nothing, parent(H))
 
 function combine_into_cluster(group::MajoranaGroup, spaces)
     fermionic_cluster = combine_into_cluster(group.id, map(parent, spaces))

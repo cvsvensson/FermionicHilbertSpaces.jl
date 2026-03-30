@@ -1,5 +1,4 @@
 
-_format_subspaces(s) = ismissing(s) ? nothing : isa(s, Union{Tuple,AbstractVector}) ? "$(length(s)) subspaces" : "subspaces"
 _indent(s, p) = join([(i > 1 ? p : "") * l for (i, l) in enumerate(split(s, '\n'))], '\n')
 _parity(p) = p == [-1, 1] ? "any" : p == [1] ? "even" : p == [-1] ? "odd" : string(p)
 
@@ -7,13 +6,13 @@ function Base.show(io::IO, nc::NumberConservation{T,H,W}) where {T,H,W}
     if get(io, :compact, false)
         parts = filter(!isnothing, [
             ismissing(nc.total) ? nothing : sprint(show, nc.total),
-            ismissing(nc.subspaces) ? nothing : _format_subspaces(nc.subspaces),
+            ismissing(nc.subspaces) ? nothing : "subspaces: $(length(nc.subspaces))",
             ismissing(nc.weights) ? nothing : "weighted"])
         print(io, "NumberConservation(", join(parts, ", "), ")")
     else
         lines = filter(!isnothing, [
             ismissing(nc.total) ? nothing : "total: " * (isa(nc.total, AbstractVector) && length(nc.total) == 1 ? string(only(nc.total)) : sprint(show, nc.total)),
-            ismissing(nc.subspaces) ? nothing : "$(_format_subspaces(nc.subspaces))",
+            ismissing(nc.subspaces) ? nothing : "subspaces: $(length(nc.subspaces))",
             ismissing(nc.weights) ? nothing : "weights: " * sprint(show, nc.weights)])
         isempty(lines) ? print(io, "NumberConservation()") : print(io, "NumberConservation(", join(lines, ", "), ")")
     end
@@ -23,11 +22,11 @@ function Base.show(io::IO, pc::ParityConservation{H}) where {H}
     compact = get(io, :compact, false)
     if compact
         parts = [_parity(pc.allowed_parities)]
-        !ismissing(pc.subspaces) && push!(parts, "subspaces")
+        !ismissing(pc.subspaces) && push!(parts, "subspaces: $(length(pc.subspaces))")
         print(io, "ParityConservation(", join(parts, ", "), ")")
     else
         lines = ["allowed_parities: $(_parity(pc.allowed_parities))"]
-        !ismissing(pc.subspaces) && push!(lines, ", $(_format_subspaces(pc.subspaces))")
+        !ismissing(pc.subspaces) && push!(lines, "subspaces: $(length(pc.subspaces))")
         print(io, "ParityConservation(", join(lines, ""), ")")
     end
 end
@@ -40,8 +39,39 @@ function Base.show(io::IO, ac::AdditiveConstraint{T,H,F}) where {T,H,F}
     else
         lines = ["  allowed_values: " * (ismissing(ac.allowed_values) ? "missing" : sprint(show, ac.allowed_values)),
             "  functions: $nf function(s)"]
-        !ismissing(ac.subspaces) && push!(lines, "  subspaces: $(_format_subspaces(ac.subspaces))")
+        !ismissing(ac.subspaces) && push!(lines, "  subspaces: $(length(ac.subspaces))")
         print(io, "AdditiveConstraint(\n", join(lines, "\n"), "\n)")
+    end
+end
+
+function Base.show(io::IO, fc::FilterConstraint)
+    if get(io, :compact, false)
+        parts = filter(!isnothing, [
+            ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
+            ismissing(fc.subspace_functions) ? nothing : "$(isa(fc.subspace_functions, Tuple) ? length(fc.subspace_functions) : 1) function(s)"])
+        print(io, "FilterConstraint(", join(parts, ", "), ")")
+    else
+        lines = filter(!isnothing, [
+            ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
+            ismissing(fc.subspace_functions) ? nothing : "subspace_functions: $(isa(fc.subspace_functions, Tuple) ? length(fc.subspace_functions) : 1) function(s)",
+            "reducer: $(fc.reducer)"])
+        print(io, "FilterConstraint(", join(lines, ", "), ")")
+    end
+end
+
+function Base.show(io::IO, bc::BlockConstraint)
+    fc = bc.filter
+    if get(io, :compact, false)
+        parts = filter(!isnothing, [
+            ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
+            ismissing(fc.subspace_functions) ? nothing : "$(isa(fc.subspace_functions, Tuple) ? length(fc.subspace_functions) : 1) function(s)"])
+        print(io, "BlockConstraint(", join(parts, ", "), ")")
+    else
+        lines = filter(!isnothing, [
+            ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
+            ismissing(fc.subspace_functions) ? nothing : "subspace_functions: $(isa(fc.subspace_functions, Tuple) ? length(fc.subspace_functions) : 1) function(s)",
+            "reducer: $(fc.reducer)"])
+        print(io, "BlockConstraint(", join(lines, ""), ")")
     end
 end
 
@@ -217,7 +247,7 @@ function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
 end
 
 function Base.show(io::IO, state::BosonicState)
-    print(io, "|",state.n, "⟩")
+    print(io, "|", state.n, "⟩")
 end
 
 function Base.show(io::IO, H::SpinSpace{J}) where J

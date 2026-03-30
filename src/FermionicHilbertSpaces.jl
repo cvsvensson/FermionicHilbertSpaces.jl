@@ -34,12 +34,12 @@ Adding this is equivalent to adding the hermitian conjugate.
 """
 const hc = HC()
 
-struct TypedIterator{T, I}
+struct TypedIterator{T,I}
     iter::I
 end
 
 # Constructor with explicit type
-TypedIterator{T}(iter) where T = TypedIterator{T, typeof(iter)}(iter)
+TypedIterator{T}(iter) where T = TypedIterator{T,typeof(iter)}(iter)
 # Iterator interface
 Base.iterate(ti::TypedIterator) = iterate(ti.iter)
 Base.iterate(ti::TypedIterator, state) = iterate(ti.iter, state)

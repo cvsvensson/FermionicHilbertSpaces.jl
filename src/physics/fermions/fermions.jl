@@ -279,7 +279,7 @@ _find_position(f::FermionSym, H::AbstractHilbertSpace) = _find_position(Fermioni
 _find_position(f::FermionSym, H::ProductSpace) = _find_position(FermionicMode(f), H)
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionCluster(map(l -> FermionicMode(a[l]), labels))
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::AbstractVector{<:AbstractBasisState}) = ConstrainedSpace(hilbert_space(a, labels), states)
-hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::AbstractConstraint) = tensor_product([hilbert_space(a[l]) for l in labels], constraint)
+hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::AbstractConstraint) = tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
 
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::ParityConservation{Missing})
     H = hilbert_space(a, labels)
@@ -319,7 +319,7 @@ issubsystem(Hsub::AbstractHilbertSpace, H::FermionCluster) = isorderedsubsystem(
 
     #The difference between left fermions and right fermions is conserved
     constraint = NumberConservation(-1:1, [Hl, Hr], [1, -1])
-    Hcons = tensor_product((Hl, Hr), constraint)
+    Hcons = tensor_product((Hl, Hr); constraint)
     @test size(matrix_representation(lindbladian, Hcons), 1) == dim(Hcons)
 
     blocks = map(sectors(Hcons)) do Hsector

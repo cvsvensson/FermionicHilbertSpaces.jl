@@ -3,14 +3,13 @@ struct BranchConstraint{F} <: AbstractBranchConstraint
     f::F
 end
 branch_constraint(constraint::BranchConstraint, space) = constraint
-has_sectors(::AbstractConstraint) = false
 """
     valid_branch(constraint, partial_state, remaining_spaces) -> Bool
     
     Return `true` if the branch should be explored, `false` to prune. By default this calls `constraint.f(partial_state, remaining_spaces)`.
 """
 valid_branch(constraint::BranchConstraint, partial_state, depth, spaces) = constraint.f(partial_state, depth, spaces)
-valid_branch(constraint::ProductConstraint, partial_state, depth, spaces) = all(map(c -> valid_branch(c, partial_state, depth, spaces), constraint.constraints))
+valid_branch(constraint::ProductConstraint, partial_state, depth, spaces) = all(Iterators.map(c -> valid_branch(c, partial_state, depth, spaces), constraint.constraints))
 
 process_partial(::Nothing, partial_state, depth, spaces) = nothing
 process_partial(processor, partial_state, depth, spaces) = processor(partial_state, depth, spaces)
@@ -224,8 +223,8 @@ branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_cons
         s -> particle_number(s),
     ))
     numcon = NumberConservation([1], (Hs[1], Hs[2], Hs[3]), (2, -1, 1))
-    Hnum = tensor_product(Hs, numcon)
-    Hadd = tensor_product(Hs, additive)
+    Hnum = tensor_product(Hs; constraint=numcon)
+    Hadd = tensor_product(Hs; constraint=additive)
     @test Hnum == Hadd
     # states = generate_states(Hs, additive, H; process_result)
     @test all(state -> begin
@@ -243,7 +242,7 @@ branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_cons
             n4 + n5 in (0, 2)
         end, states)
 
-    Hc = tensor_product(Hs, additive)
+    Hc = tensor_product(Hs; constraint=additive)
     @test collect(quantumnumbers(Hc)) == [1]
 
     compound = additive * AdditiveConstraint([1], (Hs[4], Hs[5]), particle_number)

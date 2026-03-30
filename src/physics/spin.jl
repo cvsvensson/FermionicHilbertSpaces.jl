@@ -73,7 +73,7 @@ cluster_id(H::SpinSpace) = symbolic_group(H.sym)
 atomic_id(H::SpinSpace) = symbolic_group(H.sym)
 
 hilbert_space(sym::SymbolicSpinBasis, J) = SpinSpace{J}(sym)
-hilbert_space(sym::SpinField, labels, J, constraint=NoSymmetry()) = tensor_product([hilbert_space(sym[l], J) for l in labels], constraint)
+hilbert_space(sym::SpinField, labels, J, constraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], J), labels); constraint)
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
 

@@ -134,7 +134,7 @@ end
     @test subregion([f[1]], Hf) == hilbert_space(f, 1:1)
     @test subregion([b[1]], Hb) == hilbert_space(b, 1:1, 2)
 
-    H = tensor_product(Hf, Hb, NumberConservation(1))
+    H = tensor_product(Hf, Hb; constraint=NumberConservation(1))
     Hfsub = subregion([f[1], f[2]], H)
     Hbsub = subregion([b[2], b[3]], H)
     @test dim(Hfsub) == 3

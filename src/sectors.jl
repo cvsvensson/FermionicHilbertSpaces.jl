@@ -97,14 +97,14 @@ sectors(H::AbstractHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 Return the basis-state indices in `H` belonging to a given sector, specified
 either by a sector Hilbert space `Hsub` or by a quantum number `qn`.
 """
-function indices(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
-    sector_list = collect(sectors(H))
+function indices(Hsub, H::AbstractHilbertSpace)
+    sector_list = sectors(H)
     indexin = findfirst(isequal(Hsub), sector_list)
     # map(state -> state_index(state, H), basisstates(Hsub))
     if indexin === nothing
         throw(ArgumentError("Hilbert space $Hsub is not a sector of $H"))
     end
-    qn = collect(quantumnumbers(H))[indexin]
+    qn = quantumnumbers(H)[indexin]
     indices(qn, H)
 end
 function indices(qn::Q, H::BlockHilbertSpace{B,P,Q}) where {B,P,Q}
@@ -117,7 +117,7 @@ function indices(qn::Q, H::BlockHilbertSpace{B,P,Q}) where {B,P,Q}
     end_index = dims[qn_index]
     start_index:end_index
 end
-indices(qn, H::AbstractHilbertSpace) = indices(sector(qn, H), H)
+# indices(qn, H::AbstractHilbertSpace) = indices(sector(qn, H), H)
 indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
 
 _precomputation_before_operator_application(ops, space::BlockHilbertSpace) = _precomputation_before_operator_application(ops, parent(space))

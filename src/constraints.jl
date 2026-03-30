@@ -16,7 +16,60 @@ Base.:*(sym1::AbstractConstraint, sym2::AbstractConstraint) = ProductConstraint(
 Base.:*(sym1::AbstractConstraint, sym2::ProductConstraint) = ProductConstraint((sym1, sym2.constraints...))
 Base.:*(sym1::ProductConstraint, sym2::AbstractConstraint) = ProductConstraint((sym1.constraints..., sym2))
 Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint((sym1.constraints..., sym2.constraints...))
-branch_constraint(constraint::ProductConstraint, space) = ProductConstraint(map(cons -> branch_constraint(cons, space), constraint.constraints))
+function branch_constraint(constraint::ProductConstraint, space)
+    prunable = filter(supports_branch_pruning, constraint.constraints)
+    ProductConstraint(map(cons -> branch_constraint(cons, space), prunable))
+end
+supports_branch_pruning(c::ProductConstraint) = any(supports_branch_pruning, c.constraints)
+supports_filtering(c::ProductConstraint) = any(supports_filtering, c.constraints)
+supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c.constraints)
+
+
+struct FilterConstraint{H,FS,F} <: AbstractConstraint
+    subspaces::H
+    subspace_functions::FS
+    reducer::F
+    function FilterConstraint(subspaces::H, subspace_functions::FS, reducer::F) where {H,FS,F}
+        new{H,FS,F}(subspaces, subspace_functions, reducer)
+    end
+end
+function FilterConstraint(reducer::F) where {F<:Function}
+    FilterConstraint(missing, missing, reducer)
+end
+supports_branch_pruning(::FilterConstraint) = false
+supports_filtering(::FilterConstraint) = true
+supports_sector_grouping(c::FilterConstraint) = false
+function filter_function(constraint::FilterConstraint{Missing,Missing,F}, ::AbstractHilbertSpace) where F
+    return constraint.reducer
+end
+function filter_function(constraint::FilterConstraint, space::AbstractHilbertSpace)
+    mapper = state_mapper(space, constraint.subspaces)
+    function _filter_function(state)
+        subs = unique_split_state(state, mapper)
+        values = Iterators.map((s, f) -> f(s), subs, constraint.subspace_functions)
+        constraint.reducer(values)
+    end
+end
+
+struct BlockConstraint{F<:FilterConstraint} <: AbstractConstraint
+    filter::F
+end
+function BlockConstraint(subspaces::H, subspace_functions::FS, reducer::F) where {H,FS,F}
+    BlockConstraint(FilterConstraint(subspaces, subspace_functions, reducer))
+end
+function BlockConstraint(reducer::F) where {F<:Function}
+    BlockConstraint(FilterConstraint(missing, missing, reducer))
+end
+supports_branch_pruning(::BlockConstraint) = false
+supports_filtering(::BlockConstraint) = true
+supports_sector_grouping(::BlockConstraint) = true
+function sector_function(constraint::BlockConstraint, space::AbstractHilbertSpace)
+    return filter_function(constraint.filter, space)
+end
+function filter_function(constraint::BlockConstraint, space::AbstractHilbertSpace)
+    sec = filter_function(constraint.filter, space)
+    return !ismissing ∘ sec
+end
 
 
 """
@@ -36,6 +89,9 @@ end
 AdditiveConstraint(allowed_values, functions) = AdditiveConstraint(allowed_values, missing, functions)
 AdditiveConstraint(allowed_values, subspace::AbstractHilbertSpace, functions) = AdditiveConstraint(allowed_values, atomic_factors(subspace), functions)
 AdditiveConstraint(allowed_values, subspace::AbstractClusterHilbertSpace, functions) = AdditiveConstraint(allowed_values, atomic_factors(subspace), functions)
+supports_branch_pruning(::AdditiveConstraint) = true
+supports_filtering(::AdditiveConstraint) = true
+supports_sector_grouping(::AdditiveConstraint) = true
 
 """
     NumberConservation(total=missing, subspaces=missing, weights=missing)
@@ -55,16 +111,12 @@ struct NumberConservation{T,H,W} <: AbstractConstraint
     end
 end
 _normalize_constraint_subspace(subspace::AbstractHilbertSpace) = (subspace,)
-_normalize_constraint_subspace(subspaces) = map(hilbert_space, subspaces)
+_normalize_constraint_subspace(subspaces) = subspaces
 _normalize_constraint_subspace(subspaces::Missing) = subspaces
 NumberConservation(H::AbstractHilbertSpace) = NumberConservation(missing, (H,), missing)
-# NumberConservation(n) = NumberConservation(n, missing, missing)
-# NumberConservation(H::AbstractHilbertSpace) = NumberConservation(missing, atomic_factors(H), missing)
-# NumberConservation() = NumberConservation(missing, missing, missing)
-# NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(total, (subspace,), missing)
-# NumberConservation(total, subspace::AbstractHilbertSpace) = NumberConservation(total, (subspace,), missing)
-# NumberConservation(total, subspace::AbstractClusterHilbertSpace) = NumberConservation(total, (subspace,), missing)
-# NumberConservation(total, spaces) = NumberConservation(total, spaces, missing)
+supports_branch_pruning(::NumberConservation) = true
+supports_filtering(::NumberConservation) = true
+supports_sector_grouping(::NumberConservation) = true
 
 """
     ParityConservation(parities=[-1, 1], subspaces=missing)
@@ -81,31 +133,32 @@ struct ParityConservation{H} <: AbstractConstraint
         new{typeof(subspace)}(allowed, subspace)
     end
 end
-# ParityConservation() = ParityConservation([-1, 1], missing)
-# ParityConservation(H::AbstractHilbertSpace) = ParityConservation([-1, 1], H)
-# ParityConservation(ps::AbstractVector{Int}) = ParityConservation(Vector{Int}(ps), missing)
-# ParityConservation(p::Int) = ParityConservation([p], missing)
+supports_branch_pruning(::ParityConservation) = true
+supports_filtering(::ParityConservation) = true
+supports_sector_grouping(::ParityConservation) = true
 
 unique_split_state(state, mapper) = only(first(split_state(state, mapper)))
 
-function sector_function(cons::C, space::AbstractHilbertSpace, spaces) where {C<:Union{<:NumberConservation,<:ParityConservation,<:AdditiveConstraint}}
-    subspaces = ismissing(cons.subspaces) ? spaces : cons.subspaces
-    subspaces = ismissing(subspaces) ? (space,) : subspaces
+function sector_function(cons::C, space::AbstractHilbertSpace) where {C<:Union{<:NumberConservation,<:ParityConservation,<:AdditiveConstraint}}
+    subspaces = ismissing(cons.subspaces) ? (space,) : cons.subspaces
     mapper = state_mapper(space, subspaces)
+    allowed_vals = allowed_values(cons, space)
+    allowed = in(allowed_vals)
     function number(state)
         subs = unique_split_state(state, mapper)
-        _apply_constraint_function(subs, cons)
+        val = _apply_constraint_function(subs, cons)
+        allowed(val) ? val : missing
     end
 end
-function sector_function(constraint::ProductConstraint, space::AbstractHilbertSpace, spaces)
-    subspace_functions = map(cons -> sector_function(cons, space, spaces), constraint.constraints)
+function sector_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
+    subspace_functions = map(cons -> sector_function(cons, space), constraint.constraints)
     state -> map(f -> f(state), subspace_functions)
 end
 
 _apply_constraint_function(substates, ::NumberConservation{<:Any,<:Any,Missing}) = sum(particle_number, substates)
 _apply_constraint_function(substates, cons::NumberConservation{<:Any,<:Any,W}) where {W} = mapreduce((s, w) -> particle_number(s) * w, +, substates, cons.weights)
 _apply_constraint_function(substates, ::ParityConservation) = prod(parity, substates)
-_apply_constraint_function(substates, cons::AdditiveConstraint{<:Any,<:Any,<:Function}) = sum(cons.f, substates)
+_apply_constraint_function(substates, cons::AdditiveConstraint{<:Any,<:Any,<:Function}) = sum(cons.functions, substates)
 function _apply_constraint_function(substates, cons::AdditiveConstraint)
     mapreduce((s, f) -> f(s), +, substates, cons.functions)
 end
@@ -129,10 +182,6 @@ function branch_constraint(constraint::NumberConservation{T,H,W}, spaces) where 
 end
 
 sectors(::AbstractConstraint) = nothing
-has_sectors(N::NumberConservation) = true
-has_sectors(C::AdditiveConstraint) = true
-has_sectors(P::ParityConservation) = true
-has_sectors(c::ProductConstraint) = any(has_sectors, c.constraints)
 
 
 """

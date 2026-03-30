@@ -61,7 +61,7 @@ Ndn = 1
 Hup = hilbert_space(f,  [(i, :↑) for i in 1:N])
 Hdn = hilbert_space(f, [(i, :↓) for i in 1:N])
 constraint = NumberConservation(Nup, Hup)*NumberConservation(Ndn, Hdn)
-H = tensor_product((Hup, Hdn), constraint)
+H = tensor_product((Hup, Hdn); constraint)
 ```
 The full hilbert space is of size `4^20 ≈ 10^12`, but the sector with 2 spin up and 1 spin down fermion is only of size `3800` and is generated without constructing the full hilbert space. Finally, we can get the matrix representation of the hamiltonian in this sector as
 ```@example hubbard

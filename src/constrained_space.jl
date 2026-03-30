@@ -33,22 +33,16 @@ constrain_space(space::AbstractHilbertSpace, constraint::NoSymmetry) = space
 constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}) where B<:AbstractBasisState = ConstrainedSpace(space, states)
 
 function constrain_space(space, constraint::AbstractConstraint)
-    allowed = in(Set(allowed_values(constraint, space)))
-    qn_func = sector_function(constraint, space, missing)
-    qn(state) = begin
-        n = qn_func(state)
-        allowed(n) ? n : missing
+    if supports_sector_grouping(constraint)
+        f = sector_function(constraint, space)
+        return block_space(space, basisstates(space), f)
+    elseif supports_filtering(constraint)
+        f = filter_function(constraint, space)
+        filtered_states = collect(Iterators.filter(f, basisstates(space)))
+        return ConstrainedSpace(space, filtered_states)
+    else
+        throw(ArgumentError("Constraint $(constraint) is not supported for constraining spaces."))
     end
-    block_space(space, basisstates(space), qn)
-end
-function constrain_space(space, constraint::ProductConstraint)
-    alloweds = map(c -> in(Set(allowed_values(c, space))), constraint.constraints)
-    qn_funcs = map(c -> sector_function(c, space, missing), constraint.constraints)
-    qn(state) = begin
-        qns = map(qn_func -> qn_func(state), qn_funcs)
-        all(aq -> aq[1](aq[2]), zip(alloweds, qns)) ? qns : missing
-    end
-    block_space(space, basisstates(space), qn)
 end
 
 allowed_values(::NumberConservation{Missing}, space) = 0:maximum_particles(space)
@@ -86,6 +80,47 @@ allowed_values(p::ParityConservation, space) = p.allowed_parities
     @test basisstates(H3) == basisstates(constrain_space(H, NumberConservation(1)))
 end
 
+@testitem "FilterConstraint agrees with NumberConservation" begin
+    using FermionicHilbertSpaces: BlockConstraint, FilterConstraint, particle_number
+    @fermions f
+    N = 4
+    H = hilbert_space(f, 1:N)
+    Hs = (hilbert_space(f, 1:2), hilbert_space(f, 3:4))
+
+    block_constraint = BlockConstraint(state -> begin
+        n = particle_number(state)
+        n in 1:2 ? n : missing
+    end)
+    filter_constraint = FilterConstraint(in(1:2) ∘ particle_number)
+
+    Hnumber = hilbert_space(f, 1:N, NumberConservation(1:2))
+    Hfrom_tensor = tensor_product(Hs, constraint=filter_constraint)
+    Hfrom_constrain = constrain_space(H, filter_constraint)
+    Hfrom_tensor_block = tensor_product(Hs, constraint=block_constraint)
+    Hfrom_constrain_block = constrain_space(H, block_constraint)
+    states = Set(basisstates(Hnumber))
+    @test Set(basisstates(Hfrom_tensor)) == states
+    @test Set(basisstates(Hfrom_constrain)) == states
+    @test Set(basisstates(Hfrom_tensor_block)) == states
+    @test Set(basisstates(Hfrom_constrain_block)) == states
+
+    @test collect(quantumnumbers(Hfrom_constrain_block)) == collect(quantumnumbers(Hnumber))
+    @test collect(quantumnumbers(Hfrom_constrain_block)) == collect(quantumnumbers(Hnumber))
+
+    # Now with subregions and weights
+    Hnumber = hilbert_space(f, 1:N, NumberConservation(1:2, [f[1], f[2]], [1, -1]))
+    filter_constraint = FilterConstraint([f[1], f[2]], [particle_number, particle_number], in(1:2) ∘ only ∘ diff)
+    block_constraint = BlockConstraint([f[1], f[2]], [particle_number, particle_number], n1, n2 -> begin
+        n1 - n2 in 1:2 ? n1 - n2 : missing
+    end)
+    Hfrom_tensor = tensor_product(Hs, constraint=filter_constraint)
+    Hfrom_constrain = constrain_space(H, filter_constraint)
+    Hfrom_tensor_block = tensor_product(Hs, constraint=block_constraint)
+    Hfrom_constrain_block = constrain_space(H, block_constraint)
+
+
+end
+
 state_mapper(H::ConstrainedSpace, Hs) = state_mapper(parent(H), Hs)
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
 
@@ -104,7 +139,7 @@ _precomputation_before_operator_application(ops::Union{<:Any,<:NCMul}, space::Co
 
     #total number of particles is 1
     Hc = constrain_space(H, NumberConservation(1))
-    Hc2 = tensor_product(H.modes, NumberConservation(1))
+    Hc2 = tensor_product(H.modes; constraint=NumberConservation(1))
     @test Set(basisstates(Hc)) == Set(basisstates(Hc2))
     @test dim(Hc) == N
     mc = matrix_representation(sym, Hc)

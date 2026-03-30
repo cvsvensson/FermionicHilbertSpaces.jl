@@ -157,7 +157,7 @@ function state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace)
     s.n + 1
 end
 
-hilbert_space(sym::BosonField, labels, dimension::Int, constraint::AbstractConstraint=NoSymmetry()) = tensor_product([hilbert_space(sym[l], dimension) for l in labels], constraint)
+hilbert_space(sym::BosonField, labels, dimension::Int, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], dimension), labels); constraint)
 hilbert_space(sym::BosonSym, dimension::Int) = TruncatedBosonicHilbertSpace(sym, dimension)
 hilbert_space(sym::BosonSym, dimension::Int, constraint::AbstractConstraint) = constrain_space(hilbert_space(sym, dimension), constraint)
 particle_number(s::BosonicState) = s.n
