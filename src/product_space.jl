@@ -30,7 +30,9 @@ Base.hash(H::ProductSpace, h::UInt) = hash(H.clusters, hash(H.atoms, h))
 atomic_factors(H::ProductSpace) = H.atoms
 factors(H::ProductSpace) = H.clusters
 clusters(H::ProductSpace) = H.clusters
-dim(H::ProductSpace) = prod(dim, H.clusters; init = 1)
+dim(H::ProductSpace) = prod(dim, H.clusters; init=1)
+atomic_id(H::ProductSpace) = H.atom_ordering
+cluster_id(H::ProductSpace) = H.atom_ordering
 
 basisstates(H::ProductSpace) = collect(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.clusters)...)))
 function basisstate(n::Int, H::ProductSpace{B}) where B
@@ -165,7 +167,7 @@ end
         only(only(first(split_state(state, p_fermion_incomplete))))
     end)
 
-    # test state_mapper for FermionCluster
+    # test state_mapper for FermionicSpace
     p_fermion = state_mapper(Hab, [Ha, Hb])
     for state in basisstates(Hab)
         substates = only(first(split_state(state, p_fermion)))
@@ -326,8 +328,8 @@ end
 
 # ─── helpers ───────────────────────────────────────────────────────────────────
 
-_find_position(target::AbstractAtomicHilbertSpace, parent::AbstractAtomicHilbertSpace) = target == parent ? 1 : 0
-_find_position(target::AbstractClusterHilbertSpace, parent::AbstractClusterHilbertSpace) = target == parent ? 1 : 0
+_find_position(target::AbstractAtomicHilbertSpace, parent::AbstractAtomicHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
+_find_position(target::AbstractClusterHilbertSpace, parent::AbstractClusterHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
 
 # Extract the k-th sub-state (for ProductState) or the state itself (for atomic/cluster)
 extract_substate(state::ProductState, k) = state.states[k]

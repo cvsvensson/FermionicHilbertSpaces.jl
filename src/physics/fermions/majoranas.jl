@@ -199,7 +199,7 @@ end
 function state_mapper(H::MajoranaHilbertSpace, Hs)
     state_mapper(parent(H), Hs)
 end
-_find_position(f::MajoranaHilbertSpace, H::FermionCluster) = _find_position(f.parent, H)
+_find_position(f::MajoranaHilbertSpace, H::FermionicSpace) = _find_position(f.parent, H)
 partial_trace_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_trace_phase_factor(f1, f2, H.parent)
 
 function majoranas(H::MajoranaHilbertSpace)
@@ -283,7 +283,8 @@ function atomic_factors(H::MajoranaHilbertSpace)
     # convert to majoranas
     γ = H.sym
     map(enumerate(parent_atoms)) do (i, atom)
-        majoranaindices = OrderedDict(γ[atom.label[1]] => 1, γ[atom.label[2]] => 2)
+        fsym = only(modes(atom))
+        majoranaindices = OrderedDict(γ[fsym.label[1]] => 1, γ[fsym.label[2]] => 2)
         MajoranaHilbertSpace(majoranaindices, atom, H.sym)
     end
 end
@@ -292,7 +293,7 @@ end
     @majoranas γ
     H = hilbert_space(γ, 1:2)
     Hf = H.parent
-    f = H.parent.symbolic_basis
+    f = H.parent.modes[1].basis
 
     @test parityoperator(H.parent) == matrix_representation(1im * γ[1] * γ[2], H)
     y1 = matrix_representation(γ[1], H)
@@ -316,11 +317,11 @@ end
     Hsub = subregion(hilbert_space(γ, 1:2), H)
     @test dim(Hsub) == 2
     Hf = H.parent
-    Hfsub = subregion(hilbert_space(Hsub.parent.parent.symbolic_basis, [(1, 2)]), Hf)
+    Hfsub = subregion(hilbert_space(Hsub.parent.parent.modes[1].basis, [(1, 2)]), Hf)
     m = rand(dim(H), dim(H))
     @test partial_trace(m, H => Hsub) == partial_trace(m, Hf => Hfsub)
     Hsub2 = subregion(hilbert_space(γ, 3:4), H)
-    Hfsub2 = subregion(hilbert_space(Hsub.parent.parent.symbolic_basis, [(3, 4)]), Hf)
+    Hfsub2 = subregion(hilbert_space(Hsub.parent.parent.modes[1].basis, [(3, 4)]), Hf)
 
     Hprod = tensor_product(Hsub, Hsub2)
     @test basisstates(Hprod) == basisstates(tensor_product(Hfsub, Hfsub2))

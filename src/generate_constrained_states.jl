@@ -101,8 +101,9 @@ function additive_branch_constraint(allowed_sums, functions, _subspaces, allspac
     _additive_branch_constraint(allowed_values, functions, map(hilbert_space, subspaces), allspaces)
 end
 function _additive_branch_constraint(allowed_values, functions, subspaces, allspaces)
+    atom_ids = collect(map(atomic_id, allspaces))
     positions = map(subspaces) do subspace
-        pos = findfirst(isequal(subspace), allspaces)
+        pos = findfirst(==(atomic_id(subspace)), atom_ids)
         isnothing(pos) && throw(ArgumentError("All AdditiveConstraint subspaces must be present in the generated space"))
         pos
     end

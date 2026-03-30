@@ -104,8 +104,8 @@ function subregion(Hs, H::AbstractHilbertSpace)
     isempty(input_ids) && throw(ArgumentError("Hs must contain at least one space or symbolic operator"))
     Hatoms = collect(atomic_factors(H))
     Hatom_ids = map(atomic_id, Hatoms)
-    positions = map(id -> _find_position(id, Hatom_ids), input_ids)
-    all(>(0), positions) || throw(ArgumentError("The spaces/operators in Hs must match atomic factors in H, but the following were not found: $(input_ids[findall(==(0), positions)])."))
+    positions = map(id -> findfirst(==(id), Hatom_ids), input_ids)
+    all(!isnothing, positions) || throw(ArgumentError("The spaces/operators in Hs must match atomic factors in H, but the following were not found: $(input_ids[findall(isnothing, positions)])."))
     length(unique(positions)) == length(positions) || throw(ArgumentError("Hs contains duplicate atomic factors"))
 
     Hsub = tensor_product(Hatoms[positions])
@@ -139,11 +139,11 @@ end
     Hbsub = subregion([b[2], b[3]], H)
     @test dim(Hfsub) == 3
     @test dim(Hbsub) == 3
-    
+
     using FermionicHilbertSpaces: complementary_subsystem
     @test complementary_subsystem(H, subregion([f[3], b[2]], H)) ==
-        subregion([f[1], f[2], b[1], b[3]], H) 
-    
+          subregion([f[1], f[2], b[1], b[3]], H)
+
 end
 
 function _find_subregion_states(H, mapper)
@@ -191,10 +191,9 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
     length(atomic_factors(Hsub)) == length(sub_atoms) || throw(ArgumentError("Duplicate atoms in subsystem"))
 
     # Filter atoms preserving original order
-    remaining = filter(a -> !(a in sub_atoms), atomic_factors(H))
+    remaining = collect(Iterators.filter(a -> !(a in sub_atoms), atomic_factors(H)))
     # isempty(remaining) && throw(ArgumentError("Complementary subsystem is empty"))
     isempty(remaining) && return nothing
-
     Hcomp = tensor_product(remaining)
     if isconstrained(H)
         #restrict states in Hcomp to those compatible with states in Hsub
@@ -205,7 +204,7 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
     return Hcomp
 end
 
-_find_position(n, v::AbstractVector) = (pos = findfirst(==(n), v); isnothing(pos) ? 0 : pos)
+_find_position(n, v::Union{<:AbstractVector,<:Base.Generator}) = (pos = findfirst(==(n), v); isnothing(pos) ? 0 : pos)
 _find_atom_position(atom, H::AbstractClusterHilbertSpace) = _find_position(atom, H)
 _find_atom_position(atom, H::AbstractHilbertSpace) = _find_position(atom, atomic_factors(H))
 

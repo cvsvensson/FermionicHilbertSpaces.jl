@@ -202,13 +202,13 @@ function Base.show(io::IO, H::SingleParticleHilbertSpace)
     end
 end
 
-function Base.show(io::IO, c::FermionCluster)
+function Base.show(io::IO, c::FermionicSpace)
     max_modes = 10
     if get(io, :compact, false)
         _compact_fermionic_modes(io, c; max_groups=4, edge_groups=2, max_labels_per_group=6, edge_labels=2)
     else
         n = nbr_of_modes(c)
-        print(io, "$(dim(c))-dimensional FermionCluster\nModes: ")
+        print(io, "$(dim(c))-dimensional FermionicSpace\nModes: ")
         n > max_modes && print(io, "$n total ")
         _compact_fermionic_modes(io, c; (n > max_modes ? (max_groups=6, edge_groups=3, max_labels_per_group=8, edge_labels=3) : (;))...)
     end

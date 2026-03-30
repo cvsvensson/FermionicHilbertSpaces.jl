@@ -1,84 +1,66 @@
 
-
-struct FermionicMode{L,S} <: AbstractAtomicHilbertSpace{FockNumber{UInt}}
-    label::L
-    symbolic_basis::S
-end
-fermionic_group(h::FermionicMode) = fermionic_group(h.symbolic_basis)
-cluster_id(h::FermionicMode) = fermionic_group(h)
-atomic_id(H::FermionicMode) = (H.symbolic_basis, H.label)
-
-modes(H::FermionicMode) = (H.symbolic_basis[H.label],)
-Base.:(==)(m1::FermionicMode, m2::FermionicMode) = m1.label == m2.label && m1.symbolic_basis == m2.symbolic_basis
-Base.hash(m::FermionicMode, h::UInt) = hash(m.label, hash(m.symbolic_basis, h))
-function Base.show(io::IO, c::FermionicMode)
-    get(io, :compact, false) || return print(io, "FermionicMode(", c.symbolic_basis.name, "[", c.label, "])")
-    print(io, c.symbolic_basis.name, "[", c.label, "]")
-end
-combine_states(states, ::AbstractAtomicHilbertSpace) = (only(states),), (1,)
-combine_into_cluster(group::FermionicGroup, fermions) = all(f -> cluster_id(f) == group, fermions) ? FermionCluster(fermions, group) : throw(ArgumentError("Not all fermions belong to the same group"))
-function basisstate(n::Int, H::FermionicMode)
-    n == 1 && return FockNumber(zero(default_fock_representation(1)))
-    n == 2 && return FockNumber(one(default_fock_representation(1)))
-    throw(ArgumentError("Invalid state index $n for FermionicMode"))
-end
-basisstates(::FermionicMode) = (FockNumber(zero(default_fock_representation(Val(1)))), FockNumber(one(default_fock_representation(Val(1)))))
-maximum_particles(::FermionicMode) = 1
-# state_index(s::FockNumber{Bool}, H::FermionicMode) = s.f + 1
-function state_index(s::FockNumber, H::FermionicMode)
-    iszero(s.f) && return 1
-    isone(s.f) && return 2
-    throw(ArgumentError("Invalid state $s for FermionicMode"))
-end
-atomic_factors(H::FermionicMode) = (H,)
-
-label(H::FermionicMode) = H.label
-nbr_of_modes(H::FermionicMode) = 1
-dim(H::FermionicMode) = 2
-
 abstract type AbstractFermionicClusterHilbertSpace{B} <: AbstractClusterHilbertSpace{B} end
-struct FermionCluster{F,L} <: AbstractFermionicClusterHilbertSpace{F}
+struct FermionicSpace{F,L} <: AbstractFermionicClusterHilbertSpace{F}
     modes::Vector{L}
     mode_ordering::OrderedDict{L,Int}
     group::FermionicGroup
-    function FermionCluster(modes::Union{<:AbstractVector{L},<:NTuple{N,L}}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(length(modes))}) where {F,L<:FermionicMode,N}
-        length(modes) == 0 && throw(ArgumentError("Cannot create a FermionCluster with no modes"))
-        length(modes) == 1 && return only(modes)
+    function FermionicSpace(modes::Union{<:AbstractVector{L},<:NTuple{N,L}}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(length(modes))}) where {F,L<:FermionSym,N}
+        length(modes) == 0 && throw(ArgumentError("Cannot create a FermionicSpace with no modes"))
+        # length(modes) == 1 && return only(modes)
         mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("Duplicate modes in fermionic group"))
         new{F,L}(collect(modes), mode_ordering, group)
     end
 end
-FermionCluster(mode::FermionicMode) = mode
-function FermionCluster(modes::Union{<:AbstractVector{F},NTuple{N,F}}) where {N,F<:FermionicMode}
-
-    FermionCluster(modes, only(unique(map(cluster_id, modes))))
+function FermionicSpace(clusters::Union{<:AbstractVector{L},<:NTuple{N,L}}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, clusters))}) where {F,L<:FermionicSpace,N}
+    all(c -> cluster_id(c) == group, clusters) || throw(ArgumentError("Not all clusters belong to the same group"))
+    fermionsyms = collect(Iterators.flatten(Iterators.map(modes, clusters)))
+    FermionicSpace(fermionsyms, group, F)
 end
-maximum_particles(H::FermionCluster) = nbr_of_modes(H)
-Base.:(==)(c1::FermionCluster, c2::FermionCluster) = c1.modes == c2.modes && c1.group == c2.group
-Base.hash(c::FermionCluster, h::UInt) = hash(c.modes, hash(c.group, h))
-basisstates(H::FermionCluster{F}) where F = TypedIterator{F}(Iterators.map(F, UnitRange{UInt64}(0, dim(H) - 1)))
-basisstate(ind, ::FermionCluster{F}) where F = (F ∘ FockNumber)(ind - 1)
-state_index(state::FockNumber, ::FermionCluster) = state.f + 1
-function dim(H::FermionCluster)
+function FermionicSpace(modes::Union{<:AbstractVector{F},NTuple{N,F}}) where {N,F<:FermionSym}
+    FermionicSpace(modes, only(unique(map(cluster_id, modes))))
+end
+maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
+Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.group == c2.group
+Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
+basisstates(H::FermionicSpace{F}) where F = TypedIterator{F}(Iterators.map(F, UnitRange{UInt64}(0, dim(H) - 1)))
+basisstate(ind, ::FermionicSpace{F}) where F = (F ∘ FockNumber)(ind - 1)
+state_index(state::FockNumber, ::FermionicSpace) = state.f + 1
+function dim(H::FermionicSpace)
     N = nbr_of_modes(H)
     N < 63 ? 2^N : BigInt(2)^N
 end
-atomic_factors(H::FermionCluster) = H.modes
-nbr_of_modes(H::FermionCluster) = length(H.modes)
-cluster_id(H::FermionCluster) = H.group
-mode_ordering(H::FermionCluster) = H.mode_ordering
-modes(H::FermionCluster) = H.modes
-_find_position(f::FermionicMode, H::FermionCluster) = get(H.mode_ordering, f, 0)
-_find_position(f::FermionicMode, H::FermionicMode) = f == H ? 1 : 0
-_find_position(H::AbstractHilbertSpace, ordering::AbstractDict) = get(ordering, H, 0)
-operators(H::FermionCluster) = fermions(H)
-operators(H::FermionicMode) = fermions(H)
-isconstrained(H::FermionCluster) = false
-combine_states(states, H::FermionCluster{F}) where F = (catenate_fock_states(states, H.modes, F),), (1,)
+atomic_factors(H::FermionicSpace) = map(hilbert_space, H.modes)
+nbr_of_modes(H::FermionicSpace) = length(H.modes)
+cluster_id(H::FermionicSpace) = H.group
+atomic_id(h::FermionicSpace) = nbr_of_modes(h) == 1 ? atomic_id(only(h.modes)) : map(atomic_id, h.modes)
+label(h::FermionicSpace) = label(only(h.modes))
+mode_ordering(H::FermionicSpace) = H.mode_ordering
+modes(H::FermionicSpace) = H.modes
 
-state_mapper(H::FermionCluster, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
-function state_mapper(H::FermionCluster, Hs)
+_normalize_sym(f::FermionSym) = FermionSym(false, f.label, f.basis)
+statetype(f::FermionSym) = FockNumber{default_fock_representation(1)}
+basisstates(f::FermionSym) = (statetype(f)(0), statetype(f)(1))
+nbr_of_modes(f::FermionSym) = 1
+maximum_particles(f::FermionSym) = 1
+isconstrained(f::FermionSym) = false
+
+function _find_position(f::FermionSym, H::FermionicSpace)
+    get(H.mode_ordering, _normalize_sym(f), 0)
+end
+function _find_position(f::FermionicSpace, H::FermionicSpace)
+    nbr_of_modes(f) == 1 || throw(ArgumentError("Can only find position of single-mode cluster within another cluster"))
+    return _find_position(only(modes(f)), H)
+end
+
+combine_into_cluster(group::FermionicGroup, fermions) = all(f -> cluster_id(f) == group, fermions) ? FermionicSpace(fermions, group) : throw(ArgumentError("Not all fermions belong to the same group"))
+
+operators(H::FermionicSpace) = fermions(H)
+isconstrained(H::FermionicSpace) = false
+combine_states(states, H::FermionicSpace{F}) where F = (catenate_fock_states(states, H.modes, F),), (1,)
+
+state_mapper(H::FermionicSpace, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
+function state_mapper(H::FermionicSpace, Hs)
     fermionpositions = [[_find_position(atom, H) for atom in atomic_factors(cluster)] for cluster in Hs]
     all(x -> x > 0, Iterators.flatten(fermionpositions)) || throw(ArgumentError("All subspaces must be part of the cluster"))
     FockMapper(Tuple(fermionpositions))
@@ -87,19 +69,19 @@ end
 _truncate(items, max, edge) =
     length(items) <= max ? items : [items[1:edge]; "..."; items[end-edge+1:end]]
 
-function _compact_fermionic_modes(io::IO, c::FermionCluster;
+function _compact_fermionic_modes(io::IO, c::FermionicSpace;
     max_groups=typemax(Int), edge_groups=3,
     max_labels_per_group=typemax(Int), edge_labels=3)
 
-    isempty(c.modes) && return print(io, "FermionCluster()")
+    isempty(c.modes) && return print(io, "FermionicSpace()")
 
     # Group consecutive modes by symbolic basis name
     groups = Tuple{Any,Vector{Any}}[]
     for m in c.modes
-        if !isempty(groups) && last(groups)[1] == m.symbolic_basis.name
+        if !isempty(groups) && last(groups)[1] == m.basis.name
             push!(last(groups)[2], m.label)
         else
-            push!(groups, (m.symbolic_basis.name, Any[m.label]))
+            push!(groups, (m.basis.name, Any[m.label]))
         end
     end
 
@@ -107,20 +89,20 @@ function _compact_fermionic_modes(io::IO, c::FermionCluster;
     print(io, "(", join(_truncate(map(fmt, groups), max_groups, edge_groups), ", "), ")")
 end
 
-function embedding_unitary(partition, states, H::FermionCluster)
+function embedding_unitary(partition, states, H::FermionicSpace)
     atoms = atomic_factors(H)
     positions = [[_find_position(atom, atoms) for atom in atomic_factors(cluster)] for cluster in partition]
     embedding_unitary(positions, states)
 end
-function bipartite_embedding_unitary(X, Xbar, states, H::FermionCluster)
+function bipartite_embedding_unitary(X, Xbar, states, H::FermionicSpace)
     atoms = atomic_factors(H)
     Xpos = [_find_position(atom, atoms) for atom in atomic_factors(X)]
     Xbarpos = [_find_position(atom, atoms) for atom in atomic_factors(Xbar)]
     bipartite_embedding_unitary(Xpos, Xbarpos, states)
 end
-embedding_unitary(partition, H::FermionCluster) = embedding_unitary(partition, basisstates(H), H)
-bipartite_embedding_unitary(X, Xbar, H::FermionCluster) = bipartite_embedding_unitary(X, Xbar, basisstates(H), H)
-partial_trace_phase_factor(f1, f2, H::FermionCluster) = phase_factor_f(f1, f2, nbr_of_modes(H))
+embedding_unitary(partition, H::FermionicSpace) = embedding_unitary(partition, basisstates(H), H)
+bipartite_embedding_unitary(X, Xbar, H::FermionicSpace) = bipartite_embedding_unitary(X, Xbar, basisstates(H), H)
+partial_trace_phase_factor(f1, f2, H::FermionicSpace) = phase_factor_f(f1, f2, nbr_of_modes(H))
 
 
 
@@ -130,12 +112,12 @@ function (processor::CombineFockNumbersProcessor{T})(full_state, spaces) where T
 end
 # _init_results(spaces, ::CombineFockNumbersProcessor{T}) where T = T[]
 
-focknbr_from_site_label(mode::FermionicMode, H::FermionCluster) = focknbr_from_site_index(_find_position(mode, H))
-focknbr_from_site_labels(Hsub::FermionCluster, H::FermionCluster) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
+focknbr_from_site_label(mode::FermionSym, H::FermionicSpace) = focknbr_from_site_index(_find_position(mode, H))
+focknbr_from_site_labels(Hsub::FermionicSpace, H::FermionicSpace) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
 
 
 # _precomputation_before_operator_application(op::NCMul, space::AbstractHilbertSpace{B}) where {B<:FockNumber} = map(op -> _find_position(op, space), op.factors)
-_precomputation_before_operator_application(op::NCMul, space::Union{<:FermionicMode,<:FermionCluster{B}}) where {B<:FockNumber} = map(op -> _find_position(op, space), op.factors)
+_precomputation_before_operator_application(op::NCMul, space::FermionicSpace{B}) where {B<:FockNumber} = map(op -> _find_position(op, space), op.factors)
 function apply_local_operators(op::NCMul, state::FockNumber{I}, space::AbstractHilbertSpace, fermionpositions) where I
     factors = op.factors
     newfocknbr = state
@@ -274,10 +256,9 @@ end
     end
 end
 
-FermionicMode(f::FermionSym) = FermionicMode(f.label, f.basis)
-_find_position(f::FermionSym, H::AbstractHilbertSpace) = _find_position(FermionicMode(f), H)
-_find_position(f::FermionSym, H::ProductSpace) = _find_position(FermionicMode(f), H)
-hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionCluster(map(l -> FermionicMode(a[l]), labels))
+_find_position(f::FermionSym, H::AbstractHilbertSpace) = _find_position(hilbert_space(f), H)
+_find_position(f::FermionSym, H::ProductSpace) = _find_position(hilbert_space(f), H)
+hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionicSpace(map(l -> a[l], labels))
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::AbstractVector{<:AbstractBasisState}) = ConstrainedSpace(hilbert_space(a, labels), states)
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::AbstractConstraint) = tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
 
@@ -300,7 +281,7 @@ function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constrai
     _block_space(H, dict)
 end
 
-issubsystem(Hsub::AbstractHilbertSpace, H::FermionCluster) = isorderedsubsystem(Hsub, H)
+issubsystem(Hsub::AbstractHilbertSpace, H::FermionicSpace) = isorderedsubsystem(Hsub, H)
 
 @testitem "Commuting fermionic operators: Lindbladian and number conservation" begin
     @fermions c_l
@@ -328,20 +309,20 @@ issubsystem(Hsub::AbstractHilbertSpace, H::FermionCluster) = isorderedsubsystem(
     @test cat(blocks...; dims=(1, 2)) == matrix_representation(lindbladian, Hcons)
 end
 
-@testitem "Tensor product of FermionicMode and FermionCluster" begin
-    import FermionicHilbertSpaces: constrain_space, FermionCluster
+@testitem "Tensor product of FermionicMode and FermionicSpace" begin
+    import FermionicHilbertSpaces: constrain_space, FermionicSpace
     @fermions a
 
-    # FermionicMode: tensor product of two single modes gives a FermionCluster
+    # FermionicMode: tensor product of two single modes gives a FermionicSpace
     H1 = hilbert_space(a[1])
     H2 = hilbert_space(a[2])
     Hw = tensor_product([H1, H2])
     H3 = hilbert_space(a, 1:2)
     @test Hw == H3
-    @test Hw isa FermionCluster
+    @test Hw isa FermionicSpace
     @test dim(H1) * dim(H2) == dim(Hw)
 
-    # FermionCluster: tensor product of two clusters gives a larger FermionCluster
+    # FermionicSpace: tensor product of two clusters gives a larger FermionicSpace
     H1 = hilbert_space(a, 1:2)
     H2 = hilbert_space(a, 3:4)
     Hw = tensor_product([H1, H2])
@@ -349,7 +330,7 @@ end
     @test Hw == H3
     @test dim(H1) * dim(H2) == dim(Hw)
 
-    # NumberConservation constrained FermionClusters
+    # NumberConservation constrained FermionicSpaces
     H1 = constrain_space(hilbert_space(a, 1:2), NumberConservation(1))
     H2 = constrain_space(hilbert_space(a, 3:4), NumberConservation(1))
     Hw = tensor_product((H1, H2))
