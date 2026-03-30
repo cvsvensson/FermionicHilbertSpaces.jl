@@ -37,7 +37,7 @@ function tensor_product(spaces; constraint=NoSymmetry())
         filtered_states = collect(Iterators.filter(filter_function(constraint, full_space), states))
         return ConstrainedSpace(full_space, filtered_states)
     else
-        return full_space
+        return ConstrainedSpace(full_space, states)
     end
 end
 

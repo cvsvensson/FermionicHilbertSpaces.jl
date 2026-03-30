@@ -2,6 +2,10 @@ abstract type AbstractBranchConstraint <: AbstractConstraint end
 struct BranchConstraint{F} <: AbstractBranchConstraint
     f::F
 end
+supports_branch_pruning(::BranchConstraint) = true
+supports_filtering(::BranchConstraint) = false
+supports_sector_grouping(::BranchConstraint) = false
+
 branch_constraint(constraint::BranchConstraint, space) = constraint
 """
     valid_branch(constraint, partial_state, remaining_spaces) -> Bool
