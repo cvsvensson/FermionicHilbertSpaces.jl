@@ -80,6 +80,9 @@ end
 function combine_states(states, ::AtomicStateMapper)
     (only(states),), (1,)
 end
+function combine_states(states, ::AbstractAtomicHilbertSpace)
+    (only(states),), (1,)
+end
 kron_phase_factor(::AtomicStateMapper) = (f1, f2) -> 1
 
 """
