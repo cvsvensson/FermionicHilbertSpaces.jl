@@ -48,6 +48,7 @@ end
 allowed_values(::NumberConservation{Missing}, space) = 0:maximum_particles(space)
 allowed_values(constraint::NumberConservation{T}, space) where T = constraint.total
 allowed_values(p::ParityConservation, space) = p.allowed_parities
+allowed_values(c::AdditiveConstraint, space) = c.allowed_values
 
 @testitem "constrain_space" begin
     @fermions f
@@ -109,15 +110,15 @@ end
 
     # Now with subregions and weights
     Hnumber = hilbert_space(f, 1:N, NumberConservation(1:2, [f[1], f[2]], [1, -1]))
-    filter_constraint = FilterConstraint([f[1], f[2]], [particle_number, particle_number], in(1:2) ∘ only ∘ diff)
-    block_constraint = BlockConstraint([f[1], f[2]], [particle_number, particle_number], n1, n2 -> begin
+    filter_constraint = FilterConstraint([f[1], f[2]], [particle_number, particle_number], in(1:2) ∘ only ∘ diff ∘ collect)
+    block_constraint = BlockConstraint([f[1], f[2]], [particle_number, particle_number], ns -> begin
+        n1, n2 = collect(ns)
         n1 - n2 in 1:2 ? n1 - n2 : missing
     end)
     Hfrom_tensor = tensor_product(Hs, constraint=filter_constraint)
     Hfrom_constrain = constrain_space(H, filter_constraint)
     Hfrom_tensor_block = tensor_product(Hs, constraint=block_constraint)
     Hfrom_constrain_block = constrain_space(H, block_constraint)
-
 
 end
 

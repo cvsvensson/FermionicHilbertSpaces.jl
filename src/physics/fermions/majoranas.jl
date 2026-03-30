@@ -177,7 +177,7 @@ function sector(qn, H::MajoranaHilbertSpace)
     parent_sector = sector(qn, parent(H))
     MajoranaHilbertSpace(H.majoranaindices, parent_sector, H.sym)
 end
-# sector(::Nothing, H::MajoranaHilbertSpace) = H
+sector(::Nothing, H::MajoranaHilbertSpace) = H
 # indices(Hsub::AbstractHilbertSpace, H::MajoranaHilbertSpace) = indices(Hsub, parent(H))
 # indices(::Nothing, H::MajoranaHilbertSpace) = indices(nothing, parent(H))
 
