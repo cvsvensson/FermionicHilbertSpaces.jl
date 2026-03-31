@@ -10,21 +10,8 @@ function phase_factor_f(focknbr1, focknbr2, subinds::NTuple)
     end
     return pf ? -1 : 1
 end
-function phase_factor_f(fock1::FockNumber, fock2::FockNumber, N::Int)
-    # Assumes no bits are set above N
-    f1 = fock1.f
-    f2 = fock2.f
-    g = f1 ⊻ f2          # only differences between the two states matter
-    pf = false
-    tmp = f2
-    while tmp != 0
-        p = trailing_zeros(tmp)                # 0-indexed position of lowest set bit
-        tmp &= tmp - 1                           # clear lowest set bit
-        pf ⊻= isodd(count_ones(g >> (p + 1)))   # parity of g-bits strictly above p
-        # with different Jw convention we would have
-        # pf ⊻= isodd(count_ones(g & ((1 << p) - 1)))    # parity of g-bits strictly below p
-    end
-    return pf ? -1 : 1
+function phase_factor_f(f1::FockNumber, f2::FockNumber, N::Int)
+    _pair_parity(f1.f ⊻ f2.f, f2.f) ? -1 : 1
 end
 
 function phase_factor_f(focknbr1, focknbr2, N::Int)
@@ -49,27 +36,35 @@ function kron_phase_factor(state_mapper::FockMapper)
     end
 end
 
-function phase_factor_h(f1::AbstractFockState, f2::AbstractFockState, partition, masks=map(focknbr_from_site_indices, partition))::Int
-    # this assumes that partition is a list of list of indices
-    # masks is a list of bitmasks corresponding to the partition
-    #(120b)
-    phase = 1
-    for (Xp, Xpmask) in zip(partition, masks)
-        masked_f1 = Xpmask & f1
-        masked_f2 = Xpmask & f2
-        for X in partition
-            if X === Xp
-                continue
-            end
-            for i in X
-                if _bit(f2, i)
-                    phase *= jwstring_anti(i, masked_f1) * jwstring_anti(i, masked_f2)
-                end
-            end
-        end
+"""
+Parity of #{(i,j) : bit j set in `a`, bit i set in `b`, j > i (0-indexed positions)}.
+Returns true for odd count (contributes phase -1).
+"""
+function _pair_parity(a::T, b::T) where {T<:Integer}
+    parity = false
+    tmp = a
+    while tmp != 0
+        j = trailing_zeros(tmp)
+        tmp &= tmp - 1
+        parity ⊻= isodd(count_ones(b & ((one(T) << j) - one(T))))
     end
-    return phase
+    return parity
 end
+
+function phase_factor_h(f1::FockNumber, f2::FockNumber,
+    partition, masks=map(focknbr_from_site_indices, partition))::Int
+    g_bits = f1.f ⊻ f2.f
+    f2_bits = f2.f
+    # All pairs across the full system
+    parity = _pair_parity(g_bits, f2_bits)
+    # Subtract same-partition pairs (XOR = add mod 2)
+    for mask in masks
+        m = mask.f
+        parity ⊻= _pair_parity(g_bits & m, f2_bits & m)
+    end
+    return parity ? -1 : 1
+end
+
 
 @testitem "Phase factor f" begin
     import FermionicHilbertSpaces: phase_factor_h, phase_factor_f, bits
