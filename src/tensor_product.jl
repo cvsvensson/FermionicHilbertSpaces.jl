@@ -389,11 +389,12 @@ end
 function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::FullPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); phase_factors=true, skipmissing=false)
     fill!(mout, zero(eltype(mout)))
     inds = tensor_product_iterator(m, H)
+    splitsamps = map(Base.Fix2(split_state, mapper), basisstates(H))
     for I in inds
         f1 = basisstate(I[1], H)
         f2 = basisstate(I[2], H)
-        splits1, amps1 = split_state(f1, mapper)
-        splits2, amps2 = split_state(f2, mapper)
+        splits1, amps1 = splitsamps[I[1]]
+        splits2, amps2 = splitsamps[I[2]]
         for ((f1sub, f1bar), w1) in zip(splits1, amps1)
             J1 = state_index(f1sub, Hsub)
             if ismissing(J1)
