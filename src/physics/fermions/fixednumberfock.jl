@@ -44,9 +44,6 @@ function FixedNumberFockState{N}(f::FockNumber) where N
     FixedNumberFockState{N}(Tuple(sites))
 end
 
-function insert_bits(f::FixedNumberFockState, positions)
-    FixedNumberFockState(insert_bits(FockNumber(f), positions))
-end
 Base.:(|)(f1::FixedNumberFockState, f2::FixedNumberFockState) = FixedNumberFockState((f1.sites..., f2.sites...))
 Base.:(|)(f1::FixedNumberFockState, f2::FockNumber) = FixedNumberFockState(FockNumber(f1) | f2)
 
@@ -57,6 +54,10 @@ function substate(siteindices, f::FixedNumberFockState)
         site in f.sites && push!(subsites, n)
     end
     return FixedNumberFockState(Tuple(subsites))
+end
+function split_state(f::FixedNumberFockState, fm::FockMapper{N}) where N
+    state = map(pos -> substate(pos, f), fm.fermionpositions)
+    (state,), (1,)
 end
 
 Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.sites
@@ -168,6 +169,12 @@ Base.zero(::FixedNumberFockState) = FixedNumberFockState(())
 function concatenate((lastf, lastwidth)::Tuple{FixedNumberFockState,Int}, (f, width)::Tuple{FixedNumberFockState,Int})
     return (FixedNumberFockState((lastf.sites..., (lastwidth .+ f.sites)...)), lastwidth + width)
 end
+function concatenate((lastf, lastwidth)::Tuple{FockNumber,Int}, (f, width)::Tuple{FixedNumberFockState,Int})
+    concatenate((FixedNumberFockState(lastf), lastwidth), (f, width))
+end
+function concatenate((lastf, lastwidth)::Tuple{FixedNumberFockState,Int}, (f, width)::Tuple{FockNumber,Int})
+    concatenate((lastf, lastwidth), (FixedNumberFockState(f), width))
+end
 function permute(f::FixedNumberFockState, permutation::BitPermutations.AbstractBitPermutation)
     p = Vector(permutation')
     return FixedNumberFockState(map(s -> p[s], f.sites))
@@ -244,18 +251,23 @@ end
     @test ρsub_fock ≈ ρsub_fixed
 
     msub = rand(dim(Hsub_fock), dim(Hsub_fock))
-    m_fock = embed(msub, Hsub_fock => H_fock.parent)
-    m_fixed = embed(msub, Hsub_fixed => H_fixed.parent)
+    m_fock = embed(msub, Hsub_fock => H_fock; skipmissing=true)
+    m_fixed = embed(msub, Hsub_fixed => H_fixed; skipmissing=true)
     @test m_fock ≈ m_fixed
 
-    Hcomp = FermionicHilbertSpaces.complementary_subsystem(H_fixed, Hsub_fixed)
-    ρsub_fixed = partial_trace(Ψ_fixed * Ψ_fixed', H_fixed => Hsub_fixed; complement=Hcomp)
-    @test ρsub_fock ≈ ρsub_fixed
-
-    mcomp = rand(dim(Hcomp), dim(Hcomp))
-    m_fock = tensor_product((msub, mcomp), (Hsub_fock, Hcomp) => H_fock.parent)
-    m_fixed = tensor_product((msub, mcomp), (Hsub_fixed, Hcomp) => H_fixed.parent)
+    Hcomp_fixed = FermionicHilbertSpaces.complementary_subsystem(H_fixed, Hsub_fixed)
+    Hcomp_fock = FermionicHilbertSpaces.complementary_subsystem(H_fock, Hsub_fock)
+    mcomp = rand(dim(Hcomp_fixed), dim(Hcomp_fixed))
+    H_fock = tensor_product(Hsub_fock, Hcomp_fock)
+    H_fixed = tensor_product(Hsub_fixed, Hcomp_fixed)
+    @test dim(H_fock) == dim(H_fixed)
+    m_fock = tensor_product((msub, mcomp), (Hsub_fock, Hcomp_fock) => H_fock)
+    m_fixed = tensor_product((msub, mcomp), (Hsub_fixed, Hcomp_fixed) => H_fixed)
     @test m_fock ≈ m_fixed
+end
+
+function phase_factor_h(f1::FixedNumberFockState, f2::FixedNumberFockState, partition, masks)
+    phase_factor_h(FockNumber(f1), FockNumber(f2), partition, masks)
 end
 
 
