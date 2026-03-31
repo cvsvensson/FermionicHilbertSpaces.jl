@@ -112,20 +112,20 @@ function _require_full_partition(fm::FockMapper)
     throw(ArgumentError("combine_states requires a full non-overlapping partition, but split_state may be used with partial or overlapping fermion subregions: $(fm.fermionpositions)"))
 end
 
-function combine_states(fs, fm::FockMapper{N}) where {N}
+function combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:AbstractBitPermutation}) where {N}
     _require_full_partition(fm)
     state = concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))})
     (state,), (1,)
 end
-# function combine_states(f, fm::FockMapper{N}) where N
-#     _require_full_partition(fm)
-#     IT = default_fock_representation(Val(N))
-#     result = zero(IT)
-#     for (fock, mask) in zip(f, fm.masks)
-#         result |= BitPermutations.pdep(IT(fock.f), IT(mask.f))
-#     end
-#     (FockNumber{IT}(result),), (1,)
-# end
+function combine_states(f, fm::FockMapper{N}) where N
+    _require_full_partition(fm)
+    IT = default_fock_representation(Val(N))
+    result = zero(IT)
+    for (fock, mask) in zip(f, fm.masks)
+        result |= BitPermutations.pdep(IT(fock.f), IT(mask.f))
+    end
+    (FockNumber{IT}(result),), (1,)
+end
 function catenate_fock_states(fock_states, spaces, T)
     num = zero(T)
     shift = 0
