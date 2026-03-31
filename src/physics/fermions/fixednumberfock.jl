@@ -243,8 +243,19 @@ end
     ρsub_fixed = partial_trace(Ψ_fixed * Ψ_fixed', H_fixed => Hsub_fixed)
     @test ρsub_fock ≈ ρsub_fixed
 
-    ρsub_fixed = partial_trace(Ψ_fixed * Ψ_fixed', H_fixed => Hsub_fixed; complement=FermionicHilbertSpaces.complementary_subsystem(H_fixed, Hsub_fixed))
+    msub = rand(dim(Hsub_fock), dim(Hsub_fock))
+    m_fock = embed(msub, Hsub_fock => H_fock.parent)
+    m_fixed = embed(msub, Hsub_fixed => H_fixed.parent)
+    @test m_fock ≈ m_fixed
+
+    Hcomp = FermionicHilbertSpaces.complementary_subsystem(H_fixed, Hsub_fixed)
+    ρsub_fixed = partial_trace(Ψ_fixed * Ψ_fixed', H_fixed => Hsub_fixed; complement=Hcomp)
     @test ρsub_fock ≈ ρsub_fixed
+
+    mcomp = rand(dim(Hcomp), dim(Hcomp))
+    m_fock = tensor_product((msub, mcomp), (Hsub_fock, Hcomp) => H_fock.parent)
+    m_fixed = tensor_product((msub, mcomp), (Hsub_fixed, Hcomp) => H_fixed.parent)
+    @test m_fock ≈ m_fixed
 end
 
 
