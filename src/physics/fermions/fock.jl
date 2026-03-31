@@ -70,8 +70,12 @@ Parity of the number of fermions to the right of site.
 """
 jwstring(site, focknbr) = jwstring_left(site, focknbr)
 jwstring_anti(site, focknbr) = jwstring_right(site, focknbr)
-jwstring_right(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f >> site)) ? 1 : -1
-jwstring_left(site, focknbr::FockNumber) = iseven(count_ones(focknbr.f) - count_ones(focknbr.f >> (site - 1))) ? 1 : -1
+jwstring_bool(site, focknbr) = jwstring_left_bool(site, focknbr)
+jwstring_anti_bool(site, focknbr) = jwstring_right_bool(site, focknbr)
+jwstring_right(site, focknbr) = jwstring_right_bool(site, focknbr) ? -1 : 1
+jwstring_left(site, focknbr) = jwstring_left_bool(site, focknbr) ? -1 : 1
+jwstring_right_bool(site, focknbr::FockNumber) = isodd(count_ones(focknbr.f >> site)) # true represents -1
+jwstring_left_bool(site, focknbr::FockNumber) = isodd(count_ones(focknbr.f) - count_ones(focknbr.f >> (site - 1)))
 
 
 struct FockMapper{N,P1,W,P2} <: AbstractStateMapper
@@ -95,7 +99,7 @@ function Base.show(io::IO, fm::FockMapper{N}) where N
     print(io, join(["[" * join(pos, ",") * "]" for pos in fm.fermionpositions], " ⊗ "))
     print(io, ")")
 end
-function combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:BitPermutation}) where N
+function combine_states(fs::NTuple{M,<:FockNumber}, fm::FockMapper{N,<:Any,<:Any,<:AbstractBitPermutation}) where {N,M}
     state = concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))})
     (state,), (1,)
 end

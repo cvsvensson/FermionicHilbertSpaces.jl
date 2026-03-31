@@ -8,20 +8,20 @@ Base.hash(f::FixedNumberFockState, h::UInt) = hash(f.sites, h)
 
 const SingleParticleState = FixedNumberFockState{1}
 SingleParticleState(site::Int) = FixedNumberFockState((site,))
-function jwstring_left(site, f::FixedNumberFockState)
-    sign = 1
+function jwstring_left_bool(site, f::FixedNumberFockState)
+    sign = false
     for s in f.sites
         if s < site
-            sign *= -1
+            sign ⊻= true
         end
     end
     return sign
 end
-function jwstring_right(site, f::FixedNumberFockState)
-    sign = 1
+function jwstring_right_bool(site, f::FixedNumberFockState)
+    sign = false
     for s in f.sites
         if s > site
-            sign *= -1
+            sign ⊻= true
         end
     end
     return sign

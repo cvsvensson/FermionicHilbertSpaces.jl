@@ -1,22 +1,42 @@
 
 ##https://iopscience.iop.org/article/10.1088/1751-8121/ac0646/pdf (10c)
-function phase_factor_f(focknbr1, focknbr2, subinds::NTuple)::Int
+function phase_factor_f(focknbr1, focknbr2, subinds::NTuple)
     bitmask = focknbr_from_site_indices(subinds)
-    pf = 1
+    pf = false
+    masked_f1 = bitmask & focknbr1
+    masked_f2 = bitmask & focknbr2
     for i in subinds
-        pf *= _phase_factor_f(bitmask & focknbr1, bitmask & focknbr2, i)
+        pf ⊻= _phase_factor_f_bool(masked_f1, masked_f2, i)
     end
-    return pf
+    return pf ? -1 : 1
 end
-function phase_factor_f(focknbr1, focknbr2, N::Int)::Int
-    pf = 1
+function phase_factor_f(fock1::FockNumber, fock2::FockNumber, N::Int)
+    # Assumes no bits are set above N
+    f1 = fock1.f
+    f2 = fock2.f
+    g = f1 ⊻ f2          # only differences between the two states matter
+    pf = false
+    tmp = f2
+    while tmp != 0
+        p = trailing_zeros(tmp)                # 0-indexed position of lowest set bit
+        tmp &= tmp - 1                           # clear lowest set bit
+        pf ⊻= isodd(count_ones(g >> (p + 1)))   # parity of g-bits strictly above p
+        # with different Jw convention we would have
+        # pf ⊻= isodd(count_ones(g & ((1 << p) - 1)))    # parity of g-bits strictly below p
+    end
+    return pf ? -1 : 1
+end
+
+function phase_factor_f(focknbr1, focknbr2, N::Int)
+    #Fall back which works for FixedNumberFockState
+    pf = false
     for i in 1:N
-        pf *= _phase_factor_f(focknbr1, focknbr2, i)
+        pf ⊻= _phase_factor_f_bool(focknbr1, focknbr2, i)
     end
-    return pf
+    return pf ? -1 : 1
 end
-function _phase_factor_f(focknbr1, focknbr2, i::Int)::Int
-    _bit(focknbr2, i) ? (jwstring_anti(i, focknbr1) * jwstring_anti(i, focknbr2)) : 1
+function _phase_factor_f_bool(focknbr1, focknbr2, i::Int)
+    _bit(focknbr2, i) ? (jwstring_anti_bool(i, focknbr1) ⊻ jwstring_anti_bool(i, focknbr2)) : false
 end
 
 function kron_phase_factor(state_mapper::FockMapper)
