@@ -46,17 +46,6 @@ fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
 particle_number(s::FockNumber) = fermionnumber(s)
 
-# function substate(siteindices, f::FockNumber{T}) where T
-#     subbits = Iterators.map(i -> _bit(f, i), siteindices)
-#     return focknbr_from_bits(subbits, T)
-# end
-function substate(siteindices, f::FockNumber{T}) where T
-    val = zero(T)
-    for idx in Iterators.reverse(siteindices)
-        val = (val << 1) | _bit(f, idx)
-    end
-    return FockNumber{T}(val)
-end
 
 
 fermionnumber(f::FockNumber{<:Integer}, mask) = count_weighted_ones(f.f, mask)
@@ -78,19 +67,28 @@ jwstring_right_bool(site, focknbr::FockNumber) = isodd(count_ones(focknbr.f >> s
 jwstring_left_bool(site, focknbr::FockNumber) = isodd(count_ones(focknbr.f) - count_ones(focknbr.f >> (site - 1)))
 
 
-struct FockMapper{N,P1,W,P2} <: AbstractStateMapper
+struct FockMapper{N,P1,W,P2,M} <: AbstractStateMapper
     fermionpositions::P1
     widths::W
     permutation::P2
-    FockMapper(fermionpositions::P1, widths::W, permutation::P2, nbr_of_modes::Int) where {P1,W,P2} = new{nbr_of_modes,P1,W,P2}(fermionpositions, widths, permutation)
+    masks::M
+    isfullpartition::Bool
 end
 function FockMapper(fermionpositions::P) where P
     widths = map(length, fermionpositions)
-    nbr_of_modes = maximum(maximum, fermionpositions)
+    N = maximum(maximum, fermionpositions)
     perm = mapreduce(collect, vcat, fermionpositions)
     all(issorted, fermionpositions) || throw(ArgumentError("The order of fermions in each subsystem should be ordered as in the full system, but the provided fermion positions are not sorted: $fermionpositions"))
-    permutation = isperm(perm) && nbr_of_modes < 64 ? BitPermutation{UInt}(perm)' : nothing
-    FockMapper(fermionpositions, widths, permutation, nbr_of_modes)
+    # permutation = isperm(perm) && N < 64 ? BitPermutation{UInt}(perm)' : nothing
+    T = default_fock_representation(N)
+    permutation = isperm(perm) && N < 64 ? BitPermutation{T}(perm)' : nothing
+    masks = map(Xp -> focknbr_from_site_indices(Xp), fermionpositions)
+    isfullpartition = ispartition(fermionpositions, N)
+    P1 = typeof(fermionpositions)
+    W = typeof(widths)
+    P2 = typeof(permutation)
+    M = typeof(masks)
+    FockMapper{N,P1,W,P2,M}(fermionpositions, widths, permutation, masks, isfullpartition)
 end
 unique_split(::FockMapper) = true
 unique_combine(::FockMapper) = true
@@ -99,30 +97,35 @@ function Base.show(io::IO, fm::FockMapper{N}) where N
     print(io, join(["[" * join(pos, ",") * "]" for pos in fm.fermionpositions], " ⊗ "))
     print(io, ")")
 end
-function combine_states(fs::NTuple{M,<:FockNumber}, fm::FockMapper{N,<:Any,<:Any,<:AbstractBitPermutation}) where {N,M}
+
+function split_state(f::FockNumber, fm::FockMapper{N}) where N
+    state = map(mask -> substate(mask, f), fm.masks)
+    (state,), (1,)
+end
+
+function substate(mask::FockNumber{T1}, f::FockNumber{T2}) where {T1,T2}
+    T = promote_type(T1, T2)
+    return FockNumber{T}(BitPermutations.pext(T(f.f), T(mask.f)))
+end
+function _require_full_partition(fm::FockMapper)
+    fm.isfullpartition && return fm
+    throw(ArgumentError("combine_states requires a full non-overlapping partition, but split_state may be used with partial or overlapping fermion subregions: $(fm.fermionpositions)"))
+end
+
+function combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:AbstractBitPermutation}) where {N}
+    _require_full_partition(fm)
     state = concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))})
     (state,), (1,)
 end
-function split_state(f::AbstractFockState, fm::FockMapper{N}) where N
-    state = map(site_indices -> substate(site_indices, f), fm.fermionpositions)
-    (state,), (1,)
-end
-
-
 function combine_states(f, fm::FockMapper{N}) where N
+    _require_full_partition(fm)
     IT = default_fock_representation(Val(N))
     result = zero(IT)
-    for (fock, positions) in zip(f, fm.fermionpositions)
-        remaining = FockNumber{IT}(fock).f
-        for pos in positions
-            iszero(remaining) && break
-            result |= (remaining & one(IT)) << (pos - 1)
-            remaining >>= one(IT)
-        end
+    for (fock, mask) in zip(f, fm.masks)
+        result |= BitPermutations.pdep(IT(fock.f), IT(mask.f))
     end
     (FockNumber{IT}(result),), (1,)
 end
-
 function catenate_fock_states(fock_states, spaces, T)
     num = zero(T)
     shift = 0
@@ -131,24 +134,6 @@ function catenate_fock_states(fock_states, spaces, T)
         shift += nbr_of_modes(space)
     end
     num
-end
-
-# function combine_states(f, fm::FockMapper{N}) where N
-#     T = FockNumber{default_fock_representation(Val(N))}
-#     state = mapfoldr(tup -> insert_bits(T(tup[1]), tup[2]), |, zip(f, fm.fermionpositions); init=zero(T))
-#     (state,), (1,)
-# end
-function insert_bits(_x::FockNumber{T}, positions) where T
-    x = _x.f
-    result = zero(T)
-    bit_index = 1
-    for pos in positions
-        if x & (one(T) << (bit_index - 1)) != 0
-            result |= (one(T) << (pos - 1))
-        end
-        bit_index += 1
-    end
-    return FockNumber{T}(result)
 end
 
 function concatenate_and_permute(fs, widths, permutation, ::Type{T}) where T
@@ -235,70 +220,62 @@ end
 _bit(f::FockNumber, k) = Bool((f.f >> (k - 1)) & 1)
 _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
 
-@testitem "Split and join focknumbers" begin
+@testitem "FockMapper partitions" begin
     import FermionicHilbertSpaces: FockMapper, split_state, combine_states, focknbr_from_site_indices as fock
-    fockmapper = FockMapper(((1, 3), (2, 4)))
     _split(state, fockmapper) = only(first(split_state(state, fockmapper)))
     _combine(states, fockmapper) = only(first(combine_states(states, fockmapper)))
 
-    split = Base.Fix2(_split, fockmapper)
-    combine = Base.Fix2(_combine, fockmapper)
-    @test split(fock((1, 2, 3, 4))) == (fock((1, 2)), fock((1, 2)))
-    @test split(fock((1,))) == (fock((1,)), fock(()))
-    @test split(fock(())) == (fock(()), fock(()))
-    @test split(fock((1, 2, 3))) == (fock((1, 2)), fock((1,)))
-    @test split(fock((1, 3))) == (fock((1, 2)), fock(()))
-    @test split(fock((2, 4))) == (fock(()), fock((1, 2)))
-    @test split(fock((3, 2))) == (fock((2,)), fock((1,)))
-    @test split(fock((3, 4))) == (fock((2,)), fock((2,)))
+    @testset "full partitions" begin
+        fockmapper = FockMapper(((1, 3), (2, 4)))
+        split = Base.Fix2(_split, fockmapper)
+        combine = Base.Fix2(_combine, fockmapper)
+        @test split(fock((1, 2, 3, 4))) == (fock((1, 2)), fock((1, 2)))
+        @test split(fock((1,))) == (fock((1,)), fock(()))
+        @test split(fock(())) == (fock(()), fock(()))
+        @test split(fock((1, 2, 3))) == (fock((1, 2)), fock((1,)))
+        @test split(fock((1, 3))) == (fock((1, 2)), fock(()))
+        @test split(fock((2, 4))) == (fock(()), fock((1, 2)))
+        @test split(fock((3, 2))) == (fock((2,)), fock((1,)))
+        @test split(fock((3, 4))) == (fock((2,)), fock((2,)))
 
-    # test all cases above with combiner
-    @test fock((1, 2, 3, 4)) == combine((fock((1, 2)), fock((1, 2))))
-    @test fock((1,)) == combine((fock((1,)), fock(())))
-    @test fock(()) == combine((fock(()), fock(())))
-    @test fock((1, 2, 3)) == combine((fock((1, 2)), fock((1,))))
-    @test fock((1, 3)) == combine((fock((1, 2)), fock(())))
-    @test fock((2, 4)) == combine((fock(()), fock((1, 2))))
-    @test fock((3, 2)) == combine((fock((2,)), fock((1,))))
-    @test fock((3, 4)) == combine((fock((2,)), fock((2,))))
+        @test fock((1, 2, 3, 4)) == combine((fock((1, 2)), fock((1, 2))))
+        @test fock((1,)) == combine((fock((1,)), fock(())))
+        @test fock(()) == combine((fock(()), fock(())))
+        @test fock((1, 2, 3)) == combine((fock((1, 2)), fock((1,))))
+        @test fock((1, 3)) == combine((fock((1, 2)), fock(())))
+        @test fock((2, 4)) == combine((fock(()), fock((1, 2))))
+        @test fock((3, 2)) == combine((fock((2,)), fock((1,))))
+        @test fock((3, 4)) == combine((fock((2,)), fock((2,))))
 
-    # test splitting with different sizes
-    fockmapper = FockMapper(((1, 2), (3,)))
-    split = Base.Fix2(_split, fockmapper)
-    combine = Base.Fix2(_combine, fockmapper)
-    @test split(fock((1, 2, 3))) == (fock((1, 2)), fock((1,)))
-    @test split(fock((1, 3))) == (fock((1,)), fock((1,)))
-    @test split(fock((1, 2))) == (fock((1, 2)), fock(()))
-    @test split(fock((2,))) == (fock((2,)), fock(()))
-    @test split(fock((2, 3))) == (fock((2,)), fock((1,)))
-    @test split(fock((3,))) == (fock(()), fock((1)))
+        fockmapper = FockMapper(((1, 4), (2,), (3,)))
+        split = Base.Fix2(_split, fockmapper)
+        combine = Base.Fix2(_combine, fockmapper)
+        ident = combine ∘ split
+        @test all(ident(FockNumber(k)) == FockNumber(k) for k in 0:2^4-1)
+    end
 
-    # test all cases above with combine
-    @test fock((1, 3)) == combine((fock((1,)), fock((1,))))
-    @test fock((1, 2)) == combine((fock((1, 2)), fock(())))
-    @test fock((2,)) == combine((fock((2,)), fock(())))
-    @test fock((2, 3)) == combine((fock((2,)), fock((1,))))
-    @test fock((3,)) == combine((fock(()), fock((1,))))
+    @testset "partial partitions" begin
+        fockmapper = FockMapper(((1, 3),))
+        split = only ∘ Base.Fix2(_split, fockmapper)
+        @test split(fock((1, 2, 3, 4))) == fock((1, 2))
+        @test split(fock((1,))) == fock((1,))
+        @test split(fock(())) == fock(())
+        @test split(fock((1, 2, 3))) == fock((1, 2))
+        @test split(fock((1, 3))) == fock((1, 2))
+        @test split(fock((2, 4))) == fock(())
+        @test split(fock((3, 2))) == fock((2,))
+        @test split(fock((3, 4))) == fock((2,))
+        @test_throws ArgumentError _combine((fock((1, 2)),), fockmapper)
+    end
 
-    # test splitting with different sizes
-    fockmapper = FockMapper(((1, 4), (2,), (3,)))
-    split = Base.Fix2(_split, fockmapper)
-    combine = Base.Fix2(_combine, fockmapper)
-    ident = combine ∘ split
-    @test all(ident(FockNumber(k)) == FockNumber(k) for k in 0:2^4-1)
-
-    # test subsystem splits
-    fockmapper = FockMapper(((1, 3),))
-    split = only ∘ Base.Fix2(_split, fockmapper)
-    # split(state) = only(only(first(split_state(state, fockmapper))))
-    @test split(fock((1, 2, 3, 4))) == fock((1, 2))
-    @test split(fock((1,))) == fock((1,))
-    @test split(fock(())) == fock(())
-    @test split(fock((1, 2, 3))) == fock((1, 2))
-    @test split(fock((1, 3))) == fock((1, 2))
-    @test split(fock((2, 4))) == fock(())
-    @test split(fock((3, 2))) == fock((2,))
-    @test split(fock((3, 4))) == fock((2,))
+    @testset "overlapping partitions" begin
+        fockmapper = FockMapper(((1, 2), (2, 3)))
+        split = Base.Fix2(_split, fockmapper)
+        @test split(fock((1, 2, 3))) == (fock((1, 2)), fock((1, 2)))
+        @test split(fock((2,))) == (fock((2,)), fock((1,)))
+        @test split(fock((1, 3))) == (fock((1,)), fock((2,)))
+        @test_throws ArgumentError _combine((fock((1, 2)), fock((1, 2))), fockmapper)
+    end
 end
 
 
@@ -315,4 +292,22 @@ end
     @test all(f -> f.f >= 0, states)
     # Check that the type is FockNumber{BigInt} for large M
     @test all(f -> f isa FockNumber{BigInt}, states)
+end
+
+@testitem "BigInts" begin
+    @fermions f
+    N = 70
+    H = hilbert_space(f, 1:N, NumberConservation(1))
+    Hsubsmall = subregion([f[n] for n in 1:10], H)
+    Hsubbig = subregion([f[n] for n in 11:N], H)
+    Hcomp = FermionicHilbertSpaces.complementary_subsystem(H, Hsubsmall)
+    @test Hcomp == Hsubbig
+
+    emb = embed(Hsubsmall => H; complement=Hsubbig)
+    pt = partial_trace(H => Hsubsmall)
+    @test emb == pt'
+
+    emb = embed(Hsubbig => H; complement=Hsubsmall)
+    pt = partial_trace(H => Hsubbig)
+    @test emb == pt'
 end

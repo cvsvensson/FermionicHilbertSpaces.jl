@@ -100,11 +100,11 @@ end
 
     mapper = state_mapper(H, (Ha, Hb))
     for state in basisstates(H)
-        @test only(first(split_state(state, mapper))) == (substate(1, state.states[1]), substate(2, state.states[1]))
+        @test only(first(split_state(state, mapper))) == (substate(FockNumber(1), state.states[1]), substate(FockNumber(2), state.states[1]))
     end
     mapper = state_mapper(H, (Ha, Hc))
     for state in basisstates(H)
-        @test only(first(split_state(state, mapper))) == (substate(1, state.states[1]), state.states[2])
+        @test only(first(split_state(state, mapper))) == (substate(FockNumber(1), state.states[1]), state.states[2])
     end
 
 
