@@ -1,8 +1,8 @@
-using FermionicHilbertSpaces, LinearAlgebra, Plots, OrdinaryDiffEqTsit5
-using Symbolics
+using FermionicHilbertSpaces
+using Symbolics, LinearAlgebra, Plots, OrdinaryDiffEqTsit5
 
-H = majorana_hilbert_space([0, 1, 2, 3, 22, 33], ParityConservation())
 @majoranas γ
+H = hilbert_space(γ, [0, 1, 2, 3, 22, 33], ParityConservation())
 @variables Δ[1:3]::Real
 symbolic_ham = sum(1im * Δ[i] * γ[0] * γ[i] for i in 1:3)
 ham = collect(matrix_representation(symbolic_ham, H))
@@ -58,7 +58,7 @@ isapprox(abs2(sol[end]' * exchange_gate^2 * u0), 1, atol=1e-2)
 isapprox(abs2(sol(T)' * exchange_gate * u0), 1, atol=1e-2)
 ## lets measure the parities
 measurements = [matrix_representation(1.0im * γ[i] * γ[j], H) for (i, j) in [(2, 22), (3, 33)]]
-plot(ts, [real(sol(t)'m * sol(t)) for m in measurements2, t in ts]', xlabel="t", label=["P2" "P3"], frame=:box, size=(400, 250), lw=2)
+plot(ts, [real(sol(t)'m * sol(t)) for m in measurements, t in ts]', xlabel="t", label=["P2" "P3"], frame=:box, size=(400, 250), lw=2)
 
 ## Let's calculate the Non-abelian berry pase with the Kato method
 const totalparity = parityoperator(H)
@@ -83,7 +83,7 @@ U0 = Matrix{ComplexF64}(I, 8, 8)
 kato_prob = ODEProblem(kato_ode!, U0, tspan, p)
 ts = range(0, tspan[2], 100)
 ## Solve the ODE and check the norm
-@time kato_sol = solve(kato_prob, Tsit5(); saveat=[0, T, 2T], reltol=1e-10, abstol=1e-10); #saveat=ts, reltol=1e-4)
+@time kato_sol = solve(kato_prob, Tsit5(); saveat=[0, T, 2T], reltol=1e-10, abstol=1e-10);
 kato_sol[end]' * kato_sol[end] ≈ I
 1 ≈ dot(kato_sol[end], exchange_gate^2) / (dot(exchange_gate, exchange_gate)) |> abs
 1 ≈ dot(kato_sol(T), exchange_gate) / (dot(exchange_gate, exchange_gate)) |> abs
