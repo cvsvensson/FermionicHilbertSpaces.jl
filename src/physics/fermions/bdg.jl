@@ -154,7 +154,7 @@ struct BdGEigen{T<:Number} <: AbstractBdGEigenAlg
 end
 BdGEigen() = BdGEigen(DEFAULT_PH_CUTOFF)
 
-function LinearAlgebra.eigen(A::AbstractMatrix, alg::BdGEigen; canon_alg=ProjectionCanon())
+function LinearAlgebra.eigen(A::AbstractMatrix, alg::BdGEigen; canon_alg=SVDCanon())
     enforce_ph_symmetry(eigen(A), canon_alg; cutoff=alg.cutoff)
 end
 
