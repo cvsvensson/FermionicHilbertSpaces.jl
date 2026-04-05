@@ -486,7 +486,6 @@ function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, 
             end
             for (f2, (splits2, amps2)) in zip(states, substates2)
                 for ((f2sub, f2bar), w2) in zip(splits2, amps2)
-                    # println(f2sub)
                     if f1bar != f2bar
                         continue
                     end

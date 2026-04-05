@@ -34,6 +34,8 @@ Adding this is equivalent to adding the hermitian conjugate.
 """
 const hc = HC()
 
+abstract type AbstractSym end
+
 struct TypedIterator{T,I}
     iter::I
 end

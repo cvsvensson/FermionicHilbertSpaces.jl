@@ -44,6 +44,7 @@ function constrain_space(space, constraint::AbstractConstraint)
         throw(ArgumentError("Constraint $(constraint) is not supported for constraining spaces."))
     end
 end
+_find_position(op::AbstractSym, H::ConstrainedSpace) = _find_position(op, parent(H))
 
 allowed_values(::NumberConservation{Missing}, space) = 0:maximum_particles(space)
 allowed_values(constraint::NumberConservation{T}, space) where T = constraint.total

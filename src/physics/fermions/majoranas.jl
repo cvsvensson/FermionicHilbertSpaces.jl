@@ -269,11 +269,6 @@ function _precomputation_before_operator_application(op::NCMul, space::MajoranaH
     return fermionpositions, daggers
 end
 function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace, (fpos, daggers); kwargs...)
-    # majoranadigitpositions = Iterators.reverse(_find_position(f, H) for f in ops)
-    # println(majoranadigitpositions)
-    # daggers = Iterators.reverse(Iterators.map(iseven, majoranadigitpositions))
-    # digitpositions = Iterators.reverse(Iterators.map(n -> div(n + 1, 2), majoranadigitpositions))
-    # digitpositions = Iterators.reverse(Iterators.map(n -> div(n + 1, 2), majoranadigitpositions))
     state, amp = togglemajoranas(Iterators.reverse(fpos), Iterators.reverse(daggers), f)
     return (state,), (amp * op.coeff,)
 end

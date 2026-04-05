@@ -29,6 +29,7 @@ factors(H::AbstractClusterHilbertSpace) = atomic_factors(H)
 clusters(H::AbstractClusterHilbertSpace) = (H,)
 atomic_substate(n, f, ::AbstractClusterHilbertSpace) = substate(n, f)
 isconstrained(H::AbstractAtomicHilbertSpace) = false
+atomic_factors(f::AbstractSym) = (f,)
 
 partial_trace_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1
 

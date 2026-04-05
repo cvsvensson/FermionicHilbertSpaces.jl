@@ -1,6 +1,4 @@
-abstract type AbstractSym end
 abstract type AbstractFermionSym <: AbstractSym end
-atomic_factors(f::AbstractSym) = (f,)
 
 function mat_eltype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S,F}
     promote_type(C, mat_eltype(S))

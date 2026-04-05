@@ -75,7 +75,7 @@ end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
 
-hilbert_space(f::FermionSym) = FermionicSpace([f], symbolic_group(f))
+hilbert_space(f::FermionSym) = FermionicSpace((f,), symbolic_group(f))
 
 function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     if a == b

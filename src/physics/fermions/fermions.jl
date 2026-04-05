@@ -40,7 +40,7 @@ modes(H::FermionicSpace) = H.modes
 
 _normalize_sym(f::FermionSym) = FermionSym(false, f.label, f.basis)
 statetype(f::FermionSym) = FockNumber{default_fock_representation(1)}
-basisstates(f::FermionSym) = (statetype(f)(0), statetype(f)(1))
+basisstates(f::FermionSym) = [statetype(f)(0), statetype(f)(1)]
 nbr_of_modes(f::FermionSym) = 1
 maximum_particles(f::FermionSym) = 1
 isconstrained(f::FermionSym) = false
@@ -256,8 +256,8 @@ end
     end
 end
 
-_find_position(f::FermionSym, H::AbstractHilbertSpace) = _find_position(hilbert_space(f), H)
-_find_position(f::FermionSym, H::ProductSpace) = _find_position(hilbert_space(f), H)
+# _find_position(f::FermionSym, H::AbstractHilbertSpace) = _find_position(hilbert_space(f), H)
+_find_position(f::AbstractSym, H::ProductSpace) = _find_position(f, parent(H))
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionicSpace(map(l -> a[l], labels))
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::AbstractVector{<:AbstractBasisState}) = ConstrainedSpace(hilbert_space(a, labels), states)
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::AbstractConstraint) = tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
