@@ -43,14 +43,16 @@ function _block_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}) w
     BlockHilbertSpace(space, ordered_states, state_indexdict, qn_to_states)
 end
 
+Base.parent(H::BlockHilbertSpace) = H.parent
 dim(H::BlockHilbertSpace) = length(H.ordered_basis_states)
 atomic_factors(H::BlockHilbertSpace) = atomic_factors(H.parent)
-isconstrained(H::BlockHilbertSpace) = true
-basisstates(H::BlockHilbertSpace) = H.ordered_basis_states
-Base.parent(H::BlockHilbertSpace) = H.parent
-_find_position(Hsub::AbstractHilbertSpace, H::BlockHilbertSpace) = _find_position(Hsub, H.parent)
 clusters(H::BlockHilbertSpace) = clusters(H.parent)
 factors(H::BlockHilbertSpace) = factors(H.parent)
+atomic_id(H::BlockHilbertSpace) = atomic_id(parent(H))
+
+isconstrained(H::BlockHilbertSpace) = true
+basisstates(H::BlockHilbertSpace) = H.ordered_basis_states
+_find_position(Hsub::AbstractHilbertSpace, H::BlockHilbertSpace) = _find_position(Hsub, H.parent)
 combine_states(substates, H::BlockHilbertSpace) = combine_states(substates, parent(H))
 partial_trace_phase_factor(s1, s2, H::BlockHilbertSpace) = partial_trace_phase_factor(s1, s2, parent(H))
 state_mapper(H::BlockHilbertSpace, Hs) = state_mapper(parent(H), Hs)
@@ -145,7 +147,6 @@ _precomputation_before_operator_application(ops, space::BlockHilbertSpace) = _pr
     Hprod = hilbert_space(f, 1:4, NumberConservation() * ParityConservation())
     @test Hprod isa BlockHilbertSpace
     qns = quantumnumbers(Hprod)
-    @test all(qn -> qn isa Tuple, qns)
     @test all(qn -> dim(sector(qn, Hprod)) > 0, qns)
 
     ## test fermions on block spaces

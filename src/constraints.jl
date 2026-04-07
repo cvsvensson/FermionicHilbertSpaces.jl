@@ -12,10 +12,10 @@ struct ProductConstraint{C} <: AbstractConstraint
     constraints::C
 end
 
-Base.:*(sym1::AbstractConstraint, sym2::AbstractConstraint) = ProductConstraint((sym1, sym2))
-Base.:*(sym1::AbstractConstraint, sym2::ProductConstraint) = ProductConstraint((sym1, sym2.constraints...))
-Base.:*(sym1::ProductConstraint, sym2::AbstractConstraint) = ProductConstraint((sym1.constraints..., sym2))
-Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint((sym1.constraints..., sym2.constraints...))
+Base.:*(sym1::AbstractConstraint, sym2::AbstractConstraint) = ProductConstraint([sym1, sym2])
+Base.:*(sym1::AbstractConstraint, sym2::ProductConstraint) = ProductConstraint([sym1, sym2.constraints...])
+Base.:*(sym1::ProductConstraint, sym2::AbstractConstraint) = ProductConstraint([sym1.constraints..., sym2])
+Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint([sym1.constraints..., sym2.constraints...])
 function branch_constraint(constraint::ProductConstraint, space)
     prunable = filter(supports_branch_pruning, constraint.constraints)
     ProductConstraint(map(cons -> branch_constraint(cons, space), prunable))
@@ -47,6 +47,15 @@ function filter_function(constraint::FilterConstraint, space::AbstractHilbertSpa
     function _filter_function(state)
         subs = unique_split_state(state, mapper)
         values = Iterators.map((s, f) -> f(s), subs, constraint.subspace_functions)
+        constraint.reducer(values)
+    end
+end
+function filter_function(constraint::FilterConstraint{<:Any,<:Function}, space::AbstractHilbertSpace)
+    mapper = state_mapper(space, constraint.subspaces)
+    f = constraint.subspace_functions
+    function _filter_function(state)
+        subs = unique_split_state(state, mapper)
+        values = Iterators.map(f, subs)
         constraint.reducer(values)
     end
 end
@@ -90,7 +99,9 @@ AdditiveConstraint(allowed_values, functions) = AdditiveConstraint(allowed_value
 AdditiveConstraint(allowed_values, subspace::AbstractHilbertSpace, functions) = AdditiveConstraint(allowed_values, atomic_factors(subspace), functions)
 AdditiveConstraint(allowed_values, subspace::AbstractClusterHilbertSpace, functions) = AdditiveConstraint(allowed_values, atomic_factors(subspace), functions)
 supports_branch_pruning(::AdditiveConstraint) = true
+supports_filtering(::AdditiveConstraint{<:Any,Missing}) = false
 supports_filtering(::AdditiveConstraint) = true
+supports_sector_grouping(::AdditiveConstraint{<:Any,Missing}) = false
 supports_sector_grouping(::AdditiveConstraint) = true
 
 """
@@ -152,7 +163,11 @@ function sector_function(cons::C, space::AbstractHilbertSpace) where {C<:Union{<
 end
 function sector_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
     subspace_functions = map(cons -> sector_function(cons, space), constraint.constraints)
-    state -> map(f -> f(state), subspace_functions)
+    function sector(state)
+        sectors = map(f -> f(state), subspace_functions)
+        any(ismissing, sectors) && return missing
+        return sectors
+    end
 end
 
 _apply_constraint_function(substates, ::NumberConservation{<:Any,<:Any,Missing}) = sum(particle_number, substates)
@@ -198,7 +213,7 @@ constrain_space
     qn = NumberConservation() * ParityConservation()
     @fermions f
     H = hilbert_space(f, labels, qn)
-    @test collect(quantumnumbers(H)) == [(n, (-1)^n) for n in 0:4]
+    @test collect(quantumnumbers(H)) == [[n, (-1)^n] for n in 0:4]
     qn = prod(NumberConservation(missing, hilbert_space(f[l])) for l in labels)
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
