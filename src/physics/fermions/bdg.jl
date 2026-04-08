@@ -1,4 +1,4 @@
-struct NambuState <: AbstractBasisState
+struct NambuState <: AbstractFockState
     state::SingleParticleState
     hole::Bool
 end
@@ -23,12 +23,13 @@ function normal_order_to_bdg(m::AbstractMatrix)
         -conj(Δ) -conj(h)]
 end
 
-struct BdGHilbertSpace{H}
+struct BdGHilbertSpace{B,H} <: AbstractHilbertSpace{B}
     parent::H
-    function BdGHilbertSpace(labels)
+    function BdGHilbertSpace(f::SymbolicFermionBasis, labels)
         states = vec([NambuState(i, hole) for (i, label) in enumerate(labels), hole in (true, false)])
-        H = hilbert_space(labels, states)
-        return new{typeof(H)}(H)
+        H = hilbert_space(f, labels, states)
+        B = statetype(H)
+        return new{B,typeof(H)}(H)
     end
 end
 """
@@ -39,31 +40,29 @@ This hilbert space uses Nambu states to describe non-interacting systems with su
 -Δ*  -H*] \\
 where H is hermitian and Δ is antisymmetric.
 """
-bdg_hilbert_space(labels) = BdGHilbertSpace(labels)
+bdg_hilbert_space(f, labels) = BdGHilbertSpace(f, labels)
 dim(h::BdGHilbertSpace) = dim(h.parent)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
+Base.:(==)(a::BdGHilbertSpace, b::BdGHilbertSpace) = a === b || a.parent == b.parent
+Base.hash(x::BdGHilbertSpace, h::UInt) = hash(x.parent, h)
 modes(H::BdGHilbertSpace) = modes(H.parent)
-Base.keys(h::BdGHilbertSpace) = keys(h.parent)
 basisstates(h::BdGHilbertSpace) = basisstates(h.parent)
+Base.parent(h::BdGHilbertSpace) = h.parent
+state_index(state::NambuState, H::BdGHilbertSpace) = state_index(state, parent(H))
+_find_position(op::AbstractSym, H::BdGHilbertSpace) = _find_position(op, parent(H))
+
 
 function matrix_representation(op, H::BdGHilbertSpace)
     isquadratic(op) || throw(ArgumentError("Operator must be quadratic in fermions to be represented on a BdG Hilbert space."))
-    normal_order_to_bdg(matrix_representation(remove_identity(op), H.parent))
+    normal_order_to_bdg(_matrix_representation_single_space(remove_identity(op), H))
 end
 
-function operator_inds_amps!((outinds, ininds, amps), op, ordering, states::AbstractVector{NambuState}, fock_to_ind; kwargs...)
-    isquadratic(op) && return operator_inds_amps_bdg!((outinds, ininds, amps), op, ordering, states, fock_to_ind)
-    return operator_inds_amps_generic!((outinds, ininds, amps), op, ordering, states, fock_to_ind; kwargs...)
-end
 
-function operator_inds_amps_bdg!((outinds, ininds, amps), op::NCMul, ordering, states, fock_to_ind)
-    if length(op.factors) != 2
-        throw(ArgumentError("Only two-fermion operators supported for free fermions"))
-    end
-    nambustates = (NambuState(getindex(ordering, op.factors[1].label), op.factors[1].creation),
-        NambuState(getindex(ordering, op.factors[2].label), !op.factors[2].creation))
-    inind = fock_to_ind[nambustates[2]]
-    outind = fock_to_ind[nambustates[1]]
+function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::AbstractHilbertSpace{NambuState}; kwargs...)
+    nambustates = (NambuState(_find_position(op.factors[1], H), op.factors[1].creation),
+        NambuState(_find_position(op.factors[2], H), !op.factors[2].creation))
+    inind = state_index(nambustates[2], H)
+    outind = state_index(nambustates[1], H)
     push!(outinds, outind)
     push!(ininds, inind)
     push!(amps, op.coeff)
@@ -73,7 +72,7 @@ end
 @testitem "BdG" begin
     @fermions f
     h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
-    H = bdg_hilbert_space(1:2)
+    H = bdg_hilbert_space(f, 1:2)
     @test matrix_representation(h + 1, H) == matrix_representation(h, H)
 
     h = rand(ComplexF64, 2, 2) + hc
@@ -150,27 +149,23 @@ quasiparticle_adjoint_index(n, N) = 2N + 1 - n
 
 abstract type AbstractBdGEigenAlg end
 
-struct SkewEigenAlg{T<:Number} <: AbstractBdGEigenAlg
-    cutoff::T # tolerance for particle-hole symmetry
-end
 struct BdGEigen{T<:Number} <: AbstractBdGEigenAlg
     cutoff::T # tolerance for particle-hole symmetry
 end
 BdGEigen() = BdGEigen(DEFAULT_PH_CUTOFF)
-SkewEigenAlg() = SkewEigenAlg(DEFAULT_PH_CUTOFF)
 
-function LinearAlgebra.eigen(A::AbstractMatrix, alg::BdGEigen)
-    enforce_ph_symmetry(eigen(A), cutoff=alg.cutoff)
+function LinearAlgebra.eigen(A::AbstractMatrix, alg::BdGEigen; canon_alg=SVDCanon())
+    enforce_ph_symmetry(eigen(A), canon_alg; cutoff=alg.cutoff)
 end
 
 
 struct ProjectionCanon end
 struct SVDCanon end
 
-function enforce_ph_symmetry(_es, _ops, canon_alg=ProjectionCanon(); cutoff=DEFAULT_PH_CUTOFF)
+function enforce_ph_symmetry(_es, _ops, canon_alg=SVDCanon(); cutoff=DEFAULT_PH_CUTOFF)
     p = sortperm(_es)
     es = _es[p]
-    ops = (_ops[:, p])
+    ops = complex(_ops[:, p])
     N = div(length(es), 2)
     ph = quasiparticle_adjoint
     for k in Iterators.take(eachindex(es), N)
@@ -199,7 +194,7 @@ function enforce_ph_symmetry(_es, _ops, canon_alg=ProjectionCanon(); cutoff=DEFA
     es, ops
 end
 
-function enforce_ph_symmetry(F::Eigen, canon_alg=ProjectionCanon(); cutoff=DEFAULT_PH_CUTOFF)
+function enforce_ph_symmetry(F::Eigen, canon_alg=SVDCanon(); cutoff=DEFAULT_PH_CUTOFF)
     if isreal(F.values)
         enforce_ph_symmetry(real(F.values), F.vectors, canon_alg; cutoff)
     else
@@ -209,29 +204,33 @@ end
 
 function canonicalize_particle_pair(v1, v2, ::ProjectionCanon)
     ph = quasiparticle_adjoint
-    ph1 = ph(v1)
-    ph2 = ph(v2)
-    all_majs = [ph1 + v1, 1im * (ph1 - v1), ph2 + v2, 1im * (ph2 - v2)]
-    sort!(all_majs, by=norm)
-    majplus = all_majs[1]
-    majminus = argmin(y -> abs(dot(y, majplus)) / (norm(majplus) * norm(y)), all_majs)
-    # majminus = all_majs[findfirst(y -> abs(dot(y, majplus)) < 0.5 * norm(majplus) * norm(y), all_majs)]
-    majs = [majplus majminus]
+    ph1, ph2 = ph(v1), ph(v2)
+
+    # Construct all Majorana candidates
+    all_majs = if isreal(v1) && isreal(v2)
+        [ph1 + v1, ph2 + v2]
+    else
+        [ph1 + v1, 1im * (ph1 - v1), ph2 + v2, 1im * (ph2 - v2)]
+    end
+
+    # Use QR with pivoting to find two most linearly independent Majoranas
+    # Stack as columns and find best basis
+    M = hcat(all_majs...)
+    Q, R, p = qr(M, ColumnNorm())  # pivoted QR
+    # Take first 2 columns (most independent, via pivot order)
+    majs = M[:, p[1:2]]
+    # Orthonormalize via Cholesky of Gram matrix
     HM = Hermitian(majs' * majs)
     X = try
         cholesky(HM)
     catch
         vals = eigvals(HM)
-        reg = 100 * eps(eltype(vals))
-        @warn "Cholesky failed, matrix is not positive definite? eigenvals = $vals. Adding $(reg) * I"
-        @debug "Cholesky failed. Input:" _es _ops
+        reg = max(1e-12, 1e6 * eps(eltype(vals)))
+        @warn "Cholesky failed, eigenvals = $vals. Adding regularization."
         cholesky(HM + reg * I)
     end
-    newmajs = majs * inv(X.U) * [1 1; 1im -1im] / sqrt(2)
-    # o1 = (newmajs[:, 1] + newmajs[:, 2])
-    # o2 = (newmajs[:, 1] - newmajs[:, 2])
-    # normalize!(o1)
-    # normalize!(o2)
+    T = [1 1; 1im -1im] / sqrt(2)
+    newmajs = majs * (X.U \ T)
     return newmajs
 end
 
@@ -284,7 +283,7 @@ end
     using LinearAlgebra
     @fermions f
     N = 4
-    H = bdg_hilbert_space(1:N)
+    H = bdg_hilbert_space(f, 1:N)
     ham = sum(rand(ComplexF64) * f[n]'f[k] + rand(ComplexF64) * f[n]'f[k]' + hc for (n, k) in Iterators.product(1:N, 1:N))
     h = matrix_representation(ham, H)
     @test ishermitian(h)
@@ -305,3 +304,29 @@ end
 
 const DEFAULT_PH_CUTOFF = 1e-12
 
+@testitem "BdG on Kitaev Sweet spot" begin
+    using FermionicHilbertSpaces: BdGEigen
+    using LinearAlgebra
+    @fermions f
+    symham = f[1]' * f[2] + f[1]' * f[2]' + hc
+    H = bdg_hilbert_space(f, 1:2)
+    mat = matrix_representation(symham, H)
+    vals, vecs = eigen(Matrix(mat), BdGEigen(); canon_alg=FermionicHilbertSpaces.SVDCanon())
+    @test vals ≈ [-1, 0, 0, 1]
+    @test 1 ≈ abs(vecs[:, 2][1]^2 + vecs[:, 3][1]^2) / (abs2(vecs[:, 2][1]) + abs2(vecs[:, 3][1]))
+    vals2, vecs2 = eigen(Matrix(mat), BdGEigen(); canon_alg=FermionicHilbertSpaces.ProjectionCanon())
+    @test vals ≈ vals2
+    @test 1 ≈ abs(vecs2[:, 2][1]^2 + vecs2[:, 3][1]^2) / (abs2(vecs2[:, 2][1]) + abs2(vecs2[:, 3][1]))
+
+    # three site
+    symham = f[1]' * f[2] + f[2]' * f[3] + f[1]' * f[2]' + f[2]' * f[3]' + hc
+    H = bdg_hilbert_space(f, 1:3)
+    Hmb = hilbert_space(f, 1:3)
+    matmb = matrix_representation(symham, Hmb)
+    mat = matrix_representation(symham, H)
+    vals, vecs = eigen(Matrix(mat), BdGEigen(); canon_alg=FermionicHilbertSpaces.SVDCanon())
+    @test 1 ≈ abs(vecs[:, 3][1]^2 + vecs[:, 4][1]^2) / (abs2(vecs[:, 3][1]) + abs2(vecs[:, 4][1]))
+    vals2, vecs2 = eigen(Matrix(mat), BdGEigen(); canon_alg=FermionicHilbertSpaces.ProjectionCanon())
+    @test vals ≈ vals2
+    @test 1 ≈ abs(vecs2[:, 3][1]^2 + vecs2[:, 4][1]^2) / (abs2(vecs2[:, 3][1]) + abs2(vecs2[:, 4][1]))
+end

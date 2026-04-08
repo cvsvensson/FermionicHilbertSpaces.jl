@@ -1,68 +1,45 @@
 
+
 """
-    tensor_product(Hs)
+    tensor_product(spaces; constraint=NoSymmetry())
 
-Return the tensor product space of hilbert spaces `Hs`.
+Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
 """
-tensor_product(Hs::AbstractVector{<:AbstractHilbertSpace}) = foldl(tensor_product, Hs)
-tensor_product(Hs::Tuple) = foldl(tensor_product, Hs)
-tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace, Hs...) = tensor_product(tensor_product(H1, H2), Hs...)
+function tensor_product_no_constraints(spaces)
+    atoms = Iterators.flatten(Iterators.map(atomic_factors, spaces))
+    groups = groupby(group_id, atoms; sort=false)
 
-function tensor_product(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
-    tensor_product_combine_basisstates(H1, H2)
+    factors = map((id, atoms) -> combine_into_group(id, atoms), keys(groups), values(groups))
+    space = if length(factors) == 1
+        only(factors)
+    else
+        ProductSpace(Tuple(factors), collect(atoms))
+    end
+    if any(isconstrained, spaces)
+        mapper = state_mapper(space, spaces)
+        states = _find_combined_states(space, spaces, mapper)
+        return ConstrainedSpace(space, states)
+    end
+    return space
 end
-tensor_product(H1::AbstractFockHilbertSpace, H2::AbstractFockHilbertSpace) = tensor_product_combine_basisstates(H1, H2)
+tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
+function tensor_product(spaces; constraint=NoSymmetry())
+    if length(spaces) == 1
+        return constrain_space(only(spaces), constraint)
+    end
+    full_space = tensor_product_no_constraints(spaces)
+    constraint == NoSymmetry() && return full_space
 
-tensor_product(H1::AbstractHilbertSpace) = H1
-tensor_product(H1::AbstractFockHilbertSpace, H2::AbstractHilbertSpace) = ProductSpace(H1, (H2,))
-tensor_product(H1::AbstractHilbertSpace, H2::AbstractFockHilbertSpace) = ProductSpace(H2, (H1,))
-tensor_product(H1::AbstractHilbertSpace, H2::AbstractHilbertSpace) = ProductSpace(nothing, (H1, H2))
-tensor_product(H::ProductSpace, H2::AbstractHilbertSpace) = ProductSpace(H.fock_space, (H.other_spaces..., H2))
-tensor_product(H1::AbstractHilbertSpace, H::ProductSpace) = ProductSpace(H.fock_space, (H1, H.other_spaces...))
-tensor_product(H1::AbstractFockHilbertSpace, H::ProductSpace) = ProductSpace(tensor_product(H1, H.fock_space), H.other_spaces)
-tensor_product(H::ProductSpace, H2::AbstractFockHilbertSpace) = ProductSpace(tensor_product(H.fock_space, H2), H.other_spaces)
-tensor_product(H::AbstractHilbertSpace, ::Nothing) = H
-tensor_product(::Nothing, H::AbstractHilbertSpace) = H
-
-function tensor_product_combine_basisstates(H1, H2)
-    isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
-    newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
-    newbasisstates = vec([combine_states(f1, f2, H1, H2) for f1 in basisstates(H1), f2 in basisstates(H2)])
-    FockHilbertSpace(newlabels, newbasisstates)
+    states = supports_branch_pruning(constraint) ? generate_states(spaces, constraint, full_space) : basisstates(full_space)
+    if supports_sector_grouping(constraint) && supports_filtering(constraint)
+        return sector_space(full_space, states, sector_function(constraint, full_space))
+    elseif supports_filtering(constraint)
+        filtered_states = collect(Iterators.filter(filter_function(constraint, full_space), states))
+        return ConstrainedSpace(full_space, filtered_states)
+    else
+        return ConstrainedSpace(full_space, states)
+    end
 end
-
-function simple_tensor_product(H1::AbstractFockHilbertSpace, H2::AbstractFockHilbertSpace)
-    isdisjoint(keys(H1.jw), keys(H2.jw)) || throw(ArgumentError("The labels of the two bases are not disjoint"))
-    newlabels = vcat(collect(keys(H1.jw)), collect(keys(H2.jw)))
-    SimpleFockHilbertSpace(newlabels)
-end
-tensor_product(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace) = simple_tensor_product(H1, H2)
-
-@testitem "tensor_product product of Fock Hilbert Spaces" begin
-    using FermionicHilbertSpaces
-    H1 = FockHilbertSpace(1:2)
-    H2 = FockHilbertSpace(3:4)
-    Hw = tensor_product(H1, H2)
-    H3 = FockHilbertSpace(1:4)
-    @test Hw == H3
-    @test dim(H1) * dim(H2) == dim(Hw)
-
-    H1 = SymmetricFockHilbertSpace(1:2, number_conservation())
-    H2 = SymmetricFockHilbertSpace(3:4, number_conservation())
-    Hw = tensor_product(H1, H2)
-    H3 = SymmetricFockHilbertSpace(1:4, number_conservation())
-    @test sort(basisstates(Hw)) == sort(basisstates(H3))
-    @test dim(H1) * dim(H2) == dim(Hw)
-
-    H1 = SymmetricFockHilbertSpace(1:2, ParityConservation())
-    H2 = SymmetricFockHilbertSpace(3:4, ParityConservation())
-    Hw = tensor_product(H1, H2)
-    H3 = SymmetricFockHilbertSpace(1:4, ParityConservation())
-    @test sort(basisstates(Hw)) == sort(basisstates(H3))
-    @test dim(H1) * dim(H2) == dim(Hw)
-
-end
-
 
 function check_tensor_product_basis_compatibility(b1::AbstractHilbertSpace, b2::AbstractHilbertSpace, b3::AbstractHilbertSpace)
     if vcat(collect(keys(b1)), collect(keys(b2))) != collect(keys(b3))
@@ -74,13 +51,14 @@ size_compatible(m, H) = size(m) == size(m) == ntuple(_ -> dim(H), ndims(m))
 size_compatible(m::UniformScaling, H) = true
 kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, Hs))
 
-@testitem "Size compatible" begin
+@testitem "Kron size compatibility and error handling" begin
     using LinearAlgebra, Random
     import FermionicHilbertSpaces: kron_sizes_compatible
     Random.seed!(1234)
-    H1 = hilbert_space(1:2)
-    H2 = hilbert_space(3:3)
-    H3 = hilbert_space(4:6)
+    @fermions a
+    H1 = hilbert_space(a, 1:2)
+    H2 = hilbert_space(a, 3:3)
+    H3 = hilbert_space(a, 4:6)
     Hs = [H1, H2, H3]
     ms = m1, m2, m3 = [rand(dim(H), dim(H)) for H in Hs]
     vs = v1, v2, v3 = [rand(dim(H)) for H in Hs]
@@ -105,7 +83,7 @@ function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kw
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs, H)
-    extend_state = StateExtender(Hs, H)
+    extend_state = state_mapper(H, Hs)
     if N == 1
         return generalized_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
     elseif N == 2
@@ -139,39 +117,42 @@ tensor_product_iterator(::UniformScaling, H::AbstractHilbertSpace) = diagind(I(l
 
 function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true, skipmissing=false) where T
     fill!(mout, zero(T))
-    phase_factors && (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
-    !phase_factors && (ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system")))
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
-    pfh = phase_factors ? phase_factor_h(Hs, H) : (f1, f2) -> 1
+    pfh = phase_factors ? kron_phase_factor(extend_state) : (f1, f2) -> 1
     for I in inds
         I1 = map(i -> i[1], I)
         I2 = map(i -> i[2], I)
-        fock1 = map(basisstate, I1, Hs)
-        fullfock1 = extend_state(fock1)
-        fock2 = map(basisstate, I2, Hs)
-        fullfock2 = extend_state(fock2)
-        outind1 = state_index(fullfock1, H)
-        if ismissing(outind1)
-            skipmissing && continue
-            throw(ArgumentError("The state $fullfock1 does not exist in the full Hilbert space"))
+        state1 = map(basisstate, I1, Hs)
+        state2 = map(basisstate, I2, Hs)
+        fullstates1, amps1 = combine_states(state1, extend_state)
+        fullstates2, amps2 = combine_states(state2, extend_state)
+        for (fullstate1, w1) in zip(fullstates1, amps1)
+            outind1 = state_index(fullstate1, H)
+            if ismissing(outind1)
+                skipmissing && continue
+                throw(ArgumentError("The state $fullstate1 does not exist in the full Hilbert space"))
+            end
+            for (fullstate2, w2) in zip(fullstates2, amps2)
+                outind2 = state_index(fullstate2, H)
+                if ismissing(outind2)
+                    skipmissing && continue
+                    throw(ArgumentError("The state $fullstate2 does not exist in the full Hilbert space"))
+                end
+                s = pfh(fullstate1, fullstate2)
+                v = prod(ntuple(i -> ms[i][I1[i], I2[i]], length(ms)))
+                mout[outind1, outind2] += w1 * w2 * v * s
+            end
         end
-        outind2 = state_index(fullfock2, H)
-        if ismissing(outind2)
-            skipmissing && continue
-            throw(ArgumentError("The state $fullfock2 does not exist in the full Hilbert space"))
-        end
-        s = pfh(fullfock1, fullfock2)
-        v = prod(ntuple(i -> ms[i][I1[i], I2[i]], length(ms)))
-        mout[outind1, outind2] += v * s
     end
     return mout
 end
 
 function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true, skipmissing=false) where T
-    phase_factors && (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
-    !phase_factors && (ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system")))
+    # phase_factors && (isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be consistent with the jordan-wigner ordering of the full system")))
+    # !phase_factors && (ispartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition of the full system")))
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
-    pfh = phase_factors ? phase_factor_h(Hs, H) : (f1, f2) -> 1
+
+    pfh = phase_factors ? kron_phase_factor(extend_state) : (f1, f2) -> 1
     Is, Js, Vs = Int[], Int[], T[]
     sizehint!(Is, length(inds))
     sizehint!(Js, length(inds))
@@ -179,25 +160,31 @@ function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H
     for I in inds
         I1 = map(i -> i[1], I)
         I2 = map(i -> i[2], I)
-        fock1 = map(basisstate, I1, Hs)
-        fullfock1 = extend_state(fock1)
-        outind1 = state_index(fullfock1, H)
-        if ismissing(outind1)
-            skipmissing && continue
-            throw(ArgumentError("The state $fullfock1 does not exist in the full Hilbert space"))
+        state1 = map(basisstate, I1, Hs)
+        state2 = map(basisstate, I2, Hs)
+        fullstates1, amps1 = combine_states(state1, extend_state)
+        fullstates2, amps2 = combine_states(state2, extend_state)
+        for (fullstate1, w1) in zip(fullstates1, amps1)
+            outind1 = state_index(fullstate1, H)
+
+            if ismissing(outind1)
+                skipmissing && continue
+                throw(ArgumentError("The state $fullstate1 does not exist in the full Hilbert space"))
+            end
+            for (fullstate2, w2) in zip(fullstates2, amps2)
+                outind2 = state_index(fullstate2, H)
+                if ismissing(outind2)
+                    skipmissing && continue
+                    throw(ArgumentError("The state $fullstate2 does not exist in the full Hilbert space"))
+                end
+                s = pfh(fullstate1, fullstate2)
+
+                v = prod(ntuple(i -> ms[i][I1[i], I2[i]], length(ms)))
+                push!(Is, outind1)
+                push!(Js, outind2)
+                push!(Vs, w1 * w2 * v * s)
+            end
         end
-        fock2 = map(basisstate, I2, Hs)
-        fullfock2 = extend_state(fock2)
-        outind2 = state_index(fullfock2, H)
-        if ismissing(outind2)
-            skipmissing && continue
-            throw(ArgumentError("The state $fullfock2 does not exist in the full Hilbert space"))
-        end
-        s = pfh(fullfock1, fullfock2)
-        v = prod(ntuple(i -> ms[i][I1[i], I2[i]], length(ms)))
-        push!(Is, outind1)
-        push!(Js, outind2)
-        push!(Vs, v * s)
     end
     return mout .= sparse(Is, Js, Vs, size(mout, 1), size(mout, 2))
 end
@@ -210,9 +197,11 @@ function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpa
     for I in inds
         TI = Tuple(I)
         fock = map(basisstate, TI, Hs)
-        fullfock = extend_state(fock)
-        outind = state_index(fullfock, H)
-        mout[outind] += mapreduce((i1, m) -> m[i1], *, TI, ms)
+        states, amps = combine_states(fock, extend_state)
+        for (fullfock, w) in zip(states, amps)
+            outind = state_index(fullfock, H)
+            mout[outind] += w * mapreduce((i1, m) -> m[i1], *, TI, ms)
+        end
     end
     return U * mout
 end
@@ -224,237 +213,13 @@ embedding_unitary(Hs, H::ProductSpace{Nothing}) = I
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
 `kwargs` can be passed a bool `phase_factors`.
 """
-function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractFockHilbertSpace; kwargs...)
+function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
-    isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
+    # isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
     return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H, kwargs...), *, zip(ms, Hs))
 end
 tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
 tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
-
-function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::ProductSpace{Nothing}; kwargs...)
-    generalized_kron(ms, Hs, H; kwargs...)
-end
-
-@testitem "Fermionic tensor product properties" begin
-    # Properties from J. Phys. A: Math. Theor. 54 (2021) 393001
-    # Eq. 16
-    using Random, Base.Iterators, LinearAlgebra
-    import FermionicHilbertSpaces: embedding_unitary, project_on_parity, project_on_parities
-
-    Random.seed!(3)
-    N = 8
-    rough_size = 4
-    fine_size = 2
-    rough_partitions = sort.(collect(partition(randperm(N), rough_size)))
-    # divide each part of rough partition into finer partitions
-    fine_partitions = map(rough_partition -> sort.(collect(partition(shuffle(rough_partition), fine_size))), rough_partitions)
-    H = hilbert_space(1:N)
-    c = fermions(H)
-    Hs_rough = [hilbert_space(r_p) for r_p in rough_partitions]
-    Hs_fine = map(f_p_list -> hilbert_space.(f_p_list), fine_partitions)
-
-    ops_rough = map(r_p -> rand(ComplexF64, 2^length(r_p), 2^length(r_p)), rough_partitions)
-    ops_fine = map(f_p_list -> [rand(ComplexF64, 2^length(f_p), 2^length(f_p)) for f_p in f_p_list], fine_partitions)
-
-    # Associativity (Eq. 16)
-    rhs = generalized_kron(reduce(vcat, ops_fine), reduce(vcat, Hs_fine), H)
-    finetensor_products = [generalized_kron(ops_vec, cs_vec, c_rough) for (ops_vec, cs_vec, c_rough) in zip(ops_fine, Hs_fine, Hs_rough)]
-    lhs = generalized_kron(finetensor_products, Hs_rough, H)
-    @test lhs ≈ rhs
-
-    physical_ops_rough = [project_on_parity(op, H, 1) for (op, H) in zip(ops_rough, Hs_rough)]
-
-    # Eq. 18
-    As = ops_rough
-    Bs = map(r_p -> rand(ComplexF64, 2^length(r_p), 2^length(r_p)), rough_partitions)
-    lhs = tr(generalized_kron(As, Hs_rough, H)' * generalized_kron(Bs, Hs_rough, H))
-    rhs = mapreduce((A, B) -> tr(A' * B), *, As, Bs)
-    @test lhs ≈ rhs
-
-    # Fermionic embedding
-
-    # Eq. 19 
-    As_modes = [rand(ComplexF64, 2, 2) for _ in 1:N]
-    ξ = vcat(fine_partitions...)
-    ξbases = vcat(Hs_fine...)
-    modebases = [hilbert_space(j:j) for j in 1:N]
-    lhs = prod(j -> embed(As_modes[j], modebases[j], H), 1:N)
-    rhs_ordered_prod(X, basis) = mapreduce(j -> Matrix(embed(As_modes[j], modebases[j], basis)), *, X)
-    rhs = generalized_kron([rhs_ordered_prod(X, H) for (X, H) in zip(ξ, ξbases)], ξbases, H)
-    @test lhs ≈ rhs
-
-    # Associativity (Eq. 21)
-    @test embed(embed(ops_fine[1][1], Hs_fine[1][1], Hs_rough[1]), Hs_rough[1], H) ≈ embed(ops_fine[1][1], Hs_fine[1][1], H)
-    @test all(map(Hs_rough, Hs_fine, ops_fine) do cr, cfs, ofs
-        all(map(cfs, ofs) do cf, of
-            embed(embed(of, cf, cr), cr, H) ≈ embed(of, cf, H)
-        end)
-    end)
-
-    ## Eq. 22
-    HX = Hs_rough[1]
-    Ux = embedding_unitary(rough_partitions, H)
-    A = ops_rough[1]
-    @test Ux !== I
-    @test embed(A, HX, H) ≈ Ux * embed(A, HX, H; phase_factors=false) * Ux'
-    # Eq. 93
-    @test tensor_product(physical_ops_rough, Hs_rough, H) ≈ Ux * generalized_kron(physical_ops_rough, Hs_rough, H; phase_factors=false) * Ux'
-
-    # Eq. 23
-    X = rough_partitions[1]
-    HX = Hs_rough[1]
-    A = ops_rough[1]
-    B = rand(ComplexF64, 2^length(X), 2^length(X))
-    #Eq 5a and 5br are satisfied also when embedding matrices in larger subsystems
-    @test embed(A, HX, H)' ≈ embed(A', HX, H)
-    @test embed(A, HX, H; phase_factors=false) * embed(B, HX, H; phase_factors=false) ≈ embed(A * B, HX, H; phase_factors=false)
-    for cmode in modebases
-        #Eq 5bl
-        local A = rand(ComplexF64, 2, 2)
-        local B = rand(ComplexF64, 2, 2)
-        @test embed(A, cmode, H) * embed(B, cmode, H) ≈ embed(A * B, cmode, H)
-    end
-
-    # Ordered product of embeddings
-
-    # Eq. 31
-    A = ops_rough[1]
-    X = rough_partitions[1]
-    Xbar = setdiff(1:N, X)
-    HX = Hs_rough[1]
-    HXbar = hilbert_space(Xbar)
-    corr = embed(A, HX, H)
-    @test corr ≈ generalized_kron([A, I], [HX, HXbar], H) ≈ tensor_product([A, I], [HX, HXbar], H) ≈ tensor_product([I, A], [HXbar, HX], H)
-
-    # Eq. 32
-    @test tensor_product(As_modes, modebases, H) ≈ generalized_kron(As_modes, modebases, H)
-
-    ## Fermionic partial trace
-
-    # Eq. 36
-    X = rough_partitions[1]
-    A = ops_rough[1]
-    B = rand(ComplexF64, 2^N, 2^N)
-    HX = Hs_rough[1]
-    lhs = tr(embed(A, HX, H)' * B)
-    rhs = tr(A' * partial_trace(B, H, HX))
-    @test lhs ≈ rhs
-
-    # Eq. 38 (using A, X, HX, HXbar from above)
-    B = rand(ComplexF64, 2^length(Xbar), 2^length(Xbar))
-    Hs = [HX, HXbar]
-    ops = [A, B]
-    @test partial_trace(generalized_kron(ops, Hs, H), H, HX) ≈ partial_trace(tensor_product(ops, Hs, H), H, HX) ≈ partial_trace(tensor_product(reverse(ops), reverse(Hs), H), H, HX) ≈ A * tr(B)
-
-    # Eq. 39
-    A = rand(ComplexF64, 2^N, 2^N)
-    X = fine_partitions[1][1]
-    Y = rough_partitions[1]
-    HX = Hs_fine[1][1]
-    HY = Hs_rough[1]
-    HZ = H
-    Z = 1:N
-    rhs = partial_trace(A, HZ, HX)
-    lhs = partial_trace(partial_trace(A, HZ, HY), HY, HX)
-    @test lhs ≈ rhs
-
-    # Eq. 41
-    HY = H
-    @test partial_trace(A', HY, HX) ≈ partial_trace(A, HY, HX)'
-
-    # Eq. 95
-    ξ = rough_partitions
-    Asphys = physical_ops_rough
-    Bs = map(X -> rand(ComplexF64, 2^length(X), 2^length(X)), ξ)
-    Bsphys = [project_on_parity(B, H, 1) for (B, H) in zip(Bs, Hs_rough)]
-    lhs1 = tensor_product(Asphys, Hs_rough, H) * tensor_product(Bsphys, Hs_rough, H)
-    rhs1 = tensor_product(Asphys .* Bsphys, Hs_rough, H)
-    @test lhs1 ≈ rhs1
-    @test tensor_product(Asphys, Hs_rough, H)' ≈ tensor_product(adjoint.(Asphys), Hs_rough, H)
-
-
-    ## Unitary equivalence between tensor_product and kron
-    ops = reduce(vcat, ops_fine)
-    Hs = reduce(vcat, Hs_fine)
-    physical_ops = [project_on_parity(op, H, 1) for (op, H) in zip(ops, Hs)]
-    # Eq. 93 implies that the unitary equivalence holds for the physical operators
-    @test svdvals(Matrix(tensor_product(physical_ops, Hs, H))) ≈ svdvals(Matrix(generalized_kron(physical_ops, Hs, H; phase_factors=false)))
-    # However, it is more general. The unitary equivalence holds as long as all except at most one of the operators has a definite parity:
-
-    numberops = map(numberoperator, Hs)
-    Uemb = embedding_unitary(Hs, H)
-    fine_partition = reduce(vcat, fine_partitions)
-    for parities in Base.product([[-1, 1] for _ in 1:length(Hs)]...)
-        projected_ops = [project_on_parity(op, H, p) for (op, H, p) in zip(ops, Hs, parities)] # project on local parity
-        opsk = [[projected_ops[1:k-1]..., ops[k], projected_ops[k+1:end]...] for k in 1:length(ops)] # switch out one operator of definite parity for an operator of indefinite parity
-        embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
-        kron_prods = [generalized_kron(ops, Hs, H; phase_factors=false) for ops in opsk]
-
-        @test all(svdvals(Matrix(op1)) ≈ svdvals(Matrix(op2)) for (op1, op2) in zip(embedding_prods, kron_prods))
-    end
-
-    # Explicit construction of unitary equivalence in case of all even (except one) 
-    function phase(k, f)
-        Xkmask = FermionicHilbertSpaces.focknbr_from_site_labels(fine_partition[k], H.jw)
-        iseven(count_ones(f & Xkmask)) && return 1
-        phase = 1
-        for r in 1:k-1
-            Xrmask = FermionicHilbertSpaces.focknbr_from_site_labels(fine_partition[r], H.jw)
-            phase *= (-1)^(count_ones(f & Xrmask))
-        end
-        return phase
-    end
-    opsk = [[physical_ops[1:k-1]..., ops[k], physical_ops[k+1:end]...] for k in 1:length(ops)]
-    unitaries = [Diagonal([phase(k, f) for f in basisstates(H)]) * Uemb for k in 1:length(opsk)]
-    embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
-    kron_prods = [generalized_kron(ops, Hs, H; phase_factors=false) for ops in opsk]
-    @test all(op1 ≈ U * op2 * U for (op1, op2, U) in zip(embedding_prods, kron_prods, unitaries))
-
-end
-
-
-@testitem "tensor_product" begin
-    using Random, LinearAlgebra
-    import SparseArrays: SparseMatrixCSC
-    Random.seed!(1234)
-
-    for qn in [NoSymmetry(), ParityConservation(), number_conservation()]
-        H1 = hilbert_space(1:1, qn)
-        H2 = hilbert_space(1:3, qn)
-        @test_throws ArgumentError tensor_product(H1, H2)
-        H2 = hilbert_space(2:3, qn)
-        H3 = hilbert_space(1:3, qn)
-        H3w = tensor_product(H1, H2)
-        @test H3w == tensor_product((H1, H2)) == tensor_product([H1, H2])
-        Hs = [H1, H2]
-        b1 = fermions(H1)
-        b2 = fermions(H2)
-        b3 = fermions(H3w)
-
-        #test that they keep sparsity
-        @test typeof(tensor_product((b1[1], b2[2]), Hs => H3)) == typeof(b1[1])
-        @test typeof(generalized_kron((b1[1], b2[2]), Hs, H3)) == typeof(b1[1])
-        @test typeof(tensor_product((b1[1], I), Hs => H3)) == typeof(b1[1])
-        @test typeof(generalized_kron((b1[1], I), Hs, H3)) == typeof(b1[1])
-        @test tensor_product((I, I), Hs => H3) isa SparseMatrixCSC
-        @test generalized_kron((I, I), Hs, H3) isa SparseMatrixCSC
-
-        # Test zero-mode tensor_product
-        H1 = hilbert_space(1:0, qn)
-        H2 = hilbert_space(1:1, qn)
-        c1 = fermions(H1)
-        c2 = fermions(H2)
-        @test tensor_product([I, I], [H1, H2], H2) == I
-        @test tensor_product([I, c2[1]], [H1, H2], H2) == c2[1]
-    end
-
-    #Test basis compatibility
-    H1 = hilbert_space(1:2, ParityConservation())
-    H2 = hilbert_space(2:4, ParityConservation())
-    @test_throws ArgumentError tensor_product(H1, H2)
-end
-
 
 struct PhaseMap{F}
     phases::Matrix{Int}
@@ -487,24 +252,29 @@ function phase_map(fockstates, M::Int)
     PhaseMap(phases, fockstates)
 end
 phase_map(N::Int) = phase_map(map(FockNumber, UnitRange{UInt64}(0, 2^N - 1)), N)
-phase_map(H::AbstractFockHilbertSpace) = phase_map(collect(basisstates(H)), length(H.jw))
-LazyPhaseMap(N::Int) = (states = map(FockNumber, UnitRange{UInt64}(0, 2^N - 1)); LazyPhaseMap{N,eltype(states)}(states))
+phase_map(H::AbstractHilbertSpace) = phase_map(collect(basisstates(H)), nbr_of_modes(H))
+function LazyPhaseMap(N::Int)
+    states = map(FockNumber, UnitRange{UInt64}(0, 2^N - 1))
+    LazyPhaseMap{N,eltype(states)}(states)
+end
 SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest...) = SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(rest...)
 (p::PhaseMap)(op::AbstractMatrix) = p.phases .* op
 (p::LazyPhaseMap)(op::AbstractMatrix) = p .* op
-@testitem "phasemap" begin
+@testitem "Phase map: sign pattern structure" begin
     using LinearAlgebra
+    import FermionicHilbertSpaces: fermions
     # see App 2 in https://arxiv.org/pdf/2006.03087
     ns = 1:4
     phis = Dict(zip(ns, FermionicHilbertSpaces.phase_map.(ns)))
     lazyphis = Dict(zip(ns, FermionicHilbertSpaces.LazyPhaseMap.(ns)))
     @test all(sum(phis[n].phases .== -1) == (2^n - 2) * 2^n / 2 for n in ns)
     @test all(sum(phis[n].phases .== -1) == (2^n - 2) * 2^n / 2 for n in ns)
-
+    @fermions f
     for N in ns
-        H = SimpleFockHilbertSpace(1:N)
+        H = hilbert_space(f, 1:N)
         c = fermions(H)
-        q = FermionicHilbertSpaces.QubitOperators(H)
+        # Now let's make commuting fermions (hardcore bosons)
+        q = Dict(k => embed(only(fermions(hilbert_space(f[k])))[2], hilbert_space(f[k]) => H; phase_factors=false) for k in 1:N)
         @test all(map(n -> q[n] == phis[N](c[n]), 1:N))
         c2 = map(n -> phis[N](c[n]), 1:N)
         @test phis[N](phis[N](c[1])) == c[1]
@@ -516,11 +286,11 @@ SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest..
         @test all([c2[n]' * c2[n2] == (-c2[n2] * c2[n]' + I) * (n == n2) + (n !== n2) * (c2[n2] * c2[n]') for n in 1:N, n2 in 1:N])
     end
 
-    H1 = hilbert_space(1:1)
+    H1 = hilbert_space(f, 1:1)
     c1 = fermions(H1)
-    H2 = hilbert_space(2:2)
+    H2 = hilbert_space(f, 2:2)
     c2 = fermions(H2)
-    H12 = hilbert_space(1:2)
+    H12 = hilbert_space(f, 1:2)
     c12 = fermions(H12)
     p1 = FermionicHilbertSpaces.LazyPhaseMap(1)
     p2 = FermionicHilbertSpaces.phase_map(2)
@@ -535,100 +305,115 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
     phi(kron(reverse(map((phi, op) -> phi(op), phis, ops))...))
 end
 
-function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
+function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
-    if H == Hsub
-        return copy(m)
+    if isnothing(complement)
+        U = basis_transformation(Hsub, H)
+        return U * m * U'
     end
     mout = zeros(eltype(m), dim(Hsub), dim(Hsub))
-    partial_trace!(mout, m, H, Hsub, phase_factors, complement, alg; kwargs...)
+    partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
+end
+function basis_transformation(H1, H2)
+    #transforms from the basis of H1 to the basis of H2. Assumes they are the same basis states, just ordered differently. If they are not the same, this will throw an error.
+    dim(H1) == dim(H2) || throw(ArgumentError("Hilbert spaces must have the same dimension for a basis transformation"))
+    I = Vector{Int}(undef, dim(H1))
+    J = Vector{Int}(undef, dim(H2))
+    V = ones(Int, dim(H1))
+    for (i, f1) in enumerate(basisstates(H1))
+        j = state_index(f1, H2)
+        if ismissing(j)
+            throw(ArgumentError("The state $f1 in the first Hilbert space does not exist in the second Hilbert space"))
+        end
+        J[i] = j
+        I[i] = i
+    end
+    return SparseArrays.sparse!(I, J, V)
 end
 
 """
-    partial_trace(m, H => Hsub; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub))
+    partial_trace(m, H => Hsub; complement=complementary_subsystem(H, Hsub))
 
 Compute the partial trace of `m` from `H` to `Hsub`. Fermionic phase factors are included if both `H` and `Hsub` are Fermionic, unless specified otherwise in `kwargs`.
 """
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
-use_phase_factors(H::AbstractHilbertSpace) = false
-use_phase_factors(H::AbstractFockHilbertSpace) = true
 
 abstract type AbstractPartialTraceAlg end
 struct SubsystemPartialTraceAlg <: AbstractPartialTraceAlg end
 struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
 default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+#TODO: FullPartialTraceAlg exploits sparsity of the matrix which should be taken into account.
 
 """
-    partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, extend_state=StateExtender((Hsub, complement), H); skipmissing=true)
+    partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, extend_state=StateExtender((Hsub, complement), H); skipmissing=true, phase_factors=true)
 
 Compute the partial trace of `m` from `H` to `Hsub`. 
 """
-function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, ::SubsystemPartialTraceAlg, extend_state=StateExtender((Hsub, complement), H); skipmissing=true)
-    #skipmissing is true be default, to allow for the complement to include more states than strictly necessary
-    if phase_factors
-        consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
-    end
+function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::SubsystemPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
     fill!(mout, zero(eltype(mout)))
 
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
-
     for f1 in substates
         I1 = state_index(f1, Hsub)
         for f2 in substates
-            s2 = phase_factors ? phase_factor_f(f1, f2, length(keys(Hsub))) : 1
+            s2 = phase_factors ? partial_trace_phase_factor(f1, f2, Hsub) : 1
             I2 = state_index(f2, Hsub)
             for fbar in barstates
-                fullf1 = extend_state((f1, fbar))
-                fullf2 = extend_state((f2, fbar))
-                s1 = phase_factors ? phase_factor_f(fullf1, fullf2, length(keys(H))) : 1
-                s = s2 * s1
-                J1 = state_index(fullf1, H)
-                if ismissing(J1)
-                    skipmissing && continue
-                    throw(ArgumentError("The state $fullf1 is not in the full Hilbert space"))
+                fullstates1, amps1 = combine_states((f1, fbar), mapper)
+                fullstates2, amps2 = combine_states((f2, fbar), mapper)
+                for (fullf1, w1) in zip(fullstates1, amps1)
+                    J1 = state_index(fullf1, H)
+                    if ismissing(J1)
+                        skipmissing && continue
+                        throw(ArgumentError("The state $fullf1 is not in the full Hilbert space"))
+                    end
+                    for (fullf2, w2) in zip(fullstates2, amps2)
+                        J2 = state_index(fullf2, H)
+                        if ismissing(J2)
+                            skipmissing && continue
+                            throw(ArgumentError("The state $fullf2 is not in the full Hilbert space"))
+                        end
+                        s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
+                        s = s2 * s1
+                        mout[I1, I2] += w1 * w2 * s * m[J1, J2]
+                    end
                 end
-                J2 = state_index(fullf2, H)
-                if ismissing(J2)
-                    skipmissing && continue
-                    throw(ArgumentError("The state $fullf2 is not in the full Hilbert space"))
-                end
-                mout[I1, I2] += s * m[J1, J2]
             end
         end
     end
     return mout
 end
-function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, ::FullPartialTraceAlg, split_state=StateSplitter(H, (Hsub, complement)); skipmissing=false)
-    if phase_factors
-        consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
-    end
+
+function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::FullPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); phase_factors=true, skipmissing=false)
     fill!(mout, zero(eltype(mout)))
     inds = tensor_product_iterator(m, H)
-    M = length(keys(H))
-    N = length(keys(Hsub))
+    splitsamps = map(Base.Fix2(split_state, mapper), basisstates(H))
     for I in inds
         f1 = basisstate(I[1], H)
         f2 = basisstate(I[2], H)
-        f1sub, f1bar = split_state(f1)
-        f2sub, f2bar = split_state(f2)
-        if f1bar != f2bar
-            continue
+        splits1, amps1 = splitsamps[I[1]]
+        splits2, amps2 = splitsamps[I[2]]
+        for ((f1sub, f1bar), w1) in zip(splits1, amps1)
+            J1 = state_index(f1sub, Hsub)
+            if ismissing(J1)
+                skipmissing && continue
+                throw(ArgumentError("The state $f1sub is not in the subsystem Hilbert space"))
+            end
+            for ((f2sub, f2bar), w2) in zip(splits2, amps2)
+                f1bar != f2bar && continue
+                J2 = state_index(f2sub, Hsub)
+                if ismissing(J2)
+                    skipmissing && continue
+                    throw(ArgumentError("The state $f2sub is not in the subsystem Hilbert space"))
+                end
+                s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
+                s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
+                s = s2 * s1
+                mout[J1, J2] += w1 * w2 * s * m[I[1], I[2]]
+            end
         end
-        s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
-        s2 = phase_factors ? phase_factor_f(f1sub, f2sub, N) : 1
-        s = s2 * s1
-        J1 = state_index(f1sub, Hsub)
-        if ismissing(J1)
-            skipmissing && continue
-            throw(ArgumentError("The state $f1sub is not in the subsystem Hilbert space"))
-        end
-        J2 = state_index(f2sub, Hsub)
-        if ismissing(J2)
-            skipmissing && continue
-            throw(ArgumentError("The state $f2sub is not in the subsystem Hilbert space"))
-        end
-        mout[J1, J2] += s * m[I[1], I[2]]
     end
     return mout
 end
@@ -639,10 +424,11 @@ end
 Compute the partial trace map from `H` to `Hsub`, represented by a sparse matrix of dimension `dim(Hsub)^2 x dim(H)^2` that can be multiplied with a vectorized density matrix. 
 """
 partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace_map(Hs...; kwargs...)
-function partial_trace_map(H, Hsub; phase_factors=use_phase_factors(H) && use_phase_factors(Hsub), complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
-    partial_trace_map(H, Hsub, phase_factors, complement, alg; kwargs...)
+function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
+    partial_trace_map(H, Hsub, complement, alg; kwargs...)
 end
-function partial_trace_map(H, Hsub, phase_factors::Bool, complement, ::SubsystemPartialTraceAlg, extend_state=StateExtender((Hsub, complement), H); skipmissing=false)
+function partial_trace_map(H, Hsub, complement, ::SubsystemPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
+    # we use skipmissing = true here as the default, since there is if H has constraints, there may be combinations of states from Hsub and the complement that do not exist in H, even if every split state from H exists in Hsub and the complement.
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
     indI = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
@@ -651,69 +437,72 @@ function partial_trace_map(H, Hsub, phase_factors::Bool, complement, ::Subsystem
     Js = Int[]
     Vs = Int[]
     for f1 in substates, f2 in substates
-        s2 = phase_factors ? phase_factor_f(f1, f2, length(keys(Hsub))) : 1
+        s2 = phase_factors ? partial_trace_phase_factor(f1, f2, Hsub) : 1
         I1 = state_index(f1, Hsub)
         I2 = state_index(f2, Hsub)
         for fbar in barstates
-            fullf1 = extend_state((f1, fbar))
-            fullf2 = extend_state((f2, fbar))
-            s1 = phase_factors ? phase_factor_f(fullf1, fullf2, length(keys(H))) : 1
-            s = s2 * s1
-            J1 = state_index(fullf1, H)
-            if ismissing(J1)
-                skipmissing && continue
-                throw(ArgumentError("The state $fullf1 is not in the full Hilbert space"))
+            fullstates1, amps1 = combine_states((f1, fbar), mapper)
+            fullstates2, amps2 = combine_states((f2, fbar), mapper)
+            for (fullf1, w1) in zip(fullstates1, amps1)
+                J1 = state_index(fullf1, H)
+                if ismissing(J1)
+                    skipmissing && continue
+                    throw(ArgumentError("The state $fullf1 is not in the full Hilbert space."))
+                end
+                for (fullf2, w2) in zip(fullstates2, amps2)
+                    J2 = state_index(fullf2, H)
+                    if ismissing(J2)
+                        skipmissing && continue
+                        throw(ArgumentError("The state $fullf2 is not in the full Hilbert space."))
+                    end
+                    s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
+                    s = s2 * s1
+                    push!(Is, indI[I1, I2])
+                    push!(Js, indJ[J1, J2])
+                    push!(Vs, w1 * w2 * s)
+                end
             end
-            J2 = state_index(fullf2, H)
-            if ismissing(J2)
-                skipmissing && continue
-                throw(ArgumentError("The state $fullf2 is not in the full Hilbert space"))
-            end
-            push!(Is, indI[I1, I2])
-            push!(Js, indJ[J1, J2])
-            push!(Vs, s)
         end
     end
     return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
 
-function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, phase_factors::Bool, complement, ::FullPartialTraceAlg, split_state=StateSplitter(H, (Hsub, complement)); skipmissing=false)
-    if phase_factors
-        consistent_ordering(Hsub, H) || throw(ArgumentError("Subsystem must be ordered in the same way as the full system"))
-    end
+function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::FullPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
     states = basisstates(H)
-    M = length(keys(H))
-    N = length(keys(Hsub))
     indI = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
     Is = Int[]
     Js = Int[]
     Vs = Int[]
-    substates2 = map(split_state, states)
+    substates2 = map(Base.Fix2(split_state, mapper), states)
     for f1 in states
-        f1sub, f1bar = split_state(f1)
-        J1 = state_index(f1sub, Hsub)
-        if ismissing(J1)
-            skipmissing && continue
-            throw(ArgumentError("The state $f1sub is not in the subsystem Hilbert space"))
-        end
-        I1 = state_index(f1, H)
-        for (f2, (f2sub, f2bar)) in zip(states, substates2)
-            if f1bar != f2bar
-                continue
-            end
-            s1 = phase_factors ? phase_factor_f(f1, f2, M) : 1
-            s2 = phase_factors ? phase_factor_f(f1sub, f2sub, N) : 1
-            s = s2 * s1
-            J2 = state_index(f2sub, Hsub)
-            if ismissing(J2)
+        J1 = state_index(f1, H)
+        splits1, amps1 = split_state(f1, mapper)
+        for ((f1sub, f1bar), w1) in zip(splits1, amps1)
+            I1 = state_index(f1sub, Hsub)
+            if ismissing(I1)
                 skipmissing && continue
-                throw(ArgumentError("The state $f2sub is not in the subsystem Hilbert space"))
+                throw(ArgumentError("The state $f1sub is not in the subsystem Hilbert space"))
             end
-            I2 = state_index(f2, H)
-            push!(Is, indI[I1, I2])
-            push!(Js, indJ[J1, J2])
-            push!(Vs, s)
+            for (f2, (splits2, amps2)) in zip(states, substates2)
+                for ((f2sub, f2bar), w2) in zip(splits2, amps2)
+                    if f1bar != f2bar
+                        continue
+                    end
+                    s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
+                    s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
+                    s = s2 * s1
+                    I2 = state_index(f2sub, Hsub)
+                    if ismissing(I2)
+                        skipmissing && continue
+                        throw(ArgumentError("The state $f2sub is not in the subsystem Hilbert space"))
+                    end
+                    J2 = state_index(f2, H)
+                    push!(Is, indI[I1, I2])
+                    push!(Js, indJ[J1, J2])
+                    push!(Vs, s * w1 * w2)
+                end
+            end
         end
     end
     return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
@@ -748,7 +537,8 @@ end
 
 @testitem "Parity projection" begin
     import FermionicHilbertSpaces: project_on_parity, project_on_parities
-    Hs = [hilbert_space(2k-1:2k) for k in 1:3]
+    @fermions f
+    Hs = [hilbert_space(f, 2k-1:2k) for k in 1:3]
     H = tensor_product(Hs)
     op = rand(ComplexF64, dim(H), dim(H))
     local_parity_iter = (1, -1)
@@ -764,8 +554,9 @@ end
 end
 
 @testitem "Partial trace map" begin
-    H = hilbert_space(1:4)
-    Hsub = hilbert_space([2, 4])
+    @fermions f
+    H = hilbert_space(f, 1:4)
+    Hsub = hilbert_space(f, [2, 4])
     m = rand(ComplexF64, dim(H), dim(H))
 
     msub = partial_trace(m, H => Hsub)
@@ -773,8 +564,8 @@ end
     msub_map = pt * reshape(m, (dim(H)^2))
     @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
 
-    H = hilbert_space(1:4, number_conservation(2))
-    Hsub = subregion([1, 3, 4], H)
+    H = hilbert_space(f, 1:4, NumberConservation(2))
+    Hsub = subregion(hilbert_space(f, [1, 3, 4]), H)
     m = rand(ComplexF64, dim(H), dim(H))
     msub = partial_trace(m, H => Hsub)
     pt = partial_trace(H => Hsub)
@@ -784,23 +575,37 @@ end
 
 @testitem "Partial trace with missing states" begin
     using LinearAlgebra
-    H1 = hilbert_space(1:2, NumberConservation(1))
-    H2 = hilbert_space(3:4, NumberConservation(1))
-    H = hilbert_space(1:4, NumberConservation(2))
+    @fermions a
+    H1 = hilbert_space(a, 1:2, NumberConservation(1))
+    H2 = hilbert_space(a, 3:4, NumberConservation(1))
+    H = hilbert_space(a, 1:4, NumberConservation(2))
     m1 = rand(ComplexF64, dim(H1), dim(H1))
     m2 = rand(ComplexF64, dim(H2), dim(H2))
+    p = FermionicHilbertSpaces.state_mapper(H, (H1, H2))
+
     m12 = tensor_product((m1, m2), (H1, H2) => H)
-    m12_traced1 = partial_trace(m12, H => H1)
-    m12_traced2 = partial_trace(m12, H => H2)
-    @test m12_traced1 ≈ m1 * tr(m2)
-    @test m12_traced2 ≈ m2 * tr(m1)
+    m1ext = embed(m1, H1 => H)
+    m2ext = embed(m2, H2 => H)
+    @test m1ext * m2ext ≈ m12
+    m21 = tensor_product((m2, m1), (H2, H1) => H)
+    @test m2ext * m1ext ≈ m21
+    alg1 = FermionicHilbertSpaces.FullPartialTraceAlg()
+    alg2 = FermionicHilbertSpaces.SubsystemPartialTraceAlg()
+    m12_traced1_alg1 = partial_trace(m12, H => H1; alg=alg1)
+    m12_traced2_alg1 = partial_trace(m12, H => H2; alg=alg1)
+    m12_traced1_alg2 = partial_trace(m12, H => H1; alg=alg2)
+    m12_traced2_alg2 = partial_trace(m12, H => H2; alg=alg2)
+    @test m12_traced1_alg1 ≈ m1 * tr(m2)
+    @test m12_traced2_alg1 ≈ m2 * tr(m1)
+    @test m12_traced1_alg2 ≈ m1 * tr(m2)
+    @test m12_traced2_alg2 ≈ m2 * tr(m1)
 
     m12full = rand(ComplexF64, dim(H), dim(H))
     @test_throws ArgumentError partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.FullPartialTraceAlg(), skipmissing=false)
     @test partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.FullPartialTraceAlg(), skipmissing=true) ≈
           partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg()) # This is a bit problematic, because the subsystem partial trace algorithm will not enumerate all possible states in H, and can silently give the wrong result.
 
-    H = hilbert_space(1:4, NumberConservation(1))
+    H = hilbert_space(a, 1:4, NumberConservation(1))
     @test_throws ArgumentError generalized_kron((m1, m2), (H1, H2) => H)
     generalized_kron((m1, m2), (H1, H2) => H; skipmissing=true) ≈ tensor_product((m1, m2), (H1, H2) => H) # Since tensor_product first embeds both operators in the full Hilbert space (which can be done) and then multiplies them, it won't complain about missing states.
 end

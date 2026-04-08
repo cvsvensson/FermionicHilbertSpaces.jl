@@ -1,10 +1,12 @@
 # # Free fermions on a 2D grid
 # For free fermions, one can work in the single particle picture to get a better scaling with the size of the system. FermionicHilbertSpaces.jl contains some features to help with this.
-using FermionicHilbertSpaces, Plots, LinearAlgebra
+using FermionicHilbertSpaces
+using Plots, LinearAlgebra
 import FermionicHilbertSpaces: add!! # Import add!! for efficient Hamiltonian construction
 using Arpack # For sparse eigenvalue decomposition
 # ## Define a grid 
 # We'll look at a system defined on a disc. Let's define a square grid and then cut out a disc in the middle
+@fermions f
 N = 40
 xs, ys = -N:N, -N:N
 indomain(xy) = norm(xy) < N
@@ -12,7 +14,7 @@ square_grid = [indomain(xy) ? xy : missing for xy in Iterators.product(xs, ys)]
 disc = collect(skipmissing(square_grid))
 shifts = [(1, 0), (0, 1), (-1, 0), (0, -1)]
 neighbours(Nx, Ny) = ((Nx + dx, Ny + dy) for (dx, dy) in shifts if indomain((Nx + dx, Ny + dy)))
-H = single_particle_hilbert_space(disc)
+H = single_particle_hilbert_space(f, disc)
 # For plotting heatmaps later, we need a function to map a vector over the disc to a matrix on the 2d grid
 function vec_to_square_grid(v::AbstractVector{T}) where T
     count = 0
@@ -35,7 +37,6 @@ function potential(xy)
     5 * cos(2 * (θ - 2 * r))^2 * exp(r)
 end
 hopping(xy1, xy2) = N
-@fermions f
 # Since we are dealing with many fermions, symbolic sums may take a long time. To get better performance, we will use the function `add!!` to update the symbolic hamiltonian in place. For this, it is important to initialize the Hamiltonian with the correct type. We do this by making a simple hamiltonian and then call `zero` to get an empty hamiltonian of a matching type.
 ham = zero(1.0 * f[0, 0] * f[1, 1] + 1.0)
 # Now we can build the hamiltonian

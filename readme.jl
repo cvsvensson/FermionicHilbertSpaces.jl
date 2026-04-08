@@ -23,21 +23,21 @@ sym_ham = sum(rand() * f[n]'f[n] for n in 1:4) +
           sum(f[n+1]'f[n] + hc for n in 1:3)
 
 #Get a matrix representation of the hamiltonian on a hilbert space
-H = hilbert_space(1:4)
+H = hilbert_space(f, 1:4)
 ham = matrix_representation(sym_ham, H)
 
 #Diagonalize to find the ground state
 Ψ = eigvecs(collect(ham))[:, 1]
 
 #Define a subsystem and partial trace to find the reduced density matrix
-Hsub = hilbert_space(1:2)
+Hsub = hilbert_space(f, 1:2)
 ρsub = partial_trace(Ψ * Ψ', H => Hsub)
 entanglement_entropy = sum(λ -> -λ * log(λ), eigvals(ρsub))
 
 
 # ### Conserved quantities
 # The hamiltonian above conserves the number of fermions, which we can exploit as
-Hcons = hilbert_space(1:4, number_conservation(2))
+Hcons = hilbert_space(f, 1:4, NumberConservation(2))
 # This hilbert space contains only states with two fermions. We can use it just as before to get a matrix representation of the hamiltonian
 ham = matrix_representation(sym_ham, Hcons)
 # and we can calculate the partial trace as before

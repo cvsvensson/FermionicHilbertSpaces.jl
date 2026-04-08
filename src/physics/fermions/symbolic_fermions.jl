@@ -1,10 +1,18 @@
+struct FermionicGroup
+    id::UInt64
+end
+Base.hash(x::FermionicGroup, h::UInt) = hash(x.id, h)
+Base.:(==)(a::FermionicGroup, b::FermionicGroup) = a.id == b.id
+symbolic_group(g::FermionicGroup) = g
+Base.isless(g1::FermionicGroup, g2::FermionicGroup) = g1.id < g2.id
 
 struct SymbolicFermionBasis
     name::Symbol
-    universe::UInt64
+    group::FermionicGroup
 end
-Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.universe, h))
-
+Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.group, h))
+symbolic_group(h::SymbolicFermionBasis) = fermionic_group(h)
+fermionic_group(b::SymbolicFermionBasis) = b.group
 """
     @fermions a b ...
 
@@ -20,17 +28,17 @@ and commute with fermions in other `@fermions` blocks.
     - `a[1]' * a[1] + a[1] * a[1]' == 1`
     - `a[1] * b[1] - b[1] * a[1] == 0`
 
-See also [`@majoranas`](@ref), [`FermionicHilbertSpaces.eval_in_basis`](@ref).
+See also [`@majoranas`](@ref).
 """
 macro fermions(xs...)
-    universe = hash(xs)
+    group = FermionicGroup(hash(xs))
     defs = map(xs) do x
-        :($(esc(x)) = SymbolicFermionBasis($(Expr(:quote, x)), $universe))
+        :($(esc(x)) = SymbolicFermionBasis($(Expr(:quote, x)), $group))
     end
     Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
 end
-Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.universe == b.universe
+Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.group == b.group
 Base.getindex(f::SymbolicFermionBasis, is...) = FermionSym(false, is, f)
 Base.getindex(f::SymbolicFermionBasis, i) = FermionSym(false, i, f)
 
@@ -41,6 +49,11 @@ struct FermionSym{L,B} <: AbstractFermionSym
 end
 Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.label, x.basis)
 Base.iszero(x::FermionSym) = false
+symbolic_group(h::FermionSym) = symbolic_group(h.basis)
+atomic_id(h::FermionSym) = (h.basis, h.label)
+label(h::FermionSym) = h.label
+group_id(f::FermionSym) = symbolic_group(f)
+
 function Base.show(io::IO, x::FermionSym)
     print(io, x.basis.name, x.creation ? "†" : "")
     if Base.isiterable(typeof(x.label))
@@ -50,8 +63,8 @@ function Base.show(io::IO, x::FermionSym)
     end
 end
 function Base.isless(a::FermionSym, b::FermionSym)
-    if a.basis.universe !== b.basis.universe
-        a.basis.universe < b.basis.universe
+    if a.basis.group !== b.basis.group
+        a.basis.group < b.basis.group
     elseif a.creation == b.creation
         a.basis.name == b.basis.name && return a.label < b.label
         a.basis.name < b.basis.name
@@ -61,14 +74,16 @@ function Base.isless(a::FermionSym, b::FermionSym)
 end
 Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
-struct TotalNormalOrder end
-function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym, ::TotalNormalOrder)
+
+hilbert_space(f::FermionSym) = FermionicSpace((f,), symbolic_group(f))
+
+function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     if a == b
         0
     elseif a < b
         nothing
     elseif a > b
-        swap = Swap((-1)^(a.basis.universe == b.basis.universe))
+        swap = Swap((-1)^(a.basis.group == b.basis.group))
         if a.label == b.label && a.basis == b.basis
             return AddTerms((swap, 1))
         else
@@ -79,25 +94,9 @@ function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym, ::Total
     end
 end
 
-Base.valtype(::AbstractFermionSym) = Int
-Base.valtype(::Type{S}) where {S<:AbstractFermionSym} = Int
+mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
 
-@nc_eager FermionSym TotalNormalOrder()
-
-""" 
-    eval_in_basis(a, f)
-
-Evaluate an expression with fermions in a basis `f`. 
-
-# Examples
-```julia
-@fermions a
-f = fermions(hilbert_space(1:2))
-FermionicHilbertSpaces.eval_in_basis(a[1]'*a[2] + hc, f)
-```
-"""
-eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
-
+@nc FermionSym
 
 @testitem "SymbolicFermions" begin
     using Symbolics, LinearAlgebra
@@ -167,3 +166,20 @@ eval_in_basis(a::FermionSym, f) = a.creation ? f[a.label]' : f[a.label]
     end
 
 end
+
+# """
+#     apply_local_operator(op, state, space) -> (new_state, amplitude)
+
+# Apply a local operator (single factor or product) to a state in a single Hilbert space.
+# Returns the resulting state and amplitude.
+
+# Type-specific implementations are defined in their respective files (e.g., symbolic_spin.jl).
+# """
+# function apply_local_operator(op::FermionSym, state::FockNumber, space::AbstractFockHilbertSpace)
+#     # Convert single FermionSym to NCMul and use existing machinery
+#     ordering = mode_ordering(space)
+#     digitpos = getindex(ordering, op.label)
+#     dagger = op.creation
+#     new_state, amp = togglefermions([digitpos], [dagger], state)
+#     return (new_state, amp)
+# end
