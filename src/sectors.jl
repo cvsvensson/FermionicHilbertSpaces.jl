@@ -46,9 +46,10 @@ end
 Base.parent(H::BlockHilbertSpace) = H.parent
 dim(H::BlockHilbertSpace) = length(H.ordered_basis_states)
 atomic_factors(H::BlockHilbertSpace) = atomic_factors(H.parent)
-clusters(H::BlockHilbertSpace) = clusters(H.parent)
-factors(H::BlockHilbertSpace) = factors(H.parent)
+factors(H::BlockHilbertSpace) = factors(parent(H))
+groups(H::BlockHilbertSpace) = groups(parent(H))
 atomic_id(H::BlockHilbertSpace) = atomic_id(parent(H))
+group_id(H::BlockHilbertSpace) = group_id(parent(H))
 
 isconstrained(H::BlockHilbertSpace) = true
 basisstates(H::BlockHilbertSpace) = H.ordered_basis_states

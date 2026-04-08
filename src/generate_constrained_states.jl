@@ -261,7 +261,7 @@ branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_cons
             2n1 - n2 + n3 == 1 && n4 + n5 == 1
         end, states)
 
-    # Test with clusters and mixed spaces
+    # Test with composite and mixed spaces
     H1 = hilbert_space(f, 1:2)
     H2 = hilbert_space(f, 3:3)
     @boson b

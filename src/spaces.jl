@@ -4,7 +4,7 @@ abstract type AbstractFockState <: AbstractBasisState end
 abstract type AbstractHilbertSpace{S} end
 abstract type AbstractAtomicHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractProductHilbertSpace{B} <: AbstractHilbertSpace{B} end
-abstract type AbstractClusterHilbertSpace{B} <: AbstractProductHilbertSpace{B} end
+abstract type AbstractGroupedHilbertSpace{B} <: AbstractProductHilbertSpace{B} end
 
 """
 	basisstates(H)
@@ -23,11 +23,11 @@ with additional arguments such as constraints.
 hilbert_space
 
 factors(H::AbstractAtomicHilbertSpace) = (H,)
-clusters(H::AbstractAtomicHilbertSpace) = (H,)
 atomic_factors(H::AbstractAtomicHilbertSpace) = (H,)
-factors(H::AbstractClusterHilbertSpace) = atomic_factors(H)
-clusters(H::AbstractClusterHilbertSpace) = (H,)
-atomic_substate(n, f, ::AbstractClusterHilbertSpace) = substate(n, f)
+factors(H::AbstractGroupedHilbertSpace) = atomic_factors(H)
+groups(H::AbstractAtomicHilbertSpace) = (H,)
+groups(H::AbstractGroupedHilbertSpace) = (H,)
+atomic_substate(n, f, ::AbstractGroupedHilbertSpace) = substate(n, f)
 isconstrained(H::AbstractAtomicHilbertSpace) = false
 atomic_factors(f::AbstractSym) = (f,)
 
@@ -209,7 +209,7 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
 end
 
 _find_position(n, v::Union{<:AbstractVector,<:Base.Generator}) = (pos = findfirst(==(n), v); isnothing(pos) ? 0 : pos)
-_find_atom_position(atom, H::AbstractClusterHilbertSpace) = _find_position(atom, H)
+_find_atom_position(atom, H::AbstractGroupedHilbertSpace) = _find_position(atom, H)
 _find_atom_position(atom, H::AbstractHilbertSpace) = _find_position(atom, atomic_factors(H))
 
 function isorderedsubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)

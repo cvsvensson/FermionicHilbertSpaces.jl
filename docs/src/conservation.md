@@ -68,12 +68,12 @@ constrain_space(H, ParityConservation(1, [Hb])) # keep only even parity of the b
 @bosons b
 H = hilbert_space(b, 1:2, 3)
 using FermionicHilbertSpaces: FilterConstraint, BlockConstraint, particle_number
-constraint = FilterConstraint(H.clusters, particle_number, issorted)
+constraint = FilterConstraint(factors(H), particle_number, issorted)
 basisstates(constrain_space(H, constraint)) # keep only states with sorted particle numbers
 ```
 
 ```@example constraints
-constraint = BlockConstraint(H.clusters, particle_number, numbers -> issorted(numbers) ? first(numbers) : missing) #  keep only states with sorted particle numbers, organize them into blocks according to the number of particles in the first mode
+constraint = BlockConstraint(factors(H), particle_number, numbers -> issorted(numbers) ? first(numbers) : missing) #  keep only states with sorted particle numbers, organize them into blocks according to the number of particles in the first mode
 constrain_space(H, constraint).qn_to_states
 ```
 

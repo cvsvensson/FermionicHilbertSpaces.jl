@@ -1,6 +1,6 @@
 
-combine_into_cluster(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
-combine_into_cluster(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("Don't know how to combine spaces $spaces with atomic group $group_id into a cluster"))
+combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
+combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("Don't know how to combine spaces $spaces with atomic group $group_id into a group"))
 struct ProductState{B} <: AbstractBasisState
     states::B
 end
@@ -9,43 +9,43 @@ atomic_factors(state::ProductState) = state.states
 Base.:(==)(s1::ProductState, s2::ProductState) = s1.states == s2.states
 Base.hash(s::ProductState, h::UInt) = hash(s.states, h)
 Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
-#ClusterSpace consists of atoms. A cluster compresses states and has nontrivial phase factors
+
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
-# ProductSpaces consists of a list of atomic spaces and clusters
+# ProductSpaces consists of a list of atomic spaces and factor spaces
 struct ProductSpace{B,C,A} <: AbstractProductHilbertSpace{B}
-    clusters::C
+    factors::C
     atoms::Vector{A}
     atom_ordering::Dict{A,Int}
-    function ProductSpace(clusters::C, atoms::Vector{A}) where {C,A}
-        length(clusters) == 0 && throw(ArgumentError("Product space must have at least one cluster"))
-        B = ProductState{Tuple{map(statetype, clusters)...}}
+    function ProductSpace(factors::C, atoms::Vector{A}) where {C,A}
+        length(factors) == 0 && throw(ArgumentError("Product space must have at least one factor"))
+        B = ProductState{Tuple{map(statetype, factors)...}}
         atom_ordering = Dict{A,Int}(a => i for (i, a) in enumerate(atoms))
-        new{B,C,A}(clusters, atoms, atom_ordering)
+        new{B,C,A}(factors, atoms, atom_ordering)
     end
 end
 
 isconstrained(H::ProductSpace) = false
-Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1.clusters == H2.clusters && H1.atoms == H2.atoms
-Base.hash(H::ProductSpace, h::UInt) = hash(H.clusters, hash(H.atoms, h))
+Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1.factors == H2.factors && H1.atoms == H2.atoms
+Base.hash(H::ProductSpace, h::UInt) = hash(H.factors, hash(H.atoms, h))
 atomic_factors(H::ProductSpace) = H.atoms
-factors(H::ProductSpace) = H.clusters
-clusters(H::ProductSpace) = H.clusters
-dim(H::ProductSpace) = prod(dim, H.clusters; init=1)
+factors(H::ProductSpace) = H.factors
+groups(H::ProductSpace) = H.factors
+dim(H::ProductSpace) = prod(dim, factors(H); init=1)
 atomic_id(H::ProductSpace) = H.atom_ordering
-cluster_id(H::ProductSpace) = H.atom_ordering
+group_id(H::ProductSpace) = H.atom_ordering
 
-basisstates(H::ProductSpace) = collect(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.clusters)...)))
+basisstates(H::ProductSpace) = collect(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
 function basisstate(n::Int, H::ProductSpace{B}) where B
-    inds = Tuple(CartesianIndices(map(dim, H.clusters))[n])
-    ProductState(map(basisstate, inds, H.clusters))
+    inds = Tuple(CartesianIndices(map(dim, H.factors))[n])
+    ProductState(map(basisstate, inds, H.factors))
 end
 function state_index(state::ProductState, H::ProductSpace)
-    cartesian_index = CartesianIndex(Tuple(map(state_index, state.states, H.clusters)))
-    LinearIndices(map(dim, H.clusters))[cartesian_index]
+    cartesian_index = CartesianIndex(Tuple(map(state_index, state.states, H.factors)))
+    LinearIndices(map(dim, H.factors))[cartesian_index]
 end
 _find_atom_position(Hsub::AbstractAtomicHilbertSpace, H::ProductSpace) = get(H.atom_ordering, Hsub, 0)
 function _find_position(Hsub, H::ProductSpace)
-    pos = findfirst(==(Hsub), H.clusters)
+    pos = findfirst(==(Hsub), H.factors)
     isnothing(pos) && return 0
     return pos
 end
@@ -76,13 +76,13 @@ end
     Hb = hilbert_space(b[1])
     Hc = hilbert_space(c[1])
     H = tensor_product((Ha, Hb, Hc))
-    @test length(H.clusters) == 2
+    @test length(H.factors) == 2
     @test length(H.atoms) == 3
     @test dim(H) == dim(Ha) * dim(Hb) * dim(Hc)
     @test H.atom_ordering == Dict(Ha => 1, Hb => 2, Hc => 3)
     @test_throws ArgumentError tensor_product([Ha, Ha])
 
-    Hab = H.clusters[1]
+    Hab = H.factors[1]
     @test atomic_factors(Hab) == [Ha, Hb]
     @test dim(Hab) == dim(Ha) * dim(Hb)
 
@@ -90,7 +90,7 @@ end
     Hboson = hilbert_space(boson, 2)
     H2 = tensor_product([H, Hboson])
     @test dim(H2) == dim(H) * dim(Hboson)
-    @test length(H2.clusters) == 3
+    @test length(H2.factors) == 3
 
     @test basisstates(H2) == [ProductState((s_f.states..., s_b)) for s_f in basisstates(H), s_b in basisstates(Hboson)]
     for (i, state) in enumerate(basisstates(H))
@@ -121,7 +121,7 @@ end
         @test only(first(combine_states(split, p_trivial))) == state
     end
 
-    # Test 2: Binary partition with whole-cluster passthrough
+    # Test 2: Binary partition with whole-group passthrough
     p_binary = state_mapper(H, (Hab, Hc))
     for state in basisstates(H)
         substates = only(first(split_state(state, p_binary)))
@@ -129,8 +129,8 @@ end
         @test only(first(combine_states(substates, p_binary))) == state
     end
 
-    # Test 3: Partition that fractures a fermionic cluster
-    # Split the (Ha, Hb) cluster by grouping [Ha] and [Hb, Hc]
+    # Test 3: Partition that fractures a fermionic group
+    # Split the (Ha, Hb) group by grouping [Ha] and [Hb, Hc]
     p_split = state_mapper(H, [Ha, tensor_product((Hb, Hc))])
     for state in basisstates(H)
         substates = only(first(split_state(state, p_split)))
@@ -255,15 +255,15 @@ end
 end
 ##
 struct ProductSpaceMapper{CS,TP,CP,TS} <: AbstractStateMapper
-    # For each source cluster: mapper into per-target pieces, or nothing if uncovered
-    cluster_mappers::CS
+    # For each source factor: mapper into per-target pieces, or nothing if uncovered
+    factor_mappers::CS
 
-    # For each target j: (source_cluster_idx, piece_idx) pairs sorted by position in target j.
-    # Invariant: gathered[k] corresponds to target_spaces[j].clusters[k].
+    # For each target j: (source_group_idx, piece_idx) pairs sorted by position in target j.
+    # Invariant: gathered[k] corresponds to target_spaces[j].factors[k].
     target_piece_sources::TP
 
-    # For each source cluster i: (target_idx, sub_idx_in_target) per piece, in piece-output order
-    cluster_piece_targets::CP
+    # For each source factor i: (target_idx, sub_idx_in_target) per piece, in piece-output order
+    factor_piece_targets::CP
 
     target_spaces::TS
 end
@@ -284,28 +284,28 @@ function state_mapper(source::ProductSpace, targets)
         end
     end
 
-    cluster_mappers = []
-    cluster_piece_targets = []  # (ti, sub_idx) per piece, in piece-output order
+    factor_mappers = []
+    factor_piece_targets = []  # (ti, sub_idx) per piece, in piece-output order
     pending_pieces = [Tuple{Int,Int,Int}[] for _ in targets]
 
-    for (ci, cluster) in enumerate(source.clusters)
-        catoms = atomic_factors(cluster)
+    for (ci, factor) in enumerate(factors(source))
+        catoms = atomic_factors(factor)
         covered_targets = Tuple(unique(atom_to_target[a] for a in catoms if haskey(atom_to_target, a)))
 
         if isempty(covered_targets)
-            push!(cluster_mappers, nothing)
-            push!(cluster_piece_targets, ())
+            push!(factor_mappers, nothing)
+            push!(factor_piece_targets, ())
             continue
         end
 
         piece_destinations = map(covered_targets) do ti
-            (ti, findfirst(cluster -> all(in(catoms), atomic_factors(cluster)), clusters(targets[ti])))
+            (ti, findfirst(factor -> all(in(catoms), atomic_factors(factor)), groups(targets[ti])))
         end
-        subspaces = [clusters(targets[ti])[dest] for (ti, dest) in piece_destinations]
-        push!(cluster_mappers, state_mapper(cluster, subspaces))
+        subspaces = [groups(targets[ti])[dest] for (ti, dest) in piece_destinations]
+        push!(factor_mappers, state_mapper(factor, subspaces))
 
         # Store where each piece goes: (ti, sub_idx_in_target)
-        push!(cluster_piece_targets, piece_destinations)
+        push!(factor_piece_targets, piece_destinations)
 
         # Accumulate for sorting
         for (pi, (ti, tsub)) in enumerate(piece_destinations)
@@ -320,32 +320,32 @@ function state_mapper(source::ProductSpace, targets)
     )
 
     ProductSpaceMapper(
-        Tuple(cluster_mappers),
+        Tuple(factor_mappers),
         target_piece_sources,
-        Tuple(cluster_piece_targets),
+        Tuple(factor_piece_targets),
         targets,)
 end
 
 # ─── helpers ───────────────────────────────────────────────────────────────────
 
 _find_position(target::AbstractAtomicHilbertSpace, parent::AbstractAtomicHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
-_find_position(target::AbstractClusterHilbertSpace, parent::AbstractClusterHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
+_find_position(target::AbstractGroupedHilbertSpace, parent::AbstractGroupedHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
 
-# Extract the k-th sub-state (for ProductState) or the state itself (for atomic/cluster)
+# Extract the k-th sub-state (for ProductState) or the state itself (for atomic/group)
 extract_substate(state::ProductState, k) = state.states[k]
 extract_substate(state, k) = state
 
 # ─── split / combine ───────────────────────────────────────────────────────────
 
 function split_state(state::ProductState, sp::ProductSpaceMapper)
-    # Split each source cluster into its pieces
-    cluster_pieces = map(sp.cluster_mappers, state.states) do mapper, substate
+    # Split each source factor into its pieces
+    factor_pieces = map(sp.factor_mappers, state.states) do mapper, substate
         isnothing(mapper) ? () :
-        only(first(split_state(substate, mapper))) #TODO: handle multiple outcomes from split_state. The use of only(first()) assumes that each cluster mapper produces exactly one piece per target
+        only(first(split_state(substate, mapper))) #TODO: handle multiple outcomes from split_state. The use of only(first()) assumes that each factor mapper produces exactly one piece per target
     end
     outstates = map(sp.target_piece_sources, sp.target_spaces) do sources, target_space
         gathered = map(sources) do source
-            cluster_pieces[source[1]][source[2]]
+            factor_pieces[source[1]][source[2]]
         end
         only(first(combine_states(gathered, target_space)))
     end
@@ -353,8 +353,8 @@ function split_state(state::ProductState, sp::ProductSpaceMapper)
 end
 
 function combine_states(substates, sp::ProductSpaceMapper)
-    outstate = ProductState(map(sp.cluster_mappers, sp.cluster_piece_targets) do mapper, piece_destinations
-        isnothing(mapper) && error("Cannot reconstruct state: cluster $i has no atoms in any target")
+    outstate = ProductState(map(sp.factor_mappers, sp.factor_piece_targets) do mapper, piece_destinations
+        isnothing(mapper) && error("Cannot reconstruct state: factor $i has no atoms in any target")
         gathered = map(piece_destinations) do dest
             extract_substate(substates[dest[1]], dest[2])
         end
@@ -372,7 +372,7 @@ combine_states(states::Tuple, ::ProductSpace{ProductState{B}}) where B = (Produc
 
 function kron_phase_factor(state_mapper::ProductSpaceMapper)
     length(state_mapper.target_spaces) == 2 || throw(ArgumentError("Phase factors currently only implemented for binary splits"))
-    mappers = state_mapper.cluster_mappers
+    mappers = state_mapper.factor_mappers
     phase_factor_maps = map(kron_phase_factor, mappers)
     function phase_factor(fullstate1, fullstate2)
         pf = 1
@@ -386,8 +386,8 @@ end
 function partial_trace_phase_factor(state1, state2, space::ProductSpace)
     # product of phase factors from each space and substate
     pf = 1
-    for (s1, s2, cluster) in zip(state1.states, state2.states, space.clusters)
-        pf *= partial_trace_phase_factor(s1, s2, cluster)
+    for (s1, s2, group) in zip(state1.states, state2.states, space.factors)
+        pf *= partial_trace_phase_factor(s1, s2, group)
     end
     return pf
 end
@@ -399,7 +399,7 @@ function _precomputation_before_operator_application(ops::Vector, space::Product
 end
 function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState{B}, space::ProductSpace, precomps) where B
     amp = 1
-    spaces = clusters(space)
+    spaces = factors(space)
     newstates = map(state.states, spaces, ops, precomps) do subst, space, op, precomp
         new_local_states, local_amps = apply_local_operators(op, subst, space, precomp) #TODO: add support for multiple terms here
         amp *= only(local_amps)

@@ -97,7 +97,7 @@ struct AdditiveConstraint{T,H,F} <: AbstractConstraint
 end
 AdditiveConstraint(allowed_values, functions) = AdditiveConstraint(allowed_values, missing, functions)
 AdditiveConstraint(allowed_values, subspace::AbstractHilbertSpace, functions) = AdditiveConstraint(allowed_values, atomic_factors(subspace), functions)
-AdditiveConstraint(allowed_values, subspace::AbstractClusterHilbertSpace, functions) = AdditiveConstraint(allowed_values, atomic_factors(subspace), functions)
+AdditiveConstraint(allowed_values, subspace::AbstractGroupedHilbertSpace, functions) = AdditiveConstraint(allowed_values, atomic_factors(subspace), functions)
 supports_branch_pruning(::AdditiveConstraint) = true
 supports_filtering(::AdditiveConstraint{<:Any,Missing}) = false
 supports_filtering(::AdditiveConstraint) = true

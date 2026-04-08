@@ -199,7 +199,7 @@ atomic_id(f::BosonSym) = symbolic_group(f)
 # symbolic_group(f::BosonSym{<:Any,Not}) = (BosonSym, f.label)
 symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
 atomic_id(H::TruncatedBosonicHilbertSpace) = atomic_id(H.sym)
-cluster_id(H::TruncatedBosonicHilbertSpace) = atomic_id(H)
+group_id(H::TruncatedBosonicHilbertSpace) = atomic_id(H)
 mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
 
 @testitem "Bosonic hilbert space" begin

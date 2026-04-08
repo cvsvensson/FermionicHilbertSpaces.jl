@@ -80,7 +80,7 @@ basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
-cluster_id(H::SpinSpace) = symbolic_group(H.sym)
+group_id(H::SpinSpace) = symbolic_group(H.sym)
 atomic_id(H::SpinSpace) = symbolic_group(H.sym)
 
 hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,J}) where J<:Union{Int,Rational} = SpinSpace{sym.spin}(sym)

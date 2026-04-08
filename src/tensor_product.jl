@@ -7,13 +7,13 @@ Construct the composite Hilbert space from the spaces in `spaces`, with optional
 """
 function tensor_product_no_constraints(spaces)
     atoms = Iterators.flatten(Iterators.map(atomic_factors, spaces))
-    groups = groupby(cluster_id, atoms; sort=false)
+    groups = groupby(group_id, atoms; sort=false)
 
-    clusters = map((id, atoms) -> combine_into_cluster(id, atoms), keys(groups), values(groups))
-    space = if length(clusters) == 1
-        only(clusters)
+    factors = map((id, atoms) -> combine_into_group(id, atoms), keys(groups), values(groups))
+    space = if length(factors) == 1
+        only(factors)
     else
-        ProductSpace(Tuple(clusters), collect(atoms))
+        ProductSpace(Tuple(factors), collect(atoms))
     end
     if any(isconstrained, spaces)
         mapper = state_mapper(space, spaces)

@@ -123,13 +123,13 @@ function Base.show(io::IO, sm::ProductSpaceMapper)
         i > 1 && print(io, " ⊗ ")
         show(IOContext(io, :compact => true), ts)
     end
-    for (ci, (mapper, piece_targets)) in enumerate(zip(sm.cluster_mappers, sm.cluster_piece_targets))
+    for (ci, (mapper, piece_targets)) in enumerate(zip(sm.factor_mappers, sm.factor_piece_targets))
         println(io)
         if isnothing(mapper)
-            print(io, "  Cluster $ci: (unmapped)")
+            print(io, "  Group $ci: (unmapped)")
         else
             destinations = join(["target $(ti)[$(si)]" for (ti, si) in piece_targets], ", ")
-            print(io, "  Cluster $ci → $destinations: ")
+            print(io, "  Group $ci → $destinations: ")
             show(IOContext(io, :compact => true), mapper)
         end
     end
@@ -288,12 +288,12 @@ end
 
 function Base.show(io::IO, H::ProductSpace)
     if get(io, :compact, false)
-        print(io, "ProductSpace($(dim(H))-dim, $(length(H.clusters)) clusters)")
+        print(io, "ProductSpace($(dim(H))-dim, $(length(H.factors)) factors)")
     else
         print(io, "$(dim(H))-dimensional ProductSpace: ")
-        dims = map(dim, H.clusters)
+        dims = map(dim, H.factors)
         println(io, "(", join(dims, "×"), ")")
-        for (i, c) in enumerate(H.clusters)
+        for (i, c) in enumerate(H.factors)
             i > 1 && print(io, " ⨯ ")
             show(IOContext(io, :compact => true), c)
         end

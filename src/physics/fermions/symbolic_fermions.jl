@@ -52,7 +52,7 @@ Base.iszero(x::FermionSym) = false
 symbolic_group(h::FermionSym) = symbolic_group(h.basis)
 atomic_id(h::FermionSym) = (h.basis, h.label)
 label(h::FermionSym) = h.label
-cluster_id(f::FermionSym) = symbolic_group(f)
+group_id(f::FermionSym) = symbolic_group(f)
 
 function Base.show(io::IO, x::FermionSym)
     print(io, x.basis.name, x.creation ? "†" : "")
