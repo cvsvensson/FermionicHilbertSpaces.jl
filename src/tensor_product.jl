@@ -32,7 +32,7 @@ function tensor_product(spaces; constraint=NoSymmetry())
 
     states = supports_branch_pruning(constraint) ? generate_states(spaces, constraint, full_space) : basisstates(full_space)
     if supports_sector_grouping(constraint) && supports_filtering(constraint)
-        return block_space(full_space, states, sector_function(constraint, full_space))
+        return sector_space(full_space, states, sector_function(constraint, full_space))
     elseif supports_filtering(constraint)
         filtered_states = collect(Iterators.filter(filter_function(constraint, full_space), states))
         return ConstrainedSpace(full_space, filtered_states)

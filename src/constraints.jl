@@ -60,22 +60,22 @@ function filter_function(constraint::FilterConstraint{<:Any,<:Function}, space::
     end
 end
 
-struct BlockConstraint{F<:FilterConstraint} <: AbstractConstraint
+struct SectorConstraint{F<:FilterConstraint} <: AbstractConstraint
     filter::F
 end
-function BlockConstraint(subspaces::H, subspace_functions::FS, reducer::F) where {H,FS,F}
-    BlockConstraint(FilterConstraint(subspaces, subspace_functions, reducer))
+function SectorConstraint(subspaces::H, subspace_functions::FS, reducer::F) where {H,FS,F}
+    SectorConstraint(FilterConstraint(subspaces, subspace_functions, reducer))
 end
-function BlockConstraint(reducer::F) where {F<:Function}
-    BlockConstraint(FilterConstraint(missing, missing, reducer))
+function SectorConstraint(reducer::F) where {F<:Function}
+    SectorConstraint(FilterConstraint(missing, missing, reducer))
 end
-supports_branch_pruning(::BlockConstraint) = false
-supports_filtering(::BlockConstraint) = true
-supports_sector_grouping(::BlockConstraint) = true
-function sector_function(constraint::BlockConstraint, space::AbstractHilbertSpace)
+supports_branch_pruning(::SectorConstraint) = false
+supports_filtering(::SectorConstraint) = true
+supports_sector_grouping(::SectorConstraint) = true
+function sector_function(constraint::SectorConstraint, space::AbstractHilbertSpace)
     return filter_function(constraint.filter, space)
 end
-function filter_function(constraint::BlockConstraint, space::AbstractHilbertSpace)
+function filter_function(constraint::SectorConstraint, space::AbstractHilbertSpace)
     sec = filter_function(constraint.filter, space)
     return !ismissing ∘ sec
 end

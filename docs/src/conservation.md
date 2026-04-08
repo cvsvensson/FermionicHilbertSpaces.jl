@@ -14,7 +14,7 @@ We define two common types of constraints for conserved quantum numbers:
 
 As well as some types to help with constructing custom constraints:
 - **FilterConstraint** — Flexible filtering using a boolean test on states (iterates over all states)
-- **BlockConstraint** — Groups states into sectors using a custom rule (iterates over all states)
+- **SectorConstraint** — Groups states into sectors using a custom rule (iterates over all states)
 - **AdditiveConstraint** — Generalization of number conservation, which can be used for more complicated additive quantum numbers (can be used by iterating over all states, or by branch pruning)
 - **BranchConstraint** — Efficient generation of states using branch pruning
 
@@ -51,29 +51,29 @@ basisstates(H)
 constrain_space(H, ParityConservation(1, [Hb])) # keep only even parity of the bosonic part
 ```
 
-### Filter and Block
+### FilterConstraint and SectorConstraint
 - `FilterConstraint(...)`:
     A flexible filtering constraint.
     - `FilterConstraint(reducer)` applies `reducer(state)` and keeps states where it returns `true`.
     - `FilterConstraint(subspaces, subspace_functions, reducer)` first applies the subspace_functions to the states in each subspace, then passes them to the `reducer` function.
     Use this for custom selection rules that are easiest to express as a boolean test on complete states.
 
-- `BlockConstraint(...)`:
+- `SectorConstraint(...)`:
     Like `FilterConstraint`, but for grouping states into sectors.
     - The reducer should return a sector label/key (or `missing` to discard a state).
-    - States with the same returned key are collected into the same block.
+    - States with the same returned key are collected into the same sector.
     Use this when you want an explicit block structure from a custom rule.
 
 ```@example constraints
 @bosons b
 H = hilbert_space(b, 1:2, 3)
-using FermionicHilbertSpaces: FilterConstraint, BlockConstraint, particle_number
+using FermionicHilbertSpaces: FilterConstraint, SectorConstraint, particle_number
 constraint = FilterConstraint(factors(H), particle_number, issorted)
 basisstates(constrain_space(H, constraint)) # keep only states with sorted particle numbers
 ```
 
 ```@example constraints
-constraint = BlockConstraint(factors(H), particle_number, numbers -> issorted(numbers) ? first(numbers) : missing) #  keep only states with sorted particle numbers, organize them into blocks according to the number of particles in the first mode
+constraint = SectorConstraint(factors(H), particle_number, numbers -> issorted(numbers) ? first(numbers) : missing) #  keep only states with sorted particle numbers, organize them into sectors according to the number of particles in the first mode
 constrain_space(H, constraint).qn_to_states
 ```
 
@@ -107,13 +107,13 @@ H = tensor_product(Hup, Hdn)
 ```
 If spin is conserved, one can use 
 ```@example spin
-Hblocks = constrain_space(H, NumberConservation(Hup)*NumberConservation(Hdn))
+Hsectors = constrain_space(H, NumberConservation(Hup)*NumberConservation(Hdn))
 ```
 to sort states according to the number of fermions with spin up and down. However, this package can't help to sort states into sectors with different total angular momentum, because that requires taking superpositions of different fock states.
 
 To pick out the sector with 2 fermions with spin up and 0 fermions with spin down, one can extract it from the hilbert space defined above using `sector` as
 ```@example spin
-sector([2,0], Hblocks)
+sector([2,0], Hsectors)
 ```
 or more efficiently by only constructing that specific sector in the first place
 ```@example spin

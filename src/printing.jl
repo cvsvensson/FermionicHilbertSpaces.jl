@@ -59,19 +59,19 @@ function Base.show(io::IO, fc::FilterConstraint)
     end
 end
 
-function Base.show(io::IO, bc::BlockConstraint)
+function Base.show(io::IO, bc::SectorConstraint)
     fc = bc.filter
     if get(io, :compact, false)
         parts = filter(!isnothing, [
             ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
             ismissing(fc.subspace_functions) ? nothing : "$(isa(fc.subspace_functions, Tuple) ? length(fc.subspace_functions) : 1) function(s)"])
-        print(io, "BlockConstraint(", join(parts, ", "), ")")
+        print(io, "SectorConstraint(", join(parts, ", "), ")")
     else
         lines = filter(!isnothing, [
             ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
             ismissing(fc.subspace_functions) ? nothing : "subspace_functions: $(isa(fc.subspace_functions, Tuple) ? length(fc.subspace_functions) : 1) function(s)",
             "reducer: $(fc.reducer)"])
-        print(io, "BlockConstraint(", join(lines, ""), ")")
+        print(io, "SectorConstraint(", join(lines, ""), ")")
     end
 end
 
@@ -136,13 +136,13 @@ function Base.show(io::IO, sm::ProductSpaceMapper)
 end
 
 
-function Base.show(io::IO, H::BlockHilbertSpace)
+function Base.show(io::IO, H::SectorHilbertSpace)
     if get(io, :compact, false)
-        print(io, "BlockHilbertSpace(")
+        print(io, "SectorHilbertSpace(")
         show(IOContext(io, :compact => true), H.parent)
         print(io, ", $(dim(H))-dim)")
     else
-        print(io, "$(dim(H))-dimensional BlockHilbertSpace\n")
+        print(io, "$(dim(H))-dimensional SectorHilbertSpace\n")
         print(io, "Parent: ")
         show(IOContext(io, :compact => true), H.parent)
 

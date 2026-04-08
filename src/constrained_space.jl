@@ -35,7 +35,7 @@ constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}) where B<
 function constrain_space(space, constraint::AbstractConstraint)
     if supports_sector_grouping(constraint)
         f = sector_function(constraint, space)
-        return block_space(space, basisstates(space), f)
+        return sector_space(space, basisstates(space), f)
     elseif supports_filtering(constraint)
         f = filter_function(constraint, space)
         filtered_states = collect(Iterators.filter(f, basisstates(space)))
@@ -83,13 +83,13 @@ allowed_values(c::AdditiveConstraint, space) = c.allowed_values
 end
 
 @testitem "FilterConstraint agrees with NumberConservation" begin
-    using FermionicHilbertSpaces: BlockConstraint, FilterConstraint, particle_number
+    using FermionicHilbertSpaces: SectorConstraint, FilterConstraint, particle_number
     @fermions f
     N = 4
     H = hilbert_space(f, 1:N)
     Hs = (hilbert_space(f, 1:2), hilbert_space(f, 3:4))
 
-    block_constraint = BlockConstraint(state -> begin
+    sector_constraint = SectorConstraint(state -> begin
         n = particle_number(state)
         n in 1:2 ? n : missing
     end)
@@ -98,29 +98,34 @@ end
     Hnumber = hilbert_space(f, 1:N, NumberConservation(1:2))
     Hfrom_tensor = tensor_product(Hs, constraint=filter_constraint)
     Hfrom_constrain = constrain_space(H, filter_constraint)
-    Hfrom_tensor_block = tensor_product(Hs, constraint=block_constraint)
-    Hfrom_constrain_block = constrain_space(H, block_constraint)
+    Hfrom_tensor_sector = tensor_product(Hs, constraint=sector_constraint)
+    Hfrom_constrain_sector = constrain_space(H, sector_constraint)
     states = Set(basisstates(Hnumber))
     @test Set(basisstates(Hfrom_tensor)) == states
     @test Set(basisstates(Hfrom_constrain)) == states
-    @test Set(basisstates(Hfrom_tensor_block)) == states
-    @test Set(basisstates(Hfrom_constrain_block)) == states
+    @test Set(basisstates(Hfrom_tensor_sector)) == states
+    @test Set(basisstates(Hfrom_constrain_sector)) == states
 
-    @test collect(quantumnumbers(Hfrom_constrain_block)) == collect(quantumnumbers(Hnumber))
-    @test collect(quantumnumbers(Hfrom_constrain_block)) == collect(quantumnumbers(Hnumber))
+    @test collect(quantumnumbers(Hfrom_constrain_sector)) == collect(quantumnumbers(Hnumber))
+    @test collect(quantumnumbers(Hfrom_constrain_sector)) == collect(quantumnumbers(Hnumber))
 
     # Now with subregions and weights
     Hnumber = hilbert_space(f, 1:N, NumberConservation(1:2, [f[1], f[2]], [1, -1]))
-    filter_constraint = FilterConstraint([f[1], f[2]], [particle_number, particle_number], in(1:2) ∘ only ∘ diff ∘ collect)
-    block_constraint = BlockConstraint([f[1], f[2]], [particle_number, particle_number], ns -> begin
+    filter_constraint = FilterConstraint([f[1], f[2]], [particle_number, particle_number], in(-(1:2)) ∘ only ∘ diff ∘ collect)
+    sector_constraint = SectorConstraint([f[1], f[2]], [particle_number, particle_number], ns -> begin
         n1, n2 = collect(ns)
         n1 - n2 in 1:2 ? n1 - n2 : missing
     end)
     Hfrom_tensor = tensor_product(Hs, constraint=filter_constraint)
     Hfrom_constrain = constrain_space(H, filter_constraint)
-    Hfrom_tensor_block = tensor_product(Hs, constraint=block_constraint)
-    Hfrom_constrain_block = constrain_space(H, block_constraint)
+    Hfrom_tensor_sector = tensor_product(Hs, constraint=sector_constraint)
+    Hfrom_constrain_sector = constrain_space(H, sector_constraint)
 
+    states = Set(basisstates(Hnumber))
+    @test Set(basisstates(Hfrom_tensor)) == states
+    @test Set(basisstates(Hfrom_constrain)) == states
+    @test Set(basisstates(Hfrom_tensor_sector)) == states
+    @test Set(basisstates(Hfrom_constrain_sector)) == states
 end
 
 state_mapper(H::ConstrainedSpace, Hs) = state_mapper(parent(H), Hs)
@@ -157,4 +162,4 @@ _precomputation_before_operator_application(ops::Union{<:Any,<:NCMul}, space::Co
     @test dim(Hsub) == Nsub + 1
 end
 
-apply_local_operators(ops::Vector{<:NCMul}, state, space::BlockHilbertSpace, precomp) = apply_local_operators(ops, state, space.parent, precomp)
+apply_local_operators(ops::Vector{<:NCMul}, state, space::SectorHilbertSpace, precomp) = apply_local_operators(ops, state, space.parent, precomp)

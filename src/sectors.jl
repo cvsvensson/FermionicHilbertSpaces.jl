@@ -1,26 +1,26 @@
 """
-    BlockHilbertSpace
+    SectorHilbertSpace
 
 Hilbert space whose basis is grouped into sectors labeled by quantum numbers.
-Use `quantumnumbers`, `sector`, and `indices` to access individual blocks.
+Use `quantumnumbers`, `sector`, and `indices` to access individual sectors.
 """
-struct BlockHilbertSpace{B,P,Q} <: AbstractHilbertSpace{B}
+struct SectorHilbertSpace{B,P,Q} <: AbstractHilbertSpace{B}
     parent::P
     ordered_basis_states::Vector{B}
     state_to_index::OrderedDict{B,Int}
     qn_to_states::OrderedDict{Q,Vector{B}}
 end
-BlockHilbertSpace(space::P, ordered_basis_states::AbstractVector{B}, state_to_index::OrderedDict{B,Int}, qn_to_states::OrderedDict{Q,Vector{B}}) where {B,P,Q} = BlockHilbertSpace{B,P,Q}(space, ordered_basis_states, state_to_index, qn_to_states)
-Base.hash(H::BlockHilbertSpace, h::UInt) = hash((H.parent, H.ordered_basis_states, H.state_to_index, H.qn_to_states), h)
-Base.:(==)(H1::BlockHilbertSpace, H2::BlockHilbertSpace) = H1 === H2 || (H1.parent == H2.parent && H1.ordered_basis_states == H2.ordered_basis_states && H1.state_to_index == H2.state_to_index && H1.qn_to_states == H2.qn_to_states)
-atomic_substate(n, f, space::BlockHilbertSpace) = atomic_substate(n, f, parent(space))
+SectorHilbertSpace(space::P, ordered_basis_states::AbstractVector{B}, state_to_index::OrderedDict{B,Int}, qn_to_states::OrderedDict{Q,Vector{B}}) where {B,P,Q} = SectorHilbertSpace{B,P,Q}(space, ordered_basis_states, state_to_index, qn_to_states)
+Base.hash(H::SectorHilbertSpace, h::UInt) = hash((H.parent, H.ordered_basis_states, H.state_to_index, H.qn_to_states), h)
+Base.:(==)(H1::SectorHilbertSpace, H2::SectorHilbertSpace) = H1 === H2 || (H1.parent == H2.parent && H1.ordered_basis_states == H2.ordered_basis_states && H1.state_to_index == H2.state_to_index && H1.qn_to_states == H2.qn_to_states)
+atomic_substate(n, f, space::SectorHilbertSpace) = atomic_substate(n, f, parent(space))
 
-block_space(space, states, ::Missing) = ConstrainedSpace(space, states)
-function block_space(space, states, sector_function)
+sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
+function sector_space(space, states, sector_function)
     B = eltype(states)
     sort = Base.hasmethod(isless, Tuple{B,B})
     _qntostates = groupby(sector_function, states; sort)
-    _block_space(space, _qntostates)
+    _sector_space(space, _qntostates)
 end
 function groupby(f::F, itr; sort=false) where F
     V = eltype(itr)
@@ -37,34 +37,34 @@ function groupby(f::F, itr; sort=false) where F
 end
 
 
-function _block_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}) where {Q,B}
+function _sector_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}) where {Q,B}
     ordered_states = reduce(vcat, values(qn_to_states), init=B[])
     state_indexdict = OrderedDict(zip(ordered_states, 1:length(ordered_states)))
-    BlockHilbertSpace(space, ordered_states, state_indexdict, qn_to_states)
+    SectorHilbertSpace(space, ordered_states, state_indexdict, qn_to_states)
 end
 
-Base.parent(H::BlockHilbertSpace) = H.parent
-dim(H::BlockHilbertSpace) = length(H.ordered_basis_states)
-atomic_factors(H::BlockHilbertSpace) = atomic_factors(H.parent)
-factors(H::BlockHilbertSpace) = factors(parent(H))
-groups(H::BlockHilbertSpace) = groups(parent(H))
-atomic_id(H::BlockHilbertSpace) = atomic_id(parent(H))
-group_id(H::BlockHilbertSpace) = group_id(parent(H))
+Base.parent(H::SectorHilbertSpace) = H.parent
+dim(H::SectorHilbertSpace) = length(H.ordered_basis_states)
+atomic_factors(H::SectorHilbertSpace) = atomic_factors(H.parent)
+factors(H::SectorHilbertSpace) = factors(parent(H))
+groups(H::SectorHilbertSpace) = groups(parent(H))
+atomic_id(H::SectorHilbertSpace) = atomic_id(parent(H))
+group_id(H::SectorHilbertSpace) = group_id(parent(H))
 
-isconstrained(H::BlockHilbertSpace) = true
-basisstates(H::BlockHilbertSpace) = H.ordered_basis_states
-_find_position(Hsub::AbstractHilbertSpace, H::BlockHilbertSpace) = _find_position(Hsub, H.parent)
-combine_states(substates, H::BlockHilbertSpace) = combine_states(substates, parent(H))
-partial_trace_phase_factor(s1, s2, H::BlockHilbertSpace) = partial_trace_phase_factor(s1, s2, parent(H))
-state_mapper(H::BlockHilbertSpace, Hs) = state_mapper(parent(H), Hs)
-mode_ordering(H::BlockHilbertSpace) = mode_ordering(parent(H))
+isconstrained(H::SectorHilbertSpace) = true
+basisstates(H::SectorHilbertSpace) = H.ordered_basis_states
+_find_position(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace) = _find_position(Hsub, H.parent)
+combine_states(substates, H::SectorHilbertSpace) = combine_states(substates, parent(H))
+partial_trace_phase_factor(s1, s2, H::SectorHilbertSpace) = partial_trace_phase_factor(s1, s2, parent(H))
+state_mapper(H::SectorHilbertSpace, Hs) = state_mapper(parent(H), Hs)
+mode_ordering(H::SectorHilbertSpace) = mode_ordering(parent(H))
 
-function basisstate(ind::Int, H::BlockHilbertSpace)
+function basisstate(ind::Int, H::SectorHilbertSpace)
     (ind < 1 || ind > dim(H)) && throw(ArgumentError("Invalid state index $ind"))
     H.ordered_basis_states[ind]
 end
 
-state_index(state, H::BlockHilbertSpace) = get(H.state_to_index, state, missing)
+state_index(state, H::SectorHilbertSpace) = get(H.state_to_index, state, missing)
 
 """
     quantumnumbers(H)
@@ -72,20 +72,20 @@ state_index(state, H::BlockHilbertSpace) = get(H.state_to_index, state, missing)
 Return the quantum-number labels that define the sectors of `H`.
 For spaces without sector structure, this returns `(nothing,)`.
 """
-quantumnumbers(H::BlockHilbertSpace) = collect(keys(H.qn_to_states))
+quantumnumbers(H::SectorHilbertSpace) = collect(keys(H.qn_to_states))
 quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 
 """
     sector(qn, H)
 
 Return the sector of `H` corresponding to quantum number `qn`.
-For `qn === nothing`, this returns `H` for non-block spaces.
+For `qn === nothing`, this returns `H` for non-sector spaces.
 """
-sector(qn, H::BlockHilbertSpace) = constrain_space(parent(H), H.qn_to_states[qn])
+sector(qn, H::SectorHilbertSpace) = constrain_space(parent(H), H.qn_to_states[qn])
 sector(::Nothing, H::AbstractHilbertSpace) = H
-sector(::Nothing, ::BlockHilbertSpace) = constrain_space(parent(H), H.qn_to_states[qn])
+sector(::Nothing, ::SectorHilbertSpace) = constrain_space(parent(H), H.qn_to_states[qn])
 
-# sectors(H::BlockHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
+# sectors(H::SectorHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 """
     sectors(H)
 
@@ -110,7 +110,7 @@ function indices(Hsub, H::AbstractHilbertSpace)
     qn = quantumnumbers(H)[indexin]
     indices(qn, H)
 end
-function indices(qn::Q, H::BlockHilbertSpace{B,P,Q}) where {B,P,Q}
+function indices(qn::Q, H::SectorHilbertSpace{B,P,Q}) where {B,P,Q}
     dims = cumsum([length(H.qn_to_states[qn]) for qn in collect(quantumnumbers(H))])
     qn_index = findfirst(isequal(qn), collect(quantumnumbers(H)))
     if qn_index === nothing
@@ -123,13 +123,13 @@ end
 # indices(qn, H::AbstractHilbertSpace) = indices(sector(qn, H), H)
 indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
 
-_precomputation_before_operator_application(ops, space::BlockHilbertSpace) = _precomputation_before_operator_application(ops, parent(space))
+_precomputation_before_operator_application(ops, space::SectorHilbertSpace) = _precomputation_before_operator_application(ops, parent(space))
 
-@testitem "BlockHilbertSpace sectors" begin
+@testitem "SectorHilbertSpace sectors" begin
     @fermions f
 
     H = hilbert_space(f, 1:4, NumberConservation())
-    @test H isa BlockHilbertSpace
+    @test H isa SectorHilbertSpace
     @test collect(quantumnumbers(H)) == 0:4
 
     for n in 0:4
@@ -146,11 +146,11 @@ _precomputation_before_operator_application(ops, space::BlockHilbertSpace) = _pr
     @test length(sectors(H0)) == length(quantumnumbers(H0))
 
     Hprod = hilbert_space(f, 1:4, NumberConservation() * ParityConservation())
-    @test Hprod isa BlockHilbertSpace
+    @test Hprod isa SectorHilbertSpace
     qns = quantumnumbers(Hprod)
     @test all(qn -> dim(sector(qn, Hprod)) > 0, qns)
 
-    ## test fermions on block spaces
+    ## test fermions on sector spaces
     import FermionicHilbertSpaces: fermions
     N = 4
     H = hilbert_space(f, 1:N, NumberConservation(0:N-1))
@@ -224,10 +224,10 @@ end
     # Get the sector for parity = 1
     even_inds = indices(1, H)
     even_sector = m[even_inds, even_inds]
-    # The size of the even sector block should match the number of even-parity states
+    # The size of the even sector should match the number of even-parity states
     even_states = [f for f in basisstates(H) if parity(f) == 1]
     @test size(even_sector, 1) == length(even_states)
-    # The values should match the corresponding block in m
+    # The values should match the corresponding sector in m
     # Get the indices of even states in the full basisstates list
     even_inds = findall(f -> parity(f) == 1, basisstates(H))
     @test even_sector == m[even_inds, even_inds]
@@ -282,4 +282,4 @@ end
     @test size(matrix_representation(hopping_symham, H; projection=true), 1) == dim(H)
 end
 
-maximum_particles(H::BlockHilbertSpace) = maximum_particles(parent(H))
+maximum_particles(H::SectorHilbertSpace) = maximum_particles(parent(H))

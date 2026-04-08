@@ -171,10 +171,10 @@ matrix_representation(F, Hfloq; projection=true) # we need projection=true becau
 
 # Now Floquet operators will work together algebraically with the spin operators, and we can get matrix represnentations of such mixed operators. Let's do some physics.
 # ## Driven two level system.
-# We'll take a spin 1/2 as our physical system and couple it to the Floquet space to model a driven two-level system.  The full Hilbert space is a product of the spin and Floquet spaces, and the Hamiltonian is a symbolic expression mixing spin and Floquet operators. When making the full space, we use the BlockConstraint to organize the basis states in Floquet sectors, which will be convenient later.
+# We'll take a spin 1/2 as our physical system and couple it to the Floquet space to model a driven two-level system.  The full Hilbert space is a product of the spin and Floquet spaces, and the Hamiltonian is a symbolic expression mixing spin and Floquet operators. When making the full space, we use the SectorConstraint to organize the basis states in Floquet sectors, which will be convenient later.
 @spin σ
 Hspin = hilbert_space(σ, 1 // 2)
-floquet_sectors = FermionicHilbertSpaces.BlockConstraint([Hfloq], [s -> s.mode], only)
+floquet_sectors = FermionicHilbertSpaces.SectorConstraint([Hfloq], [s -> s.mode], only)
 H = tensor_product((Hspin, Hfloq); constraint=floquet_sectors)
 
 # Floquet operators can be used together with spin operators to build the Floquet Hamiltonian (since we used @commutative to declare that they commute):

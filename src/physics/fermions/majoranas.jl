@@ -147,8 +147,8 @@ struct MajoranaHilbertSpace{B,L,H} <: AbstractGroupedHilbertSpace{B}
     end
 end
 
-function BlockHilbertSpace(maj_space::MajoranaHilbertSpace, ordered_basis_states::Vector{B}, state_to_index::OrderedDict{B,Int64}, qn_to_states::OrderedDict{Q,Vector{B}}) where {B,Q}
-    MajoranaHilbertSpace(maj_space.majoranaindices, BlockHilbertSpace(parent(maj_space), ordered_basis_states, state_to_index, qn_to_states), maj_space.sym)
+function SectorHilbertSpace(maj_space::MajoranaHilbertSpace, ordered_basis_states::Vector{B}, state_to_index::OrderedDict{B,Int64}, qn_to_states::OrderedDict{Q,Vector{B}}) where {B,Q}
+    MajoranaHilbertSpace(maj_space.majoranaindices, SectorHilbertSpace(parent(maj_space), ordered_basis_states, state_to_index, qn_to_states), maj_space.sym)
 end
 dim(H::MajoranaHilbertSpace) = dim(H.parent)
 mode_ordering(H::MajoranaHilbertSpace) = H.majoranaindices
@@ -167,7 +167,7 @@ function atomic_id(H::MajoranaHilbertSpace)
 end
 
 quantumnumbers(H::MajoranaHilbertSpace) = quantumnumbers(H.parent)
-indices(qn::Q, H::MajoranaHilbertSpace{<:Any,<:Any,BlockHilbertSpace{B,P,Q}}) where {B,P,Q} = indices(qn, parent(H))
+indices(qn::Q, H::MajoranaHilbertSpace{<:Any,<:Any,SectorHilbertSpace{B,P,Q}}) where {B,P,Q} = indices(qn, parent(H))
 function sector(qn, H::MajoranaHilbertSpace)
     # get sector from parent, then convert to majorana
     parent_sector = sector(qn, parent(H))
