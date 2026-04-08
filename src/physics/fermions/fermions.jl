@@ -115,7 +115,11 @@ focknbr_from_site_label(mode::FermionSym, H::FermionicSpace) = focknbr_from_site
 focknbr_from_site_labels(Hsub::FermionicSpace, H::FermionicSpace) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
 
 
-_precomputation_before_operator_application(op::NCMul, space::FermionicSpace{B}) where {B<:FockNumber} = map(op -> _find_position(op, space), op.factors)
+function _precomputation_before_operator_application(op::NCMul, space::FermionicSpace{B}) where {B<:FockNumber}
+    positions = map(op -> _find_position(op, space), op.factors)
+    any(iszero, positions) && throw(ArgumentError("Operator ($op) contains factors that are not part of the fermionic space ($space)"))
+    return positions
+end
 function apply_local_operators(op::NCMul, state::FockNumber{I}, space::AbstractHilbertSpace, fermionpositions) where I
     factors = op.factors
     newfocknbr = state
@@ -522,3 +526,8 @@ end
     @test_throws ArgumentError tensor_product(H1, H2)
 end
 
+@testitem "matrix_representation throws ArgumentError for invalid operator" begin
+    @fermions f
+    H = hilbert_space(f, 1:1)
+    @test_throws ArgumentError matrix_representation(f[2], H)
+end
