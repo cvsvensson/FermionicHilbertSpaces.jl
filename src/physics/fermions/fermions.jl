@@ -3,20 +3,20 @@ struct FermionicSpace{F,L} <: AbstractGroupedHilbertSpace{F}
     modes::Vector{L}
     mode_ordering::OrderedDict{L,Int}
     group::FermionicGroup
-    function FermionicSpace(modes::Union{<:AbstractVector{L},<:NTuple{N,L}}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(length(modes))}) where {F,L<:FermionSym,N}
-        length(modes) == 0 && throw(ArgumentError("Cannot create a FermionicSpace with no modes"))
-        # length(modes) == 1 && return only(modes)
+    function FermionicSpace(_modes::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(length(_modes))}) where {F,L<:FermionSym}
+        length(_modes) == 0 && throw(ArgumentError("Cannot create a FermionicSpace with no modes"))
+        modes = map(_normalize_sym, _modes)
         mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("Duplicate modes in fermionic group"))
-        new{F,L}(collect(modes), mode_ordering, group)
+        new{F,L}(modes, mode_ordering, group)
     end
 end
-function FermionicSpace(factors::Union{<:AbstractVector{L},<:NTuple{N,L}}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F,L<:FermionicSpace,N}
+function FermionicSpace(factors::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F,L<:FermionicSpace}
     all(c -> group_id(c) == group, factors) || throw(ArgumentError("Not all factors belong to the same group"))
     fermionsyms = collect(Iterators.flatten(Iterators.map(modes, factors)))
     FermionicSpace(fermionsyms, group, F)
 end
-function FermionicSpace(modes::Union{<:AbstractVector{F},NTuple{N,F}}) where {N,F<:FermionSym}
+function FermionicSpace(modes::AbstractVector{F}) where {F<:FermionSym}
     FermionicSpace(modes, only(unique(map(group_id, modes))))
 end
 maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
