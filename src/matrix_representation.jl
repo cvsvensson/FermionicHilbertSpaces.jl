@@ -141,9 +141,10 @@ function _matrix_representation_single_space(op::NCAdd, space; kwargs...)
     AT = mat_eltype(op)
     amps = AT[]
     N = dim(space)
-    sizehint!(outinds, N)
-    sizehint!(ininds, N)
-    sizehint!(amps, N)
+    length_guess = Int(floor(1 + log2(length(op.dict) + 1))) * N # mild increase with number of terms
+    sizehint!(outinds, length_guess)
+    sizehint!(ininds, length_guess)
+    sizehint!(amps, length_guess)
     for (term, coeff) in op.dict
         operator_indices_and_amplitudes!((outinds, ininds, amps), coeff * term, space; kwargs...)
     end
@@ -152,6 +153,7 @@ function _matrix_representation_single_space(op::NCAdd, space; kwargs...)
         append!(outinds, 1:N)
         append!(amps, Fill(op.coeff, N))
     end
+    isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, N)
     return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
 end
 
