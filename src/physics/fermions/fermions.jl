@@ -123,19 +123,24 @@ end
 function apply_local_operators(op::NCMul, state::FockNumber{I}, space::AbstractHilbertSpace, fermionpositions) where I
     factors = op.factors
     newfocknbr = state
-    fermionstatistics = op.coeff
-    for (op, digitpos) in Iterators.reverse(zip(factors, fermionpositions))
-        dagger = op.creation
-        op = one(I) << (digitpos - 1)
-        occupied = !iszero(op & newfocknbr)
+    fermionparity = false  # false = +1, true = -1
+    N = length(factors)
+    @inbounds for m in eachindex(factors, fermionpositions)
+        n = N - m + 1
+        factor = factors[n]
+        digitpos = fermionpositions[n]
+        dagger = factor.creation
+        bitmask = one(I) << (digitpos - 1)
+        occupied = !iszero(bitmask & newfocknbr)
         if dagger == occupied
-            return (newfocknbr,), (zero(fermionstatistics),)
+            return (newfocknbr,), (zero(op.coeff),)
         end
-        fermionstatistics *= jwstring(digitpos, newfocknbr)
-        newfocknbr = op ⊻ newfocknbr
+        fermionparity ⊻= isodd(count_ones(newfocknbr.f & (bitmask - one(I))))
+        newfocknbr = bitmask ⊻ newfocknbr
     end
-    return (newfocknbr,), (fermionstatistics,)
+    return (newfocknbr,), (fermionparity ? -op.coeff : op.coeff,)
 end
+
 
 
 """
