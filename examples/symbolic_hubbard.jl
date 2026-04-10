@@ -5,7 +5,7 @@ using SymPy, LinearAlgebra
 # with symbolic parameters U (interaction) and t (hopping amplitude),
 # and restrict to the sector with one spin-up and one spin-down fermion (S_z = 0).
 
-@syms U, t
+@syms U::real, t::real
 @fermions f
 
 # Define spinful Hilbert space as tensor product of spin-up and spin-down sectors
@@ -53,3 +53,18 @@ T = [
 
 # Transform Hamiltonian
 T' * M * T
+
+
+# --- Reduced density matrix ---
+#
+# As an example of post-processing, we compute the reduced density matrix
+# of the first site by tracing out the second site. This provides access
+# to local observables and entanglement properties.
+
+ψ = vecs[:, 3]
+ρ = simplify.(ψ * ψ')
+ρ /= tr(ρ)  # normalize
+Hsub = hilbert_space(f, [(1, :↑), (1, :↓)])
+ρ_sub = partial_trace(ρ, H => Hsub)
+simplify(tr(ρ_sub))
+purity = simplify(tr(ρ_sub^2))
