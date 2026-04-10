@@ -22,6 +22,7 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
+        "Intro" => "intro.md",
         "Conserved quantities" => "conservation.md",
         "Non interacting systems" => "non_interacting.md",
         "Tutorials" => [       
