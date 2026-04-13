@@ -311,5 +311,10 @@ end
     @test partial_trace(embed(mf, Hf => H), H => Hf) ≈ (dim(Hs) * dim(Hb)) * mf
     @test partial_trace(embed(ms, Hs => H), H => Hs) ≈ (dim(Hf) * dim(Hb)) * ms
     @test partial_trace(embed(mb, Hb => H), H => Hb) ≈ (dim(Hf) * dim(Hs)) * mb
+
+    # subregions
+    @test Hf == subregion([f[1]], H)
+    @test Hs == subregion([S], H)
+    @test Hb == subregion([b], H)
 end
 

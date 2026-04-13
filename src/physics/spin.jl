@@ -18,6 +18,8 @@ Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
 Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.spin, hash(x.field, hash(x.label, h)))
 label(S::SymbolicSpinBasis) = S.label
 Base.getindex(s::SpinField, i) = SymbolicSpinBasis(i, s, s.spin)
+atomic_factors(s::SymbolicSpinBasis) = (s,)
+atomic_id(s::SymbolicSpinBasis) = s
 
 function Base.show(io::IO, S::SymbolicSpinBasis)
     spin_suffix = S.spin isa Nothing ? "" : ", spin=$(S.spin)"
@@ -209,8 +211,8 @@ end
 Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.basis == b.basis && a.exponent == b.exponent
 Base.hash(a::SpinSym, h::UInt) = hash(a.exponent, hash(a.op, hash(a.basis, h)))
 symbolic_group(f::SpinSym) = symbolic_group(f.basis)
-symbolic_group(f::SymbolicSpinBasis) = (SymbolicSpinBasis, f.field, f.label, f.spin)
-atomic_id(f::SpinSym) = (SpinSpace, f.basis.field, f.basis.label, f.basis.spin)
+symbolic_group(f::SymbolicSpinBasis) = f
+atomic_id(f::SpinSym) = atomic_id(f.basis)
 
 mat_eltype(::Type{<:SpinSym}) = Float64
 
