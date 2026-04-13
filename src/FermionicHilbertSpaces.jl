@@ -62,6 +62,7 @@ include("constraints.jl")
 include("constrained_space.jl")
 
 include("tensor_product.jl")
+include("permutation_symmetry.jl")
 include("embedding.jl")
 include("reshape.jl")
 
