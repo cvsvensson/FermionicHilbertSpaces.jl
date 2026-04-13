@@ -48,16 +48,16 @@ function create_jchm_hamiltonian(b, s, N_sites::Int, N_fock::Int, ωc, ωa, g, J
     for i in 1:N_sites
         ham += ωc * b[i]' * b[i] # Cavity energy
         ham += (ωa / 2) * s[i][:z] # Atomic energy (σᶻ/2)
-        ham += 2 * g * (b[i]' * s[i][:-] + b[i] * s[i][:+]) # Atom-cavity coupling
+        ham += 2 * g * (b[i]'s[i][:-] + hc) # Atom-cavity coupling
     end
     for i in 1:(N_sites-1)
-        ham += -J * (b[i]' * b[i+1] + hc)
+        ham += -J * (b[i]'b[i+1] + hc)
     end
 
     symoperators = Dict(
-        "cavity_n" => [(b[i]' * b[i]) for i in 1:N_sites],  # Photon numbers
-        "atom_z" => [(s[i][:z]) for i in 1:N_sites],          # Atomic z-components
-        "atom_e" => [(s[i][:+]' * s[i][:+]) for i in 1:N_sites],  # Excitation (|↑⟩⟨↑|)
+        "cavity_n" => [b[i]'b[i] for i in 1:N_sites],  # Photon numbers
+        "atom_z" => [s[i][:z] for i in 1:N_sites],          # Atomic z-components
+        "atom_e" => [s[i][:+]'s[i][:+] for i in 1:N_sites],  # Excitation (|↑⟩⟨↑|)
         #"cavity_a" => [mat(b[i]) for i in 1:N_sites],           # Field operators   
     )
     # operators = Dict(
