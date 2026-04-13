@@ -1,12 +1,3 @@
-#_as_tuple_spaces(Hs) = Hs isa Tuple ? Hs : Tuple(Hs)
-
-function _validate_permutation(perm, n::Int)
-    length(perm) == n || throw(ArgumentError("Permutation length must match number of partition blocks"))
-    all(1 <= p <= n for p in perm) || throw(ArgumentError("Permutation entries must be in 1:$n"))
-    length(unique(perm)) == n || throw(ArgumentError("Permutation must contain each index exactly once"))
-    return Tuple(perm)
-end
-
 """
     permute_state(state, mapper, perm)
 
@@ -62,7 +53,6 @@ Build a group-averaged projector/operator from permutation operators:
 `P = sum(weights[g] * R_g for g)`.
 """
 function permutation_projector(H::AbstractHilbertSpace, Hs, perms; weights=nothing, normalize=true)
-    # perms_t = map(p -> _validate_permutation(p, length(Hs)), perms)
     isempty(perms) && throw(ArgumentError("At least one permutation is required"))
 
     ws = if isnothing(weights)

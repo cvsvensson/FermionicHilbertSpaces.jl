@@ -14,7 +14,7 @@ Hdn = hilbert_space(f, [(j, :↓) for j in 1:2])
 
 # Restrict to N↑ = 1 and N↓ = 1
 H = tensor_product(Hup, Hdn;
-    constraint = NumberConservation(1, Hup) * NumberConservation(1, Hdn)
+    constraint=NumberConservation(1, Hup) * NumberConservation(1, Hdn)
 )
 
 # Define the Hubbard Hamiltonian
@@ -54,6 +54,16 @@ T = [
 # Transform Hamiltonian
 T' * M * T
 
+# Test permutation projector
+perms = [[1, 2], [2, 1]]
+Hleft = subregion([f[1, :↑], f[1, :↓]], H)
+Hright = subregion([f[2, :↑], f[2, :↓]], H)
+P1 = permutation_projector(H, [Hleft, Hright], perms)
+P2 = permutation_projector(H, [Hleft, Hright], perms, weights=[1, -1])
+P1 * M * P1
+P1 * M * P2 # is zero as expected
+P2 * M * P2
+# So now we can project into sectors, but perhaps we also want to reduce the dimensionality.
 
 # --- Reduced density matrix ---
 #
