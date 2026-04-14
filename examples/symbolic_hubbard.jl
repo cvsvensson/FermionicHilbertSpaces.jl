@@ -24,59 +24,35 @@ ham = sum(-t * (f[1, s]' * f[2, s] + hc) for s in (:↑, :↓)) +
 # Construct matrix representation in the constrained Hilbert space
 M = Matrix(matrix_representation(ham, H))
 
-# Inspect basis ordering (Fock states)
-# Basis: |↑↓,0⟩, |↑,↓⟩, |↓,↑⟩, |0,↑↓⟩
-basisstates(H)
-FermionicHilbertSpaces.mode_ordering(H)
-
-# Diagonalize symbolically using SymPy
-vals, vecs = eigen(M)
-simplify.(vecs)
-
 # --- Revealing structure via a basis transformation ---
 #
 # The Hamiltonian is invariant under exchange of the two sites. By transforming
 # to symmetric and antisymmetric combinations of basis states, we align the basis
 # with this symmetry. This block-diagonalizes the Hamiltonian.
-#
-# Such symmetry sectors are not diagonal in the Fock basis and 
-# cannot be constructed automatically by the package. They can nevertheless be
-# accessed via explicit basis transformations.
-
-sqrt2 = sympy.sqrt(2)
-T = [
-    1/sqrt2   0         0         1/sqrt2   # symmetric doublon
-    0         1/sqrt2   1/sqrt2   0         # symmetric spin
-    0         1/sqrt2  -1/sqrt2   0         # antisymmetric spin
-    1/sqrt2   0         0        -1/sqrt2   # antisymmetric doublon
-]
-
-# Transform Hamiltonian
-T' * M * T
-
-# Test permutation projector
 Hleft = subregion([f[1, :↑], f[1, :↓]], H)
 Hright = subregion([f[2, :↑], f[2, :↓]], H)
-P₊ = symmetric_sector(H, [Hleft, Hright], :symmetric, Sym)
-P₋ = symmetric_sector(H, [Hleft, Hright], :antisymmetric, Sym)
-P₊' * M * P₊
+Peven = symmetric_sector(H, [Hleft, Hright], :symmetric, Sym)
+Podd = symmetric_sector(H, [Hleft, Hright], :antisymmetric, Sym)
+Meven = Peven' * M * Peven
 
-# Test off-diagonal elements
-P₊' * M * P₋ # is zero as expected
+# The off-diagonal block should vanish
+Peven' * M * Podd
 
 # Anti-symmetric sector
-P₋' * M * P₋
+Modd = Podd' * M * Podd
+
+# Diagonalize symbolically using SymPy
+vals_odd, vecs_odd = eigen(Modd)
+vals_even, vecs_even = eigen(Meven)
 
 # --- Reduced density matrix ---
 #
 # As an example of post-processing, we compute the reduced density matrix
 # of the first site by tracing out the second site. This provides access
-# to local observables and entanglement properties.
-
-ψ = vecs[:, 3]
-ρ = simplify.(ψ * ψ')
-ρ /= tr(ρ)  # normalize
-Hsub = hilbert_space(f, [(1, :↑), (1, :↓)])
-ρ_sub = partial_trace(ρ, H => Hsub)
+# to local observables and entanglement properties. 
+ψ = Peven * vecs_even[:, 1] # map back to original basis
+ρ = ψ * ψ'
+ρ /= tr(ρ)  # normalize, since sympy eigenvectors are not guaranteed to be normalized
+ρ_sub = partial_trace(ρ, H => Hleft)
 simplify(tr(ρ_sub))
 purity = simplify(tr(ρ_sub^2))
