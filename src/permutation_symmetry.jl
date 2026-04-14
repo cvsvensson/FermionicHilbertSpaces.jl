@@ -3,19 +3,10 @@
 
 """
 function permute_state(state, mapper, perm)
-    splits, wsplits = split_state(state, mapper)
-    outstates = typeof(state)[]
-    outamps = Int[]
-
-    for (substates, wsplit) in zip(splits, wsplits)
-        permuted = substates[perm]
-        states2, w2 = combine_states(permuted, mapper)
-        for (state2, amp2) in zip(states2, w2)
-            push!(outstates, state2)
-            push!(outamps, wsplit * amp2)
-        end
-    end
-    return outstates, outamps
+    substates = unique_split_state(state, mapper) #only support unique splits for now
+    permuted = substates[perm]
+    newstate = only(first(combine_states(permuted, mapper))) # only support unique combination for now
+    return newstate
 end
 
 """
@@ -23,27 +14,18 @@ end
 
 Build the matrix representation `R_perm` of a partition permutation in basis `H`.
 """
-function permutation_operator(H::AbstractHilbertSpace, Hs, perm)
-    spaces = Hs
-    d = dim(H)
-    I = Int[]
-    J = Int[]
-    V = Int[]
-    sizehint!(I, d)
-    sizehint!(J, d)
-    sizehint!(V, d)
-    mapper = state_mapper(H, spaces)
-    for (j, state) in enumerate(basisstates(H))
-        states2, amps2 = permute_state(state, mapper, perm)
-        for (state2, amp2) in zip(states2, amps2)
-            i = state_index(state2, H)
-            ismissing(i) && throw(ArgumentError("Permutation maps a basis state outside the constrained space"))
-            push!(I, i)
-            push!(J, j)
-            push!(V, amp2)
-        end
+function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T}=Float64) where T
+    P = zeros(T, dim(H), dim(H))
+    add_permutation_operator!(P, (basisstates(H), Base.Fix2(state_index, H)), state_mapper(H, Hs), perm, one(T))
+end
+function add_permutation_operator!(P, (states, state_index), mapper, perm, weight=1)
+    for (j, state) in enumerate(states)
+        state2 = permute_state(state, mapper, perm)
+        i = state_index(state2)
+        ismissing(i) && throw(ArgumentError("Permutation maps a basis state outside the constrained space"))
+        P[i, j] += weight
     end
-    return SparseArrays.sparse!(I, J, V, d, d)
+    return P
 end
 
 """
@@ -52,20 +34,23 @@ end
 Build a group-averaged projector/operator from permutation operators:
 `P = sum(weights[g] * R_g for g)`.
 """
-function permutation_projector(H::AbstractHilbertSpace, Hs, perms; weights=nothing, normalize=true)
+function permutation_projector(H::AbstractHilbertSpace, Hs, perms, ::Type{T}=Float64; weights=nothing, normalize=true) where T
     isempty(perms) && throw(ArgumentError("At least one permutation is required"))
 
     ws = if isnothing(weights)
-        ones(Float64, length(perms))
+        ones(T, length(perms))
     else
         length(weights) == length(perms) || throw(ArgumentError("weights must match perms length"))
         float.(collect(weights))
     end
 
     d = dim(H)
-    P = spzeros(Float64, d, d)
+    P = zeros(T, d, d)
+    mapper = state_mapper(H, Hs)
+    states = basisstates(H)
+    si = Base.Fix2(state_index, H)
     for (perm, w) in zip(perms, ws)
-        P .+= w .* permutation_operator(H, Hs, perm)
+        add_permutation_operator!(P, (states, si), mapper, perm, w)
     end
 
     if normalize
@@ -76,31 +61,57 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms; weights=nothi
     return P
 end
 
-function _independent_columns(M::AbstractMatrix; atol=1e-10)
-    isempty(M) && return Int[]
-    F = qr(Matrix(M))
-    rdiag = abs.(diag(F.R))
-    r = count(>(atol), rdiag)
-    return collect(1:r)
-end
-
 """
-    symmetry_basis_transformation(H, Hs, perms; weights=nothing, atol=1e-10)
+    symmetry_basis_transformation(H, Hs, perms; weights=nothing, cutoff=0.9)
 
 Construct a basis transformation matrix `T` from the image of the group-averaged projector.
 Columns of `T` form an orthonormal basis for the projected subspace.
 """
-function symmetry_basis_transformation(H::AbstractHilbertSpace, Hs, perms; weights=nothing, atol=1e-10)
-    P = permutation_projector(H, Hs, perms; weights=weights, normalize=true)
-    cols = _independent_columns(P; atol=atol)
-    isempty(cols) && return Matrix{Float64}(undef, dim(H), 0)
-    Q, _ = qr(Matrix(P[:, cols]))
-    return Matrix(Q)
+function symmetry_basis_transformation(H::AbstractHilbertSpace, Hs, perms, ::Type{T}=Float64;
+    weights=nothing, cutoff=0.9) where T
+    P = permutation_projector(H, Hs, perms, T; weights=weights, normalize=true)
+    # P is Hermitian; eigenvalues cluster at 0 and 1
+    E = eigen(Hermitian(Matrix(P)))
+    keep = findall(>(cutoff), E.values)  # λ ≈ 1 subspace
+    isempty(keep) && return Matrix{T}(undef, dim(H), 0)
+    return E.vectors[:, keep]  # already orthonormal
 end
+
+
+function symmetry_basis_states(H::AbstractHilbertSpace, Hs, perms, ::Type{T}=Float64;
+    weights=nothing, atol=1e-10) where T
+    mapper = state_mapper(H, Hs)
+    d = dim(H)
+    ws = isnothing(weights) ? ones(d) : collect(weights)
+
+    visited = falses(d)
+    result_cols = Vector{T}[]
+
+    for (j, state_j) in enumerate(basisstates(H))
+        visited[j] && continue
+        visited[j] = true
+
+        v = zeros(T, d)
+        for (perm, w) in zip(perms, ws)
+            newstate = permute_state(state_j, mapper, perm)
+            i = state_index(newstate, H)
+            ismissing(i) && throw(ArgumentError("Permutation maps a basis state outside the constrained space"))
+            visited[i] = true   # mark orbit member
+            v[i] += w
+        end
+
+        n = norm(v)
+        n > atol && push!(result_cols, v ./ n)
+    end
+
+    isempty(result_cols) && return Matrix{T}(undef, d, 0)
+    return reduce(hcat, result_cols)
+end
+
 
 @testitem "Permutation symmetry" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: permute_state, permutation_operator, permutation_projector, symmetry_basis_transformation
+    using FermionicHilbertSpaces: permute_state, permutation_operator, permutation_projector, symmetry_basis_transformation, symmetry_basis_states
     @fermions f
     H1 = hilbert_space(f, 1:1)
     H2 = hilbert_space(f, 2:2)
@@ -120,8 +131,11 @@ end
     @test Psign * Psign ≈ Psign
     @test Ptriv * Psign ≈ 0I
 
-    Ttriv = symmetry_basis_transformation(H, [H1, H2], perms; weights=(1.0, 1.0)) #These are wrong
-    Tsign = symmetry_basis_transformation(H, [H1, H2], perms; weights=(1.0, -1.0)) #there are wrong
+    Ttriv = symmetry_basis_states(H, [H1, H2], [idperm, swapperm]; weights=[1.0, 1.0])
+    Tsign = symmetry_basis_states(H, [H1, H2], [idperm, swapperm]; weights=[1.0, -1.0])
+
+    Ttriv2 = symmetry_basis_transformation(H, [H1, H2], perms; weights=(1.0, 1.0))
+    Tsign2 = symmetry_basis_transformation(H, [H1, H2], perms; weights=(1.0, -1.0))
     @test size(Tsign, 2) == 1
     @test Tsign' * Tsign ≈ I
     @test Tsign' * Rswap * Tsign ≈ -I
