@@ -34,7 +34,7 @@ end
 Build a group-averaged projector/operator from permutation operators:
 `P = sum(weights[g] * R_g for g)`.
 """
-function permutation_projector(H::AbstractHilbertSpace, Hs, perms, ::Type{T}=Float64; weights=nothing, normalize=true) where T
+function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights, ::Type{T}=Float64; normalize=true) where T
     isempty(perms) && throw(ArgumentError("At least one permutation is required"))
 
     ws = if isnothing(weights)
@@ -67,9 +67,9 @@ end
 Construct a basis transformation matrix `T` from the image of the group-averaged projector.
 Columns of `T` form an orthonormal basis for the projected subspace.
 """
-function symmetry_basis_transformation(H::AbstractHilbertSpace, Hs, perms, ::Type{T}=Float64;
-    weights=nothing, cutoff=0.9) where T
-    P = permutation_projector(H, Hs, perms, T; weights=weights, normalize=true)
+function symmetry_basis_transformation(H::AbstractHilbertSpace, Hs, perms, weights, ::Type{T}=Float64;
+    cutoff=0.9) where T
+    P = permutation_projector(H, Hs, perms, weights, T; normalize=true)
     # P is Hermitian; eigenvalues cluster at 0 and 1
     E = eigen(Hermitian(Matrix(P)))
     keep = findall(>(cutoff), E.values)  # λ ≈ 1 subspace
@@ -91,58 +91,41 @@ Set `method` to:
 - `:transformation`: return an orthonormal basis from projector eigenspace.
 - `:projector`: return the permutation projector/operator itself.
 """
-function symmetric_sector(H::AbstractHilbertSpace, Hs, sector::Symbol=:symmetric, ::Type{T}=Float64;
-    method::Symbol=:states, normalize::Bool=true, cutoff=0.9, atol=1e-10) where T
+function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type{T}=Float64;
+    method::Symbol=:states, kwargs...) where T
     isempty(Hs) && throw(ArgumentError("At least one factor space is required"))
 
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
     length(perms) == length(weights) || throw(ArgumentError("Generated weights must match generated permutations"))
 
     if method === :states
-        return symmetry_basis_states(H, Hs, perms, T; weights=weights, atol=atol)
+        return symmetry_basis_states(H, Hs, perms, weights, T; kwargs...)
     elseif method === :transformation
-        return symmetry_basis_transformation(H, Hs, perms, T; weights=weights, cutoff=cutoff)
+        return symmetry_basis_transformation(H, Hs, perms, weights, T; kwargs...)
     elseif method === :projector
-        return permutation_projector(H, Hs, perms, T; weights=weights, normalize=normalize)
+        return permutation_projector(H, Hs, perms, weights, T; kwargs...)
     end
 
     throw(ArgumentError("Unknown method :$(method). Expected one of :states, :transformation, :projector"))
 end
+_resolve_sector_permutations_and_weights(Hs, (perms, weights), T) = (perms, weights) # for direct input of perms and weights
 
-function symmetry_basis_states(H::AbstractHilbertSpace, Hs, perms, ::Type{T}=Float64;
-    weights=nothing, atol=1e-10) where T
-    isempty(perms) && throw(ArgumentError("At least one permutation is required"))
-    mapper = state_mapper(H, Hs)
+function symmetry_basis_states(H, Hs, perms, weights, ::Type{T}=Float64; atol=sqrt(eps(T))) where T
     d = dim(H)
-    ws = if isnothing(weights)
-        Fill(one(T), length(perms))
-    else
-        length(weights) == length(perms) || throw(ArgumentError("weights must match perms length"))
-        weights
-    end
+    mapper = state_mapper(H, Hs)
 
-    visited = falses(d)
-    result_cols = Vector{T}[]
+    all_projected = spzeros(T, d, d)
 
-    for (j, state_j) in enumerate(basisstates(H))
-        visited[j] && continue
-        visited[j] = true
-
-        v = zeros(T, d)
-        for (perm, w) in zip(perms, ws)
-            newstate = permute_state(state_j, mapper, perm)
+    for (j, state) in enumerate(basisstates(H))
+        for (perm, w) in zip(perms, weights)
+            newstate = permute_state(state, mapper, perm)
             i = state_index(newstate, H)
-            ismissing(i) && throw(ArgumentError("Permutation maps a basis state outside the constrained space"))
-            visited[i] = true   # mark orbit member
-            v[i] += w
+            all_projected[i, j] += w
         end
-
-        n = norm(v)
-        n > atol && push!(result_cols, v ./ n)
     end
-
-    isempty(result_cols) && return Matrix{T}(undef, d, 0)
-    return reduce(hcat, result_cols)
+    F = qr(all_projected)
+    big_cols = findall(>(atol) ∘ abs, diag(F.R))
+    return droptol!(sparse(F.Q[:, big_cols]), atol)
 end
 
 
