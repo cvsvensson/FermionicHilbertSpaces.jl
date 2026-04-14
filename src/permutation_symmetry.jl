@@ -41,7 +41,7 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, ::Type{T}=Flo
         ones(T, length(perms))
     else
         length(weights) == length(perms) || throw(ArgumentError("weights must match perms length"))
-        float.(collect(weights))
+        weights
     end
 
     d = dim(H)
@@ -77,12 +77,49 @@ function symmetry_basis_transformation(H::AbstractHilbertSpace, Hs, perms, ::Typ
     return E.vectors[:, keep]  # already orthonormal
 end
 
+"""
+    symmetric_sector(H, Hs, sector=:symmetric, T=Float64; method=:states, normalize=true, cutoff=0.9, atol=1e-10)
+
+Construct symmetry-adapted objects from symbolic sector selectors.
+
+Supported sectors are `:symmetric` and `:antisymmetric`, generated over the full
+permutation group `S_n` for `n = length(Hs)`. This requires the `Combinatorics.jl`
+weak extension to be available.
+
+Set `method` to:
+- `:states` (default): return orbit-based symmetry basis states.
+- `:transformation`: return an orthonormal basis from projector eigenspace.
+- `:projector`: return the permutation projector/operator itself.
+"""
+function symmetric_sector(H::AbstractHilbertSpace, Hs, sector::Symbol=:symmetric, ::Type{T}=Float64;
+    method::Symbol=:states, normalize::Bool=true, cutoff=0.9, atol=1e-10) where T
+    isempty(Hs) && throw(ArgumentError("At least one factor space is required"))
+
+    perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
+    length(perms) == length(weights) || throw(ArgumentError("Generated weights must match generated permutations"))
+
+    if method === :states
+        return symmetry_basis_states(H, Hs, perms, T; weights=weights, atol=atol)
+    elseif method === :transformation
+        return symmetry_basis_transformation(H, Hs, perms, T; weights=weights, cutoff=cutoff)
+    elseif method === :projector
+        return permutation_projector(H, Hs, perms, T; weights=weights, normalize=normalize)
+    end
+
+    throw(ArgumentError("Unknown method :$(method). Expected one of :states, :transformation, :projector"))
+end
 
 function symmetry_basis_states(H::AbstractHilbertSpace, Hs, perms, ::Type{T}=Float64;
     weights=nothing, atol=1e-10) where T
+    isempty(perms) && throw(ArgumentError("At least one permutation is required"))
     mapper = state_mapper(H, Hs)
     d = dim(H)
-    ws = isnothing(weights) ? ones(d) : collect(weights)
+    ws = if isnothing(weights)
+        Fill(one(T), length(perms))
+    else
+        length(weights) == length(perms) || throw(ArgumentError("weights must match perms length"))
+        weights
+    end
 
     visited = falses(d)
     result_cols = Vector{T}[]
@@ -111,7 +148,11 @@ end
 
 @testitem "Permutation symmetry" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: permute_state, permutation_operator, permutation_projector, symmetry_basis_transformation, symmetry_basis_states
+    using Combinatorics: permutations
+    using FermionicHilbertSpaces: permutation_operator, permutation_projector, symmetry_basis_transformation, symmetry_basis_states, symmetric_sector
+
+    permutation_sign(perm) = isodd(sum(perm[i] > perm[j] for i in 1:length(perm)-1 for j in i+1:length(perm))) ? -1.0 : 1.0
+
     @fermions f
     H1 = hilbert_space(f, 1:1)
     H2 = hilbert_space(f, 2:2)
@@ -136,7 +177,26 @@ end
 
     Ttriv2 = symmetry_basis_transformation(H, [H1, H2], perms; weights=(1.0, 1.0))
     Tsign2 = symmetry_basis_transformation(H, [H1, H2], perms; weights=(1.0, -1.0))
+    Tsym = symmetric_sector(H, [H1, H2], :symmetric)
+    Tanti = symmetric_sector(H, [H1, H2], :antisymmetric)
+    Panti = symmetric_sector(H, [H1, H2], :antisymmetric; method=:projector)
     @test size(Tsign, 2) == 1
     @test Tsign' * Tsign ≈ I
     @test Tsign' * Rswap * Tsign ≈ -I
+    @test Tsym' * Tsym ≈ I
+    @test Tanti' * Tanti ≈ I
+    @test Tsym * Tsym' ≈ Ptriv
+    @test Tanti * Tanti' ≈ Psign
+    @test Panti ≈ Psign
+
+    H3 = hilbert_space(f, 3:3)
+    H123 = tensor_product(H1, H2, H3)
+    Hs3 = [H1, H2, H3]
+    perms3 = permutations(1:3)
+    ws3 = [permutation_sign(p) for p in perms3]
+    Pmanual3 = permutation_projector(H123, Hs3, perms3; weights=ws3)
+    Pauto3 = symmetric_sector(H123, Hs3, :antisymmetric; method=:projector)
+    @test Pmanual3 ≈ Pauto3
+
+    @test_throws ArgumentError symmetric_sector(H, [H1, H2], :invalid)
 end

@@ -1,5 +1,5 @@
 using FermionicHilbertSpaces
-using SymPy, LinearAlgebra
+using SymPy, LinearAlgebra, Combinatorics
 
 # We construct a two-site Hubbard model (e.g., a double quantum dot) 
 # with symbolic parameters U (interaction) and t (hopping amplitude),
@@ -55,13 +55,16 @@ T = [
 T' * M * T
 
 # Test permutation projector
-perms = [[1, 2], [2, 1]]
 Hleft = subregion([f[1, :↑], f[1, :↓]], H)
 Hright = subregion([f[2, :↑], f[2, :↓]], H)
-P₊ = FermionicHilbertSpaces.symmetry_basis_states(H, [Hleft, Hright], perms; weights=[1, 1])
-P₋ = FermionicHilbertSpaces.symmetry_basis_states(H, [Hleft, Hright], perms; weights=[1, -1])
+P₊ = symmetric_sector(H, [Hleft, Hright], :symmetric)
+P₋ = symmetric_sector(H, [Hleft, Hright], :antisymmetric)
 P₊' * M * P₊
+
+# Test off-diagonal elements
 P₊' * M * P₋ # is zero as expected
+
+# Anti-symmetric sector
 P₋' * M * P₋
 
 # --- Reduced density matrix ---
