@@ -57,8 +57,8 @@ T' * M * T
 # Test permutation projector
 Hleft = subregion([f[1, :↑], f[1, :↓]], H)
 Hright = subregion([f[2, :↑], f[2, :↓]], H)
-P₊ = symmetric_sector(H, [Hleft, Hright], :symmetric)
-P₋ = symmetric_sector(H, [Hleft, Hright], :antisymmetric)
+P₊ = symmetric_sector(H, [Hleft, Hright], :symmetric, Sym)
+P₋ = symmetric_sector(H, [Hleft, Hright], :antisymmetric, Sym)
 P₊' * M * P₊
 
 # Test off-diagonal elements
