@@ -14,7 +14,7 @@ projectors = map(AbstractAlgebra.Generic.partitions(N)) do λ
     χ = AbstractAlgebra.character(λ)
     perms = Iterators.map(p -> p.d, G)
     weights = Iterators.map(χ, G)
-    P = symmetric_sector(H, factors(H), (perms, weights), method=:states)
+    P = symmetric_sector(H, factors(H), (perms, weights))
 end
 blocks = map(projectors) do p # block-diagonalize M in the symmetry sectors
     p' * M * p
