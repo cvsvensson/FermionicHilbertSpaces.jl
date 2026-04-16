@@ -191,21 +191,59 @@ end
 
 function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors=true)
     fill!(mout, zero(eltype(mout)))
-    U = embedding_unitary(Hs, H)
     dimlengths = map(length ∘ basisstates, Hs)
     inds = CartesianIndices(Tuple(dimlengths))
+    mapper = state_mapper(H, Hs)
+    pfu = phase_factors ? phase_factor_u(mapper) : state -> 1
     for I in inds
         TI = Tuple(I)
         fock = map(basisstate, TI, Hs)
         states, amps = combine_states(fock, extend_state)
         for (fullfock, w) in zip(states, amps)
             outind = state_index(fullfock, H)
-            mout[outind] += w * mapreduce((i1, m) -> m[i1], *, TI, ms)
+            mout[outind] += w * mapreduce((i1, m) -> m[i1], *, TI, ms) * pfu(fullfock)
         end
     end
-    return U * mout
+    return mout
 end
-embedding_unitary(Hs, H::ProductSpace{Nothing}) = I
+
+@testitem "generalized_kron_vec! direct call" begin
+    using Random
+    Random.seed!(1234)
+    @fermions a
+    H1 = hilbert_space(a, 1:1)
+    H2 = hilbert_space(a, 2:3)
+    Hs = (H1, H2)
+    H = tensor_product(Hs)
+
+    v1 = rand(ComplexF64, dim(H1))
+    # v1 = FermionicHilbertSpaces.project_on_parity(v1, H1, 1)
+    v2 = rand(ComplexF64, dim(H2))
+    v2 = FermionicHilbertSpaces.project_on_parity(v2, H2, 1)
+    mout = zeros(ComplexF64, dim(H))
+    mapper = FermionicHilbertSpaces.state_mapper(H, Hs)
+    rho1 = v1 * v1'
+    rho2 = v2 * v2'
+
+    v12 = FermionicHilbertSpaces.generalized_kron_vec!(mout, (v1, v2), Hs, H, mapper)
+    @test v12 ≈ tensor_product((v1, v2), Hs, H)
+    @test v12 ≈ generalized_kron((v1, v2), Hs, H)
+
+    rho12 = tensor_product((rho1, rho2), Hs, H)
+    rho_v12 = v12 * v12'
+    @test rho12 ≈ rho_v12 # only true because we projected v2 to a definite parity sector
+
+    ## test mixed spaces
+    @boson b
+    Hb = hilbert_space(b, 2)
+    Hmix = tensor_product(H1, Hb)
+    H = tensor_product(H1, H2, Hb)
+    vb = rand(ComplexF64, dim(Hb))
+    vmix = tensor_product((v1, vb), (H1, Hb) => Hmix)
+    v12b = tensor_product((v1, v2, vb), (H1, H2, Hb) => H)
+    vmix2 = tensor_product((vmix, v2), (Hmix, H2) => H)
+    @test v12b ≈ vmix2
+end
 
 """
     tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
@@ -216,7 +254,11 @@ Compute the ordered product of the fermionic embeddings of the matrices `ms` in 
 function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     # isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
-    return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H, kwargs...), *, zip(ms, Hs))
+    if all(isequal(1) ∘ ndims, ms)
+        return generalized_kron(ms, Hs, H; kwargs...)
+    elseif all(isequal(2) ∘ ndims, ms)
+        return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H, kwargs...), *, zip(ms, Hs))
+    end
 end
 tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
 tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
@@ -508,7 +550,7 @@ function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, 
     return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
 
-function project_on_parities(op::AbstractMatrix, H, Hs, parities)
+function project_on_parities(op::AbstractArray, H, Hs, parities)
     length(Hs) == length(parities) || throw(ArgumentError("The number of parities must match the number of subsystems"))
     for (bsub, parity) in zip(Hs, parities)
         op = project_on_subparity(op, H, bsub, parity)
@@ -516,12 +558,12 @@ function project_on_parities(op::AbstractMatrix, H, Hs, parities)
     return op
 end
 
-function project_on_subparity(op::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, parity)
+function project_on_subparity(op::AbstractArray, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, parity)
     P = embed(parityoperator(Hsub), Hsub, H)
     return project_on_parity(op, P, parity)
 end
 
-project_on_parity(op::AbstractMatrix, H::AbstractHilbertSpace, parity) = project_on_parity(op, parityoperator(H), parity)
+project_on_parity(op::AbstractArray, H::AbstractHilbertSpace, parity) = project_on_parity(op, parityoperator(H), parity)
 
 function project_on_parity(op::AbstractMatrix, P::AbstractMatrix, parity)
     Peven = (I + P) / 2
@@ -530,6 +572,15 @@ function project_on_parity(op::AbstractMatrix, P::AbstractMatrix, parity)
         return Peven * op * Peven + Podd * op * Podd
     elseif parity == -1
         return Podd * op * Peven + Peven * op * Podd
+    else
+        throw(ArgumentError("Parity must be either 1 or -1"))
+    end
+end
+function project_on_parity(op::AbstractVector, P::AbstractMatrix, parity)
+    if parity == 1
+        return (op .+ P * op) ./ 2
+    elseif parity == -1
+        return (op .- P * op) ./ 2
     else
         throw(ArgumentError("Parity must be either 1 or -1"))
     end

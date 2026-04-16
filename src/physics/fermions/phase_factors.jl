@@ -26,9 +26,8 @@ function _phase_factor_f_bool(focknbr1, focknbr2, i::Int)
     _bit(focknbr2, i) ? (jwstring_anti_bool(i, focknbr1) ⊻ jwstring_anti_bool(i, focknbr2)) : false
 end
 
-function kron_phase_factor(state_mapper::FockMapper)
+function kron_phase_factor(state_mapper::FockMapper{N}) where N
     inds = state_mapper.fermionpositions
-    N = sum(length, inds)
     T = FockNumber{default_fock_representation(N)}
     masks = map(Xp -> T(focknbr_from_site_indices(Xp)), inds)
     function pfh(f1, f2)
@@ -233,4 +232,98 @@ end
     @test lξ([[1], [2], [3]], fockstates) == ones(Int, 2^N, 2^N)
     @test lξ([[2], [1], [3]], fockstates) == lξ([[2], [1, 3]], fockstates)
     @test lξ([[2], [3], [1]], fockstates) == lξ([[2, 3], [1]], fockstates) == lX([2, 3], [1], fockstates)
+end
+
+## Phase factor u
+function phase_factor_u(partition, masks, state::FockNumber)
+    phase = false
+    for (s, (Xs, mask)) in enumerate(zip(partition, masks))
+        for (r, Xr) in Iterators.drop(enumerate(partition), s)
+            for i in Xr
+                if _bit(state, i)
+                    phase ⊻= jwstring_anti_bool(i, mask & state)
+                end
+            end
+        end
+    end
+    return phase ? -1 : 1
+end
+
+phase_factor_u(::AtomicStateMapper) = state -> 1
+function phase_factor_u(state_mapper::ProductSpaceMapper)
+    mappers = state_mapper.factor_mappers
+    phase_factor_maps = map(phase_factor_u, mappers)
+    function phase_factor(state)
+        pf = 1
+        for (s, mapper, pfu) in zip(state.states, mappers, phase_factor_maps)
+            isnothing(mapper) && continue
+            pf *= pfu(s)
+        end
+        return pf
+    end
+end
+function phase_factor_u(state_mapper::FockMapper{N}) where N
+    inds = state_mapper.fermionpositions
+    T = FockNumber{default_fock_representation(N)}
+    masks = map(Xp -> T(focknbr_from_site_indices(Xp)), inds)
+    function pfu(f1)
+        phase_factor_u(inds, masks, f1)
+    end
+end
+
+
+@testitem "Phase factor u" begin
+    # Appendix C.4
+    import FermionicHilbertSpaces: phase_factor_u, bits, focknbr_from_site_indices
+    N = 2
+    fockstates = sort(map(FockNumber, 0:2^N-1), by=Base.Fix2(bits, N))
+    # uX(p1, p2, fockstates) = [phase_factor_u(f1, p1, p2) for f1 in fockstates]
+    uξ(p, fockstates) = [phase_factor_u(p, map(focknbr_from_site_indices, p), f1) for f1 in fockstates]
+
+    p = [[1], [2]]
+    @test uξ(p, fockstates) == [1, 1, 1, 1]
+
+    p = [[2], [1]]
+    @test uξ(p, fockstates) == [1, 1, 1, -1]
+
+    #
+    N = 3
+    fockstates = sort(map(FockNumber, 0:2^N-1), by=Base.Fix2(bits, N))
+
+    p = [[1], [2, 3]]
+    @test uξ(p, fockstates) == [1, 1, 1, 1, 1, 1, 1, 1]
+
+    p = [[2, 3], [1]]
+    @test uξ(p, fockstates) == [1, 1, 1, 1, 1, -1, -1, 1]
+
+    p = [[2], [1, 3]]
+    @test uξ(p, fockstates) == [1, 1, 1, 1, 1, 1, -1, -1]
+
+    p = [[1, 3], [2]]
+    @test uξ(p, fockstates) == [1, 1, 1, -1, 1, 1, 1, -1]
+
+    p = [[3], [1, 2]]
+    @test uξ(p, fockstates) == [1, 1, 1, -1, 1, -1, 1, 1]
+
+    p = [[1, 2], [3]]
+    @test uξ(p, fockstates) == [1, 1, 1, 1, 1, 1, 1, 1]
+
+    p = [[1], [2], [3]]
+    @test uξ(p, fockstates) == [1, 1, 1, 1, 1, 1, 1, 1]
+
+    p = [[1], [3], [2]]
+    @test uξ(p, fockstates) == [1, 1, 1, -1, 1, 1, 1, -1]
+
+    p = [[2], [1], [3]]
+    @test uξ(p, fockstates) == [1, 1, 1, 1, 1, 1, -1, -1]
+
+    p = [[3], [1], [2]]
+    @test uξ(p, fockstates) == [1, 1, 1, -1, 1, -1, 1, 1]
+
+    p = [[2], [3], [1]]
+    @test uξ(p, fockstates) == [1, 1, 1, 1, 1, -1, -1, 1]
+
+    p = [[3], [2], [1]]
+    @test uξ(p, fockstates) == [1, 1, 1, -1, 1, -1, -1, -1]
+
 end

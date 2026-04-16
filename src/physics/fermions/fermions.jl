@@ -87,22 +87,13 @@ function _compact_fermionic_modes(io::IO, c::FermionicSpace;
     fmt((name, labels)) = "$name[$(join(_truncate(labels, max_labels_per_group, edge_labels), ", "))]"
     print(io, "(", join(_truncate(map(fmt, groups), max_groups, edge_groups), ", "), ")")
 end
-
-function embedding_unitary(partition, states, H::FermionicSpace)
+function embedding_unitary(partition, H::FermionicSpace)
     atoms = atomic_factors(H)
     positions = [[_find_position(atom, atoms) for atom in atomic_factors(group)] for group in partition]
-    embedding_unitary(positions, states)
+    masks = map(focknbr_from_site_indices, positions)
+    Diagonal([phase_factor_u(positions, masks, state) for state in basisstates(H)])
 end
-function bipartite_embedding_unitary(X, Xbar, states, H::FermionicSpace)
-    atoms = atomic_factors(H)
-    Xpos = [_find_position(atom, atoms) for atom in atomic_factors(X)]
-    Xbarpos = [_find_position(atom, atoms) for atom in atomic_factors(Xbar)]
-    bipartite_embedding_unitary(Xpos, Xbarpos, states)
-end
-embedding_unitary(partition, H::FermionicSpace) = embedding_unitary(partition, basisstates(H), H)
-bipartite_embedding_unitary(X, Xbar, H::FermionicSpace) = bipartite_embedding_unitary(X, Xbar, basisstates(H), H)
 partial_trace_phase_factor(f1, f2, H::FermionicSpace) = phase_factor_f(f1, f2, nbr_of_modes(H))
-
 
 
 struct CombineFockNumbersProcessor{T} end
@@ -319,7 +310,7 @@ end
     # Properties from J. Phys. A: Math. Theor. 54 (2021) 393001
     # Eq. 16
     using Random, Base.Iterators, LinearAlgebra
-    import FermionicHilbertSpaces: embedding_unitary, project_on_parity, project_on_parities
+    import FermionicHilbertSpaces: project_on_parity, project_on_parities, phase_factor_u, embedding_unitary, focknbr_from_site_labels
 
     @fermions a
     Random.seed!(3)
@@ -476,11 +467,11 @@ end
     # Explicit construction of unitary equivalence in case of all even (except one) 
     function phase(k, f)
         fines = collect(Iterators.flatten(Hs_fine))
-        Xkmask = FermionicHilbertSpaces.focknbr_from_site_labels(fines[k], H)
+        Xkmask = focknbr_from_site_labels(fines[k], H)
         iseven(count_ones(f & Xkmask)) && return 1
         phase = 1
         for r in 1:k-1
-            Xrmask = FermionicHilbertSpaces.focknbr_from_site_labels(fines[r], H)
+            Xrmask = focknbr_from_site_labels(fines[r], H)
             phase *= (-1)^(count_ones(f & Xrmask))
         end
         return phase
