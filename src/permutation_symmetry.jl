@@ -1,10 +1,12 @@
-"""
-    permute_state(state, mapper, perm)
+struct Orbit end
+struct Projector end
+struct _QR end
+struct _EIG end
 
-"""
 function permute_state(state, mapper, perm)
     substates = unique_split_state(state, mapper) #only support unique splits for now
     permuted = substates[perm]
+    # permuted = TupleTools.permute(substates, Tuple(perm))
     newstate = only(first(combine_states(permuted, mapper))) # only support unique combination for now
     return newstate
 end
@@ -12,7 +14,7 @@ end
 """
     permutation_operator(H, Hs, perm)
 
-Build the matrix representation `R_perm` of a partition permutation in basis `H`.
+Gives the matrix representation on `H` of a permutation `perm` of the partition `Hs`.
 """
 function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T}=Float64) where T
     P = zeros(T, dim(H), dim(H))
@@ -27,14 +29,14 @@ function add_permutation_operator!(P, (states, state_index), mapper, perm, weigh
     end
     return P
 end
-
 """
     permutation_projector(H, Hs, perms; weights=nothing, normalize=true)
 
 Build a group-averaged projector/operator from permutation operators:
 `P = sum(weights[g] * R_g for g)`.
 """
-function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights, ::Type{T}=Float64; normalize=true) where T
+permutation_projector(H::AbstractHilbertSpace, args...; kwargs...) = get_projector(Projector(), H, args...; kwargs...)
+function get_projector(::Projector, H::AbstractHilbertSpace, Hs, perms, weights, ::Type{T}=Float64; normalize=true) where T
     isempty(perms) && throw(ArgumentError("At least one permutation is required"))
 
     ws = if isnothing(weights)
@@ -54,27 +56,11 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights, ::Ty
     end
 
     if normalize
-        tr2 = tr(P^2)
+        tr2 = sum(abs2, P)
         tr1 = tr(P)
         iszero(tr2) || (P *= (tr1 / tr2))
     end
     return P
-end
-
-"""
-    symmetry_basis_transformation(H, Hs, perms; weights=nothing, cutoff=0.9)
-
-Construct a basis transformation matrix `T` from the image of the group-averaged projector.
-Columns of `T` form an orthonormal basis for the projected subspace.
-"""
-function symmetry_basis_transformation(H::AbstractHilbertSpace, Hs, perms, weights, ::Type{T}=Float64;
-    cutoff=0.9) where T
-    P = permutation_projector(H, Hs, perms, weights, T; normalize=true)
-    # P is Hermitian; eigenvalues cluster at 0 and 1
-    E = eigen(Hermitian(Matrix(P)))
-    keep = findall(>(cutoff), E.values)  # λ ≈ 1 subspace
-    isempty(keep) && return Matrix{T}(undef, dim(H), 0)
-    return E.vectors[:, keep]  # already orthonormal
 end
 
 """
@@ -92,40 +78,44 @@ Set `method` to:
 - `:projector`: return the permutation projector/operator itself.
 """
 function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type{T}=Float64;
-    method::Symbol=:states, kwargs...) where T
+    method=Projector(), orth_method=_QR(), kwargs...) where T
     isempty(Hs) && throw(ArgumentError("At least one factor space is required"))
 
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
     length(perms) == length(weights) || throw(ArgumentError("Generated weights must match generated permutations"))
-
-    if method === :states
-        return symmetry_basis_states(H, Hs, perms, weights, T; kwargs...)
-    elseif method === :transformation
-        return symmetry_basis_transformation(H, Hs, perms, weights, T; kwargs...)
-    elseif method === :projector
-        return permutation_projector(H, Hs, perms, weights, T; kwargs...)
-    end
-
-    throw(ArgumentError("Unknown method :$(method). Expected one of :states, :transformation, :projector"))
+    P = get_projector(method, H, Hs, perms, weights; kwargs...)
+    _remove_columns(P, orth_method)
 end
 _resolve_sector_permutations_and_weights(Hs, (perms, weights), T) = (perms, weights) # for direct input of perms and weights
 
-function symmetry_basis_states(H, Hs, perms, weights, ::Type{T}=Float64; atol=sqrt(eps(T))) where T
+function get_projector(::Orbit, H::AbstractHilbertSpace, Hs, perms, weights, ::Type{T}=Float64; atol=sqrt(eps(T)), orth=_QR()) where T
     d = dim(H)
     mapper = state_mapper(H, Hs)
-
-    all_projected = spzeros(T, d, d)
-
+    P = zeros(T, d, d)
     for (j, state) in enumerate(basisstates(H))
+        substates = collect(unique_split_state(state, mapper)) #only support unique splits for now
         for (perm, w) in zip(perms, weights)
-            newstate = permute_state(state, mapper, perm)
+            permuted = substates[perm]
+            newstate = only(first(combine_states(permuted, mapper))) # only support unique combination for now
             i = state_index(newstate, H)
-            all_projected[i, j] += w
+            P[i, j] += w
         end
     end
-    F = qr(all_projected)
-    big_cols = findall(>(atol) ∘ abs, diag(F.R))
-    return droptol!(sparse(F.Q[:, big_cols]), atol)
+    return P
+end
+
+function _remove_columns(P, ::_QR)
+    F = qr(P)
+    big_cols = findall(>(0.1) ∘ abs, diag(F.R))
+    return F.Q[:, big_cols]
+end
+function _remove_columns(P, ::_EIG)
+    E = eigen(Hermitian((P)))
+    keep = findall(>(0.9) ∘ abs, E.values)  # λ ≈ 1 subspace
+    return E.vectors[:, keep]  # already orthonormal
+end
+function _remove_columns(P, ::Nothing)
+    return P
 end
 
 
