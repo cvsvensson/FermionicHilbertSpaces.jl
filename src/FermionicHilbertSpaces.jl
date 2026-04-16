@@ -81,6 +81,7 @@ include("physics/fermions/bdg.jl")
 
 include("physics/bosons.jl")
 include("physics/spin.jl")
+include("physics/heom_bosonic.jl")
 
 include("printing.jl")
 
