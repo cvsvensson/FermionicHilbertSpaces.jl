@@ -18,19 +18,26 @@ function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op::N
     precomp = _precomputation_before_operator_application(op, space)
     for (n, state) in enumerate(basisstates(space))
         newstates, newamps = apply_local_operators(op, state, space, precomp)
-        for (newstate, amp) in zip(newstates, newamps)
-            if !iszero(amp)
-                outind = state_index(newstate, space)
-                if !projection || !ismissing(outind)
-                    push!(outinds, outind)
-                    push!(amps, amp)
-                    push!(ininds, n)
-                end
-            end
-        end
+        push_inds_amps!((outinds, ininds, amps), i, newstates, newamps, 1, space; projection=projection)
     end
     return (outinds, ininds, amps)
 end
+
+function push_inds_amps!((outinds, ininds, amps), inind, newstates, newamps, coeff, space; projection=false)
+    for n in eachindex(newstates, newamps)
+        newstate = newstates[n]
+        amp = newamps[n]
+        if !iszero(amp)
+            outind = state_index(newstate, space)
+            if !projection || !ismissing(outind)
+                push!(outinds, outind)
+                push!(amps, amp * coeff)
+                push!(ininds, inind)
+            end
+        end
+    end
+end
+
 
 ## 
 remove_identity(a::NCMul) = a
