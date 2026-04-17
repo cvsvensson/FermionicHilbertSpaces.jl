@@ -27,12 +27,10 @@
 ## This file defines:
 ##   • HEOMBosonicBath       – bath parameters (N_exp, m_max, χ, ξ)
 ##   • HEOMBosonicUp/Down/Damping – symbolic auxiliary operators
-##   • HEOMBosonicAuxState   – basis state (occupation vector n)
+##   • HEOMBosonicAuxState   – basis state (occupation tuple n)
 ##   • heom_bosonic_aux_space – builds the auxiliary GenericHilbertSpace
 ##   • heom_generator        – builds the full symbolic HEOM generator
 ##   • Algebra rules, symbolic_group, apply_local_operators (all required interfaces)
-
-import FermionicHilbertSpaces.NonCommutativeProducts: @nc, Swap, NCMul, AddTerms, @commutative, mul_effect
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Bath descriptor
@@ -117,12 +115,12 @@ end
 
 const HEOMBosonicOps = Union{HEOMBosonicUp,HEOMBosonicDown,HEOMBosonicDamping}
 
-Base.show(io::IO, op::HEOMBosonicUp)      = print(io, "Aup(", op.l, ")")
-Base.show(io::IO, op::HEOMBosonicDown)    = print(io, "Adown(", op.l, ")")
+Base.show(io::IO, op::HEOMBosonicUp) = print(io, "Aup(", op.l, ")")
+Base.show(io::IO, op::HEOMBosonicDown) = print(io, "Adown(", op.l, ")")
 Base.show(io::IO, op::HEOMBosonicDamping) = print(io, "W_aux")
-Base.adjoint(op::HEOMBosonicUp)           = HEOMBosonicDown(op.l, op.bath)
-Base.adjoint(op::HEOMBosonicDown)         = HEOMBosonicUp(op.l, op.bath)
-Base.adjoint(op::HEOMBosonicDamping)      = op   # W is Hermitian
+Base.adjoint(op::HEOMBosonicUp) = HEOMBosonicDown(op.l, op.bath)
+Base.adjoint(op::HEOMBosonicDown) = HEOMBosonicUp(op.l, op.bath)
+Base.adjoint(op::HEOMBosonicDamping) = op   # W is Hermitian
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Algebra registration and commutativity
@@ -131,7 +129,7 @@ Base.adjoint(op::HEOMBosonicDamping)      = op   # W is Hermitian
 @nc HEOMBosonicUp HEOMBosonicDown HEOMBosonicDamping
 
 # HEOM auxiliary operators commute with all system operator algebras
-@commutative HEOMBosonicOps AbstractSym
+NonCommutativeProducts.@commutative HEOMBosonicOps AbstractSym
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Multiplication rules (mul_effect)
@@ -161,12 +159,12 @@ end
 """
     HEOMBosonicAuxState(n)
 
-Basis state for the bosonic HEOM auxiliary Hilbert space.  `n` is a vector of
-non-negative integers where `n[l]` is the number of times exponent index `l`
+Basis state for the bosonic HEOM auxiliary Hilbert space. `n` is stored as an
+immutable tuple of non-negative integers where `n[l]` is the number of times exponent index `l`
 appears in the ADO multi-index j.  The total tier (hierarchy level) is `sum(n)`.
 """
-struct HEOMBosonicAuxState <: AbstractBasisState
-    n::Vector{Int}
+struct HEOMBosonicAuxState{N} <: AbstractBasisState
+    n::NTuple{N,Int}
 end
 Base.:(==)(a::HEOMBosonicAuxState, b::HEOMBosonicAuxState) = a.n == b.n
 Base.hash(a::HEOMBosonicAuxState, h::UInt) = hash(a.n, h)
@@ -176,27 +174,25 @@ Base.show(io::IO, s::HEOMBosonicAuxState) = print(io, "ADO", s.n)
 # Local operator application (bridge to matrix_representation machinery)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Apply a single HEOM auxiliary factor to an occupation vector.
+# Apply a single HEOM auxiliary factor to an occupation tuple.
 # Returns (new_n, new_amplitude); amplitude becomes zero for forbidden transitions.
-function _apply_heom_factor!(n::Vector{Int}, amp, op::HEOMBosonicUp)
+function _apply_heom_factor!(n::NTuple{N,Int}, amp, op::HEOMBosonicUp) where {N}
     if sum(n) >= op.bath.m_max
         return n, zero(amp)
     end
-    n[op.l] += 1
-    return n, amp
+    return Base.setindex(n, n[op.l] + 1, op.l), amp
 end
 
-function _apply_heom_factor!(n::Vector{Int}, amp, op::HEOMBosonicDown)
+function _apply_heom_factor!(n::NTuple{N,Int}, amp, op::HEOMBosonicDown) where {N}
     nl = n[op.l]
     if nl == 0
         return n, zero(amp)
     end
-    n[op.l] -= 1
-    return n, amp * nl
+    return Base.setindex(n, nl - 1, op.l), amp * nl
 end
 
-function _apply_heom_factor!(n::Vector{Int}, amp, op::HEOMBosonicDamping)
-    decay = -sum(op.bath.χ[l] * n[l] for l in 1:op.bath.N_exp; init=zero(ComplexF64))
+function _apply_heom_factor!(n::NTuple{N,Int}, amp, op::HEOMBosonicDamping) where {N}
+    decay = -sum(op.bath.χ[l] * n[l] for l in eachindex(n); init=zero(ComplexF64))
     return n, amp * decay
 end
 
@@ -207,22 +203,16 @@ Apply an NCMul of HEOM auxiliary operators to a basis state, returning
 (new_states, amplitudes) tuples required by the matrix-building machinery.
 Factors are applied right-to-left (standard right-action convention).
 """
-function apply_local_operators(op::NCMul, state::HEOMBosonicAuxState, space, precomp)
-    n = copy(state.n)
+function apply_local_operators(op::NCMul, state::HEOMBosonicAuxState{N}, space, precomp) where {N}
+    n = state.n
     amp = op.coeff
     for factor in Iterators.reverse(op.factors)
         n, amp = _apply_heom_factor!(n, amp, factor)
         iszero(amp) && return (state,), (zero(amp),)
     end
-    return (HEOMBosonicAuxState(n),), (amp,)
+    return (HEOMBosonicAuxState{N}(n),), (amp,)
 end
-
-# ─────────────────────────────────────────────────────────────────────────────
-# symbolic_group and mat_eltype (required by matrix_representation dispatch)
-# ─────────────────────────────────────────────────────────────────────────────
-
 symbolic_group(op::HEOMBosonicOps) = op.bath
-# group_id(H::GenericHilbertSpace{HEOMBosonicAuxState}) = H.label
 mat_eltype(::Type{<:HEOMBosonicOps}) = ComplexF64
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -242,21 +232,24 @@ and Σₗ nₗ ≤ m_max.  The total dimension is
 where C is the binomial coefficient.
 """
 function heom_bosonic_aux_space(bath::HEOMBosonicBath)
-    states = HEOMBosonicAuxState[]
-    _enumerate_aux_states!(states, zeros(Int, bath.N_exp), 1, bath.N_exp, bath.m_max)
+    return _heom_bosonic_aux_space(bath, Val(bath.N_exp))
+end
+
+# Enumerate all occupation tuples via depth-first enumeration.
+function _heom_bosonic_aux_space(bath::HEOMBosonicBath, ::Val{N}) where {N}
+    states = HEOMBosonicAuxState{N}[]
+    _enumerate_aux_states!(states, zeros(Int, N), 1, bath.m_max)
     return GenericHilbertSpace(bath, states)
 end
 
-# Enumerate all occupation vectors via depth-first enumeration.
-function _enumerate_aux_states!(states, current, l, N_exp, m_max)
-    if l > N_exp
-        push!(states, HEOMBosonicAuxState(copy(current)))
+function _enumerate_aux_states!(states, current::Vector{Int}, l::Int, remaining::Int)
+    if l > length(current)
+        push!(states, HEOMBosonicAuxState(Tuple(current)))
         return
     end
-    remaining = m_max - sum(current)
     for nl in 0:remaining
         current[l] = nl
-        _enumerate_aux_states!(states, current, l + 1, N_exp, m_max)
+        _enumerate_aux_states!(states, current, l + 1, remaining - nl)
     end
     current[l] = 0
 end
@@ -341,7 +334,7 @@ end
 
 @testitem "HEOMBosonicBath construction" begin
     using FermionicHilbertSpaces: HEOMBosonicBath
-    bath = HEOMBosonicBath(1, 2, 3, [1.0, 2.0], [0.5+0.5im, 1.0+0.0im])
+    bath = HEOMBosonicBath(1, 2, 3, [1.0, 2.0], [0.5 + 0.5im, 1.0 + 0.0im])
     @test bath.N_exp == 2
     @test bath.m_max == 3
     @test bath.χ == ComplexF64[1.0, 2.0]
@@ -366,6 +359,7 @@ end
     H2 = heom_bosonic_aux_space(bath2)
     @test dim(H2) == 3
     @test dim(H2) == heom_aux_dim(2, 1)
+    @test basisstates(H2)[1].n isa NTuple{2,Int}
 
     # N_exp=2, m_max=2 → 1 + 2 + 3 = 6 states
     bath3 = HEOMBosonicBath(3, 2, 2, [1.0, 2.0], [1.0, 1.0])
@@ -375,20 +369,19 @@ end
 end
 
 @testitem "HEOM aux operator actions" begin
-    using FermionicHilbertSpaces: HEOMBosonicBath, heom_bosonic_aux_space, matrix_representation
-    using FermionicHilbertSpaces: HEOMBosonicUp, HEOMBosonicDown, HEOMBosonicDamping
+    using FermionicHilbertSpaces: HEOMBosonicBath, heom_bosonic_aux_space, HEOMBosonicUp, HEOMBosonicDown, HEOMBosonicDamping
     using LinearAlgebra
 
-    bath = HEOMBosonicBath(1, 1, 2, [2.0+0.0im], [1.0+0.0im])
+    bath = HEOMBosonicBath(1, 2, 2, [2.0, 3], [1.0, 2])
     H = heom_bosonic_aux_space(bath)  # states: n=0,1,2
 
-    Aup   = HEOMBosonicUp(1, bath)
-    Adown = HEOMBosonicDown(1, bath)
-    W     = HEOMBosonicDamping(bath)
+    Aup = HEOMBosonicUp(1, bath)
+    Adown = HEOMBosonicDown(2, bath)
+    W = HEOMBosonicDamping(bath)
 
-    Mu  = Matrix(matrix_representation(Aup,   H; projection=true))
-    Md  = Matrix(matrix_representation(Adown, H; projection=true))
-    Mw  = Matrix(matrix_representation(W,     H))
+    Mu = matrix_representation(Aup, H; projection=true)
+    Md = matrix_representation(Adown, H; projection=true)
+    Mw = matrix_representation(W, H)
 
     # Aup: |0⟩→|1⟩, |1⟩→|2⟩, |2⟩→0 (truncated)
     @test Mu ≈ [0 0 0; 1 0 0; 0 1 0]
@@ -421,10 +414,10 @@ end
     ξ1 = 0.5 - 0.5im
     bath = HEOMBosonicBath(1, 1, 1, [χ1], [ξ1])
 
-    @spin σ_l 1//2
-    @spin σ_r 1//2
-    Hl =  ω / 2 * σ_l[:z]
-    Hr =  ω / 2 * σ_r[:z]
+    @spin σ_l 1 // 2
+    @spin σ_r 1 // 2
+    Hl = ω / 2 * σ_l[:z]
+    Hr = ω / 2 * σ_r[:z]
     Vl = σ_l[:z]
     Vr = σ_r[:z]
 
@@ -433,7 +426,7 @@ end
     # Build spaces
     Hs_l = hilbert_space(σ_l)
     Hs_r = hilbert_space(σ_r)
-    Haux  = heom_bosonic_aux_space(bath)
+    Haux = heom_bosonic_aux_space(bath)
     Hfull = tensor_product((Hs_l, Hs_r, Haux))
 
     mat = matrix_representation(M_sym, Hfull)
@@ -446,8 +439,8 @@ end
     # In vectorised form: sum of each column restricted to the ρ subspace must be zero
     # Equivalently: the all-ones vector on the m=0 sector is a left eigenvector with λ=0
     # Quick check: real part of trace of mat restricted to m=0 block should be zero
-    m0_inds = [i for (i,s) in enumerate(basisstates(Hfull)) if s.states[3].n == [0]]
+    m0_inds = [i for (i, s) in enumerate(basisstates(Hfull)) if s.states[3].n == (0,)]
     # sum of each column of the coherent (i(H_l - H_r)) part over the ρ sector: zero
     coherent_mat = matrix_representation(1im * (Hl - Hr), tensor_product((Hs_l, Hs_r)))
-    @test tr(coherent_mat) ≈ 0 atol=1e-12
+    @test tr(coherent_mat) ≈ 0 atol = 1e-12
 end

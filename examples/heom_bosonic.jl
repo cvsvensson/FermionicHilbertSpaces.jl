@@ -106,8 +106,8 @@ println("\nSymbolic HEOM generator:\n  ", M_sym)
 # The full augmented space is the tensor product of the doubled physical space
 # and the auxiliary ADO space.
 
-Hs_l = hilbert_space(σ_l) 
-Hs_r = hilbert_space(σ_r)  
+Hs_l = hilbert_space(σ_l)
+Hs_r = hilbert_space(σ_r)
 Haux = heom_bosonic_aux_space(bath) # dim = heom_aux_dim(N_exp=1, m_max=2) = 3
 
 Hfull = tensor_product((Hs_l, Hs_r, Haux))
