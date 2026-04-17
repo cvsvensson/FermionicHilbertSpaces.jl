@@ -339,7 +339,8 @@ Apply a single spin operator to a spin state. Returns (newstate, amplitude) wher
 function apply_local_operator(op::SpinSym, state::SpinState, ::Val{J}) where J
     m = state.m
     newstate = state
-    amplitude = one(typeof(sqrt(J * (J + 1))))
+    T = typeof(sqrt(J * (J + 1)) * m)
+    amplitude = one(T)
     for _ in 1:op.exponent
         m = newstate.m
         if op.op == :z
@@ -352,7 +353,7 @@ function apply_local_operator(op::SpinSym, state::SpinState, ::Val{J}) where J
                 newstate = SpinState(m + 1)
                 amplitude *= factor
             else
-                return (state, 0)
+                return (state, zero(T))
             end
         elseif op.op == :-
             # S_- |m⟩ = √(J(J+1) - m(m-1)) |m-1⟩
@@ -361,7 +362,7 @@ function apply_local_operator(op::SpinSym, state::SpinState, ::Val{J}) where J
                 newstate = SpinState(m - 1)
                 amplitude *= factor
             else
-                return (state, 0)
+                return (state, zero(T))
             end
         else
             throw(ArgumentError("Invalid spin operator symbol: $(op.op)."))
@@ -377,10 +378,10 @@ Apply a sequence of spin operators (product) to a spin state. Operators are appl
 """
 function apply_local_operators(op, state::SpinState, space::SpinSpace{J}, precomp) where J
     newstate = state
-    amplitude = op.coeff * one(typeof(sqrt(J * (J + 1))))  # Start with 1.0 to handle mixed numeric types
+    amplitude = op.coeff * one(typeof(sqrt(J * (J + 1))))  
     # Apply factors in reverse order (from right to left)
     for factor in reverse(op.factors)
-        newstate, factor_amp = apply_local_operator(factor, newstate, Val(J))
+        newstate, factor_amp = apply_local_operator(factor, newstate, Val{J}())
         if iszero(factor_amp)
             return (state,), (zero(amplitude),)
         end
@@ -469,6 +470,17 @@ end
     @test iszero(Sone[:+]^3)
     @test Sone[:z]^3 == Sone[:z]
 
+end
+
+@testitem "Spin matrix reps" begin
+    @spin s
+    H = hilbert_space(s, 1 // 2)
+    S_mat = Dict(sym => matrix_representation(s[sym], H) for sym in (:x, :y, :z, :+, :-))
+    @test S_mat[:+] == [0 0; 1 0]
+    @test S_mat[:-] == [0 1; 0 0]
+    @test S_mat[:z] == [-1//2 0; 0 1//2]
+    @test S_mat[:x] == [0 1//2; 1//2 0]
+    @test S_mat[:y] == [0 im//2; -im//2 0]
 end
 
 @testitem "Spin: spin-aware vs not" begin
