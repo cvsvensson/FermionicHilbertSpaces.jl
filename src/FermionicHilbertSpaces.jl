@@ -36,6 +36,27 @@ const hc = HC()
 
 abstract type AbstractSym end
 
+# Symbolic-basis remapping interface used by open-system left/right rewriting.
+symbolic_id(basis) = basis
+change_id(basis, newid) = throw(MethodError(change_id, (basis, newid)))
+symbolic_basis(sym) = throw(MethodError(symbolic_basis, (sym,)))
+change_basis(sym, newbasis) = throw(MethodError(change_basis, (sym, newbasis)))
+
+struct TaggedID{I,T<:Tuple}
+    base::I
+    tags::T
+end
+Base.hash(id::TaggedID, h::UInt) = hash(id.tags, hash(id.base, h))
+Base.:(==)(a::TaggedID, b::TaggedID) = a.base == b.base && a.tags == b.tags
+Base.isless(a::TaggedID, b::TaggedID) = a.base == b.base ? isless(a.tags, b.tags) : isless(a.base, b.base)
+
+tags(::Any) = ()
+tags(id::TaggedID) = id.tags
+
+_append_tag(ts::Tuple, tag::Symbol) = tag in ts ? ts : (ts..., tag)
+_tag_id(id::TaggedID, tag::Symbol) = TaggedID(id.base, _append_tag(id.tags, tag))
+_tag_id(id, tag::Symbol) = TaggedID(id, (tag,))
+
 struct TypedIterator{T,I}
     iter::I
 end
@@ -82,6 +103,7 @@ include("physics/fermions/bdg.jl")
 include("physics/bosons.jl")
 include("physics/spin.jl")
 include("physics/heom_bosonic.jl")
+include("physics/open_systems.jl")
 
 include("printing.jl")
 

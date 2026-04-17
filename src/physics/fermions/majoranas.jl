@@ -4,13 +4,19 @@ end
 Base.hash(x::MajoranaGroup, h::UInt) = hash(MajoranaGroup, hash(x.id, h))
 Base.:(==)(a::MajoranaGroup, b::MajoranaGroup) = a.id == b.id
 symbolic_group(g::MajoranaGroup) = g
-Base.isless(g1::MajoranaGroup, g2::MajoranaGroup) = g1.id < g2.id
+Base.isless(g1::MajoranaGroup, g2::MajoranaGroup) = isless(g1.id, g2.id)
+tags(g::MajoranaGroup) = tags(g.id)
+add_tag(g::MajoranaGroup, tag::Symbol) = MajoranaGroup(add_tag(g.id, tag))
 struct SymbolicMajoranaBasis
     name::Symbol
     group::MajoranaGroup
 end
 Base.hash(x::SymbolicMajoranaBasis, h::UInt) = hash(x.name, hash(x.group, h))
 symbolic_group(f::SymbolicMajoranaBasis) = f.group
+symbolic_id(f::SymbolicMajoranaBasis) = f.group
+change_id(f::SymbolicMajoranaBasis, newid) = SymbolicMajoranaBasis(f.name, newid)
+tags(f::SymbolicMajoranaBasis) = tags(symbolic_id(f))
+add_tag(f::SymbolicMajoranaBasis, tag::Symbol) = change_id(f, add_tag(symbolic_id(f), tag))
 Base.show(io::IO, x::SymbolicMajoranaBasis) = print(io, "SymbolicMajoranaBasis(", x.name, ")")
 
 abstract type AbstractMajoranaSym <: AbstractFermionSym end
@@ -52,6 +58,8 @@ Base.hash(a::MajoranaSym, h::UInt) = hash(a.label, hash(a.basis, h))
 Base.adjoint(x::MajoranaSym) = MajoranaSym(x.label, x.basis)
 Base.iszero(x::MajoranaSym) = false
 symbolic_group(f::AbstractMajoranaSym) = symbolic_group(f.basis)
+symbolic_basis(f::AbstractMajoranaSym) = f.basis
+change_basis(f::MajoranaSym, newbasis) = MajoranaSym(f.label, newbasis)
 function Base.show(io::IO, x::MajoranaSym)
     print(io, x.basis.name)
     if Base.isiterable(typeof(x.label))

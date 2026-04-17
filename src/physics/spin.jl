@@ -7,19 +7,24 @@ Base.:(==)(a::SpinField, b::SpinField) = a.name == b.name
 Base.hash(b::SpinField, h::UInt) = hash(b.name, h)
 Base.show(io::IO, b::SpinField) = print(io, "SpinField(", b.name, ")")
 
-struct SymbolicSpinBasis{L,P,J}
+struct SymbolicSpinBasis{L,P,J,I}
     label::L
     field::P
     spin::J
+    id::I
 end
-SymbolicSpinBasis(label::L) where L = SymbolicSpinBasis(label, nothing, nothing)
-Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field && a.spin == b.spin
+SymbolicSpinBasis(label::L) where L = SymbolicSpinBasis(label, nothing, nothing, label)
+Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field && a.spin == b.spin && a.id == b.id
 Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
-Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.spin, hash(x.field, hash(x.label, h)))
+Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.id, hash(x.spin, hash(x.field, hash(x.label, h))))
 label(S::SymbolicSpinBasis) = S.label
-Base.getindex(s::SpinField, i) = SymbolicSpinBasis(i, s, s.spin)
+Base.getindex(s::SpinField, i) = SymbolicSpinBasis(i, s, s.spin, (s.name, i, s.spin))
 atomic_factors(s::SymbolicSpinBasis) = (s,)
-atomic_id(s::SymbolicSpinBasis) = s
+atomic_id(s::SymbolicSpinBasis) = s.id
+symbolic_id(s::SymbolicSpinBasis) = s.id
+change_id(s::SymbolicSpinBasis, newid) = SymbolicSpinBasis(s.label, s.field, s.spin, newid)
+tags(s::SymbolicSpinBasis) = tags(symbolic_id(s))
+add_tag(s::SymbolicSpinBasis, tag::Symbol) = change_id(s, _tag_id(symbolic_id(s), tag))
 
 function Base.show(io::IO, S::SymbolicSpinBasis)
     spin_suffix = S.spin isa Nothing ? "" : ", spin=$(S.spin)"
@@ -41,7 +46,7 @@ macro spin(x)
         :($(esc(x))))
 end
 macro spin(x, spin)
-    Expr(:block, :($(esc(x)) = SymbolicSpinBasis($(Expr(:quote, x)), nothing, $(esc(spin)))),
+    Expr(:block, :($(esc(x)) = SymbolicSpinBasis($(Expr(:quote, x)), nothing, $(esc(spin)), ($(Expr(:quote, x)), $(esc(spin))))),
         :($(esc(x))))
 end
 
@@ -211,7 +216,9 @@ end
 Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.basis == b.basis && a.exponent == b.exponent
 Base.hash(a::SpinSym, h::UInt) = hash(a.exponent, hash(a.op, hash(a.basis, h)))
 symbolic_group(f::SpinSym) = symbolic_group(f.basis)
-symbolic_group(f::SymbolicSpinBasis) = f
+symbolic_group(f::SymbolicSpinBasis) = symbolic_id(f)
+symbolic_basis(f::SpinSym) = f.basis
+change_basis(f::SpinSym, newbasis) = SpinSym(f.op, newbasis, f.exponent)
 atomic_id(f::SpinSym) = atomic_id(f.basis)
 
 mat_eltype(::Type{<:SpinSym}) = Float64
@@ -378,7 +385,7 @@ Apply a sequence of spin operators (product) to a spin state. Operators are appl
 """
 function apply_local_operators(op, state::SpinState, space::SpinSpace{J}, precomp) where J
     newstate = state
-    amplitude = op.coeff * one(typeof(sqrt(J * (J + 1))))  
+    amplitude = op.coeff * one(typeof(sqrt(J * (J + 1))))
     # Apply factors in reverse order (from right to left)
     for factor in reverse(op.factors)
         newstate, factor_amp = apply_local_operator(factor, newstate, Val{J}())

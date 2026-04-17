@@ -1,10 +1,12 @@
-struct FermionicGroup
-    id::UInt64
+struct FermionicGroup{T}
+    id::T
 end
 Base.hash(x::FermionicGroup, h::UInt) = hash(x.id, h)
 Base.:(==)(a::FermionicGroup, b::FermionicGroup) = a.id == b.id
 symbolic_group(g::FermionicGroup) = g
-Base.isless(g1::FermionicGroup, g2::FermionicGroup) = g1.id < g2.id
+Base.isless(g1::FermionicGroup, g2::FermionicGroup) = isless(g1.id, g2.id)
+tags(g::FermionicGroup) = tags(g.id)
+add_tag(g::FermionicGroup, tag::Symbol) = FermionicGroup(_tag_id(g.id, tag))
 
 struct SymbolicFermionBasis
     name::Symbol
@@ -13,6 +15,10 @@ end
 Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.group, h))
 symbolic_group(h::SymbolicFermionBasis) = fermionic_group(h)
 fermionic_group(b::SymbolicFermionBasis) = b.group
+symbolic_id(b::SymbolicFermionBasis) = b.group
+change_id(b::SymbolicFermionBasis, newid) = SymbolicFermionBasis(b.name, newid)
+tags(b::SymbolicFermionBasis) = tags(symbolic_id(b))
+add_tag(b::SymbolicFermionBasis, tag::Symbol) = change_id(b, add_tag(symbolic_id(b), tag))
 """
     @fermions a b ...
 
@@ -50,6 +56,8 @@ end
 Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.label, x.basis)
 Base.iszero(x::FermionSym) = false
 symbolic_group(h::FermionSym) = symbolic_group(h.basis)
+symbolic_basis(h::FermionSym) = h.basis
+change_basis(h::FermionSym, newbasis) = FermionSym(h.creation, h.label, newbasis)
 atomic_id(h::FermionSym) = (h.basis, h.label)
 label(h::FermionSym) = h.label
 group_id(f::FermionSym) = symbolic_group(f)

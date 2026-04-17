@@ -10,8 +10,8 @@ using SciMLOperators: concretize
 # -----------------------------------------------------------------------------
 
 omega = 1.1
-n_exp = 4
-m_max = 4
+n_exp = 5
+m_max = 5
 
 gamma = ComplexF64[0.7+0.0im, 1.3+0.0im, 2, 4, 1im][1:n_exp]
 eta = ComplexF64[0.40-0.20im, 0.15+0.05im, 2, 4, 1im][1:n_exp]
@@ -19,6 +19,7 @@ eta = ComplexF64[0.40-0.20im, 0.15+0.05im, 2, 4, 1im][1:n_exp]
 # -----------------------------------------------------------------------------
 # FermionicHilbertSpaces matrix
 # -----------------------------------------------------------------------------
+using FermionicHilbertSpaces: SectorConstraint, parity
 
 @spin s_l 1 // 2
 @spin s_r 1 // 2
@@ -39,6 +40,22 @@ Hfull = tensor_product((Hs_l, Hs_r, Haux))
 M_fhs = matrix_representation(M_fhs_sym, Hfull)
 M_fhs_sys = matrix_representation(1im * (H_l - H_r), tensor_product((Hs_l, Hs_r)))
 
+# Constraint
+spin_parity(s) = (-1)^(iseven(Int(s.m + 1 // 2)))
+ADOparity(s) = (-1)^(iseven(sum(s.n)))
+even_parity(ps) = begin
+    p = prod(ps)
+    p == 1 ? p : missing
+end
+constraint = SectorConstraint(
+    [Hs_l, Hs_r, Haux],
+    [spin_parity, spin_parity, ADOparity], even_parity
+)
+Hcons = constrain_space(Hfull, constraint)
+matrix_representation(M_fhs_sym, Hcons)
+
+
+
 ##
 # -----------------------------------------------------------------------------
 # HierarchicalEOM matrix
@@ -52,8 +69,5 @@ M_h_obj = M_Boson(H_q, m_max, bath_h; threshold=0.0, verbose=false)
 M_h = concretize(M_h_obj.data)
 
 M_h_sys = concretize(M_S(H_q; verbose=false).data)
-println("FHS matrix size:  ", size(M_fhs))
-println("HEOM matrix size: ", size(M_h))
-@assert size(M_fhs) == size(M_h) "Matrix dimensions differ; cannot compare"
 ##
-M_h - transpose(M_fhs)
+M_h - transpose(M_fhs) |> norm
