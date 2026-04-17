@@ -16,15 +16,17 @@ end
 _precomputation_before_operator_application(factors, space) = nothing
 function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op::NCMul, space::AbstractHilbertSpace; projection=false)
     precomp = _precomputation_before_operator_application(op, space)
-    for (n, state) in enumerate(basisstates(space))
+    for (i, state) in enumerate(basisstates(space))
         newstates, newamps = apply_local_operators(op, state, space, precomp)
-        for (newstate, amp) in zip(newstates, newamps)
+        for n in eachindex(newstates, newamps)
+            newstate = newstates[n]
+            amp = newamps[n]
             if !iszero(amp)
                 outind = state_index(newstate, space)
                 if !projection || !ismissing(outind)
                     push!(outinds, outind)
                     push!(amps, amp)
-                    push!(ininds, n)
+                    push!(ininds, i)
                 end
             end
         end
@@ -168,6 +170,7 @@ function _term_matrix_representation(op, H::AbstractHilbertSpace; kwargs...)
     sizehint!(_ininds, N)
     sizehint!(_amps, N)
     (outinds, ininds, amps) = operator_indices_and_amplitudes!((_outinds, _ininds, _amps), op, H; kwargs...)
+    isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, N)
     return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
 end
 function _factorized_term_matrix_representation(ops::Vector, H; kwargs...)
@@ -180,6 +183,7 @@ function _factorized_term_matrix_representation(ops::Vector, H; kwargs...)
     sizehint!(_ininds, N)
     sizehint!(_amps, N)
     (outinds, ininds, amps) = operator_indices_and_amplitudes!((_outinds, _ininds, _amps), ops, H; kwargs...)
+    isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, N)
     return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
 end
 
