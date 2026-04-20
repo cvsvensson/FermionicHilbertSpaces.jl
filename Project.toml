@@ -14,6 +14,12 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
 TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 
+[weakdeps]
+LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
+
+[extensions]
+FermionicHilbertSpacesLinearMapsExt = "LinearMaps"
+
 [compat]
 BitPermutations = "0.3"
 FillArrays = "1"

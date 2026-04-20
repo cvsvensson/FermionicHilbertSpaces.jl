@@ -54,7 +54,7 @@ _find_position(op::AbstractSym, H::BdGHilbertSpace) = _find_position(op, parent(
 
 function matrix_representation(op, H::BdGHilbertSpace)
     isquadratic(op) || throw(ArgumentError("Operator must be quadratic in fermions to be represented on a BdG Hilbert space."))
-    normal_order_to_bdg(_matrix_representation_single_space(remove_identity(op), H))
+    normal_order_to_bdg(_matrix_representation_single_space(remove_identity(op), H, EagerRepr()))
 end
 
 

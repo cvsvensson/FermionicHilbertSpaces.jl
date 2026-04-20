@@ -1,5 +1,8 @@
 abstract type AbstractFermionSym <: AbstractSym end
 
+struct EagerRepr end
+struct LazyRepr end
+
 function mat_eltype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S,F}
     promote_type(C, mat_eltype(S))
 end
@@ -100,42 +103,42 @@ function partition_factors_by_basis(factors::Vector, bases)
 end
 
 
-function _matrix_representation(op::NCMul, bases, space::ProductSpace; kwargs...)
+function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr; kwargs...)
     spaces = factors(space)
     partitioned = partition_factors_by_basis(op.factors, bases)
     matrices = map(partitioned, spaces) do factors, space
         if isempty(factors)
             return I(dim(space))
         else
-            _term_matrix_representation(NCMul(1, factors), space; kwargs...)
+            _term_matrix_representation(NCMul(1, factors), space, repr; kwargs...)
         end
     end
     length(spaces) == 1 && return op.coeff * only(matrices)
     op.coeff * kron(reverse(matrices)...)
 end
-function _matrix_representation(op::NCMul, bases, space; kwargs...)
+function _matrix_representation(op::NCMul, bases, space, repr; kwargs...)
     if isempty(op.factors)
         return op.coeff * I(dim(space))
     else
         if length(bases) > 1
             partition = partition_factors_by_basis(op.factors, bases)
-            return op.coeff * _factorized_term_matrix_representation(map(ops -> NCMul(1, ops), partition), space; kwargs...)
+            return op.coeff * _factorized_term_matrix_representation(map(ops -> NCMul(one(op.coeff), ops), partition), space, repr; kwargs...)
         else
-            return _term_matrix_representation(op, space; kwargs...)
+            return _term_matrix_representation(op, space, repr; kwargs...)
         end
     end
 end
-function _matrix_representation(op::NCAdd, bases, space; kwargs...)
+function _matrix_representation(op::NCAdd, bases, space, repr; kwargs...)
     if length(bases) == 1
-        return _matrix_representation_single_space(op, space; kwargs...)
+        return _matrix_representation_single_space(op, space, repr; kwargs...)
     end
-    sum(_matrix_representation(term, bases, space; kwargs...) for term in NCterms(op)) + op.coeff * I(dim(space))
+    sum(_matrix_representation(term, bases, space, repr; kwargs...) for term in NCterms(op)) + op.coeff * I(dim(space))
 end
-function _matrix_representation(op, bases, space; kwargs...) #Assume op is a single symbolic operator
-    _matrix_representation(NCMul(1, [op]), bases, space; kwargs...)
+function _matrix_representation(op, bases, space, repr; kwargs...) #Assume op is a single symbolic operator
+    _matrix_representation(NCMul(1, [op]), bases, space, repr; kwargs...)
 end
 
-function _matrix_representation_single_space(op::NCAdd, space; kwargs...)
+function _matrix_representation_single_space(op::NCAdd, space, ::EagerRepr; kwargs...)
     outinds = Int[]
     ininds = Int[]
     AT = mat_eltype(op)
@@ -158,7 +161,7 @@ function _matrix_representation_single_space(op::NCAdd, space; kwargs...)
 end
 
 
-function _term_matrix_representation(op, H::AbstractHilbertSpace; kwargs...)
+function _term_matrix_representation(op, H::AbstractHilbertSpace, ::EagerRepr; kwargs...)
     _outinds = Int[]
     _ininds = Int[]
     AT = mat_eltype(op)
@@ -170,7 +173,7 @@ function _term_matrix_representation(op, H::AbstractHilbertSpace; kwargs...)
     (outinds, ininds, amps) = operator_indices_and_amplitudes!((_outinds, _ininds, _amps), op, H; kwargs...)
     return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
 end
-function _factorized_term_matrix_representation(ops::Vector, H; kwargs...)
+function _factorized_term_matrix_representation(ops::Vector, H, ::EagerRepr; kwargs...)
     _outinds = Int[]
     _ininds = Int[]
     AT = promote_type([mat_eltype(op) for op in ops]...)
@@ -242,14 +245,15 @@ M = matrix_representation(op, H)
 size(M) == (dim(H), dim(H))
 ```
 """
-function matrix_representation(op, space::AbstractHilbertSpace; kwargs...)
+function matrix_representation(op, space::AbstractHilbertSpace; lazy=false, kwargs...)
+    repr = lazy ? LazyRepr() : EagerRepr()
     if trivial_operator(op)
         return get_trivial_op_coeff(op) * I(dim(space))
     end
     op_groups = symbolic_groups(op)
     space_groups = unique(Iterators.map(group_id, factors(space)))
     all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
-    return _matrix_representation(op, space_groups, space; kwargs...)
+    return _matrix_representation(op, space_groups, space, repr; kwargs...)
 end
 trivial_operator(op::Union{UniformScaling,Number}) = true
 trivial_operator(op::NCMul) = length(op.factors) == 0
