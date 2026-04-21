@@ -408,22 +408,13 @@ function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState{B}, spa
     newstate = ProductState{B}(Tuple(newstates))
     return (newstate,), (amp,)
 end
-function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), ops::Vector{<:NCMul}, space::AbstractHilbertSpace; projection=false)
+function operator_indices_and_amplitudes!((outinds, ininds, amps), ops::Vector{<:NCMul}, space::AbstractHilbertSpace; projection=false)
     # This is for productspaces, where ops is a list of operators applying to each factor space
     coeff = prod(op.coeff for op in ops)
     precomp = _precomputation_before_operator_application(ops, space)
     for (n, state) in enumerate(basisstates(space))
         newstates, newamps = apply_local_operators(ops, state, space, precomp)
-        for (newstate, amp) in zip(newstates, newamps)
-            if !iszero(amp)
-                outind = state_index(newstate, space)
-                if !projection || !ismissing(outind)
-                    push!(outinds, outind)
-                    push!(amps, amp * coeff)
-                    push!(ininds, n)
-                end
-            end
-        end
+        push_inds_amps!((outinds, ininds, amps), n, newstates, newamps, coeff, space; projection)
     end
     return (outinds, ininds, amps)
 end
