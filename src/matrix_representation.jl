@@ -23,7 +23,7 @@ function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op::N
     return (outinds, ininds, amps)
 end
 
-function push_inds_amps!((outinds, ininds, amps), inind, newstates, newamps, coeff, space; projection=false)
+@inline function push_inds_amps!((outinds, ininds, amps), inind, newstates, newamps, coeff, space; projection=false)
     for n in eachindex(newstates, newamps)
         newstate = newstates[n]
         amp = newamps[n]
