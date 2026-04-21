@@ -5,20 +5,19 @@ Base.hash(x::FermionicGroup, h::UInt) = hash(x.id, h)
 Base.:(==)(a::FermionicGroup, b::FermionicGroup) = a.id == b.id
 symbolic_group(g::FermionicGroup) = g
 Base.isless(g1::FermionicGroup, g2::FermionicGroup) = isless(g1.id, g2.id)
-tags(g::FermionicGroup) = tags(g.id)
-add_tag(g::FermionicGroup, tag::Symbol) = FermionicGroup(_tag_id(g.id, tag))
 
-struct SymbolicFermionBasis
+struct SymbolicFermionBasis{T<:Tags}
     name::Symbol
     group::FermionicGroup
+    tags::T
 end
-Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.group, h))
+SymbolicFermionBasis(name, group) = SymbolicFermionBasis(name, group, Tags(nothing))
+Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.tags, hash(x.name, hash(x.group, h)))
 symbolic_group(h::SymbolicFermionBasis) = fermionic_group(h)
 fermionic_group(b::SymbolicFermionBasis) = b.group
-symbolic_id(b::SymbolicFermionBasis) = b.group
-change_id(b::SymbolicFermionBasis, newid) = SymbolicFermionBasis(b.name, newid)
-tags(b::SymbolicFermionBasis) = tags(symbolic_id(b))
-add_tag(b::SymbolicFermionBasis, tag::Symbol) = change_id(b, add_tag(symbolic_id(b), tag))
+tags(b::SymbolicFermionBasis) = b.tags
+add_tag(b::SymbolicFermionBasis, tag) = SymbolicFermionBasis(b.name, b.group, add_tag(b.tags, tag))
+
 """
     @fermions a b ...
 

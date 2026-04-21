@@ -36,32 +36,23 @@ const hc = HC()
 
 abstract type AbstractSym end
 
-# Symbolic-basis remapping interface used by open-system left/right rewriting.
-symbolic_id(basis) = basis
-change_id(basis, newid) = throw(MethodError(change_id, (basis, newid)))
-symbolic_basis(sym) = throw(MethodError(symbolic_basis, (sym,)))
-change_basis(sym, newbasis) = throw(MethodError(change_basis, (sym, newbasis)))
 
-struct TaggedID{I,T<:Tuple}
-    base::I
+struct Tags{T}
     tags::T
 end
-Base.hash(id::TaggedID, h::UInt) = hash(id.tags, hash(id.base, h))
-Base.:(==)(a::TaggedID, b::TaggedID) = a.base == b.base && a.tags == b.tags
-Base.isless(a::TaggedID, b::TaggedID) = a.base == b.base ? isless(a.tags, b.tags) : isless(a.base, b.base)
-
-tags(::Any) = ()
-tags(id::TaggedID) = id.tags
+Base.hash(id::Tags, h::UInt) = hash(id.tags, h)
+Base.:(==)(a::Tags, b::Tags) = a.tags == b.tags
+Base.isless(a::Tags, b::Tags) = isless(hash(a.tags), hash(b.tags))
+# tags(id::Tags) = id.tags
 
 function _symbolic_name_with_tags(name, tagged)
-    tagset = tags(tagged)
-    isempty(tagset) && return string(name)
+    tagset = tags(tagged).tags
+    isnothing(tagset) && return string(name)
     return string(name, "(", join(tagset, ","), ")")
 end
 
-_append_tag(ts::Tuple, tag::Symbol) = tag in ts ? ts : (ts..., tag)
-_tag_id(id::TaggedID, tag::Symbol) = TaggedID(id.base, _append_tag(id.tags, tag))
-_tag_id(id, tag::Symbol) = TaggedID(id, (tag,))
+add_tag(t::Tags, tag) = Tags((t.tags..., tag))
+add_tag(::Tags{Nothing}, tag) = Tags((tag,))
 
 struct TypedIterator{T,I}
     iter::I
@@ -139,7 +130,7 @@ PrecompileTools.@compile_workload begin
         Hb = hilbert_space(b, 2)
         Hs = hilbert_space(s)
         H = tensor_product(H2, Hb, Hs)
-        mat = matrix_representation(b'b + s[:x]*f[3], H)
+        mat = matrix_representation(b'b + s[:x] * f[3], H)
     end
 end
 

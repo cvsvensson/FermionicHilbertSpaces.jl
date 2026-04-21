@@ -20,18 +20,16 @@ macro bosons(name)
         :($(esc(name))))
 end
 
-struct BosonField{I}
+struct BosonField{T<:Tags}
     name::Symbol
-    id::I
+    tags::T
 end
-BosonField(name::Symbol) = BosonField(name, name)
-Base.:(==)(a::BosonField, b::BosonField) = a.name == b.name && a.id == b.id
-Base.hash(b::BosonField, h::UInt) = hash(b.id, hash(b.name, h))
+BosonField(name::Symbol) = BosonField(name, Tags(nothing))
+Base.:(==)(a::BosonField, b::BosonField) = a.name == b.name && a.tags == b.tags
+Base.hash(b::BosonField, h::UInt) = hash(b.tags, hash(b.name, h))
 Base.show(io::IO, b::BosonField) = print(io, "BosonField(", b.name, ")")
-symbolic_id(b::BosonField) = b.id
-change_id(b::BosonField, newid) = BosonField(b.name, newid)
-tags(b::BosonField) = tags(symbolic_id(b))
-add_tag(b::BosonField, tag::Symbol) = change_id(b, _tag_id(symbolic_id(b), tag))
+tags(b::BosonField) = b.tags
+add_tag(b::BosonField, tag) = BosonField(b.name, add_tag(b.tags, tag))
 
 struct BosonSym{L,B} <: AbstractSym
     label::L
@@ -200,11 +198,9 @@ function apply_local_operators(op::NCMul, state::BosonicState, space::TruncatedB
     return (BosonicState(n),), (amplitude,)
 end
 
-# symbolic_group(f::BosonSym{L,B}) = f.basis 
-symbolic_group(f::BosonSym{<:Any,B}) where B<:BosonField = (symbolic_id(f.basis), f.label)
+symbolic_group(f::BosonSym{<:Any,B}) where B<:BosonField = (symbolic_group(f.basis), f.label)
 symbolic_group(f::BosonSym{<:Any,Nothing}) = (BosonSym, f.label)
 atomic_id(f::BosonSym) = symbolic_group(f)
-# symbolic_group(f::BosonSym{<:Any,Not}) = (BosonSym, f.label)
 symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
 atomic_id(H::TruncatedBosonicHilbertSpace) = atomic_id(H.sym)
 group_id(H::TruncatedBosonicHilbertSpace) = atomic_id(H)

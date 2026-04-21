@@ -5,35 +5,32 @@ function open_system(base, args...; kwargs...)
     left_basis = _left_basis(base)
     right_basis = _right_basis(base)
     Hleft = hilbert_space(left_basis, args...; kwargs...)
-    Hright = hilbert_space(right_basis, args...; kwargs...)
-    Hfull = tensor_product(Hleft, TransposedSpace(Hright))
-    return Hfull, left, right
+    Hright = TransposedSpace(hilbert_space(right_basis, args...; kwargs...))
+    Hfull = tensor_product(Hleft, Hright)
+    return Hfull, Hleft, Hright, left, right
 end
 
-function _remap_factor_basis(factor, side::Symbol)
+function _remap_factor_basis(factor, tag)
     basis = symbolic_basis(factor)
-    new_basis = side === :left ? _left_basis(basis) : _right_basis(basis)
+    new_basis = add_tag(basis, tag)
     return change_basis(factor, new_basis)
 end
 
-function _remap_operator(op::NCMul, side::Symbol)
-    new_factors = map(f -> _remap_factor_basis(f, side), op.factors)
+function _remap_operator(op::NCMul, tag)
+    new_factors = map(f -> _remap_factor_basis(f, tag), op.factors)
     NCMul(op.coeff, new_factors)
 end
 
-function _remap_operator(op::NCAdd, side::Symbol)
+function _remap_operator(op::NCAdd, tag)
     remapped = op.coeff
     for (term, coeff) in op.dict
-        remapped += coeff * _remap_operator(term, side)
+        remapped += coeff * _remap_operator(term, tag)
     end
     return remapped
 end
 
-_remap_operator(op, ::Symbol) = op
-
-left(base) = _left_basis(base)
-right(base) = _right_basis(base)
-
+left(op::AbstractSym) = _remap_factor_basis(op, :left)
+right(op::AbstractSym) = _remap_factor_basis(op, :right)
 left(op::NCMul) = _remap_operator(op, :left)
 left(op::NCAdd) = _remap_operator(op, :left)
 right(op::NCMul) = _remap_operator(op, :right)
@@ -56,6 +53,8 @@ atomic_id(H::TransposedSpace) = atomic_id(H.parent)
 atomic_factors(H::TransposedSpace) = (H,)#map(TransposedSpace, atomic_factors(H.parent))
 # Base.keys(H::TransposedSpace) = (atomic_id(H),)
 _precomputation_before_operator_application(factors, space::TransposedSpace) = _precomputation_before_operator_application(factors, space.parent)
+TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, factors(H)), map(TransposedSpace, H.atoms))
+state_mapper(H::TransposedSpace, Hs) = state_mapper(H.parent, Hs)
 
 
 function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSpace}
@@ -116,6 +115,16 @@ end
     M = matrix_representation(left(op) * right(op) + left(op), Hfull)
     @test size(M) == (dim(Hfull), dim(Hfull))
     Mexpected = matrix_representation((c_left[1]' * c_left[1]) * (c_right[1]' * c_right[1]) + (c_left[1]' * c_left[1]), Hfull)
+    @test M ≈ Mexpected
+
+    @spin s 1 // 2
+    Hs, _, _ = open_system(s)
+    s_left = left(s)
+    s_right = right(s)
+    H = tensor_product(Hfull, Hs)
+    op = c[1]' * s[:z]
+    M = matrix_representation(left(op) * right(op) + left(op), H)
+    Mexpected = matrix_representation((c_left[1]' * s_left[:z]) * (c_right[1]' * s_right[:z]) + (c_left[1]' * s_left[:z]), H)
     @test M ≈ Mexpected
 end
 
