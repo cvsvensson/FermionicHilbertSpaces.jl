@@ -122,7 +122,8 @@ function _matrix_representation(op::NCMul, bases, space, repr; kwargs...)
     else
         if length(bases) > 1
             partition = partition_factors_by_basis(op.factors, bases)
-            return op.coeff * _factorized_term_matrix_representation(map(ops -> NCMul(one(op.coeff), ops), partition), space, repr; kwargs...)
+            vecops = map((n, ops) -> NCMul(n == 1 ? op.coeff : one(op.coeff), ops), eachindex(partition), partition)
+            return _factorized_term_matrix_representation(vecops, space, repr; kwargs...)
         else
             return _term_matrix_representation(op, space, repr; kwargs...)
         end

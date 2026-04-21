@@ -1,6 +1,7 @@
 module FermionicHilbertSpaces
 
 using LinearAlgebra, SparseArrays
+import SciMLOperators
 import FillArrays: Zeros, Fill
 import OrderedCollections: OrderedDict
 using TestItems
