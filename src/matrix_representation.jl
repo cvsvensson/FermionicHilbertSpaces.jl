@@ -234,8 +234,7 @@ end
 
 Return the matrix representation of symbolic operator `op` in Hilbert space `space`.
 
-This is the main entry point for converting symbolic expressions (fermionic, Majorana,
-spin, or mixed products supported by the space) into sparse/dense matrices.
+Keyword arguments include `lazy` (default `false`) to return a `LazyOperator` that computes the matrix-vector product on demand, and `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space.
 
 # Examples
 ```julia

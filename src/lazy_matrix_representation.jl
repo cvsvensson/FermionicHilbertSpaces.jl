@@ -79,7 +79,8 @@ function LinearAlgebra.mul!(Y::AbstractMatrix, L::LazyOperator, X::AbstractMatri
     lazy_mul!(Y, L, X, α, β)
     return Y
 end
-function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, precomp, coeff, α, conjugate, transpose, projection)
+function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, precomp, _coeff, conjugate, transpose, projection)
+    coeff = (conjugate ? conj(_coeff) : _coeff)
     for (n, state) in enumerate(basisstates(space))
         if !transpose
             xn = x[n]
@@ -92,9 +93,9 @@ function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, 
                 outind = state_index(newstate, space)
                 if !projection || !ismissing(outind)
                     if !transpose
-                        y[outind] += amp * xn * α
+                        y[outind] += amp * xn
                     else
-                        y[n] += amp * x[outind] * α
+                        y[n] += amp * x[outind]
                     end
                 end
             end
@@ -102,12 +103,13 @@ function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, 
     end
 end
 
-function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, coeff, α, conjugate, transpose, projection)
+function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, _coeff, conjugate, transpose, projection)
+    coeff = (conjugate ? conj(_coeff) : _coeff)
     for (n, state) in enumerate(basisstates(space))
         newstates, newamps = apply_local_operators(term, state, space, precomp)
         for (newstate, _amp) in zip(newstates, newamps)
             if !iszero(_amp)
-                amp = (conjugate ? conj(_amp) : _amp) * coeff * α
+                amp = (conjugate ? conj(_amp) : _amp) * coeff
                 outind = state_index(newstate, space)
                 if !projection || !ismissing(outind)
                     if !transpose
@@ -122,29 +124,29 @@ function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, 
 end
 
 function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCMul}, x::AbstractVecOrMat, α, β)
-    y .= β .* y
-    _apply_single_term!(y, x, L.space, L.op, L.precomp, true, α, L.conjugate, L.transpose, L.projection)
+    rmul!(y, β)
+    _apply_single_term!(y, x, L.space, L.op, L.precomp, α, L.conjugate, L.transpose, L.projection)
     return y
 end
 
 function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:Vector{<:NCMul}}, x::AbstractVecOrMat, α, β)
     # This is for productspaces, where ops is a list of operators applying to each factor space
-    y .= β .* y
+    rmul!(y, β)
     coeff = prod(op.coeff for op in L.op)
-    _apply_single_term!(y, x, L.space, L.op, L.precomp, coeff, α, L.conjugate, L.transpose, L.projection)
+    _apply_single_term!(y, x, L.space, L.op, L.precomp, coeff * α, L.conjugate, L.transpose, L.projection)
     return y
 end
 
 function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCAdd}, x::AbstractVecOrMat, α, β)
-    y .= β .* y
+    rmul!(y, β)
     op = L.op
     for (term, coeff) in op.dict
         precomp = _precomputation_before_operator_application(term, L.space)
-        _apply_single_term!(y, x, L.space, term, precomp, coeff, α, L.conjugate, L.transpose, L.projection)
+        _apply_single_term!(y, x, L.space, term, precomp, coeff * α, L.conjugate, L.transpose, L.projection)
     end
     if !iszero(op.coeff) && !iszero(α)
-        scalar_coeff = L.conjugate ? conj(op.coeff) : op.coeff
-        y .+= scalar_coeff .* x .* α
+        scalar_coeff = α * (L.conjugate ? conj(op.coeff) : op.coeff)
+        y .+= scalar_coeff .* x
     end
     return y
 end
