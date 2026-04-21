@@ -414,7 +414,7 @@ function operator_indices_and_amplitudes!((outinds, ininds, amps), ops::Vector{<
     precomp = _precomputation_before_operator_application(ops, space)
     for (n, state) in enumerate(basisstates(space))
         newstates, newamps = apply_local_operators(ops, state, space, precomp)
-        push_inds_amps!((outinds, ininds, amps), n, newstates, newamps, coeff, space)
+        push_inds_amps!((outinds, ininds, amps), n, newstates, newamps, coeff, space; projection)
     end
     return (outinds, ininds, amps)
 end

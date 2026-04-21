@@ -18,7 +18,7 @@ function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op::N
     precomp = _precomputation_before_operator_application(op, space)
     for (n, state) in enumerate(basisstates(space))
         newstates, newamps = apply_local_operators(op, state, space, precomp)
-        push_inds_amps!((outinds, ininds, amps), n, newstates, newamps, 1, space; projection=projection)
+        push_inds_amps!((outinds, ininds, amps), n, newstates, newamps, 1, space; projection)
     end
     return (outinds, ininds, amps)
 end
