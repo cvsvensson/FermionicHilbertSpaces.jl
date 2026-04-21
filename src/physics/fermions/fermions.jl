@@ -77,10 +77,11 @@ function _compact_fermionic_modes(io::IO, c::FermionicSpace;
     # Group consecutive modes by symbolic basis name
     groups = Tuple{Any,Vector{Any}}[]
     for m in c.modes
-        if !isempty(groups) && last(groups)[1] == m.basis.name
+        mode_name = _symbolic_name_with_tags(m.basis.name, m.basis)
+        if !isempty(groups) && last(groups)[1] == mode_name
             push!(last(groups)[2], m.label)
         else
-            push!(groups, (m.basis.name, Any[m.label]))
+            push!(groups, (mode_name, Any[m.label]))
         end
     end
 

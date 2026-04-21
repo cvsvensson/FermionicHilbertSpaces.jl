@@ -90,8 +90,8 @@ state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
 group_id(H::SpinSpace) = symbolic_group(H.sym)
 atomic_id(H::SpinSpace) = symbolic_group(H.sym)
 
-hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,J}) where J<:Union{Int,Rational} = SpinSpace{sym.spin}(sym)
-hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:Nothing}, J) = SpinSpace{J}(sym)
+hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,J,<:Any}) where J<:Union{Int,Rational} = SpinSpace{sym.spin}(sym)
+hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:Nothing,<:Any}, J) = SpinSpace{J}(sym)
 hilbert_space(sym::SpinField{J}, labels, constraint=NoSymmetry()) where J<:Union{Int,Rational} = tensor_product(map(l -> hilbert_space(sym[l]), labels); constraint)
 hilbert_space(sym::SpinField{Nothing}, labels, J, constraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], J), labels); constraint)
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
@@ -206,7 +206,7 @@ function Base.show(io::IO, x::SpinSym)
     if x.basis.field isa Nothing
         print(io, x.basis.label, "[:$(x.op)]")
     else
-        print(io, x.basis.field.name, "[", x.basis.label, "][:$(x.op)]")
+        print(io, _symbolic_name_with_tags(x.basis.field.name, x.basis), "[", x.basis.label, "][:$(x.op)]")
     end
     if x.exponent != 1
         print(io, "^", x.exponent)

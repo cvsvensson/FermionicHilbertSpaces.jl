@@ -53,6 +53,12 @@ Base.isless(a::TaggedID, b::TaggedID) = a.base == b.base ? isless(a.tags, b.tags
 tags(::Any) = ()
 tags(id::TaggedID) = id.tags
 
+function _symbolic_name_with_tags(name, tagged)
+    tagset = tags(tagged)
+    isempty(tagset) && return string(name)
+    return string(name, "(", join(tagset, ","), ")")
+end
+
 _append_tag(ts::Tuple, tag::Symbol) = tag in ts ? ts : (ts..., tag)
 _tag_id(id::TaggedID, tag::Symbol) = TaggedID(id.base, _append_tag(id.tags, tag))
 _tag_id(id, tag::Symbol) = TaggedID(id, (tag,))

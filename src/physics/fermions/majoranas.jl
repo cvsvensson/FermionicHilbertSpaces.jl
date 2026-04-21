@@ -61,7 +61,7 @@ symbolic_group(f::AbstractMajoranaSym) = symbolic_group(f.basis)
 symbolic_basis(f::AbstractMajoranaSym) = f.basis
 change_basis(f::MajoranaSym, newbasis) = MajoranaSym(f.label, newbasis)
 function Base.show(io::IO, x::MajoranaSym)
-    print(io, x.basis.name)
+    print(io, _symbolic_name_with_tags(x.basis.name, x.basis))
     if Base.isiterable(typeof(x.label))
         Base.show_delim_array(io, x.label, "[", ",", "]", false)
     else

@@ -47,7 +47,7 @@ function Base.show(io::IO, x::BosonSym)
     if x.basis isa Nothing
         print(io, x.label)
     else
-        print(io, x.basis.name)
+        print(io, _symbolic_name_with_tags(x.basis.name, x.basis))
     end
     print(io, x.exp > 0 ? "†" : "")
     if abs(x.exp) !== 1

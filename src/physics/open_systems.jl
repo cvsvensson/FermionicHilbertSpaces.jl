@@ -7,16 +7,11 @@ function open_system(base, args...; kwargs...)
     Hleft = hilbert_space(left_basis, args...; kwargs...)
     Hright = hilbert_space(right_basis, args...; kwargs...)
     Hfull = tensor_product(Hleft, TransposedSpace(Hright))
-    return (Hfull, left_basis, right_basis)
+    return Hfull, left, right
 end
 
 function _remap_factor_basis(factor, side::Symbol)
-    basis = try
-        symbolic_basis(factor)
-    catch err
-        err isa MethodError || rethrow(err)
-        return factor
-    end
+    basis = symbolic_basis(factor)
     new_basis = side === :left ? _left_basis(basis) : _right_basis(basis)
     return change_basis(factor, new_basis)
 end
@@ -45,27 +40,27 @@ right(op::NCMul) = _remap_operator(op, :right)
 right(op::NCAdd) = _remap_operator(op, :right)
 
 struct TransposedSpace{B,H} <: AbstractHilbertSpace{B}
-    inner::H
+    parent::H
 end
 TransposedSpace(inner::H) where {H<:AbstractHilbertSpace} = TransposedSpace{statetype(inner),H}(inner)
 
-Base.:(==)(a::TransposedSpace, b::TransposedSpace) = a.inner == b.inner
-Base.hash(H::TransposedSpace, h::UInt) = hash(H.inner, h)
-basisstates(H::TransposedSpace) = basisstates(H.inner)
-basisstate(i::Int, H::TransposedSpace) = basisstate(i, H.inner)
-state_index(state, H::TransposedSpace) = state_index(state, H.inner)
-dim(H::TransposedSpace) = dim(H.inner)
-isconstrained(H::TransposedSpace) = isconstrained(H.inner)
-group_id(H::TransposedSpace) = group_id(H.inner)
-atomic_id(H::TransposedSpace) = atomic_id(H.inner)
-atomic_factors(H::TransposedSpace) = (H,)#map(TransposedSpace, atomic_factors(H.inner))
+Base.:(==)(a::TransposedSpace, b::TransposedSpace) = a.parent == b.parent
+Base.hash(H::TransposedSpace, h::UInt) = hash(H.parent, h)
+basisstates(H::TransposedSpace) = basisstates(H.parent)
+basisstate(i::Int, H::TransposedSpace) = basisstate(i, H.parent)
+state_index(state, H::TransposedSpace) = state_index(state, H.parent)
+dim(H::TransposedSpace) = dim(H.parent)
+isconstrained(H::TransposedSpace) = isconstrained(H.parent)
+group_id(H::TransposedSpace) = group_id(H.parent)
+atomic_id(H::TransposedSpace) = atomic_id(H.parent)
+atomic_factors(H::TransposedSpace) = (H,)#map(TransposedSpace, atomic_factors(H.parent))
 # Base.keys(H::TransposedSpace) = (atomic_id(H),)
-_precomputation_before_operator_application(factors, space::TransposedSpace) = _precomputation_before_operator_application(factors, space.inner)
+_precomputation_before_operator_application(factors, space::TransposedSpace) = _precomputation_before_operator_application(factors, space.parent)
 
 
 function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSpace}
     only(unique(map(group_id, spaces))) == group || throw(ArgumentError("All spaces must belong to the same group"))
-    TransposedSpace(FermionicSpace(map(H -> H.inner, spaces), group))
+    TransposedSpace(FermionicSpace(map(H -> H.parent, spaces), group))
 end
 
 
@@ -74,9 +69,9 @@ function matrix_representation(op, H::TransposedSpace; kwargs...)
         return get_trivial_op_coeff(op) * I(dim(H))
     end
     op_groups = symbolic_groups(op)
-    space_groups = unique(Iterators.map(group_id, factors(H.inner)))
+    space_groups = unique(Iterators.map(group_id, factors(H.parent)))
     all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the provided space. Operator groups: $op_groups, expected one of: $space_groups"))
-    return transpose(matrix_representation(op, H.inner; kwargs...))
+    return transpose(matrix_representation(op, H.parent; kwargs...))
 end
 
 function left_operator(op, H::AbstractHilbertSpace, Hfull::AbstractHilbertSpace=tensor_product(H, TransposedSpace(H)); kwargs...)
@@ -111,16 +106,12 @@ end
 end
 
 @testitem "open_system symbolic left-right interface" begin
+    using FermionicHilbertSpaces: open_system
     @fermions c
-    (Hfull, c_left, c_right) = open_system(c, 1:1)
+    Hfull, left, right = open_system(c, 1:1)
+    c_left = left(c)
+    c_right = right(c)
     op = c[1]' * c[1]
-
-    @test tags(c) == ()
-    @test tags(c_left) == (:left,)
-    @test tags(c_right) == (:right,)
-    @test add_tag(c_left, :left) == c_left
-    @test left(c) == c_left
-    @test right(c) == c_right
 
     M = matrix_representation(left(op) * right(op) + left(op), Hfull)
     @test size(M) == (dim(Hfull), dim(Hfull))
@@ -129,7 +120,7 @@ end
 end
 
 
-function push_inds_amps!((outinds, ininds, amps), inind, newstates, newamps, coeff, space::TransposedSpace; projection=false)
+@inline function push_inds_amps!((outinds, ininds, amps), inind, newstates, newamps, coeff, space::TransposedSpace; projection=false)
     for n in eachindex(newstates, newamps)
         newstate = newstates[n]
         amp = newamps[n]

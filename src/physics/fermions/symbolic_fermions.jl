@@ -63,7 +63,7 @@ label(h::FermionSym) = h.label
 group_id(f::FermionSym) = symbolic_group(f)
 
 function Base.show(io::IO, x::FermionSym)
-    print(io, x.basis.name, x.creation ? "†" : "")
+    print(io, _symbolic_name_with_tags(x.basis.name, x.basis), x.creation ? "†" : "")
     if Base.isiterable(typeof(x.label))
         Base.show_delim_array(io, x.label, "[", ",", "]", false)
     else
@@ -137,7 +137,6 @@ mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
     @test_nowarn display(1 + f1)
     @test_nowarn display(1 + f3)
     @test_nowarn display(1 + a * f2 - 5 * f1 + 2 * z * f1 * f2)
-
     @test iszero(f1 - f1)
     @test iszero(f1 * f1)
     @test iszero(2 * f1 - 2 * f1)
