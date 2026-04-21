@@ -29,7 +29,13 @@ end
         amp = newamps[n]
         if !iszero(amp)
             outind = state_index(newstate, space)
-            if !projection || !ismissing(outind)
+            if ismissing(outind)
+                if projection
+                    continue
+                else
+                    throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
+                end
+            else
                 push!(outinds, outind)
                 push!(amps, amp * coeff)
                 push!(ininds, inind)
