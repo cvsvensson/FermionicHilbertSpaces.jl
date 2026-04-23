@@ -5,18 +5,17 @@ Base.hash(x::FermionicGroup, h::UInt) = hash(x.id, h)
 Base.:(==)(a::FermionicGroup, b::FermionicGroup) = a.id == b.id
 symbolic_group(g::FermionicGroup) = g
 Base.isless(g1::FermionicGroup, g2::FermionicGroup) = isless(g1.id, g2.id)
+add_tag(g::FermionicGroup, tag) = FermionicGroup(add_tag(g.id, tag))
+tags(g::FermionicGroup) = g.id
 
 struct SymbolicFermionBasis{T<:Tags}
     name::Symbol
-    group::FermionicGroup
-    tags::T
+    tags::FermionicGroup{T}
 end
-SymbolicFermionBasis(name, group) = SymbolicFermionBasis(name, group, Tags(nothing))
-Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.tags, hash(x.name, hash(x.group, h)))
-symbolic_group(h::SymbolicFermionBasis) = fermionic_group(h)
-fermionic_group(b::SymbolicFermionBasis) = b.group
-tags(b::SymbolicFermionBasis) = b.tags
-add_tag(b::SymbolicFermionBasis, tag) = SymbolicFermionBasis(b.name, b.group, add_tag(b.tags, tag))
+Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.tags, h))
+symbolic_group(x::SymbolicFermionBasis) = tags(x)
+tags(x::SymbolicFermionBasis) = x.tags
+add_tag(x::SymbolicFermionBasis, tag) = SymbolicFermionBasis(x.name, add_tag(x.tags, tag))
 
 """
     @fermions a b ...
@@ -36,14 +35,14 @@ and commute with fermions in other `@fermions` blocks.
 See also [`@majoranas`](@ref).
 """
 macro fermions(xs...)
-    group = FermionicGroup(hash(xs))
+    group = FermionicGroup(Tags((hash(xs),)))
     defs = map(xs) do x
         :($(esc(x)) = SymbolicFermionBasis($(Expr(:quote, x)), $group))
     end
     Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
 end
-Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.group == b.group
+Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.tags == b.tags
 Base.getindex(f::SymbolicFermionBasis, is...) = FermionSym(false, is, f)
 Base.getindex(f::SymbolicFermionBasis, i) = FermionSym(false, i, f)
 
@@ -62,7 +61,7 @@ label(h::FermionSym) = h.label
 group_id(f::FermionSym) = symbolic_group(f)
 
 function Base.show(io::IO, x::FermionSym)
-    print(io, _symbolic_name_with_tags(x.basis.name, x.basis), x.creation ? "†" : "")
+    print(io, _symbolic_name_with_tags(x.basis.name, x.basis; skip_first=1), x.creation ? "†" : "")
     if Base.isiterable(typeof(x.label))
         Base.show_delim_array(io, x.label, "[", ",", "]", false)
     else
@@ -70,8 +69,8 @@ function Base.show(io::IO, x::FermionSym)
     end
 end
 function Base.isless(a::FermionSym, b::FermionSym)
-    if a.basis.group !== b.basis.group
-        a.basis.group < b.basis.group
+    if tags(a.basis) !== tags(b.basis)
+        tags(a.basis) < tags(b.basis)
     elseif a.creation == b.creation
         a.basis.name == b.basis.name && return a.label < b.label
         a.basis.name < b.basis.name
@@ -90,7 +89,8 @@ function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     elseif a < b
         nothing
     elseif a > b
-        swap = Swap((-1)^(a.basis.group == b.basis.group))
+        anti_commuting = tags(a.basis) == tags(b.basis)
+        swap = Swap((-1)^anti_commuting)
         if a.label == b.label && a.basis == b.basis
             return AddTerms((swap, 1))
         else

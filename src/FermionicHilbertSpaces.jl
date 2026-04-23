@@ -43,12 +43,15 @@ end
 Base.hash(id::Tags, h::UInt) = hash(id.tags, h)
 Base.:(==)(a::Tags, b::Tags) = a.tags == b.tags
 Base.isless(a::Tags, b::Tags) = isless(hash(a.tags), hash(b.tags))
-# tags(id::Tags) = id.tags
+tagset(id::Tags) = id.tags
+tagset(::Tags{Nothing}) = ()
+tagset(x) = tagset(tags(x))
 
-function _symbolic_name_with_tags(name, tagged)
-    tagset = tags(tagged).tags
-    isnothing(tagset) && return string(name)
-    return string(name, "(", join(tagset, ","), ")")
+function _symbolic_name_with_tags(name, tagged; skip_first = 0)
+    tags = tagset(tagged)
+    tags = skip_first > 0 ? tags[skip_first+1:end] : tags
+    isempty(tags) && return string(name)
+    return string(name, "(", join(tags, ","), ")")
 end
 
 add_tag(t::Tags, tag) = Tags((t.tags..., tag))
@@ -99,7 +102,6 @@ include("physics/fermions/bdg.jl")
 
 include("physics/bosons.jl")
 include("physics/spin.jl")
-include("physics/heom_bosonic.jl")
 include("physics/open_systems.jl")
 
 include("printing.jl")

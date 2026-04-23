@@ -287,7 +287,6 @@ function state_mapper(source::ProductSpace, targets)
     factor_mappers = []
     factor_piece_targets = []  # (ti, sub_idx) per piece, in piece-output order
     pending_pieces = [Tuple{Int,Int,Int}[] for _ in targets]
-
     for (ci, factor) in enumerate(factors(source))
         catoms = atomic_factors(factor)
         covered_targets = Tuple(unique(atom_to_target[a] for a in catoms if haskey(atom_to_target, a)))
@@ -297,10 +296,11 @@ function state_mapper(source::ProductSpace, targets)
             push!(factor_piece_targets, ())
             continue
         end
-
+        atomic_id_set = Set(map(atomic_id, catoms))
         piece_destinations = map(covered_targets) do ti
-            (ti, findfirst(factor -> all(in(catoms), atomic_factors(factor)), groups(targets[ti])))
+            (ti, findfirst(factor -> all(atom -> in(atomic_id(atom), atomic_id_set), atomic_factors(factor)), groups(targets[ti])))
         end
+
         subspaces = [groups(targets[ti])[dest] for (ti, dest) in piece_destinations]
         push!(factor_mappers, state_mapper(factor, subspaces))
 
@@ -414,7 +414,9 @@ function operator_indices_and_amplitudes!((outinds, ininds, amps), ops::Vector{<
     precomp = _precomputation_before_operator_application(ops, space)
     for (n, state) in enumerate(basisstates(space))
         newstates, newamps = apply_local_operators(ops, state, space, precomp)
-        push_inds_amps!((outinds, ininds, amps), n, newstates, newamps, coeff, space)
+        push_inds_amps!((outinds, ininds, amps), n, newstates, newamps, coeff, space; projection)
     end
     return (outinds, ininds, amps)
 end
+
+add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors), map(a -> add_tag(a, tag), H.atoms))

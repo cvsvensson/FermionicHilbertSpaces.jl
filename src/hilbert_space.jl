@@ -14,8 +14,8 @@ basisstate(ind, H::GenericHilbertSpace) = H.basisstates[ind]
 Base.keys(H::GenericHilbertSpace) = (H.label,)
 state_index(state, H::GenericHilbertSpace) = get(H.state_index, state, missing)
 symbolic_group(H::GenericHilbertSpace) = H.label
-group_id(H::GenericHilbertSpace) = H.label
 atomic_id(H::GenericHilbertSpace) = H.label
+add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag), H.basisstates, H.state_index)
 
 
 @testitem "GenericHilbertSpace, ProductSpace" begin

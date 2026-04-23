@@ -19,14 +19,16 @@ end
 
 SymbolicSpinBasis(label::L, field::P=nothing, spin::J=nothing) where {L,P,J} = SymbolicSpinBasis(label, field, spin, Tags(nothing))
 Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field && a.spin == b.spin && a.tags == b.tags
+Base.isless(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = (a.field, a.label, a.tags) < (b.field, b.label, b.tags)
 Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
 Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.tags, hash(x.spin, hash(x.field, hash(x.label, h))))
 label(S::SymbolicSpinBasis) = S.label
 Base.getindex(s::SpinField, i) = SymbolicSpinBasis(i, s, s.spin, tags(s))
 atomic_factors(s::SymbolicSpinBasis) = (s,)
-atomic_id(s::SymbolicSpinBasis) = s.id
+atomic_id(s::SymbolicSpinBasis) = s
 tags(s::SymbolicSpinBasis) = s.tags
 add_tag(s::SymbolicSpinBasis, tag) = SymbolicSpinBasis(s.label, s.field, s.spin, add_tag(s.tags, tag))
+symbolic_group(s::SymbolicSpinBasis) = s
 
 function Base.show(io::IO, S::SymbolicSpinBasis)
     spin_suffix = S.spin isa Nothing ? "" : ", spin=$(S.spin)"
@@ -78,20 +80,22 @@ struct SpinSpace{J,M,S} <: AbstractAtomicHilbertSpace{SpinState{M}}
     basisstates::Vector{SpinState{M}}
     sym::S
     state_index::Dict{SpinState{M},Int}
-    function SpinSpace{J}(sym::S) where {J,S<:SymbolicSpinBasis}
-        states = spin_basisstates(Val(J))
-        state_index = Dict(s => i for (i, s) in enumerate(states))
-        new{J,typeof(J),S}(states, sym, state_index)
-    end
+end
+function SpinSpace{J}(sym::S) where {J,S<:SymbolicSpinBasis}
+    states = spin_basisstates(Val(J))
+    state_index = Dict(s => i for (i, s) in enumerate(states))
+    SpinSpace{J,typeof(J),S}(states, sym, state_index)
 end
 SpinSpace{J}(label) where J = SpinSpace{J}(SymbolicSpinBasis(label))
 basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
-group_id(H::SpinSpace) = symbolic_group(H.sym)
-atomic_id(H::SpinSpace) = symbolic_group(H.sym)
-
+atomic_id(H::SpinSpace) = atomic_id(H.sym)
+function add_tag(H::SpinSpace{J,M,S}, tag) where {J,M,S}
+    newsym = add_tag(H.sym, tag)
+    SpinSpace{J,M,typeof(newsym)}(H.basisstates, newsym, H.state_index)
+end
 hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,J,<:Any}) where J<:Union{Int,Rational} = SpinSpace{sym.spin}(sym)
 hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:Nothing,<:Any}, J) = SpinSpace{J}(sym)
 hilbert_space(sym::SpinField{J}, labels, constraint=NoSymmetry()) where J<:Union{Int,Rational} = tensor_product(map(l -> hilbert_space(sym[l]), labels); constraint)
@@ -219,7 +223,6 @@ Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.basis == b.basis && a.exp
 Base.hash(a::SpinSym, h::UInt) = hash(a.exponent, hash(a.op, hash(a.basis, h)))
 symbolic_group(f::SpinSym) = symbolic_group(f.basis)
 symbolic_basis(f::SpinSym) = f.basis
-symbolic_group(f::SymbolicSpinBasis) = (SymbolicSpinBasis, f.label, f.spin, tags(f))
 change_basis(f::SpinSym, newbasis) = SpinSym(f.op, newbasis, f.exponent)
 atomic_id(f::SpinSym) = atomic_id(f.basis)
 
@@ -253,13 +256,13 @@ end
 _factor_or_empty(x) = isone(x) ? Any[] : [x]
 
 function NonCommutativeProducts.mul_effect(a::S, b::S) where S<:SpinSym
-    if symbolic_group(a.basis) > symbolic_group(b.basis)
+    if a.basis > b.basis
         return Swap(1)
     end
-    if symbolic_group(a.basis) < symbolic_group(b.basis)
+    if a.basis < b.basis
         return nothing
     end
-    symbolic_group(a.basis) == symbolic_group(b.basis) || throw(ArgumentError("Symbolic groups must be comparable for multiplication."))
+    a.basis == b.basis || throw(ArgumentError("Symbolic groups must be comparable for multiplication."))
 
     if a.op == b.op && a.op in (:+, :-, :z)
         exponent = a.exponent + b.exponent
