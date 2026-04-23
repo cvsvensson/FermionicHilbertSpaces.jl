@@ -2,9 +2,9 @@ struct GenericHilbertSpace{B,L,S} <: AbstractAtomicHilbertSpace{B}
     label::L
     basisstates::S
     state_index::Dict{B,Int}
-    function GenericHilbertSpace(label, basisstates, state_index=Dict(reverse(pair) for pair in enumerate(basisstates)))
+    function GenericHilbertSpace(label::L, basisstates, state_index=Dict(reverse(pair) for pair in enumerate(basisstates))) where L
         B = eltype(basisstates)
-        new{B,eltype(label),typeof(basisstates)}(label, basisstates, state_index)
+        new{B,L,typeof(basisstates)}(label, basisstates, state_index)
     end
 end
 Base.:(==)(H1::GenericHilbertSpace, H2::GenericHilbertSpace) = H1 === H2 || (H1.label == H2.label && H1.basisstates == H2.basisstates)

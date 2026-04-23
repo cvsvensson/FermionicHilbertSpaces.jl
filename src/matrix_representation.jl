@@ -115,15 +115,16 @@ end
 function _matrix_representation(op::NCMul, bases, space::ProductSpace; kwargs...)
     spaces = factors(space)
     partitioned = partition_factors_by_basis(op.factors, bases)
-    matrices = map(partitioned, spaces) do factors, space
+    matrices = Iterators.map(partitioned, spaces, eachindex(spaces)) do factors, space, n
+        coeff = n == 1 ? op.coeff : one(op.coeff)
         if isempty(factors)
-            return I(dim(space))
+            return coeff * I(dim(space))
         else
-            _term_matrix_representation(NCMul(1, factors), space; kwargs...)
+            _term_matrix_representation(NCMul(coeff, factors), space; kwargs...)
         end
     end
-    length(spaces) == 1 && return op.coeff * only(matrices)
-    op.coeff * kron(reverse(matrices)...)
+    length(spaces) == 1 && return first(matrices)
+    return foldl(kron, Iterators.reverse(matrices))
 end
 function _matrix_representation(op::NCMul, bases, space; kwargs...)
     if isempty(op.factors)
@@ -217,25 +218,22 @@ end
 Extract all unique symbolic bases from an operator expression.
 Returns a set of unique bases found in the operator.
 """
-function symbolic_groups(op::NCMul)
-    bases = Set()
+function symbolic_groups(op::NCMul, bases=Set())
     for factor in op.factors
-        basis = symbolic_group(factor)
-        push!(bases, basis)
+        push!(bases, symbolic_group(factor))
     end
     return bases
 end
 
 function symbolic_groups(op::NCAdd)
     bases = Set()
-    for (term, coeff) in op.dict
-        term_bases = symbolic_groups(term)
-        union!(bases, term_bases)
+    for term in keys(op.dict)
+        symbolic_groups(term, bases)
     end
     return bases
 end
 
-function symbolic_groups(op)
+function symbolic_groups(op) # Assume op is a single symbolic operator
     [symbolic_group(op)]
 end
 

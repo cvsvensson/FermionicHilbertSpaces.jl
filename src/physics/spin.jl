@@ -396,7 +396,7 @@ function apply_local_operators(op, state::SpinState, space, precomp::Val{J}) whe
     newstate = state
     amplitude = op.coeff * one(typeof(sqrt(J * (J + 1))))
     # Apply factors in reverse order (from right to left)
-    for factor in reverse(op.factors)
+    for factor in Iterators.reverse(op.factors)
         newstate, factor_amp = apply_local_operator(factor, newstate, Val{J}())
         if iszero(factor_amp)
             return (state,), (zero(amplitude),)
