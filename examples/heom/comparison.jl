@@ -8,7 +8,6 @@ gamma = [1 + 0.5im, 0.5 + 0.1im]
 eta = [0.4 - 0.2im, 0.15 + 0.05im]
 
 ## FermionicHilbertSpaces
-using BenchmarkTools
 @spin s 1 // 2
 ham = omega * s[:z]
 V = 2s[:x]
@@ -17,7 +16,7 @@ M_fhs_sym = heom_generator(ham, V, bath_fhs)
 Hs, Hleft, Hright, left, right = open_system(s)
 Haux = heom_bosonic_aux_space(bath_fhs)
 Hfull = tensor_product((Hs, Haux))
-@profview @btime M_fhs = matrix_representation(M_fhs_sym, Hfull);
+M_fhs = matrix_representation(M_fhs_sym, Hfull);
 ## HierarchicalEOM.jl
 using HierarchicalEOM
 H_q = 0.5 * omega * sigmaz()
