@@ -102,7 +102,7 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
 
     h = a[1]' * a[2] + 1im * a[1]' * a[2]' + hc
     H = hilbert_space(a, 1:2, FermionicHilbertSpaces.SingleParticleState.(1:3))
-    @test_throws MethodError matrix_representation(h, H)
+    @test_throws ArgumentError matrix_representation(h, H)
 
     N = 10
     H = hilbert_space(a, 1:N, SingleParticleState.(1:N))

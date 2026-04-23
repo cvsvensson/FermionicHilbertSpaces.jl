@@ -16,20 +16,26 @@ end
 _precomputation_before_operator_application(factors, space) = nothing
 function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op::NCMul, space::AbstractHilbertSpace; projection=false)
     precomp = _precomputation_before_operator_application(op, space)
-    for (i, state) in enumerate(basisstates(space))
+    for (ind, state) in enumerate(basisstates(space))
         newstates, newamps = apply_local_operators(op, state, space, precomp)
-        push_inds_amps!((outinds, ininds, amps), i, newstates, newamps, 1, space; projection)
+        push_inds_amps!((outinds, ininds, amps), ind, newstates, newamps, 1, space; projection)
     end
     return (outinds, ininds, amps)
 end
 
-function push_inds_amps!((outinds, ininds, amps), inind, newstates, newamps, coeff, space; projection=false)
+@inline function push_inds_amps!((outinds, ininds, amps), inind, newstates, newamps, coeff, space; projection=false)
     for n in eachindex(newstates, newamps)
         newstate = newstates[n]
         amp = newamps[n]
         if !iszero(amp)
             outind = state_index(newstate, space)
-            if !projection || !ismissing(outind)
+            if ismissing(outind)
+                if projection
+                    continue
+                else
+                    throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
+                end
+            else
                 push!(outinds, outind)
                 push!(amps, amp * coeff)
                 push!(ininds, inind)
@@ -37,7 +43,6 @@ function push_inds_amps!((outinds, ininds, amps), inind, newstates, newamps, coe
         end
     end
 end
-
 
 ## 
 remove_identity(a::NCMul) = a
