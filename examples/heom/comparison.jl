@@ -21,24 +21,19 @@ eta = ComplexF64[0.40-0.20im, 0.15+0.05im, 2, 4, 1im][1:n_exp]
 # -----------------------------------------------------------------------------
 using FermionicHilbertSpaces: SectorConstraint, parity
 
-@spin s_l 1 // 2
-@spin s_r 1 // 2
+@spin s 1 // 2
 
-H_l = omega * s_l[:z]
-H_r = omega * s_r[:z]
-V_l = 2s_l[:x]
-V_r = 2s_r[:x]
+ham = omega * s[:z]
+V = 2s[:x]
 
 bath_fhs = HEOMBosonicBath(1, n_exp, m_max, gamma, eta)
-M_fhs_sym = heom_generator(H_l, H_r, V_l, V_r, bath_fhs)
-
-Hs_l = hilbert_space(s_l)
-Hs_r = hilbert_space(s_r)
+M_fhs_sym = heom_generator(ham, V, bath_fhs)
+Hs, Hleft, Hright, left, right = open_system(s)
 Haux = heom_bosonic_aux_space(bath_fhs)
-Hfull = tensor_product((Hs_l, Hs_r, Haux))
+Hfull = tensor_product((Hs, Haux))
 
 M_fhs = matrix_representation(M_fhs_sym, Hfull)
-M_fhs_sys = matrix_representation(1im * (H_l - H_r), tensor_product((Hs_l, Hs_r)))
+M_fhs_sys = matrix_representation(1im * (left(ham) - right(ham)), Hs)
 
 # Constraint
 spin_parity(s) = (-1)^(iseven(Int(s.m + 1 // 2)))
@@ -48,13 +43,11 @@ even_parity(ps) = begin
     p == 1 ? p : missing
 end
 constraint = SectorConstraint(
-    [Hs_l, Hs_r, Haux],
+    [Hleft, Hright, Haux],
     [spin_parity, spin_parity, ADOparity], even_parity
 )
 Hcons = constrain_space(Hfull, constraint)
 matrix_representation(M_fhs_sym, Hcons)
-
-
 
 ##
 # -----------------------------------------------------------------------------

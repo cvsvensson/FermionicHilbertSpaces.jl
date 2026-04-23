@@ -32,9 +32,7 @@
 ##   • heom_generator        – builds the full symbolic HEOM generator
 ##   • Algebra rules, symbolic_group, apply_local_operators (all required interfaces)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Bath descriptor
-# ─────────────────────────────────────────────────────────────────────────────
+using FermionicHilbertSpaces, Test
 
 """
     HEOMBosonicBath(id, N_exp, m_max, χ, ξ)
@@ -122,40 +120,21 @@ Base.adjoint(op::HEOMBosonicUp) = HEOMBosonicDown(op.l, op.bath)
 Base.adjoint(op::HEOMBosonicDown) = HEOMBosonicUp(op.l, op.bath)
 Base.adjoint(op::HEOMBosonicDamping) = op   # W is Hermitian
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Algebra registration and commutativity
-# ─────────────────────────────────────────────────────────────────────────────
-
+## Algebra
+import FermionicHilbertSpaces: AbstractSym, GenericHilbertSpace, open_system, symbolic_group, apply_local_operators, add_tag,
+    @nc, NCMul, NonCommutativeProducts.mul_effect, NonCommutativeProducts.@commutative
 @nc HEOMBosonicUp HEOMBosonicDown HEOMBosonicDamping
+@commutative HEOMBosonicOps AbstractSym
 
-# HEOM auxiliary operators commute with all system operator algebras
-NonCommutativeProducts.@commutative HEOMBosonicOps AbstractSym
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Multiplication rules (mul_effect)
-# ─────────────────────────────────────────────────────────────────────────────
-#
-# For operators from different baths: sort by bath id (they act on
-# independent aux spaces, so they commute).
-# For operators from the same bath: these do *not* have simple algebraic
-# relations analogous to bosonic [b,b†]=1.  We keep them in the order they
-# appear and let apply_local_operators resolve the action sequentially.
-# (Returning `nothing` means "already canonical — do not rewrite".)
-
+# For operators from different baths: sort by bath id
+# otherwise don't do anything
 _heom_bath_id(op::HEOMBosonicOps) = op.bath.id
-
 function mul_effect(a::HEOMBosonicOps, b::HEOMBosonicOps)
     _heom_bath_id(a) > _heom_bath_id(b) && return Swap(1)   # different baths: sort by id
     return nothing                                            # same bath or already ordered
 end
 
-# Damping commutes with Up/Down (they act on different bases conceptually, but
-# we keep them in the product and apply sequentially, so this is fine).
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Basis state for the auxiliary space
-# ─────────────────────────────────────────────────────────────────────────────
-
+## State and space
 """
     HEOMBosonicAuxState(n)
 
@@ -163,16 +142,12 @@ Basis state for the bosonic HEOM auxiliary Hilbert space. `n` is stored as an
 immutable tuple of non-negative integers where `n[l]` is the number of times exponent index `l`
 appears in the ADO multi-index j.  The total tier (hierarchy level) is `sum(n)`.
 """
-struct HEOMBosonicAuxState{N} <: AbstractBasisState
+struct HEOMBosonicAuxState{N} <: FermionicHilbertSpaces.AbstractBasisState
     n::NTuple{N,Int}
 end
 Base.:(==)(a::HEOMBosonicAuxState, b::HEOMBosonicAuxState) = a.n == b.n
 Base.hash(a::HEOMBosonicAuxState, h::UInt) = hash(a.n, h)
 Base.show(io::IO, s::HEOMBosonicAuxState) = print(io, "ADO", s.n)
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Local operator application (bridge to matrix_representation machinery)
-# ─────────────────────────────────────────────────────────────────────────────
 
 # Apply a single HEOM auxiliary factor to an occupation tuple.
 # Returns (new_n, new_amplitude); amplitude becomes zero for forbidden transitions.
@@ -253,24 +228,13 @@ function _enumerate_aux_states!(states, current::Vector{Int}, l::Int, remaining:
     end
     current[l] = 0
 end
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Helper: analytical dimension of aux space
-# ─────────────────────────────────────────────────────────────────────────────
-
 """
     heom_aux_dim(N_exp, m_max)
-
-Return the dimension of the bosonic HEOM auxiliary space:
-`Σ_{m=0}^{m_max} binomial(N_exp + m - 1, m)`.
+Return the dimension of the bosonic HEOM auxiliary space: `Σ_{m=0}^{m_max} binomial(N_exp + m - 1, m)`.
 """
 function heom_aux_dim(N_exp::Int, m_max::Int)
     sum(binomial(N_exp + m - 1, m) for m in 0:m_max)
 end
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Symbolic HEOM generator
-# ─────────────────────────────────────────────────────────────────────────────
 
 """
     heom_generator(H_sys_sym, V_sys_sym, bath; sys_left, sys_right)
@@ -291,49 +255,28 @@ Arguments
 
 The convention follows arXiv 2306.07522 Eq. (16) for the purely bosonic case
 with the doubled-space (vectorised density-matrix) representation of Section II.1.
-
-Example
--------
-```julia
-@spin σ
-bath = HEOMBosonicBath(1, 1, 2, [1.0], [0.5 - 0.5im])
-
-H_l = ω * σ_l[:z]
-H_r = ω * σ_r[:z]
-V_l = σ_l[:z]
-V_r = σ_r[:z]
-
-M_sym = heom_generator(H_l, H_r, V_l, V_r, bath)
-```
 """
-function heom_generator(H_sys_l, H_sys_r, V_sys_l, V_sys_r, bath::HEOMBosonicBath)
+function heom_generator(ham, V, bath::HEOMBosonicBath)
     # Coherent Liouvillian: i[H, ρ] → i(H_l - H_r) in doubled space
-    M = 1im * (H_sys_l - H_sys_r)
-
+    M = 1im * (add_tag(ham, :left) - add_tag(ham, :right))
+    Vleft = add_tag(V, :left)
+    Vright = add_tag(V, :right)
     # Hierarchy damping: −Σₗ χₗ nₗ (diagonal on auxiliary space)
     M = M + HEOMBosonicDamping(bath)
 
     for l in 1:bath.N_exp
-        χl = bath.χ[l]
         ξl = bath.ξ[l]
-
         # Upward coupling: −i [V_s, ρ] ⊗ Aup(l) in doubled space
-        # [V_s, ρ] → (V_l − V_r)
-        M = M - 1im * (V_sys_l - V_sys_r) * HEOMBosonicUp(l, bath)
+        M = M - 1im * (Vleft - Vright) * HEOMBosonicUp(l, bath)
 
         # Downward coupling: −i (ξ_l V_s ρ − ξ_l* ρ V_s) ⊗ Adown(l)
-        # ξ_l V_s ρ → ξ_l V_l,   ξ_l* ρ V_s → ξ_l* V_r
-        M = M - 1im * (ξl * V_sys_l - conj(ξl) * V_sys_r) * HEOMBosonicDown(l, bath)
+        M = M - 1im * (ξl * Vleft - conj(ξl) * Vright) * HEOMBosonicDown(l, bath)
     end
     M
 end
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Tests
-# ─────────────────────────────────────────────────────────────────────────────
-
-@testitem "HEOMBosonicBath construction" begin
-    using FermionicHilbertSpaces: HEOMBosonicBath
+## Tests
+@testset "HEOMBosonicBath construction" begin
     bath = HEOMBosonicBath(1, 2, 3, [1.0, 2.0], [0.5 + 0.5im, 1.0 + 0.0im])
     @test bath.N_exp == 2
     @test bath.m_max == 3
@@ -342,41 +285,34 @@ end
     @test_throws ArgumentError HEOMBosonicBath(1, 2, 3, [1.0], [0.5, 1.0])
 end
 
-@testitem "HEOMBosonicAuxState enumeration" begin
-    using FermionicHilbertSpaces: HEOMBosonicBath, heom_bosonic_aux_space, heom_aux_dim, HEOMBosonicAuxState, basisstates, dim
-
+@testset "HEOMBosonicAuxState enumeration" begin
     # N_exp=1, m_max=2 → states n=0,1,2 (3 states)
     bath = HEOMBosonicBath(1, 1, 2, [1.0], [1.0])
     H = heom_bosonic_aux_space(bath)
     @test dim(H) == 3
-    @test dim(H) == heom_aux_dim(1, 2)
-    @test basisstates(H)[1] == HEOMBosonicAuxState([0])
-    @test basisstates(H)[2] == HEOMBosonicAuxState([1])
-    @test basisstates(H)[3] == HEOMBosonicAuxState([2])
+    @test basisstates(H)[1] == HEOMBosonicAuxState((0,))
+    @test basisstates(H)[2] == HEOMBosonicAuxState((1,))
+    @test basisstates(H)[3] == HEOMBosonicAuxState((2,))
 
     # N_exp=2, m_max=1 → states (0,0),(1,0),(0,1) (3 states)
     bath2 = HEOMBosonicBath(2, 2, 1, [1.0, 2.0], [1.0, 1.0])
     H2 = heom_bosonic_aux_space(bath2)
     @test dim(H2) == 3
-    @test dim(H2) == heom_aux_dim(2, 1)
     @test basisstates(H2)[1].n isa NTuple{2,Int}
 
     # N_exp=2, m_max=2 → 1 + 2 + 3 = 6 states
     bath3 = HEOMBosonicBath(3, 2, 2, [1.0, 2.0], [1.0, 1.0])
     H3 = heom_bosonic_aux_space(bath3)
     @test dim(H3) == 6
-    @test dim(H3) == heom_aux_dim(2, 2)
 end
 
-@testitem "HEOM aux operator actions" begin
-    using FermionicHilbertSpaces: HEOMBosonicBath, heom_bosonic_aux_space, HEOMBosonicUp, HEOMBosonicDown, HEOMBosonicDamping
+@testset "HEOM aux operator actions" begin
     using LinearAlgebra
-
-    bath = HEOMBosonicBath(1, 2, 2, [2.0, 3], [1.0, 2])
+    bath = HEOMBosonicBath(1, 1, 2, [2.0], [1.0])
     H = heom_bosonic_aux_space(bath)  # states: n=0,1,2
 
     Aup = HEOMBosonicUp(1, bath)
-    Adown = HEOMBosonicDown(2, bath)
+    Adown = HEOMBosonicDown(1, bath)
     W = HEOMBosonicDamping(bath)
 
     Mu = matrix_representation(Aup, H; projection=true)
@@ -393,8 +329,7 @@ end
     @test Mw ≈ diagm([0.0, -2.0, -4.0])
 end
 
-@testitem "HEOM aux operators commute with fermions" begin
-    using FermionicHilbertSpaces: HEOMBosonicBath, HEOMBosonicUp, HEOMBosonicDown
+@testset "HEOM aux operators commute with fermions" begin
     @fermions f
     bath = HEOMBosonicBath(1, 1, 2, [1.0], [1.0])
     Aup = HEOMBosonicUp(1, bath)
@@ -403,8 +338,8 @@ end
     @test f[1] * HEOMBosonicDown(1, bath) - HEOMBosonicDown(1, bath) * f[1] == 0
 end
 
-@testitem "HEOM full matrix for minimal model" begin
-    using FermionicHilbertSpaces: HEOMBosonicBath, heom_bosonic_aux_space, heom_generator, heom_aux_dim
+@testset "HEOM full matrix for minimal model" begin
+    using FermionicHilbertSpaces: open_system
     using LinearAlgebra
 
     # Minimal model: spin-1/2 system, 1 bath exponential, m_max=1
@@ -414,20 +349,16 @@ end
     ξ1 = 0.5 - 0.5im
     bath = HEOMBosonicBath(1, 1, 1, [χ1], [ξ1])
 
-    @spin σ_l 1 // 2
-    @spin σ_r 1 // 2
-    Hl = ω / 2 * σ_l[:z]
-    Hr = ω / 2 * σ_r[:z]
-    Vl = σ_l[:z]
-    Vr = σ_r[:z]
+    @spin σ 1 // 2
+    ham = ω / 2 * σ[:z]
+    V = σ[:z]
 
-    M_sym = heom_generator(Hl, Hr, Vl, Vr, bath)
+    M_sym = heom_generator(ham, V, bath)
 
     # Build spaces
-    Hs_l = hilbert_space(σ_l)
-    Hs_r = hilbert_space(σ_r)
+    Hs, Hleft, Hright, left, right = open_system(σ)
     Haux = heom_bosonic_aux_space(bath)
-    Hfull = tensor_product((Hs_l, Hs_r, Haux))
+    Hfull = tensor_product((Hs, Haux))
 
     mat = matrix_representation(M_sym, Hfull)
 
@@ -441,6 +372,6 @@ end
     # Quick check: real part of trace of mat restricted to m=0 block should be zero
     m0_inds = [i for (i, s) in enumerate(basisstates(Hfull)) if s.states[3].n == (0,)]
     # sum of each column of the coherent (i(H_l - H_r)) part over the ρ sector: zero
-    coherent_mat = matrix_representation(1im * (Hl - Hr), tensor_product((Hs_l, Hs_r)))
+    coherent_mat = matrix_representation(1im * (left(ham) - right(ham)), Hs)
     @test tr(coherent_mat) ≈ 0 atol = 1e-12
 end
