@@ -273,7 +273,7 @@ end
 
 function matrix_representation(op, H::SingleParticleHilbertSpace)
     isquadratic(op) && isnumberconserving(op) || throw(ArgumentError("Only quadratic, number conserving operators supported for SingleParticleHilbertSpace"))
-    _matrix_representation_single_space(remove_identity(op), H)
+    _matrix_representation_single_space(remove_identity(op), H, EagerRepr())
 end
 _find_position(op, H::SingleParticleHilbertSpace) = _find_position(op, parent(H))
 function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::SingleParticleHilbertSpace; kwargs...)
