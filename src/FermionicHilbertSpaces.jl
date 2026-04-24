@@ -1,6 +1,7 @@
 module FermionicHilbertSpaces
 
 using LinearAlgebra, SparseArrays
+import SciMLOperators
 import FillArrays: Zeros, Fill
 import OrderedCollections: OrderedDict
 using TestItems
@@ -89,6 +90,7 @@ include("reshape.jl")
 include("generate_constrained_states.jl")
 
 include("matrix_representation.jl")
+include("lazy_matrix_representation.jl")
 
 include("physics/fermions/fock.jl")
 include("physics/fermions/phase_factors.jl")
