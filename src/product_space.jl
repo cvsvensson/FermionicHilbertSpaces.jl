@@ -393,30 +393,21 @@ function partial_trace_phase_factor(state1, state2, space::ProductSpace)
 end
 
 
-
 function _precomputation_before_operator_application(ops::Vector, space::ProductSpace)
     map((subops, space) -> _precomputation_before_operator_application(subops, space), ops, factors(space))
 end
-function apply_local_operators(ops::Vector{<:NCMul}, state::ProductState{B}, space::ProductSpace, precomps) where B
+function _apply_local_operators(ops::Vector{<:NCMul}, state::ProductState{B}, space::ProductSpace, precomps) where B<:Tuple
     amp = 1
     spaces = factors(space)
-    newstates = map(state.states, spaces, ops, precomps) do subst, space, op, precomp
-        new_local_states, local_amps = apply_local_operators(op, subst, space, precomp) #TODO: add support for multiple terms here
-        amp *= only(local_amps)
-        only(new_local_states)
+    newstates = state.states
+    count = 1
+    foreach(state.states, spaces, ops, precomps) do subst, space, op, precomp
+        new_local_state, local_amp = _apply_local_operators(op, subst, space, precomp)
+        amp *= local_amp
+        newstates = Base.setindex(newstates, new_local_state, count)
+        count += 1
     end
-    newstate = ProductState{B}(Tuple(newstates))
-    return (newstate,), (amp,)
-end
-function operator_indices_and_amplitudes!((outinds, ininds, amps), ops::Vector{<:NCMul}, space::AbstractHilbertSpace; projection=false)
-    # This is for productspaces, where ops is a list of operators applying to each factor space
-    coeff = prod(op.coeff for op in ops)
-    precomp = _precomputation_before_operator_application(ops, space)
-    for (n, state) in enumerate(basisstates(space))
-        newstates, newamps = apply_local_operators(ops, state, space, precomp)
-        push_inds_amps!((outinds, ininds, amps), n, newstates, newamps, coeff, space; projection)
-    end
-    return (outinds, ininds, amps)
+    return ProductState{B}(newstates), amp
 end
 
 add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors), map(a -> add_tag(a, tag), H.atoms))

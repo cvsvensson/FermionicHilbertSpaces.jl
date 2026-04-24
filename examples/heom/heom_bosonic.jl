@@ -32,7 +32,7 @@
 ##   • Algebra rules, symbolic_group, apply_local_operators (all required interfaces)
 
 using FermionicHilbertSpaces, Test
-import FermionicHilbertSpaces: AbstractSym, GenericHilbertSpace, open_system, symbolic_group, apply_local_operators, add_tag,
+import FermionicHilbertSpaces: AbstractSym, GenericHilbertSpace, open_system, symbolic_group, apply_local_operator, add_tag,
     @nc, NCMul, NonCommutativeProducts.mul_effect, NonCommutativeProducts.@commutative, mat_eltype
 
 """
@@ -144,41 +144,27 @@ Base.show(io::IO, s::HEOMBosonicAuxState) = print(io, "ADO", s.n)
 
 # Apply a single HEOM auxiliary factor to an occupation tuple.
 # Returns (new_n, new_amplitude); amplitude becomes zero for forbidden transitions.
-@inline function _apply_heom_factor!(n::NTuple{N,Int}, amp, op::HEOMBosonicOp) where {N}
+@inline function apply_local_operator(op::HEOMBosonicOp, state::HEOMBosonicAuxState{N}, space, factors) where N
+    amp = 1
+    n = state.n
+    # @inline function _apply_heom_factor!(n::NTuple{N,Int}, amp, op::HEOMBosonicOp) where {N}
     if op.type == :up
         if sum(n) >= op.bath.m_max
-            return n, zero(amp)
+            return state, zero(amp)
         end
-        return Base.setindex(n, n[op.l] + 1, op.l), amp
+        return HEOMBosonicAuxState{N}(Base.setindex(n, n[op.l] + 1, op.l)), amp
     elseif op.type == :down
         nl = n[op.l]
         if iszero(nl)
-            return n, zero(amp)
+            return state, zero(amp)
         end
-        return Base.setindex(n, nl - 1, op.l), amp * nl
+        return HEOMBosonicAuxState{N}(Base.setindex(n, nl - 1, op.l)), amp * nl
     elseif op.type == :damping
         decay = -sum(op.bath.χ[l] * n[l] for l in eachindex(n))
-        return n, amp * decay
+        return HEOMBosonicAuxState{N}(n), amp * decay
     end
 end
-
-"""
-    apply_local_operators(op::NCMul, state::HEOMBosonicAuxState, space, precomp)
-
-Apply an NCMul of HEOM auxiliary operators to a basis state, returning
-(new_states, amplitudes) tuples required by the matrix-building machinery.
-Factors are applied right-to-left (standard right-action convention).
-"""
 FermionicHilbertSpaces._precomputation_before_operator_application(op, space::GenericHilbertSpace{<:HEOMBosonicAuxState}) = Tuple(op.factors)
-function apply_local_operators(op::NCMul, state::HEOMBosonicAuxState{N}, space, factors) where {N}
-    n = state.n
-    amp = op.coeff * one(eltype(FermionicHilbertSpaces.atomic_id(space)))
-    for factor in Iterators.reverse(factors)
-        n, amp = _apply_heom_factor!(n, amp, factor)
-        iszero(amp) && return (state,), (zero(amp),)
-    end
-    return (HEOMBosonicAuxState{N}(n),), (amp,)
-end
 symbolic_group(op::HEOMBosonicOp) = op.bath
 mat_eltype(::HEOMBosonicOp{B}) where B = eltype(B)
 mat_eltype(::Type{<:HEOMBosonicOp{B}}) where B = eltype(B)

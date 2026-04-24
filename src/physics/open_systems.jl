@@ -1,3 +1,35 @@
+
+struct TransposedSpace{B,H} <: AbstractHilbertSpace{B}
+    parent::H
+end
+TransposedSpace(inner::H) where {H<:AbstractHilbertSpace} = TransposedSpace{statetype(inner),H}(inner)
+
+Base.:(==)(a::TransposedSpace, b::TransposedSpace) = a.parent == b.parent
+Base.hash(H::TransposedSpace, h::UInt) = hash(H.parent, h)
+basisstates(H::TransposedSpace) = basisstates(H.parent)
+basisstate(i::Int, H::TransposedSpace) = basisstate(i, H.parent)
+state_index(state, H::TransposedSpace) = state_index(state, H.parent)
+dim(H::TransposedSpace) = dim(H.parent)
+isconstrained(H::TransposedSpace) = isconstrained(H.parent)
+group_id(H::TransposedSpace) = group_id(H.parent)
+atomic_id(H::TransposedSpace) = atomic_id(H.parent)
+atomic_factors(H::TransposedSpace) = map(TransposedSpace, atomic_factors(H.parent)) # (H,)
+add_tag(H::TransposedSpace, tag) = TransposedSpace(add_tag(H.parent, tag))
+groups(H::TransposedSpace) = groups(H.parent)
+factors(H::TransposedSpace) = factors(H.parent)
+_precomputation_before_operator_application(factors, space::TransposedSpace) = _precomputation_before_operator_application(factors, space.parent)
+TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, factors(H)), map(TransposedSpace, H.atoms))
+TransposedSpace(H::ConstrainedSpace) = ConstrainedSpace(TransposedSpace(H.parent), H.states, H.state_index)
+state_mapper(H::TransposedSpace, Hs) = state_mapper(H.parent, Hs)
+combine_states(states, H::TransposedSpace) = combine_states(states, H.parent)
+Base.parent(H::TransposedSpace) = H.parent
+
+function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSpace}
+    only(unique(map(group_id, spaces))) == group || throw(ArgumentError("All spaces must belong to the same group"))
+    TransposedSpace(FermionicSpace(map(H -> H.parent, spaces), group))
+end
+
+
 _left_basis(base) = add_tag(base, :left)
 _right_basis(base) = add_tag(base, :right)
 
@@ -41,57 +73,6 @@ add_tag(op::AbstractSym, tag) = _remap_factor_basis(op, tag)
 add_tag(op::NCMul, tag) = _remap_operator(op, tag)
 add_tag(op::NCAdd, tag) = _remap_operator(op, tag)
 
-struct TransposedSpace{B,H} <: AbstractHilbertSpace{B}
-    parent::H
-end
-TransposedSpace(inner::H) where {H<:AbstractHilbertSpace} = TransposedSpace{statetype(inner),H}(inner)
-
-Base.:(==)(a::TransposedSpace, b::TransposedSpace) = a.parent == b.parent
-Base.hash(H::TransposedSpace, h::UInt) = hash(H.parent, h)
-basisstates(H::TransposedSpace) = basisstates(H.parent)
-basisstate(i::Int, H::TransposedSpace) = basisstate(i, H.parent)
-state_index(state, H::TransposedSpace) = state_index(state, H.parent)
-dim(H::TransposedSpace) = dim(H.parent)
-isconstrained(H::TransposedSpace) = isconstrained(H.parent)
-group_id(H::TransposedSpace) = group_id(H.parent)
-atomic_id(H::TransposedSpace) = atomic_id(H.parent)
-atomic_factors(H::TransposedSpace) = map(TransposedSpace, atomic_factors(H.parent)) # (H,)
-add_tag(H::TransposedSpace, tag) = TransposedSpace(add_tag(H.parent, tag))
-# Base.keys(H::TransposedSpace) = (atomic_id(H),)
-groups(H::TransposedSpace) = groups(H.parent)
-_precomputation_before_operator_application(factors, space::TransposedSpace) = _precomputation_before_operator_application(factors, space.parent)
-TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, factors(H)), map(TransposedSpace, H.atoms))
-state_mapper(H::TransposedSpace, Hs) = state_mapper(H.parent, Hs)
-combine_states(states, H::TransposedSpace) = combine_states(states, H.parent)
-
-
-function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSpace}
-    only(unique(map(group_id, spaces))) == group || throw(ArgumentError("All spaces must belong to the same group"))
-    TransposedSpace(FermionicSpace(map(H -> H.parent, spaces), group))
-end
-
-
-function matrix_representation(op, H::TransposedSpace; kwargs...)
-    if trivial_operator(op)
-        return get_trivial_op_coeff(op) * I(dim(H))
-    end
-    op_groups = symbolic_groups(op)
-    space_groups = unique(Iterators.map(group_id, factors(H.parent)))
-    all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the provided space. Operator groups: $op_groups, expected one of: $space_groups"))
-    return transpose(matrix_representation(op, H.parent; kwargs...))
-end
-
-function left_operator(op, H::AbstractHilbertSpace, Hfull::AbstractHilbertSpace=tensor_product(H, TransposedSpace(H)); kwargs...)
-    Ht = TransposedSpace(H)
-    left_matrix = matrix_representation(op, H; kwargs...)
-    return generalized_kron((left_matrix, I), (H, Ht), Hfull)
-end
-
-function right_operator(op, H::AbstractHilbertSpace, Hfull::AbstractHilbertSpace=tensor_product(H, TransposedSpace(H)); kwargs...)
-    Ht = TransposedSpace(H)
-    right_matrix = matrix_representation(op, Ht; kwargs...)
-    return generalized_kron((I, right_matrix), (H, Ht), Hfull)
-end
 
 @testitem "TransposedSpace basics" begin
     using LinearAlgebra
@@ -136,18 +117,102 @@ end
     @test M ≈ Mexpected
 end
 
+@testitem "Matrix representation of transposed spaces" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: TransposedSpace
 
-@inline function push_inds_amps!((outinds, ininds, amps), inind, newstates, newamps, coeff, space::TransposedSpace; projection=false)
-    for n in eachindex(newstates, newamps)
-        newstate = newstates[n]
-        amp = newamps[n]
-        if !iszero(amp)
-            outind = state_index(newstate, space)
-            if !projection || !ismissing(outind)
-                push!(outinds, inind)
-                push!(amps, amp * coeff)
-                push!(ininds, outind)
-            end
+    # An operator A*B acts as A*(B*v) on a normal space
+    # On a transposed space, we change the order, so
+    # A*B acts as B^T*A^T*v
+    # Compare to the kron identity vec(X*A*B) = kron(B^T*A^T, I) * vec(X)
+    @spin s 1 // 2
+    H = hilbert_space(s)
+    Ht = TransposedSpace(H)
+
+    A = sum((n + 1im) * s[n] for n in 0:3)
+    @test transpose(matrix_representation(A, H)) ≈ matrix_representation(A, Ht)
+
+    B = sum((n + 2)^2 * s[n] for n in 0:3)
+    @test matrix_representation(A * B, H) ≈ matrix_representation(A, H) * matrix_representation(B, H)
+    @test matrix_representation(A * B, Ht) ≈ matrix_representation(B, Ht) * matrix_representation(A, Ht)
+    @test matrix_representation(A * B, Ht) ≈ transpose(matrix_representation(A * B, H))
+    # Test on a mixed space
+    @fermions f
+    Hf = hilbert_space(f, 1:2)
+    Hfull = tensor_product(H, Hf)
+    Hfull_t = TransposedSpace(Hfull)
+    A2 = A * f[1]' * f[1]
+    B2 = B * f[1]' * f[1] - I
+    @test transpose(matrix_representation(A2, Hfull)) ≈ matrix_representation(A2, Hfull_t)
+    @test matrix_representation(A2 * B2, Hfull_t) ≈ transpose(matrix_representation(A2 * B2, Hfull))
+
+    @test matrix_representation(A2 * B2, Hfull) ≈ matrix_representation(A2, Hfull) * matrix_representation(B2, Hfull)
+    @test matrix_representation(A2 * B2, Hfull_t) ≈ matrix_representation(B2, Hfull_t) * matrix_representation(A2, Hfull_t)
+
+    # Test with constrained spaces
+    _Hf = hilbert_space(f, 1:2)
+    Hf = constrain_space(_Hf, collect(basisstates(_Hf))[[2, 3]])
+    Hfull = tensor_product(H, Hf)
+    Hfull_t = TransposedSpace(Hfull)
+    A2 = A * f[1]' * f[1] + 0.5 * s[:x] * f[1]' * f[2]
+    B2 = B * f[2]' * f[1] - I
+    @test transpose(matrix_representation(A2, Hfull)) ≈ matrix_representation(A2, Hfull_t)
+    @test matrix_representation(A2 * B2, Hfull_t) ≈ transpose(matrix_representation(A2 * B2, Hfull))
+    @test matrix_representation(A2 * B2, Hfull) ≈ matrix_representation(A2, Hfull) * matrix_representation(B2, Hfull)
+    @test matrix_representation(A2 * B2, Hfull_t) ≈ matrix_representation(B2, Hfull_t) * matrix_representation(A2, Hfull_t)
+
+    # test with sector space
+    Hf = hilbert_space(f, 1:2, NumberConservation(1))
+    Hfull = tensor_product(H, Hf)
+    Hfull_t = TransposedSpace(Hfull)
+    A2 = A * f[1]' * f[1] + 0.5 * s[:x] * f[1]' * f[2]
+    B2 = B * f[2]' * f[1] - I
+    @test transpose(matrix_representation(A2, Hfull)) ≈ matrix_representation(A2, Hfull_t)
+    @test matrix_representation(A2 * B2, Hfull_t) ≈ transpose(matrix_representation(A2 * B2, Hfull))
+    @test matrix_representation(A2 * B2, Hfull) ≈ matrix_representation(A2, Hfull) * matrix_representation(B2, Hfull)
+    @test matrix_representation(A2 * B2, Hfull_t) ≈ matrix_representation(B2, Hfull_t) * matrix_representation(A2, Hfull_t)
+
+end
+
+@testitem "Vectorization and kron identity" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: open_system
+
+    @spin s 1 // 2
+    H = hilbert_space(s)
+    Hfull, Hleft, Hright, left, right = open_system(s)
+
+    A = 1.2 * s[:x] - 0.4im * s[:y] + 0.7 * s[:z]
+    B = -0.3 * s[:x] + 1.1im * s[:y] + 0.2 * s[:z]
+
+    MA = matrix_representation(A, H)
+    MB = matrix_representation(B, H)
+
+    Msuper = matrix_representation(left(A) * right(B), Hfull)
+    @test Msuper ≈ kron(transpose(MB), MA)
+
+    Mright = matrix_representation(right(A * B), Hfull)
+    @test Mright ≈ kron(transpose(MA * MB), I(dim(H)))
+end
+
+function _apply_local_operators(op, state, space::TransposedSpace, precomp)
+    newstate, amp = apply_local_operators(op, state, parent(space), precomp; transpose=true)
+    return newstate, amp
+end
+
+function apply_local_operators(_op::NCMul, state, space, precomp; transpose)
+    if !transpose
+        return foldr(_op.factors, init=(state, _op.coeff)) do op, (state, amp)
+            newstate, _amp = apply_local_operator(op, state, space, precomp)
+            return newstate, amp * _amp
+        end
+    elseif transpose
+        return foldl(_op.factors; init=(state, _op.coeff)) do (state, amp), op
+            newstate, _amp = apply_local_operator(op', state, space, precomp)
+            return newstate, amp * conj(_amp)
         end
     end
 end
+
+maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))
+_find_position(f::TransposedSpace, H::FermionicSpace) = _find_position(parent(f), H)

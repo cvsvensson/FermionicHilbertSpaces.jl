@@ -69,11 +69,11 @@ function Base.show(io::IO, x::BosonSym)
 end
 Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && isequal(a.basis, b.basis)
 Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, h)))
-_boson_name(s::BosonSym) = s.basis isa Nothing ? (s.label) : Symbol(s.basis.name, s.label)
+_boson_name(s::BosonSym) = s.basis isa Nothing ? (s.label, tags(s)) : (s.basis.name, s.label, tags(s))
 function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
     if _boson_name(a) == _boson_name(b)
         if sign(a.exp) == sign(b.exp)
-            return BosonSym(a.label, a.basis, a.exp + b.exp)
+            return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
         else
             if a.exp < 0 && b.exp > 0
                 return AddTerms((Swap(1), 1))
@@ -183,32 +183,29 @@ particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 maximum_particles(H::TruncatedBosonicHilbertSpace) = dim(H) - 1
 
-function apply_local_operators(op::NCMul, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp)
-    factors = op.factors
+function apply_local_operator(factor::BosonSym, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp)
     n = state.n
-    amplitude = op.coeff
-
-    for factor in Iterators.reverse(factors)
-        k = abs(factor.exp)
-        if factor.exp < 0
-            if n < k
-                return (state,), (zero(amplitude),)
-            end
-            for i in 0:(k-1)
-                amplitude *= sqrt(n - i)
-            end
-            n -= k
-        else
-            for i in 1:k
-                amplitude *= sqrt(n + i)
-            end
-            n += k
+    k = abs(factor.exp)
+    T = Float64
+    amplitude = one(T)
+    if factor.exp < 0
+        if n < k
+            return state, zero(T)
         end
+        for i in 0:(k-1)
+            amplitude *= T(sqrt(n - i))
+        end
+        n -= k
+    else
+        for i in 1:k
+            amplitude *= T(sqrt(n + i))
+        end
+        n += k
     end
     if n >= dim(space)
-        return (state,), (zero(amplitude),)
+        return state, zero(T)
     end
-    return (BosonicState(n),), (amplitude,)
+    return BosonicState(n), amplitude
 end
 symbolic_group(f::BosonSym{<:Any,B}) where B = (f.basis, f.label)
 symbolic_group(f::BosonSym{<:Any,Nothing}) = (BosonSym, f.label)

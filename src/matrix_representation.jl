@@ -18,18 +18,13 @@ function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::Ab
     return operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, space, precomp; kwargs...)
 end
 _precomputation_before_operator_application(factors, space) = nothing
-function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op::NCMul, space::AbstractHilbertSpace, precomp; projection=false)
-    for (ind, state) in enumerate(basisstates(space))
-        newstates, newamps = apply_local_operators(op, state, space, precomp)
-        push_inds_amps!((outinds, ininds, amps), ind, newstates, newamps, 1, space; projection)
-    end
-    return (outinds, ininds, amps)
-end
 
-@inline function push_inds_amps!((outinds, ininds, amps), inind, newstates, newamps, coeff, space; projection=false)
-    for n in eachindex(newstates, newamps)
-        newstate = newstates[n]
-        amp = newamps[n]
+function _apply_local_operators(op, state, space, precomp)
+    apply_local_operators(op, state, space, precomp; transpose=false)
+end
+function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, space::AbstractHilbertSpace, precomp; projection)
+    for (inind, state) in enumerate(basisstates(space))
+        newstate, amp = _apply_local_operators(op, state, space, precomp)
         if !iszero(amp)
             outind = state_index(newstate, space)
             if ismissing(outind)
@@ -40,11 +35,12 @@ end
                 end
             else
                 push!(outinds, outind)
-                push!(amps, amp * coeff)
+                push!(amps, amp)
                 push!(ininds, inind)
             end
         end
     end
+    return (outinds, ininds, amps)
 end
 
 ## 
@@ -123,7 +119,7 @@ function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr; kwa
         if isempty(factors)
             return coeff * I(dim(space))
         else
-            _term_matrix_representation(NCMul(coeff, factors), space, repr; kwargs...)
+            _term_matrix_representation(NCMul(coeff, Tuple(factors)), space, repr; kwargs...)
         end
     end
     length(spaces) == 1 && return first(matrices)
@@ -135,7 +131,7 @@ function _matrix_representation(op::NCMul, bases, space, repr; kwargs...)
     else
         if length(bases) > 1
             partition = partition_factors_by_basis(op.factors, bases)
-            vecops = map((n, ops) -> NCMul(n == 1 ? op.coeff : one(op.coeff), ops), eachindex(partition), partition)
+            vecops = map((n, ops) -> NCMul(n == 1 ? op.coeff : one(op.coeff), Tuple(ops)), eachindex(partition), partition)
             return _factorized_term_matrix_representation(vecops, space, repr; kwargs...)
         else
             return _term_matrix_representation(op, space, repr; kwargs...)
@@ -202,18 +198,11 @@ function _factorized_term_matrix_representation(ops::Vector, H, ::EagerRepr; kwa
     return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
 end
 
-function apply_local_operator(op::NCMul{C,F}, state::AbstractFockState, space::AbstractHilbertSpace; kwargs...) where {C,F<:AbstractFermionSym}
-    # Apply sequence of fermion operators (homogeneous type)
-    digitpositions = collect(Iterators.reverse(_find_position(f, space) for f in op.factors))
-    daggers = collect(Iterators.reverse(s.creation for s in op.factors))
-    new_state, amp = togglefermions(digitpositions, daggers, state)
-    return (new_state, amp)
-end
+# function apply_local_operator(op::NCMul{C,F}, state::AbstractFockState, space::AbstractHilbertSpace, (pos, daggers)) where {C,F<:AbstractFermionSym}
+#     new_state, amp = togglefermions(Iterators.reverse(pos), Iterators.reverse(daggers), state)
+#     return new_state, amp
+# end
 
-# Fallback for other types
-function apply_local_operator(op, state, space; kwargs...)
-    error("apply_local_operator not implemented for operator type $(typeof(op)) on space type $(typeof(space))")
-end
 
 ## Automatic basis inference from operator
 """
@@ -257,7 +246,7 @@ M = matrix_representation(op, H)
 size(M) == (dim(H), dim(H))
 ```
 """
-function matrix_representation(op, space::AbstractHilbertSpace; lazy=false, kwargs...)
+function matrix_representation(op, space::AbstractHilbertSpace; lazy=false, projection=false, kwargs...)
     repr = lazy ? LazyRepr() : EagerRepr()
     if trivial_operator(op)
         return get_trivial_op_coeff(op) * I(dim(space))
@@ -265,7 +254,7 @@ function matrix_representation(op, space::AbstractHilbertSpace; lazy=false, kwar
     op_groups = symbolic_groups(op)
     space_groups = unique(Iterators.map(group_id, factors(space)))
     all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
-    return _matrix_representation(op, space_groups, space, repr; kwargs...)
+    return _matrix_representation(op, space_groups, space, repr; projection, kwargs...)
 end
 trivial_operator(op::Union{UniformScaling,Number}) = true
 trivial_operator(op::NCMul) = length(op.factors) == 0

@@ -119,25 +119,25 @@ function _precomputation_before_operator_application(op::NCMul, space::Fermionic
     any(iszero, positions) && throw(ArgumentError("Operator ($op) contains factors that are not part of the fermionic space ($space)"))
     return positions
 end
-function apply_local_operators(op::NCMul, state::FockNumber{I}, space::AbstractHilbertSpace, fermionpositions) where I
+function apply_local_operators(op::NCMul, state::FockNumber{I}, space::FermionicSpace, fermionpositions; transpose) where I
     factors = op.factors
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1
     N = length(factors)
     @inbounds for m in eachindex(factors, fermionpositions)
-        n = N - m + 1
+        n = !transpose ? N - m + 1 : m
         factor = factors[n]
         digitpos = fermionpositions[n]
-        dagger = factor.creation
+        dagger = !transpose ? factor.creation : !factor.creation
         bitmask = one(I) << (digitpos - 1)
         occupied = !iszero(bitmask & newfocknbr)
         if dagger == occupied
-            return (newfocknbr,), (zero(op.coeff),)
+            return newfocknbr, zero(op.coeff)
         end
         fermionparity ⊻= isodd(count_ones(newfocknbr.f & (bitmask - one(I))))
         newfocknbr = bitmask ⊻ newfocknbr
     end
-    return (newfocknbr,), (fermionparity ? -op.coeff : op.coeff,)
+    return newfocknbr, (fermionparity ? -op.coeff : op.coeff)
 end
 
 

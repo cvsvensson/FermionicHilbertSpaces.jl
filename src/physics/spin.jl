@@ -349,7 +349,7 @@ NonCommutativeProducts.@commutative MajoranaSym SpinSym
 
 Apply a single spin operator to a spin state. Returns (newstate, amplitude) where amplitude is 0 if the operation is not allowed, and a nonzero value otherwise.
 """
-function apply_local_operator(op::SpinSym, state::SpinState, ::Val{J}) where J
+function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace{J}, precomp) where J
     m = state.m
     newstate = state
     T = typeof(sqrt(J * (J + 1)) * m)
@@ -382,28 +382,6 @@ function apply_local_operator(op::SpinSym, state::SpinState, ::Val{J}) where J
         end
     end
     return (newstate, amplitude)
-end
-
-
-_precomputation_before_operator_application(factors, space::SpinSpace{J}) where J = Val{J}()
-
-"""
-    apply_local_operators(factors::Vector{SpinSym}, state::SpinState, H::SpinSpace) -> (newstate, amplitude)
-
-Apply a sequence of spin operators (product) to a spin state. Operators are applied in reverse order (right-to-left, as in operator composition). Returns (newstate, amplitude) or (state, 0) if any step fails.
-"""
-function apply_local_operators(op, state::SpinState, space, precomp::Val{J}) where J
-    newstate = state
-    amplitude = op.coeff * one(typeof(sqrt(J * (J + 1))))
-    # Apply factors in reverse order (from right to left)
-    for factor in Iterators.reverse(op.factors)
-        newstate, factor_amp = apply_local_operator(factor, newstate, Val{J}())
-        if iszero(factor_amp)
-            return (state,), (zero(amplitude),)
-        end
-        amplitude *= factor_amp
-    end
-    return (newstate,), (amplitude,)
 end
 
 @testitem "SpinSym" begin

@@ -272,9 +272,13 @@ function _precomputation_before_operator_application(op::NCMul, space::MajoranaH
     daggers = map(iseven, majoranapositions)
     return fermionpositions, daggers
 end
-function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace, (fpos, daggers); kwargs...)
-    state, amp = togglemajoranas(Iterators.reverse(fpos), Iterators.reverse(daggers), f)
-    return (state,), (amp * op.coeff,)
+function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace, (fpos, daggers); transpose)
+    if !transpose
+        state, amp = togglemajoranas(Iterators.reverse(fpos), Iterators.reverse(daggers), f)
+    else
+        state, amp = togglemajoranas(fpos, Iterators.map(!, daggers), f)
+    end
+    return state, amp * op.coeff
 end
 
 function atomic_factors(H::MajoranaHilbertSpace)
