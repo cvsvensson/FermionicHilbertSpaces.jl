@@ -10,12 +10,12 @@ mat_eltype(::Type{NCMul{C,S,F}}) where {C,S,F} = promote_type(C, mat_eltype(S))
 mat_eltype(::S) where {S} = mat_eltype(S)
 mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors if a complex number is expected. Override it for specific types if needed.
 
-function operator_indices_and_amplitudes!((outinds, ininds, amps), op, H::AbstractHilbertSpace; kwargs...)
-    return operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, H; kwargs...)
+function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::AbstractHilbertSpace; kwargs...)
+    precomp = _precomputation_before_operator_application(op, space)
+    return operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, space, precomp; kwargs...)
 end
 _precomputation_before_operator_application(factors, space) = nothing
-function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op::NCMul, space::AbstractHilbertSpace; projection=false)
-    precomp = _precomputation_before_operator_application(op, space)
+function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op::NCMul, space::AbstractHilbertSpace, precomp; projection=false)
     for (ind, state) in enumerate(basisstates(space))
         newstates, newamps = apply_local_operators(op, state, space, precomp)
         push_inds_amps!((outinds, ininds, amps), ind, newstates, newamps, 1, space; projection)
