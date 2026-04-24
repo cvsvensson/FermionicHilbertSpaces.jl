@@ -125,10 +125,10 @@ function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCMul}, x::AbstractVec
     return y
 end
 
-function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:Vector{<:NCMul}}, x::AbstractVecOrMat, α, β)
+function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:OperatorSequence}, x::AbstractVecOrMat, α, β)
     # This is for productspaces, where ops is a list of operators applying to each factor space
     rmul!(y, β)
-    coeff = prod(op.coeff for op in L.op)
+    coeff = prod(op.coeff for op in L.op.ops)
     _apply_single_term!(y, x, L.space, L.op, L.precomp, coeff * α, L.conjugate, L.transpose, L.projection)
     return y
 end
@@ -156,7 +156,7 @@ function _term_matrix_representation(op::NCMul, H::AbstractHilbertSpace, ::LazyR
     LazyOperator(op, H; kwargs...)
 end
 
-function _factorized_term_matrix_representation(ops::Vector, H, ::LazyRepr; kwargs...)
+function _factorized_term_matrix_representation(ops::OperatorSequence, H, ::LazyRepr; kwargs...)
     LazyOperator(ops, H; kwargs...)
 end
 

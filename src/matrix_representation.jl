@@ -13,9 +13,13 @@ mat_eltype(::Type{NCMul{C,S,F}}) where {C,S,F} = promote_type(C, mat_eltype(S))
 mat_eltype(::S) where {S} = mat_eltype(S)
 mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors if a complex number is expected. Override it for specific types if needed.
 
+_concretize(op::NCMul) = op
+_concretize(op::NCMul{C,<:Union{Any,AbstractSym},F}) where {C,F} = NCMul(op.coeff, Tuple(op.factors))
+_concretize(op::OperatorSequence) = OperatorSequence(map(_concretize, op.ops))
 function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::AbstractHilbertSpace; kwargs...)
-    precomp = _precomputation_before_operator_application(op, space)
-    return operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, space, precomp; kwargs...)
+    concrete_op = _concretize(op) # op is often an NCMul with Abstract types. We try to make it concrete here, as the operator will be applied to all basis states, so the overhead of concretization is likely worth it
+    precomp = _precomputation_before_operator_application(concrete_op, space)
+    return operator_indices_and_amplitudes_generic!((outinds, ininds, amps), concrete_op, space, precomp; kwargs...)
 end
 _precomputation_before_operator_application(factors, space) = nothing
 
@@ -119,7 +123,7 @@ function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr; kwa
         if isempty(factors)
             return coeff * I(dim(space))
         else
-            _term_matrix_representation(NCMul(coeff, Tuple(factors)), space, repr; kwargs...)
+            _term_matrix_representation(NCMul(coeff, factors), space, repr; kwargs...)
         end
     end
     length(spaces) == 1 && return first(matrices)
@@ -131,7 +135,7 @@ function _matrix_representation(op::NCMul, bases, space, repr; kwargs...)
     else
         if length(bases) > 1
             partition = partition_factors_by_basis(op.factors, bases)
-            vecops = map((n, ops) -> NCMul(n == 1 ? op.coeff : one(op.coeff), Tuple(ops)), eachindex(partition), partition)
+            vecops = OperatorSequence(map((n, ops) -> NCMul(n == 1 ? op.coeff : one(op.coeff), ops), eachindex(partition), partition))
             return _factorized_term_matrix_representation(vecops, space, repr; kwargs...)
         else
             return _term_matrix_representation(op, space, repr; kwargs...)
@@ -184,10 +188,10 @@ function _term_matrix_representation(op, H::AbstractHilbertSpace, ::EagerRepr; k
     isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, N)
     return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
 end
-function _factorized_term_matrix_representation(ops::Vector, H, ::EagerRepr; kwargs...)
+function _factorized_term_matrix_representation(ops::OperatorSequence, H, ::EagerRepr; kwargs...)
     _outinds = Int[]
     _ininds = Int[]
-    AT = promote_type([mat_eltype(op) for op in ops]...)
+    AT = promote_type([mat_eltype(op) for op in ops.ops]...)
     _amps = AT[]
     N = dim(H)
     sizehint!(_outinds, N)

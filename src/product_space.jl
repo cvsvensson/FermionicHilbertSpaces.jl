@@ -392,16 +392,18 @@ function partial_trace_phase_factor(state1, state2, space::ProductSpace)
     return pf
 end
 
-
-function _precomputation_before_operator_application(ops::Vector, space::ProductSpace)
-    map((subops, space) -> _precomputation_before_operator_application(subops, space), ops, factors(space))
+struct OperatorSequence{O}
+    ops::O
 end
-function _apply_local_operators(ops::Vector{<:NCMul}, state::ProductState{B}, space::ProductSpace, precomps) where B<:Tuple
+function _precomputation_before_operator_application(ops::OperatorSequence, space::ProductSpace)
+    map((subops, space) -> _precomputation_before_operator_application(subops, space), ops.ops, factors(space))
+end
+function _apply_local_operators(ops::OperatorSequence, state::ProductState{B}, space::ProductSpace, precomps) where B<:Tuple
     amp = 1
     spaces = factors(space)
     newstates = state.states
     count = 1
-    foreach(state.states, spaces, ops, precomps) do subst, space, op, precomp
+    foreach(state.states, spaces, ops.ops, precomps) do subst, space, op, precomp
         new_local_state, local_amp = _apply_local_operators(op, subst, space, precomp)
         amp *= local_amp
         newstates = Base.setindex(newstates, new_local_state, count)
