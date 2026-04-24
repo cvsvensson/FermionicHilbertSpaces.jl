@@ -23,10 +23,10 @@ function LazyOperator(op::O, space::S, precomp::P=_precomputation_before_operato
 end
 _ishermitian(x::NCMul) = iszero(x - hc)
 _ishermitian(x::NCAdd) = iszero(x - hc)
-function _ishermitian(x::Vector{<:NCMul})
-    _ishermitian(prod(x))
+function _ishermitian(x::OperatorSequence)
+    _ishermitian(prod(x.ops))
 end
-mat_eltype(x::Vector{<:NCMul}) = promote_type(map(mat_eltype, x)...)
+mat_eltype(x::OperatorSequence) = promote_type(map(mat_eltype, x.ops)...)
 
 Base.size(L::LazyOperator) = (dim(L.space), dim(L.space))
 Base.size(L::LazyOperator, i::Int) = size(L)[i]
@@ -49,7 +49,7 @@ function _eager_matrix_representation(L::LazyOperator{<:NCMul})
     return _term_matrix_representation(L.op, L.space, EagerRepr(); projection=L.projection)
 end
 
-function _eager_matrix_representation(L::LazyOperator{<:Vector{<:NCMul}})
+function _eager_matrix_representation(L::LazyOperator{<:OperatorSequence})
     return _factorized_term_matrix_representation(L.op, L.space, EagerRepr(); projection=L.projection)
 end
 

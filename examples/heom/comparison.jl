@@ -16,8 +16,7 @@ M_fhs_sym = heom_generator(ham, V, bath_fhs)
 Hs, Hleft, Hright, left, right = open_system(s)
 Haux = heom_bosonic_aux_space(bath_fhs)
 Hfull = tensor_product((Hs, Haux))
-@btime M_fhs = matrix_representation(M_fhs_sym, Hfull)
-@profview @btime M_fhs = matrix_representation(M_fhs_sym, Hfull)
+M_fhs = matrix_representation(M_fhs_sym, Hfull)
 ## HierarchicalEOM.jl
 using HierarchicalEOM
 H_q = 0.5 * omega * sigmaz()

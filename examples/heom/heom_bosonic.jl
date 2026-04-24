@@ -164,7 +164,7 @@ Base.show(io::IO, s::HEOMBosonicAuxState) = print(io, "ADO", s.n)
         return HEOMBosonicAuxState{N}(n), amp * decay
     end
 end
-FermionicHilbertSpaces._precomputation_before_operator_application(op, space::GenericHilbertSpace{<:HEOMBosonicAuxState}) = Tuple(op.factors)
+# FermionicHilbertSpaces._precomputation_before_operator_application(op, space::GenericHilbertSpace{<:HEOMBosonicAuxState}) = Tuple(op.factors)
 symbolic_group(op::HEOMBosonicOp) = op.bath
 mat_eltype(::HEOMBosonicOp{B}) where B = eltype(B)
 mat_eltype(::Type{<:HEOMBosonicOp{B}}) where B = eltype(B)
