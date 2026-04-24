@@ -17,6 +17,18 @@ struct LazyOperator{O,S,T,P} <: SciMLOperators.AbstractSciMLOperator{T}
     hermitian::Bool
 end
 
+function _show_lazy_operator_expression(io::IO, L::LazyOperator)
+    show(IOContext(io, :compact => true), L.op)
+    L.transpose && print(io, "^T")
+    L.conjugate && print(io, "^*")
+end
+
+function Base.show(io::IO, L::LazyOperator)
+    _show_lazy_operator_expression(io, L)
+    print(io, " acting on ")
+    show(IOContext(io, :compact => true), L.space)
+end
+
 function LazyOperator(op::O, space::S, precomp::P=_precomputation_before_operator_application(op, space); projection=false, conjugate=false, transpose=false, hermitian=_ishermitian(op), T=mat_eltype(op)
 ) where {O,S,P}
     LazyOperator{O,S,T,P}(op, space, precomp, projection, conjugate, transpose, hermitian)
