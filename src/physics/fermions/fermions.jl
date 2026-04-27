@@ -31,6 +31,7 @@ function dim(H::FermionicSpace)
 end
 atomic_factors(H::FermionicSpace) = map(hilbert_space, H.modes)
 nbr_of_modes(H::FermionicSpace) = length(H.modes)
+nbr_of_modes(H::AbstractHilbertSpace) = nbr_of_modes(parent(H))
 group_id(H::FermionicSpace) = H.group
 atomic_id(h::FermionicSpace) = nbr_of_modes(h) == 1 ? atomic_id(only(h.modes)) : map(atomic_id, h.modes)
 label(h::FermionicSpace) = label(only(h.modes))

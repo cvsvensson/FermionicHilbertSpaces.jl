@@ -168,7 +168,6 @@ Base.hash(H::MajoranaHilbertSpace, h::UInt) = hash(H.majoranaindices, hash(H.par
 basisstates(m::MajoranaHilbertSpace) = basisstates(m.parent)
 basisstate(i, m::MajoranaHilbertSpace) = basisstate(i, m.parent)
 Base.parent(H::MajoranaHilbertSpace) = H.parent
-nbr_of_modes(H::MajoranaHilbertSpace) = nbr_of_modes(H.parent)
 isconstrained(H::MajoranaHilbertSpace) = isconstrained(H.parent)
 group_id(H::MajoranaHilbertSpace) = symbolic_group(H.sym)
 add_tag(H::MajoranaHilbertSpace, tag) = MajoranaHilbertSpace(H.majoranaindices, add_tag(parent(H), tag), add_tag(H.sym, tag))
