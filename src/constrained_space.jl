@@ -45,6 +45,7 @@ function constrain_space(space, constraint::AbstractConstraint)
     end
 end
 _find_position(op::AbstractSym, H::ConstrainedSpace) = _find_position(op, parent(H))
+add_tag(H::ConstrainedSpace, tag) = ConstrainedSpace(add_tag(parent(H), tag), H.states, H.state_index)
 
 allowed_values(::NumberConservation{Missing}, space) = 0:maximum_particles(space)
 allowed_values(constraint::NumberConservation{T}, space) where T = constraint.total
@@ -131,8 +132,8 @@ end
 state_mapper(H::ConstrainedSpace, Hs) = state_mapper(parent(H), Hs)
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
 
-apply_local_operators(ops::Vector{<:NCMul}, state::ProductState, space::ConstrainedSpace, precomp) = apply_local_operators(ops, state, space.parent, precomp)
-_precomputation_before_operator_application(ops::Union{<:Any,<:NCMul}, space::ConstrainedSpace) = _precomputation_before_operator_application(ops, parent(space))
+_apply_local_operators(ops, state, space::ConstrainedSpace, precomp) = _apply_local_operators(ops, state, space.parent, precomp)
+_precomputation_before_operator_application(ops, space::ConstrainedSpace) = _precomputation_before_operator_application(ops, parent(space))
 
 @testitem "Constrained space" begin
     import FermionicHilbertSpaces: constrain_space, CombineFockNumbersProcessor, subregion
@@ -162,4 +163,5 @@ _precomputation_before_operator_application(ops::Union{<:Any,<:NCMul}, space::Co
     @test dim(Hsub) == Nsub + 1
 end
 
-apply_local_operators(ops::Vector{<:NCMul}, state, space::SectorHilbertSpace, precomp) = apply_local_operators(ops, state, space.parent, precomp)
+_apply_local_operators(ops, state, space::SectorHilbertSpace, precomp) = _apply_local_operators(ops, state, space.parent, precomp)
+add_tag(H::SectorHilbertSpace, tag) = SectorHilbertSpace(add_tag(parent(H), tag), H.ordered_basis_states, H.state_to_index, H.qn_to_states)

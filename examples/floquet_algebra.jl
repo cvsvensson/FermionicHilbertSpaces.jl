@@ -1,5 +1,5 @@
 import FermionicHilbertSpaces.NonCommutativeProducts: @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, @commutative, mul_effect
-import FermionicHilbertSpaces: apply_local_operators, symbolic_group, FermionSym, SpinSym
+import FermionicHilbertSpaces: apply_local_operator, symbolic_group, FermionSym, SpinSym
 ## Floquet algebra, see https://arxiv.org/pdf/2503.20186v1
 struct FloquetBasis
     id::Int
@@ -39,10 +39,6 @@ end
 floquet_mul(a::FloquetLadder, ::FloquetNumber) = return AddTerms((Swap(1), -a.shift * a))
 floquet_mul(::FloquetNumber, ::FloquetLadder) = return nothing
 
-function apply_local_operators(op, state::FloquetState, space, precomp)
-    state, amp = foldr((op, (state, amp)) -> apply_local_operator(op, state, amp), op.factors, init=(state, 1))
-    return (state,), (amp,)
-end
 
 apply_local_operator(op::FloquetLadder, state::FloquetState, amp) = (FloquetState(state.mode + op.shift), amp)
 apply_local_operator(op::FloquetNumber, state::FloquetState, amp) = (state, amp * state.mode^op.power)

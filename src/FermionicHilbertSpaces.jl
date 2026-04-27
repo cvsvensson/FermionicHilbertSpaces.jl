@@ -38,6 +38,27 @@ const hc = HC()
 
 abstract type AbstractSym end
 
+
+struct Tags{T}
+    tags::T
+end
+Base.hash(id::Tags, h::UInt) = hash(id.tags, h)
+Base.:(==)(a::Tags, b::Tags) = a.tags == b.tags
+Base.isless(a::Tags, b::Tags) = isless(hash(a.tags), hash(b.tags))
+tagset(id::Tags) = id.tags
+tagset(::Tags{Nothing}) = ()
+tagset(x) = tagset(tags(x))
+
+function _symbolic_name_with_tags(name, tagged; skip_first = 0)
+    tags = tagset(tagged)
+    tags = skip_first > 0 ? tags[skip_first+1:end] : tags
+    isempty(tags) && return string(name)
+    return string(name, "(", join(tags, ","), ")")
+end
+
+add_tag(t::Tags, tag) = Tags((t.tags..., tag))
+add_tag(::Tags{Nothing}, tag) = Tags((tag,))
+
 struct TypedIterator{T,I}
     iter::I
 end
@@ -86,6 +107,7 @@ include("physics/fermions/bdg.jl")
 
 include("physics/bosons.jl")
 include("physics/spin.jl")
+include("physics/open_systems.jl")
 
 include("printing.jl")
 
@@ -115,7 +137,7 @@ PrecompileTools.@compile_workload begin
         Hb = hilbert_space(b, 2)
         Hs = hilbert_space(s)
         H = tensor_product(H2, Hb, Hs)
-        mat = matrix_representation(b'b + s[:x]*f[3], H)
+        mat = matrix_representation(b'b + s[:x] * f[3], H)
     end
 end
 

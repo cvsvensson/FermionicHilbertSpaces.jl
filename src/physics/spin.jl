@@ -1,25 +1,34 @@
-struct SpinField{J}
+struct SpinField{J,I}
     name::Symbol
     spin::J
+    tags::I
 end
-SpinField(name::Symbol) = SpinField(name, nothing)
+SpinField(name::Symbol, spin::J=nothing) where J = SpinField(name, spin, Tags(nothing))
 Base.:(==)(a::SpinField, b::SpinField) = a.name == b.name
 Base.hash(b::SpinField, h::UInt) = hash(b.name, h)
 Base.show(io::IO, b::SpinField) = print(io, "SpinField(", b.name, ")")
+tags(s::SpinField) = s.tags
+add_tag(s::SpinField, tag) = SpinField(s.name, s.spin, add_tag(s.tags, tag))
 
-struct SymbolicSpinBasis{L,P,J}
+struct SymbolicSpinBasis{L,P,J,T<:Tags}
     label::L
     field::P
     spin::J
+    tags::T
 end
-SymbolicSpinBasis(label::L) where L = SymbolicSpinBasis(label, nothing, nothing)
-Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field && a.spin == b.spin
+
+SymbolicSpinBasis(label::L, field::P=nothing, spin::J=nothing) where {L,P,J} = SymbolicSpinBasis(label, field, spin, Tags(nothing))
+Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field && a.spin == b.spin && a.tags == b.tags
+Base.isless(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = (a.field, a.label, a.tags) < (b.field, b.label, b.tags)
 Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
-Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.spin, hash(x.field, hash(x.label, h)))
+Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.tags, hash(x.spin, hash(x.field, hash(x.label, h))))
 label(S::SymbolicSpinBasis) = S.label
-Base.getindex(s::SpinField, i) = SymbolicSpinBasis(i, s, s.spin)
+Base.getindex(s::SpinField, i) = SymbolicSpinBasis(i, s, s.spin, tags(s))
 atomic_factors(s::SymbolicSpinBasis) = (s,)
 atomic_id(s::SymbolicSpinBasis) = s
+tags(s::SymbolicSpinBasis) = s.tags
+add_tag(s::SymbolicSpinBasis, tag) = SymbolicSpinBasis(s.label, s.field, s.spin, add_tag(s.tags, tag))
+symbolic_group(s::SymbolicSpinBasis) = s
 
 function Base.show(io::IO, S::SymbolicSpinBasis)
     spin_suffix = S.spin isa Nothing ? "" : ", spin=$(S.spin)"
@@ -55,7 +64,7 @@ macro spins(name)
     return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)))), :($(esc(name))))
 end
 macro spins(name, spin)
-    return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)), $(esc(spin)))), :($(esc(name))))
+    return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)), $(esc(spin)))))
 end
 
 
@@ -71,22 +80,24 @@ struct SpinSpace{J,M,S} <: AbstractAtomicHilbertSpace{SpinState{M}}
     basisstates::Vector{SpinState{M}}
     sym::S
     state_index::Dict{SpinState{M},Int}
-    function SpinSpace{J}(sym::S) where {J,S<:SymbolicSpinBasis}
-        states = spin_basisstates(Val(J))
-        state_index = Dict(s => i for (i, s) in enumerate(states))
-        new{J,typeof(J),S}(states, sym, state_index)
-    end
+end
+function SpinSpace{J}(sym::S) where {J,S<:SymbolicSpinBasis}
+    states = spin_basisstates(Val(J))
+    state_index = Dict(s => i for (i, s) in enumerate(states))
+    SpinSpace{J,typeof(J),S}(states, sym, state_index)
 end
 SpinSpace{J}(label) where J = SpinSpace{J}(SymbolicSpinBasis(label))
 basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + (J + 1))
-group_id(H::SpinSpace) = symbolic_group(H.sym)
-atomic_id(H::SpinSpace) = symbolic_group(H.sym)
-
-hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,J}) where J<:Union{Int,Rational} = SpinSpace{sym.spin}(sym)
-hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:Nothing}, J) = SpinSpace{J}(sym)
+atomic_id(H::SpinSpace) = atomic_id(H.sym)
+function add_tag(H::SpinSpace{J,M,S}, tag) where {J,M,S}
+    newsym = add_tag(H.sym, tag)
+    SpinSpace{J,M,typeof(newsym)}(H.basisstates, newsym, H.state_index)
+end
+hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,J,<:Any}) where J<:Union{Int,Rational} = SpinSpace{sym.spin}(sym)
+hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:Nothing,<:Any}, J) = SpinSpace{J}(sym)
 hilbert_space(sym::SpinField{J}, labels, constraint=NoSymmetry()) where J<:Union{Int,Rational} = tensor_product(map(l -> hilbert_space(sym[l]), labels); constraint)
 hilbert_space(sym::SpinField{Nothing}, labels, J, constraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], J), labels); constraint)
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
@@ -201,7 +212,7 @@ function Base.show(io::IO, x::SpinSym)
     if x.basis.field isa Nothing
         print(io, x.basis.label, "[:$(x.op)]")
     else
-        print(io, x.basis.field.name, "[", x.basis.label, "][:$(x.op)]")
+        print(io, _symbolic_name_with_tags(x.basis.field.name, x.basis), "[", x.basis.label, "][:$(x.op)]")
     end
     if x.exponent != 1
         print(io, "^", x.exponent)
@@ -211,7 +222,8 @@ end
 Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.basis == b.basis && a.exponent == b.exponent
 Base.hash(a::SpinSym, h::UInt) = hash(a.exponent, hash(a.op, hash(a.basis, h)))
 symbolic_group(f::SpinSym) = symbolic_group(f.basis)
-symbolic_group(f::SymbolicSpinBasis) = f
+symbolic_basis(f::SpinSym) = f.basis
+change_basis(f::SpinSym, newbasis) = SpinSym(f.op, newbasis, f.exponent)
 atomic_id(f::SpinSym) = atomic_id(f.basis)
 
 mat_eltype(::Type{<:SpinSym}) = Float64
@@ -244,12 +256,13 @@ end
 _factor_or_empty(x) = isone(x) ? Any[] : [x]
 
 function NonCommutativeProducts.mul_effect(a::S, b::S) where S<:SpinSym
-    if _spin_name(a.basis) > _spin_name(b.basis)
+    if a.basis > b.basis
         return Swap(1)
     end
-    if _spin_name(a.basis) < _spin_name(b.basis)
+    if a.basis < b.basis
         return nothing
     end
+    a.basis == b.basis || throw(ArgumentError("Symbolic groups must be comparable for multiplication."))
 
     if a.op == b.op && a.op in (:+, :-, :z)
         exponent = a.exponent + b.exponent
@@ -336,10 +349,11 @@ NonCommutativeProducts.@commutative MajoranaSym SpinSym
 
 Apply a single spin operator to a spin state. Returns (newstate, amplitude) where amplitude is 0 if the operation is not allowed, and a nonzero value otherwise.
 """
-function apply_local_operator(op::SpinSym, state::SpinState, ::Val{J}) where J
+function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace{J}, precomp) where J
     m = state.m
     newstate = state
-    amplitude = one(typeof(sqrt(J * (J + 1))))
+    T = typeof(sqrt(J * (J + 1)) * m)
+    amplitude = one(T)
     for _ in 1:op.exponent
         m = newstate.m
         if op.op == :z
@@ -352,7 +366,7 @@ function apply_local_operator(op::SpinSym, state::SpinState, ::Val{J}) where J
                 newstate = SpinState(m + 1)
                 amplitude *= factor
             else
-                return (state, 0)
+                return (state, zero(T))
             end
         elseif op.op == :-
             # S_- |m⟩ = √(J(J+1) - m(m-1)) |m-1⟩
@@ -361,32 +375,13 @@ function apply_local_operator(op::SpinSym, state::SpinState, ::Val{J}) where J
                 newstate = SpinState(m - 1)
                 amplitude *= factor
             else
-                return (state, 0)
+                return (state, zero(T))
             end
         else
             throw(ArgumentError("Invalid spin operator symbol: $(op.op)."))
         end
     end
     return (newstate, amplitude)
-end
-
-"""
-    apply_local_operators(factors::Vector{SpinSym}, state::SpinState, H::SpinSpace) -> (newstate, amplitude)
-
-Apply a sequence of spin operators (product) to a spin state. Operators are applied in reverse order (right-to-left, as in operator composition). Returns (newstate, amplitude) or (state, 0) if any step fails.
-"""
-function apply_local_operators(op, state::SpinState, space::SpinSpace{J}, precomp) where J
-    newstate = state
-    amplitude = op.coeff * one(typeof(sqrt(J * (J + 1))))  # Start with 1.0 to handle mixed numeric types
-    # Apply factors in reverse order (from right to left)
-    for factor in reverse(op.factors)
-        newstate, factor_amp = apply_local_operator(factor, newstate, Val(J))
-        if iszero(factor_amp)
-            return (state,), (zero(amplitude),)
-        end
-        amplitude *= factor_amp
-    end
-    return (newstate,), (amplitude,)
 end
 
 @testitem "SpinSym" begin
@@ -469,6 +464,17 @@ end
     @test iszero(Sone[:+]^3)
     @test Sone[:z]^3 == Sone[:z]
 
+end
+
+@testitem "Spin matrix reps" begin
+    @spin s
+    H = hilbert_space(s, 1 // 2)
+    S_mat = Dict(sym => matrix_representation(s[sym], H) for sym in (:x, :y, :z, :+, :-))
+    @test S_mat[:+] == [0 0; 1 0]
+    @test S_mat[:-] == [0 1; 0 0]
+    @test S_mat[:z] == [-1//2 0; 0 1//2]
+    @test S_mat[:x] == [0 1//2; 1//2 0]
+    @test S_mat[:y] == [0 im//2; -im//2 0]
 end
 
 @testitem "Spin: spin-aware vs not" begin

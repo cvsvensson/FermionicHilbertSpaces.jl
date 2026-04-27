@@ -32,7 +32,7 @@
 # 2. **`@nc` declaration** — registers types with the algebraic machinery
 # 3. **`@commutative` declaration** — declares commutativity with other algebras
 # 4. **`mul_effect`** — the multiplication / commutation rules
-# 5. **`apply_local_operators`** — how operators act on basis states
+# 5. **`apply_local_operator`** — how operators act on basis states
 # 6. **`symbolic_group`** — links operators to their Hilbert space
 
 # Let's load the package and import some things we need to overload or use
@@ -122,7 +122,7 @@ end
 # ``N \cdot F^k`` is already in normal order (``N`` sorts before ``F``).
 floquet_mul(::FloquetNumber, ::FloquetLadder) = nothing
 
-# ### Step 5 — `apply_local_operators`
+# ### Step 5 — `apply_local_operator`
 
 # This is the bridge between symbolic operators and matrix elements.
 # Given an `NCMul` of Floquet factors and a single basis state, it returns
@@ -132,24 +132,13 @@ floquet_mul(::FloquetNumber, ::FloquetLadder) = nothing
 struct FloquetState <: FermionicHilbertSpaces.AbstractBasisState
     mode::Int
 end
-# And define how Floquet operators act on these states.
-
+# To hook it up to the matrix-representation machinery, we need to define `apply_local_operator(op, state::FloquetState, space, precomp)
+import FermionicHilbertSpaces: apply_local_operator
 # ``F^k`` shifts the Floquet index by ``k``.
-apply_local_operator(op::FloquetLadder, state::FloquetState, amp) = FloquetState(state.mode + op.shift), amp
+apply_local_operator(op::FloquetLadder, state::FloquetState, space, precomp) = FloquetState(state.mode + op.shift), 1
 
 # ``N^p`` multiplies the amplitude by ``n^p``, where ``n`` is the current mode index.
-apply_local_operator(op::FloquetNumber, state::FloquetState, amp) = state, amp * state.mode^op.power
-
-# To hook it up to the matrix-representation machinery, we need to define `apply_local_operators(op::NCMul, state::FloquetState, space, precomp), where NCMul represents a product of Floquet operators. We just apply them sequentially here
-import FermionicHilbertSpaces: apply_local_operators
-function apply_local_operators(op::NCMul, state::FloquetState, space, precomp)
-    new_state, amp = foldr(
-        (factor, (s, a)) -> apply_local_operator(factor, s, a),
-        op.factors;
-        init=(state, op.coeff)
-    )
-    return (new_state,), (amp,)
-end
+apply_local_operator(op::FloquetNumber, state::FloquetState, space, precomp) = state, state.mode^op.power
 
 # ### Step 6 — `symbolic_group`
 

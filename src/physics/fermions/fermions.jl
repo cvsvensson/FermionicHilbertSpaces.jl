@@ -1,14 +1,14 @@
 
-struct FermionicSpace{F,L} <: AbstractGroupedHilbertSpace{F}
+struct FermionicSpace{F,L,FG<:FermionicGroup} <: AbstractGroupedHilbertSpace{F}
     modes::Vector{L}
     mode_ordering::OrderedDict{L,Int}
-    group::FermionicGroup
-    function FermionicSpace(_modes::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(length(_modes))}) where {F,L<:FermionSym}
+    group::FG
+    function FermionicSpace(_modes::AbstractVector{L}, group::FG, ::Type{F}=FockNumber{default_fock_representation(length(_modes))}) where {F,L<:FermionSym,FG<:FermionicGroup}
         length(_modes) == 0 && throw(ArgumentError("Cannot create a FermionicSpace with no modes"))
         modes = map(_normalize_sym, _modes)
         mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("Duplicate modes in fermionic group"))
-        new{F,L}(modes, mode_ordering, group)
+        new{F,L,FG}(modes, mode_ordering, group)
     end
 end
 function FermionicSpace(factors::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F,L<:FermionicSpace}
@@ -36,6 +36,7 @@ atomic_id(h::FermionicSpace) = nbr_of_modes(h) == 1 ? atomic_id(only(h.modes)) :
 label(h::FermionicSpace) = label(only(h.modes))
 mode_ordering(H::FermionicSpace) = H.mode_ordering
 modes(H::FermionicSpace) = H.modes
+add_tag(H::FermionicSpace, tag) = FermionicSpace(map(m -> add_tag(m, tag), H.modes), add_tag(group_id(H), tag), statetype(H))
 
 _normalize_sym(f::FermionSym) = FermionSym(false, f.label, f.basis)
 statetype(f::FermionSym) = FockNumber{default_fock_representation(1)}
@@ -52,7 +53,13 @@ function _find_position(f::FermionicSpace, H::FermionicSpace)
     return _find_position(only(modes(f)), H)
 end
 
-combine_into_group(group::FermionicGroup, fermions) = all(f -> group_id(f) == group, fermions) ? FermionicSpace(fermions, group) : throw(ArgumentError("Not all fermions belong to the same group"))
+function combine_into_group(group::FermionicGroup, fermions)
+    if all(f -> group_id(f) == group, fermions)
+        return FermionicSpace(fermions, group)
+    else
+        throw(ArgumentError("Not all fermions belong to the same group"))
+    end
+end
 
 operators(H::FermionicSpace) = fermions(H)
 isconstrained(H::FermionicSpace) = false
@@ -77,10 +84,11 @@ function _compact_fermionic_modes(io::IO, c::FermionicSpace;
     # Group consecutive modes by symbolic basis name
     groups = Tuple{Any,Vector{Any}}[]
     for m in c.modes
-        if !isempty(groups) && last(groups)[1] == m.basis.name
+        mode_name = _symbolic_name_with_tags(m.basis.name, m.basis; skip_first=1)
+        if !isempty(groups) && last(groups)[1] == mode_name
             push!(last(groups)[2], m.label)
         else
-            push!(groups, (m.basis.name, Any[m.label]))
+            push!(groups, (mode_name, Any[m.label]))
         end
     end
 
@@ -111,25 +119,25 @@ function _precomputation_before_operator_application(op::NCMul, space::Fermionic
     any(iszero, positions) && throw(ArgumentError("Operator ($op) contains factors that are not part of the fermionic space ($space)"))
     return positions
 end
-function apply_local_operators(op::NCMul, state::FockNumber{I}, space::AbstractHilbertSpace, fermionpositions) where I
+function apply_local_operators(op::NCMul, state::FockNumber{I}, space::FermionicSpace, fermionpositions; transpose) where I
     factors = op.factors
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1
     N = length(factors)
     @inbounds for m in eachindex(factors, fermionpositions)
-        n = N - m + 1
+        n = !transpose ? N - m + 1 : m
         factor = factors[n]
         digitpos = fermionpositions[n]
-        dagger = factor.creation
+        dagger = !transpose ? factor.creation : !factor.creation
         bitmask = one(I) << (digitpos - 1)
         occupied = !iszero(bitmask & newfocknbr)
         if dagger == occupied
-            return (newfocknbr,), (zero(op.coeff),)
+            return newfocknbr, zero(op.coeff)
         end
         fermionparity ⊻= isodd(count_ones(newfocknbr.f & (bitmask - one(I))))
         newfocknbr = bitmask ⊻ newfocknbr
     end
-    return (newfocknbr,), (fermionparity ? -op.coeff : op.coeff,)
+    return newfocknbr, (fermionparity ? -op.coeff : op.coeff)
 end
 
 

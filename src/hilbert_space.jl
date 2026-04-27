@@ -2,9 +2,9 @@ struct GenericHilbertSpace{B,L,S} <: AbstractAtomicHilbertSpace{B}
     label::L
     basisstates::S
     state_index::Dict{B,Int}
-    function GenericHilbertSpace(label, basisstates, state_index=Dict(reverse(pair) for pair in enumerate(basisstates)))
+    function GenericHilbertSpace(label::L, basisstates, state_index=Dict(reverse(pair) for pair in enumerate(basisstates))) where L
         B = eltype(basisstates)
-        new{B,eltype(label),typeof(basisstates)}(label, basisstates, state_index)
+        new{B,L,typeof(basisstates)}(label, basisstates, state_index)
     end
 end
 Base.:(==)(H1::GenericHilbertSpace, H2::GenericHilbertSpace) = H1 === H2 || (H1.label == H2.label && H1.basisstates == H2.basisstates)
@@ -14,8 +14,8 @@ basisstate(ind, H::GenericHilbertSpace) = H.basisstates[ind]
 Base.keys(H::GenericHilbertSpace) = (H.label,)
 state_index(state, H::GenericHilbertSpace) = get(H.state_index, state, missing)
 symbolic_group(H::GenericHilbertSpace) = H.label
-group_id(H::GenericHilbertSpace) = H.label
 atomic_id(H::GenericHilbertSpace) = H.label
+add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag), H.basisstates, H.state_index)
 
 
 @testitem "GenericHilbertSpace, ProductSpace" begin

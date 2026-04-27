@@ -17,16 +17,28 @@ struct LazyOperator{O,S,T,P} <: SciMLOperators.AbstractSciMLOperator{T}
     hermitian::Bool
 end
 
+function _show_lazy_operator_expression(io::IO, L::LazyOperator)
+    show(IOContext(io, :compact => true), L.op)
+    L.transpose && print(io, "^T")
+    L.conjugate && print(io, "^*")
+end
+
+function Base.show(io::IO, L::LazyOperator)
+    _show_lazy_operator_expression(io, L)
+    print(io, " acting on ")
+    show(IOContext(io, :compact => true), L.space)
+end
+
 function LazyOperator(op::O, space::S, precomp::P=_precomputation_before_operator_application(op, space); projection=false, conjugate=false, transpose=false, hermitian=_ishermitian(op), T=mat_eltype(op)
 ) where {O,S,P}
     LazyOperator{O,S,T,P}(op, space, precomp, projection, conjugate, transpose, hermitian)
 end
 _ishermitian(x::NCMul) = iszero(x - hc)
 _ishermitian(x::NCAdd) = iszero(x - hc)
-function _ishermitian(x::Vector{<:NCMul})
-    _ishermitian(prod(x))
+function _ishermitian(x::OperatorSequence)
+    _ishermitian(prod(x.ops))
 end
-mat_eltype(x::Vector{<:NCMul}) = promote_type(map(mat_eltype, x)...)
+mat_eltype(x::OperatorSequence) = promote_type(map(mat_eltype, x.ops)...)
 
 Base.size(L::LazyOperator) = (dim(L.space), dim(L.space))
 Base.size(L::LazyOperator, i::Int) = size(L)[i]
@@ -49,7 +61,7 @@ function _eager_matrix_representation(L::LazyOperator{<:NCMul})
     return _term_matrix_representation(L.op, L.space, EagerRepr(); projection=L.projection)
 end
 
-function _eager_matrix_representation(L::LazyOperator{<:Vector{<:NCMul}})
+function _eager_matrix_representation(L::LazyOperator{<:OperatorSequence})
     return _factorized_term_matrix_representation(L.op, L.space, EagerRepr(); projection=L.projection)
 end
 
@@ -86,17 +98,15 @@ function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, 
             xn = x[n]
             iszero(xn) && continue
         end
-        newstates, newamps = apply_local_operators(term, state, space, precomp)
-        for (newstate, _amp) in zip(newstates, newamps)
-            if !iszero(_amp)
-                amp = (conjugate ? conj(_amp) : _amp) * coeff
-                outind = state_index(newstate, space)
-                if !projection || !ismissing(outind)
-                    if !transpose
-                        y[outind] += amp * xn
-                    else
-                        y[n] += amp * x[outind]
-                    end
+        newstate, _amp = _apply_local_operators(term, state, space, precomp)
+        if !iszero(_amp)
+            amp = (conjugate ? conj(_amp) : _amp) * coeff
+            outind = state_index(newstate, space)
+            if !projection || !ismissing(outind)
+                if !transpose
+                    y[outind] += amp * xn
+                else
+                    y[n] += amp * x[outind]
                 end
             end
         end
@@ -106,17 +116,15 @@ end
 function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, _coeff, conjugate, transpose, projection)
     coeff = (conjugate ? conj(_coeff) : _coeff)
     for (n, state) in enumerate(basisstates(space))
-        newstates, newamps = apply_local_operators(term, state, space, precomp)
-        for (newstate, _amp) in zip(newstates, newamps)
-            if !iszero(_amp)
-                amp = (conjugate ? conj(_amp) : _amp) * coeff
-                outind = state_index(newstate, space)
-                if !projection || !ismissing(outind)
-                    if !transpose
-                        @views y[outind, :] .+= amp .* x[n, :]
-                    else
-                        @views y[n, :] .+= amp .* x[outind, :]
-                    end
+        newstate, _amp = _apply_local_operators(term, state, space, precomp)
+        if !iszero(_amp)
+            amp = (conjugate ? conj(_amp) : _amp) * coeff
+            outind = state_index(newstate, space)
+            if !projection || !ismissing(outind)
+                if !transpose
+                    @views y[outind, :] .+= amp .* x[n, :]
+                else
+                    @views y[n, :] .+= amp .* x[outind, :]
                 end
             end
         end
@@ -129,10 +137,10 @@ function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCMul}, x::AbstractVec
     return y
 end
 
-function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:Vector{<:NCMul}}, x::AbstractVecOrMat, α, β)
+function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:OperatorSequence}, x::AbstractVecOrMat, α, β)
     # This is for productspaces, where ops is a list of operators applying to each factor space
     rmul!(y, β)
-    coeff = prod(op.coeff for op in L.op)
+    coeff = prod(op.coeff for op in L.op.ops)
     _apply_single_term!(y, x, L.space, L.op, L.precomp, coeff * α, L.conjugate, L.transpose, L.projection)
     return y
 end
@@ -160,7 +168,7 @@ function _term_matrix_representation(op::NCMul, H::AbstractHilbertSpace, ::LazyR
     LazyOperator(op, H; kwargs...)
 end
 
-function _factorized_term_matrix_representation(ops::Vector, H, ::LazyRepr; kwargs...)
+function _factorized_term_matrix_representation(ops::OperatorSequence, H, ::LazyRepr; kwargs...)
     LazyOperator(ops, H; kwargs...)
 end
 

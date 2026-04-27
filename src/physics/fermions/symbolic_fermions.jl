@@ -1,18 +1,22 @@
-struct FermionicGroup
-    id::UInt64
+struct FermionicGroup{T}
+    id::T
 end
 Base.hash(x::FermionicGroup, h::UInt) = hash(x.id, h)
 Base.:(==)(a::FermionicGroup, b::FermionicGroup) = a.id == b.id
 symbolic_group(g::FermionicGroup) = g
-Base.isless(g1::FermionicGroup, g2::FermionicGroup) = g1.id < g2.id
+Base.isless(g1::FermionicGroup, g2::FermionicGroup) = isless(g1.id, g2.id)
+add_tag(g::FermionicGroup, tag) = FermionicGroup(add_tag(g.id, tag))
+tags(g::FermionicGroup) = g.id
 
-struct SymbolicFermionBasis
+struct SymbolicFermionBasis{T<:Tags}
     name::Symbol
-    group::FermionicGroup
+    tags::FermionicGroup{T}
 end
-Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.group, h))
-symbolic_group(h::SymbolicFermionBasis) = fermionic_group(h)
-fermionic_group(b::SymbolicFermionBasis) = b.group
+Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.tags, h))
+symbolic_group(x::SymbolicFermionBasis) = tags(x)
+tags(x::SymbolicFermionBasis) = x.tags
+add_tag(x::SymbolicFermionBasis, tag) = SymbolicFermionBasis(x.name, add_tag(x.tags, tag))
+
 """
     @fermions a b ...
 
@@ -31,14 +35,14 @@ and commute with fermions in other `@fermions` blocks.
 See also [`@majoranas`](@ref).
 """
 macro fermions(xs...)
-    group = FermionicGroup(hash(xs))
+    group = FermionicGroup(Tags((hash(xs),)))
     defs = map(xs) do x
         :($(esc(x)) = SymbolicFermionBasis($(Expr(:quote, x)), $group))
     end
     Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
 end
-Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.group == b.group
+Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.tags == b.tags
 Base.getindex(f::SymbolicFermionBasis, is...) = FermionSym(false, is, f)
 Base.getindex(f::SymbolicFermionBasis, i) = FermionSym(false, i, f)
 
@@ -50,12 +54,14 @@ end
 Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.label, x.basis)
 Base.iszero(x::FermionSym) = false
 symbolic_group(h::FermionSym) = symbolic_group(h.basis)
+symbolic_basis(h::FermionSym) = h.basis
+change_basis(h::FermionSym, newbasis) = FermionSym(h.creation, h.label, newbasis)
 atomic_id(h::FermionSym) = (h.basis, h.label)
 label(h::FermionSym) = h.label
 group_id(f::FermionSym) = symbolic_group(f)
 
 function Base.show(io::IO, x::FermionSym)
-    print(io, x.basis.name, x.creation ? "†" : "")
+    print(io, _symbolic_name_with_tags(x.basis.name, x.basis; skip_first=1), x.creation ? "†" : "")
     if Base.isiterable(typeof(x.label))
         Base.show_delim_array(io, x.label, "[", ",", "]", false)
     else
@@ -63,8 +69,8 @@ function Base.show(io::IO, x::FermionSym)
     end
 end
 function Base.isless(a::FermionSym, b::FermionSym)
-    if a.basis.group !== b.basis.group
-        a.basis.group < b.basis.group
+    if tags(a.basis) !== tags(b.basis)
+        tags(a.basis) < tags(b.basis)
     elseif a.creation == b.creation
         a.basis.name == b.basis.name && return a.label < b.label
         a.basis.name < b.basis.name
@@ -83,7 +89,8 @@ function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     elseif a < b
         nothing
     elseif a > b
-        swap = Swap((-1)^(a.basis.group == b.basis.group))
+        anti_commuting = tags(a.basis) == tags(b.basis)
+        swap = Swap((-1)^anti_commuting)
         if a.label == b.label && a.basis == b.basis
             return AddTerms((swap, 1))
         else
@@ -129,7 +136,6 @@ mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
     @test_nowarn display(1 + f1)
     @test_nowarn display(1 + f3)
     @test_nowarn display(1 + a * f2 - 5 * f1 + 2 * z * f1 * f2)
-
     @test iszero(f1 - f1)
     @test iszero(f1 * f1)
     @test iszero(2 * f1 - 2 * f1)
@@ -166,20 +172,3 @@ mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
     end
 
 end
-
-# """
-#     apply_local_operator(op, state, space) -> (new_state, amplitude)
-
-# Apply a local operator (single factor or product) to a state in a single Hilbert space.
-# Returns the resulting state and amplitude.
-
-# Type-specific implementations are defined in their respective files (e.g., symbolic_spin.jl).
-# """
-# function apply_local_operator(op::FermionSym, state::FockNumber, space::AbstractFockHilbertSpace)
-#     # Convert single FermionSym to NCMul and use existing machinery
-#     ordering = mode_ordering(space)
-#     digitpos = getindex(ordering, op.label)
-#     dagger = op.creation
-#     new_state, amp = togglefermions([digitpos], [dagger], state)
-#     return (new_state, amp)
-# end

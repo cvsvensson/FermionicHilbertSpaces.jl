@@ -114,11 +114,16 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
 end
 
 # _precomputation_before_operator_application(op::NCMul, space::SingleParticleHilbertSpace) = (println("ASD"); map(op -> _find_position(op, space), op.factors))
-function apply_local_operators(op::NCMul, f::FixedNumberFockState, H::AbstractHilbertSpace, sites; kwargs...)
+function apply_local_operators(op::NCMul, f::FixedNumberFockState, H::AbstractHilbertSpace, sites; transpose)
     # sites = Iterators.map(op -> _find_position(op, H), reverse(ops))
-    daggers = Iterators.map(op -> op.creation, reverse(op.factors))
-    state, amp = togglefermions(Iterators.reverse(sites), daggers, f)
-    return (state,), (amp * op.coeff,)
+    if !transpose
+        daggers = Iterators.map(op -> op.creation, reverse(op.factors))
+        state, amp = togglefermions(Iterators.reverse(sites), daggers, f)
+    else
+        daggers = Iterators.map(op -> !op.creation, op.factors)
+        state, amp = togglefermions(sites, daggers, f)
+    end
+    return state, amp * op.coeff
 end
 function togglefermions(sites, daggers, f::FixedNumberFockState)
     # Check if operation results in vacuum or not,
