@@ -102,7 +102,7 @@ sectors(H::AbstractHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 Return the basis-state indices in `H` belonging to a given sector, specified
 either by a sector Hilbert space `Hsub` or by a quantum number `qn`.
 """
-function indices(Hsub, H::AbstractHilbertSpace)
+function space_indices(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
     sector_list = sectors(H)
     indexin = findfirst(isequal(Hsub), sector_list)
     # map(state -> state_index(state, H), basisstates(Hsub))
@@ -112,7 +112,10 @@ function indices(Hsub, H::AbstractHilbertSpace)
     qn = quantumnumbers(H)[indexin]
     indices(qn, H)
 end
-function indices(qn::Q, H::SectorHilbertSpace{B,P,Q}) where {B,P,Q}
+indices(qn, H) = qn_indices(qn, H)
+indices(qn::AbstractHilbertSpace, H::AbstractHilbertSpace) = space_indices(qn, H)
+indices(qn::Q, H::SectorHilbertSpace{B,P,Q}) where {B,P,Q} = qn_indices(qn, H)
+function qn_indices(qn, H)
     dims = cumsum([length(H.qn_to_states[qn]) for qn in collect(quantumnumbers(H))])
     qn_index = findfirst(isequal(qn), collect(quantumnumbers(H)))
     if qn_index === nothing
@@ -161,7 +164,6 @@ end
 
 
 @testitem "Sector" begin
-    import FermionicHilbertSpaces: sector, sectors, indices, quantumnumbers
     N = 4
     @fermions f
     H = hilbert_space(f, 1:N, NumberConservation())
