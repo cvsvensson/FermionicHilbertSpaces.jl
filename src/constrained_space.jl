@@ -35,7 +35,7 @@ constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}) where B<
 function constrain_space(space, constraint::AbstractConstraint)
     if supports_sector_grouping(constraint)
         f = sector_function(constraint, space)
-        return sector_space(space, basisstates(space), f)
+        return sector_space(space, basisstates(space), f, constraint)
     elseif supports_filtering(constraint)
         f = filter_function(constraint, space)
         filtered_states = collect(Iterators.filter(f, basisstates(space)))
@@ -164,4 +164,53 @@ _precomputation_before_operator_application(ops, space::ConstrainedSpace) = _pre
 end
 
 _apply_local_operators(ops, state, space::SectorHilbertSpace, precomp) = _apply_local_operators(ops, state, space.parent, precomp)
-add_tag(H::SectorHilbertSpace, tag) = SectorHilbertSpace(add_tag(parent(H), tag), H.ordered_basis_states, H.state_to_index, H.qn_to_states)
+add_tag(H::SectorHilbertSpace, tag) = SectorHilbertSpace(add_tag(parent(H), tag), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)
+
+"""
+    localize_constraint(c, H::SectorHilbertSpace)
+
+Return a version of constraint `c` that is bound to `H` as its subspace, so that
+when `sector_function` is later called on a larger combined space it knows to extract
+the contribution from `H` only.  Already-localized (non-`Missing` subspace) or
+unsupported constraints are returned unchanged.
+"""
+localize_constraint(c::AbstractConstraint, ::SectorHilbertSpace) = c
+function localize_constraint(c::NumberConservation{<:Any,Missing,W}, H::SectorHilbertSpace) where W
+    allowed = collect(keys(H.qn_to_states))
+    NumberConservation(allowed, H, c.weights)
+end
+function localize_constraint(c::ParityConservation{Missing}, H::SectorHilbertSpace)
+    ParityConservation(c.allowed_parities, H)
+end
+function localize_constraint(c::ProductConstraint, H::SectorHilbertSpace)
+    qns = collect(keys(H.qn_to_states))
+    localized = map(enumerate(c.constraints)) do (i, sub_c)
+        allowed_i = unique!(map(qn -> qn[i], qns))
+        _localize_sub_constraint(sub_c, allowed_i, H)
+    end
+    ProductConstraint(localized)
+end
+_localize_sub_constraint(c::NumberConservation{<:Any,<:Any,W}, allowed, H) where W = NumberConservation(allowed, H, c.weights)
+_localize_sub_constraint(c::ParityConservation, allowed, H) = ParityConservation(allowed, H)
+_localize_sub_constraint(c::AbstractConstraint, _allowed, _H) = c
+function localize_constraint(c::SectorConstraint{<:FilterConstraint{Missing,Missing}}, H::SectorHilbertSpace)
+    # Bind the free-standing reducer to H as its single subspace.
+    # sector_function on the larger space will split the state, extract the H-substate,
+    # apply the original reducer to it, and return the label via `only`.
+    SectorConstraint((H,), (c.filter.reducer,), only)
+end
+
+"""
+    _combined_sector_constraint(spaces)
+
+Given a collection of Hilbert spaces, construct a combined constraint from the stored
+constraints of any `SectorHilbertSpace` inputs (localized to their respective subspaces).
+Returns `missing` if no usable sector information exists.
+"""
+function _combined_sector_constraint(spaces)
+    sector_inputs = filter(s -> s isa SectorHilbertSpace && !isnothing(s.constraint), spaces)
+    isempty(sector_inputs) && return missing
+    local_constraints = map(H -> localize_constraint(H.constraint, H), sector_inputs)
+    combined = length(local_constraints) == 1 ? only(local_constraints) : reduce(*, local_constraints)
+    (supports_sector_grouping(combined) && supports_filtering(combined)) ? combined : missing
+end

@@ -275,7 +275,7 @@ function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constrai
         valid_parity = only(constraint.allowed_parities)
         Iterators.filter(isequal(valid_parity) ∘ parity, basisstates(H))
     end
-    sector_space(H, states, parity)
+    sector_space(H, states, parity, constraint)
 end
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::NumberConservation{T,Missing,Missing}) where T
     H = hilbert_space(a, labels)
@@ -283,7 +283,7 @@ function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constrai
     numbers = T === Missing ? (0:N) : constraint.total
     state_blocks = map(n -> fixed_particle_number_fockstates(N, n), numbers)
     dict = OrderedDict(zip(numbers, state_blocks))
-    _sector_space(H, dict)
+    _sector_space(H, dict, constraint)
 end
 
 issubsystem(Hsub::AbstractHilbertSpace, H::FermionicSpace) = isorderedsubsystem(Hsub, H)

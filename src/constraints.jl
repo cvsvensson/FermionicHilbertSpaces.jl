@@ -1,6 +1,4 @@
 
-abstract type AbstractConstraint end
-
 """
     NoSymmetry()
 
