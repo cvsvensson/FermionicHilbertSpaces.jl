@@ -135,10 +135,10 @@ end
 # To hook it up to the matrix-representation machinery, we need to define `apply_local_operator(op, state::FloquetState, space, precomp)
 import FermionicHilbertSpaces: apply_local_operator
 # ``F^k`` shifts the Floquet index by ``k``.
-apply_local_operator(op::FloquetLadder, state::FloquetState, amp) = FloquetState(state.mode + op.shift), amp
+apply_local_operator(op::FloquetLadder, state::FloquetState, space, precomp) = FloquetState(state.mode + op.shift), 1
 
 # ``N^p`` multiplies the amplitude by ``n^p``, where ``n`` is the current mode index.
-apply_local_operator(op::FloquetNumber, state::FloquetState, amp) = state, amp * state.mode^op.power
+apply_local_operator(op::FloquetNumber, state::FloquetState, space, precomp) = state, state.mode^op.power
 
 # ### Step 6 — `symbolic_group`
 
