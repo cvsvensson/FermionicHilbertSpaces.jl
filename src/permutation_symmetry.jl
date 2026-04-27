@@ -55,9 +55,22 @@ end
 
 Build a group-averaged projector/operator from permutation operators:
 `P = sum(weights[g] * R_g for g)`.
+
+`Hs` may be either a full partition of `H` (covering all atomic factors) or a proper
+subsystem list (covering only a subset of atomic factors). In the subsystem case the
+projector is first constructed on `Hsub = tensor_product(Hs...)` and then embedded
+back into `H` via `embed(Psub, Hsub => H)`.
 """
 function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothing, ::Type{T}=Float64; normalize=true) where T
     isempty(perms) && throw(ArgumentError("At least one permutation is required"))
+
+    # Subsystem branch: Hs does not partition H, treat as a proper subsystem.
+    if !ispartition(Hs, H)
+        Hsub = subregion(tensor_product(Hs...), H)
+        issubsystem(Hsub, H) || throw(ArgumentError("Hs is neither a partition nor a subsystem of H"))
+        Psub = permutation_projector(Hsub, Hs, perms, weights, T; normalize)
+        return embed(Psub, Hsub => H)
+    end
 
     ws = if isnothing(weights)
         ones(T, length(perms))
@@ -92,6 +105,8 @@ Supported sectors are `:symmetric` and `:antisymmetric`, generated over the full
 permutation group `S_n` for `n = length(Hs)`. This requires the `Combinatorics.jl`
 weak extension to be available.
 
+`Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
+case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
 """
 function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type{T}=Float64;
     orth_method=_QR(), kwargs...) where T
@@ -104,25 +119,26 @@ function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type
 end
 _resolve_sector_permutations_and_weights(Hs, (perms, weights), T) = (perms, weights) # for direct input of perms and weights
 
-function _remove_columns(P, ::_QR)
-    F = qr(P)
+_remove_columns(P::AbstractMatrix, alg) = _remove_columns(Matrix(P), alg) # ensure we have a dense matrix for the decomposition
+function _remove_columns(P::Matrix, ::_QR)
+    F = qr(P, ColumnNorm())
     big_cols = findall(>(0.1) ∘ abs, diag(F.R))
     return F.Q[:, big_cols]
 end
-function _remove_columns(P, ::_EIG)
-    E = eigen(Hermitian((P)))
+function _remove_columns(P::Matrix, ::_EIG)
+    E = eigen(Hermitian(P))
     keep = findall(>(0.9) ∘ abs, E.values)  # λ ≈ 1 subspace
     return E.vectors[:, keep]  # already orthonormal
 end
-function _remove_columns(P, ::Nothing)
+function _remove_columns(P::AbstractMatrix, ::Nothing)
     return P
 end
 
 
 @testitem "Permutation symmetry" begin
     using LinearAlgebra
-    using Combinatorics: permutations
     using FermionicHilbertSpaces: permutation_operator, permutation_projector, symmetric_sector
+    using Combinatorics: permutations
 
     permutation_sign(perm) = isodd(sum(perm[i] > perm[j] for i in 1:length(perm)-1 for j in i+1:length(perm))) ? -1.0 : 1.0
 
@@ -176,4 +192,36 @@ end
     @test Pmanual3 ≈ Pauto3
 
     @test_throws ArgumentError symmetric_sector(H, [H1, H2], :invalid)
+
+    # Subsystem tests: Hs covers only a subset of H
+    Hs_sub = [H1, H2]
+    Hsub = tensor_product(H1, H2)
+
+    # Subsystem result should equal manually embedded projector
+    Psub_manual_sym = permutation_projector(Hsub, Hs_sub, [idperm, swapperm])
+    Psub_embed_sym = embed(Psub_manual_sym, Hsub => H123)
+    Psub_auto_sym = permutation_projector(H123, Hs_sub, [idperm, swapperm])
+    @test Psub_auto_sym ≈ Psub_embed_sym
+
+    Psub_manual_anti = permutation_projector(Hsub, Hs_sub, [idperm, swapperm], (1.0, -1.0))
+    Psub_embed_anti = embed(Psub_manual_anti, Hsub => H123)
+    Psub_auto_anti = permutation_projector(H123, Hs_sub, [idperm, swapperm], (1.0, -1.0))
+    @test Psub_auto_anti ≈ Psub_embed_anti
+
+    # symmetric_sector subsystem path
+    Qsym = symmetric_sector(H123, Hs_sub, :symmetric)
+    Qanti = symmetric_sector(H123, Hs_sub, :antisymmetric)
+
+    # Columns should be orthonormal
+    @test Qsym' * Qsym ≈ I
+    @test Qanti' * Qanti ≈ I
+
+    # Q*Q' should equal the full space projector (orth_method=nothing)
+    Tsym_sub = symmetric_sector(H123, Hs_sub, :symmetric; orth_method=nothing)
+    Tanti_sub = symmetric_sector(H123, Hs_sub, :antisymmetric; orth_method=nothing)
+    @test Qsym * Qsym' ≈ Tsym_sub
+    @test Qanti * Qanti' ≈ Tanti_sub
+
+    # Invalid input: Hs not a subsystem of H
+    @test_throws ArgumentError permutation_projector(H, [H1, H3], [idperm, swapperm])
 end
