@@ -354,7 +354,7 @@ end
 
 function combine_states(substates, sp::ProductSpaceMapper)
     outstate = ProductState(map(sp.factor_mappers, sp.factor_piece_targets) do mapper, piece_destinations
-        isnothing(mapper) && error("Cannot reconstruct state: factor $i has no atoms in any target")
+        isnothing(mapper) && error("Cannot reconstruct state: piece_destinations = $piece_destinations, substates = $substates")
         gathered = map(piece_destinations) do dest
             extract_substate(substates[dest[1]], dest[2])
         end
