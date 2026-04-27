@@ -178,7 +178,7 @@ end
 
 
 function branch_constraint(constraint::ParityConservation, spaces)
-    possible_numbers = ismissing(constraint.subspaces) ? (0:sum(maximum_particles, spaces)) : (0:sum(nbr_of_modes, constraint.subspaces))
+    possible_numbers = ismissing(constraint.subspaces) ? (0:sum(maximum_particles, spaces)) : (0:sum(maximum_particles, constraint.subspaces))
     allowed_numbers = filter(n -> any(p -> p == (-1)^n, constraint.allowed_parities), possible_numbers)
     cons = NumberConservation(allowed_numbers, constraint.subspaces, missing)
     branch_constraint(cons, spaces)
