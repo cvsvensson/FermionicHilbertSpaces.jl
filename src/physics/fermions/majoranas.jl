@@ -317,23 +317,25 @@ end
     @test tensor_product((m1, m2), (Hsub, Hsub2), Hprod) == embed(m1, Hsub => Hprod) * embed(m2, Hsub2 => Hprod)
 end
 
-function fermion_to_majorana(expr::FermionSym, f::SymbolicFermionBasis, γ::SymbolicMajoranaBasis; maj_labels=(1, 2))
-    γ1 = γ[(label(expr), maj_labels[1])]
-    γ2 = γ[(label(expr), maj_labels[2])]
+function fermion_to_majorana(expr::FermionSym, H::MajoranaHilbertSpace)
+    γ = symbolic_basis(H)
+    γ1 = γ[first(label(expr))]
+    γ2 = γ[last(label(expr))]
     expr.creation ? (1//2 * (γ1 - 1im * γ2)) : 1//2 * (γ1 + 1im * γ2)
 end
-function fermion_to_majorana(expr::NCMul, f::SymbolicFermionBasis, γ::SymbolicMajoranaBasis)
-    mapreduce(factor -> fermion_to_majorana(factor, f, γ), *, expr.factors)
+function fermion_to_majorana(expr::NCMul, H::MajoranaHilbertSpace)
+    mapreduce(factor -> fermion_to_majorana(factor, H), *, expr.factors)
 end
-function fermion_to_majorana(expr::NCAdd, f::SymbolicFermionBasis, γ::SymbolicMajoranaBasis)
-    sum(fermion_to_majorana(term, f, γ) for term in NCterms(expr); init=zero(expr)) + expr.coeff * I
+function fermion_to_majorana(expr::NCAdd, H::MajoranaHilbertSpace)
+    sum(fermion_to_majorana(term, H) for term in NCterms(expr); init=zero(expr)) + expr.coeff * I
 end
 
 @testitem "Fermion to Majorana conversion" begin
     import FermionicHilbertSpaces: fermion_to_majorana
     @majoranas γ
     @fermions f
-    @test fermion_to_majorana(f[1], f, γ) == 1//2 * (γ[1, 1] + 1im * γ[1, 2])
+    H = hilbert_space(γ, 1:4)
+    @test fermion_to_majorana(f[1], H) == 1//2 * (γ[1, 1] + 1im * γ[1, 2])
     @test fermion_to_majorana(f[1]', f, γ) == 1//2 * (γ[1, 1] - 1im * γ[1, 2])
     hilbert_space(γ, 1:4)
 end
