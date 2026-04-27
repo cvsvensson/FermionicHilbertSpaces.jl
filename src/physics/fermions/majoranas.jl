@@ -59,6 +59,7 @@ Base.iszero(x::MajoranaSym) = false
 symbolic_group(f::AbstractMajoranaSym) = symbolic_group(f.basis)
 symbolic_basis(f::AbstractMajoranaSym) = f.basis
 change_basis(f::MajoranaSym, newbasis) = MajoranaSym(f.label, newbasis)
+label(f::AbstractMajoranaSym) = f.label
 function Base.show(io::IO, x::MajoranaSym)
     print(io, _symbolic_name_with_tags(x.basis.name, x.basis; skip_first=1))
     if Base.isiterable(typeof(x.label))
@@ -192,8 +193,7 @@ _find_position(f::MajoranaHilbertSpace, H::FermionicSpace) = _find_position(f.pa
 partial_trace_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_trace_phase_factor(f1, f2, H.parent)
 
 function majoranas(H::MajoranaHilbertSpace)
-    γ = symbolic_basis(H)
-    OrderedDict(l => matrix_representation(γ[l], H) for l in labels(H))
+    OrderedDict(label(γi) => matrix_representation(γi, H) for γi in modes(H))
 end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
 
@@ -316,3 +316,25 @@ end
     m2 = rand(dim(Hsub2), dim(Hsub2))
     @test tensor_product((m1, m2), (Hsub, Hsub2), Hprod) == embed(m1, Hsub => Hprod) * embed(m2, Hsub2 => Hprod)
 end
+
+function fermion_to_majorana(expr::FermionSym, f::SymbolicFermionBasis, γ::SymbolicMajoranaBasis; maj_labels=(1, 2))
+    γ1 = γ[(label(expr), maj_labels[1])]
+    γ2 = γ[(label(expr), maj_labels[2])]
+    expr.creation ? (1//2 * (γ1 - 1im * γ2)) : 1//2 * (γ1 + 1im * γ2)
+end
+function fermion_to_majorana(expr::NCMul, f::SymbolicFermionBasis, γ::SymbolicMajoranaBasis)
+    mapreduce(factor -> fermion_to_majorana(factor, f, γ), *, expr.factors)
+end
+function fermion_to_majorana(expr::NCAdd, f::SymbolicFermionBasis, γ::SymbolicMajoranaBasis)
+    sum(fermion_to_majorana(term, f, γ) for term in NCterms(expr); init=zero(expr)) + expr.coeff * I
+end
+
+@testitem "Fermion to Majorana conversion" begin
+    import FermionicHilbertSpaces: fermion_to_majorana
+    @majoranas γ
+    @fermions f
+    @test fermion_to_majorana(f[1], f, γ) == 1//2 * (γ[1, 1] + 1im * γ[1, 2])
+    @test fermion_to_majorana(f[1]', f, γ) == 1//2 * (γ[1, 1] - 1im * γ[1, 2])
+    hilbert_space(γ, 1:4)
+end
+
