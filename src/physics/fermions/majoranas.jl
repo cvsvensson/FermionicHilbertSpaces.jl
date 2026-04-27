@@ -317,26 +317,57 @@ end
     @test tensor_product((m1, m2), (Hsub, Hsub2), Hprod) == embed(m1, Hsub => Hprod) * embed(m2, Hsub2 => Hprod)
 end
 
-function fermion_to_majorana(expr::FermionSym, H::MajoranaHilbertSpace)
-    γ = symbolic_basis(H)
-    γ1 = γ[first(label(expr))]
-    γ2 = γ[last(label(expr))]
-    expr.creation ? (1//2 * (γ1 - 1im * γ2)) : 1//2 * (γ1 + 1im * γ2)
+struct MajoranaMap{F1,F2}
+    ferm_to_maj::F1   # f -> (γ1, γ2)
+    maj_to_ferm::F2     # γ -> (f, isfirst)
 end
-function fermion_to_majorana(expr::NCMul, H::MajoranaHilbertSpace)
-    mapreduce(factor -> fermion_to_majorana(factor, H), *, expr.factors)
+# Simple constructor for MajoranaMap
+function MajoranaMap(γ::SymbolicMajoranaBasis, f::SymbolicFermionBasis; tags=(:a, :b))
+    ferm_to_maj = f -> (γ[f.label, first(tags)], γ[f.label, last(tags)])
+    maj_to_ferm = maj -> begin
+        i, tag = maj.label
+        if tag == first(tags)
+            (f[i], true)
+        elseif tag == last(tags)
+            (f[i], false)
+        else
+            throw(ArgumentError("Invalid majorana label: $(maj.label)"))
+        end
+    end
+    MajoranaMap(ferm_to_maj, maj_to_ferm)
 end
-function fermion_to_majorana(expr::NCAdd, H::MajoranaHilbertSpace)
-    sum(fermion_to_majorana(term, H) for term in NCterms(expr); init=zero(expr)) + expr.coeff * I
+
+pair(γ::MajoranaSym, M::MajoranaMap) = M.maj_to_ferm(γ)
+unpair(f::FermionSym, M::MajoranaMap) = M.ferm_to_maj(f)
+
+function fermion_to_majorana(f::FermionSym, M::MajoranaMap)
+    γ1, γ2 = unpair(f, M)
+    f.creation ? (1//2 * (γ1 - 1im * γ2)) : 1//2 * (γ1 + 1im * γ2)
+end
+
+function majorana_to_fermion(γ::MajoranaSym, M::MajoranaMap)
+    f, isfirst = pair(γ, M)
+    isfirst ? f + f' : 1im * (f' - f)
+end
+
+rewrite(expr::FermionSym, M::MajoranaMap) = fermion_to_majorana(expr, M)
+rewrite(expr::MajoranaSym, M::MajoranaMap) = majorana_to_fermion(expr, M)
+function rewrite(expr::NCMul, M::MajoranaMap)
+    mapreduce(factor -> rewrite(factor, M), *, expr.factors)
+end
+function rewrite(expr::NCAdd, M::MajoranaMap)
+    sum(rewrite(term, M) for term in NCterms(expr); init=zero(expr)) + expr.coeff * I
 end
 
 @testitem "Fermion to Majorana conversion" begin
-    import FermionicHilbertSpaces: fermion_to_majorana
+    import FermionicHilbertSpaces: rewrite, MajoranaMap
     @majoranas γ
     @fermions f
-    H = hilbert_space(γ, 1:4)
-    @test fermion_to_majorana(f[1], H) == 1//2 * (γ[1, 1] + 1im * γ[1, 2])
-    @test fermion_to_majorana(f[1]', f, γ) == 1//2 * (γ[1, 1] - 1im * γ[1, 2])
-    hilbert_space(γ, 1:4)
+    M = MajoranaMap(γ, f)
+    @test rewrite(f[1], M) == 1//2 * (γ[1, :a] + 1im * γ[1, :b])
+    @test rewrite(γ[1, :a], M) == f[1] + f[1]'
+    @test rewrite(f[1]' + f[1], M) == γ[1, :a]
+    @test rewrite(f[1]'f[1] + 3, M) == 1im * γ[1, :a] * γ[1, :b] + 3
+    @test rewrite(f[1]', M) == 1//2 * (γ[1, :a] - 1im * γ[1, :b])
 end
 
