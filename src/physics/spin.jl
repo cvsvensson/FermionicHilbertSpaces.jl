@@ -90,7 +90,7 @@ SpinSpace{J}(label) where J = SpinSpace{J}(SymbolicSpinBasis(label))
 basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
-state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + J + 1)
+state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + (J + 1))
 atomic_id(H::SpinSpace) = atomic_id(H.sym)
 function add_tag(H::SpinSpace{J,M,S}, tag) where {J,M,S}
     newsym = add_tag(H.sym, tag)
