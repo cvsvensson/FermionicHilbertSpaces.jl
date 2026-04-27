@@ -21,6 +21,7 @@ export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
+export symmetric_sector
 
 """
     HC
@@ -52,6 +53,7 @@ Base.eltype(::Type{<:TypedIterator{T}}) where T = T
 Base.length(ti::TypedIterator) = length(ti.iter)
 Base.size(ti::TypedIterator) = size(ti.iter)
 
+function _resolve_sector_permutations_and_weights end # for Combinatorics extension
 
 ## Files
 include("spaces.jl")
@@ -63,6 +65,7 @@ include("constraints.jl")
 include("constrained_space.jl")
 
 include("tensor_product.jl")
+include("permutation_symmetry.jl")
 include("embedding.jl")
 include("reshape.jl")
 
