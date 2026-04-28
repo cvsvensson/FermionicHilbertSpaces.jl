@@ -101,6 +101,7 @@ function additive_branch_constraint(allowed_sums, functions, _subspaces, allspac
     _additive_branch_constraint(allowed_values, functions, map(hilbert_space, subspaces), allspaces)
 end
 function _additive_branch_constraint(allowed_values, functions, subspaces, allspaces)
+    ismissing(allowed_values) && return BranchConstraint((partial, depth, spaces) -> true)
     atom_ids = collect(map(atomic_id, allspaces))
     positions = map(subspaces) do subspace
         pos = findfirst(==(atomic_id(subspace)), atom_ids)
@@ -126,7 +127,6 @@ function _additive_branch_constraint(allowed_values, functions, subspaces, allsp
     end
     BranchConstraint((partial, depth, _) -> begin
         current = _additive_function_application(partial, positions, functions, depth, T)
-        # current = sum(f(partial[pos]) for (pos, f) in zip(positions, functions) if pos <= depth; init=zero(T))
         min_possible = current + remaining_min[depth+1]
         max_possible = current + remaining_max[depth+1]
         any(t -> min_possible <= t <= max_possible, allowed_values)
