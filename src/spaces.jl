@@ -35,6 +35,8 @@ group_id(H::AbstractAtomicHilbertSpace) = atomic_id(H)
 
 partial_trace_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1
 
+maximum_particles(H::AbstractHilbertSpace) = maximum(particle_number, basisstates(H))
+
 
 abstract type AbstractStateMapper end
 """

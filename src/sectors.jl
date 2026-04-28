@@ -286,8 +286,6 @@ end
     @test size(matrix_representation(hopping_symham, H; projection=true), 1) == dim(H)
 end
 
-maximum_particles(H::SectorHilbertSpace) = maximum_particles(parent(H))
-
 @testitem "Sector propagation in tensor_product" begin
     @fermions f
 
