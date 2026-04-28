@@ -20,6 +20,7 @@ factors(H::TransposedSpace) = factors(H.parent)
 _precomputation_before_operator_application(factors, space::TransposedSpace) = _precomputation_before_operator_application(factors, space.parent)
 TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, factors(H)), map(TransposedSpace, H.atoms))
 TransposedSpace(H::ConstrainedSpace) = ConstrainedSpace(TransposedSpace(H.parent), H.states, H.state_index)
+TransposedSpace(H::SectorHilbertSpace) = SectorHilbertSpace(TransposedSpace(parent(H)), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)
 state_mapper(H::TransposedSpace, Hs) = state_mapper(H.parent, Hs)
 combine_states(states, H::TransposedSpace) = combine_states(states, H.parent)
 Base.parent(H::TransposedSpace) = H.parent
@@ -172,6 +173,12 @@ end
     @test matrix_representation(A2 * B2, Hfull) ≈ matrix_representation(A2, Hfull) * matrix_representation(B2, Hfull)
     @test matrix_representation(A2 * B2, Hfull_t) ≈ matrix_representation(B2, Hfull_t) * matrix_representation(A2, Hfull_t)
 
+    # test with Majorana fermions
+    @majoranas m
+    Hm = hilbert_space(m, 1:4)
+    Hm_t = TransposedSpace(Hm)
+    A = m[1] * m[2] + 0.5 * m[3] * m[4]
+    @test transpose(matrix_representation(A, Hm)) ≈ matrix_representation(A, Hm_t)
 end
 
 @testitem "Vectorization and kron identity" begin

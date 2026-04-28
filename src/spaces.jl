@@ -2,6 +2,7 @@
 abstract type AbstractBasisState end
 abstract type AbstractFockState <: AbstractBasisState end
 abstract type AbstractHilbertSpace{S} end
+abstract type AbstractConstraint end
 abstract type AbstractAtomicHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractProductHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractGroupedHilbertSpace{B} <: AbstractProductHilbertSpace{B} end
@@ -33,6 +34,8 @@ atomic_factors(f::AbstractSym) = (f,)
 group_id(H::AbstractAtomicHilbertSpace) = atomic_id(H)
 
 partial_trace_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1
+
+maximum_particles(H::AbstractHilbertSpace) = maximum(particle_number, basisstates(H))
 
 
 abstract type AbstractStateMapper end

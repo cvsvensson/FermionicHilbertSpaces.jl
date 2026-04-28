@@ -28,11 +28,15 @@ function tensor_product(spaces; constraint=NoSymmetry())
         return constrain_space(only(spaces), constraint)
     end
     full_space = tensor_product_no_constraints(spaces)
-    constraint == NoSymmetry() && return full_space
+    if constraint == NoSymmetry()
+        combined = _combined_sector_constraint(spaces)
+        !ismissing(combined) && return sector_space(full_space, basisstates(full_space), sector_function(combined, full_space), combined)
+        return full_space
+    end
 
     states = supports_branch_pruning(constraint) ? generate_states(spaces, constraint, full_space) : basisstates(full_space)
     if supports_sector_grouping(constraint) && supports_filtering(constraint)
-        return sector_space(full_space, states, sector_function(constraint, full_space))
+        return sector_space(full_space, states, sector_function(constraint, full_space), constraint)
     elseif supports_filtering(constraint)
         filtered_states = collect(Iterators.filter(filter_function(constraint, full_space), states))
         return ConstrainedSpace(full_space, filtered_states)

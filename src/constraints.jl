@@ -1,12 +1,13 @@
 
-abstract type AbstractConstraint end
-
 """
     NoSymmetry()
 
 Constraint that leaves a Hilbert space unchanged.
 """
 struct NoSymmetry <: AbstractConstraint end
+supports_sector_grouping(::NoSymmetry) = false
+supports_filtering(::NoSymmetry) = false
+supports_branch_pruning(::NoSymmetry) = false
 
 struct ProductConstraint{C} <: AbstractConstraint
     constraints::C
@@ -180,7 +181,7 @@ end
 
 
 function branch_constraint(constraint::ParityConservation, spaces)
-    possible_numbers = ismissing(constraint.subspaces) ? (0:sum(maximum_particles, spaces)) : (0:sum(nbr_of_modes, constraint.subspaces))
+    possible_numbers = ismissing(constraint.subspaces) ? (0:sum(maximum_particles, spaces)) : (0:sum(maximum_particles, constraint.subspaces))
     allowed_numbers = filter(n -> any(p -> p == (-1)^n, constraint.allowed_parities), possible_numbers)
     cons = NumberConservation(allowed_numbers, constraint.subspaces, missing)
     branch_constraint(cons, spaces)
