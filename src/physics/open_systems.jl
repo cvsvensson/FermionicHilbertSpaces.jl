@@ -223,3 +223,6 @@ end
 
 maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))
 _find_position(f::TransposedSpace, H::FermionicSpace) = _find_position(parent(f), H)
+function _wrap(space, ::TransposedSpace)
+    TransposedSpace(space)
+end

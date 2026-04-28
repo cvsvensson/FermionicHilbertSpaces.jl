@@ -148,17 +148,11 @@ struct MajoranaHilbertSpace{B,L,H} <: AbstractGroupedHilbertSpace{B}
     majoranaindices::L
     parent::H
     sym::SymbolicMajoranaBasis
-    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::SymbolicMajoranaBasis) where {L,H}
+    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::SymbolicMajoranaBasis) where {L,H<:FermionicSpace}
         B = statetype(parent)
         new{B,L,H}(majoranaindices, parent, sym)
     end
 end
-
-function SectorHilbertSpace(maj_space::MajoranaHilbertSpace, ordered_basis_states::Vector{B}, state_to_index::OrderedDict{B,Int64}, qn_to_states::OrderedDict{Q,Vector{B}}) where {B,Q}
-    MajoranaHilbertSpace(maj_space.majoranaindices, SectorHilbertSpace(parent(maj_space), ordered_basis_states, state_to_index, qn_to_states), maj_space.sym)
-end
-indices(qn, H::MajoranaHilbertSpace) = indices(qn, parent(H))
-indices(qn::Nothing, H::MajoranaHilbertSpace) = indices(qn, parent(H))
 
 dim(H::MajoranaHilbertSpace) = dim(H.parent)
 mode_ordering(H::MajoranaHilbertSpace) = H.majoranaindices
@@ -168,27 +162,13 @@ Base.hash(H::MajoranaHilbertSpace, h::UInt) = hash(H.majoranaindices, hash(H.par
 basisstates(m::MajoranaHilbertSpace) = basisstates(m.parent)
 basisstate(i, m::MajoranaHilbertSpace) = basisstate(i, m.parent)
 Base.parent(H::MajoranaHilbertSpace) = H.parent
-isconstrained(H::MajoranaHilbertSpace) = isconstrained(H.parent)
+isconstrained(H::MajoranaHilbertSpace) = false
 group_id(H::MajoranaHilbertSpace) = symbolic_group(H.sym)
 add_tag(H::MajoranaHilbertSpace, tag) = MajoranaHilbertSpace(H.majoranaindices, add_tag(parent(H), tag), add_tag(H.sym, tag))
 function atomic_id(H::MajoranaHilbertSpace)
     length(H.majoranaindices) == 2 || throw(ArgumentError("Atomic ID is only defined for MajoranaHilbertSpaces with exactly 2 Majoranas."))
     (H.sym, H.majoranaindices)
 end
-
-quantumnumbers(H::MajoranaHilbertSpace) = quantumnumbers(H.parent)
-indices(qn::Q, H::MajoranaHilbertSpace{<:Any,<:Any,SectorHilbertSpace{B,P,Q}}) where {B,P,Q} = indices(qn, parent(H))
-function sector(qn, H::MajoranaHilbertSpace, constraint=NoSymmetry())
-    # get sector from parent, then convert to majorana
-    parent_sector = sector(qn, parent(H), constraint)
-    MajoranaHilbertSpace(H.majoranaindices, parent_sector, H.sym)
-end
-function sector(qn::Nothing, H::MajoranaHilbertSpace, constraint=NoSymmetry())
-    parent_sector = sector(qn, parent(H), constraint)
-    MajoranaHilbertSpace(H.majoranaindices, parent_sector, H.sym)
-end
-# indices(Hsub::AbstractHilbertSpace, H::MajoranaHilbertSpace) = indices(Hsub, parent(H))
-# indices(::Nothing, H::MajoranaHilbertSpace) = indices(nothing, parent(H))
 
 function combine_into_group(group::MajoranaGroup, spaces)
     fermionic_space = combine_into_group(group.group, map(parent, spaces))
@@ -218,19 +198,17 @@ end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
 
 hilbert_space(y::SymbolicMajoranaBasis, labels, args...; kwargs...) = majorana_hilbert_space(y, labels, args...; kwargs...)
-"""
-    majorana_hilbert_space(labels, qn)
 
-Represents a hilbert space for majoranas. `labels` must be an even number of unique labels.
-"""
-function majorana_hilbert_space(y::SymbolicMajoranaBasis, labels, args...; kwargs...)
+function majorana_hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
     iseven(length(labels)) || throw(ArgumentError("Must be an even number of Majoranas to define a Hilbert space."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
     f = SymbolicFermionBasis(y.name, tags(y).group)
-    H = hilbert_space(f, pairs, args...; kwargs...)
+    Hf = hilbert_space(f, pairs, args...; kwargs...)
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
-    MajoranaHilbertSpace(majorana_position, H, y)
+    MajoranaHilbertSpace(majorana_position, Hf, y)
 end
+# MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
+MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = _wrap(MajoranaHilbertSpace(majoranaindices, parent(space), sym), space)
 
 function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
     parent_subregion = subregion(parent(Hsub), parent(H))
@@ -323,12 +301,13 @@ end
     @test dim(H) == 2
     Hsub = subregion(hilbert_space(γ, 1:2), H)
     @test dim(Hsub) == 2
-    Hf = H.parent
-    Hfsub = subregion(hilbert_space(Hsub.parent.parent.modes[1].basis, [(1, 2)]), Hf)
+    f = H.parent.parent.modes[1].basis
+    Hf = hilbert_space(f, [(1, 2), (3, 4)], ParityConservation(1))
+    Hfsub = subregion(hilbert_space(f, [(1, 2)]), Hf)
     m = rand(dim(H), dim(H))
     @test partial_trace(m, H => Hsub) == partial_trace(m, Hf => Hfsub)
     Hsub2 = subregion(hilbert_space(γ, 3:4), H)
-    Hfsub2 = subregion(hilbert_space(Hsub.parent.parent.modes[1].basis, [(3, 4)]), Hf)
+    Hfsub2 = subregion(hilbert_space(f, [(3, 4)]), Hf)
 
     Hprod = tensor_product(Hsub, Hsub2)
     @test basisstates(Hprod) == basisstates(tensor_product(Hfsub, Hfsub2))

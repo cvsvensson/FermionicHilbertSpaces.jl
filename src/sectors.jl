@@ -183,7 +183,7 @@ end
     @test indices(only(quantumnumbers(Hnoqn)), Hnoqn) == 1:dim(Hnoqn)
     @test indices(only(quantumnumbers(HMnoqn)), HMnoqn) == 1:dim(HMnoqn)
     @test length(sectors(Hnoqn)) == length(sectors(HMnoqn)) == 1
-    @test eltype(sectors(HMnoqn)) <: FermionicHilbertSpaces.MajoranaHilbertSpace
+    @test all(H -> H isa FermionicHilbertSpaces.MajoranaHilbertSpace, sectors(HMnoqn))
     # Majorana hilbert spaces
     HM = hilbert_space(γ, 1:N, NumberConservation())
     @test collect(quantumnumbers(HM)) == 0:N÷2
@@ -191,7 +191,7 @@ end
     HMqn = hilbert_space(γ, 1:N, NumberConservation(qn))
     @test basisstates(HMqn) == basisstates(HM)[indices(qn, HM)]
     @test length(sectors(HM)) == N ÷ 2 + 1
-    @test eltype(sectors(HM)) <: FermionicHilbertSpaces.MajoranaHilbertSpace
+    @test all(H -> parent(H) isa FermionicHilbertSpaces.MajoranaHilbertSpace, sectors(HM))
 end
 
 
@@ -364,4 +364,6 @@ end
     for qn in qns
         @test basisstates(H)[indices(qn, H)] == basisstates(sector(qn, H))
     end
+function _wrap(space, wrapping::SectorHilbertSpace)
+    SectorHilbertSpace(space, wrapping.ordered_basis_states, wrapping.state_to_index, wrapping.qn_to_states, wrapping.constraint)
 end
