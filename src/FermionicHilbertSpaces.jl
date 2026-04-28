@@ -102,6 +102,7 @@ include("physics/fermions/symbolic_fermions.jl")
 include("physics/fermions/fermions.jl")
 include("physics/fermions/operators.jl")
 include("physics/fermions/majoranas.jl")
+include("physics/fermions/symbolic_conversion.jl")
 include("physics/fermions/fixednumberfock.jl")
 include("physics/fermions/bdg.jl")
 
