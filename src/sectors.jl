@@ -83,9 +83,9 @@ quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 Return the sector of `H` corresponding to quantum number `qn`.
 For `qn === nothing`, this returns `H` for non-sector spaces.
 """
-sector(qn, H::SectorHilbertSpace) = constrain_space(parent(H), H.qn_to_states[qn])
-sector(::Nothing, H::AbstractHilbertSpace) = H
-sector(::Nothing, ::SectorHilbertSpace) = constrain_space(parent(H), H.qn_to_states[qn])
+sector(qn, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), H.qn_to_states[qn], constraint)
+sector(::Nothing, H::AbstractHilbertSpace, constraint=NoSymmetry()) = constrain_space(H, constraint)
+sector(qn::Nothing, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), H.qn_to_states[qn], constraint)
 
 # sectors(H::SectorHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 """
@@ -93,7 +93,7 @@ sector(::Nothing, ::SectorHilbertSpace) = constrain_space(parent(H), H.qn_to_sta
 
 Return all sectors of `H` in the same order as `quantumnumbers(H)`.
 """
-sectors(H::AbstractHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
+sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
 
 """
     indices(Hsub, H)

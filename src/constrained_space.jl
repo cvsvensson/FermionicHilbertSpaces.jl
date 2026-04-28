@@ -29,16 +29,16 @@ isconstrained(H::ConstrainedSpace) = true
 combine_states(substates, sp::ConstrainedSpace) = combine_states(substates, parent(sp))
 partial_trace_phase_factor(s1, s2, sp::ConstrainedSpace) = partial_trace_phase_factor(s1, s2, parent(sp))
 atomic_substate(n, f, space::ConstrainedSpace) = atomic_substate(n, f, parent(space))
-constrain_space(space::AbstractHilbertSpace, constraint::NoSymmetry) = space
-constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}) where B<:AbstractBasisState = ConstrainedSpace(space, states)
+constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
+constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}, constraint::AbstractConstraint=NoSymmetry()) where B<:AbstractBasisState = constrain_space(space, constraint, states)
 
-function constrain_space(space, constraint::AbstractConstraint)
+function constrain_space(space, constraint::AbstractConstraint, states = basisstates(space))
     if supports_sector_grouping(constraint)
         f = sector_function(constraint, space)
-        return sector_space(space, basisstates(space), f, constraint)
+        return sector_space(space, states, f, constraint)
     elseif supports_filtering(constraint)
         f = filter_function(constraint, space)
-        filtered_states = collect(Iterators.filter(f, basisstates(space)))
+        filtered_states = collect(Iterators.filter(f, states))
         return ConstrainedSpace(space, filtered_states)
     else
         throw(ArgumentError("Constraint $(constraint) is not supported for constraining spaces."))
