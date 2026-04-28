@@ -402,12 +402,14 @@ function _apply_local_operators(ops::OperatorSequence, state::ProductState{B}, s
     amp = 1
     spaces = factors(space)
     newstates = state.states
-    count = 1
-    foreach(state.states, spaces, ops.ops, precomps) do subst, space, op, precomp
+    for n in eachindex(state.states)
+        subst = state.states[n]
+        space = spaces[n]
+        op = ops.ops[n]
+        precomp = precomps[n]
         new_local_state, local_amp = _apply_local_operators(op, subst, space, precomp)
         amp *= local_amp
-        newstates = Base.setindex(newstates, new_local_state, count)
-        count += 1
+        newstates = Base.setindex(newstates, new_local_state, n)
     end
     return ProductState{B}(newstates), amp
 end
