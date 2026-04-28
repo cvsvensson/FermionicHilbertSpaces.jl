@@ -32,6 +32,7 @@ atomic_substate(n, f, space::ConstrainedSpace) = atomic_substate(n, f, parent(sp
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
 constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}, constraint::AbstractConstraint=NoSymmetry()) where B<:AbstractBasisState = constrain_space(space, constraint, states)
 
+constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, states)
 function constrain_space(space, constraint::AbstractConstraint, states = basisstates(space))
     if supports_sector_grouping(constraint)
         f = sector_function(constraint, space)

@@ -5,6 +5,9 @@
 Constraint that leaves a Hilbert space unchanged.
 """
 struct NoSymmetry <: AbstractConstraint end
+supports_sector_grouping(::NoSymmetry) = false
+supports_filtering(::NoSymmetry) = false
+supports_branch_pruning(::NoSymmetry) = false
 
 struct ProductConstraint{C} <: AbstractConstraint
     constraints::C
