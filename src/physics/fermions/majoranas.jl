@@ -178,12 +178,15 @@ end
 
 quantumnumbers(H::MajoranaHilbertSpace) = quantumnumbers(H.parent)
 indices(qn::Q, H::MajoranaHilbertSpace{<:Any,<:Any,SectorHilbertSpace{B,P,Q}}) where {B,P,Q} = indices(qn, parent(H))
-function sector(qn, H::MajoranaHilbertSpace)
+function sector(qn, H::MajoranaHilbertSpace, constraint=NoSymmetry())
     # get sector from parent, then convert to majorana
-    parent_sector = sector(qn, parent(H))
+    parent_sector = sector(qn, parent(H), constraint)
     MajoranaHilbertSpace(H.majoranaindices, parent_sector, H.sym)
 end
-sector(::Nothing, H::MajoranaHilbertSpace) = H
+function sector(qn::Nothing, H::MajoranaHilbertSpace, constraint=NoSymmetry())
+    parent_sector = sector(qn, parent(H), constraint)
+    MajoranaHilbertSpace(H.majoranaindices, parent_sector, H.sym)
+end
 # indices(Hsub::AbstractHilbertSpace, H::MajoranaHilbertSpace) = indices(Hsub, parent(H))
 # indices(::Nothing, H::MajoranaHilbertSpace) = indices(nothing, parent(H))
 
