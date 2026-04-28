@@ -11,35 +11,45 @@ struct SectorHilbertSpace{B,P,Q,C} <: AbstractHilbertSpace{B}
     qn_to_states::OrderedDict{Q,Vector{B}}
     constraint::C
 end
-SectorHilbertSpace(space::P, ordered_basis_states::AbstractVector{B}, state_to_index::OrderedDict{B,Int}, qn_to_states::OrderedDict{Q,Vector{B}}) where {B,P,Q} = SectorHilbertSpace{B,P,Q,Nothing}(space, ordered_basis_states, state_to_index, qn_to_states, nothing)
 SectorHilbertSpace(space::P, ordered_basis_states::AbstractVector{B}, state_to_index::OrderedDict{B,Int}, qn_to_states::OrderedDict{Q,Vector{B}}, constraint::C) where {B,P,Q,C} = SectorHilbertSpace{B,P,Q,C}(space, ordered_basis_states, state_to_index, qn_to_states, constraint)
 Base.hash(H::SectorHilbertSpace, h::UInt) = hash((H.parent, H.ordered_basis_states, H.state_to_index, H.qn_to_states), h)
 Base.:(==)(H1::SectorHilbertSpace, H2::SectorHilbertSpace) = H1 === H2 || (H1.parent == H2.parent && H1.ordered_basis_states == H2.ordered_basis_states && H1.state_to_index == H2.state_to_index && H1.qn_to_states == H2.qn_to_states)
 atomic_substate(n, f, space::SectorHilbertSpace) = atomic_substate(n, f, parent(space))
 
 sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
-function sector_space(space, states, sector_function, constraint=nothing)
-    B = eltype(states)
+function sector_space(space, states, sector_function, constraint)
+    B = statetype(space)
     sort = Base.hasmethod(isless, Tuple{B,B})
-    _qntostates = groupby(sector_function, states; sort)
+    _qntostates = groupby(sector_function, states, B; sort)
     _sector_space(space, _qntostates, constraint)
 end
-function groupby(f::F, itr; sort=false) where F
-    V = eltype(itr)
-    d = OrderedDict{Any,Vector{V}}()
+function groupby(f::F, itr; sort=false) where {F}
+    B = eltype(itr)
+    d = OrderedDict{Any,Vector{B}}()
     for x in itr
         key = f(x)
         ismissing(key) && continue
         push!(get!(d, key) do
-                V[]
+                B[]
             end, x)
     end
     ks = sort ? sort!(collect(keys(d))) : collect(keys(d))
     return OrderedDict(k => map(identity, d[k]) for k in ks)
 end
+function groupby(f::F, itr, ::Type{B}; sort=false) where {F,B}
+    d = OrderedDict{Any,Vector{B}}()
+    for x in itr
+        key = f(x)
+        ismissing(key) && continue
+        push!(get!(d, key) do
+                B[]
+            end, x)
+    end
+    ks = sort ? sort!(collect(keys(d))) : collect(keys(d))
+    return OrderedDict{eltype(ks),Vector{B}}(k => d[k] for k in ks)
+end
 
-
-function _sector_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}, constraint=nothing) where {Q,B}
+function _sector_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}, constraint) where {Q,B}
     ordered_states = reduce(vcat, values(qn_to_states), init=B[])
     state_indexdict = OrderedDict(zip(ordered_states, 1:length(ordered_states)))
     SectorHilbertSpace(space, ordered_states, state_indexdict, qn_to_states, constraint)
@@ -102,20 +112,30 @@ sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn,
 Return the basis-state indices in `H` belonging to a given sector, specified
 either by a sector Hilbert space `Hsub` or by a quantum number `qn`.
 """
-function space_indices(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
+function space_indices(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace)
     sector_list = sectors(H)
     indexin = findfirst(isequal(Hsub), sector_list)
-    # map(state -> state_index(state, H), basisstates(Hsub))
     if indexin === nothing
-        throw(ArgumentError("Hilbert space $Hsub is not a sector of $H"))
+        return space_indices_generic(Hsub, H)
     end
     qn = quantumnumbers(H)[indexin]
     indices(qn, H)
 end
+function space_indices_generic(Hsub, H)
+    # fallback for when the sector space isn't exactly in the sectors list (e.g. due to constraints)
+    map(basisstates(Hsub)) do state
+        ind = state_index(state, H)
+        if ismissing(ind)
+            throw(ArgumentError("State $state from sector space $Hsub not found in parent space $H"))
+        end
+        ind
+    end
+end
 indices(qn, H) = qn_indices(qn, H)
 indices(qn::AbstractHilbertSpace, H::AbstractHilbertSpace) = space_indices(qn, H)
+indices(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace) = space_indices(Hsub, H)
 indices(qn::Q, H::SectorHilbertSpace{B,P,Q}) where {B,P,Q} = qn_indices(qn, H)
-function qn_indices(qn, H)
+function qn_indices(qn, H::SectorHilbertSpace)
     dims = cumsum([length(H.qn_to_states[qn]) for qn in collect(quantumnumbers(H))])
     qn_index = findfirst(isequal(qn), collect(quantumnumbers(H)))
     if qn_index === nothing
@@ -125,7 +145,6 @@ function qn_indices(qn, H)
     end_index = dims[qn_index]
     start_index:end_index
 end
-# indices(qn, H::AbstractHilbertSpace) = indices(sector(qn, H), H)
 indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
 
 _precomputation_before_operator_application(ops, space::SectorHilbertSpace) = _precomputation_before_operator_application(ops, parent(space))
@@ -217,7 +236,7 @@ end
 end
 
 @testitem "sector" begin
-    import FermionicHilbertSpaces: sector, parity
+    import FermionicHilbertSpaces: parity
     # Create a Hilbert space with parity symmetry
     @fermions f
     labels = 1:3
@@ -364,6 +383,32 @@ end
     for qn in qns
         @test basisstates(H)[indices(qn, H)] == basisstates(sector(qn, H))
     end
+
+    ##
+    subconstraint = NumberConservation(missing, [H1, H2], [-1, 1])
+    for (label, expected_h1_dim) in [(:vacuum, 1), (:has_particle, 2^k - 1)]
+        for n2 in 0:k
+            qn = [label, n2]
+            @test qn in qns
+            @test dim(sector(qn, H, subconstraint)) == expected_h1_dim * binomial(k, n2)
+        end
+    end
+    @test dim(H) == dim(H1) * dim(H2)
+    for qn in qns
+        @test Set(basisstates(H)[indices(qn, H)]) == Set(basisstates(sector(qn, H, subconstraint)))
+    end
+
+end
+
+@testitem "Generic sectors fallback" begin
+    @fermions f
+    H = hilbert_space(f, 1:2, ParityConservation())
+    Hsecs = sectors(H, NumberConservation(1))
+    inds = map(Hsec -> indices(Hsec, H), Hsecs)
+    @test Set(inds[1]) == Set(1:2)
+    @test length(inds[2]) == 0
+end
+
 function _wrap(space, wrapping::SectorHilbertSpace)
     SectorHilbertSpace(space, wrapping.ordered_basis_states, wrapping.state_to_index, wrapping.qn_to_states, wrapping.constraint)
 end

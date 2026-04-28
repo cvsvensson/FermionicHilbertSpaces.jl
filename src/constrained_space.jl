@@ -33,7 +33,7 @@ constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
 constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}, constraint::AbstractConstraint=NoSymmetry()) where B<:AbstractBasisState = constrain_space(space, constraint, states)
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, states)
-function constrain_space(space, constraint::AbstractConstraint, states = basisstates(space))
+function constrain_space(space, constraint::AbstractConstraint, states=basisstates(space))
     if supports_sector_grouping(constraint)
         f = sector_function(constraint, space)
         return sector_space(space, states, f, constraint)
@@ -48,10 +48,20 @@ end
 _find_position(op::AbstractSym, H::ConstrainedSpace) = _find_position(op, parent(H))
 add_tag(H::ConstrainedSpace, tag) = ConstrainedSpace(add_tag(parent(H), tag), H.states, H.state_index)
 
-allowed_values(::NumberConservation{Missing}, space) = 0:maximum_particles(space)
-allowed_values(constraint::NumberConservation{T}, space) where T = constraint.total
-allowed_values(p::ParityConservation, space) = p.allowed_parities
-allowed_values(c::AdditiveConstraint, space) = c.allowed_values
+allowed_values(::NumberConservation{Missing,Missing,Missing}, space, mapper) = 0:maximum_particles(space)
+function allowed_values(nc::NumberConservation{Missing}, space, mapper)
+    Iterators.map(basisstates(space)) do state
+        subs = unique_split_state(state, mapper)
+        _apply_constraint_function(subs, nc)
+    end |> unique
+end
+allowed_values(constraint::NumberConservation{T}, space, mapper) where T = constraint.total
+allowed_values(p::ParityConservation, space, mapper) = p.allowed_parities
+allowed_values(c::AdditiveConstraint, space, mapper) = c.allowed_values
+
+function _wrap(space, wrapping::ConstrainedSpace)
+    ConstrainedSpace(space, wrapping.states, wrapping.state_index)
+end
 
 @testitem "constrain_space" begin
     @fermions f

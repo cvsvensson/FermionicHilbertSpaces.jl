@@ -154,7 +154,7 @@ unique_split_state(state, mapper) = only(first(split_state(state, mapper)))
 function sector_function(cons::C, space::AbstractHilbertSpace) where {C<:Union{<:NumberConservation,<:ParityConservation,<:AdditiveConstraint}}
     subspaces = ismissing(cons.subspaces) ? (space,) : cons.subspaces
     mapper = state_mapper(space, subspaces)
-    allowed_vals = allowed_values(cons, space)
+    allowed_vals = allowed_values(cons, space, mapper)
     allowed = in(allowed_vals)
     function number(state)
         subs = unique_split_state(state, mapper)
@@ -190,10 +190,8 @@ end
 function branch_constraint(constraint::NumberConservation{T,H,W}, spaces) where {T,H,W}
     subspaces = H === Missing ? spaces : constraint.subspaces
     if W === Missing
-        total = T === Missing ? (0:sum(maximum_particles, subspaces)) : constraint.total
-        return additive_branch_constraint(total, particle_number, subspaces, spaces)
+        return additive_branch_constraint(constraint.total, particle_number, subspaces, spaces)
     end
-    T === Missing && throw(ArgumentError("Total particle number must be specified when using weighted number branch constraint"))
     additive_branch_constraint(constraint.total, WeightedFunction(particle_number, constraint.weights), subspaces, spaces)
 end
 
