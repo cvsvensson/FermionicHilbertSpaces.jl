@@ -148,8 +148,8 @@ end
 Base.:(==)(a::BosonicState, b::BosonicState) = a.n == b.n
 Base.isless(a::BosonicState, b::BosonicState) = a.n < b.n
 Base.hash(x::BosonicState, h::UInt) = hash(x.n, h)
-internal_rep(state::BosonicState, ::AbstractHilbertSpace, ::Type{T}=UInt64) where T = InternalRep{T}(T(state.n))
-physical_rep(state::InternalRep{T}, ::Type{BosonicState}) where T<:Integer = BosonicState(Int(state.data))
+internal_rep(state::BosonicState, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.n)
+physical_rep(state::T, ::Type{BosonicState}) where T<:Integer = BosonicState(Int(state))
 
 struct TruncatedBosonicHilbertSpace{L,B} <: AbstractAtomicHilbertSpace{BosonicState}
     sym::BosonSym{L,B}

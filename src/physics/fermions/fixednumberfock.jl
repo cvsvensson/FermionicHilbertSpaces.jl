@@ -46,8 +46,8 @@ function FixedNumberFockState{N}(f::FockNumber) where N
 end
 
 
-physical_rep(state::InternalRep{T}, ::Type{FixedNumberFockState{N}}) where {T,N} = FixedNumberFockState{N}(FockNumber(state.data))
-internal_rep(state::FixedNumberFockState, space::FermionicSpace, ::Type{T}=UInt64) where T = internal_rep(FockNumber(state), space, T)
+physical_rep(state::T, ::Type{FixedNumberFockState{N}}) where {T,N} = FixedNumberFockState{N}(physical_rep(state, FockNumber))
+internal_rep(state::FixedNumberFockState, space::FermionicSpace, ::Type{T}) where T = internal_rep(FockNumber(state), space, T)
 
 
 Base.:(|)(f1::FixedNumberFockState, f2::FixedNumberFockState) = FixedNumberFockState((f1.sites..., f2.sites...))
