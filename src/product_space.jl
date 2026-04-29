@@ -437,7 +437,7 @@ function has_internal_rep(state::ProductState, space::ProductSpace, ::Type{T}) w
     all(Iterators.map((s, f) -> has_internal_rep(s, f, T), state.states, factors(space)))
 end
 
-function has_internal_rep(state::AbstractBasisState, space, ::Type{T}) where {T}
+function has_internal_rep(state, space, ::Type{T}) where {T}
     int_rep = try
         _internal_rep(state, space, T)
     catch e
@@ -487,10 +487,10 @@ function _apply_local_operators(ops::OperatorSequence, state::ProductState{B}, s
         return ProductState{B}(newstate), amp
     end
 end
-function apply_local_operators(op::NCMul, int_state::InternalRep, space::AbstractHilbertSpace, precomp; kwargs...)
+function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::AbstractHilbertSpace, precomp; kwargs...) where T
     state = _physical_rep(int_state, space)
     newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
-    return _internal_rep(newstate, space), amp
+    return _internal_rep(newstate, space, T), amp
 end
 function _apply_local_operators_fast(ops::OperatorSequence, internal_reps::NTuple{N,InternalRep{T}}, space::ProductSpace, precomps) where {T,N}
     amp = 1

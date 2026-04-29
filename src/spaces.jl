@@ -40,11 +40,13 @@ maximum_particles(H::AbstractHilbertSpace) = maximum(particle_number, basisstate
 struct InternalRep{T}
     data::T
 end
-internal_rep(state, space, ::Type{T}) where T = internal_rep(state, parent(space), T)
 _internal_rep(state, space, ::Type{T}) where T = InternalRep{T}(internal_rep(state, space, T))
-physical_rep(state, space::AbstractHilbertSpace) = physical_rep(state, statetype(space))
-_physical_rep(state::InternalRep, space::AbstractHilbertSpace) = physical_rep(state.data, space)
+_physical_rep(state::InternalRep, space_or_type) = physical_rep(state.data, space_or_type)
 Base.convert(::Type{B}, state::InternalRep{T}) where {B<:AbstractBasisState,T} = _physical_rep(state, B)
+physical_rep(state, space::AbstractHilbertSpace) = physical_rep(state, statetype(space))
+# The following should be overloaded for custom basis states
+internal_rep(state, space, ::Type{T}) where T = internal_rep(state, parent(space), T)
+# physical_rep(state, type::B<:AbstractBasisState)
 
 
 abstract type AbstractStateMapper end
