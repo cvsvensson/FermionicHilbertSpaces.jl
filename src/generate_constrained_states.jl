@@ -31,7 +31,7 @@ function generate_states(spaces, constraint, full_space::AbstractHilbertSpace{B}
     mapper = state_mapper(full_space, spaces)
     process_result = (state, spaces) -> only(first(combine_states(state, mapper)))
     valid_final_state = if isconstrained(full_space)
-        state -> !ismissing(state_index(state, full_space)) # This might be redundant, if full_space is always constructed to only include valid states
+        state -> !iszero(state_index(state, full_space)) # This might be redundant, if full_space is always constructed to only include valid states
     else
         state -> true
     end

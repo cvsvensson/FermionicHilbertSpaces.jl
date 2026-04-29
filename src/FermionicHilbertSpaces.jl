@@ -73,6 +73,7 @@ Base.IteratorEltype(::Type{<:TypedIterator}) = Base.HasEltype()
 Base.eltype(::Type{<:TypedIterator{T}}) where T = T
 Base.length(ti::TypedIterator) = length(ti.iter)
 Base.size(ti::TypedIterator) = size(ti.iter)
+Base.keys(ti::TypedIterator) = keys(ti.iter)
 
 function _resolve_sector_permutations_and_weights end # for Combinatorics extension
 

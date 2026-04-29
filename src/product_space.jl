@@ -4,7 +4,8 @@ combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : thro
 struct ProductState{B} <: AbstractBasisState
     states::B
 end
-substate(n::Int, state::ProductState) = state.states[n]
+ProductState{B}(state::ProductState{B}) where B = state
+substate(n::Integer, state::ProductState) = state.states[n]
 atomic_factors(state::ProductState) = state.states
 Base.:(==)(s1::ProductState, s2::ProductState) = s1.states == s2.states
 Base.hash(s::ProductState, h::UInt) = hash(s.states, h)
@@ -35,11 +36,11 @@ atomic_id(H::ProductSpace) = H.atom_ordering
 group_id(H::ProductSpace) = H.atom_ordering
 
 basisstates(H::ProductSpace) = collect(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
-function basisstate(n::Int, H::ProductSpace{B}) where B
+function basisstate(n::Integer, H::ProductSpace{B}) where B
     inds = Tuple(CartesianIndices(map(dim, H.factors))[n])
     ProductState(map(basisstate, inds, H.factors))
 end
-function state_index(state::ProductState, H::ProductSpace)
+function state_index(state::B, H::ProductSpace{B}) where B
     cartesian_index = CartesianIndex(Tuple(map(state_index, state.states, H.factors)))
     LinearIndices(map(dim, H.factors))[cartesian_index]
 end

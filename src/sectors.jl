@@ -71,12 +71,14 @@ partial_trace_phase_factor(s1, s2, H::SectorHilbertSpace) = partial_trace_phase_
 state_mapper(H::SectorHilbertSpace, Hs) = state_mapper(parent(H), Hs)
 mode_ordering(H::SectorHilbertSpace) = mode_ordering(parent(H))
 
-function basisstate(ind::Int, H::SectorHilbertSpace)
+function basisstate(ind::Integer, H::SectorHilbertSpace)
     (ind < 1 || ind > dim(H)) && throw(ArgumentError("Invalid state index $ind"))
     H.ordered_basis_states[ind]
 end
 
-state_index(state, H::SectorHilbertSpace) = get(H.state_to_index, state, missing)
+state_index(state::B, H::SectorHilbertSpace{B}) where B = get(H.state_to_index, state, 0)
+add_tag(H::SectorHilbertSpace, tag) = SectorHilbertSpace(add_tag(parent(H), tag), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)
+
 
 """
     quantumnumbers(H)

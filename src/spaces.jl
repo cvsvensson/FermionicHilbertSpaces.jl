@@ -182,7 +182,7 @@ function _find_compatible_complementary_states(H, Hsub, mapper)
     else
         Iterators.flatten(Iterators.map(first ∘ split, basisstates(H)))
     end
-    unique(fbar for (fsub, fbar) in split_state_iterator if !ismissing(state_index(fsub, Hsub)))
+    unique(fbar for (fsub, fbar) in split_state_iterator if !iszero(state_index(fsub, Hsub)))
 end
 
 

@@ -97,7 +97,7 @@ function _reshape_tensor_to_vec(t, Hs, H::AbstractHilbertSpace, state_mapper)
         substates, amps = combine_states(fstuple, state_mapper)
         for (substate, amp) in zip(substates, amps)
             Iout = state_index(substate, H)
-            ismissing(Iout) && continue
+            iszero(Iout) && continue
             v[Iout] += amp * t[Is...]
         end
     end

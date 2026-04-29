@@ -28,12 +28,13 @@ function jwstring_right_bool(site, f::FixedNumberFockState)
 end
 FockNumber(f::FixedNumberFockState) = focknbr_from_site_indices(f.sites)
 FockNumber{I}(f::FixedNumberFockState) where I = FockNumber{I}(focknbr_from_site_indices(f.sites, I))
-FixedNumberFockState{N}(f::FixedNumberFockState{M}) where {M,N} = FixedNumberFockState{N}((f.sites))
+FixedNumberFockState{N}(f::FixedNumberFockState{N}) where {N} = f
 FixedNumberFockState(f::FockNumber) = FixedNumberFockState{count_ones(f)}(f)
 function FixedNumberFockState{N}(f::FockNumber) where N
     site = 1
     count = 0
     sites = Int[]
+    count_ones(f) == N || throw(ArgumentError("Fock number has $(count_ones(f)) particles, expected $N"))
     while count < N
         if _bit(f, site)
             count += 1

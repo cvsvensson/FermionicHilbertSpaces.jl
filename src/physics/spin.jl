@@ -88,7 +88,7 @@ function SpinSpace{J}(sym::S) where {J,S<:SymbolicSpinBasis}
 end
 SpinSpace{J}(label) where J = SpinSpace{J}(SymbolicSpinBasis(label))
 basisstates(H::SpinSpace) = H.basisstates
-basisstate(n::Int, H::SpinSpace) = H.basisstates[n]
+basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + (J + 1))
 atomic_id(H::SpinSpace) = atomic_id(H.sym)

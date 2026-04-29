@@ -7,8 +7,8 @@ TransposedSpace(inner::H) where {H<:AbstractHilbertSpace} = TransposedSpace{stat
 Base.:(==)(a::TransposedSpace, b::TransposedSpace) = a.parent == b.parent
 Base.hash(H::TransposedSpace, h::UInt) = hash(H.parent, h)
 basisstates(H::TransposedSpace) = basisstates(H.parent)
-basisstate(i::Int, H::TransposedSpace) = basisstate(i, H.parent)
-state_index(state, H::TransposedSpace) = state_index(state, H.parent)
+basisstate(i::Integer, H::TransposedSpace) = basisstate(i, H.parent)
+state_index(state::B, H::TransposedSpace{B}) where B = state_index(state, H.parent)
 dim(H::TransposedSpace) = dim(H.parent)
 isconstrained(H::TransposedSpace) = isconstrained(H.parent)
 group_id(H::TransposedSpace) = group_id(H.parent)

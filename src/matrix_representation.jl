@@ -14,8 +14,8 @@ mat_eltype(::S) where {S} = mat_eltype(S)
 mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors if a complex number is expected. Override it for specific types if needed.
 
 _concretize(op::NCMul) = op
-_concretize(op::NCMul{C, AbstractSym, F}) where {C, F} = NCMul(op.coeff, Tuple(op.factors))
-_concretize(op::NCMul{C, Any, F}) where {C, F} = NCMul(op.coeff, Tuple(op.factors))
+_concretize(op::NCMul{C,AbstractSym,F}) where {C,F} = NCMul(op.coeff, Tuple(op.factors))
+_concretize(op::NCMul{C,Any,F}) where {C,F} = NCMul(op.coeff, Tuple(op.factors))
 _concretize(op::OperatorSequence) = OperatorSequence(map(_concretize, op.ops))
 function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::AbstractHilbertSpace; kwargs...)
     concrete_op = _concretize(op) # op is often an NCMul with Abstract types. We try to make it concrete here, as the operator will be applied to all basis states, so the overhead of concretization is likely worth it
@@ -24,15 +24,15 @@ function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::Ab
 end
 _precomputation_before_operator_application(factors, space) = nothing
 
-function _apply_local_operators(op, state, space, precomp)
-    apply_local_operators(op, state, space, precomp; transpose=false)
+function _apply_local_operators(op, index, space, precomp)
+    apply_local_operators(op, index, space, precomp; transpose=false)
 end
+
 function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, space::AbstractHilbertSpace, precomp; projection)
-    for (inind, state) in enumerate(basisstates(space))
-        newstate, amp = _apply_local_operators(op, state, space, precomp)
+    for inind in eachindex(basisstates(space))
+        outind, amp = _apply_local_operators(op, inind, space, precomp)
         if !iszero(amp)
-            outind = state_index(newstate, space)
-            if ismissing(outind)
+            if iszero(outind)
                 if projection
                     continue
                 else
