@@ -106,7 +106,7 @@ Hsub = tensor_product(hilbert_space(f, 1:1), [hilbert_space(b[n], 2) for n in 1:
 SUITE["complement"]["product space"] = @benchmarkable FermionicHilbertSpaces.complementary_subsystem($H, $Hsub)
 
 op = (1 + sum(rand() * f[n]'f[n] for n in 1:2)) * (1 + sum(rand() * b[n]'b[n] + b[n+1]'b[n] + hc for n in 1:3))
-SUITE["matrix_representation"]["product space"] = @benchmarkable matrix_representation($op, $Hsub)
+SUITE["matrix_representation"]["product space"] = @benchmarkable matrix_representation($op, $H)
 
 complement = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
 SUITE["partial_trace"]["product space"]["map"] = @benchmarkable partial_trace($(H => Hsub); complement=$complement)
