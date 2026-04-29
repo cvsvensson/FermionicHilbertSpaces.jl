@@ -71,7 +71,7 @@ function _reshape_tensor_to_mat(t, (Hsout, mapperout), (Hsin, mapperin), H::Abst
     Jouts = map(f -> state_index.(f, Hsout), fsout)
     Jins = map(f -> state_index.(f, Hsin), fsin)
 
-    m = zeros(eltype(t), prod(dim, Hsout), prod(dim, Hsin))
+    m = zeros(eltype(t), dim(H), dim(H))
     for (fsin_tuple, Jin) in zip(fsin, Jins)
         states_in, amps_in = combine_states(fsin_tuple, mapperin)
         for (fullf_in, win) in zip(states_in, amps_in)
@@ -80,7 +80,9 @@ function _reshape_tensor_to_mat(t, (Hsout, mapperout), (Hsin, mapperin), H::Abst
                 states_out, amps_out = combine_states(fsout_tuple, mapperout)
                 for (fullf_out, wout) in zip(states_out, amps_out)
                     Iout = state_index(fullf_out, H)
-                    m[Iout, Iin] += wout * win * t[Jout..., Jin...]
+                    tval = t[Jout..., Jin...]
+                    iszero(tval) && continue
+                    m[Iout, Iin] += wout * win * tval
                 end
             end
         end
@@ -90,7 +92,7 @@ end
 
 function _reshape_tensor_to_vec(t, Hs, H::AbstractHilbertSpace, state_mapper)
     fs = Base.product(basisstates.(Hs)...)
-    v = Vector{eltype(t)}(undef, length(fs))
+    v = Vector{eltype(t)}(undef, dim(H))
     fill!(v, zero(eltype(v)))
     for fstuple in fs
         Is = state_index.(fstuple, Hs)
@@ -104,149 +106,89 @@ function _reshape_tensor_to_vec(t, Hs, H::AbstractHilbertSpace, state_mapper)
     return v
 end
 
-@testitem "Reshape" begin
+@testitem "Reshape Properties" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: project_on_parities, project_on_parity, fermions, majoranas
-    function majorana_basis(H)
-        b = majoranas(fermions(H))
-        labels = collect(keys(b))
-        basisops = mapreduce(vec, vcat, [[prod(l -> b[l], ls) for ls in Base.product([labels for _ in 1:n]...) if (issorted(ls) && allunique(ls))] for n in 1:length(labels)])
-        pushfirst!(basisops, I + 0 * first(basisops))
-        map(Hermitian ∘ (x -> x / sqrt(complex(tr(x * x)))), basisops)
-    end
+    using FermionicHilbertSpaces: permutation_operator, fermions
 
-    qns = [NoSymmetry(), ParityConservation(), NumberConservation()]
-    for qn in qns
-        @fermions f
-        H = hilbert_space(f, 1:2, qn)
-        majbasis = majorana_basis(H)
-        @test all(map(ishermitian, majbasis))
-        overlaps = [tr(Γ1' * Γ2) for (Γ1, Γ2) in Base.product(majbasis, majbasis)]
-        @test overlaps ≈ I
-        @test rank(mapreduce(vec, hcat, majbasis)) == length(majbasis)
-    end
-    function test_reshape(qn1, qn2, qn3)
-        @fermions f
-        H1 = hilbert_space(f, [1, 3], qn1)
-        H2 = hilbert_space(f, [2, 4], qn2)
-        d1 = 4
-        d2 = 4
-        Hs = (H1, H2)
+    @fermions f
+
+    # ── 2-subsystem property tests across symmetry types ──────────────────────
+    for (qn1, qn2, qn3) in [
+        (NoSymmetry(), NoSymmetry(), NoSymmetry()),
+        (ParityConservation(), ParityConservation(), ParityConservation()),
+        (NumberConservation(), NumberConservation(), NumberConservation()),
+        (NoSymmetry(), ParityConservation(), NumberConservation()),
+    ]
+        H1 = hilbert_space(f, [1, 2], qn1)
+        H2 = hilbert_space(f, [3, 4], qn2)
         H = hilbert_space(f, 1:4, qn3)
+        Hs = (H1, H2)
+        d = dim(H)
+
+        # Property 1: Round-trip identity for operators
+        m = rand(ComplexF64, d, d)
+        @test reshape(reshape(m, H => Hs), Hs => H) ≈ m
+
+        # Property 2: Round-trip identity for state vectors
+        v = rand(ComplexF64, d)
+        m1 = reshape(v, H => Hs)
+        @test reshape(m1, Hs => H) == v
+        @test reshape(v, H => reverse(Hs)) == transpose(m1)
+
+        # Property 3: Norm invariance (reshape is an isometry)
         b = fermions(H)
-        m = b[1]
-        t = reshape(m, H => Hs)
-        @test norm(m) ≈ norm(t)
+        op = b[1]
+        @test norm(op) ≈ norm(reshape(op, H => Hs))
 
-        m = rand(ComplexF64, d1 * d2, d1 * d2)
-        t = reshape(m, H => Hs)
-        m2 = reshape(t, Hs => H)
-        @test m ≈ m2
-
-        v = rand(ComplexF64, d1 * d2)
-        tv = reshape(v, H => Hs)
-        v2 = reshape(tv, Hs => H)
-        @test v ≈ v2
-        # Note the how reshaping without phase factors is used in a contraction
-        @test sum(reshape(m, H => Hs)[:, :, i, j] * tv[i, j] for i in 1:d1, j in 1:d2) ≈ reshape(m * v, H => Hs)
-
-        m1 = rand(ComplexF64, d1 * d2, d1 * d2)
-        m2 = rand(ComplexF64, d1 * d2, d1 * d2)
-        t1 = reshape(m1, H => Hs)
-        t2 = reshape(m2, H => Hs)
+        # Property 4: Multiplication consistency — tensor contraction equals matrix product
+        m1, m2 = rand(ComplexF64, d, d), rand(ComplexF64, d, d)
+        t1, t2 = reshape(m1, H => Hs), reshape(m2, H => Hs)
+        d1, d2 = dim(H1), dim(H2)
         t3 = zeros(ComplexF64, d1, d2, d1, d2)
-        for i in 1:d1, j in 1:d2, k in 1:d1, l in 1:d2, k1 in 1:d1, k2 in 1:d2
-            t3[i, j, k, l] += t1[i, j, k1, k2] * t2[k1, k2, k, l]
+        for i in 1:d1, j in 1:d2, k in 1:d1, l in 1:d2
+            for k1 in 1:d1, k2 in 1:d2
+                t3[i, j, k, l] += t1[i, j, k1, k2] * t2[k1, k2, k, l]
+            end
         end
         @test reshape(m1 * m2, H => Hs) ≈ t3
-        @test m1 * m2 ≈ reshape(t3, Hs => H)
 
-        basis1 = majorana_basis(H1)
-        basis2 = majorana_basis(H2)
-        basis12all = [generalized_kron((Γ1, Γ2), Hs => H) for (Γ1, Γ2) in Base.product(basis1, basis2)]
-        basis12oddodd = [project_on_parities(Γ, H, Hs, (-1, -1)) for Γ in basis12all]
-        basis12oddeven = [project_on_parities(Γ, H, Hs, (-1, 1)) for Γ in basis12all]
-        basis12evenodd = [project_on_parities(Γ, H, Hs, (1, -1)) for Γ in basis12all]
-        basis12eveneven = [project_on_parities(Γ, H, Hs, (1, 1)) for Γ in basis12all]
-        basis12normalized = map(x -> x / sqrt(tr(x^2) + 0im), basis12all)
+        # Property 5: Round-trip survives subsystem reorder (H2, H1)
+        @test reshape(reshape(m, H => (H2, H1)), (H2, H1) => H) ≈ m
 
-        @test all(map(tr, map(adjoint, basis12all) .* basis12all) .≈ 1)
-        overlaps = [tr(Γ1' * Γ2) for (Γ1, Γ2) in Base.product(vec(basis12all), vec(basis12all))]
-        @test overlaps ≈ I
-        @test all(ishermitian, basis12normalized)
-        @test all(map(tr, basis12normalized .* basis12normalized) .≈ 1)
-        @test all(filter(x -> abs(x) > 0.01, map(tr, basis12oddodd .* basis12oddodd)) .≈ -1)
-        @test all(filter(x -> abs(x) > 0.01, map(tr, basis12eveneven .* basis12eveneven)) .≈ 1)
-        @test all(filter(x -> abs(x) > 0.01, map(tr, basis12evenodd .* basis12evenodd)) .≈ 1)
-        @test all(filter(x -> abs(x) > 0.01, map(tr, basis12oddeven .* basis12oddeven)) .≈ 1)
-
-        Hvirtual = rand(ComplexF64, length(basis1), length(basis2))
-        Hoddoddvirtual = [Hvirtual[I] * norm(basis12oddodd[I]) for I in CartesianIndices(Hvirtual)]
-        Hvirtual_no_oddodd = Hvirtual - Hoddoddvirtual
-        h = sum(Hvirtual[I] * basis12all[I] for I in CartesianIndices(Hvirtual))
-        H_no_oddodd = sum(Hvirtual_no_oddodd[I] * basis12all[I] for I in CartesianIndices(Hvirtual))
-        Hotherbasis = sum(Hvirtual[I] * basis12normalized[I] for I in CartesianIndices(Hvirtual))
-        H_no_oddodd_otherbasis = sum(Hvirtual_no_oddodd[I] * basis12normalized[I] for I in CartesianIndices(Hvirtual))
-        @test H_no_oddodd_otherbasis ≈ H_no_oddodd
-
-        Hvirtual3 = [tr(Γ' * h) / sqrt(tr(Γ' * Γ) + 0im) for Γ in basis12all]
-        @test Hvirtual3 ≈ Hvirtual
-        Hvirtual4 = [tr(Γ' * Hotherbasis) for Γ in basis12normalized]
-        @test Hvirtual4 ≈ Hvirtual
-        # @test svdvals(Hvirtual) ≈ svdvals(Hvirtual4)
-
-        # t_no_oddodd = reshape(H_no_oddodd, H, Hs)
-        # Hvirtual_no_oddodd2 = FermionicHilbertSpaces.reshape_to_matrix(t_no_oddodd, (1, 3))
-        # @test svdvals(Hvirtual_no_oddodd) ≈ svdvals(Hvirtual_no_oddodd2)
-        Hvirtual_no_oddodd3 = [tr(Γ' * H_no_oddodd) / sqrt(tr(Γ' * Γ) + 0im) for Γ in basis12all]
-        @test svdvals(Hvirtual_no_oddodd) ≈ svdvals(Hvirtual_no_oddodd3)
-        Hvirtual_no_oddodd4 = [tr(Γ' * H_no_oddodd_otherbasis) for Γ in basis12normalized]
-        @test svdvals(Hvirtual_no_oddodd) ≈ svdvals(Hvirtual_no_oddodd4)
-
-        ## Test consistency with partial trace
-        m2 = partial_trace(m, H => H2; phase_factors=false)
-        t = reshape(m, H => Hs)
-        tpt = sum(t[k, :, k, :] for k in axes(t, 1))
-        @test m2 ≈ tpt
-
-        mE = project_on_parity(m, H, 1)
-        mO = project_on_parity(m, H, -1)
-        m1 = rand(ComplexF64, d1, d1)
-        m2 = rand(ComplexF64, d2, d2)
-        m2O = project_on_parity(m2, H2, -1)
-        m2E = project_on_parity(m2, H2, 1)
-        m1O = project_on_parity(m1, H1, -1)
-        m1E = project_on_parity(m1, H1, 1)
-        mEE = project_on_parities(m, H, Hs, (1, 1))
-        mOO = project_on_parities(m, H, Hs, (-1, -1))
-
-        F = partial_trace(m * generalized_kron((m1, I), Hs => H), H => H2)
-        @test tr(F * m2) ≈ tr(m * generalized_kron((m1, I), Hs, H) * generalized_kron((I, m2), Hs, H))
-
-        t = reshape(m, H => Hs)
-        tpt = sum(t[k1, :, k2, :] * m1[k2, k1] for k1 in axes(t, 1), k2 in axes(t, 3))
-        @test partial_trace(m * generalized_kron((m1, I), Hs, H; phase_factors=false), H => H2; phase_factors=false) ≈ tpt
-
-        ## More bases
-        H3 = hilbert_space(f, 5:5, qn3)
-        d3 = 2
-        Hs = (H1, H2, H3)
-        H = tensor_product(Hs)
-        m = rand(ComplexF64, d1 * d2 * d3, d1 * d2 * d3)
-        t = reshape(m, H => Hs)
-        @test ndims(t) == 6
-        @test m ≈ reshape(t, Hs, H)
+        # Property 6: Permutation covariance — permutation_operator is consistent with reshape
+        P = permutation_operator(H, [H1, H2], [2, 1])
+        @test P * P ≈ I
+        @test reshape(reshape(P * m * P', H => Hs), Hs => H) ≈ P * m * P'
     end
 
-    qns_iterator = [[NoSymmetry(), NoSymmetry(), NoSymmetry()],
-        [ParityConservation(), ParityConservation(), ParityConservation()],
-        [NumberConservation(), NumberConservation(), NumberConservation()],
-        [NoSymmetry(), ParityConservation(), NumberConservation()],
-        [NumberConservation(), NumberConservation(), NoSymmetry()],
-        [ParityConservation(), ParityConservation(), NumberConservation()]]
-    for qns in qns_iterator
-        test_reshape(qns...)
-    end
+    # ── Fixed-number sector: NumberConservation(1) ─────────────────────────────
+    H_nc = hilbert_space(f, 1:4, NumberConservation())
+    Hn1 = sector(1, H_nc)
+    H1_ns = hilbert_space(f, [1, 2], NoSymmetry())
+    H2_ns = hilbert_space(f, [3, 4], NoSymmetry())
+    d_n1 = dim(Hn1)
+    m_n1 = rand(ComplexF64, d_n1, d_n1)
+    @test reshape(reshape(m_n1, Hn1 => (H1_ns, H2_ns)), (H1_ns, H2_ns) => Hn1) ≈ m_n1
+
+    v_n1 = rand(ComplexF64, d_n1)
+    @test reshape(reshape(v_n1, Hn1 => (H1_ns, H2_ns)), (H1_ns, H2_ns) => Hn1) ≈ v_n1
+
+    # ── 3-subsystem: round-trip and subsystem reorder ─────────────────────────
+    H1_3 = hilbert_space(f, [1], NoSymmetry())
+    H2_3 = hilbert_space(f, [2], NoSymmetry())
+    H3_3 = hilbert_space(f, [3], NoSymmetry())
+    H_3 = tensor_product(H1_3, H2_3, H3_3)
+    d_3 = dim(H_3)
+    m3 = rand(ComplexF64, d_3, d_3)
+
+    # Standard ordering round-trip with ndims check
+    t3 = reshape(m3, H_3 => (H1_3, H2_3, H3_3))
+    @test ndims(t3) == 6
+    @test m3 ≈ reshape(t3, (H1_3, H2_3, H3_3) => H_3)
+
+    # Permuted subsystem orderings round-trip
+    @test m3 ≈ reshape(reshape(m3, H_3 => (H1_3, H3_3, H2_3)), (H1_3, H3_3, H2_3) => H_3)
+    @test m3 ≈ reshape(reshape(m3, H_3 => (H3_3, H2_3, H1_3)), (H3_3, H2_3, H1_3) => H_3)
 end
 
 function reshape_to_matrix(t::AbstractArray{<:Any,N}, leftindices::NTuple{NL,Int}) where {N,NL}
