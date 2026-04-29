@@ -396,10 +396,92 @@ end
 struct OperatorSequence{O}
     ops::O
 end
-function _precomputation_before_operator_application(ops::OperatorSequence, space::ProductSpace)
-    map((subops, space) -> _precomputation_before_operator_application(subops, space), ops.ops, factors(space))
+function has_internal_rep(space::AbstractHilbertSpace, ::Type{T}=UInt64) where {T}
+    state = basisstate(1, space)
+    has_internal_rep(state, space, T)
 end
-function _apply_local_operators(ops::OperatorSequence, state::ProductState{B}, space::ProductSpace, precomps) where B<:Tuple
+function has_internal_rep(state::ProductState, space::ProductSpace, ::Type{T}=UInt64) where {T}
+    all(Iterators.map((s, f) -> has_internal_rep(s, f, T), state.states, factors(space)))
+end
+
+function has_internal_rep(state::AbstractBasisState, space, ::Type{T}=UInt64) where {T}
+    int_rep = try
+        internal_rep(state, space, T)
+    catch e
+        if isa(e, MethodError) && (e.f == internal_rep || e.f == parent)
+            return false
+        else
+            rethrow()
+        end
+    end
+    newstate = try
+        physical_rep(int_rep, space)
+    catch e
+        if isa(e, MethodError) && (e.f == physical_rep || e.f == parent)
+            return false
+        else
+            rethrow()
+        end
+    end
+    newstate == state || throw(ArgumentError("internal_rep and physical_rep are inconsistent for space $space: got $newstate from physical_rep(internal_rep($state))"))
+    return true
+end
+function _precomputation_before_operator_application(ops::OperatorSequence, space::ProductSpace)
+    fast_path = has_internal_rep(space)
+    return fast_path, map((subops, space) -> _precomputation_before_operator_application(subops, space), ops.ops, factors(space))
+end
+
+internal_rep(state, space::ProductSpace, ::Type{T}=UInt64) where T = InternalRep{T}(T(state_index(state, space)))
+physical_rep(state::InternalRep{T}, space::ProductSpace) where T<:Integer = basisstate(state.data, space)
+function _apply_local_operators(ops::OperatorSequence, index::Integer, space::ProductSpace, precomps)
+    dims = map(dim, factors(space))
+    ci = CartesianIndices(dims)
+    li = LinearIndices(dims)
+    inds = Tuple(ci[index])
+    new_indices, amp = _apply_local_operators(ops, inds, space, precomps)
+    any(iszero, new_indices) && return 0, amp
+    return li[CartesianIndex(new_indices)], amp
+end
+function _apply_local_operators(ops::OperatorSequence, state::ProductState{B}, space::ProductSpace, (fast_path, precomps)) where B
+    # try
+    #     internal_reps = map(internal_rep, state.states, factors(space))
+    #     newrep, amp = _apply_local_operators(ops, internal_reps, space, precomps)
+    #     return ProductState{B}(newrep), amp
+    # catch e
+    #     newrep, amp = _apply_local_operators_slow(ops, state, space, precomps)
+    #     return ProductState{B}(newrep), amp
+    # end
+    if fast_path
+        internal_reps = map(internal_rep, state.states, factors(space))
+        newrep, amp = _apply_local_operators_fast(ops, internal_reps, space, precomps)
+        return ProductState{B}(newrep), amp
+    else
+        newstate, amp = _apply_local_operators_slow(ops, state, space, precomps)
+        return ProductState{B}(newstate), amp
+    end
+end
+function apply_local_operators(op::NCMul, int_state::InternalRep, space::AbstractHilbertSpace, precomp; kwargs...)
+    state = physical_rep(int_state, space)
+    newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
+    return internal_rep(newstate, space), amp
+end
+function _apply_local_operators_fast(ops::OperatorSequence, internal_reps::NTuple{N,InternalRep{T}}, space::ProductSpace, precomps) where {T,N}
+    amp = 1
+    spaces = factors(space)
+    newreps = internal_reps
+    for n in eachindex(internal_reps)
+        internal_rep = internal_reps[n]
+        local_space = spaces[n]
+        op = ops.ops[n]
+        precomp = precomps[n]
+        new_local_rep::InternalRep{T}, local_amp = _apply_local_operators(op, internal_rep, local_space, precomp)
+        amp *= local_amp
+        newreps = Base.setindex(newreps, new_local_rep, n)
+    end
+    return newreps, amp
+end
+
+function _apply_local_operators_slow(ops::OperatorSequence, state::ProductState{B}, space::ProductSpace, precomps) where B<:Tuple
     amp = 1
     spaces = factors(space)
     newstates = state.states

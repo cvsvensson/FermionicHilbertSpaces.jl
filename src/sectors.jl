@@ -127,7 +127,7 @@ function space_indices_generic(Hsub, H)
     # fallback for when the sector space isn't exactly in the sectors list (e.g. due to constraints)
     map(basisstates(Hsub)) do state
         ind = state_index(state, H)
-        if ismissing(ind)
+        if iszero(ind)
             throw(ArgumentError("State $state from sector space $Hsub not found in parent space $H"))
         end
         ind

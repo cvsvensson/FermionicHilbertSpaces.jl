@@ -21,7 +21,7 @@ end
 dim(H::ConstrainedSpace) = length(H.states)
 basisstates(H::ConstrainedSpace) = H.states
 basisstate(n::Integer, H::ConstrainedSpace) = H.states[n]
-state_index(state::B, H::ConstrainedSpace{B}) where B = get(H.state_index, state, 0)
+state_index(state, H::ConstrainedSpace{B}) where B = get(H.state_index, state, 0)
 atomic_factors(H::ConstrainedSpace) = atomic_factors(parent(H))
 groups(H::ConstrainedSpace) = groups(parent(H))
 factors(H::ConstrainedSpace) = factors(parent(H))
@@ -62,6 +62,8 @@ allowed_values(c::AdditiveConstraint, space, mapper) = c.allowed_values
 function _wrap(space, wrapping::ConstrainedSpace)
     ConstrainedSpace(space, wrapping.states, wrapping.state_index)
 end
+
+_apply_local_operators(ops, state::AbstractBasisState, space::Union{SectorHilbertSpace, ConstrainedSpace}, precomp) = _apply_local_operators(ops, state, parent(space), precomp)
 
 @testitem "constrain_space" begin
     @fermions f
@@ -143,18 +145,7 @@ end
 state_mapper(H::ConstrainedSpace, Hs) = state_mapper(parent(H), Hs)
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
 
-function _apply_local_operators(ops, index, space::ConstrainedSpace, precomp)
-    index_in_parent = state_index(basisstate(index, space), parent(space))
-    println("state: ", basisstate(index, space))
-    _newindex, amp = _apply_local_operators(ops, index_in_parent, parent(space), precomp)
-    iszero(_newindex) && return _newindex, amp
-    parent_state = basisstate(_newindex, parent(space))
-    println("parent state: ", parent_state)
-    println("op ", ops)
-    println("amp: ", amp)
-    newindex = state_index(parent_state, space)
-    return newindex, amp
-end
+# _apply_local_operators(ops, state, space::ConstrainedSpace, precomp) = _apply_local_operators(ops, state, space.parent, precomp)
 _precomputation_before_operator_application(ops, space::ConstrainedSpace) = _precomputation_before_operator_application(ops, parent(space))
 
 @testitem "Constrained space" begin

@@ -37,6 +37,13 @@ partial_trace_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1
 
 maximum_particles(H::AbstractHilbertSpace) = maximum(particle_number, basisstates(H))
 
+struct InternalRep{T}
+    data::T
+end
+internal_rep(state, space::AbstractHilbertSpace, ::Type{T}=UInt64) where T = internal_rep(state, parent(space), T)
+physical_rep(state::InternalRep, space::AbstractHilbertSpace) = physical_rep(state, statetype(space))
+Base.convert(::Type{B}, state::InternalRep{T}) where {B<:AbstractBasisState,T} = physical_rep(state, B)
+
 
 abstract type AbstractStateMapper end
 """

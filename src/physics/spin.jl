@@ -75,6 +75,8 @@ Base.:(==)(a::SpinState, b::SpinState) = a.m == b.m
 Base.isless(a::SpinState, b::SpinState) = a.m < b.m
 Base.hash(x::SpinState, h::UInt) = hash(x.m, h)
 
+internal_rep(state::SpinState, ::AbstractHilbertSpace, ::Type{T}=UInt64) where T = InternalRep{T}(2state.m < 0 ? T(-4state.m - 1) : T(4state.m))
+physical_rep(state::InternalRep{T}, ::Type{SpinState{M}}) where {T,M} = SpinState{M}((isodd(state.data) ? -Int((state.data + 1) >> 1) : Int(state.data >> 1)) // 2)
 
 struct SpinSpace{J,M,S} <: AbstractAtomicHilbertSpace{SpinState{M}}
     basisstates::Vector{SpinState{M}}
