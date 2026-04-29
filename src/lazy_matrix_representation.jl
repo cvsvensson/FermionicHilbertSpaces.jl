@@ -98,7 +98,7 @@ function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, 
             xn = x[n]
             iszero(xn) && continue
         end
-        outind, _amp = _apply_local_operators(term, n, space, precomp)
+        outind, _amp = _apply_local_operators_index(term, n, space, precomp)
         if !iszero(_amp)
             amp = (conjugate ? conj(_amp) : _amp) * coeff
             if !projection || !iszero(outind)
@@ -115,7 +115,7 @@ end
 function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, _coeff, conjugate, transpose, projection)
     coeff = (conjugate ? conj(_coeff) : _coeff)
     for n in eachindex(basisstates(space))
-        outind, _amp = _apply_local_operators(term, n, space, precomp)
+        outind, _amp = _apply_local_operators_index(term, n, space, precomp)
         if !iszero(_amp)
             amp = (conjugate ? conj(_amp) : _amp) * coeff
             if !projection || !iszero(outind)
