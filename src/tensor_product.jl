@@ -351,7 +351,7 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
     phi(kron(reverse(map((phi, op) -> phi(op), phis, ops))...))
 end
 
-function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
+function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
     if isnothing(complement)
         U = basis_transformation(Hsub, H)
@@ -387,9 +387,15 @@ partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs
 abstract type AbstractPartialTraceAlg end
 struct SubsystemPartialTraceAlg <: AbstractPartialTraceAlg end
 struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
+
+_effective_dim(m::AbstractMatrix, H) = length(m)
+_effective_dim(m::AbstractSparseMatrix, H) = nnz(m)
+_effective_dim(::UniformScaling, H) = dim(H)
+
+default_partial_trace_alg(m::AbstractMatrix, Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+default_partial_trace_alg(::AbstractMatrix, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
-#TODO: FullPartialTraceAlg exploits sparsity of the matrix which should be taken into account.
 
 """
     partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, extend_state=StateExtender((Hsub, complement), H); skipmissing=true, phase_factors=true)
