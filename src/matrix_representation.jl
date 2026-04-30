@@ -21,8 +21,12 @@ _concretize(op::NCMul{C,AbstractSym,F}) where {C,F} = __concretize(op)
 _concretize(op::NCMul{C,Any,F}) where {C,F} = __concretize(op)
 _concretize(op::OperatorSequence) = OperatorSequence(map(_concretize, op.ops))
 
-function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::AbstractHilbertSpace; concretize=false, kwargs...)
-    concrete_op = concretize ? _concretize(op) : op # op is often an NCMul with Abstract types, so one might benefit from making it concrete. But testing it doesn't show a clear advantage, so default to false for now.
+# These _default_concretize rules come from a bit of benchmarking
+_default_concretize(op, space) = dim(space) > 1000 
+_default_concretize(op::OperatorSequence, space) = false
+
+function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::AbstractHilbertSpace; concretize=_default_concretize(op, space), kwargs...)
+    concrete_op = concretize ? _concretize(op) : op # op is often an NCMul with Abstract types, so one might benefit from making it concrete. 
     precomp = _precomputation_before_operator_application(concrete_op, space)
     return operator_indices_and_amplitudes_generic!((outinds, ininds, amps), concrete_op, space, precomp; kwargs...)
 end
@@ -277,10 +281,14 @@ function matrix_representation(op, space::AbstractHilbertSpace; lazy=false, proj
         return get_trivial_op_coeff(op) * I(dim(space))
     end
     op_groups = symbolic_groups(op)
-    space_groups = unique(Iterators.map(group_id, factors(space)))
+    space_groups = group_ids(space)
     all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
     return _matrix_representation(op, space_groups, space, repr; projection, kwargs...)
 end
+group_ids(space::ProductSpace) = unique(Iterators.map(group_id, factors(space)))
+group_ids(space::Union{AbstractAtomicHilbertSpace,AbstractGroupedHilbertSpace}) = (group_id(space),)
+group_ids(space::AbstractHilbertSpace) = group_ids(parent(space))
+
 trivial_operator(op::Union{UniformScaling,Number}) = true
 trivial_operator(op::NCMul) = length(op.factors) == 0
 trivial_operator(op::NCAdd) = length(op.dict) == 0
