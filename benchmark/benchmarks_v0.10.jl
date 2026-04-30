@@ -101,7 +101,7 @@ end
 @bosons b
 Hf = hilbert_space(f, 1:2)
 Hb = hilbert_space(b, 1:4, 2)
-H = tensor_product(Hf, Hb)
+H = tensor_product(Hf, Hb; constraint = NumberConservation())
 Hsub = tensor_product(hilbert_space(f, 1:1), [hilbert_space(b[n], 2) for n in 1:2]...)
 SUITE["complement"]["product space"] = @benchmarkable FermionicHilbertSpaces.complementary_subsystem($H, $Hsub)
 
