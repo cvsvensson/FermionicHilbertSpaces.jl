@@ -222,7 +222,7 @@ mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
     using FermionicHilbertSpaces: TruncatedBosonicHilbertSpace, BosonicState, state_index, basisstate
     @boson b
     H = TruncatedBosonicHilbertSpace(b, 4)
-    @test basisstates(H) == [BosonicState(0), BosonicState(1), BosonicState(2), BosonicState(3)]
+    @test collect(basisstates(H)) == [BosonicState(0), BosonicState(1), BosonicState(2), BosonicState(3)]
     @test dim(H) == 4
     @test basisstate(1, H) == BosonicState(0)
     @test basisstate(4, H) == BosonicState(3)
