@@ -170,11 +170,13 @@ function Base.show(io::IO, H::SectorHilbertSpace)
 
                 print(io, "]")
             else
-                print(io, "\nSectors: ")
+                print(io, "\nSectors: [")
                 for (i, qn) in enumerate(qns)
                     i > 1 && print(io, ", ")
                     print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
                 end
+                print(io, "]")
+
             end
         end
     end
