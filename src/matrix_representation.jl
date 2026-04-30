@@ -13,19 +13,18 @@ mat_eltype(::Type{NCMul{C,S,F}}) where {C,S,F} = promote_type(C, mat_eltype(S))
 mat_eltype(::S) where {S} = mat_eltype(S)
 mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors if a complex number is expected. Override it for specific types if needed.
 
-_concretize(op::NCMul) = op
-_concretize(op::NCMul{C,AbstractSym,F}) where {C,F} = NCMul(op.coeff, Tuple(op.factors))
-_concretize(op::NCMul{C,Any,F}) where {C,F} = NCMul(op.coeff, Tuple(op.factors))
-_concretize(op::OperatorSequence) = OperatorSequence(map(_concretize, op.ops))
-function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::AbstractHilbertSpace; kwargs...)
-    concrete_op = _concretize(op) # op is often an NCMul with Abstract types. We try to make it concrete here, as the operator will be applied to all basis states, so the overhead of concretization is likely worth it
-    precomp = _precomputation_before_operator_application(concrete_op, space)
-    return operator_indices_and_amplitudes_generic!((outinds, ininds, amps), concrete_op, space, precomp; kwargs...)
-end
 _precomputation_before_operator_application(factors, space) = nothing
 
-function _apply_local_operators(op, state, space, precomp)
-    apply_local_operators(op, state, space, precomp; transpose=false)
+_concretize(op::NCMul) = op
+__concretize(op::NCMul) = NCMul(op.coeff, Tuple(op.factors))
+_concretize(op::NCMul{C,AbstractSym,F}) where {C,F} = __concretize(op)
+_concretize(op::NCMul{C,Any,F}) where {C,F} = __concretize(op)
+_concretize(op::OperatorSequence) = OperatorSequence(map(_concretize, op.ops))
+
+function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::AbstractHilbertSpace; concretize=false, kwargs...)
+    concrete_op = concretize ? _concretize(op) : op # op is often an NCMul with Abstract types, so one might benefit from making it concrete. But testing it doesn't show a clear advantage, so default to false for now.
+    precomp = _precomputation_before_operator_application(concrete_op, space)
+    return operator_indices_and_amplitudes_generic!((outinds, ininds, amps), concrete_op, space, precomp; kwargs...)
 end
 
 function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, space::AbstractHilbertSpace, precomp; projection)
@@ -48,6 +47,26 @@ function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, s
     end
     return (outinds, ininds, amps)
 end
+
+
+function _apply_local_operators(op, state, space, precomp)
+    apply_local_operators(op, state, space, precomp; transpose=false)
+end
+
+function apply_local_operators(_op::NCMul, state, space, precomp; transpose)
+    if !transpose
+        return foldr(_op.factors, init=(state, _op.coeff)) do op, (state, amp)
+            newstate, _amp = apply_local_operator(op, state, space, precomp)
+            return newstate, amp * _amp
+        end
+    elseif transpose
+        return foldl(_op.factors; init=(state, _op.coeff)) do (state, amp), op
+            newstate, _amp = apply_local_operator(op', state, space, precomp)
+            return newstate, amp * conj(_amp)
+        end
+    end
+end
+
 
 ## 
 remove_identity(a::NCMul) = a
