@@ -4,6 +4,7 @@
 # time-reversed, so that right-actions correspond to transposed matrices.
 # The `open_system` helper function sets up this structure:
 using FermionicHilbertSpaces
+using FermionicHilbertSpaces: open_system
 @fermions c
 Hlr, Hl, Hr, left, right = open_system(c, 1:1)
 # This generates two versions of hilbert_space(c, 1:1), tagged as `:left` and `:right`. 
