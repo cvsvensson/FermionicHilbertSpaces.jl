@@ -207,20 +207,6 @@ function _apply_local_operators(op, state, space::TransposedSpace, precomp)
     return newstate, amp
 end
 
-function apply_local_operators(_op::NCMul, state, space, precomp; transpose)
-    if !transpose
-        return foldr(_op.factors, init=(state, _op.coeff)) do op, (state, amp)
-            newstate, _amp = apply_local_operator(op, state, space, precomp)
-            return newstate, amp * _amp
-        end
-    elseif transpose
-        return foldl(_op.factors; init=(state, _op.coeff)) do (state, amp), op
-            newstate, _amp = apply_local_operator(op', state, space, precomp)
-            return newstate, amp * conj(_amp)
-        end
-    end
-end
-
 maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))
 _find_position(f::TransposedSpace, H::FermionicSpace) = _find_position(parent(f), H)
 function _wrap(space, ::TransposedSpace)

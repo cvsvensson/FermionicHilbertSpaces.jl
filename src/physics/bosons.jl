@@ -163,7 +163,7 @@ struct TruncatedBosonicHilbertSpace{L,B} <: AbstractAtomicHilbertSpace{BosonicSt
 end
 Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)
 Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.dimension, h))
-basisstates(H::TruncatedBosonicHilbertSpace) = map(BosonicState, 0:(dim(H)-1))
+basisstates(H::TruncatedBosonicHilbertSpace) = TypedIterator{BosonicState}(Iterators.map(BosonicState, 0:(dim(H)-1)))
 function basisstate(n::Integer, H::TruncatedBosonicHilbertSpace)
     if n < 1 || n > dim(H)
         throw(ArgumentError("Basis state index $n is out of bounds for Hilbert space with dimension $(dim(H))"))
