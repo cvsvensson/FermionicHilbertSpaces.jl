@@ -67,12 +67,14 @@ d = dim(H)
 mat = rand(ComplexF64, d, d)
 matsparse = sprand(ComplexF64, d, d, 0.01)
 Hcomp = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
-def_alg = default_partial_trace_alg(Hsub, H, Hcomp)
-def = _name(def_alg)
 for alg in [SubsystemPartialTraceAlg(), FullPartialTraceAlg()]
     name = _name(alg)
+    def_alg = default_partial_trace_alg(mat, Hsub, H, Hcomp)
+    def = _name(def_alg)
     SUITE["partial_trace_algorithms"]["default=$def"]["Sparse space"]["Dense"]["$name"] =
-        @benchmarkable partial_trace($mat, $H, $Hsub; alg=$alg)
+    @benchmarkable partial_trace($mat, $H, $Hsub; alg=$alg)
+    def_alg = default_partial_trace_alg(matsparse, Hsub, H, Hcomp)
+    def = _name(def_alg)
     SUITE["partial_trace_algorithms"]["default=$def"]["Sparse space"]["Sparse"]["$name"] =
         @benchmarkable partial_trace($matsparse, $H, $Hsub; alg=$alg)
 end
@@ -86,12 +88,14 @@ d_std = dim(H_std)
 m_std = rand(ComplexF64, d_std, d_std)
 m_sparse = sprand(ComplexF64, d_std, d_std, 0.01)
 Hcomp = FermionicHilbertSpaces.complementary_subsystem(H_std, Hsub_std)
-def_alg = default_partial_trace_alg(Hsub_std, H_std, Hcomp)
-def = _name(def_alg)
 for alg in [SubsystemPartialTraceAlg(), FullPartialTraceAlg()]
     name = _name(alg)
+    def_alg = default_partial_trace_alg(m_std, Hsub_std, H_std, Hcomp)
+    def = _name(def_alg)
     SUITE["partial_trace_algorithms"]["default=$def"]["Full space"]["Dense"]["$name"] =
         @benchmarkable partial_trace($m_std, $H_std, $Hsub_std; alg=$alg)
+    def_alg = default_partial_trace_alg(m_sparse, Hsub_std, H_std, Hcomp)
+    def = _name(def_alg)
     SUITE["partial_trace_algorithms"]["default=$def"]["Full space"]["Sparse"]["$name"] =
         @benchmarkable partial_trace($m_sparse, $H_std, $Hsub_std; alg=$alg)
 end
@@ -101,7 +105,7 @@ end
 @bosons b
 Hf = hilbert_space(f, 1:2)
 Hb = hilbert_space(b, 1:4, 2)
-H = tensor_product(Hf, Hb; constraint = NumberConservation())
+H = tensor_product(Hf, Hb; constraint=NumberConservation())
 Hsub = tensor_product(hilbert_space(f, 1:1), [hilbert_space(b[n], 2) for n in 1:2]...)
 SUITE["complement"]["product space"] = @benchmarkable FermionicHilbertSpaces.complementary_subsystem($H, $Hsub)
 
