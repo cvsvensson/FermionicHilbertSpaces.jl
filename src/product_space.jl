@@ -468,16 +468,6 @@ end
 
 internal_rep(state, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))
 physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state, space)
-# function _apply_local_operators(ops::OperatorSequence, state, space::ProductSpace, precomps)
-#     index = state_index(state, space)
-#     dims = map(dim, factors(space))
-#     ci = CartesianIndices(dims)
-#     li = LinearIndices(dims)
-#     inds = Tuple(ci[index])
-#     new_indices, amp = _apply_local_operators(ops, inds, space, precomps)
-#     any(iszero, new_indices) && return 0, amp
-#     return li[CartesianIndex(new_indices)], amp
-# end
 function _apply_local_operators(ops::OperatorSequence, state::ProductState{B}, space::ProductSpace, (fast_path, precomps)) where B
     if !ismissing(fast_path)
         internal_reps = map((s, f) -> _internal_rep(s, f, typeof(fast_path)), state.states, factors(space))
