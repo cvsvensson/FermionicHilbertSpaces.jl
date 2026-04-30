@@ -24,20 +24,15 @@ function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::Ab
 end
 _precomputation_before_operator_application(factors, space) = nothing
 
-function _apply_local_operators_index(op, index::Integer, space, precomp)
-    state = basisstate(index, space)
-    newstate, amp = _apply_local_operators(op, state, space, precomp)
-    newindex = state_index(newstate, space)
-    return newindex, amp
-end
 function _apply_local_operators(op, state, space, precomp)
     apply_local_operators(op, state, space, precomp; transpose=false)
 end
 
 function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, space::AbstractHilbertSpace, precomp; projection)
-    for inind in eachindex(basisstates(space))
-        outind, amp = _apply_local_operators_index(op, inind, space, precomp)
+    for (inind, state) in enumerate(basisstates(space))
+        newstate, amp = _apply_local_operators(op, state, space, precomp)
         if !iszero(amp)
+            outind = state_index(newstate, space)
             if iszero(outind)
                 if projection
                     continue

@@ -93,13 +93,14 @@ function LinearAlgebra.mul!(Y::AbstractMatrix, L::LazyOperator, X::AbstractMatri
 end
 function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, precomp, _coeff, conjugate, transpose, projection)
     coeff = (conjugate ? conj(_coeff) : _coeff)
-    for n in eachindex(basisstates(space))
+    for (n, state) in enumerate(basisstates(space))
         if !transpose
             xn = x[n]
             iszero(xn) && continue
         end
-        outind, _amp = _apply_local_operators_index(term, n, space, precomp)
+        state, _amp = _apply_local_operators(term, state, space, precomp)
         if !iszero(_amp)
+            outind = state_index(state, space)
             amp = (conjugate ? conj(_amp) : _amp) * coeff
             if !projection || !iszero(outind)
                 if !transpose
@@ -114,9 +115,10 @@ end
 
 function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, _coeff, conjugate, transpose, projection)
     coeff = (conjugate ? conj(_coeff) : _coeff)
-    for n in eachindex(basisstates(space))
-        outind, _amp = _apply_local_operators_index(term, n, space, precomp)
+    for (n, state) in enumerate(basisstates(space))
+        newstate, _amp = _apply_local_operators(term, state, space, precomp)
         if !iszero(_amp)
+            outind = state_index(newstate, space)
             amp = (conjugate ? conj(_amp) : _amp) * coeff
             if !projection || !iszero(outind)
                 if !transpose
