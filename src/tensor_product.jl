@@ -126,6 +126,8 @@ function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H:
     for I in inds
         I1 = map(i -> i[1], I)
         I2 = map(i -> i[2], I)
+        v = prod(ntuple(i -> ms[i][I1[i], I2[i]], length(ms)))
+        iszero(v) && continue
         state1 = map(basisstate, I1, Hs)
         state2 = map(basisstate, I2, Hs)
         fullstates1, amps1 = combine_states(state1, extend_state)
@@ -143,7 +145,6 @@ function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H:
                     throw(ArgumentError("The state $fullstate2 does not exist in the full Hilbert space"))
                 end
                 s = pfh(fullstate1, fullstate2)
-                v = prod(ntuple(i -> ms[i][I1[i], I2[i]], length(ms)))
                 mout[outind1, outind2] += w1 * w2 * v * s
             end
         end
@@ -164,6 +165,8 @@ function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H
     for I in inds
         I1 = map(i -> i[1], I)
         I2 = map(i -> i[2], I)
+        v = prod(ntuple(i -> ms[i][I1[i], I2[i]], length(ms)))
+        iszero(v) && continue
         state1 = map(basisstate, I1, Hs)
         state2 = map(basisstate, I2, Hs)
         fullstates1, amps1 = combine_states(state1, extend_state)
@@ -183,7 +186,6 @@ function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H
                 end
                 s = pfh(fullstate1, fullstate2)
 
-                v = prod(ntuple(i -> ms[i][I1[i], I2[i]], length(ms)))
                 push!(Is, outind1)
                 push!(Js, outind2)
                 push!(Vs, w1 * w2 * v * s)
@@ -394,6 +396,7 @@ _effective_dim(::UniformScaling, H) = dim(H)
 
 default_partial_trace_alg(m::AbstractMatrix, Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(m::AbstractMatrix, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+
 default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 
@@ -443,6 +446,8 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::
     inds = tensor_product_iterator(m, H)
     splitsamps = map(Base.Fix2(split_state, mapper), basisstates(H))
     for I in inds
+        mval = m[I[1], I[2]]
+        iszero(mval) && continue
         f1 = basisstate(I[1], H)
         f2 = basisstate(I[2], H)
         splits1, amps1 = splitsamps[I[1]]
@@ -463,7 +468,7 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::
                 s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
                 s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
                 s = s2 * s1
-                mout[J1, J2] += w1 * w2 * s * m[I[1], I[2]]
+                mout[J1, J2] += w1 * w2 * s * mval
             end
         end
     end
