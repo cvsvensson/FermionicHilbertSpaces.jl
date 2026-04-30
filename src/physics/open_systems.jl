@@ -7,8 +7,8 @@ TransposedSpace(inner::H) where {H<:AbstractHilbertSpace} = TransposedSpace{stat
 Base.:(==)(a::TransposedSpace, b::TransposedSpace) = a.parent == b.parent
 Base.hash(H::TransposedSpace, h::UInt) = hash(H.parent, h)
 basisstates(H::TransposedSpace) = basisstates(H.parent)
-basisstate(i::Int, H::TransposedSpace) = basisstate(i, H.parent)
-state_index(state, H::TransposedSpace) = state_index(state, H.parent)
+basisstate(i::Integer, H::TransposedSpace) = basisstate(i, H.parent)
+state_index(state::B, H::TransposedSpace{B}) where B = state_index(state, H.parent)
 dim(H::TransposedSpace) = dim(H.parent)
 isconstrained(H::TransposedSpace) = isconstrained(H.parent)
 group_id(H::TransposedSpace) = group_id(H.parent)
@@ -205,20 +205,6 @@ end
 function _apply_local_operators(op, state, space::TransposedSpace, precomp)
     newstate, amp = apply_local_operators(op, state, parent(space), precomp; transpose=true)
     return newstate, amp
-end
-
-function apply_local_operators(_op::NCMul, state, space, precomp; transpose)
-    if !transpose
-        return foldr(_op.factors, init=(state, _op.coeff)) do op, (state, amp)
-            newstate, _amp = apply_local_operator(op, state, space, precomp)
-            return newstate, amp * _amp
-        end
-    elseif transpose
-        return foldl(_op.factors; init=(state, _op.coeff)) do (state, amp), op
-            newstate, _amp = apply_local_operator(op', state, space, precomp)
-            return newstate, amp * conj(_amp)
-        end
-    end
 end
 
 maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))

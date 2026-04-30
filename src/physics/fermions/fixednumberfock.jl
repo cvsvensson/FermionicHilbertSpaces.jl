@@ -28,12 +28,13 @@ function jwstring_right_bool(site, f::FixedNumberFockState)
 end
 FockNumber(f::FixedNumberFockState) = focknbr_from_site_indices(f.sites)
 FockNumber{I}(f::FixedNumberFockState) where I = FockNumber{I}(focknbr_from_site_indices(f.sites, I))
-FixedNumberFockState{N}(f::FixedNumberFockState{M}) where {M,N} = FixedNumberFockState{N}((f.sites))
+FixedNumberFockState{N}(f::FixedNumberFockState{N}) where {N} = f
 FixedNumberFockState(f::FockNumber) = FixedNumberFockState{count_ones(f)}(f)
 function FixedNumberFockState{N}(f::FockNumber) where N
     site = 1
     count = 0
     sites = Int[]
+    count_ones(f) == N || return FixedNumberFockState{N}(ntuple(i -> 0, N))
     while count < N
         if _bit(f, site)
             count += 1
@@ -43,6 +44,11 @@ function FixedNumberFockState{N}(f::FockNumber) where N
     end
     FixedNumberFockState{N}(Tuple(sites))
 end
+
+
+physical_rep(state::T, ::Type{FixedNumberFockState{N}}) where {T,N} = FixedNumberFockState{N}(physical_rep(state, FockNumber))
+internal_rep(state::FixedNumberFockState, space::FermionicSpace, ::Type{T}) where T = internal_rep(FockNumber(state), space, T)
+
 
 Base.:(|)(f1::FixedNumberFockState, f2::FixedNumberFockState) = FixedNumberFockState((f1.sites..., f2.sites...))
 Base.:(|)(f1::FixedNumberFockState, f2::FockNumber) = FixedNumberFockState(FockNumber(f1) | f2)
@@ -123,7 +129,9 @@ function apply_local_operators(op::NCMul, f::FixedNumberFockState, H::AbstractHi
         daggers = Iterators.map(op -> !op.creation, op.factors)
         state, amp = togglefermions(sites, daggers, f)
     end
-    return state, amp * op.coeff
+    newamp = amp * op.coeff
+    iszero(newamp) && return f, newamp
+    return state, newamp
 end
 function togglefermions(sites, daggers, f::FixedNumberFockState)
     # Check if operation results in vacuum or not,

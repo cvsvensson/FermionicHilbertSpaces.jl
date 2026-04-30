@@ -20,8 +20,8 @@ end
 
 dim(H::ConstrainedSpace) = length(H.states)
 basisstates(H::ConstrainedSpace) = H.states
-basisstate(n::Int, H::ConstrainedSpace) = H.states[n]
-state_index(state, H::ConstrainedSpace) = get(H.state_index, state, missing)
+basisstate(n::Integer, H::ConstrainedSpace) = H.states[n]
+state_index(state, H::ConstrainedSpace{B}) where B = get(H.state_index, state, 0)
 atomic_factors(H::ConstrainedSpace) = atomic_factors(parent(H))
 groups(H::ConstrainedSpace) = groups(parent(H))
 factors(H::ConstrainedSpace) = factors(parent(H))
@@ -62,6 +62,8 @@ allowed_values(c::AdditiveConstraint, space, mapper) = c.allowed_values
 function _wrap(space, wrapping::ConstrainedSpace)
     ConstrainedSpace(space, wrapping.states, wrapping.state_index)
 end
+
+_apply_local_operators(ops, state::AbstractBasisState, space::Union{SectorHilbertSpace, ConstrainedSpace}, precomp) = _apply_local_operators(ops, state, parent(space), precomp)
 
 @testitem "constrain_space" begin
     @fermions f
@@ -143,7 +145,7 @@ end
 state_mapper(H::ConstrainedSpace, Hs) = state_mapper(parent(H), Hs)
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
 
-_apply_local_operators(ops, state, space::ConstrainedSpace, precomp) = _apply_local_operators(ops, state, space.parent, precomp)
+# _apply_local_operators(ops, state, space::ConstrainedSpace, precomp) = _apply_local_operators(ops, state, space.parent, precomp)
 _precomputation_before_operator_application(ops, space::ConstrainedSpace) = _precomputation_before_operator_application(ops, parent(space))
 
 @testitem "Constrained space" begin
@@ -173,9 +175,6 @@ _precomputation_before_operator_application(ops, space::ConstrainedSpace) = _pre
     Hsub = subregion(H.modes[1:Nsub], H2)
     @test dim(Hsub) == Nsub + 1
 end
-
-_apply_local_operators(ops, state, space::SectorHilbertSpace, precomp) = _apply_local_operators(ops, state, space.parent, precomp)
-add_tag(H::SectorHilbertSpace, tag) = SectorHilbertSpace(add_tag(parent(H), tag), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)
 
 """
     localize_constraint(c, H::SectorHilbertSpace)

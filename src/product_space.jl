@@ -4,7 +4,8 @@ combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : thro
 struct ProductState{B} <: AbstractBasisState
     states::B
 end
-substate(n::Int, state::ProductState) = state.states[n]
+ProductState{B}(state::ProductState{B}) where B = state
+substate(n::Integer, state::ProductState) = state.states[n]
 atomic_factors(state::ProductState) = state.states
 Base.:(==)(s1::ProductState, s2::ProductState) = s1.states == s2.states
 Base.hash(s::ProductState, h::UInt) = hash(s.states, h)
@@ -35,11 +36,11 @@ atomic_id(H::ProductSpace) = H.atom_ordering
 group_id(H::ProductSpace) = H.atom_ordering
 
 basisstates(H::ProductSpace) = collect(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
-function basisstate(n::Int, H::ProductSpace{B}) where B
+function basisstate(n::Integer, H::ProductSpace{B}) where B
     inds = Tuple(CartesianIndices(map(dim, H.factors))[n])
     ProductState(map(basisstate, inds, H.factors))
 end
-function state_index(state::ProductState, H::ProductSpace)
+function state_index(state::B, H::ProductSpace{B}) where B
     cartesian_index = CartesianIndex(Tuple(map(state_index, state.states, H.factors)))
     LinearIndices(map(dim, H.factors))[cartesian_index]
 end
@@ -253,8 +254,24 @@ end
     @test_throws ArgumentError state_mapper(H, hilbert_space(f, [3, 1]))
     @test_throws ArgumentError state_mapper(H, hilbert_space(f, [3, 2]))
 end
+
+@testitem "ProductSpaceMapper fast/slow path" begin
+    import FermionicHilbertSpaces: state_mapper, split_state, combine_states, has_internal_rep
+    @fermions a b
+    @fermions c
+    Ha = hilbert_space(a[1])
+    Hb = hilbert_space(b[1])
+    Hc = hilbert_space(c[1])
+    H = tensor_product((Ha, Hb, Hc))
+
+    # Fast path: fully fermionic factors all support has_internal_rep
+    p_full = state_mapper(H, [Ha, Hb, Hc])
+    @test !ismissing(p_full.fast_path)
+
+    #Fast path is not actually implemented yet
+end
 ##
-struct ProductSpaceMapper{CS,TP,CP,TS} <: AbstractStateMapper
+struct ProductSpaceMapper{CS,TP,CP,TS,FP} <: AbstractStateMapper
     # For each source factor: mapper into per-target pieces, or nothing if uncovered
     factor_mappers::CS
 
@@ -266,6 +283,9 @@ struct ProductSpaceMapper{CS,TP,CP,TS} <: AbstractStateMapper
     factor_piece_targets::CP
 
     target_spaces::TS
+
+    # fast_path: true when all piece spaces support has_internal_rep (enables typed intermediates)
+    fast_path::FP
 end
 unique_split(::Any) = false
 unique_combine(::Any) = false
@@ -319,11 +339,15 @@ function state_mapper(source::ProductSpace, targets)
         for pieces in pending_pieces
     )
 
+    T = Int
+    fast_path = has_internal_rep(source, T) ? zero(T) : missing
+
     ProductSpaceMapper(
         Tuple(factor_mappers),
         target_piece_sources,
         Tuple(factor_piece_targets),
-        targets,)
+        targets,
+        fast_path)
 end
 
 # ─── helpers ───────────────────────────────────────────────────────────────────
@@ -337,11 +361,11 @@ extract_substate(state, k) = state
 
 # ─── split / combine ───────────────────────────────────────────────────────────
 
-function split_state(state::ProductState, sp::ProductSpaceMapper)
+function _split_state_slow(state::ProductState, sp::ProductSpaceMapper)
     # Split each source factor into its pieces
     factor_pieces = map(sp.factor_mappers, state.states) do mapper, substate
         isnothing(mapper) ? () :
-        only(first(split_state(substate, mapper))) #TODO: handle multiple outcomes from split_state. The use of only(first()) assumes that each factor mapper produces exactly one piece per target
+        only(first(split_state(substate, mapper)))
     end
     outstates = map(sp.target_piece_sources, sp.target_spaces) do sources, target_space
         gathered = map(sources) do source
@@ -352,15 +376,25 @@ function split_state(state::ProductState, sp::ProductSpaceMapper)
     (outstates,), (1,)
 end
 
-function combine_states(substates, sp::ProductSpaceMapper)
+function split_state(state::ProductState, sp::ProductSpaceMapper)
+    _split_state_slow(state, sp)
+    # !ismissing(sp.fast_path) ? _split_state_fast(state, sp) : _split_state_slow(state, sp)
+end
+
+function _combine_states_slow(substates, sp::ProductSpaceMapper)
     outstate = ProductState(map(sp.factor_mappers, sp.factor_piece_targets) do mapper, piece_destinations
         isnothing(mapper) && error("Cannot reconstruct state: piece_destinations = $piece_destinations, substates = $substates")
         gathered = map(piece_destinations) do dest
             extract_substate(substates[dest[1]], dest[2])
         end
-        only(first(combine_states(gathered, mapper))) #TODO: handle multiple outcomes from combine_states
+        only(first(combine_states(gathered, mapper)))
     end)
     (outstate,), (1,)
+end
+
+function combine_states(substates, sp::ProductSpaceMapper)
+    # !ismissing(sp.fast_path) ? _combine_states_fast(substates, sp) : _combine_states_slow(substates, sp)
+    _combine_states_slow(substates, sp)
 end
 
 
@@ -395,10 +429,77 @@ end
 struct OperatorSequence{O}
     ops::O
 end
-function _precomputation_before_operator_application(ops::OperatorSequence, space::ProductSpace)
-    map((subops, space) -> _precomputation_before_operator_application(subops, space), ops.ops, factors(space))
+function has_internal_rep(space::AbstractHilbertSpace, ::Type{T}) where {T}
+    state = basisstate(1, space)
+    has_internal_rep(state, space, T)
 end
-function _apply_local_operators(ops::OperatorSequence, state::ProductState{B}, space::ProductSpace, precomps) where B<:Tuple
+function has_internal_rep(state::ProductState, space::ProductSpace, ::Type{T}) where {T}
+    all(Iterators.map((s, f) -> has_internal_rep(s, f, T), state.states, factors(space)))
+end
+
+function has_internal_rep(state, space, ::Type{T}) where {T}
+    int_rep = try
+        _internal_rep(state, space, T)
+    catch e
+        if isa(e, MethodError) && (e.f == internal_rep || e.f == parent)
+            return false
+        else
+            rethrow()
+        end
+    end
+    newstate = try
+        _physical_rep(int_rep, space)
+    catch e
+        if isa(e, MethodError) && (e.f == physical_rep || e.f == parent)
+            return false
+        else
+            rethrow()
+        end
+    end
+    newstate == state || throw(ArgumentError("internal_rep and physical_rep are inconsistent for space $space: got $newstate from physical_rep(internal_rep($state))"))
+    return true
+end
+function _precomputation_before_operator_application(ops::OperatorSequence, space::ProductSpace)
+    T = Int
+    fast_path = has_internal_rep(space, Int)
+    fp = fast_path ? zero(Int) : missing
+    return fp, map((subops, space) -> _precomputation_before_operator_application(subops, space), ops.ops, factors(space))
+end
+
+internal_rep(state, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))
+physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state, space)
+function _apply_local_operators(ops::OperatorSequence, state::ProductState{B}, space::ProductSpace, (fast_path, precomps)) where B
+    if !ismissing(fast_path)
+        internal_reps = map((s, f) -> _internal_rep(s, f, typeof(fast_path)), state.states, factors(space))
+        newrep, amp = _apply_local_operators_fast(ops, internal_reps, space, precomps)
+        return ProductState{B}(newrep), amp
+    else
+        newstate, amp = _apply_local_operators_slow(ops, state, space, precomps)
+        return ProductState{B}(newstate), amp
+    end
+end
+function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::AbstractHilbertSpace, precomp; kwargs...) where T
+    state = _physical_rep(int_state, space)
+    newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
+    return _internal_rep(newstate, space, T), amp
+end
+function _apply_local_operators_fast(ops::OperatorSequence, internal_reps::NTuple{N,InternalRep{T}}, space::ProductSpace, precomps) where {T,N}
+    amp = 1
+    spaces = factors(space)
+    newreps = internal_reps
+    for n in eachindex(internal_reps)
+        internal_rep = internal_reps[n]
+        local_space = spaces[n]
+        op = ops.ops[n]
+        precomp = precomps[n]
+        new_local_rep::InternalRep{T}, local_amp = _apply_local_operators(op, internal_rep, local_space, precomp)
+        amp *= local_amp
+        newreps = Base.setindex(newreps, new_local_rep, n)
+    end
+    return newreps, amp
+end
+
+function _apply_local_operators_slow(ops::OperatorSequence, state::ProductState{B}, space::ProductSpace, precomps) where B<:Tuple
     amp = 1
     spaces = factors(space)
     newstates = state.states

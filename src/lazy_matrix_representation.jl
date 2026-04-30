@@ -98,11 +98,11 @@ function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, 
             xn = x[n]
             iszero(xn) && continue
         end
-        newstate, _amp = _apply_local_operators(term, state, space, precomp)
+        state, _amp = _apply_local_operators(term, state, space, precomp)
         if !iszero(_amp)
+            outind = state_index(state, space)
             amp = (conjugate ? conj(_amp) : _amp) * coeff
-            outind = state_index(newstate, space)
-            if !projection || !ismissing(outind)
+            if !projection || !iszero(outind)
                 if !transpose
                     y[outind] += amp * xn
                 else
@@ -118,9 +118,9 @@ function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, 
     for (n, state) in enumerate(basisstates(space))
         newstate, _amp = _apply_local_operators(term, state, space, precomp)
         if !iszero(_amp)
-            amp = (conjugate ? conj(_amp) : _amp) * coeff
             outind = state_index(newstate, space)
-            if !projection || !ismissing(outind)
+            amp = (conjugate ? conj(_amp) : _amp) * coeff
+            if !projection || !iszero(outind)
                 if !transpose
                     @views y[outind, :] .+= amp .* x[n, :]
                 else

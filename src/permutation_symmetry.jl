@@ -36,7 +36,7 @@ function _add_permutation_operator_tuple!(P, (states, state_index), mapper, perm
     for (j, state) in enumerate(states)
         state2 = permute_state(state, mapper, perm)
         i = state_index(state2)
-        ismissing(i) && throw(ArgumentError("Permutation maps a basis state outside the constrained space"))
+        iszero(i) && throw(ArgumentError("Permutation maps a basis state outside the constrained space"))
         P[i, j] += weight
     end
     return P
@@ -45,7 +45,7 @@ function _add_permutation_operator!(P, (states, state_index), mapper, perm, weig
     for (j, state) in enumerate(states)
         state2 = permute_state(state, mapper, perm)
         i = state_index(state2)
-        ismissing(i) && throw(ArgumentError("Permutation maps a basis state outside the constrained space"))
+        iszero(i) && throw(ArgumentError("Permutation maps a basis state outside the constrained space"))
         P[i, j] += weight
     end
     return P

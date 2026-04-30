@@ -148,6 +148,9 @@ end
 Base.:(==)(a::BosonicState, b::BosonicState) = a.n == b.n
 Base.isless(a::BosonicState, b::BosonicState) = a.n < b.n
 Base.hash(x::BosonicState, h::UInt) = hash(x.n, h)
+internal_rep(state::BosonicState, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.n)
+physical_rep(state::T, ::Type{BosonicState}) where T<:Integer = BosonicState(Int(state))
+
 struct TruncatedBosonicHilbertSpace{L,B} <: AbstractAtomicHilbertSpace{BosonicState}
     sym::BosonSym{L,B}
     dimension::Int
@@ -160,8 +163,8 @@ struct TruncatedBosonicHilbertSpace{L,B} <: AbstractAtomicHilbertSpace{BosonicSt
 end
 Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)
 Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.dimension, h))
-basisstates(H::TruncatedBosonicHilbertSpace) = map(BosonicState, 0:(dim(H)-1))
-function basisstate(n::Int, H::TruncatedBosonicHilbertSpace)
+basisstates(H::TruncatedBosonicHilbertSpace) = TypedIterator{BosonicState}(Iterators.map(BosonicState, 0:(dim(H)-1)))
+function basisstate(n::Integer, H::TruncatedBosonicHilbertSpace)
     if n < 1 || n > dim(H)
         throw(ArgumentError("Basis state index $n is out of bounds for Hilbert space with dimension $(dim(H))"))
     end
@@ -219,7 +222,7 @@ mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
     using FermionicHilbertSpaces: TruncatedBosonicHilbertSpace, BosonicState, state_index, basisstate
     @boson b
     H = TruncatedBosonicHilbertSpace(b, 4)
-    @test basisstates(H) == [BosonicState(0), BosonicState(1), BosonicState(2), BosonicState(3)]
+    @test collect(basisstates(H)) == [BosonicState(0), BosonicState(1), BosonicState(2), BosonicState(3)]
     @test dim(H) == 4
     @test basisstate(1, H) == BosonicState(0)
     @test basisstate(4, H) == BosonicState(3)

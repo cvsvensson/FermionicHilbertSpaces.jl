@@ -47,6 +47,8 @@ Base.count_ones(f::FockNumber) = count_ones(f.f)
 particle_number(s::FockNumber) = fermionnumber(s)
 
 
+internal_rep(state::FockNumber, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.f)
+physical_rep(state::T, ::Type{FockNumber{I}}) where {T,I} = FockNumber{I}(state)
 
 fermionnumber(f::FockNumber{<:Integer}, mask) = count_weighted_ones(f.f, mask)
 count_weighted_ones(x, mask::Integer) = count_ones(x & mask)

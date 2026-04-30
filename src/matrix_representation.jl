@@ -13,26 +13,30 @@ mat_eltype(::Type{NCMul{C,S,F}}) where {C,S,F} = promote_type(C, mat_eltype(S))
 mat_eltype(::S) where {S} = mat_eltype(S)
 mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors if a complex number is expected. Override it for specific types if needed.
 
+_precomputation_before_operator_application(factors, space) = nothing
+
 _concretize(op::NCMul) = op
-_concretize(op::NCMul{C, AbstractSym, F}) where {C, F} = NCMul(op.coeff, Tuple(op.factors))
-_concretize(op::NCMul{C, Any, F}) where {C, F} = NCMul(op.coeff, Tuple(op.factors))
+__concretize(op::NCMul) = NCMul(op.coeff, Tuple(op.factors))
+_concretize(op::NCMul{C,AbstractSym,F}) where {C,F} = __concretize(op)
+_concretize(op::NCMul{C,Any,F}) where {C,F} = __concretize(op)
 _concretize(op::OperatorSequence) = OperatorSequence(map(_concretize, op.ops))
-function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::AbstractHilbertSpace; kwargs...)
-    concrete_op = _concretize(op) # op is often an NCMul with Abstract types. We try to make it concrete here, as the operator will be applied to all basis states, so the overhead of concretization is likely worth it
+
+# These _default_concretize rules come from a bit of benchmarking
+_default_concretize(op, space) = dim(space) > 1000 
+_default_concretize(op::OperatorSequence, space) = false
+
+function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::AbstractHilbertSpace; concretize=_default_concretize(op, space), kwargs...)
+    concrete_op = concretize ? _concretize(op) : op # op is often an NCMul with Abstract types, so one might benefit from making it concrete. 
     precomp = _precomputation_before_operator_application(concrete_op, space)
     return operator_indices_and_amplitudes_generic!((outinds, ininds, amps), concrete_op, space, precomp; kwargs...)
 end
-_precomputation_before_operator_application(factors, space) = nothing
 
-function _apply_local_operators(op, state, space, precomp)
-    apply_local_operators(op, state, space, precomp; transpose=false)
-end
 function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, space::AbstractHilbertSpace, precomp; projection)
     for (inind, state) in enumerate(basisstates(space))
         newstate, amp = _apply_local_operators(op, state, space, precomp)
         if !iszero(amp)
             outind = state_index(newstate, space)
-            if ismissing(outind)
+            if iszero(outind)
                 if projection
                     continue
                 else
@@ -47,6 +51,26 @@ function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, s
     end
     return (outinds, ininds, amps)
 end
+
+
+function _apply_local_operators(op, state, space, precomp)
+    apply_local_operators(op, state, space, precomp; transpose=false)
+end
+
+function apply_local_operators(_op::NCMul, state, space, precomp; transpose)
+    if !transpose
+        return foldr(_op.factors, init=(state, _op.coeff)) do op, (state, amp)
+            newstate, _amp = apply_local_operator(op, state, space, precomp)
+            return newstate, amp * _amp
+        end
+    elseif transpose
+        return foldl(_op.factors; init=(state, _op.coeff)) do (state, amp), op
+            newstate, _amp = apply_local_operator(op', state, space, precomp)
+            return newstate, amp * conj(_amp)
+        end
+    end
+end
+
 
 ## 
 remove_identity(a::NCMul) = a
@@ -257,10 +281,14 @@ function matrix_representation(op, space::AbstractHilbertSpace; lazy=false, proj
         return get_trivial_op_coeff(op) * I(dim(space))
     end
     op_groups = symbolic_groups(op)
-    space_groups = unique(Iterators.map(group_id, factors(space)))
+    space_groups = group_ids(space)
     all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
     return _matrix_representation(op, space_groups, space, repr; projection, kwargs...)
 end
+group_ids(space::ProductSpace) = unique(Iterators.map(group_id, factors(space)))
+group_ids(space::Union{AbstractAtomicHilbertSpace,AbstractGroupedHilbertSpace}) = (group_id(space),)
+group_ids(space::AbstractHilbertSpace) = group_ids(parent(space))
+
 trivial_operator(op::Union{UniformScaling,Number}) = true
 trivial_operator(op::NCMul) = length(op.factors) == 0
 trivial_operator(op::NCAdd) = length(op.dict) == 0
