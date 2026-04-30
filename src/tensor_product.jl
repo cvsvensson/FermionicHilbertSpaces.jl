@@ -393,7 +393,7 @@ _effective_dim(m::AbstractSparseMatrix, H) = nnz(m)
 _effective_dim(::UniformScaling, H) = dim(H)
 
 default_partial_trace_alg(m::AbstractMatrix, Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
-default_partial_trace_alg(::AbstractMatrix, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+default_partial_trace_alg(m::AbstractMatrix, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 
