@@ -196,13 +196,14 @@ function majoranas(H::MajoranaHilbertSpace)
     OrderedDict(label(γi) => matrix_representation(γi, H) for γi in modes(H))
 end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
+symbolic_fermion_basis(H::MajoranaHilbertSpace) = symbolic_basis(H.parent)
 
 hilbert_space(y::SymbolicMajoranaBasis, labels, args...; kwargs...) = majorana_hilbert_space(y, labels, args...; kwargs...)
 
 function majorana_hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
     iseven(length(labels)) || throw(ArgumentError("Must be an even number of Majoranas to define a Hilbert space."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
-    f = SymbolicFermionBasis(y.name, tags(y).group)
+    f = to_fermion(y)
     Hf = hilbert_space(f, pairs, args...; kwargs...)
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
     MajoranaHilbertSpace(majorana_position, Hf, y)
