@@ -57,7 +57,7 @@ function add_tag(factor::AbstractSym, tag)
     new_basis = add_tag(basis, tag)
     return change_basis(factor, new_basis)
 end
-add_tag(expr, tag) = NonCommutativeProducts.ncmap(Base.Fix2(_add_tag, tag), expr)
+add_tag(expr, tag) = NonCommutativeProducts.ncmap(Base.Fix2(add_tag, tag), expr)
 
 
 @testitem "TransposedSpace basics" begin
