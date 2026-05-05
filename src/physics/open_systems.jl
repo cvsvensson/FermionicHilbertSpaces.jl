@@ -52,28 +52,12 @@ function open_system(H::AbstractHilbertSpace; kwargs...)
     return Hlr, Hleft, Hright, left, right
 end
 
-function _remap_factor_basis(factor, tag)
+function add_tag(factor::AbstractSym, tag)
     basis = symbolic_basis(factor)
     new_basis = add_tag(basis, tag)
     return change_basis(factor, new_basis)
 end
-
-function _remap_operator(op::NCMul, tag)
-    new_factors = map(f -> _remap_factor_basis(f, tag), op.factors)
-    NCMul(op.coeff, new_factors)
-end
-
-function _remap_operator(op::NCAdd, tag)
-    remapped = op.coeff
-    for (term, coeff) in op.dict
-        remapped += coeff * _remap_operator(term, tag)
-    end
-    return remapped
-end
-
-add_tag(op::AbstractSym, tag) = _remap_factor_basis(op, tag)
-add_tag(op::NCMul, tag) = _remap_operator(op, tag)
-add_tag(op::NCAdd, tag) = _remap_operator(op, tag)
+add_tag(expr, tag) = NonCommutativeProducts.ncmap(Base.Fix2(_add_tag, tag), expr)
 
 
 @testitem "TransposedSpace basics" begin
