@@ -3,6 +3,7 @@ struct TransposedSpace{B,H} <: AbstractHilbertSpace{B}
     parent::H
 end
 TransposedSpace(inner::H) where {H<:AbstractHilbertSpace} = TransposedSpace{statetype(inner),H}(inner)
+TransposedSpace(H::TransposedSpace) = parent(H)
 
 Base.:(==)(a::TransposedSpace, b::TransposedSpace) = a.parent == b.parent
 Base.hash(H::TransposedSpace, h::UInt) = hash(H.parent, h)
@@ -19,7 +20,7 @@ groups(H::TransposedSpace) = groups(H.parent)
 factors(H::TransposedSpace) = factors(H.parent)
 _precomputation_before_operator_application(factors, space::TransposedSpace) = _precomputation_before_operator_application(factors, space.parent)
 TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, factors(H)), map(TransposedSpace, H.atoms))
-TransposedSpace(H::ConstrainedSpace) = ConstrainedSpace(TransposedSpace(H.parent), H.states, H.state_index)
+TransposedSpace(H::ConstrainedSpace) = ConstrainedSpace(TransposedSpace(parent(H)), H.states, H.state_index)
 TransposedSpace(H::SectorHilbertSpace) = SectorHilbertSpace(TransposedSpace(parent(H)), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)
 state_mapper(H::TransposedSpace, Hs) = state_mapper(H.parent, Hs)
 combine_states(states, H::TransposedSpace) = combine_states(states, H.parent)
