@@ -13,18 +13,20 @@ Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
 
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
 # ProductSpaces consists of a list of atomic spaces and factor spaces
-struct ProductSpace{B,C,A} <: AbstractProductHilbertSpace{B}
+struct ProductSpace{B,C,A,T} <: AbstractProductHilbertSpace{B}
     factors::C
     atoms::Vector{A}
     atom_ordering::Dict{A,Int}
+    fast_path::T
     function ProductSpace(factors::C, atoms::Vector{A}) where {C,A}
         length(factors) == 0 && throw(ArgumentError("Product space must have at least one factor"))
         B = ProductState{Tuple{map(statetype, factors)...}}
         atom_ordering = Dict{A,Int}(a => i for (i, a) in enumerate(atoms))
-        new{B,C,A}(factors, atoms, atom_ordering)
+        fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
+        new{B,C,A,typeof(fast_path)}(factors, atoms, atom_ordering, fast_path)
     end
 end
-
+fast_path(space::ProductSpace) = space.fast_path
 isconstrained(H::ProductSpace) = false
 Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1.factors == H2.factors && H1.atoms == H2.atoms
 Base.hash(H::ProductSpace, h::UInt) = hash(H.factors, hash(H.atoms, h))
@@ -460,17 +462,15 @@ function has_internal_rep(state, space, ::Type{T}) where {T}
     return true
 end
 function _precomputation_before_operator_application(ops::OperatorSequence, space::ProductSpace)
-    T = Int
-    fast_path = has_internal_rep(space, Int)
-    fp = fast_path ? zero(Int) : missing
-    return fp, map((subops, space) -> _precomputation_before_operator_application(subops, space), ops.ops, factors(space))
+    return map((subops, space) -> _precomputation_before_operator_application(subops, space), ops.ops, factors(space))
 end
 
 internal_rep(state, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))
 physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state, space)
-function _apply_local_operators(ops::OperatorSequence, state::ProductState{B}, space::ProductSpace, (fast_path, precomps)) where B
-    if !ismissing(fast_path)
-        internal_reps = map((s, f) -> _internal_rep(s, f, typeof(fast_path)), state.states, factors(space))
+function _apply_local_operators(ops::OperatorSequence, state::ProductState{B}, space::ProductSpace, precomps) where B
+    if !ismissing(fast_path(space))
+        T = typeof(fast_path(space))
+        internal_reps = map((s, f) -> _internal_rep(s, f, T), state.states, factors(space))
         newrep, amp = _apply_local_operators_fast(ops, internal_reps, space, precomps)
         return ProductState{B}(newrep), amp
     else
