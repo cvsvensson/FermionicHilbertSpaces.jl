@@ -1,7 +1,10 @@
 abstract type AbstractFermionSym <: AbstractSym end
 
 struct EagerRepr end
-struct LazyRepr end
+struct LazyRepr{T}
+    input::T
+end
+LazyRepr() = LazyRepr(missing)
 
 function mat_eltype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S,F}
     promote_type(C, mat_eltype(S))
@@ -22,7 +25,7 @@ _concretize(op::NCMul{C,Any,F}) where {C,F} = __concretize(op)
 _concretize(op::OperatorSequence) = OperatorSequence(map(_concretize, op.ops))
 
 # These _default_concretize rules come from a bit of benchmarking
-_default_concretize(op, space) = dim(space) > 1000 
+_default_concretize(op, space) = dim(space) > 1000
 _default_concretize(op::OperatorSequence, space) = false
 
 function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::AbstractHilbertSpace; concretize=_default_concretize(op, space), kwargs...)
@@ -276,7 +279,11 @@ size(M) == (dim(H), dim(H))
 ```
 """
 function matrix_representation(op, space::AbstractHilbertSpace; lazy=false, projection=false, kwargs...)
-    repr = lazy ? LazyRepr() : EagerRepr()
+    repr = if lazy isa LazyRepr
+        lazy
+    else
+        lazy ? LazyRepr() : EagerRepr()
+    end
     if trivial_operator(op)
         return get_trivial_op_coeff(op) * I(dim(space))
     end
