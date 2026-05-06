@@ -169,8 +169,7 @@ end
 function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:OperatorSequence}, x::AbstractVecOrMat, α, β)
     # This is for productspaces, where ops is a list of operators applying to each factor space
     rmul!(y, β)
-    coeff = prod(op.coeff for op in L.op.ops)
-    _apply_single_term!(y, x, L.space, L.op, L.precomp, coeff * α, L.conjugate, L.projection)
+    _apply_single_term!(y, x, L.space, L.op, L.precomp, α, L.conjugate, L.projection)
     return y
 end
 
@@ -283,7 +282,7 @@ end
     @spin s 1 // 2
     Hs = hilbert_space(s)
     H = tensor_product(Hf, Hs)
-    op = f[1]' * f[2] * s[:x] + s[:z] + f[1] + 1im
+    op = 5 * f[1]' * f[2] * s[:x] + 2 * s[:z] + f[1] + 1im
     L = matrix_representation(op, H; lazy=true)
     M = matrix_representation(op, H)
     v = randn(dim(H))
