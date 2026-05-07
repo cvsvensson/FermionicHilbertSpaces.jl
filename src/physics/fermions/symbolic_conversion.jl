@@ -28,31 +28,21 @@ function majorana_map(H::MajoranaHilbertSpace)
     majorana_map(; ferm_to_maj, maj_to_ferm)
 end
 
-abstract type RewriteDirection end
+to_majorana(expr, M::MajoranaMap) = NonCommutativeProducts.ncmap(Base.Fix2(_to_majorana, M), expr)
+to_fermion(expr, M::MajoranaMap) = NonCommutativeProducts.ncmap(Base.Fix2(_to_fermion, M), expr)
 
-struct ToMajorana <: RewriteDirection end
-struct ToFermion  <: RewriteDirection end
-
-to_majorana(expr, M::MajoranaMap) = _rewrite(expr, M, ToMajorana())
-to_fermion(expr, M::MajoranaMap) = _rewrite(expr, M, ToFermion())
-function to_majorana(f::FermionSym, M::MajoranaMap)
+# leaf functions
+function _to_majorana(f::FermionSym, M::MajoranaMap)
     γ1, γ2 = unpair(f, M)
     f.creation ? (1//2 * (γ1 + 1im * γ2)) : 1//2 * (γ1 - 1im * γ2)
 end
-function to_fermion(γ::MajoranaSym, M::MajoranaMap)
+_to_majorana(x, ::MajoranaMap) = x
+function _to_fermion(γ::MajoranaSym, M::MajoranaMap)
     f, isfirst = pair(γ, M)
     isfirst ? f + f' : 1im * (f - f')
 end
+_to_fermion(x, ::MajoranaMap) = x
 
-_rewrite(expr, ::MajoranaMap, ::RewriteDirection) = expr
-_rewrite(expr::FermionSym, M::MajoranaMap, ::ToMajorana) = to_majorana(expr, M)
-_rewrite(expr::MajoranaSym, M::MajoranaMap, ::ToFermion) = to_fermion(expr, M)
-function _rewrite(expr::NCMul, M::MajoranaMap, dir::RewriteDirection)
-    prod(factor -> _rewrite(factor, M, dir), expr.factors; init=expr.coeff)
-end
-function _rewrite(expr::NCAdd, M::MajoranaMap, dir::RewriteDirection)
-    sum(_rewrite(term, M, dir) for term in NCterms(expr); init=expr.coeff)
-end
 
 function to_fermion(basis::SymbolicMajoranaBasis; name = Symbol("f_", basis.name))
     SymbolicFermionBasis(name, tags(basis).group)
