@@ -114,7 +114,7 @@ function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type
 
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
     length(perms) == length(weights) || throw(ArgumentError("Generated weights must match generated permutations"))
-    P = permutation_projector(H, Hs, perms, weights; kwargs...)
+    P = permutation_projector(H, Hs, perms, weights, T; kwargs...)
     _remove_columns(P, orth_method)
 end
 _resolve_sector_permutations_and_weights(Hs, (perms, weights), T) = (perms, weights) # for direct input of perms and weights
