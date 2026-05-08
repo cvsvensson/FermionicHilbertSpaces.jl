@@ -120,23 +120,15 @@ function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
     return iszero(amp) ? 0 : amp * SymbolicState(newstate, s.space, false)
 end
 
-# ── Vector representation for SymbolicState (single ket or bra) ─────────────
-
-function representation(s::SymbolicState, space::AbstractHilbertSpace; kwargs...)
-    _same_space_id(space, s.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
-    vec = vector_representation(s.state, space)
-    return isket(s) ? vec : adjoint(vec)
-end
 
 representation(s::SymbolicState; kwargs...) = representation(s, s.space; kwargs...)
 
-# ── Vector representation for product-of-kets / product-of-bras ─────────────
+_operator_type(op::SymbolicState) = op.ket ? :kets : :bras
 function _operator_type(op)
     hasket = false
     hasbra = false
     hasop = false
     function f(nc::SymbolicState)
-        # hasket + hasbra + hasop > 1 && throw(ArgumentError("Mixed kets, bras, and operators in NCMul"))
         isket(nc) ? (hasket = true) : (hasbra = true)
         return 0
     end
@@ -159,13 +151,16 @@ end
 For a product of ket SymbolicStates, apply each ket's operator action in sequence
 and return a sparse column vector. For bras, return the adjoint row vector.
 """
-# vector_representation(op::NCMul, space::AbstractHilbertSpace; kwargs...) = op.coeff * vector_representation(only(factors(op)), space; kwargs...)
-
 function vector_representation(state::AbstractBasisState, space::AbstractHilbertSpace)
     ind = state_index(state, space)
     v = SparseArrays.spzeros(Int, dim(space))
     v[ind] = 1
     return v
+end
+function vector_representation(s::SymbolicState, space::AbstractHilbertSpace; kwargs...)
+    _same_space_id(space, s.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
+    vec = vector_representation(s.state, space)
+    return isket(s) ? vec : adjoint(vec)
 end
 
 function vector_representation(op::NCMul, space::AbstractHilbertSpace; type=_operator_type(op), kwargs...)
@@ -192,14 +187,6 @@ function vector_representation(op::NCAdd, space::AbstractHilbertSpace; type=_ope
     return sum(coeff * vector_representation(term, space; type, kwargs...) for (term, coeff) in pairs(op.dict))
 end
 
-
-# ── Unified representation entry point ──────────────────────────────────────
-
-function _has_symbolic_state(op::NCMul)
-    any(f -> f isa SymbolicState, op.factors)
-end
-_has_symbolic_state(op::NCAdd) = any(_has_symbolic_state, keys(op.dict))
-_has_symbolic_state(_) = false
 
 function representation(op, space::AbstractHilbertSpace; kwargs...)
     type = _operator_type(op)
@@ -291,4 +278,20 @@ end
     @test size(rep) == (1, dim(H))
     @test iszero(sb * sf - sf * sb)
 
+    Hcons = tensor_product(Hf, Hb; constraint=ParityConservation())
+    sb = vb("1")
+    sf = vf("0")
+    rep = representation(sb * sf, Hcons)
+    @test rep ≈ tensor_product((representation(sf), representation(sb)), (Hf, Hb) => Hcons)
+    @test size(rep) == (dim(Hcons),)
+
+    sb = 0.5 * vb("1")' + 1im * vb("4")' + 2 * vb("2")'
+    sf = vf("0")' + 10 * vf("1")'
+    rep = representation(sb * sf, Hcons)
+    @test rep ≈ tensor_product((representation(sf, Hf), representation(sb, Hb)), (Hf, Hb) => Hcons)
+    @test size(rep) == (1, dim(Hcons))
+    @test iszero(sb * sf - sf * sb)
+
+    using FermionicHilbertSpaces: TransposedSpace
+    @test representation(vb("1")vb("0")', TransposedSpace(Hb)) == transpose(representation(vb("1")vb("0")', Hb))
 end
