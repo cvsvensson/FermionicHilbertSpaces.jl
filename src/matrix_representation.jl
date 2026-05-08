@@ -263,6 +263,19 @@ function symbolic_groups(op) # Assume op is a single symbolic operator
 end
 
 """
+    representation(op_or_state, space::AbstractHilbertSpace; kwargs...)
+
+Return a concrete representation of `op_or_state` in Hilbert space `space`.
+
+- For symbolic operators, returns a sparse matrix (or lazy operator when `lazy=true`).
+- For `AbstractBasisState`, returns a one-hot sparse column vector.
+- For `SymbolicState` (ket/bra), returns the corresponding column/row vector.
+"""
+function representation(state::AbstractBasisState, space::AbstractHilbertSpace; kwargs...)
+    vector_representation(state, space)
+end
+
+"""
     matrix_representation(op, space::AbstractHilbertSpace; kwargs...)
 
 Return the matrix representation of symbolic operator `op` in Hilbert space `space`.
@@ -292,6 +305,7 @@ function matrix_representation(op, space::AbstractHilbertSpace; lazy=false, proj
     all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
     return _matrix_representation(op, space_groups, space, repr; projection, kwargs...)
 end
+
 group_ids(space::ProductSpace) = unique(Iterators.map(group_id, factors(space)))
 group_ids(space::Union{AbstractAtomicHilbertSpace,AbstractGroupedHilbertSpace}) = (group_id(space),)
 group_ids(space::AbstractHilbertSpace) = group_ids(parent(space))
