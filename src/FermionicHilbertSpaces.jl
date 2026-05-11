@@ -11,7 +11,7 @@ using NonCommutativeProducts
 import NonCommutativeProducts: @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 
 
-export FockNumber, hc, basisstates, dim
+export FockNumber, hc, basisstates, dim, state_index, basisstate
 export hilbert_space, subregion
 export parityoperator, numberoperator, matrix_representation, representation, vector_representation
 export Kets

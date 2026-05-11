@@ -21,14 +21,16 @@ mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors i
 _precomputation_before_operator_application(factors, space) = nothing
 
 _concretize(op::NCMul) = op
-__concretize(op::NCMul) = NCMul(op.coeff, Tuple(op.factors))
+_concretize(op::NCAdd) = op
+__concretize(op::NCMul) = NCMul(op.coeff, length(op.factors) > 0 ? Tuple(op.factors) : op.factors)
 _concretize(op::NCMul{C,AbstractSym,F}) where {C,F} = __concretize(op)
 _concretize(op::NCMul{C,Any,F}) where {C,F} = __concretize(op)
 _concretize(op::OperatorSequence) = OperatorSequence(map(_concretize, op.ops))
 
 # These _default_concretize rules come from a bit of benchmarking
-_default_concretize(op, space) = dim(space) > 1000
-_default_concretize(op::OperatorSequence, space) = false
+_default_concretize(op, space) = true
+# _default_concretize(op, space) = dim(space) > 1000
+# _default_concretize(op::OperatorSequence, space) = false
 
 function operator_indices_and_amplitudes!(accumulator, op, space::AbstractHilbertSpace; concretize=_default_concretize(op, space), kwargs...)
     concrete_op = concretize ? _concretize(op) : op # op is often an NCMul with Abstract types, so one might benefit from making it concrete. 
