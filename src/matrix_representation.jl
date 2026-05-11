@@ -1,6 +1,8 @@
 abstract type AbstractFermionSym <: AbstractSym end
 
-struct EagerRepr end
+struct EagerDenseRepr end
+struct EagerSparseRepr end
+
 struct LazyRepr{T}
     input::T
 end
@@ -34,7 +36,7 @@ function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::Ab
     return operator_indices_and_amplitudes_generic!((outinds, ininds, amps), concrete_op, space, precomp; kwargs...)
 end
 
-function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, space::AbstractHilbertSpace, precomp; projection)
+function operator_indices_and_amplitudes_generic!(accumulator, op, space::AbstractHilbertSpace, precomp; projection)
     for (inind, state) in enumerate(basisstates(space))
         newstate, amp = _apply_local_operators(op, state, space, precomp)
         if !iszero(amp)
@@ -46,13 +48,20 @@ function operator_indices_and_amplitudes_generic!((outinds, ininds, amps), op, s
                     throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
                 end
             else
-                push!(outinds, outind)
-                push!(amps, amp)
-                push!(ininds, inind)
+                push_inds_amps!(accumulator, outind, inind, amp)
             end
         end
     end
-    return (outinds, ininds, amps)
+    return accumulator
+end
+function push_inds_amps!((outinds, ininds, amps), outind, inind, amp)
+    push!(outinds, outind)
+    push!(ininds, inind)
+    push!(amps, amp)
+    return nothing
+end
+function push_inds_amps!(m::Matrix, outind, inind, amp)
+    m[outind, inind] = amp
 end
 
 
@@ -180,54 +189,68 @@ function _matrix_representation(op, bases, space, repr; kwargs...) #Assume op is
     _matrix_representation(NCMul(1, [op]), bases, space, repr; kwargs...)
 end
 
-function _matrix_representation_single_space(op::NCAdd, space, ::EagerRepr; kwargs...)
+function matrix_accumulator(op::NCAdd, space, ::EagerSparseRepr)
+    length_guess = Int(floor(1 + log2(length(op.dict) + 1))) * dim(space) # mild increase with number of terms
+    return sparse_matrix_accumulator(mat_eltype(op), length_guess)
+end
+matrix_accumulator(op::Union{NCMul,OperatorSequence}, space, ::EagerSparseRepr) = sparse_matrix_accumulator(mat_eltype(op), dim(space))
+function sparse_matrix_accumulator(::Type{T}, N) where T
     outinds = Int[]
     ininds = Int[]
-    AT = mat_eltype(op)
-    amps = AT[]
+    amps = T[]
+    sizehint!(outinds, N)
+    sizehint!(ininds, N)
+    sizehint!(amps, N)
+    return (outinds, ininds, amps)
+end
+function add_identity!!((outinds, ininds, amps), coeff, space)
     N = dim(space)
-    length_guess = Int(floor(1 + log2(length(op.dict) + 1))) * N # mild increase with number of terms
-    sizehint!(outinds, length_guess)
-    sizehint!(ininds, length_guess)
-    sizehint!(amps, length_guess)
+    append!(ininds, 1:N)
+    append!(outinds, 1:N)
+    append!(amps, Fill(coeff, N))
+end
+function finalize!((outinds, ininds, amps), space)
+    N = dim(space)
+    isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, N)
+    return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
+end
+
+function matrix_accumulator(op, space, ::EagerDenseRepr)
+    T = mat_eltype(op)
+    N = dim(space)
+    zeros(T, N, N)
+end
+function add_identity!!(m::Matrix{T}, coeff, space) where T
+    m .+= coeff * I(size(m, 1))
+end
+function finalize!(m::Matrix, space)
+    return m
+end
+
+
+function _matrix_representation_single_space(op::NCAdd, space, repr::Union{EagerSparseRepr,EagerDenseRepr}; kwargs...)
+    accumulator = matrix_accumulator(op, space, repr)
     for (term, coeff) in op.dict
-        operator_indices_and_amplitudes!((outinds, ininds, amps), coeff * term, space; kwargs...)
+        operator_indices_and_amplitudes!(accumulator, coeff * term, space; kwargs...)
     end
     if !iszero(op.coeff)
-        append!(ininds, 1:N)
-        append!(outinds, 1:N)
-        append!(amps, Fill(op.coeff, N))
+        add_identity!!(accumulator, op.coeff, space)
     end
-    isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, N)
-    return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
+    finalize!(accumulator, space)
 end
 
 
-function _term_matrix_representation(op, H::AbstractHilbertSpace, ::EagerRepr; kwargs...)
-    _outinds = Int[]
-    _ininds = Int[]
-    AT = mat_eltype(op)
-    _amps = AT[]
-    N = dim(H)
-    sizehint!(_outinds, N)
-    sizehint!(_ininds, N)
-    sizehint!(_amps, N)
-    (outinds, ininds, amps) = operator_indices_and_amplitudes!((_outinds, _ininds, _amps), op, H; kwargs...)
-    isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, N)
-    return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
+function _term_matrix_representation(op, H::AbstractHilbertSpace, repr::Union{EagerSparseRepr,EagerDenseRepr}; kwargs...)
+    _accumulator = matrix_accumulator(op, H, repr)
+    accumulator = operator_indices_and_amplitudes!(_accumulator, op, H; kwargs...)
+    finalize!(accumulator, H)
 end
-function _factorized_term_matrix_representation(ops::OperatorSequence, H, ::EagerRepr; kwargs...)
-    _outinds = Int[]
-    _ininds = Int[]
-    AT = promote_type([mat_eltype(op) for op in ops.ops]...)
-    _amps = AT[]
-    N = dim(H)
-    sizehint!(_outinds, N)
-    sizehint!(_ininds, N)
-    sizehint!(_amps, N)
-    (outinds, ininds, amps) = operator_indices_and_amplitudes!((_outinds, _ininds, _amps), ops, H; kwargs...)
-    isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, N)
-    return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
+# mat_eltype(ops::OperatorSequence) = promote_type((mat_eltype ∘ typeof, ops.ops)...)
+# AT = promote_type([mat_eltype(op) for op in ops.ops]...)
+function _factorized_term_matrix_representation(ops::OperatorSequence, H, repr::Union{EagerSparseRepr,EagerDenseRepr}; kwargs...)
+    _accumulator = matrix_accumulator(ops, H, repr)
+    accumulator = operator_indices_and_amplitudes!(_accumulator, ops, H; kwargs...)
+    finalize!(accumulator, H)
 end
 
 # function apply_local_operator(op::NCMul{C,F}, state::AbstractFockState, space::AbstractHilbertSpace, (pos, daggers)) where {C,F<:AbstractFermionSym}
@@ -291,12 +314,8 @@ M = matrix_representation(op, H)
 size(M) == (dim(H), dim(H))
 ```
 """
-function matrix_representation(op, space::AbstractHilbertSpace; lazy=false, projection=false, kwargs...)
-    repr = if lazy isa LazyRepr
-        lazy
-    else
-        lazy ? LazyRepr() : EagerRepr()
-    end
+function matrix_representation(op, space::AbstractHilbertSpace, type=EagerSparseRepr(); projection=false, kwargs...)
+    repr = _process_type(type)
     if trivial_operator(op)
         return get_trivial_op_coeff(op) * I(dim(space))
     end
@@ -305,6 +324,14 @@ function matrix_representation(op, space::AbstractHilbertSpace; lazy=false, proj
     all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
     return _matrix_representation(op, space_groups, space, repr; projection, kwargs...)
 end
+_process_type(t) = t
+function _process_type(s::Symbol)
+    s == :sparse && return EagerSparseRepr()
+    s == :dense && return EagerDenseRepr()
+    s == :lazy && return LazyRepr()
+    throw(ArgumentError("Invalid type argument: $s. Expected :sparse, :dense, or :lazy."))
+end
+
 
 group_ids(space::ProductSpace) = unique(Iterators.map(group_id, factors(space)))
 group_ids(space::Union{AbstractAtomicHilbertSpace,AbstractGroupedHilbertSpace}) = (group_id(space),)

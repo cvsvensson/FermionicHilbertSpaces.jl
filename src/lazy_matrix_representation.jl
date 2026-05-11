@@ -59,15 +59,15 @@ Base.transpose(L::SciMLOperators.FunctionOperator{<:Any,<:Any,<:Any,<:Any,<:Lazy
 LinearAlgebra.ishermitian(L::LazyOperator) = L.ishermitian
 
 function _eager_matrix_representation(L::LazyOperator{<:NCMul})
-    return _term_matrix_representation(L.op, L.space, EagerRepr(); projection=L.projection)
+    return _term_matrix_representation(L.op, L.space, EagerSparseRepr(); projection=L.projection)
 end
 
 function _eager_matrix_representation(L::LazyOperator{<:OperatorSequence})
-    return _factorized_term_matrix_representation(L.op, L.space, EagerRepr(); projection=L.projection)
+    return _factorized_term_matrix_representation(L.op, L.space, EagerSparseRepr(); projection=L.projection)
 end
 
 function _eager_matrix_representation(L::LazyOperator{<:NCAdd})
-    return _matrix_representation_single_space(L.op, L.space, EagerRepr(); projection=L.projection)
+    return _matrix_representation_single_space(L.op, L.space, EagerSparseRepr(); projection=L.projection)
 end
 
 function Base.convert(::Type{AbstractMatrix}, L::LazyOperator)

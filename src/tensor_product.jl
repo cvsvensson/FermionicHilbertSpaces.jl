@@ -258,7 +258,6 @@ Compute the ordered product of the fermionic embeddings of the matrices `ms` in 
 function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     # isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
-    # println(ms)
     if all(m -> prod(size(m)) == maximum(size(m)), ms) # effectively vectors
         if all(m -> size(m, 2) == 1 && ndims(m) <= 2, ms)
             return generalized_kron(map(vec, ms), Hs, H; kwargs...)
