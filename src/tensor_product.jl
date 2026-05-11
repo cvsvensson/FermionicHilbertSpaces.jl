@@ -258,18 +258,23 @@ Compute the ordered product of the fermionic embeddings of the matrices `ms` in 
 function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     # isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
-    if all(m -> prod(size(m)) == maximum(size(m)), ms) # effectively vectors
-        if all(m -> size(m, 2) == 1 && ndims(m) <= 2, ms)
-            return generalized_kron(map(vec, ms), Hs, H; kwargs...)
-        elseif all(m -> size(m, 1) == 1 && ndims(m) <= 2, ms)
-            # All matrices are row vectors, so we can treat them as vectors and then reshape the result
-            return transpose(generalized_kron(map(vec, ms), Hs, H; kwargs...))
-        end
-    elseif all(isequal(2) ∘ ndims, ms)
+    if all(_issquare, ms)
         return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H, kwargs...), *, zip(ms, Hs))
+    elseif all(_isket, ms)
+        return generalized_kron(map(vec, ms), Hs, H; kwargs...)
+    elseif all(_isbra, ms)
+        # All matrices are row vectors, so we can treat them as vectors and then reshape the result
+        return transpose(generalized_kron(map(vec, ms), Hs, H; kwargs...))
     end
     throw(ArgumentError("All elements of `ms` in tensor_product must be either vectors or matrices"))
 end
+_issquare(m) = size(m, 1) == size(m, 2)
+_issquare(m::UniformScaling) = true
+_isket(m::AbstractVecOrMat) = ndims(m) == 1 || (ndims(m) == 2 && size(m, 2) == 1)
+_isket(m::UniformScaling) = false
+_isbra(m::AbstractVecOrMat) = ndims(m) == 2 && size(m, 1) == 1
+_isbra(m::UniformScaling) = false
+
 tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
 tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
 
