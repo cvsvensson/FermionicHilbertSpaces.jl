@@ -30,10 +30,10 @@ _concretize(op::OperatorSequence) = OperatorSequence(map(_concretize, op.ops))
 _default_concretize(op, space) = dim(space) > 1000
 _default_concretize(op::OperatorSequence, space) = false
 
-function operator_indices_and_amplitudes!((outinds, ininds, amps), op, space::AbstractHilbertSpace; concretize=_default_concretize(op, space), kwargs...)
+function operator_indices_and_amplitudes!(accumulator, op, space::AbstractHilbertSpace; concretize=_default_concretize(op, space), kwargs...)
     concrete_op = concretize ? _concretize(op) : op # op is often an NCMul with Abstract types, so one might benefit from making it concrete. 
     precomp = _precomputation_before_operator_application(concrete_op, space)
-    return operator_indices_and_amplitudes_generic!((outinds, ininds, amps), concrete_op, space, precomp; kwargs...)
+    return operator_indices_and_amplitudes_generic!(accumulator, concrete_op, space, precomp; kwargs...)
 end
 
 function operator_indices_and_amplitudes_generic!(accumulator, op, space::AbstractHilbertSpace, precomp; projection)
