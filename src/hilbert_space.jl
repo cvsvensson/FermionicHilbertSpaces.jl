@@ -18,7 +18,7 @@ atomic_id(H::GenericHilbertSpace) = H.label
 add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag), H.basisstates, H.state_index)
 
 @testitem "GenericHilbertSpace, ProductSpace" begin
-    using FermionicHilbertSpaces: GenericHilbertSpace
+    using FermionicHilbertSpaces: GenericHilbertSpace, Kets, fast_path
     using LinearAlgebra
     H1 = GenericHilbertSpace(:A, [:a, :b])
     H2 = GenericHilbertSpace(:B, [:c, :d])
@@ -36,6 +36,18 @@ add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag)
     P3 = tensor_product(Hf, P)
     @test P3 == P2
     @test_throws ArgumentError tensor_product(Hf, P2)
+
+    # GenericHilbertSpace does not define internal_rep/physical_rep,
+    # so constrained product spaces must dispatch through the slow operator path.
+    Hmixed = tensor_product(constrain_space(Hf, NumberConservation()), H1)
+    @test ismissing(fast_path(Hmixed))
+    vg = Kets(H1)
+    opg = vg(:a) * vg(:b)'
+    op = opg * (f[1]' * f[1])
+    M = matrix_representation(op, Hmixed)
+    Mexpected = embed(matrix_representation(opg, H1), H1 => Hmixed) *
+                embed(matrix_representation(f[1]' * f[1], Hf), Hf => Hmixed)
+    @test M == Mexpected
 end
 
 

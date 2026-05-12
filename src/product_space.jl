@@ -503,8 +503,9 @@ function _apply_local_operators_slow(ops::ProductOperator, state::ProductState{B
     amp = 1
     spaces = factors(space)
     newstates = state.states
-    for (n, (op, local_space)) in enumerate(ops.pairs) 
+    for (n, op) in enumerate(ops.ops)
         ismissing(op) && continue
+        local_space = ops.spaces[n]
         subst = state.states[n]
         precomp = precomps[n]
         new_local_state, local_amp = _apply_local_operators(op, subst, local_space, precomp)

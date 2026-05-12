@@ -393,8 +393,9 @@ end
 end
 
 
-@testitem "Dense/sparse/lazy matrix parity" begin
+@testitem "Dense/sparse/lazy matrix representation agree" begin
     using SparseArrays, LinearAlgebra
+    import FermionicHilbertSpaces.SciMLOperators: concretize
     @fermions f
     @spin s 1 // 2
 

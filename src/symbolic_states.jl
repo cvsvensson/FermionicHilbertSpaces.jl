@@ -121,12 +121,12 @@ function NonCommutativeProducts.mul_effect(a::SymbolicState, b::SymbolicState)
     return nothing
 end
 
-function apply_local_operator(op::SymbolicState, state::AbstractBasisState, space::AbstractHilbertSpace, precomp)
+function apply_local_operator(op::SymbolicState, state, space::AbstractHilbertSpace, precomp)
     _same_space_id(space, op.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
     isketbra(op) || throw(ArgumentError("apply_local_operator is only defined for ketbra SymbolicState operators"))
     return state == op.bra ? (op.ket, 1) : (state, 0)
 end
-function apply_local_operators(_op::NCMul{C,<:SymbolicState}, state::AbstractBasisState, space::AbstractHilbertSpace, precomp) where C
+function apply_local_operators(_op::NCMul{C,<:SymbolicState}, state, space::AbstractHilbertSpace, precomp) where C
     op = only(_op.factors)
     _same_space_id(space, op.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
     isketbra(op) || throw(ArgumentError("apply_local_operator is only defined for ketbra SymbolicState operators"))
@@ -206,13 +206,13 @@ end
 For a product of ket SymbolicStates, apply each ket's operator action in sequence
 and return a sparse column vector. For bras, return the adjoint row vector.
 """
-function vector_representation(state::AbstractBasisState, space::AbstractHilbertSpace, repr::EagerSparseRepr=EagerSparseRepr(); T=Int, kwargs...)
+function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr=EagerSparseRepr(); T=Int, kwargs...) where B
     ind = state_index(state, space)
     v = SparseArrays.spzeros(T, dim(space))
     v[ind] = one(T)
     return v
 end
-function vector_representation(state::AbstractBasisState, space::AbstractHilbertSpace, repr::EagerDenseRepr; T=Int, kwargs...)
+function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerDenseRepr; T=Int, kwargs...) where B
     ind = state_index(state, space)
     v = zeros(T, dim(space))
     v[ind] = one(T)
