@@ -72,7 +72,7 @@ for alg in [SubsystemPartialTraceAlg(), FullPartialTraceAlg()]
     def_alg = default_partial_trace_alg(mat, Hsub, H, Hcomp)
     def = _name(def_alg)
     SUITE["partial_trace_algorithms"]["default=$def"]["Sparse space"]["Dense"]["$name"] =
-    @benchmarkable partial_trace($mat, $H, $Hsub; alg=$alg)
+        @benchmarkable partial_trace($mat, $H, $Hsub; alg=$alg)
     def_alg = default_partial_trace_alg(matsparse, Hsub, H, Hcomp)
     def = _name(def_alg)
     SUITE["partial_trace_algorithms"]["default=$def"]["Sparse space"]["Sparse"]["$name"] =
@@ -118,3 +118,41 @@ m = rand(ComplexF64, dim(H), dim(H))
 SUITE["partial_trace"]["product space"]["standard"] = @benchmarkable partial_trace($m, $(H => Hsub); complement=$complement)
 msub = rand(ComplexF64, dim(Hsub), dim(Hsub))
 SUITE["embed"]["product space"] = @benchmarkable embed($msub, $(Hsub => H); complement=$complement)
+
+# Larger product spaces with many atomic factors
+@fermions f
+@bosons b
+Hf = hilbert_space(f, 1:2)
+Hb = hilbert_space(b, 1:10, 2)
+
+Hprod = tensor_product(Hf, Hb)
+op_prod = sum((0.2n) * f[n]' * f[n] for n in 1:2)
+op_prod += 0.1 * (f[2]' * f[1] + hc)
+op_prod += sum((0.05n) * b[n]' * b[n] for n in 1:10)
+op_prod += sum(0.03 * (b[n+1]' * b[n] + hc) for n in 1:9)
+SUITE["matrix_representation"]["product space many spaces"] = @benchmarkable matrix_representation($op_prod, $Hprod)
+
+Hb_cons = hilbert_space(b, 1:18, 2, NumberConservation(0:1))
+Hprod_cons = tensor_product(Hf, Hb_cons)
+op_prod_cons = sum((0.15n) * f[n]' * f[n] for n in 1:2)
+op_prod_cons += 0.07 * (f[2]' * f[1] + hc)
+op_prod_cons += sum((0.04n) * b[n]' * b[n] for n in 1:18)
+op_prod_cons += sum(0.02 * (b[n+1]' * b[n] + hc) for n in 1:17)
+SUITE["matrix_representation"]["product space many spaces constrained"] = @benchmarkable matrix_representation($op_prod_cons, $Hprod_cons)
+
+# Lazy Liouvillian application benchmark (application only)
+@fermions c
+N_liouv = 3
+Hopen, _, _, left, right = FermionicHilbertSpaces.open_system(c, 1:N_liouv)
+ham_liouv = sum((0.3n) * c[n]' * c[n] for n in 1:N_liouv) + sum(0.2im * c[n]' * c[n+1] + hc for n in 1:(N_liouv-1))
+dissipator(L) = left(L) * right(L') - 0.5 * (left(L' * L) + right(L' * L))
+jump_in = [sqrt(0.05 + 0.01n) * c[n]' for n in 1:N_liouv]
+jump_out = [sqrt(0.04 + 0.01n) * c[n] for n in 1:N_liouv]
+liouvillian = 1im * (left(ham_liouv) - right(ham_liouv)) + sum(dissipator(L) for L in jump_in) + sum(dissipator(L) for L in jump_out)
+L_lazy = matrix_representation(liouvillian, Hopen, :lazy)
+v_lazy = randn(ComplexF64, dim(Hopen))
+vout = copy(v_lazy)
+using LinearAlgebra
+L_lazy = FermionicHilbertSpaces.SciMLOperators.cache_operator(L_lazy, v_lazy)
+SUITE["matrix_application"]["lazy liouvillian"]["apply"] = @benchmarkable mul!($vout, $L_lazy, $v_lazy)
+

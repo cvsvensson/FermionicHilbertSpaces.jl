@@ -27,7 +27,7 @@ basisstate(ind, ::FermionicSpace{F}) where F = (F ∘ FockNumber)(ind - 1)
 state_index(state::FockNumber, ::FermionicSpace) = state.f + 1
 function dim(H::FermionicSpace)
     N = nbr_of_modes(H)
-    N < 63 ? 2^N : BigInt(2)^N
+    N < 63 ? 1 << N : BigInt(1) << N
 end
 atomic_factors(H::FermionicSpace) = map(hilbert_space, H.modes)
 nbr_of_modes(H::FermionicSpace) = length(H.modes)
