@@ -105,6 +105,35 @@ hilbert_space(sym::SpinField{Nothing}, labels, J, constraint=NoSymmetry()) = ten
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
 
+function interpret_state(input::AbstractString, ::SpinSpace{J,M}) where {J,M}
+    if input in ("up", "↑")
+        return SpinState(J)
+    elseif input in ("down", "↓")
+        return SpinState(-J)
+    end
+    if M <: Integer
+        m = try
+            parse(Int, input)
+        catch
+            throw(ArgumentError("Invalid spin state string \"$input\""))
+        end
+        if m < -J || m > J
+            throw(ArgumentError("Spin state m must be between -J and J, got $m for J=$J."))
+        end
+    end
+    if M <: Rational
+        m = try
+            parse(Rational, input)
+        catch
+            throw(ArgumentError("Invalid spin state string \"$input\""))
+        end
+        if m < -J || m > J
+            throw(ArgumentError("Spin state m must be between -J and J, got $m for J=$J."))
+        end
+    end
+    throw(ArgumentError("Unsupported spin state input \"$input\"."))
+end
+
 function spin_basisstates(::Val{J}) where {J}
     states = [SpinState{typeof(J)}(i - J) for i in 0:2J]
     return states

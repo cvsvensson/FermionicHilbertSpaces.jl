@@ -8,7 +8,16 @@ struct SymbolicState{K,B,H} <: AbstractSym
     ket::K
     bra::B
 end
-SymbolicState(state, space) = SymbolicState(space, state, nothing)
+function SymbolicState(space::ProductSpace, ket::ProductState, bra::Nothing)
+    mapreduce(SymbolicState, *, space.factors, ket.states)
+end
+function SymbolicState(space::ProductSpace, ket::Nothing, bra::ProductState)
+    mapreduce(SymbolicState, *, space.factors, Ref(nothing), bra.states)
+end
+function SymbolicState(space::ProductSpace, ket::ProductState, bra::ProductState)
+    mapreduce(SymbolicState, *, space.factors, ket.states, bra.states)
+end
+SymbolicState(space, state) = SymbolicState(space, state, nothing)
 has_ket(s::SymbolicState) = !isnothing(s.ket)
 has_bra(s::SymbolicState) = !isnothing(s.bra)
 isket(s::SymbolicState) = has_ket(s) && !has_bra(s)
@@ -43,6 +52,7 @@ atomic_id(s::SymbolicState) = (atomic_id(s.space), s.ket, s.bra)
 @nc SymbolicState AbstractSym
 
 interpret_state(state::B, ::Type{B}) where B = state
+interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
 
 function interpret_state(input::AbstractString, ::Type{B}) where {I,B<:FockNumber{I}}
     all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only '0' and '1', got \"$input\""))
@@ -59,11 +69,9 @@ function interpret_state(input::AbstractString, ::Type{BosonicState})
     BosonicState(n)
 end
 
-function interpret_state(input::Tuple, ::Type{ProductState{T}}) where {T<:Tuple}
-    types = fieldtypes(T)
-    length(input) == length(types) || throw(ArgumentError("Product-state tuple has length $(length(input)), expected $(length(types))"))
-    parsed = ntuple(i -> interpret_state(input[i], types[i]), length(types))
-    return ProductState(parsed)
+function interpret_state(input, space::ProductSpace)
+    length(input) == length(factors(space)) || throw(ArgumentError("Product-state input must have length $(length(factors(space))), got $(length(input))"))
+    return ProductState(map(interpret_state, input, factors(space)))
 end
 
 function (k::Kets{B})(inputs...) where B
@@ -74,7 +82,7 @@ function (k::Kets{B})(inputs...) where B
     else
         throw(ArgumentError("Expected a single state input for non-product spaces, got $(length(inputs))"))
     end
-    parsed = interpret_state(raw, B)
+    parsed = interpret_state(raw, k.space)
     return SymbolicState(k.space, parsed, nothing)
 end
 
@@ -141,7 +149,7 @@ function NonCommutativeProducts.mul_effect(op::AbstractSym, s::SymbolicState)
         return _order_hash(op) > _order_hash(s) ? Swap(1) : nothing
     end
     if !has_ket(s)
-        return nothing
+        throw(ArgumentError("Cannot act with operator $op on the left of $s"))
     end
     newket, amp = _apply_symbolic_operator_to_state(op, s.ket, s.space)
     return iszero(amp) ? 0 : amp * SymbolicState(s.space, newket, s.bra)
@@ -152,7 +160,7 @@ function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
         return _order_hash(s) > _order_hash(op) ? Swap(1) : nothing
     end
     if !has_bra(s)
-        return nothing
+        throw(ArgumentError("Cannot act with operator $op on the right of $s"))
     end
     newbra, amp = _apply_symbolic_operator_to_state(op, s.bra, s.space; transpose=true)
     return iszero(amp) ? 0 : amp * SymbolicState(s.space, s.ket, newbra)
@@ -322,6 +330,9 @@ end
 
     @test vf("10")' * vf("10") == 1
     @test vf("10")' * vf("11") == 0
+    @test iszero(f[1] * vf("00"))
+    @test_throws ArgumentError f[1] * vf("0")'
+    @test_throws ArgumentError vf("0") * f[1]
 
     Mouter = representation(vf("10") * vf("10")', Hf)
     @test Mouter[state_index(vf("10").ket, Hf), state_index(vf("10").ket, Hf)] == 1
@@ -348,11 +359,14 @@ end
     @test vb("3")' * vb("4") == 0
 
     H = tensor_product(Hf, Hb)
-    sb = vb("1")
+    vfb = Kets(H)
+    sb = vb("2")
     sf = vf("0")
     rep = representation(sb * sf, H)
     @test rep ≈ tensor_product((representation(sf), representation(sb)), (Hf, Hb) => H)
     @test size(rep) == (dim(H),)
+    @test sb * sf == vfb("0", "2")
+    @test sb * sf * (sb * sf)' == vfb("0", "2") * vfb("0", "2")'
 
     sb = 0.5 * vb("1")' + 1im * vb("4")' + 2 * vb("2")'
     sf = vf("0")' + 10 * vf("1")'
@@ -395,4 +409,71 @@ end
     Hcons = constrain_space(H, NumberConservation())
     representation(opb, Hcons) * representation(opf, Hcons) == representation(opb, Hcons) * representation(opf, Hcons)
     @test b' * op == (sqrt(2) * vb("2")vb("0")' + sqrt(2) * vb("2")vb("4")') * opf
+end
+
+@testitem "Interleaved operators and states in product spaces" begin
+    using LinearAlgebra
+    @fermions f
+    @boson b
+
+    Hf = hilbert_space(f, 1:2)
+    Hb = hilbert_space(b, 4)
+    H = tensor_product(Hf, Hb)
+    vf = Kets(Hf)
+    vb = Kets(Hb)
+    vfb = Kets(H)
+
+    # Test: op_f * vf_ket * op_b * vb_ket should reorder to op_f * op_b * vf_ket * vb_ket
+    # Mixed order: operator_f, state_f, operator_b, state_b
+    mixed = f[1]' * vf("0") * b' * vb("2")
+    @test mixed == b' * f[1]' * vf("0") * vb("2")
+    @test mixed == b' * f[1]' * vb("2") * vf("0")
+    @test mixed == f[1]' * b' * vf("0") * vb("2")
+    @test mixed == f[1]' * b' * vfb("0", "2")
+
+    # Test with adjoint (bra)
+    mixed = vb("2")'vf("0")' * f[1] * b'
+    @test mixed == vf("0")' * vb("2")' * f[1] * b'
+    @test mixed == vf("0")' * f[1] * vb("2")' * b'
+    @test mixed == vb("2")' * vf("0")' * f[1] * b'
+    @test mixed == vfb("0", "2")' * f[1] * b'
+
+    num = vb("2")'vf("0")' * f[1] * b' * vb("1")vf("1")
+    @test iszero(num - sqrt(2))
+    @test num == vb("2")'vf("0")' * f[1] * b' * vf("1")vb("1")
+    @test num == vb("2")'vf("0")' * b' * f[1] * vf("1")vb("1")
+    @test num == vf("0")'vb("2")' * b' * f[1] * vf("1")vb("1")
+    @test num == vf("0")' * f[1] * vb("2")' * b' * vb("1")vf("1")
+    @test num == vf("0")' * f[1] * vb("2")' * vf("1") * b' * vb("1")
+    @test num == vfb("0", "2")' * f[1] * b' * vfb("1", "1")
+
+    opf = vf("1")vf("0")'
+    opb = vb("0")vb("1")'
+    mixed = opf * opb * f[1] * b'
+    @test opf * opb == vfb("1", "0") * vfb("0", "1")'
+    @test mixed == opf * f[1] * opb * b'
+    @test mixed == opb * opf * b' * f[1]
+    @test mixed * vf("1") == vb("0")vb("0")' * vf("1")
+    @test mixed * vb("0") == vf("1")vf("1")' * vb("0")
+    @test FermionicHilbertSpaces._operator_type(mixed) == :ketbras
+
+    @spin s 1 // 2
+    Hs = hilbert_space(s)
+    vs = Kets(Hs)
+    vfbs = Kets(tensor_product(Hf, Hs, Hb))
+    @test vb("0") * vs("↑") * vf("1") == vfbs("1", "↑", "0")
+
+    @test iszero((vb("0") * vs("↑") * vf("0"))' * vb("0") * vs("↑") * vf("0") - 1)
+    long_op = s[:x] * f[1] * b * (1 + s[:y]) * (1 + f[2]') * (1 + s[:z]) * b' + hc
+    ket = long_op * vb("0") * vs("↑") * vf("1")
+    @test FermionicHilbertSpaces._operator_type(ket) == :kets
+    bra = (vb("0") * vs("↑") * vf("0"))' * long_op
+    @test FermionicHilbertSpaces._operator_type(bra) == :bras
+
+    num = (vb("0") * vs("↑") * vf("0"))' * long_op * vb("0") * vs("↑") * vf("1")
+    @test FermionicHilbertSpaces.NonCommutativeProducts.isscalar(num)
+    @test num == vfbs("0", "↑", "0")' * long_op * vfbs("1", "↑", "0")
+
+    ketbra = vb("0") * vs("↑") * vf("1") * (vb("0") * vs("↑") * vf("0"))'
+    @test FermionicHilbertSpaces._operator_type(ketbra) == :ketbras
 end
