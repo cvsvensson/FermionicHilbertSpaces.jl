@@ -111,9 +111,7 @@ end
 function _apply_single_term!(y::AbstractVector, x::SparseArrays.AbstractSparseVector, space, term, precomp, _coeff, conjugate, projection)
     coeff = (conjugate ? conj(_coeff) : _coeff)
     inds, vals = findnz(x)
-    for k in eachindex(inds)
-        n = inds[k]
-        xn = vals[k]
+    for (n, xn) in zip(inds, vals)
         state = basisstate(n, space)
         state, _amp = _apply_local_operators(term, state, space, precomp)
         if !iszero(_amp)

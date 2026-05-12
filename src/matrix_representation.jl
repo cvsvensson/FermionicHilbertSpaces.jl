@@ -278,8 +278,8 @@ M = matrix_representation(op, H)
 size(M) == (dim(H), dim(H))
 ```
 """
-function matrix_representation(op, space::AbstractHilbertSpace, repr::Symbol; projection=false, kwargs...)
-    repr == :lazy && return matrix_representation(op, space; lazy=true, projection, kwargs...)
+function matrix_representation(op, space::AbstractHilbertSpace, repr::Symbol; kwargs...)
+    repr == :lazy && return matrix_representation(op, space; lazy=true, kwargs...)
 end
 
 function matrix_representation(op, space::AbstractHilbertSpace; lazy=false, projection=false, kwargs...)

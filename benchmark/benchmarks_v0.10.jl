@@ -142,17 +142,21 @@ SUITE["matrix_representation"]["product space many spaces constrained"] = @bench
 
 # Lazy Liouvillian application benchmark (application only)
 @fermions c
-N_liouv = 3
-Hopen, _, _, left, right = FermionicHilbertSpaces.open_system(c, 1:N_liouv)
-ham_liouv = sum((0.3n) * c[n]' * c[n] for n in 1:N_liouv) + sum(0.2im * c[n]' * c[n+1] + hc for n in 1:(N_liouv-1))
+N = 8
+Hopen, _, _, left, right = FermionicHilbertSpaces.open_system(c, 1:N)
+ham_liouv = sum((0.3n) * c[n]' * c[n] for n in 1:N) + sum(0.2im * c[n]' * c[n+1] + hc for n in 1:(N-1))
 dissipator(L) = left(L) * right(L') - 0.5 * (left(L' * L) + right(L' * L))
-jump_in = [sqrt(0.05 + 0.01n) * c[n]' for n in 1:N_liouv]
-jump_out = [sqrt(0.04 + 0.01n) * c[n] for n in 1:N_liouv]
+jump_in = [sqrt(0.05 + 0.01n) * c[n]' for n in 1:N]
+jump_out = [sqrt(0.04 + 0.01n) * c[n] for n in 1:N]
 liouvillian = 1im * (left(ham_liouv) - right(ham_liouv)) + sum(dissipator(L) for L in jump_in) + sum(dissipator(L) for L in jump_out)
-L_lazy = matrix_representation(liouvillian, Hopen, :lazy)
-v_lazy = randn(ComplexF64, dim(Hopen))
-vout = copy(v_lazy)
+L = matrix_representation(liouvillian, Hopen, :lazy)
+# L = matrix_representation(left(c[1]), Hopen, :lazy)
+v = randn(ComplexF64, dim(Hopen))
+vout = copy(v)
 using LinearAlgebra
-L_lazy = FermionicHilbertSpaces.SciMLOperators.cache_operator(L_lazy, v_lazy)
-SUITE["matrix_application"]["lazy liouvillian"]["apply"] = @benchmarkable mul!($vout, $L_lazy, $v_lazy)
+# SUITE["matrix_application"]["lazy liouvillian"]["apply"] = @benchmarkable $L * $v
+L_cached = FermionicHilbertSpaces.SciMLOperators.cache_operator(L, v)
+SUITE["matrix_application"]["lazy liouvillian"]["mul!"] = @benchmarkable mul!($vout, $L_cached, $v)
+vs = sprand(ComplexF64, dim(Hopen), 0.001)
+SUITE["matrix_application"]["lazy liouvillian"]["mul sparse"] = @benchmarkable $L * $vs
 
