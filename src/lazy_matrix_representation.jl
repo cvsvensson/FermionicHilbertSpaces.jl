@@ -14,6 +14,7 @@ struct LazyOperator{O,S,T,P}
     projection::Bool
     conjugate::Bool
     ishermitian::Bool
+    size::Tuple{Int,Int}
 end
 
 function _show_lazy_operator_expression(io::IO, L::LazyOperator)
@@ -29,7 +30,7 @@ end
 
 function LazyOperator(op::O, space::S, precomp::P=_precomputation_before_operator_application(op, space); projection=false, conjugate=false, ishermitian=_ishermitian(op), T=mat_eltype(op),
 ) where {O,S,P}
-    LazyOperator{O,S,T,P}(op, space, precomp, projection, conjugate, ishermitian)
+    LazyOperator{O,S,T,P}(op, space, precomp, projection, conjugate, ishermitian, (dim(space), dim(space)))
 end
 function scimloperator(L::LazyOperator, input=Vector{eltype(L)}(undef, dim(L.space)), output=input; kwargs...)
     SciMLOperators.FunctionOperator(L, input, output; ishermitian=ishermitian(L), op_adjoint=adjoint(L), isconstant=true, T=eltype(L), islinear=true, batch=true, kwargs...)
@@ -45,7 +46,7 @@ function _ishermitian(x::ProductOperator)
 end
 mat_eltype(x::ProductOperator) = promote_type(map(mat_eltype, skipmissing(x.ops))...)
 
-Base.size(L::LazyOperator) = (dim(L.space), dim(L.space))
+Base.size(L::LazyOperator) = L.size
 Base.size(L::LazyOperator, i::Int) = size(L)[i]
 Base.eltype(::LazyOperator{O,S,T,P}) where {O,S,T,P} = T
 Base.conj(L::LazyOperator) = LazyOperator(L.op, L.space, L.precomp; projection=L.projection, conjugate=!L.conjugate, transpose=L.transpose, ishermitian=L.ishermitian)
@@ -110,9 +111,7 @@ end
 function _apply_single_term!(y::AbstractVector, x::SparseArrays.AbstractSparseVector, space, term, precomp, _coeff, conjugate, projection)
     coeff = (conjugate ? conj(_coeff) : _coeff)
     inds, vals = findnz(x)
-    for k in eachindex(inds)
-        n = inds[k]
-        xn = vals[k]
+    for (n, xn) in zip(inds, vals)
         state = basisstate(n, space)
         state, _amp = _apply_local_operators(term, state, space, precomp)
         if !iszero(_amp)

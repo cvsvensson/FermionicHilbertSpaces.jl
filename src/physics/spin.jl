@@ -192,13 +192,15 @@ struct SpinSym{B} <: AbstractSym
         end
     end
 end
-const _spin_x_aliases = Set((:x, :X, 1))
-const _spin_y_aliases = Set((:y, :Y, 2))
-const _spin_z_aliases = Set((:z, :Z, 3))
-const _spin_identity_aliases = Set((:I, 0))
-const _spin_plus_aliases = Set((:+, :plus, :p))
-const _spin_minus_aliases = Set((:-, :minus, :m))
+const _spin_x_aliases = (:x, :X, 1)
+const _spin_y_aliases = (:y, :Y, 2)
+const _spin_z_aliases = (:z, :Z, 3)
+const _spin_identity_aliases = (:I, 0)
+const _spin_plus_aliases = (:+, :plus, :p)
+const _spin_minus_aliases = (:-, :minus, :m)
+_iscanonical(op) = op in (:+, :-, :z)
 function _canonical_spin_alias(op)
+    _iscanonical(op) && return op
     if op in _spin_z_aliases
         :z
     elseif op in _spin_plus_aliases
