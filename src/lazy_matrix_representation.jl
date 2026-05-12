@@ -27,16 +27,9 @@ function Base.show(io::IO, L::LazyOperator)
     show(IOContext(io, :compact => true), L.space)
 end
 
-function LazyOperator(op::O, space::S, precomp::P; projection=false, conjugate=false, ishermitian=_ishermitian(op), T=mat_eltype(op), concretize=_default_concretize(op, space),
+function LazyOperator(op::O, space::S, precomp::P=_precomputation_before_operator_application(op, space); projection=false, conjugate=false, ishermitian=_ishermitian(op), T=mat_eltype(op),
 ) where {O,S,P}
-    concrete_op = concretize ? _concretize(op) : op
-    LazyOperator{typeof(concrete_op),S,T,P}(concrete_op, space, precomp, projection, conjugate, ishermitian)
-end
-function LazyOperator(op::O, space::S; projection=false, conjugate=false, ishermitian=_ishermitian(op), T=mat_eltype(op), concretize=_default_concretize(op, space),
-) where {O,S}
-    concrete_op = concretize ? _concretize(op) : op
-    precomp = _precomputation_before_operator_application(concrete_op, space)
-    LazyOperator{typeof(concrete_op),S,T,typeof(precomp)}(concrete_op, space, precomp, projection, conjugate, ishermitian)
+    LazyOperator{O,S,T,P}(op, space, precomp, projection, conjugate, ishermitian)
 end
 function scimloperator(L::LazyOperator, input=Vector{eltype(L)}(undef, dim(L.space)), output=input; kwargs...)
     SciMLOperators.FunctionOperator(L, input, output; ishermitian=ishermitian(L), op_adjoint=adjoint(L), isconstant=true, T=eltype(L), islinear=true, batch=true, kwargs...)
@@ -47,10 +40,10 @@ end
 
 _ishermitian(x::NCMul) = iszero(x - hc)
 _ishermitian(x::NCAdd) = iszero(x - hc)
-function _ishermitian(x::OperatorSequence)
-    _ishermitian(prod(x.ops))
+function _ishermitian(x::ProductOperator)
+    _ishermitian(prod(skipmissing(x.ops)))
 end
-mat_eltype(x::OperatorSequence) = promote_type(map(mat_eltype, x.ops)...)
+mat_eltype(x::ProductOperator) = promote_type(map(mat_eltype, skipmissing(x.ops))...)
 
 Base.size(L::LazyOperator) = (dim(L.space), dim(L.space))
 Base.size(L::LazyOperator, i::Int) = size(L)[i]
@@ -69,7 +62,7 @@ function _eager_matrix_representation(L::LazyOperator{<:NCMul})
     return _term_matrix_representation(L.op, L.space, EagerSparseRepr(); projection=L.projection)
 end
 
-function _eager_matrix_representation(L::LazyOperator{<:OperatorSequence})
+function _eager_matrix_representation(L::LazyOperator{<:ProductOperator})
     return _factorized_term_matrix_representation(L.op, L.space, EagerSparseRepr(); projection=L.projection)
 end
 
@@ -173,7 +166,7 @@ function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCMul}, x::AbstractVec
     return y
 end
 
-function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:OperatorSequence}, x::AbstractVecOrMat, α, β)
+function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:ProductOperator}, x::AbstractVecOrMat, α, β)
     # This is for productspaces, where ops is a list of operators applying to each factor space
     rmul!(y, β)
     _apply_single_term!(y, x, L.space, L.op, L.precomp, α, L.conjugate, L.projection)
@@ -212,7 +205,7 @@ end
 function _term_matrix_representation(op::NCMul, H::AbstractHilbertSpace, rep::LazyRepr; kwargs...)
     scimloperator(LazyOperator(op, H; kwargs...), get_input(rep, H))
 end
-function _factorized_term_matrix_representation(ops::OperatorSequence, H, rep::LazyRepr; kwargs...)
+function _factorized_term_matrix_representation(ops::ProductOperator, H, rep::LazyRepr; kwargs...)
     scimloperator(LazyOperator(ops, H; kwargs...), get_input(rep, H))
 end
 function _matrix_representation_single_space(op::NCAdd, H, rep::LazyRepr; kwargs...)

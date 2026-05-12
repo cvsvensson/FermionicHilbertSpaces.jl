@@ -20,22 +20,9 @@ mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors i
 
 _precomputation_before_operator_application(factors, space) = nothing
 
-_concretize(op::NCMul) = op
-_concretize(op::NCAdd) = op
-__concretize(op::NCMul) = NCMul(op.coeff, length(op.factors) > 0 ? Tuple(op.factors) : op.factors)
-_concretize(op::NCMul{C,AbstractSym,F}) where {C,F} = __concretize(op)
-_concretize(op::NCMul{C,Any,F}) where {C,F} = __concretize(op)
-_concretize(op::OperatorSequence) = OperatorSequence(map(_concretize, op.ops))
-
-# These _default_concretize rules come from a bit of benchmarking
-_default_concretize(op, space) = true
-# _default_concretize(op, space) = dim(space) > 1000
-# _default_concretize(op::OperatorSequence, space) = false
-
-function operator_indices_and_amplitudes!(accumulator, op, space::AbstractHilbertSpace; concretize=_default_concretize(op, space), kwargs...)
-    concrete_op = concretize ? _concretize(op) : op # op is often an NCMul with Abstract types, so one might benefit from making it concrete. 
-    precomp = _precomputation_before_operator_application(concrete_op, space)
-    return operator_indices_and_amplitudes_generic!(accumulator, concrete_op, space, precomp; kwargs...)
+function operator_indices_and_amplitudes!(accumulator, op, space::AbstractHilbertSpace; kwargs...)
+    precomp = _precomputation_before_operator_application(op, space)
+    return operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp; kwargs...)
 end
 
 function operator_indices_and_amplitudes_generic!(accumulator, op, space::AbstractHilbertSpace, precomp; projection)
@@ -63,10 +50,11 @@ function push_inds_amps!((outinds, ininds, amps), outind, inind, amp)
     return nothing
 end
 function push_inds_amps!(m::Matrix, outind, inind, amp)
-    m[outind, inind] = amp
+    m[outind, inind] += amp
 end
 
 
+_apply_local_operators(op::Missing, state, space, precomp) = state, 1
 function _apply_local_operators(op, state, space, precomp)
     apply_local_operators(op, state, space, precomp; transpose=false)
 end
@@ -86,96 +74,87 @@ function apply_local_operators(_op::NCMul, state, space, precomp; transpose)
 end
 
 
-## 
-remove_identity(a::NCMul) = a
-remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict)
-
-## Symmetries
-isnumberconserving(x::AbstractFermionSym) = false
-isnumberconserving(x::NCMul) = iszero(sum(s -> 2s.creation - 1, x.factors))
-isnumberconserving(x::NCAdd) = all(isnumberconserving, NCterms(x))
-
-isparityconserving(x::AbstractFermionSym) = false
-isparityconserving(x::NCMul) = iseven(length(x.factors))
-isparityconserving(x::NCAdd) = all(isparityconserving, NCterms(x))
-
-isquadratic(::AbstractFermionSym) = false
-isquadratic(x::NCMul) = length(x.factors) == 2
-isquadratic(x::NCAdd) = all(isquadratic, NCterms(x))
-
-@testitem "Fermion symmetry property checks" begin
-    import FermionicHilbertSpaces: isnumberconserving, isparityconserving, isquadratic
-    @fermions f
-    # isnumberconserving
-    @test !isnumberconserving(f[1])
-    @test isnumberconserving(f[1]'f[2])
-    @test !isnumberconserving(f[1]f[2])
-    @test !isnumberconserving(f[1]'f[2] + f[3])
-    @test isnumberconserving(f[1]'f[2] + f[3]f[3]' + 1)
-    # isparityconserving
-    @test !isparityconserving(f[1])
-    @test isparityconserving(f[1]f[2])
-    @test !isparityconserving(f[1]f[2] * f[3])
-    @test !isparityconserving(f[1]f[2] + f[3])
-    @test isparityconserving(f[1]f[2] + f[3]f[3]' + 1)
-    # isquadratic
-    @test !isquadratic(f[1])
-    @test isquadratic(f[1]f[2])
-    @test !isquadratic(f[1]f[2] * f[3])
-    @test isquadratic(f[1]f[2] + f[3] * f[3]' + 1)
-end
-
-@testitem "Consistency between + and add!!" begin
-    import FermionicHilbertSpaces.NonCommutativeProducts.add!!
-    @fermions f
-    a = 1.0 * f[2] * f[1] + 1 + f[1]
-    for b in [1.0, 1, f[1], 1.0 * f[1], f[2] * f[1], a]
-        a2 = copy(a)
-        a3 = add!!(a2, b) # Should mutate
-        @test a + b == a3
-        @test a2 == a3
-        anew = add!!(a, 1im * b) #Should not mutate
-        @test a2 !== anew
-    end
-    @test a == 1.0 * f[2] * f[1] + 1 + f[1]
-end
-
 """
     partition_factors_by_basis(factors::Vector, bases::Vector)
 
 Partition a vector of operator factors into groups by their symbolic basis.
 """
 function partition_factors_by_basis(factors::Vector, bases)
-    partition = map(bases) do basis
-        filter(==(basis) ∘ symbolic_group, factors)
+    partition = Iterators.map(bases) do basis
+        v = filter(==(basis) ∘ symbolic_group, factors)
+        length(v) > 0 ? Tuple(v) : v #missing
     end
-    sum(length, partition) == length(factors) || throw(ArgumentError("Not all factors were assigned to a basis."))
+    sum(length, skipmissing(partition)) == length(factors) || throw(ArgumentError("Not all factors were assigned to a basis."))
     return partition
 end
+struct TupleConcretizer end
+struct VecConcretizer end
+struct NoConcretizer end
+___concretize(factors, ::TupleConcretizer) = Tuple(factors)
+___concretize(factors::AbstractVector, ::VecConcretizer) = map(identity, factors)
+___concretize(factors::Tuple, ::VecConcretizer) = collect(factors)
+___concretize(factors, ::NoConcretizer) = factors
 
+function partition_product(op::NCMul, bases, spaces, concr=VecConcretizer())
+    used_coeff = false
+    n = 0
+    ops = map(bases, spaces) do basis, space
+        v = filter(==(basis) ∘ symbolic_group, op.factors)
+        if length(v) > 0
+            vc = ___concretize(v, concr)
+            coeff = used_coeff ? one(op.coeff) : op.coeff
+            used_coeff = true
+            n += length(v)
+            return NCMul(coeff, vc)
+        end
+        return missing
+    end
+    n == length(op.factors) || throw(ArgumentError("Not all factors were assigned to a basis."))
+    return ProductOperator(___concretize(ops, concr), spaces)
+end
 
+import FillArrays: Eye
 function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr; kwargs...)
     spaces = factors(space)
-    partitioned = partition_factors_by_basis(op.factors, bases)
-    matrices = Iterators.map(partitioned, spaces, eachindex(spaces)) do factors, space, n
-        coeff = n == 1 ? op.coeff : one(op.coeff)
-        if isempty(factors)
-            return coeff * I(dim(space))
+    length(spaces) == 1 && return _term_matrix_representation(op, local_space, repr; kwargs...)
+
+    prodop = partition_product(op, bases, spaces)
+    matrices = map(prodop.ops, prodop.spaces) do op, local_space
+        ismissing(op) && return Eye(dim(local_space)) #I(dim(local_space))
+        _term_matrix_representation(op, local_space, repr; kwargs...)
+    end
+
+    mergedmatrices = _merge_diags(matrices)
+    length(spaces) == 1 && return first(mergedmatrices)
+    return foldl(kron, Iterators.reverse(mergedmatrices))
+end
+function _merge_diags(matrices)
+    # go through list of matrices and merge consecutive Diagonals with kron
+    newmats = Any[]
+    n = 1
+    while n <= length(matrices)
+        if matrices[n] isa Diagonal
+            m = 1
+            while m + n <= length(matrices) && matrices[n+m] isa Diagonal
+                m += 1
+            end
+            m > 1 ? push!(newmats, kron(matrices[n:n+m-1]...)) : push!(newmats, matrices[n])
+            n += m
         else
-            _term_matrix_representation(NCMul(coeff, factors), space, repr; kwargs...)
+            push!(newmats, matrices[n])
+            n += 1
         end
     end
-    length(spaces) == 1 && return first(matrices)
-    return foldl(kron, Iterators.reverse(matrices))
+    return newmats
 end
+
 function _matrix_representation(op::NCMul, bases, space, repr; kwargs...)
     if isempty(op.factors)
         return op.coeff * I(dim(space))
     else
         if length(bases) > 1
-            partition = partition_factors_by_basis(op.factors, bases)
-            vecops = OperatorSequence(map((n, ops) -> NCMul(n == 1 ? op.coeff : one(op.coeff), ops), eachindex(partition), partition))
-            return _factorized_term_matrix_representation(vecops, space, repr; kwargs...)
+            prodop = partition_product(op, bases, factors(space))
+            return _factorized_term_matrix_representation(prodop, space, repr; kwargs...)
         else
             return _term_matrix_representation(op, space, repr; kwargs...)
         end
@@ -190,12 +169,15 @@ end
 function _matrix_representation(op, bases, space, repr; kwargs...) #Assume op is a single symbolic operator
     _matrix_representation(NCMul(1, [op]), bases, space, repr; kwargs...)
 end
+function _matrix_representation(op::Missing, bases, space, repr; kwargs...)
+    Eye(dim(space))
+end
 
 function matrix_accumulator(op::NCAdd, space, ::EagerSparseRepr)
     length_guess = Int(floor(1 + log2(length(op.dict) + 1))) * dim(space) # mild increase with number of terms
     return sparse_matrix_accumulator(mat_eltype(op), length_guess)
 end
-matrix_accumulator(op::Union{NCMul,OperatorSequence}, space, ::EagerSparseRepr) = sparse_matrix_accumulator(mat_eltype(op), dim(space))
+matrix_accumulator(op::Union{NCMul,ProductOperator}, space, ::EagerSparseRepr) = sparse_matrix_accumulator(mat_eltype(op), dim(space))
 function sparse_matrix_accumulator(::Type{T}, N) where T
     outinds = Int[]
     ininds = Int[]
@@ -247,9 +229,7 @@ function _term_matrix_representation(op, H::AbstractHilbertSpace, repr::Union{Ea
     accumulator = operator_indices_and_amplitudes!(_accumulator, op, H; kwargs...)
     finalize!(accumulator, H)
 end
-# mat_eltype(ops::OperatorSequence) = promote_type((mat_eltype ∘ typeof, ops.ops)...)
-# AT = promote_type([mat_eltype(op) for op in ops.ops]...)
-function _factorized_term_matrix_representation(ops::OperatorSequence, H, repr::Union{EagerSparseRepr,EagerDenseRepr}; kwargs...)
+function _factorized_term_matrix_representation(ops::ProductOperator, H, repr::Union{EagerSparseRepr,EagerDenseRepr}; kwargs...)
     _accumulator = matrix_accumulator(ops, H, repr)
     accumulator = operator_indices_and_amplitudes!(_accumulator, ops, H; kwargs...)
     finalize!(accumulator, H)
@@ -263,7 +243,7 @@ end
 
 ## Automatic basis inference from operator
 """
-    extract_symbolic_bases(op)
+    symbolic_groups(op)
 
 Extract all unique symbolic bases from an operator expression.
 Returns a set of unique bases found in the operator.
@@ -335,7 +315,8 @@ function _process_type(s::Symbol)
 end
 
 
-group_ids(space::ProductSpace) = unique(Iterators.map(group_id, factors(space)))
+# group_ids(space::ProductSpace) = unique(Iterators.map(group_id, factors(space)))
+group_ids(space::ProductSpace) = map(group_id, factors(space))
 group_ids(space::Union{AbstractAtomicHilbertSpace,AbstractGroupedHilbertSpace}) = (group_id(space),)
 group_ids(space::AbstractHilbertSpace) = group_ids(parent(space))
 
@@ -409,4 +390,82 @@ end
     @test_throws ArgumentError matrix_representation(op, Hs)
     @test_throws ArgumentError matrix_representation(op, Hf)
     @test_throws ArgumentError matrix_representation(op, Hg)
+end
+
+
+@testitem "Dense/sparse/lazy matrix parity" begin
+    using SparseArrays, LinearAlgebra
+    @fermions f
+    @spin s 1 // 2
+
+    Hf = hilbert_space(f, 1:2)
+    op = f[1]' * f[2] + 1im * f[2]' * f[1] + 2
+    Md = matrix_representation(op, Hf, :dense)
+    Ms = matrix_representation(op, Hf)
+    Ml = concretize(matrix_representation(op, Hf, :lazy))
+    @test Md == Ms
+    @test Md == Ml
+
+    Hs = hilbert_space(s)
+    Hprod = tensor_product(Hf, Hs)
+    op_prod = f[1]' * f[2] * s[:z] + 2 * f[2]' * f[1] * s[:x] + 1im
+    Md = matrix_representation(op_prod, Hprod, :dense)
+    Ms = matrix_representation(op_prod, Hprod)
+    Ml = concretize(matrix_representation(op_prod, Hprod, :lazy))
+    @test Md == Ms
+    @test Md == Ml
+end
+
+## 
+remove_identity(a::NCMul) = a
+remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict)
+
+## Symmetries
+isnumberconserving(x::AbstractFermionSym) = false
+isnumberconserving(x::NCMul) = iszero(sum(s -> 2s.creation - 1, x.factors))
+isnumberconserving(x::NCAdd) = all(isnumberconserving, NCterms(x))
+
+isparityconserving(x::AbstractFermionSym) = false
+isparityconserving(x::NCMul) = iseven(length(x.factors))
+isparityconserving(x::NCAdd) = all(isparityconserving, NCterms(x))
+
+isquadratic(::AbstractFermionSym) = false
+isquadratic(x::NCMul) = length(x.factors) == 2
+isquadratic(x::NCAdd) = all(isquadratic, NCterms(x))
+
+@testitem "Fermion symmetry property checks" begin
+    import FermionicHilbertSpaces: isnumberconserving, isparityconserving, isquadratic
+    @fermions f
+    # isnumberconserving
+    @test !isnumberconserving(f[1])
+    @test isnumberconserving(f[1]'f[2])
+    @test !isnumberconserving(f[1]f[2])
+    @test !isnumberconserving(f[1]'f[2] + f[3])
+    @test isnumberconserving(f[1]'f[2] + f[3]f[3]' + 1)
+    # isparityconserving
+    @test !isparityconserving(f[1])
+    @test isparityconserving(f[1]f[2])
+    @test !isparityconserving(f[1]f[2] * f[3])
+    @test !isparityconserving(f[1]f[2] + f[3])
+    @test isparityconserving(f[1]f[2] + f[3]f[3]' + 1)
+    # isquadratic
+    @test !isquadratic(f[1])
+    @test isquadratic(f[1]f[2])
+    @test !isquadratic(f[1]f[2] * f[3])
+    @test isquadratic(f[1]f[2] + f[3] * f[3]' + 1)
+end
+
+@testitem "Consistency between + and add!!" begin
+    import FermionicHilbertSpaces.NonCommutativeProducts.add!!
+    @fermions f
+    a = 1.0 * f[2] * f[1] + 1 + f[1]
+    for b in [1.0, 1, f[1], 1.0 * f[1], f[2] * f[1], a]
+        a2 = copy(a)
+        a3 = add!!(a2, b) # Should mutate
+        @test a + b == a3
+        @test a2 == a3
+        anew = add!!(a, 1im * b) #Should not mutate
+        @test a2 !== anew
+    end
+    @test a == 1.0 * f[2] * f[1] + 1 + f[1]
 end
