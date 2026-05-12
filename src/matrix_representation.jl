@@ -120,15 +120,27 @@ function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr; kwa
 
     prodop = partition_product(op, bases, spaces)
     matrices = map(prodop.ops, prodop.spaces) do op, local_space
-        ismissing(op) && return Eye(dim(local_space)) #I(dim(local_space))
         _term_matrix_representation(op, local_space, repr; kwargs...)
     end
 
-    mergedmatrices = _merge_diags(matrices)
+    mergedmatrices = _merge_diags(matrices, repr)
     length(spaces) == 1 && return first(mergedmatrices)
     return foldl(kron, Iterators.reverse(mergedmatrices))
 end
-function _merge_diags(matrices)
+function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}; kwargs...)
+    Eye(dim(space))
+end
+function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::LazyRepr; kwargs...)
+    SciMLOperators.IdentityOperator(dim(space))
+end
+function _matrix_representation(op::Missing, bases, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}; kwargs...)
+    Eye(dim(space))
+end
+function _matrix_representation(op::Missing, bases, space::AbstractHilbertSpace, repr::LazyRepr; kwargs...)
+    SciMLOperators.IdentityOperator(dim(space))
+end
+_merge_diags(matrices, repr::LazyRepr) = matrices 
+function _merge_diags(matrices, repr::Union{EagerDenseRepr, EagerSparseRepr})
     # go through list of matrices and merge consecutive Diagonals with kron
     newmats = Any[]
     n = 1
@@ -169,9 +181,7 @@ end
 function _matrix_representation(op, bases, space, repr; kwargs...) #Assume op is a single symbolic operator
     _matrix_representation(NCMul(1, [op]), bases, space, repr; kwargs...)
 end
-function _matrix_representation(op::Missing, bases, space, repr; kwargs...)
-    Eye(dim(space))
-end
+
 
 function matrix_accumulator(op::NCAdd, space, ::EagerSparseRepr)
     length_guess = Int(floor(1 + log2(length(op.dict) + 1))) * dim(space) # mild increase with number of terms
