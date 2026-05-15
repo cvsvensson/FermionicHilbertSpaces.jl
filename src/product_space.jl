@@ -13,17 +13,23 @@ Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
 
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
 # ProductSpaces consists of a list of atomic spaces and factor spaces
-struct ProductSpace{B,C,A,T} <: AbstractProductHilbertSpace{B}
+struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
     factors::C
     atoms::Vector{A}
     atom_ordering::Dict{A,Int}
     fast_path::T
+    lininds::LI
+    cartinds::CI
     function ProductSpace(factors::C, atoms::Vector{A}) where {C,A}
         length(factors) == 0 && throw(ArgumentError("Product space must have at least one factor"))
         B = ProductState{Tuple{map(statetype, factors)...}}
         atom_ordering = Dict{A,Int}(a => i for (i, a) in enumerate(atoms))
         fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
-        new{B,C,A,typeof(fast_path)}(factors, atoms, atom_ordering, fast_path)
+        lininds = LinearIndices(map(dim, factors))
+        cartinds = CartesianIndices(map(dim, factors))
+        LI = typeof(lininds)
+        CI = typeof(cartinds)
+        new{B,C,A,typeof(fast_path),LI,CI}(factors, atoms, atom_ordering, fast_path, lininds, cartinds)
     end
 end
 fast_path(space::ProductSpace) = space.fast_path
@@ -39,12 +45,12 @@ group_id(H::ProductSpace) = H.atom_ordering
 
 basisstates(H::ProductSpace) = collect(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
 function basisstate(n::Integer, H::ProductSpace{B}) where B
-    inds = Tuple(CartesianIndices(map(dim, H.factors))[n])
+    inds = Tuple(H.cartinds[n])
     ProductState(map(basisstate, inds, H.factors))
 end
 function state_index(state::B, H::ProductSpace{B}) where B
     cartesian_index = CartesianIndex(Tuple(map(state_index, state.states, H.factors)))
-    LinearIndices(map(dim, H.factors))[cartesian_index]
+    H.lininds[cartesian_index]
 end
 _find_atom_position(Hsub::AbstractAtomicHilbertSpace, H::ProductSpace) = get(H.atom_ordering, Hsub, 0)
 function _find_position(Hsub, H::ProductSpace)
@@ -428,10 +434,21 @@ function partial_trace_phase_factor(state1, state2, space::ProductSpace)
     return pf
 end
 
-struct ProductOperator{O,S}
+struct ProductOperator{C,O,S}
     ops::O
     spaces::S
+    inds::Vector{Int} # indices of active spaces in full space
+    function ProductOperator{C}(ops::O, spaces::S, inds::Vector{Int}) where {C,O,S}
+        new{C,O,S}(ops, spaces, inds)
+    end
 end
+function ProductOperator(ops::O, spaces::S, inds::Vector{Int}) where {O,S}
+    length(ops) == length(spaces) || throw(ArgumentError("Length of ops and spaces must match"))
+    C = promote_type(Iterators.map(mat_eltype, ops)...)
+    ProductOperator{C}(ops, spaces, inds)
+end
+mat_eltype(::ProductOperator{C}) where {C} = C
+
 function has_internal_rep(space::AbstractHilbertSpace, ::Type{T}) where {T}
     state = basisstate(1, space)
     has_internal_rep(state, space, T)
@@ -485,33 +502,52 @@ function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::Abst
     newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
     return _internal_rep(newstate, space, T), amp
 end
-function _apply_local_operators_fast(ops::ProductOperator, internal_reps::NTuple{N,InternalRep{T}}, space::ProductSpace, precomps) where {T,N}
-    amp = 1
-    newreps = internal_reps
-    for (n, op) in enumerate(ops.ops)
-        ismissing(op) && continue
-        local_space = ops.spaces[n]
-        internal_rep = internal_reps[n]
-        precomp = precomps[n]
-        new_local_rep::InternalRep{T}, local_amp = _apply_local_operators(op, internal_rep, local_space, precomp)
-        amp *= local_amp
-        newreps = Base.setindex(newreps, new_local_rep, n)
+function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::NTuple{N,InternalRep{T}}, space::ProductSpace, precomps) where {C,T,N}
+    # amp::C = one(C)
+    # newreps::NTuple{N,InternalRep{T}} = internal_reps
+    # n::Int = 0
+    # map(ops.ops, ops.spaces, precomps, ops.inds) do op, local_space, precomp, n
+    #     internal_rep::InternalRep{T} = internal_reps[n]
+    #     new_local_rep::InternalRep{T}, local_amp::C = _apply_local_operators(op, internal_rep, local_space, precomp)
+    #     amp *= local_amp
+    #     newreps = Base.setindex(newreps, new_local_rep, n)
+    #     return nothing
+    # end
+    amp, newreps = foldl(
+        zip(ops.inds, ops.ops, ops.spaces, precomps);
+        init=(one(C), internal_reps)
+    ) do (amp, newreps), (n, op, local_space, precomp)
+        ismissing(op) && return (amp, newreps)
+        new_local_rep::InternalRep{T}, local_amp::C =
+            _apply_local_operators(op, internal_reps[n], local_space, precomp)
+        return (amp * local_amp, Base.setindex(newreps, new_local_rep, n))
     end
     return newreps, amp
 end
-function _apply_local_operators_slow(ops::ProductOperator, state::ProductState{B}, space::ProductSpace, precomps) where B<:Tuple
-    amp = 1
-    spaces = factors(space)
-    newstates = state.states
-    for (n, op) in enumerate(ops.ops)
-        ismissing(op) && continue
-        local_space = ops.spaces[n]
-        subst = state.states[n]
-        precomp = precomps[n]
-        new_local_state, local_amp = _apply_local_operators(op, subst, local_space, precomp)
-        amp *= local_amp
-        newstates = Base.setindex(newstates, new_local_state, n)
+function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductState{B}, space::ProductSpace, precomps) where {C,B<:Tuple}
+    # amp::C = one(C)
+    # newstates::B = state.states
+    # n::Int = 0
+    # println(typeof(ops.ops), typeof(ops.spaces), typeof(precomps), typeof(ops.inds))
+    # for (op, local_space, precomp, n) in zip(ops.ops, ops.spaces, precomps, ops.inds)
+    #     # n += 1
+    #     ismissing(op) && return newstates
+    #     subst = state.states[n]
+    #     new_local_state, local_amp::C = _apply_local_operators(op, subst, local_space, precomp)
+    #     amp *= local_amp
+    #     newstates = Base.setindex(newstates, new_local_state, n)
+    # end
+
+    amp, newstates = foldl(
+        zip(ops.inds, ops.ops, ops.spaces, precomps);
+        init=(one(C), state.states)
+    ) do (amp, newstates), (n, op, local_space, precomp)
+        ismissing(op) && return (amp, newstates)
+        new_local_state, local_amp::C =
+            _apply_local_operators(op, state.states[n], local_space, precomp)
+        return (amp * local_amp, Base.setindex(newstates, new_local_state, n))
     end
+
     return ProductState{B}(newstates), amp
 end
 
