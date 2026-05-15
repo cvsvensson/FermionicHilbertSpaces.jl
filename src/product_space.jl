@@ -544,10 +544,11 @@ function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductStat
     ) do (amp, newreps), (n, op, local_space, precomp)
         ismissing(op) && return (amp, newreps)
         new_local_rep, local_amp::C =
-            _apply_local_operators(op, internal_reps[n], local_space, precomp)
+            _apply_local_operators(op, state.states[n], local_space, precomp)
         return (amp * local_amp, Base.setindex(newreps, new_local_rep, n))
     end
-    return ProductState{B}(newstates), amp
+
+    return ProductState{B}(newreps), amp
 end
 
 add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors), map(a -> add_tag(a, tag), H.atoms))
