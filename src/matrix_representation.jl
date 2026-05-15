@@ -95,11 +95,12 @@ ___concretize(factors::AbstractVector, ::VecConcretizer) = map(identity, factors
 ___concretize(factors::Tuple, ::VecConcretizer) = collect(factors)
 ___concretize(factors, ::NoConcretizer) = factors
 
-function partition_product(op::NCMul, bases, spaces, concr=VecConcretizer())
-    used_coeff = false
-    n = 0
-    ops = map(bases, spaces) do basis, space
-        v = filter(==(basis) ∘ symbolic_group, op.factors)
+function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
+    # @nospecialize bases
+    used_coeff::Bool = false
+    n::Int = 0
+    ops = map(bases) do basis
+        v = [fac for fac in op.factors if symbolic_group(fac) == basis]
         if length(v) > 0
             vc = ___concretize(v, concr)
             coeff = used_coeff ? one(op.coeff) : op.coeff
@@ -116,7 +117,7 @@ end
 import FillArrays: Eye
 function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr; kwargs...)
     spaces = factors(space)
-    length(spaces) == 1 && return _term_matrix_representation(op, local_space, repr; kwargs...)
+    length(spaces) == 1 && return _term_matrix_representation(op, only(spaces), repr; kwargs...)
 
     prodop = partition_product(op, bases, spaces)
     matrices = map(prodop.ops, prodop.spaces) do op, local_space
@@ -127,20 +128,20 @@ function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr; kwa
     length(spaces) == 1 && return first(mergedmatrices)
     return foldl(kron, Iterators.reverse(mergedmatrices))
 end
-function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}; kwargs...)
+function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}; kwargs...)
     Eye(dim(space))
 end
 function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::LazyRepr; kwargs...)
     SciMLOperators.IdentityOperator(dim(space))
 end
-function _matrix_representation(op::Missing, bases, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}; kwargs...)
+function _matrix_representation(op::Missing, bases, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}; kwargs...)
     Eye(dim(space))
 end
 function _matrix_representation(op::Missing, bases, space::AbstractHilbertSpace, repr::LazyRepr; kwargs...)
     SciMLOperators.IdentityOperator(dim(space))
 end
-_merge_diags(matrices, repr::LazyRepr) = matrices 
-function _merge_diags(matrices, repr::Union{EagerDenseRepr, EagerSparseRepr})
+_merge_diags(matrices, repr::LazyRepr) = matrices
+function _merge_diags(matrices, repr::Union{EagerDenseRepr,EagerSparseRepr})
     # go through list of matrices and merge consecutive Diagonals with kron
     newmats = Any[]
     n = 1
@@ -176,7 +177,8 @@ function _matrix_representation(op::NCAdd, bases, space, repr; kwargs...)
     if length(bases) == 1
         return _matrix_representation_single_space(op, space, repr; kwargs...)
     end
-    sum(_matrix_representation(term, bases, space, repr; kwargs...) for term in NCterms(op)) + op.coeff * I(dim(space))
+    sum(_matrix_representation(term, bases, space, repr; kwargs...) for term in NCterms(op)) + op.coeff * _matrix_representation(missing, bases, space, repr; kwargs...)
+end
 end
 function _matrix_representation(op, bases, space, repr; kwargs...) #Assume op is a single symbolic operator
     _matrix_representation(NCMul(1, [op]), bases, space, repr; kwargs...)

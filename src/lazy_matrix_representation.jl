@@ -35,6 +35,7 @@ end
 function scimloperator(L::LazyOperator, input=Vector{eltype(L)}(undef, dim(L.space)), output=input; kwargs...)
     SciMLOperators.FunctionOperator(L, input, output; ishermitian=ishermitian(L), op_adjoint=adjoint(L), isconstant=true, T=eltype(L), islinear=true, batch=true, kwargs...)
 end
+
 (L::LazyOperator)(w, v, u, p, t, α, β) = mul!(w, L, v, α, β)
 (L::LazyOperator)(w, v, u, p, t) = mul!(w, L, v)
 (L::LazyOperator)(v, u, p, t) = L * v
@@ -44,17 +45,24 @@ _ishermitian(x::NCAdd) = iszero(x - hc)
 function _ishermitian(x::ProductOperator)
     _ishermitian(prod(skipmissing(x.ops)))
 end
-mat_eltype(x::ProductOperator) = promote_type(map(mat_eltype, skipmissing(x.ops))...)
 
 Base.size(L::LazyOperator) = L.size
 Base.size(L::LazyOperator, i::Int) = size(L)[i]
 Base.eltype(::LazyOperator{O,S,T,P}) where {O,S,T,P} = T
-Base.conj(L::LazyOperator) = LazyOperator(L.op, L.space, L.precomp; projection=L.projection, conjugate=!L.conjugate, transpose=L.transpose, ishermitian=L.ishermitian)
+Base.conj(L::LazyOperator) = LazyOperator(L.op, L.space, L.precomp; projection=L.projection, conjugate=!L.conjugate, ishermitian=L.ishermitian)
 function Base.adjoint(L::LazyOperator)
     LazyOperator(L.op, TransposedSpace(L.space), L.precomp; projection=L.projection, conjugate=!L.conjugate, ishermitian=L.ishermitian)
 end
 function Base.transpose(L::LazyOperator)
     LazyOperator(L.op, TransposedSpace(L.space), L.precomp; projection=L.projection, conjugate=L.conjugate, ishermitian=L.ishermitian)
+end
+function Base.adjoint(L::LazyOperator{<:ProductOperator{C}}) where C
+    newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces))
+    LazyOperator(newop, TransposedSpace(L.space), L.precomp; projection=L.projection, conjugate=!L.conjugate, ishermitian=L.ishermitian)
+end
+function Base.transpose(L::LazyOperator{<:ProductOperator{C}}) where C
+    newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces))
+    LazyOperator(newop, TransposedSpace(L.space), L.precomp; projection=L.projection, conjugate=L.conjugate, ishermitian=L.ishermitian)
 end
 Base.transpose(L::SciMLOperators.FunctionOperator{<:Any,<:Any,<:Any,<:Any,<:LazyOperator}) = scimloperator(transpose(L.op))
 LinearAlgebra.ishermitian(L::LazyOperator) = L.ishermitian
@@ -159,15 +167,23 @@ function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC,
     end
 end
 
-function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCMul}, x::AbstractVecOrMat, α, β)
-    rmul!(y, β)
+function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCMul}, x::AbstractVecOrMat, α, β) where T
+    if iszero(β)
+        fill!(y, zero(T))
+    else
+        rmul!(y, β)
+    end
     _apply_single_term!(y, x, L.space, L.op, L.precomp, α, L.conjugate, L.projection)
     return y
 end
 
-function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:ProductOperator}, x::AbstractVecOrMat, α, β)
+function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:ProductOperator}, x::AbstractVecOrMat, α, β) where T
     # This is for productspaces, where ops is a list of operators applying to each factor space
-    rmul!(y, β)
+    if iszero(β)
+        fill!(y, zero(T))
+    else
+        rmul!(y, β)
+    end
     _apply_single_term!(y, x, L.space, L.op, L.precomp, α, L.conjugate, L.projection)
     return y
 end
