@@ -503,14 +503,11 @@ function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::Abst
     return _internal_rep(newstate, space, T), amp
 end
 function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::NTuple{N,InternalRep{T}}, space::ProductSpace, precomps) where {C,T,N}
-    amp::C = one(C)
-    newreps::NTuple{N,InternalRep{T}} = internal_reps
+    # amp::C = one(C)
+    # newreps::NTuple{N,InternalRep{T}} = internal_reps
     # n::Int = 0
     # map(ops.ops, ops.spaces, precomps, ops.inds) do op, local_space, precomp, n
-    #     # n += 1
-    #     # n = ind
     #     internal_rep::InternalRep{T} = internal_reps[n]
-    #     ismissing(op) && return nothing
     #     new_local_rep::InternalRep{T}, local_amp::C = _apply_local_operators(op, internal_rep, local_space, precomp)
     #     amp *= local_amp
     #     newreps = Base.setindex(newreps, new_local_rep, n)
@@ -531,24 +528,27 @@ function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductStat
     # amp::C = one(C)
     # newstates::B = state.states
     # n::Int = 0
-    # map(ops.ops, ops.spaces, precomps, state.states) do op, local_space, precomp, subst
-    #     n += 1
+    # println(typeof(ops.ops), typeof(ops.spaces), typeof(precomps), typeof(ops.inds))
+    # for (op, local_space, precomp, n) in zip(ops.ops, ops.spaces, precomps, ops.inds)
+    #     # n += 1
     #     ismissing(op) && return newstates
+    #     subst = state.states[n]
     #     new_local_state, local_amp::C = _apply_local_operators(op, subst, local_space, precomp)
     #     amp *= local_amp
     #     newstates = Base.setindex(newstates, new_local_state, n)
     # end
-    amp, newreps = foldl(
+
+    amp, newstates = foldl(
         zip(ops.inds, ops.ops, ops.spaces, precomps);
         init=(one(C), state.states)
-    ) do (amp, newreps), (n, op, local_space, precomp)
-        ismissing(op) && return (amp, newreps)
-        new_local_rep, local_amp::C =
+    ) do (amp, newstates), (n, op, local_space, precomp)
+        ismissing(op) && return (amp, newstates)
+        new_local_state, local_amp::C =
             _apply_local_operators(op, state.states[n], local_space, precomp)
-        return (amp * local_amp, Base.setindex(newreps, new_local_rep, n))
+        return (amp * local_amp, Base.setindex(newstates, new_local_state, n))
     end
 
-    return ProductState{B}(newreps), amp
+    return ProductState{B}(newstates), amp
 end
 
 add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors), map(a -> add_tag(a, tag), H.atoms))

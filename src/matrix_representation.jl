@@ -96,7 +96,6 @@ ___concretize(factors::Tuple, ::VecConcretizer) = collect(factors)
 ___concretize(factors, ::NoConcretizer) = factors
 
 function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
-    # @nospecialize bases
     used_coeff::Bool = false
     n::Int = 0
     inds = Int[]
@@ -176,21 +175,25 @@ function _matrix_representation(op::NCMul, bases, space, repr; kwargs...)
         end
     end
 end
-function _matrix_representation(op::NCAdd, bases, space, repr; kwargs...)
+function _matrix_representation_serial(op::NCAdd, bases, space, repr; kwargs...)
     if length(bases) == 1
         return _matrix_representation_single_space(op, space, repr; kwargs...)
     end
     sum(_matrix_representation(term, bases, space, repr; kwargs...) for term in NCterms(op)) + op.coeff * _matrix_representation(missing, bases, space, repr; kwargs...)
 end
-
+function _matrix_representation(op::NCAdd, bases, space, repr; scheduler=nothing, kwargs...)
+    !isnothing(scheduler) && _matrix_representation_threaded(op, bases, space, repr, scheduler; kwargs...)
+    return _matrix_representation_serial(op, bases, space, repr; kwargs...)
+end
 function _matrix_representation(op, bases, space, repr; kwargs...) #Assume op is a single symbolic operator
     _matrix_representation(NCMul(1, [op]), bases, space, repr; kwargs...)
 end
 
 
-function matrix_accumulator(op::NCAdd, space, ::EagerSparseRepr)
-    length_guess = Int(floor(1 + log2(length(op.dict) + 1))) * dim(space) # mild increase with number of terms
-    return sparse_matrix_accumulator(mat_eltype(op), length_guess)
+matrix_accumulator(op::NCAdd, space, repr::EagerSparseRepr) = matrix_accumulator(mat_eltype(op), length(op.dict), space, repr)
+function matrix_accumulator(::Type{T}, N::Int, space, ::EagerSparseRepr) where T
+    length_guess = Int(floor(1 + log2(N + 1))) * dim(space) # mild increase with number of terms
+    return sparse_matrix_accumulator(T, length_guess)
 end
 matrix_accumulator(op::Union{NCMul,ProductOperator}, space, ::EagerSparseRepr) = sparse_matrix_accumulator(mat_eltype(op), dim(space))
 function sparse_matrix_accumulator(::Type{T}, N) where T
@@ -236,6 +239,9 @@ function _matrix_representation_single_space(op::NCAdd, space, repr::Union{Eager
         add_identity!!(accumulator, op.coeff, space)
     end
     finalize!(accumulator, space)
+end
+function _matrix_representation_threaded(op::NCAdd, bases, space, repr, scheduler; kwargs...)
+    throw(ArgumentError("Unsupported scheduler of type $(typeof(scheduler)). Install/load OhMyThreads to enable threaded schedulers."))
 end
 
 
@@ -430,6 +436,24 @@ end
     Ml = concretize(matrix_representation(op_prod, Hprod, :lazy))
     @test Md == Ms
     @test Md == Ml
+end
+
+@testitem "Scheduler extension correctness" begin
+    using SparseArrays, LinearAlgebra
+
+    @fermions f
+    H = hilbert_space(f, 1:4)
+    op = f[1]' * f[2] + 1im * f[2]' * f[1] + f[3]' * f[4] + f[4]' * f[3] + 2
+
+    M_serial = matrix_representation(op, H)
+
+    using OhMyThreads
+    M_threaded = matrix_representation(op, H; scheduler=DynamicScheduler(; nchunks=2))
+    @test M_threaded == M_serial
+
+
+    struct DummyScheduler end
+    @test_throws ArgumentError matrix_representation(op, H; scheduler=DummyScheduler())
 end
 
 ## 
