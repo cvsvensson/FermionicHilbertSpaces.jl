@@ -437,14 +437,15 @@ end
 struct ProductOperator{C,O,S}
     ops::O
     spaces::S
-    function ProductOperator{C}(ops::O, spaces::S) where {C,O,S}
-        new{C,O,S}(ops, spaces)
+    inds::Vector{Int} # indices of active spaces in full space
+    function ProductOperator{C}(ops::O, spaces::S, inds::Vector{Int}) where {C,O,S}
+        new{C,O,S}(ops, spaces, inds)
     end
 end
-function ProductOperator(ops::O, spaces::S) where {O,S}
+function ProductOperator(ops::O, spaces::S, inds::Vector{Int}) where {O,S}
     length(ops) == length(spaces) || throw(ArgumentError("Length of ops and spaces must match"))
-    C = promote_type(Iterators.map(mat_eltype, skipmissing(ops))...)
-    ProductOperator{C}(ops, spaces)
+    C = promote_type(Iterators.map(mat_eltype, ops)...)
+    ProductOperator{C}(ops, spaces, inds)
 end
 mat_eltype(::ProductOperator{C}) where {C} = C
 
@@ -505,21 +506,23 @@ function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::NTu
     amp::C = one(C)
     newreps::NTuple{N,InternalRep{T}} = internal_reps
     # n::Int = 0
-    # map(ops.ops, ops.spaces, precomps, internal_reps) do op, local_space, precomp, internal_rep
-    #     n += 1
+    # map(ops.ops, ops.spaces, precomps, ops.inds) do op, local_space, precomp, n
+    #     # n += 1
+    #     # n = ind
+    #     internal_rep::InternalRep{T} = internal_reps[n]
     #     ismissing(op) && return nothing
-    #     new_local_rep::InternalRep{T}, local_amp = _apply_local_operators(op, internal_rep, local_space, precomp)
+    #     new_local_rep::InternalRep{T}, local_amp::C = _apply_local_operators(op, internal_rep, local_space, precomp)
     #     amp *= local_amp
     #     newreps = Base.setindex(newreps, new_local_rep, n)
     #     return nothing
     # end
     amp, newreps = foldl(
-        zip(Base.OneTo(N), ops.ops, ops.spaces, precomps, internal_reps);
+        zip(ops.inds, ops.ops, ops.spaces, precomps);
         init=(one(C), internal_reps)
-    ) do (amp, newreps), (n, op, local_space, precomp, internal_rep)
+    ) do (amp, newreps), (n, op, local_space, precomp)
         ismissing(op) && return (amp, newreps)
         new_local_rep::InternalRep{T}, local_amp::C =
-            _apply_local_operators(op, internal_rep, local_space, precomp)
+            _apply_local_operators(op, internal_reps[n], local_space, precomp)
         return (amp * local_amp, Base.setindex(newreps, new_local_rep, n))
     end
     return newreps, amp

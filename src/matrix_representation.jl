@@ -99,19 +99,20 @@ function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
     # @nospecialize bases
     used_coeff::Bool = false
     n::Int = 0
-    ops = map(bases) do basis
+    inds = Int[]
+    ops = NCMul[]
+    for (i, basis) in enumerate(bases)
         v = [fac for fac in op.factors if symbolic_group(fac) == basis]
         if length(v) > 0
-            vc = ___concretize(v, concr)
             coeff = used_coeff ? one(op.coeff) : op.coeff
             used_coeff = true
             n += length(v)
-            return NCMul(coeff, vc)
+            push!(inds, i)
+            push!(ops, NCMul(coeff, ___concretize(v, concr)))
         end
-        return missing
     end
     n == length(op.factors) || throw(ArgumentError("Not all factors were assigned to a basis."))
-    return ProductOperator(___concretize(ops, concr), spaces)
+    return ProductOperator(___concretize(ops, TupleConcretizer()), spaces[inds], inds)
 end
 
 import FillArrays: Eye
