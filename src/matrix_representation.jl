@@ -179,7 +179,7 @@ function _matrix_representation(op::NCAdd, bases, space, repr; kwargs...)
     end
     sum(_matrix_representation(term, bases, space, repr; kwargs...) for term in NCterms(op)) + op.coeff * _matrix_representation(missing, bases, space, repr; kwargs...)
 end
-end
+
 function _matrix_representation(op, bases, space, repr; kwargs...) #Assume op is a single symbolic operator
     _matrix_representation(NCMul(1, [op]), bases, space, repr; kwargs...)
 end
