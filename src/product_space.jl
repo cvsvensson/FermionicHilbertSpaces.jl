@@ -528,15 +528,24 @@ function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::NTu
     return newreps, amp
 end
 function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductState{B}, space::ProductSpace, precomps) where {C,B<:Tuple}
-    amp::C = one(C)
-    newstates::B = state.states
-    n::Int = 0
-    map(ops.ops, ops.spaces, precomps, state.states) do op, local_space, precomp, subst
-        n += 1
-        ismissing(op) && return newstates
-        new_local_state, local_amp::C = _apply_local_operators(op, subst, local_space, precomp)
-        amp *= local_amp
-        newstates = Base.setindex(newstates, new_local_state, n)
+    # amp::C = one(C)
+    # newstates::B = state.states
+    # n::Int = 0
+    # map(ops.ops, ops.spaces, precomps, state.states) do op, local_space, precomp, subst
+    #     n += 1
+    #     ismissing(op) && return newstates
+    #     new_local_state, local_amp::C = _apply_local_operators(op, subst, local_space, precomp)
+    #     amp *= local_amp
+    #     newstates = Base.setindex(newstates, new_local_state, n)
+    # end
+    amp, newreps = foldl(
+        zip(ops.inds, ops.ops, ops.spaces, precomps);
+        init=(one(C), state.states)
+    ) do (amp, newreps), (n, op, local_space, precomp)
+        ismissing(op) && return (amp, newreps)
+        new_local_rep, local_amp::C =
+            _apply_local_operators(op, internal_reps[n], local_space, precomp)
+        return (amp * local_amp, Base.setindex(newreps, new_local_rep, n))
     end
     return ProductState{B}(newstates), amp
 end

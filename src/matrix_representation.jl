@@ -121,7 +121,9 @@ function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr; kwa
     length(spaces) == 1 && return _term_matrix_representation(op, only(spaces), repr; kwargs...)
 
     prodop = partition_product(op, bases, spaces)
-    matrices = map(prodop.ops, prodop.spaces) do op, local_space
+    matrices = map(enumerate(spaces)) do (n, local_space)
+        m = findfirst(==(n), prodop.inds)
+        op = !isnothing(m) ? prodop.ops[m] : missing
         _term_matrix_representation(op, local_space, repr; kwargs...)
     end
 

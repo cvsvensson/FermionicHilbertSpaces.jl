@@ -43,7 +43,7 @@ end
 _ishermitian(x::NCMul) = iszero(x - hc)
 _ishermitian(x::NCAdd) = iszero(x - hc)
 function _ishermitian(x::ProductOperator)
-    _ishermitian(prod(skipmissing(x.ops)))
+    _ishermitian(prod(x.ops))
 end
 
 Base.size(L::LazyOperator) = L.size
@@ -57,11 +57,11 @@ function Base.transpose(L::LazyOperator)
     LazyOperator(L.op, TransposedSpace(L.space), L.precomp; projection=L.projection, conjugate=L.conjugate, ishermitian=L.ishermitian)
 end
 function Base.adjoint(L::LazyOperator{<:ProductOperator{C}}) where C
-    newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces), L.inds)
+    newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces), L.op.inds)
     LazyOperator(newop, TransposedSpace(L.space), L.precomp; projection=L.projection, conjugate=!L.conjugate, ishermitian=L.ishermitian)
 end
 function Base.transpose(L::LazyOperator{<:ProductOperator{C}}) where C
-    newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces), L.inds)
+    newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces), L.op.inds)
     LazyOperator(newop, TransposedSpace(L.space), L.precomp; projection=L.projection, conjugate=L.conjugate, ishermitian=L.ishermitian)
 end
 Base.transpose(L::SciMLOperators.FunctionOperator{<:Any,<:Any,<:Any,<:Any,<:LazyOperator}) = scimloperator(transpose(L.op))
