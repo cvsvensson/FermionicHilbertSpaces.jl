@@ -59,6 +59,7 @@ Base.iszero(x::MajoranaSym) = false
 symbolic_group(f::AbstractMajoranaSym) = symbolic_group(f.basis)
 symbolic_basis(f::AbstractMajoranaSym) = f.basis
 change_basis(f::MajoranaSym, newbasis) = MajoranaSym(f.label, newbasis)
+label(f::AbstractMajoranaSym) = f.label
 function Base.show(io::IO, x::MajoranaSym)
     print(io, _symbolic_name_with_tags(x.basis.name, x.basis; skip_first=1))
     if Base.isiterable(typeof(x.label))
@@ -192,17 +193,17 @@ _find_position(f::MajoranaHilbertSpace, H::FermionicSpace) = _find_position(f.pa
 partial_trace_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_trace_phase_factor(f1, f2, H.parent)
 
 function majoranas(H::MajoranaHilbertSpace)
-    γ = symbolic_basis(H)
-    OrderedDict(l => matrix_representation(γ[l], H) for l in labels(H))
+    OrderedDict(label(γi) => matrix_representation(γi, H) for γi in modes(H))
 end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
+symbolic_fermion_basis(H::MajoranaHilbertSpace) = symbolic_basis(H.parent)
 
 hilbert_space(y::SymbolicMajoranaBasis, labels, args...; kwargs...) = majorana_hilbert_space(y, labels, args...; kwargs...)
 
 function majorana_hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
     iseven(length(labels)) || throw(ArgumentError("Must be an even number of Majoranas to define a Hilbert space."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
-    f = SymbolicFermionBasis(y.name, tags(y).group)
+    f = to_fermion(y)
     Hf = hilbert_space(f, pairs, args...; kwargs...)
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
     MajoranaHilbertSpace(majorana_position, Hf, y)
