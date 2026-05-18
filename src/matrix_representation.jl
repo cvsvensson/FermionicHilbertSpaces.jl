@@ -114,7 +114,6 @@ function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
     return ProductOperator(___concretize(ops, TupleConcretizer()), spaces[inds], inds)
 end
 
-import FillArrays: Eye
 function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr; kwargs...)
     spaces = factors(space)
     length(spaces) == 1 && return _term_matrix_representation(op, only(spaces), repr; kwargs...)
