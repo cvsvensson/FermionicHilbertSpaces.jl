@@ -175,15 +175,19 @@ function _matrix_representation(op::NCMul, bases, space, repr; kwargs...)
         end
     end
 end
-function _matrix_representation_serial(op::NCAdd, bases, space, repr; kwargs...)
+function _matrix_representation_serial(op::NCAdd, bases, space, repr; tree_split=10, kwargs...)
     if length(bases) == 1
         return _matrix_representation_single_space(op, space, repr; kwargs...)
     end
-    sum(_matrix_representation(term, bases, space, repr; kwargs...) for term in NCterms(op)) + op.coeff * _matrix_representation(missing, bases, space, repr; kwargs...)
+    matrices = [_matrix_representation(term, bases, space, repr; kwargs...) for term in NCterms(op)]
+    _sum_matrices(matrices, repr; tree_split=tree_split) + op.coeff * _matrix_representation(missing, bases, space, repr; kwargs...)
 end
 function _matrix_representation(op::NCAdd, bases, space, repr; scheduler=nothing, kwargs...)
-    !isnothing(scheduler) && _matrix_representation_threaded(op, bases, space, repr, scheduler; kwargs...)
-    return _matrix_representation_serial(op, bases, space, repr; kwargs...)
+    if !isnothing(scheduler)
+        return _matrix_representation_threaded(op, bases, space, repr, scheduler; kwargs...)
+    else
+        return _matrix_representation_serial(op, bases, space, repr; kwargs...)
+    end
 end
 function _matrix_representation(op, bases, space, repr; kwargs...) #Assume op is a single symbolic operator
     _matrix_representation(NCMul(1, [op]), bases, space, repr; kwargs...)
@@ -508,4 +512,20 @@ end
         @test a2 !== anew
     end
     @test a == 1.0 * f[2] * f[1] + 1 + f[1]
+end
+
+_sum_matrices(matrices, ::LazyRepr; tree_split=10) = sum(matrices)
+_sum_matrices(matrices, ::Union{EagerSparseRepr,EagerDenseRepr}; tree_split=10) = _sum_tree(matrices, tree_split)
+function _sum_tree(matrices, k)
+    n = length(matrices)
+    n == 0 && throw(ArgumentError("Empty collection"))
+    n == 1 && return only(matrices)
+    n <= k && return map(+, matrices...)
+
+    # Divide into k roughly equal parts
+    chunk_size = cld(n, k)
+    chunks = Iterators.partition(matrices, chunk_size)
+
+    partials = [_sum_tree(collect(chunk), k) for chunk in chunks]
+    return map(+, partials...)
 end
