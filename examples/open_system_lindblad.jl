@@ -5,6 +5,7 @@
 # The `open_system` helper function sets up this structure:
 using FermionicHilbertSpaces
 using FermionicHilbertSpaces: open_system
+using LinearAlgebra
 @fermions c
 Hlr, Hl, Hr, left, right = open_system(c, 1:1)
 # This generates two versions of hilbert_space(c, 1:1), tagged as `:left` and `:right`. 
@@ -92,15 +93,12 @@ println("Steady-state occupation ⟨n⟩_ss = $n_ss  (analytic: $n_analytical)")
 
 # For this model, while there are particles jumping in and out of the system,
 # the difference in particle number between the left and right space is conserved.
-# However, because the right space is transposed, particles and holes are swapped,
-# so the conserved quantity is in fact the total particle number:
 # ```math
-# Q = n_l + n_r.
+# Q = n_l - n_r.
 # ```
 # is conserved. We can constrain to fixed `Q` sectors and get block matrices.
+# The Q=0 sector is the physically relevant one if we disallow coherences
+# between different particle number sectors.
 constraint = NumberConservation(-1:1, [Hl, Hr], [1, -1])
 Hcons = tensor_product((Hl, Hr); constraint)
 mat_cons = matrix_representation(lindbladian, Hcons)
-blocks = map(sectors(Hcons)) do Hsector
-    matrix_representation(lindbladian, Hsector)
-end

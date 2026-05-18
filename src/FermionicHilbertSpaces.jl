@@ -2,7 +2,7 @@ module FermionicHilbertSpaces
 
 using LinearAlgebra, SparseArrays
 import SciMLOperators
-import FillArrays: Zeros, Fill
+import FillArrays: Zeros, Fill, Eye
 import OrderedCollections: OrderedDict
 using TestItems
 using BitPermutations

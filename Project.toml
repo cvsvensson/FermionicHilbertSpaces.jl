@@ -17,9 +17,11 @@ TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 
 [weakdeps]
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
+OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
 
 [extensions]
 CombinatoricsExt = "Combinatorics"
+OhMyThreadsExt = "OhMyThreads"
 
 [compat]
 BitPermutations = "0.3"
@@ -27,6 +29,7 @@ Combinatorics = "1"
 FillArrays = "1"
 LinearAlgebra = "1.11"
 NonCommutativeProducts = "0.4.2"
+OhMyThreads = "0.8.5"
 OrderedCollections = "1"
 PrecompileTools = "1.2"
 SciMLOperators = "1.16"
