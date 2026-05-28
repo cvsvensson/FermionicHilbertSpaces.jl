@@ -272,23 +272,13 @@ end
 Extract all unique symbolic bases from an operator expression.
 Returns a set of unique bases found in the operator.
 """
-function symbolic_groups(op::NCMul, bases=Set())
-    for factor in op.factors
-        push!(bases, symbolic_group(factor))
-    end
-    return bases
-end
-
-function symbolic_groups(op::NCAdd)
-    bases = Set()
-    for term in keys(op.dict)
-        symbolic_groups(term, bases)
-    end
-    return bases
-end
-
-function symbolic_groups(op) # Assume op is a single symbolic operator
-    [symbolic_group(op)]
+function symbolic_groups(op)
+    combine(x, y) = nothing
+    reducer = (combine, combine)
+    accum = Set()
+    f(op) = push!(accum, symbolic_group(op))
+    NonCommutativeProducts.ncmapreduce(f, reducer, op)
+    return accum
 end
 
 """
