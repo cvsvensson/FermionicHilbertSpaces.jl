@@ -2,6 +2,15 @@ abstract type AbstractFermionSym <: AbstractSym end
 
 struct EagerDenseRepr end
 struct EagerSparseRepr end
+struct PartitionedSparseRepr{B,R,C}
+    backend::B
+    row_partition::R
+    col_partition::C
+    nparts::Int
+end
+
+PartitionedSparseRepr(; backend=nothing, row_partition=nothing, col_partition=nothing, nparts::Int=4) =
+    PartitionedSparseRepr{typeof(backend),typeof(row_partition),typeof(col_partition)}(backend, row_partition, col_partition, nparts)
 
 struct LazyRepr{T}
     input::T
@@ -233,7 +242,7 @@ function finalize!(m::Matrix, space)
 end
 
 
-function _matrix_representation_single_space(op::NCAdd, space, repr::Union{EagerSparseRepr,EagerDenseRepr}; kwargs...)
+function _matrix_representation_single_space(op::NCAdd, space, repr; kwargs...)
     accumulator = matrix_accumulator(op, space, repr)
     for (term, coeff) in op.dict
         operator_indices_and_amplitudes!(accumulator, coeff * term, space; kwargs...)
@@ -457,6 +466,25 @@ end
 
     struct DummyScheduler end
     @test_throws ArgumentError matrix_representation(op, H; scheduler=DummyScheduler())
+end
+
+@testitem "Distributed sparse matrix representation" begin
+    using FermionicHilbertSpaces, Test
+    import FermionicHilbertSpaces: PartitionedSparseRepr
+    using LinearAlgebra
+    using PartitionedArrays
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    op = f[1]' * f[2] + (1 + 2im) * f[3]' * f[1] + 2.0
+
+    M_ref = matrix_representation(op, H)
+    rep = PartitionedSparseRepr(; backend=DebugArray)
+    M_dist = matrix_representation(op, H, rep)
+
+    v = pvector(M_dist.col_partition) do inds
+        rand(length(inds))
+    end
+    @test collect(M_dist * v) ≈ M_ref * collect(v)
 end
 
 ## 
