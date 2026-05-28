@@ -4,7 +4,7 @@
 A matrix-free (lazy) representation of a symbolic operator on a Hilbert space.
 Acts directly on vectors and matrices via without constructing a sparse matrix.
 
-Constructed via `matrix_representation(op, space; lazy=true)`. `LazyOperator` conforms to
+Constructed via `matrix_representation(op, space, :lazy)`. `LazyOperator` conforms to
 the `SciMLOperators.AbstractSciMLOperator` interface.
 """
 struct LazyOperator{O,S,T,P}
@@ -14,6 +14,7 @@ struct LazyOperator{O,S,T,P}
     projection::Bool
     conjugate::Bool
     ishermitian::Bool
+    size::Tuple{Int,Int}
 end
 
 function _show_lazy_operator_expression(io::IO, L::LazyOperator)
@@ -27,47 +28,55 @@ function Base.show(io::IO, L::LazyOperator)
     show(IOContext(io, :compact => true), L.space)
 end
 
-function LazyOperator(op::O, space::S, precomp::P=_precomputation_before_operator_application(op, space); projection=false, conjugate=false, ishermitian=_ishermitian(op), T=mat_eltype(op)
+function LazyOperator(op::O, space::S, precomp::P=_precomputation_before_operator_application(op, space); projection=false, conjugate=false, ishermitian=_ishermitian(op), T=mat_eltype(op),
 ) where {O,S,P}
-    LazyOperator{O,S,T,P}(op, space, precomp, projection, conjugate, ishermitian)
+    LazyOperator{O,S,T,P}(op, space, precomp, projection, conjugate, ishermitian, (dim(space), dim(space)))
 end
 function scimloperator(L::LazyOperator, input=Vector{eltype(L)}(undef, dim(L.space)), output=input; kwargs...)
     SciMLOperators.FunctionOperator(L, input, output; ishermitian=ishermitian(L), op_adjoint=adjoint(L), isconstant=true, T=eltype(L), islinear=true, batch=true, kwargs...)
 end
+
 (L::LazyOperator)(w, v, u, p, t, α, β) = mul!(w, L, v, α, β)
 (L::LazyOperator)(w, v, u, p, t) = mul!(w, L, v)
 (L::LazyOperator)(v, u, p, t) = L * v
 
 _ishermitian(x::NCMul) = iszero(x - hc)
 _ishermitian(x::NCAdd) = iszero(x - hc)
-function _ishermitian(x::OperatorSequence)
+function _ishermitian(x::ProductOperator)
     _ishermitian(prod(x.ops))
 end
-mat_eltype(x::OperatorSequence) = promote_type(map(mat_eltype, x.ops)...)
 
-Base.size(L::LazyOperator) = (dim(L.space), dim(L.space))
+Base.size(L::LazyOperator) = L.size
 Base.size(L::LazyOperator, i::Int) = size(L)[i]
 Base.eltype(::LazyOperator{O,S,T,P}) where {O,S,T,P} = T
-Base.conj(L::LazyOperator) = LazyOperator(L.op, L.space, L.precomp; projection=L.projection, conjugate=!L.conjugate, transpose=L.transpose, ishermitian=L.ishermitian)
+Base.conj(L::LazyOperator) = LazyOperator(L.op, L.space, L.precomp; projection=L.projection, conjugate=!L.conjugate, ishermitian=L.ishermitian)
 function Base.adjoint(L::LazyOperator)
     LazyOperator(L.op, TransposedSpace(L.space), L.precomp; projection=L.projection, conjugate=!L.conjugate, ishermitian=L.ishermitian)
 end
 function Base.transpose(L::LazyOperator)
     LazyOperator(L.op, TransposedSpace(L.space), L.precomp; projection=L.projection, conjugate=L.conjugate, ishermitian=L.ishermitian)
 end
+function Base.adjoint(L::LazyOperator{<:ProductOperator{C}}) where C
+    newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces), L.op.inds)
+    LazyOperator(newop, TransposedSpace(L.space), L.precomp; projection=L.projection, conjugate=!L.conjugate, ishermitian=L.ishermitian)
+end
+function Base.transpose(L::LazyOperator{<:ProductOperator{C}}) where C
+    newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces), L.op.inds)
+    LazyOperator(newop, TransposedSpace(L.space), L.precomp; projection=L.projection, conjugate=L.conjugate, ishermitian=L.ishermitian)
+end
 Base.transpose(L::SciMLOperators.FunctionOperator{<:Any,<:Any,<:Any,<:Any,<:LazyOperator}) = scimloperator(transpose(L.op))
 LinearAlgebra.ishermitian(L::LazyOperator) = L.ishermitian
 
 function _eager_matrix_representation(L::LazyOperator{<:NCMul})
-    return _term_matrix_representation(L.op, L.space, EagerRepr(); projection=L.projection)
+    return _term_matrix_representation(L.op, L.space, EagerSparseRepr(); projection=L.projection)
 end
 
-function _eager_matrix_representation(L::LazyOperator{<:OperatorSequence})
-    return _factorized_term_matrix_representation(L.op, L.space, EagerRepr(); projection=L.projection)
+function _eager_matrix_representation(L::LazyOperator{<:ProductOperator})
+    return _factorized_term_matrix_representation(L.op, L.space, EagerSparseRepr(); projection=L.projection)
 end
 
 function _eager_matrix_representation(L::LazyOperator{<:NCAdd})
-    return _matrix_representation_single_space(L.op, L.space, EagerRepr(); projection=L.projection)
+    return _matrix_representation_single_space(L.op, L.space, EagerSparseRepr(); projection=L.projection)
 end
 
 function Base.convert(::Type{AbstractMatrix}, L::LazyOperator)
@@ -110,9 +119,7 @@ end
 function _apply_single_term!(y::AbstractVector, x::SparseArrays.AbstractSparseVector, space, term, precomp, _coeff, conjugate, projection)
     coeff = (conjugate ? conj(_coeff) : _coeff)
     inds, vals = findnz(x)
-    for k in eachindex(inds)
-        n = inds[k]
-        xn = vals[k]
+    for (n, xn) in zip(inds, vals)
         state = basisstate(n, space)
         state, _amp = _apply_local_operators(term, state, space, precomp)
         if !iszero(_amp)
@@ -160,15 +167,23 @@ function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC,
     end
 end
 
-function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCMul}, x::AbstractVecOrMat, α, β)
-    rmul!(y, β)
+function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCMul}, x::AbstractVecOrMat, α, β) where T
+    if iszero(β)
+        fill!(y, zero(T))
+    else
+        rmul!(y, β)
+    end
     _apply_single_term!(y, x, L.space, L.op, L.precomp, α, L.conjugate, L.projection)
     return y
 end
 
-function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:OperatorSequence}, x::AbstractVecOrMat, α, β)
+function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:ProductOperator}, x::AbstractVecOrMat, α, β) where T
     # This is for productspaces, where ops is a list of operators applying to each factor space
-    rmul!(y, β)
+    if iszero(β)
+        fill!(y, zero(T))
+    else
+        rmul!(y, β)
+    end
     _apply_single_term!(y, x, L.space, L.op, L.precomp, α, L.conjugate, L.projection)
     return y
 end
@@ -205,7 +220,7 @@ end
 function _term_matrix_representation(op::NCMul, H::AbstractHilbertSpace, rep::LazyRepr; kwargs...)
     scimloperator(LazyOperator(op, H; kwargs...), get_input(rep, H))
 end
-function _factorized_term_matrix_representation(ops::OperatorSequence, H, rep::LazyRepr; kwargs...)
+function _factorized_term_matrix_representation(ops::ProductOperator, H, rep::LazyRepr; kwargs...)
     scimloperator(LazyOperator(ops, H; kwargs...), get_input(rep, H))
 end
 function _matrix_representation_single_space(op::NCAdd, H, rep::LazyRepr; kwargs...)
@@ -218,7 +233,7 @@ end
     @fermions f
     Hf = hilbert_space(f, 1:2)
     op = f[1]' * f[2] + 1im
-    L = matrix_representation(op, Hf; lazy=true)
+    L = matrix_representation(op, Hf, :lazy)
     M = matrix_representation(op, Hf)
     v = randn(dim(Hf))
     w = randn(ComplexF64, dim(Hf))
@@ -264,26 +279,26 @@ end
     @test (2 * L) * v ≈ 2 * (M * v)
     @test concretize(L) == M
     @test !ishermitian(L)
-    @test ishermitian(matrix_representation(op + hc, Hf; lazy=true))
+    @test ishermitian(matrix_representation(op + hc, Hf, :lazy))
 
     import FermionicHilbertSpaces: LazyRepr
-    @test matrix_representation(op, Hf; lazy=true).cache[1] isa Vector
-    @test matrix_representation(op, Hf; lazy=LazyRepr(:dense)).cache[1] isa Vector
-    @test matrix_representation(op, Hf; lazy=LazyRepr(:sparse)).cache[1] isa SparseVector
+    @test matrix_representation(op, Hf, :lazy).cache[1] isa Vector
+    @test matrix_representation(op, Hf, LazyRepr(:dense)).cache[1] isa Vector
+    @test matrix_representation(op, Hf, LazyRepr(:sparse)).cache[1] isa SparseVector
     dense_cache = zeros(ComplexF64, dim(Hf))
     sparse_cache = spzeros(ComplexF64, dim(Hf))
     symbol_cache = [:a for _ in 1:dim(Hf)]
-    @test matrix_representation(op, Hf; lazy=LazyRepr(dense_cache)).cache[1] isa typeof(dense_cache)
-    @test matrix_representation(op, Hf; lazy=LazyRepr(sparse_cache)).cache[1] isa typeof(sparse_cache)
-    @test matrix_representation(op, Hf; lazy=LazyRepr(symbol_cache)).cache[1] isa typeof(symbol_cache)
+    @test matrix_representation(op, Hf, LazyRepr(dense_cache)).cache[1] isa typeof(dense_cache)
+    @test matrix_representation(op, Hf, LazyRepr(sparse_cache)).cache[1] isa typeof(sparse_cache)
+    @test matrix_representation(op, Hf, LazyRepr(symbol_cache)).cache[1] isa typeof(symbol_cache)
 
-    @test_throws DimensionMismatch matrix_representation(op, Hf; lazy=LazyRepr(zeros(dim(Hf) + 1)))
+    @test_throws DimensionMismatch matrix_representation(op, Hf, LazyRepr(zeros(dim(Hf) + 1)))
 
     @spin s 1 // 2
     Hs = hilbert_space(s)
     H = tensor_product(Hf, Hs)
     op = 5 * f[1]' * f[2] * s[:x] + 2 * s[:z] + f[1] + 1im
-    L = matrix_representation(op, H; lazy=true)
+    L = matrix_representation(op, H, :lazy)
     M = matrix_representation(op, H)
     v = randn(dim(H))
     Vm = randn(dim(H), 2)
@@ -293,7 +308,7 @@ end
     @test L * Vm ≈ M * Vm
 
     Hcons = constrain_space(H, NumberConservation(2, [Hf]))
-    L = matrix_representation(op, Hcons; lazy=true, projection=true)
+    L = matrix_representation(op, Hcons, :lazy; projection=true)
     M = matrix_representation(op, Hcons; projection=true)
     v = randn(dim(Hcons))
     Vm = randn(ComplexF64, dim(Hcons), 2)

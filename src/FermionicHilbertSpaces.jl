@@ -2,7 +2,7 @@ module FermionicHilbertSpaces
 
 using LinearAlgebra, SparseArrays
 import SciMLOperators
-import FillArrays: Zeros, Fill
+import FillArrays: Zeros, Fill, Eye
 import OrderedCollections: OrderedDict
 using TestItems
 using BitPermutations
@@ -11,9 +11,10 @@ using NonCommutativeProducts
 import NonCommutativeProducts: @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 
 
-export FockNumber, hc, basisstates, dim
+export FockNumber, hc, basisstates, dim, state_index, basisstate
 export hilbert_space, subregion
-export parityoperator, numberoperator, matrix_representation
+export parityoperator, numberoperator, matrix_representation, representation, vector_representation
+export Kets
 
 export partial_trace, generalized_kron, tensor_product, embed
 export @fermions, @majoranas, @boson, @bosons, @spin, @spins
@@ -110,6 +111,7 @@ include("physics/fermions/bdg.jl")
 include("physics/bosons.jl")
 include("physics/spin.jl")
 include("physics/open_systems.jl")
+include("symbolic_states.jl")
 
 include("printing.jl")
 

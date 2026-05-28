@@ -27,7 +27,7 @@ basisstate(ind, ::FermionicSpace{F}) where F = (F ∘ FockNumber)(ind - 1)
 state_index(state::FockNumber, ::FermionicSpace) = state.f + 1
 function dim(H::FermionicSpace)
     N = nbr_of_modes(H)
-    N < 63 ? 2^N : BigInt(2)^N
+    N < 63 ? 1 << N : BigInt(1) << N
 end
 atomic_factors(H::FermionicSpace) = map(hilbert_space, H.modes)
 nbr_of_modes(H::FermionicSpace) = length(H.modes)
@@ -116,12 +116,14 @@ focknbr_from_site_label(mode::FermionSym, H::FermionicSpace) = focknbr_from_site
 focknbr_from_site_labels(Hsub::FermionicSpace, H::FermionicSpace) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
 
 
-function _precomputation_before_operator_application(op::NCMul, space::FermionicSpace{B}) where {B<:FockNumber}
+function _precomputation_before_operator_application(op::NCMul{<:Any,<:FermionSym}, space::FermionicSpace{B}) where {B<:FockNumber}
     positions = map(op -> _find_position(op, space), op.factors)
-    any(iszero, positions) && throw(ArgumentError("Operator ($op) contains factors that are not part of the fermionic space ($space)"))
+    any(==(0), positions) && throw(ArgumentError("Operator ($op) contains factors that are not part of the fermionic space ($space)"))
     return positions
 end
-function apply_local_operators(op::NCMul, state::FockNumber{I}, space::FermionicSpace, fermionpositions; transpose) where I
+
+
+function apply_local_operators(op::NCMul{<:Any,<:FermionSym}, state::FockNumber{I}, space::FermionicSpace, fermionpositions; transpose) where I
     factors = op.factors
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1

@@ -33,10 +33,10 @@ Hleft = subregion([f[1, :↑], f[1, :↓]], H)
 Hright = subregion([f[2, :↑], f[2, :↓]], H)
 Peven = symmetric_sector(H, [Hleft, Hright], :symmetric, Sym)
 Podd = symmetric_sector(H, [Hleft, Hright], :antisymmetric, Sym)
-Meven = Peven' * M * Peven
+Meven = simplify.(Peven' * M * Peven)
 
 # The off-diagonal block should vanish
-Peven' * M * Podd
+simplify.(Peven' * M * Podd)
 
 # Anti-symmetric sector
 Modd = Podd' * M * Podd

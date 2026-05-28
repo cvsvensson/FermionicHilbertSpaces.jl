@@ -11,3 +11,4 @@ benchmark/Manifest*.toml
 /docs/build/
 /docs/src/literate_output/*
 .vscode/
+.DS_Store

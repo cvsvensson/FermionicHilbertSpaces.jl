@@ -30,7 +30,7 @@ combine_states(substates, sp::ConstrainedSpace) = combine_states(substates, pare
 partial_trace_phase_factor(s1, s2, sp::ConstrainedSpace) = partial_trace_phase_factor(s1, s2, parent(sp))
 atomic_substate(n, f, space::ConstrainedSpace) = atomic_substate(n, f, parent(space))
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
-constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}, constraint::AbstractConstraint=NoSymmetry()) where B<:AbstractBasisState = constrain_space(space, constraint, states)
+constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}, constraint::AbstractConstraint=NoSymmetry()) where B = constrain_space(space, constraint, states)
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, states)
 function constrain_space(space, constraint::AbstractConstraint, states=basisstates(space))
@@ -63,7 +63,9 @@ function _wrap(space, wrapping::ConstrainedSpace)
     ConstrainedSpace(space, wrapping.states, wrapping.state_index)
 end
 
-_apply_local_operators(ops, state::AbstractBasisState, space::Union{SectorHilbertSpace, ConstrainedSpace}, precomp) = _apply_local_operators(ops, state, parent(space), precomp)
+_apply_local_operators(ops, state::AbstractBasisState, space::Union{SectorHilbertSpace,ConstrainedSpace}, precomp) = _apply_local_operators(ops, state, parent(space), precomp)
+
+fast_path(space::ConstrainedSpace) = fast_path(parent(space))
 
 @testitem "constrain_space" begin
     @fermions f
