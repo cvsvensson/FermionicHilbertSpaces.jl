@@ -38,6 +38,7 @@ label(h::FermionicSpace) = label(only(h.modes))
 mode_ordering(H::FermionicSpace) = H.mode_ordering
 modes(H::FermionicSpace) = H.modes
 add_tag(H::FermionicSpace, tag) = FermionicSpace(map(m -> add_tag(m, tag), H.modes), add_tag(group_id(H), tag), statetype(H))
+symbolic_basis(H::FermionicSpace) = symbolic_basis(first(modes(H)))
 
 _normalize_sym(f::FermionSym) = FermionSym(false, f.label, f.basis)
 statetype(f::FermionSym) = FockNumber{default_fock_representation(1)}
