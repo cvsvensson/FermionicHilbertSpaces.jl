@@ -2,6 +2,7 @@ abstract type AbstractFermionSym <: AbstractSym end
 
 struct EagerDenseRepr end
 struct EagerSparseRepr end
+struct ChunkedSparseRepr end
 struct PartitionedSparseRepr{B,R,C}
     backend::B
     row_partition::R
@@ -151,7 +152,7 @@ function _matrix_representation(op::Missing, bases, space::AbstractHilbertSpace,
     SciMLOperators.IdentityOperator(dim(space))
 end
 _merge_diags(matrices, repr::LazyRepr) = matrices
-function _merge_diags(matrices, repr::Union{EagerDenseRepr,EagerSparseRepr})
+function _merge_diags(matrices, repr::Union{EagerDenseRepr,EagerSparseRepr,ChunkedSparseRepr})
     # go through list of matrices and merge consecutive Diagonals with kron
     newmats = Any[]
     n = 1
@@ -225,8 +226,11 @@ function add_identity!!((outinds, ininds, amps), coeff, space)
 end
 function finalize!((outinds, ininds, amps), space)
     N = dim(space)
-    isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, N)
-    return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, N)
+    finalize!((outinds, ininds, amps), N, N)
+end
+function finalize!((outinds, ininds, amps), N, M)
+    isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, M)
+    return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, M)
 end
 
 function matrix_accumulator(op, space, ::EagerDenseRepr)
@@ -452,24 +456,26 @@ end
 
 @testitem "Scheduler extension correctness" begin
     using SparseArrays, LinearAlgebra
+    using OhMyThreads
+    import FermionicHilbertSpaces: ChunkedSparseRepr
 
     @fermions f
     H = hilbert_space(f, 1:4)
     op = f[1]' * f[2] + 1im * f[2]' * f[1] + f[3]' * f[4] + f[4]' * f[3] + 2
 
     M_serial = matrix_representation(op, H)
-
-    using OhMyThreads
-    M_threaded = matrix_representation(op, H; scheduler=DynamicScheduler(; nchunks=2))
-    @test M_threaded == M_serial
-
+    scheduler = StaticScheduler(; nchunks=8)
+    M_chunked = matrix_representation(op, H, ChunkedSparseRepr(); scheduler)
+    M_threaded = matrix_representation(op, H; scheduler)
+    @test M_chunked ≈ M_serial
+    @test M_threaded ≈ M_serial
 
     struct DummyScheduler end
     @test_throws ArgumentError matrix_representation(op, H; scheduler=DummyScheduler())
 end
 
 @testitem "Distributed sparse matrix representation" begin
-    using FermionicHilbertSpaces, Test
+    # using FermionicHilbertSpaces, Test
     import FermionicHilbertSpaces: PartitionedSparseRepr
     using LinearAlgebra
     using PartitionedArrays

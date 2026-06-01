@@ -6,18 +6,7 @@ import FermionicHilbertSpaces: NonCommutativeProducts.NCAdd, NonCommutativeProdu
 function _resolve_ranks(repr::PartitionedSparseRepr)
     repr.nparts > 0 || throw(ArgumentError("nparts must be positive, got $(repr.nparts)."))
     ranks_source = LinearIndices((repr.nparts,))
-
-    if isnothing(repr.backend)
-        return DebugArray(ranks_source)
-    elseif repr.backend isa AbstractArray
-        return repr.backend
-    elseif repr.backend isa Function
-        return repr.backend(ranks_source)
-    elseif repr.backend isa DataType
-        return repr.backend(ranks_source)
-    end
-
-    throw(ArgumentError("Invalid backend $(repr.backend). Provide either a distributed ranks array, a backend function like distribute_with_mpi, or a constructor like DebugArray."))
+    return repr.backend(ranks_source)
 end
 
 function _resolve_partitions(repr::PartitionedSparseRepr, n::Int)
@@ -71,31 +60,50 @@ function _coo_from_single_term(op, space, col_partition; projection)
     return I, J, V
 end
 
+function _coo_from_single_term_chunk(op, space, local_cols; projection, precomp)
+    T = mat_eltype(op)
+    outinds = Int[]
+    ininds = Int[]
+    vals = T[]
+    sizehint!(vals, length(local_cols))
+    sizehint!(outinds, length(local_cols))
+    sizehint!(ininds, length(local_cols))
+    for inind in own_to_global(local_cols)
+        state = basisstate(inind, space)
+        newstate, amp = _apply_local_operators(op, state, space, precomp)
+        if !iszero(amp)
+            outind = state_index(newstate, space)
+            if iszero(outind)
+                projection || throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
+            else
+                push!(outinds, outind)
+                push!(ininds, inind)
+                push!(vals, amp)
+            end
+        end
+    end
+    return outinds, ininds, vals
+end
+
 function _coo_from_add(op::NCAdd, space, col_partition; projection)
     T = mat_eltype(op)
+    terms = collect(op.dict)
+    precomps = map(terms) do (term, _)
+        _precomputation_before_operator_application(term, space)
+    end
 
     coo = map(col_partition) do local_cols
-        own_cols = own_to_global(local_cols)
         outinds = Int[]
         ininds = Int[]
         vals = T[]
-        for inind in own_cols
-            state = basisstate(inind, space)
-            for (term, coeff) in op.dict
-                precomp = _precomputation_before_operator_application(term, space)
-                newstate, amp = _apply_local_operators(coeff * term, state, space, precomp)
-                if !iszero(amp)
-                    outind = state_index(newstate, space)
-                    if iszero(outind)
-                        projection || throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
-                    else
-                        push!(outinds, outind)
-                        push!(ininds, inind)
-                        push!(vals, amp)
-                    end
-                end
-            end
-            if !iszero(op.coeff)
+        for ((term, coeff), precomp) in zip(terms, precomps)
+            term_outinds, term_ininds, term_vals = _coo_from_single_term_chunk(coeff * term, space, local_cols; projection=projection, precomp=precomp)
+            append!(outinds, term_outinds)
+            append!(ininds, term_ininds)
+            append!(vals, term_vals)
+        end
+        if !iszero(op.coeff)
+            for inind in own_to_global(local_cols)
                 push!(outinds, inind)
                 push!(ininds, inind)
                 push!(vals, op.coeff)
