@@ -1,7 +1,7 @@
 module PartitionedArraysExt
 
 import PartitionedArrays: DebugArray, own_to_global, psparse, uniform_partition
-import FermionicHilbertSpaces: NonCommutativeProducts.NCAdd, NonCommutativeProducts.NCMul, ProductOperator, PartitionedSparseRepr, _apply_local_operators, _factorized_term_matrix_representation, _matrix_representation_single_space, _precomputation_before_operator_application, _sum_matrices, _term_matrix_representation, basisstate, dim, mat_eltype, state_index
+import FermionicHilbertSpaces: NonCommutativeProducts.NCAdd, NonCommutativeProducts.NCMul, ProductOperator, PartitionedSparseRepr, _factorized_term_matrix_representation, _matrix_representation_single_space, _sum_matrices, _term_matrix_representation, dim, mat_eltype, operator_indices_and_amplitudes!, sparse_matrix_accumulator
 
 function _resolve_ranks(repr::PartitionedSparseRepr)
     repr.nparts > 0 || throw(ArgumentError("nparts must be positive, got $(repr.nparts)."))
@@ -25,116 +25,45 @@ function _resolve_partitions(repr::PartitionedSparseRepr, n::Int)
     return row_partition, col_partition
 end
 
-function _coo_from_single_term(op, space, col_partition; projection)
-    precomp = _precomputation_before_operator_application(op, space)
-    T = mat_eltype(op)
-
+function _coo_from_chunked_terms(terms, space, col_partition; projection, identity_coeff=0)
+    T = isempty(terms) ? typeof(identity_coeff) : mat_eltype(first(terms))
     coo = map(col_partition) do local_cols
-        own_cols = own_to_global(local_cols)
-        outinds = Int[]
-        ininds = Int[]
-        vals = T[]
-        sizehint!(vals, length(own_cols))
-        sizehint!(outinds, length(own_cols))
-        sizehint!(ininds, length(own_cols))
-        for inind in own_cols
-            state = basisstate(inind, space)
-            newstate, amp = _apply_local_operators(op, state, space, precomp)
-            if !iszero(amp)
-                outind = state_index(newstate, space)
-                if iszero(outind)
-                    projection || throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
-                else
-                    push!(outinds, outind)
-                    push!(ininds, inind)
-                    push!(vals, amp)
-                end
+        cols = own_to_global(local_cols)
+        accum = sparse_matrix_accumulator(T, max(length(cols), 16))
+        for term in terms
+            operator_indices_and_amplitudes!(accum, term, space, cols; projection)
+        end
+        if !iszero(identity_coeff)
+            for inind in cols
+                push!(accum[1], inind)
+                push!(accum[2], inind)
+                push!(accum[3], identity_coeff)
             end
         end
-        (outinds, ininds, vals)
+        accum
     end
 
-    I = map(t -> t[1], coo)
-    J = map(t -> t[2], coo)
-    V = map(t -> t[3], coo)
-    return I, J, V
-end
-
-function _coo_from_single_term_chunk(op, space, local_cols; projection, precomp)
-    T = mat_eltype(op)
-    outinds = Int[]
-    ininds = Int[]
-    vals = T[]
-    sizehint!(vals, length(local_cols))
-    sizehint!(outinds, length(local_cols))
-    sizehint!(ininds, length(local_cols))
-    for inind in own_to_global(local_cols)
-        state = basisstate(inind, space)
-        newstate, amp = _apply_local_operators(op, state, space, precomp)
-        if !iszero(amp)
-            outind = state_index(newstate, space)
-            if iszero(outind)
-                projection || throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
-            else
-                push!(outinds, outind)
-                push!(ininds, inind)
-                push!(vals, amp)
-            end
-        end
-    end
-    return outinds, ininds, vals
-end
-
-function _coo_from_add(op::NCAdd, space, col_partition; projection)
-    T = mat_eltype(op)
-    terms = collect(op.dict)
-    precomps = map(terms) do (term, _)
-        _precomputation_before_operator_application(term, space)
-    end
-
-    coo = map(col_partition) do local_cols
-        outinds = Int[]
-        ininds = Int[]
-        vals = T[]
-        for ((term, coeff), precomp) in zip(terms, precomps)
-            term_outinds, term_ininds, term_vals = _coo_from_single_term_chunk(coeff * term, space, local_cols; projection=projection, precomp=precomp)
-            append!(outinds, term_outinds)
-            append!(ininds, term_ininds)
-            append!(vals, term_vals)
-        end
-        if !iszero(op.coeff)
-            for inind in own_to_global(local_cols)
-                push!(outinds, inind)
-                push!(ininds, inind)
-                push!(vals, op.coeff)
-            end
-        end
-        (outinds, ininds, vals)
-    end
-
-    I = map(t -> t[1], coo)
-    J = map(t -> t[2], coo)
-    V = map(t -> t[3], coo)
-    return I, J, V
+    return map(t -> t[1], coo), map(t -> t[2], coo), map(t -> t[3], coo)
 end
 
 _assemble_psparse(I, J, V, row_partition, col_partition) = fetch(psparse(I, J, V, row_partition, col_partition))
 
-function _term_matrix_representation(op::NCMul, H, repr::PartitionedSparseRepr; projection=false, kwargs...)
+function _term_matrix_representation(op::NCMul, H, repr::PartitionedSparseRepr, chunking; projection=false, kwargs...)
     row_partition, col_partition = _resolve_partitions(repr, dim(H))
-    I, J, V = _coo_from_single_term(op, H, col_partition; projection=projection)
+    I, J, V = _coo_from_chunked_terms((op,), H, col_partition; projection=projection)
     _assemble_psparse(I, J, V, row_partition, col_partition)
 end
 
-function _factorized_term_matrix_representation(ops::ProductOperator, H, repr::PartitionedSparseRepr; projection=false, kwargs...)
-    row_partition, col_partition = _resolve_partitions(repr, dim(H))
-    I, J, V = _coo_from_single_term(ops, H, col_partition; projection=projection)
-    _assemble_psparse(I, J, V, row_partition, col_partition)
-end
+# function _factorized_term_matrix_representation(ops::ProductOperator, H, repr::PartitionedSparseRepr, chunking; projection=false, kwargs...)
+#     row_partition, col_partition = _resolve_partitions(repr, dim(H))
+#     I, J, V = _coo_from_chunked_terms((ops,), H, col_partition; projection=projection)
+#     _assemble_psparse(I, J, V, row_partition, col_partition)
+# end
 
-function _matrix_representation_single_space(op::NCAdd, H, repr::PartitionedSparseRepr; projection=false, kwargs...)
+function _matrix_representation_single_space(op::NCAdd, H, repr::PartitionedSparseRepr, chunking; projection=false, kwargs...)
     row_partition, col_partition = _resolve_partitions(repr, dim(H))
-    I, J, V = _coo_from_add(op, H, col_partition; projection=projection)
+    terms = Tuple(coeff * term for (term, coeff) in op.dict)
+    I, J, V = _coo_from_chunked_terms(terms, H, col_partition; projection=projection, identity_coeff=op.coeff)
     _assemble_psparse(I, J, V, row_partition, col_partition)
 end
 

@@ -284,9 +284,9 @@ function phase_factor_h(f1::FixedNumberFockState, f2::FixedNumberFockState, part
 end
 
 
-function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); kwargs...)
+function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking = NoChunking(), kwargs...)
     isquadratic(op) && isnumberconserving(op) || throw(ArgumentError("Only quadratic, number conserving operators supported for SingleParticleHilbertSpace"))
-    _matrix_representation_single_space(remove_identity(op), H, repr; kwargs...)
+    _matrix_representation_single_space(remove_identity(op), H, repr, chunking; kwargs...)
 end
 _find_position(op, H::SingleParticleHilbertSpace) = _find_position(op, parent(H))
 function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::SingleParticleHilbertSpace; kwargs...)
