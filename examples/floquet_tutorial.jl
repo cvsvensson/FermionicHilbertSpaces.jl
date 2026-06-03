@@ -38,7 +38,7 @@
 # Let's load the package and import some things we need to overload or use
 using FermionicHilbertSpaces
 import FermionicHilbertSpaces.NonCommutativeProducts:
-    @nc, Swap, NCMul, AddTerms, @commutative, mul_effect
+    @nc, NCMul, @commutative, mul_effect
 
 # ### Step 1 — Symbolic types
 
@@ -87,7 +87,7 @@ const Floquets = Union{FloquetLadder,FloquetNumber}
 # we will put number operators before ladder operators.
 
 function mul_effect(a::Floquets, b::Floquets)
-    a.basis.id > b.basis.id && return Swap(1)   # different subsystem: sort by id
+    a.basis.id > b.basis.id && return b * a   # different subsystem: sort by id
     a.basis.id < b.basis.id && return nothing   # already in order
     return floquet_mul(a, b)                    # same subsystem: apply algebra
 end
@@ -109,12 +109,12 @@ end
 # ``F^k N = N F^k - k F^k``.
 function floquet_mul(a::FloquetLadder, b::FloquetNumber)
     if b.power == 1
-        return AddTerms((Swap(1), -a.shift * a))         # Base case: F^k * N = N * F^k - k * F^k
+        return b * a - a.shift * a         # Base case: F^k * N = N * F^k - k * F^k
     else
         N_remaining = FloquetNumber(b.power - 1, b.basis)
-        term1 = NCMul(1, [FloquetNumber(1, b.basis), a, N_remaining])   # N * F^k * N^(p-1)
-        term2 = NCMul(-a.shift, [a, N_remaining])                        # -k * F^k * N^(p-1)
-        return AddTerms((term1, term2))
+        term1 = FloquetNumber(1, b.basis) * a * N_remaining   # N * F^k * N^(p-1)
+        term2 = -a.shift * a * N_remaining                    # -k * F^k * N^(p-1)
+        return term1 + term2
     end
     throw(ArgumentError("Should not reach here"))
 end
