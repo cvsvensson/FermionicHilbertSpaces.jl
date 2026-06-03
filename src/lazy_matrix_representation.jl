@@ -83,7 +83,7 @@ end
 Base.transpose(L::SciMLOperators.FunctionOperator{<:Any,<:Any,<:Any,<:Any,<:LazyOperator}) = scimloperator(transpose(L.op))
 LinearAlgebra.ishermitian(L::LazyOperator) = L.ishermitian
 
-function _eager_matrix_representation(L::LazyOperator{Union{<:NCMul,<:ProductOperator}})
+function _eager_matrix_representation(L::LazyOperator{<:Union{NCMul,ProductOperator}})
     return _term_matrix_representation(L.op, L.space, EagerSparseRepr(), L.chunking; projection=L.projection)
 end
 
