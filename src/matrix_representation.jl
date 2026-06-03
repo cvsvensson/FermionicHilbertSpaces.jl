@@ -217,7 +217,7 @@ function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs.
     end
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
 end
-function __matrix_representation(op::NCAdd, bases, space, repr, chunking::NoChunking; tree_split=10, kwargs...)
+function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
     matrices = [_matrix_representation(term, bases, space, repr, NoChunking(); kwargs...) for term in NCterms(op)]
     _sum_matrices(matrices, repr; tree_split=tree_split) + op.coeff * _matrix_representation(missing, bases, space, repr, NoChunking(); kwargs...)
 end
@@ -229,17 +229,12 @@ end
 
 matrix_accumulator(op::ProductOperator, space, repr) = matrix_accumulator(mat_eltype(op), 1, (dim(space), dim(space)), repr)
 matrix_accumulator(op, space, repr) = matrix_accumulator(mat_eltype(op), length(NCterms(op)), (dim(space), dim(space)), repr)
-# matrix_accumulator(op::NCAdd, (N, M), repr::EagerSparseRepr) = matrix_accumulator(mat_eltype(op), length(op.dict), repr)
+
 function matrix_accumulator(::Type{T}, N::Int, (d1, d2)::Tuple{Int, Int}, ::EagerSparseRepr) where T
     length_guess = Int(floor(1 + log2(N + 1))) .* (d1, d2) # mild increase with number of terms
     return sparse_matrix_accumulator(T, length_guess)
 end
-# matrix_accumulator(op::Union{NCMul,ProductOperator}, space, ::EagerSparseRepr) = sparse_matrix_accumulator(mat_eltype(op), dim(space))
-# function matrix_accumulator(op::NCAdd, ::EagerSparseRepr, N::Int, M::Int)
-#     length_guess = Int(floor(1 + log2(length(NCterms(op)) + 1))) * M
-#     return sparse_matrix_accumulator(mat_eltype(op), length_guess)
-# end
-# matrix_accumulator(op::Union{NCMul,ProductOperator}, space, ::EagerSparseRepr, N::Int, M::Int) = sparse_matrix_accumulator(mat_eltype(op), M)
+
 function sparse_matrix_accumulator(::Type{T}, (N, M)) where T
     outinds = Int[]
     ininds = Int[]
@@ -290,21 +285,11 @@ function _matrix_representation_single_space(op::NCAdd, space, repr::Union{Eager
     finalize!(accumulator, space)
 end
 
-# function _matrix_representation_single_space(op::NCAdd, space, repr; chunking=NoChunking(), kwargs...)
-#     _matrix_representation_single_space(op, space, repr, chunking; kwargs...)
-# end
-
-
 function _term_matrix_representation(op, H::AbstractHilbertSpace, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
     _accumulator = matrix_accumulator(op, H, repr)
     accumulator = operator_indices_and_amplitudes!(_accumulator, op, H; kwargs...)
     finalize!(accumulator, H)
 end
-# function _factorized_term_matrix_representation(ops::ProductOperator, H, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
-#     _accumulator = matrix_accumulator(ops, H, repr)
-#     accumulator = operator_indices_and_amplitudes!(_accumulator, ops, H; kwargs...)
-#     finalize!(accumulator, H)
-# end
 
 # function apply_local_operator(op::NCMul{C,F}, state::AbstractFockState, space::AbstractHilbertSpace, (pos, daggers)) where {C,F<:AbstractFermionSym}
 #     new_state, amp = togglefermions(Iterators.reverse(pos), Iterators.reverse(daggers), state)

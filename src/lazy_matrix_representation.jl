@@ -7,7 +7,7 @@ Acts directly on vectors and matrices via without constructing a sparse matrix.
 Constructed via `matrix_representation(op, space, :lazy)`. `LazyOperator` conforms to
 the `SciMLOperators.AbstractSciMLOperator` interface.
 """
-struct LazyOperator{O,S,T,C,P}
+mutable struct LazyOperator{O,S,T,C,P}
     op::O
     space::S
     chunking::C
@@ -16,6 +16,7 @@ struct LazyOperator{O,S,T,C,P}
     conjugate::Bool
     ishermitian::Bool
     size::Tuple{Int,Int}
+    cache::Any
 end
 
 function _show_lazy_operator_expression(io::IO, L::LazyOperator)
@@ -31,8 +32,22 @@ end
 
 function LazyOperator(op::O, space::S, chunking::C=NoChunking(), precomp::P=_precomputation_before_operator_application(op, space); projection=false, conjugate=false, ishermitian=_ishermitian(op), T=mat_eltype(op),
 ) where {O,S,C<:AbstractChunkingStrategy,P}
-    LazyOperator{O,S,T,C,P}(op, space, chunking, precomp, projection, conjugate, ishermitian, (dim(space), dim(space)))
+    LazyOperator{O,S,T,C,P}(op, space, chunking, precomp, projection, conjugate, ishermitian, (dim(space), dim(space)), nothing)
 end
+
+function _lazy_output_prototype(L::LazyOperator, input::AbstractVector)
+    size(L, 2) == length(input) || throw(DimensionMismatch("input has size $(size(input)) but operator has size $(size(L))"))
+    T = promote_type(eltype(L), eltype(input))
+    return similar(input, T, size(L, 1))
+end
+
+function _lazy_output_prototype(L::LazyOperator, input::AbstractMatrix)
+    size(input, 1) == size(L, 2) || throw(DimensionMismatch("input has size $(size(input)) but operator has size $(size(L))"))
+    T = promote_type(eltype(L), eltype(input))
+    return similar(input, T, (size(L, 1), size(input, 2)))
+end
+
+
 function scimloperator(L::LazyOperator, input=Vector{eltype(L)}(undef, dim(L.space)), output=input; kwargs...)
     SciMLOperators.FunctionOperator(L, input, output; ishermitian=ishermitian(L), op_adjoint=adjoint(L), isconstant=true, T=eltype(L), islinear=true, batch=true, kwargs...)
 end
@@ -71,10 +86,6 @@ LinearAlgebra.ishermitian(L::LazyOperator) = L.ishermitian
 function _eager_matrix_representation(L::LazyOperator{Union{<:NCMul,<:ProductOperator}})
     return _term_matrix_representation(L.op, L.space, EagerSparseRepr(), L.chunking; projection=L.projection)
 end
-
-# function _eager_matrix_representation(L::LazyOperator{<:ProductOperator})
-#     return _factorized_term_matrix_representation(L.op, L.space, EagerSparseRepr(); projection=L.projection)
-# end
 
 function _eager_matrix_representation(L::LazyOperator{<:NCAdd})
     return _matrix_representation_single_space(L.op, L.space, EagerSparseRepr(), L.chunking; projection=L.projection)
@@ -222,9 +233,7 @@ end
 function _term_matrix_representation(op::Union{NCMul,ProductOperator}, H::AbstractHilbertSpace, rep::LazyRepr, chunking; kwargs...)
     scimloperator(LazyOperator(op, H, chunking; kwargs...), get_input(rep, H))
 end
-# function _factorized_term_matrix_representation(ops::ProductOperator, H, rep::LazyRepr; kwargs...)
-#     scimloperator(LazyOperator(ops, H; kwargs...), get_input(rep, H))
-# end
+
 function _matrix_representation_single_space(op::NCAdd, H, rep::LazyRepr, chunking; kwargs...)
     scimloperator(LazyOperator(op, H, chunking; kwargs...), get_input(rep, H))
 end
@@ -349,12 +358,13 @@ end
     using FermionicHilbertSpaces.SciMLOperators
     using LinearAlgebra, SparseArrays
     using OhMyThreads
-    import FermionicHilbertSpaces: TermChunking, StateChunking, NoChunking
+    import FermionicHilbertSpaces: TermChunking, StateChunking, NoChunking, cache_operator!
 
     scheduler = StaticScheduler(; nchunks=4)
+    scheduler = SerialScheduler()
 
     @fermions f
-    Hf = hilbert_space(f, 1:18)
+    Hf = hilbert_space(f, 1:4)
     op = f[1]' * f[2] + 2im * f[3]' * f[4] + hc + 1.5
 
     M = matrix_representation(op, Hf)
@@ -366,6 +376,12 @@ end
     V = randn(ComplexF64, dim(Hf), 3)
     vs = sprandn(ComplexF64, dim(Hf), 0.5)
     Vs = sprandn(ComplexF64, dim(Hf), 3, 0.5)
+
+    cache_operator(Lt, v)
+    cache_operator(Ls, V)
+    @test Lt.op.cache isa Channel
+    @test Ls.op.cache isa Channel
+    @test size(fetch(Ls.op.cache)) == size(V)
 
     @test Lt * v ≈ M * v
     @test Ls * v ≈ M * v
