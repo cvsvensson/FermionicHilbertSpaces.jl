@@ -25,6 +25,7 @@ supports_branch_pruning(c::ProductConstraint) = any(supports_branch_pruning, c.c
 supports_filtering(c::ProductConstraint) = any(supports_filtering, c.constraints)
 supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c.constraints)
 
+supply_missing_constraint_info(constraint::ProductConstraint, space, spaces) = ProductConstraint(map(cons -> supply_missing_constraint_info(cons, space, spaces), constraint.constraints))
 
 struct FilterConstraint{R,FS,H} <: AbstractConstraint
     reducer::R
@@ -80,10 +81,7 @@ function filter_function(constraint::SectorConstraint, space::AbstractHilbertSpa
 end
 
 supply_missing_constraint_info(constraint::FilterConstraint{<:Any,<:Any,Missing}, space, spaces) = FilterConstraint(constraint.reducer, constraint.functions, spaces)
-function supply_missing_constraint_info(constraint::FilterConstraint, space, spaces)
-    constraint.subspaces == spaces && return constraint
-    throw(ArgumentError("Constraint subspaces do not match the spaces being combined. Please provide explicit subspace information for this constraint."))
-end
+supply_missing_constraint_info(constraint::FilterConstraint, space, spaces) = constraint
 supply_missing_constraint_info(constraint::SectorConstraint, space, spaces) = supply_missing_constraint_info(constraint.filter, space, spaces) |> SectorConstraint
 
 
@@ -111,10 +109,7 @@ supports_sector_grouping(::AdditiveConstraint{<:Any,Missing}) = false
 supports_sector_grouping(::AdditiveConstraint) = true
 
 supply_missing_constraint_info(constraint::AdditiveConstraint{<:Any,Missing}, space, spaces) = AdditiveConstraint(constraint.allowed_values, spaces, constraint.functions)
-function supply_missing_constraint_info(constraint::AdditiveConstraint, space, spaces)
-    constraint.subspaces == spaces && return constraint
-    throw(ArgumentError("Constraint subspaces do not match the spaces being combined. Please provide explicit subspace information for this constraint."))
-end
+supply_missing_constraint_info(constraint::AdditiveConstraint, space, spaces) = constraint
 
 """
     NumberConservation(total=missing, subspaces=missing, weights=missing)
@@ -141,10 +136,7 @@ supports_branch_pruning(::NumberConservation) = true
 supports_filtering(::NumberConservation) = true
 supports_sector_grouping(::NumberConservation) = true
 supply_missing_constraint_info(constraint::NumberConservation{<:Any,Missing}, space, spaces) = NumberConservation(constraint.total, spaces, constraint.weights)
-function supply_missing_constraint_info(constraint::NumberConservation, space, spaces)
-    constraint.subspaces == spaces && return constraint
-    throw(ArgumentError("Constraint subspaces do not match the spaces being combined. Please provide explicit subspace information for this constraint."))
-end
+supply_missing_constraint_info(constraint::NumberConservation, space, spaces) = constraint
 
 """
     ParityConservation(parities=[-1, 1], subspaces=missing)
@@ -165,10 +157,7 @@ supports_branch_pruning(::ParityConservation) = true
 supports_filtering(::ParityConservation) = true
 supports_sector_grouping(::ParityConservation) = true
 supply_missing_constraint_info(constraint::ParityConservation{Missing}, space, spaces) = ParityConservation(constraint.allowed_parities, spaces)
-function supply_missing_constraint_info(constraint::ParityConservation, space, spaces)
-    constraint.subspaces == spaces && return constraint
-    throw(ArgumentError("Constraint subspaces do not match the spaces being combined. Please provide explicit subspace information for this constraint."))
-end
+supply_missing_constraint_info(constraint::ParityConservation, space, spaces) = constraint
 
 unique_split_state(state, mapper) = only(first(split_state(state, mapper)))
 
