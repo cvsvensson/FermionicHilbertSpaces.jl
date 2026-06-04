@@ -34,6 +34,8 @@ function tensor_product(spaces; constraint=NoSymmetry())
         return full_space
     end
 
+    constraint = supply_missing_constraint_info(constraint, full_space, spaces)
+
     states = supports_branch_pruning(constraint) ? generate_states(spaces, constraint, full_space) : basisstates(full_space)
     if supports_sector_grouping(constraint) && supports_filtering(constraint)
         return sector_space(full_space, states, sector_function(constraint, full_space), constraint)
