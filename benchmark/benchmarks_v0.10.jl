@@ -160,3 +160,15 @@ SUITE["matrix_application"]["lazy liouvillian"]["mul!"] = @benchmarkable mul!($v
 vs = sprand(ComplexF64, dim(Hopen), 0.001)
 SUITE["matrix_application"]["lazy liouvillian"]["mul sparse"] = @benchmarkable $L * $vs
 
+## Permutations
+using Combinatorics
+using FermionicHilbertSpaces: AdditiveConstraint
+@spins S 1 // 2
+H = hilbert_space(S, 1:8, AdditiveConstraint(2, s -> s.m))
+Hs = factors(H)
+SUITE["permutations"]["many_small"] = @benchmarkable symmetric_sector($H, $Hs, $:symmetric)
+
+@spins S 3
+H = hilbert_space(S, 1:4)
+Hs = factors(H)
+SUITE["permutations"]["few_large"] = @benchmarkable symmetric_sector($H, $Hs, $:symmetric)

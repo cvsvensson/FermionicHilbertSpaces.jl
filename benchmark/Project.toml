@@ -1,5 +1,6 @@
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 FermionicHilbertSpaces = "82e5dd95-83c3-46b2-a303-acc930c81756"
 NonCommutativeProducts = "a9a0a982-c603-4485-bf80-6b61b825abb4"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
