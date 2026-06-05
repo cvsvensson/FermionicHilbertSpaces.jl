@@ -53,6 +53,7 @@ atomic_id(s::SymbolicState) = (atomic_id(s.space), s.ket, s.bra)
 
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
+state_index(state::AbstractString, space::AbstractHilbertSpace) = state_index(interpret_state(state, space), space)
 
 function interpret_state(input::AbstractString, ::Type{B}) where {I,B<:FockNumber{I}}
     all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only '0' and '1', got \"$input\""))

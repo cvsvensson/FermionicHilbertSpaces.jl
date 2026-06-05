@@ -77,6 +77,7 @@ Base.size(ti::TypedIterator) = size(ti.iter)
 Base.keys(ti::TypedIterator) = keys(ti.iter)
 
 function _resolve_sector_permutations_and_weights end # for Combinatorics extension
+function cache_operator! end # for OhMyThreads extension
 
 ## Files
 include("spaces.jl")

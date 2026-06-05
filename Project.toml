@@ -18,10 +18,12 @@ TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 [weakdeps]
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
+PartitionedArrays = "5a9dfac6-5c52-46f7-8278-5e2210713be9"
 
 [extensions]
 CombinatoricsExt = "Combinatorics"
 OhMyThreadsExt = "OhMyThreads"
+PartitionedArraysExt = "PartitionedArrays"
 
 [compat]
 BitPermutations = "0.3"
@@ -31,6 +33,7 @@ LinearAlgebra = "1.11"
 NonCommutativeProducts = "0.4.3"
 OhMyThreads = "0.8.5"
 OrderedCollections = "1"
+PartitionedArrays = "0.5"
 PrecompileTools = "1.2"
 SciMLOperators = "1.16"
 SparseArrays = "1"
