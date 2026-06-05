@@ -18,8 +18,7 @@ vals, vecs = eigsolve(v -> ham * v, rand(size(ham, 1)), 1)
 
 ## Partial trace to half the system
 Hsub = subregion(hilbert_space(c, 1:div(N, 2)), H)
-#vecs[1]*vecs[1]' runs out of memory for large N, so let's use LowRankMatrices.jl
-using LowRankMatrices
-rho = LowRankMatrix(vecs[1], conj(vecs[1]))
-@time subrho = partial_trace(rho, H => Hsub);
+#vecs[1]*vecs[1]' runs out of memory for large N, but by supplying a vector to partial_trace,
+# LowRankMatrices.jl will be used to avoid the full matrix
+@time subrho = partial_trace(vecs[1], H => Hsub);
 sum(v -> -v * log(abs(v) + 1e-16), eigvals(subrho))

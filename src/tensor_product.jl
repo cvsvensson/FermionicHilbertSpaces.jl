@@ -362,6 +362,7 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
     phi(kron(reverse(map((phi, op) -> phi(op), phis, ops))...))
 end
 
+partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_trace(LowRankMatrix(v, conj(v)), H, Hsub; kwargs...)
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
     if isnothing(complement)
