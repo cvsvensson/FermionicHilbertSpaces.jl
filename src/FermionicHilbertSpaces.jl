@@ -1,6 +1,6 @@
 module FermionicHilbertSpaces
 
-using LinearAlgebra, SparseArrays
+using LinearAlgebra, SparseArrays, LowRankMatrices
 import SciMLOperators
 import FillArrays: Zeros, Fill, Eye
 import OrderedCollections: OrderedDict
