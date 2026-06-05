@@ -41,7 +41,7 @@ end
 supports_branch_pruning(::FilterConstraint) = false
 supports_filtering(::FilterConstraint) = true
 supports_sector_grouping(c::FilterConstraint) = false
-function filter_function(constraint::FilterConstraint{Missing,Missing,F}, ::AbstractHilbertSpace) where F
+function filter_function(constraint::FilterConstraint{F,Missing,Missing}, ::AbstractHilbertSpace) where F
     return constraint.reducer
 end
 function filter_function(constraint::FilterConstraint, space::AbstractHilbertSpace)
@@ -61,6 +61,10 @@ function filter_function(constraint::FilterConstraint{<:Any,<:Function}, space::
         constraint.reducer(values)
     end
 end
+supply_missing_constraint_info(constraint::FilterConstraint{<:Any,<:Any,Missing}, space, spaces) = FilterConstraint(constraint.reducer, constraint.functions, spaces)
+supply_missing_constraint_info(constraint::FilterConstraint{<:Any,Missing,Missing}, space, spaces) = FilterConstraint(constraint.reducer, constraint.functions, missing) # if subspace functions are missing, the reducer acts directly on the full state
+supply_missing_constraint_info(constraint::FilterConstraint, space, spaces) = constraint
+
 
 struct SectorConstraint{F<:FilterConstraint} <: AbstractConstraint
     filter::F
@@ -80,8 +84,6 @@ function filter_function(constraint::SectorConstraint, space::AbstractHilbertSpa
     return !ismissing ∘ sec
 end
 
-supply_missing_constraint_info(constraint::FilterConstraint{<:Any,<:Any,Missing}, space, spaces) = FilterConstraint(constraint.reducer, constraint.functions, spaces)
-supply_missing_constraint_info(constraint::FilterConstraint, space, spaces) = constraint
 supply_missing_constraint_info(constraint::SectorConstraint, space, spaces) = supply_missing_constraint_info(constraint.filter, space, spaces) |> SectorConstraint
 
 
