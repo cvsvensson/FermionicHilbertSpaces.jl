@@ -92,7 +92,17 @@ SpinSpace{J}(label) where J = SpinSpace{J}(SymbolicSpinBasis(label))
 basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
-state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S} = Int(s.m + (J + 1))
+function state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S<:Rational}
+    if s.m.den == 2 == J.den
+        return div(s.m.num + J.num, 2) + 1
+    else
+        throw(ArgumentError("For rational spin J, the m values must be half-integers."))
+    end
+end
+function state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S<:Integer}
+    return s.m + J + 1
+end
+
 atomic_id(H::SpinSpace) = atomic_id(H.sym)
 function add_tag(H::SpinSpace{J,M,S}, tag) where {J,M,S}
     newsym = add_tag(H.sym, tag)
