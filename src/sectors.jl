@@ -41,7 +41,7 @@ function groupby(f::F, itr; sortkeys=false, sortvals=false) where {F}
     end
     newdict
 end
-function groupby(f::F, itr, ::Type{B}; sortkeys = Base.hasmethod(isless, Tuple{K,K}), sortvals=Base.hasmethod(isless, Tuple{B,B})) where {F,B}
+function groupby(f::F, itr, ::Type{B}; sortkeys=:auto, sortvals=false) where {F,B}
     d = OrderedDict{Any,Vector{B}}()
     for x in itr
         key = f(x)
@@ -52,6 +52,7 @@ function groupby(f::F, itr, ::Type{B}; sortkeys = Base.hasmethod(isless, Tuple{K
     end
     _ks = identity.(keys(d))
     K = eltype(_ks)
+    sortkeys = sortkeys == :auto ? Base.hasmethod(isless, Tuple{K,K}) : false
     ks = sortkeys ? sort!(_ks) : _ks
     if sortvals
         foreach(sort!, values(d))
