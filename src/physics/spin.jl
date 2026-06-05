@@ -73,7 +73,8 @@ struct SpinState{M} <: AbstractBasisState
 end
 Base.:(==)(a::SpinState, b::SpinState) = a.m == b.m
 Base.isless(a::SpinState, b::SpinState) = a.m < b.m
-Base.hash(x::SpinState, h::UInt) = hash(x.m, h)
+Base.hash(x::SpinState{<:Rational}, h::UInt) = hash(x.m.num, h)
+Base.hash(x::SpinState{<:Integer}, h::UInt) = hash(x.m, h)
 
 internal_rep(state::SpinState, ::AbstractHilbertSpace, ::Type{Int}) = Int(state.m * 2)
 physical_rep(state::Int, ::Type{SpinState{M}}) where {M} = SpinState{M}(state // 2)
