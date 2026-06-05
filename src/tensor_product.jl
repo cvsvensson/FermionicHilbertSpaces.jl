@@ -7,7 +7,7 @@ Construct the composite Hilbert space from the spaces in `spaces`, with optional
 """
 function tensor_product_no_constraints(spaces)
     atoms = Iterators.flatten(Iterators.map(atomic_factors, spaces))
-    groups = groupby(group_id, atoms; sort=false)
+    groups = groupby(group_id, atoms; sortkeys=false, sortvals = false)
 
     factors = map((id, atoms) -> combine_into_group(id, atoms), keys(groups), values(groups))
     space = if length(factors) == 1
