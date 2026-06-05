@@ -127,11 +127,11 @@ end
 
     # Now with subregions and weights
     Hnumber = hilbert_space(f, 1:N, NumberConservation(1:2, [f[1], f[2]], [1, -1]))
-    filter_constraint = FilterConstraint([f[1], f[2]], [particle_number, particle_number], in(-(1:2)) ∘ only ∘ diff ∘ collect)
-    sector_constraint = SectorConstraint([f[1], f[2]], [particle_number, particle_number], ns -> begin
-        n1, n2 = collect(ns)
-        n1 - n2 in 1:2 ? n1 - n2 : missing
-    end)
+    filter_constraint = FilterConstraint(in(-(1:2)) ∘ only ∘ diff ∘ collect, particle_number, [f[1], f[2]])
+    sector_constraint = SectorConstraint(ns -> begin
+            n1, n2 = collect(ns)
+            n1 - n2 in 1:2 ? n1 - n2 : missing
+        end, [particle_number, particle_number], [f[1], f[2]])
     Hfrom_tensor = tensor_product(Hs, constraint=filter_constraint)
     Hfrom_constrain = constrain_space(H, filter_constraint)
     Hfrom_tensor_sector = tensor_product(Hs, constraint=sector_constraint)
@@ -205,11 +205,11 @@ end
 _localize_sub_constraint(c::NumberConservation{<:Any,<:Any,W}, allowed, H) where W = NumberConservation(allowed, H, c.weights)
 _localize_sub_constraint(c::ParityConservation, allowed, H) = ParityConservation(allowed, H)
 _localize_sub_constraint(c::AbstractConstraint, _allowed, _H) = c
-function localize_constraint(c::SectorConstraint{<:FilterConstraint{Missing,Missing}}, H::SectorHilbertSpace)
+function localize_constraint(c::SectorConstraint{<:FilterConstraint{<:Any,Missing,Missing}}, H::SectorHilbertSpace)
     # Bind the free-standing reducer to H as its single subspace.
     # sector_function on the larger space will split the state, extract the H-substate,
     # apply the original reducer to it, and return the label via `only`.
-    SectorConstraint((H,), (c.filter.reducer,), only)
+    SectorConstraint(only, (c.filter.reducer,), (H,))
 end
 
 """

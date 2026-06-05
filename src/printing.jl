@@ -48,12 +48,12 @@ function Base.show(io::IO, fc::FilterConstraint)
     if get(io, :compact, false)
         parts = filter(!isnothing, [
             ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
-            ismissing(fc.subspace_functions) ? nothing : "$(isa(fc.subspace_functions, Tuple) ? length(fc.subspace_functions) : 1) function(s)"])
+            ismissing(fc.functions) ? nothing : "$(isa(fc.functions, Tuple) ? length(fc.functions) : 1) function(s)"])
         print(io, "FilterConstraint(", join(parts, ", "), ")")
     else
         lines = filter(!isnothing, [
             ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
-            ismissing(fc.subspace_functions) ? nothing : "subspace_functions: $(isa(fc.subspace_functions, Tuple) ? length(fc.subspace_functions) : 1) function(s)",
+            ismissing(fc.functions) ? nothing : "subspace_functions: $(isa(fc.functions, Tuple) ? length(fc.functions) : 1) function(s), ",
             "reducer: $(fc.reducer)"])
         print(io, "FilterConstraint(", join(lines, ", "), ")")
     end
@@ -64,12 +64,12 @@ function Base.show(io::IO, bc::SectorConstraint)
     if get(io, :compact, false)
         parts = filter(!isnothing, [
             ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
-            ismissing(fc.subspace_functions) ? nothing : "$(isa(fc.subspace_functions, Tuple) ? length(fc.subspace_functions) : 1) function(s)"])
+            ismissing(fc.functions) ? nothing : "$(isa(fc.functions, Tuple) ? length(fc.functions) : 1) function(s)"])
         print(io, "SectorConstraint(", join(parts, ", "), ")")
     else
         lines = filter(!isnothing, [
             ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
-            ismissing(fc.subspace_functions) ? nothing : "subspace_functions: $(isa(fc.subspace_functions, Tuple) ? length(fc.subspace_functions) : 1) function(s)",
+            ismissing(fc.functions) ? nothing : "subspace_functions: $(isa(fc.functions, Tuple) ? length(fc.functions) : 1) function(s), ",
             "reducer: $(fc.reducer)"])
         print(io, "SectorConstraint(", join(lines, ""), ")")
     end

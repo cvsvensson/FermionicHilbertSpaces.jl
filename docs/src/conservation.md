@@ -68,12 +68,12 @@ constrain_space(H, ParityConservation(1, [Hb])) # keep only even parity of the b
 @bosons b
 H = hilbert_space(b, 1:2, 3)
 using FermionicHilbertSpaces: FilterConstraint, SectorConstraint, particle_number
-constraint = FilterConstraint(factors(H), particle_number, issorted)
+constraint = FilterConstraint(issorted, particle_number, factors(H))
 basisstates(constrain_space(H, constraint)) # keep only states with sorted particle numbers
 ```
 
 ```@example constraints
-constraint = SectorConstraint(factors(H), particle_number, numbers -> issorted(numbers) ? first(numbers) : missing) #  keep only states with sorted particle numbers, organize them into sectors according to the number of particles in the first mode
+constraint = SectorConstraint(numbers -> issorted(numbers) ? first(numbers) : missing,  particle_number, factors(H)) #  keep only states with sorted particle numbers, organize them into sectors according to the number of particles in the first mode
 constrain_space(H, constraint).qn_to_states
 ```
 
@@ -143,7 +143,7 @@ Nup = 2
 Ndn = 1
 Hup = hilbert_space(f, [(i, :↑) for i in 1:N], NumberConservation(Nup))
 Hdn = hilbert_space(f, [(i, :↓) for i in 1:N], NumberConservation(Ndn))
-H = tensor_product((Hup, Hdn))
+H = tensor_product(Hup, Hdn)
 ```
 The full hilbert space is of size `4^20 ≈ 10^12`, but the sector with 2 spin up and 1 spin down fermion is only of size `3800` and is generated without constructing the full hilbert space. Finally, we can get the matrix representation of the hamiltonian in this sector as
 ```@example hubbard

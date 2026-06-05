@@ -5,7 +5,7 @@ end
 supports_branch_pruning(::BranchConstraint) = true
 supports_filtering(::BranchConstraint) = false
 supports_sector_grouping(::BranchConstraint) = false
-
+supply_missing_constraint_info(constraint::BranchConstraint, space, spaces) = constraint
 branch_constraint(constraint::BranchConstraint, space) = constraint
 """
     valid_branch(constraint, partial_state, remaining_spaces) -> Bool
