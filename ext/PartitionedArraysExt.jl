@@ -1,7 +1,7 @@
 module PartitionedArraysExt
 
 import PartitionedArrays: DebugArray, own_to_global, psparse, uniform_partition
-import FermionicHilbertSpaces: NonCommutativeProducts.NCAdd, NonCommutativeProducts.NCMul, NonCommutativeProducts.NCterms, ProductOperator, PartitionedSparseRepr, _matrix_representation_single_space, _sum_matrices, _term_matrix_representation, dim, mat_eltype, operator_indices_and_amplitudes!, sparse_matrix_accumulator, chunked_operator_indices_and_amplitudes!, push_inds_amps!
+import FermionicHilbertSpaces: NonCommutativeProducts.NCAdd, NonCommutativeProducts.NCMul, NonCommutativeProducts.NCterms, PartitionedSparseRepr, _matrix_representation_single_space, _sum_matrices, _term_matrix_representation, dim, mat_eltype, sparse_matrix_accumulator, chunked_operator_indices_and_amplitudes!, push_inds_amps!
 
 function _resolve_ranks(repr::PartitionedSparseRepr)
     repr.nparts > 0 || throw(ArgumentError("nparts must be positive, got $(repr.nparts)."))
@@ -36,9 +36,6 @@ function _coo_from_chunked_terms(terms, space, col_partition; projection, identi
         if !iszero(identity_coeff)
             for inind in cols
                 push_inds_amps!(accum, inind, inind, identity_coeff)
-                # push!(accum[1], inind)
-                # push!(accum[2], inind)
-                # push!(accum[3], identity_coeff)
             end
         end
         accum
@@ -47,21 +44,17 @@ function _coo_from_chunked_terms(terms, space, col_partition; projection, identi
     return map(t -> t[1], coo), map(t -> t[2], coo), map(t -> t[3], coo)
 end
 
-_assemble_psparse(I, J, V, row_partition, col_partition) = fetch(psparse(I, J, V, row_partition, col_partition))
-
 function _term_matrix_representation(op::NCMul, H, repr::PartitionedSparseRepr, chunking; projection, kwargs...)
     row_partition, col_partition = _resolve_partitions(repr, dim(H))
     I, J, V = _coo_from_chunked_terms((op,), H, col_partition; projection)
-    _assemble_psparse(I, J, V, row_partition, col_partition)
+    fetch(psparse(I, J, V, row_partition, col_partition))
 end
 
 function _matrix_representation_single_space(op::NCAdd, H, repr::PartitionedSparseRepr, chunking; projection=false, kwargs...)
     row_partition, col_partition = _resolve_partitions(repr, dim(H))
     terms = collect(NCterms(op))
     I, J, V = _coo_from_chunked_terms(terms, H, col_partition; projection, identity_coeff=op.coeff)
-    _assemble_psparse(I, J, V, row_partition, col_partition)
+    fetch(psparse(I, J, V, row_partition, col_partition))
 end
-
-_sum_matrices(matrices, ::PartitionedSparseRepr; tree_split=10) = map(+, matrices...)
 
 end

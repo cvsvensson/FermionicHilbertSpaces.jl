@@ -79,7 +79,6 @@ function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCAdd,<:Any,<:Any,<:Te
         put!(chnl, local_mat)
         local_mat
     end
-    # _reduce_add!(y, partials)
 
     if !iszero(op.coeff) && !iszero(α)
         scalar_coeff = α * (L.conjugate ? conj(op.coeff) : op.coeff)
@@ -123,16 +122,6 @@ function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCAdd,<:Any,<:Any,<:St
     end
     return y
 end
-
-# # Helper used in every StateChunking _apply_single_term! variant
-# @inline function _with_channel_buffer(f, chnl::Channel)
-#     buf = take!(chnl)
-#     try
-#         f(buf)
-#     finally
-#         put!(chnl, buf)
-#     end
-# end
 
 function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, precomp, _coeff, conjugate, projection, chunking::StateChunking, chnl::Channel)
     coeff = (conjugate ? conj(_coeff) : _coeff)
@@ -197,7 +186,6 @@ function _apply_single_term!(y::AbstractVector, x::SparseArrays.AbstractSparseVe
         put!(chnl, local_mat)
         local_mat
     end
-    # _reduce_add!(y, partials)
     return y
 end
 
@@ -228,7 +216,6 @@ function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, 
         put!(chnl, local_mat)
         local_mat
     end
-    # _reduce_add!(y, partials)
     return y
 end
 
@@ -268,7 +255,6 @@ function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC,
         put!(chnl, local_mat)
         local_mat
     end
-    # _reduce_add!(y, partials)
     return y
 end
 
