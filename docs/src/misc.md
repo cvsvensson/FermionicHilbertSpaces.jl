@@ -28,7 +28,7 @@ M2 = matrix_representation(op, H; chunking=StateChunking(scheduler))
 ```
 
 For distributed sparse matrices, use `PartitionedSparseRepr` with a [PartitionedArrays](https://github.com/PartitionedArrays/PartitionedArrays.jl) backend:
-```@example partitionedarrays
+```julia
 using FermionicHilbertSpaces, PartitionedArrays
 using FermionicHilbertSpaces: PartitionedSparseRepr
 @fermions f
@@ -39,7 +39,7 @@ rep = PartitionedSparseRepr(; backend=DebugArray)
 M = matrix_representation(op, space, rep)
 ```
 To use [MPI](https://github.com/JuliaParallel/MPI.jl), start julia with MPI (`mpiexec -n 8 julia`) and do
-```@example partitionedarrays
+```julia
 using MPI
 MPI.Init()
 rep = PartitionedSparseRepr(; backend=distribute_with_mpi, nparts=MPI.Comm_size(MPI.COMM_WORLD))
