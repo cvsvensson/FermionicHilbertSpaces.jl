@@ -4,7 +4,6 @@ struct _EIG end
 function permute_state(state, mapper, perm::AbstractVector)
     substates = unique_split_state(state, mapper) #only support unique splits for now
     permuted = substates[perm]
-    # permuted = TupleTools.permute(substates, Tuple(perm))
     newstate = only(first(combine_states(permuted, mapper))) # only support unique combination for now
     return newstate
 end
@@ -25,28 +24,20 @@ function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T}=Float
     add_permutation_operator!(P, (basisstates(H), Base.Fix2(state_index, H)), state_mapper(H, Hs), perm, one(T))
 end
 function add_permutation_operator!(P, (states, state_index), mapper, perm, weight=1)
-    if unique_split_state(first(states), mapper) isa Tuple
-        return _add_permutation_operator_tuple!(P, (states, state_index), mapper, Tuple(perm), weight)
+    _perm = if unique_split_state(first(states), mapper) isa Tuple
+        Tuple(perm)
     else
-        return _add_permutation_operator!(P, (states, state_index), mapper, perm, weight)
+        perm
     end
+    return _add_permutation_operator!(P, (states, state_index), mapper, _perm, weight)
 end
 
-function _add_permutation_operator_tuple!(P, (states, state_index), mapper, perm, weight=1)
+function _add_permutation_operator!(P, (states, state_index), mapper, perm, weight)
     for (j, state) in enumerate(states)
         state2 = permute_state(state, mapper, perm)
         i = state_index(state2)
         iszero(i) && throw(ArgumentError("Permutation maps a basis state outside the constrained space"))
-        P[i, j] += weight
-    end
-    return P
-end
-function _add_permutation_operator!(P, (states, state_index), mapper, perm, weight=1)
-    for (j, state) in enumerate(states)
-        state2 = permute_state(state, mapper, perm)
-        i = state_index(state2)
-        iszero(i) && throw(ArgumentError("Permutation maps a basis state outside the constrained space"))
-        P[i, j] += weight
+        push_inds_amps!(P, i, j, weight)
     end
     return P
 end
@@ -61,7 +52,7 @@ subsystem list (covering only a subset of atomic factors). In the subsystem case
 projector is first constructed on `Hsub = tensor_product(Hs...)` and then embedded
 back into `H` via `embed(Psub, Hsub => H)`.
 """
-function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothing, ::Type{T}=Float64; normalize=true) where T
+function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothing, ::Type{T}=Float64; normalize=true, sparse=true) where T
     isempty(perms) && throw(ArgumentError("At least one permutation is required"))
 
     # Subsystem branch: Hs does not partition H, treat as a proper subsystem.
@@ -80,12 +71,26 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothi
     end
 
     d = dim(H)
-    P = zeros(T, d, d)
+    accum = if sparse
+        if 4 * length(perms) > d
+            zeros(T, d, d)
+        else
+            L = d * length(perms)
+            map(v -> sizehint!(v, L), (Int[], Int[], T[]))
+        end
+    else
+        zeros(T, d, d)
+    end
     mapper = state_mapper(H, Hs)
     states = basisstates(H)
     si = Base.Fix2(state_index, H)
     for (perm, w) in zip(perms, ws)
-        add_permutation_operator!(P, (states, si), mapper, perm, w)
+        add_permutation_operator!(accum, (states, si), mapper, perm, w)
+    end
+    P = if sparse
+        SparseArrays.sparse(finalize!(accum, H))
+    else
+        accum
     end
 
     if normalize
@@ -115,22 +120,34 @@ function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
     length(perms) == length(weights) || throw(ArgumentError("Generated weights must match generated permutations"))
     P = permutation_projector(H, Hs, perms, weights, T; kwargs...)
-    _remove_columns(P, orth_method)
+    _remove_columns!(P, orth_method)
 end
 _resolve_sector_permutations_and_weights(Hs, (perms, weights), T) = (perms, weights) # for direct input of perms and weights
 
-_remove_columns(P::AbstractMatrix, alg) = _remove_columns(Matrix(P), alg) # ensure we have a dense matrix for the decomposition
-function _remove_columns(P::Matrix, ::_QR)
-    F = qr(P, ColumnNorm())
+function _remove_columns!(P::Matrix, ::_QR, M::Int=round(Int, tr(P)))
+    F = try
+        qr!(P, ColumnNorm())
+    catch e
+        qr(P, ColumnNorm())
+    end
     big_cols = findall(>(0.1) ∘ abs, diag(F.R))
     return F.Q[:, big_cols]
 end
-function _remove_columns(P::Matrix, ::_EIG)
-    E = eigen(Hermitian(P))
+_remove_columns!(P::AbstractMatrix, ::_EIG, M::Int=round(Int, tr(P))) = _remove_columns!(Matrix(P), _EIG(), M) # ensure we have a dense matrix for the decomposition
+function _remove_columns!(P::Matrix, ::_EIG, M::Int=round(Int, tr(P)))
+    E = try
+        eigen!(Hermitian(P))
+    catch e
+        eigen(Hermitian(P))
+    end
     keep = findall(>(0.9) ∘ abs, E.values)  # λ ≈ 1 subspace
     return E.vectors[:, keep]  # already orthonormal
 end
-function _remove_columns(P::AbstractMatrix, ::Nothing)
+function _remove_columns!(P::SparseMatrixCSC, ::_QR, M::Int=round(Int, tr(P)))
+    F = qr(P; tol=0.1)
+    F.Q[invperm(F.prow), 1:M]
+end
+function _remove_columns!(P::AbstractMatrix, ::Nothing, M=round(Int, tr(P)))
     return P
 end
 

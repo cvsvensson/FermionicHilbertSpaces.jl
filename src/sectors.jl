@@ -19,11 +19,10 @@ atomic_substate(n, f, space::SectorHilbertSpace) = atomic_substate(n, f, parent(
 sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
 function sector_space(space, states, sector_function, constraint)
     B = statetype(space)
-    sort = Base.hasmethod(isless, Tuple{B,B})
-    _qntostates = groupby(sector_function, states, B; sort)
+    _qntostates = groupby(sector_function, states, B)
     _sector_space(space, _qntostates, constraint)
 end
-function groupby(f::F, itr; sort=false) where {F}
+function groupby(f::F, itr; sortkeys=false, sortvals=false) where {F}
     B = eltype(itr)
     d = OrderedDict{Any,Vector{B}}()
     for x in itr
@@ -33,10 +32,16 @@ function groupby(f::F, itr; sort=false) where {F}
                 B[]
             end, x)
     end
-    ks = sort ? sort!(collect(keys(d))) : collect(keys(d))
-    return OrderedDict(k => map(identity, d[k]) for k in ks)
+    _ks = identity.(keys(d))
+    K = eltype(_ks)
+    ks = sortkeys ? sort!(_ks) : _ks
+    newdict = OrderedDict(k => map(identity, d[k]) for k in ks)
+    if sortvals
+        foreach(sort!, values(newdict))
+    end
+    newdict
 end
-function groupby(f::F, itr, ::Type{B}; sort=false) where {F,B}
+function groupby(f::F, itr, ::Type{B}; sortkeys=:auto, sortvals=false) where {F,B}
     d = OrderedDict{Any,Vector{B}}()
     for x in itr
         key = f(x)
@@ -45,8 +50,14 @@ function groupby(f::F, itr, ::Type{B}; sort=false) where {F,B}
                 B[]
             end, x)
     end
-    ks = sort ? sort!(collect(keys(d))) : collect(keys(d))
-    return OrderedDict{eltype(ks),Vector{B}}(k => d[k] for k in ks)
+    _ks = identity.(keys(d))
+    K = eltype(_ks)
+    sortkeys = sortkeys == :auto ? Base.hasmethod(isless, Tuple{K,K}) : false
+    ks = sortkeys ? sort!(_ks) : _ks
+    if sortvals
+        foreach(sort!, values(d))
+    end
+    return OrderedDict{K,Vector{B}}(k => d[k] for k in ks)
 end
 
 function _sector_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}, constraint) where {Q,B}
