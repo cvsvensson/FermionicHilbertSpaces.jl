@@ -19,7 +19,7 @@ end
 
 Gives the matrix representation on `H` of a permutation `perm` of the partition `Hs`.
 """
-function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T}=Float64) where T
+function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T}=Int) where T
     P = zeros(T, dim(H), dim(H))
     add_permutation_operator!(P, (basisstates(H), Base.Fix2(state_index, H)), state_mapper(H, Hs), perm, one(T))
 end
@@ -52,7 +52,7 @@ subsystem list (covering only a subset of atomic factors). In the subsystem case
 projector is first constructed on `Hsub = tensor_product(Hs...)` and then embedded
 back into `H` via `embed(Psub, Hsub => H)`.
 """
-function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothing, ::Type{T}=Float64; normalize=true, sparse=true) where T
+function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothing, ::Type{T}=_default_projector_eltype(weights); normalize=true, sparse=true) where T
     isempty(perms) && throw(ArgumentError("At least one permutation is required"))
 
     # Subsystem branch: Hs does not partition H, treat as a proper subsystem.
@@ -101,14 +101,19 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothi
     return P
 end
 
+function _default_projector_eltype(weights)
+    isnothing(weights) && return Int
+    eltype(weights) <: Number && return eltype(weights)
+    typeof(first(weights)) <: Number && return typeof(first(weights))
+    return Float64
+end
+
 """
     symmetric_sector(H, Hs, sector=:symmetric, T=Float64; normalize=true, cutoff=0.9, atol=1e-10)
 
-Construct symmetry-adapted objects from symbolic sector selectors.
+Construct the projector onto symmetric sectors of `H` under permutations of the partition `Hs`. 
 
-Supported sectors are `:symmetric` and `:antisymmetric`, generated over the full
-permutation group `S_n` for `n = length(Hs)`. This requires the `Combinatorics.jl`
-weak extension to be available.
+If `Combinatorics.jl` is loaded, `sector` can be `:symmetric` or `:antisymmetric` to automatically generate the full set of permutations and weights for the symmetric or antisymmetric representation. Otherwise, `sector` must be a tuple of `(perms, weights)` to specify the permutations and their corresponding weights directly.
 
 `Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
 case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
@@ -120,7 +125,8 @@ function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
     length(perms) == length(weights) || throw(ArgumentError("Generated weights must match generated permutations"))
     P = permutation_projector(H, Hs, perms, weights, T; kwargs...)
-    _remove_columns!(P, orth_method)
+    rank = round(Int, real(tr(P)))
+    _remove_columns!(P, orth_method, rank)
 end
 _resolve_sector_permutations_and_weights(Hs, (perms, weights), T) = (perms, weights) # for direct input of perms and weights
 
@@ -133,8 +139,8 @@ function _remove_columns!(P::Matrix, ::_QR, M::Int=round(Int, tr(P)))
     big_cols = findall(>(0.1) ∘ abs, diag(F.R))
     return F.Q[:, big_cols]
 end
-_remove_columns!(P::AbstractMatrix, ::_EIG, M::Int=round(Int, tr(P))) = _remove_columns!(Matrix(P), _EIG(), M) # ensure we have a dense matrix for the decomposition
-function _remove_columns!(P::Matrix, ::_EIG, M::Int=round(Int, tr(P)))
+_remove_columns!(P::AbstractMatrix, ::_EIG, M::Int) = _remove_columns!(Matrix(P), _EIG(), M) # ensure we have a dense matrix for the decomposition
+function _remove_columns!(P::Matrix, ::_EIG, M::Int)
     E = try
         eigen!(Hermitian(P))
     catch e
@@ -143,11 +149,11 @@ function _remove_columns!(P::Matrix, ::_EIG, M::Int=round(Int, tr(P)))
     keep = findall(>(0.9) ∘ abs, E.values)  # λ ≈ 1 subspace
     return E.vectors[:, keep]  # already orthonormal
 end
-function _remove_columns!(P::SparseMatrixCSC, ::_QR, M::Int=round(Int, tr(P)))
+function _remove_columns!(P::SparseMatrixCSC, ::_QR, M::Int)
     F = qr(P; tol=0.1)
     F.Q[invperm(F.prow), 1:M]
 end
-function _remove_columns!(P::AbstractMatrix, ::Nothing, M=round(Int, tr(P)))
+function _remove_columns!(P::AbstractMatrix, ::Nothing, M)
     return P
 end
 
