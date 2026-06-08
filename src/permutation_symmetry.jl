@@ -151,8 +151,7 @@ function _remove_columns!(P::Matrix, ::_EIG, M::Int)
 end
 function _remove_columns!(P::SparseMatrixCSC, ::_QR, M::Int)
     F = qr(P; tol=0.1)
-    v = F.Q[invperm(F.prow), 1:M]
-    return v
+    F.Q[invperm(F.prow), 1:M]
 end
 function _remove_columns!(P::AbstractMatrix, ::Nothing, M)
     return P
