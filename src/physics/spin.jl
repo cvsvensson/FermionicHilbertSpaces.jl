@@ -403,43 +403,71 @@ Apply a single spin operator to a spin state. Returns (newstate, amplitude) wher
 function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace{J}, precomp) where J
     m = state.m
     newstate = state
-    T = Float64# typeof(factor)
+    T = Float64
     amplitude = one(T)
-    for _ in 1:op.exponent
+
+    if op.op == :z
         m = newstate.m
-        if op.op == :z
-            # S_z |m⟩ = m |m⟩
-            amplitude *= m
-        elseif op.op == :+
-            # S_+ |m⟩ = √(J(J+1) - m(m+1)) |m+1⟩
-            if m < J
-                factor = _fast_spin_prefactor(J, m, +1)
-                newstate = SpinState(m + 1)
-                amplitude *= factor
-            else
-                return (state, zero(T))
-            end
-        elseif op.op == :-
-            # S_- |m⟩ = √(J(J+1) - m(m-1)) |m-1⟩
-            if m > -J
-                factor = _fast_spin_prefactor(J, m, -1)
-                newstate = SpinState(m - 1)
-                amplitude *= factor
-            else
-                return (state, zero(T))
-            end
-        else
-            throw(ArgumentError("Invalid spin operator symbol: $(op.op)."))
-        end
+        # S_z |m⟩ = m |m⟩
+        amplitude = T(_fast_spin_z_exponent(m, op.exponent))
+        return (state, amplitude)
+    elseif op.op == :+
+        # S_+ |m⟩ = √(J(J+1) - m(m+1)) |m+1⟩
+        m + op.exponent > J && return (state, zero(T))
+        amplitude = T(_fast_spin_prefactor(J, m, +1, op.exponent))
+        newstate = SpinState(m + op.exponent)
+        return (newstate, amplitude)
+    elseif op.op == :-
+        m - op.exponent < -J && return (state, zero(T))
+        # S_- |m⟩ = √(J(J+1) - m(m-1)) |m-1⟩
+        amplitude = T(_fast_spin_prefactor(J, m, -1, op.exponent))
+
+        newstate = SpinState(m - op.exponent)
+        return (newstate, amplitude)
+    else
+        throw(ArgumentError("Invalid spin operator symbol: $(op.op)."))
     end
-    return (newstate, amplitude)
 end
 
+function _fast_spin_z_exponent(m::Rational, exp::Int)
+    exp == 0 && return 1.0
+    x = m.num * 0.5
+    for _ in Base.OneTo(exp - 1)
+        x *= m.num * 0.5
+    end
+    return x
+end
+function _fast_spin_z_exponent(m::Int, exp::Int)
+    exp == 0 && return 1.0
+    m == 1 && return 1.0
+    m == -1 && return isodd(exp) ? -1.0 : 1.0
+    x = m
+    for _ in Base.OneTo(exp - 1)
+        x *= m
+    end
+    return x
+end
 function _fast_spin_prefactor(J::Rational, m::Rational, sign::Int)
     sqrt(J.num * (J.num + 2) - m.num * (m.num + 2sign)) * 0.5
 end
-function _fast_spin_prefactor(J::Int, m::Int, sign::Int)
+function _fast_spin_prefactor(J::Rational, m::Rational, sign::Int, exp::Int)
+    x = one(Float64)
+    for _dm in Base.OneTo(exp)
+        dm = _dm - 1
+        x *= sqrt(J.num * (J.num + 2) - (m.num + dm * 2sign) * (m.num + _dm * 2sign)) * 0.5
+    end
+    return x
+end
+function _fast_spin_prefactor(J, m, sign::Int)
     sqrt(J * (J + 1) - m * (m + sign))
+end
+function _fast_spin_prefactor(J, m, sign::Int, exp::Int)
+    x = 1.0
+    for _dm in Base.OneTo(exp)
+        dm = _dm - 1
+        x *= sqrt(J * (J + 1) - (m + dm * sign) * (m + _dm * sign))
+    end
+    return x
 end
 
 @testitem "SpinSym" begin
