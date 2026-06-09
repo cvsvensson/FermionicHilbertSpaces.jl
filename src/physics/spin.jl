@@ -76,7 +76,8 @@ Base.isless(a::SpinState, b::SpinState) = a.m < b.m
 Base.hash(x::SpinState{<:Rational}, h::UInt) = hash(x.m.num, h)
 Base.hash(x::SpinState{<:Integer}, h::UInt) = hash(x.m, h)
 
-internal_rep(state::SpinState, ::AbstractHilbertSpace, ::Type{Int}) = Int(state.m * 2)
+internal_rep(state::SpinState{<:Rational}, ::AbstractHilbertSpace, ::Type{Int}) = Int(state.m.num)
+internal_rep(state::SpinState{<:Integer}, ::AbstractHilbertSpace, ::Type{Int}) = Int(2 * state.m)
 function physical_rep(state::Int, ::Type{SpinState{M}}) where {M<:Rational}
     isodd(state) || throw(ArgumentError("Internal representation must be an odd integer for half-integer spin states."))
     return SpinState{M}(Base.unsafe_rational(Int, state, 2))
@@ -435,7 +436,7 @@ function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace{J}
 end
 
 function _fast_spin_prefactor(J::Rational, m::Rational, sign::Int)
-    sqrt(J.num * (J.num + 2) - m.num * (m.num + 2sign)) / 2
+    sqrt(J.num * (J.num + 2) - m.num * (m.num + 2sign)) * 0.5
 end
 function _fast_spin_prefactor(J::Int, m::Int, sign::Int)
     sqrt(J * (J + 1) - m * (m + sign))
