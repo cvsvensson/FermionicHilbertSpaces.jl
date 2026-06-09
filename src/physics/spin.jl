@@ -219,24 +219,28 @@ struct SpinSym{B} <: AbstractSym
     op::Symbol
     basis::B
     exponent::Int
-    function SpinSym(op, basis::B, exponent::Integer=1) where {B}
-        exponent < 0 && throw(ArgumentError("Spin operator exponent must be >= 0, got $exponent."))
-        exponent == 0 && return 1 // 1
-        if op in _spin_x_aliases
-            exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators."))
-            return (new{B}(:+, basis, 1) + new{B}(:-, basis, 1)) / 2
-        elseif op in _spin_y_aliases
-            exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators."))
-            return (new{B}(:+, basis, 1) - new{B}(:-, basis, 1)) / (2im)
-        elseif op in _spin_identity_aliases
-            return 1 // 1
-        else
-            canonical = _canonical_spin_alias(op)
-            if !(basis.spin isa Nothing) && canonical in (:+, :-) && exponent > Int(2 * basis.spin)
-                return 0 // 1
-            end
-            return new{B}(canonical, basis, Int(exponent))
+    function SpinSym{B}(op, basis::B, exponent) where {B}
+        #bypass any checks for internal use when we know the input is valid
+        return new{B}(op, basis, exponent)
+    end
+end
+function SpinSym(op, basis::B, exponent::Integer=1) where {B}
+    exponent < 0 && throw(ArgumentError("Spin operator exponent must be >= 0, got $exponent."))
+    exponent == 0 && return 1 // 1
+    if op in _spin_x_aliases
+        exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators."))
+        return (SpinSym{B}(:+, basis, 1) + SpinSym{B}(:-, basis, 1)) / 2
+    elseif op in _spin_y_aliases
+        exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators."))
+        return (SpinSym{B}(:+, basis, 1) - SpinSym{B}(:-, basis, 1)) / (2im)
+    elseif op in _spin_identity_aliases
+        return 1 // 1
+    else
+        canonical = _canonical_spin_alias(op)
+        if !(basis.spin isa Nothing) && canonical in (:+, :-) && exponent > Int(2 * basis.spin)
+            return 0 // 1
         end
+        SpinSym{B}(canonical, basis, Int(exponent))
     end
 end
 const _spin_x_aliases = (:x, :X, 1)
@@ -279,11 +283,11 @@ atomic_id(f::SpinSym) = atomic_id(f.basis)
 
 mat_eltype(::Type{<:SpinSym}) = Float64
 
-function Base.adjoint(x::SpinSym)
+function Base.adjoint(x::SpinSym{B}) where B
     if x.op == :+
-        SpinSym(:-, x.basis, x.exponent)
+        SpinSym{B}(:-, x.basis, x.exponent) #unsafe constructor
     elseif x.op == :-
-        SpinSym(:+, x.basis, x.exponent)
+        SpinSym{B}(:+, x.basis, x.exponent) #unsafe constructor
     elseif x.op == :z
         x
     else
@@ -292,13 +296,13 @@ function Base.adjoint(x::SpinSym)
 end
 _spin_name(a::SymbolicSpinBasis) = a.field isa Nothing ? a.label : Symbol(a.field.name, a.label)
 
-function _spin_commutator_term(a::SpinSym, b::SpinSym)
+function _spin_commutator_term(a::SpinSym{B}, b::SpinSym{B}) where B
     if a.op == :+ && b.op == :z
-        return (-1, SpinSym(:+, a.basis))
+        return (-1, SpinSym{B}(:+, a.basis, 1))
     elseif a.op == :- && b.op == :z
-        return (1, SpinSym(:-, a.basis))
+        return (1, SpinSym{B}(:-, a.basis, 1))
     elseif a.op == :- && b.op == :+
-        return (-2, SpinSym(:z, a.basis))
+        return (-2, SpinSym{B}(:z, a.basis, 1))
     else
         return nothing
     end
@@ -421,7 +425,6 @@ function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace{J}
         m - op.exponent < -J && return (state, zero(T))
         # S_- |m⟩ = √(J(J+1) - m(m-1)) |m-1⟩
         amplitude = T(_fast_spin_prefactor(J, m, -1, op.exponent))
-
         newstate = SpinState(m - op.exponent)
         return (newstate, amplitude)
     else
