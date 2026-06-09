@@ -77,8 +77,14 @@ Base.hash(x::SpinState{<:Rational}, h::UInt) = hash(x.m.num, h)
 Base.hash(x::SpinState{<:Integer}, h::UInt) = hash(x.m, h)
 
 internal_rep(state::SpinState, ::AbstractHilbertSpace, ::Type{Int}) = Int(state.m * 2)
-physical_rep(state::Int, ::Type{SpinState{M}}) where {M} = SpinState{M}(state // 2)
-
+function physical_rep(state::Int, ::Type{SpinState{M}}) where {M<:Rational}
+    isodd(state) || throw(ArgumentError("Internal representation must be an odd integer for half-integer spin states."))
+    return SpinState{M}(Base.unsafe_rational(Int, state, 2))
+end
+function physical_rep(state::Int, ::Type{SpinState{M}}) where {M<:Integer}
+    iseven(state) || throw(ArgumentError("Internal representation must be an even integer for integer spin states."))
+    return SpinState{M}(div(state, 2))
+end
 struct SpinSpace{J,M,S} <: AbstractAtomicHilbertSpace{SpinState{M}}
     basisstates::Vector{SpinState{M}}
     sym::S
@@ -396,7 +402,7 @@ Apply a single spin operator to a spin state. Returns (newstate, amplitude) wher
 function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace{J}, precomp) where J
     m = state.m
     newstate = state
-    T = typeof(sqrt(J * (J + 1)) * m)
+    T = Float64# typeof(factor)
     amplitude = one(T)
     for _ in 1:op.exponent
         m = newstate.m
@@ -406,7 +412,7 @@ function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace{J}
         elseif op.op == :+
             # S_+ |m⟩ = √(J(J+1) - m(m+1)) |m+1⟩
             if m < J
-                factor = sqrt(J * (J + 1) - m * (m + 1))
+                factor = _fast_spin_prefactor(J, m, +1)
                 newstate = SpinState(m + 1)
                 amplitude *= factor
             else
@@ -415,7 +421,7 @@ function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace{J}
         elseif op.op == :-
             # S_- |m⟩ = √(J(J+1) - m(m-1)) |m-1⟩
             if m > -J
-                factor = sqrt(J * (J + 1) - m * (m - 1))
+                factor = _fast_spin_prefactor(J, m, -1)
                 newstate = SpinState(m - 1)
                 amplitude *= factor
             else
@@ -426,6 +432,13 @@ function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace{J}
         end
     end
     return (newstate, amplitude)
+end
+
+function _fast_spin_prefactor(J::Rational, m::Rational, sign::Int)
+    sqrt(J.num * (J.num + 2) - m.num * (m.num + 2sign)) / 2
+end
+function _fast_spin_prefactor(J::Int, m::Int, sign::Int)
+    sqrt(J * (J + 1) - m * (m + sign))
 end
 
 @testitem "SpinSym" begin
