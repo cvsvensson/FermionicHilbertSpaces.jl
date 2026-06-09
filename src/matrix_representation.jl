@@ -102,16 +102,25 @@ function _apply_local_operators(op, state, space, precomp)
 end
 
 function apply_local_operators(_op::NCMul, state, space, precomp; transpose)
+    amp = _op.coeff
     if !transpose
-        return foldr(_op.factors, init=(state, _op.coeff)) do op, (state, amp)
-            newstate, _amp = apply_local_operator(op, state, space, precomp)
-            return newstate, amp * _amp
+        for factor in Iterators.reverse(_op.factors)
+            state, _amp = apply_local_operator(factor, state, space, precomp)
+            if iszero(_amp)
+                return state, zero(mat_eltype(_op))
+            end
+            amp *= _amp
         end
+        return state, amp
     elseif transpose
-        return foldl(_op.factors; init=(state, _op.coeff)) do (state, amp), op
-            newstate, _amp = apply_local_operator(op', state, space, precomp)
-            return newstate, amp * conj(_amp)
+        for factor in _op.factors
+            state, _amp = apply_local_operator(adjoint(factor), state, space, precomp)
+            if iszero(_amp)
+                return state, zero(mat_eltype(_op))
+            end
+            amp *= conj(_amp)
         end
+        return state, amp
     end
 end
 
@@ -230,7 +239,7 @@ end
 matrix_accumulator(op::ProductOperator, space, repr) = matrix_accumulator(mat_eltype(op), 1, (dim(space), dim(space)), repr)
 matrix_accumulator(op, space, repr) = matrix_accumulator(mat_eltype(op), length(NCterms(op)), (dim(space), dim(space)), repr)
 
-function matrix_accumulator(::Type{T}, N::Int, (d1, d2)::Tuple{Int, Int}, ::EagerSparseRepr) where T
+function matrix_accumulator(::Type{T}, N::Int, (d1, d2)::Tuple{Int,Int}, ::EagerSparseRepr) where T
     length_guess = Int(floor(1 + log2(N + 1))) .* (d1, d2) # mild increase with number of terms
     return sparse_matrix_accumulator(T, length_guess)
 end
