@@ -475,9 +475,6 @@ combine_pieces(leaf::Fractured, pieces) = only(first(combine_states(pieces, leaf
 substate_pieces(state::ProductState) = state.states
 substate_pieces(state) = (state,)
 
-# The groups of a target are the slots its state decomposes into.
-target_groups(t::AbstractAtomicHilbertSpace) = (t,)
-target_groups(t) = groups(t)
 
 # ─── The mapper ──────────────────────────────────────────────────────────────
 
@@ -545,7 +542,7 @@ function ProductSpaceMapper(source::ProductSpace, targets)
             (factor=only(owners), target=ti, group_slot=si, space=g,
                 pos=minimum(atom_pos[a] for a in atomic_factors(g)))
         end
-        for (ti, t) in enumerate(targets) for (si, g) in enumerate(target_groups(t))
+        for (ti, t) in enumerate(targets) for (si, g) in enumerate(groups(t))
     ]
 
     # Per-factor view: build leaves and factor routes.
@@ -577,7 +574,7 @@ function ProductSpaceMapper(source::ProductSpace, targets)
                 p = only(q for q in pieces if q.target == ti && q.group_slot == si)
                 PieceIndex(p.factor, piece_slot[(ti, si)])
             end
-            for si in eachindex(target_groups(t)))
+            for si in eachindex(groups(t)))
         for (ti, t) in enumerate(targets))
 
     ProductSpaceMapper(Tuple(leaves), Tuple(factor_routes), target_routes, targets)
