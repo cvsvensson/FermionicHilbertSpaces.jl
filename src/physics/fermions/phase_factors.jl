@@ -250,18 +250,6 @@ function phase_factor_u(partition, masks, state::FockNumber)
 end
 
 phase_factor_u(::AtomicStateMapper) = state -> 1
-function phase_factor_u(state_mapper::ProductSpaceMapper)
-    mappers = state_mapper.factor_mappers
-    phase_factor_maps = map(phase_factor_u, mappers)
-    function phase_factor(state)
-        pf = 1
-        for (s, mapper, pfu) in zip(state.states, mappers, phase_factor_maps)
-            isnothing(mapper) && continue
-            pf *= pfu(s)
-        end
-        return pf
-    end
-end
 function phase_factor_u(state_mapper::FockMapper{N}) where N
     inds = state_mapper.fermionpositions
     T = FockNumber{default_fock_representation(N)}
