@@ -16,8 +16,8 @@ group_id(H::TransposedSpace) = group_id(H.parent)
 atomic_id(H::TransposedSpace) = atomic_id(H.parent)
 atomic_factors(H::TransposedSpace) = map(TransposedSpace, atomic_factors(H.parent)) # (H,)
 add_tag(H::TransposedSpace, tag) = TransposedSpace(add_tag(H.parent, tag))
-groups(H::TransposedSpace) = groups(H.parent)
-factors(H::TransposedSpace) = factors(H.parent)
+groups(H::TransposedSpace) = map(TransposedSpace, groups(H.parent))
+factors(H::TransposedSpace) = map(TransposedSpace, factors(H.parent))
 _precomputation_before_operator_application(factors, space::TransposedSpace) = _precomputation_before_operator_application(factors, space.parent)
 TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, factors(H)), map(TransposedSpace, H.atoms))
 TransposedSpace(H::ConstrainedSpace) = ConstrainedSpace(TransposedSpace(parent(H)), H.states, H.state_index)
@@ -101,6 +101,8 @@ end
     M = matrix_representation(left(op) * right(op) + left(op), H)
     Mexpected = matrix_representation((c_left[1]' * s_left[:z]) * (c_right[1]' * s_right[:z]) + (c_left[1]' * s_left[:z]), H)
     @test M ≈ Mexpected
+
+    @test reshape(reshape(I(dim(Hfull)), Hfull => (Hleft, Hright)), (Hleft, Hright) => Hfull) == I(dim(Hfull))
 end
 
 @testitem "Matrix representation of transposed spaces" begin
