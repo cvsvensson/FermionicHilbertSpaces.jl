@@ -91,6 +91,7 @@ end
     @test size(M) == (dim(Hfull), dim(Hfull))
     Mexpected = matrix_representation((c_left[1]' * c_left[1]) * (c_right[1]' * c_right[1]) + (c_left[1]' * c_left[1]), Hfull)
     @test M ≈ Mexpected
+    @test reshape(reshape(M, Hfull => (Hleft, Hright)), (Hleft, Hright) => Hfull) == M
 
     @spin s 1 // 2
     Hs, _, _ = open_system(s)
@@ -101,8 +102,7 @@ end
     M = matrix_representation(left(op) * right(op) + left(op), H)
     Mexpected = matrix_representation((c_left[1]' * s_left[:z]) * (c_right[1]' * s_right[:z]) + (c_left[1]' * s_left[:z]), H)
     @test M ≈ Mexpected
-
-    @test reshape(reshape(I(dim(Hfull)), Hfull => (Hleft, Hright)), (Hleft, Hright) => Hfull) == I(dim(Hfull))
+    @test reshape(reshape(M, H => (Hleft, Hs, Hright)), (Hleft, Hs, Hright) => H) == M
 end
 
 @testitem "Matrix representation of transposed spaces" begin
