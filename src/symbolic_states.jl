@@ -53,7 +53,7 @@ atomic_id(s::SymbolicState) = (atomic_id(s.space), s.ket, s.bra)
 
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
-state_index(state::AbstractString, space::AbstractHilbertSpace) = state_index(interpret_state(state, space), space)
+state_index(state::Union{<:AbstractString, <:AbstractChar}, space::AbstractHilbertSpace) = state_index(interpret_state(state, space), space)
 
 function interpret_state(input::AbstractString, ::Type{B}) where {I,B<:FockNumber{I}}
     all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only '0' and '1', got \"$input\""))
@@ -70,10 +70,11 @@ function interpret_state(input::AbstractString, ::Type{BosonicState})
     BosonicState(n)
 end
 
-function interpret_state(input, space::ProductSpace)
+function interpret_state(input, space::ProductSpace{B}) where B
     length(input) == length(factors(space)) || throw(ArgumentError("Product-state input must have length $(length(factors(space))), got $(length(input))"))
-    return ProductState(map(interpret_state, input, factors(space)))
+    return B(map(interpret_state, input, factors(space)))
 end
+interpret_state(char::AbstractChar, space::AbstractHilbertSpace) = interpret_state(string(char), space)
 
 function (k::Kets{B})(inputs...) where B
     raw = if length(inputs) == 1

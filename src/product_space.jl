@@ -5,6 +5,7 @@ struct ProductState{B} <: AbstractBasisState
     states::B
 end
 ProductState{B}(state::ProductState{B}) where B = state
+ProductState{NTuple{N,S}}(states::AbstractVector{S}) where {N,S} = ProductState{NTuple{N,S}}(Tuple(states))
 substate(n::Integer, state::ProductState) = state.states[n]
 atomic_factors(state::ProductState) = state.states
 Base.:(==)(s1::ProductState, s2::ProductState) = s1.states == s2.states
