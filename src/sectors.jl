@@ -61,8 +61,8 @@ function groupby(f::F, itr, ::Type{B}; sortkeys=:auto, sortvals=false) where {F,
 end
 
 function _sector_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}, constraint) where {Q,B}
-    ordered_states = reduce(vcat, values(qn_to_states), init=B[])
-    state_indexdict = OrderedDict(zip(ordered_states, 1:length(ordered_states)))
+    ordered_states::Vector{B} = vcat(values(qn_to_states)...)
+    state_indexdict = OrderedDict(zip(ordered_states, Base.OneTo(length(ordered_states))))
     SectorHilbertSpace(space, ordered_states, state_indexdict, qn_to_states, constraint)
 end
 

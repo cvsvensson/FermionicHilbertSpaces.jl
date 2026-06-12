@@ -106,7 +106,8 @@ function Base.show(io::IO, pc::ProductConstraint{C}) where {C}
     end
 end
 
-
+block_idx(::PieceIndex{b,s}) where {b,s} = b
+slot_idx(::PieceIndex{b,s}) where {b,s} = s
 function Base.show(io::IO, sm::ProductSpaceMapper)
     if get(io, :compact, false)
         print(io, "ProductSpaceMapper(")
@@ -123,17 +124,22 @@ function Base.show(io::IO, sm::ProductSpaceMapper)
         i > 1 && print(io, " ⊗ ")
         show(IOContext(io, :compact => true), ts)
     end
-    for (ci, (mapper, piece_targets)) in enumerate(zip(sm.factor_mappers, sm.factor_piece_targets))
+    for (fi, (leaf, route)) in enumerate(zip(sm.leaves, sm.factor_routes))
         println(io)
-        if isnothing(mapper)
-            print(io, "  Group $ci: (unmapped)")
+        if leaf isa Uncovered
+            print(io, "  Factor $fi (uncovered)")
         else
-            destinations = join(["target $(ti)[$(si)]" for (ti, si) in piece_targets], ", ")
-            print(io, "  Group $ci → $destinations: ")
-            show(IOContext(io, :compact => true), mapper)
+            dests = join(["target $(block_idx(ref))[$(slot_idx(ref))]" for ref in route], ", ")
+            if leaf isa Passthrough
+                print(io, "  Factor $fi → $dests  (passthrough)")
+            else
+                n = length(route)
+                print(io, "  Factor $fi → $dests  ($n piece$(n > 1 ? "s" : ""))")
+            end
         end
     end
 end
+
 
 
 function Base.show(io::IO, H::SectorHilbertSpace)

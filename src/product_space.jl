@@ -263,168 +263,13 @@ end
     @test_throws ArgumentError state_mapper(H, hilbert_space(f, [3, 2]))
 end
 
-@testitem "ProductSpaceMapper fast/slow path" begin
-    import FermionicHilbertSpaces: state_mapper, split_state, combine_states, has_internal_rep
-    @fermions a b
-    @fermions c
-    Ha = hilbert_space(a[1])
-    Hb = hilbert_space(b[1])
-    Hc = hilbert_space(c[1])
-    H = tensor_product((Ha, Hb, Hc))
-
-    # Fast path: fully fermionic factors all support has_internal_rep
-    p_full = state_mapper(H, [Ha, Hb, Hc])
-    @test !ismissing(p_full.fast_path)
-
-    #Fast path is not actually implemented yet
-end
-##
-struct ProductSpaceMapper{CS,TP,CP,TS,FP} <: AbstractStateMapper
-    # For each source factor: mapper into per-target pieces, or nothing if uncovered
-    factor_mappers::CS
-
-    # For each target j: (source_group_idx, piece_idx) pairs sorted by position in target j.
-    # Invariant: gathered[k] corresponds to target_spaces[j].factors[k].
-    target_piece_sources::TP
-
-    # For each source factor i: (target_idx, sub_idx_in_target) per piece, in piece-output order
-    factor_piece_targets::CP
-
-    target_spaces::TS
-
-    # fast_path: true when all piece spaces support has_internal_rep (enables typed intermediates)
-    fast_path::FP
-end
 unique_split(::Any) = false
 unique_combine(::Any) = false
-unique_split(::ProductSpaceMapper) = true
-unique_combine(::ProductSpaceMapper) = true
-
-function state_mapper(source::ProductSpace, targets)
-    targets = Tuple(targets)
-
-    atom_to_target = Dict{eltype(source.atoms),Int}()
-    for (ti, target) in enumerate(targets)
-        for a in atomic_factors(target)
-            a ∈ Set(source.atoms) || throw(ArgumentError("Atom $a not in source space"))
-            haskey(atom_to_target, a) && throw(ArgumentError("Atom $a duplicated across targets"))
-            atom_to_target[a] = ti
-        end
-    end
-
-    factor_mappers = []
-    factor_piece_targets = []  # (ti, sub_idx) per piece, in piece-output order
-    pending_pieces = [Tuple{Int,Int,Int}[] for _ in targets]
-    for (ci, factor) in enumerate(factors(source))
-        catoms = atomic_factors(factor)
-        covered_targets = Tuple(unique(atom_to_target[a] for a in catoms if haskey(atom_to_target, a)))
-
-        if isempty(covered_targets)
-            push!(factor_mappers, nothing)
-            push!(factor_piece_targets, ())
-            continue
-        end
-        atomic_id_set = Set(map(atomic_id, catoms))
-        piece_destinations = map(covered_targets) do ti
-            (ti, findfirst(factor -> all(atom -> in(atomic_id(atom), atomic_id_set), atomic_factors(factor)), groups(targets[ti])))
-        end
-
-        subspaces = [groups(targets[ti])[dest] for (ti, dest) in piece_destinations]
-        push!(factor_mappers, state_mapper(factor, subspaces))
-
-        # Store where each piece goes: (ti, sub_idx_in_target)
-        push!(factor_piece_targets, piece_destinations)
-
-        # Accumulate for sorting
-        for (pi, (ti, tsub)) in enumerate(piece_destinations)
-            push!(pending_pieces[ti], (ci, pi, tsub))
-        end
-    end
-
-    # Sort each target's pieces by their sub-index
-    target_piece_sources = Tuple(
-        Tuple((p[1], p[2]) for p in sort(pieces, by=p -> p[3]))
-        for pieces in pending_pieces
-    )
-
-    T = Int
-    fast_path = has_internal_rep(source, T) ? zero(T) : missing
-
-    ProductSpaceMapper(
-        Tuple(factor_mappers),
-        target_piece_sources,
-        Tuple(factor_piece_targets),
-        targets,
-        fast_path)
-end
-
-# ─── helpers ───────────────────────────────────────────────────────────────────
 
 _find_position(target::AbstractAtomicHilbertSpace, parent::AbstractAtomicHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
 _find_position(target::AbstractGroupedHilbertSpace, parent::AbstractGroupedHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
 
-# Extract the k-th sub-state (for ProductState) or the state itself (for atomic/group)
-extract_substate(state::ProductState, k) = state.states[k]
-extract_substate(state, k) = state
 
-# ─── split / combine ───────────────────────────────────────────────────────────
-
-function _split_state_slow(state::ProductState, sp::ProductSpaceMapper)
-    # Split each source factor into its pieces
-    factor_pieces = map(sp.factor_mappers, state.states) do mapper, substate
-        isnothing(mapper) ? () :
-        only(first(split_state(substate, mapper)))
-    end
-    outstates = map(sp.target_piece_sources, sp.target_spaces) do sources, target_space
-        gathered = map(sources) do source
-            factor_pieces[source[1]][source[2]]
-        end
-        only(first(combine_states(gathered, target_space)))
-    end
-    (outstates,), (1,)
-end
-
-function split_state(state::ProductState, sp::ProductSpaceMapper)
-    _split_state_slow(state, sp)
-    # !ismissing(sp.fast_path) ? _split_state_fast(state, sp) : _split_state_slow(state, sp)
-end
-
-function _combine_states_slow(substates, sp::ProductSpaceMapper)
-    outstate = ProductState(map(sp.factor_mappers, sp.factor_piece_targets) do mapper, piece_destinations
-        isnothing(mapper) && error("Cannot reconstruct state: piece_destinations = $piece_destinations, substates = $substates")
-        gathered = map(piece_destinations) do dest
-            extract_substate(substates[dest[1]], dest[2])
-        end
-        only(first(combine_states(gathered, mapper)))
-    end)
-    (outstate,), (1,)
-end
-
-function combine_states(substates, sp::ProductSpaceMapper)
-    # !ismissing(sp.fast_path) ? _combine_states_fast(substates, sp) : _combine_states_slow(substates, sp)
-    _combine_states_slow(substates, sp)
-end
-
-
-extract_piece(state, ::Int) = state
-extract_piece(state::ProductState, idx::Int) = state.states[idx]
-
-combine_states(states::Tuple, ::ProductSpace{ProductState{B}}) where B = (ProductState{B}(B(states)),), (1,)
-
-
-function kron_phase_factor(state_mapper::ProductSpaceMapper)
-    length(state_mapper.target_spaces) == 2 || throw(ArgumentError("Phase factors currently only implemented for binary splits"))
-    mappers = state_mapper.factor_mappers
-    phase_factor_maps = map(kron_phase_factor, mappers)
-    function phase_factor(fullstate1, fullstate2)
-        pf = 1
-        for (s1, s2, mapper, pfh) in zip(fullstate1.states, fullstate2.states, mappers, phase_factor_maps)
-            isnothing(mapper) && continue
-            pf *= pfh(s1, s2)
-        end
-        return pf
-    end
-end
 function partial_trace_phase_factor(state1, state2, space::ProductSpace)
     # product of phase factors from each space and substate
     pf = 1
@@ -552,3 +397,239 @@ function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductStat
 end
 
 add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors), map(a -> add_tag(a, tag), H.atoms))
+
+
+##
+###############################################################################
+# ProductSpaceMapper
+#
+# Maps between a source ProductSpace and a collection of target spaces.
+# Built on a single concept: the *piece table*.
+#
+# A `piece` is a block of the common refinement of the source factor
+# partition and the target partition. Each piece has four coordinates:
+#
+#     (source factor index, slot among that factor's pieces,
+#      target index,        slot among that target's groups)
+#
+# Split and combine are opposite traversals of this table:
+#
+#   split_state:     split each source factor into its pieces,
+#                    then assemble each target from its pieces.
+#   combine_states:  take each target's pieces apart (trivial substate
+#                    extraction), then assemble each source factor
+#                    from its pieces.
+#
+# Type stability: all routing indices live in the *type domain* via
+# `PieceIndex{block,slot}`. Indexing a heterogeneous tuple with these
+# compile-time constants infers concretely, so the hot path is type stable
+# and allocation free even for heterogeneous states. Construction, by
+# contrast, is deliberately plain and dynamic (Dicts, Vectors, sorting) —
+# it runs once, so clarity wins there.
+###############################################################################
+
+# ─── Compile-time routing index ──────────────────────────────────────────────
+
+"""
+    PieceIndex{block, slot}
+
+A routing index carried in the type domain. `getpiece(blocks, ref)` extracts
+`blocks[block][slot]` with compile-time-known indices, so heterogeneous
+tuples can be indexed without type instability.
+"""
+struct PieceIndex{block,slot} end
+PieceIndex(block::Int, slot::Int) = PieceIndex{block,slot}()
+@inline getpiece(blocks, ::PieceIndex{b,s}) where {b,s} = blocks[b][s]
+
+# ─── Leaves: what happens to each source factor ──────────────────────────────
+
+"""A source factor not covered by any target. It is dropped on split and
+cannot be reconstructed on combine."""
+struct Uncovered end
+
+"""A source factor that goes unchanged into exactly one target slot.
+The trivial inner mapper is kept only for phase-factor computation;
+split/combine bypass it entirely."""
+struct Passthrough{M}
+    mapper::M
+end
+
+"""A source factor that is split into several pieces (or reshaped into one
+non-identical piece) by an inner leaf mapper."""
+struct Fractured{M}
+    mapper::M
+end
+
+# Split one source factor's state into its tuple of pieces.
+split_pieces(::Uncovered, state) = ()
+split_pieces(::Passthrough, state) = (state,)
+split_pieces(leaf::Fractured, state) = only(first(split_state(state, leaf.mapper)))
+
+# Reassemble one source factor's state from its gathered pieces.
+combine_pieces(::Uncovered, pieces) =
+    throw(ArgumentError("Cannot reconstruct the full state: the targets do not cover every source factor"))
+combine_pieces(::Passthrough, pieces) = only(pieces)
+combine_pieces(leaf::Fractured, pieces) = only(first(combine_states(pieces, leaf.mapper)))
+
+# The pieces of a target's state are its substates (one piece per group).
+substate_pieces(state::ProductState) = state.states
+substate_pieces(state) = (state,)
+
+
+# ─── The mapper ──────────────────────────────────────────────────────────────
+
+"""
+    ProductSpaceMapper(source::ProductSpace, targets)
+
+Mapper between `source` and the partition (or sub-collection) `targets`.
+
+Fields:
+- `leaves`        : per source factor, an `Uncovered`, `Passthrough` or
+                    `Fractured` leaf describing how that factor fractures.
+- `factor_routes` : per source factor, one `PieceIndex{target, group_slot}`
+                    per piece (in the factor's piece order). Drives combine.
+- `target_routes` : per target, one `PieceIndex{factor, piece_slot}` per
+                    group (in the target's group order). Drives split.
+- `target_spaces` : the targets themselves.
+
+`factor_routes` and `target_routes` are the two directional views of the
+same piece table; they are exact inverses of each other by construction.
+"""
+struct ProductSpaceMapper{L,FR,TR,TS} <: AbstractStateMapper
+    leaves::L
+    factor_routes::FR
+    target_routes::TR
+    target_spaces::TS
+end
+
+unique_split(::ProductSpaceMapper) = true
+unique_combine(::ProductSpaceMapper) = true
+
+state_mapper(source::ProductSpace, targets) = ProductSpaceMapper(source, targets)
+
+# ─── Construction (cold path: clarity over speed) ────────────────────────────
+
+function ProductSpaceMapper(source::ProductSpace, targets)
+    targets = Tuple(targets)
+    sfactors = factors(source)
+
+    # Atom bookkeeping: which factor owns each atom, and where inside it.
+    A = eltype(source.atoms)
+    atom_factor = Dict{A,Int}()
+    atom_pos = Dict{A,Int}()
+    for (ci, f) in enumerate(sfactors)
+        for (k, a) in enumerate(atomic_factors(f))
+            atom_factor[a] = ci
+            atom_pos[a] = k
+        end
+    end
+
+    # Validate: every target atom exists in the source, no duplicates.
+    seen = Set{A}()
+    for t in targets, a in atomic_factors(t)
+        haskey(atom_factor, a) || throw(ArgumentError("Atom $a not in source space"))
+        a ∈ seen && throw(ArgumentError("Atom $a duplicated across targets"))
+        push!(seen, a)
+    end
+
+    # Build the piece table: one piece per group of each target.
+    # Each group must lie inside a single source factor.
+    pieces = [
+        begin
+            owners = unique(atom_factor[a] for a in atomic_factors(g))
+            length(owners) == 1 ||
+                throw(ArgumentError("Target group $g spans several source factors; this is not supported"))
+            (factor=only(owners), target=ti, group_slot=si, space=g,
+                pos=minimum(atom_pos[a] for a in atomic_factors(g)))
+        end
+        for (ti, t) in enumerate(targets) for (si, g) in enumerate(groups(t))
+    ]
+
+    # Per-factor view: build leaves and factor routes.
+    # A factor's pieces are ordered by where their atoms sit inside the
+    # factor, which is also the order the inner leaf mapper produces them in.
+    leaves = Any[]
+    factor_routes = Any[]
+    piece_slot = Dict{Tuple{Int,Int},Int}()  # (target, group_slot) -> slot within factor
+    for (ci, f) in enumerate(sfactors)
+        ps = sort([p for p in pieces if p.factor == ci], by=p -> p.pos)
+        if isempty(ps)
+            push!(leaves, Uncovered())
+            push!(factor_routes, ())
+            continue
+        end
+        for (k, p) in enumerate(ps)
+            piece_slot[(p.target, p.group_slot)] = k
+        end
+        inner = state_mapper(f, Tuple(p.space for p in ps))
+        leaf = (length(ps) == 1 && only(ps).space == f) ? Passthrough(inner) : Fractured(inner)
+        push!(leaves, leaf)
+        push!(factor_routes, Tuple(PieceIndex(p.target, p.group_slot) for p in ps))
+    end
+
+    # Per-target view: the inverse routing, one entry per group slot.
+    target_routes = Tuple(
+        Tuple(
+            begin
+                p = only(q for q in pieces if q.target == ti && q.group_slot == si)
+                PieceIndex(p.factor, piece_slot[(ti, si)])
+            end
+            for si in eachindex(groups(t)))
+        for (ti, t) in enumerate(targets))
+
+    ProductSpaceMapper(Tuple(leaves), Tuple(factor_routes), target_routes, targets)
+end
+
+# ─── Hot path: split / combine ───────────────────────────────────────────────
+
+function split_state(state::ProductState, sp::ProductSpaceMapper)
+    # 1. Fracture each source factor into its pieces.
+    pieces = map(split_pieces, sp.leaves, state.states)
+    # 2. Assemble each target from its pieces.
+    outstates = map(sp.target_routes, sp.target_spaces) do route, tspace
+        gathered = map(ref -> getpiece(pieces, ref), route)
+        only(first(combine_states(gathered, tspace)))
+    end
+    return (outstates,), (1,)
+end
+
+function combine_states(substates::Tuple, sp::ProductSpaceMapper)
+    # 1. Take each target's state apart into its pieces (one per group).
+    tpieces = map(substate_pieces, substates)
+    # 2. Assemble each source factor from its pieces.
+    states = map(sp.leaves, sp.factor_routes) do leaf, route
+        combine_pieces(leaf, map(ref -> getpiece(tpieces, ref), route))
+    end
+    return (ProductState(states),), (1,)
+end
+combine_states(substates, sp::ProductSpaceMapper) = combine_states(Tuple(substates), sp)
+combine_states(states::Tuple, ::ProductSpace{ProductState{B}}) where B = (ProductState{B}(B(states)),), (1,)
+
+# ─── Phase factors ───────────────────────────────────────────────────────────
+
+leaf_phase_factor(::Uncovered) = (s1, s2) -> 1
+leaf_phase_factor(leaf::Union{Passthrough,Fractured}) = kron_phase_factor(leaf.mapper)
+
+function kron_phase_factor(sp::ProductSpaceMapper)
+    length(sp.target_spaces) == 2 ||
+        throw(ArgumentError("Phase factors currently only implemented for binary splits"))
+    phase_fns = map(leaf_phase_factor, sp.leaves)
+    function phase_factor(fullstate1, fullstate2)
+        prod(map((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))
+    end
+end
+function phase_factor_u(sp::ProductSpaceMapper)
+    # Build per-leaf phase-factor functions (Uncovered → nothing, others → recurse)
+    leaf_pfus = map(sp.leaves) do leaf
+        leaf isa Uncovered ? nothing : phase_factor_u(leaf.mapper)
+    end
+
+    function phase_factor(state)
+        pf = 1
+        for (s, leaf, pfu) in zip(state.states, sp.leaves, leaf_pfus)
+            leaf isa Uncovered && continue
+            pf *= pfu(s)
+        end
+        return pf
+    end
+end
