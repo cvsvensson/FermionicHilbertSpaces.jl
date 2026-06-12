@@ -12,6 +12,7 @@ h = fill(2pi, N)
 Jx = fill(0.2pi, N - 1)
 Jy = fill(0.2pi, N - 1)
 Jz = fill(0.2pi, N - 1)
+J = eachrow(hcat(Jx, Jy, Jz))
 γ_deph = fill(0.02, N)
 
 tspan = (0.0, 100.0)
@@ -21,15 +22,16 @@ ts = range(tspan[1], tspan[2], length=200)
 H = hilbert_space(S, 1:N)
 
 ham_sym = -sum(h[k] * S[k][:z] for k in 1:N) -
-          2 * sum(Jx[k] * S[k][:x] * S[k+1][:x] +
-                  Jy[k] * S[k][:y] * S[k+1][:y] +
-                  Jz[k] * S[k][:z] * S[k+1][:z] for k in 1:(N-1))
+          sum(1:N-1) do k
+    sum(2J[k] .* S[k][:] .* S[k+1][:])
+end
 
 ham_mat = matrix_representation(ham_sym, H)
 Sz_mats = [matrix_representation(-2 * S[k][:z], H) for k in 1:N]
 
 using FermionicHilbertSpaces: SpinState, ProductState, state_index
-state_ind = state_index(ProductState(SpinState((-1)^(n > 1) * 1 // 2) for n in 1:N), H)
+state = "↑" * repeat("↓", N - 1)
+state_ind = state_index(state, H)
 ψ0 = zeros(ComplexF64, dim(H))
 ψ0[state_ind] = 1.0
 
@@ -49,7 +51,7 @@ lindbladian_sym = 1im * (left(ham_sym) - right(ham_sym))
 dissipator(op) = left(op) * right(op) - 0.5 * (left(op)' * left(op) + right(op)' * right(op))
 for k in 1:N
     jump_op = 2 * sqrt(γ_deph[k]) * S[k][:z]
-    lindbladian_sym += dissipator(jump_op)
+    global lindbladian_sym += dissipator(jump_op)
 end
 
 lindbladian_mat = matrix_representation(lindbladian_sym, Hopen)

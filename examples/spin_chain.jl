@@ -4,7 +4,7 @@ N = 4
 @spins S 1 // 2
 H = hilbert_space(S, 1:N)
 ## Heisenberg chain
-ham = sum(S[k][op] * S[k+1][op] for k in 1:N-1 for op in (:x, :y, :z))
+ham = sum(S[k][:]'S[k+1][:] for k in 1:N-1)
 M = matrix_representation(ham, H)
 Peven = symmetric_sector(H, factors(H), :symmetric)
 Podd = symmetric_sector(H, factors(H), :antisymmetric)
