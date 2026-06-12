@@ -8,6 +8,7 @@ using TestItems
 using BitPermutations
 using TupleTools
 using NonCommutativeProducts
+using HalfIntegers
 import NonCommutativeProducts: @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 
 

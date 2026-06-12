@@ -258,7 +258,8 @@ function Base.show(io::IO, state::BosonicState)
     print(io, "|", state.n, "⟩")
 end
 
-function Base.show(io::IO, H::SpinSpace{J}) where J
+function Base.show(io::IO, H::SpinSpace)
+    J = H.spin
     sym = H.sym
     lbl = sym.field isa Nothing ? sym.label : "$( _symbolic_name_with_tags(sym.field.name, sym) )[$(sym.label)]"
     if get(io, :compact, false)

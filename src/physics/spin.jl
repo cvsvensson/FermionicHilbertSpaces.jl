@@ -3,7 +3,7 @@ struct SpinField{J,I}
     spin::J
     tags::I
 end
-SpinField(name::Symbol, spin::J=nothing) where J = SpinField(name, spin, Tags(nothing))
+SpinField(name::Symbol, spin::J=nothing) where J = SpinField(name, spin isa Nothing ? nothing : HalfInteger(spin), Tags(nothing))
 Base.:(==)(a::SpinField, b::SpinField) = a.name == b.name
 Base.hash(b::SpinField, h::UInt) = hash(b.name, h)
 Base.show(io::IO, b::SpinField) = print(io, "SpinField(", b.name, ")")
@@ -15,6 +15,10 @@ struct SymbolicSpinBasis{L,P,J,T<:Tags}
     field::P
     spin::J
     tags::T
+    function SymbolicSpinBasis(label::L, field::P, spin::J, tags::T) where {L,P,J,T}
+        hspin = spin isa Nothing ? nothing : HalfInteger(spin)
+        new{L,P,typeof(hspin),T}(label, field, hspin, tags)
+    end
 end
 
 SymbolicSpinBasis(label::L, field::P=nothing, spin::J=nothing) where {L,P,J} = SymbolicSpinBasis(label, field, spin, Tags(nothing))
@@ -68,110 +72,91 @@ macro spins(name, spin)
 end
 
 
-struct SpinState{M} <: AbstractBasisState
-    m::M
+struct SpinState{T<:Integer} <: AbstractBasisState
+    m::Half{T}
 end
+SpinState(m) = SpinState(HalfInteger(m))
 Base.:(==)(a::SpinState, b::SpinState) = a.m == b.m
 Base.isless(a::SpinState, b::SpinState) = a.m < b.m
-Base.hash(x::SpinState{<:Rational}, h::UInt) = hash(x.m.num, h)
-Base.hash(x::SpinState{<:Integer}, h::UInt) = hash(x.m, h)
+Base.hash(x::SpinState, h::UInt) = hash(x.m, h)
 
-internal_rep(state::SpinState{<:Rational}, ::AbstractHilbertSpace, ::Type{Int}) = Int(state.m.num)
-internal_rep(state::SpinState{<:Integer}, ::AbstractHilbertSpace, ::Type{Int}) = Int(2 * state.m)
-function physical_rep(state::Int, ::Type{SpinState{M}}) where {M<:Rational}
-    isodd(state) || throw(ArgumentError("Internal representation must be an odd integer for half-integer spin states."))
-    return SpinState{M}(Base.unsafe_rational(Int, state, 2))
+internal_rep(state::SpinState, ::AbstractHilbertSpace, ::Type{Int}) = Int(twice(state.m))
+physical_rep(state::Int, ::Type{SpinState}) = SpinState(half(state))
+function physical_rep(state::Int, ::Type{SpinState{T}}) where {T<:Integer}
+    SpinState{T}(convert(Half{T}, half(state)))
 end
-function physical_rep(state::Int, ::Type{SpinState{M}}) where {M<:Integer}
-    iseven(state) || throw(ArgumentError("Internal representation must be an even integer for integer spin states."))
-    return SpinState{M}(div(state, 2))
-end
-struct SpinSpace{J,M,S} <: AbstractAtomicHilbertSpace{SpinState{M}}
-    basisstates::Vector{SpinState{M}}
+struct SpinSpace{J,T<:Integer,S} <: AbstractAtomicHilbertSpace{SpinState{T}}
+    spin::Half{T}
+    basisstates::Vector{SpinState{T}}
     sym::S
-    state_index::Dict{SpinState{M},Int}
+    state_index::Dict{SpinState{T},Int}
 end
 function SpinSpace{J}(sym::S) where {J,S<:SymbolicSpinBasis}
-    states = spin_basisstates(Val(J))
+    Jhalf = HalfInteger(J)
+    states = spin_basisstates(Val(Jhalf))
+    T = typeof(twice(Jhalf))
     state_index = Dict(s => i for (i, s) in enumerate(states))
-    SpinSpace{J,typeof(J),S}(states, sym, state_index)
+    SpinSpace{Jhalf,T,S}(Jhalf, states, sym, state_index)
 end
-SpinSpace{J}(label) where J = SpinSpace{J}(SymbolicSpinBasis(label))
+SpinSpace(sym::S) where {S<:SymbolicSpinBasis} = (sym.spin isa Nothing ? throw(ArgumentError("SpinSpace requires a symbolic spin with explicit spin value.")) : SpinSpace{sym.spin}(sym))
+SpinSpace{J}(label) where J = SpinSpace{J}(SymbolicSpinBasis(label, nothing, J))
+SpinSpace(label, J) = SpinSpace{J}(label)
 basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
-function state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S<:Rational}
-    if s.m.den == 2 == J.den
-        return div(s.m.num + J.num, 2) + 1
-    else
-        throw(ArgumentError("For rational spin J, the m values must be half-integers."))
-    end
-end
-function state_index(s::SpinState{S}, ::SpinSpace{J,S}) where {J,S<:Integer}
-    return s.m + J + 1
-end
+state_index(s::SpinState, space::SpinSpace) = Int(s.m + space.spin + 1)
 
 atomic_id(H::SpinSpace) = atomic_id(H.sym)
-function add_tag(H::SpinSpace{J,M,S}, tag) where {J,M,S}
+function add_tag(H::SpinSpace{J,T,S}, tag) where {J,T,S}
     newsym = add_tag(H.sym, tag)
-    SpinSpace{J,M,typeof(newsym)}(H.basisstates, newsym, H.state_index)
+    SpinSpace{J,T,typeof(newsym)}(H.spin, H.basisstates, newsym, H.state_index)
 end
-hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,J,<:Any}) where J<:Union{Int,Rational} = SpinSpace{sym.spin}(sym)
-hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:Nothing,<:Any}, J) = SpinSpace{J}(sym)
-hilbert_space(sym::SpinField{J}, labels, constraint=NoSymmetry()) where J<:Union{Int,Rational} = tensor_product(map(l -> hilbert_space(sym[l]), labels); constraint)
+hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:HalfInteger,<:Any}) = SpinSpace{sym.spin}(sym)
+hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:Nothing,<:Any}, J) = SpinSpace{HalfInteger(J)}(sym)
+hilbert_space(sym::SpinField{J}, labels, constraint=NoSymmetry()) where J<:HalfInteger = tensor_product(map(l -> hilbert_space(sym[l]), labels); constraint)
 hilbert_space(sym::SpinField{Nothing}, labels, J, constraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], J), labels); constraint)
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
 
-function interpret_state(input::AbstractString, ::SpinSpace{J,M}) where {J,M}
+function interpret_state(input::AbstractString, H::SpinSpace{J,T}) where {J,T}
+    Jhalf = HalfInteger(J)
     if input in ("up", "↑")
-        return SpinState(J)
+        return SpinState(Jhalf)
     elseif input in ("down", "↓")
-        return SpinState(-J)
+        return SpinState(-Jhalf)
     end
-    if M <: Integer
-        m = try
-            parse(Int, input)
-        catch
-            throw(ArgumentError("Invalid spin state string \"$input\""))
-        end
-        if m < -J || m > J
-            throw(ArgumentError("Spin state m must be between -J and J, got $m for J=$J."))
-        end
+    m = try
+        parse(HalfInt, input)
+    catch
+        throw(ArgumentError("Invalid spin state string \"$input\""))
     end
-    if M <: Rational
-        m = try
-            parse(Rational, input)
-        catch
-            throw(ArgumentError("Invalid spin state string \"$input\""))
-        end
-        if m < -J || m > J
-            throw(ArgumentError("Spin state m must be between -J and J, got $m for J=$J."))
-        end
+    m = convert(Half{T}, m)
+    if m < -Jhalf || m > Jhalf
+        throw(ArgumentError("Spin state m must be between -J and J, got $m for J=$Jhalf."))
     end
-    throw(ArgumentError("Unsupported spin state input \"$input\"."))
+    return SpinState(m)
 end
 
 function spin_basisstates(::Val{J}) where {J}
-    states = [SpinState{typeof(J)}(i - J) for i in 0:2J]
-    return states
+    [SpinState(i - J) for i in 0:twice(J)]
 end
-spin_basisstates(j) = spin_basisstates(Val(j))
+spin_basisstates(j) = spin_basisstates(Val(HalfInteger(j)))
 
-function operators(H::SpinSpace{J,S}) where {J,S}
+function operators(H::SpinSpace{J}) where J
+    Jhalf = HalfInteger(J)
     Splus = spzeros(Float64, dim(H), dim(H))
     Sminus = spzeros(Float64, dim(H), dim(H))
     Sz = spzeros(Float64, dim(H), dim(H))
     for state in H.basisstates
         m = state.m
         i = state_index(state, H)
-        if m < J
+        if m < Jhalf
             j = state_index(SpinState(m + 1), H)
-            Splus[j, i] = sqrt(J * (J + 1) - m * (m + 1))
+            Splus[j, i] = sqrt(Jhalf * (Jhalf + 1) - m * (m + 1))
         end
-        if m > -J
+        if m > -Jhalf
             j = state_index(SpinState(m - 1), H)
-            Sminus[j, i] = sqrt(J * (J + 1) - m * (m - 1))
+            Sminus[j, i] = sqrt(Jhalf * (Jhalf + 1) - m * (m - 1))
         end
         Sz[i, i] = m
     end
@@ -404,7 +389,8 @@ NonCommutativeProducts.@commutative MajoranaSym SpinSym
 
 Apply a single spin operator to a spin state. Returns (newstate, amplitude) where amplitude is 0 if the operation is not allowed, and a nonzero value otherwise.
 """
-function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace{J}, precomp) where J
+function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace, precomp)
+    J = space.spin
     m = state.m
     newstate = state
     T = Float64
@@ -432,15 +418,7 @@ function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace{J}
     end
 end
 
-function _fast_spin_z_exponent(m::Rational, exp::Int)
-    exp == 0 && return 1.0
-    x = m.num * 0.5
-    for _ in Base.OneTo(exp - 1)
-        x *= m.num * 0.5
-    end
-    return x
-end
-function _fast_spin_z_exponent(m::Int, exp::Int)
+function _fast_spin_z_exponent(m, exp::Int)
     exp == 0 && return 1.0
     m == 1 && return 1.0
     m == -1 && return isodd(exp) ? -1.0 : 1.0
@@ -450,25 +428,21 @@ function _fast_spin_z_exponent(m::Int, exp::Int)
     end
     return x
 end
-function _fast_spin_prefactor(J::Rational, m::Rational, sign::Int)
-    sqrt(J.num * (J.num + 2) - m.num * (m.num + 2sign)) * 0.5
-end
-function _fast_spin_prefactor(J::Rational, m::Rational, sign::Int, exp::Int)
-    x = one(Float64)
-    for _dm in Base.OneTo(exp)
-        dm = _dm - 1
-        x *= sqrt(J.num * (J.num + 2) - (m.num + dm * 2sign) * (m.num + _dm * 2sign)) * 0.5
-    end
-    return x
-end
-function _fast_spin_prefactor(J, m, sign::Int)
-    sqrt(J * (J + 1) - m * (m + sign))
-end
 function _fast_spin_prefactor(J, m, sign::Int, exp::Int)
     x = 1.0
     for _dm in Base.OneTo(exp)
         dm = _dm - 1
         x *= sqrt(J * (J + 1) - (m + dm * sign) * (m + _dm * sign))
+    end
+    return x
+end
+function _fast_spin_prefactor(J::HalfInteger, m::HalfInteger, sign::Int, exp::Int)
+    x = one(Float64)
+    J2 = twice(J)
+    m2 = twice(m)
+    for _dm in Base.OneTo(exp)
+        dm = _dm - 1
+        x *= sqrt(J2 * (J2 + 2) - (m2 + dm * 2sign) * (m2 + _dm * 2sign)) * 0.5
     end
     return x
 end
