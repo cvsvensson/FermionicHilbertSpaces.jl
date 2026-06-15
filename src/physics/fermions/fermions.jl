@@ -1,14 +1,16 @@
 
-struct FermionicSpace{F,L,FG<:FermionicGroup} <: AbstractGroupedHilbertSpace{F}
+struct FermionicSpace{F,L,FG<:FermionicGroup,A} <: AbstractGroupedHilbertSpace{F}
     modes::Vector{L}
     mode_ordering::OrderedDict{L,Int}
     group::FG
+    atomic_id::A
     function FermionicSpace(_modes::AbstractVector{L}, group::FG, ::Type{F}=FockNumber{default_fock_representation(length(_modes))}) where {F,L<:FermionSym,FG<:FermionicGroup}
         length(_modes) == 0 && throw(ArgumentError("Cannot create a FermionicSpace with no modes"))
         modes = map(_normalize_sym, _modes)
         mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("Duplicate modes in fermionic group"))
-        new{F,L,FG}(modes, mode_ordering, group)
+        id = length(modes) == 1 ? atomic_id(only(modes)) : map(atomic_id, modes)
+        new{F,L,FG,typeof(id)}(modes, mode_ordering, group, id)
     end
 end
 function FermionicSpace(factors::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F,L<:FermionicSpace}
@@ -29,11 +31,11 @@ function dim(H::FermionicSpace)
     N = nbr_of_modes(H)
     N < 63 ? 1 << N : BigInt(1) << N
 end
-atomic_factors(H::FermionicSpace) = map(hilbert_space, H.modes)
+atomic_factors(H::FermionicSpace) = map(m -> FermionicSpace([m], H.group, statetype(H)), H.modes)
 nbr_of_modes(H::FermionicSpace) = length(H.modes)
 nbr_of_modes(H::AbstractHilbertSpace) = nbr_of_modes(parent(H))
 group_id(H::FermionicSpace) = H.group
-atomic_id(h::FermionicSpace) = nbr_of_modes(h) == 1 ? atomic_id(only(h.modes)) : map(atomic_id, h.modes)
+atomic_id(h::FermionicSpace) = h.atomic_id
 label(h::FermionicSpace) = label(only(h.modes))
 mode_ordering(H::FermionicSpace) = H.mode_ordering
 modes(H::FermionicSpace) = H.modes
@@ -115,7 +117,7 @@ focknbr_from_site_label(mode::FermionSym, H::FermionicSpace) = focknbr_from_site
 focknbr_from_site_labels(Hsub::FermionicSpace, H::FermionicSpace) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
 
 
-function _precomputation_before_operator_application(op::NCMul{<:Any,<:FermionSym}, space::FermionicSpace{B}) where {B<:FockNumber}
+function _precomputation_before_operator_application(op::NCMul, space::FermionicSpace{B}) where {B<:FockNumber}
     positions = map(op -> _find_position(op, space), op.factors)
     any(==(0), positions) && throw(ArgumentError("Operator ($op) contains factors that are not part of the fermionic space ($space)"))
     return positions
@@ -141,6 +143,25 @@ function apply_local_operators(op::NCMul{<:Any,<:FermionSym}, state::FockNumber{
         newfocknbr = bitmask ⊻ newfocknbr
     end
     return newfocknbr, (fermionparity ? -op.coeff : op.coeff)
+end
+
+function apply_local_operator(op::FermionSym, state::FockNumber{I}, space::FermionicSpace, fermionpositions) where I
+    newfocknbr = state
+    fermionparity = false  # false = +1, true = -1
+    factor = op
+    digitpos = _find_position(factor, space)
+    iszero(digitpos) && throw(ArgumentError("Operator ($op) contains a factor that is not part of the fermionic space ($space)"))
+    # digitpos = fermionposition
+    dagger = factor.creation
+    bitmask = one(I) << (digitpos - 1)
+    occupied = !iszero(bitmask & newfocknbr)
+    if dagger == occupied
+        return newfocknbr, 0
+    end
+    fermionparity ⊻= isodd(count_ones(newfocknbr.f & (bitmask - one(I))))
+    newfocknbr = bitmask ⊻ newfocknbr
+
+    return newfocknbr, (fermionparity ? -1 : 1)
 end
 
 
