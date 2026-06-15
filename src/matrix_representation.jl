@@ -1,7 +1,9 @@
 abstract type AbstractFermionSym <: AbstractSym end
 
-struct EagerDenseRepr end
-struct EagerSparseRepr end
+struct EagerDenseRepr{T} end
+struct EagerSparseRepr{T} end
+EagerSparseRepr() = EagerSparseRepr{Missing}()
+EagerDenseRepr() = EagerDenseRepr{Missing}()
 struct PartitionedSparseRepr{B,R,C}
     backend::B
     row_partition::R
@@ -355,7 +357,7 @@ size(M) == (dim(H), dim(H))
 ```
 """
 function matrix_representation(op, space::AbstractHilbertSpace, type=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
-    repr = _process_type(type)
+    repr = _canonicalize_repr(type)
     if trivial_operator(op)
         return get_trivial_op_coeff(op) * I(dim(space))
     end
@@ -364,8 +366,11 @@ function matrix_representation(op, space::AbstractHilbertSpace, type=EagerSparse
     all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
     return _matrix_representation(op, space_groups, space, repr, chunking; projection, kwargs...)
 end
-_process_type(t) = t
-function _process_type(s::Symbol)
+_canonicalize_repr(t) = t
+_canonicalize_repr(::Type{<:AbstractArray{T}}) where T = EagerDenseRepr{T}()
+_canonicalize_repr(::Type{T}) where T<:SparseArrays.AbstractSparseVecOrMat = EagerSparseRepr{eltype(T)}()
+_canonicalize_repr(::Type{T}) where T<:Number = EagerSparseRepr{T}()
+function _canonicalize_repr(s::Symbol)
     s == :sparse && return EagerSparseRepr()
     s == :dense && return EagerDenseRepr()
     s == :lazy && return LazyRepr()
