@@ -1,14 +1,16 @@
 
-struct FermionicSpace{F,L,FG<:FermionicGroup} <: AbstractGroupedHilbertSpace{F}
+struct FermionicSpace{F,L,FG<:FermionicGroup,A} <: AbstractGroupedHilbertSpace{F}
     modes::Vector{L}
     mode_ordering::OrderedDict{L,Int}
     group::FG
+    atomic_id::A
     function FermionicSpace(_modes::AbstractVector{L}, group::FG, ::Type{F}=FockNumber{default_fock_representation(length(_modes))}) where {F,L<:FermionSym,FG<:FermionicGroup}
         length(_modes) == 0 && throw(ArgumentError("Cannot create a FermionicSpace with no modes"))
         modes = map(_normalize_sym, _modes)
         mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("Duplicate modes in fermionic group"))
-        new{F,L,FG}(modes, mode_ordering, group)
+        id = length(modes) == 1 ? atomic_id(only(modes)) : map(atomic_id, modes)
+        new{F,L,FG,typeof(id)}(modes, mode_ordering, group, id)
     end
 end
 function FermionicSpace(factors::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F,L<:FermionicSpace}
@@ -33,7 +35,7 @@ atomic_factors(H::FermionicSpace) = map(hilbert_space, H.modes)
 nbr_of_modes(H::FermionicSpace) = length(H.modes)
 nbr_of_modes(H::AbstractHilbertSpace) = nbr_of_modes(parent(H))
 group_id(H::FermionicSpace) = H.group
-atomic_id(h::FermionicSpace) = nbr_of_modes(h) == 1 ? atomic_id(only(h.modes)) : map(atomic_id, h.modes)
+atomic_id(h::FermionicSpace) = h.atomic_id
 label(h::FermionicSpace) = label(only(h.modes))
 mode_ordering(H::FermionicSpace) = H.mode_ordering
 modes(H::FermionicSpace) = H.modes
