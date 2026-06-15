@@ -25,6 +25,7 @@ SymbolicSpinBasis(label::L, field::P=nothing, spin::J=nothing) where {L,P,J} = S
 Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field && a.spin == b.spin && a.tags == b.tags
 Base.isless(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = (a.field, a.label, a.tags) < (b.field, b.label, b.tags)
 Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
+Base.getindex(s::SymbolicSpinBasis, ::Colon) = [SpinSym(σ, s) for σ in (:x, :y, :z)]
 Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.tags, hash(x.spin, hash(x.field, hash(x.label, h))))
 label(S::SymbolicSpinBasis) = S.label
 Base.getindex(s::SpinField, i) = SymbolicSpinBasis(i, s, s.spin, tags(s))
@@ -214,10 +215,10 @@ function SpinSym(op, basis::B, exponent::Integer=1) where {B}
     exponent == 0 && return 1 // 1
     if op in _spin_x_aliases
         exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators."))
-        return (SpinSym{B}(:+, basis, 1) + SpinSym{B}(:-, basis, 1)) / 2
+        return SpinSym{B}(:+, basis, 1) / 2 + SpinSym{B}(:-, basis, 1) / 2
     elseif op in _spin_y_aliases
         exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators."))
-        return (SpinSym{B}(:+, basis, 1) - SpinSym{B}(:-, basis, 1)) / (2im)
+        return SpinSym{B}(:+, basis, 1) / (2im) - SpinSym{B}(:-, basis, 1) / (2im)
     elseif op in _spin_identity_aliases
         return 1 // 1
     else
@@ -526,6 +527,9 @@ end
     Spo = Sone[:+]
     @test iszero(Sone[:+]^3)
     @test Sone[:z]^3 == Sone[:z]
+
+    # Test spin-1/2 identity: Sx^2 + Sy^2 + Sz^2 = 3/4 * I, and Colon operator
+    @test Shalf[:]' * Shalf[:] == 3 / 4 * Shalf[:I]
 
 end
 

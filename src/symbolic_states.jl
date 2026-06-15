@@ -53,7 +53,7 @@ atomic_id(s::SymbolicState) = (atomic_id(s.space), s.ket, s.bra)
 
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
-state_index(state::AbstractString, space::AbstractHilbertSpace) = state_index(interpret_state(state, space), space)
+state_index(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = state_index(interpret_state(state, space), space)
 
 function interpret_state(input::AbstractString, ::Type{B}) where {I,B<:FockNumber{I}}
     all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only '0' and '1', got \"$input\""))
@@ -70,10 +70,11 @@ function interpret_state(input::AbstractString, ::Type{BosonicState})
     BosonicState(n)
 end
 
-function interpret_state(input, space::ProductSpace)
+function interpret_state(input, space::ProductSpace{B}) where B
     length(input) == length(factors(space)) || throw(ArgumentError("Product-state input must have length $(length(factors(space))), got $(length(input))"))
-    return ProductState(map(interpret_state, input, factors(space)))
+    return B(map(interpret_state, input, factors(space)))
 end
+interpret_state(char::AbstractChar, space::AbstractHilbertSpace) = interpret_state(string(char), space)
 
 function (k::Kets{B})(inputs...) where B
     raw = if length(inputs) == 1
@@ -215,21 +216,24 @@ end
 For a product of ket SymbolicStates, apply each ket's operator action in sequence
 and return a sparse column vector. For bras, return the adjoint row vector.
 """
-function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr=EagerSparseRepr(); T=Int, kwargs...) where B
+function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
     ind = state_index(state, space)
-    v = SparseArrays.spzeros(T, dim(space))
-    v[ind] = one(T)
+    TT = T === Missing ? Int : T
+    v = SparseArrays.spzeros(TT, dim(space))
+    v[ind] = one(TT)
     return v
 end
-function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerDenseRepr; T=Int, kwargs...) where B
+function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerDenseRepr{T}; kwargs...) where {B,T}
     ind = state_index(state, space)
-    v = zeros(T, dim(space))
-    v[ind] = one(T)
+    TT = T === Missing ? Int : T
+    v = zeros(TT, dim(space))
+    v[ind] = one(TT)
     return v
 end
 function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     vector_representation(1 * s, space, repr; kwargs...)
 end
+vector_representation(op, space, repr; kwargs...) = vector_representation(op, space, _canonicalize_repr(repr); kwargs...)
 
 function vector_representation(op::NCMul, space::AbstractHilbertSpace, repr=EagerSparseRepr(); type=_operator_type(op), kwargs...)
     symstates = op.factors
@@ -281,6 +285,13 @@ function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr();
     else
         return matrix_representation(op, space, repr; kwargs...)
     end
+end
+function representation(op::Union{AbstractString,AbstractChar}, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
+    state = interpret_state(op, space)
+    return vector_representation(state, space, repr; kwargs...)
+end
+function representation(state::B, space::AbstractHilbertSpace{B}, repr=EagerSparseRepr(); kwargs...) where B
+    return vector_representation(state, space, repr; kwargs...)
 end
 
 
