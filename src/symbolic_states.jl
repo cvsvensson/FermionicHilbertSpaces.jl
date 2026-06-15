@@ -139,7 +139,7 @@ function apply_local_operators(_op::NCMul{C,<:SymbolicState}, state, space::Abst
     op = only(_op.factors)
     _same_space_id(space, op.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
     isketbra(op) || throw(ArgumentError("apply_local_operator is only defined for ketbra SymbolicState operators"))
-    return state == op.bra ? (op.ket, op.coeff) : (state, zero(eltype(op.coeff)))
+    return state == op.bra ? (op.ket, _op.coeff) : (state, zero(eltype(_op.coeff)))
 end
 _precomputation_before_operator_application(op::NCMul{C,<:SymbolicState}, space::AbstractHilbertSpace) where C = nothing
 _precomputation_before_operator_application(op::NCMul{C,<:SymbolicState}, space::FermionicSpace{<:FockNumber}) where C = nothing
@@ -478,3 +478,5 @@ end
     ketbra = vb("0") * vs("↑") * vf("1") * (vb("0") * vs("↑") * vf("0"))'
     @test FermionicHilbertSpaces._operator_type(ketbra) == :ketbras
 end
+
+_find_position(op::SymbolicState, space::FermionicSpace) = nothing

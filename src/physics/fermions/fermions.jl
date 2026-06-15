@@ -117,7 +117,7 @@ focknbr_from_site_label(mode::FermionSym, H::FermionicSpace) = focknbr_from_site
 focknbr_from_site_labels(Hsub::FermionicSpace, H::FermionicSpace) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
 
 
-function _precomputation_before_operator_application(op::NCMul{<:Any,<:FermionSym}, space::FermionicSpace{B}) where {B<:FockNumber}
+function _precomputation_before_operator_application(op::NCMul, space::FermionicSpace{B}) where {B<:FockNumber}
     positions = map(op -> _find_position(op, space), op.factors)
     any(==(0), positions) && throw(ArgumentError("Operator ($op) contains factors that are not part of the fermionic space ($space)"))
     return positions
@@ -143,6 +143,25 @@ function apply_local_operators(op::NCMul{<:Any,<:FermionSym}, state::FockNumber{
         newfocknbr = bitmask ⊻ newfocknbr
     end
     return newfocknbr, (fermionparity ? -op.coeff : op.coeff)
+end
+
+function apply_local_operator(op::FermionSym, state::FockNumber{I}, space::FermionicSpace, fermionpositions) where I
+    newfocknbr = state
+    fermionparity = false  # false = +1, true = -1
+    factor = op
+    digitpos = _find_position(factor, space)
+    iszero(digitpos) && throw(ArgumentError("Operator ($op) contains a factor that is not part of the fermionic space ($space)"))
+    # digitpos = fermionposition
+    dagger = factor.creation
+    bitmask = one(I) << (digitpos - 1)
+    occupied = !iszero(bitmask & newfocknbr)
+    if dagger == occupied
+        return newfocknbr, 0
+    end
+    fermionparity ⊻= isodd(count_ones(newfocknbr.f & (bitmask - one(I))))
+    newfocknbr = bitmask ⊻ newfocknbr
+
+    return newfocknbr, (fermionparity ? -1 : 1)
 end
 
 
