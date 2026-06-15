@@ -26,14 +26,12 @@ ham_sym = -sum(h[k] * S[k][:z] for k in 1:N) -
     sum(2J[k] .* S[k][:] .* S[k+1][:])
 end
 
-ham_mat = matrix_representation(ham_sym, H)
-Sz_mats = [matrix_representation(-2 * S[k][:z], H) for k in 1:N]
+ham_mat = representation(ham_sym, H, :dense)
+Sz_mats = [representation(-2 * S[k][:z], H) for k in 1:N]
 
 using FermionicHilbertSpaces: SpinState, ProductState, state_index
 state = "↑" * repeat("↓", N - 1)
-state_ind = state_index(state, H)
-ψ0 = zeros(ComplexF64, dim(H))
-ψ0[state_ind] = 1.0
+ψ0 = representation(state, H, Vector{ComplexF64})
 
 prob_closed = ODEProblem(MatrixOperator(-1im * ham_mat), ψ0, tspan)
 tols = (reltol=1e-6, abstol=1e-6)
