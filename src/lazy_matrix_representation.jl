@@ -30,9 +30,18 @@ function Base.show(io::IO, L::LazyOperator)
     show(IOContext(io, :compact => true), L.space)
 end
 
-function LazyOperator(op::O, space::S, chunking::C=NoChunking(), precomp::P=_precomputation_before_operator_application(op, space); projection=false, conjugate=false, ishermitian=_ishermitian(op), T=mat_eltype(op),
-) where {O,S,C<:AbstractChunkingStrategy,P}
-    LazyOperator{O,S,T,C,P}(op, space, chunking, precomp, projection, conjugate, ishermitian, (dim(space), dim(space)), nothing)
+function LazyOperator(_op, space::S, chunking::C=NoChunking(); projection=false, conjugate=false, ishermitian=_ishermitian(_op), T=mat_eltype(_op), concretizer=NoConcretizer()
+) where {S,C<:AbstractChunkingStrategy}
+    op = __concretize(_op, concretizer)
+    precomp = _precomputation_before_operator_application(op, space)
+    O = typeof(op)
+    P = typeof(precomp)
+    dims = (dim(space), dim(space))
+    LazyOperator{O,S,T,C,P}(op, space, chunking, precomp, projection, conjugate, ishermitian, dims, nothing)
+end
+function LazyOperator(op::O, space::S, chunking::C, precomp::P; projection=false, conjugate=false, ishermitian=_ishermitian(op), T=mat_eltype(op)) where {O,S,C<:AbstractChunkingStrategy,P}
+    dims = (dim(space), dim(space))
+    LazyOperator{O,S,T,C,P}(op, space, chunking, precomp, projection, conjugate, ishermitian, dims, nothing)
 end
 
 function _lazy_output_prototype(L::LazyOperator, input::AbstractVector)
@@ -220,7 +229,7 @@ function Base.:*(L::LazyOperator, x::AbstractVecOrMat)
     y = similar(x, T)
     return mul!(y, L, x)
 end
-get_input(::LazyRepr{Missing}, H) = Vector{mat_eltype(H)}(undef, dim(H))
+get_input(::LazyRepr{Missing}, H) = dim(H) < 1e4 ? Vector{mat_eltype(H)}(undef, dim(H)) : spzeros(mat_eltype(H), dim(H))
 function get_input(rep::LazyRepr{<:AbstractArray}, H)
     dim(H) == size(rep.input, 1) || throw(DimensionMismatch("input has size $(size(rep.input)) but expected $(dim(H))"))
     return rep.input
@@ -406,11 +415,15 @@ end
     @test Lsprod * vprod ≈ Mprod * vprod
 
     Hcons = constrain_space(Hprod, NumberConservation(2, [Hf]))
-    Mcons = matrix_representation(op_prod, Hcons; projection=true)
-    Ltcons = matrix_representation(op_prod, Hcons, :lazy; projection=true, chunking=TermChunking(scheduler))
-    Lscons = matrix_representation(op_prod, Hcons, :lazy; projection=true, chunking=StateChunking(scheduler))
     vcons = randn(ComplexF64, dim(Hcons))
-    @test Ltcons * vcons ≈ Mcons * vcons
-    @test Lscons * vcons ≈ Mcons * vcons
+    Mv = Mcons * vcons
+    for concretizer in [FermionicHilbertSpaces.NoConcretizer(), FermionicHilbertSpaces.TupleConcretizer(), FermionicHilbertSpaces.VecConcretizer()]
+        Lcons = matrix_representation(op_prod, Hcons, :lazy; projection=true, chunking=NoChunking(), concretizer)
+        Ltcons = matrix_representation(op_prod, Hcons, :lazy; projection=true, chunking=TermChunking(scheduler), concretizer)
+        Lscons = matrix_representation(op_prod, Hcons, :lazy; projection=true, chunking=StateChunking(scheduler), concretizer)
+        @test Lcons * vcons ≈ Mv
+        @test Ltcons * vcons ≈ Mv
+        @test Lscons * vcons ≈ Mv
+    end
 end
 
