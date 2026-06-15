@@ -31,7 +31,7 @@ function dim(H::FermionicSpace)
     N = nbr_of_modes(H)
     N < 63 ? 1 << N : BigInt(1) << N
 end
-atomic_factors(H::FermionicSpace) = map(hilbert_space, H.modes)
+atomic_factors(H::FermionicSpace) = map(m -> FermionicSpace([m], H.group, statetype(H)), H.modes)
 nbr_of_modes(H::FermionicSpace) = length(H.modes)
 nbr_of_modes(H::AbstractHilbertSpace) = nbr_of_modes(parent(H))
 group_id(H::FermionicSpace) = H.group
