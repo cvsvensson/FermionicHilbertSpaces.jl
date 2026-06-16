@@ -147,6 +147,9 @@ ___concretize(factors, ::TupleConcretizer) = Tuple(factors)
 ___concretize(factors::AbstractVector, ::VecConcretizer) = map(identity, factors)
 ___concretize(factors::Tuple, ::VecConcretizer) = collect(factors)
 ___concretize(factors, ::NoConcretizer) = factors
+__concretize(x::NCMul, concr) = NCMul(x.coeff, ___concretize(x.factors, concr))
+__concretize(x::NCAdd, concr) = sum(__concretize(term, concr) for term in NCterms(x)) + x.coeff
+__concretize(x::ProductOperator, concr) = ProductOperator(map(op -> __concretize(op, concr), x.ops), x.spaces, x.inds)
 
 function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
     used_coeff::Bool = false
