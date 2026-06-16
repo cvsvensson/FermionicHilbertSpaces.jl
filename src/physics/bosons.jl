@@ -44,6 +44,8 @@ function BosonSym(label::L, tags::T, exp::Int) where {L,T<:Tags}
     BosonSym{L,Nothing,T}(label, nothing, tags, exp)
 end
 Base.getindex(b::BosonField, i) = BosonSym(i, b, -1)
+Base.getindex(b::BosonField, is...) = BosonSym(is, b, -1)
+
 Base.adjoint(x::BosonSym) = BosonSym(x.label, x.basis, x.tags, -x.exp)
 Base.iszero(x::BosonSym) = false
 symbolic_basis(x::BosonSym{<:Any,<:BosonField}) = x.basis
