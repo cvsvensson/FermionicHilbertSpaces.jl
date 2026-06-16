@@ -27,7 +27,7 @@ add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag)
         s == :d && return 2
         return 0
     end
-    H2 = GenericHilbertSpace(:B, [:c, :d], custom_state_index)
+    H2 = GenericHilbertSpace(:B, (:c, :d), custom_state_index)
     @test all(state_index(b, H1) == n for (n, b) in enumerate(basisstates(H1)))
     @test all(state_index(b, H2) == n for (n, b) in enumerate(basisstates(H2)))
 
