@@ -48,6 +48,16 @@ physical_rep(state, space::AbstractHilbertSpace) = physical_rep(state, statetype
 internal_rep(state, space, ::Type{T}) where T = internal_rep(state, parent(space), T)
 # physical_rep(state, type::B<:AbstractBasisState)
 
+# First dispatch on NC operators with precomputation_before_operator_application
+# then one can dispatch on abstract syms, spaces or statetypes
+function precomputation_before_operator_application(op::NCMul, space::AbstractHilbertSpace)
+    map(op -> _precomputation_before_operator_application(op, space), op.factors)
+end
+precomputation_before_operator_application(::NCAdd, ::AbstractHilbertSpace) = nothing
+function precomputation_before_operator_application(op::AbstractSym, space::AbstractHilbertSpace)
+    _precomputation_before_operator_application(op, space)
+end
+_precomputation_before_operator_application(factors, space) = nothing
 
 abstract type AbstractStateMapper end
 """

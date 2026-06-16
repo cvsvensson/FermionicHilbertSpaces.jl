@@ -76,7 +76,9 @@ group_id(H::SectorHilbertSpace) = group_id(parent(H))
 
 isconstrained(H::SectorHilbertSpace) = true
 basisstates(H::SectorHilbertSpace) = H.ordered_basis_states
-_find_position(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace) = _find_position(Hsub, H.parent)
+_find_position(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace) = _find_position(Hsub, parent(H))
+_find_position(op::AbstractSym, H::SectorHilbertSpace) = _find_position(op, parent(H))
+
 combine_states(substates, H::SectorHilbertSpace) = combine_states(substates, parent(H))
 partial_trace_phase_factor(s1, s2, H::SectorHilbertSpace) = partial_trace_phase_factor(s1, s2, parent(H))
 state_mapper(H::SectorHilbertSpace, Hs) = state_mapper(parent(H), Hs)
@@ -161,8 +163,6 @@ function qn_indices(qn, H::SectorHilbertSpace)
     start_index:end_index
 end
 indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
-
-_precomputation_before_operator_application(ops, space::SectorHilbertSpace) = _precomputation_before_operator_application(ops, parent(space))
 
 @testitem "SectorHilbertSpace sectors" begin
     @fermions f

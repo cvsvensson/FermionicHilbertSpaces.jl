@@ -95,7 +95,7 @@ end
 
 function _apply_symbolic_operator_to_state(op::AbstractSym, state::AbstractBasisState, space::AbstractHilbertSpace; transpose=false)
     term = NCMul(1, [op])
-    precomp = _precomputation_before_operator_application(term, space)
+    precomp = precomputation_before_operator_application(term, space)
     if transpose
         return apply_local_operators(term, state, space, precomp; transpose=true)
     end
@@ -143,9 +143,6 @@ function apply_local_operators(_op::NCMul{C,<:SymbolicState}, state, space::Abst
     isketbra(op) || throw(ArgumentError("apply_local_operator is only defined for ketbra SymbolicState operators"))
     return state == op.bra ? (op.ket, _op.coeff) : (state, zero(eltype(_op.coeff)))
 end
-_precomputation_before_operator_application(op::NCMul{C,<:SymbolicState}, space::AbstractHilbertSpace) where C = nothing
-_precomputation_before_operator_application(op::NCMul{C,<:SymbolicState}, space::FermionicSpace{<:FockNumber}) where C = nothing
-_precomputation_before_operator_application(op::NCMul{C,<:SymbolicState}, space::TransposedSpace) where C = nothing
 
 function NonCommutativeProducts.mul_effect(op::AbstractSym, s::SymbolicState)
     if !(symbolic_group(op) == group_id(s.space))

@@ -18,7 +18,6 @@ atomic_factors(H::TransposedSpace) = map(TransposedSpace, atomic_factors(H.paren
 add_tag(H::TransposedSpace, tag) = TransposedSpace(add_tag(H.parent, tag))
 groups(H::TransposedSpace) = map(TransposedSpace, groups(H.parent))
 factors(H::TransposedSpace) = map(TransposedSpace, factors(H.parent))
-_precomputation_before_operator_application(factors, space::TransposedSpace) = _precomputation_before_operator_application(factors, space.parent)
 TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, factors(H)), map(TransposedSpace, H.atoms))
 TransposedSpace(H::ConstrainedSpace) = ConstrainedSpace(TransposedSpace(parent(H)), H.states, H.state_index)
 TransposedSpace(H::SectorHilbertSpace) = SectorHilbertSpace(TransposedSpace(parent(H)), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)
@@ -196,6 +195,7 @@ end
 
 maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))
 _find_position(f::TransposedSpace, H::FermionicSpace) = _find_position(parent(f), H)
+_find_position(op::AbstractSym, H::TransposedSpace) = _find_position(op, parent(H))
 function _wrap(space, ::TransposedSpace)
     TransposedSpace(space)
 end
