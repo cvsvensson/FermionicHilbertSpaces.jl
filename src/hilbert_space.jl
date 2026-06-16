@@ -1,10 +1,10 @@
-struct GenericHilbertSpace{B,L,S} <: AbstractAtomicHilbertSpace{B}
+struct GenericHilbertSpace{B,L,S,SI} <: AbstractAtomicHilbertSpace{B}
     label::L
     basisstates::S
-    state_index::Dict{B,Int}
+    state_index::SI
     function GenericHilbertSpace(label::L, basisstates, state_index=Dict(reverse(pair) for pair in enumerate(basisstates))) where L
         B = eltype(basisstates)
-        new{B,L,typeof(basisstates)}(label, basisstates, state_index)
+        new{B,L,typeof(basisstates),typeof(state_index)}(label, basisstates, state_index)
     end
 end
 Base.:(==)(H1::GenericHilbertSpace, H2::GenericHilbertSpace) = H1 === H2 || (H1.label == H2.label && H1.basisstates == H2.basisstates)
@@ -12,7 +12,8 @@ Base.hash(H::GenericHilbertSpace, h::UInt) = hash((H.label, H.basisstates), h)
 basisstates(H::GenericHilbertSpace) = H.basisstates
 basisstate(ind, H::GenericHilbertSpace) = H.basisstates[ind]
 Base.keys(H::GenericHilbertSpace) = (H.label,)
-state_index(state::B, H::GenericHilbertSpace{B}) where B = get(H.state_index, state, 0)
+state_index(state::B, H::GenericHilbertSpace{B,<:Any,<:Any,<:AbstractDict}) where B = get(H.state_index, state, 0)
+state_index(state::B, H::GenericHilbertSpace{B}) where B = H.state_index(state)
 symbolic_group(H::GenericHilbertSpace) = H.label
 atomic_id(H::GenericHilbertSpace) = H.label
 add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag), H.basisstates, H.state_index)
@@ -21,7 +22,15 @@ add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag)
     using FermionicHilbertSpaces: GenericHilbertSpace, Kets, fast_path
     using LinearAlgebra
     H1 = GenericHilbertSpace(:A, [:a, :b])
-    H2 = GenericHilbertSpace(:B, [:c, :d])
+    custom_state_index(s) = begin
+        s == :c && return 1
+        s == :d && return 2
+        return 0
+    end
+    H2 = GenericHilbertSpace(:B, (:c, :d), custom_state_index)
+    @test all(state_index(b, H1) == n for (n, b) in enumerate(basisstates(H1)))
+    @test all(state_index(b, H2) == n for (n, b) in enumerate(basisstates(H2)))
+
     P = tensor_product(H1, H2)
     @test dim(P) == dim(H1) * dim(H2)
     @test 2 * I(2) == partial_trace(1.0 * I(4), P => H1)
