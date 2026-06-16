@@ -325,8 +325,8 @@ function has_internal_rep(state, space, ::Type{T}) where {T}
     newstate == state || throw(ArgumentError("internal_rep and physical_rep are inconsistent for space $space: got $newstate from physical_rep(internal_rep($state))"))
     return true
 end
-function _precomputation_before_operator_application(ops::ProductOperator, space::ProductSpace)
-    return map(_precomputation_before_operator_application, ops.ops, ops.spaces)
+function precomputation_before_operator_application(ops::ProductOperator, space::AbstractHilbertSpace)
+    return map(precomputation_before_operator_application, ops.ops, ops.spaces)
 end
 
 internal_rep(state, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))

@@ -33,7 +33,7 @@ end
 function LazyOperator(_op, space::S, chunking::C=NoChunking(); projection=false, conjugate=false, ishermitian=_ishermitian(_op), T=mat_eltype(_op), concretizer=NoConcretizer()
 ) where {S,C<:AbstractChunkingStrategy}
     op = __concretize(_op, concretizer)
-    precomp = _precomputation_before_operator_application(op, space)
+    precomp = precomputation_before_operator_application(op, space)
     O = typeof(op)
     P = typeof(precomp)
     dims = (dim(space), dim(space))
@@ -214,7 +214,7 @@ function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCAdd}, x::AbstractVec
     rmul!(y, β)
     op = L.op
     for (term, coeff) in op.dict
-        precomp = _precomputation_before_operator_application(term, L.space)
+        precomp = precomputation_before_operator_application(term, L.space)
         _apply_single_term!(y, x, L.space, term, precomp, coeff * α, L.conjugate, L.projection, L.chunking)
     end
     if !iszero(op.coeff) && !iszero(α)

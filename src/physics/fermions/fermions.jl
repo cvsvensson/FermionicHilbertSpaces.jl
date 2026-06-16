@@ -117,24 +117,24 @@ focknbr_from_site_label(mode::FermionSym, H::FermionicSpace) = focknbr_from_site
 focknbr_from_site_labels(Hsub::FermionicSpace, H::FermionicSpace) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
 
 
-function _precomputation_before_operator_application(op::NCMul, space::FermionicSpace{B}) where {B<:FockNumber}
-    positions = map(op -> _find_position(op, space), op.factors)
-    any(==(0), positions) && throw(ArgumentError("Operator ($op) contains factors that are not part of the fermionic space ($space)"))
-    return positions
+
+function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{FockNumber{I}}) where {I}
+    position = _find_position(op, space)
+    iszero(position) && throw(ArgumentError("Operator ($op) contains a factor that is not part of the fermionic space ($space)"))
+    return one(I) << (position - 1)
 end
 
 
-function apply_local_operators(op::NCMul{<:Any,<:FermionSym}, state::FockNumber{I}, space::FermionicSpace, fermionpositions; transpose) where I
+function apply_local_operators(op::NCMul{<:Any,<:FermionSym}, state::FockNumber{I}, space::FermionicSpace, bitmasks; transpose) where I
     factors = op.factors
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1
     N = length(factors)
-    @inbounds for m in eachindex(factors, fermionpositions)
+    @inbounds for m in eachindex(factors, bitmasks)
         n = !transpose ? N - m + 1 : m
         factor = factors[n]
-        digitpos = fermionpositions[n]
-        dagger = !transpose ? factor.creation : !factor.creation
-        bitmask = one(I) << (digitpos - 1)
+        dagger = xor(factor.creation, transpose)
+        bitmask = bitmasks[n]
         occupied = !iszero(bitmask & newfocknbr)
         if dagger == occupied
             return newfocknbr, zero(op.coeff)
@@ -145,15 +145,15 @@ function apply_local_operators(op::NCMul{<:Any,<:FermionSym}, state::FockNumber{
     return newfocknbr, (fermionparity ? -op.coeff : op.coeff)
 end
 
-function apply_local_operator(op::FermionSym, state::FockNumber{I}, space::FermionicSpace, fermionpositions) where I
+function apply_local_operator(op::FermionSym, state::FockNumber{I}, space::FermionicSpace, bitmask) where I
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1
     factor = op
-    digitpos = _find_position(factor, space)
-    iszero(digitpos) && throw(ArgumentError("Operator ($op) contains a factor that is not part of the fermionic space ($space)"))
+    # digitpos = _find_position(factor, space)
+    #iszero(digitpos) && throw(ArgumentError("Operator ($op) contains a factor that is not part of the fermionic space ($space)"))
     # digitpos = fermionposition
     dagger = factor.creation
-    bitmask = one(I) << (digitpos - 1)
+    # bitmask = one(I) << (digitpos - 1)
     occupied = !iszero(bitmask & newfocknbr)
     if dagger == occupied
         return newfocknbr, 0

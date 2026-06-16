@@ -38,15 +38,14 @@ mat_eltype(::Type{NCMul{C,S,F}}) where {C,S,F} = promote_type(C, mat_eltype(S))
 mat_eltype(::S) where {S} = mat_eltype(S)
 mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors if a complex number is expected. Override it for specific types if needed.
 
-_precomputation_before_operator_application(factors, space) = nothing
 
 function operator_indices_and_amplitudes!(accumulator, op, space::AbstractHilbertSpace; kwargs...)
-    precomp = _precomputation_before_operator_application(op, space)
+    precomp = precomputation_before_operator_application(op, space)
     return operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp; kwargs...)
 end
 
 function chunked_operator_indices_and_amplitudes!(accumulator, op, space::AbstractHilbertSpace, input_inds, col_offset; kwargs...)
-    precomp = _precomputation_before_operator_application(op, space)
+    precomp = precomputation_before_operator_application(op, space)
     return chunked_operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp, input_inds, col_offset; kwargs...)
 end
 
@@ -103,22 +102,22 @@ function _apply_local_operators(op, state, space, precomp)
     apply_local_operators(op, state, space, precomp; transpose=false)
 end
 
-function apply_local_operators(_op::NCMul, state, space, precomp; transpose)
-    amp = _op.coeff
+function apply_local_operators(op::NCMul, state, space, precomps; transpose)
+    amp = op.coeff
     if !transpose
-        for factor in Iterators.reverse(_op.factors)
+        for (factor, precomp) in Iterators.reverse(zip(op.factors, precomps))
             state, _amp = apply_local_operator(factor, state, space, precomp)
             if iszero(_amp)
-                return state, zero(mat_eltype(_op))
+                return state, zero(mat_eltype(op))
             end
             amp *= _amp
         end
         return state, amp
     elseif transpose
-        for factor in _op.factors
+        for (factor, precomp) in zip(op.factors, precomps)
             state, _amp = apply_local_operator(adjoint(factor), state, space, precomp)
             if iszero(_amp)
-                return state, zero(mat_eltype(_op))
+                return state, zero(mat_eltype(op))
             end
             amp *= conj(_amp)
         end
@@ -564,7 +563,6 @@ end
 end
 
 @testitem "Distributed sparse matrix representation" begin
-    # using FermionicHilbertSpaces, Test
     import FermionicHilbertSpaces: PartitionedSparseRepr
     using LinearAlgebra
     using PartitionedArrays

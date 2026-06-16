@@ -4,7 +4,9 @@ struct ConstrainedSpace{B,H,S} <: AbstractHilbertSpace{B}
     states::S
     state_index::Dict{B,Int}
 end
-_find_position(Hsub::AbstractHilbertSpace, H::ConstrainedSpace) = _find_position(Hsub, H.parent)
+_find_position(Hsub::AbstractHilbertSpace, H::ConstrainedSpace) = _find_position(Hsub, parent(H))
+_find_position(op::AbstractSym, H::ConstrainedSpace) = _find_position(op, parent(H))
+
 Base.:(==)(H1::ConstrainedSpace, H2::ConstrainedSpace) = H1.parent == H2.parent && H1.states == H2.states && H1.state_index == H2.state_index
 Base.hash(H::ConstrainedSpace, h::UInt) = hash(H.parent, hash(H.states, hash(H.state_index, h)))
 Base.parent(H::ConstrainedSpace) = H.parent
@@ -45,7 +47,6 @@ function constrain_space(space, constraint::AbstractConstraint, states=basisstat
         throw(ArgumentError("Constraint $(constraint) is not supported for constraining spaces."))
     end
 end
-_find_position(op::AbstractSym, H::ConstrainedSpace) = _find_position(op, parent(H))
 add_tag(H::ConstrainedSpace, tag) = ConstrainedSpace(add_tag(parent(H), tag), H.states, H.state_index)
 
 allowed_values(::NumberConservation{Missing,Missing,Missing}, space, mapper) = 0:maximum_particles(space)
@@ -146,9 +147,6 @@ end
 
 state_mapper(H::ConstrainedSpace, Hs) = state_mapper(parent(H), Hs)
 mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
-
-# _apply_local_operators(ops, state, space::ConstrainedSpace, precomp) = _apply_local_operators(ops, state, space.parent, precomp)
-_precomputation_before_operator_application(ops, space::ConstrainedSpace) = _precomputation_before_operator_application(ops, parent(space))
 
 @testitem "Constrained space" begin
     import FermionicHilbertSpaces: constrain_space, CombineFockNumbersProcessor, subregion

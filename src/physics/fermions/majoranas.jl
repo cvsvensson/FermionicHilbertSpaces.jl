@@ -248,14 +248,15 @@ end
 state_index(state::AbstractFockState, H::MajoranaHilbertSpace) = state_index(state, H.parent)
 _find_position(f::MajoranaSym, H::MajoranaHilbertSpace) = get(H.majoranaindices, f, 0)
 
-function _precomputation_before_operator_application(op::NCMul, space::MajoranaHilbertSpace)
-    # find positions of all majoranas in the operator
-    majoranapositions = map(f -> _find_position(f, space), op.factors)
-    fermionpositions = map(n -> div(n + 1, 2), majoranapositions)
-    daggers = map(iseven, majoranapositions)
-    return fermionpositions, daggers
+function _precomputation_before_operator_application(op::MajoranaSym, space::AbstractHilbertSpace{<:FockNumber})
+    majoranaposition = _find_position(op, space)
+    fermionposition = div(majoranaposition + 1, 2)
+    dagger = iseven(majoranaposition)
+    return fermionposition, dagger
 end
-function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace, (fpos, daggers); transpose)
+function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace, precomp; transpose)
+    fpos = Iterators.map(first, precomp)
+    daggers = Iterators.map(last, precomp)
     if !transpose
         state, amp = togglemajoranas(Iterators.reverse(fpos), Iterators.reverse(daggers), f)
     else
