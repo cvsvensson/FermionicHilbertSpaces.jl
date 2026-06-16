@@ -6,7 +6,7 @@ using LinearAlgebra
 import SciMLOperators: cache_operator
 
 import OhMyThreads: Schedulers.chunking_args, Consecutive
-import FermionicHilbertSpaces: NCAdd, NCterms, EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, _matrix_representation, _matrix_representation_single_space, __matrix_representation, finalize!, mat_eltype, matrix_accumulator, operator_indices_and_amplitudes!, push_inds_amps!, NoChunking, chunked_operator_indices_and_amplitudes!, partition_product, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, _precomputation_before_operator_application, basisstate, state_index, dim, _lazy_output_prototype, NonCommutativeProducts.NCMul
+import FermionicHilbertSpaces: NCAdd, NCterms, EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, _matrix_representation, _matrix_representation_single_space, __matrix_representation, finalize!, mat_eltype, matrix_accumulator, operator_indices_and_amplitudes!, push_inds_amps!, NoChunking, chunked_operator_indices_and_amplitudes!, partition_product, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, precomputation_before_operator_application, basisstate, state_index, dim, _lazy_output_prototype, NonCommutativeProducts.NCMul
 
 function _reduce_add!(y, partials)
     isempty(partials) && return y
@@ -70,7 +70,7 @@ function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCAdd,<:Any,<:Any,<:Te
         local_mat = take!(chnl)
         fill!(local_mat, zero(eltype(local_mat)))
         for term in local_terms
-            precomp = _precomputation_before_operator_application(term, L.space)
+            precomp = precomputation_before_operator_application(term, L.space)
             _apply_single_term!(local_mat, x, L.space, term, precomp, α, L.conjugate, L.projection, NoChunking())
         end
         lock(lk) do
@@ -113,7 +113,7 @@ function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCAdd,<:Any,<:Any,<:St
     rmul!(y, β)
     cache_operator!(L, y)
     for term in NCterms(L.op)
-        precomp = _precomputation_before_operator_application(term, L.space)
+        precomp = precomputation_before_operator_application(term, L.space)
         _apply_single_term!(y, x, L.space, term, precomp, α, L.conjugate, L.projection, L.chunking, L.cache)
     end
     if !iszero(L.op.coeff) && !iszero(α)
