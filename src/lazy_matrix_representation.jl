@@ -416,6 +416,7 @@ end
 
     Hcons = constrain_space(Hprod, NumberConservation(2, [Hf]))
     vcons = randn(ComplexF64, dim(Hcons))
+    Mcons = matrix_representation(op_prod, Hcons; projection=true)
     Mv = Mcons * vcons
     for concretizer in [FermionicHilbertSpaces.NoConcretizer(), FermionicHilbertSpaces.TupleConcretizer(), FermionicHilbertSpaces.VecConcretizer()]
         Lcons = matrix_representation(op_prod, Hcons, :lazy; projection=true, chunking=NoChunking(), concretizer)
