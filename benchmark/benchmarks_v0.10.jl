@@ -39,6 +39,23 @@ d = dim(Hsub)
 msub = rand(ComplexF64, d, d)
 SUITE["embed"]["fermions"] = @benchmarkable embed($msub, $(Hsub => H); complement=$complement)
 
+## Reshape: tensor-to-tensor
+H1r = hilbert_space(f, 1:3, NoSymmetry())
+H2r = hilbert_space(f, 4:5, NoSymmetry())
+H3r = hilbert_space(f, 6:8, NoSymmetry())
+H4r = hilbert_space(f, 9:12, NoSymmetry())
+H12r = tensor_product(H1r, H2r)
+H34r = tensor_product(H3r, H4r)
+Ar = rand(ComplexF64, dim(H12r), dim(H3r), dim(H4r))
+Mr = rand(ComplexF64, dim(H12r), dim(H34r))
+H = tensor_product(H12r, H34r)
+SUITE["reshape"]["mat_to_tens"] =
+    @benchmarkable reshape($Mr, $H12r => ($H1r, $H2r), $H34r => ($H3r, $H4r))
+SUITE["reshape"]["mat_to_vec"] =
+    @benchmarkable reshape($Mr, ($H12r, $H34r) => $H)
+SUITE["reshape"]["mixed_split_combine"] =
+    @benchmarkable reshape($Ar, $H12r => ($H1r, $H2r), ($H3r, $H4r) => $H34r)
+
 N = 60
 weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
 allowed_ones = [[0, 1], [-1, 0], [2]]
