@@ -47,6 +47,91 @@ matrix_representation(op, space, rep)
 ```
 
 
+## Reshaping
+
+`reshape` converts arrays by splitting or combining axes according to Hilbert-space mappings. Mappings are applied left-to-right, and each mapping consumes the next consecutive group of input axes.
+
+```julia
+reshape(t::AbstractArray, mappings...; repeat=false)
+```
+
+Supported mapping forms:
+
+- `H => (H1, H2, ...)`: split one axis into several
+- `(H1, H2, ...) => H`: combine several consecutive axes into one
+- `(H1, H2, ...) => (K1, K2, ...)`: repartition several axes into several
+- `H => H`: keep one axis unchanged
+
+Direct many-to-many mappings are equivalent to explicit combine-then-split composition:
+
+```julia
+reshape(A, (H1, H2) => (K1, K2))
+# equivalent to reshape(reshape(A, (H1, H2) => Hmid), Hmid => (K1, K2))
+```
+
+where `Hmid` is the canonical combined space of the input tuple.
+
+### Multiple mappings
+
+Provide one mapping per axis group:
+
+```julia
+reshape(A, H1 => (H1a, H1b), (H2a, H2b) => H2, H3 => H3)
+```
+
+This splits the first axis, combines the next two, and keeps the last unchanged.
+
+### Single-mapping shorthand
+
+If exactly one mapping is provided, it is expanded automatically:
+
+- If it consumes all axes of `t`, it is applied once.
+- If `t` has twice as many axes as the mapping consumes, the mapping is applied to the first half and again to the second half.
+
+This is convenient for square operator matrices:
+
+```julia
+reshape(v, H => (H1, H2))
+reshape(m, H => (H1, H2))
+reshape(T, (H1, H2) => H)
+```
+
+For asymmetric operators, specify both sides explicitly:
+
+```julia
+reshape(m, Hout => (H1, H2), Hin => (K1, K2))
+```
+
+### Repeating one mapping
+
+With `repeat=true`, one mapping is applied to every consecutive compatible axis group:
+
+```julia
+reshape(A, H => (H1, H2); repeat=true)
+```
+
+### Pair syntax and curried form
+
+Mappings use `Pair` syntax and can be passed directly:
+
+```julia
+reshape(m, H => (H1, H2))
+reshape(T, (H1, H2) => H)
+```
+
+`reshape` also accepts mappings first and returns a function:
+
+```julia
+to_tensor = reshape(H => (H1, H2))
+to_matrix = reshape((H1, H2) => H)
+```
+This does not provide any performance benefit at the moment, but might in the future.
+
+### Practical usage
+
+For worked examples, see [docs/src/literate_output/open_system_lindblad.md](literate_output/open_system_lindblad.md).
+
+
 ## State mapper interface
 
 Internal tensor/reshape/partial-trace routines use a common mapper protocol:

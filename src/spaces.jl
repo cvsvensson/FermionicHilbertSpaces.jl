@@ -7,6 +7,8 @@ abstract type AbstractAtomicHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractProductHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractGroupedHilbertSpace{B} <: AbstractProductHilbertSpace{B} end
 
+const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}
+
 """
 	basisstates(H)
 
