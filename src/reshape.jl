@@ -9,6 +9,7 @@ consuming the next consecutive group of input indices.
 
     H => (H1, H2, ...)   split one index into several
     (H1, H2, ...) => H   combine several consecutive indices into one
+    (H1, H2, ...) => (K1, K2, ...)  repartition several indices into several
     H => H               leave one index unchanged
 
 # Specifying multiple mappings
@@ -43,6 +44,14 @@ For asymmetric operators, specify both mappings explicitly:
 
     reshape(m, Hout => (H1, H2), Hin => (K1, K2))
 
+Many-to-many mappings are evaluated directly and are equivalent to an explicit
+combine-then-split composition:
+
+    reshape(A, (H1, H2) => (K1, K2))
+    # equivalent to reshape(reshape(A, (H1, H2) => Hmid), Hmid => (K1, K2))
+
+where `Hmid` is the canonical combined space of the input tuple.
+
 When `repeat=true`, the single given mapping is applied to every
 consecutive group of input indices. For example, with a 3-index array
 where every index lives on `H`:
@@ -51,7 +60,7 @@ where every index lives on `H`:
     # equivalent to reshape(A, H => (H1, H2), H => (H1, H2), H => (H1, H2))
 
 """
-function Base.reshape(t::AbstractArray, mappings::PairWithHilbertSpace...; repeat=false)
+function Base.reshape(t::AbstractArray, mappings::Pair...; repeat=false)
     mappings = if repeat
         _repeat_mapping(t, mappings)
     elseif length(mappings) == 1
@@ -67,7 +76,7 @@ function Base.reshape(t::AbstractArray, mappings::PairWithHilbertSpace...; repea
     return _reshape(t, blocks, Hsouts)
 end
 
-Base.reshape(mappings::PairWithHilbertSpace...; kwargs...) = t -> reshape(t, mappings...; kwargs...)
+Base.reshape(mappings::Pair...; kwargs...) = t -> reshape(t, mappings...; kwargs...)
 
 _spaces(H::AbstractHilbertSpace) = (H,)
 _spaces(Hs::Union{Tuple,AbstractVector}) = Tuple(Hs)
@@ -81,10 +90,6 @@ function _mapping_spaces(mapping::Pair)
 
     (isempty(Hsin) || isempty(Hsout)) &&
         throw(ArgumentError("Empty Hilbert space group in mapping $mapping"))
-
-    length(Hsin) > 1 && length(Hsout) > 1 &&
-        throw(ArgumentError("Many-to-many mappings are not supported: $mapping. \
-                             Use `(H1, H2) => H` followed by `H => (K1, K2)`."))
 
     length(Hsin) == 1 == length(Hsout) && only(Hsin) != only(Hsout) &&
         throw(ArgumentError("A one-to-one mapping must be the identity `H => H`, \
@@ -129,11 +134,31 @@ function _repeat_mapping(t::AbstractArray, mappings)
 end
 
 _flatten(groups::Tuple) = reduce((a, b) -> (a..., b...), groups; init=())
+struct _ComposedMapper{M1,M2}
+    combine_mapper::M1
+    split_mapper::M2
+end
+
+function _build_many_to_many_mapper(Hsin, Hsout)
+    Hmid = try
+        tensor_product(Hsin)
+    catch err
+        throw(ArgumentError("Cannot infer an intermediate space for many-to-many mapping $Hsin => $Hsout. \
+                             Use an explicit two-step mapping `(H1, H2, ...) => H => (K1, K2, ...)`. \
+                             Original error: $(sprint(showerror, err))"))
+    end
+    combine_mapper = state_mapper(Hmid, Hsin)
+    split_mapper = state_mapper(Hmid, Hsout)
+    return _ComposedMapper(combine_mapper, split_mapper)
+end
+
 function _mapper(Hsin, Hsout)
     if length(Hsin) == 1 && length(Hsout) > 1        # split
         state_mapper(only(Hsin), Hsout)
     elseif length(Hsin) > 1 && length(Hsout) == 1    # combine
         state_mapper(only(Hsout), Hsin)
+    elseif length(Hsin) > 1 && length(Hsout) > 1     # many-to-many
+        _build_many_to_many_mapper(Hsin, Hsout)
     else                                             # identity
         nothing
     end
@@ -165,6 +190,24 @@ function _transitions(Hsin, Hsout::Tuple{<:AbstractHilbertSpace}, mapper)
             Iout = (state_index(f, H),)
             any(iszero, Iout) && continue
             push!(transitions, (Iin, Iout, w))
+        end
+    end
+    return map(identity, transitions)
+end
+
+# Many-to-many: (H1, H2, ...) => (K1, K2, ...)
+function _transitions(Hsin, Hsout, mapper::_ComposedMapper)
+    transitions = []
+    for fs in Base.product(basisstates.(Hsin)...)
+        Iin = map(state_index, fs, Hsin)
+        mid_states, ws1 = combine_states(fs, mapper.combine_mapper)
+        for (fmid, w1) in zip(mid_states, ws1)
+            out_states, ws2 = split_state(fmid, mapper.split_mapper)
+            for (states, w2) in zip(out_states, ws2)
+                Iout = map(state_index, states, Hsout)
+                any(iszero, Iout) && continue
+                push!(transitions, (Iin, Iout, w1 * w2))
+            end
         end
     end
     return map(identity, transitions)
@@ -284,6 +327,18 @@ end
     @test size(B) == (dim(H1_3), dim(H2_3), dim(H34_3))
     @test reshape(B, (H1_3, H2_3) => H12_3, H34_3 => (H3_3, H4_3)) ≈ A
 
+    # Direct many-to-many mapping is equivalent to explicit two-step composition
+    H13_3 = tensor_product(H1_3, H3_3)
+    H24_3 = tensor_product(H2_3, H4_3)
+    H1234 = tensor_product(H12_3, H34_3)
+    M24 = rand(ComplexF64, dim(H12_3), dim(H34_3))
+    M24_direct = reshape(M24, (H12_3, H34_3) => (H13_3, H24_3))
+    M24_twostep = reshape(reshape(M24, (H12_3, H34_3) => H1234), H1234 => (H13_3, H24_3))
+    @test M24_direct ≈ M24_twostep
+
+    # Inverse many-to-many map restores the original matrix
+    @test reshape(M24_direct, (H13_3, H24_3) => (H12_3, H34_3)) ≈ M24
+
     # Identity mappings leave the tensor unchanged
     @test reshape(A, H12_3 => H12_3, H3_3 => H3_3, H4_3 => H4_3) == A
 
@@ -301,6 +356,66 @@ end
     # Permuted subsystem orderings round-trip
     @test m3 ≈ reshape(reshape(m3, H_3 => (H1_3, H3_3, H2_3)), (H1_3, H3_3, H2_3) => H_3)
     @test m3 ≈ reshape(reshape(m3, H_3 => (H3_3, H2_3, H1_3)), (H3_3, H2_3, H1_3) => H_3)
+end
+
+@testitem "Mixed reshape mapping check" begin
+    @fermions f
+    # Build elementary spaces
+    H1a = hilbert_space(f, [1], NoSymmetry())
+    H1b = hilbert_space(f, [2], NumberConservation())
+    H2a = hilbert_space(f, [3], NoSymmetry())
+    H2b = hilbert_space(f, [4], ParityConservation())
+    H3a = hilbert_space(f, [5], NoSymmetry())
+    H3b = hilbert_space(f, [6], NumberConservation())
+    H3c = hilbert_space(f, [7], NoSymmetry())
+    H4  = hilbert_space(f, [8], NoSymmetry())
+
+    # Composite spaces used in the mapping
+    H1ab = tensor_product(H1a, H1b)
+    H2ab = tensor_product(H2a, H2b)
+    H3bc = tensor_product(H3b, H3c)
+    H3ab = tensor_product(H3a, H3b)
+
+    # Input tensor has indices: (H1ab, H2a, H2b, H3a, H3bc, H4)
+    A = rand(ComplexF64,
+        dim(H1ab), dim(H2a), dim(H2b), dim(H3a), dim(H3bc), dim(H4)
+    )
+
+    B = reshape(A,
+        H1ab => (H1a, H1b),
+        (H2a, H2b) => H2ab,
+        (H3a, H3bc) => (H3ab, H3c),
+        H4 => H4,
+    )
+
+    # Expected output indices: (H1a, H1b, H2ab, H3ab, H3c, H4)
+    @test size(B) == (dim(H1a), dim(H1b), dim(H2ab), dim(H3ab), dim(H3c), dim(H4))
+
+    # Inverse mapping should recover A
+    A_rt = reshape(B,
+        (H1a, H1b) => H1ab,
+        H2ab => (H2a, H2b),
+        (H3ab, H3c) => (H3a, H3bc),
+        H4 => H4,
+    )
+    @test A_rt ≈ A
+
+    # Optional: direct many-to-many equals explicit two-step composition
+    H3abc = tensor_product(H3a, H3bc)
+    B_twostep = reshape(
+        reshape(A,
+            H1ab => (H1a, H1b),
+            (H2a, H2b) => H2ab,
+            (H3a, H3bc) => H3abc,
+            H4 => H4,
+        ),
+        H1a => H1a,
+        H1b => H1b,
+        H2ab => H2ab,
+        H3abc => (H3ab, H3c),
+        H4 => H4,
+    )
+    @test B_twostep ≈ B
 end
 
 function reshape_to_matrix(t::AbstractArray{<:Any,N}, leftindices::NTuple{NL,Int}) where {N,NL}

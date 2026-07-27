@@ -59,9 +59,17 @@ Supported mapping forms:
 
 - `H => (H1, H2, ...)`: split one axis into several
 - `(H1, H2, ...) => H`: combine several consecutive axes into one
+- `(H1, H2, ...) => (K1, K2, ...)`: repartition several axes into several
 - `H => H`: keep one axis unchanged
 
-Many-to-many mappings are not supported directly. Use a combine step followed by a split step.
+Direct many-to-many mappings are equivalent to explicit combine-then-split composition:
+
+```julia
+reshape(A, (H1, H2) => (K1, K2))
+# equivalent to reshape(reshape(A, (H1, H2) => Hmid), Hmid => (K1, K2))
+```
+
+where `Hmid` is the canonical combined space of the input tuple.
 
 ### Multiple mappings
 
