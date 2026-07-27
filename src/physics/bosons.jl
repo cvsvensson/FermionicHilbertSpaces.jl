@@ -214,10 +214,9 @@ function apply_local_operator(factor::BosonSym, state::BosonicState, space::Trun
 end
 symbolic_group(f::BosonSym{<:Any,B}) where B = (f.basis, f.label)
 symbolic_group(f::BosonSym{<:Any,Nothing}) = (BosonSym, f.label)
-atomic_id(f::BosonSym) = symbolic_group(f)
 symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
 symbolic_basis(H::TruncatedBosonicHilbertSpace) = symbolic_group(H)
-atomic_id(H::TruncatedBosonicHilbertSpace) = atomic_id(H.sym)
+atomic_id(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
 mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
 
 @testitem "Bosonic hilbert space" begin

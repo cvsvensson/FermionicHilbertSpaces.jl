@@ -30,7 +30,7 @@ Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.tags, hash(x.spin, hash(x.fiel
 label(S::SymbolicSpinBasis) = S.label
 Base.getindex(s::SpinField, i) = SymbolicSpinBasis(i, s, s.spin, tags(s))
 atomic_factors(s::SymbolicSpinBasis) = (s,)
-atomic_id(s::SymbolicSpinBasis) = s
+atomic_id(s::SymbolicSpinBasis) = symbolic_group(s)
 tags(s::SymbolicSpinBasis) = s.tags
 add_tag(s::SymbolicSpinBasis, tag) = SymbolicSpinBasis(s.label, s.field, s.spin, add_tag(s.tags, tag))
 symbolic_group(s::SymbolicSpinBasis) = s
@@ -107,7 +107,7 @@ basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState, space::SpinSpace) = Int(s.m + space.spin + 1)
 
-atomic_id(H::SpinSpace) = atomic_id(H.sym)
+atomic_id(H::SpinSpace) = symbolic_group(H.sym)
 function add_tag(H::SpinSpace{J,T,S}, tag) where {J,T,S}
     newsym = add_tag(H.sym, tag)
     SpinSpace{J,T,typeof(newsym)}(H.spin, H.basisstates, newsym, H.state_index)
@@ -265,7 +265,6 @@ Base.hash(a::SpinSym, h::UInt) = hash(a.exponent, hash(a.op, hash(a.basis, h)))
 symbolic_group(f::SpinSym) = symbolic_group(f.basis)
 symbolic_basis(f::SpinSym) = f.basis
 change_basis(f::SpinSym, newbasis) = SpinSym(f.op, newbasis, f.exponent)
-atomic_id(f::SpinSym) = atomic_id(f.basis)
 
 mat_eltype(::Type{<:SpinSym}) = Float64
 

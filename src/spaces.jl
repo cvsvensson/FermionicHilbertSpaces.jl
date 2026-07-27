@@ -31,6 +31,7 @@ groups(H::AbstractGroupedHilbertSpace) = (H,)
 atomic_substate(n, f, ::AbstractGroupedHilbertSpace) = substate(n, f)
 isconstrained(H::AbstractAtomicHilbertSpace) = false
 atomic_factors(f::AbstractSym) = (f,)
+atomic_id(f::AbstractSym) = symbolic_group(f) # generic fallback
 group_id(H::AbstractAtomicHilbertSpace) = atomic_id(H)
 
 partial_trace_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1

@@ -1,7 +1,7 @@
 struct Kets{B,H}
     space::H
+    Kets(space::H) where H = new{statetype(space),H}(space)
 end
-Kets(space::H) where H = Kets{statetype(space),H}(space)
 
 struct SymbolicState{K,B,H} <: AbstractSym
     space::H
@@ -47,7 +47,6 @@ Base.adjoint(s::SymbolicState) = SymbolicState(s.space, s.bra, s.ket)
 
 symbolic_group(s::SymbolicState) = group_id(s.space)
 group_id(s::SymbolicState) = group_id(s.space)
-atomic_id(s::SymbolicState) = (atomic_id(s.space), s.ket, s.bra)
 
 @nc SymbolicState AbstractSym
 
