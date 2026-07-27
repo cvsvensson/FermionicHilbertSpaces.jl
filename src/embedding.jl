@@ -5,7 +5,6 @@ function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
     end
     return generalized_kron((m, I), (Hsub, complement), H; kwargs...)
 end
-const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}
 
 """
     embed(m, Hsub => H; complement=complementary_subsystem(H, Hsub), kwargs...)

@@ -1,109 +1,195 @@
+"""
+    reshape(t, mappings...; repeat=false)
 
-function Base.reshape(m::AbstractMatrix, H::AbstractHilbertSpace, Hs)
-    mapper = state_mapper(H, Hs)
-    _reshape_mat_to_tensor(m, H, Hs, Hs, mapper, mapper)
-end
-function Base.reshape(m::AbstractMatrix, H::AbstractHilbertSpace, Hsout, Hsin)
-    mapperout = state_mapper(H, Hsout)
-    mapperin = state_mapper(H, Hsin)
-    _reshape_mat_to_tensor(m, H, Hsout, Hsin, mapperout, mapperin)
-end
-function Base.reshape(m::AbstractVector, H::AbstractHilbertSpace, Hs)
-    _reshape_vec_to_tensor(m, H, Hs, state_mapper(H, Hs))
-end
-const PairWithHilbertSpace = Union{Pair{<:AbstractHilbertSpace,<:Any},Pair{<:Any,<:AbstractHilbertSpace}}
-Base.reshape(Hs::PairWithHilbertSpace; kwargs...) = m -> reshape(m, first(Hs), last(Hs); kwargs...)
-Base.reshape(m::AbstractArray, Hs::PairWithHilbertSpace; kwargs...) = reshape(m, first(Hs), last(Hs); kwargs...)
+Reshape the array `t` by splitting or combining its indices according to
+Hilbert-space mappings. The mappings are applied left to right, each one
+consuming the next consecutive group of input indices.
 
-function Base.reshape(t::AbstractArray, Hs::Union{<:AbstractVector,Tuple}, H::AbstractHilbertSpace)
-    mapper_in = state_mapper(H, Hs)
-    if ndims(t) == 2 * length(Hs)
-        return _reshape_tensor_to_mat(t, (Hs, mapper_in), (Hs, mapper_in), H, state_mapper)
-    elseif ndims(t) == length(Hs)
-        return _reshape_tensor_to_vec(t, Hs, H, mapper_in)
+# Mapping forms
+
+    H => (H1, H2, ...)   split one index into several
+    (H1, H2, ...) => H   combine several consecutive indices into one
+    H => H               leave one index unchanged
+
+# Specifying multiple mappings
+
+Give one mapping per group of input indices:
+
+    reshape(A, H1 => (H1a, H1b), (H2a, H2b) => H2, H3 => H3)
+
+This splits the first index, combines the next two, and leaves the last
+unchanged.
+
+# Single-mapping shorthand
+
+When only one mapping is given, it is replicated if needed:
+
+- If it consumes all indices of `t`, it is applied once:
+
+      reshape(v, H => (H1, H2))        # length-1 vector → 2-index tensor
+
+- If `t` has twice as many indices as the mapping consumes, the mapping
+  is applied to the first half and again to the second half. This covers
+  the common case of a square operator matrix, where the first index is
+  the output space and the second is the input space:
+
+      reshape(m, H => (H1, H2))        # matrix → 4-index tensor
+      # equivalent to reshape(m, H => (H1, H2), H => (H1, H2))
+
+      reshape(T, (H1, H2) => H)        # 4-index tensor → matrix
+      # equivalent to reshape(T, (H1, H2) => H, (H1, H2) => H)
+
+For asymmetric operators, specify both mappings explicitly:
+
+    reshape(m, Hout => (H1, H2), Hin => (K1, K2))
+
+When `repeat=true`, the single given mapping is applied to every
+consecutive group of input indices. For example, with a 3-index array
+where every index lives on `H`:
+
+    reshape(A, H => (H1, H2); repeat=true)
+    # equivalent to reshape(A, H => (H1, H2), H => (H1, H2), H => (H1, H2))
+
+"""
+function Base.reshape(t::AbstractArray, mappings::PairWithHilbertSpace...; repeat=false)
+    mappings = if repeat
+        _repeat_mapping(t, mappings)
+    elseif length(mappings) == 1
+        _expand_single_mapping(t, only(mappings))
     else
-        throw(ArgumentError("The number of dimensions in the tensor must match the number of subsystems"))
+        mappings
     end
+
+    Hsins, Hsouts = _validate(t, mappings)
+    mappers = map(_mapper, Hsins, Hsouts)
+    blocks = map(_transitions, Hsins, Hsouts, mappers)
+
+    return _reshape(t, blocks, Hsouts)
 end
 
-function _reshape_vec_to_tensor(v::AbstractVector, H::AbstractHilbertSpace, Hs, mapper)
-    dims = map(dim, Hs)
-    fs = basisstates(H)
-    Is = map(f -> state_index(f, H), fs)
-    t = zeros(eltype(v), dims...)
-    for (f, I) in zip(fs, Is)
-        states, amps = split_state(f, mapper)
-        for (substates, w) in zip(states, amps)
-            Iout = state_index.(substates, Hs)
-            t[Iout...] += w * v[I]
-        end
-    end
-    return t
+Base.reshape(mappings::PairWithHilbertSpace...; kwargs...) = t -> reshape(t, mappings...; kwargs...)
+
+_spaces(H::AbstractHilbertSpace) = (H,)
+_spaces(Hs::Union{Tuple,AbstractVector}) = Tuple(Hs)
+_spaces(x) = throw(ArgumentError("Expected a Hilbert space or a tuple of Hilbert \
+                                  spaces, got $(typeof(x))"))
+
+# Split one mapping into (input spaces, output spaces) and check that it is a
+# split, a combine, or an identity.
+function _mapping_spaces(mapping::Pair)
+    Hsin, Hsout = _spaces(first(mapping)), _spaces(last(mapping))
+
+    (isempty(Hsin) || isempty(Hsout)) &&
+        throw(ArgumentError("Empty Hilbert space group in mapping $mapping"))
+
+    length(Hsin) > 1 && length(Hsout) > 1 &&
+        throw(ArgumentError("Many-to-many mappings are not supported: $mapping. \
+                             Use `(H1, H2) => H` followed by `H => (K1, K2)`."))
+
+    length(Hsin) == 1 == length(Hsout) && only(Hsin) != only(Hsout) &&
+        throw(ArgumentError("A one-to-one mapping must be the identity `H => H`, \
+                             got $mapping"))
+
+    return Hsin, Hsout
 end
 
-function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractHilbertSpace, Hsout, Hsin, mapperout, mapperin)
-    #reshape the matrix m in basis b into a tensor where each index pair has a basis in bs
-    dimsin = map(dim, Hsin)
-    dimsout = map(dim, Hsout)
-    fs = basisstates(H)
-    Js = map(f -> state_index(f, H), fs)
-    t = zeros(eltype(m), dimsout..., dimsin...)
-    for (J1, f1) in zip(Js, fs)
-        substatesout, wsout = split_state(f1, mapperout)
-        for (substatesout, wout) in zip(substatesout, wsout)
-            Iout = map(state_index, substatesout, Hsout)
-            for (J2, f2) in zip(Js, fs)
-                substatesin, wsin = split_state(f2, mapperin)
-                for (substatesin, win) in zip(substatesin, wsin)
-                    Iin = map(state_index, substatesin, Hsin)
-                    t[Iout..., Iin...] += wout * win * m[J1, J2]
-                end
-            end
-        end
-    end
-    return t
+# Check that the mappings describe every index of t, and that the dimensions match.
+function _validate(t::AbstractArray, mappings)
+    Hsins = map(m -> _mapping_spaces(m)[1], mappings)
+    Hsouts = map(m -> _mapping_spaces(m)[2], mappings)
+
+    Hsin_all = _flatten(Hsins)
+    length(Hsin_all) == ndims(t) ||
+        throw(DimensionMismatch("The mappings consume $(length(Hsin_all)) indices, \
+                                 but the array has $(ndims(t))"))
+
+    size(t) == map(dim, Hsin_all) ||
+        throw(DimensionMismatch("The array has size $(size(t)), but the input \
+                                 Hilbert spaces have dimensions $(map(dim, Hsin_all))"))
+
+    return Hsins, Hsouts
 end
 
-function _reshape_tensor_to_mat(t, (Hsout, mapperout), (Hsin, mapperin), H::AbstractHilbertSpace, state_mapper)
-    fsout = Base.product(basisstates.(Hsout)...)
-    fsin = Base.product(basisstates.(Hsin)...)
-
-    Jouts = map(f -> state_index.(f, Hsout), fsout)
-    Jins = map(f -> state_index.(f, Hsin), fsin)
-
-    m = zeros(eltype(t), dim(H), dim(H))
-    for (fsin_tuple, Jin) in zip(fsin, Jins)
-        states_in, amps_in = combine_states(fsin_tuple, mapperin)
-        for (fullf_in, win) in zip(states_in, amps_in)
-            Iin = state_index(fullf_in, H)
-            for (fsout_tuple, Jout) in zip(fsout, Jouts)
-                states_out, amps_out = combine_states(fsout_tuple, mapperout)
-                for (fullf_out, wout) in zip(states_out, amps_out)
-                    Iout = state_index(fullf_out, H)
-                    tval = t[Jout..., Jin...]
-                    iszero(tval) && continue
-                    m[Iout, Iin] += wout * win * tval
-                end
-            end
-        end
-    end
-    return m
+# A single mapping either covers the whole array, or is applied to out and in indices.
+function _expand_single_mapping(t::AbstractArray, mapping::Pair)
+    n = length(_mapping_spaces(mapping)[1])
+    ndims(t) == n && return (mapping,)
+    ndims(t) == 2n && return (mapping, mapping)
+    throw(ArgumentError("The mapping $mapping consumes $n indices, but the array has \
+                         $(ndims(t)). Give one mapping per index group, or use repeat=true."))
 end
 
-function _reshape_tensor_to_vec(t, Hs, H::AbstractHilbertSpace, state_mapper)
-    fs = Base.product(basisstates.(Hs)...)
-    v = Vector{eltype(t)}(undef, dim(H))
-    fill!(v, zero(eltype(v)))
-    for fstuple in fs
-        Is = state_index.(fstuple, Hs)
-        substates, amps = combine_states(fstuple, state_mapper)
-        for (substate, amp) in zip(substates, amps)
-            Iout = state_index(substate, H)
-            iszero(Iout) && continue
-            v[Iout] += amp * t[Is...]
+function _repeat_mapping(t::AbstractArray, mappings)
+    length(mappings) == 1 ||
+        throw(ArgumentError("repeat=true requires exactly one mapping"))
+    n = length(_mapping_spaces(only(mappings))[1])
+    ndims(t) % n == 0 ||
+        throw(DimensionMismatch("ndims(t) = $(ndims(t)) is not divisible by $n"))
+    return ntuple(_ -> only(mappings), ndims(t) ÷ n)
+end
+
+_flatten(groups::Tuple) = reduce((a, b) -> (a..., b...), groups; init=())
+function _mapper(Hsin, Hsout)
+    if length(Hsin) == 1 && length(Hsout) > 1        # split
+        state_mapper(only(Hsin), Hsout)
+    elseif length(Hsin) > 1 && length(Hsout) == 1    # combine
+        state_mapper(only(Hsout), Hsin)
+    else                                             # identity
+        nothing
+    end
+end
+# Split: H => (H1, H2, ...)
+function _transitions(Hsin::Tuple{<:AbstractHilbertSpace}, Hsout, mapper)
+    H = only(Hsin)
+    transitions = []
+    for f in basisstates(H)
+        Iin = (state_index(f, H),)
+        substates, ws = split_state(f, mapper)
+        for (states, w) in zip(substates, ws)
+            Iout = map(state_index, states, Hsout)
+            any(iszero, Iout) && continue
+            push!(transitions, (Iin, Iout, w))
         end
     end
-    return v
+    return map(identity, transitions)  # narrow the element type
+end
+
+# Combine: (H1, H2, ...) => H
+function _transitions(Hsin, Hsout::Tuple{<:AbstractHilbertSpace}, mapper)
+    H = only(Hsout)
+    transitions = []
+    for fs in Base.product(basisstates.(Hsin)...)
+        Iin = map(state_index, fs, Hsin)
+        states, ws = combine_states(fs, mapper)
+        for (f, w) in zip(states, ws)
+            Iout = (state_index(f, H),)
+            any(iszero, Iout) && continue
+            push!(transitions, (Iin, Iout, w))
+        end
+    end
+    return map(identity, transitions)
+end
+
+# Identity: H => H
+function _transitions(Hsin::Tuple{<:AbstractHilbertSpace}, Hsout::Tuple{<:AbstractHilbertSpace}, ::Nothing)
+    H = only(Hsin)
+    return [((I,), (I,), 1) for I in 1:dim(H)]
+end
+function _reshape(t::AbstractArray, blocks, Hsouts)
+    Hsout_all = _flatten(Hsouts)
+    tout = zeros(eltype(t), map(dim, Hsout_all)...)
+
+    for transitions in Base.product(blocks...)
+        Iin = _flatten(map(tr -> tr[1], transitions))
+        tval = t[Iin...]
+        iszero(tval) && continue
+
+        Iout = _flatten(map(tr -> tr[2], transitions))
+        w = prod(tr -> tr[3], transitions)
+        tout[Iout...] += w * tval
+    end
+
+    return tout
 end
 
 @testitem "Reshape Properties" begin
@@ -180,6 +266,32 @@ end
     H_3 = tensor_product(H1_3, H2_3, H3_3)
     d_3 = dim(H_3)
     m3 = rand(ComplexF64, d_3, d_3)
+
+    # ── 4-subsystem: rectangular operator, mixed reshape, identity ───────────
+    H4_3 = hilbert_space(f, [4], NoSymmetry())
+    H12_3 = tensor_product(H1_3, H2_3)
+    H34_3 = tensor_product(H3_3, H4_3)
+
+    # Rectangular operator: different out/in composite spaces
+    R = rand(ComplexF64, dim(H12_3), dim(H34_3))
+    RT = reshape(R, H12_3 => (H1_3, H2_3), H34_3 => (H3_3, H4_3))
+    @test size(RT) == (dim(H1_3), dim(H2_3), dim(H3_3), dim(H4_3))
+    @test reshape(RT, (H1_3, H2_3) => H12_3, (H3_3, H4_3) => H34_3) ≈ R
+
+    # Mixed split and combine on a general 3-index tensor
+    A = rand(ComplexF64, dim(H12_3), dim(H3_3), dim(H4_3))
+    B = reshape(A, H12_3 => (H1_3, H2_3), (H3_3, H4_3) => H34_3)
+    @test size(B) == (dim(H1_3), dim(H2_3), dim(H34_3))
+    @test reshape(B, (H1_3, H2_3) => H12_3, H34_3 => (H3_3, H4_3)) ≈ A
+
+    # Identity mappings leave the tensor unchanged
+    @test reshape(A, H12_3 => H12_3, H3_3 => H3_3, H4_3 => H4_3) == A
+
+    # repeat=true applies one mapping to every index group
+    A3 = rand(ComplexF64, dim(H12_3), dim(H12_3), dim(H12_3))
+    @test reshape(A3, H12_3 => (H1_3, H2_3); repeat=true) ≈
+          reshape(A3, H12_3 => (H1_3, H2_3), H12_3 => (H1_3, H2_3),
+        H12_3 => (H1_3, H2_3))
 
     # Standard ordering round-trip with ndims check
     t3 = reshape(m3, H_3 => (H1_3, H2_3, H3_3))
