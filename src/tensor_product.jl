@@ -7,7 +7,7 @@ Construct the composite Hilbert space from the spaces in `spaces`, with optional
 """
 function tensor_product_no_constraints(spaces)
     atoms = Iterators.flatten(Iterators.map(atomic_factors, spaces))
-    groups = groupby(group_id, atoms; sortkeys=false, sortvals = false)
+    groups = groupby(group_id, atoms; sortkeys=false, sortvals=false)
 
     factors = map((id, atoms) -> combine_into_group(id, atoms), keys(groups), values(groups))
     space = if length(factors) == 1
@@ -53,7 +53,7 @@ function check_tensor_product_basis_compatibility(b1::AbstractHilbertSpace, b2::
     end
 end
 
-size_compatible(m, H) = size(m) == size(m) == ntuple(_ -> dim(H), ndims(m))
+size_compatible(m, H) = size(m) == ntuple(_ -> dim(H), ndims(m))
 size_compatible(m::UniformScaling, H) = true
 kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, Hs))
 
@@ -364,7 +364,7 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
     phi(kron(reverse(map((phi, op) -> phi(op), phis, ops))...))
 end
 
-partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_trace(LowRankMatrix(v, conj(v)), H, Hsub; kwargs...)
+partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_trace(vec_to_density_matrix(v), H, Hsub; kwargs...)
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
     if isnothing(complement)
@@ -505,33 +505,41 @@ function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; co
     PartialTraceMap(H, Hsub, complement, kwargs, map)
 end
 
-function (op::PartialTraceMap)(m::AbstractMatrix)
-    size_compatible(m, op.H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
-    reshape(op.map * vec(m), dim(op.Hsub), dim(op.Hsub))
+vec_to_density_matrix(v::AbstractVector) = LowRankMatrix(v, conj(v))
+vec_to_density_matrix(v::SparseVector) = v*v'
+
+_vectorize_pt_density_matrix(rho::AbstractMatrix) = vec(rho)
+_vectorize_pt_density_matrix(rho::LowRankMatrix) = vec(Matrix(rho))
+
+function _canonicalize_pt_input(v::AbstractVector, H::AbstractHilbertSpace)
+    if length(v) == dim(H)
+        return _vectorize_pt_density_matrix(vec_to_density_matrix(v))
+    elseif length(v) == dim(H)^2
+        return v
+    else
+        throw(DimensionMismatch("The input vector must have length $(dim(H)^2) (interpreted as a vectorized density matrix) or $(dim(H)) (interpreted as a pure state, which is then converted to a density matrix), got $(length(v))"))
+    end
+end
+function _canonicalize_pt_input(m::AbstractMatrix, H::AbstractHilbertSpace)
+    size(m) == (dim(H), dim(H)) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
+    return _vectorize_pt_density_matrix(m)
+end
+function _canonicalize_pt_input(m::UniformScaling, H::AbstractHilbertSpace)
+    return _vectorize_pt_density_matrix(m.λ * I(dim(H)))
+end
+_canonicalize_pt_output(v::AbstractVector) = v
+_canonicalize_pt_output(m::AbstractMatrix) = vec(m)
+
+function (op::PartialTraceMap)(in)
+    v = _canonicalize_pt_input(in, op.H)
+    reshape(op.map * v, dim(op.Hsub), dim(op.Hsub))
 end
 
-function (op::PartialTraceMap)(out::AbstractMatrix, m::AbstractMatrix)
-    size_compatible(m, op.H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
-    size(out) == (dim(op.Hsub), dim(op.Hsub)) || throw(DimensionMismatch("The output matrix must have size ($(dim(op.Hsub)), $(dim(op.Hsub))), got $(size(out))"))
-    mul!(vec(out), op.map, vec(m))
+function (op::PartialTraceMap)(out, in)
+    vin = _canonicalize_pt_input(in, op.H)
+    vout = _canonicalize_pt_output(out)
+    mul!(vout, op.map, vin)
     out
-end
-
-function (op::PartialTraceMap)(v::AbstractVector)
-    length(v) == dim(op.H)^2 || throw(DimensionMismatch("The input vector must have length $(dim(op.H)^2), got $(length(v))"))
-    op.map * v
-end
-
-function (op::PartialTraceMap)(out::AbstractVector, v::AbstractVector)
-    length(v) == dim(op.H)^2 || throw(DimensionMismatch("The input vector must have length $(dim(op.H)^2), got $(length(v))"))
-    length(out) == dim(op.Hsub)^2 || throw(DimensionMismatch("The output vector must have length $(dim(op.Hsub)^2), got $(length(out))"))
-    mul!(out, op.map, v)
-    out
-end
-
-function (op::PartialTraceMap)(m::UniformScaling)
-    mfull = Matrix(m, dim(op.H), dim(op.H))
-    reshape(op.map * vec(mfull), dim(op.Hsub), dim(op.Hsub))
 end
 SparseArrays.sparse(op::PartialTraceMap) = op.map
 
@@ -659,7 +667,7 @@ end
 @testitem "Parity projection" begin
     import FermionicHilbertSpaces: project_on_parity, project_on_parities
     @fermions f
-    Hs = [hilbert_space(f, 2k-1:2k) for k in 1:3]
+    Hs = [hilbert_space(f, (2k-1):2k) for k in 1:3]
     H = tensor_product(Hs)
     op = rand(ComplexF64, dim(H), dim(H))
     local_parity_iter = (1, -1)

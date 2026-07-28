@@ -184,6 +184,49 @@ end
     @test out_r_repeat ≈ reshape(A3, H12 => (H1, H2); repeat=true)
 end
 
+@testitem "PartialTraceMap variants" begin
+    @fermions f
+
+    H = hilbert_space(f, 1:4, NumberConservation(2))
+    Hsub = subregion(hilbert_space(f, 1:2), H)
+    d = dim(H)
+    dsub = dim(Hsub)
+
+    m = rand(ComplexF64, d, d)
+    v_dm = vec(m)
+    v_pure = rand(ComplexF64, d)
+
+    pt = partial_trace(H => Hsub)
+
+    ref_m = partial_trace(m, H => Hsub)
+    ref_v_dm = vec(ref_m)
+    ref_v_pure_mat = partial_trace(v_pure, H => Hsub)
+    ref_v_pure = vec(ref_v_pure_mat)
+
+    @test pt(m) ≈ ref_m
+    out_m = zeros(ComplexF64, dsub, dsub)
+    @test pt(out_m, m) === out_m
+    @test out_m ≈ ref_m
+
+    @test pt(v_dm) ≈ ref_m
+    out_v_dm = zeros(ComplexF64, dsub^2)
+    @test pt(out_v_dm, v_dm) === out_v_dm
+    @test out_v_dm ≈ ref_v_dm
+
+    @test pt(v_pure) ≈ ref_v_pure_mat
+    out_v_pure = zeros(ComplexF64, dsub^2)
+    @test pt(out_v_pure, v_pure) === out_v_pure
+    @test out_v_pure ≈ ref_v_pure
+
+    out_v_from_m = zeros(ComplexF64, dsub^2)
+    @test pt(out_v_from_m, m) === out_v_from_m
+    @test out_v_from_m ≈ ref_v_dm
+
+    @test_throws DimensionMismatch pt(zeros(ComplexF64, dsub^2 - 1), v_dm)
+    @test_throws DimensionMismatch pt(zeros(ComplexF64, dsub, dsub + 1), m)
+    @test_throws DimensionMismatch pt(zeros(ComplexF64, dsub^2 - 1), m)
+end
+
 @testitem "Identity in matrix_representation" begin
     using LinearAlgebra
     @fermions f
