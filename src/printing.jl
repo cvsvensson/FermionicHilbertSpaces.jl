@@ -316,3 +316,88 @@ function Base.show(io::IO, state::ProductState)
     end
     print(io, "")
 end
+
+
+function _show_mapping_summary(io::IO, mappings; max_mappings=3)
+    nm = length(mappings)
+    nshow = min(nm, max_mappings)
+    for i in 1:nshow
+        i > 1 && print(io, ", ")
+        m = mappings[i]
+        show(IOContext(io, :compact => true), first(m))
+        print(io, " => ")
+        show(IOContext(io, :compact => true), last(m))
+    end
+    nm > nshow && print(io, ", ... (", nm - nshow, " more)")
+end
+
+function Base.show(io::IO, op::PartialTraceMap)
+    in_dim = dim(op.H)
+    out_dim = dim(op.Hsub)
+    if get(io, :compact, false)
+        print(io, "PartialTraceMap(", in_dim, "^2 → ", out_dim, "^2")
+        length(op.kwargs) > 0 && print(io, ", ", length(op.kwargs), " kw")
+        print(io, ")")
+    else
+        print(io, "PartialTraceMap\n")
+        print(io, "  Input space: ")
+        show(IOContext(io, :compact => true), op.H)
+        print(io, "\n  Output space: ")
+        show(IOContext(io, :compact => true), op.Hsub)
+        print(io, "\n  Superoperator size: ", out_dim^2, " x ", in_dim^2)
+        print(io, "\n  Stored map nnz: ", nnz(op.map))
+        if length(op.kwargs) > 0
+            print(io, "\n  kwargs: ")
+            show(io, op.kwargs)
+        end
+    end
+end
+
+function Base.show(io::IO, op::EmbedMap)
+    in_dim = dim(op.Hsub)
+    out_dim = dim(op.H)
+    if get(io, :compact, false)
+        print(io, "EmbedMap(", in_dim, "^2 → ", out_dim, "^2")
+        length(op.kwargs) > 0 && print(io, ", ", length(op.kwargs), " kw")
+        print(io, ")")
+    else
+        print(io, "EmbedMap\n")
+        print(io, "  Input space: ")
+        show(IOContext(io, :compact => true), op.Hsub)
+        print(io, "\n  Output space: ")
+        show(IOContext(io, :compact => true), op.H)
+        print(io, "\n  Superoperator size: ", out_dim^2, " x ", in_dim^2)
+        print(io, "\n  Stored map nnz: ", nnz(op.map))
+        if length(op.kwargs) > 0
+            print(io, "\n  kwargs: ")
+            show(io, op.kwargs)
+        end
+    end
+end
+
+function Base.show(io::IO, op::ReshapeMap)
+    dims_in = map(p -> Tuple(map(dim, p.Hsin)), op.precomputed)
+    dims_out = map(p -> Tuple(map(dim, p.Hsout)), op.precomputed)
+
+    if get(io, :compact, false)
+        print(io, "ReshapeMap(")
+        if length(dims_in) == 1
+            print(io, dims_in[1], " -> ", dims_out[1])
+            op.repeat && print(io, ", repeat=true")
+        else
+            pairs = map(((din, dout),) -> string(din, " -> ", dout), zip(dims_in, dims_out))
+            print(io, "[", join(pairs, ", "), "]")
+        end
+        print(io, ")")
+    else
+        print(io, "ReshapeMap(")
+        if length(dims_in) == 1
+            print(io, "consumes ", dims_in[1], ", outputs ", dims_out[1])
+            op.repeat && print(io, ", repeat=true")
+        else
+            pairs = map(((din, dout),) -> string(din, " -> ", dout), zip(dims_in, dims_out))
+            print(io, "mappings=", "[", join(pairs, ", "), "]")
+        end
+        print(io, ")")
+    end
+end

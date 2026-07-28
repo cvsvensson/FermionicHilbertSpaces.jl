@@ -487,9 +487,55 @@ end
 """
     partial_trace(H => Hsub; kwargs...)
 
-Compute the partial trace map from `H` to `Hsub`, represented by a sparse matrix of dimension `dim(Hsub)^2 x dim(H)^2` that can be multiplied with a vectorized density matrix. 
+Create a callable partial-trace operation from `H` to `Hsub`.
+
+The operation can be applied directly as `op(m)` and can be converted to a sparse
+matrix map with `sparse(op)`.
 """
-partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace_map(Hs...; kwargs...)
+struct PartialTraceMap{H,HS,C,K,M}
+    H::H
+    Hsub::HS
+    complement::C
+    kwargs::K
+    map::M
+end
+
+function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
+    map = partial_trace_map(H, Hsub, complement, alg; kwargs...)
+    PartialTraceMap(H, Hsub, complement, kwargs, map)
+end
+
+function (op::PartialTraceMap)(m::AbstractMatrix)
+    size_compatible(m, op.H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
+    reshape(op.map * vec(m), dim(op.Hsub), dim(op.Hsub))
+end
+
+function (op::PartialTraceMap)(out::AbstractMatrix, m::AbstractMatrix)
+    size_compatible(m, op.H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
+    size(out) == (dim(op.Hsub), dim(op.Hsub)) || throw(DimensionMismatch("The output matrix must have size ($(dim(op.Hsub)), $(dim(op.Hsub))), got $(size(out))"))
+    mul!(vec(out), op.map, vec(m))
+    out
+end
+
+function (op::PartialTraceMap)(v::AbstractVector)
+    length(v) == dim(op.H)^2 || throw(DimensionMismatch("The input vector must have length $(dim(op.H)^2), got $(length(v))"))
+    op.map * v
+end
+
+function (op::PartialTraceMap)(out::AbstractVector, v::AbstractVector)
+    length(v) == dim(op.H)^2 || throw(DimensionMismatch("The input vector must have length $(dim(op.H)^2), got $(length(v))"))
+    length(out) == dim(op.Hsub)^2 || throw(DimensionMismatch("The output vector must have length $(dim(op.Hsub)^2), got $(length(out))"))
+    mul!(out, op.map, v)
+    out
+end
+
+function (op::PartialTraceMap)(m::UniformScaling)
+    mfull = Matrix(m, dim(op.H), dim(op.H))
+    reshape(op.map * vec(mfull), dim(op.Hsub), dim(op.Hsub))
+end
+SparseArrays.sparse(op::PartialTraceMap) = op.map
+
+partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = PartialTraceMap(first(Hs), last(Hs); kwargs...)
 function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
     partial_trace_map(H, Hsub, complement, alg; kwargs...)
 end
@@ -636,7 +682,7 @@ end
 
     msub = partial_trace(m, H => Hsub)
     pt = partial_trace(H => Hsub)
-    msub_map = pt * reshape(m, (dim(H)^2))
+    msub_map = pt(vec(m))
     @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
 
     H = hilbert_space(f, 1:4, NumberConservation(2))
@@ -644,7 +690,7 @@ end
     m = rand(ComplexF64, dim(H), dim(H))
     msub = partial_trace(m, H => Hsub)
     pt = partial_trace(H => Hsub)
-    msub_map = pt * reshape(m, (dim(H)^2))
+    msub_map = pt(vec(m))
     @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
 end
 

@@ -40,9 +40,13 @@ using TestItemRunner
     d1 = dim(H1)
     ptmap = Matrix(LinearMap(rhovec -> vec(partial_trace(reshape(rhovec, (d, d)), H, H1)), d1^2, d^2))
     embeddingmap = Matrix(LinearMap(rhovec -> vec(embed(reshape(rhovec, (d1, d1)), H1, H)), d^2, d1^2))
+    ptop = partial_trace(H => H1)
+    embop = embed(H1 => H)
     @test ptmap ≈ embeddingmap'
-    @test ptmap ≈ partial_trace(H => H1)
-    @test embeddingmap ≈ embed(H1 => H)
+    @test ptmap ≈ ptop.map
+    @test embeddingmap ≈ embop.map
+    @test ptop(reshape(1:(d^2), d, d)) ≈ partial_trace(reshape(1:(d^2), d, d), H => H1)
+    @test embop(reshape(1:(d1^2), d1, d1)) ≈ embed(reshape(1:(d1^2), d1, d1), H1 => H)
 
     import FermionicHilbertSpaces: atomic_factors
     labels = vec(collect(Base.product(1:N, (:↑, :↓))))
@@ -85,10 +89,13 @@ end
         d = dim(H)
         ptmap = Matrix(LinearMap(rhovec -> vec(pt(reshape(rhovec, (d, d)))), dsub^2, d^2))
         embeddingmap = Matrix(LinearMap(rhovec -> vec(emb(reshape(rhovec, (dsub, dsub)))), d^2, dsub^2))
+        ptop = partial_trace(H => Hsub)
+        embop = embed(Hsub => H)
         @test ptmap ≈ embeddingmap'
-        @test ptmap ≈ partial_trace(H => Hsub)
-        @test embeddingmap ≈ embed(Hsub => H)
-
+        @test ptmap ≈ ptop.map
+        @test embeddingmap ≈ embop.map
+        @test ptop'.map == embop.map
+        @test embop'.map == ptop.map
     end
     qns = [NoSymmetry(), ParityConservation(), NumberConservation()]
     @fermions f
@@ -123,6 +130,58 @@ end
         test_adjoint(H13, H)
         test_adjoint(H23, H)
     end
+end
+
+@testitem "Precomputed maps match eager" begin
+    using SparseArrays
+    @fermions f
+
+    H = hilbert_space(f, 1:3, NoSymmetry())
+    Hsub = hilbert_space(f, 1:1, NoSymmetry())
+    d = dim(H)
+    dsub = dim(Hsub)
+
+    m = rand(ComplexF64, d, d)
+
+    pt = partial_trace(H => Hsub)
+    @test sparse(pt) == FermionicHilbertSpaces.partial_trace_map(H, Hsub)
+    @test pt(m) ≈ partial_trace(m, H => Hsub)
+    out_pt = zeros(ComplexF64, dsub, dsub)
+    @test pt(out_pt, m) === out_pt
+    @test out_pt ≈ partial_trace(m, H => Hsub)
+    v = vec(m)
+    out_pt_vec = zeros(ComplexF64, dsub^2)
+    @test pt(out_pt_vec, v) === out_pt_vec
+    @test out_pt_vec ≈ vec(partial_trace(m, H => Hsub))
+
+    emb = embed(Hsub => H)
+    @test sparse(emb) == FermionicHilbertSpaces.partial_trace_map(H, Hsub)'
+    msub = rand(ComplexF64, dsub, dsub)
+    @test emb(msub) ≈ embed(msub, Hsub => H)
+    out_emb = zeros(ComplexF64, d, d)
+    @test emb(out_emb, msub) === out_emb
+    @test out_emb ≈ embed(msub, Hsub => H)
+    vsub = vec(msub)
+    out_emb_vec = zeros(ComplexF64, d^2)
+    @test emb(out_emb_vec, vsub) === out_emb_vec
+    @test out_emb_vec ≈ vec(embed(msub, Hsub => H))
+
+    H1 = hilbert_space(f, 1:1, NoSymmetry())
+    H2 = hilbert_space(f, 2:2, NoSymmetry())
+    H12 = hilbert_space(f, 1:2, NoSymmetry())
+    rmap = reshape(H12 => (H1, H2))
+    mr = rand(ComplexF64, dim(H12), dim(H12))
+    @test rmap(mr) ≈ reshape(mr, H12 => (H1, H2))
+    out_r = zeros(ComplexF64, dim(H1), dim(H2), dim(H1), dim(H2))
+    @test rmap(out_r, mr) === out_r
+    @test out_r ≈ reshape(mr, H12 => (H1, H2))
+
+    A3 = rand(ComplexF64, dim(H12), dim(H12), dim(H12))
+    rmap_repeat = reshape(H12 => (H1, H2); repeat=true)
+    @test rmap_repeat(A3) ≈ reshape(A3, H12 => (H1, H2); repeat=true)
+    out_r_repeat = zeros(ComplexF64, dim(H1), dim(H2), dim(H1), dim(H2), dim(H1), dim(H2))
+    @test rmap_repeat(out_r_repeat, A3) === out_r_repeat
+    @test out_r_repeat ≈ reshape(A3, H12 => (H1, H2); repeat=true)
 end
 
 @testitem "Identity in matrix_representation" begin
