@@ -119,13 +119,13 @@ reshape(m, H => (H1, H2))
 reshape(T, (H1, H2) => H)
 ```
 
-`reshape` also accepts mappings first and returns a function:
+`reshape` also accepts mappings first and returns a callable object:
 
 ```julia
 to_tensor = reshape(H => (H1, H2))
 to_matrix = reshape((H1, H2) => H)
 ```
-This does not provide any performance benefit at the moment, but might in the future.
+This returns a callable reshape map which precomputes some data so that it can be applied to multiple arrays efficiently.
 
 ### Practical usage
 

@@ -76,7 +76,72 @@ function Base.reshape(t::AbstractArray, mappings::Pair...; repeat=false)
     return _reshape(t, blocks, Hsouts)
 end
 
-Base.reshape(mappings::Pair...; kwargs...) = t -> reshape(t, mappings...; kwargs...)
+struct ReshapeMap{M,P}
+    mappings::M
+    repeat::Bool
+    precomputed::P
+end
+
+function (op::ReshapeMap)(t::AbstractArray)
+    mappings = _resolve_mappings(t, op.mappings; op.repeat)
+
+    n = length(mappings)
+    pre = if length(op.precomputed) == 1
+        ntuple(_ -> only(op.precomputed), n)
+    elseif length(op.precomputed) == n
+        op.precomputed
+    else
+        throw(ArgumentError("Unexpected resolved mapping count $(length(mappings)) for reshape operation with $(length(op.precomputed)) precomputed mapping(s)."))
+    end
+
+    Hsins = map(p -> p.Hsin, pre)
+    Hsouts = map(p -> p.Hsout, pre)
+    blocks = map(p -> p.blocks, pre)
+    _validate_from_spaces(t, Hsins, Hsouts)
+    _reshape(t, blocks, Hsouts)
+end
+
+function (op::ReshapeMap)(out::AbstractArray, t::AbstractArray)
+    mappings = _resolve_mappings(t, op.mappings; op.repeat)
+
+    n = length(mappings)
+    pre = if length(op.precomputed) == 1
+        ntuple(_ -> only(op.precomputed), n)
+    elseif length(op.precomputed) == n
+        op.precomputed
+    else
+        throw(ArgumentError("Unexpected resolved mapping count $(length(mappings)) for reshape operation with $(length(op.precomputed)) precomputed mapping(s)."))
+    end
+
+    Hsins = map(p -> p.Hsin, pre)
+    Hsouts = map(p -> p.Hsout, pre)
+    blocks = map(p -> p.blocks, pre)
+    _validate_from_spaces(t, Hsins, Hsouts)
+    _reshape!(out, t, blocks, Hsouts)
+end
+
+function Base.reshape(mappings::Pair...; repeat=false)
+    mappings_t = Tuple(mappings)
+    precomputed = Tuple(map(_precompute_mapping, mappings_t))
+    ReshapeMap(mappings_t, repeat, precomputed)
+end
+
+function _resolve_mappings(t::AbstractArray, mappings; repeat=false)
+    if repeat
+        _repeat_mapping(t, mappings)
+    elseif length(mappings) == 1
+        _expand_single_mapping(t, only(mappings))
+    else
+        mappings
+    end
+end
+
+function _precompute_mapping(mapping::Pair)
+    Hsin, Hsout = _mapping_spaces(mapping)
+    mapper = _mapper(Hsin, Hsout)
+    blocks = _transitions(Hsin, Hsout, mapper)
+    (; mapping, Hsin, Hsout, blocks)
+end
 
 _spaces(H::AbstractHilbertSpace) = (H,)
 _spaces(Hs::Union{Tuple,AbstractVector}) = Tuple(Hs)
@@ -102,6 +167,11 @@ end
 function _validate(t::AbstractArray, mappings)
     Hsins = map(m -> _mapping_spaces(m)[1], mappings)
     Hsouts = map(m -> _mapping_spaces(m)[2], mappings)
+
+    _validate_from_spaces(t, Hsins, Hsouts)
+end
+
+function _validate_from_spaces(t::AbstractArray, Hsins, Hsouts)
 
     Hsin_all = _flatten(Hsins)
     length(Hsin_all) == ndims(t) ||
@@ -133,7 +203,8 @@ function _repeat_mapping(t::AbstractArray, mappings)
     return ntuple(_ -> only(mappings), ndims(t) ÷ n)
 end
 
-_flatten(groups::Tuple) = reduce((a, b) -> (a..., b...), groups; init=())
+# _flatten(groups::Tuple) = reduce((a, b) -> (a..., b...), groups; init=())
+_flatten(groups::Tuple) = TupleTools.flatten(groups...)
 struct _ComposedMapper{M1,M2}
     combine_mapper::M1
     split_mapper::M2
@@ -235,6 +306,24 @@ function _reshape(t::AbstractArray, blocks, Hsouts)
     return tout
 end
 
+function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts)
+    Hsout_all = _flatten(Hsouts)
+    size(tout) == map(dim, Hsout_all) || throw(DimensionMismatch("The output array has size $(size(tout)), but expected $(map(dim, Hsout_all))"))
+
+    fill!(tout, zero(eltype(tout)))
+    for transitions in Base.product(blocks...)
+        Iin = _flatten(map(tr -> tr[1], transitions))
+        tval = t[Iin...]
+        iszero(tval) && continue
+
+        Iout = _flatten(map(tr -> tr[2], transitions))
+        w = prod(tr -> tr[3], transitions)
+        tout[Iout...] += w * tval
+    end
+
+    return tout
+end
+
 @testitem "Reshape Properties" begin
     using LinearAlgebra
     using FermionicHilbertSpaces: permutation_operator, fermions
@@ -263,6 +352,12 @@ end
         m1 = reshape(v, H => Hs)
         @test reshape(m1, Hs => H) == v
         @test reshape(v, H => reverse(Hs)) == transpose(m1)
+
+        # Property 2b: Callable reshape operation object matches direct call
+        to_tensor = reshape(H => Hs)
+        to_matrix = reshape(Hs => H)
+        @test to_tensor(m) ≈ reshape(m, H => Hs)
+        @test to_matrix(to_tensor(m)) ≈ m
 
         # Property 3: Norm invariance (reshape is an isometry)
         b = fermions(H)
@@ -347,6 +442,8 @@ end
     @test reshape(A3, H12_3 => (H1_3, H2_3); repeat=true) ≈
           reshape(A3, H12_3 => (H1_3, H2_3), H12_3 => (H1_3, H2_3),
         H12_3 => (H1_3, H2_3))
+    to_split_repeat = reshape(H12_3 => (H1_3, H2_3); repeat=true)
+    @test to_split_repeat(A3) ≈ reshape(A3, H12_3 => (H1_3, H2_3); repeat=true)
 
     # Standard ordering round-trip with ndims check
     t3 = reshape(m3, H_3 => (H1_3, H2_3, H3_3))
@@ -368,7 +465,7 @@ end
     H3a = hilbert_space(f, [5], NoSymmetry())
     H3b = hilbert_space(f, [6], NumberConservation())
     H3c = hilbert_space(f, [7], NoSymmetry())
-    H4  = hilbert_space(f, [8], NoSymmetry())
+    H4 = hilbert_space(f, [8], NoSymmetry())
 
     # Composite spaces used in the mapping
     H1ab = tensor_product(H1a, H1b)
@@ -387,6 +484,8 @@ end
         (H3a, H3bc) => (H3ab, H3c),
         H4 => H4,
     )
+    rmap = reshape(H1ab => (H1a, H1b), (H2a, H2b) => H2ab, (H3a, H3bc) => (H3ab, H3c), H4 => H4)
+    @test B ≈ rmap(A)
 
     # Expected output indices: (H1a, H1b, H2ab, H3ab, H3c, H4)
     @test size(B) == (dim(H1a), dim(H1b), dim(H2ab), dim(H3ab), dim(H3c), dim(H4))
