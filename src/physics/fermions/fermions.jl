@@ -96,7 +96,7 @@ function _compact_fermionic_modes(io::IO, c::FermionicSpace;
     end
 
     fmt((name, labels)) = "$name[$(join(_truncate(labels, max_labels_per_group, edge_labels), ", "))]"
-    print(io, "(", join(_truncate(map(fmt, groups), max_groups, edge_groups), ", "), ")")
+    print(io, join(_truncate(map(fmt, groups), max_groups, edge_groups), ", "))
 end
 function embedding_unitary(partition, H::FermionicSpace)
     atoms = atomic_factors(H)

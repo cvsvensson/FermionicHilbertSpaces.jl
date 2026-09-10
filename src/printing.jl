@@ -234,6 +234,17 @@ function Base.show(io::IO, H::ConstrainedSpace)
     end
 end
 
+function Base.show(io::IO, H::TransposedSpace)
+    if get(io, :compact, false)
+        show(io, parent(H))
+        print(io, "^T")
+    else
+        lines = split(sprint(show, parent(H); context=io), '\n')
+        lines[1] *= " (transposed)"
+        print(io, join(lines, '\n'))
+    end
+end
+
 function Base.show(io::IO, H::GenericHilbertSpace)
     if get(io, :compact, false)
         print(io, "GenericHilbertSpace(", H.label, ")")
@@ -301,7 +312,7 @@ function Base.show(io::IO, H::ProductSpace)
     else
         print(io, "$(dim(H))-dimensional ProductSpace: ")
         dims = map(dim, H.factors)
-        println(io, "(", join(dims, "×"), ")")
+        println(io, "", join(dims, "×"), ")")
         for (i, c) in enumerate(H.factors)
             i > 1 && print(io, " ⨯ ")
             show(IOContext(io, :compact => true), c)
