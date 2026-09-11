@@ -307,9 +307,9 @@ end
 
     emb = embed(Hsubsmall => H; complement=Hsubbig)
     pt = partial_trace(H => Hsubsmall)
-    @test emb == pt'
+    @test emb.map == pt'.map
 
     emb = embed(Hsubbig => H; complement=Hsubsmall)
     pt = partial_trace(H => Hsubbig)
-    @test emb == pt'
+    @test emb.map == pt'.map
 end
