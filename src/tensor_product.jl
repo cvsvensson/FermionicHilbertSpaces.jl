@@ -288,11 +288,6 @@ struct LazyPhaseMap{M,F} <: AbstractMatrix{Int}
     fockstates::Vector{F}
 end
 Base.length(p::LazyPhaseMap) = length(p.fockstates)
-Base.ndims(::LazyPhaseMap) = 2
-function Base.size(p::LazyPhaseMap, d::Int)
-    d < 1 && error("arraysize: dimension out of range")
-    d in (1, 2) ? length(p.fockstates) : 1
-end
 Base.size(p::LazyPhaseMap) = (length(p.fockstates), length(p.fockstates))
 function Base.show(io::IO, p::LazyPhaseMap{M,F}) where {M,F}
     print(io, "LazyPhaseMap{$M,$F}(")
