@@ -28,7 +28,7 @@ struct EmbedMap{HS,H,C,K,M}
     map::M
 end
 
-function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=SubsystemPartialTraceAlg(), skipmissing=false, kwargs...)
+function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
     map = partial_trace_map(H, Hsub; complement, alg, skipmissing=skipmissing, kwargs...)'
     EmbedMap(Hsub, H, complement, kwargs, map)
 end
