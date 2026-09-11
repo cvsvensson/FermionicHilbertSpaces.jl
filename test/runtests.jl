@@ -133,7 +133,7 @@ end
 end
 
 @testitem "Precomputed maps match eager" begin
-    using SparseArrays
+    using LinearAlgebra, SparseArrays
     @fermions f
 
     H = hilbert_space(f, 1:3, NoSymmetry())
@@ -143,6 +143,7 @@ end
 
     m = rand(ComplexF64, d, d)
 
+    # Partial-trace maps agree with eager evaluation for matrix and vector inputs.
     pt = partial_trace(H => Hsub)
     @test sparse(pt) == FermionicHilbertSpaces.partial_trace_map(H, Hsub)
     @test pt(m) ≈ partial_trace(m, H => Hsub)
@@ -154,6 +155,7 @@ end
     @test pt(out_pt_vec, v) === out_pt_vec
     @test out_pt_vec ≈ vec(partial_trace(m, H => Hsub))
 
+    # Embedding maps agree with eager evaluation and support in-place outputs.
     emb = embed(Hsub => H)
     @test sparse(emb) == FermionicHilbertSpaces.partial_trace_map(H, Hsub)'
     msub = rand(ComplexF64, dsub, dsub)
@@ -166,6 +168,7 @@ end
     @test emb(out_emb_vec, vsub) === out_emb_vec
     @test out_emb_vec ≈ vec(embed(msub, Hsub => H))
 
+    # Reshape maps precompute both ordinary and repeated index mappings.
     H1 = hilbert_space(f, 1:1, NoSymmetry())
     H2 = hilbert_space(f, 2:2, NoSymmetry())
     H12 = hilbert_space(f, 1:2, NoSymmetry())
@@ -182,6 +185,26 @@ end
     out_r_repeat = zeros(ComplexF64, dim(H1), dim(H2), dim(H1), dim(H2), dim(H1), dim(H2))
     @test rmap_repeat(out_r_repeat, A3) === out_r_repeat
     @test out_r_repeat ≈ reshape(A3, H12 => (H1, H2); repeat=true)
+
+    # Eager and precomputed embedding must use the same skipmissing default.
+    Hconstrained = hilbert_space(f, 1:4, NumberConservation(2))
+    Hsub_constrained = subregion(hilbert_space(f, 1:2), Hconstrained)
+    msub_constrained = rand(ComplexF64, dim(Hsub_constrained), dim(Hsub_constrained))
+    @test_throws ArgumentError embed(msub_constrained, Hsub_constrained => Hconstrained)
+    @test_throws ArgumentError embed(Hsub_constrained => Hconstrained)
+    emb_constrained_skipmissing = embed(Hsub_constrained => Hconstrained; skipmissing=true)
+    @test emb_constrained_skipmissing(msub_constrained) ≈
+          embed(msub_constrained, Hsub_constrained => Hconstrained; skipmissing=true)
+
+    # A whole-space partial trace must produce a basis-transformation map.
+    Hsame = hilbert_space(f, 1:2, NoSymmetry())
+    Hsimilar = hilbert_space(f, 1:2, ParityConservation())
+    msame = rand(ComplexF64, dim(Hsame), dim(Hsame))
+    pt_same = partial_trace(Hsame => Hsame)
+    pt_similar = partial_trace(Hsame => Hsimilar)
+    @test pt_same(msame) ≈ msame
+    @test sparse(pt_same) == sparse(I(dim(Hsame)^2))
+    @test pt_similar(msame) ≈ partial_trace(msame, Hsame => Hsimilar)
 end
 
 @testitem "PartialTraceMap variants" begin

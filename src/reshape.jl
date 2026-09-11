@@ -83,7 +83,7 @@ struct ReshapeMap{M,P}
 end
 
 function (op::ReshapeMap)(t::AbstractArray)
-    mappings = _resolve_mappings(t, op.mappings; op.repeat)
+    mappings = _resolve_mappings(t, op.mappings; repeat=op.repeat)
 
     n = length(mappings)
     pre = if length(op.precomputed) == 1
@@ -102,7 +102,7 @@ function (op::ReshapeMap)(t::AbstractArray)
 end
 
 function (op::ReshapeMap)(out::AbstractArray, t::AbstractArray)
-    mappings = _resolve_mappings(t, op.mappings; op.repeat)
+    mappings = _resolve_mappings(t, op.mappings; repeat=op.repeat)
 
     n = length(mappings)
     pre = if length(op.precomputed) == 1

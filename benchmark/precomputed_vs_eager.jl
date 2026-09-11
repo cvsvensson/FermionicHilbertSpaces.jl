@@ -23,7 +23,7 @@ Random.seed!(42)
 #      construction takes considerably longer than a single eager evaluation.
 #
 # 3. In-place evaluation:
-#    - Prefer in-place overloads (`map!(out, input)`) when the destination buffer
+#    - Prefer in-place overloads (`op(out, input)`) when the destination buffer
 #      can be preallocated and reused.
 #    - They run at the same speed (or slightly faster) as the allocating precomputed
 #      forms, but reduce temporary allocations to zero (or negligible metadata),
