@@ -15,7 +15,7 @@ import NonCommutativeProducts: @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 export FockNumber, hc, basisstates, dim, state_index, basisstate
 export hilbert_space, subregion
 export parityoperator, numberoperator, matrix_representation, representation, vector_representation
-export Kets
+export Kets, ProductState, SpinState, BosonicState
 
 export partial_trace, generalized_kron, tensor_product, embed
 export @fermions, @majoranas, @boson, @bosons, @spin, @spins
