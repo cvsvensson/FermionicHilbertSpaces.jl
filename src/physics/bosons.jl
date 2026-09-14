@@ -212,8 +212,8 @@ function apply_local_operator(factor::BosonSym, state::BosonicState, space::Trun
     end
     return BosonicState(n), amplitude
 end
-symbolic_group(f::BosonSym{<:Any,B}) where B = (f.basis, f.label)
-symbolic_group(f::BosonSym{<:Any,Nothing}) = (BosonSym, f.label)
+symbolic_group(f::BosonSym{<:Any,B}) where B = (f.basis, f.label, f.tags)
+symbolic_group(f::BosonSym{<:Any,Nothing}) = (BosonSym, f.label, f.tags)
 symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
 symbolic_basis(H::TruncatedBosonicHilbertSpace) = symbolic_group(H)
 atomic_id(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)

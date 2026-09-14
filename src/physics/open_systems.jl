@@ -31,24 +31,22 @@ function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSp
 end
 
 
-_left_basis(base) = add_tag(base, :left)
-_right_basis(base) = add_tag(base, :right)
+tag_left(base) = add_tag(base, :left)
+tag_right(base) = add_tag(base, :right)
 
 function open_system(base, args...; kwargs...)
-    left_basis = _left_basis(base)
-    right_basis = _right_basis(base)
+    left_basis = tag_left(base)
+    right_basis = tag_right(base)
     Hleft = hilbert_space(left_basis, args...; kwargs...)
     Hright = TransposedSpace(hilbert_space(right_basis, args...; kwargs...))
     Hfull = tensor_product(Hleft, Hright)
-    left(op) = add_tag(op, :left)
-    right(op) = add_tag(op, :right)
-    return Hfull, Hleft, Hright, left, right
+    return Hfull, Hleft, Hright, tag_left, tag_right
 end
 function open_system(H::AbstractHilbertSpace; kwargs...)
-    Hleft = add_tag(H, :left)
-    Hright = TransposedSpace(add_tag(H, :right))
+    Hleft = tag_left(H)
+    Hright = TransposedSpace(tag_right(H))
     Hlr = tensor_product(Hleft, Hright; kwargs...)
-    return Hlr, Hleft, Hright, left, right
+    return Hlr, Hleft, Hright, tag_left, tag_right
 end
 
 function add_tag(factor::AbstractSym, tag)
@@ -91,6 +89,17 @@ end
     Mexpected = matrix_representation((c_left[1]' * c_left[1]) * (c_right[1]' * c_right[1]) + (c_left[1]' * c_left[1]), Hfull)
     @test M ≈ Mexpected
     @test reshape(reshape(M, Hfull => (Hleft, Hright)), (Hleft, Hright) => Hfull) == M
+
+    @boson b
+    Hb, Hleftb, Hrightb, left_b, right_b = open_system(b, 2)
+    bl = left_b(b)
+    br = right_b(b)
+    op_b = b' * b
+    Mb = matrix_representation(left_b(op_b) * right_b(op_b) + left_b(op_b), Hb)
+    @test size(Mb) == (dim(Hb), dim(Hb))
+    Mexpected_b = matrix_representation((bl' * bl) * (br' * br) + (bl' * bl), Hb)
+    @test Mb ≈ Mexpected_b
+    @test reshape(reshape(Mb, Hb => (Hleftb, Hrightb)), (Hleftb, Hrightb) => Hb) == Mb
 
     @spin s 1 // 2
     Hs, _, _ = open_system(s)

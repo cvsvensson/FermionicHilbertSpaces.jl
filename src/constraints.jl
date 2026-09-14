@@ -182,6 +182,16 @@ function sector_function(constraint::ProductConstraint, space::AbstractHilbertSp
         return sectors
     end
 end
+function filter_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
+    subspace_functions = map(constraint.constraints) do cons
+        if supports_sector_grouping(cons)
+            sector = sector_function(cons, space)
+            return state -> !ismissing(sector(state))
+        end
+        filter_function(cons, space)
+    end
+    state -> all(f -> f(state), subspace_functions)
+end
 
 _apply_constraint_function(substates, ::NumberConservation{<:Any,<:Any,Missing}) = sum(particle_number, substates)
 _apply_constraint_function(substates, cons::NumberConservation{<:Any,<:Any,W}) where {W} = mapreduce((s, w) -> particle_number(s) * w, +, substates, cons.weights)
@@ -229,4 +239,16 @@ constrain_space
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
     @test all(isone ∘ dim, sectors(H))
+end
+
+@testitem "ProductConstraint filtering" begin
+    using FermionicHilbertSpaces: FilterConstraint, particle_number
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    constraint = NumberConservation(1) * FilterConstraint(state -> state != basisstate(2, H))
+
+    Hconstrained = constrain_space(H, constraint)
+
+    @test dim(Hconstrained) == 1
+    @test all(particle_number(state) == 1 for state in basisstates(Hconstrained))
 end
