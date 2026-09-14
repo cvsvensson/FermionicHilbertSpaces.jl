@@ -2,6 +2,7 @@ using BenchmarkTools
 using FermionicHilbertSpaces
 using SparseArrays
 using Random
+BenchmarkTools.DEFAULT_PARAMETERS.seconds = 1
 const SUITE = BenchmarkGroup()
 
 Random.seed!(1)
@@ -159,7 +160,7 @@ SUITE["matrix_representation"]["product space many spaces constrained"] = @bench
 
 # Lazy Liouvillian application benchmark (application only)
 @fermions c
-N = 8
+N = 6
 Hopen, _, _, left, right = FermionicHilbertSpaces.open_system(c, 1:N)
 ham_liouv = sum((0.3n) * c[n]' * c[n] for n in 1:N) + sum(0.2im * c[n]' * c[n+1] + hc for n in 1:(N-1))
 dissipator(L) = left(L) * right(L') - 0.5 * (left(L' * L) + right(L' * L))
@@ -181,7 +182,7 @@ SUITE["matrix_application"]["lazy liouvillian"]["mul sparse"] = @benchmarkable $
 using Combinatorics
 using FermionicHilbertSpaces: AdditiveConstraint
 @spins S 1 // 2
-H = hilbert_space(S, 1:8, AdditiveConstraint(2, s -> s.m))
+H = hilbert_space(S, 1:6, AdditiveConstraint(2, s -> s.m))
 Hs = factors(H)
 SUITE["permutations"]["many_small"] = @benchmarkable symmetric_sector($H, $Hs, $:symmetric)
 
