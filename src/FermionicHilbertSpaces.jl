@@ -1,21 +1,26 @@
 module FermionicHilbertSpaces
 
-using LinearAlgebra, SparseArrays, LowRankMatrices
+using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Eigen, Hermitian,
+    Symmetric, UniformScaling, cholesky, diag, diagind, dot,
+    eigen, eigen!, eigvals, eigvecs, ishermitian, issymmetric,
+    mul!, normalize, qr, qr!, rmul!, schur, svdvals, tr, I
+using LowRankMatrices: LowRankMatrices, LowRankMatrix
 import SciMLOperators
-import FillArrays: Zeros, Fill, Eye
-import OrderedCollections: OrderedDict
-using TestItems
-using BitPermutations
-using TupleTools
-using NonCommutativeProducts
-using HalfIntegers
-import NonCommutativeProducts: @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
+using FillArrays: Zeros, Fill, Eye
+using OrderedCollections: OrderedDict
+using BitPermutations: BitPermutations, AbstractBitPermutation, BitPermutation, bitpermute
+using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice
+using SparseArrays: SparseArrays, AbstractSparseMatrix, SparseVector, findnz,
+    nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
+using TestItems: TestItems, @testitem
+import TupleTools
+using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 
 
 export FockNumber, hc, basisstates, dim, state_index, basisstate
 export hilbert_space, subregion
 export parityoperator, numberoperator, matrix_representation, representation, vector_representation
-export Kets
+export Kets, ProductState, SpinState, BosonicState
 
 export partial_trace, generalized_kron, tensor_product, embed
 export @fermions, @majoranas, @boson, @bosons, @spin, @spins
@@ -51,9 +56,9 @@ tagset(id::Tags) = id.tags
 tagset(::Tags{Nothing}) = ()
 tagset(x) = tagset(tags(x))
 
-function _symbolic_name_with_tags(name, tagged; skip_first = 0)
+function _symbolic_name_with_tags(name, tagged; skip_first=0)
     tags = tagset(tagged)
-    tags = skip_first > 0 ? tags[skip_first+1:end] : tags
+    tags = skip_first > 0 ? tags[(skip_first+1):end] : tags
     isempty(tags) && return string(name)
     return string(name, "(", join(tags, ","), ")")
 end

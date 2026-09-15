@@ -489,7 +489,7 @@ end
     fine_partition = reduce(vcat, fine_partitions)
     for parities in Base.product([[-1, 1] for _ in 1:length(Hs)]...)
         projected_ops = [project_on_parity(op, H, p) for (op, H, p) in zip(ops, Hs, parities)] # project on local parity
-        opsk = [[projected_ops[1:k-1]..., ops[k], projected_ops[k+1:end]...] for k in 1:length(ops)] # switch out one operator of definite parity for an operator of indefinite parity
+        opsk = [[projected_ops[1:k-1]..., ops[k], projected_ops[k+1:end]...] for k in eachindex(ops)] # switch out one operator of definite parity for an operator of indefinite parity
         embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
         kron_prods = [generalized_kron(ops, Hs, H; phase_factors=false) for ops in opsk]
 
@@ -508,8 +508,8 @@ end
         end
         return phase
     end
-    opsk = [[physical_ops[1:k-1]..., ops[k], physical_ops[k+1:end]...] for k in 1:length(ops)]
-    unitaries = [Diagonal([phase(k, f) for f in basisstates(H)]) * Uemb for k in 1:length(opsk)]
+    opsk = [[physical_ops[1:k-1]..., ops[k], physical_ops[k+1:end]...] for k in eachindex(ops)]
+    unitaries = [Diagonal([phase(k, f) for f in basisstates(H)]) * Uemb for k in eachindex(opsk)]
     embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
     kron_prods = [generalized_kron(ops, Hs, H; phase_factors=false) for ops in opsk]
     @test all(op1 ≈ U * op2 * U for (op1, op2, U) in zip(embedding_prods, kron_prods, unitaries))
