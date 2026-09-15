@@ -191,7 +191,7 @@ end
 function concatenate((lastf, lastwidth)::Tuple{FixedNumberFockState,Int}, (f, width)::Tuple{FockNumber,Int})
     concatenate((lastf, lastwidth), (FixedNumberFockState(f), width))
 end
-function permute(f::FixedNumberFockState, permutation::BitPermutations.AbstractBitPermutation)
+function permute(f::FixedNumberFockState, permutation::AbstractBitPermutation)
     p = Vector(permutation')
     return FixedNumberFockState(map(s -> p[s], f.sites))
 end
