@@ -31,7 +31,8 @@ makedocs(;
         "Examples" => [
             "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
             "Free fermions" => "literate_output/free_fermions.md",
-            "Open systems" => "literate_output/open_system_lindblad.md"
+            "Open systems" => "literate_output/open_system_lindblad.md",
+            "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md"
         ],
         "Misc" => "misc.md",
         "Functions" => "docstrings.md",
