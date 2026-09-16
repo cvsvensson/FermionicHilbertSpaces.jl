@@ -35,6 +35,7 @@ makedocs(;
             "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md"
         ],
         "Misc" => "misc.md",
+        "Symbolic states" => "symbolic_states.md",
         "Functions" => "docstrings.md",
     ],
 )
