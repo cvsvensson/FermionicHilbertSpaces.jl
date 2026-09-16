@@ -316,8 +316,8 @@ end
             f[(i, σ)]' * f[(j, σ)] + hc
         end
     end
-    @test_throws ArgumentError matrix_representation(hopping_symham, H)
-    @test size(matrix_representation(hopping_symham, H; projection=true), 1) == dim(H)
+    @test_throws ArgumentError representation(hopping_symham, H)
+    @test size(representation(hopping_symham, H; projection=true), 1) == dim(H)
 end
 
 @testitem "Sector propagation in tensor_product" begin

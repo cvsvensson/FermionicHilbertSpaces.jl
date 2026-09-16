@@ -154,7 +154,7 @@ mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
     @fermions f
     H = hilbert_space(f, 1:N)
     sym = sum(f[k]' * f[k] for k in 1:N)
-    m = matrix_representation(sym, H)
+    m = representation(sym, H)
     @test dim(H) == 2^N
     @test size(m) == (2^N, 2^N)
 
@@ -163,7 +163,7 @@ mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
     Hc2 = tensor_product(H.modes; constraint=NumberConservation(1))
     @test Set(basisstates(Hc)) == Set(basisstates(Hc2))
     @test dim(Hc) == N
-    mc = matrix_representation(sym, Hc)
+    mc = representation(sym, Hc)
     @test size(mc) == (N, N)
 
     @test m == numberoperator(H)

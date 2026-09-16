@@ -65,15 +65,15 @@ add_tag(expr, tag) = NonCommutativeProducts.ncmap(Base.Fix2(add_tag, tag), expr)
     H = hilbert_space(c, 1:1)
     Ht = TransposedSpace(H)
     op = c[1]' * c[1]
-    @test matrix_representation(op, Ht) == transpose(matrix_representation(op, H))
+    @test representation(op, Ht) == transpose(representation(op, H))
 
     @boson b
     Hb = hilbert_space(b, 2)
-    @test matrix_representation(b' * b, TransposedSpace(Hb)) == transpose(matrix_representation(b' * b, Hb))
+    @test representation(b' * b, TransposedSpace(Hb)) == transpose(representation(b' * b, Hb))
 
     @spin s 1 // 2
     Hs = hilbert_space(s)
-    @test matrix_representation(s[:x], TransposedSpace(Hs)) == transpose(matrix_representation(s[:x], Hs))
+    @test representation(s[:x], TransposedSpace(Hs)) == transpose(representation(s[:x], Hs))
 end
 
 @testitem "open_system symbolic left-right interface" begin
@@ -84,9 +84,9 @@ end
     c_right = right(c)
     op = c[1]' * c[1]
 
-    M = matrix_representation(left(op) * right(op) + left(op), Hfull)
+    M = representation(left(op) * right(op) + left(op), Hfull)
     @test size(M) == (dim(Hfull), dim(Hfull))
-    Mexpected = matrix_representation((c_left[1]' * c_left[1]) * (c_right[1]' * c_right[1]) + (c_left[1]' * c_left[1]), Hfull)
+    Mexpected = representation((c_left[1]' * c_left[1]) * (c_right[1]' * c_right[1]) + (c_left[1]' * c_left[1]), Hfull)
     @test M ≈ Mexpected
     @test reshape(reshape(M, Hfull => (Hleft, Hright)), (Hleft, Hright) => Hfull) == M
 
@@ -95,9 +95,9 @@ end
     bl = left_b(b)
     br = right_b(b)
     op_b = b' * b
-    Mb = matrix_representation(left_b(op_b) * right_b(op_b) + left_b(op_b), Hb)
+    Mb = representation(left_b(op_b) * right_b(op_b) + left_b(op_b), Hb)
     @test size(Mb) == (dim(Hb), dim(Hb))
-    Mexpected_b = matrix_representation((bl' * bl) * (br' * br) + (bl' * bl), Hb)
+    Mexpected_b = representation((bl' * bl) * (br' * br) + (bl' * bl), Hb)
     @test Mb ≈ Mexpected_b
     @test reshape(reshape(Mb, Hb => (Hleftb, Hrightb)), (Hleftb, Hrightb) => Hb) == Mb
 
@@ -107,8 +107,8 @@ end
     s_right = right(s)
     H = tensor_product(Hfull, Hs)
     op = c[1]' * s[:z]
-    M = matrix_representation(left(op) * right(op) + left(op), H)
-    Mexpected = matrix_representation((c_left[1]' * s_left[:z]) * (c_right[1]' * s_right[:z]) + (c_left[1]' * s_left[:z]), H)
+    M = representation(left(op) * right(op) + left(op), H)
+    Mexpected = representation((c_left[1]' * s_left[:z]) * (c_right[1]' * s_right[:z]) + (c_left[1]' * s_left[:z]), H)
     @test M ≈ Mexpected
     @test reshape(reshape(M, H => (Hleft, Hs, Hright)), (Hleft, Hs, Hright) => H) == M
 end
@@ -126,12 +126,12 @@ end
     Ht = TransposedSpace(H)
 
     A = sum((n + 1im) * s[n] for n in 0:3)
-    @test transpose(matrix_representation(A, H)) ≈ matrix_representation(A, Ht)
+    @test transpose(representation(A, H)) ≈ representation(A, Ht)
 
     B = sum((n + 2)^2 * s[n] for n in 0:3)
-    @test matrix_representation(A * B, H) ≈ matrix_representation(A, H) * matrix_representation(B, H)
-    @test matrix_representation(A * B, Ht) ≈ matrix_representation(B, Ht) * matrix_representation(A, Ht)
-    @test matrix_representation(A * B, Ht) ≈ transpose(matrix_representation(A * B, H))
+    @test representation(A * B, H) ≈ representation(A, H) * representation(B, H)
+    @test representation(A * B, Ht) ≈ representation(B, Ht) * representation(A, Ht)
+    @test representation(A * B, Ht) ≈ transpose(representation(A * B, H))
     # Test on a mixed space
     @fermions f
     Hf = hilbert_space(f, 1:2)
@@ -139,11 +139,11 @@ end
     Hfull_t = TransposedSpace(Hfull)
     A2 = A * f[1]' * f[1]
     B2 = B * f[1]' * f[1] - I
-    @test transpose(matrix_representation(A2, Hfull)) ≈ matrix_representation(A2, Hfull_t)
-    @test matrix_representation(A2 * B2, Hfull_t) ≈ transpose(matrix_representation(A2 * B2, Hfull))
+    @test transpose(representation(A2, Hfull)) ≈ representation(A2, Hfull_t)
+    @test representation(A2 * B2, Hfull_t) ≈ transpose(representation(A2 * B2, Hfull))
 
-    @test matrix_representation(A2 * B2, Hfull) ≈ matrix_representation(A2, Hfull) * matrix_representation(B2, Hfull)
-    @test matrix_representation(A2 * B2, Hfull_t) ≈ matrix_representation(B2, Hfull_t) * matrix_representation(A2, Hfull_t)
+    @test representation(A2 * B2, Hfull) ≈ representation(A2, Hfull) * representation(B2, Hfull)
+    @test representation(A2 * B2, Hfull_t) ≈ representation(B2, Hfull_t) * representation(A2, Hfull_t)
 
     # Test with constrained spaces
     _Hf = hilbert_space(f, 1:2)
@@ -152,10 +152,10 @@ end
     Hfull_t = TransposedSpace(Hfull)
     A2 = A * f[1]' * f[1] + 0.5 * s[:x] * f[1]' * f[2]
     B2 = B * f[2]' * f[1] - I
-    @test transpose(matrix_representation(A2, Hfull)) ≈ matrix_representation(A2, Hfull_t)
-    @test matrix_representation(A2 * B2, Hfull_t) ≈ transpose(matrix_representation(A2 * B2, Hfull))
-    @test matrix_representation(A2 * B2, Hfull) ≈ matrix_representation(A2, Hfull) * matrix_representation(B2, Hfull)
-    @test matrix_representation(A2 * B2, Hfull_t) ≈ matrix_representation(B2, Hfull_t) * matrix_representation(A2, Hfull_t)
+    @test transpose(representation(A2, Hfull)) ≈ representation(A2, Hfull_t)
+    @test representation(A2 * B2, Hfull_t) ≈ transpose(representation(A2 * B2, Hfull))
+    @test representation(A2 * B2, Hfull) ≈ representation(A2, Hfull) * representation(B2, Hfull)
+    @test representation(A2 * B2, Hfull_t) ≈ representation(B2, Hfull_t) * representation(A2, Hfull_t)
 
     # test with sector space
     Hf = hilbert_space(f, 1:2, NumberConservation(1))
@@ -163,17 +163,17 @@ end
     Hfull_t = TransposedSpace(Hfull)
     A2 = A * f[1]' * f[1] + 0.5 * s[:x] * f[1]' * f[2]
     B2 = B * f[2]' * f[1] - I
-    @test transpose(matrix_representation(A2, Hfull)) ≈ matrix_representation(A2, Hfull_t)
-    @test matrix_representation(A2 * B2, Hfull_t) ≈ transpose(matrix_representation(A2 * B2, Hfull))
-    @test matrix_representation(A2 * B2, Hfull) ≈ matrix_representation(A2, Hfull) * matrix_representation(B2, Hfull)
-    @test matrix_representation(A2 * B2, Hfull_t) ≈ matrix_representation(B2, Hfull_t) * matrix_representation(A2, Hfull_t)
+    @test transpose(representation(A2, Hfull)) ≈ representation(A2, Hfull_t)
+    @test representation(A2 * B2, Hfull_t) ≈ transpose(representation(A2 * B2, Hfull))
+    @test representation(A2 * B2, Hfull) ≈ representation(A2, Hfull) * representation(B2, Hfull)
+    @test representation(A2 * B2, Hfull_t) ≈ representation(B2, Hfull_t) * representation(A2, Hfull_t)
 
     # test with Majorana fermions
     @majoranas m
     Hm = hilbert_space(m, 1:4)
     Hm_t = TransposedSpace(Hm)
     A = m[1] * m[2] + 0.5 * m[3] * m[4]
-    @test transpose(matrix_representation(A, Hm)) ≈ matrix_representation(A, Hm_t)
+    @test transpose(representation(A, Hm)) ≈ representation(A, Hm_t)
 end
 
 @testitem "Vectorization and kron identity" begin
@@ -187,13 +187,13 @@ end
     A = 1.2 * s[:x] - 0.4im * s[:y] + 0.7 * s[:z]
     B = -0.3 * s[:x] + 1.1im * s[:y] + 0.2 * s[:z]
 
-    MA = matrix_representation(A, H)
-    MB = matrix_representation(B, H)
+    MA = representation(A, H)
+    MB = representation(B, H)
 
-    Msuper = matrix_representation(left(A) * right(B), Hfull)
+    Msuper = representation(left(A) * right(B), Hfull)
     @test Msuper ≈ kron(transpose(MB), MA)
 
-    Mright = matrix_representation(right(A * B), Hfull)
+    Mright = representation(right(A * B), Hfull)
     @test Mright ≈ kron(transpose(MA * MB), I(dim(H)))
 end
 

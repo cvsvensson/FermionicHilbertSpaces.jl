@@ -325,17 +325,17 @@ issubsystem(Hsub::AbstractHilbertSpace, H::FermionicSpace) = isorderedsubsystem(
     Hl = hilbert_space(c_l[1])
     Hr = hilbert_space(c_r[1])
     Hlr = tensor_product((Hl, Hr))
-    mat = matrix_representation(lindbladian, Hlr)
+    mat = representation(lindbladian, Hlr)
 
     #The difference between left fermions and right fermions is conserved
     constraint = NumberConservation(-1:1, [Hl, Hr], [1, -1])
     Hcons = tensor_product((Hl, Hr); constraint)
-    @test size(matrix_representation(lindbladian, Hcons), 1) == dim(Hcons)
+    @test size(representation(lindbladian, Hcons), 1) == dim(Hcons)
 
     blocks = map(sectors(Hcons)) do Hsector
-        matrix_representation(lindbladian, Hsector)
+        representation(lindbladian, Hsector)
     end
-    @test cat(blocks...; dims=(1, 2)) == matrix_representation(lindbladian, Hcons)
+    @test cat(blocks...; dims=(1, 2)) == representation(lindbladian, Hcons)
 end
 
 @testitem "Fermionic tensor product properties" begin
@@ -557,5 +557,6 @@ end
 @testitem "matrix_representation throws ArgumentError for invalid operator" begin
     @fermions f
     H = hilbert_space(f, 1:1)
+    @test_throws ArgumentError representation(f[2], H)
     @test_throws ArgumentError matrix_representation(f[2], H)
 end
