@@ -83,6 +83,10 @@ function backtrack!(results, partial, spaces, depth, constraint, partial_process
     end
 end
 
+function filter_function(constraint::BranchConstraint, space::AbstractHilbertSpace)
+    state -> true
+end
+
 _normalize_constraint_values(values::AbstractVector) = values
 _normalize_constraint_values(values::Tuple) = values
 _normalize_constraint_values(values::AbstractRange) = values
