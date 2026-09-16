@@ -1,4 +1,19 @@
 abstract type AbstractBranchConstraint <: AbstractConstraint end
+"""
+    BranchConstraint(f)
+
+Constraint for pruning branches while generating basis states.
+`f(partial_state, depth, spaces) -> Bool` is evaluated during
+backtracking by [`generate_states`](@ref), after the state at position `depth`
+has been assigned. Entries after `depth` in `partial_state` have not yet been
+assigned.
+
+Returning `true` continues exploring the branch, while returning `false`
+prunes it. The callback should therefore accept partial states and reject a
+branch only when no valid completion can satisfy the constraint.
+
+`BranchConstraint` is intended for use with `tensor_product` or more directly with `generate_states`.
+"""
 struct BranchConstraint{F} <: AbstractBranchConstraint
     f::F
 end
@@ -66,6 +81,10 @@ function backtrack!(results, partial, spaces, depth, constraint, partial_process
             backtrack!(results, partial, spaces, depth + 1, constraint, partial_processor, process_result, valid_final_state)
         end
     end
+end
+
+function filter_function(constraint::BranchConstraint, space::AbstractHilbertSpace)
+    state -> true
 end
 
 _normalize_constraint_values(values::AbstractVector) = values

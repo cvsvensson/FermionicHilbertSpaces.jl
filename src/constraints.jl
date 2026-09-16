@@ -27,6 +27,18 @@ supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c
 
 supply_missing_constraint_info(constraint::ProductConstraint, space, spaces) = ProductConstraint(map(cons -> supply_missing_constraint_info(cons, space, spaces), constraint.constraints))
 
+"""
+    FilterConstraint(reducer)
+    FilterConstraint(reducer, functions, subspaces)
+
+Constraint that keeps complete basis states for which `reducer` returns `true`.
+
+With only `reducer`, the reducer is called directly as `reducer(state)`. When
+`functions` and `subspaces` are provided, the state is split into the selected
+subspaces, each function is applied to its corresponding subspace, and the
+reducer is called on the resulting values. A single function is applied to all
+subspaces; a collection of functions supplies one function per subspace.
+"""
 struct FilterConstraint{R,FS,H} <: AbstractConstraint
     reducer::R
     functions::FS
@@ -66,6 +78,20 @@ supply_missing_constraint_info(constraint::FilterConstraint{<:Any,Missing,Missin
 supply_missing_constraint_info(constraint::FilterConstraint, space, spaces) = constraint
 
 
+"""
+    SectorConstraint(reducer, functions=missing, subspaces=missing)
+
+Constraint that groups complete basis states into sectors according to a
+custom rule. It has the same `reducer`, `functions`, and `subspaces` interface
+as [`FilterConstraint`](@ref), but `reducer` must return the sector label for a
+state. Returning `missing` discards the state; states with the same non-missing
+label are placed in the same sector.
+
+When `functions` and `subspaces` are provided, the state is split into the
+selected subspaces, the functions are applied to them, and the reducer receives
+the resulting values. A single function is applied to all subspaces; a
+collection of functions supplies one function per subspace.
+"""
 struct SectorConstraint{F<:FilterConstraint} <: AbstractConstraint
     filter::F
 end
@@ -182,6 +208,16 @@ function sector_function(constraint::ProductConstraint, space::AbstractHilbertSp
         return sectors
     end
 end
+function filter_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
+    subspace_functions = map(constraint.constraints) do cons
+        if supports_sector_grouping(cons)
+            sector = sector_function(cons, space)
+            return state -> !ismissing(sector(state))
+        end
+        filter_function(cons, space)
+    end
+    state -> all(f -> f(state), subspace_functions)
+end
 
 _apply_constraint_function(substates, ::NumberConservation{<:Any,<:Any,Missing}) = sum(particle_number, substates)
 _apply_constraint_function(substates, cons::NumberConservation{<:Any,<:Any,W}) where {W} = mapreduce((s, w) -> particle_number(s) * w, +, substates, cons.weights)
@@ -229,4 +265,16 @@ constrain_space
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
     @test all(isone ∘ dim, sectors(H))
+end
+
+@testitem "ProductConstraint filtering" begin
+    using FermionicHilbertSpaces: FilterConstraint, particle_number
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    constraint = NumberConservation(1) * FilterConstraint(state -> state != basisstate(2, H))
+
+    Hconstrained = constrain_space(H, constraint)
+
+    @test dim(Hconstrained) == 1
+    @test all(particle_number(state) == 1 for state in basisstates(Hconstrained))
 end
