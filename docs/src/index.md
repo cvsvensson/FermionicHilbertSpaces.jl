@@ -25,7 +25,7 @@ ham = hopping + coulomb
 ```
 To get the matrix representation of this operator on the Hilbert space, do
 ```@example intro
-mat = matrix_representation(ham, H)
+mat = representation(ham, H)
 ```
 
 ## Tensor product and partial trace
@@ -34,9 +34,9 @@ This package also includes functionality for combining Hilbert spaces and operat
 H1 = hilbert_space(c, 1:2)
 H2 = hilbert_space(c, 3:4)
 H = tensor_product(H1, H2)
-c1 = matrix_representation(c[1], H1)
-c3 = matrix_representation(c[3], H2)
-c1c3 = matrix_representation(c[1] * c[3], H)
+c1 = representation(c[1], H1)
+c3 = representation(c[3], H2)
+c1c3 = representation(c[1] * c[3], H)
 # Use embed to embed operators into a larger space
 embed(c1, H1 => H) * embed(c3, H2 => H) ≈ c1c3 #true 
 # Or call tensor_product to combine operators from different spaces
@@ -45,25 +45,25 @@ tensor_product((c1, c3), (H1, H2) => H) ≈ c1c3
 Let's partial trace to sites 1 and 3. Let's get a Hilbert space for those sites by using the function `subregion`, and then we can partial trace to that space with `partial_trace`.
 ```@example intro
 Hsub = subregion([c[1], c[3]], H)
-dim(Hsub) / dim(H) * partial_trace(c1c3, H => Hsub) ≈ matrix_representation(c[1] * c[3], Hsub)
+dim(Hsub) / dim(H) * partial_trace(c1c3, H => Hsub) ≈ representation(c[1] * c[3], Hsub)
 ```
 
 ## Conserved quantum numbers
 This package also includes some functionality for working with conserved quantum numbers. If we have for example number conservation, we might want to get a block structure of the hamiltonian. Here's how one can do that:
 ```@example intro
 H = hilbert_space(c, labels, NumberConservation())
-matrix_representation(ham, H)
+representation(ham, H)
 ```
 This has a block structure corresponding to the different sectors. To only look at some sectors, for example the sectors with 0, 2 and 4 particles, use
 ```@example intro
 H = hilbert_space(c, labels, NumberConservation([0, 2, 4]))
-matrix_representation(ham, H)
+representation(ham, H)
 ```
 
 Those sectors have even fermionic parity, which can alternatively be specified with `ParityConservation`.
 ```@example intro
 H = hilbert_space(c, labels, ParityConservation(1))
-matrix_representation(ham, H)
+representation(ham, H)
 ```
 
 # References

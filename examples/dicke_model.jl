@@ -18,5 +18,5 @@ constraint = FilterConstraint([Ha, Hs], [parity, spin_parity], ==(1) ∘ prod)
 H = tensor_product(Hs, Ha; constraint=constraint)
 H2 = constrain_space(tensor_product(Hs, Ha), constraint)
 H == H2
-ham = matrix_representation(symham, H)
+ham = representation(symham, H)
 # One should use sectors with permutationally invariant states, but we need to add methods to constrain product spaces to do that

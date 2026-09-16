@@ -156,7 +156,7 @@ F = FloquetLadder(floquet_basis)       # raising operator F
 Nf = FloquetNumber(1, floquet_basis)    # photon number N
 n_max = 5       # keep Floquet modes n = −n_max … n_max
 Hfloq = FermionicHilbertSpaces.GenericHilbertSpace(floquet_basis, FloquetState.(-n_max:n_max))
-matrix_representation(F, Hfloq; projection=true) # we need projection=true because we've truncated the Floquet space
+representation(F, Hfloq; projection=true) # we need projection=true because we've truncated the Floquet space
 
 # Now Floquet operators will work together algebraically with the spin operators, and we can get matrix represnentations of such mixed operators. Let's do some physics.
 # ## Driven two level system.
@@ -185,10 +185,10 @@ spectrum = zeros(length(A_values), n_states)
 spin_pol = zeros(length(A_values), n_states)
 entanglement = zeros(length(A_values), n_states)
 floquet_num = zeros(length(A_values), n_states)
-σz_mat = matrix_representation(σ[:z], H)
-Nf_mat = matrix_representation(Nf, H)
+σz_mat = representation(σ[:z], H)
+Nf_mat = representation(Nf, H)
 for (i, A) in enumerate(A_values)
-    mat = Matrix(matrix_representation(floquet_ham(A), H; projection=true))
+    mat = representation(floquet_ham(A), H, :dense; projection=true)
     vals, vecs = eigen(Hermitian(mat))
     spectrum[i, :] = vals
     for j in 1:n_states

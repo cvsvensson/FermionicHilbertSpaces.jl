@@ -148,7 +148,7 @@ H = tensor_product(Hup, Hdn)
 The full hilbert space is of size `4^20 ≈ 10^12`, but the sector with 2 spin up and 1 spin down fermion is only of size `3800` and is generated without constructing the full hilbert space. Finally, we can get the matrix representation of the hamiltonian in this sector as
 ```@example hubbard
 symham = hubbard_hamiltonian(f, N, 1.0, 4.0)
-ham = matrix_representation(symham, H)
+ham = representation(symham, H)
 ```
 
 #### No double occupation
@@ -162,7 +162,7 @@ This quantum number is a product of number conservations, so the sector is const
 The matrix representation of the hamiltonian in this sector can be constructed as before, but now we need to specify `projection = true` as the symbolic hamiltonian maps states in the subspace to states outside the subspace. The keyword `projection = true` says to ignore those terms.
 ```@example hubbard
 symham = hubbard_hamiltonian(f, N, 1, 0)
-ham_ndo = matrix_representation(symham, H_ndo; projection = true)
+ham_ndo = representation(symham, H_ndo; projection = true)
 ```
 
 ### Fractionalized hilbert space with BranchConstraint
@@ -216,7 +216,7 @@ Hfrac = hilbert_space(f, labels, spin_order_constraint([:↑, :↑, :↓, :↑, 
 which has only dimension 4368. We can then construct hamiltonian in this sector by
 ```@example hubbard
 symham = tjz(f, N, 1, 1/4)
-ham = matrix_representation(symham, Hfrac; projection = true)
+ham = representation(symham, Hfrac; projection = true)
 ```
 We can use `subregion` to find the hilbert space of a subsystem, taking into account the constraint. The full hilbert space of the left half of the system is
 ```@example hubbard

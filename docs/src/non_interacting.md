@@ -20,15 +20,15 @@ H = hilbert_space(c, 1:N, FermionicHilbertSpaces.SingleParticleState.(1:N))
 h = rand(ComplexF64, N, N)
 E = rand(ComplexF64)
 op = E * I + sum(c[i]' * h[i, j] * c[j] for i in 1:N, j in 1:N)
-matrix_representation(op, H) == h + E * I
+representation(op, H) == h + E * I
 ```
 Often, $h_{nm}$ is of interest because diagonalizing it gives information on the quasiparticles in the system.
 
 !!! tip "Use `single_particle_hilbert_space` instead"
-    For convenience, `single_particle_hilbert_space` can be used define the hilbert space which will give only the single particle states, and will remove the contribution of the identity operator when calling `matrix_representation`:
+    For convenience, `single_particle_hilbert_space` can be used define the hilbert space which will give only the single particle states, and will remove the contribution of the identity operator when calling `representation`:
     ```julia
     H = single_particle_hilbert_space(c, 1:N)
-    matrix_representation(op,H) == h # true
+    representation(op,H) == h # true
     ```
 
 See [Free fermions on a 2D grid](@ref) for an example of how to use this.
@@ -60,15 +60,15 @@ h = Hermitian(rand(N, N))
 Δ = rand(N, N) |> m -> m - transpose(m)
 E = rand()
 op = E * I + sum(c[i]' * h[i, j] * c[j] + (Δ[i, j] * c[i]' * c[j]' + Δ'[i, j] * c[i] * c[j]) for i in 1:N, j in 1:N)
-ℋ = matrix_representation(op, H) |> FermionicHilbertSpaces.normal_order_to_bdg
+ℋ = representation(op, H) |> FermionicHilbertSpaces.normal_order_to_bdg
 FermionicHilbertSpaces.isbdgmatrix(ℋ)
 ```
-The matrix returned by `matrix_representation` will depend on the ordering of operators in the symbolic operator `op`. If it is normal ordered (which is the default), one can use `FermionicHilbertSpaces.normal_order_to_bdg` to convert it to the choice above.
+The matrix returned by `representation` will depend on the ordering of operators in the symbolic operator `op`. If it is normal ordered (which is the default), one can use `FermionicHilbertSpaces.normal_order_to_bdg` to convert it to the choice above.
 !!! tip "Use `bdg_hilbert_space` instead"
-    By defining the hilbert space using `bdg_hilbert_space`, one automatically gets the Nambu states and `matrix_representation` will return a matrix of the form above without the need to manually convert it:
+    By defining the hilbert space using `bdg_hilbert_space`, one automatically gets the Nambu states and `representation` will return a matrix of the form above without the need to manually convert it:
     ```julia
     Hbdg = bdg_hilbert_space(c, 1:N)
-    matrix_representation(op, Hbdg)
+    representation(op, Hbdg)
     #= example output
     4×4 SparseArrays.SparseMatrixCSC{Float64, Int64} with 12 stored entries:
     0.449635   0.297613    ⋅         0.18844

@@ -22,7 +22,7 @@ ham = sum(-t * (f[1, s]' * f[2, s] + hc) for s in (:↑, :↓)) +
       U * sum(f[j, :↑]' * f[j, :↑] * f[j, :↓]' * f[j, :↓] for j in 1:2)
 
 # Construct matrix representation in the constrained Hilbert space
-M = Matrix(matrix_representation(ham, H))
+M = representation(ham, H, :dense)
 
 # --- Revealing structure via a basis transformation ---
 #

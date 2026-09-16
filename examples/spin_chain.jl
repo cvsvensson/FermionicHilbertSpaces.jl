@@ -5,7 +5,7 @@ N = 4
 H = hilbert_space(S, 1:N)
 ## Heisenberg chain
 ham = sum(S[k][:]'S[k+1][:] for k in 1:N-1)
-M = matrix_representation(ham, H)
+M = representation(ham, H)
 Peven = symmetric_sector(H, factors(H), :symmetric)
 Podd = symmetric_sector(H, factors(H), :antisymmetric)
 using AbstractAlgebra
@@ -26,8 +26,8 @@ constraint = FermionicHilbertSpaces.AdditiveConstraint(1, s -> s.m)
 H = hilbert_space(S, 1:N, constraint)
 ham = sum(S[k][op] * S[k+1][op] for k in 1:N-1 for op in (:x, :y, :z))
 total_spin_op = sum(sum(S[k][op] for k in 1:N)^2 for op in (:x, :y, :z))
-total_spin_mat = matrix_representation(total_spin_op, H)
-M = matrix_representation(ham, H)
+total_spin_mat = representation(total_spin_op, H)
+M = representation(ham, H)
 P = nullspace(Matrix(total_spin_mat - 4 * I))
 P' * M * P
 Peven = symmetric_sector(H, factors(H), :symmetric)

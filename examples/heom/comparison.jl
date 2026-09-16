@@ -16,7 +16,7 @@ M_fhs_sym = heom_generator(ham, V, bath_fhs)
 Hs, Hleft, Hright, left, right = open_system(s)
 Haux = heom_bosonic_aux_space(bath_fhs)
 Hfull = tensor_product((Hs, Haux))
-M_fhs = matrix_representation(M_fhs_sym, Hfull)
+M_fhs = representation(M_fhs_sym, Hfull)
 ## HierarchicalEOM.jl
 using HierarchicalEOM
 H_q = 0.5 * omega * sigmaz()
@@ -40,5 +40,5 @@ constraint = SectorConstraint(
     [spin_parity, spin_parity, ADOparity], even_parity
 )
 Hcons = constrain_space(Hfull, constraint)
-matrix_representation(M_fhs_sym, Hcons)
+representation(M_fhs_sym, Hcons)
 

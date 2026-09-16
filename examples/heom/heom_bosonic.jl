@@ -279,9 +279,9 @@ end
     Adown = HEOMBosonicOp(:down, 1, bath)
     W = HEOMBosonicOp(:damping, 0, bath)
 
-    Mu = matrix_representation(Aup, H; projection=true)
-    Md = matrix_representation(Adown, H; projection=true)
-    Mw = matrix_representation(W, H)
+    Mu = representation(Aup, H; projection=true)
+    Md = representation(Adown, H; projection=true)
+    Mw = representation(W, H)
 
     # Aup: |0⟩→|1⟩, |1⟩→|2⟩, |2⟩→0 (truncated)
     @test Mu ≈ [0 0 0; 1 0 0; 0 1 0]
@@ -310,7 +310,7 @@ end
     Hs, Hleft, Hright, left, right = open_system(σ)
     Haux = heom_bosonic_aux_space(bath)
     Hfull = tensor_product((Hs, Haux))
-    mat = matrix_representation(M_sym, Hfull)
+    mat = representation(M_sym, Hfull)
     # Dimension check: 2 × 2 × (1+1) = 8
     @test size(mat) == (8, 8)
     @test dim(Hfull) == 8

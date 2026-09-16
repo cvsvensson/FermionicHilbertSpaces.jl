@@ -13,7 +13,7 @@ basisstates(Hsub)
 
 ## Parallelization
 
-Matrix construction can be parallelized by passing a chunking strategy to `matrix_representation`. The two supported options are `TermChunking(scheduler)`, which splits work by operator terms, and `StateChunking(scheduler)`, which splits work by basis states. Any [OhMyThreads](https://github.com/JuliaFolds2/OhMyThreads.jl) scheduler can be used, for example `StaticScheduler`.
+Matrix construction can be parallelized by passing a chunking strategy to `representation`. The two supported options are `TermChunking(scheduler)`, which splits work by operator terms, and `StateChunking(scheduler)`, which splits work by basis states. Any [OhMyThreads](https://github.com/JuliaFolds2/OhMyThreads.jl) scheduler can be used, for example `StaticScheduler`.
 
 ```@example parallelization
 using FermionicHilbertSpaces, OhMyThreads
@@ -23,8 +23,8 @@ H = hilbert_space(f, 1:4)
 op = f[1]' * f[2] + 1im * f[2]' * f[1] + f[3]' * f[4] + f[4]' * f[3] + 2
 
 scheduler = StaticScheduler(; nchunks=4)
-M1 = matrix_representation(op, H; chunking=TermChunking(scheduler))
-M2 = matrix_representation(op, H; chunking=StateChunking(scheduler))
+M1 = representation(op, H; chunking=TermChunking(scheduler))
+M2 = representation(op, H; chunking=StateChunking(scheduler))
 ```
 
 For distributed sparse matrices, use `PartitionedSparseRepr` with a [PartitionedArrays](https://github.com/PartitionedArrays/PartitionedArrays.jl) backend:
@@ -36,14 +36,14 @@ space = hilbert_space(f, 1:3)
 op = f[1]' * f[2] + (1 + 2im) * f[3]' * f[1] + 2.0
 
 rep = PartitionedSparseRepr(; backend=DebugArray)
-M = matrix_representation(op, space, rep)
+M = representation(op, space, rep)
 ```
 To use [MPI](https://github.com/JuliaParallel/MPI.jl), start julia with MPI (`mpiexec -n 8 julia`) and do
 ```julia
 using MPI
 MPI.Init()
 rep = PartitionedSparseRepr(; backend=distribute_with_mpi, nparts=MPI.Comm_size(MPI.COMM_WORLD))
-matrix_representation(op, space, rep)
+representation(op, space, rep)
 ```
 
 

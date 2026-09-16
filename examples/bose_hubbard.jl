@@ -8,13 +8,13 @@ total_particles = N
 
 H = hilbert_space(b, 1:6, local_dimension, NumberConservation(total_particles))
 
-number_ops = [matrix_representation(b[i]'b[i], H) for i in 1:N]
-hopping_ops = [matrix_representation(b[i]'b[i+1], H) for i in 1:(N-1)]
+number_ops = [representation(b[i]'b[i], H) for i in 1:N]
+hopping_ops = [representation(b[i]'b[i+1], H) for i in 1:(N-1)]
 
 function bose_hubbard_observables(U, t)
     ham = -t * sum(b[i]'b[i+1] + hc for i in 1:(N-1)) +
           U * sum(b[i]'b[i] * (b[i]'b[i] - 1) for i in 1:N)
-    M = matrix_representation(ham, H)
+    M = representation(ham, H)
     _, vecs = eigs(M; nev=1, which=:SR)
     ψ = vecs[:, 1]
     occupation = sum(dot(ψ, ni, ψ) for ni in number_ops) / N
