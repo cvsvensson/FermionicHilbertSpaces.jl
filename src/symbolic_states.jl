@@ -177,6 +177,7 @@ function _operator_type(op::SymbolicState)
         return :ketbras
     end
 end
+_operator_type(::Union{UniformScaling, Number}) = :operator
 function _operator_type(op)
     hasket = false
     hasbra = false
