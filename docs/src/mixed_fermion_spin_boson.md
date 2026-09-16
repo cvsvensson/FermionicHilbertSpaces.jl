@@ -3,13 +3,13 @@
 This example combines several features at once: fermionic, spin, and bosonic Hilbert spaces; custom constraints; and reduced density matrices.
 
 Consider a spinful fermionic mode $f$, a localized spin-half $S$, and a bosonic mode $a$ with the Hamiltonian
-$$
+```math
 H = \omega a^\dagger a + \Delta_f s_z + \Delta_S S_z
     + J\vec{s} \cdot \vec{S}
     + g\left(a^\dagger f_\downarrow^\dagger f_\uparrow
     + a f_\uparrow^\dagger f_\downarrow\right).
-$$
-where $s_\alpha = \tfrac{1}{2} f^\dagger \sigma_\alpha f$ is the spin operator of the fermion. This model conserves $Q = a^\dagger a + s_z + S_z$ and the fermion number $N_f$. We will calculate the ground state in the $N_f = 1$, $Q = 0$ sector, and then the mutual information between different subsystems.
+```
+where ``s_\alpha = \tfrac{1}{2} f^\dagger \sigma_\alpha f`` is the spin operator of the fermion. This model conserves ``Q = a^\dagger a + s_z + S_z`` and the fermion number ``N_f``. We will calculate the ground state in the ``N_f = 1``, ``Q = 0`` sector, and then the mutual information between different subsystems.
 
 ```@example mixed_fermion_spin_boson
 using FermionicHilbertSpaces
