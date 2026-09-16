@@ -27,6 +27,18 @@ supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c
 
 supply_missing_constraint_info(constraint::ProductConstraint, space, spaces) = ProductConstraint(map(cons -> supply_missing_constraint_info(cons, space, spaces), constraint.constraints))
 
+"""
+    FilterConstraint(reducer)
+    FilterConstraint(reducer, functions, subspaces)
+
+Constraint that keeps complete basis states for which `reducer` returns `true`.
+
+With only `reducer`, the reducer is called directly as `reducer(state)`. When
+`functions` and `subspaces` are provided, the state is split into the selected
+subspaces, each function is applied to its corresponding subspace, and the
+reducer is called on the resulting values. A single function is applied to all
+subspaces; a collection of functions supplies one function per subspace.
+"""
 struct FilterConstraint{R,FS,H} <: AbstractConstraint
     reducer::R
     functions::FS
@@ -66,6 +78,20 @@ supply_missing_constraint_info(constraint::FilterConstraint{<:Any,Missing,Missin
 supply_missing_constraint_info(constraint::FilterConstraint, space, spaces) = constraint
 
 
+"""
+    SectorConstraint(reducer, functions=missing, subspaces=missing)
+
+Constraint that groups complete basis states into sectors according to a
+custom rule. It has the same `reducer`, `functions`, and `subspaces` interface
+as [`FilterConstraint`](@ref), but `reducer` must return the sector label for a
+state. Returning `missing` discards the state; states with the same non-missing
+label are placed in the same sector.
+
+When `functions` and `subspaces` are provided, the state is split into the
+selected subspaces, the functions are applied to them, and the reducer receives
+the resulting values. A single function is applied to all subspaces; a
+collection of functions supplies one function per subspace.
+"""
 struct SectorConstraint{F<:FilterConstraint} <: AbstractConstraint
     filter::F
 end
