@@ -248,7 +248,7 @@ end
     H_fixed = hilbert_space(f, 1:N, FixedNumberFockState{n_particles}.(basisstates(H_fock)))
 
     # Define a random Hermitian operator
-    sym_ham = sum(rand() * f[n]'f[n] for n in 1:N) + sum(f[n+1]'f[n] + hc for n in 1:N-1)
+    sym_ham = sum(rand() * f[n]'f[n] for n in 1:N) + sum(f[n+1]'f[n] + hc for n in 1:(N-1))
     ham_fock = representation(sym_ham, H_fock)
     ham_fixed = representation(sym_ham, H_fixed)
     @test ham_fock ≈ ham_fixed
@@ -287,7 +287,7 @@ function phase_factor_h(f1::FixedNumberFockState, f2::FixedNumberFockState, part
     phase_factor_h(FockNumber(f1), FockNumber(f2), partition, masks)
 end
 
-
+representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, parent(H), repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
     isquadratic(op) && isnumberconserving(op) || throw(ArgumentError("Only quadratic, number conserving operators supported for SingleParticleHilbertSpace"))
     _matrix_representation_single_space(remove_identity(op), H, repr, chunking; kwargs...)
