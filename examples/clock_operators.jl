@@ -5,7 +5,7 @@
 # global clock charge to diagonalise a Hamiltonian sector by sector and to
 # resolve the entanglement entropy of a subsystem.
 
-using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
 import FermionicHilbertSpaces:
     AbstractBasisState,
     AbstractSym,
@@ -48,7 +48,7 @@ symbolic_group(op::ClockOp) = op.site
 # This is enough to get most of the functionality of this package.
 # ## Hamiltonian and conservation laws
 # Let's take the case D = 3 for 6 sites. We define a hamiltonian which conserves the particle number modulo D, and calculate the symmetry resolved entanglement entropy in the ground state.
-D = 4
+D = 3
 L = 6
 Hs = [GenericHilbertSpace(k, ClockState{D}.(0:(D-1))) for k in 1:L]
 Hfull = tensor_product(Hs)
@@ -62,11 +62,10 @@ function clock_sectors(H)
 end
 Hzd = clock_sectors(Hfull)
 Hhalf = clock_sectors(tensor_product(Hs[1:div(L, 2)]))
-using Arpack
+
 function sector_ground_state(q, J, h)
     Hq = sector(q, Hzd)
-    # hmat = representation(clock_hamiltonian(J, h), Hq, :dense)
-    hmat = (representation(clock_hamiltonian(J, h), Hq))
+    hmat = Matrix(representation(clock_hamiltonian(J, h), Hq))
     vals, vecs = eigs(Hermitian(hmat), nev=1, which=:SR)
     return Hq, vals[1], vecs[:, 1]
 end
@@ -96,7 +95,7 @@ end
 
 ptmap = partial_trace(sector(0, Hzd) => Hhalf)
 hs = range(0.05, 2.5; length=30)
-@profview @time r = map(hs) do h
+r = map(hs) do h
     _, _, ψ0 = sector_ground_state(0, 1.0, h)
     ρhalf = ptmap(ψ0)
     symmetry_resolved_entropy(ρhalf, Hhalf, D)
@@ -107,13 +106,11 @@ Hq = getproperty.(r, :Hcharge)
 Sw = getproperty.(r, :Swithin)
 p = getproperty.(r, :p)
 Sq = getproperty.(r, :Sq)
-
-# Top: what makes up the entanglement?  Bottom: the individual charge sectors.
 p1 = plot(hs, S, lw=3, c=:black, label="total  S(A)",
     xlabel="h / J", ylabel="entropy",
-    title="Half-chain entanglement")
-plot!(p1, hs, Hq, lw=2, c=:dodgerblue, label="charge entropy  H(pₛ)")
-plot!(p1, hs, Sw/maximum(Sw), lw=2, c=:orangered, label="within-sector  ΣₛpₛSₛ")
+    title="Half-chain entanglement", yscale = :log10, legend = :bottomright)
+plot!(p1, hs, Hq, lw=2, c=:dodgerblue, label="charge entropy  H(pₛ)",)
+plot!(p1, hs, Sw, lw=2, c=:orangered, label="within-sector  ΣₛpₛSₛ")
 vline!(p1, [1], ls=:dash, c=:gray, label=false)
 
 p2 = plot(hs, getindex.(p, 1), lw=3, c=:seagreen, label="p₀",
@@ -123,6 +120,4 @@ plot!(p2, hs, getindex.(p, 2), lw=3, c=:mediumpurple, label="p₁ = p₂")
 plot!(p2, hs, getindex.(Sq, 1), lw=2, ls=:dash, c=:seagreen, label="S₀")
 plot!(p2, hs, getindex.(Sq, 2), lw=2, ls=:dash, c=:mediumpurple, label="S₁ = S₂")
 vline!(p2, [1], ls=:dash, c=:gray, label=false)
-
 plot(p1, p2; layout=(1, 2), size=(800, 300))
-
