@@ -52,8 +52,8 @@ t = 1.0
     ground_state[inds] = vecs[:, 1]
     (; energy=first(vals), ground_state)
 end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{@NamedTuple{energy::Float64, ground_state::Vector{Float64}}}:
- (energy = -30.88431178451313, ground_state = [-0.017199243203262934, 0.018548790166372477, -0.016890092086739094, -0.016193789793343853, 0.01714560172625713, 0.01797227143022796, -0.019207828614434663, 0.017876658689792286, -0.017218005481788635, -0.01768536815029694  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
- (energy = -30.884331431866972, ground_state = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.020300746748632716, -0.01892709491454755, 0.016242117258605072, 0.016692660286701348, -0.021406546465997014, 0.018905344284311697, 0.017864375792244577, -0.019962748363460042, 0.016060979381801725, 0.015608274175071164])</code></pre><p>The ground states are almost degenerate, as expected. Then, we can construct the ground state Majorana operators as <code>γ = o * e&#39; + hc</code> and <code>γ̃ = 1im * o * e&#39; + hc</code> but that takes a lot of memory for large systems. We can use LowRankMatrices.jl to avoid this</p><pre><code class="language-julia hljs">using LowRankMatrices
+ (energy = -30.884311784513073, ground_state = [-0.017199243203262923, 0.018548790166372474, -0.016890092086739125, -0.016193789793343905, 0.017145601726257186, 0.01797227143022805, -0.019207828614434676, 0.01787665868979231, -0.01721800548178863, -0.017685368150296955  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+ (energy = -30.884331431866965, ground_state = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  …  0.020300746748632727, -0.018927094914547575, 0.016242117258605082, 0.016692660286701435, -0.021406546465997055, 0.018905344284311742, 0.017864375792244654, -0.01996274836346008, 0.016060979381801833, 0.01560827417507113])</code></pre><p>The ground states are almost degenerate, as expected. Then, we can construct the ground state Majorana operators as <code>γ = o * e&#39; + hc</code> and <code>γ̃ = 1im * o * e&#39; + hc</code> but that takes a lot of memory for large systems. We can use LowRankMatrices.jl to avoid this</p><pre><code class="language-julia hljs">using LowRankMatrices
 γ = LowRankMatrix(o, conj(e)) + hc
 γ̃ = 1im * LowRankMatrix(o, conj(e)) + hc
 δρ = LowRankMatrix(o, conj(o)) - LowRankMatrix(e, conj(e))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4096×4096 LowRankMatrices.LowRankMatrix{Float64}:
@@ -83,18 +83,18 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
 γ_reductions = [norm(svdvals(γ), 1) for γ in γR]
 γ̃_reductions = [norm(svdvals(γ̃), 1) for γ̃ in γ̃R]
 LD = [norm(svdvals(δρ), 1) for δρ in δρR]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">12-element Vector{Float64}:
- 1.578706783356143e-15
- 1.5803330866148713e-15
- 1.581850969656351e-15
- 1.581254658461484e-15
- 1.5872719805187785e-15
- 1.5808209775924897e-15
- 1.5718763096694843e-15
- 1.6202859366709621e-15
- 1.3699978651526834e-15
- 1.9235372843151577e-15
- 1.836909530733566e-15
- 8.960930955592694e-16</code></pre><p>We can plot the reductions to visualize the localization of the Majorana modes.</p><pre><code class="language-julia hljs">#
+ 6.226573076584252e-16
+ 6.523102370759037e-16
+ 6.236872997222864e-16
+ 6.232536188532922e-16
+ 6.703079931391631e-16
+ 8.28655720430671e-16
+ 1.312806200554073e-15
+ 1.908033193248615e-15
+ 1.5326824011341333e-15
+ 1.2734496616928492e-15
+ 1.6392052645808342e-15
+ 1.5042220941063889e-15</code></pre><p>We can plot the reductions to visualize the localization of the Majorana modes.</p><pre><code class="language-julia hljs">#
 lw = 4
 legendfontsize = 15
 marker = true
@@ -102,4 +102,4 @@ markerstrokewidth = 2
 plot(xlabel=&quot;Site&quot;, title=&quot;Majorana quality measures&quot;; frame=:box, size=(500, 300), xticks=1:3:N, yscale=:identity, legendfontsize, ylims=(-1e-1, 2), legendposition=:top, labelfontsize=15)
 plot!(1:N, γ_reductions; label=&quot;‖γₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)
 plot!(1:N, γ̃_reductions; label=&quot;‖γ̃ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)
-plot!(1:N, LD; label=&quot;‖(iγγ̃)ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)</code></pre><img src="72df0eb4.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../non_interacting/">« Non interacting systems</a><a class="docs-footer-nextpage" href="../free_fermions/">Free fermions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Thursday 17 September 2026 12:05">Thursday 17 September 2026</span>. Using Julia version 1.13.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+plot!(1:N, LD; label=&quot;‖(iγγ̃)ₙ‖&quot;, lw, legendfontsize, marker, markerstrokewidth)</code></pre><img src="0722bc2d.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../non_interacting/">« Non interacting systems</a><a class="docs-footer-nextpage" href="../free_fermions/">Free fermions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Thursday 17 September 2026 13:15">Thursday 17 September 2026</span>. Using Julia version 1.13.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
