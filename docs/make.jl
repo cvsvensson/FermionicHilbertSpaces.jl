@@ -24,6 +24,7 @@ makedocs(;
         "Home" => "index.md",
         "Fermions" => "fermions.md",
         "Conserved quantities" => "conservation.md",
+        "Hilbert space and array operations" => "operations.md",
         "Tutorials" => [
             "Bosons" => "literate_output/bose_hubbard.md",
             "Spins" => "literate_output/spin_chain.md",
