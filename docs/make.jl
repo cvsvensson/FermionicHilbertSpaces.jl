@@ -5,7 +5,7 @@ using Literate
 
 DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilbertSpaces); recursive=true)
 
-literate_files = ["examples/kitaev_chain.jl", "examples/free_fermions.jl", "examples/floquet_tutorial.jl", "examples/open_system_lindblad.jl", "examples/spin_chain.jl"]
+literate_files = ["examples/kitaev_chain.jl", "examples/free_fermions.jl", "examples/floquet_tutorial.jl", "examples/open_system_lindblad.jl", "examples/spin_chain.jl", "examples/bose_hubbard.jl"]
 output_directory = "docs/src/literate_output"
 for file in literate_files
     Literate.markdown(file, output_directory; documenter=true, execute=false)
@@ -24,19 +24,20 @@ makedocs(;
         "Home" => "index.md",
         "Fermions" => "fermions.md",
         "Conserved quantities" => "conservation.md",
-        "Non interacting systems" => "non_interacting.md",
-        "Tutorials" => [       
-                 "Defining your own algebra: Floquet" => "literate_output/floquet_tutorial.md",
+        "Tutorials" => [
+            "Bosons" => "literate_output/bose_hubbard.md",
+            "Spins" => "literate_output/spin_chain.md",
+            "Custom algebra: Floquet" => "literate_output/floquet_tutorial.md",
+            "Open systems" => "literate_output/open_system_lindblad.md",
+            "Symbolic states" => "symbolic_states.md",
+            "Non interacting systems" => "non_interacting.md",
         ],
         "Examples" => [
             "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
             "Free fermions" => "literate_output/free_fermions.md",
-            "Open systems" => "literate_output/open_system_lindblad.md",
-            "Spin chains" => "literate_output/spin_chain.md",
             "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md"
         ],
         "Misc" => "misc.md",
-        "Symbolic states" => "symbolic_states.md",
         "Functions" => "docstrings.md",
     ],
 )
