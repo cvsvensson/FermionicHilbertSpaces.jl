@@ -108,6 +108,7 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
 
     h = a[1]' * a[2] + 1im * a[1]' * a[2]' + hc
     H = hilbert_space(a, 1:2, FermionicHilbertSpaces.SingleParticleState.(1:3))
+    @test_throws ArgumentError representation(h, H)
     @test_throws ArgumentError matrix_representation(h, H)
 
     N = 10
@@ -116,7 +117,7 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     @test length(basisstates(H)) == length(basisstates(Hf)) == N
     @test map(FockNumber, basisstates(H)) == basisstates(Hf)
     op = sum(rand() * a[k1]'a[k2] + rand(ComplexF64) * a[k1]a[k2]' for (k1, k2) in Base.product(1:N, 1:N))
-    @test matrix_representation(op, H) ≈ matrix_representation(op, Hf)
+    @test representation(op, H) ≈ representation(op, Hf)
 end
 
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{<:FixedNumberFockState})
@@ -226,12 +227,12 @@ state_index(state::AbstractFockState, H::SingleParticleHilbertSpace) = state_ind
     @fermions f
     H = single_particle_hilbert_space(f, 1:2)
     opmul = f[1]' * f[2]
-    @test matrix_representation(opmul, H) ≈ matrix_representation(opmul, parent(H))
+    @test representation(opmul, H) ≈ representation(opmul, parent(H))
     opadd = opmul + hc
-    ham = matrix_representation(opadd, H)
-    @test ham ≈ matrix_representation(opadd, parent(H))
-    @test matrix_representation(opadd + I, H) == matrix_representation(opadd, H)
-    @test matrix_representation(opadd + I, H) == matrix_representation(opadd + I, parent(H)) - I
+    ham = representation(opadd, H)
+    @test ham ≈ representation(opadd, parent(H))
+    @test representation(opadd + I, H) == representation(opadd, H)
+    @test representation(opadd + I, H) == representation(opadd + I, parent(H)) - I
 end
 
 @testitem "Partial trace consistency: FockNumber vs FixedNumberFockState" begin
@@ -247,9 +248,9 @@ end
     H_fixed = hilbert_space(f, 1:N, FixedNumberFockState{n_particles}.(basisstates(H_fock)))
 
     # Define a random Hermitian operator
-    sym_ham = sum(rand() * f[n]'f[n] for n in 1:N) + sum(f[n+1]'f[n] + hc for n in 1:N-1)
-    ham_fock = matrix_representation(sym_ham, H_fock)
-    ham_fixed = matrix_representation(sym_ham, H_fixed)
+    sym_ham = sum(rand() * f[n]'f[n] for n in 1:N) + sum(f[n+1]'f[n] + hc for n in 1:(N-1))
+    ham_fock = representation(sym_ham, H_fock)
+    ham_fixed = representation(sym_ham, H_fixed)
     @test ham_fock ≈ ham_fixed
     # Diagonalize to get ground state
     Ψ_fock = eigvecs(collect(ham_fock))[:, 1]
@@ -286,7 +287,7 @@ function phase_factor_h(f1::FixedNumberFockState, f2::FixedNumberFockState, part
     phase_factor_h(FockNumber(f1), FockNumber(f2), partition, masks)
 end
 
-
+representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
     isquadratic(op) && isnumberconserving(op) || throw(ArgumentError("Only quadratic, number conserving operators supported for SingleParticleHilbertSpace"))
     _matrix_representation_single_space(remove_identity(op), H, repr, chunking; kwargs...)

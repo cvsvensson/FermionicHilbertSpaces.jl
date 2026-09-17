@@ -5,9 +5,9 @@ using Symbolics, LinearAlgebra, Plots, OrdinaryDiffEqTsit5
 H = hilbert_space(γ, [0, 1, 2, 3, 22, 33], ParityConservation())
 @variables Δ[1:3]::Real
 symbolic_ham = sum(1im * Δ[i] * γ[0] * γ[i] for i in 1:3)
-ham = collect(matrix_representation(symbolic_ham, H))
+ham = collect(representation(symbolic_ham, H))
 construct_ham, construct_ham! = build_function(ham, Δ, expression=Val{false})
-exchange_gate = matrix_representation(sqrt(1im / 2) * (I + γ[3] * γ[2]), H)
+exchange_gate = representation(sqrt(1im / 2) * (I + γ[3] * γ[2]), H)
 ##
 smooth_step(x, k) = 1 / 2 + tanh(k * x) / 2
 # Give the value of the three deltas at time t in the three point majorana braiding protocol
@@ -34,7 +34,7 @@ function drho!(du, u, p, t)
     return du
 end
 ##
-u0 = eigvecs(Matrix(matrix_representation(1.0im * γ[2] * γ[22] + 1.0im * γ[0] * γ[1], H) + parityoperator(H)))[:, 1]
+u0 = eigvecs(representation(1.0im * γ[2] * γ[22] + 1.0im * γ[0] * γ[1], H) + parityoperator(H), :dense)[:, 1]
 # u0' * P2 * u0
 
 T = 1000
@@ -57,7 +57,7 @@ plot(ts, map(norm ∘ sol, ts), label="norm", xlabel="t")
 isapprox(abs2(sol[end]' * exchange_gate^2 * u0), 1, atol=1e-2)
 isapprox(abs2(sol(T)' * exchange_gate * u0), 1, atol=1e-2)
 ## lets measure the parities
-measurements = [matrix_representation(1.0im * γ[i] * γ[j], H) for (i, j) in [(2, 22), (3, 33)]]
+measurements = [representation(1.0im * γ[i] * γ[j], H) for (i, j) in [(2, 22), (3, 33)]]
 plot(ts, [real(sol(t)'m * sol(t)) for m in measurements, t in ts]', xlabel="t", label=["P2" "P3"], frame=:box, size=(400, 250), lw=2)
 
 ## Let's calculate the Non-abelian berry pase with the Kato method

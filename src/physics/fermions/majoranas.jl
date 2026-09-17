@@ -240,8 +240,8 @@ end
     Hsub = subregion(majorana_hilbert_space(y, 3:4), H)
     op = 1 + 3y[1] + 2y[3] + 4y[1] * y[6] + 3y[4] * y[1] + y[3] * y[4] + y[1] * y[3] * y[4] + y[1] * y[2] * y[6]
     op2 = 3 + 0y[1] # NCterms(op2) is empty
-    @test matrix_representation(partial_trace(op, H => Hsub), Hsub) == partial_trace(matrix_representation(op, H), H => Hsub)
-    @test matrix_representation(partial_trace(op2, H => Hsub), Hsub) == partial_trace(matrix_representation(op2, H), H => Hsub)
+    @test representation(partial_trace(op, H => Hsub), Hsub) == partial_trace(representation(op, H), H => Hsub)
+    @test representation(partial_trace(op2, H => Hsub), Hsub) == partial_trace(representation(op2, H), H => Hsub)
 end
 
 
@@ -282,18 +282,18 @@ end
     Hf = H.parent
     f = H.parent.modes[1].basis
 
-    @test parityoperator(H.parent) == matrix_representation(1im * γ[1] * γ[2], H)
-    y1 = matrix_representation(γ[1], H)
-    y2 = matrix_representation(γ[2], H)
-    @test y1 * y2 == matrix_representation(γ[1] * γ[2], H)
+    @test parityoperator(H.parent) == representation(1im * γ[1] * γ[2], H)
+    y1 = representation(γ[1], H)
+    y2 = representation(γ[2], H)
+    @test y1 * y2 == representation(γ[1] * γ[2], H)
 
     maj(f) = f.creation ? -1im * f + hc : f + hc
-    @test matrix_representation(γ[1], H) == matrix_representation(maj(f[(1, 2)]), Hf)
-    @test matrix_representation(γ[2], H) == matrix_representation(maj(f[(1, 2)]'), Hf)
-    @test matrix_representation(1, H) == matrix_representation(1, Hf) == matrix_representation(1I, H) == matrix_representation(1I, Hf)
-    @test matrix_representation(γ[1] * γ[2], H) == matrix_representation(maj(f[(1, 2)]) * maj(f[(1, 2)]'), Hf)
-    @test matrix_representation(1 + γ[1] + 1im * γ[2] + 0.2 * γ[1] * γ[2], H) ==
-          matrix_representation(1 + maj(f[(1, 2)]) + 1im * maj(f[(1, 2)]') + 0.2 * maj(f[(1, 2)]) * maj(f[(1, 2)]'), Hf)
+    @test representation(γ[1], H) == representation(maj(f[(1, 2)]), Hf)
+    @test representation(γ[2], H) == representation(maj(f[(1, 2)]'), Hf)
+    @test representation(1, H) == representation(1, Hf) == representation(1I, H) == representation(1I, Hf)
+    @test representation(γ[1] * γ[2], H) == representation(maj(f[(1, 2)]) * maj(f[(1, 2)]'), Hf)
+    @test representation(1 + γ[1] + 1im * γ[2] + 0.2 * γ[1] * γ[2], H) ==
+          representation(1 + maj(f[(1, 2)]) + 1im * maj(f[(1, 2)]') + 0.2 * maj(f[(1, 2)]) * maj(f[(1, 2)]'), Hf)
 end
 
 @testitem "Majorana hilbert space" begin

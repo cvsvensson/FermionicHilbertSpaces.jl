@@ -33,8 +33,8 @@ t = 1.0
 
 # We can now construct the Hamiltonian using symbolic fermions for a symbolic representation
 hsym = kitaev_chain(f, N, μ, t, Δ, U)
-# To convert the symbolic Hamiltonian to a matrix representation, we can use the `matrix_representation` function.
-matrix_representation(hsym, H)
+# To convert the symbolic Hamiltonian to a matrix representation, we can use the `representation` function.
+representation(hsym, H)
 
 
 # Now, let's diagonalize the system.
@@ -42,7 +42,7 @@ matrix_representation(hsym, H)
 import FermionicHilbertSpaces: indices, sector, quantumnumbers
 (Eo, o), (Ee, e) = map(quantumnumbers(H)) do parity
     Hsec = sector(parity, H)
-    ham = matrix_representation(hsym, Hsec)
+    ham = representation(hsym, Hsec)
     vals, vecs = eigs(ham; nev=1, which=:SR)
     inds = indices(Hsec, H)
     ground_state = zeros(eltype(vecs), dim(H))

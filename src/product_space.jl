@@ -211,14 +211,14 @@ end
     @test partial_trace(embed(m, Ha => H), H => Ha) == m * dim(Hb) * dim(Hc)
 
     # Fermion commutation relations
-    amat = matrix_representation(a[1], Ha)
-    bmat = matrix_representation(b[1], Hb)
-    cmat = matrix_representation(c[1], Hc)
+    amat = representation(a[1], Ha)
+    bmat = representation(b[1], Hb)
+    cmat = representation(c[1], Hc)
     @test embed(amat, Ha => H) * embed(bmat, Ha => H) ≈ -embed(bmat, Ha => H) * embed(amat, Ha => H)
     @test embed(amat, Ha => H) * embed(cmat, Ha => H) ≈ embed(cmat, Ha => H) * embed(amat, Ha => H)
-    @test embed(amat, Ha => H) == matrix_representation(a[1], H)
-    @test embed(bmat, Hb => H) == matrix_representation(b[1], H)
-    @test embed(cmat, Hc => H) == matrix_representation(c[1], H)
+    @test embed(amat, Ha => H) == representation(a[1], H)
+    @test embed(bmat, Hb => H) == representation(b[1], H)
+    @test embed(cmat, Hc => H) == representation(c[1], H)
 
     # Constrained spaces and subregion
     Habcons = constrain_space(Hab, NumberConservation(1))
@@ -248,10 +248,10 @@ end
     @test partial_trace(m, Hprod => H2) ≈ partial_trace(partial_trace(m, Hprod => H1), H1 => H2)
 
 
-    @test matrix_representation(a[1] + 1, Hprod; projection=true) == embed(matrix_representation(a[1], Ha), Ha => Hprod; skipmissing=true) + I
-    @test matrix_representation(c[1], Hprod; projection=true) == embed(matrix_representation(c[1], Hc), Hc => Hprod; skipmissing=true)
+    @test representation(a[1] + 1, Hprod; projection=true) == embed(representation(a[1], Ha), Ha => Hprod; skipmissing=true) + I
+    @test representation(c[1], Hprod; projection=true) == embed(representation(c[1], Hc), Hc => Hprod; skipmissing=true)
 
-    @test matrix_representation(a[1]' * b[1], Hprod) == embed(matrix_representation(a[1]' * b[1], Hab), Hab => Hprod; skipmissing=true)
+    @test representation(a[1]' * b[1], Hprod) == embed(representation(a[1]' * b[1], Hab), Hab => Hprod; skipmissing=true)
 
 end
 
