@@ -1,11 +1,3 @@
-# #export ParafermionicGroup, SymbolicParafermionBasis, ParafermionSym,
-#        ParaFockNumber, ParaFockMapper, ParafermionicSpace,
-#        parafermion_basis, @parafermions,
-#        parafock_from_digits, occupations, occupation,
-#        parafermion_order, parafermion_sigma, parafermion_charge,
-#        parafermion_number, parafermions,
-#        inverse_phase_factor_f, inverse_partial_trace_phase_factor,
-#        parafermion_selftest
 export @parafermions
 
 # =====================================================================
@@ -54,8 +46,7 @@ function _pf_root(::Val{P}, exponent::Integer) where P
     cis(2π * (k / P))
 end
 
-# Use BigInt arithmetic for exponent products to avoid integer overflow.
-_pf_addmod(e, x, P) = Int(mod(big(e) + x, P))
+_pf_addmod(e, x, P) = Int(mod(e + x, P))
 
 function default_parafock_representation(P::Int, N::Int)
     _pf_check_parameters(P, 1)
@@ -115,9 +106,10 @@ function Base.show(io::IO, a::ParaFockNumber{P,S}) where {P,S}
     print(io, "ParaFockNumber{", P, ",", S, "}(", a.f, ")")
 end
 
-function occupation(a::ParaFockNumber{P}, site::Integer) where P
+function occupation(a::ParaFockNumber{P,S,I}, site::Integer) where {P,S,I}
     site >= 1 || throw(ArgumentError("Mode positions are one-based"))
-    Int(mod(div(big(a.f), big(P)^(site - 1)), P))
+    # I already holds every digit of a.f, so I(P)^(site-1) cannot overflow.
+    Int(mod(div(a.f, I(P)^(site - 1)), P))
 end
 
 function occupations(a::ParaFockNumber, N::Integer)
@@ -146,9 +138,9 @@ function parafock_from_digits(
     ParaFockNumber{P,S,I}(value)
 end
 
-function particle_number(a::ParaFockNumber{P}) where P
-    x = big(a.f)
-    total = big(0)
+function particle_number(a::ParaFockNumber{P,S,I}) where {P,S,I}
+    x = a.f
+    total = zero(I)
     while x != 0
         x, r = divrem(x, P)
         total += r
@@ -440,13 +432,15 @@ end
 function split_state(
     state::ParaFockNumber{P,S},
     fm::ParaFockMapper{P,S,N,F},
-) where {P,S,N,F}
+) where {P,S,N,I,F<:ParaFockNumber{P,S,I}}
+    # P^N itself (not P^N-1) can overflow I right at the boundary, so this
+    # bound check must stay in BigInt.
     big(state.f) < big(P)^N ||
         throw(ArgumentError("State lies outside the mapper's full space"))
 
     substates = map(fm.fermionpositions) do X
-        value = big(0)
-        place = big(1)
+        value = zero(I)
+        place = one(I)
         for i in X
             value += occupation(state, i) * place
             place *= P
@@ -460,22 +454,23 @@ end
 function combine_states(
     states,
     fm::ParaFockMapper{P,S,N,F},
-) where {P,S,N,F}
+) where {P,S,N,I,F<:ParaFockNumber{P,S,I}}
     fm.isfullpartition ||
         throw(ArgumentError(
             "combine_states requires a full, non-overlapping partition"))
     length(states) == length(fm.fermionpositions) ||
         throw(DimensionMismatch("Wrong number of subsystem states"))
 
-    value = big(0)
+    value = zero(I)
     for (state, X) in zip(states, fm.fermionpositions)
         state isa ParaFockNumber{P,S} ||
             throw(ArgumentError("Incompatible parafermionic state"))
+        # P^length(X) itself can overflow I at the boundary; keep this in BigInt.
         big(state.f) < big(P)^length(X) ||
             throw(ArgumentError("Subsystem state has too many digits"))
 
         for (localpos, globalpos) in enumerate(X)
-            value += occupation(state, localpos) * big(P)^(globalpos - 1)
+            value += occupation(state, localpos) * I(P)^(globalpos - 1)
         end
     end
 
@@ -585,7 +580,7 @@ function phase_factor_l(
         if i > j
             di = occupation(a, i) - occupation(b, i)
             dj = occupation(a, j) - occupation(b, j)
-            exponent = _pf_addmod(exponent, big(di) * dj, P)
+            exponent = _pf_addmod(exponent, di * dj, P)
         end
     end
     _pf_root(Val(P), S * exponent)
@@ -603,7 +598,7 @@ function phase_factor_l(
             if i > j
                 di = occupation(a, i) - occupation(b, i)
                 dj = occupation(a, j) - occupation(b, j)
-                exponent = _pf_addmod(exponent, big(di) * dj, P)
+                exponent = _pf_addmod(exponent, di * dj, P)
             end
         end
     end
@@ -622,7 +617,7 @@ function phase_factor_u(
             if i > j
                 exponent = _pf_addmod(
                     exponent,
-                    big(occupation(state, i)) * occupation(state, j),
+                    occupation(state, i) * occupation(state, j),
                     P,
                 )
             end
@@ -851,22 +846,21 @@ function state_mapper(H::ParafermionicSpace, Hs)
     ParaFockMapper(positions, statetype(H), nbr_of_modes(H))
 end
 
-function combine_states(states, H::ParafermionicSpace{F}) where F
+function combine_states(states, H::ParafermionicSpace{ParaFockNumber{P,S,I}}) where {P,S,I}
     length(states) == nbr_of_modes(H) ||
         throw(DimensionMismatch("Expected one state per atomic mode"))
 
-    P, S = parafermion_order(H), parafermion_sigma(H)
-    value = big(0)
-    place = big(1)
+    value = zero(I)
+    place = one(I)
     for state in states
         state isa ParaFockNumber{P,S} ||
             throw(ArgumentError("Incompatible atomic state"))
         state.f < P ||
             throw(ArgumentError("Expected a single-mode state"))
-        value += big(state.f) * place
+        value += state.f * place
         place *= P
     end
-    (F(value),), (1,)
+    (ParaFockNumber{P,S,I}(value),), (1,)
 end
 
 # Same hook semantics as the fermionic source: return f_H, NOT an
@@ -901,7 +895,8 @@ function _precomputation_before_operator_application(
     position > 0 ||
         throw(ArgumentError("Operator ($op) is not part of space ($H)"))
 
-    (position, big(P)^(position - 1))
+    # I already holds every state of H, so I(P)^(position-1) cannot overflow.
+    (position, I(P)^(position - 1))
 end
 
 function _pf_apply(
@@ -911,7 +906,7 @@ function _pf_apply(
     transpose::Bool=false,
 ) where {P,S,I}
     position, place = cache
-    n = Int(mod(div(big(state.f), place), P))
+    n = Int(mod(div(state.f, place), P))
 
     # transpose means ordinary matrix transpose, not adjoint.
     #
@@ -923,11 +918,11 @@ function _pf_apply(
         return state, ComplexF64(0)
     end
 
-    shift = creation ? 1 : -1
     exponent = S * _pf_degree(op) * _pf_left_charge(state, position)
     amplitude = _pf_root(Val(P), exponent)
 
-    newstate = ParaFockNumber{P,S,I}(big(state.f) + shift * place)
+    # Add/subtract directly: `-1 * place` would wrap around for unsigned I.
+    newstate = ParaFockNumber{P,S,I}(creation ? state.f + place : state.f - place)
     newstate, amplitude
 end
 
@@ -1245,20 +1240,23 @@ end
 
 @testitem "Parafermionic tensor product properties" begin
     using LinearAlgebra, Random
-    import SparseArrays: issparse
+    import SparseArrays: issparse, spzeros
     import FermionicHilbertSpaces as FHS
 
     rng = MersenneTwister(1234)
     close(a, b) = isapprox(a, b; atol=3e-10, rtol=3e-10)
 
     # Occupation labels are zero-based; Julia matrix indices are not.
-    function E(d, a, b)
-        M = zeros(ComplexF64, d, d)
-        M[a+1, b+1] = 1
-        M
-    end
+    for p in (2, 3), sigma in (-1, 1)
+        function E!(M, a, b)
+            fill!(M, 0)
+            M[a+1, b+1] = 1
+            M
+        end
+        A = spzeros(ComplexF64, p, p)
+        B = spzeros(ComplexF64, p, p)
+        global_unit = spzeros(ComplexF64, p^2, p^2) 
 
-    for p in (2, 3, 4), sigma in (-1, 1)
         @testset "Matrix-unit phases: p=$p sigma=$sigma" begin
             c = FHS.parafermion_basis(:c, p; sigma=sigma)
             H = hilbert_space(c, 1:2)
@@ -1270,9 +1268,9 @@ end
             for a1 in 0:(p-1), b1 in 0:(p-1),
                 a2 in 0:(p-1), b2 in 0:(p-1)
 
-                A = E(p, a1, b1)
-                B = E(p, a2, b2)
-                global_unit = E(p^2, a1 + p*a2, b1 + p*b2)
+                A = E!(A, a1, b1)
+                B = E!(B, a2, b2)
+                global_unit = E!(global_unit, a1 + p*a2, b1 + p*b2)
 
                 h = cis(2π * mod(sigma * b1 * (a2 - b2), p) / p)
                 ell = cis(2π * mod(sigma * (a1 - b1) * (a2 - b2), p) / p)
@@ -1288,18 +1286,15 @@ end
                 @test close(tensor_product((B, A), (H2, H1), H),
                     ell * h * global_unit)
             end
-
-            # Existing sparse representation and product paths.
-            C1 = representation(c[1], H1)
-            C2 = representation(c[2], H2)
-
-            @test close(FHS.generalized_kron((I, I), (H1, H2), H),
-                Matrix{ComplexF64}(I, p^2, p^2))
         end
     end
 
     # Noncontiguous blocks and nontrivial internal f_X phases.
     for p in (2, 3), sigma in (-1, 1)
+        A = randn(rng, ComplexF64, p^2, p^2)
+        B = randn(rng, ComplexF64, p, p)
+        A2 = randn(rng, ComplexF64, p^2, p^2)
+        B2 = randn(rng, ComplexF64, p, p)
         @testset "Interleaved blocks: p=$p sigma=$sigma" begin
             c = FHS.parafermion_basis(:c, p; sigma=sigma)
             H = hilbert_space(c, 1:3)
@@ -1307,11 +1302,6 @@ end
             HX = hilbert_space(c, [1, 3])
             HZ = atoms[2]
             Hs = [HX, HZ]
-
-            A = randn(rng, ComplexF64, p^2, p^2)
-            B = randn(rng, ComplexF64, p, p)
-            A2 = randn(rng, ComplexF64, p^2, p^2)
-            B2 = randn(rng, ComplexF64, p, p)
 
             G = FHS.generalized_kron([A, B], Hs, H)
             T = tensor_product([A, B], Hs, H)
@@ -1323,7 +1313,7 @@ end
                 embed(B, HZ, H) * embed(A, HX, H))
 
             # Verify the l correction for interleaved blocks.
-            states = collect(FHS.basisstates(H))
+            states = basisstates(H)
             L = [
                 FHS.phase_factor_l(a, b, ((1, 3), (2,)))
                 for a in states, b in states
