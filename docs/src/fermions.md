@@ -11,12 +11,12 @@ Fermionic creation and annihilation operators ``c_i^\dagger, c_i`` satisfy the c
 ```math
 \{c_i, c_j^\dagger\} = \delta_{ij}, \quad \{c_i, c_j\} = 0, \quad \{c_i^\dagger, c_j^\dagger\} = 0.
 ```
-The Fock space is spanned by occupation number states ``\ket{n_1,\ldots,n_N}`` built by acting with ``c_i^\dagger`` on the vacuum, and is represented in this package as bitstrings of an integer (see `FockNumber` in [src/physics/fermions/fock.jl](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/blob/main/src/physics/fermions/fock.jl)).
+The Fock space is spanned by occupation number states ``\ket{n_1,\ldots,n_N}`` built by acting with ``c_i^\dagger`` on the vacuum, and is represented in this package as bitstrings of an integer.
 
 ### The fermionic tensor product
-Suppose we split the modes into two groups ``X`` and ``\bar X``, with Hilbert spaces ``\mathcal{H}_X`` and ``\mathcal{H}_{\bar X}``, and we want to embed local operators ``A`` on ``\mathcal{H}_X`` and ``B`` on ``\mathcal{H}_{\bar X}`` into the joint space ``\mathcal{H} = \mathcal{H}_X \otimes \mathcal{H}_{\bar X}``. The naive choice ``A \otimes \mathbb 1`` and ``\mathbb 1 \otimes B`` always *commutes*, ``(A \otimes \mathbb 1)(\mathbb 1 \otimes B) = (\mathbb 1 \otimes B)(A \otimes \mathbb 1)``, regardless of what ``A`` and ``B`` are. This is inconsistent with the CAR relations whenever ``A`` and ``B`` involve an odd number of fermionic operators (e.g. single creation/annihilation operators), which must instead *anticommute*.
+Suppose we split the modes into two groups ``X`` and ``\bar X``, with Hilbert spaces ``\mathcal{H}_X`` and ``\mathcal{H}_{\bar X}``, and we want to embed local operators ``A`` on ``\mathcal{H}_X`` and ``B`` on ``\mathcal{H}_{\bar X}`` into the joint space ``\mathcal{H} = \mathcal{H}_X \otimes \mathcal{H}_{\bar X}``. The naive choice ``A \otimes \mathbb 1`` and ``\mathbb 1 \otimes B`` always *commutes*, ``(A \otimes \mathbb 1)(\mathbb 1 \otimes B) = (\mathbb 1 \otimes B)(A \otimes \mathbb 1)``, regardless of what ``A`` and ``B`` are. This is inconsistent with the CAR relations whenever ``A`` and ``B``are fermionic.
 
-To embed an operator acting on mode ``i`` into a larger space consistently with the CAR, it must be dressed with a parity operator counting the fermions occupying the modes it is moved past, known as a Jordan-Wigner (JW) string. We refer to the tensor product that includes this JW string as a *fermionic tensor product* and denote it by ``\tilde{\otimes}``. We define the embedding of ``A`` into the joint space as ``E_{\mathcal{H}_X \rightarrow \mathcal{H}}[A] = A \tilde{\otimes} \mathbb 1`` and the code for it is `embed(A, HX => H)`.
+To embed a fermion into a larger space, it must be dressed with a parity operator counting the fermions occupying the modes it is moved past, known as a Jordan-Wigner (JW) string. We refer to the tensor product that includes this JW string as a *fermionic tensor product* and denote it by ``\tilde{\otimes}``. We define the embedding of ``A`` into the joint space as ``E_{\mathcal{H}_X \rightarrow \mathcal{H}}[A] = A \tilde{\otimes} \mathbb 1`` and the code for it is `embed(A, HX => H)`.
 
 !!! note 
     The tensor product depends on the arbitrary ordering of the fermionic modes. **In the special case** where the modes of ``X`` are all to the left of the modes in ``\bar X``, we have the relations 
@@ -30,7 +30,7 @@ We still have to define in what order ``A`` and ``B`` acts in the expression ``A
 1. decide based on the order we wrote them down, so that ``A \tilde{\otimes} B = - B \tilde{\otimes} A``. 
 2. decide based on the arbitrary fermionic mode ordering, in which case ``A \tilde{\otimes} B = B \tilde{\otimes} A``.
 
-In this package, the first choice is the canonical way and is used by `tensor_product`. This function uses the order in which the operators are passed to it explicitly such that ``tensor_product((A, B), (H_X, H_{\bar X}) => H)`` corresponds to the ordered product of embeddings ``A \tilde{\otimes} \mathbb 1) (\mathbb 1 \tilde{\otimes} B)``. The second choice is available with `generalized_kron`.
+In this package, the first choice is the canonical way and is used by `tensor_product`. This function uses the order in which the operators are passed to it explicitly such that `tensor_product((A, B), (HX, HXbar) => H)` corresponds to the ordered product of embeddings ``A \tilde{\otimes} \mathbb 1) (\mathbb 1 \tilde{\otimes} B)``. The second choice is available with `generalized_kron`.
 
 In this way, our function `tensor_product` is closely related to the `algebraic tensor product` of [[1]](#fermion_information_article).
 
