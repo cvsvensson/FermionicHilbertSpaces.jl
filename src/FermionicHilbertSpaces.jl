@@ -117,6 +117,7 @@ include("physics/fermions/bdg.jl")
 include("physics/bosons.jl")
 include("physics/spin.jl")
 include("physics/open_systems.jl")
+include("physics/parafermions.jl")
 include("symbolic_states.jl")
 
 include("printing.jl")
