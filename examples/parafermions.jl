@@ -1,379 +1,182 @@
-# # Boundary modes of an open Z_p parafermion chain
+# # Boundary modes of the Z_p parafermion chain
 #
+# In this example we study the Z_p parafermion chain (Fendley's chain), the
+# parafermionic generalisation of the Kitaev chain. We construct the Hamiltonian
+# symbolically, restrict to the Z_p charge sectors, solve for the p ground states
+# and characterise the locality of the many-body parafermion edge modes.
+#
+# As in the Kitaev tutorial, the edge modes are built *only* from the ground
+# states (there γ = o*e' + hc). For p > 2 the relative phases of the p ground
+# states matter; they are fixed by the locality criterion explained below.
 
 using FermionicHilbertSpaces
 import FermionicHilbertSpaces as FHS
-
-using LinearAlgebra
-using SparseArrays
-using Printf
-using Plots
+import FermionicHilbertSpaces: indices, sector, quantumnumbers
+using LinearAlgebra, Plots
 
 trace_norm(A) = sum(svdvals(Matrix(A)))
 
-# ---------------------------------------------------------------------
-# Model conventions
-#
-# Local clock operators:
-#
-#   X |n> = |n+1 mod p>
-#   Z |n> = ω^n |n>
-#   Z X = ω X Z
-#
-# Construct X from the nilpotent local Fock annihilator c:
-#
-#   X = c† + c^(p-1).
-#
-# With the extension's sigma convention, embedding X produces
-#
-#   α_j = (∏_{k<j} Z_k^sigma) X_j.
-#
-# Define its partner
-#
-#   β_j = κ α_j Z_j^sigma,
-#   κ   = exp[-iπ sigma (p-1)/p],
-#
-# so α_j^p = β_j^p = I.
-#
-# The open-chain Hamiltonian is
-#
-#   H = -J ∑_j (b β_j† α_{j+1} + h.c.)
-#       -h ∑_j (Z_j + Z_j†),
-#
-#   b = κ ω^(-sigma).
-#
-# In clock variables this is exactly
-#
-#   H = -J ∑_j (X_j† X_{j+1} + h.c.)
-#       -h ∑_j (Z_j + Z_j†).
-#
-# Thus the model is independent of the chosen braiding convention.
-# At h=0, α_1 and β_N commute exactly with H.
-#
-# The default p=3, h/J=0.18 lies near the ordered, parafermionic
-# topological limit. Do not assume an identical phase diagram for
-# arbitrary p or arbitrary additional interactions.
-# ---------------------------------------------------------------------
+# ## Parafermions and the on-site clock algebra
+p = 3
+N = 6
+J = 1.0
+ω = cis(2π / p)
 
-function build_parafermion_chain(;
-    p::Int=3,
-    N::Int=6,
-    sigma::Int=1,
-    J::Real=1.0,
-)
-    @assert p >= 2
-    @assert N >= 2
-    @assert sigma in (-1, 1)
-    @assert J > 0
+@parafermions p c
+Hfull = hilbert_space(c, 1:N)
+H = constrain_space(Hfull, FHS.SectorConstraint(FHS.parafermion_charge))
+Hmodes = [hilbert_space(c, j:j) for j in 1:N]
 
-    ω = cis(2π / p)
-    κ = cis(-π * sigma * (p - 1) / p)
-    bondphase = κ * ω^(-sigma)
+# On every site the nilpotent parafermion c_j generates the clock algebra
+#   X_j = c_j† + c_j^(p-1),   X|n> = |n+1>,
+#   Z_j = ω^(n_j),            Z X = ω X Z.
+# Embedded in the chain, X_j carries the parafermionic string, so X_j is the first
+# parafermion χ_{2j-1} of site j. The second one is χ_{2j} = Y_j = X_j Z_j^(-σ),
+# where X_i X_j = ω^σ X_j X_i (i < j) is the braiding convention of the package.
+X(j) = c[j]' + c[j]^(p - 1)
+Z(j) = I + (ω - 1) * sum(ω^(k - 1) * (c[j]')^k * c[j]^k for k in 1:p-1)
 
-    c = FHS.parafermion_basis(:c, p; sigma=sigma)
-    Hspace = hilbert_space(c, collect(1:N))
-    Hsites = [hilbert_space(c, [j]) for j in 1:N]
+X1, X2, Z1 = (representation(op, Hfull) for op in (X(1), X(2), Z(1)))
+@assert norm(Z1 * X1 - ω * X1 * Z1) < 1e-10                            # clock algebra
+σ = norm(X1 * X2 - ω * X2 * X1) < norm(X1 * X2 - conj(ω) * X2 * X1) ? 1 : -1
+@assert norm(X1 * X2 - ω^σ * X2 * X1) < 1e-10                          # braiding
+Y(j) = σ == 1 ? X(j) * Z(j)' : X(j) * Z(j)
 
-    D = Int(dim(Hspace))
-    identity_full = spdiagm(0 => ones(ComplexF64, D))
-    identity_local = Matrix{ComplexF64}(I, p, p)
+# The bond unitary B = Y_j† X_{j+1} obeys B^p = e^{iη}·1. Removing that phase gives
+# bond eigenvalues ω^k with a unique minimum of -(B + B†) at k = 0: the non-chiral
+# ferromagnet, whose h = 0 point is exactly solvable (all bonds commute).
+B = representation(Y(1)' * X(2), Hfull)
+η = angle(tr(B^p) / dim(Hfull))
+@assert norm(B^p - cis(η) * I) < 1e-10
+ϕ = cis(-η / p)
 
-    # Obtain the cyclic shift from the local Fock representation.
-    c_local = sparse(representation(c[1], Hsites[1]))
-    Xlocal = sparse(c_local' + c_local^(p - 1))
-    Zlocal = spdiagm(0 => ComplexF64[ω^n for n in 0:(p-1)])
+# ## Hamiltonian
+#   H = -J Σ_j (ϕ χ_{2j}† χ_{2j+1} + hc) - h Σ_j (χ_{2j-1}† χ_{2j} + hc),
+# the second sum being -h Σ_j (Z_j + Z_j†). At h = 0, χ_1 = X_1 and χ_{2N} = Y_N
+# commute with H exactly: perfectly localised edge modes.
+parafermion_chain(J, h) = -J * sum(ϕ * Y(j)' * X(j + 1) + hc for j in 1:N-1) -
+                          h * sum(X(j)' * Y(j) + hc for j in 1:N)
 
-    @assert isapprox(
-        Matrix(Xlocal^p), identity_local; atol=1e-11
-    )
-    @assert isapprox(
-        Zlocal * Xlocal, ω * Xlocal * Zlocal; atol=1e-11
-    )
-
-    # IMPORTANT: use the existing graded embedding.
-    # An ordinary Kronecker product would omit the strings.
-    α = [
-        sparse(FHS.embed(Xlocal, Hsites[j], Hspace))
-        for j in 1:N
-    ]
-    Z = [
-        sparse(FHS.embed(Zlocal, Hsites[j], Hspace))
-        for j in 1:N
-    ]
-
-    β = [
-        sparse(κ * α[j] * (sigma == 1 ? Z[j] : Z[j]'))
-        for j in 1:N
-    ]
-
-    for j in (1, N)
-        @assert isapprox(α[j]^p, identity_full; atol=1e-10)
-        @assert isapprox(β[j]^p, identity_full; atol=1e-10)
+# Model sanity check only; the edge operators are *not* used to build the modes.
+let H0 = representation(parafermion_chain(J, 0.0), Hfull)
+    for edge in (X(1), Y(N))
+        op = representation(edge, Hfull)
+        @assert norm(H0 * op - op * H0) < 1e-10
     end
-
-    Hbond = spzeros(ComplexF64, D, D)
-    for j in 1:(N-1)
-        term = bondphase * β[j]' * α[j+1]
-        Hbond -= J * (term + term')
-    end
-
-    Hfield = spzeros(ComplexF64, D, D)
-    for j in 1:N
-        Hfield -= Z[j] + Z[j]'
-    end
-
-    # Build charge-sector indices from the actual basis ordering.
-    # No parafermionic conservation-law wrapper is assumed here.
-    states = collect(FHS.basisstates(Hspace))
-    charges = [FHS.parafermion_charge(state) for state in states]
-    sector_indices = [
-        findall(==(q), charges) for q in 0:(p-1)
-    ]
-    Q = spdiagm(0 => ComplexF64[ω^q for q in charges])
-
-    # These assertions also catch inconsistent embedding phases.
-    scale = max(norm(Hbond), 1.0)
-    @assert norm(Hbond * α[1] - α[1] * Hbond) < 1e-10 * scale
-    @assert norm(Hbond * β[end] - β[end] * Hbond) < 1e-10 * scale
-
-    @assert norm(Q * α[1] - ω * α[1] * Q) < 1e-10 * sqrt(D)
-    @assert norm(Q * β[end] - ω * β[end] * Q) < 1e-10 * sqrt(D)
-
-    return (;
-        p, N, sigma, J, ω,
-        Hspace, Hsites, D,
-        Hbond, Hfield, Q, sector_indices,
-        left_seed=α[1],
-        right_seed=β[end],
-    )
 end
 
-# ---------------------------------------------------------------------
-# Lowest state in each Z_p charge sector
-#
-# We diagonalize each block separately and lift its ground state into
-# the full space, just as the Kitaev example does for parity sectors.
-#
-# At the default size the blocks are only 243 × 243.
-# ---------------------------------------------------------------------
+# ## Ground states, one per Z_p charge sector
+# States are labelled by their eigenvalue ω^q of Q = Π_j Z_j, so X_j, Y_j raise q by one.
+Qop = prod(representation(Z(j), H) for j in 1:N)
 
-function charge_ground_states(model, ham)
-    (; p, D, sector_indices) = model
-
-    energies = zeros(Float64, p)
-    next_energies = zeros(Float64, p)
-    G = zeros(ComplexF64, D, p)
-
-    for q in 0:(p-1)
-        inds = sector_indices[q+1]
-        block = Matrix(ham[inds, inds])
-        solution = eigen(Hermitian(block))
-
-        energies[q+1] = solution.values[1]
-        next_energies[q+1] = solution.values[2]
-        G[inds, q+1] = solution.vectors[:, 1]
+function ground_states(hsym)
+    states = map(quantumnumbers(H)) do qn
+        Hsec = sector(qn, H)
+        vals, vecs = eigen(Hermitian(Matrix(representation(hsym, Hsec))))
+        ψ = zeros(ComplexF64, dim(H))
+        ψ[indices(Hsec, H)] = vecs[:, 1]
+        q = mod(round(Int, angle(dot(ψ, Qop, ψ)) / (2π / p)), p)
+        (; q, energy=vals[1], gap=vals[2] - vals[1], ψ)
     end
-
-    @assert isapprox(G' * G, Matrix{ComplexF64}(I, p, p); atol=1e-10)
-
-    # Positive separation means the selected p states form the
-    # entire lowest band, below every other state.
-    bandwidth = maximum(energies) - minimum(energies)
-    separation = minimum(next_energies) - maximum(energies)
-
-    return (; G, energies, bandwidth, separation)
+    sort!(states; by=s -> s.q)
+    @assert [s.q for s in states] == 0:p-1
+    return states
 end
 
-# ---------------------------------------------------------------------
-# Ground-manifold boundary transitions
+# ## Edge modes from the ground states
 #
-# Let P = G G†. Define
+# A charge-raising operator acting inside the ground space is
+#     Γ = Σ_q c_q |q+1><q|          (q mod p),
+# the p = 2 case with c = (1, 1) being the Majorana o*e' + hc. Rephasing the states,
+# |q> → e^{iθ_q}|q>, maps c_q → c_q e^{i(θ_{q+1} - θ_q)}: the moduli |c_q| and the
+# holonomy Π_q c_q are the only gauge invariants, so choosing c *is* fixing the
+# relative phases of the ground states.
 #
-#   Γ_L = P α_1 P,
-#   Γ_R = P β_N P.
-#
-# Unlike constructing arbitrary sums |q+1><q|, this prescription is
-# independent of eigenvector phase choices and fixes the two boundary
-# transitions through their physical endpoint operators.
-#
-# No Hermitian conjugate is added: for p>2 these charged transitions
-# are not Majorana operators.
-# ---------------------------------------------------------------------
-
-function boundary_profile(model, G, energies, seed)
-    (; Hspace, Hsites, N) = model
-
-    small_operator = G' * seed * G
-    normalization = trace_norm(small_operator)
-
-    normalization > 1e-12 ||
-        error("The endpoint operator has negligible ground-band overlap.")
-
-    # Same trace norm as the full projected operator, because G is
-    # an isometry. Normalize so profiles are comparable.
-    Γ = G * small_operator * G' / normalization
-
-    reductions = [partial_trace(Γ, Hspace => Hsites[j]) for j in 1:N]
-    profile = trace_norm.(reductions)
-
-    # Exact commutator norm within the selected invariant band.
-    # At finite size it need not vanish because the sectors split.
-    E = Diagonal(energies)
-    commutator = norm(E * small_operator - small_operator * E) /
-        max(norm(small_operator), eps(Float64))
-
-    return (; profile, commutator)
+# We choose c by locality. Reductions are linear, R_j(Γ) = Σ_q c_q R_j(|q+1><q|),
+# so the operator weight of Γ on site j is a Hermitian form,
+#     ‖R_j(Γ)‖_F² = c† M_j c,   (M_j)_{qq'} = Tr[R_j(|q+1><q|)† R_j(|q'+1><q'|)].
+# The most localised left / right mode is the top eigenvector of M_1 / M_N.
+# Normalisation ‖c‖ = √p makes a unitary mode have |c_q| = 1; the overall phase is
+# fixed by Π_q c_q > 0 (Γ^p is then a positive multiple of the ground-space projector).
+function edge_modes(states)
+    G = hcat((s.ψ for s in states)...)                                  # columns |0>, …, |p-1>
+    T = [G[:, mod(q + 1, p) + 1] * G[:, q + 1]' for q in 0:p-1]        # |q+1><q|
+    R = [[partial_trace(Tq, H => Hmode) for Tq in T] for Hmode in Hmodes]   # R_j(|q+1><q|)
+    reduction(c, j) = sum(c[q+1] * R[j][q+1] for q in 0:p-1)            # R_j(Γ)
+    function most_localized(j)
+        M = Hermitian([tr(R[j][a]' * R[j][b]) for a in 1:p, b in 1:p])
+        c = eigen(M).vectors[:, end]
+        return sqrt(p) * cis(-angle(prod(c)) / p) * c
+    end
+    return (; G, cL=most_localized(1), cR=most_localized(N), reduction)
 end
 
-# ---------------------------------------------------------------------
-# Local distinguishability
-#
-# For each site j:
-#
-#   LD_j = max_{q<r} 1/2 ||ρ_q^(j) - ρ_r^(j)||_1.
-#
-# A small value means no single-site observable distinguishes the
-# different charge-sector ground states well.
-# ---------------------------------------------------------------------
-
-function local_distinguishability(model, G)
-    (; p, N, Hspace, Hsites) = model
-
-    reduced_states = [
-        Vector{Matrix{ComplexF64}}(undef, N) for _ in 1:p
-    ]
-
-    for q in 1:p
-        ψ = G[:, q]
-        for j in 1:N
-            reduced_states[q][j] = partial_trace(ψ, Hspace => Hsites[j])
-
-        end
+# ### Fixing the relative phases of the ground states
+# With Π_q c_q > 0 the recursion θ_{q+1} = θ_q - arg c_q closes around the Z_p cycle
+# and makes every c_q real and positive. In this gauge Γ_L = Σ_q |c_q| |q+1><q| is a
+# plain clock shift, |q+1> ∝ Γ_L |q>, the analogue of |o> = γ_L |e>.
+function fix_phases(G, c)
+    θ = zeros(p)
+    for q in 1:p-1
+        θ[q+1] = θ[q] - angle(c[q])
     end
-
-    LD = zeros(Float64, N)
-    for j in 1:N, q in 1:p, r in (q+1):p
-        LD[j] = max(LD[j],
-            trace_norm(reduced_states[q][j] - reduced_states[r][j]) / 2)
-    end
-
-    return LD
+    u = cis.(θ)
+    regauge(d) = [d[q+1] * u[mod(q + 1, p) + 1] * conj(u[q+1]) for q in 0:p-1]
+    return G * Diagonal(u), regauge
 end
 
-function analyze_boundary_modes(model; h::Real)
-    (; Hbond, Hfield, Q, left_seed, right_seed, J) = model
+function analyze(h)
+    states = ground_states(parafermion_chain(J, h))
+    (; G, cL, cR, reduction) = edge_modes(states)
+    Gfixed, regauge = fix_phases(G, cL)
+    cLf, cRf = regauge(cL), regauge(cR)
+    @assert all(x -> abs(imag(x)) < 1e-10 && real(x) > 0, cLf)
 
-    ham = Hbond + h * Hfield
-    scale = max(norm(ham), 1.0)
+    # Locality profiles, normalised so a perfectly localised unitary mode gives 1.
+    ΓL = [trace_norm(reduction(cL, j)) / p for j in 1:N]
+    ΓR = [trace_norm(reduction(cR, j)) / p for j in 1:N]
 
-    @assert norm(ham - ham') < 1e-11 * scale
-    @assert norm(ham * Q - Q * ham) < 1e-10 * scale
+    # Local distinguishability of the ground states, max_{q<r} ½‖ρ_q^(j) - ρ_r^(j)‖₁.
+    ρ = [[partial_trace(G[:, q] * G[:, q]', H => Hmode) for q in 1:p] for Hmode in Hmodes]
+    LD = [maximum(trace_norm(ρ[j][q] - ρ[j][r]) / 2 for q in 1:p for r in q+1:p) for j in 1:N]
 
-    ground = charge_ground_states(model, ham)
-    (; G, energies, bandwidth, separation) = ground
+    # Ground-space parafermion algebra: Γ_L Γ_R = ω^σ Γ_R Γ_L ⇔ all ratios below equal ω^σ.
+    braiding = [cL[mod(q + 1, p) + 1] * cR[q+1] / (cR[mod(q + 1, p) + 1] * cL[q+1]) for q in 0:p-1]
 
-    if separation <= 0
-        @warn "The selected charge-sector states are not an isolated lowest band." h separation
-    end
+    energies = [s.energy for s in states]
+    println("\nh/J = ", h / J)
+    println("  energies:                 ", energies)
+    println("  ground-band splitting:    ", maximum(energies) - minimum(energies))
+    println("  smallest gap in a sector: ", minimum(s.gap for s in states))
+    println("  |c_L| = ", round.(abs.(cL); digits=4), "  |c_R| = ", round.(abs.(cR); digits=4))
+    println("  c_R in the gauge where c_L > 0: ", round.(cRf; digits=4))
+    println("  braiding ratios: ", round.(braiding; digits=4), "  (ω^σ = ", round(ω^σ; digits=4), ")")
 
-    left = boundary_profile(model, G, energies, left_seed)
-    right = boundary_profile(model, G, energies, right_seed)
-    LD = local_distinguishability(model, G)
-
-    @printf("\nh/J = %.3f\n", h / J)
-    for q in 0:(model.p-1)
-        @printf("  E(q=%d) = %.12f\n", q, energies[q+1])
-    end
-    @printf("  Ground-band splitting:          %.4e\n", bandwidth)
-    @printf("  Separation above ground band:   %.4e\n", separation)
-    @printf("  Relative left commutator norm:  %.4e\n", left.commutator)
-    @printf("  Relative right commutator norm: %.4e\n", right.commutator)
-    @printf("  Maximum local distinguishability: %.4e\n", maximum(LD))
-
-    return (;
-        h, energies, bandwidth, separation,
-        left=left.profile,
-        right=right.profile,
-        LD,
-    )
+    return (; h, states, Gfixed, cL=cLf, cR=cRf, ΓL, ΓR, LD, braiding)
 end
 
-# ---------------------------------------------------------------------
-# Run at the exactly localized point and nearby in the same phase.
-# ---------------------------------------------------------------------
+# ## Run at the exactly solvable point and in the topological regime
+sweet = analyze(0.0);
+topological = analyze(0.18J);
 
-model = build_parafermion_chain(;
-    p=3,
-    N=6,
-    sigma=1,       # Also works with the conjugate convention sigma=-1.
-    J=1.0,
-)
-
-sweet = analyze_boundary_modes(model; h=0.0)
-topological = analyze_boundary_modes(model; h=0.18 * model.J)
-
-# At the exactly localized point:
-# - the left transition reduces only onto the first site;
-# - the right transition reduces only onto the last site;
-# - different ground states are locally indistinguishable.
-#
-# These checks are useful end-to-end tests of the complex phase hooks.
+# At h = 0 the left mode lives on site 1 only, the right mode on site N only, the
+# ground states are locally indistinguishable, and Γ_L, Γ_R braid like χ_1, χ_{2N}.
 tol = 1e-8
-@assert abs(sweet.left[1] - 1) < tol
-@assert maximum(sweet.left[2:end]) < tol
-@assert abs(sweet.right[end] - 1) < tol
-@assert maximum(sweet.right[1:(end-1)]) < tol
+@assert abs(sweet.ΓL[1] - 1) < tol && maximum(sweet.ΓL[2:end]) < tol
+@assert abs(sweet.ΓR[end] - 1) < tol && maximum(sweet.ΓR[1:end-1]) < tol
 @assert maximum(sweet.LD) < tol
+@assert maximum(abs.(sweet.braiding .- ω^σ)) < 1e-6
 
-# ---------------------------------------------------------------------
-# Plot, following the style of kitaev_chain.jl.
-# ---------------------------------------------------------------------
-
-function locality_panel(model, result; title)
-    sites = 1:model.N
-
-    fig = plot(
-        sites, result.left;
-        label="Left boundary transition",
-        xlabel="Site",
-        ylabel="Normalized reduction trace norm",
-        title=title,
-        frame=:box,
-        lw=3,
-        marker=:circle,
-        xticks=sites,
-        ylims=(-0.04, 1.08),
-        legend=:top,
-    )
-
-    plot!(
-        fig, sites, result.right;
-        label="Right boundary transition",
-        lw=3,
-        marker=:diamond,
-    )
-
-    plot!(
-        fig, sites, result.LD;
-        label="Local distinguishability",
-        lw=2,
-        marker=:square,
-        linestyle=:dash,
-    )
-
+# ## Plot
+function locality_panel(result; title)
+    lw, marker, markerstrokewidth = 3, true, 2
+    fig = plot(; xlabel="Site", title, frame=:box, xticks=1:N, ylims=(-0.05, 1.1), legend=:top)
+    plot!(fig, 1:N, result.ΓL; label="‖(Γ_L)ₙ‖", lw, marker, markerstrokewidth)
+    plot!(fig, 1:N, result.ΓR; label="‖(Γ_R)ₙ‖", lw, marker, markerstrokewidth)
+    plot!(fig, 1:N, result.LD; label="local distinguishability", lw, marker, markerstrokewidth, linestyle=:dash)
     return fig
 end
 
-fig = plot(
-    locality_panel(
-        model, sweet;
-        title="Exactly localized: h/J = 0",
-    ),
-    locality_panel(
-        model, topological;
-        title="Topological regime: h/J = 0.18",
-    );
-    layout=(1, 2),
-    size=(1100, 400),
-    margin=5Plots.mm,
-)
+plot(locality_panel(sweet; title="Exactly localised: h/J = 0"),
+     locality_panel(topological; title="Topological regime: h/J = 0.18");
+     layout=(1, 2), size=(1000, 380), margin=5Plots.mm)
