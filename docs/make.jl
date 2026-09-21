@@ -1,7 +1,8 @@
 # To build docs with LiveServer and avoid infinite loop with literate, run `servedocs(skip_dir = "docs/src/literate_output")`
 using FermionicHilbertSpaces
 using Documenter
-using Literate
+import DocumenterCodeBlocks
+import Literate
 
 DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilbertSpaces); recursive=true)
 
@@ -24,7 +25,7 @@ makedocs(;
         "Home" => "index.md",
         "Fermions" => "fermions.md",
         "Conserved quantities" => "conservation.md",
-        "Hilbert space and array operations" => "operations.md",
+        "Hilbert space and array operations" => "hilbert_space_operations.md",
         "Tutorials" => [
             "Bosons" => "literate_output/bose_hubbard.md",
             "Spins" => "literate_output/spin_chain.md",
@@ -42,6 +43,7 @@ makedocs(;
         "Misc" => "misc.md",
         "Functions" => "docstrings.md",
     ],
+    plugins=[DocumenterCodeBlocks.CodeBlocks()],
 )
 
 deploydocs(;

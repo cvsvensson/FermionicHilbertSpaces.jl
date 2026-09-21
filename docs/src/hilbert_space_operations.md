@@ -20,34 +20,23 @@ tensor_product(spaces...; constraint=NoSymmetry())
 tensor_product(spaces; constraint=NoSymmetry())
 ```
 
-Constructs the composite Hilbert space spanned by `spaces`. Spaces that share the
-same underlying mode (e.g. the same fermionic mode) are merged rather than
-duplicated, so `tensor_product` is safe to use even when the inputs overlap in
-their atomic factors.
+Constructs the composite Hilbert space spanned by `spaces`.
 
-```@example ops_tensorproduct
+```@example hilbert_space_ops
 using FermionicHilbertSpaces
 @fermions f
 H1 = hilbert_space(f, 1:2)
 H2 = hilbert_space(f, 3:4)
 H = tensor_product(H1, H2)
-dim(H)
 ```
 
 An optional `constraint` restricts the resulting space to a subset of basis
 states, or groups it into sectors — see [Constrained Hilbert spaces and conserved
-quantum numbers](conservation.md) for the available constraint types
-(`NumberConservation`, `ParityConservation`, custom constraints, ...).
+quantum numbers](conservation.md) for the available constraint types.
 
-```@example ops_tensorproduct
+```@example hilbert_space_ops
 Hn = tensor_product(H1, H2; constraint=NumberConservation(1))
-dim(Hn)
 ```
-
-!!! note
-    The order in which spaces are combined matters for fermionic systems: it fixes
-    the Jordan-Wigner mode ordering used by `embed`, `tensor_product` on arrays, and
-    `partial_trace`. See [Fermionic tensor products and partial traces](fermions.md).
 
 ### Extracting subsystems with `subregion`
 
@@ -60,9 +49,7 @@ in `Hs`. When `H` has a restricted set of basis states (e.g. from a constraint),
 the returned subregion only contains the fock states that are compatible with
 that restriction.
 
-```@example ops_subregion
-using FermionicHilbertSpaces
-@fermions f
+```@example hilbert_space_ops
 H = hilbert_space(f, 1:4, NumberConservation(1))
 Hsub = subregion(hilbert_space(f, 1:2), H)
 basisstates(Hsub)
@@ -71,11 +58,37 @@ basisstates(Hsub)
 Here the total particle number is fixed to 1, so the subregion on modes `1:2` has
 exactly three compatible states: `(1,0)`, `(0,1)`, and `(0,0)`.
 
+In some cases `subregion` can also be called with symbolic operators instead of Hilbert spaces
+```@example hilbert_space_ops
+Hsub = subregion([f[k] for k in 1:2], H)
+```
+
+In many cases one needs the complementary subsystem as well. It is available with `complementary_subsystem(H, Hsub)` (but unexported), which returns the subregion of `H` that is complementary to `Hsub`.
+```@example hilbert_space_ops
+FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
+basisstates(Hsub)
+```
+The complement is used when performing partial trace or embed, and it can be a useful optimization to precompute it and pass it explicitly in some cases.
+
 ### Decomposing a space into factors
 
-`factors(H)` and `groups(H)` return the composite spaces that make up a product
-space (for example the two `hilbert_space(f, 1:2)` and `hilbert_space(f, 3:4)`
-factors of `H` above). For an atomic (non-product) space, both return `(H,)`.
+`factors(H)` returns the composite spaces that make up a product space 
+```@example hilbert_space_ops
+@boson b 
+Hf = hilbert_space(f, 1:2, NumberConservation(1))
+Hb = hilbert_space(b, 5)
+Hfb = tensor_product(Hf, Hb)
+factors(Hfb)
+```
+Note that the fermionic space was kept intact! However, calling factors in the fermionic space directly will return the individual mode spaces
+```@example hilbert_space_ops
+factors(Hf)
+```
+
+`factors` splits the space one level, so spaces grouped together will be preserved (as of v0.10, only Fermions group together). To split it all the way down to the individual mode spaces, use 
+```@example hilbert_space_ops
+FermionicHilbertSpaces.atomic_factors(Hfb)
+```
 
 ### Sectors and quantum numbers
 
@@ -84,26 +97,28 @@ When a space is built with a constraint that groups states into sectors (such as
 can be inspected and navigated with:
 
 ```julia
-quantumnumbers(H)      # the quantum-number label of each sector
+quantumnumbers(H)       # the quantum-number label of each sector
 sectors(H)              # the sectors themselves, as Hilbert spaces
 sector(qn, H)           # the sector corresponding to a given quantum number
 indices(qn_or_Hsub, H)  # basis-state indices of a sector, in H's ordering
 ```
 
-```@example ops_sectors
-using FermionicHilbertSpaces
+```@example hilbert_space_ops
 @fermions f
 H = hilbert_space(f, 1:4, NumberConservation())
-collect(quantumnumbers(H))
+map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(H), sectors(H))
 ```
 
-```@example ops_sectors
-H1 = sector(1, H)
-basisstates(H1)
-```
-
-```@example ops_sectors
-indices(1, H) # same states, as indices into basisstates(H)
+This pattern is useful to calculate ground states in each sector and extend each vector to the full space
+```@example hilbert_space_ops
+using LinearAlgebra
+symham = sum(f[n]'f[n] for n in 1:4)
+stack(sectors(H)) do Hsec
+    ham = representation(symham, Hsec, :dense)
+    v = zeros(dim(H))
+    v[indices(Hsec, H)] = eigvecs(ham)[:, 1]
+    v
+end
 ```
 
 `indices` also accepts a sector Hilbert space instead of a quantum number, e.g.
@@ -138,8 +153,7 @@ embed(m, Hsub => H; complement=complementary_subsystem(H, Hsub), kwargs...)
 
 Embeds a matrix `m` acting on `Hsub` into the larger space `H`.
 
-```@example ops_embed
-using FermionicHilbertSpaces
+```@example hilbert_space_ops
 @fermions f
 H = hilbert_space(f, 1:4)
 Hsub = hilbert_space(f, [2, 4])
@@ -158,7 +172,7 @@ Computes the partial trace of `m` (a matrix on `H`, or a state vector which is
 first converted to a density matrix) down to `Hsub`. This is the adjoint
 operation of `embed`.
 
-```@example ops_embed
+```@example hilbert_space_ops
 Msub = partial_trace(M, H => Hsub)
 Msub ≈ m
 ```
@@ -169,7 +183,8 @@ on the sizes of `Hsub`, `H`, and the complementary subsystem, but you can force
 one with the `alg` keyword. The `skipmissing` keyword controls what happens when
 a combination of a substate and a complement state does not occur in `H` — this
 can happen for constrained spaces, and defaults to the safer choice for each
-algorithm.
+algorithm. But, SubsystemPartialTraceAlg may not detect missing states, and in cases 
+where the subsystem is inconsistent with the full space may silently give the wrong result.
 
 ### `tensor_product` and `generalized_kron` on arrays
 
@@ -184,16 +199,23 @@ order of `ms` is significant: `tensor_product((A, B), (HA, HB) => H)` correspond
 to `embed(A, HA=>H) * embed(B, HB=>H)`, so swapping `A` and `B` picks up a minus
 sign whenever both are fermionic and odd.
 
-```@example ops_tp_arrays
-using FermionicHilbertSpaces
+```@example hilbert_space_ops
 @fermions f
 H1 = hilbert_space(f, 1:1)
 H2 = hilbert_space(f, 2:3)
 H = tensor_product(H1, H2)
-v1 = representation(f[1], H1) * ones(dim(H1))
-v2 = representation(f[2], H2) * ones(dim(H2))
-v = tensor_product((v1, v2), (H1, H2) => H)
-length(v)
+f1 = representation(f[1], H1) 
+f2 = representation(f[2], H2)
+f12 = tensor_product((f1, f2), (H1, H2) => H)
+```
+It can be used for vectors as well to build a product state from its factors,
+but note that this is only well-defined for fermions if each state respects 
+super-selection: it must not be a superposition of states with different fermion parity.
+```@example hilbert_space_ops
+v1 = representation("0", H1)
+v2 = representation("10", H2)
+v12 = tensor_product((v1, v2), (H1, H2) => H)
+v12 ≈ representation("010", H)
 ```
 
 `generalized_kron(ms, Hs, H=tensor_product(Hs); kwargs...)` computes the same kind
@@ -209,20 +231,16 @@ H)`, returning a callable that can be applied to different collections of `ms`.
 with only a `Pair` of spaces, return callable operation objects (`PartialTraceMap`
 and `EmbedMap`) instead of immediately acting on a matrix:
 
-```@example ops_maps
-using FermionicHilbertSpaces, SparseArrays
+```@example hilbert_space_ops
 @fermions f
 H = hilbert_space(f, 1:4)
 Hsub = hilbert_space(f, [2, 4])
-pt = partial_trace(H => Hsub)
 emb = embed(Hsub => H)
-pt' == emb # partial_trace and embed are mutually adjoint
+pt = partial_trace(H => Hsub)
 ```
 
-These objects can be applied directly, `op(m)` or in-place `op(out, m)`, and
-converted to an explicit sparse matrix acting on vectorized inputs with
-`sparse(op)`. This is useful when the same embedding or partial trace is applied
-many times, e.g. when building Liouvillian superoperators.
+These objects can be applied directly, `op(m)` or in-place `op(out, m)`. 
+This is useful when the same embedding or partial trace is applied many times.
 
 ### `reshape`: splitting and combining array axes
 
@@ -241,15 +259,25 @@ Supported mapping forms:
 - `(H1, H2, ...) => (K1, K2, ...)`: repartition several axes into several
 - `H => H`: keep one axis unchanged
 
-Direct many-to-many mappings are equivalent to explicit combine-then-split
-composition:
-
-```julia
-reshape(A, (H1, H2) => (K1, K2))
-# equivalent to reshape(reshape(A, (H1, H2) => Hmid), Hmid => (K1, K2))
+The most common usage of this functionality is probably to convert density matrices
+between vectorized and matrix forms
+```@example hilbert_space_ops
+@fermions fl
+@fermions fr
+Hl = hilbert_space(fl, 1:1)
+Hr = hilbert_space(fr, 1:1)
+Hlr = tensor_product(Hl, Hr)
+vlr = representation("00", Hlr) + 2*representation("11", Hlr) 
+rho = reshape(vlr, Hlr => (Hl, Hr))
 ```
 
-where `Hmid` is the canonical combined space of the input tuple.
+This works with constraints as well
+```@example hilbert_space_ops
+Hlrconstrained = constrain_space(Hlr, NumberConservation([0, 1]))
+reshape(rho, (Hl, Hr) => Hlrconstrained)
+```
+In this case, note that one element was silently dropped as it is not in the output space.
+This is not checked.
 
 #### Multiple mappings
 
