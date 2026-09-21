@@ -1469,7 +1469,7 @@ end
             @test close(partial_trace(M', H, HX), reduced')
 
             # Identity normalization: trace is unnormalized.
-            @test close(partial_trace(I(D), H, HX), p * I(p^2))
+            @test close(partial_trace(1.0*I(D), H, HX), p * I(p^2))
 
             # Sequential traces, including an interleaved intermediate
             # subsystem and a retained rightmost mode.
