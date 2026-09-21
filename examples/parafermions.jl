@@ -132,15 +132,15 @@ function analyze(h)
     cLf, cRf = regauge(cL), regauge(cR)
     @assert all(x -> abs(imag(x)) < 1e-10 && real(x) > 0, cLf)
 
-    # Locality profiles, normalised so a perfectly localised unitary mode gives 1.
+    #Locality profiles, normalised so a perfectly localised unitary mode gives 1.
     ΓL = [trace_norm(reduction(cL, j)) / p for j in 1:N]
     ΓR = [trace_norm(reduction(cR, j)) / p for j in 1:N]
 
-    # Local distinguishability of the ground states, max_{q<r} ½‖ρ_q^(j) - ρ_r^(j)‖₁.
-    ρ = [[partial_trace(G[:, q] * G[:, q]', H => Hmode) for q in 1:p] for Hmode in Hmodes]
+    #Local distinguishability of the ground states, max_{q<r} ½‖ρ_q^(j) - ρ_r^(j)‖₁.
+    ρ = [[partial_trace(G[:, q], H => Hmode) for q in 1:p] for Hmode in Hmodes]
     LD = [maximum(trace_norm(ρ[j][q] - ρ[j][r]) / 2 for q in 1:p for r in q+1:p) for j in 1:N]
 
-    # Ground-space parafermion algebra: Γ_L Γ_R = ω^σ Γ_R Γ_L ⇔ all ratios below equal ω^σ.
+    #Ground-space parafermion algebra: Γ_L Γ_R = ω^σ Γ_R Γ_L ⇔ all ratios below equal ω^σ.
     braiding = [cL[mod(q + 1, p) + 1] * cR[q+1] / (cR[mod(q + 1, p) + 1] * cL[q+1]) for q in 0:p-1]
 
     energies = [s.energy for s in states]
