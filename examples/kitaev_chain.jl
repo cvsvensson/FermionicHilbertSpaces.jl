@@ -8,9 +8,9 @@
 # We start by importing the necessary packages.
 using FermionicHilbertSpaces
 using Arpack, LinearAlgebra, Plots
-# Symbolic fermions can be defined using the `@fermions` macro,
+# We define symbolic fermions using the `@fermions` macro, and a
+# Hilbert space with `N` sites and parity conservation.
 @fermions f
-# Then we define the Hilbert space with `N` sites and parity conservation.
 N = 12
 H = hilbert_space(f, 1:N, ParityConservation())
 
@@ -18,28 +18,26 @@ H = hilbert_space(f, 1:N, ParityConservation())
 # It is a function of the fermions `f` and parameters `N`, `μ`, `t`, `Δ`, and `U`,
 # representing the number of sites, chemical potential, hopping amplitude, pairing amplitude, and interaction strength, respectively.
 # Note the use of the Hermitian conjugate `hc`, which simplifies the expression for the Hamiltonian.
-kitaev_chain(f, N, μ, t, Δ, U) = sum(t * f[i]' * f[i+1] + hc for i in 1:N-1) +
-                                 sum(Δ * f[i] * f[i+1] + hc for i in 1:N-1) +
-                                 sum(U * f[i]' * f[i] * f[i+1]' * f[i+1] for i in 1:N-1) +
-                                 sum(μ[i] * f[i]' * f[i] for i in 1:N)
+kitaev_chain(f, N, μ, t, Δ, U) = sum(t * f[i]' * f[i+1] + hc for i in 1:(N-1)) +
+    sum(Δ * f[i] * f[i+1] + hc for i in 1:(N-1)) +
+    sum(U * f[i]' * f[i] * f[i+1]' * f[i+1] for i in 1:(N-1)) +
+    sum(μ[i] * f[i]' * f[i] for i in 1:N)
 
-# Define parameters close to the sweet spot with perfectly localized Majoranas.
+# Define parameters close to the sweet spot with perfectly localized Majoranas, and get the symbolic Hamiltonian.
 U = 4.0
 t = 1.0
 δΔ = 0.4
 Δ = t + U / 2 - δΔ # slightly detuned from the sweet spot
 μ = fill(-U / 2, N) # edge chemical potential
-μ[2:N-1] .= -U # bulk chemical potential
-
-# We can now construct the Hamiltonian using symbolic fermions for a symbolic representation
+μ[2:(N-1)] .= -U # bulk chemical potential
 hsym = kitaev_chain(f, N, μ, t, Δ, U)
-# To convert the symbolic Hamiltonian to a matrix representation, we can use the `representation` function.
+# To convert the symbolic Hamiltonian to a matrix representation, use the `representation` function.
 representation(hsym, H)
 
 
 # Now, let's diagonalize the system.
-# Since parity is conserved, we can work in the even and odd parity sectors separately. 
-import FermionicHilbertSpaces: indices, sector, quantumnumbers
+# Since parity is conserved, we work in the even and odd parity sectors separately. 
+using FermionicHilbertSpaces: indices, sector, quantumnumbers
 (Eo, o), (Ee, e) = map(quantumnumbers(H)) do parity
     Hsec = sector(parity, H)
     ham = representation(hsym, Hsec)
@@ -57,9 +55,9 @@ end
 using LowRankMatrices
 γ = LowRankMatrix(o, conj(e)) + hc
 γ̃ = 1im * LowRankMatrix(o, conj(e)) + hc
-δρ = LowRankMatrix(o, conj(o)) - LowRankMatrix(e, conj(e))
+δρ = LowRankMatrix(o, conj(o)) - LowRankMatrix(e, conj(e));
 
-# Now we can compute the reduction of the Majorana operators to each mode.
+# Now we can compute the reduction of the Majorana operators to each mode, and plot the results to visualize the localization of the Majorana modes.
 Hmodes = [hilbert_space(f, i:i) for i in 1:N]
 γR = [partial_trace(γ, H => Hmode) for Hmode in Hmodes];
 γ̃R = [partial_trace(γ̃, H => Hmode) for Hmode in Hmodes];
@@ -67,13 +65,10 @@ Hmodes = [hilbert_space(f, i:i) for i in 1:N]
 γ_reductions = [norm(svdvals(γ), 1) for γ in γR]
 γ̃_reductions = [norm(svdvals(γ̃), 1) for γ̃ in γ̃R]
 LD = [norm(svdvals(δρ), 1) for δρ in δρR]
-# We can plot the reductions to visualize the localization of the Majorana modes.
-##
-lw = 4
-legendfontsize = 15
-marker = true
-markerstrokewidth = 2
-plot(xlabel="Site", title="Majorana quality measures"; frame=:box, size=(500, 300), xticks=1:3:N, yscale=:identity, legendfontsize, ylims=(-1e-1, 2), legendposition=:top, labelfontsize=15)
-plot!(1:N, γ_reductions; label="‖γₙ‖", lw, legendfontsize, marker, markerstrokewidth)
-plot!(1:N, γ̃_reductions; label="‖γ̃ₙ‖", lw, legendfontsize, marker, markerstrokewidth)
-plot!(1:N, LD; label="‖(iγγ̃)ₙ‖", lw, legendfontsize, marker, markerstrokewidth)
+
+kwargs = (; lw=4, legendfontsize=15, marker=true, markerstrokewidth=2)
+plot(xlabel="Site", title="Majorana locality measures"; frame=:box, size=(500, 300),
+    xticks=1:3:N, yscale=:identity, ylims=(-0.1, 2.1), legendposition=:top, labelfontsize=15)
+plot!(1:N, γ_reductions; label="‖γₙ‖", kwargs...)
+plot!(1:N, γ̃_reductions; label="‖γ̃ₙ‖", kwargs...)
+plot!(1:N, LD; label="‖(iγγ̃)ₙ‖", kwargs...)
