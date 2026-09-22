@@ -18,7 +18,7 @@ The package helps with three general areas
 
 More concretely, with links to documentation and examples:
 * Fermions: [Theory on tensor products and partial traces](fermions.md). Example with [Kitaev chain](literate_output/kitaev_chain.md).
-* [Bosons tutorial](literate_output/bose_hubbard.md), [Spins tutorial](literate_output/spin_chain.md), [Mixed fermion-spin-boson systems](mixed_fermion_spin_boson.md)
+* [Bosons tutorial](literate_output/bosons.md), [Spins tutorial](literate_output/spin_chain.md), [Mixed fermion-spin-boson systems](mixed_fermion_spin_boson.md)
 * [Conserved quantities and constraints](conservation.md)
 * Examples for extending with a custom algebra: [Floquet](literate_output/floquet_tutorial.md), [Clock operators](literate_output/clock_operators.md)
 * Symbolic operators can act on [symbolic states](symbolic_states.md), so one can completely avoid instantiating large matrices.

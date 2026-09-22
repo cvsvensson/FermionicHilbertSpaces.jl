@@ -6,7 +6,7 @@ import Literate
 
 DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilbertSpaces); recursive=true)
 
-literate_files = ["examples/kitaev_chain.jl", "examples/free_fermions.jl", "examples/floquet_tutorial.jl", "examples/open_system_lindblad.jl", "examples/spin_chain.jl", "examples/bose_hubbard.jl", "examples/clock_operators.jl"]
+literate_files = ["examples/kitaev_chain.jl", "examples/free_fermions.jl", "examples/floquet_tutorial.jl", "examples/open_system_lindblad.jl", "examples/spin_chain.jl", "examples/bosons.jl", "examples/clock_operators.jl"]
 output_directory = "docs/src/literate_output"
 for file in literate_files
     Literate.markdown(file, output_directory; documenter=true, execute=false)
@@ -27,7 +27,7 @@ makedocs(;
         "Conserved quantities" => "conservation.md",
         "Hilbert space and array operations" => "hilbert_space_operations.md",
         "Tutorials" => [
-            "Bosons" => "literate_output/bose_hubbard.md",
+            "Bosons" => "literate_output/bosons.md",
             "Spins" => "literate_output/spin_chain.md",
             "Custom algebra: Floquet" => "literate_output/floquet_tutorial.md",
             "Open systems" => "literate_output/open_system_lindblad.md",
