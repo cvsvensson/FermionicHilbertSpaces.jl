@@ -25,13 +25,13 @@ H_spin = hilbert_space(S)
 H_boson = hilbert_space(a, 4)  # Truncated boson with 4 levels
 spaces = [H_up, H_down, H_spin, H_boson]
 
-Q = FilterConstraint(iszero ∘ sum,
-    [state -> 1//2 * particle_number(state),
+Q = FilterConstraint(iszero ∘ sum;
+    maps = [state -> 1//2 * particle_number(state),
     state -> -1//2 * particle_number(state),
     state -> state.m,
     state -> particle_number(state)],
     spaces)
-Nf = NumberConservation(1, [H_up, H_down])
+Nf = NumberConservation(1; spaces = [H_up, H_down])
 H = tensor_product(spaces; constraint = Q * Nf)
 basisstates(H)
 ```
@@ -53,7 +53,6 @@ ham = ω*a'*a + Δf*sz + ΔS*S[:z] + J*s'*S[:] +
 Now compute the reduced density matrices and the mutual information between different subsystem pairs.
 
 ```@example mixed_fermion_spin_boson
-rho = ψ*ψ'
 entropy(rho) = sum(-p * log(p) for p in eigvals(rho) if p > 1e-12)
 function mutual_info(rho, HA, HB, H)
     HAB = tensor_product(HA, HB)
@@ -65,7 +64,7 @@ end
 
 H_fermions = tensor_product(H_up, H_down; constraint = NumberConservation(1))
 subsystems = [(H_fermions, H_spin), (H_fermions, H_boson), (H_spin, H_boson)]
-[mutual_info(rho, HA, HB, H) for (HA, HB) in subsystems]
+[mutual_info(ψ, HA, HB, H) for (HA, HB) in subsystems]
 ```
 
 This yields the mutual information for the three subsystem pairs.

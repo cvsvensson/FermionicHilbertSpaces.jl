@@ -21,10 +21,10 @@ As well as some types to help with constructing custom constraints:
 One can also combine constraints by taking products.
 
 ### NumberConservation and ParityConservation
-- `NumberConservation(total=missing, subspaces=missing, weights=missing)`:
+- `NumberConservation(total=missing; spaces=missing, weights=missing)`:
     Conserves a (possibly weighted) particle number.
     - `total` can be a single integer or a collection of allowed values.
-    - `subspaces` can restrict the count to selected subspaces (or modes).
+    - `spaces` can restrict the count to selected spaces (or modes).
     - `weights` lets each selected subspace contribute with a different integer weight.
     Examples: `NumberConservation()`, `NumberConservation(2)`, `NumberConservation(0:1, Hup)`, `NumberConservation(-1:1, [Hl, Hr], [1, -1])`.
 
@@ -40,12 +40,12 @@ Hb = hilbert_space(b, 10)
 H = tensor_product(Hf, Hb; constraint = NumberConservation(0:1, [Hf,Hb] , [1,-1])) # the number of fermions in Hf minus the number of bosons in Hb must be 0 or 1
 basisstates(H)
 ```
-- `ParityConservation(parities=[-1, 1], subspaces=missing)`:
+- `ParityConservation(parities=[-1, 1], spaces=missing)`:
     Conserves fermionic parity.
     - Allowed parities are `-1` (odd) and `1` (even).
     - `ParityConservation()` keeps both sectors (odd first, then even).
     - `ParityConservation([1])` or `ParityConservation(1)` keeps only even parity.
-    - `subspaces` lets you enforce parity on a specific part of a tensor-product space.
+    - `spaces` lets you enforce parity on a specific part of a tensor-product space.
 
 ```@example constraints 
 constrain_space(H, ParityConservation(1, [Hb])) # keep only even parity of the bosonic part
@@ -55,7 +55,7 @@ constrain_space(H, ParityConservation(1, [Hb])) # keep only even parity of the b
 - `FilterConstraint(...)`:
     A flexible filtering constraint.
     - `FilterConstraint(reducer)` applies `reducer(state)` and keeps states where it returns `true`.
-    - `FilterConstraint(subspaces, subspace_functions, reducer)` first applies the subspace_functions to the states in each subspace, then passes them to the `reducer` function.
+    - `FilterConstraint(reducer; spaces, maps)` first applies the `maps` to the states in each subspace of `spaces`, then passes them to the `reducer` function. `maps` can be a list of function or a single function to be applied to all subspaces. The `reducer` should return `true` for states that are kept, and `false` for states that are discarded.
     Use this for custom selection rules that are easiest to express as a boolean test on complete states.
 
 - `SectorConstraint(...)`:
@@ -68,12 +68,12 @@ constrain_space(H, ParityConservation(1, [Hb])) # keep only even parity of the b
 @bosons b
 H = hilbert_space(b, 1:2, 3)
 using FermionicHilbertSpaces: FilterConstraint, SectorConstraint, particle_number
-constraint = FilterConstraint(issorted, particle_number, factors(H))
+constraint = FilterConstraint(issorted; maps = particle_number, spaces = factors(H))
 basisstates(constrain_space(H, constraint)) # keep only states with sorted particle numbers
 ```
 
 ```@example constraints
-constraint = SectorConstraint(numbers -> issorted(numbers) ? first(numbers) : missing,  particle_number, factors(H)) #  keep only states with sorted particle numbers, organize them into sectors according to the number of particles in the first mode
+constraint = SectorConstraint(numbers -> issorted(numbers) ? first(numbers) : missing; maps = particle_number, spaces = factors(H)) #  keep only states with sorted particle numbers, organize them into sectors according to the number of particles in the first mode
 constrain_space(H, constraint).qn_to_states
 ```
 
@@ -154,7 +154,7 @@ ham = representation(symham, H)
 #### No double occupation
 When the onsite Coulomb interaction is very strong, there is a large energy penalty for double occupation of a site. In that case, we can restrict the Hilbert space to not allow double occupation of any site. Consider the site `k`, which has two labels `(k, :↑)` and `(k, :↓)`. We can use `number_conservation(0:1, label -> label[1] == k)` which says that the sum of occupation numbers of all labels where the first element of the label equals `k` is contained in the set `0:1`. To impose this for all sites, we take the product over all sites.
 ```@example hubbard
-no_double_occ = prod(NumberConservation(0:1, [f[(k, :↑)], f[(k, :↓)]]) for k in 1:N)
+no_double_occ = prod(NumberConservation(0:1; spaces = [f[(k, :↑)], f[(k, :↓)]]) for k in 1:N)
 H_ndo = constrain_space(H, no_double_occ)
 ```
 This quantum number is a product of number conservations, so the sector is constructed without enumerating the full Hilbert space.

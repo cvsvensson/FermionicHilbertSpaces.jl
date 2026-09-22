@@ -14,7 +14,7 @@ Hs = hilbert_space(S, 1:N, 1 // 2)
 Ha = hilbert_space(a, 10)
 H = tensor_product(Hs, Ha)
 spin_parity(p) = (-1)^(Int(N // 2 + sum(s -> s.m, p.states)))
-constraint = FilterConstraint([Ha, Hs], [parity, spin_parity], ==(1) ∘ prod)
+constraint = FilterConstraint(==(1) ∘ prod; spaces=[Ha, Hs], maps=[parity, spin_parity])
 H = tensor_product(Hs, Ha; constraint=constraint)
 H2 = constrain_space(tensor_product(Hs, Ha), constraint)
 H == H2

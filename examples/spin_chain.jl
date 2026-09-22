@@ -43,7 +43,8 @@ ham = sum(S[k][:]'S[k+1][:] for k in 1:(N-1))
 M = representation(ham, H)
 
 # We can exploit the fact that this hamiltonian conserves the total magnetization by
-constraint = FermionicHilbertSpaces.AdditiveConstraint(1, s -> s.m)
+using FermionicHilbertSpaces: AdditiveConstraint
+constraint = AdditiveConstraint(1; maps=s -> s.m)
 H = hilbert_space(S, 1:N, constraint)
 M = representation(ham, H)
 
@@ -63,7 +64,7 @@ ham = sum(S[i][op] * S[j][op] for i in 1:N, j in 1:N, op in (:x, :y, :z))
 
 # `AdditiveConstraint` restricts the Hilbert space to states where the sum of a
 # per-site quantity, here the magnetization `s.m`, equals a fixed value.
-constraint = FermionicHilbertSpaces.AdditiveConstraint(1, s -> s.m)
+constraint = AdditiveConstraint(1; maps=s -> s.m)
 H = hilbert_space(S, 1:N, J, constraint)
 
 
@@ -103,7 +104,7 @@ P' * M * P
 # Let's find the ground state energies in each block of total spin, magnetization and permutation symmetry sector
 magnetizations = (-N*J):(N*J)
 energies = mapreduce(vcat, magnetizations) do m
-    magcons = FermionicHilbertSpaces.AdditiveConstraint(m, s -> s.m)
+    magcons = AdditiveConstraint(m; maps=s -> s.m)
     H = hilbert_space(S, 1:N, J, magcons)
     total_spin_mat = representation(total_spin_op, H)
     ham_mat = representation(ham, H)

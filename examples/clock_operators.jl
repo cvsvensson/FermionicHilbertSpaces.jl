@@ -57,9 +57,9 @@ clock_hamiltonian(J, h) = -J * sum(X(i)' * X(i + 1) + hc for i in 1:(L-1)) - h *
 # Define a constraint and a function which divides the hilbert space up into sectors.
 function clock_sectors(H)
     constraint = SectorConstraint(
-        values -> mod(sum(values), D),  # sum the values mod D where
-        state -> state.n,               # the values are the local clock values
-        factors(H)                      # of each factor of the hilbert space
+        values -> mod(sum(values), D);  # sum the values mod D where
+        maps = state -> state.n,        # the values are the local clock values
+        spaces = factors(H)             # of each factor of the hilbert space
     )
     return constrain_space(H, constraint)
 end

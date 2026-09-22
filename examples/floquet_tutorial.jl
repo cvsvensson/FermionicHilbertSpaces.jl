@@ -167,7 +167,7 @@ representation(F, Hfloq; projection=true) # we need projection=true because we'v
 using FermionicHilbertSpaces: SectorConstraint
 @spin σ
 Hspin = hilbert_space(σ, 1)
-floquet_sectors = SectorConstraint(only, s -> s.mode, [Hfloq])
+floquet_sectors = SectorConstraint(only; maps=s -> s.mode, spaces=[Hfloq])
 H = tensor_product((Hspin, Hfloq); constraint=floquet_sectors)
 
 # Floquet operators can be used together with spin operators to build the Floquet Hamiltonian (since we used @commutative to declare that they commute):
