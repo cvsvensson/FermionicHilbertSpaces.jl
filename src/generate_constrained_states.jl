@@ -25,7 +25,8 @@ branch_constraint(constraint::BranchConstraint, space) = constraint
 """
     valid_branch(constraint, partial_state, remaining_spaces) -> Bool
     
-    Return `true` if the branch should be explored, `false` to prune. By default this calls `constraint.f(partial_state, remaining_spaces)`.
+    Return `true` if the branch should be explored, `false` to prune. 
+    By default this calls `constraint.f(partial_state, remaining_spaces)`.
 """
 valid_branch(constraint::BranchConstraint, partial_state, depth, spaces) = constraint.f(partial_state, depth, spaces)
 valid_branch(constraint::ProductConstraint, partial_state, depth, spaces) = all(Iterators.map(c -> valid_branch(c, partial_state, depth, spaces), constraint.constraints))
