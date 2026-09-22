@@ -10,7 +10,7 @@ using LinearAlgebra
 # ## Spin algebra
 # Declare a spin mode and index into to get symbolic spin operators
 @spin S
-S[:x] * S[:y] - S[:y] * S[:x] == 1im * S[:z]
+S[:x] * S[:y] - S[:y] * S[:x] == 1im * S[:z]; #true
 
 # Allowed operator arguments are the spin components `:x`, `:y`, `:z` and the ladder operators `:+`, `:-`, and identity :I. There are operator aliases, so e.g. `S[1] == S[:x] == S[:X]`. The spin basis defined here has no fixed spin value. We can define an operator with a specific total spin which has more algebraic structure.
 @spin Shalf 1//2
@@ -26,10 +26,8 @@ Hhalf = hilbert_space(Shalf)
 Hone = hilbert_space(Sone)
 Hten = hilbert_space(S, 10)
 
-# When dealing with multiple spins it is convenient to define a spin field as
+# When dealing with multiple spins it is convenient to define a spin field which gives spin basis when indexing
 @spins S
-
-# which gives spin basis when indexing
 S[1][:+] # spin + operator on the site labeled 1
 
 # A hilbert space for this field is obtained by hilbert_space(S, labels, spin)
