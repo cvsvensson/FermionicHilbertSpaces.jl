@@ -178,7 +178,7 @@ function tjz(c, N,t,Jz)
     -t*sum(c[i,σ]'c[i+1,σ] + hc for σ in spins for i in 1:N-1) + Jz*sum(Sz(i)Sz(i+1) for i in 1:N-1)
 end
 ```
-To construct the hilbert space in a specific sector, we need to go beyond simple particle number constraints. Each sector is defined by a spin ordering, e.g. '[:↑, :↑, :↓, :↑, :↓]'. Each state in this sector has three spin up electrons occupied, two spin down electrons occupied, and they come in that specific order with possible holes between them. 
+To construct the hilbert space in a specific sector, we need to go beyond simple particle number constraints. Each sector is defined by a spin ordering, e.g. `[:↑, :↑, :↓, :↑, :↓]`. Each state in this sector has three spin up electrons occupied, two spin down electrons occupied, and they come in that specific order with possible holes between them. 
 
 This package can help construct these small sectors while avoiding the exponentially large hilbert space, by 
 ```@example hubbard
@@ -209,7 +209,7 @@ N = 16
 labels = [(i, s) for i in 1:N for s in (:↑,:↓)]
 Hfull = hilbert_space(f,  labels)
 ```
-This space is too large to deal with directly, but we can constrain it to the sector with spin order '[:↑, :↑, :↓, :↑, :↓]' as
+This space is too large to deal with directly, but we can constrain it to the sector with spin order `[:↑, :↑, :↓, :↑, :↓]` as
 ```@example hubbard
 Hfrac = hilbert_space(f, labels, spin_order_constraint([:↑, :↑, :↓, :↑, :↓]))
 ```

@@ -23,7 +23,7 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-        "Fermions" => "fermions.md",
+        "Fermionic tensor products and partial traces" => "fermions.md",
         "Constrained Hilbert spaces and conserved quantum numbers" => "conservation.md",
         "Hilbert space and array operations" => "hilbert_space_operations.md",
         "Tutorials" => [

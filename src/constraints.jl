@@ -144,7 +144,8 @@ supply_missing_constraint_info(constraint::AdditiveConstraint{<:Any,Missing}, sp
 supply_missing_constraint_info(constraint::AdditiveConstraint, space, spaces) = constraint
 
 """
-    NumberConservation(total=missing, spaces=missing, weights=missing)
+    NumberConservation(allowed, spaces, weights)
+    NumberConservation(allowed=missing; spaces=missing, weights=missing)
 
 Constraint enforcing conservation of a (possibly weighted) particle number.
 `total` can be a single value or collection of allowed values.
