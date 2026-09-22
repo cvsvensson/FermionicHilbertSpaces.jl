@@ -24,7 +24,7 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "Fermions" => "fermions.md",
-        "Conserved quantities" => "conservation.md",
+        "Constrained Hilbert spaces and conserved quantum numbers" => "conservation.md",
         "Hilbert space and array operations" => "hilbert_space_operations.md",
         "Tutorials" => [
             "Bosons" => "literate_output/bosons.md",

@@ -77,7 +77,7 @@ constraint = SectorConstraint(numbers -> issorted(numbers) ? first(numbers) : mi
 constrain_space(H, constraint).qn_to_states
 ```
 
-### Product
+### Product constraints
 
 Constraints can be combined by multiplying them:
 ```@example constraints
@@ -85,6 +85,7 @@ Hs = [hilbert_space(f,2k-1:2k) for k in 1:3]
 constraint = prod(NumberConservation(0:1, H) for H in Hs) * NumberConservation(2) # each mode can be occupied by at most one fermion, and the total number of fermions must be 2
 H = tensor_product(Hs; constraint)
 ```
+This constraint is a product of 4 constraints, and the quantum numbers of the resulting space keep track of the quantum numbers of each.
 
 ### BranchConstraint
 - `BranchConstraint(f)`:
@@ -96,29 +97,26 @@ H = tensor_product(Hs; constraint)
 
 ## Examples
 
-### Spin
-This package does not know anything about spin, but one can treat spin just as an extra label as follows:
+### Spinful fermions
+This package does not special case spinful fermions, but one can treat spin just as an extra label. Suppose that the number of spin up and spin down fermions are separately conserved. Let's define a Hilbert space for 4 spin up and 4 spin down fermions, and then divide it into sectors of different numbers of spin up and spin down fermions.
 ```@example spin
 using FermionicHilbertSpaces
 @fermions f
 Hup = hilbert_space(f, [(i, :↑) for i in 1:4])
 Hdn = hilbert_space(f, [(i, :↓) for i in 1:4])
 H = tensor_product(Hup, Hdn)
-```
-If spin is conserved, one can use 
-```@example spin
 Hsectors = constrain_space(H, NumberConservation(Hup)*NumberConservation(Hdn))
 ```
-to sort states according to the number of fermions with spin up and down. However, this package can't help to sort states into sectors with different total angular momentum, because that requires taking superpositions of different fock states.
-
-To pick out the sector with 2 fermions with spin up and 0 fermions with spin down, one can extract it from the hilbert space defined above using `sector` as
+This space has 25 different sectors. To pick out the sector with 2 fermions with spin up and 0 fermions with spin down, one can extract it from the hilbert space defined above using `sector` as
 ```@example spin
 sector([2,0], Hsectors)
 ```
 or more efficiently by only constructing that specific sector in the first place
 ```@example spin
-constrain_space(H, NumberConservation(2, Hup)*NumberConservation(0, Hdn))
+constraint = NumberConservation(2, Hup)*NumberConservation(0, Hdn)
+constrain_space(H, constraint)
 ```
+or even more efficiently by doing it at the time of constructing the tensor product with `tensor_product(Hup, Hdn; constraint)`.
 
 ### Hubbard model
 For N fermions, the full hilbert space is exponentially large in N. However, due to conservation laws, we may be interested in only a small subspace. If you use a quantum number which consists of only products of number conservations, this package attempts to find the subspaces without enumerating the full hilbert space.
@@ -132,7 +130,8 @@ which conserves the number of spin up and spin down fermions separately. Let's d
 using FermionicHilbertSpaces
 function hubbard_hamiltonian(c, N, t, U)
     spins = (:↑,:↓)
-    sum(-t * c[i,σ]' * c[i+1,σ] + hc for σ in spins for i in 1:N-1) + sum(U * c[i,:↑]'c[i,:↑] * c[i,:↓]'c[i,:↓] for i in 1:N)
+    sum(-t * c[i,σ]' * c[i+1,σ] + hc for σ in spins for i in 1:N-1) + 
+    sum(U * c[i,:↑]'c[i,:↑] * c[i,:↓]'c[i,:↓] for i in 1:N)
 end
 ```
 Let's find the matrix representation of the hamiltonian in the sector with `N_up` spin up fermions and `N_down` spin down fermions. To find this subspace we do
@@ -145,16 +144,17 @@ Hup = hilbert_space(f, [(i, :↑) for i in 1:N], NumberConservation(Nup))
 Hdn = hilbert_space(f, [(i, :↓) for i in 1:N], NumberConservation(Ndn))
 H = tensor_product(Hup, Hdn)
 ```
-The full hilbert space is of size `4^20 ≈ 10^12`, but the sector with 2 spin up and 1 spin down fermion is only of size `3800` and is generated without constructing the full hilbert space. Finally, we can get the matrix representation of the hamiltonian in this sector as
+The full hilbert space is of size `4^20 ≈ 10^12`, but the sector with 2 spin up and 1 spin down fermion is only of size `3800` and is generated without constructing the full hilbert space. We can get the matrix representation of the hamiltonian in this sector as
 ```@example hubbard
 symham = hubbard_hamiltonian(f, N, 1.0, 4.0)
 ham = representation(symham, H)
 ```
 
 #### No double occupation
-When the onsite Coulomb interaction is very strong, there is a large energy penalty for double occupation of a site. In that case, we can restrict the Hilbert space to not allow double occupation of any site. Consider the site `k`, which has two labels `(k, :↑)` and `(k, :↓)`. We can use `number_conservation(0:1, label -> label[1] == k)` which says that the sum of occupation numbers of all labels where the first element of the label equals `k` is contained in the set `0:1`. To impose this for all sites, we take the product over all sites.
+When the onsite Coulomb interaction is very strong, there is a large energy penalty for double occupation of a site. In that case, we can restrict the Hilbert space to not allow double occupation of any site. Consider the site `k`, which has two labels `(k, :↑)` and `(k, :↓)`. We can use `NumberConservation(0:1, [f[(k, :↑)], f[(k, :↓)]])`. To impose this for all sites, we take the product over all sites.
 ```@example hubbard
-no_double_occ = prod(NumberConservation(0:1; spaces = [f[(k, :↑)], f[(k, :↓)]]) for k in 1:N)
+local_modes(k) = [f[k, :↑], f[k, :↓]]
+no_double_occ = prod(NumberConservation(0:1, local_modes(k)) for k in 1:N)
 H_ndo = constrain_space(H, no_double_occ)
 ```
 This quantum number is a product of number conservations, so the sector is constructed without enumerating the full Hilbert space.
@@ -213,7 +213,7 @@ This space is too large to deal with directly, but we can constrain it to the se
 ```@example hubbard
 Hfrac = hilbert_space(f, labels, spin_order_constraint([:↑, :↑, :↓, :↑, :↓]))
 ```
-which has only dimension 4368. We can then construct hamiltonian in this sector by
+which has only dimension 4368. We can then construct the hamiltonian in this sector by
 ```@example hubbard
 symham = tjz(f, N, 1, 1/4)
 ham = representation(symham, Hfrac; projection = true)
