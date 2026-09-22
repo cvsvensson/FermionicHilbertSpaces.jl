@@ -92,7 +92,7 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothi
     else
         accum
     end
-
+    
     if normalize
         tr2 = sum(abs2, P)
         tr1 = tr(P)
@@ -125,7 +125,12 @@ function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
     length(perms) == length(weights) || throw(ArgumentError("Generated weights must match generated permutations"))
     P = permutation_projector(H, Hs, perms, weights, T; kwargs...)
-    rank = round(Int, real(tr(P)))
+    trP = tr(P)
+    rank = try
+        Int(trP) 
+    catch e
+        round(Int, real(trP))
+    end
     _remove_columns!(P, orth_method, rank)
 end
 _resolve_sector_permutations_and_weights(Hs, (perms, weights), T) = (perms, weights) # for direct input of perms and weights
@@ -163,7 +168,7 @@ end
     using FermionicHilbertSpaces: permutation_operator, permutation_projector, symmetric_sector
     using Combinatorics: permutations
 
-    permutation_sign(perm) = isodd(sum(perm[i] > perm[j] for i in 1:length(perm)-1 for j in i+1:length(perm))) ? -1.0 : 1.0
+    permutation_sign(perm) = isodd(sum(perm[i] > perm[j] for i in 1:(length(perm)-1) for j in (i+1):length(perm))) ? -1.0 : 1.0
 
     @fermions f
     H1 = hilbert_space(f, 1:1)
