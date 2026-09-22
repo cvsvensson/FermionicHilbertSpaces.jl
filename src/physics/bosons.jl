@@ -244,15 +244,15 @@ end
         a[n, n+1] = sqrt(n)
     end
 
-    ma = matrix_representation(b, H)
-    madag = matrix_representation(b', H)
+    ma = representation(b, H)
+    madag = representation(b', H)
 
     @test ma isa SparseMatrixCSC
     @test madag isa SparseMatrixCSC
     @test ma == a
     @test madag == a'
-    @test matrix_representation(b, H) == ma
-    @test madag * ma + 1im * I ≈ matrix_representation(b' * b + 1im, H)
+    @test representation(b, H) == ma
+    @test madag * ma + 1im * I ≈ representation(b' * b + 1im, H)
 end
 
 @testitem "Boson product spaces and number conservation" begin
@@ -280,7 +280,7 @@ end
     H = constrain_space(Hfull, NumberConservation(total_particles))
     @test dim(H) == constrained_boson_dim(N, max_occupancy, total_particles)
     Nop = sum(b[i]' * b[i] for i in 1:N)
-    @test norm(matrix_representation(Nop, H) - total_particles * I(dim(H))) < 1e-10
+    @test norm(representation(Nop, H) - total_particles * I(dim(H))) < 1e-10
 end
 
 @testitem "Fermion-spin-boson mixed spaces" begin
@@ -298,11 +298,11 @@ end
     f_expr = f[1]' * f[1] + 0.5 * (f[1] + f[1]') + 1
     s_expr = S[:z] + 0.5 * (S[:x] + S[:y]) + 1
     b_expr = b' * b + 0.5 * (b + b') + 1
-    fmat = matrix_representation(f_expr, Hf)
-    smat = matrix_representation(s_expr, Hs)
-    bmat = matrix_representation(b_expr, Hb)
+    fmat = representation(f_expr, Hf)
+    smat = representation(s_expr, Hs)
+    bmat = representation(b_expr, Hb)
     op = f_expr * s_expr * b_expr
-    mop = matrix_representation(op, H)
+    mop = representation(op, H)
     expected = kron(reverse([fmat, smat, bmat])...)
     @test mop ≈ expected
 

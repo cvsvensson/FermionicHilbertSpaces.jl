@@ -7,7 +7,7 @@ using LinearAlgebra, Plots
 Ha = hilbert_space(a, 8)
 Hf = hilbert_space(f, [(j, σ) for j in 1:2 for σ in [:↑, :↓]], NumberConservation(1))
 H = tensor_product(Hf, Ha)
-n_photon = matrix_representation(a'a, H)
+n_photon = representation(a'a, H)
 n_f(j, σ) = f[j, σ]'f[j, σ]
 
 h_dqd(; δϵ, t, α, U, B) = sum(δϵ * (n_f(1, σ) - n_f(2, σ)) for σ in [:↑, :↓]) +
@@ -29,7 +29,7 @@ fix_params = (; ωr, t, α, U, B, g)
 
 function cavity_dqd_eigensystem(; ωr, δϵ, t, α, U, B, g)
     Hsym = h_cavity_dqd(; ωr, δϵ, t, α, U, B, g)
-    M = matrix_representation(Hsym, H)
+    M = representation(Hsym, H)
     vals, vecs = eigen(Hermitian(Matrix(M)))
     return vals, vecs
 end

@@ -52,7 +52,7 @@ for k in 1:N
     global lindbladian_sym += dissipator(jump_op)
 end
 
-lindbladian_mat = matrix_representation(lindbladian_sym, Hopen)
+lindbladian_mat = representation(lindbladian_sym, Hopen)
 
 ρ0 = ψ0 * ψ0'
 ρ0_vec = reshape(ρ0, (Hleft, Hright) => Hopen)

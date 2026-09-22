@@ -128,11 +128,12 @@ end
 
     # Now with subregions and weights
     Hnumber = hilbert_space(f, 1:N, NumberConservation(1:2, [f[1], f[2]], [1, -1]))
-    filter_constraint = FilterConstraint(in(-(1:2)) ∘ only ∘ diff ∘ collect, particle_number, [f[1], f[2]])
+    filter_constraint = FilterConstraint(in(-(1:2)) ∘ only ∘ diff ∘ collect; maps=particle_number, spaces=[f[1], f[2]])
     sector_constraint = SectorConstraint(ns -> begin
-            n1, n2 = collect(ns)
-            n1 - n2 in 1:2 ? n1 - n2 : missing
-        end, [particle_number, particle_number], [f[1], f[2]])
+        n1, n2 = collect(ns)
+        n1 - n2 in 1:2 ? n1 - n2 : missing
+    end; maps=[particle_number, particle_number],
+        spaces=[f[1], f[2]])
     Hfrom_tensor = tensor_product(Hs, constraint=filter_constraint)
     Hfrom_constrain = constrain_space(H, filter_constraint)
     Hfrom_tensor_sector = tensor_product(Hs, constraint=sector_constraint)
@@ -154,7 +155,7 @@ mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
     @fermions f
     H = hilbert_space(f, 1:N)
     sym = sum(f[k]' * f[k] for k in 1:N)
-    m = matrix_representation(sym, H)
+    m = representation(sym, H)
     @test dim(H) == 2^N
     @test size(m) == (2^N, 2^N)
 
@@ -163,7 +164,7 @@ mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
     Hc2 = tensor_product(H.modes; constraint=NumberConservation(1))
     @test Set(basisstates(Hc)) == Set(basisstates(Hc2))
     @test dim(Hc) == N
-    mc = matrix_representation(sym, Hc)
+    mc = representation(sym, Hc)
     @test size(mc) == (N, N)
 
     @test m == numberoperator(H)

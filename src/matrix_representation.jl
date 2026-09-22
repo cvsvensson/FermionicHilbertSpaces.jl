@@ -356,6 +356,8 @@ size(M) == (dim(H), dim(H))
 ```
 """
 function matrix_representation(op, space::AbstractHilbertSpace, type=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
+    type === :dense && return Matrix(matrix_representation(
+        op, space, :sparse; projection, chunking, kwargs...))
     repr = _canonicalize_repr(type)
     if trivial_operator(op)
         return get_trivial_op_coeff(op) * I(dim(space))
@@ -466,8 +468,11 @@ end
     Md = matrix_representation(op, Hf, :dense)
     Ms = matrix_representation(op, Hf)
     Ml = concretize(matrix_representation(op, Hf, :lazy))
+    @test Md isa Matrix
+    @test Md == Matrix(Ms)
     @test Md == Ms
     @test Md == Ml
+    Md_single = Md
 
     Hs = hilbert_space(s)
     Hprod = tensor_product(Hf, Hs)
@@ -475,8 +480,18 @@ end
     Md = matrix_representation(op_prod, Hprod, :dense)
     Ms = matrix_representation(op_prod, Hprod)
     Ml = concretize(matrix_representation(op_prod, Hprod, :lazy))
+    @test Md isa Matrix
+    @test Md == Matrix(Ms)
     @test Md == Ms
     @test Md == Ml
+
+    trivial = matrix_representation(2, Hf, :dense)
+    @test trivial isa Matrix
+    @test trivial == Matrix(2I, dim(Hf), dim(Hf))
+
+    direct_dense = matrix_representation(op, Hf, FermionicHilbertSpaces.EagerDenseRepr())
+    @test direct_dense isa Matrix
+    @test direct_dense == Md_single
 end
 
 @testitem "Scheduler extension correctness" begin

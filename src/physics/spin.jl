@@ -535,7 +535,7 @@ end
 @testitem "Spin matrix reps" begin
     @spin s
     H = hilbert_space(s, 1 // 2)
-    S_mat = Dict(sym => matrix_representation(s[sym], H) for sym in (:x, :y, :z, :+, :-))
+    S_mat = Dict(sym => representation(s[sym], H) for sym in (:x, :y, :z, :+, :-))
     @test S_mat[:+] == [0 0; 1 0]
     @test S_mat[:-] == [0 1; 0 0]
     @test S_mat[:z] == [-1//2 0; 0 1//2]
@@ -551,7 +551,7 @@ end
         @test iszero(s[:+]^Int(2J + 1))
         @test iszero(s[:-]^Int(2J + 1))
         syms = (:+, :-, :z, :x, :y, :I)
-        smat = Dict([sym => matrix_representation(s[sym], H) for sym in syms])
-        @test all(smat[sym1] * smat[sym2] ≈ matrix_representation(s[sym1] * s[sym2], H) for sym1 in syms for sym2 in syms)
+        smat = Dict([sym => representation(s[sym], H) for sym in syms])
+        @test all(smat[sym1] * smat[sym2] ≈ representation(s[sym1] * s[sym2], H) for sym1 in syms for sym2 in syms)
     end
 end

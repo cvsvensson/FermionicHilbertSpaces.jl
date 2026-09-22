@@ -53,9 +53,9 @@ add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag)
     vg = Kets(H1)
     opg = vg(:a) * vg(:b)'
     op = opg * (f[1]' * f[1])
-    M = matrix_representation(op, Hmixed)
-    Mexpected = embed(matrix_representation(opg, H1), H1 => Hmixed) *
-                embed(matrix_representation(f[1]' * f[1], Hf), Hf => Hmixed)
+    M = representation(op, Hmixed)
+    Mexpected = embed(representation(opg, H1), H1 => Hmixed) *
+                embed(representation(f[1]' * f[1], Hf), Hf => Hmixed)
     @test M == Mexpected
 end
 
