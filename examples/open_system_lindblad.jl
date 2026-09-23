@@ -39,7 +39,7 @@ iszero(L_mat' * Ivec)
 v = rand(dim(Hlr))
 reshape(v, Hlr => (Hl, Hr))
 
-# ## Lindblad example
+# ## Example: Lindblad 
 
 # We study a **single fermionic level** at energy ``\varepsilon`` coupled to a
 # Markovian reservoir, with incoherent gain/loss rates:
@@ -59,10 +59,10 @@ using FermionicHilbertSpaces, LinearAlgebra
 γ_in = 0.3
 γ_out = 0.7
 
-# ## Step 1: Build the open-system Hilbert space
+# ### Build the Hilbert space and matrices
 @fermions c
 Hlr, Hl, Hr, left, right = open_system(c, 1:1)
-ham_sym = ε * c[1]' * c[1]
+ham_sym = ε * c[1]'c[1]
 L_in = √γ_in * c[1]'
 L_out = exp(rand() * 2pi * im) * √γ_out * c[1]
 
@@ -73,7 +73,7 @@ lindbladian = 1im * (left(ham_sym) - right(ham_sym)) + dissipator(L_in) + dissip
 mat = representation(lindbladian, Hlr)
 Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
 iszero(mat' * Ivec)
-# ## Solve for the steady state
+# ### Solve for the steady state
 # The steady state is the eigenvector of `mat` with eigenvalue closest to zero.
 vals, vecs = eigen(Matrix(mat); sortby=abs)
 v = vecs[:, 1]
@@ -89,7 +89,7 @@ n_ss = Ivec' * n_matlr * v / (Ivec' * v)
 n_analytical = γ_in / (γ_in + γ_out)
 println("Steady-state occupation ⟨n⟩_ss = $n_ss  (analytic: $n_analytical)")
 
-# ## Use a conserved quantity for block structure
+# ### Use a conserved quantity for block structure
 
 # For this model, while there are particles jumping in and out of the system,
 # the difference in particle number between the left and right space is conserved.
