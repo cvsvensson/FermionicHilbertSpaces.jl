@@ -35,6 +35,7 @@ makedocs(;
             "Symbolic states" => "symbolic_states.md",
             "Custom operators: Clock" => "literate_output/clock_operators.md",
             "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
+            "Spatial symmetries" => "dihedral_symmetry.md",
         ],
         "Non-interacting systems" => [
             "Non-interacting hilbert spaces" => "non_interacting.md",

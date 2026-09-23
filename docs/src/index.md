@@ -22,7 +22,7 @@ More concretely, with links to documentation and examples:
 * [Conserved quantities and constraints](conservation.md)
 * Examples for extending with a custom algebra: [Floquet](literate_output/floquet_tutorial.md), [Clock operators](literate_output/clock_operators.md)
 * Symbolic operators can act on [symbolic states](symbolic_states.md), so one can completely avoid instantiating large matrices.
-* Symmetries such as translation symmetry and permutation symmetry can be handled with ...
+* Dealing with [spatial symmetries](dihedral_symmetry.md) such as translations. 
 * [Open systems](literate_output/open_system_lindblad.md) are represented by a tensor product of two copies of the hilbert space. With `reshape` you can convert between vectorized and matrix representations.
 
 # Introduction
