@@ -9,6 +9,7 @@ benchmark/Manifest*.toml
 /docs/Manifest*.toml
 /benchmark/Manifest*.toml
 /examples/Manifest*.toml
+/examples/heom/Manifest*.toml
 /test/Manifest*.toml
 /docs/build/
 /docs/src/literate_output/*

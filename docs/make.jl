@@ -37,8 +37,8 @@ makedocs(;
             "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
         ],
         "Non-interacting systems" => [
-            "non_interacting.md" => "Non-interacting hilbert spaces",
-            "literate_output/free_fermions.md" => "Example: Free fermions"],
+            "Non-interacting hilbert spaces" => "non_interacting.md",
+            "Example: Free fermions" => "literate_output/free_fermions.md"],
         "Misc" => "misc.md",
         "Functions" => "docstrings.md",
     ],
