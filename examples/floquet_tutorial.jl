@@ -224,8 +224,7 @@ for (i, A) in enumerate(A_values)
     end
 end
 
-# ## Plots
-# Each line traces one Floquet eigenstate as the drive amplitude grows. The grey dashed lines mark the Brillouin zone boundaries at ``\pm\tfrac{\omega}{2}``. We plot the central three zones. We plot the quasienergies, <σz> and entanglement between spin and Floquet spaces as a function of drive amplitude.
+# Let's plot the results. Each line traces one Floquet eigenstate and we plot the quasienergies, <σz> and entanglement between spin and Floquet spaces as a function of drive amplitude.
 using Plots
 floquet_zone_inds = reduce(vcat, [indices(n, H) for n in -1:1]) # Get the zone indices of zones with floquet numbers -1 to 1.
 p1 = plot(xlabel="Drive amplitude  A/ω", title="Quasienergy spectrum",

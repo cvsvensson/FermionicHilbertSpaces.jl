@@ -22,7 +22,7 @@ More concretely, with links to documentation and examples:
 * [Conserved quantities and constraints](conservation.md)
 * Examples for extending with a custom algebra: [Floquet](literate_output/floquet_tutorial.md), [Clock operators](literate_output/clock_operators.md)
 * Symbolic operators can act on [symbolic states](symbolic_states.md), so one can completely avoid instantiating large matrices.
-* Symmetries such as translation symmetry and permutation symmetry can be handled with ...
+* Dealing with [spatial symmetries](dihedral_symmetry.md) such as translations. 
 * [Open systems](literate_output/open_system_lindblad.md) are represented by a tensor product of two copies of the hilbert space. With `reshape` you can convert between vectorized and matrix representations.
 
 # Introduction
@@ -69,14 +69,13 @@ representation(ham, sector(3, H))
 We can restrict the sectors from the outset, which is useful if the full space is too large. For example, let's take the 0, 1 and 2 particle sectors of a 100-mode system
 ```@example intro
 H = hilbert_space(c, 1:100, NumberConservation([0,1,2]))
-representation(sum(c[k]'c[k] for k in 1:100), H)
 ```
 The function `subregion` gives a hilbert space for a subregion, including only those states which are substates of the full space
 ```@example intro
 Hsub = subregion([c[k] for k in 1:2:100], H)
 ```
 and we can split it into sectors with definite particle numbers with
-```julia
+```@example intro
 constrain_space(Hsub, NumberConservation())
 ```
 

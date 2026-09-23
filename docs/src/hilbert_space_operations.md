@@ -111,14 +111,16 @@ map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(H), sectors(H))
 
 This pattern is useful to calculate ground states in each sector and extend each vector to the full space
 ```@example hilbert_space_ops
-using LinearAlgebra
+using LinearAlgebra, SparseArrays
 symham = sum(f[n]'f[n] for n in 1:4)
-stack(sectors(H)) do Hsec
+ground_states = stack(sectors(H)) do Hsec
     ham = representation(symham, Hsec, :dense)
     v = zeros(dim(H))
     v[indices(Hsec, H)] = eigvecs(ham)[:, 1]
     v
 end
+# Let's project the full hamiltonian onto the ground states
+ground_states' * representation(symham, H) * ground_states 
 ```
 
 `indices` also accepts a sector Hilbert space instead of a quantum number, e.g.
@@ -159,7 +161,6 @@ H = hilbert_space(f, 1:4)
 Hsub = hilbert_space(f, [2, 4])
 m = representation(f[2]' * f[4], Hsub)
 M = embed(m, Hsub => H)
-size(M)
 ```
 
 ### `partial_trace`: reducing to a subsystem
@@ -174,7 +175,6 @@ operation of `embed`.
 
 ```@example hilbert_space_ops
 Msub = partial_trace(M, H => Hsub)
-Msub ≈ m
 ```
 
 Two algorithms are available, `SubsystemPartialTraceAlg` and
@@ -215,7 +215,6 @@ super-selection: it must not be a superposition of states with different fermion
 v1 = representation("0", H1)
 v2 = representation("10", H2)
 v12 = tensor_product((v1, v2), (H1, H2) => H)
-v12 ≈ representation("010", H)
 ```
 
 `generalized_kron(ms, Hs, H=tensor_product(Hs); kwargs...)` computes the same kind
