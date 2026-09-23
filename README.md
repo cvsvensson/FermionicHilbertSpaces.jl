@@ -45,7 +45,7 @@ This hamiltonian conserves the number of fermions, which we can exploit. Let's s
 
 ````julia
 Hcons = hilbert_space(f, 1:4, NumberConservation(3))
-Hsubcons = subregion(Hsub, Hcons) # Include only substates consistent with Hcons.
+Hsubcons = subregion(Hsub, Hcons) # Include only substates consistent with Hcons
 Ψcons = eigvecs(representation(sym_ham, Hcons, :dense))[:, 1]
 ρsub = partial_trace(Ψcons, Hcons => Hsubcons)
 sum(-λ * log(λ) for λ in eigvals(ρsub))

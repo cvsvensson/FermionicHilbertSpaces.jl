@@ -46,24 +46,16 @@ mat = representation(ham, H)
 ```
 
 ## Tensor product and partial trace
-You can take tensor products of Hilbert spaces and operators on them, as well as calculate partial traces in a way that is consistent with fermionic anticommutation relations, see [Fermions](fermions.md). 
+You can take tensor products of Hilbert spaces and operators on them, as well as calculate partial traces in a way that is consistent with fermionic anticommutation relations, see [Fermions](fermions.md). In this example, we take the ground state of the hamiltonian above, calculate reduced density matrices and the uncorrelated state $\rho_A \otimes \rho_B$.
 ```@example intro
-H1 = hilbert_space(c, 1:2)
-H2 = hilbert_space(c, 3:4)
-H = tensor_product(H1, H2)
-c1 = representation(c[1], H1)
-c3 = representation(c[3], H2)
-c1c3 = representation(c[1] * c[3], H)
-# Use embed to embed operators into a larger space
-embed(c1, H1 => H) * embed(c3, H2 => H) ≈ c1c3 #true 
-# Or call tensor_product to combine operators from different spaces
-tensor_product((c1, c3), (H1, H2) => H) ≈ c1c3 
+Ψ = eigvecs(Matrix(mat))[:, 1] 
+HA = hilbert_space(c, labels[1:2])
+HB = hilbert_space(c, labels[3:4]) 
+ρA = partial_trace(Ψ, H => HA)
+ρB = partial_trace(Ψ, H => HB)
+ρAB = tensor_product((ρA, ρB), (HA, HB) => H)
 ```
-Let's partial trace to sites 1 and 3. Let's get a Hilbert space for those sites by using the function `subregion`, and then we can partial trace to that space with `partial_trace`.
-```@example intro
-Hsub = subregion([c[1], c[3]], H)
-dim(Hsub) / dim(H) * partial_trace(c1c3, H => Hsub) ≈ representation(c[1] * c[3], Hsub)
-```
+These patterns works for all spaces, subregions and constraints, with automatic handling of fermionic signs.
 
 ## Conserved quantum numbers
 Hilbert spaces can be constrained with custom constraints, see [Conserved quantites](conservation.md), which is useful when dealing with conservation laws. Particle number conservation is built into the package. Defining
@@ -79,19 +71,11 @@ We can restrict the sectors from the outset, which is useful if the full space i
 H = hilbert_space(c, 1:100, NumberConservation([0,1,2]))
 representation(sum(c[k]'c[k] for k in 1:100), H)
 ```
-
-
-Sectors and constraints are respected in tensor products and subregions.
+The function `subregion` gives a hilbert space for a subregion, including only those states which are substates of the full space
 ```@example intro
-H1 = hilbert_space(c, 1:10, NumberConservation([0,1]))
-H2 = hilbert_space(c, 11:15, NumberConservation([3]))
-H12 = tensor_product(H1, H2)
+Hsub = subregion([c[k] for k in 1:2:100], H)
 ```
-We see that the tensor product keeps track of the sectors of each factor. Let's take the subregion of modes 9-12. The function `subregion` finds the allowed states
-```@example intro
-Hsub = subregion([c[k] for k in 9:12], H12)
-```
-and we can sort it into sectors with definite particle numbers with
+and we can split it into sectors with definite particle numbers with
 ```julia
 constrain_space(Hsub, NumberConservation())
 ```
