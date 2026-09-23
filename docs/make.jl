@@ -26,20 +26,19 @@ makedocs(;
         "Fermionic tensor products and partial traces" => "fermions.md",
         "Constrained Hilbert spaces and conserved quantum numbers" => "conservation.md",
         "Hilbert space and array operations" => "hilbert_space_operations.md",
-        "Tutorials" => [
+        "Tutorials and examples" => [
+            "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
             "Bosons" => "literate_output/bosons.md",
             "Spins" => "literate_output/spin_chain.md",
-            "Custom algebra: Floquet" => "literate_output/floquet_tutorial.md",
+            "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md",
             "Open systems" => "literate_output/open_system_lindblad.md",
             "Symbolic states" => "symbolic_states.md",
-            "Non interacting systems" => "non_interacting.md",
+            "Custom operators: Clock" => "literate_output/clock_operators.md",
+            "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
         ],
-        "Examples" => [
-            "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
-            "Free fermions" => "literate_output/free_fermions.md",
-            "Clock operators" => "literate_output/clock_operators.md",
-            "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md"
-        ],
+        "Non-interacting systems" => [
+            "non_interacting.md" => "Non-interacting hilbert spaces",
+            "literate_output/free_fermions.md" => "Example: Free fermions"],
         "Misc" => "misc.md",
         "Functions" => "docstrings.md",
     ],

@@ -14,9 +14,9 @@ Hlr, Hl, Hr, left, right = open_system(c, 1:1)
 # i.e. `A` acts on `Hr` before `B` does. This choice is natural when working with density matrices as
 # in an expression like
 # ```math
-# \rho * A * B,
+# A \rho B C,
 # ```
-# A acts before B.
+# B acts before C, while A commutes with both.
 
 # The left and right spaces each have a symbolic basis associated to them, which are tagged 
 # copies of the original `c` basis. The `left` and `right` functions map symbolic expressions 

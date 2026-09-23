@@ -37,7 +37,7 @@ Hf = hilbert_space(f, 1:3, NumberConservation(2)) # Single sector with 2 particl
 ```@example constraints 
 @boson b
 Hb = hilbert_space(b, 10)
-H = tensor_product(Hf, Hb; constraint = NumberConservation(0:1, [Hf,Hb] , [1,-1])) # the number of fermions in Hf minus the number of bosons in Hb must be 0 or 1
+H = tensor_product(Hf, Hb; constraint = NumberConservation(0:1, [Hf,Hb], [1,-1])) # the number of fermions in Hf minus the number of bosons in Hb must be 0 or 1
 basisstates(H)
 ```
 - `ParityConservation(parities=[-1, 1], spaces=missing)`:
@@ -64,17 +64,21 @@ constrain_space(H, ParityConservation(1, [Hb])) # keep only even parity of the b
     - States with the same returned key are collected into the same sector.
     Use this when you want an explicit block structure from a custom rule.
 
+Let's use a `FilterConstraint` to keep only states where the particle numbers are sorted in ascending order. We can use `particle_number` to get the particle number of each subspace, and then check if they are sorted.
 ```@example constraints
 @bosons b
 H = hilbert_space(b, 1:2, 3)
 using FermionicHilbertSpaces: FilterConstraint, SectorConstraint, particle_number
 constraint = FilterConstraint(issorted; maps = particle_number, spaces = factors(H))
-basisstates(constrain_space(H, constraint)) # keep only states with sorted particle numbers
+basisstates(constrain_space(H, constraint)) 
 ```
 
+With `SectorConstraint`, we can filter and group states into sectors at the same time. For example, let's keep only states where the particle numbers are all different, and group them into sectors by the total particle numbers.
 ```@example constraints
-constraint = SectorConstraint(numbers -> issorted(numbers) ? first(numbers) : missing; maps = particle_number, spaces = factors(H)) #  keep only states with sorted particle numbers, organize them into sectors according to the number of particles in the first mode
-constrain_space(H, constraint).qn_to_states
+constraint = SectorConstraint(numbers -> allunique(numbers) ? sum(numbers) : missing;
+    maps=particle_number, spaces=factors(H))
+Hcons = constrain_space(H, constraint)
+map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(Hcons), sectors(Hcons))
 ```
 
 ### Product constraints
@@ -162,7 +166,7 @@ This quantum number is a product of number conservations, so the sector is const
 The matrix representation of the hamiltonian in this sector can be constructed as before, but now we need to specify `projection = true` as the symbolic hamiltonian maps states in the subspace to states outside the subspace. The keyword `projection = true` says to ignore those terms.
 ```@example hubbard
 symham = hubbard_hamiltonian(f, N, 1, 0)
-ham_ndo = representation(symham, H_ndo; projection = true)
+ham_ndo = representation(symham, H_ndo; projection = true);
 ```
 
 ### Fractionalized hilbert space with BranchConstraint
@@ -216,7 +220,7 @@ Hfrac = hilbert_space(f, labels, spin_order_constraint([:↑, :↑, :↓, :↑, 
 which has only dimension 4368. We can then construct the hamiltonian in this sector by
 ```@example hubbard
 symham = tjz(f, N, 1, 1/4)
-ham = representation(symham, Hfrac; projection = true)
+ham = representation(symham, Hfrac; projection = true);
 ```
 We can use `subregion` to find the hilbert space of a subsystem, taking into account the constraint. The full hilbert space of the left half of the system is
 ```@example hubbard
