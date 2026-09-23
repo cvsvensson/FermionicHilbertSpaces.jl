@@ -1,3 +1,4 @@
+# This is largely LLM generated.
 export @parafermions
 
 # =====================================================================
@@ -43,7 +44,7 @@ function _pf_root(::Val{P}, exponent::Integer) where P
     iseven(P) && k == P ÷ 2 && return ComplexF64(-1)
     P % 4 == 0 && k == P ÷ 4 && return ComplexF64(0, 1)
     P % 4 == 0 && k == 3 * (P ÷ 4) && return ComplexF64(0, -1)
-    cis(2π * (k / P))
+    cispi(2k / P)
 end
 
 _pf_addmod(e, x, P) = Int(mod(e + x, P))
@@ -53,6 +54,29 @@ function default_parafock_representation(P::Int, N::Int)
     N >= 0 || throw(ArgumentError("Negative number of modes"))
     big(P)^N - 1 <= typemax(UInt64) ? UInt64 : BigInt
 end
+
+# Convert, failing with a clear message instead of wrapping or InexactError.
+function _pf_convert_checked(::Type{I}, x::Integer, what) where {I<:Integer}
+    I === BigInt || x <= typemax(I) ||
+        throw(ArgumentError("$what does not fit in the storage type $I"))
+    convert(I, x)
+end
+
+# First n base-P digits of f (little-endian). Digits beyond the stored
+# value are zero. No powers are formed, so nothing can overflow.
+function _pf_decode(f::Integer, ::Val{P}, n::Integer) where P
+    n >= 0 || throw(ArgumentError("Negative number of modes"))
+    ds = zeros(Int, n)
+    x = f
+    i = 1
+    while i <= n && !iszero(x)
+        x, r = divrem(x, P)
+        ds[i] = Int(r)
+        i += 1
+    end
+    ds
+end
+
 
 # =====================================================================
 # Fock states
@@ -68,10 +92,17 @@ struct ParaFockNumber{P,S,I<:Integer} <: AbstractFockState
     end
 end
 
-function ParaFockNumber{P,S}(f::Integer) where {P,S}
-    I = f <= typemax(UInt64) ? UInt64 : BigInt
-    ParaFockNumber{P,S,I}(f)
-end
+# Storage is chosen from the argument's *type*, not its value, so the result
+# type can be inferred. Every nonnegative integer of 64 bits or fewer fits
+# in UInt64; wider types (Int128, UInt128, BigInt) get BigInt.
+_pf_default_storage(::Type{<:Union{Bool,Int8,Int16,Int32,Int64,
+    UInt8,UInt16,UInt32,UInt64}}) = UInt64
+_pf_default_storage(::Type{<:Integer}) = BigInt
+
+ParaFockNumber{P,S}(f::Integer) where {P,S} =
+    ParaFockNumber{P,S,_pf_default_storage(typeof(f))}(f)
+
+_pf_storagetype(::Type{<:ParaFockNumber{P,S,I}}) where {P,S,I} = I
 
 ParaFockNumber{P}(f::Integer) where P = ParaFockNumber{P,1}(f)
 
@@ -106,19 +137,30 @@ function Base.show(io::IO, a::ParaFockNumber{P,S}) where {P,S}
     print(io, "ParaFockNumber{", P, ",", S, "}(", a.f, ")")
 end
 
-function occupation(a::ParaFockNumber{P,S,I}, site::Integer) where {P,S,I}
+function occupation(a::ParaFockNumber{P}, site::Integer) where P
     site >= 1 || throw(ArgumentError("Mode positions are one-based"))
-    # I already holds every digit of a.f, so I(P)^(site-1) cannot overflow.
-    Int(mod(div(a.f, I(P)^(site - 1)), P))
+    # Divide step by step instead of forming P^(site-1). That power can
+    # overflow the storage type for sites beyond the stored digits.
+    # Hot paths don't call this; they use cached place values.
+    x = a.f
+    for _ in 2:site
+        iszero(x) && return 0
+        x = div(x, P)
+    end
+    Int(rem(x, P))
 end
 
-function occupations(a::ParaFockNumber, N::Integer)
+function occupations(a::ParaFockNumber{P}, N::Integer) where P
     N >= 0 || throw(ArgumentError("Negative number of modes"))
-    [occupation(a, i) for i in 1:N]
+    _pf_decode(a.f, Val(P), N)
 end
 
-# Convenience: unlike fermionic bits, these are integer-valued digits.
-bits(a::ParaFockNumber, N) = occupations(a, N)
+# Shared code reads `bits` as 0/1 occupations and `parity` as the fermionic
+# sign. Those meanings match the parafermionic ones only for P = 2, so both
+# are defined only there. For P > 2 they throw instead of silently meaning
+# something else.
+bits(a::ParaFockNumber{2}, N) = occupations(a, N)
+bits(::ParaFockNumber{P}, N) where P = throw(ArgumentError("bits is only defined for P = 2; use occupations(state, N) for base-$P digits"))
 
 function parafock_from_digits(
     ns,
@@ -137,21 +179,22 @@ function parafock_from_digits(
     end
     ParaFockNumber{P,S,I}(value)
 end
-
-function particle_number(a::ParaFockNumber{P,S,I}) where {P,S,I}
+# Always Int: the digit sum is at most (P-1)·N.
+function particle_number(a::ParaFockNumber{P}) where P
     x = a.f
-    total = zero(I)
-    while x != 0
+    total = 0
+    while !iszero(x)
         x, r = divrem(x, P)
-        total += r
+        total += Int(r)
     end
-    total <= typemax(Int) ? Int(total) : total
+    total
 end
 
-parafermion_charge(a::ParaFockNumber{P}) where P = Int(mod(particle_number(a), P))
+parafermion_charge(a::ParaFockNumber{P}) where P = mod(particle_number(a), P)
 
-# Kept as an ordinary occupation parity, not as the Z_P charge.
-parity(a::ParaFockNumber) = iseven(particle_number(a)) ? 1 : -1
+parity(a::ParaFockNumber{2}) = iseven(particle_number(a)) ? 1 : -1
+parity(::ParaFockNumber{P}) where P = throw(ArgumentError(
+    "parity is only defined for P = 2; use parafermion_charge(state) for the Z_$P charge"))
 
 internal_rep(a::ParaFockNumber, ::AbstractHilbertSpace,
     ::Type{T}) where {T<:Integer} = T(a.f)
@@ -159,13 +202,24 @@ internal_rep(a::ParaFockNumber, ::AbstractHilbertSpace,
 physical_rep(a::Integer, ::Type{ParaFockNumber{P,S,I}}) where {P,S,I} =
     ParaFockNumber{P,S,I}(a)
 
-function _pf_left_charge(a::ParaFockNumber{P}, site::Int) where P
+"""
+Z_P charge of the modes strictly before the mode whose base-P place value
+is `place`: Σ_{i<site} n_i mod P. `rem(f, place)` keeps exactly those
+digits, so no powers are formed and no digit is decoded twice.
+"""
+function _pf_left_charge(f::Integer, place::Integer, ::Val{P}) where P
+    x = rem(f, place)
     e = 0
-    for i in 1:(site-1)
-        e = _pf_addmod(e, occupation(a, i), P)
+    while !iszero(x)
+        x, r = divrem(x, P)
+        e += Int(r)
     end
-    e
+    mod(e, P)
 end
+
+# P = 2: the place value is a power of two, so the left digits form a bit mask.
+_pf_left_charge(f::Unsigned, place::Unsigned, ::Val{2}) =
+    count_ones(f & (place - one(place))) & 1
 
 # =====================================================================
 # Groups and symbolic operators
@@ -382,11 +436,31 @@ end
 # =====================================================================
 # State mapper
 # =====================================================================
+# Ordered cross-block inversions: (i, j) with i ∈ X_s, j ∈ X_r, s < r, i > j.
+# These are exactly the pairs that enter the l and u phases.
+function _pf_inversions(blocks)
+    pairs = Tuple{Int,Int}[]
+    for s in eachindex(blocks), r in (s+1):lastindex(blocks)
+        for i in blocks[s], j in blocks[r]
+            i > j && push!(pairs, (Int(i), Int(j)))
+        end
+    end
+    pairs
+end
 
-struct ParaFockMapper{P,S,N,F,T,W} <: AbstractStateMapper
+struct ParaFockMapper{P,S,N,F,T,W,I,PL,SM} <: AbstractStateMapper
+    # Same field names as FockMapper: generic code reads `fermionpositions`
+    # and `widths`.
     fermionpositions::T
     widths::W
     isfullpartition::Bool
+    # Precomputed once, so split/combine and the phase hooks never form
+    # powers or build BigInts per state.
+    places::PL                          # NTuple{N,I}: places[i] = P^(i-1)
+    maxstate::I                         # P^N - 1
+    submax::SM                          # per block: P^width - 1
+    sortedsites::Vector{Int}            # sorted union of all blocks
+    inversions::Vector{Tuple{Int,Int}}  # see _pf_inversions
 end
 
 function ParaFockMapper(
@@ -405,12 +479,18 @@ function ParaFockMapper(
             throw(ArgumentError("A mode position lies outside the system"))
     end
 
-    flat = collect(Iterators.flatten(pos))
+    flat = collect(Int, Iterators.flatten(pos))
     full = length(flat) == N && sort(flat) == collect(1:N)
     widths = map(length, pos)
 
-    ParaFockMapper{P,S,N,F,typeof(pos),typeof(widths)}(
-        pos, widths, full)
+    # P^N - 1 must fit in I; then every place value P^(i-1) ≤ P^N - 1 fits too.
+    maxstate = _pf_convert_checked(I, big(P)^N - 1, "The largest state of $N modes")
+    places = ntuple(i -> I(big(P)^(i - 1)), N)
+    submax = map(w -> I(big(P)^w - 1), widths)
+
+    ParaFockMapper{P,S,N,F,typeof(pos),typeof(widths),I,typeof(places),typeof(submax)}(
+        pos, widths, full, places, maxstate, submax,
+        sort!(unique(flat)), _pf_inversions(pos))
 end
 
 function ParaFockMapper(
@@ -433,17 +513,15 @@ function split_state(
     state::ParaFockNumber{P,S},
     fm::ParaFockMapper{P,S,N,F},
 ) where {P,S,N,I,F<:ParaFockNumber{P,S,I}}
-    # P^N itself (not P^N-1) can overflow I right at the boundary, so this
-    # bound check must stay in BigInt.
-    big(state.f) < big(P)^N ||
+    state.f <= fm.maxstate ||
         throw(ArgumentError("State lies outside the mapper's full space"))
 
+    f = convert(I, state.f)  # fits: checked above
+    places = fm.places
     substates = map(fm.fermionpositions) do X
         value = zero(I)
-        place = one(I)
-        for i in X
-            value += occupation(state, i) * place
-            place *= P
+        for (k, i) in enumerate(X)
+            value += rem(div(f, places[i]), P) * places[k]
         end
         F(value)
     end
@@ -462,20 +540,23 @@ function combine_states(
         throw(DimensionMismatch("Wrong number of subsystem states"))
 
     value = zero(I)
-    for (state, X) in zip(states, fm.fermionpositions)
+    for (state, X, submax) in zip(states, fm.fermionpositions, fm.submax)
         state isa ParaFockNumber{P,S} ||
             throw(ArgumentError("Incompatible parafermionic state"))
-        # P^length(X) itself can overflow I at the boundary; keep this in BigInt.
-        big(state.f) < big(P)^length(X) ||
+        state.f <= submax ||
             throw(ArgumentError("Subsystem state has too many digits"))
 
-        for (localpos, globalpos) in enumerate(X)
-            value += occupation(state, localpos) * I(P)^(globalpos - 1)
+        # Peel off local digits in order; local digit k goes to global mode X[k].
+        x = state.f
+        for i in X
+            x, r = divrem(x, P)
+            value += convert(I, r) * fm.places[i]
         end
     end
 
     (F(value),), (1,)
 end
+
 
 # =====================================================================
 # Phase factors
@@ -494,115 +575,152 @@ end
 # of embeddings. u is the occupation-state reordering phase.
 # =====================================================================
 
+# ---------------------------------------------------------------------
+# Every hook decodes each state ONCE into Int digits (a Vector on the
+# generic paths, an NTuple{N,Int} in mapper closures) and then runs plain
+# integer loops. Kernels return raw exponents; _pf_root reduces mod P
+# once. Raw sums are bounded by ~N²P², so Int overflow would need
+# N·P ≳ 3×10⁹.
+# ---------------------------------------------------------------------
+
+# All N digits of a state, from the mapper's cached place values. No allocation.
+@inline function _pf_decode(a::ParaFockNumber{P,S}, fm::ParaFockMapper{P,S}) where {P,S}
+    a.f <= fm.maxstate ||
+        throw(ArgumentError("State lies outside the mapper's full space"))
+    f = a.f
+    map(place -> Int(rem(div(f, place), P)), fm.places)
+end
+
+# Σ_{i<j; i,j ∈ X} b_i (a_j - b_j), for X iterated in ascending order.
+@inline function _pf_f_kernel(da, db, X)
+    e = 0
+    prefix = 0
+    for j in X
+        e += prefix * (da[j] - db[j])
+        prefix += db[j]
+    end
+    e
+end
+
+# f_Y - Σ_X f_X, with Y = union of the blocks (`sites`, ascending) and each
+# block ascending. Tuples of blocks are mapped (unrolled), so blocks of
+# different lengths stay type-stable. Cost O(N), with no pair loop.
+function _pf_h_kernel(da, db, sites, blocks)
+    _pf_f_kernel(da, db, sites) -
+        sum(map(X -> _pf_f_kernel(da, db, X), blocks); init=0)
+end
+
+# Σ_{(i,j) ∈ pairs} w_i w_j
+@inline function _pf_pair_kernel(w, pairs)
+    e = 0
+    for (i, j) in pairs
+        e += w[i] * w[j]
+    end
+    e
+end
+
+# Normalize an arbitrary partition (tuples, vectors, ranges) to Vector{Vector{Int}}.
+function _pf_blocks(partition)
+    blocks = [collect(Int, X) for X in partition]
+    all(i -> i >= 1, Iterators.flatten(blocks)) ||
+        throw(ArgumentError("Mode positions are one-based"))
+    blocks
+end
+
+_pf_maxsite(blocks) = maximum(Iterators.flatten(blocks); init=0)
+
+# Raw (unreduced) σ-weighted f exponent over an arbitrary index set.
 function _pf_f_exponent(
     a::ParaFockNumber{P,S},
     b::ParaFockNumber{P,S},
     inds,
 ) where {P,S}
-    X = sort!(unique!(Int[i for i in inds]))
-    all(i -> i >= 1, X) ||
-        throw(ArgumentError("Mode positions are one-based"))
-
-    exponent = 0
-    prefix_b = 0
-    for j in X
-        dj = occupation(a, j) - occupation(b, j)
-        exponent = _pf_addmod(exponent, prefix_b * dj, P)
-        prefix_b = _pf_addmod(prefix_b, occupation(b, j), P)
-    end
-    mod(S * exponent, P)
+    X = sort!(unique!(collect(Int, inds)))
+    isempty(X) && return 0
+    first(X) >= 1 || throw(ArgumentError("Mode positions are one-based"))
+    da = _pf_decode(a.f, Val(P), last(X))
+    db = _pf_decode(b.f, Val(P), last(X))
+    S * _pf_f_kernel(da, db, X)
 end
 
 # Use explicit tuple and Int signatures to avoid ambiguity with the
 # existing untyped fermionic fallback methods.
-function phase_factor_f(
-    a::ParaFockNumber{P,S},
-    b::ParaFockNumber{P,S},
-    inds::NTuple,
-) where {P,S}
+phase_factor_f(a::ParaFockNumber{P,S}, b::ParaFockNumber{P,S},
+    inds::NTuple) where {P,S} =
     _pf_root(Val(P), _pf_f_exponent(a, b, inds))
-end
 
-function phase_factor_f(
-    a::ParaFockNumber{P,S},
-    b::ParaFockNumber{P,S},
-    inds::AbstractVector{<:Integer},
-) where {P,S}
+phase_factor_f(a::ParaFockNumber{P,S}, b::ParaFockNumber{P,S},
+    inds::AbstractVector{<:Integer}) where {P,S} =
     _pf_root(Val(P), _pf_f_exponent(a, b, inds))
-end
 
+# Modes 1:N: a single pass over the digits of a and b together, with no
+# allocation for fixed-width storage. Used by the partial-trace hook.
 function phase_factor_f(
     a::ParaFockNumber{P,S},
     b::ParaFockNumber{P,S},
     N::Int,
 ) where {P,S}
-    _pf_root(Val(P), _pf_f_exponent(a, b, 1:N))
+    N >= 0 || throw(ArgumentError("Negative number of modes"))
+    x, y = a.f, b.f
+    e, prefix = 0, 0
+    for _ in 1:N
+        iszero(x) && iszero(y) && break  # remaining digits contribute nothing
+        x, ra = divrem(x, P)
+        y, rb = divrem(y, P)
+        e += prefix * (Int(ra) - Int(rb))
+        prefix += Int(rb)
+    end
+    _pf_root(Val(P), S * e)
 end
 
 inverse_phase_factor_f(a::ParaFockNumber, b::ParaFockNumber, inds) =
     conj(phase_factor_f(a, b, inds))
 
+# Generic entry point (arbitrary partition). Mapper closures use _pf_h_phase.
 function phase_factor_h(
     a::ParaFockNumber{P,S},
     b::ParaFockNumber{P,S},
     partition,
     masks=nothing,
 ) where {P,S}
-    # `masks` is accepted for interface compatibility. Binary masks
-    # are not used for base-P occupation states.
-    Xs = Tuple(Tuple(X) for X in partition)
-    flat = collect(Iterators.flatten(Xs))
-    allunique(flat) ||
-        throw(ArgumentError("h requires disjoint blocks"))
+    # `masks` is accepted only for interface compatibility.
+    blocks = map(sort!, _pf_blocks(partition))
+    sites = sort!(reduce(vcat, blocks; init=Int[]))
+    allunique(sites) || throw(ArgumentError("h requires disjoint blocks"))
+    n = isempty(sites) ? 0 : last(sites)
+    da = _pf_decode(a.f, Val(P), n)
+    db = _pf_decode(b.f, Val(P), n)
+    _pf_root(Val(P), S * _pf_h_kernel(da, db, sites, blocks))
+end
 
-    exponent = _pf_f_exponent(a, b, flat)
-    for X in Xs
-        exponent = _pf_addmod(
-            exponent, -_pf_f_exponent(a, b, X), P)
-    end
-    _pf_root(Val(P), exponent)
+function _pf_h_phase(
+    a::ParaFockNumber{P,S},
+    b::ParaFockNumber{P,S},
+    fm::ParaFockMapper{P,S},
+) where {P,S}
+    da = _pf_decode(a, fm)
+    db = _pf_decode(b, fm)
+    _pf_root(Val(P), S * _pf_h_kernel(da, db, fm.sortedsites, fm.fermionpositions))
 end
 
 function kron_phase_factor(fm::ParaFockMapper)
     fm.isfullpartition ||
         throw(ArgumentError("kron_phase_factor requires a full partition"))
-    (a, b) -> phase_factor_h(a, b, fm.fermionpositions)
+    (a, b) -> _pf_h_phase(a, b, fm)
 end
 
-function phase_factor_l(
-    a::ParaFockNumber{P,S},
-    b::ParaFockNumber{P,S},
-    X,
-    Xbar,
-) where {P,S}
-    exponent = 0
-    for i in X, j in Xbar
-        if i > j
-            di = occupation(a, i) - occupation(b, i)
-            dj = occupation(a, j) - occupation(b, j)
-            exponent = _pf_addmod(exponent, di * dj, P)
-        end
-    end
-    _pf_root(Val(P), S * exponent)
-end
+phase_factor_l(a::ParaFockNumber{P,S}, b::ParaFockNumber{P,S},
+    X, Xbar) where {P,S} = phase_factor_l(a, b, (X, Xbar))
 
 function phase_factor_l(
     a::ParaFockNumber{P,S},
     b::ParaFockNumber{P,S},
     partition,
 ) where {P,S}
-    Xs = Tuple(partition)
-    exponent = 0
-    for s in eachindex(Xs), r in (s+1):length(Xs)
-        for i in Xs[s], j in Xs[r]
-            if i > j
-                di = occupation(a, i) - occupation(b, i)
-                dj = occupation(a, j) - occupation(b, j)
-                exponent = _pf_addmod(exponent, di * dj, P)
-            end
-        end
-    end
-    _pf_root(Val(P), S * exponent)
+    blocks = _pf_blocks(partition)
+    n = _pf_maxsite(blocks)
+    d = _pf_decode(a.f, Val(P), n) .- _pf_decode(b.f, Val(P), n)
+    _pf_root(Val(P), S * _pf_pair_kernel(d, _pf_inversions(blocks)))
 end
 
 function phase_factor_u(
@@ -610,32 +728,25 @@ function phase_factor_u(
     masks,
     state::ParaFockNumber{P,S},
 ) where {P,S}
-    Xs = Tuple(partition)
-    exponent = 0
-    for s in eachindex(Xs), r in (s+1):length(Xs)
-        for i in Xs[s], j in Xs[r]
-            if i > j
-                exponent = _pf_addmod(
-                    exponent,
-                    occupation(state, i) * occupation(state, j),
-                    P,
-                )
-            end
-        end
-    end
-    _pf_root(Val(P), S * exponent)
+    # `masks` is accepted only for interface compatibility.
+    blocks = _pf_blocks(partition)
+    n = _pf_decode(state.f, Val(P), _pf_maxsite(blocks))
+    _pf_root(Val(P), S * _pf_pair_kernel(n, _pf_inversions(blocks)))
 end
 
 phase_factor_u(partition, state::ParaFockNumber) =
     phase_factor_u(partition, nothing, state)
 
-phase_factor_u(fm::ParaFockMapper) =
-    state -> phase_factor_u(fm.fermionpositions, nothing, state)
+function _pf_u_phase(state::ParaFockNumber{P,S}, fm::ParaFockMapper{P,S}) where {P,S}
+    n = _pf_decode(state, fm)
+    _pf_root(Val(P), S * _pf_pair_kernel(n, fm.inversions))
+end
+
+phase_factor_u(fm::ParaFockMapper) = state -> _pf_u_phase(state, fm)
 
 # =====================================================================
 # Hilbert spaces
 # =====================================================================
-
 struct ParafermionicSpace{
     F,L,PG<:ParafermionicGroup,A
 } <: AbstractGroupedHilbertSpace{F}
@@ -643,6 +754,7 @@ struct ParafermionicSpace{
     mode_ordering::OrderedDict{L,Int}
     group::PG
     atomic_id::A
+    maxstate::F   # P^N - 1, cached for allocation-free bounds checks
 
     function ParafermionicSpace(
         input_modes::AbstractVector{L},
@@ -660,6 +772,8 @@ struct ParafermionicSpace{
         S = parafermion_sigma(group)
         F <: ParaFockNumber{P,S} ||
             throw(ArgumentError("State type and group are incompatible"))
+        isconcretetype(F) ||
+            throw(ArgumentError("State type must be concrete, e.g. ParaFockNumber{P,S,UInt64}"))
 
         order = OrderedDict{L,Int}(m => i for (i, m) in enumerate(ms))
         length(order) == length(ms) ||
@@ -673,11 +787,13 @@ struct ParafermionicSpace{
                 "Modes must follow the symbolic order (species name, label). " *
                     "Use ordered subregions; use state_mapper for block permutations."))
 
-        # Check that the chosen storage type can hold every state.
-        F(big(P)^length(ms) - 1)
+        # Check that the storage type can hold every state, and cache the
+        # largest state for allocation-free bounds checks in state_index.
+        maxstate = F(_pf_convert_checked(_pf_storagetype(F),
+            big(P)^length(ms) - 1, "The largest state of $(length(ms)) modes"))
 
         id = length(ms) == 1 ? atomic_id(only(ms)) : map(atomic_id, ms)
-        new{F,L,PG,typeof(id)}(ms, order, group, id)
+        new{F,L,PG,typeof(id)}(ms, order, group, id, maxstate)
     end
 end
 
@@ -734,12 +850,13 @@ isconstrained(::ParafermionicSpace) = false
 parafermion_order(H::ParafermionicSpace) = parafermion_order(H.group)
 parafermion_sigma(H::ParafermionicSpace) = parafermion_sigma(H.group)
 
-maximum_particles(H::ParafermionicSpace) =
-    (parafermion_order(H) - 1) * nbr_of_modes(H)
-
+maximum_particles(H::ParafermionicSpace) = (parafermion_order(H) - 1) * nbr_of_modes(H)
+# P^N can exceed typemax(Int) for large (constrained) spaces, so dim stays
+# Union{Int,BigInt} on purpose. It is now cheap (no BigInt for small spaces)
+# and no longer on per-state paths, which use H.maxstate instead.
 function dim(H::ParafermionicSpace)
-    d = big(parafermion_order(H))^nbr_of_modes(H)
-    d <= typemax(Int) ? Int(d) : d
+    m = H.maxstate.f
+    m < typemax(Int) ? Int(m) + 1 : big(m) + 1
 end
 
 function basisstates(H::ParafermionicSpace{F}) where F
@@ -751,15 +868,20 @@ function basisstate(ind::Integer, H::ParafermionicSpace{F}) where F
     F(ind - 1)
 end
 
-function state_index(state::ParaFockNumber, H::ParafermionicSpace{F}) where F
-    state isa ParaFockNumber{
-        parafermion_order(H),parafermion_sigma(H)
-    } || throw(ArgumentError("Incompatible state"))
-
-    big(state.f) < dim(H) || throw(BoundsError(H, state))
-    index = big(state.f) + 1
-    index <= typemax(Int) ? Int(index) : index
+# Always returns Int: an index above typemax(Int) can't index a matrix anyway.
+# No BigInt is created; comparing native integers with a BigInt goes straight
+# to GMP.
+function state_index(
+    state::ParaFockNumber{P,S},
+    H::ParafermionicSpace{<:ParaFockNumber{P,S}},
+) where {P,S}
+    state.f <= H.maxstate.f || throw(BoundsError(H, state))
+    state.f < typemax(Int) || throw(ArgumentError(
+        "State index exceeds typemax(Int); the space is too large to index"))
+    Int(state.f) + 1
 end
+
+state_index(::ParaFockNumber, ::ParafermionicSpace) = throw(ArgumentError("Incompatible state"))
 
 atomic_factors(H::ParafermionicSpace) =
     [ParafermionicSpace([m], H.group, statetype(H)) for m in H.modes]
@@ -872,8 +994,27 @@ inverse_partial_trace_phase_factor(a, b, H::ParafermionicSpace) =
     conj(partial_trace_phase_factor(a, b, H))
 
 # Calls the existing representation machinery; builds no matrices here.
+"""
+    parafermions(H)
+    parafermions(H, species)
+
+Return an `OrderedDict` mapping each label to the matrix of the
+annihilation operator for that mode of `H`. If several species in `H`
+share labels, labels alone are ambiguous and the one-argument form throws;
+use the second form to pick one species.
+"""
 function parafermions(H::ParafermionicSpace)
+    allunique(label(m) for m in modes(H)) || throw(ArgumentError(
+        "Labels are ambiguous: several species in $H share labels. " *
+            "Use parafermions(H, species) to select one species."))
     OrderedDict(label(m) => representation(m, H) for m in modes(H))
+end
+
+function parafermions(H::ParafermionicSpace, species::SymbolicParafermionBasis)
+    ms = filter(m -> symbolic_basis(m) == species, modes(H))
+    isempty(ms) &&
+        throw(ArgumentError("Species $(species.name) has no modes in $H"))
+    OrderedDict(label(m) => representation(m, H) for m in ms)
 end
 
 operators(H::ParafermionicSpace) = parafermions(H)
@@ -883,7 +1024,6 @@ operators(H::ParafermionicSpace) = parafermions(H)
 #
 # Cache = (one-based mode position, base-P place value).
 # =====================================================================
-
 function _precomputation_before_operator_application(
     op::ParafermionSym,
     H::AbstractHilbertSpace{ParaFockNumber{P,S,I}},
@@ -895,8 +1035,10 @@ function _precomputation_before_operator_application(
     position > 0 ||
         throw(ArgumentError("Operator ($op) is not part of space ($H)"))
 
-    # I already holds every state of H, so I(P)^(position-1) cannot overflow.
-    (position, I(P)^(position - 1))
+    # Checked rather than assumed. Runs once per operator, not per state.
+    place = _pf_convert_checked(I, big(P)^(position - 1),
+        "The place value of mode $position")
+    (position, place)
 end
 
 function _pf_apply(
@@ -905,8 +1047,8 @@ function _pf_apply(
     cache;
     transpose::Bool=false,
 ) where {P,S,I}
-    position, place = cache
-    n = Int(mod(div(state.f, place), P))
+    _, place = cache
+    n = Int(rem(div(state.f, place), P))
 
     # transpose means ordinary matrix transpose, not adjoint.
     #
@@ -918,7 +1060,7 @@ function _pf_apply(
         return state, ComplexF64(0)
     end
 
-    exponent = S * _pf_degree(op) * _pf_left_charge(state, position)
+    exponent = S * _pf_degree(op) * _pf_left_charge(state.f, place, Val(P))
     amplitude = _pf_root(Val(P), exponent)
 
     # Add/subtract directly: `-1 * place` would wrap around for unsigned I.
@@ -930,9 +1072,10 @@ function apply_local_operator(
     op::ParafermionSym,
     state::ParaFockNumber,
     H::ParafermionicSpace,
-    cache,
+    cache;
+    transpose::Bool=false,
 )
-    _pf_apply(op, state, cache)
+    _pf_apply(op, state, cache; transpose=transpose)
 end
 
 function apply_local_operators(
@@ -940,7 +1083,7 @@ function apply_local_operators(
     state::ParaFockNumber,
     H::ParafermionicSpace,
     caches;
-    transpose,
+    transpose::Bool=false,
 )
     factors = op.factors
     length(factors) == length(caches) ||
@@ -963,6 +1106,201 @@ function apply_local_operators(
     result, op.coeff * phase
 end
 
+
+# =====================================================================
+# API, robustness, transpose, BigInt storage, and rewritten phase hooks
+# =====================================================================
+
+@testitem "Parafermionic API and robustness" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces as FHS
+
+    close(a, b) = isapprox(a, b; atol=2e-11, rtol=2e-11)
+    root(p, e) = cispi(2 * mod(e, p) / p)
+
+    # Independent reference exponents (no production helpers).
+    f_exp(a, b, X) = sum((b[i] * (a[j] - b[j]) for i in X for j in X if i < j); init=0)
+    l_exp(a, b, part) = sum(((a[i] - b[i]) * (a[j] - b[j])
+                             for s in eachindex(part) for r in (s+1):length(part)
+                             for i in part[s] for j in part[r] if i > j); init=0)
+    u_exp(a, part) = l_exp(a, zero(a), part)
+
+    @testset "occupation beyond the stored digits" begin
+        x = FHS.ParaFockNumber{3}(5)                    # digits (2, 1)
+        @test x.f isa UInt64
+        @test FHS.occupation(x, 1) == 2
+        @test FHS.occupation(x, 2) == 1
+        @test FHS.occupation(x, 3) == 0
+        @test FHS.occupation(x, 50) == 0                # 3^49 overflows UInt64
+        @test FHS.occupation(x, 1000) == 0
+        @test FHS.occupations(x, 45) == [2; 1; zeros(Int, 43)]
+        @test_throws ArgumentError FHS.occupation(x, 0)
+    end
+
+    @testset "type stability and state_index" begin
+        @test (@inferred FHS.ParaFockNumber{3,1}(5)).f isa UInt64
+        @test FHS.ParaFockNumber{3}(big(5)).f isa BigInt
+        @test FHS.ParaFockNumber{3}(big(5)) == FHS.ParaFockNumber{3}(5)
+        c = FHS.parafermion_basis(:c, 3)
+        H = hilbert_space(c, 1:3)
+        s = FHS.basisstate(7, H)                        # digits (0, 2, 0)
+        @test @inferred(FHS.state_index(s, H)) === 7
+        @test @inferred(FHS.particle_number(s)) === 2
+        @test FHS.parafermion_charge(s) === 2
+        @test_throws BoundsError FHS.state_index(FHS.ParaFockNumber{3}(27), H)
+        @test_throws ArgumentError FHS.state_index(FHS.ParaFockNumber{3,-1}(0), H)
+    end
+
+    @testset "fermion-only helpers throw for p > 2" begin
+        x3 = FHS.parafock_from_digits([1, 2], Val(3))
+        @test_throws ArgumentError FHS.bits(x3, 2)
+        @test_throws ArgumentError FHS.parity(x3)
+        x2 = FHS.parafock_from_digits([1, 1, 0], Val(2))
+        @test FHS.bits(x2, 3) == [1, 1, 0]
+        @test FHS.parity(x2) == 1
+    end
+
+    @testset "@parafermions and multi-species groups" begin
+        ab = @parafermions 3 a b
+        @test ab == (a, b)
+        @test FHS.symbolic_group(a) == FHS.symbolic_group(b)
+        @test FHS.parafermion_order(a) == 3
+        @test FHS.parafermion_sigma(a) == 1
+        @parafermions 3 d
+        @test FHS.symbolic_group(d) != FHS.symbolic_group(a)
+
+        H = FHS.ParafermionicSpace([a[1], a[2], b[1]])
+        R(op) = representation(op, H)
+        A1, B1 = R(a[1]), R(b[1])
+        # Same group, a[1] precedes b[1]: a[1] b[1] = ω^(-1) b[1] a[1] (σ = +1).
+        @test close(A1 * B1, root(3, -1) * B1 * A1)
+        @test close(R(b[1] * a[1]), B1 * A1)
+
+        # Label 1 occurs in both species, so labels alone are ambiguous.
+        @test_throws ArgumentError FHS.parafermions(H)
+        ops_a = FHS.parafermions(H, a)
+        @test collect(keys(ops_a)) == [1, 2]
+        @test close(ops_a[1], A1)
+        @test collect(keys(FHS.parafermions(H, b))) == [1]
+        @test_throws ArgumentError FHS.parafermions(H, d)
+        @test collect(keys(FHS.parafermions(hilbert_space(a, 1:2)))) == [1, 2]
+    end
+
+    @testset "operator application with BigInt storage" begin
+        p, N = 3, 41                                    # 3^41 - 1 > typemax(UInt64)
+        c = FHS.parafermion_basis(:c, p)
+        H = hilbert_space(c, 1:N)
+        @test zero(FHS.statetype(H)).f isa BigInt
+
+        ns = [mod(i, p) for i in 1:N]
+        ns[N] = 0
+        state = FHS.parafock_from_digits(ns, Val(p))
+        cache = FHS._precomputation_before_operator_application(c[N]', H)
+
+        up, amp_up = FHS.apply_local_operator(c[N]', state, H, cache)
+        @test FHS.occupations(up, N) == [ns[1:(N-1)]; 1]
+        @test close(amp_up, root(p, sum(ns[1:(N-1)])))
+
+        down, amp_down = FHS.apply_local_operator(c[N], up, H, cache)
+        @test down == state
+        @test close(amp_up * amp_down, 1)
+
+        vac = zero(FHS.statetype(H))
+        @test iszero(last(FHS.apply_local_operator(c[N], vac, H, cache)))
+
+        @test FHS.state_index(FHS.basisstate(5, H), H) === 5
+        @test_throws ArgumentError FHS.state_index(up, H)   # index > typemax(Int)
+    end
+
+    @testset "transpose application: p=$p sigma=$sigma" for p in (2, 3), sigma in (-1, 1)
+        c = FHS.parafermion_basis(:c, p; sigma=sigma)
+        H = hilbert_space(c, 1:3)
+        D = dim(H)
+        states = collect(basisstates(H))
+        precompute(op) = FHS._precomputation_before_operator_application(op, H)
+
+        # Build the matrix of an application rule, column by column.
+        function assemble(apply)
+            M = zeros(ComplexF64, D, D)
+            for s in states
+                t, amp = apply(s)
+                iszero(amp) || (M[FHS.state_index(t, H), FHS.state_index(s, H)] += amp)
+            end
+            M
+        end
+
+        for op in (c[1], c[2], c[3]')
+            cache = precompute(op)
+            M = representation(op, H)
+            @test close(assemble(s -> FHS.apply_local_operator(op, s, H, cache)), M)
+            @test close(assemble(s -> FHS.apply_local_operator(op, s, H, cache; transpose=true)),
+                transpose(M))
+        end
+
+        for word in (c[1]' * c[2] * c[3], (1 + 2im) * c[2]' * c[3]')
+            caches = map(precompute, word.factors)
+            M = representation(word, H)
+            for flag in (false, true)
+                @test close(
+                    assemble(s -> FHS.apply_local_operators(word, s, H, caches; transpose=flag)),
+                    flag ? transpose(M) : M)
+            end
+        end
+    end
+
+    @testset "p=6 mixes exact and inexact roots" begin
+        @test FHS._pf_root(Val(6), 3) === ComplexF64(-1)
+        @test FHS._pf_root(Val(6), -3) === ComplexF64(-1)
+        @test FHS._pf_root(Val(6), 12) === ComplexF64(1)
+        @test FHS._pf_root(Val(4), 1) === ComplexF64(0, 1)
+        @test close(FHS._pf_root(Val(6), 1), cispi(1 / 3))
+
+        c = FHS.parafermion_basis(:c, 6)
+        H = hilbert_space(c, 1:2)
+        C1 = representation(c[1], H)
+        C2 = representation(c[2], H)
+        for (A, B, dA, dB) in ((C1, C2, -1, -1), (C1, C2', -1, 1),
+            (C1', C2, 1, -1), (C1', C2', 1, 1))
+            @test close(A * B, root(6, -dA * dB) * B * A)
+        end
+        @test close(C2^6, zeros(36, 36))
+        @test norm(C2^5) > 0
+    end
+
+    @testset "phase hooks vs reference: p=$p sigma=$sigma" for p in (2, 3, 4), sigma in (-1, 1)
+        c = FHS.parafermion_basis(:c, p; sigma=sigma)
+        H = hilbert_space(c, 1:3)
+        states = collect(basisstates(H))
+        ns = [FHS.occupations(s, 3) for s in states]
+        table(g) = [g(a, b) for a in states, b in states]
+
+        f_ref(X) = [root(p, sigma * f_exp(na, nb, X)) for na in ns, nb in ns]
+        @test close(table((a, b) -> FHS.phase_factor_f(a, b, 3)), f_ref(1:3))
+        @test close(table((a, b) -> FHS.phase_factor_f(a, b, 2)), f_ref(1:2))
+        @test close(table((a, b) -> FHS.phase_factor_f(a, b, (1, 3))), f_ref((1, 3)))
+        @test close(table((a, b) -> FHS.phase_factor_f(a, b, [3, 1])), f_ref((1, 3)))
+
+        for partition in (((1,), (2,), (3,)), ((3,), (1,), (2,)),
+            ((1, 3), (2,)), ((2, 3), (1,)))
+            mapper = FHS.state_mapper(H, [hilbert_space(c, collect(X)) for X in partition])
+            h = FHS.kron_phase_factor(mapper)
+            u = FHS.phase_factor_u(mapper)
+
+            h_ref = [root(p, sigma * (f_exp(na, nb, 1:3) -
+                sum(f_exp(na, nb, X) for X in partition)))
+                     for na in ns, nb in ns]
+            l_ref = [root(p, sigma * l_exp(na, nb, partition)) for na in ns, nb in ns]
+            u_ref = [root(p, sigma * u_exp(na, partition)) for na in ns]
+
+            @test close(table(h), h_ref)
+            @test close(table((a, b) -> FHS.phase_factor_h(a, b, partition)), h_ref)
+            @test close(table((a, b) -> FHS.phase_factor_l(a, b, partition)), l_ref)
+            @test close(u.(states), u_ref)
+            @test close([FHS.phase_factor_u(partition, s) for s in states], u_ref)
+            @test_throws ArgumentError FHS.split_state(FHS.ParaFockNumber{p,sigma}(p^3), mapper)
+        end
+    end
+end
 
 
 # =====================================================================
@@ -1116,7 +1454,7 @@ end
             c = FHS.parafermion_basis(:c, p; sigma=sigma)
             H = hilbert_space(c, 1:3)
 
-            D = Int(FHS.dim(H))
+            D = Int(dim(H))
             Id = Matrix{ComplexF64}(I, D, D)
             Zeros = zeros(ComplexF64, D, D)
             R(op) = Matrix(representation(op, H))
@@ -1255,7 +1593,7 @@ end
         end
         A = spzeros(ComplexF64, p, p)
         B = spzeros(ComplexF64, p, p)
-        global_unit = spzeros(ComplexF64, p^2, p^2) 
+        global_unit = spzeros(ComplexF64, p^2, p^2)
 
         @testset "Matrix-unit phases: p=$p sigma=$sigma" begin
             c = FHS.parafermion_basis(:c, p; sigma=sigma)
@@ -1407,8 +1745,7 @@ end
                 M = E(p^2, a1 + p*a2, b1 + p*b2)
 
                 # Retain the first mode: no traced mode precedes it.
-                expected1 = a2 == b2 ?
-                            E(p, a1, b1) : zeros(ComplexF64, p, p)
+                expected1 = a2 == b2 ? E(p, a1, b1) : zeros(ComplexF64, p, p)
 
                 # Retain the second mode:
                 # phase = ω^[-σ b1 (a2-b2)] when a1=b1.
@@ -1429,7 +1766,7 @@ end
             HZ = hilbert_space(c, [2])
             H3 = hilbert_space(c, [3])
 
-            D = Int(FHS.dim(H))
+            D = Int(dim(H))
             A = randn(rng, ComplexF64, p^2, p^2)
             B = randn(rng, ComplexF64, p, p)
             M = randn(rng, ComplexF64, D, D)
