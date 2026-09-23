@@ -34,7 +34,7 @@ Hbdg = bdg_hilbert_space(c, [(n, s) for n in 1:N for s in (:↑, :↓)])
 Vzs = range(0.0, Vz_c2 * 1.2, length=40)
 energies = stack(Vzs) do Vz
     symham = ham(c, N; μ, t, Δ, Vz, α)
-    matham = matrix_representation(symham, Hbdg)
+    matham = representation(symham, Hbdg)
     vals, _ = eigen(Matrix(matham), FermionicHilbertSpaces.BdGEigen())
     vals
 end
@@ -49,7 +49,7 @@ display(p1)
 Vzs = [Vz_c * 0.5, Vz_c * 1.2]  # Trivial and topological
 densities = map(Vzs) do Vz
     symham = ham(c, N; μ, t, Δ, Vz, α)
-    matham = matrix_representation(symham, Hbdg)
+    matham = representation(symham, Hbdg)
     vals, vecs = eigen(Matrix(matham), FermionicHilbertSpaces.BdGEigen())
     # Each colum of vecs is a quasiparticle wavefunction, and particle-hole symmetry ensures has been enforced by using FermionicHilbertSpaces.BdGEigen.
     low_energy_mode = vecs[:, 2N]

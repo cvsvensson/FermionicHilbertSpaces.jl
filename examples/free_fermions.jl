@@ -47,7 +47,7 @@ for xy in disc
     end
 end
 # And get a matrix representation of it on the single particle hilbert space
-mat = matrix_representation(ham, H)
+mat = representation(ham, H)
 
 # ## Compute eigenstates and momentum operators and plot results
 # Compute a few eigenvalues/eigenvectors (lowest energy states)
@@ -59,8 +59,8 @@ for xy in disc
     xy .+ (1, 0) in disc && add!!(px, 1im * f[xy.+(1, 0)]' * f[xy] + hc)
     xy .+ (0, 1) in disc && add!!(py, 1im * f[xy.+(0, 1)]' * f[xy] + hc)
 end
-pxmat = matrix_representation(px, H)
-pymat = matrix_representation(py, H);
+pxmat = representation(px, H)
+pymat = representation(py, H);
 function angular_momentum(v)
     px = pxmat * v
     py = pymat * v

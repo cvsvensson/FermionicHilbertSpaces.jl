@@ -6,13 +6,13 @@ function Base.show(io::IO, nc::NumberConservation{T,H,W}) where {T,H,W}
     if get(io, :compact, false)
         parts = filter(!isnothing, [
             ismissing(nc.total) ? nothing : sprint(show, nc.total),
-            ismissing(nc.subspaces) ? nothing : "subspaces: $(length(nc.subspaces))",
+            ismissing(nc.spaces) ? nothing : "subspaces: $(length(nc.spaces))",
             ismissing(nc.weights) ? nothing : "weighted"])
         print(io, "NumberConservation(", join(parts, ", "), ")")
     else
         lines = filter(!isnothing, [
             ismissing(nc.total) ? nothing : "total: " * (isa(nc.total, AbstractVector) && length(nc.total) == 1 ? string(only(nc.total)) : sprint(show, nc.total)),
-            ismissing(nc.subspaces) ? nothing : "subspaces: $(length(nc.subspaces))",
+            ismissing(nc.spaces) ? nothing : "subspaces: $(length(nc.spaces))",
             ismissing(nc.weights) ? nothing : "weights: " * sprint(show, nc.weights)])
         isempty(lines) ? print(io, "NumberConservation()") : print(io, "NumberConservation(", join(lines, ", "), ")")
     end
@@ -22,24 +22,24 @@ function Base.show(io::IO, pc::ParityConservation{H}) where {H}
     compact = get(io, :compact, false)
     if compact
         parts = [_parity(pc.allowed_parities)]
-        !ismissing(pc.subspaces) && push!(parts, "subspaces: $(length(pc.subspaces))")
+        !ismissing(pc.spaces) && push!(parts, "subspaces: $(length(pc.spaces))")
         print(io, "ParityConservation(", join(parts, ", "), ")")
     else
         lines = ["allowed_parities: $(_parity(pc.allowed_parities))"]
-        !ismissing(pc.subspaces) && push!(lines, "subspaces: $(length(pc.subspaces))")
+        !ismissing(pc.spaces) && push!(lines, "subspaces: $(length(pc.spaces))")
         print(io, "ParityConservation(", join(lines, ""), ")")
     end
 end
 
 function Base.show(io::IO, ac::AdditiveConstraint{T,H,F}) where {T,H,F}
-    nf = isa(ac.functions, Tuple) ? length(ac.functions) : 1
+    nf = isa(ac.maps, Tuple) ? length(ac.maps) : 1
     if get(io, :compact, false)
         pre = ismissing(ac.allowed_values) ? "" : sprint(show, ac.allowed_values) * ", "
         print(io, "AdditiveConstraint(", pre, "$nf function(s))")
     else
         lines = ["  allowed_values: " * (ismissing(ac.allowed_values) ? "missing" : sprint(show, ac.allowed_values)),
             "  functions: $nf function(s)"]
-        !ismissing(ac.subspaces) && push!(lines, "  subspaces: $(length(ac.subspaces))")
+        !ismissing(ac.spaces) && push!(lines, "  subspaces: $(length(ac.spaces))")
         print(io, "AdditiveConstraint(\n", join(lines, "\n"), "\n)")
     end
 end
@@ -47,13 +47,13 @@ end
 function Base.show(io::IO, fc::FilterConstraint)
     if get(io, :compact, false)
         parts = filter(!isnothing, [
-            ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
-            ismissing(fc.functions) ? nothing : "$(isa(fc.functions, Tuple) ? length(fc.functions) : 1) function(s)"])
+            ismissing(fc.spaces) ? nothing : "subspaces: $(length(fc.spaces))",
+            ismissing(fc.maps) ? nothing : "$(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s)"])
         print(io, "FilterConstraint(", join(parts, ", "), ")")
     else
         lines = filter(!isnothing, [
-            ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
-            ismissing(fc.functions) ? nothing : "subspace_functions: $(isa(fc.functions, Tuple) ? length(fc.functions) : 1) function(s), ",
+            ismissing(fc.spaces) ? nothing : "subspaces: $(length(fc.spaces))",
+            ismissing(fc.maps) ? nothing : "subspace_functions: $(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s), ",
             "reducer: $(fc.reducer)"])
         print(io, "FilterConstraint(", join(lines, ", "), ")")
     end
@@ -63,13 +63,13 @@ function Base.show(io::IO, bc::SectorConstraint)
     fc = bc.filter
     if get(io, :compact, false)
         parts = filter(!isnothing, [
-            ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
-            ismissing(fc.functions) ? nothing : "$(isa(fc.functions, Tuple) ? length(fc.functions) : 1) function(s)"])
+            ismissing(fc.spaces) ? nothing : "subspaces: $(length(fc.spaces))",
+            ismissing(fc.maps) ? nothing : "$(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s)"])
         print(io, "SectorConstraint(", join(parts, ", "), ")")
     else
         lines = filter(!isnothing, [
-            ismissing(fc.subspaces) ? nothing : "subspaces: $(length(fc.subspaces))",
-            ismissing(fc.functions) ? nothing : "subspace_functions: $(isa(fc.functions, Tuple) ? length(fc.functions) : 1) function(s), ",
+            ismissing(fc.spaces) ? nothing : "subspaces: $(length(fc.spaces))",
+            ismissing(fc.maps) ? nothing : "subspace_functions: $(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s), ",
             "reducer: $(fc.reducer)"])
         print(io, "SectorConstraint(", join(lines, ""), ")")
     end

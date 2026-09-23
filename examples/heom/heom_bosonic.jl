@@ -1,4 +1,5 @@
 ## Bosonic HEOM Auxiliary Algebra
+## This example has been to a large extent LLM generated.
 ##
 ## Reference: arXiv 2306.07522 — HierarchicalEOM.jl paper
 ##
@@ -47,8 +48,8 @@ Fields
 ------
 - `id`    : unique integer identifying this bath (used for canonical ordering)
 - `m_max` : maximum bosonic hierarchy depth (truncation tier)
-- `χ`     : decay rates (length N_exp, generally complex)
-- `ξ`     : amplitudes  (length N_exp, generally complex)
+- `χ`     : decay rates (length N_exp, only real numbers supported)
+- `ξ`     : amplitudes  (length N_exp)
 """
 struct HEOMBosonicBath{L,V1,V2}
     id::L
@@ -56,7 +57,7 @@ struct HEOMBosonicBath{L,V1,V2}
     m_max::Int
     χ::V1
     ξ::V2
-    function HEOMBosonicBath(id::L, m_max, χ::V1, ξ::V2) where {L,V1<:AbstractVector,V2<:AbstractVector}
+    function HEOMBosonicBath(id::L, m_max, χ::V1, ξ::V2) where {L,V1<:AbstractVector{<:Real},V2<:AbstractVector}
         N_exp = length(χ)
         length(χ) == length(ξ) == N_exp || throw(ArgumentError("length(ξ) must equal length(χ)"))
         m_max >= 0 || throw(ArgumentError("m_max must be non-negative"))
@@ -111,6 +112,8 @@ Base.adjoint(op::HEOMBosonicOp) = begin
         HEOMBosonicOp(:up, op.l, op.bath)
     elseif op.type == :damping
         op   # W is Hermitian
+    else
+        throw(ArgumentError("Unknown HEOMBosonicOp type: ", op.type))
     end
 end
 
@@ -123,7 +126,7 @@ end
 # otherwise don't do anything
 _heom_bath_id(op::HEOMBosonicOp) = op.bath.id
 function mul_effect(a::HEOMBosonicOp, b::HEOMBosonicOp)
-    # _heom_bath_id(a) > _heom_bath_id(b) && return Swap(1)   # different baths: sort by id
+    _heom_bath_id(a) > _heom_bath_id(b) && return Swap(1)   # different baths: sort by id
     return nothing                                            # same bath or already ordered
 end
 
@@ -145,9 +148,8 @@ Base.show(io::IO, s::HEOMBosonicAuxState) = print(io, "ADO", s.n)
 # Apply a single HEOM auxiliary factor to an occupation tuple.
 # Returns (new_n, new_amplitude); amplitude becomes zero for forbidden transitions.
 @inline function apply_local_operator(op::HEOMBosonicOp, state::HEOMBosonicAuxState{N}, space, factors) where N
-    amp = 1
+    amp = one(eltype(op.bath.χ))
     n = state.n
-    # @inline function _apply_heom_factor!(n::NTuple{N,Int}, amp, op::HEOMBosonicOp) where {N}
     if op.type == :up
         if sum(n) >= op.bath.m_max
             return state, zero(amp)
@@ -164,7 +166,6 @@ Base.show(io::IO, s::HEOMBosonicAuxState) = print(io, "ADO", s.n)
         return HEOMBosonicAuxState{N}(n), amp * decay
     end
 end
-# FermionicHilbertSpaces._precomputation_before_operator_application(op, space::GenericHilbertSpace{<:HEOMBosonicAuxState}) = Tuple(op.factors)
 symbolic_group(op::HEOMBosonicOp) = op.bath
 mat_eltype(::HEOMBosonicOp{B}) where B = eltype(B)
 mat_eltype(::Type{<:HEOMBosonicOp{B}}) where B = eltype(B)
@@ -176,11 +177,7 @@ Base.eltype(::Type{HEOMBosonicBath{L,V1,V2}}) where {L,V1,V2} = eltype(V1)
 Construct the auxiliary Hilbert space for a bosonic HEOM hierarchy.
 
 Basis states are all occupation vectors n = (n₁,…,n_Nexp) with nₗ ≥ 0
-and Σₗ nₗ ≤ m_max.  The total dimension is
-
-    Σ_{m=0}^{m_max} C(N_exp + m - 1, m)
-
-where C is the binomial coefficient.
+and Σₗ nₗ ≤ m_max. 
 """
 function heom_bosonic_aux_space(bath::HEOMBosonicBath)
     return _heom_bosonic_aux_space(bath, Val(bath.N_exp))
@@ -204,22 +201,15 @@ function _enumerate_aux_states!(states, current::Vector{Int}, l::Int, remaining:
     end
     current[l] = 0
 end
-"""
-    heom_aux_dim(N_exp, m_max)
-Return the dimension of the bosonic HEOM auxiliary space: `Σ_{m=0}^{m_max} binomial(N_exp + m - 1, m)`.
-"""
-function heom_aux_dim(N_exp::Int, m_max::Int)
-    sum(binomial(N_exp + m - 1, m) for m in 0:m_max)
-end
 
 """
     heom_generator(H_sys_sym, V_sys_sym, bath; sys_left, sys_right)
 
 Build the symbolic bosonic HEOM generator
 
-    M = i(H_l − H_r) + W_aux
-        − i Σ_l (V_l − V_r) * Aup(l)
-        − i Σ_l (ξ_l V_l − ξ_l* V_r) * Adown(l)
+    M = i(H_l - H_r) + W_aux
+        - i Σ_l (V_l - V_r) * Aup(l)
+        - i Σ_l (ξ_l V_l - ξ_l* V_r) * Adown(l)
 
 from symbolic system operators and bath parameters.
 
@@ -279,9 +269,9 @@ end
     Adown = HEOMBosonicOp(:down, 1, bath)
     W = HEOMBosonicOp(:damping, 0, bath)
 
-    Mu = matrix_representation(Aup, H; projection=true)
-    Md = matrix_representation(Adown, H; projection=true)
-    Mw = matrix_representation(W, H)
+    Mu = representation(Aup, H; projection=true)
+    Md = representation(Adown, H; projection=true)
+    Mw = representation(W, H)
 
     # Aup: |0⟩→|1⟩, |1⟩→|2⟩, |2⟩→0 (truncated)
     @test Mu ≈ [0 0 0; 1 0 0; 0 1 0]
@@ -298,7 +288,7 @@ end
     # Minimal model: spin-1/2 system, 1 bath exponential, m_max=1
     # System: H = ω/2 σz,  coupling V = σz
     ω = 1.0
-    χ1 = 1.0 + 0.0im
+    χ1 = 1.0
     ξ1 = 0.5 - 0.5im
     bath = HEOMBosonicBath(1, 1, [χ1], [ξ1])
 
@@ -310,7 +300,7 @@ end
     Hs, Hleft, Hright, left, right = open_system(σ)
     Haux = heom_bosonic_aux_space(bath)
     Hfull = tensor_product((Hs, Haux))
-    mat = matrix_representation(M_sym, Hfull)
+    mat = representation(M_sym, Hfull)
     # Dimension check: 2 × 2 × (1+1) = 8
     @test size(mat) == (8, 8)
     @test dim(Hfull) == 8

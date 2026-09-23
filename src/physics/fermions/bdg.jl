@@ -15,9 +15,9 @@ end
 
 function normal_order_to_bdg(m::AbstractMatrix)
     n = size(m, 1)
-    h = m[1:n÷2, 1:n÷2] / 2
-    δ = m[1:n÷2, n÷2+1:end]
-    δd = m[n÷2+1:end, 1:n÷2]
+    h = m[1:(n÷2), 1:(n÷2)] / 2
+    δ = m[1:(n÷2), (n÷2+1):end]
+    δd = m[(n÷2+1):end, 1:(n÷2)]
     Δ = (δ - transpose(δ) + (δd - transpose(δd))') / 4
     [h Δ
         -conj(Δ) -conj(h)]
@@ -52,6 +52,7 @@ state_index(state::NambuState, H::BdGHilbertSpace) = state_index(state, parent(H
 _find_position(op::AbstractSym, H::BdGHilbertSpace) = _find_position(op, parent(H))
 
 
+representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
     isquadratic(op) || throw(ArgumentError("Operator must be quadratic in fermions to be represented on a BdG Hilbert space."))
     normal_order_to_bdg(_matrix_representation_single_space(remove_identity(op), H, repr, chunking; kwargs...))
@@ -73,7 +74,7 @@ end
     @fermions f
     h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
     H = bdg_hilbert_space(f, 1:2)
-    @test matrix_representation(h + 1, H) == matrix_representation(h, H)
+    @test representation(h + 1, H) == representation(h, H)
 
     h = rand(ComplexF64, 2, 2) + hc
     Δ = rand(ComplexF64, 2, 2)
@@ -81,8 +82,8 @@ end
     bdg_ham = [h/2 Δ/2
         -conj(Δ)/2 -conj(h / 2)]
     op = sum(f[n]' * h[n, m] * f[m] for n in 1:2, m in 1:2) +
-         sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:2, m in 1:2)
-    bdg_ham2 = matrix_representation(op, H)
+        sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:2, m in 1:2)
+    bdg_ham2 = representation(op, H)
     @test bdg_ham ≈ bdg_ham2
 end
 
@@ -107,9 +108,9 @@ function isbdgmatrix(A::AbstractMatrix)
     N = div(size(A, 1), 2)
     inds1, inds2 = axes(A)
     H = @views A[inds1[1:N], inds2[1:N]]
-    Δ = @views A[inds1[1:N], inds2[N+1:2N]]
-    Hd = @views A[inds1[N+1:2N], inds2[N+1:2N]]
-    Δd = @views A[inds1[N+1:2N], inds2[1:N]]
+    Δ = @views A[inds1[1:N], inds2[(N+1):2N]]
+    Hd = @views A[inds1[(N+1):2N], inds2[(N+1):2N]]
+    Δd = @views A[inds1[(N+1):2N], inds2[1:N]]
     _isbdgmatrix(H, Δ, Hd, Δd)
 end
 function _isbdgmatrix(H, Δ, Hd, Δd)
@@ -285,7 +286,7 @@ end
     N = 4
     H = bdg_hilbert_space(f, 1:N)
     ham = sum(rand(ComplexF64) * f[n]'f[k] + rand(ComplexF64) * f[n]'f[k]' + hc for (n, k) in Iterators.product(1:N, 1:N))
-    h = matrix_representation(ham, H)
+    h = representation(ham, H)
     @test ishermitian(h)
     @test isbdgmatrix(h)
     F = eigen(collect(h))
@@ -310,7 +311,7 @@ const DEFAULT_PH_CUTOFF = 1e-12
     @fermions f
     symham = f[1]' * f[2] + f[1]' * f[2]' + hc
     H = bdg_hilbert_space(f, 1:2)
-    mat = matrix_representation(symham, H)
+    mat = representation(symham, H)
     vals, vecs = eigen(Matrix(mat), BdGEigen(); canon_alg=FermionicHilbertSpaces.SVDCanon())
     @test vals ≈ [-1, 0, 0, 1]
     @test 1 ≈ abs(vecs[:, 2][1]^2 + vecs[:, 3][1]^2) / (abs2(vecs[:, 2][1]) + abs2(vecs[:, 3][1]))
@@ -322,8 +323,8 @@ const DEFAULT_PH_CUTOFF = 1e-12
     symham = f[1]' * f[2] + f[2]' * f[3] + f[1]' * f[2]' + f[2]' * f[3]' + hc
     H = bdg_hilbert_space(f, 1:3)
     Hmb = hilbert_space(f, 1:3)
-    matmb = matrix_representation(symham, Hmb)
-    mat = matrix_representation(symham, H)
+    matmb = representation(symham, Hmb)
+    mat = representation(symham, H)
     vals, vecs = eigen(Matrix(mat), BdGEigen(); canon_alg=FermionicHilbertSpaces.SVDCanon())
     @test 1 ≈ abs(vecs[:, 3][1]^2 + vecs[:, 4][1]^2) / (abs2(vecs[:, 3][1]) + abs2(vecs[:, 4][1]))
     vals2, vecs2 = eigen(Matrix(mat), BdGEigen(); canon_alg=FermionicHilbertSpaces.ProjectionCanon())

@@ -254,8 +254,8 @@ end
     using LinearAlgebra
     @fermions f
     H = hilbert_space(f, 1:2)
-    @test matrix_representation(1 + 0 * f[1], H) == I
-    @test matrix_representation(1, H) == I
-    @test matrix_representation(I, H) == I
-    @test matrix_representation(1 + f[1], H) == I + matrix_representation(f[1], H)
+    @test representation(1 + 0 * f[1], H) == I
+    @test representation(1, H) == I
+    @test representation(I, H) == I
+    @test representation(1 + f[1], H) == I + representation(f[1], H)
 end

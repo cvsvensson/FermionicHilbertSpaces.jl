@@ -138,9 +138,9 @@ PrecompileTools.@compile_workload begin
         subregion([f[3]], H2)
         partial_trace(m + hc, H1 => hilbert_space(f, 1:1, NumberConservation()))
         H = tensor_product(H1, H2)
-        c = matrix_representation(f[1], H1)
+        c = representation(f[1], H1)
         embed(c, H1 => H)
-        matrix_representation((f[1] * f[2]' + 1 + f[1])^2 * 2.0, H1)
+        representation((f[1] * f[2]' + 1 + f[1])^2 * 2.0, H1)
         @majoranas γ
         (γ[1] * γ[2] + 1.0 + γ[1])^2
         @boson b
@@ -148,7 +148,7 @@ PrecompileTools.@compile_workload begin
         Hb = hilbert_space(b, 2)
         Hs = hilbert_space(s)
         H = tensor_product(H2, Hb, Hs)
-        mat = matrix_representation(b'b + s[:x] * f[3], H)
+        mat = representation(b'b + s[:x] * f[3], H)
     end
 end
 

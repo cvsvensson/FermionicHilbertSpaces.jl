@@ -1,7 +1,7 @@
 [deps]
 FermionicHilbertSpaces = "82e5dd95-83c3-46b2-a303-acc930c81756"
-HierarchicalEOM = "a62dbcb7-80f5-4d31-9a88-8b19fd92b128"
+KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
-SciMLOperators = "c0aeaf25-5076-4817-a8d5-81caf7dfa961"
-SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Oscar = "f1435218-dba5-11e9-1e4d-f1a5fab5fc13"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"

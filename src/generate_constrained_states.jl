@@ -25,7 +25,8 @@ branch_constraint(constraint::BranchConstraint, space) = constraint
 """
     valid_branch(constraint, partial_state, remaining_spaces) -> Bool
     
-    Return `true` if the branch should be explored, `false` to prune. By default this calls `constraint.f(partial_state, remaining_spaces)`.
+    Return `true` if the branch should be explored, `false` to prune. 
+    By default this calls `constraint.f(partial_state, remaining_spaces)`.
 """
 valid_branch(constraint::BranchConstraint, partial_state, depth, spaces) = constraint.f(partial_state, depth, spaces)
 valid_branch(constraint::ProductConstraint, partial_state, depth, spaces) = all(Iterators.map(c -> valid_branch(c, partial_state, depth, spaces), constraint.constraints))
@@ -161,7 +162,7 @@ end
 _additive_function_application(substates, func::Function, ::Type{T}=Int) where T = sum(func, substates; init=zero(T))
 _additive_function_application(substates, fw::WeightedFunction, ::Type{T}=Int) where T = sum(w * fw.func(substate) for (substate, w) in zip(substates, fw.weights); init=zero(T))
 
-branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_constraint(constraint.allowed_values, constraint.functions, constraint.subspaces, spaces)
+branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_constraint(constraint.allowed_values, constraint.maps, constraint.spaces, spaces)
 
 
 @testitem "generate_states with BranchConstraint" begin
@@ -241,44 +242,45 @@ branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_cons
     @test all(s -> s.f >= 0, states)
 
     H = tensor_product(Hs)
-    additive = AdditiveConstraint([1], (Hs[1], Hs[2], Hs[3]), (
-        s -> 2 * particle_number(s),
-        s -> -particle_number(s),
-        s -> particle_number(s),
-    ))
+    additive = AdditiveConstraint([1];
+        spaces=(Hs[1], Hs[2], Hs[3]),
+        maps=(s -> 2 * particle_number(s),
+            s -> -particle_number(s),
+            s -> particle_number(s))
+    )
     numcon = NumberConservation([1], (Hs[1], Hs[2], Hs[3]), (2, -1, 1))
     Hnum = tensor_product(Hs; constraint=numcon)
     Hadd = tensor_product(Hs; constraint=additive)
     @test Hnum == Hadd
     # states = generate_states(Hs, additive, H; process_result)
     @test all(state -> begin
-            n1 = count_ones(state.f & 0b00001)
-            n2 = count_ones(state.f & 0b00010)
-            n3 = count_ones(state.f & 0b00100)
-            2n1 - n2 + n3 == 1
-        end, basisstates(Hadd))
+        n1 = count_ones(state.f & 0b00001)
+        n2 = count_ones(state.f & 0b00010)
+        n3 = count_ones(state.f & 0b00100)
+        2n1 - n2 + n3 == 1
+    end, basisstates(Hadd))
 
-    additive_with_shared_function = AdditiveConstraint([0, 2], (Hs[4], Hs[5]), particle_number)
+    additive_with_shared_function = AdditiveConstraint([0, 2]; spaces=(Hs[4], Hs[5]), maps=particle_number)
     states = generate_states(Hs, additive_with_shared_function; process_result)
     @test all(state -> begin
-            n4 = count_ones(state.f & 0b01000)
-            n5 = count_ones(state.f & 0b10000)
-            n4 + n5 in (0, 2)
-        end, states)
+        n4 = count_ones(state.f & 0b01000)
+        n5 = count_ones(state.f & 0b10000)
+        n4 + n5 in (0, 2)
+    end, states)
 
     Hc = tensor_product(Hs; constraint=additive)
     @test collect(quantumnumbers(Hc)) == [1]
 
-    compound = additive * AdditiveConstraint([1], (Hs[4], Hs[5]), particle_number)
+    compound = additive * AdditiveConstraint([1]; spaces=(Hs[4], Hs[5]), maps=particle_number)
     states = generate_states(Hs, compound; process_result)
     @test all(state -> begin
-            n1 = count_ones(state.f & 0b00001)
-            n2 = count_ones(state.f & 0b00010)
-            n3 = count_ones(state.f & 0b00100)
-            n4 = count_ones(state.f & 0b01000)
-            n5 = count_ones(state.f & 0b10000)
-            2n1 - n2 + n3 == 1 && n4 + n5 == 1
-        end, states)
+        n1 = count_ones(state.f & 0b00001)
+        n2 = count_ones(state.f & 0b00010)
+        n3 = count_ones(state.f & 0b00100)
+        n4 = count_ones(state.f & 0b01000)
+        n5 = count_ones(state.f & 0b10000)
+        2n1 - n2 + n3 == 1 && n4 + n5 == 1
+    end, states)
 
     # Test with composite and mixed spaces
     H1 = hilbert_space(f, 1:2)

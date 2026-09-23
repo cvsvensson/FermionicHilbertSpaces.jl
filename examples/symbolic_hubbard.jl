@@ -22,7 +22,7 @@ ham = sum(-t * (f[1, s]' * f[2, s] + hc) for s in (:↑, :↓)) +
       U * sum(f[j, :↑]' * f[j, :↑] * f[j, :↓]' * f[j, :↓] for j in 1:2)
 
 # Construct matrix representation in the constrained Hilbert space
-M = Matrix(matrix_representation(ham, H))
+M = representation(ham, H, :dense)
 
 # --- Revealing structure via a basis transformation ---
 #
@@ -31,12 +31,12 @@ M = Matrix(matrix_representation(ham, H))
 # with this symmetry. This block-diagonalizes the Hamiltonian.
 Hleft = subregion([f[1, :↑], f[1, :↓]], H)
 Hright = subregion([f[2, :↑], f[2, :↓]], H)
-Peven = symmetric_sector(H, [Hleft, Hright], :symmetric, Sym)
-Podd = symmetric_sector(H, [Hleft, Hright], :antisymmetric, Sym)
+Peven = symmetric_sector(H, [Hleft, Hright], :symmetric, eltype(M); orth_method=nothing)
+Podd = symmetric_sector(H, [Hleft, Hright], :antisymmetric, eltype(M); orth_method=nothing)
 Meven = simplify.(Peven' * M * Peven)
 
 # The off-diagonal block should vanish
-simplify.(Peven' * M * Podd)
+Peven' * M * Podd
 
 # Anti-symmetric sector
 Modd = Podd' * M * Podd
@@ -50,7 +50,8 @@ vals_even, vecs_even = eigen(Meven)
 # As an example of post-processing, we compute the reduced density matrix
 # of the first site by tracing out the second site. This provides access
 # to local observables and entanglement properties. 
-ψ = Peven * vecs_even[:, 1] # map back to original basis
+n = findfirst(!iszero, vals_even)
+ψ = Peven * vecs_even[:, n] # map back to original basis
 ρ = ψ * ψ'
 ρ /= tr(ρ)  # normalize, since sympy eigenvectors are not guaranteed to be normalized
 ρ_sub = partial_trace(ρ, H => Hleft)

@@ -44,7 +44,7 @@ dim(H::ProductSpace) = prod(dim, factors(H); init=1)
 atomic_id(H::ProductSpace) = H.atom_ordering
 group_id(H::ProductSpace) = H.atom_ordering
 
-basisstates(H::ProductSpace) = collect(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
+basisstates(H::ProductSpace{B}) where B = TypedIterator{B}(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
 function basisstate(n::Integer, H::ProductSpace{B}) where B
     inds = Tuple(H.cartinds[n])
     ProductState(map(basisstate, inds, H.factors))
@@ -102,7 +102,7 @@ end
     @test dim(H2) == dim(H) * dim(Hboson)
     @test length(H2.factors) == 3
 
-    @test basisstates(H2) == [ProductState((s_f.states..., s_b)) for s_f in basisstates(H), s_b in basisstates(Hboson)]
+    @test collect(basisstates(H2)) == [ProductState((s_f.states..., s_b)) for s_f in basisstates(H), s_b in basisstates(Hboson)]
     for (i, state) in enumerate(basisstates(H))
         @test state_index(state, H) == i
         @test basisstate(i, H) == state
@@ -211,14 +211,14 @@ end
     @test partial_trace(embed(m, Ha => H), H => Ha) == m * dim(Hb) * dim(Hc)
 
     # Fermion commutation relations
-    amat = matrix_representation(a[1], Ha)
-    bmat = matrix_representation(b[1], Hb)
-    cmat = matrix_representation(c[1], Hc)
+    amat = representation(a[1], Ha)
+    bmat = representation(b[1], Hb)
+    cmat = representation(c[1], Hc)
     @test embed(amat, Ha => H) * embed(bmat, Ha => H) ≈ -embed(bmat, Ha => H) * embed(amat, Ha => H)
     @test embed(amat, Ha => H) * embed(cmat, Ha => H) ≈ embed(cmat, Ha => H) * embed(amat, Ha => H)
-    @test embed(amat, Ha => H) == matrix_representation(a[1], H)
-    @test embed(bmat, Hb => H) == matrix_representation(b[1], H)
-    @test embed(cmat, Hc => H) == matrix_representation(c[1], H)
+    @test embed(amat, Ha => H) == representation(a[1], H)
+    @test embed(bmat, Hb => H) == representation(b[1], H)
+    @test embed(cmat, Hc => H) == representation(c[1], H)
 
     # Constrained spaces and subregion
     Habcons = constrain_space(Hab, NumberConservation(1))
@@ -248,10 +248,10 @@ end
     @test partial_trace(m, Hprod => H2) ≈ partial_trace(partial_trace(m, Hprod => H1), H1 => H2)
 
 
-    @test matrix_representation(a[1] + 1, Hprod; projection=true) == embed(matrix_representation(a[1], Ha), Ha => Hprod; skipmissing=true) + I
-    @test matrix_representation(c[1], Hprod; projection=true) == embed(matrix_representation(c[1], Hc), Hc => Hprod; skipmissing=true)
+    @test representation(a[1] + 1, Hprod; projection=true) == embed(representation(a[1], Ha), Ha => Hprod; skipmissing=true) + I
+    @test representation(c[1], Hprod; projection=true) == embed(representation(c[1], Hc), Hc => Hprod; skipmissing=true)
 
-    @test matrix_representation(a[1]' * b[1], Hprod) == embed(matrix_representation(a[1]' * b[1], Hab), Hab => Hprod; skipmissing=true)
+    @test representation(a[1]' * b[1], Hprod) == embed(representation(a[1]' * b[1], Hab), Hab => Hprod; skipmissing=true)
 
 end
 

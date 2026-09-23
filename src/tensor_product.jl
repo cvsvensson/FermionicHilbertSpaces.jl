@@ -522,17 +522,80 @@ end
 function _canonicalize_pt_input(m::UniformScaling, H::AbstractHilbertSpace)
     return _vectorize_pt_density_matrix(m.λ * I(dim(H)))
 end
-_canonicalize_pt_output(v::AbstractVector) = v
-_canonicalize_pt_output(m::AbstractMatrix) = vec(m)
+function _canonicalize_pt_output(v::AbstractVector, Hsub::AbstractHilbertSpace)
+    length(v) == dim(Hsub)^2 || throw(DimensionMismatch("The output vector must have length $(dim(Hsub)^2), got $(length(v))"))
+    return v
+end
+function _canonicalize_pt_output(m::AbstractMatrix, Hsub::AbstractHilbertSpace)
+    size(m) == (dim(Hsub), dim(Hsub)) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(m))"))
+    return vec(m)
+end
 
-function (op::PartialTraceMap)(in)
+function (op::PartialTraceMap)(in::AbstractMatrix)
+    v = _canonicalize_pt_input(in, op.H)
+    reshape(op.map * v, dim(op.Hsub), dim(op.Hsub))
+end
+function (op::PartialTraceMap)(in::AbstractVector)
+    if length(in) == dim(op.H)
+        # pure state: apply the map directly, without forming the density matrix
+        w = _apply_ptmap_on_vec(op, in)
+        return reshape(w, dim(op.Hsub), dim(op.Hsub))
+    end
+    v = _canonicalize_pt_input(in, op.H)
+    reshape(op.map * v, dim(op.Hsub), dim(op.Hsub))
+end
+function (op::PartialTraceMap)(in::UniformScaling)
     v = _canonicalize_pt_input(in, op.H)
     reshape(op.map * v, dim(op.Hsub), dim(op.Hsub))
 end
 
-function (op::PartialTraceMap)(out, in)
+function _apply_ptmap_on_vec(ptmap::PartialTraceMap, ψ::AbstractVector)
+    w = zeros(eltype(ψ), dim(ptmap.Hsub)^2)
+    _apply_ptmap_on_vec!(w, ptmap, ψ)
+    return w
+end
+function _apply_ptmap_on_vec!(w::AbstractVector, ptmap::PartialTraceMap, ψ::AbstractVector)
+    mat = ptmap.map
+    D = length(ψ) # dim(ptmap.H), the column-major decode below relies on this
+    fill!(w, zero(eltype(w)))
+
+    rows = rowvals(mat)
+    vals = nonzeros(mat)
+
+    @inbounds for c in 1:size(mat, 2)
+        ptr_start = mat.colptr[c]
+        ptr_end = mat.colptr[c+1] - 1
+        ptr_start > ptr_end && continue  # skip empty column
+        
+        j = (c - 1) % D + 1
+        k = div(c - 1, D) + 1
+        
+        val_ψ = ψ[j] * conj(ψ[k])
+        iszero(val_ψ) && continue
+        
+        for ptr in ptr_start:ptr_end
+            w[rows[ptr]] += vals[ptr] * val_ψ
+        end
+    end
+    
+    return w
+end
+
+function (op::PartialTraceMap)(out, in::AbstractMatrix)
+    vout = _canonicalize_pt_output(out, op.Hsub)
     vin = _canonicalize_pt_input(in, op.H)
-    vout = _canonicalize_pt_output(out)
+    mul!(vout, op.map, vin)
+    out
+end
+function (op::PartialTraceMap)(out, in::AbstractVector)
+    if length(in) == dim(op.H)
+        # pure state: apply the map directly, without forming the density matrix
+        vout = _canonicalize_pt_output(out, op.Hsub)
+        _apply_ptmap_on_vec!(vout, op, in)
+        return out
+    end
+    vout = _canonicalize_pt_output(out, op.Hsub)
+    vin = _canonicalize_pt_input(in, op.H)
     mul!(vout, op.map, vin)
     out
 end

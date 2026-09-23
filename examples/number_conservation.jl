@@ -10,7 +10,7 @@ H = hilbert_space(c, 1:N, NumberConservation(n)) # Spans all states with n fermi
 # Define a Hamiltonian that conserves the number of fermions
 hamiltonian = sum((c[i]' * c[i+1] + hc) for i in 1:N-1) + sum(rand() * c[i]' * c[i] * c[i+1]' * c[i+1] for i in 1:N-1) #+ sum(rand() * c[i]' * c[i] for i in 1:N);
 
-ham = Hermitian(matrix_representation(hamiltonian, H))
+ham = Hermitian(representation(hamiltonian, H))
 
 ## Solve for ground state
 using KrylovKit

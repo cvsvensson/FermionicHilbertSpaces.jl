@@ -265,8 +265,8 @@ end
     @fermions f
     Hf = hilbert_space(f, 1:2)
     op = f[1]' * f[2] + 1im
-    L = matrix_representation(op, Hf, :lazy)
-    M = matrix_representation(op, Hf)
+    L = representation(op, Hf, :lazy)
+    M = representation(op, Hf)
     v = randn(dim(Hf))
     w = randn(ComplexF64, dim(Hf))
     Vm = randn(dim(Hf), 3)
@@ -311,27 +311,27 @@ end
     @test (2 * L) * v ≈ 2 * (M * v)
     @test concretize(L) == M
     @test !ishermitian(L)
-    @test ishermitian(matrix_representation(op + hc, Hf, :lazy))
+    @test ishermitian(representation(op + hc, Hf, :lazy))
 
     import FermionicHilbertSpaces: LazyRepr
-    @test matrix_representation(op, Hf, :lazy).cache[1] isa Vector
-    @test matrix_representation(op, Hf, LazyRepr(:dense)).cache[1] isa Vector
-    @test matrix_representation(op, Hf, LazyRepr(:sparse)).cache[1] isa SparseVector
+    @test representation(op, Hf, :lazy).cache[1] isa Vector
+    @test representation(op, Hf, LazyRepr(:dense)).cache[1] isa Vector
+    @test representation(op, Hf, LazyRepr(:sparse)).cache[1] isa SparseVector
     dense_cache = zeros(ComplexF64, dim(Hf))
     sparse_cache = spzeros(ComplexF64, dim(Hf))
     symbol_cache = [:a for _ in 1:dim(Hf)]
-    @test matrix_representation(op, Hf, LazyRepr(dense_cache)).cache[1] isa typeof(dense_cache)
-    @test matrix_representation(op, Hf, LazyRepr(sparse_cache)).cache[1] isa typeof(sparse_cache)
-    @test matrix_representation(op, Hf, LazyRepr(symbol_cache)).cache[1] isa typeof(symbol_cache)
+    @test representation(op, Hf, LazyRepr(dense_cache)).cache[1] isa typeof(dense_cache)
+    @test representation(op, Hf, LazyRepr(sparse_cache)).cache[1] isa typeof(sparse_cache)
+    @test representation(op, Hf, LazyRepr(symbol_cache)).cache[1] isa typeof(symbol_cache)
 
-    @test_throws DimensionMismatch matrix_representation(op, Hf, LazyRepr(zeros(dim(Hf) + 1)))
+    @test_throws DimensionMismatch representation(op, Hf, LazyRepr(zeros(dim(Hf) + 1)))
 
     @spin s 1 // 2
     Hs = hilbert_space(s)
     H = tensor_product(Hf, Hs)
     op = 5 * f[1]' * f[2] * s[:x] + 2 * s[:z] + f[1] + 1im
-    L = matrix_representation(op, H, :lazy)
-    M = matrix_representation(op, H)
+    L = representation(op, H, :lazy)
+    M = representation(op, H)
     v = randn(dim(H))
     Vm = randn(dim(H), 2)
     @test L * v ≈ M * v
@@ -340,8 +340,8 @@ end
     @test L * Vm ≈ M * Vm
 
     Hcons = constrain_space(H, NumberConservation(2, [Hf]))
-    L = matrix_representation(op, Hcons, :lazy; projection=true)
-    M = matrix_representation(op, Hcons; projection=true)
+    L = representation(op, Hcons, :lazy; projection=true)
+    M = representation(op, Hcons; projection=true)
     v = randn(dim(Hcons))
     Vm = randn(ComplexF64, dim(Hcons), 2)
     @test L * v ≈ M * v
@@ -376,10 +376,10 @@ end
     Hf = hilbert_space(f, 1:4)
     op = f[1]' * f[2] + 2im * f[3]' * f[4] + hc + 1.5
 
-    M = matrix_representation(op, Hf)
-    Ln = matrix_representation(op, Hf, :lazy; chunking=NoChunking())
-    Lt = matrix_representation(op, Hf, :lazy; chunking=TermChunking(scheduler))
-    Ls = matrix_representation(op, Hf, :lazy; chunking=StateChunking(scheduler))
+    M = representation(op, Hf)
+    Ln = representation(op, Hf, :lazy; chunking=NoChunking())
+    Lt = representation(op, Hf, :lazy; chunking=TermChunking(scheduler))
+    Ls = representation(op, Hf, :lazy; chunking=StateChunking(scheduler))
 
     v = randn(ComplexF64, dim(Hf))
     V = randn(ComplexF64, dim(Hf), 3)
@@ -407,21 +407,21 @@ end
     Hs = hilbert_space(s)
     Hprod = tensor_product(Hf, Hs)
     op_prod = f[1]' * f[2] * s[:x] + f[3]' * f[4] * s[:z] + hc + 1im
-    Mprod = matrix_representation(op_prod, Hprod)
-    Ltprod = matrix_representation(op_prod, Hprod, :lazy; chunking=TermChunking(scheduler))
-    Lsprod = matrix_representation(op_prod, Hprod, :lazy; chunking=StateChunking(scheduler))
+    Mprod = representation(op_prod, Hprod)
+    Ltprod = representation(op_prod, Hprod, :lazy; chunking=TermChunking(scheduler))
+    Lsprod = representation(op_prod, Hprod, :lazy; chunking=StateChunking(scheduler))
     vprod = randn(ComplexF64, dim(Hprod))
     @test Ltprod * vprod ≈ Mprod * vprod
     @test Lsprod * vprod ≈ Mprod * vprod
 
     Hcons = constrain_space(Hprod, NumberConservation(2, [Hf]))
     vcons = randn(ComplexF64, dim(Hcons))
-    Mcons = matrix_representation(op_prod, Hcons; projection=true)
+    Mcons = representation(op_prod, Hcons; projection=true)
     Mv = Mcons * vcons
     for concretizer in [FermionicHilbertSpaces.NoConcretizer(), FermionicHilbertSpaces.TupleConcretizer(), FermionicHilbertSpaces.VecConcretizer()]
-        Lcons = matrix_representation(op_prod, Hcons, :lazy; projection=true, chunking=NoChunking(), concretizer)
-        Ltcons = matrix_representation(op_prod, Hcons, :lazy; projection=true, chunking=TermChunking(scheduler), concretizer)
-        Lscons = matrix_representation(op_prod, Hcons, :lazy; projection=true, chunking=StateChunking(scheduler), concretizer)
+        Lcons = representation(op_prod, Hcons, :lazy; projection=true, chunking=NoChunking(), concretizer)
+        Ltcons = representation(op_prod, Hcons, :lazy; projection=true, chunking=TermChunking(scheduler), concretizer)
+        Lscons = representation(op_prod, Hcons, :lazy; projection=true, chunking=StateChunking(scheduler), concretizer)
         @test Lcons * vcons ≈ Mv
         @test Ltcons * vcons ≈ Mv
         @test Lscons * vcons ≈ Mv

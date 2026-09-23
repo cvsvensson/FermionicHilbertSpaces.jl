@@ -9,7 +9,7 @@ Random.seed!(1)
 @fermions f
 N = 12
 H = hilbert_space(f, 1:N, ParityConservation())
-op = sum(rand() * f[n]' * f[n] for n in 1:N) + sum(1im * f[n]' * f[n+1] + hc for n in 1:N-1)
+op = sum(rand() * f[n]' * f[n] for n in 1:N) + sum(1im * f[n]' * f[n+1] + hc for n in 1:(N-1))
 Hsub = hilbert_space(f, 1:div(N, 4), ParityConservation())
 d = dim(H)
 m = sprand(ComplexF64, d, d, 1 / 2^N)
@@ -33,12 +33,12 @@ SUITE["matrix_representation"]["bdg"] = @benchmarkable matrix_representation($op
 SUITE["complement"]["fermions"] = @benchmarkable FermionicHilbertSpaces.complementary_subsystem($H, $Hsub)
 
 complement = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
-SUITE["partial_trace"]["fermions"]["map"] = @benchmarkable partial_trace($(H => Hsub); complement=$complement)
-SUITE["partial_trace"]["fermions"]["standard"] = @benchmarkable partial_trace($m, $(H => Hsub), complement=$complement)
+SUITE["partial_trace"]["fermions"]["map"] = @benchmarkable partial_trace($(H => Hsub); complement=($complement))
+SUITE["partial_trace"]["fermions"]["standard"] = @benchmarkable partial_trace($m, $(H => Hsub), complement=($complement))
 
 d = dim(Hsub)
 msub = rand(ComplexF64, d, d)
-SUITE["embed"]["fermions"] = @benchmarkable embed($msub, $(Hsub => H); complement=$complement)
+SUITE["embed"]["fermions"] = @benchmarkable embed($msub, $(Hsub => H); complement=($complement))
 
 ## Reshape: tensor-to-tensor
 H1r = hilbert_space(f, 1:3, NoSymmetry())
@@ -90,11 +90,11 @@ for alg in [SubsystemPartialTraceAlg(), FullPartialTraceAlg()]
     def_alg = default_partial_trace_alg(mat, Hsub, H, Hcomp)
     def = _name(def_alg)
     SUITE["partial_trace_algorithms"]["default=$def"]["Sparse space"]["Dense"]["$name"] =
-        @benchmarkable partial_trace($mat, $H, $Hsub; alg=$alg)
+        @benchmarkable partial_trace($mat, $H, $Hsub; alg=($alg))
     def_alg = default_partial_trace_alg(matsparse, Hsub, H, Hcomp)
     def = _name(def_alg)
     SUITE["partial_trace_algorithms"]["default=$def"]["Sparse space"]["Sparse"]["$name"] =
-        @benchmarkable partial_trace($matsparse, $H, $Hsub; alg=$alg)
+        @benchmarkable partial_trace($matsparse, $H, $Hsub; alg=($alg))
 end
 
 # Setup for Standard Full Fock Space (No Symmetry)
@@ -111,11 +111,11 @@ for alg in [SubsystemPartialTraceAlg(), FullPartialTraceAlg()]
     def_alg = default_partial_trace_alg(m_std, Hsub_std, H_std, Hcomp)
     def = _name(def_alg)
     SUITE["partial_trace_algorithms"]["default=$def"]["Full space"]["Dense"]["$name"] =
-        @benchmarkable partial_trace($m_std, $H_std, $Hsub_std; alg=$alg)
+        @benchmarkable partial_trace($m_std, $H_std, $Hsub_std; alg=($alg))
     def_alg = default_partial_trace_alg(m_sparse, Hsub_std, H_std, Hcomp)
     def = _name(def_alg)
     SUITE["partial_trace_algorithms"]["default=$def"]["Full space"]["Sparse"]["$name"] =
-        @benchmarkable partial_trace($m_sparse, $H_std, $Hsub_std; alg=$alg)
+        @benchmarkable partial_trace($m_sparse, $H_std, $Hsub_std; alg=($alg))
 end
 
 ## Product spaces
@@ -131,11 +131,11 @@ op = (1 + sum(rand() * f[n]'f[n] for n in 1:2)) * (1 + sum(rand() * b[n]'b[n] + 
 SUITE["matrix_representation"]["product space"] = @benchmarkable matrix_representation($op, $H)
 
 complement = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
-SUITE["partial_trace"]["product space"]["map"] = @benchmarkable partial_trace($(H => Hsub); complement=$complement)
+SUITE["partial_trace"]["product space"]["map"] = @benchmarkable partial_trace($(H => Hsub); complement=($complement))
 m = rand(ComplexF64, dim(H), dim(H))
-SUITE["partial_trace"]["product space"]["standard"] = @benchmarkable partial_trace($m, $(H => Hsub); complement=$complement)
+SUITE["partial_trace"]["product space"]["standard"] = @benchmarkable partial_trace($m, $(H => Hsub); complement=($complement))
 msub = rand(ComplexF64, dim(Hsub), dim(Hsub))
-SUITE["embed"]["product space"] = @benchmarkable embed($msub, $(Hsub => H); complement=$complement)
+SUITE["embed"]["product space"] = @benchmarkable embed($msub, $(Hsub => H); complement=($complement))
 
 # Larger product spaces with many atomic factors
 @fermions f
@@ -167,7 +167,7 @@ dissipator(L) = left(L) * right(L') - 0.5 * (left(L' * L) + right(L' * L))
 jump_in = [sqrt(0.05 + 0.01n) * c[n]' for n in 1:N]
 jump_out = [sqrt(0.04 + 0.01n) * c[n] for n in 1:N]
 liouvillian = 1im * (left(ham_liouv) - right(ham_liouv)) + sum(dissipator(L) for L in jump_in) + sum(dissipator(L) for L in jump_out)
-L = matrix_representation(liouvillian, Hopen, :lazy)
+L = representation(liouvillian, Hopen, :lazy)
 # L = matrix_representation(left(c[1]), Hopen, :lazy)
 v = randn(ComplexF64, dim(Hopen))
 vout = copy(v)
@@ -182,7 +182,7 @@ SUITE["matrix_application"]["lazy liouvillian"]["mul sparse"] = @benchmarkable $
 using Combinatorics
 using FermionicHilbertSpaces: AdditiveConstraint
 @spins S 1 // 2
-H = hilbert_space(S, 1:6, AdditiveConstraint(2, s -> s.m))
+H = hilbert_space(S, 1:6, AdditiveConstraint(2; maps=s -> s.m))
 Hs = factors(H)
 SUITE["permutations"]["many_small"] = @benchmarkable symmetric_sector($H, $Hs, $:symmetric)
 

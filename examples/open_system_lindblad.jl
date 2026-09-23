@@ -10,13 +10,13 @@ using LinearAlgebra
 Hlr, Hl, Hr, left, right = open_system(c, 1:1)
 # This generates two versions of hilbert_space(c, 1:1), tagged as `:left` and `:right`. 
 # `Hr` is a transposed space which automatically gives transposed matrix representations
-# satisfying `matrix_representation(A*B, Hr) == matrix_representation(B, Hr) * matrix_representation(A, Hr)`,
+# satisfying `representation(A*B, Hr) == representation(B, Hr) * representation(A, Hr)`,
 # i.e. `A` acts on `Hr` before `B` does. This choice is natural when working with density matrices as
 # in an expression like
 # ```math
-# \rho * A * B,
+# A \rho B C,
 # ```
-# A acts before B.
+# B acts before C, while A commutes with both.
 
 # The left and right spaces each have a symbolic basis associated to them, which are tagged 
 # copies of the original `c` basis. The `left` and `right` functions map symbolic expressions 
@@ -27,7 +27,7 @@ ham_sym = 1.0 * c[1]'c[1]
 # then the Liouvillian superoperator is
 L_sym = 1im * (left(ham_sym) - right(ham_sym))
 # We can get a matrix representation of the Liouvillian on the full space `Hlr` with
-L_mat = matrix_representation(L_sym, Hlr)
+L_mat = representation(L_sym, Hlr)
 # A density matrix has two indices, correspinding to (Hl, Hr) and the vectorized form 
 # has one index corresponding to Hlr. To translate between these, use `reshape`.
 # E.g. to vectorize the identity operator we can do
@@ -39,7 +39,7 @@ iszero(L_mat' * Ivec)
 v = rand(dim(Hlr))
 reshape(v, Hlr => (Hl, Hr))
 
-# ## Lindblad example
+# ## Example: Lindblad 
 
 # We study a **single fermionic level** at energy ``\varepsilon`` coupled to a
 # Markovian reservoir, with incoherent gain/loss rates:
@@ -59,10 +59,10 @@ using FermionicHilbertSpaces, LinearAlgebra
 γ_in = 0.3
 γ_out = 0.7
 
-# ## Step 1: Build the open-system Hilbert space
+# ### Build the Hilbert space and matrices
 @fermions c
 Hlr, Hl, Hr, left, right = open_system(c, 1:1)
-ham_sym = ε * c[1]' * c[1]
+ham_sym = ε * c[1]'c[1]
 L_in = √γ_in * c[1]'
 L_out = exp(rand() * 2pi * im) * √γ_out * c[1]
 
@@ -70,10 +70,10 @@ L_out = exp(rand() * 2pi * im) * √γ_out * c[1]
 dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
 lindbladian = 1im * (left(ham_sym) - right(ham_sym)) + dissipator(L_in) + dissipator(L_out)
 # Let's get the matrix representation and check that it preserves trace 
-mat = matrix_representation(lindbladian, Hlr)
+mat = representation(lindbladian, Hlr)
 Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
 iszero(mat' * Ivec)
-# ## Solve for the steady state
+# ### Solve for the steady state
 # The steady state is the eigenvector of `mat` with eigenvalue closest to zero.
 vals, vecs = eigen(Matrix(mat); sortby=abs)
 v = vecs[:, 1]
@@ -81,15 +81,15 @@ v = vecs[:, 1]
 ρ ./= tr(ρ)
 
 # Extract occupation ⟨n⟩ = Tr(c†c · ρ_ss) on the physical (left) space.
-n_mat = matrix_representation(left(c[1]'c[1]), Hl)
+n_mat = representation(left(c[1]'c[1]), Hl)
 n_ss = tr(n_mat * ρ)
 # or equivalently in the vectorized space
-n_matlr = matrix_representation(left(c[1]'c[1]), Hlr)
+n_matlr = representation(left(c[1]'c[1]), Hlr)
 n_ss = Ivec' * n_matlr * v / (Ivec' * v)
 n_analytical = γ_in / (γ_in + γ_out)
 println("Steady-state occupation ⟨n⟩_ss = $n_ss  (analytic: $n_analytical)")
 
-# ## Use a conserved quantity for block structure
+# ### Use a conserved quantity for block structure
 
 # For this model, while there are particles jumping in and out of the system,
 # the difference in particle number between the left and right space is conserved.
@@ -101,4 +101,4 @@ println("Steady-state occupation ⟨n⟩_ss = $n_ss  (analytic: $n_analytical)")
 # between different particle number sectors.
 constraint = NumberConservation(-1:1, [Hl, Hr], [1, -1])
 Hcons = tensor_product((Hl, Hr); constraint)
-mat_cons = matrix_representation(lindbladian, Hcons)
+mat_cons = representation(lindbladian, Hcons)

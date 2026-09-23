@@ -35,7 +35,7 @@ M = 8 * 2
 H = hilbert_space(g, 1:M, ParityConservation(1))
 Random.seed!(11)
 symham = syk_hamiltonian(g, M)
-ham = Hermitian(Matrix(matrix_representation(symham, H)))
+ham = Hermitian(representation(symham, H, :dense))
 vals_even, vecs_even = eigen(ham)
 
 ##

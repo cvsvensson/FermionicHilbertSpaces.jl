@@ -37,6 +37,7 @@
 
 # Let's load the package and import some things we need to overload or use
 using FermionicHilbertSpaces
+using FermionicHilbertSpaces: AbstractSym
 import FermionicHilbertSpaces.NonCommutativeProducts:
     @nc, NCMul, @commutative, mul_effect
 
@@ -47,11 +48,11 @@ import FermionicHilbertSpaces.NonCommutativeProducts:
 struct FloquetBasis
     id::Int
 end
-struct FloquetLadder
+struct FloquetLadder <: AbstractSym
     shift::Int        # +1 → F (raising), −1 → F† (lowering), k → F^k
     basis::FloquetBasis
 end
-struct FloquetNumber
+struct FloquetNumber <: AbstractSym
     power::Int        # exponent p in N^p
     basis::FloquetBasis
 end
@@ -71,9 +72,9 @@ const Floquets = Union{FloquetLadder,FloquetNumber}
 
 # ### Step 3 — `@commutative` declarations
 
-# If we want Floquet operators to commute with the spin operators defined in this package, we write
+# To make Floquet operators commute with all other AbstractSyms operators we write
 
-@commutative Floquets FermionicHilbertSpaces.SpinSym
+@commutative Floquets AbstractSym
 
 # ### Step 4 — Multiplication rules via `mul_effect`
 
@@ -129,7 +130,8 @@ floquet_mul(::FloquetNumber, ::FloquetLadder) = nothing
 # the resulting state(s) and amplitude(s).
 #
 # Let's make a type for the Floquet basis states 
-struct FloquetState <: FermionicHilbertSpaces.AbstractBasisState
+using FermionicHilbertSpaces: AbstractBasisState
+struct FloquetState <: AbstractBasisState
     mode::Int
 end
 # To hook it up to the matrix-representation machinery, we need to define `apply_local_operator(op, state::FloquetState, space, precomp)
@@ -151,26 +153,30 @@ symbolic_group(b::FloquetBasis) = b
 # ## Building the Hilbert space
 
 # Now we can make a Hilbert space and get matrix representations of the Floquet operators.  
+using FermionicHilbertSpaces: GenericHilbertSpace
 floquet_basis = FloquetBasis(0)
 F = FloquetLadder(floquet_basis)       # raising operator F
 Nf = FloquetNumber(1, floquet_basis)    # photon number N
 n_max = 5       # keep Floquet modes n = −n_max … n_max
-Hfloq = FermionicHilbertSpaces.GenericHilbertSpace(floquet_basis, FloquetState.(-n_max:n_max))
-matrix_representation(F, Hfloq; projection=true) # we need projection=true because we've truncated the Floquet space
+Hfloq = GenericHilbertSpace(floquet_basis, FloquetState.((-n_max):n_max))
+representation(F, Hfloq; projection=true) # we need projection=true because we've truncated the Floquet space
 
 # Now Floquet operators will work together algebraically with the spin operators, and we can get matrix represnentations of such mixed operators. Let's do some physics.
 # ## Driven two level system.
-# We'll take a spin 1/2 as our physical system and couple it to the Floquet space to model a driven two-level system.  The full Hilbert space is a product of the spin and Floquet spaces, and the Hamiltonian is a symbolic expression mixing spin and Floquet operators. When making the full space, we use the SectorConstraint to organize the basis states in Floquet sectors, which will be convenient later.
+# We'll take a spin 1 as our physical system and couple it to the Floquet space to model a driven three-level system.  The full Hilbert space is a product of the spin and Floquet spaces, and the Hamiltonian is a symbolic expression mixing spin and Floquet operators. When making the full space, we use the SectorConstraint to organize the basis states in Floquet sectors, which will be convenient later.
+using FermionicHilbertSpaces: SectorConstraint
 @spin σ
-Hspin = hilbert_space(σ, 1 // 2)
-floquet_sectors = FermionicHilbertSpaces.SectorConstraint(only, [s -> s.mode], [Hfloq])
+Hspin = hilbert_space(σ, 1)
+floquet_sectors = SectorConstraint(only; maps=s -> s.mode, spaces=[Hfloq])
 H = tensor_product((Hspin, Hfloq); constraint=floquet_sectors)
 
 # Floquet operators can be used together with spin operators to build the Floquet Hamiltonian (since we used @commutative to declare that they commute):
 
-ε = 1.5    # level splitting
-ω = 1.0     # drive frequency 
-floquet_ham(A) = ε / 2 * σ[:z] + ω * Nf + A / 2 * σ[:x] * F + A / 2 * σ[:x] * F'
+ω = 1.0         # Drive frequency (energy unit)
+ε = 0.2 * ω     # Zeeman splitting: sets |+1⟩ and |-1⟩ baseline energies
+D = 0.3 * ω     # Single-ion anisotropy (D * Sz^2): activates the |0⟩ state
+floquet_ham(A) = ε * σ[:z] + D * σ[:z]^2 + ω * Nf +
+    (A / 2 * σ[:x] * F + hc)
 floquet_ham(2)
 
 # ## Quasienergy spectrum vs drive amplitude
@@ -178,48 +184,68 @@ floquet_ham(2)
 # We sweep the drive amplitude `A` and collect quasienergies, spin polarisation
 # ``\langle\sigma_z\rangle``, Floquet number expectation value and entanglement between the spin and Floquet spaces.
 using LinearAlgebra
-
 A_values = range(0, 4 * ω, length=100)
 n_states = dim(H)
 spectrum = zeros(length(A_values), n_states)
 spin_pol = zeros(length(A_values), n_states)
 entanglement = zeros(length(A_values), n_states)
 floquet_num = zeros(length(A_values), n_states)
-σz_mat = matrix_representation(σ[:z], H)
-Nf_mat = matrix_representation(Nf, H)
+σz_mat = representation(σ[:z], H)
+Nf_mat = representation(Nf, H)
+ptmap = partial_trace(H => Hspin)  # map to trace out Floquet space
+prev_vecs = nothing
 for (i, A) in enumerate(A_values)
-    mat = Matrix(matrix_representation(floquet_ham(A), H; projection=true))
-    vals, vecs = eigen(Hermitian(mat))
-    spectrum[i, :] = vals
-    for j in 1:n_states
-        v = vecs[:, j]
-        spin_pol[i, j] = real(v' * σz_mat * v)
-        rho = partial_trace(v * v', H => Hspin)  # trace out Floquet space
-        entanglement[i, j] = -sum(λ -> λ * log(abs(λ) + eps(λ)), eigvals(Hermitian(rho)))
-        floquet_num[i, j] = real(v' * Nf_mat * v)
+    mat = representation(floquet_ham(A), H, :dense; projection=true)
+    vals, vecs = eigen!(Hermitian(mat))
+
+    #track states by overlaps to avoid discontinuities
+    global prev_vecs
+    if prev_vecs !== nothing
+        overlaps = abs2.(prev_vecs' * vecs)
+        remaining = collect(axes(vecs, 2))
+        order = similar(remaining)
+        for j in axes(prev_vecs, 2)
+            k = argmax(overlaps[j, remaining])
+            order[j] = remaining[k]
+            deleteat!(remaining, k)
+        end
+        vals = vals[order]
+        vecs = vecs[:, order]
+    end
+    prev_vecs = vecs
+
+    #save observables
+    spectrum[i, :] = vals .- sum(vals) / length(vals)  # shift to zero mean
+    for (j, v) in enumerate(eachcol(vecs))
+        spin_pol[i, j] = dot(v, σz_mat, v)
+        rho = ptmap(v)  # trace out Floquet space
+        entanglement[i, j] = -sum(λ * log(λ) for λ in eigvals!(Hermitian(rho)) if λ > 1e-12)
+        floquet_num[i, j] = dot(v, Nf_mat, v)
     end
 end
 
-# ## Plots
-# Each line traces one Floquet eigenstate as the drive amplitude grows. The grey dashed lines mark the Brillouin zone boundaries at ``\pm\tfrac{\omega}{2}``. We plot the central three zones. We plot the quasienergies, <σz> and entanglement between spin and Floquet spaces as a function of drive amplitude.
+# Let's plot the results. Each line traces one Floquet eigenstate and we plot the quasienergies, <σz> and entanglement between spin and Floquet spaces as a function of drive amplitude.
 using Plots
-floquet_zone_inds = reduce(vcat, [indices(n, H) for n in -1:1]) # Here we exploit the block structure of the hilbert space to get the zone indices of zones with floquet numbers -1 to 1.
-n = length(floquet_zone_inds)
+floquet_zone_inds = reduce(vcat, [indices(n, H) for n in -1:1]) # Get the zone indices of zones with floquet numbers -1 to 1.
 p1 = plot(xlabel="Drive amplitude  A/ω", title="Quasienergy spectrum",
     legend=false, frame=:box, size=(500, 360), ylims=(-1.4, 1.4))
-plot!(p1, A_values ./ ω, spectrum[:, floquet_zone_inds]; lw=1.5, color=:steelblue)
-hline!(p1, [0.5, -0.5]; color=:gray, lw=1.5, ls=:dash)
+plot!(p1, A_values ./ ω, spectrum[:, floquet_zone_inds]; lw=2, color=[1 2 3])
+hline!(p1, [0.5, -0.5] .* ω; color=:gray, lw=2, ls=:dash)
 
+central_zone = indices(0, H) # central zone indices
+n = length(central_zone)
 p2 = plot(xlabel="Drive amplitude  A/ω", title="Spin and Floquet",
-    legend=true, frame=:box, size=(500, 360), ylims=0.5 .* (-1.1, 1.1),)
-plot!(p2, A_values ./ ω, spin_pol[:, floquet_zone_inds]; lw=1.5, color=:steelblue, label=["⟨σz⟩" fill("", n - 1)...]
-)
-plot!(p2, A_values ./ ω, floquet_num[:, floquet_zone_inds]; lw=1.5, color=:coral, label=["⟨Nf⟩" fill("", n - 1)...]
-)
+    legend=true, frame=:box, size=(500, 360), ylims=1 .* (-1.1, 1.1),)
+plot!(p2, A_values ./ ω, spin_pol[:, central_zone]; lw=2, color=[1 2 3], ls=:solid, label=false)
+plot!(p2, A_values ./ ω, floquet_num[:, central_zone]; lw=2, color=[1 2 3], ls=:dot, label=false)
+plot!(p2, Float64[], Float64[]; lw=3, color=:black, ls=:solid,
+    label="Spin polarization")
+plot!(p2, Float64[], Float64[]; lw=3, color=:black, ls=:dash,
+    label="Photon number")
 
 p3 = plot(xlabel="Drive amplitude  A/ω", title="Spin-Floquet entanglement",
-    legend=false, frame=:box, size=(500, 360), ylims=(0, log(2) + 0.1))
-plot!(p3, A_values ./ ω, entanglement[:, floquet_zone_inds]; lw=1.5, color=:steelblue)
-hline!(p3, [log(2)]; color=:gray, lw=1.5, ls=:dash)
+    legend=false, frame=:box, size=(500, 360), ylims=(0, log(3) + 0.1))
+plot!(p3, A_values ./ ω, entanglement[:, central_zone]; lw=2)
+hline!(p3, [log(3)]; color=:gray, lw=2, ls=:dash)
 
 plot(p1, p2, p3; layout=(1, 3), size=0.7 .* (1300, 360), margins=4Plots.mm)

@@ -177,6 +177,7 @@ function _operator_type(op::SymbolicState)
         return :ketbras
     end
 end
+_operator_type(::Union{UniformScaling, Number}) = :operator
 function _operator_type(op)
     hasket = false
     hasbra = false
@@ -308,8 +309,11 @@ end
 
     sf = basisstate(3, Hf)
     vf = representation(sf, Hf)
+    vfd = representation(sf, Hf, :dense)
     @test vf[3] == 1
     @test count(!iszero, vf) == 1
+    @test vfd isa Vector
+    @test vfd == vf
 
     sp = basisstate(4, Hprod)
     vp = representation(sp, Hprod)
