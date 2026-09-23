@@ -71,11 +71,11 @@ plot(p1, p2; layout=(1, 2), size=(600, 300), frame=:box)
 
 # ## Example 2: Dipole-conserving boson model
 # This demonstrates how to handle a more complicated conservation law. The model
-#   ```math
-#   H = -J \sum_i (b_{i-1}† b_{i+1}† b_i b_i + h.c.)
-#       + U/2 \sum_i n_i(n_i-1) + ε n_1
-#   ```
-# Conserves $N = \sum n_i$ and $D = \sum i n_i$.
+# ```math
+#  H = -J \sum_i (b_{i-1}^\dagger b_{i+1}^\dagger b_i b_i + h.c.)
+#      + U/2 \sum_i n_i(n_i-1) 
+# ```
+# Conserves the particle number $N = \sum n_i$ and the dipole moment $D = \sum i n_i$.
 
 @bosons b
 function hamiltonian(b, N; J, U)
@@ -84,11 +84,11 @@ function hamiltonian(b, N; J, U)
 end
 N = 6
 M = 6
-local_dim = M + 1           # Large enough to avoid truncation error
-Dtot = sum(1:N)             # dipole of the uniform state |1,1,1,1,1,1>
+local_dim = M + 1   # Large enough to avoid truncation error
+Dtot = sum(1:N)     # dipole of the uniform state |1,1,1,1,1,1>
 
 number_cons = NumberConservation(M)
-dipole_cons = NumberConservation(Dtot; weights=1:N) #Conserves $\sum w_i n_i$ with weights $w_i = i$.
+dipole_cons = NumberConservation(Dtot; weights=1:N)
 
 Hfull = hilbert_space(b, 1:N, local_dim)
 HN = hilbert_space(b, 1:N, local_dim, number_cons)                # only N fixed
