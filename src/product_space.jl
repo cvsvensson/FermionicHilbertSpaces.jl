@@ -44,7 +44,7 @@ dim(H::ProductSpace) = prod(dim, factors(H); init=1)
 atomic_id(H::ProductSpace) = H.atom_ordering
 group_id(H::ProductSpace) = H.atom_ordering
 
-basisstates(H::ProductSpace) = collect(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
+basisstates(H::ProductSpace{B}) where B = TypedIterator{B}(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
 function basisstate(n::Integer, H::ProductSpace{B}) where B
     inds = Tuple(H.cartinds[n])
     ProductState(map(basisstate, inds, H.factors))
@@ -102,7 +102,7 @@ end
     @test dim(H2) == dim(H) * dim(Hboson)
     @test length(H2.factors) == 3
 
-    @test basisstates(H2) == [ProductState((s_f.states..., s_b)) for s_f in basisstates(H), s_b in basisstates(Hboson)]
+    @test collect(basisstates(H2)) == [ProductState((s_f.states..., s_b)) for s_f in basisstates(H), s_b in basisstates(Hboson)]
     for (i, state) in enumerate(basisstates(H))
         @test state_index(state, H) == i
         @test basisstate(i, H) == state
