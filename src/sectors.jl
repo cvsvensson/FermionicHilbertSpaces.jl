@@ -89,7 +89,7 @@ function basisstate(ind::Integer, H::SectorHilbertSpace)
     H.ordered_basis_states[ind]
 end
 
-state_index(state::B, H::SectorHilbertSpace{B}) where B = get(H.state_to_index, state, 0)
+state_index(state::AbstractBasisState, H::SectorHilbertSpace{B}) where B = get(H.state_to_index, state, 0)
 add_tag(H::SectorHilbertSpace, tag) = SectorHilbertSpace(add_tag(parent(H), tag), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)
 
 fast_path(space::SectorHilbertSpace) = fast_path(parent(space))

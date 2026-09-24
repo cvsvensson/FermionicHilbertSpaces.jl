@@ -136,7 +136,6 @@ package to build the operations above:
 - `basisstates(H)` — an iterable of the basis states, in matrix-representation order.
 - `basisstate(ind, H)` / `state_index(state, H)` — convert between a basis state and
   its integer index (`state_index` returns `0` if the state is not in `H`).
-- `keys(H)` — the mode labels of `H`.
 
 See the [Functions](docstrings.md) page for full docstrings.
 

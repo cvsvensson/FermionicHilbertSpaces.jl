@@ -49,7 +49,7 @@ function basisstate(n::Integer, H::ProductSpace{B}) where B
     inds = Tuple(H.cartinds[n])
     ProductState(map(basisstate, inds, H.factors))
 end
-function state_index(state::B, H::ProductSpace{B}) where B
+function state_index(state::AbstractBasisState, H::ProductSpace{B}) where B
     cartesian_index = CartesianIndex(Tuple(map(state_index, state.states, H.factors)))
     H.lininds[cartesian_index]
 end

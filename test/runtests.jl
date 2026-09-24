@@ -259,3 +259,34 @@ end
     @test representation(I, H) == I
     @test representation(1 + f[1], H) == I + representation(f[1], H)
 end
+
+@testitem "state_index for states which are convertible but not identical" begin
+    # These tests failed when state_index was overly restrictive on the type of the state argument.
+    using FermionicHilbertSpaces: state_index, BosonicState, ProductState
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    Hcons = hilbert_space(f, 1:3, NumberConservation(0))
+    sf0 = FockNumber(0)
+    state = first(basisstates(H))
+    # state has UInt and sf0 has Int
+    # they are == but not ===
+    @test state == sf0 
+    @test state !== sf0
+    state_index(sf0, H) == 1
+    state_index(sf0, Hcons) == 1
+
+    @boson b
+    Hb = hilbert_space(b, 1)
+    state = first(basisstates(Hb))
+    sb0 = BosonicState(0)
+    @test 1 == state_index(sb0, Hb)
+
+    for Hprod in [tensor_product(Hcons, Hb), tensor_product(H, Hb)]
+        local state = first(basisstates(Hprod))
+        @test 1 == state_index(state, Hprod)
+        state2 = ProductState((sf0, sb0))
+        @test state == state2
+        @test state !== state2
+        @test 1 == state_index(state2, Hprod)
+    end
+end
