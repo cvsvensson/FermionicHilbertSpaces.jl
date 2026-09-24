@@ -265,7 +265,7 @@ end
     using FermionicHilbertSpaces: state_index, BosonicState, ProductState
     @fermions f
     H = hilbert_space(f, 1:3)
-    Hcons = hilbert_space(f, 1:3, NumberConservation(0))
+    Hcons = hilbert_space(f, 1:3, NumberConservation(0:1))
     sf0 = FockNumber(0)
     state = first(basisstates(H))
     # state has UInt and sf0 has Int

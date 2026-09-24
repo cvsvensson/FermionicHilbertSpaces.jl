@@ -76,7 +76,7 @@ function state_mapper(H::FermionicSpace, Hs)
 end
 
 _truncate(items, max, edge) =
-    length(items) <= max ? items : [items[1:edge]; "..."; items[end-edge+1:end]]
+    length(items) <= max ? items : [items[1:edge]; "..."; items[(end-edge+1):end]]
 
 function _compact_fermionic_modes(io::IO, c::FermionicSpace;
     max_groups=typemax(Int), edge_groups=3,
@@ -145,15 +145,11 @@ function apply_local_operators(op::NCMul{<:Any,<:FermionSym}, state::FockNumber{
     return newfocknbr, (fermionparity ? -op.coeff : op.coeff)
 end
 
-function apply_local_operator(op::FermionSym, state::FockNumber{I}, space::FermionicSpace, bitmask) where I
+function apply_local_operator(op::FermionSym, state::FockNumber{I}, space, bitmask) where I
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1
     factor = op
-    # digitpos = _find_position(factor, space)
-    #iszero(digitpos) && throw(ArgumentError("Operator ($op) contains a factor that is not part of the fermionic space ($space)"))
-    # digitpos = fermionposition
     dagger = factor.creation
-    # bitmask = one(I) << (digitpos - 1)
     occupied = !iszero(bitmask & newfocknbr)
     if dagger == occupied
         return newfocknbr, 0
@@ -489,7 +485,7 @@ end
     fine_partition = reduce(vcat, fine_partitions)
     for parities in Base.product([[-1, 1] for _ in 1:length(Hs)]...)
         projected_ops = [project_on_parity(op, H, p) for (op, H, p) in zip(ops, Hs, parities)] # project on local parity
-        opsk = [[projected_ops[1:k-1]..., ops[k], projected_ops[k+1:end]...] for k in eachindex(ops)] # switch out one operator of definite parity for an operator of indefinite parity
+        opsk = [[projected_ops[1:(k-1)]..., ops[k], projected_ops[(k+1):end]...] for k in eachindex(ops)] # switch out one operator of definite parity for an operator of indefinite parity
         embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
         kron_prods = [generalized_kron(ops, Hs, H; phase_factors=false) for ops in opsk]
 
@@ -502,13 +498,13 @@ end
         Xkmask = focknbr_from_site_labels(fines[k], H)
         iseven(count_ones(f & Xkmask)) && return 1
         phase = 1
-        for r in 1:k-1
+        for r in 1:(k-1)
             Xrmask = focknbr_from_site_labels(fines[r], H)
             phase *= (-1)^(count_ones(f & Xrmask))
         end
         return phase
     end
-    opsk = [[physical_ops[1:k-1]..., ops[k], physical_ops[k+1:end]...] for k in eachindex(ops)]
+    opsk = [[physical_ops[1:(k-1)]..., ops[k], physical_ops[(k+1):end]...] for k in eachindex(ops)]
     unitaries = [Diagonal([phase(k, f) for f in basisstates(H)]) * Uemb for k in eachindex(opsk)]
     embedding_prods = [tensor_product(ops, Hs, H) for ops in opsk]
     kron_prods = [generalized_kron(ops, Hs, H; phase_factors=false) for ops in opsk]
