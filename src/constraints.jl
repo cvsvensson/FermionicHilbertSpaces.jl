@@ -225,10 +225,10 @@ function filter_function(constraint::ProductConstraint, space::AbstractHilbertSp
     state -> all(f -> f(state), subspace_functions)
 end
 
-_apply_constraint_function(substates, ::NumberConservation{<:Any,<:Any,Missing}) = sum(particle_number, substates)
-_apply_constraint_function(substates, cons::NumberConservation{<:Any,<:Any,W}) where {W} = mapreduce((s, w) -> particle_number(s) * w, +, substates, cons.weights)
-_apply_constraint_function(substates, ::ParityConservation) = prod(parity, substates)
-_apply_constraint_function(substates, cons::AdditiveConstraint{<:Any,<:Any,<:Function}) = sum(cons.maps, substates)
+_apply_constraint_function(substates, ::NumberConservation{<:Any,<:Any,Missing}) = sum(particle_number, substates; init=0)
+_apply_constraint_function(substates, cons::NumberConservation{<:Any,<:Any,W}) where {W} = mapreduce((s, w) -> particle_number(s) * w, +, substates, cons.weights; init=0)
+_apply_constraint_function(substates, ::ParityConservation) = prod(parity, substates; init=1)
+_apply_constraint_function(substates, cons::AdditiveConstraint{<:Any,<:Any,<:Function}) = sum(cons.maps, substates; init=0)
 function _apply_constraint_function(substates, cons::AdditiveConstraint)
     mapreduce((s, f) -> f(s), +, substates, cons.maps)
 end

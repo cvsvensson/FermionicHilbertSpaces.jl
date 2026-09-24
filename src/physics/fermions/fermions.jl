@@ -5,7 +5,6 @@ struct FermionicSpace{F,L,FG<:FermionicGroup,A} <: AbstractGroupedHilbertSpace{F
     group::FG
     atomic_id::A
     function FermionicSpace(_modes::AbstractVector{L}, group::FG, ::Type{F}=FockNumber{default_fock_representation(length(_modes))}) where {F,L<:FermionSym,FG<:FermionicGroup}
-        length(_modes) == 0 && throw(ArgumentError("Cannot create a FermionicSpace with no modes"))
         modes = map(_normalize_sym, _modes)
         mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("Duplicate modes in fermionic group"))
@@ -21,6 +20,13 @@ end
 function FermionicSpace(modes::AbstractVector{F}) where {F<:FermionSym}
     FermionicSpace(modes, only(unique(map(group_id, modes))))
 end
+function FermionicSpace(a::SymbolicFermionBasis, modes::AbstractVector{F}) where {F<:FermionSym}
+    agroup = symbolic_group(a)
+    if length(modes) > 0
+        all(mode -> group_id(mode) == agroup, modes) || throw(ArgumentError("All modes must belong to the same group as the basis"))
+    end
+    return FermionicSpace(modes, agroup)
+end
 maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
 Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
@@ -31,7 +37,10 @@ function dim(H::FermionicSpace)
     N = nbr_of_modes(H)
     N < 63 ? 1 << N : BigInt(1) << N
 end
-atomic_factors(H::FermionicSpace) = map(m -> FermionicSpace([m], H.group, statetype(H)), H.modes)
+function atomic_factors(H::FermionicSpace)
+    length(H.modes) < 2 && return [H] # for single or trivial spaces
+    return map(m -> FermionicSpace([m], H.group, statetype(H)), H.modes)
+end
 nbr_of_modes(H::FermionicSpace) = length(H.modes)
 nbr_of_modes(H::AbstractHilbertSpace) = nbr_of_modes(parent(H))
 group_id(H::FermionicSpace) = H.group
@@ -52,6 +61,7 @@ function _find_position(f::FermionSym, H::FermionicSpace)
     get(H.mode_ordering, _normalize_sym(f), 0)
 end
 function _find_position(f::FermionicSpace, H::FermionicSpace)
+    # nbr_of_modes(f) == 0 && return missing#f == H && return 1 # We assume empty spaces can only be found in another empty space, and we return 1 as the position. This is a bit of a hack.
     nbr_of_modes(f) == 1 || throw(ArgumentError("Can only find position of single-mode group within another group"))
     return _find_position(only(modes(f)), H)
 end
@@ -70,7 +80,7 @@ combine_states(states, H::FermionicSpace{F}) where F = (catenate_fock_states(sta
 
 state_mapper(H::FermionicSpace, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
 function state_mapper(H::FermionicSpace, Hs)
-    fermionpositions = [[_find_position(atom, H) for atom in atomic_factors(group)] for group in Hs]
+    fermionpositions = [[_find_position(atom, H) for atom in atomic_factors(group)] for group in Hs if nbr_of_modes(group) > 0]
     all(x -> x > 0, Iterators.flatten(fermionpositions)) || throw(ArgumentError("All subspaces must be part of the group"))
     FockMapper(Tuple(fermionpositions))
 end
@@ -283,12 +293,16 @@ end
 end
 
 _find_position(f::AbstractSym, H::ProductSpace) = _find_position(f, parent(H))
-hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionicSpace(map(l -> a[l], labels))
+hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::AbstractVector{<:AbstractBasisState}) = ConstrainedSpace(hilbert_space(a, labels), states)
-hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::AbstractConstraint) = tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
+function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::AbstractConstraint)
+    length(labels) > 0 && return tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
+    return constrain_space(hilbert_space(a, labels), constraint)
+end
 
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::ParityConservation{Missing})
     H = hilbert_space(a, labels)
+    nbr_of_modes(H) == 0 && return hilbert_space(a, labels)
     states = if constraint.allowed_parities == [-1, 1]
         basisstates(H)
     else
@@ -300,6 +314,7 @@ end
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::NumberConservation{T,Missing,Missing}) where T
     H = hilbert_space(a, labels)
     N = nbr_of_modes(H)
+    N == 0 && return hilbert_space(a, labels)
     numbers = T === Missing ? (0:N) : constraint.total
     state_blocks = map(n -> fixed_particle_number_fockstates(N, n), numbers)
     dict = OrderedDict(zip(numbers, state_blocks))
@@ -539,9 +554,6 @@ end
         @test typeof(generalized_kron((b1[1], I), Hs, H3)) == typeof(b1[1])
         @test tensor_product((I, I), Hs => H3) isa SparseMatrixCSC
         @test generalized_kron((I, I), Hs, H3) isa SparseMatrixCSC
-
-        # Test zero-mode error
-        @test_throws ArgumentError hilbert_space(f, 1:0, qn)
     end
 
     #Test basis compatibility
@@ -555,4 +567,19 @@ end
     H = hilbert_space(f, 1:1)
     @test_throws ArgumentError representation(f[2], H)
     @test_throws ArgumentError matrix_representation(f[2], H)
+end
+
+@testitem "Trivial fermionic space" begin
+    @fermions f
+    @boson b
+    Hb = hilbert_space(b, 2)
+    mb = representation(b'b, Hb)
+    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
+        H = hilbert_space(f, 1:0, qn)
+        @test dim(H) == 1
+        @test only(basisstates(H)) == FockNumber(0)
+        @test collect(basisstates(tensor_product(H, hilbert_space(f, 1:1)))) == collect(basisstates(hilbert_space(f, 1:1)))
+        @test mb == representation(b'b, tensor_product(H, Hb))
+    end
+
 end
