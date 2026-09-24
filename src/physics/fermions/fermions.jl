@@ -79,7 +79,7 @@ combine_states(states, H::FermionicSpace{F}) where F = (catenate_fock_states(sta
 
 state_mapper(H::FermionicSpace, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
 function state_mapper(H::FermionicSpace, Hs)
-    fermionpositions = [[_find_position(atom, H) for atom in atomic_factors(group)] for group in Hs if nbr_of_modes(group) > 0]
+    fermionpositions = [[_find_position(atom, H) for atom in atomic_factors(group)] for group in Hs]
     all(x -> x > 0, Iterators.flatten(fermionpositions)) || throw(ArgumentError("All subspaces must be part of the group"))
     FockMapper(Tuple(fermionpositions))
 end
