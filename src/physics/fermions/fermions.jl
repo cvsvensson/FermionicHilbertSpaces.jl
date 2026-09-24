@@ -61,7 +61,6 @@ function _find_position(f::FermionSym, H::FermionicSpace)
     get(H.mode_ordering, _normalize_sym(f), 0)
 end
 function _find_position(f::FermionicSpace, H::FermionicSpace)
-    # nbr_of_modes(f) == 0 && return missing#f == H && return 1 # We assume empty spaces can only be found in another empty space, and we return 1 as the position. This is a bit of a hack.
     nbr_of_modes(f) == 1 || throw(ArgumentError("Can only find position of single-mode group within another group"))
     return _find_position(only(modes(f)), H)
 end
@@ -302,7 +301,7 @@ end
 
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::ParityConservation{Missing})
     H = hilbert_space(a, labels)
-    nbr_of_modes(H) == 0 && return hilbert_space(a, labels)
+    nbr_of_modes(H) == 0 && return H
     states = if constraint.allowed_parities == [-1, 1]
         basisstates(H)
     else
@@ -314,7 +313,7 @@ end
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::NumberConservation{T,Missing,Missing}) where T
     H = hilbert_space(a, labels)
     N = nbr_of_modes(H)
-    N == 0 && return hilbert_space(a, labels)
+    N == 0 && return H
     numbers = T === Missing ? (0:N) : constraint.total
     state_blocks = map(n -> fixed_particle_number_fockstates(N, n), numbers)
     dict = OrderedDict(zip(numbers, state_blocks))
@@ -581,5 +580,4 @@ end
         @test collect(basisstates(tensor_product(H, hilbert_space(f, 1:1)))) == collect(basisstates(hilbert_space(f, 1:1)))
         @test mb == representation(b'b, tensor_product(H, Hb))
     end
-
 end
