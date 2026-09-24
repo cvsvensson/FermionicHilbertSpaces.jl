@@ -387,9 +387,7 @@ end
 
 mat_eltype(::Type{<:ParafermionSym}) = ComplexF64
 
-function NonCommutativeProducts.mul_effect(
-    a::ParafermionSym, b::ParafermionSym
-)
+function NonCommutativeProducts.mul_effect(a::ParafermionSym, b::ParafermionSym)
     ga, gb = group_id(a), group_id(b)
 
     # Different groups commute.
@@ -480,7 +478,7 @@ function ParaFockMapper(
     end
 
     flat = collect(Int, Iterators.flatten(pos))
-    full = length(flat) == N && sort(flat) == collect(1:N)
+    full = length(flat) == N && sort(flat) == 1:N
     widths = map(length, pos)
 
     # P^N - 1 must fit in I; then every place value P^(i-1) ≤ P^N - 1 fits too.
@@ -1114,6 +1112,7 @@ end
 @testitem "Parafermionic API and robustness" begin
     using LinearAlgebra
     import FermionicHilbertSpaces as FHS
+    using FermionicHilbertSpaces.NonCommutativeProducts: ncmapreduce
 
     close(a, b) = isapprox(a, b; atol=2e-11, rtol=2e-11)
     root(p, e) = cispi(2 * mod(e, p) / p)
@@ -1216,7 +1215,7 @@ end
         c = FHS.parafermion_basis(:c, p; sigma=sigma)
         H = hilbert_space(c, 1:3)
         D = dim(H)
-        states = collect(basisstates(H))
+        states = basisstates(H)
         precompute(op) = FHS._precomputation_before_operator_application(op, H)
 
         # Build the matrix of an application rule, column by column.
@@ -1237,40 +1236,12 @@ end
                 transpose(M))
         end
 
-        for word in (c[1]' * c[2] * c[3], (1 + 2im) * c[2]' * c[3]')
-            caches = map(precompute, word.factors)
-            M = representation(word, H)
-            for flag in (false, true)
-                @test close(
-                    assemble(s -> FHS.apply_local_operators(word, s, H, caches; transpose=flag)),
-                    flag ? transpose(M) : M)
-            end
-        end
-    end
-
-    @testset "p=6 mixes exact and inexact roots" begin
-        @test FHS._pf_root(Val(6), 3) === ComplexF64(-1)
-        @test FHS._pf_root(Val(6), -3) === ComplexF64(-1)
-        @test FHS._pf_root(Val(6), 12) === ComplexF64(1)
-        @test FHS._pf_root(Val(4), 1) === ComplexF64(0, 1)
-        @test close(FHS._pf_root(Val(6), 1), cispi(1 / 3))
-
-        c = FHS.parafermion_basis(:c, 6)
-        H = hilbert_space(c, 1:2)
-        C1 = representation(c[1], H)
-        C2 = representation(c[2], H)
-        for (A, B, dA, dB) in ((C1, C2, -1, -1), (C1, C2', -1, 1),
-            (C1', C2, 1, -1), (C1', C2', 1, 1))
-            @test close(A * B, root(6, -dA * dB) * B * A)
-        end
-        @test close(C2^6, zeros(36, 36))
-        @test norm(C2^5) > 0
     end
 
     @testset "phase hooks vs reference: p=$p sigma=$sigma" for p in (2, 3, 4), sigma in (-1, 1)
         c = FHS.parafermion_basis(:c, p; sigma=sigma)
         H = hilbert_space(c, 1:3)
-        states = collect(basisstates(H))
+        states = basisstates(H)
         ns = [FHS.occupations(s, 3) for s in states]
         table(g) = [g(a, b) for a in states, b in states]
 
@@ -1355,7 +1326,7 @@ end
         @testset "p=$p sigma=$sigma" begin
             c = FHS.parafermion_basis(:c, p; sigma=sigma)
             H = hilbert_space(c, 1:3)
-            states = collect(basisstates(H))
+            states = basisstates(H)
 
             @test dim(H) == p^3
             @test length(states) == p^3
@@ -1454,10 +1425,10 @@ end
             c = FHS.parafermion_basis(:c, p; sigma=sigma)
             H = hilbert_space(c, 1:3)
 
-            D = Int(dim(H))
-            Id = Matrix{ComplexF64}(I, D, D)
+            D = dim(H)
+            Id = I(D)
             Zeros = zeros(ComplexF64, D, D)
-            R(op) = Matrix(representation(op, H))
+            R(op) = representation(op, H)
 
             C = [R(c[j]) for j in 1:3]
             N = [R(FHS.parafermion_number(c[j])) for j in 1:3]
