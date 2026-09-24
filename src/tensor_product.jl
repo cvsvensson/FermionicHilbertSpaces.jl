@@ -437,7 +437,7 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
                             throw(ArgumentError("The state $fullf2 is not in the full Hilbert space"))
                         end
                         s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
-                        s = s2 * s1
+                        s = s2 * conj(s1)
                         mout[I1, I2] += w1 * w2 * s * m[J1, J2]
                     end
                 end
@@ -471,7 +471,7 @@ function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::
                 end
                 s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
                 s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
-                s = s2 * s1
+                s = s2 * conj(s1)
                 mout[J1, J2] += w1 * w2 * s * m[I[1], I[2]]
             end
         end
@@ -640,7 +640,7 @@ function partial_trace_map(H, Hsub, complement::AbstractHilbertSpace, ::Subsyste
                         throw(ArgumentError("The state $fullf2 is not in the full Hilbert space."))
                     end
                     s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
-                    s = s2 * s1
+                    s = s2 * conj(s1)
                     push!(Is, indI[I1, I2])
                     push!(Js, indJ[J1, J2])
                     push!(Vs, w1 * w2 * s)
@@ -675,7 +675,7 @@ function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, 
                     end
                     s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
                     s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
-                    s = s2 * s1
+                    s = s2 * conj(s1)
                     I2 = state_index(f2sub, Hsub)
                     if iszero(I2)
                         skipmissing && continue
