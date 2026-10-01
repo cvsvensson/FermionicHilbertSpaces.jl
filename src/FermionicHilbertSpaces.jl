@@ -81,6 +81,7 @@ Base.eltype(::Type{<:TypedIterator{T}}) where T = T
 Base.length(ti::TypedIterator) = length(ti.iter)
 Base.size(ti::TypedIterator) = size(ti.iter)
 Base.keys(ti::TypedIterator) = keys(ti.iter)
+Base.last(ti::TypedIterator{T}) where T = T(last(ti.iter))
 
 function _resolve_sector_permutations_and_weights end # for Combinatorics extension
 function cache_operator! end # for OhMyThreads extension
@@ -117,6 +118,7 @@ include("physics/fermions/bdg.jl")
 include("physics/bosons.jl")
 include("physics/spin.jl")
 include("physics/open_systems.jl")
+include("physics/parafermions.jl")
 include("symbolic_states.jl")
 
 include("printing.jl")
