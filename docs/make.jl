@@ -7,14 +7,14 @@ import Literate
 DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilbertSpaces); recursive=true)
 
 literate_files = [
-    "examples/kitaev_chain.jl", 
-    "examples/free_fermions.jl", 
-    "examples/floquet_tutorial.jl", 
-    "examples/open_system_lindblad.jl", 
-    "examples/spin_chain.jl", 
-    "examples/bosons.jl", 
+    "examples/kitaev_chain.jl",
+    "examples/free_fermions.jl",
+    "examples/floquet_tutorial.jl",
+    "examples/open_system_lindblad.jl",
+    "examples/spin_chain.jl",
+    "examples/bosons.jl",
     "examples/clock_operators.jl",
-     "examples/parafermions.jl"
+    "examples/parafermions.jl",
 ]
 
 output_directory = "docs/src/literate_output"

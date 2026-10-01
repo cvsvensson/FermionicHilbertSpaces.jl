@@ -33,18 +33,32 @@ function _pf_check_parameters(P, S)
 end
 
 """
-Return ω^exponent, reducing the exponent first.
+ω^k for 0 <= k < P, reducing the exponent first.
 
-Special real roots are returned exactly, in ComplexF64 form.
-General roots are numerical and should be compared with ≈.
+Special real roots are exact, in ComplexF64 form; others are numerical
+and should be compared with ≈.
 """
-function _pf_root(::Val{P}, exponent::Integer) where P
-    k = Int(mod(exponent, P))
+function _pf_root_exact(P::Int, k::Int)
     k == 0 && return ComplexF64(1)
     iseven(P) && k == P ÷ 2 && return ComplexF64(-1)
     P % 4 == 0 && k == P ÷ 4 && return ComplexF64(0, 1)
     P % 4 == 0 && k == 3 * (P ÷ 4) && return ComplexF64(0, -1)
     cispi(2k / P)
+end
+
+# Computed once per P: the generated function embeds the resulting tuple as
+# a compile-time constant, so later calls avoid recomputing cispi entirely.
+@generated function _pf_roots(::Val{P}) where P
+    vals = ntuple(k -> _pf_root_exact(P, k - 1), P)
+    return :($vals)
+end
+
+"""
+Return ω^exponent, reducing the exponent first.
+"""
+@inline function _pf_root(::Val{P}, exponent::Integer) where P
+    k = Int(mod(exponent, P))
+    @inbounds _pf_roots(Val(P))[k+1]
 end
 
 _pf_addmod(e, x, P) = Int(mod(e + x, P))
@@ -209,10 +223,10 @@ digits, so no powers are formed and no digit is decoded twice.
 """
 function _pf_left_charge(f::Integer, place::Integer, ::Val{P}) where P
     x = rem(f, place)
-    e = 0
+    e = zero(x)
     while !iszero(x)
         x, r = divrem(x, P)
-        e += Int(r)
+        e += r
     end
     mod(e, P)
 end
@@ -467,7 +481,7 @@ function ParaFockMapper(
     N::Int,
 ) where {P,S,I,F<:ParaFockNumber{P,S,I}}
     N >= 0 || throw(ArgumentError("Negative number of modes"))
-    pos = Tuple(Tuple(Int(i) for i in X) for X in positions)
+    pos = Tuple([Int(i) for i in X] for X in positions)
 
     for X in pos
         issorted(X) && allunique(X) ||
