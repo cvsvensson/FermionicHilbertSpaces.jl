@@ -45,7 +45,7 @@ parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
 particle_number(s::FockNumber) = fermionnumber(s)
-
+_nbr_differing_modes(f1::FockNumber, f2::FockNumber, N::Int) = count_ones(f1.f ⊻ f2.f)
 
 internal_rep(state::FockNumber, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.f)
 physical_rep(state::T, ::Type{FockNumber{I}}) where {T,I} = FockNumber{I}(state)

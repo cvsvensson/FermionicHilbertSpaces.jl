@@ -22,7 +22,7 @@ export hilbert_space, subregion
 export parityoperator, numberoperator, matrix_representation, representation, vector_representation
 export Kets, ProductState, SpinState, BosonicState
 
-export partial_trace, generalized_kron, tensor_product, embed
+export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
 export @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
@@ -98,6 +98,7 @@ include("tensor_product.jl")
 include("permutation_symmetry.jl")
 include("embedding.jl")
 include("reshape.jl")
+include("partial_transpose.jl")
 
 include("generate_constrained_states.jl")
 

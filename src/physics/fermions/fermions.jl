@@ -581,3 +581,27 @@ end
         @test mb == representation(b'b, tensor_product(H, Hb))
     end
 end
+
+
+## ─────────────────────────────────────────────────────────────────────────────
+## Partial transpose
+##
+## Fermionic partial transpose (partial time reversal, Shapourian–Shiozaki–Ryu) in
+## the Szalay operator basis Ẽ^{ν,ν'} (ordered products of e_i ∈ {aa†, a, a†, a†a}):
+##
+##     R_A(Ẽ^{ν,ν'}) = i^{k_A} Ẽ^{(ν'_A,ν_B),(ν_A,ν'_B)},   k_A = #{a ∈ A : ν_a ≠ ν'_a}
+##
+## With |ν⟩⟨ν'| = f(ν,ν') Ẽ^{ν,ν'} this becomes, in the Fock basis,
+##
+##     R_A(|ν⟩⟨ν'|) = f_H(ν,ν') ⋅ i^{k_A} ⋅ f_Hout(μ,μ') |μ⟩⟨μ'|,  μ = (ν'_A,ν_B), μ' = (ν_A,ν'_B)
+## ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    partial_transpose_phase_factor(f1, f2, Hsub)
+
+Local phase of the matrix unit `|f1⟩⟨f2|` of the transposed subsystem `Hsub` under the
+graded transpose in the fermionic operator basis: `i^k` for fermions, where `k` is the
+number of modes in which `f1` and `f2` differ, and `1` for spaces without phase factors.
+"""
+partial_transpose_phase_factor(f1, f2, H::FermionicSpace) = _ipow(_nbr_differing_modes(f1, f2, nbr_of_modes(H)))
+_ipow(k::Integer) = (1 + 0im, 0 + 1im, -1 + 0im, 0 - 1im)[mod(k, 4)+1]

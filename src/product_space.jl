@@ -279,6 +279,14 @@ function partial_trace_phase_factor(state1, state2, space::ProductSpace)
     end
     return pf
 end
+function partial_transpose_phase_factor(state1, state2, space::ProductSpace)
+    # product of phase factors from each space and substate
+    pf = 1
+    for (s1, s2, group) in zip(state1.states, state2.states, space.factors)
+        pf *= partial_transpose_phase_factor(s1, s2, group)
+    end
+    return pf
+end
 
 struct ProductOperator{C,O,S}
     ops::O

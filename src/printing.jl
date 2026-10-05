@@ -342,6 +342,31 @@ function _show_mapping_summary(io::IO, mappings; max_mappings=3)
     nm > nshow && print(io, ", ... (", nm - nshow, " more)")
 end
 
+function Base.show(io::IO, op::PartialTransposeMap)
+    in_dim = dim(op.H)
+    out_dim = dim(op.Hout)
+    if get(io, :compact, false)
+        print(io, "PartialTransposeMap(", in_dim, "^2 → ", out_dim, "^2, transpose=")
+        show(IOContext(io, :compact => true), op.Hsub)
+        length(op.kwargs) > 0 && print(io, ", ", length(op.kwargs), " kw")
+        print(io, ")")
+    else
+        print(io, "PartialTransposeMap\n")
+        print(io, "  Input space: ")
+        show(IOContext(io, :compact => true), op.H)
+        print(io, "\n  Transposed subsystem: ")
+        show(IOContext(io, :compact => true), op.Hsub)
+        print(io, "\n  Output space: ")
+        show(IOContext(io, :compact => true), op.Hout)
+        print(io, "\n  Superoperator size: ", out_dim^2, " x ", in_dim^2)
+        print(io, "\n  Stored map nnz: ", nnz(op.map))
+        if length(op.kwargs) > 0
+            print(io, "\n  kwargs: ")
+            show(io, op.kwargs)
+        end
+    end
+end
+
 function Base.show(io::IO, op::PartialTraceMap)
     in_dim = dim(op.H)
     out_dim = dim(op.Hsub)
