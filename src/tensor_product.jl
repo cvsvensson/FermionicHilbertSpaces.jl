@@ -741,6 +741,7 @@ end
 end
 
 @testitem "Partial trace map" begin
+    using LinearAlgebra
     @fermions f
     H = hilbert_space(f, 1:4)
     Hsub = hilbert_space(f, [2, 4])
