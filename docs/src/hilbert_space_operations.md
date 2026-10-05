@@ -204,7 +204,7 @@ using LinearAlgebra
 @fermions f
 H = hilbert_space(f, 1:2)
 Hsub = hilbert_space(f, [1])
-state = representation(1/sqrt(2) * (f[1]' + f[2]') * Kets(H)("0"))
+state = representation((f[1]' + f[2]') * Ket("0", H)) / √2
 rho_pt = partial_transpose(state, H, Hsub)
 negativity = (sum(svdvals(rho_pt)) - 1)/2 
 negativity > 0 # PPT criteria for entanglement
