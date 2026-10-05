@@ -7,7 +7,7 @@ CurrentModule = FermionicHilbertSpaces
 This page documents the operations used to build composite Hilbert spaces out of
 smaller ones, to inspect their structure, and to move arrays (vectors, matrices,
 density matrices) between a space and its subsystems. See [Fermionic tensor products,
-partial traces, and partial transpose](fermions.md) for the mathematical background
+partial traces](fermions.md) for the mathematical background
 and phase-factor conventions behind `tensor_product`, `embed`, `partial_trace`, and
 `partial_transpose`; this page focuses on syntax and usage.
 
@@ -197,9 +197,7 @@ partial_transpose(m, H => Hout, Hsub; kwargs...)
 Transposes the subsystem `Hsub` of an operator `m` on `H`. A pure state vector is
 also accepted and treated as its density matrix, as is a vectorized density
 matrix. For fermions, the default operation is the fermionic partial
-transpose, also known as partial time reversal; its phase convention is described
-in [Fermionic tensor products, partial traces, and partial transpose](fermions.md).
-For bosons and spins it is the ordinary partial transpose.
+transpose, also known as partial time reversal. For bosons and spins it is the ordinary partial transpose.
 
 ```@example hilbert_space_ops
 @fermions f

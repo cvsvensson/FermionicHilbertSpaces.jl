@@ -47,9 +47,7 @@ For bosonic and spin systems, `partial_transpose` is the ordinary matrix transpo
 
 In the fermionic operator basis, this operation swaps the bra and ket labels on the selected subsystem and multiplies by a phase determined by the fermionic operator content there. Thus it is not, in general, the ordinary matrix transpose in the occupation-number basis. The convention is independent of the ordering of the fermionic modes. Set `phase_factors=false` in `partial_transpose` to disable these phases and obtain the ordinary subsystem transpose.
 
-Unlike the ordinary partial transpose, the fermionic result is not generally Hermitian. If ``p_A`` is the fermion-parity operator on the transposed subsystem, it obeys ``(\rho^{R_A})^\dagger = p_A \rho^{R_A} p_A``. This is why `logarithmic_negativity` uses the sum of singular values of the partial transpose rather than assuming it is Hermitian.
-
-The fermionic partial transpose need not preserve particle-number or parity constraints. When the resulting states do not belong to the input space, `partial_transpose` can write to a larger space using `Hout`; see [Hilbert space and array operations](hilbert_space_operations.md) for details.
+Unlike the ordinary partial transpose, the fermionic result is not generally Hermitian. If ``p_A`` is the fermion-parity operator on the transposed subsystem, it obeys ``(\rho^{R_A})^\dagger = p_A \rho^{R_A} p_A``. 
 
 # References
 ```@raw html
