@@ -200,12 +200,14 @@ matrix. For fermions, the default operation is the fermionic partial
 transpose, also known as partial time reversal. For bosons and spins it is the ordinary partial transpose.
 
 ```@example hilbert_space_ops
+using LinearAlgebra
 @fermions f
-Hpt = hilbert_space(f, 1:2)
-HApt = hilbert_space(f, [1])
-rho_pt_in = zeros(ComplexF64, dim(Hpt), dim(Hpt))
-rho_pt_in[state_index("10", Hpt), state_index("01", Hpt)] = 1
-rho_pt = partial_transpose(rho_pt_in, Hpt, HApt)
+H = hilbert_space(f, 1:2)
+Hsub = hilbert_space(f, [1])
+state = representation(1/sqrt(2) * (f[1]' + f[2]') * Kets(H)("0"))
+rho_pt = partial_transpose(state, H, Hsub)
+negativity = (sum(svdvals(rho_pt)) - 1)/2 
+negativity > 0 # PPT criteria for entanglement
 ```
 
 The partial transpose need not preserve particle-number or parity constraints.
