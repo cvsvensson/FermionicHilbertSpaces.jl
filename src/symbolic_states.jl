@@ -171,7 +171,7 @@ end
 representation(s::SymbolicState; kwargs...) = representation(s, s.space; kwargs...)
 function representation(op; kwargs...)
     reducer(::Missing, s2) = s2
-    reducer(::Missing, ::Missing) = Missing
+    reducer(::Missing, ::Missing) = missing
     reducer(s1, ::Missing) = s1
     reducer(s1, s2) = s1==s2 ? s1 : throw(ArgumentError("Cannot represent a product of symbolic states in different spaces"))
     if _operator_type(op) in (:kets, :bras, :ketbras)

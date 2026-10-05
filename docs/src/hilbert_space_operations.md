@@ -219,7 +219,7 @@ compute the ordinary subsystem transpose.
 
 `logarithmic_negativity(rho, H, Hsub; kwargs...)` computes the logarithm of the
 trace norm of the partial transpose, using singular values (the fermionic result
-is not generally Hermitian).
+is not generally Hermitian). This function is not exported.
 
 ### `tensor_product` and `generalized_kron` on arrays
 
