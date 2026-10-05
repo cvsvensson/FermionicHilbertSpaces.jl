@@ -118,8 +118,7 @@ function partial_transpose(m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::Abs
     mout = zeros(T, dim(Hout), dim(Hout))
     partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, skipmissing)
 end
-# partial_transpose(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_transpose(H, Hsub; kwargs...)(v)
-# partial_transpose(m::UniformScaling, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_transpose(H, Hsub; kwargs...)(m)
+
 partial_transpose(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub::AbstractHilbertSpace; kwargs...) =
     partial_transpose(m, first(Hs), Hsub; Hout=last(Hs), kwargs...)
 partial_transpose(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = PartialTransposeMap(H, Hsub; kwargs...)

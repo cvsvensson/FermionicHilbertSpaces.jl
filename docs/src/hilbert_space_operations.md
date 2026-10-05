@@ -275,7 +275,7 @@ ptt = partial_transpose(H, Hsub)
 ```
 
 These objects can be applied directly, `op(m)` or in-place `op(out, m)`. Use
-`sparse(op)` to obtain the sparse superoperator for a partial transpose. Callable
+`sparse(op)` to obtain superoperator as a sparse matrix. Callable
 maps are useful when the same operation is applied many times.
 
 ### `reshape`: splitting and combining array axes
