@@ -433,6 +433,10 @@ function NonCommutativeProducts.mul_effect(a::ParafermionSym, b::ParafermionSym)
 end
 
 @nc ParafermionSym
+NonCommutativeProducts.@commutative ParafermionSym FermionSym
+NonCommutativeProducts.@commutative ParafermionSym MajoranaSym
+NonCommutativeProducts.@commutative ParafermionSym BosonSym
+NonCommutativeProducts.@commutative ParafermionSym SpinSym
 
 """
 The occupation operator, not merely c†c.
@@ -1554,6 +1558,19 @@ end
         @test close(A * B, B * A)
         @test close(representation(b[1] * a[1], H), B * A)
     end
+
+    @testset "Independent operator families commute" begin
+        @parafermions 3 c
+        @fermions f
+        @boson b
+        @spin s 1 // 2
+        @majoranas gamma
+
+        parafermion = c[1]
+        independent_operators = (f[1], b, s[:x], gamma[1])
+        @test all(parafermion * op == op * parafermion for op in independent_operators)
+        @test all(parafermion' * op == op * parafermion' for op in independent_operators)
+    end
 end
 
 
@@ -1563,7 +1580,7 @@ end
 
 @testitem "Parafermionic tensor product properties" begin
     using LinearAlgebra, Random
-    import SparseArrays: issparse, spzeros
+    import SparseArrays: issparse, sparse, spzeros
     import FermionicHilbertSpaces as FHS
 
     rng = MersenneTwister(1234)
@@ -1697,6 +1714,29 @@ end
             @test_throws ArgumentError tensor_product(H12, atoms[2])
         end
     end
+    using SparseArrays
+    @testset "Real-valued local tensors promote through phase hooks" begin
+        p, sigma = 3, 1
+        c = FHS.parafermion_basis(:c, p; sigma=sigma)
+        H = hilbert_space(c, 1:2)
+        H1, H2 = hilbert_space(c, [1]), hilbert_space(c, [2])
+
+        A = zeros(Float64, p, p)
+        B = zeros(Float64, p, p)
+        A[1, 2] = 1
+        B[2, 1] = 1
+        expected = zeros(ComplexF64, p^2, p^2)
+        expected[4, 2] = cis(2π * sigma / p)
+
+        @test close(FHS.generalized_kron((A, B), (H1, H2), H), expected)
+        @test close(FHS.generalized_kron((sparse(A), sparse(B)), (H1, H2), H), expected)
+
+        local_state = zeros(Float64, p)
+        local_state[2] = 1
+        expected_vector = zeros(ComplexF64, p^2)
+        expected_vector[5] = cis(2π * sigma / p)
+        @test close(FHS.generalized_kron((local_state, local_state), (H2, H1), H), expected_vector)
+    end
 end
 
 
@@ -1812,6 +1852,26 @@ end
             expected = cis(2π * mod(-sigma, p) / p) * E(p^2, p, 1)
 
             @test close(partial_trace(input, H, HX), expected)
+        end
+    end
+
+    @testset "Real-valued traces and sparse maps promote through phase hooks" begin
+        p, sigma = 3, 1
+        c = FHS.parafermion_basis(:c, p; sigma=sigma)
+        H = hilbert_space(c, 1:2)
+        H1, H2 = hilbert_space(c, [1]), hilbert_space(c, [2])
+
+        input = zeros(Float64, p^2, p^2)
+        input[5, 2] = 1
+        expected = cis(-2π * sigma / p) * E(p, 1, 0)
+
+        @test close(partial_trace(input, H, H2), expected)
+        @test close(partial_trace(input, H, H2; alg=FHS.FullPartialTraceAlg()), expected)
+
+        for alg in (FHS.SubsystemPartialTraceAlg(), FHS.FullPartialTraceAlg())
+            map = FHS.partial_trace_map(H, H2, H1, alg)
+            @test eltype(map) <: Complex
+            @test close(map * vec(input), vec(expected))
         end
     end
 end
