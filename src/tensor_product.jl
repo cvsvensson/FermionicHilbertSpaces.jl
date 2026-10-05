@@ -758,6 +758,14 @@ end
     pt = partial_trace(H => Hsub)
     msub_map = pt(vec(m))
     @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
+
+    Hvac = hilbert_space(f, 1:1, NumberConservation(0))
+    Hmode = hilbert_space(f, 2:2)
+    Hproduct = tensor_product(Hvac, Hmode)
+    ρ = [1 2 + im; 3 - im 4]
+    @test dim(Hvac) == 1
+    @test partial_trace(ρ, Hproduct => Hvac) ≈ reshape([tr(ρ)], 1, 1)
+    @test partial_trace(ρ, Hproduct => Hmode) ≈ ρ
 end
 
 @testitem "Partial trace with missing states" begin

@@ -127,20 +127,22 @@ partial_transpose(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...
 # Pure state: direct kernel, no superoperator, and no ψψ† either (iterate nonzero pairs).
 function partial_transpose(ψ::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace;
     complement=complementary_subsystem(H, Hsub), Hout=H, phase_factors=true, skipmissing=false)
+    if length(ψ) == dim(H)
+        mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
+        mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
+        T = promote_type(eltype(ψ), _partial_transpose_eltype(H, Hsub, Hout, mapper_in, mapper_out, phase_factors))
+        mout = zeros(T, dim(Hout), dim(Hout))
+        nz = findall(!iszero, ψ)
+        splits = Dict(j => split_state(basisstate(j, H), mapper_in) for j in nz)
+        _foreach_partial_transpose_term(((j, k) for j in nz for k in nz), H, Hsub, Hout, splits, mapper_out; phase_factors, skipmissing) do J1, J2, K1, K2, v
+            mout[K1, K2] += v * ψ[J1] * conj(ψ[J2])
+        end
+        return mout
+    end
     if length(ψ) == dim(H)^2
         return partial_transpose(reshape(ψ, dim(H), dim(H)), H, Hsub; complement, Hout, phase_factors, skipmissing)
     end
-    length(ψ) == dim(H) || throw(DimensionMismatch("The vector must have length $(dim(H)) (pure state) or $(dim(H)^2) (vectorized density matrix), got $(length(ψ))"))
-    mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
-    mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
-    T = promote_type(eltype(ψ), _partial_transpose_eltype(H, Hsub, Hout, mapper_in, mapper_out, phase_factors))
-    mout = zeros(T, dim(Hout), dim(Hout))
-    nz = findall(!iszero, ψ)
-    splits = Dict(j => split_state(basisstate(j, H), mapper_in) for j in nz)
-    _foreach_partial_transpose_term(((j, k) for j in nz for k in nz), H, Hsub, Hout, splits, mapper_out; phase_factors, skipmissing) do J1, J2, K1, K2, v
-        mout[K1, K2] += v * ψ[J1] * conj(ψ[J2])
-    end
-    return mout
+    throw(DimensionMismatch("The vector must have length $(dim(H)) (pure state) or $(dim(H)^2) (vectorized density matrix), got $(length(ψ))"))
 end
 
 partial_transpose(λ::UniformScaling, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; Hout=H, kwargs...) = Matrix(λ.λ * I(dim(Hout)))                       # R_A(1) = 1, no map needed
@@ -271,6 +273,12 @@ logarithmic_negativity(ρ, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; 
     ψ[idx("10")] = ψ[idx("01")] = 1 / sqrt(2)
     @test partial_transpose(ψ, H, hilbert_space(f, [1])) ≈ partial_transpose(ψ * ψ', H, hilbert_space(f, [1]))
     @test FermionicHilbertSpaces.logarithmic_negativity(ψ, H, hilbert_space(f, [1])) ≈ log(2)
+
+    H1 = hilbert_space(f, 1:1, NumberConservation(0))
+    ψ1 = ComplexF64[1 + im]
+    @test partial_transpose(ψ1, H1, H1) ≈ reshape([abs2(ψ1[1])], 1, 1)
+    @test partial_transpose(H1, H1)(ψ1) ≈ reshape([abs2(ψ1[1])], 1, 1)
+    @test logarithmic_negativity(ψ, H, hilbert_space(f, [1])) ≈ log(2)
 end
 
 @testitem "Fermionic partial transpose: disconnected regions" begin
