@@ -708,15 +708,9 @@ end
 project_on_parity(op::AbstractArray, H::AbstractHilbertSpace, parity) = project_on_parity(op, parityoperator(H), parity)
 
 function project_on_parity(op::AbstractMatrix, P::AbstractMatrix, parity)
-    Peven = (I + P) / 2
-    Podd = (I - P) / 2
-    if parity == 1
-        return Peven * op * Peven + Podd * op * Podd
-    elseif parity == -1
-        return Podd * op * Peven + Peven * op * Podd
-    else
+    parity in (-1, 1) ||
         throw(ArgumentError("Parity must be either 1 or -1"))
-    end
+    return (op + parity * (P * op * P)) / 2
 end
 function project_on_parity(op::AbstractVector, P::AbstractMatrix, parity)
     if parity == 1
