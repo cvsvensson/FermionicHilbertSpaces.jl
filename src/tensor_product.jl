@@ -407,7 +407,7 @@ default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 
 default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 
 """
-    partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, extend_state=StateExtender((Hsub, complement), H); skipmissing=true, phase_factors=true)
+    partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, mapper=state_mapper((Hsub, complement), H); skipmissing=true, phase_factors=true)
 
 Compute the partial trace of `m` from `H` to `Hsub`. 
 """
