@@ -20,7 +20,7 @@ using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, N
 export FockNumber, hc, basisstates, dim, state_index, basisstate
 export hilbert_space, subregion
 export parityoperator, numberoperator, matrix_representation, representation, vector_representation
-export Kets, ProductState, SpinState, BosonicState
+export Kets, Ket, ProductState, SpinState, BosonicState
 
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
 export @fermions, @majoranas, @boson, @bosons, @spin, @spins

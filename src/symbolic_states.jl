@@ -2,6 +2,7 @@ struct Kets{B,H}
     space::H
     Kets(space::H) where H = new{statetype(space),H}(space)
 end
+Ket(label, H) = Kets(H)(label)
 
 struct SymbolicState{K,B,H} <: AbstractSym
     space::H
@@ -354,6 +355,7 @@ end
     Hf = hilbert_space(f, 1:2)
     vf = Kets(Hf)
 
+    @test Ket("10", Hf) == vf("10")
     @test vf("10")' * vf("10") == 1
     @test vf("10")' * vf("11") == 0
     @test iszero(f[1] * vf("00"))
