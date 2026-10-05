@@ -6,10 +6,10 @@ CurrentModule = FermionicHilbertSpaces
 
 This page documents the operations used to build composite Hilbert spaces out of
 smaller ones, to inspect their structure, and to move arrays (vectors, matrices,
-density matrices) between a space and its subsystems. See [Fermionic tensor products
-and partial traces](fermions.md) for the mathematical background and phase-factor
-conventions behind `tensor_product`, `embed` and `partial_trace`; this page focuses
-on syntax and usage.
+density matrices) between a space and its subsystems. See [Fermionic tensor products,
+partial traces, and partial transpose](fermions.md) for the mathematical background
+and phase-factor conventions behind `tensor_product`, `embed`, `partial_trace`, and
+`partial_transpose`; this page focuses on syntax and usage.
 
 ## Composing and querying Hilbert spaces
 
@@ -142,9 +142,10 @@ See the [Functions](docstrings.md) page for full docstrings.
 ## Operations on arrays
 
 The functions below move vectors and matrices between a Hilbert space and its
-subsystems. All of them respect fermionic anticommutation: embedding or tracing
-out an operator picks up the Jordan-Wigner phase factors implied by the mode
-ordering, unless disabled with `phase_factors=false`.
+subsystems. They respect fermionic anticommutation: embedding and tracing out
+operators include the Jordan-Wigner phase factors implied by the mode ordering,
+and `partial_transpose` uses the fermionic partial-time-reversal convention,
+unless disabled with `phase_factors=false`.
 
 ### `embed`: putting a subsystem operator into a larger space
 
@@ -184,6 +185,41 @@ a combination of a substate and a complement state does not occur in `H` — thi
 can happen for constrained spaces, and defaults to the safer choice for each
 algorithm. But, SubsystemPartialTraceAlg may not detect missing states, and in cases 
 where the subsystem is inconsistent with the full space may silently give the wrong result.
+
+### `partial_transpose`: transposing a subsystem
+
+```julia
+partial_transpose(m, H, Hsub; Hout=H,
+  complement=complementary_subsystem(H, Hsub), phase_factors=true, skipmissing=false)
+partial_transpose(m, H => Hout, Hsub; kwargs...)
+```
+
+Transposes the subsystem `Hsub` of an operator `m` on `H`. A pure state vector is
+also accepted and treated as its density matrix, as is a vectorized density
+matrix. For fermions, the default operation is the fermionic partial
+transpose, also known as partial time reversal; its phase convention is described
+in [Fermionic tensor products, partial traces, and partial transpose](fermions.md).
+For bosons and spins it is the ordinary partial transpose.
+
+```@example hilbert_space_ops
+@fermions f
+Hpt = hilbert_space(f, 1:2)
+HApt = hilbert_space(f, [1])
+rho_pt_in = zeros(ComplexF64, dim(Hpt), dim(Hpt))
+rho_pt_in[state_index("10", Hpt), state_index("01", Hpt)] = 1
+rho_pt = partial_transpose(rho_pt_in, Hpt, HApt)
+```
+
+The partial transpose need not preserve particle-number or parity constraints.
+If a transposed state is missing from `Hout`, the default behavior is to throw an
+`ArgumentError`. Pass a larger output space, such as the unconstrained space on the
+same modes, with `Hout`; `skipmissing=true` instead drops terms whose output states
+are absent. Set `phase_factors=false` to disable the fermionic phase factors and
+compute the ordinary subsystem transpose.
+
+`logarithmic_negativity(rho, H, Hsub; kwargs...)` computes the logarithm of the
+trace norm of the partial transpose, using singular values (the fermionic result
+is not generally Hermitian).
 
 ### `tensor_product` and `generalized_kron` on arrays
 
@@ -225,9 +261,9 @@ H)`, returning a callable that can be applied to different collections of `ms`.
 
 ### Callable maps and sparse conversion
 
-`partial_trace(H => Hsub; kwargs...)` and `embed(Hsub => H; kwargs...)`, called
-with only a `Pair` of spaces, return callable operation objects (`PartialTraceMap`
-and `EmbedMap`) instead of immediately acting on a matrix:
+`partial_trace(H => Hsub; kwargs...)`, `embed(Hsub => H; kwargs...)`, and
+`partial_transpose(H, Hsub; kwargs...)`, called with only spaces, return callable
+operation objects instead of immediately acting on an array:
 
 ```@example hilbert_space_ops
 @fermions f
@@ -235,10 +271,12 @@ H = hilbert_space(f, 1:4)
 Hsub = hilbert_space(f, [2, 4])
 emb = embed(Hsub => H)
 pt = partial_trace(H => Hsub)
+ptt = partial_transpose(H, Hsub)
 ```
 
-These objects can be applied directly, `op(m)` or in-place `op(out, m)`. 
-This is useful when the same embedding or partial trace is applied many times.
+These objects can be applied directly, `op(m)` or in-place `op(out, m)`. Use
+`sparse(op)` to obtain the sparse superoperator for a partial transpose. Callable
+maps are useful when the same operation is applied many times.
 
 ### `reshape`: splitting and combining array axes
 
