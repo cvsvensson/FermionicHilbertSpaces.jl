@@ -256,7 +256,7 @@ logarithmic_negativity(ρ, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; 
 
 @testitem "Fermionic partial transpose: two modes" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: _bit
+    using FermionicHilbertSpaces: _bit, logarithmic_negativity
     @fermions f
     H = hilbert_space(f, 1:2)
     idx(str) = state_index(str, H)
@@ -272,7 +272,7 @@ logarithmic_negativity(ρ, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; 
     ψ = zeros(ComplexF64, 4)
     ψ[idx("10")] = ψ[idx("01")] = 1 / sqrt(2)
     @test partial_transpose(ψ, H, hilbert_space(f, [1])) ≈ partial_transpose(ψ * ψ', H, hilbert_space(f, [1]))
-    @test FermionicHilbertSpaces.logarithmic_negativity(ψ, H, hilbert_space(f, [1])) ≈ log(2)
+    @test logarithmic_negativity(ψ, H, hilbert_space(f, [1])) ≈ log(2)
 
     H1 = hilbert_space(f, 1:1, NumberConservation(0))
     ψ1 = ComplexF64[1 + im]
