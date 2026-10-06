@@ -57,6 +57,8 @@ nbr_of_modes(f::FermionSym) = 1
 maximum_particles(f::FermionSym) = 1
 isconstrained(f::FermionSym) = false
 
+partial_trace_phase_factor_eltype(::FermionicSpace) = Complex{Int}
+
 function _find_position(f::FermionSym, H::FermionicSpace)
     get(H.mode_ordering, _normalize_sym(f), 0)
 end
