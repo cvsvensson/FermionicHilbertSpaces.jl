@@ -130,21 +130,11 @@ Base.convert(::Type{ParaFockNumber{P,S,I}},
 parafermion_order(::ParaFockNumber{P}) where P = P
 parafermion_sigma(::ParaFockNumber{P,S}) where {P,S} = S
 
-Base.:(==)(a::ParaFockNumber{P,S},
-    b::ParaFockNumber{Q,T}) where {P,S,Q,T} =
-    P == Q && S == T && a.f == b.f
-
-Base.hash(a::ParaFockNumber{P,S}, h::UInt) where {P,S} =
-    hash((P, S, a.f), h)
-
-Base.isless(a::ParaFockNumber{P,S},
-    b::ParaFockNumber{P,S}) where {P,S} = isless(a.f, b.f)
-
+Base.:(==)(a::ParaFockNumber{P,S}, b::ParaFockNumber{Q,T}) where {P,S,Q,T} = P == Q && S == T && a.f == b.f
+Base.hash(a::ParaFockNumber{P,S}, h::UInt) where {P,S} = hash((P, S, a.f), h)
+Base.isless(a::ParaFockNumber{P,S}, b::ParaFockNumber{P,S}) where {P,S} = isless(a.f, b.f)
 Base.iszero(a::ParaFockNumber) = iszero(a.f)
-
-Base.zero(::Type{ParaFockNumber{P,S,I}}) where {P,S,I} =
-    ParaFockNumber{P,S,I}(0)
-
+Base.zero(::Type{ParaFockNumber{P,S,I}}) where {P,S,I} = ParaFockNumber{P,S,I}(0)
 Base.zero(a::ParaFockNumber) = zero(typeof(a))
 
 function Base.show(io::IO, a::ParaFockNumber{P,S}) where {P,S}
@@ -176,10 +166,7 @@ end
 bits(a::ParaFockNumber{2}, N) = occupations(a, N)
 bits(::ParaFockNumber{P}, N) where P = throw(ArgumentError("bits is only defined for P = 2; use occupations(state, N) for base-$P digits"))
 
-function parafock_from_digits(
-    ns,
-    ::Val{P},
-    ::Val{S}=Val(1),
+function parafock_from_digits(ns, ::Val{P}, ::Val{S}=Val(1),
     ::Type{I}=default_parafock_representation(P, length(ns)),
 ) where {P,S,I<:Integer}
     _pf_check_parameters(P, S)
@@ -251,20 +238,15 @@ end
 parafermion_order(::ParafermionicGroup{P}) where P = P
 parafermion_sigma(::ParafermionicGroup{P,S}) where {P,S} = S
 
-Base.:(==)(a::ParafermionicGroup{P,S},
-    b::ParafermionicGroup{Q,T}) where {P,S,Q,T} =
+Base.:(==)(a::ParafermionicGroup{P,S}, b::ParafermionicGroup{Q,T}) where {P,S,Q,T} =
     P == Q && S == T && a.id == b.id
-
-Base.hash(g::ParafermionicGroup{P,S}, h::UInt) where {P,S} =
-    hash((P, S, g.id), h)
-
+Base.hash(g::ParafermionicGroup{P,S}, h::UInt) where {P,S} = hash((P, S, g.id), h)
 Base.isless(a::ParafermionicGroup{P,S},
     b::ParafermionicGroup{Q,T}) where {P,S,Q,T} =
     isless((P, S, a.id), (Q, T, b.id))
 
 symbolic_group(g::ParafermionicGroup) = g
 tags(g::ParafermionicGroup) = g.id
-
 add_tag(g::ParafermionicGroup{P,S}, tag) where {P,S} =
     ParafermionicGroup{P,S}(add_tag(g.id, tag))
 
@@ -275,21 +257,14 @@ end
 
 Base.:(==)(a::SymbolicParafermionBasis, b::SymbolicParafermionBasis) =
     a.name == b.name && a.tags == b.tags
-
 Base.hash(a::SymbolicParafermionBasis, h::UInt) =
     hash(a.name, hash(a.tags, h))
-
 symbolic_group(a::SymbolicParafermionBasis) = a.tags
 tags(a::SymbolicParafermionBasis) = a.tags
-
 add_tag(a::SymbolicParafermionBasis, tag) =
     SymbolicParafermionBasis(a.name, add_tag(a.tags, tag))
-
-parafermion_order(a::SymbolicParafermionBasis) =
-    parafermion_order(symbolic_group(a))
-
-parafermion_sigma(a::SymbolicParafermionBasis) =
-    parafermion_sigma(symbolic_group(a))
+parafermion_order(a::SymbolicParafermionBasis) = parafermion_order(symbolic_group(a))
+parafermion_sigma(a::SymbolicParafermionBasis) = parafermion_sigma(symbolic_group(a))
 
 """
     parafermion_basis(name, p; sigma=1, group=nothing)
@@ -347,33 +322,22 @@ struct ParafermionSym{L,B} <: AbstractSym
     basis::B
 end
 
-Base.getindex(a::SymbolicParafermionBasis, i) =
-    ParafermionSym(false, i, a)
-
-Base.getindex(a::SymbolicParafermionBasis, is...) =
-    ParafermionSym(false, is, a)
-
-Base.adjoint(a::ParafermionSym) =
-    ParafermionSym(!a.creation, a.label, a.basis)
-
+Base.getindex(a::SymbolicParafermionBasis, i) = ParafermionSym(false, i, a)
+Base.getindex(a::SymbolicParafermionBasis, is...) = ParafermionSym(false, is, a)
+Base.adjoint(a::ParafermionSym) = ParafermionSym(!a.creation, a.label, a.basis)
 Base.iszero(::ParafermionSym) = false
-
 Base.:(==)(a::ParafermionSym, b::ParafermionSym) =
     a.creation == b.creation && a.label == b.label && a.basis == b.basis
-
-Base.hash(a::ParafermionSym, h::UInt) =
-    hash(a.creation, hash(a.label, hash(a.basis, h)))
+Base.hash(a::ParafermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
 
 symbolic_group(a::ParafermionSym) = symbolic_group(a.basis)
 symbolic_basis(a::ParafermionSym) = a.basis
 group_id(a::ParafermionSym) = symbolic_group(a)
 atomic_id(a::ParafermionSym) = (a.basis, a.label)
 label(a::ParafermionSym) = a.label
-change_basis(a::ParafermionSym, basis) =
-    ParafermionSym(a.creation, a.label, basis)
+change_basis(a::ParafermionSym, basis) = ParafermionSym(a.creation, a.label, basis)
 
-add_tag(a::ParafermionSym, tag) =
-    change_basis(a, add_tag(a.basis, tag))
+add_tag(a::ParafermionSym, tag) = change_basis(a, add_tag(a.basis, tag))
 
 parafermion_order(a::ParafermionSym) = parafermion_order(a.basis)
 parafermion_sigma(a::ParafermionSym) = parafermion_sigma(a.basis)
@@ -403,7 +367,6 @@ mat_eltype(::Type{<:ParafermionSym}) = ComplexF64
 
 function NonCommutativeProducts.mul_effect(a::ParafermionSym, b::ParafermionSym)
     ga, gb = group_id(a), group_id(b)
-
     # Different groups commute.
     if ga != gb
         return isless(b, a) ? Swap(1) : nothing
@@ -418,7 +381,6 @@ function NonCommutativeProducts.mul_effect(a::ParafermionSym, b::ParafermionSym)
             !a.creation && b.creation &&
                 return AddTerms((Swap(-1), 1))
         end
-
         # For P>2, keep local words explicit. In particular, c*c is
         # NOT zero unless P=2. Numerical application implements all
         # finite-occupation identities without a symbolic rewrite.
@@ -760,9 +722,8 @@ end
 
 phase_factor_u(fm::ParaFockMapper) = state -> _pf_u_phase(state, fm)
 
-# =====================================================================
-# Hilbert spaces
-# =====================================================================
+## Hilbert spaces
+
 struct ParafermionicSpace{
     F,L,PG<:ParafermionicGroup,A
 } <: AbstractGroupedHilbertSpace{F}
