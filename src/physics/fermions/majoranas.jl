@@ -194,6 +194,7 @@ end
 _find_position(f::MajoranaHilbertSpace, H::FermionicSpace) = _find_position(parent(f), H)
 partial_trace_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_trace_phase_factor(f1, f2, parent(H))
 partial_transpose_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
+partial_trace_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_trace_phase_factor_eltype(parent(H))
 
 function majoranas(H::MajoranaHilbertSpace)
     γ = symbolic_basis(H)
