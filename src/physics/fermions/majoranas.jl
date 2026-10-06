@@ -166,7 +166,7 @@ isconstrained(H::MajoranaHilbertSpace) = false
 group_id(H::MajoranaHilbertSpace) = symbolic_group(H.sym)
 add_tag(H::MajoranaHilbertSpace, tag) = MajoranaHilbertSpace(H.majoranaindices, add_tag(parent(H), tag), add_tag(H.sym, tag))
 function atomic_id(H::MajoranaHilbertSpace)
-    length(H.majoranaindices) == 2 || throw(ArgumentError("Atomic ID is only defined for MajoranaHilbertSpaces with exactly 2 Majoranas."))
+    # length(H.majoranaindices) == 2 || throw(ArgumentError("Atomic ID is only defined for MajoranaHilbertSpaces with exactly 2 Majoranas."))
     (H.sym, H.majoranaindices)
 end
 
@@ -185,11 +185,16 @@ function combine_into_group(group::MajoranaGroup, spaces)
     MajoranaHilbertSpace(majoranaindices, fermionic_space, first(spaces).sym)
 end
 
+function combine_states(states, ::MajoranaHilbertSpace)
+    (only(states),), (1,)
+end
 function state_mapper(H::MajoranaHilbertSpace, Hs)
     state_mapper(parent(H), Hs)
 end
-_find_position(f::MajoranaHilbertSpace, H::FermionicSpace) = _find_position(f.parent, H)
-partial_trace_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_trace_phase_factor(f1, f2, H.parent)
+_find_position(f::MajoranaHilbertSpace, H::FermionicSpace) = _find_position(parent(f), H)
+partial_trace_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_trace_phase_factor(f1, f2, parent(H))
+partial_transpose_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
+partial_trace_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_trace_phase_factor_eltype(parent(H))
 
 function majoranas(H::MajoranaHilbertSpace)
     γ = symbolic_basis(H)
@@ -316,4 +321,10 @@ end
     m1 = rand(dim(Hsub), dim(Hsub))
     m2 = rand(dim(Hsub2), dim(Hsub2))
     @test tensor_product((m1, m2), (Hsub, Hsub2), Hprod) == embed(m1, Hsub => Hprod) * embed(m2, Hsub2 => Hprod)
+
+    @boson b
+    Hb = hilbert_space(b,2)
+    @test dim(tensor_product(H, Hb)) == dim(H) * dim(Hb) # this errored for constrained spaces before, fixed by defining combine_states for MajoranaHilbertSpace
+
+    @test dim(tensor_product(H, Hb; constraint = ParityConservation(1,[H]))) == dim(H) * dim(Hb) # fixed by allowing atomic_id for spaces with more than 2 Majoranas
 end

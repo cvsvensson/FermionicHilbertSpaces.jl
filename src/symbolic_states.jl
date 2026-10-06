@@ -2,20 +2,22 @@ struct Kets{B,H}
     space::H
     Kets(space::H) where H = new{statetype(space),H}(space)
 end
+Ket(label, H) = Kets(H)(label)
 
 struct SymbolicState{K,B,H} <: AbstractSym
     space::H
     ket::K
     bra::B
 end
-function SymbolicState(space::ProductSpace, ket::ProductState, bra::Nothing)
-    mapreduce(SymbolicState, *, space.factors, ket.states)
+
+function SymbolicState(space, ket::ProductState, bra::Nothing)
+    mapreduce(SymbolicState, *, groups(space), ket.states)
 end
-function SymbolicState(space::ProductSpace, ket::Nothing, bra::ProductState)
-    mapreduce(SymbolicState, *, space.factors, Ref(nothing), bra.states)
+function SymbolicState(space, ket::Nothing, bra::ProductState)
+    mapreduce(SymbolicState, *, groups(space), Ref(nothing), bra.states)
 end
-function SymbolicState(space::ProductSpace, ket::ProductState, bra::ProductState)
-    mapreduce(SymbolicState, *, space.factors, ket.states, bra.states)
+function SymbolicState(space, ket::ProductState, bra::ProductState)
+    mapreduce(SymbolicState, *, groups(space), ket.states, bra.states)
 end
 SymbolicState(space, state) = SymbolicState(space, state, nothing)
 has_ket(s::SymbolicState) = !isnothing(s.ket)
@@ -167,6 +169,18 @@ end
 
 
 representation(s::SymbolicState; kwargs...) = representation(s, s.space; kwargs...)
+function representation(op; kwargs...)
+    reducer(::Missing, s2) = s2
+    reducer(::Missing, ::Missing) = missing
+    reducer(s1, ::Missing) = s1
+    reducer(s1, s2) = s1==s2 ? s1 : throw(ArgumentError("Cannot represent a product of symbolic states in different spaces"))
+    if _operator_type(op) in (:kets, :bras, :ketbras)
+        space = NonCommutativeProducts.ncmapreduce(op -> op.space, (reducer, reducer), op; scalarmap=x->missing)
+        return representation(op, space; kwargs...)
+    else
+        throw(ArgumentError("Don't know the space of the operator $op, please provide a space argument"))
+    end
+end
 
 function _operator_type(op::SymbolicState)
     if isket(op)
@@ -177,7 +191,7 @@ function _operator_type(op::SymbolicState)
         return :ketbras
     end
 end
-_operator_type(::Union{UniformScaling, Number}) = :operator
+_operator_type(::Union{UniformScaling,Number}) = :operator
 function _operator_type(op)
     hasket = false
     hasbra = false
@@ -341,6 +355,7 @@ end
     Hf = hilbert_space(f, 1:2)
     vf = Kets(Hf)
 
+    @test Ket("10", Hf) == vf("10")
     @test vf("10")' * vf("10") == 1
     @test vf("10")' * vf("11") == 0
     @test iszero(f[1] * vf("00"))
@@ -358,6 +373,13 @@ end
     @test representation(vf("10"), Hf)[state_index(vf("10").ket, Hf)] == 1
     @test representation(vf("10")', Hf)[state_index(vf("10").ket, Hf)] == 1
 
+    ket_sum = vf("10") + 2 * vf("01")
+    bra_sum = vf("10")' + 2 * vf("01")'
+    ketbra_sum = vf("10") * vf("10")' + 2 * vf("01") * vf("01")'
+    @test representation(ket_sum) == representation(ket_sum, Hf)
+    @test representation(bra_sum) == representation(bra_sum, Hf)
+    @test representation(ketbra_sum) == representation(ketbra_sum, Hf)
+
     @test f[2]' * vf("10") == -vf("11")
     @test vf("10")' * f[2] == -vf("11")'
     @test representation(f[2]' * vf("10"), Hf) ≈ matrix_representation(f[2]', Hf) * representation(vf("10"), Hf)
@@ -370,6 +392,7 @@ end
     vb = Kets(Hb)
     @test vb("3")' * vb("3") == 1
     @test vb("3")' * vb("4") == 0
+    @test_throws ArgumentError representation(vf("10") + vb("3"))
 
     H = tensor_product(Hf, Hb)
     vfb = Kets(H)
@@ -408,8 +431,8 @@ end
     op2 = vb("0")vb("2")' + vb("3")vb("0")'
     @test representation(op * op2, Hb) == representation(op, Hb) * representation(op2, Hb)
     @test representation(op * op2, TransposedSpace(Hb)) ==
-          representation(op2, TransposedSpace(Hb)) * representation(op, TransposedSpace(Hb)) ==
-          transpose(representation(op * op2, Hb)) == transpose(representation(op2, Hb)) * transpose(representation(op, Hb))
+        representation(op2, TransposedSpace(Hb)) * representation(op, TransposedSpace(Hb)) ==
+        transpose(representation(op * op2, Hb)) == transpose(representation(op2, Hb)) * transpose(representation(op, Hb))
 
 
     H = tensor_product(Hf, TransposedSpace(Hb))
@@ -428,67 +451,69 @@ end
     using LinearAlgebra
     @fermions f
     @boson b
-
     Hf = hilbert_space(f, 1:2)
-    Hb = hilbert_space(b, 4)
-    H = tensor_product(Hf, Hb)
-    vf = Kets(Hf)
-    vb = Kets(Hb)
-    vfb = Kets(H)
+    fspaces = [Hf, constrain_space(Hf, NumberConservation()), constrain_space(Hf, collect(basisstates(Hf)))]
+    for Hf in fspaces
+        Hb = hilbert_space(b, 4)
+        H = tensor_product(Hf, Hb)
+        vf = Kets(Hf)
+        vb = Kets(Hb)
+        vfb = Kets(H)
 
-    # Test: op_f * vf_ket * op_b * vb_ket should reorder to op_f * op_b * vf_ket * vb_ket
-    # Mixed order: operator_f, state_f, operator_b, state_b
-    mixed = f[1]' * vf("0") * b' * vb("2")
-    @test mixed == b' * f[1]' * vf("0") * vb("2")
-    @test mixed == b' * f[1]' * vb("2") * vf("0")
-    @test mixed == f[1]' * b' * vf("0") * vb("2")
-    @test mixed == f[1]' * b' * vfb("0", "2")
+        # Test: op_f * vf_ket * op_b * vb_ket should reorder to op_f * op_b * vf_ket * vb_ket
+        # Mixed order: operator_f, state_f, operator_b, state_b
+        mixed = f[1]' * vf("0") * b' * vb("2")
+        @test mixed == b' * f[1]' * vf("0") * vb("2")
+        @test mixed == b' * f[1]' * vb("2") * vf("0")
+        @test mixed == f[1]' * b' * vf("0") * vb("2")
+        @test mixed == f[1]' * b' * vfb("0", "2")
 
-    # Test with adjoint (bra)
-    mixed = vb("2")'vf("0")' * f[1] * b'
-    @test mixed == vf("0")' * vb("2")' * f[1] * b'
-    @test mixed == vf("0")' * f[1] * vb("2")' * b'
-    @test mixed == vb("2")' * vf("0")' * f[1] * b'
-    @test mixed == vfb("0", "2")' * f[1] * b'
+        # Test with adjoint (bra)
+        mixed = vb("2")'vf("0")' * f[1] * b'
+        @test mixed == vf("0")' * vb("2")' * f[1] * b'
+        @test mixed == vf("0")' * f[1] * vb("2")' * b'
+        @test mixed == vb("2")' * vf("0")' * f[1] * b'
+        @test mixed == vfb("0", "2")' * f[1] * b'
 
-    num = vb("2")'vf("0")' * f[1] * b' * vb("1")vf("1")
-    @test iszero(num - sqrt(2))
-    @test num == vb("2")'vf("0")' * f[1] * b' * vf("1")vb("1")
-    @test num == vb("2")'vf("0")' * b' * f[1] * vf("1")vb("1")
-    @test num == vf("0")'vb("2")' * b' * f[1] * vf("1")vb("1")
-    @test num == vf("0")' * f[1] * vb("2")' * b' * vb("1")vf("1")
-    @test num == vf("0")' * f[1] * vb("2")' * vf("1") * b' * vb("1")
-    @test num == vfb("0", "2")' * f[1] * b' * vfb("1", "1")
+        num = vb("2")'vf("0")' * f[1] * b' * vb("1")vf("1")
+        @test iszero(num - sqrt(2))
+        @test num == vb("2")'vf("0")' * f[1] * b' * vf("1")vb("1")
+        @test num == vb("2")'vf("0")' * b' * f[1] * vf("1")vb("1")
+        @test num == vf("0")'vb("2")' * b' * f[1] * vf("1")vb("1")
+        @test num == vf("0")' * f[1] * vb("2")' * b' * vb("1")vf("1")
+        @test num == vf("0")' * f[1] * vb("2")' * vf("1") * b' * vb("1")
+        @test num == vfb("0", "2")' * f[1] * b' * vfb("1", "1")
 
-    opf = vf("1")vf("0")'
-    opb = vb("0")vb("1")'
-    mixed = opf * opb * f[1] * b'
-    @test opf * opb == vfb("1", "0") * vfb("0", "1")'
-    @test mixed == opf * f[1] * opb * b'
-    @test mixed == opb * opf * b' * f[1]
-    @test mixed * vf("1") == vb("0")vb("0")' * vf("1")
-    @test mixed * vb("0") == vf("1")vf("1")' * vb("0")
-    @test FermionicHilbertSpaces._operator_type(mixed) == :ketbras
+        opf = vf("1")vf("0")'
+        opb = vb("0")vb("1")'
+        mixed = opf * opb * f[1] * b'
+        @test opf * opb == vfb("1", "0") * vfb("0", "1")'
+        @test mixed == opf * f[1] * opb * b'
+        @test mixed == opb * opf * b' * f[1]
+        @test mixed * vf("1") == vb("0")vb("0")' * vf("1")
+        @test mixed * vb("0") == vf("1")vf("1")' * vb("0")
+        @test FermionicHilbertSpaces._operator_type(mixed) == :ketbras
 
-    @spin s 1 // 2
-    Hs = hilbert_space(s)
-    vs = Kets(Hs)
-    vfbs = Kets(tensor_product(Hf, Hs, Hb))
-    @test vb("0") * vs("↑") * vf("1") == vfbs("1", "↑", "0")
+        @spin s 1 // 2
+        Hs = hilbert_space(s)
+        vs = Kets(Hs)
+        vfbs = Kets(tensor_product(Hf, Hs, Hb))
+        @test vb("0") * vs("↑") * vf("1") == vfbs("1", "↑", "0")
 
-    @test iszero((vb("0") * vs("↑") * vf("0"))' * vb("0") * vs("↑") * vf("0") - 1)
-    long_op = s[:x] * f[1] * b * (1 + s[:y]) * (1 + f[2]') * (1 + s[:z]) * b' + hc
-    ket = long_op * vb("0") * vs("↑") * vf("1")
-    @test FermionicHilbertSpaces._operator_type(ket) == :kets
-    bra = (vb("0") * vs("↑") * vf("0"))' * long_op
-    @test FermionicHilbertSpaces._operator_type(bra) == :bras
+        @test iszero((vb("0") * vs("↑") * vf("0"))' * vb("0") * vs("↑") * vf("0") - 1)
+        long_op = s[:x] * f[1] * b * (1 + s[:y]) * (1 + f[2]') * (1 + s[:z]) * b' + hc
+        ket = long_op * vb("0") * vs("↑") * vf("1")
+        @test FermionicHilbertSpaces._operator_type(ket) == :kets
+        bra = (vb("0") * vs("↑") * vf("0"))' * long_op
+        @test FermionicHilbertSpaces._operator_type(bra) == :bras
 
-    num = (vb("0") * vs("↑") * vf("0"))' * long_op * vb("0") * vs("↑") * vf("1")
-    @test FermionicHilbertSpaces.NonCommutativeProducts.isscalar(num)
-    @test num == vfbs("0", "↑", "0")' * long_op * vfbs("1", "↑", "0")
+        num = (vb("0") * vs("↑") * vf("0"))' * long_op * vb("0") * vs("↑") * vf("1")
+        @test FermionicHilbertSpaces.NonCommutativeProducts.isscalar(num)
+        @test num == vfbs("0", "↑", "0")' * long_op * vfbs("1", "↑", "0")
 
-    ketbra = vb("0") * vs("↑") * vf("1") * (vb("0") * vs("↑") * vf("0"))'
-    @test FermionicHilbertSpaces._operator_type(ketbra) == :ketbras
+        ketbra = vb("0") * vs("↑") * vf("1") * (vb("0") * vs("↑") * vf("0"))'
+        @test FermionicHilbertSpaces._operator_type(ketbra) == :ketbras
+    end
 end
 
 _find_position(op::SymbolicState, space::FermionicSpace) = nothing

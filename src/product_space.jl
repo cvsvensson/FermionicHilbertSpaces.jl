@@ -49,7 +49,7 @@ function basisstate(n::Integer, H::ProductSpace{B}) where B
     inds = Tuple(H.cartinds[n])
     ProductState(map(basisstate, inds, H.factors))
 end
-function state_index(state::B, H::ProductSpace{B}) where B
+function state_index(state::AbstractBasisState, H::ProductSpace{B}) where B
     cartesian_index = CartesianIndex(Tuple(map(state_index, state.states, H.factors)))
     H.lininds[cartesian_index]
 end
@@ -270,12 +270,20 @@ unique_combine(::Any) = false
 _find_position(target::AbstractAtomicHilbertSpace, parent::AbstractAtomicHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
 _find_position(target::AbstractGroupedHilbertSpace, parent::AbstractGroupedHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
 
-
+partial_trace_phase_factor_eltype(space::ProductSpace) = promote_type((partial_trace_phase_factor_eltype(H) for H in factors(space))...)
 function partial_trace_phase_factor(state1, state2, space::ProductSpace)
     # product of phase factors from each space and substate
     pf = 1
     for (s1, s2, group) in zip(state1.states, state2.states, space.factors)
         pf *= partial_trace_phase_factor(s1, s2, group)
+    end
+    return pf
+end
+function partial_transpose_phase_factor(state1, state2, space::ProductSpace)
+    # product of phase factors from each space and substate
+    pf = 1
+    for (s1, s2, group) in zip(state1.states, state2.states, space.factors)
+        pf *= partial_transpose_phase_factor(s1, s2, group)
     end
     return pf
 end

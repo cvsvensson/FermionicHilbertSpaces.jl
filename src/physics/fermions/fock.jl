@@ -45,7 +45,7 @@ parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
 particle_number(s::FockNumber) = fermionnumber(s)
-
+_nbr_differing_modes(f1::FockNumber, f2::FockNumber, N::Int) = count_ones(f1.f ⊻ f2.f)
 
 internal_rep(state::FockNumber, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.f)
 physical_rep(state::T, ::Type{FockNumber{I}}) where {T,I} = FockNumber{I}(state)
@@ -175,10 +175,10 @@ shift_right(f::FockNumber, M) = FockNumber(f.f << M)
     end
 
     @testset "removefermion" begin
-        focknbr = FockNumber(rand(1:2^N) - 1)
+        focknbr = FockNumber(rand(1:(2^N)) - 1)
         fockbits = bits(focknbr, N)
         function test_remove(n)
-            FermionicHilbertSpaces.removefermion(n, focknbr) == (fockbits[n] ? (FockNumber(focknbr.f - 2^(n - 1)), (-1)^sum(fockbits[1:n-1])) : (FockNumber(0), 0))
+            FermionicHilbertSpaces.removefermion(n, focknbr) == (fockbits[n] ? (FockNumber(focknbr.f - 2^(n - 1)), (-1)^sum(fockbits[1:(n-1)])) : (FockNumber(0), 0))
         end
         @test all([test_remove(n) for n in 1:N])
     end
@@ -253,7 +253,7 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
         split = Base.Fix2(_split, fockmapper)
         combine = Base.Fix2(_combine, fockmapper)
         ident = combine ∘ split
-        @test all(ident(FockNumber(k)) == FockNumber(k) for k in 0:2^4-1)
+        @test all(ident(FockNumber(k)) == FockNumber(k) for k in 0:(2^4-1))
     end
 
     @testset "partial partitions" begin
