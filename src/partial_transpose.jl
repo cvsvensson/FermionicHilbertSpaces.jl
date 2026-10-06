@@ -14,17 +14,7 @@ function _throw_missing_pt_state(g, Hout)
     throw(ArgumentError("The state $g is not in the output Hilbert space. The partial transpose does not preserve number/parity constraints: pass a larger output space via `Hout` (e.g. the unconstrained space on the same modes), or `skipmissing=true` to drop such terms."))
 end
 
-function _partial_transpose_eltype(H, Hsub, Hout, mapper_in, mapper_out, phase_factors)
-    f = first(basisstates(H))
-    splits, ws = split_state(f, mapper_in)
-    fsub, fbar... = first(splits)
-    _, us = combine_states((fsub, fbar...), mapper_out)
-    fout = first(basisstates(Hout))
-    sT = phase_factors ? promote_type(typeof(partial_trace_phase_factor(f, f, H)),
-        typeof(partial_transpose_phase_factor(fsub, fsub, Hsub)),
-        typeof(partial_trace_phase_factor(fout, fout, Hout))) : Int
-    return promote_type(sT, eltype(ws), eltype(us))
-end
+partial_transpose_phase_factor_eltype(H::AbstractHilbertSpace) = partial_trace_phase_factor_eltype(H) # default assumption 
 
 """
     _foreach_partial_transpose_term(op, inds, H, Hsub, Hout, splits, mapper_out; phase_factors, skipmissing)
@@ -114,7 +104,7 @@ function partial_transpose(m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::Abs
     complement=complementary_subsystem(H, Hsub), Hout=H, phase_factors=true, skipmissing=false)
     mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
     mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
-    T = promote_type(eltype(m), _partial_transpose_eltype(H, Hsub, Hout, mapper_in, mapper_out, phase_factors))
+    T = promote_type(eltype(m), partial_transpose_phase_factor_eltype(H))
     mout = zeros(T, dim(Hout), dim(Hout))
     partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, skipmissing)
 end
@@ -130,7 +120,7 @@ function partial_transpose(ψ::AbstractVector, H::AbstractHilbertSpace, Hsub::Ab
     if length(ψ) == dim(H)
         mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
         mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
-        T = promote_type(eltype(ψ), _partial_transpose_eltype(H, Hsub, Hout, mapper_in, mapper_out, phase_factors))
+        T = promote_type(eltype(ψ), partial_transpose_phase_factor_eltype(H))
         mout = zeros(T, dim(Hout), dim(Hout))
         nz = findall(!iszero, ψ)
         splits = Dict(j => split_state(basisstate(j, H), mapper_in) for j in nz)
@@ -153,7 +143,7 @@ function partial_transpose_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpa
     mapper_in=state_mapper(H, _pt_parts(Hsub, complement)),
     mapper_out=_partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in);
     phase_factors=true, skipmissing=false)
-    T = _partial_transpose_eltype(H, Hsub, Hout, mapper_in, mapper_out, phase_factors)
+    T = partial_transpose_phase_factor_eltype(H)
     splits = _split_all_states(H, mapper_in)
     indK = LinearIndices((1:dim(Hout), 1:dim(Hout)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
