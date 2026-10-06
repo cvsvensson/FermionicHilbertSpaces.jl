@@ -135,7 +135,8 @@ function partial_transpose(ψ::AbstractVector, H::AbstractHilbertSpace, Hsub::Ab
     throw(DimensionMismatch("The vector must have length $(dim(H)) (pure state) or $(dim(H)^2) (vectorized density matrix), got $(length(ψ))"))
 end
 
-partial_transpose(λ::UniformScaling, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; Hout=H, kwargs...) = Matrix(λ.λ * I(dim(Hout)))                       # R_A(1) = 1, no map needed
+partial_transpose(λ::UniformScaling, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; Hout=H, kwargs...) =
+    partial_transpose(λ.λ * I(dim(H)), H, Hsub; Hout, kwargs...)
 
 ## Sparse superoperator
 
@@ -156,7 +157,7 @@ function partial_transpose_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpa
         push!(Js, indJ[J1, J2])
         push!(Vs, v)
     end
-    return sparse(Is, Js, Vs, dim(Hout)^2, dim(H)^2)
+    return SparseArrays.sparse!(Is, Js, Vs, dim(Hout)^2, dim(H)^2)
 end
 function partial_transpose_map(H, Hsub; complement=complementary_subsystem(H, Hsub), Hout=H, kwargs...)
     partial_transpose_map(H, Hsub, complement, Hout; kwargs...)
@@ -265,7 +266,7 @@ logarithmic_negativity(ρ, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; 
     @test logarithmic_negativity(ψ, H, hilbert_space(f, [1])) ≈ log(2)
 
     H1 = hilbert_space(f, 1:1, NumberConservation(0))
-    ψ1 = ComplexF64[1 + im]
+    ψ1 = ComplexF64[1+im]
     @test partial_transpose(ψ1, H1, H1) ≈ reshape([abs2(ψ1[1])], 1, 1)
     @test partial_transpose(H1, H1)(ψ1) ≈ reshape([abs2(ψ1[1])], 1, 1)
     @test logarithmic_negativity(ψ, H, hilbert_space(f, [1])) ≈ log(2)
@@ -308,6 +309,7 @@ end
 end
 
 @testitem "Fermionic partial transpose: constrained spaces" begin
+    using LinearAlgebra
     @fermions f
     H = hilbert_space(f, 1:4, NumberConservation(2))
     Hfull = hilbert_space(f, 1:4)
@@ -320,6 +322,7 @@ end
     end
     @test partial_transpose(m, H => Hfull, HA) ≈ partial_transpose(E * m * E', Hfull, hilbert_space(f, [1, 3]))
     @test partial_transpose(H, HA; Hout=Hfull)(m) ≈ partial_transpose(m, H, HA; Hout=Hfull)
+    @test partial_transpose(2I, H => Hfull, HA) ≈ partial_transpose(2I(dim(H)), H => Hfull, HA)
 end
 
 @testitem "Partial transpose: bosons, spins, and Majoranas" begin
