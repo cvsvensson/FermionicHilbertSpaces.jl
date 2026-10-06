@@ -2,6 +2,7 @@ struct Kets{B,H}
     space::H
     Kets(space::H) where H = new{statetype(space),H}(space)
 end
+Ket(label, H) = Kets(H)(label)
 
 struct SymbolicState{K,B,H} <: AbstractSym
     space::H
@@ -168,6 +169,18 @@ end
 
 
 representation(s::SymbolicState; kwargs...) = representation(s, s.space; kwargs...)
+function representation(op; kwargs...)
+    reducer(::Missing, s2) = s2
+    reducer(::Missing, ::Missing) = missing
+    reducer(s1, ::Missing) = s1
+    reducer(s1, s2) = s1==s2 ? s1 : throw(ArgumentError("Cannot represent a product of symbolic states in different spaces"))
+    if _operator_type(op) in (:kets, :bras, :ketbras)
+        space = NonCommutativeProducts.ncmapreduce(op -> op.space, (reducer, reducer), op; scalarmap=x->missing)
+        return representation(op, space; kwargs...)
+    else
+        throw(ArgumentError("Don't know the space of the operator $op, please provide a space argument"))
+    end
+end
 
 function _operator_type(op::SymbolicState)
     if isket(op)
@@ -342,6 +355,7 @@ end
     Hf = hilbert_space(f, 1:2)
     vf = Kets(Hf)
 
+    @test Ket("10", Hf) == vf("10")
     @test vf("10")' * vf("10") == 1
     @test vf("10")' * vf("11") == 0
     @test iszero(f[1] * vf("00"))
@@ -359,6 +373,13 @@ end
     @test representation(vf("10"), Hf)[state_index(vf("10").ket, Hf)] == 1
     @test representation(vf("10")', Hf)[state_index(vf("10").ket, Hf)] == 1
 
+    ket_sum = vf("10") + 2 * vf("01")
+    bra_sum = vf("10")' + 2 * vf("01")'
+    ketbra_sum = vf("10") * vf("10")' + 2 * vf("01") * vf("01")'
+    @test representation(ket_sum) == representation(ket_sum, Hf)
+    @test representation(bra_sum) == representation(bra_sum, Hf)
+    @test representation(ketbra_sum) == representation(ketbra_sum, Hf)
+
     @test f[2]' * vf("10") == -vf("11")
     @test vf("10")' * f[2] == -vf("11")'
     @test representation(f[2]' * vf("10"), Hf) ≈ matrix_representation(f[2]', Hf) * representation(vf("10"), Hf)
@@ -371,6 +392,7 @@ end
     vb = Kets(Hb)
     @test vb("3")' * vb("3") == 1
     @test vb("3")' * vb("4") == 0
+    @test_throws ArgumentError representation(vf("10") + vb("3"))
 
     H = tensor_product(Hf, Hb)
     vfb = Kets(H)

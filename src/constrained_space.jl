@@ -31,7 +31,10 @@ atomic_id(H::ConstrainedSpace) = atomic_id(parent(H))
 group_id(H::ConstrainedSpace) = group_id(parent(H))
 isconstrained(H::ConstrainedSpace) = true
 combine_states(substates, sp::ConstrainedSpace) = combine_states(substates, parent(sp))
-partial_trace_phase_factor(s1, s2, sp::ConstrainedSpace) = partial_trace_phase_factor(s1, s2, parent(sp))
+partial_trace_phase_factor(s1, s2, H::ConstrainedSpace) = partial_trace_phase_factor(s1, s2, parent(H))
+partial_trace_phase_factor_eltype(space::ConstrainedSpace) = partial_trace_phase_factor_eltype(parent(space))
+
+partial_transpose_phase_factor(f1, f2, H::ConstrainedSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
 atomic_substate(n, f, space::ConstrainedSpace) = atomic_substate(n, f, parent(space))
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
 constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}, constraint::AbstractConstraint=NoSymmetry()) where B = constrain_space(space, constraint, states)

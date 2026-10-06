@@ -2,9 +2,9 @@
 CurrentModule = FermionicHilbertSpaces
 ```
 
-# Fermionic tensor products and partial traces
+# Fermionic tensor products, partial traces, and partial transpose
 
-This page explains the mathematics behind the fermionic tensor product and partial trace, and the conventions this package uses to implement them. See [[1]](#fermion_information_article) for the full formalism; here we only sketch the ideas needed to understand why the package's `tensor_product`, `embed` and `partial_trace` differ from `kron` and a naive partial trace.
+This page explains the mathematics behind the fermionic tensor product, partial trace, and partial transpose, and the conventions this package uses to implement them. See [[1]](#fermion_information_article) for the tensor-product and partial-trace formalism, and [[2]](#fermionic_partial_time_reversal) for the fermionic partial transpose; here we sketch the ideas needed to understand why these operations differ from `kron`, a naive partial trace, and the ordinary partial transpose.
 
 ### The CAR algebra
 Fermionic creation and annihilation operators ``c_i^\dagger, c_i`` satisfy the canonical anticommutation relations (CAR)
@@ -42,8 +42,20 @@ A more mathematical description is that the partial trace is the adjoint of the 
 ```
 Since the embedding aquires fermionic phases depending on the mode ordering, so does the partial trace. This is handled automatically by the package when using `partial_trace(A, H => HX)`.
 
+### The fermionic partial transpose
+For bosonic and spin systems, `partial_transpose` is the ordinary matrix transpose on the selected subsystem. For fermions, the ordinary partial transpose does not capture the fermionic structure of the operator algebra. Following [[2]](#fermionic_partial_time_reversal), the package instead implements the fermionic partial transpose, also called partial time reversal.
+
+In the fermionic operator basis, this operation swaps the bra and ket labels on the selected subsystem and multiplies by a phase determined by the fermionic operator content there. Thus it is not, in general, the ordinary matrix transpose in the occupation-number basis. The convention is independent of the ordering of the fermionic modes. Set `phase_factors=false` in `partial_transpose` to disable these phases and obtain the ordinary subsystem transpose.
+
+Unlike the ordinary partial transpose, the fermionic result is not generally Hermitian. If ``p_A`` is the fermion-parity operator on the transposed subsystem, it obeys ``(\rho^{R_A})^\dagger = p_A \rho^{R_A} p_A``. 
+
 # References
 ```@raw html
 <a name="fermion_information_article"></a>
 ```
 [1] Szalay, Szilárd, et al. "Fermionic systems for quantum information people." [Journal of Physics A: Mathematical and Theoretical 54.39 (2021): 393001](https://doi.org/10.1088/1751-8121/ac0646), [arXiv:2006.03087](https://arxiv.org/abs/2006.03087)
+
+```@raw html
+<a name="fermionic_partial_time_reversal"></a>
+```
+[2] H. Shapourian, K. Shiozaki, and S. Ryu, "Partial time-reversal transformation and entanglement negativity in fermionic systems," [Phys. Rev. B 95, 165101 (2017)](https://doi.org/10.1103/PhysRevB.95.165101).
