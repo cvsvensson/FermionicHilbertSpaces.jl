@@ -29,8 +29,8 @@ function groupby(f::F, itr; sortkeys=false, sortvals=false) where {F}
         key = f(x)
         ismissing(key) && continue
         push!(get!(d, key) do
-                B[]
-            end, x)
+            B[]
+        end, x)
     end
     _ks = identity.(keys(d))
     K = eltype(_ks)
@@ -47,8 +47,8 @@ function groupby(f::F, itr, ::Type{B}; sortkeys=:auto, sortvals=false) where {F,
         key = f(x)
         ismissing(key) && continue
         push!(get!(d, key) do
-                B[]
-            end, x)
+            B[]
+        end, x)
     end
     _ks = identity.(keys(d))
     K = eltype(_ks)
@@ -86,10 +86,7 @@ partial_transpose_phase_factor(f1, f2, H::SectorHilbertSpace) = partial_transpos
 state_mapper(H::SectorHilbertSpace, Hs) = state_mapper(parent(H), Hs)
 mode_ordering(H::SectorHilbertSpace) = mode_ordering(parent(H))
 
-function basisstate(ind::Integer, H::SectorHilbertSpace)
-    (ind < 1 || ind > dim(H)) && throw(ArgumentError("Invalid state index $ind"))
-    H.ordered_basis_states[ind]
-end
+basisstate(ind::Integer, H::SectorHilbertSpace) = H.ordered_basis_states[ind]
 
 state_index(state::AbstractBasisState, H::SectorHilbertSpace{B}) where B = get(H.state_to_index, state, 0)
 add_tag(H::SectorHilbertSpace, tag) = SectorHilbertSpace(add_tag(parent(H), tag), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)
@@ -194,7 +191,7 @@ indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
     ## test fermions on sector spaces
     import FermionicHilbertSpaces: fermions
     N = 4
-    H = hilbert_space(f, 1:N, NumberConservation(0:N-1))
+    H = hilbert_space(f, 1:N, NumberConservation(0:(N-1)))
     @test size(fermions(H)[1], 1) == 2^N - 1
 end
 
@@ -222,7 +219,7 @@ end
     @test all(H -> H isa FermionicHilbertSpaces.MajoranaHilbertSpace, sectors(HMnoqn))
     # Majorana hilbert spaces
     HM = hilbert_space(γ, 1:N, NumberConservation())
-    @test collect(quantumnumbers(HM)) == 0:N÷2
+    @test collect(quantumnumbers(HM)) == 0:(N÷2)
     qn = 1
     HMqn = hilbert_space(γ, 1:N, NumberConservation(qn))
     @test basisstates(HMqn) == basisstates(HM)[indices(qn, HM)]
@@ -328,7 +325,7 @@ end
     # Both inputs NumberConservation → QNs are [n1, n2] vectors
     k = 2
     H1 = hilbert_space(f, 1:k, NumberConservation())
-    H2 = hilbert_space(f, k+1:2k, NumberConservation())
+    H2 = hilbert_space(f, (k+1):2k, NumberConservation())
     H = tensor_product(H1, H2)
     @test H isa SectorHilbertSpace
     qns = quantumnumbers(H)
@@ -348,7 +345,7 @@ end
     end
 
     # One sector input + one plain input → QN type is plain (e.g. Int)
-    Hplain = hilbert_space(f, k+1:2k)
+    Hplain = hilbert_space(f, (k+1):2k)
     Hmix = tensor_product(H1, Hplain)
     @test Hmix isa SectorHilbertSpace
     for n in 0:k
@@ -357,7 +354,7 @@ end
 
     # ParityConservation input
     H1p = hilbert_space(f, 1:k, ParityConservation())
-    H2p = hilbert_space(f, k+1:2k, ParityConservation())
+    H2p = hilbert_space(f, (k+1):2k, ParityConservation())
     Hp = tensor_product(H1p, H2p)
     @test Hp isa SectorHilbertSpace
     # combined parity QNs are [p1, p2] with p ∈ {-1, 1}
@@ -378,7 +375,7 @@ end
     @test dim(sector(:has_particle, H1)) == 2^k - 1
 
     # Combine with a NumberConservation sector space
-    H2 = hilbert_space(f, k+1:2k, NumberConservation())
+    H2 = hilbert_space(f, (k+1):2k, NumberConservation())
     H = tensor_product(H1, H2)
     @test H isa SectorHilbertSpace
 
