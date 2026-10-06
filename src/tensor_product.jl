@@ -130,7 +130,7 @@ recombination weights and the phase factor. `inds` supplies one row/column index
 local matrix. When `skipmissing=false`, a missing state throws `ArgumentError`.
 """
 function _foreach_kron_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state;
-                            phase_factors=true, skipmissing=false)
+    phase_factors=true, skipmissing=false)
     pfh = phase_factors ? kron_phase_factor(extend_state) : (f1, f2) -> 1
     for I in inds
         I1 = map(i -> i[1], I)
@@ -179,7 +179,7 @@ function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H
         push!(Js, K2)
         push!(Vs, v)
     end
-    return mout .= sparse(Is, Js, Vs, size(mout, 1), size(mout, 2))
+    return mout .= SparseArrays.sparse!(Is, Js, Vs, size(mout, 1), size(mout, 2))
 end
 
 """
@@ -190,7 +190,7 @@ where `v` is the product of the selected input entries, the recombination weight
 phase factor. When `skipmissing=false`, a missing state throws `ArgumentError`.
 """
 function _foreach_kron_vec_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state;
-                                phase_factors=true, skipmissing=false)
+    phase_factors=true, skipmissing=false)
     mapper = state_mapper(H, Hs)
     pfu = phase_factors ? phase_factor_u(mapper) : state -> 1
     for I in inds
@@ -424,7 +424,7 @@ default_partial_trace_alg(m::AbstractMatrix, Hsub, H, ::Nothing) = dim(Hsub)^2 <
 default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 
-partial_trace_phase_factor_eltype(::AbstractAtomicHilbertSpace) = Int 
+partial_trace_phase_factor_eltype(::AbstractAtomicHilbertSpace) = Int
 
 """
     _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, alg; phase_factors, skipmissing)
@@ -436,7 +436,7 @@ matrix in `Hsub`, and `v` excludes the input matrix element. `inds` is ignored b
 `inds`. When `skipmissing=false`, a missing state throws `ArgumentError`.
 """
 function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::SubsystemPartialTraceAlg;
-                                     phase_factors=true, skipmissing=true)
+    phase_factors=true, skipmissing=true)
     # `inds` is unused: this algorithm enumerates subsystem and complement states directly.
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
@@ -471,7 +471,7 @@ function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::Su
 end
 
 function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::FullPartialTraceAlg;
-                                     phase_factors=true, skipmissing=false)
+    phase_factors=true, skipmissing=false)
     splitsamps = map(Base.Fix2(split_state, mapper), basisstates(H))
     for I in inds
         J1, J2 = I[1], I[2]
@@ -609,18 +609,18 @@ function _apply_ptmap_on_vec!(w::AbstractVector, ptmap::PartialTraceMap, ψ::Abs
         ptr_start = mat.colptr[c]
         ptr_end = mat.colptr[c+1] - 1
         ptr_start > ptr_end && continue  # skip empty column
-        
+
         j = (c - 1) % D + 1
         k = div(c - 1, D) + 1
-        
+
         val_ψ = ψ[j] * conj(ψ[k])
         iszero(val_ψ) && continue
-        
+
         for ptr in ptr_start:ptr_end
             w[rows[ptr]] += vals[ptr] * val_ψ
         end
     end
-    
+
     return w
 end
 
@@ -657,26 +657,32 @@ function partial_trace_map(H, Hsub, complement::AbstractHilbertSpace, ::Subsyste
     indK = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
     T = partial_trace_phase_factor_eltype(H)
-    Is, Js, Vs = Int[], Int[], T[]
+    n_est = dim(Hsub)^2 * dim(complement)
+    Is = sizehint!(Int[], n_est)
+    Js = sizehint!(Int[], n_est)
+    Vs = sizehint!(T[], n_est)
     _foreach_partial_trace_term(nothing, H, Hsub, complement, mapper, SubsystemPartialTraceAlg(); skipmissing, phase_factors) do J1, J2, K1, K2, v
         push!(Is, indK[K1, K2])
         push!(Js, indJ[J1, J2])
         push!(Vs, v)
     end
-    return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
+    return SparseArrays.sparse!(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
 
 function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement::AbstractHilbertSpace, ::FullPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
     indK = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
     T = partial_trace_phase_factor_eltype(H)
-    Is, Js, Vs = Int[], Int[], T[]
+    n_est = dim(Hsub)^2 * dim(complement)
+    Is = sizehint!(Int[], n_est)
+    Js = sizehint!(Int[], n_est)
+    Vs = sizehint!(T[], n_est)
     _foreach_partial_trace_term(CartesianIndices((dim(H), dim(H))), H, Hsub, complement, mapper, FullPartialTraceAlg(); phase_factors, skipmissing) do J1, J2, K1, K2, v
         push!(Is, indK[K1, K2])
         push!(Js, indJ[J1, J2])
         push!(Vs, v)
     end
-    return sparse(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
+    return SparseArrays.sparse!(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
 
 
@@ -787,7 +793,7 @@ end
     m12full = rand(ComplexF64, dim(H), dim(H))
     @test_throws ArgumentError partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.FullPartialTraceAlg(), skipmissing=false)
     @test partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.FullPartialTraceAlg(), skipmissing=true) ≈
-          partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg()) # This is a bit problematic, because the subsystem partial trace algorithm will not enumerate all possible states in H, and can silently give the wrong result.
+        partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg()) # This is a bit problematic, because the subsystem partial trace algorithm will not enumerate all possible states in H, and can silently give the wrong result.
 
     H = hilbert_space(a, 1:4, NumberConservation(1))
     @test_throws ArgumentError generalized_kron((m1, m2), (H1, H2) => H)
