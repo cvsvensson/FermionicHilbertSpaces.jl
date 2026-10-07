@@ -51,11 +51,13 @@ symbolic_group(s::SymbolicState) = group_id(s.space)
 group_id(s::SymbolicState) = group_id(s.space)
 
 @nc SymbolicState AbstractSym
+NonCommutativeProducts.isfilterable(::SymbolicState) = false
 
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
 interpret_state(state, space::Union{TransposedSpace,SectorHilbertSpace,ConstrainedSpace}) = interpret_state(state, parent(space))
 state_index(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = state_index(interpret_state(state, space), space)
+basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(state_index(state, space), space)
 
 function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{B}) where {I,B<:FockNumber{I}}
     all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only '0' and '1', got \"$input\""))
@@ -153,7 +155,7 @@ function NonCommutativeProducts.mul_effect(op::AbstractSym, s::SymbolicState)
         throw(ArgumentError("Cannot act with operator $op on the left of $s"))
     end
     newket, amp = _apply_symbolic_operator_to_state(op, s.ket, s.space)
-    return iszero(amp) ? 0 : amp * SymbolicState(s.space, newket, s.bra)
+    return amp * SymbolicState(s.space, newket, s.bra)
 end
 
 function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
@@ -164,7 +166,7 @@ function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
         throw(ArgumentError("Cannot act with operator $op on the right of $s"))
     end
     newbra, amp = _apply_symbolic_operator_to_state(op, s.bra, s.space; transpose=true)
-    return iszero(amp) ? 0 : amp * SymbolicState(s.space, s.ket, newbra)
+    return amp * SymbolicState(s.space, s.ket, newbra)
 end
 
 
@@ -386,6 +388,24 @@ end
     @test representation(vf("10")' * f[2], Hf) ≈ representation(vf("10")', Hf) * matrix_representation(f[2], Hf)
 
     @test vf("11")' * f[2]' * vf("10") == -1
+
+    @testset "operator action matches matrix representation" begin
+        cases = (
+            (f[1], vf("00")),
+            (f[1]', vf("00")),
+            (f[1] * f[2], vf("11")),
+            (f[1]' * f[2], vf("01")),
+            (f[1] + f[2], vf("10")),
+            (f[1], vf("00") + 2 * vf("10")),
+            (f[1], vf("00") + vf("01")),
+            (f[1] + f[2], vf("00")),
+        )
+
+        for (op, state) in cases
+            @test representation(op, Hf) * representation(state, Hf) ≈
+                representation(op * state, Hf)
+        end
+    end
 
     @boson b
     Hb = hilbert_space(b, 5)
