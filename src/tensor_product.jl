@@ -291,7 +291,7 @@ function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilb
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     # isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
     if all(_issquare, ms)
-        return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H, kwargs...), *, zip(ms, Hs))
+        return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
     elseif all(_isket, ms)
         return generalized_kron(map(vec, ms), Hs, H; kwargs...)
     elseif all(_isbra, ms)
