@@ -130,10 +130,12 @@ end
 
 import PrecompileTools
 
-PrecompileTools.@compile_workload begin
+PrecompileTools.@setup_workload begin
     m = rand(4, 4)
+    NonCommutativeProducts.enable_autosort!()
     PrecompileTools.@compile_workload begin
         @fermions f
+        sprint(show, f[1])
         H1 = hilbert_space(f, 1:2)
         H2 = hilbert_space(f, 3:3, ParityConservation())
         subregion([f[3]], H2)
@@ -141,15 +143,15 @@ PrecompileTools.@compile_workload begin
         H = tensor_product(H1, H2)
         c = representation(f[1], H1)
         embed(c, H1 => H)
-        representation((f[1] * f[2]' + 1 + f[1])^2 * 2.0, H1)
-        @majoranas γ
-        (γ[1] * γ[2] + 1.0 + γ[1])^2
+        representation((1.0*f[1] * f[2]' + 1 + f[1])^2 * 2.0, H1)
         @boson b
+        sprint(show, b)
         @spin s 1 // 2
+        sprint(show, s[:z])
         Hb = hilbert_space(b, 2)
         Hs = hilbert_space(s)
         H = tensor_product(H2, Hb, Hs)
-        mat = representation(b'b + s[:x] * f[3], H)
+        mat = representation(b'b + 1.0 * s[:x] * f[3], H)
     end
 end
 

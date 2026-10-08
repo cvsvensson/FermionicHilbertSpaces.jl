@@ -12,6 +12,7 @@ struct SymbolicFermionBasis{T<:Tags}
     name::Symbol
     tags::FermionicGroup{T}
 end
+Base.show(io::IO, x::SymbolicFermionBasis) = print(io, _symbolic_name_with_tags(x.name, x; skip_first=1))
 Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.tags, h))
 symbolic_group(x::SymbolicFermionBasis) = tags(x)
 tags(x::SymbolicFermionBasis) = x.tags
@@ -39,8 +40,10 @@ macro fermions(xs...)
     defs = map(xs) do x
         :($(esc(x)) = SymbolicFermionBasis($(Expr(:quote, x)), $group))
     end
-    Expr(:block, defs...,
+    fermions = Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
+    length(defs) == 1 && return only(defs)
+    return fermions
 end
 Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.tags == b.tags
 Base.getindex(f::SymbolicFermionBasis, is...) = FermionSym(false, is, f)
@@ -109,6 +112,7 @@ mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
     using Symbolics, LinearAlgebra
     @fermions f c
     @fermions b
+    @test sprint(show, f) == "f"
     @variables a::Real z::Complex
     f1 = f[:a]
     f2 = f[:b]
