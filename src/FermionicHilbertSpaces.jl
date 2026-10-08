@@ -12,7 +12,7 @@ using BitPermutations: BitPermutations, AbstractBitPermutation, BitPermutation, 
 using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice
 using SparseArrays: SparseArrays, AbstractSparseMatrix, SparseVector, findnz,
     nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
-using TestItems: TestItems, @testitem
+using TestItems: TestItems, @testitem, @testmodule
 import TupleTools
 using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 

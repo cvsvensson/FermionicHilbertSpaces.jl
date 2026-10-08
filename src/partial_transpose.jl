@@ -97,8 +97,8 @@ independent of the mode ordering. With `phase_factors=false`, or for spaces with
 factors, it is the ordinary partial transpose.
 
 The partial transpose does not preserve number or parity constraints. For constrained `H`,
-pass a larger output space on the same modes as `Hout`. The result is not Hermitian in
-general: `(ρ^{R_A})' == p_A ρ^{R_A} p_A`, with `p_A` the parity of `Hsub`.
+pass a larger output space on the same modes as `Hout`. For fermions the result is not
+Hermitian: `(ρ^{R_A})' == p_A ρ^{R_A} p_A` for parity-even `ρ`, with `p_A` the parity of `Hsub`.
 """
 function partial_transpose(m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace;
     complement=complementary_subsystem(H, Hsub), Hout=H, phase_factors=true, skipmissing=false)
@@ -247,7 +247,7 @@ logarithmic_negativity(ρ, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; 
 
 @testitem "Fermionic partial transpose: two modes" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: _bit, logarithmic_negativity
+    using FermionicHilbertSpaces: logarithmic_negativity
     @fermions f
     H = hilbert_space(f, 1:2)
     idx(str) = state_index(str, H)
@@ -269,43 +269,6 @@ logarithmic_negativity(ρ, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; 
     ψ1 = ComplexF64[1+im]
     @test partial_transpose(ψ1, H1, H1) ≈ reshape([abs2(ψ1[1])], 1, 1)
     @test partial_transpose(H1, H1)(ψ1) ≈ reshape([abs2(ψ1[1])], 1, 1)
-    @test logarithmic_negativity(ψ, H, hilbert_space(f, [1])) ≈ log(2)
-end
-
-@testitem "Fermionic partial transpose: disconnected regions" begin
-    using LinearAlgebra, SparseArrays
-    using FermionicHilbertSpaces: _bit
-    @fermions f
-    N = 4
-    H = hilbert_space(f, 1:N)
-    HA = hilbert_space(f, [1, 3])
-    HB = hilbert_space(f, [2, 4])
-    nA = zeros(Int, dim(H))
-    par = zeros(Bool, dim(H))
-    for s in basisstates(H)
-        i = state_index(s, H)
-        par[i] = iseven(count(j -> _bit(s, j), 1:N))
-        nA[i] = count(j -> _bit(s, j), (1, 3))
-    end
-    pA = Diagonal((-1) .^ nA)
-    X = rand(ComplexF64, dim(H), dim(H))
-    ρ = X * X'
-    ρ = ρ .* (par .== par') # physical (parity-even) state
-    ρ ./= tr(ρ)
-
-    RA = partial_transpose(H, HA)
-    RB = partial_transpose(H, HB)
-    @test RA(ρ) ≈ partial_transpose(ρ, H, HA)          # map == direct
-    @test RA(RB(ρ)) ≈ transpose(ρ)                      # R_A ∘ R_B = full transpose (even ops)
-    @test RA(RA(ρ)) ≈ pA * ρ * pA                       # R_A² = p_A ⋅ p_A
-    @test RA(ρ)' ≈ pA * RA(ρ) * pA                      # pseudo-Hermiticity
-    @test sum(svdvals(RA(ρ))) ≈ sum(svdvals(RB(ρ)))     # ‖ρ^{R_A}‖₁ = ‖ρ^{R_B}‖₁
-
-    m = rand(ComplexF64, dim(H), dim(H))
-    R13 = partial_transpose(H, hilbert_space(f, [1, 3]))
-    R2 = partial_transpose(H, hilbert_space(f, [2]))
-    R123 = partial_transpose(H, hilbert_space(f, [1, 2, 3]))
-    @test sparse(R13) * sparse(R2) ≈ sparse(R123)       # additive over disjoint pieces
 end
 
 @testitem "Fermionic partial transpose: constrained spaces" begin
@@ -369,154 +332,142 @@ end
     @test partial_transpose(m, H, Hsb) ≈ expected
 end
 
-
 @testmodule PartialTranspose begin
     using LinearAlgebra, SparseArrays, Random, Test
     using FermionicHilbertSpaces
     using FermionicHilbertSpaces: nbr_of_modes
-    export PTFamily, check_partial_transpose, check_tensor_compatibility, rand_density_matrix
+    export PTFamily, check_partial_transpose, check_tensor_compatibility,
+        tracenorm, rand_density_matrix, charge_project
 
     """
-        PTFamily(; name, pt, subspace, tensor, rand_state, bell,
-                   hermitian=true, trace_preserving=true, involutive=true)
+        PTFamily(; name, basis, rand_state, kwargs=(;), gauge=nothing, skip=())
 
-    Everything the generic tests need to know about a partial-transpose family:
-
-    * `pt(H, Hsub)`         → map `R`: `R(X)` and `sparse(R)` (acting on column-major `vec`)
-    * `subspace(labels)` → Hilbert space of the modes `labels`
-    * `tensor(ms, Hs, H)`   → the family's tensor product (defines "product"/"separable")
-    * `rand_state(rng, H)`  → random *physical* density matrix (parity-even for fermions)
-    * `bell(H, a, b)`       → maximally entangled pair of modes `a ∈ A`, `b ∈ B` (‖R_A ρ‖₁ = 2)
-    * `hermitian`: R(ρ)† = R(ρ). Otherwise pseudo-Hermitian with the involution gauge
-      (requires `involutive`; assumes a real gauge or the orientation R(ρ)† = P R(ρ) P†).
-    * `involutive`: R² = Ad_P for a diagonal unitary P.
+    Partial-transpose family on the modes of the symbolic `basis`.
+    * `rand_state(rng, H)`: random physical density matrix (parity-even / charge-neutral).
+    * `kwargs`: passed to `partial_transpose` and `tensor_product`.
+    * `gauge(H, HA)`: `G` with `R_A² = Ad_G` and `R_A(ρ)' = G R_A(ρ) G'` (`I`: Hermitian), or `nothing`.
+    * `skip`: properties the family violates; pin each with an explicit counterexample test.
+      Names: `:isometry, :local, :trace, :composition, :full_transpose, :symmetry, :unitary, :separable`.
     """
-    Base.@kwdef struct PTFamily{P,S,T,R,B}
+    Base.@kwdef struct PTFamily{B,R,K<:NamedTuple,G}
         name::String
-        pt::P
-        subspace::S
-        tensor::T
+        basis::B
         rand_state::R
-        bell::B
-        hermitian::Bool = true
-        trace_preserving::Bool = true
-        involutive::Bool = true
+        kwargs::K = (;)
+        gauge::G = nothing
+        skip::Tuple{Vararg{Symbol}} = ()
     end
 
-    # ── helpers ──────────────────────────────────────────────────────────────────
-    eye(H) = I(dim(H))
-    rand_op(rng, H) = randn(rng, ComplexF64, dim(H), dim(H))
-    rand_density_matrix(rng, H) = (X=rand_op(rng, H); ρ=X * X'; ρ / tr(ρ))
-    rand_unitary(fam, rng, H) = exp(10im * Matrix(fam.rand_state(rng, H)))  # physical (e.g. parity-even) unitary
     tracenorm(X) = sum(svdvals(Matrix(X)))
+    rand_op(rng, H) = randn(rng, ComplexF64, dim(H), dim(H))
+    rand_density_matrix(rng, H) = (X = rand_op(rng, H); ρ = X * X'; ρ / tr(ρ))
+    "Keep the blocks of `ρ` that commute with the diagonal charge operator `Q`."
+    charge_project(ρ, Q) = (q = Vector(diag(Q)); ρ .* isapprox.(q, permutedims(q)))
+    rand_unitary(fam, rng, H) = exp(10im * Matrix(fam.rand_state(rng, H)))   # physical
+    bell(fam, H, a, b) = Vector(representation((fam.basis[a]' + fam.basis[b]') * Ket("0", H))) / √2
+    eye(H) = Matrix{ComplexF64}(I, dim(H), dim(H))
 
-    # ── generic property tests ───────────────────────────────────────────────────
     """
-        check_partial_transpose(fam, H, A; B=setdiff(1:nbr_of_modes(H), A), rng=Xoshiro(1), atol=1e-8)
+        check_partial_transpose(fam, H, A; B=complement, rng=Xoshiro(1), atol=1e-8)
 
-    Test properties P1 to P12 of `fam` for the bipartition `A | B` of the modes of `H`.
+    Properties P1–P12 for the cut `A | B` of the modes of `H`.
     """
     function check_partial_transpose(fam::PTFamily, H, A;
-        B=setdiff(1:nbr_of_modes(H), A), rng=Xoshiro(1), atol=1e-6)
-        isempty(A) || isempty(B) && error("A and B must both be non-empty")
-        D = dim(H)
-        HA, HB = fam.subspace(A), fam.subspace(B)
-        RA, RB, RAB = fam.pt(H, HA), fam.pt(H, HB), fam.pt(H, H)
-        MA = sparse(RA)
+        B=setdiff(1:nbr_of_modes(H), A), rng=Xoshiro(1), atol=1e-8)
+        (isempty(A) || isempty(B)) && throw(ArgumentError("A and B must both be non-empty"))
+        kw = fam.kwargs
+        HA, HB = hilbert_space(fam.basis, A), hilbert_space(fam.basis, B)
+        RA, RB, RAB = (partial_transpose(H, S; kw...) for S in (HA, HB, H))
+        ⊗(x, y) = Matrix(tensor_product((x, y), (HA, HB), H; kw...))
         X, Y = rand_op(rng, H), rand_op(rng, H)
         ρ = fam.rand_state(rng, H)
-        product(mA, mB) = fam.tensor((mA, mB), (HA, HB), H)
+        ψ = bell(fam, H, first(A), first(B))
+        G = isnothing(fam.gauge) ? nothing : fam.gauge(H, HA)
+        check(p) = p ∉ fam.skip
 
-        @testset "$(fam.name) PT, A = $A" begin
-            # P1 linearity: the callable agrees with its matrix
-            @test RA(X) ≈ reshape(MA * vec(X), D, D) atol = atol
+        @testset "$(fam.name): A = $A" begin
+            # P1 linearity / implementation consistency: sparse map == direct kernel, pure-state path
+            @test RA(X) ≈ partial_transpose(X, H, HA; kw...) atol = atol
+            @test RA(ψ) ≈ RA(ψ * ψ') atol = atol
             # P2 Hilbert–Schmidt isometry
-            @test dot(RA(X), RA(Y)) ≈ dot(X, Y) atol = atol
-            # P3 trivial on the complement: R_A(1_A ⊗ X_B) = 1_A ⊗ X_B
-            for XB in (eye(HB), fam.rand_state(rng, HB))
-                @test RA(product(eye(HA), XB)) ≈ product(eye(HA), XB) atol = atol
+            check(:isometry) && @test dot(RA(X), RA(Y)) ≈ dot(X, Y) atol = atol
+            # P3 trivial on the complement (4.2)
+            if check(:local)
+                for XB in (eye(HB), fam.rand_state(rng, HB))
+                    @test RA(eye(HA) ⊗ XB) ≈ eye(HA) ⊗ XB atol = atol
+                end
             end
             # P4 trace preservation
-            fam.trace_preserving && @test tr(RA(X)) ≈ tr(X) atol = atol
-            # P5 involution up to a diagonal gauge: R_A² = Ad_P (R_A² is diagonal on matrix units)
-            if fam.involutive
-                P = Diagonal(Vector(diag(MA * MA))[1:D])        # λ_{i1} = p_i p̄_1, normalised p_1 = 1
-                display(P.diag)
-                display(norm(MA*MA - Diagonal(kron(conj(P.diag), P.diag))))
-                display(norm(MA*MA - Diagonal(kron((P.diag), conj(P.diag)))))
-                throw()
-                # display(Diagonal(kron(conj(P.diag), P.diag)))
-                @test MA * MA ≈ Diagonal(kron(conj(P.diag), P.diag)) atol = atol  # vec(PXP†) = (P̄⊗P)vec X
-            end
-            # P6 Hermiticity (gauge 1) or pseudo-Hermiticity (involution gauge)
-            if fam.hermitian || fam.involutive
-                G = fam.hermitian ? I : P
+            check(:trace) && @test tr(RA(X)) ≈ tr(X) atol = atol
+            # P5, P6 gauge: R_A² = Ad_G and R_A(ρ)' = G R_A(ρ) G'
+            if !isnothing(G)
+                @test RA(RA(X)) ≈ G * X * G' atol = atol
                 @test RA(ρ)' ≈ G * RA(ρ) * G' atol = atol
             end
-            # P7 composition over disjoint subsystems
-            @test MA * sparse(RB) ≈ sparse(RAB) atol = atol
-            if length(A) ≥ 2
-                M1, M2 = (sparse(fam.pt(H, fam.subspace(S))) for S in (A[1:1], A[2:end]))
-                @test M1 * M2 ≈ MA atol = atol
+            # P7 composition over disjoint regions
+            if check(:composition)
+                @test sparse(RA) * sparse(RB) ≈ sparse(RAB) atol = atol
+                if length(A) ≥ 2
+                    R1, R2 = (partial_transpose(H, hilbert_space(fam.basis, S); kw...) for S in (A[1:1], A[2:end]))
+                    @test sparse(R1) * sparse(R2) ≈ sparse(RA) atol = atol
+                end
             end
-            # P8 the full transpose keeps singular values (D2)
-            @test svdvals(Matrix(RAB(ρ))) ≈ svdvals(ρ) atol = atol
-            # P9 trace-norm symmetry (D1)
-            @test tracenorm(RA(ρ)) ≈ tracenorm(RB(ρ)) atol = atol
+            # P8 the full transpose is the transpose on physical states (D2)
+            if check(:full_transpose)
+                @test RAB(ρ) ≈ transpose(ρ) atol = atol
+                @test svdvals(RAB(ρ)) ≈ svdvals(ρ) atol = atol
+            end
+            # P9 ‖R_A ρ‖₁ = ‖R_B ρ‖₁ (D1)
+            check(:symmetry) && @test tracenorm(RA(ρ)) ≈ tracenorm(RB(ρ)) atol = atol
             # P10 local-unitary invariance (4.10)
-            U = product(rand_unitary(fam, rng, HA), rand_unitary(fam, rng, HB))
-            @test tracenorm(RA(U * ρ * U')) ≈ tracenorm(RA(ρ)) atol = atol
-            # P11 separable ⇒ ‖R_A σ‖₁ = 1 (4.7); PPT for Hermitian families
-            σ = sum(_ -> product(fam.rand_state(rng, HA), fam.rand_state(rng, HB)), 1:3) / 3
-            @test tracenorm(RA(σ)) ≈ 1 atol = atol
-            fam.hermitian && @test eigmin(Hermitian(Matrix(RA(σ)))) ≥ -atol
-            # P12 not positive: a Bell pair across the cut gives ‖R_A ρ‖₁ = 2
-            @test tracenorm(RA(fam.bell(H, first(A), first(B)))) ≈ 2 atol = atol
+            if check(:unitary)
+                U = rand_unitary(fam, rng, HA) ⊗ rand_unitary(fam, rng, HB)
+                @test tracenorm(RA(U * ρ * U')) ≈ tracenorm(RA(ρ)) atol = atol
+            end
+            # P11 separable ⇒ ‖R_A σ‖₁ = 1 (4.7); positive semidefinite if Hermitian
+            if check(:separable)
+                σ = sum(fam.rand_state(rng, HA) ⊗ fam.rand_state(rng, HB) for _ in 1:3) / 3
+                @test tracenorm(RA(σ)) ≈ 1 atol = atol
+                G isa UniformScaling && @test eigmin(Hermitian(Matrix(RA(σ)))) ≥ -atol
+            end
+            # P12 a Bell pair across the cut gives ‖R_A ρ‖₁ = 2
+            @test tracenorm(RA(ψ)) ≈ 2 atol = atol
         end
     end
 
     """
         check_tensor_compatibility(fam, (H1, A1), (H2, A2), H; rng=Xoshiro(1), atol=1e-8)
 
-    P13 (Eq. 4.15): R_{A1∪A2}(ρ1 ⊗ ρ2) = R_{A1}(ρ1) ⊗ R_{A2}(ρ2) for H = H1 ⊗ H2.
-    Tested on operators, so no superoperator tensor product is needed.
+    P13 (4.15): `R_{A1∪A2}(ρ1 ⊗ ρ2) = R_{A1}(ρ1) ⊗ R_{A2}(ρ2)` for `H = H1 ⊗ H2`.
     """
     function check_tensor_compatibility(fam::PTFamily, (H1, A1), (H2, A2), H; rng=Xoshiro(1), atol=1e-8)
+        kw = fam.kwargs
         ρ1, ρ2 = fam.rand_state(rng, H1), fam.rand_state(rng, H2)
-        R1, R2 = fam.pt(H1, fam.subspace(A1)), fam.pt(H2, fam.subspace(A2))
-        R = fam.pt(H, fam.subspace([A1; A2]))
-        @testset "$(fam.name) PT ⊗-compatibility, A = $A1 ∪ $A2" begin
-            @test R(fam.tensor((ρ1, ρ2), (H1, H2), H)) ≈ fam.tensor((R1(ρ1), R2(ρ2)), (H1, H2), H) atol = atol
+        R1 = partial_transpose(H1, hilbert_space(fam.basis, A1); kw...)
+        R2 = partial_transpose(H2, hilbert_space(fam.basis, A2); kw...)
+        R = partial_transpose(H, hilbert_space(fam.basis, [A1; A2]); kw...)
+        ⊗(x, y) = Matrix(tensor_product((x, y), (H1, H2), H; kw...))
+        @testset "$(fam.name): ⊗-compatibility, A = $A1 ∪ $A2" begin
+            @test R(ρ1 ⊗ ρ2) ≈ R1(ρ1) ⊗ R2(ρ2) atol = atol
         end
     end
 end
 
-
-@testitem "Partial transposes" setup = [PartialTranspose] begin
+@testitem "Partial transpose properties: standard and fermionic" setup = [PartialTranspose] begin
     using FermionicHilbertSpaces: logarithmic_negativity
     using LinearAlgebra
     @fermions f
     H = hilbert_space(f, 1:4)
     H12, H34 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
 
+    rand_even_state(rng, H) = charge_project(rand_density_matrix(rng, H), parityoperator(H))
+    parity_gauge(H, HA) = embed(Matrix(parityoperator(HA)), HA, H)
+    families = (
+        PTFamily(; name="fermionic", basis=f, rand_state=rand_even_state, gauge=parity_gauge),
+        PTFamily(; name="standard", basis=f, rand_state=rand_density_matrix,
+            kwargs=(; phase_factors=false), gauge=(H, HA) -> I))
 
-    function fock_bell(f, H, a, b)                       # (|0⟩ + c_a† c_b† |0⟩)/√2, parity-even
-        representation((1 + f[a]' * f[b]') * Ket("0", H)) / √2
-    end
-    rand_even_state(rng, H) = (P=parityoperator(H); ρ=rand_density_matrix(rng, H); (ρ + P * ρ * P) / 2)
-
-    fock_pt_family(f; phase_factors=true) = PTFamily(;
-        name=phase_factors ? "fermionic" : "standard",
-        pt=(H, Hsub) -> partial_transpose(H, Hsub; phase_factors),
-        subspace=labels -> hilbert_space(f, labels),
-        tensor=(ms, Hs, H) -> tensor_product(ms, Hs, H; phase_factors),
-        rand_state=phase_factors ? rand_even_state : rand_density_matrix,
-        bell=(H, a, b) -> fock_bell(f, H, a, b),
-        hermitian=(!phase_factors))
-
-
-    @testset "$(fam.name)" for fam in (fock_pt_family(f; phase_factors=true),
-        fock_pt_family(f; phase_factors=false))
+    for fam in families
         for A in ([1], [2], [1, 2], [1, 3], [2, 4], [1, 2, 3])   # single, contiguous, disconnected
             check_partial_transpose(fam, H, A)
         end
@@ -526,18 +477,13 @@ end
 
     @testset "closed-form fermionic negativities" begin
         H2, H1 = hilbert_space(f, 1:2), hilbert_space(f, 1:1)
-        function pure(amps)
-            ψ = zeros(ComplexF64, dim(H2))
-            for (s, a) in amps
-                ψ[state_index(s, H2)] = a
-            end
-            ψ * ψ'
-        end
-        bell = pure(("10" => 1 / √2, "01" => 1 / √2))
+        pure(ψ) = (v = representation(ψ); v * v')
+        bell = pure((Ket("10", H2) + Ket("01", H2)) / √2)
         @test logarithmic_negativity(bell, H2, H1) ≈ log(2)
         @test logarithmic_negativity(bell, H2, hilbert_space(f, 2:2)) ≈ log(2)
         for θ in (0.1, π / 4, 1.0)   # cosθ|00⟩ + sinθ|11⟩
-            @test logarithmic_negativity(pure(("00" => cos(θ), "11" => sin(θ))), H2, H1) ≈ 2log(cos(θ) + sin(θ))
+            ρ = pure(cos(θ) * Ket("00", H2) + sin(θ) * Ket("11", H2))
+            @test logarithmic_negativity(ρ, H2, H1) ≈ 2log(cos(θ) + sin(θ))
         end
         M = representation(f[1]' * f[2] + f[2]' * f[1], H2, :dense)
         for β in (0.3, 1.0, 2.5)     # thermal hopping state
