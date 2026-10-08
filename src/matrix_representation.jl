@@ -402,7 +402,7 @@ get_trivial_op_coeff(op) = op
 
     Nf = 2
     Hf = hilbert_space(f, 1:Nf)
-    Hs = SpinSpace{1 // 2}(s)
+    Hs = SpinSpace(s, 1 // 2)
     H = tensor_product(Hf, Hs)
 
     # Test simple product operator: f[1]' * f[1] ⊗ S_z

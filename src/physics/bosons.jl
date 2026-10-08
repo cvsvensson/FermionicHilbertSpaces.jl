@@ -306,7 +306,7 @@ end
     expected = kron(reverse([fmat, smat, bmat])...)
     @test mop ≈ expected
 
-    @test_throws ArgumentError matrix_representation(s_expr, FermionicHilbertSpaces.SpinSpace{1 // 2}(:Not))
+    @test_throws ArgumentError matrix_representation(s_expr, FermionicHilbertSpaces.SpinSpace(:Not, 1 // 2))
 
     Hsb = tensor_product(Hs, Hb)
     @test partial_trace(1.0 * I(dim(Hsb)), Hsb => Hs) ≈ dim(Hb) * I(dim(Hs))
