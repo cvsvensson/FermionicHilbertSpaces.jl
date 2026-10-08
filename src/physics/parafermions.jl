@@ -191,7 +191,31 @@ function particle_number(a::ParaFockNumber{P}) where P
     total
 end
 
+function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{B}) where {P,S,I,B<:ParaFockNumber{P,S,I}}
+    all(c -> '0' <= c <= '9' && c - '0' < P, input) ||
+        throw(ArgumentError(
+            "Parafermion Fock strings must contain decimal occupations in 0:$(P-1), got \"$input\""))
+
+    value = big(0)
+    place = big(1)
+    for c in input
+        value += (c - '0') * place
+        place *= P
+    end
+    B(_pf_convert_checked(I, value, "Parsed parafermion Fock state"))
+end
+
+
 parafermion_charge(a::ParaFockNumber{P}) where P = mod(particle_number(a), P)
+"""
+    parafermion_charge_operator(H)
+
+Return the parafermionic charge operator for the Hilbert space `H`.
+"""
+function parafermion_charge_operator(H::AbstractHilbertSpace{<:ParaFockNumber{P}}) where P
+    roots = _pf_roots(Val{P}())
+    sparse_operator(ComplexF64, f -> (f, roots[parafermion_charge(f)+1]), H)
+end
 
 parity(a::ParaFockNumber{2}) = iseven(particle_number(a)) ? 1 : -1
 parity(::ParaFockNumber{P}) where P = throw(ArgumentError(
@@ -966,6 +990,7 @@ end
 # already assembled trace ratio. The caller must use f_X / f_Y.
 partial_trace_phase_factor(a, b, H::ParafermionicSpace) =
     phase_factor_f(a, b, nbr_of_modes(H))
+partial_trace_phase_factor_eltype(::ParafermionicSpace) = ComplexF64
 
 inverse_partial_trace_phase_factor(a, b, H::ParafermionicSpace) =
     conj(partial_trace_phase_factor(a, b, H))
@@ -1102,6 +1127,42 @@ end
                              for s in eachindex(part) for r in (s+1):length(part)
                              for i in part[s] for j in part[r] if i > j); init=0)
     u_exp(a, part) = l_exp(a, zero(a), part)
+
+    @testset "parafermionic state strings" begin
+        F = FHS.ParaFockNumber{3,1,UInt64}
+        @test FHS.occupations(FHS.interpret_state("210", F), 3) == [2, 1, 0]
+        @test FHS.interpret_state('2', F) == F(2)
+        @test_throws ArgumentError FHS.interpret_state("3", F)
+        @test_throws ArgumentError FHS.interpret_state("1x", F)
+        @test_throws ArgumentError FHS.interpret_state(
+            "2222222", FHS.ParaFockNumber{3,1,UInt8})
+    end
+
+    @testset "state strings, basis states, and operator representations" begin
+        c = FHS.parafermion_basis(:c, 3)
+        H = hilbert_space(c, 1:3)
+
+        for input in ("000", "102", "210")
+            state = FHS.basisstate(input, H)
+            index = FHS.state_index(input, H)
+            ket = Ket(input, H)
+            ket_rep = representation(ket, H)
+
+            @test state == FHS.interpret_state(input, H)
+            @test FHS.state_index(state, H) == index
+            @test FHS.basisstate(index, H) == state
+            expected_ket = zeros(eltype(ket_rep), dim(H))
+            expected_ket[index] = 1
+            @test ket_rep == expected_ket
+
+            for op in (c[1], c[2]', c[3]'*c[2] + 1)
+                @test close(
+                    representation(op * ket, H),
+                    representation(op, H) * ket_rep,
+                )
+            end
+        end
+    end
 
     @testset "occupation beyond the stored digits" begin
         x = FHS.ParaFockNumber{3}(5)                    # digits (2, 1)
@@ -1411,6 +1472,7 @@ end
 
             C = [R(c[j]) for j in 1:3]
             N = [R(FHS.parafermion_number(c[j])) for j in 1:3]
+            @test close(sum(N), numberoperator(H))
 
             for j in 1:3
                 @test close(R(c[j]'), C[j]')
