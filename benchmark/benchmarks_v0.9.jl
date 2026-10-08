@@ -8,17 +8,17 @@ Random.seed!(1)
 N = 12
 H = hilbert_space(1:N, ParityConservation())
 @fermions f
-op = sum(rand() * f[n]' * f[n] for n in 1:N) + sum(1im * f[n]' * f[n+1] + hc for n in 1:N-1)
+op = sum(rand() * f[n]' * f[n] for n in 1:N) + sum(1im * f[n]' * f[n+1] + hc for n in 1:(N-1))
 Hsub = hilbert_space(1:div(N, 4), ParityConservation())
 d = dim(H)
 m = sprand(ComplexF64, d, d, 1 / 2^N)
 
-SUITE["hilbert_space"] = @benchmarkable hilbert_space($(1:N), $ParityConservation())
-SUITE["symbolic"]["sum"] = @benchmarkable sum(f[n]' * f[n] + hc for n in 1:100)
-SUITE["symbolic"]["sum_square"] = @benchmarkable sum(f[n]' * f[n] + hc for n in 1:50)^2
+SUITE["hilbert_space"] = @benchmarkable hilbert_space($(1:N), $(ParityConservation()))
+SUITE["symbolic"]["sum"] = @benchmarkable sum($f[n]' * $f[n] + hc for n in 1:100)
+SUITE["symbolic"]["sum_square"] = @benchmarkable sum($f[n]' * $f[n] + hc for n in 1:50)^2
 
 labels = shuffle(1:10)
-SUITE["symbolic"]["deep_product"] = @benchmarkable prod(f[l] for l in labels) * prod(f[l]' for l in labels)
+SUITE["symbolic"]["deep_product"] = @benchmarkable prod($f[l] for l in $labels) * prod($f[l]' for l in $labels)
 SUITE["matrix_representation"]["standard"] = @benchmarkable matrix_representation($op, $H)
 
 Hsp = single_particle_hilbert_space(1:1000)
@@ -32,8 +32,8 @@ SUITE["matrix_representation"]["bdg"] = @benchmarkable matrix_representation($op
 SUITE["complement"]["fermions"] = @benchmarkable FermionicHilbertSpaces.complementary_subsystem($H, $Hsub)
 
 complement = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
-SUITE["partial_trace"]["fermions"]["map"] = @benchmarkable partial_trace($(H => Hsub); complement=$complement)
-SUITE["partial_trace"]["fermions"]["standard"] = @benchmarkable partial_trace($m, $(H => Hsub), complement=$complement)
+SUITE["partial_trace"]["fermions"]["map"] = @benchmarkable partial_trace($(H => Hsub); complement=($complement))
+SUITE["partial_trace"]["fermions"]["standard"] = @benchmarkable partial_trace($m, $(H => Hsub), complement=($complement))
 
 d = dim(Hsub)
 msub = rand(ComplexF64, d, d)
@@ -68,9 +68,9 @@ def = _name(def_alg)
 for alg in [SubsystemPartialTraceAlg(), FullPartialTraceAlg()]
     name = _name(alg)
     SUITE["partial_trace_algorithms"]["default=$def"]["Sparse space"]["Dense"]["$name"] =
-        @benchmarkable partial_trace($mat, $H, $Hsub; alg=$alg)
+        @benchmarkable partial_trace($mat, $H, $Hsub; alg=($alg))
     SUITE["partial_trace_algorithms"]["default=$def"]["Sparse space"]["Sparse"]["$name"] =
-        @benchmarkable partial_trace($matsparse, $H, $Hsub; alg=$alg)
+        @benchmarkable partial_trace($matsparse, $H, $Hsub; alg=($alg))
 end
 
 # Setup for Standard Full Fock Space (No Symmetry)
@@ -87,7 +87,7 @@ def = _name(def_alg)
 for alg in [SubsystemPartialTraceAlg(), FullPartialTraceAlg()]
     name = _name(alg)
     SUITE["partial_trace_algorithms"]["default=$def"]["Full space"]["Dense"]["$name"] =
-        @benchmarkable partial_trace($m_std, $H_std, $Hsub_std; alg=$alg)
+        @benchmarkable partial_trace($m_std, $H_std, $Hsub_std; alg=($alg))
     SUITE["partial_trace_algorithms"]["default=$def"]["Full space"]["Sparse"]["$name"] =
-        @benchmarkable partial_trace($m_sparse, $H_std, $Hsub_std; alg=$alg)
+        @benchmarkable partial_trace($m_sparse, $H_std, $Hsub_std; alg=($alg))
 end

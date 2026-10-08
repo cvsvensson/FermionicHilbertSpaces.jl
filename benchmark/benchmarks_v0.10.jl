@@ -14,12 +14,12 @@ Hsub = hilbert_space(f, 1:div(N, 4), ParityConservation())
 d = dim(H)
 m = sprand(ComplexF64, d, d, 1 / 2^N)
 
-SUITE["hilbert_space"] = @benchmarkable hilbert_space($f, $(1:N), $ParityConservation())
-SUITE["symbolic"]["sum"] = @benchmarkable sum(f[n]' * f[n] + hc for n in 1:100)
-SUITE["symbolic"]["sum_square"] = @benchmarkable sum(f[n]' * f[n] + hc for n in 1:50)^2
+SUITE["hilbert_space"] = @benchmarkable hilbert_space($f, $(1:N), $(ParityConservation()))
+SUITE["symbolic"]["sum"] = @benchmarkable sum($f[n]' * $f[n] + hc for n in 1:100)
+SUITE["symbolic"]["sum_square"] = @benchmarkable sum($f[n]' * $f[n] + hc for n in 1:50)^2
 
 labels = shuffle(1:10)
-SUITE["symbolic"]["deep_product"] = @benchmarkable prod(f[l] for l in labels) * prod(f[l]' for l in labels)
+SUITE["symbolic"]["deep_product"] = @benchmarkable prod($f[l] for l in $labels) * prod($f[l]' for l in $labels)
 SUITE["matrix_representation"]["standard"] = @benchmarkable matrix_representation($op, $H)
 
 Hsp = single_particle_hilbert_space(f, 1:1000)
@@ -62,14 +62,14 @@ weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, 
 allowed_ones = [[0, 1], [-1, 0], [2]]
 H = hilbert_space(f, 1:N)
 constraint = prod(NumberConservation(allowed, missing, w) for (allowed, w) in zip(allowed_ones, weights))
-SUITE["generate_states"]["int"] = @benchmarkable FermionicHilbertSpaces.generate_states($H.modes, $constraint, $H; process_result=FermionicHilbertSpaces.CombineFockNumbersProcessor{FockNumber{Int}}())
+SUITE["generate_states"]["int"] = @benchmarkable FermionicHilbertSpaces.generate_states($(H.modes), $constraint, $H; process_result=FermionicHilbertSpaces.CombineFockNumbersProcessor{FockNumber{Int}}())
 
 N = 64
 weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
 allowed_ones = [[0, 1], [-1, 0], [2]]
 H = hilbert_space(f, 1:N)
 constraint = prod(NumberConservation(allowed, missing, w) for (allowed, w) in zip(allowed_ones, weights))
-SUITE["generate_states"]["big_int"] = @benchmarkable FermionicHilbertSpaces.generate_states($H.modes, $constraint, $H; process_result=FermionicHilbertSpaces.CombineFockNumbersProcessor{FockNumber{Int}}())
+SUITE["generate_states"]["big_int"] = @benchmarkable FermionicHilbertSpaces.generate_states($(H.modes), $constraint, $H; process_result=FermionicHilbertSpaces.CombineFockNumbersProcessor{FockNumber{Int}}())
 
 ## Benchmark partial trace algorithms
 import FermionicHilbertSpaces: FullPartialTraceAlg, SubsystemPartialTraceAlg, default_partial_trace_alg
@@ -184,9 +184,9 @@ using FermionicHilbertSpaces: AdditiveConstraint
 @spins S 1 // 2
 H = hilbert_space(S, 1:6, AdditiveConstraint(2; maps=s -> s.m))
 Hs = factors(H)
-SUITE["permutations"]["many_small"] = @benchmarkable symmetric_sector($H, $Hs, $:symmetric)
+SUITE["permutations"]["many_small"] = @benchmarkable symmetric_sector($H, $Hs, :symmetric)
 
 @spins S 3
 H = hilbert_space(S, 1:4)
 Hs = factors(H)
-SUITE["permutations"]["few_large"] = @benchmarkable symmetric_sector($H, $Hs, $:symmetric)
+SUITE["permutations"]["few_large"] = @benchmarkable symmetric_sector($H, $Hs, :symmetric)

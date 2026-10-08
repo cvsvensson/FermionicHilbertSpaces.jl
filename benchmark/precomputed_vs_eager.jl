@@ -54,6 +54,7 @@ Random.seed!(42)
 
 
 function report(name, trial)
+    tune!(trial)
     t = run(trial)
     m = minimum(t)
     println(
