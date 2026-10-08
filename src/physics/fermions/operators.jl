@@ -19,17 +19,18 @@ end
 Return the fermionic parity operator for the Hilbert space `H`.
 """
 function parityoperator(H::AbstractHilbertSpace{<:AbstractFockState})
-    sparse_fockoperator(f -> (f, parity(f)), H)
+    sparse_operator(Int, f -> (f, parity(f)), H)
 end
 
 
 """
     numberoperator(H)
 
-Return the number operator for the Hilbert space `H`.
+Return the number operator for the Hilbert space `H`. For parafermions this is the total
+occupation `Σ_j n_j`, with `n_j ∈ 0:P-1`.
 """
 function numberoperator(H::AbstractHilbertSpace{<:AbstractFockState})
-    sparse_fockoperator(f -> (f, fermionnumber(f)), H)
+    sparse_operator(Int, f -> (f, particle_number(f)), H)
 end
 
 

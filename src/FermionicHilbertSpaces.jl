@@ -12,7 +12,7 @@ using BitPermutations: BitPermutations, AbstractBitPermutation, BitPermutation, 
 using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice
 using SparseArrays: SparseArrays, AbstractSparseMatrix, SparseVector, findnz,
     nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
-using TestItems: TestItems, @testitem
+using TestItems: TestItems, @testitem, @testmodule
 import TupleTools
 using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 
@@ -81,6 +81,7 @@ Base.eltype(::Type{<:TypedIterator{T}}) where T = T
 Base.length(ti::TypedIterator) = length(ti.iter)
 Base.size(ti::TypedIterator) = size(ti.iter)
 Base.keys(ti::TypedIterator) = keys(ti.iter)
+Base.last(ti::TypedIterator{T}) where T = T(last(ti.iter))
 
 function _resolve_sector_permutations_and_weights end # for Combinatorics extension
 function cache_operator! end # for OhMyThreads extension
