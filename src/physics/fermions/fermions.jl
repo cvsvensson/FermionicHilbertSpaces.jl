@@ -179,26 +179,23 @@ end
 Constructs a sparse matrix of size representing a fermionic annihilation operator at bit position `fermion_number` on the Hilbert space H. 
 """
 function fermion_sparse_matrix(fermion_number, H::AbstractHilbertSpace{<:AbstractFockState})
-    sparse_fockoperator(Base.Fix1(removefermion, fermion_number), H)
+    sparse_operator(Int, Base.Fix1(removefermion, fermion_number), H)
 end
 
 
-function sparse_fockoperator(op, H::AbstractHilbertSpace{<:AbstractFockState})
+function sparse_operator(T, op, H::AbstractHilbertSpace)
     fs = basisstates(H)
     N = length(fs)
-    amps = Int[]
-    ininds = Int[]
-    outinds = Int[]
-    sizehint!(amps, N)
-    sizehint!(ininds, N)
-    sizehint!(outinds, N)
+    amps = sizehint!(T[], N)
+    ininds = sizehint!(Int[], N)
+    outinds = sizehint!(Int[], N)
     for f in fs
         n = state_index(f, H)
-        newfockstate, amp = op(f)
+        newstate, amp = op(f)
         if !iszero(amp)
             push!(amps, amp)
             push!(ininds, n)
-            push!(outinds, state_index(newfockstate, H))
+            push!(outinds, state_index(newstate, H))
         end
     end
     return SparseArrays.sparse!(outinds, ininds, amps, N, N)
