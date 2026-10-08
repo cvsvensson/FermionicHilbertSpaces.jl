@@ -35,13 +35,13 @@ end
 
 function (op::EmbedMap)(m::AbstractMatrix)
     size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match the size of `Hsub`"))
-    reshape(op.map * vec(m), dim(op.H), dim(op.H))
+    _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(m), dim(op.H))
 end
 
 function (op::EmbedMap)(out::AbstractMatrix, m::AbstractMatrix)
     size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match the size of `Hsub`"))
     size(out) == (dim(op.H), dim(op.H)) || throw(DimensionMismatch("The output matrix must have size ($(dim(op.H)), $(dim(op.H))), got $(size(out))"))
-    mul!(vec(out), op.map, vec(m))
+    mul!(vec(out), op.map, _vectorize_pt_density_matrix(m))
     out
 end
 
@@ -59,7 +59,7 @@ end
 
 function (op::EmbedMap)(m::UniformScaling)
     mfull = m.λ * I(dim(op.Hsub))
-    reshape(op.map * vec(mfull), dim(op.H), dim(op.H))
+    _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(mfull), dim(op.H))
 end
 SparseArrays.sparse(op::EmbedMap) = op.map
 Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, op.map')

@@ -546,8 +546,16 @@ end
 vec_to_density_matrix(v::AbstractVector) = LowRankMatrix(v, conj(v))
 vec_to_density_matrix(v::SparseVector) = v*v'
 
-_vectorize_pt_density_matrix(rho::AbstractMatrix) = vec(rho)
-_vectorize_pt_density_matrix(rho::LowRankMatrix) = vec(Matrix(rho))
+# Vectorize into a type the sparse map can multiply without the generic getindex fallback
+_vectorize_pt_density_matrix(rho::DenseMatrix) = vec(rho)
+_vectorize_pt_density_matrix(rho::SparseMatrixCSC) = rho[:]
+_vectorize_pt_density_matrix(rho::AbstractMatrix) = vec(Matrix(rho)) # Adjoint, Hermitian, Diagonal, LowRankMatrix, ...
+
+_devectorize_pt_output(w::AbstractVector, n) = reshape(w, n, n)
+function _devectorize_pt_output(w::SparseVector, n)
+    idx = SparseArrays.nonzeroinds(w)
+    sparse(rem.(idx .- 1, n) .+ 1, div.(idx .- 1, n) .+ 1, nonzeros(w), n, n)
+end
 
 function _canonicalize_pt_input(v::AbstractVector, H::AbstractHilbertSpace)
     if length(v) == dim(H)
@@ -576,7 +584,7 @@ end
 
 function (op::PartialTraceMap)(in::AbstractMatrix)
     v = _canonicalize_pt_input(in, op.H)
-    reshape(op.map * v, dim(op.Hsub), dim(op.Hsub))
+    _devectorize_pt_output(op.map * v, dim(op.Hsub))
 end
 function (op::PartialTraceMap)(in::AbstractVector)
     if length(in) == dim(op.H)
@@ -585,11 +593,11 @@ function (op::PartialTraceMap)(in::AbstractVector)
         return reshape(w, dim(op.Hsub), dim(op.Hsub))
     end
     v = _canonicalize_pt_input(in, op.H)
-    reshape(op.map * v, dim(op.Hsub), dim(op.Hsub))
+    _devectorize_pt_output(op.map * v, dim(op.Hsub))
 end
 function (op::PartialTraceMap)(in::UniformScaling)
     v = _canonicalize_pt_input(in, op.H)
-    reshape(op.map * v, dim(op.Hsub), dim(op.Hsub))
+    _devectorize_pt_output(op.map * v, dim(op.Hsub))
 end
 
 function _apply_ptmap_on_vec(ptmap::PartialTraceMap, ψ::AbstractVector)
