@@ -205,7 +205,7 @@ end
 
 function (op::PartialTransposeMap)(in::Union{AbstractMatrix,UniformScaling})
     v = _canonicalize_pt_input(in, op.H)
-    reshape(op.map * v, dim(op.Hout), dim(op.Hout))
+    _devectorize_pt_output(op.map * v, dim(op.Hout))
 end
 function (op::PartialTransposeMap)(in::AbstractVector)
     if length(in) == dim(op.H)
@@ -214,7 +214,7 @@ function (op::PartialTransposeMap)(in::AbstractVector)
         return reshape(w, dim(op.Hout), dim(op.Hout))
     end
     v = _canonicalize_pt_input(in, op.H)
-    reshape(op.map * v, dim(op.Hout), dim(op.Hout))
+    _devectorize_pt_output(op.map * v, dim(op.Hout))
 end
 function (op::PartialTransposeMap)(out, in::Union{AbstractMatrix,UniformScaling})
     vout = _canonicalize_pt_output(out, op.Hout)
@@ -378,7 +378,7 @@ end
         kw = fam.kwargs
         HA, HB = hilbert_space(fam.basis, A), hilbert_space(fam.basis, B)
         RA, RB, RAB = (partial_transpose(H, S; kw...) for S in (HA, HB, H))
-        ⊗(x, y) = Matrix(tensor_product((x, y), (HA, HB), H; kw...))
+        ⊗(x, y) = tensor_product((x, y), (HA, HB), H; kw...)
         X, Y = rand_op(rng, H), rand_op(rng, H)
         ρ = fam.rand_state(rng, H)
         ψ = bell(fam, H, first(A), first(B))
@@ -446,7 +446,7 @@ end
         R1 = partial_transpose(H1, hilbert_space(fam.basis, A1); kw...)
         R2 = partial_transpose(H2, hilbert_space(fam.basis, A2); kw...)
         R = partial_transpose(H, hilbert_space(fam.basis, [A1; A2]); kw...)
-        ⊗(x, y) = Matrix(tensor_product((x, y), (H1, H2), H; kw...))
+        ⊗(x, y) = tensor_product((x, y), (H1, H2), H; kw...)
         @testset "$(fam.name): ⊗-compatibility, A = $A1 ∪ $A2" begin
             @test R(ρ1 ⊗ ρ2) ≈ R1(ρ1) ⊗ R2(ρ2) atol = atol
         end
