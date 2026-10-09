@@ -22,9 +22,6 @@ Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
 PartitionedArrays = "5a9dfac6-5c52-46f7-8278-5e2210713be9"
 
-[sources]
-NonCommutativeProducts = {path = "C:\\Users\\svens\\Projects\\NonCommutativeProducts.jl\\"}
-
 [extensions]
 CombinatoricsExt = "Combinatorics"
 OhMyThreadsExt = "OhMyThreads"
