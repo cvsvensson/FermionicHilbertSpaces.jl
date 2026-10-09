@@ -28,10 +28,10 @@ and commute with Majoranas in other `@majoranas` blocks.
 
 # Examples:
 - `@majoranas a b` creates two species of Majoranas that anticommute:
-    - `a[1] * a[1] + a[1] * a[1] == 1`
+    - `a[1] * a[1] == 1`
     - `a[1] * b[1] + b[1] * a[1] == 0`
 - `@majoranas a; @majoranas b` creates two species of Majoranas that commute with each other:
-    - `a[1] * a[1] + a[1] * a[1] == 1`
+    - `a[1] * a[1] == 1`
     - `a[1] * b[1] - b[1] * a[1] == 0`
 
 See also [`@fermions`](@ref).
@@ -83,11 +83,7 @@ function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym)
         nothing
     elseif a > b
         swap = Swap((-1)^(a.basis.group == b.basis.group))
-        if a.label == b.label && a.basis == b.basis
-            return AddTerms((swap, 1))
-        else
-            return swap
-        end
+        return swap
     else
         throw(ArgumentError("Don't know how to multiply $a * $b"))
     end
@@ -142,6 +138,16 @@ mat_eltype(::Type{S}) where {S<:AbstractMajoranaSym} = Complex{Int}
     @test (1 * f1) * (1 * f2) == f1 * f2
     @test f1 * f2 == f1 * (1 * f2) == f1 * f2
     @test f1 - 1 == (1 * f1) - 1 == (0.5 + f1) - 1.5
+end
+
+@testitem "Majorana triple products vs matrices" begin
+    @majoranas γ
+    H = majorana_hilbert_space(γ, 1:4)
+    ops = [γ[i] for i in 1:4]
+    mats = [representation(op, H) for op in ops]
+    for i in eachindex(ops), j in eachindex(ops), k in eachindex(ops)
+        @test representation(ops[i] * ops[j] * ops[k], H) ≈ mats[i] * mats[j] * mats[k]
+    end
 end
 
 struct MajoranaHilbertSpace{B,L,H} <: AbstractGroupedHilbertSpace{B}

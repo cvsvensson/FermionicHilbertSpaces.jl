@@ -362,17 +362,10 @@ function NonCommutativeProducts.mul_effect(a::S, b::S) where S<:SpinSym
 
     # For A^N B^M (out-of-order), rewrite only the middle pair:
     # A^(N-1) * (B*A + [A,B]) * B^(M-1)
-    left = SpinSym(a.op, a.basis, a.exponent - 1)
-    right = SpinSym(b.op, b.basis, b.exponent - 1)
-    swapped_factors, comm_factors = if a.exponent == 1 && b.exponent == 1
-        S[SpinSym(b.op, b.basis), SpinSym(a.op, a.basis)], S[comm_middle_factor]
-    elseif a.exponent == 1
-        S[SpinSym(b.op, b.basis), right], S[comm_middle_factor, right]
-    elseif b.exponent == 1
-        S[left, SpinSym(a.op, a.basis)], S[left, comm_middle_factor]
-    else
-        S[left, SpinSym(b.op, b.basis), right], S[left, comm_middle_factor, right]
-    end
+    left_factors = a.exponent == 1 ? S[] : S[SpinSym(a.op, a.basis, a.exponent - 1)]
+    right_factors = b.exponent == 1 ? S[] : S[SpinSym(b.op, b.basis, b.exponent - 1)]
+    swapped_factors = S[left_factors..., SpinSym(b.op, b.basis), SpinSym(a.op, a.basis), right_factors...]
+    comm_factors = S[left_factors..., comm_middle_factor, right_factors...]
 
     swapped_term = NCMul(1 // 1, swapped_factors)
     comm_term = NCMul(comm_coeff // 1, comm_factors)
@@ -476,6 +469,14 @@ end
     # [S+, S-] = 2Sz
     @test Sp1 * Sm1 - Sm1 * Sp1 == 2 * Sz1
 
+    # Reordering powers: Sz S± = S± (Sz ± 1)
+    @test Sp1^2 * Sz1 == Sz1 * Sp1^2 - 2 * Sp1^2
+    @test Sm1^2 * Sz1 == Sz1 * Sm1^2 + 2 * Sm1^2
+    @test Sp1 * Sz1^2 == (Sz1 - 1)^2 * Sp1
+    @test Sm1^2 * Sz1^2 == (Sz1 + 2)^2 * Sm1^2
+    @test Sm1^2 * Sp1 - Sp1 * Sm1^2 == -2 * (Sz1 * Sm1 + Sm1 * Sz1)
+    @test (Sp1^2 * Sz1) * Sm1 == Sp1^2 * (Sz1 * Sm1)
+
     # Test x and y operators expand correctly
     @test Sx1 == (Sp1 + Sm1) / 2
     @test Sy1 == (Sp1 - Sm1) / (2im)
@@ -551,7 +552,9 @@ end
         @test iszero(s[:+]^Int(2J + 1))
         @test iszero(s[:-]^Int(2J + 1))
         syms = (:+, :-, :z, :x, :y, :I)
-        smat = Dict([sym => representation(s[sym], H) for sym in syms])
+        smat = Dict(sym => representation(s[sym], H) for sym in syms)
         @test all(smat[sym1] * smat[sym2] ≈ representation(s[sym1] * s[sym2], H) for sym1 in syms for sym2 in syms)
+        # triple products exercise reordering of powers
+        @test all(smat[s1] * smat[s2] * smat[s3] ≈ representation(s[s1] * s[s2] * s[s3], H) for s1 in syms for s2 in syms for s3 in syms)
     end
 end
