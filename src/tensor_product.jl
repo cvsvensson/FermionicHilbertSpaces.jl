@@ -85,15 +85,15 @@ end
 
 Compute the tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the tensor_product product of `Hs`.
 """
-function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kwargs...)
+function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); phase_factors=true, kwargs...)
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
     N = ndims(first(ms))
-    mout = allocate_tensor_product_result(ms, Hs, H)
     extend_state = state_mapper(H, Hs)
+    mout = allocate_tensor_product_result(ms, Hs, H, extend_state; phase_factors)
     if N == 1
-        return generalized_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
+        return generalized_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state; phase_factors, kwargs...)
     elseif N == 2
-        return generalized_kron_mat!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
+        return generalized_kron_mat!(mout, Tuple(ms), Tuple(Hs), H, extend_state; phase_factors, kwargs...)
     end
     throw(ArgumentError("Only 1D or 2D arrays are supported"))
 end
@@ -103,10 +103,22 @@ generalized_kron(ms, Hs::Pair; kwargs...) = generalized_kron(ms, first(Hs), last
 
 uniform_to_sparse_type(::Type{UniformScaling{T}}) where {T} = SparseMatrixCSC{T,Int}
 uniform_to_sparse_type(::Type{T}) where {T} = T
-function allocate_tensor_product_result(ms, Hs, H)
+tensor_product_type_with_eltype(::Type{SparseMatrixCSC{S,I}}, ::Type{T}) where {S,I,T} = SparseMatrixCSC{T,I}
+tensor_product_type_with_eltype(::Type{SparseVector{S,I}}, ::Type{T}) where {S,I,T} = SparseVector{T,I}
+tensor_product_type_with_eltype(::Type{<:AbstractArray{S,N}}, ::Type{T}) where {S,N,T} = Array{T,N}
+
+function allocate_tensor_product_result(ms, Hs, H, mapper; phase_factors=true)
     T = Base.promote_eltype(ms...)
     N = ndims(first(ms))
-    types = map(uniform_to_sparse_type ∘ typeof, ms)
+    local_states = map(H -> basisstate(1, H), Hs)
+    full_states, weights = combine_states(local_states, mapper)
+    T = promote_type(T, eltype(weights))
+    if phase_factors
+        state = first(full_states)
+        phase = N == 1 ? phase_factor_u(mapper)(state) : kron_phase_factor(mapper)(state, state)
+        T = promote_type(T, typeof(phase))
+    end
+    types = map(type -> tensor_product_type_with_eltype(type, T), map(uniform_to_sparse_type ∘ typeof, ms))
     MT = Base.promote_op(kron, types...)
     Nout = dim(H)
     _mout = Zeros(T, ntuple(j -> Nout, N))
@@ -378,14 +390,28 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
 end
 
 partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_trace(vec_to_density_matrix(v), H, Hsub; kwargs...)
-function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
+function _partial_trace_eltype(H, Hsub, mapper, phase_factors)
+    f = basisstate(1, H)
+    splits, ws = split_state(f, mapper)
+    fsub, fbar... = first(splits)
+    _, us = combine_states((fsub, fbar...), mapper)
+    sT = phase_factors ? promote_type(
+        typeof(partial_trace_phase_factor(f, f, H)),
+        typeof(partial_trace_phase_factor(fsub, fsub, Hsub)),
+    ) : Int
+    return promote_type(sT, eltype(ws), eltype(us))
+end
+
+function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(m, Hsub, H, complement), phase_factors=true, kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
     if isnothing(complement)
         U = basis_transformation(Hsub, H)
         return U * m * U'
     end
-    mout = zeros(eltype(m), dim(Hsub), dim(Hsub))
-    partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
+    mapper = state_mapper(H, (Hsub, complement))
+    T = promote_type(eltype(m), _partial_trace_eltype(H, Hsub, mapper, phase_factors))
+    mout = zeros(T, dim(Hsub), dim(Hsub))
+    partial_trace!(mout, m, H, Hsub, complement, alg, mapper; phase_factors, kwargs...)
 end
 function basis_transformation(H1, H2)
     #transforms from the basis of H1 to the basis of H2. Assumes they are the same basis states, just ordered differently. If they are not the same, this will throw an error.
