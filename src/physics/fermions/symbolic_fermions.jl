@@ -176,3 +176,13 @@ mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
     end
 
 end
+
+@testitem "Fermionic triple products vs matrices" begin
+    @fermions f c
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(c, 1:1))
+    ops = [f[1], f[1]', f[2], f[2]', c[1], c[1]']
+    mats = [representation(op, H) for op in ops]
+    for i in eachindex(ops), j in eachindex(ops), k in eachindex(ops)
+        @test representation(ops[i] * ops[j] * ops[k], H) ≈ mats[i] * mats[j] * mats[k]
+    end
+end

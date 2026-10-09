@@ -72,13 +72,24 @@ end
 Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && isequal(a.basis, b.basis)
 Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, h)))
 _boson_name(s::BosonSym) = s.basis isa Nothing ? (s.label, tags(s)) : (s.basis.name, s.label, tags(s))
+# Normal ordering of a = b^m, c = b†^n: b^m b†^n = Σₖ k! C(m,k) C(n,k) b†^(n-k) b^(m-k)
+function _boson_normal_order(a::BosonSym, c::BosonSym)
+    m, n = -a.exp, c.exp
+    terms = map(0:min(m, n)) do k
+        factors = typeof(a)[]
+        n > k && push!(factors, BosonSym(a.label, a.basis, tags(a), n - k))
+        m > k && push!(factors, BosonSym(a.label, a.basis, tags(a), k - m))
+        NCMul(factorial(k) * binomial(m, k) * binomial(n, k), factors)
+    end
+    return AddTerms(terms)
+end
 function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
     if _boson_name(a) == _boson_name(b)
         if sign(a.exp) == sign(b.exp)
             return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
         else
             if a.exp < 0 && b.exp > 0
-                return AddTerms((Swap(1), 1))
+                return _boson_normal_order(a, b)
             else
                 return nothing
             end
@@ -112,6 +123,16 @@ NonCommutativeProducts.@commutative MajoranaSym BosonSym
     # Test canonical commutation relations
     @test b1 * b1' - b1' * b1 == 1
     @test b1' * b1 - b1 * b1' == -1
+
+    # Commutators involving powers: [b^m, b†] = m b^(m-1), [b, b†^n] = n b†^(n-1)
+    for k in 1:4
+        @test b1^k * b1' - b1' * b1^k == k * b1^(k - 1)
+        @test b1 * b1'^k - b1'^k * b1 == k * b1'^(k - 1)
+    end
+    @test b1^2 * b1'^2 == b1'^2 * b1^2 + 4 * b1' * b1 + 2
+    @test b1^3 * b1'^2 == b1'^2 * b1^3 + 6 * b1' * b1^2 + 6 * b1
+    @test (b1 * b1') * b1 == b1 * (b1' * b1)
+    @test (b1^2 * b1') * b1'^2 == b1^2 * (b1' * b1'^2)
 
     # Bosons at different sites commute
     @test b1 * b2 - b2 * b1 == 0
@@ -255,6 +276,19 @@ end
     @test madag * ma + 1im * I ≈ representation(b' * b + 1im, H)
 end
 
+@testitem "Bosonic triple products vs matrices" begin
+    @boson b
+    N = 10
+    H = hilbert_space(b, N)
+    ops = [b, b', b^2, b'^2]
+    mats = [representation(op, H) for op in ops]
+    low = 1:(N-2) # avoid truncation effects
+    for i in eachindex(ops), j in eachindex(ops), k in eachindex(ops)
+        sym = representation(ops[i] * ops[j] * ops[k], H)
+        @test sym[low, low] ≈ (mats[i]*mats[j]*mats[k])[low, low]
+    end
+end
+
 @testitem "Boson product spaces and number conservation" begin
     using Combinatorics: binomial
     using LinearAlgebra: I, norm
@@ -263,7 +297,7 @@ end
         L, nmax, M = nr_of_modes, max_occ, total_particles
         (M < 0 || M > L * nmax) && return 0
         s = 0
-        for k in 0:fld(M, nmax + 1)
+        for k in 0:fld(M, nmax+1)
             s += (-1)^k * binomial(L, k) * binomial(M - k * (nmax + 1) + L - 1, L - 1)
         end
         return s
