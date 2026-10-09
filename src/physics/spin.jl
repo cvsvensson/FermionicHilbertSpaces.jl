@@ -119,10 +119,13 @@ function hilbert_space(sym::SymbolicSpinBasis, J)
     sym.spin isa Nothing || throw(ArgumentError("Spin value was already given in the symbolic basis; use hilbert_space(sym) instead."))
     SpinSpace(sym, J)
 end
-hilbert_space(sym::SpinField, labels::Union{AbstractVector,Tuple,AbstractRange}, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l]), labels); constraint)
-function hilbert_space(sym::SpinField, labels, J, constraint=NoSymmetry())
+# Tuples and vectors are mapped over directly; other iterables (generators, sets, matrices) are flattened to a vector.
+_field_labels(labels::Union{Tuple,AbstractVector}) = labels
+_field_labels(labels) = vec(collect(labels))
+hilbert_space(sym::SpinField, labels, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l]), _field_labels(labels)); constraint)
+function hilbert_space(sym::SpinField, labels, J, constraint::AbstractConstraint=NoSymmetry())
     sym.spin isa Nothing || throw(ArgumentError("Spin value was already given in the spin field; omit J."))
-    tensor_product(map(l -> hilbert_space(sym[l], J), labels); constraint)
+    tensor_product(map(l -> hilbert_space(sym[l], J), _field_labels(labels)); constraint)
 end
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
