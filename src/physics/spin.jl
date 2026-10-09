@@ -86,41 +86,40 @@ physical_rep(state::Int, ::Type{SpinState}) = SpinState(half(state))
 function physical_rep(state::Int, ::Type{SpinState{T}}) where {T<:Integer}
     SpinState{T}(convert(Half{T}, half(state)))
 end
-struct SpinSpace{J,T<:Integer,S} <: AbstractAtomicHilbertSpace{SpinState{T}}
+struct SpinSpace{T<:Integer,S} <: AbstractAtomicHilbertSpace{SpinState{T}}
     spin::Half{T}
     basisstates::Vector{SpinState{T}}
     sym::S
     state_index::Dict{SpinState{T},Int}
 end
-function SpinSpace{J}(sym::S) where {J,S<:SymbolicSpinBasis}
+function SpinSpace(sym::S, J) where {S<:SymbolicSpinBasis}
     Jhalf = HalfInteger(J)
-    states = spin_basisstates(Val(Jhalf))
+    states = spin_basisstates(Jhalf)
     T = typeof(twice(Jhalf))
     state_index = Dict(s => i for (i, s) in enumerate(states))
-    SpinSpace{Jhalf,T,S}(Jhalf, states, sym, state_index)
+    SpinSpace{T,S}(Jhalf, states, sym, state_index)
 end
-SpinSpace(sym::S) where {S<:SymbolicSpinBasis} = (sym.spin isa Nothing ? throw(ArgumentError("SpinSpace requires a symbolic spin with explicit spin value.")) : SpinSpace{sym.spin}(sym))
-SpinSpace{J}(label) where J = SpinSpace{J}(SymbolicSpinBasis(label, nothing, J))
-SpinSpace(label, J) = SpinSpace{J}(label)
+SpinSpace(sym::S) where {S<:SymbolicSpinBasis} = (sym.spin isa Nothing ? throw(ArgumentError("SpinSpace requires a symbolic spin with explicit spin value.")) : SpinSpace(sym, sym.spin))
+SpinSpace(label, J) = SpinSpace(SymbolicSpinBasis(label, nothing, J), J)
 basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 state_index(s::SpinState, space::SpinSpace) = Int(s.m + space.spin + 1)
 
 atomic_id(H::SpinSpace) = symbolic_group(H.sym)
-function add_tag(H::SpinSpace{J,T,S}, tag) where {J,T,S}
+function add_tag(H::SpinSpace{T,S}, tag) where {T,S}
     newsym = add_tag(H.sym, tag)
-    SpinSpace{J,T,typeof(newsym)}(H.spin, H.basisstates, newsym, H.state_index)
+    SpinSpace{T,typeof(newsym)}(H.spin, H.basisstates, newsym, H.state_index)
 end
-hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:HalfInteger,<:Any}) = SpinSpace{sym.spin}(sym)
-hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:Nothing,<:Any}, J) = SpinSpace{HalfInteger(J)}(sym)
+hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:HalfInteger,<:Any}) = SpinSpace(sym, sym.spin)
+hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:Nothing,<:Any}, J) = SpinSpace(sym, J)
 hilbert_space(sym::SpinField{J}, labels, constraint=NoSymmetry()) where J<:HalfInteger = tensor_product(map(l -> hilbert_space(sym[l]), labels); constraint)
 hilbert_space(sym::SpinField{Nothing}, labels, J, constraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], J), labels); constraint)
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
 
-function interpret_state(input::AbstractString, H::SpinSpace{J,T}) where {J,T}
-    Jhalf = HalfInteger(J)
+function interpret_state(input::AbstractString, H::SpinSpace{T}) where {T}
+    Jhalf = H.spin
     if input in ("up", "↑")
         return SpinState(Jhalf)
     elseif input in ("down", "↓")
@@ -138,13 +137,11 @@ function interpret_state(input::AbstractString, H::SpinSpace{J,T}) where {J,T}
     return SpinState(m)
 end
 
-function spin_basisstates(::Val{J}) where {J}
-    [SpinState(i - J) for i in 0:twice(J)]
-end
-spin_basisstates(j) = spin_basisstates(Val(HalfInteger(j)))
+spin_basisstates(J::HalfInteger) = [SpinState(i - J) for i in 0:twice(J)]
+spin_basisstates(j) = spin_basisstates(HalfInteger(j))
 
-function operators(H::SpinSpace{J}) where J
-    Jhalf = HalfInteger(J)
+function operators(H::SpinSpace)
+    Jhalf = H.spin
     Splus = spzeros(Float64, dim(H), dim(H))
     Sminus = spzeros(Float64, dim(H), dim(H))
     Sz = spzeros(Float64, dim(H), dim(H))
@@ -182,7 +179,7 @@ end
     @test S[:X] * S[:Y] - S[:Y] * S[:X] ≈ im * S[:Z]
     @test S[:Y] * S[:Z] - S[:Z] * S[:Y] ≈ im * S[:X]
     @test S[:Z] * S[:X] - S[:X] * S[:Z] ≈ im * S[:Y]
-    H1, H2 = [SpinSpace{1 // 2}(k) for k in 1:2]
+    H1, H2 = [SpinSpace(k, 1 // 2) for k in 1:2]
     P = tensor_product(H1, H2)
     @test partial_trace(1.0 * I(dim(P)), P => H1) ≈ dim(H2) * I(dim(H1))
 
