@@ -22,6 +22,9 @@ Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
 PartitionedArrays = "5a9dfac6-5c52-46f7-8278-5e2210713be9"
 
+[sources]
+NonCommutativeProducts = {path = "C:\\Users\\svens\\Projects\\NonCommutativeProducts.jl\\"}
+
 [extensions]
 CombinatoricsExt = "Combinatorics"
 OhMyThreadsExt = "OhMyThreads"
@@ -34,7 +37,7 @@ FillArrays = "1"
 HalfIntegers = "1.6"
 LinearAlgebra = "1"
 LowRankMatrices = "1"
-NonCommutativeProducts = "0.4.7"
+NonCommutativeProducts = "0.4.7, 0.5"
 OhMyThreads = "0.8"
 OrderedCollections = "1, 2"
 PartitionedArrays = "0.5"

@@ -1,27 +1,30 @@
-struct SpinField{J,I}
+_to_halfint(::Nothing) = nothing
+_to_halfint(spin) = HalfInt(spin)
+
+struct SpinField{I}
     name::Symbol
-    spin::J
+    spin::Union{Nothing,HalfInt}
     tags::I
+    SpinField(name::Symbol, spin, tags::I) where I = new{I}(name, _to_halfint(spin), tags)
 end
-SpinField(name::Symbol, spin::J=nothing) where J = SpinField(name, spin isa Nothing ? nothing : HalfInteger(spin), Tags(nothing))
+SpinField(name::Symbol, spin=nothing) = SpinField(name, spin, Tags(nothing))
 Base.:(==)(a::SpinField, b::SpinField) = a.name == b.name
 Base.hash(b::SpinField, h::UInt) = hash(b.name, h)
 Base.show(io::IO, b::SpinField) = print(io, "SpinField(", b.name, ")")
 tags(s::SpinField) = s.tags
 add_tag(s::SpinField, tag) = SpinField(s.name, s.spin, add_tag(s.tags, tag))
 
-struct SymbolicSpinBasis{L,P,J,T<:Tags}
+struct SymbolicSpinBasis{L,P,T<:Tags}
     label::L
     field::P
-    spin::J
+    spin::Union{Nothing,HalfInt}
     tags::T
-    function SymbolicSpinBasis(label::L, field::P, spin::J, tags::T) where {L,P,J,T}
-        hspin = spin isa Nothing ? nothing : HalfInteger(spin)
-        new{L,P,typeof(hspin),T}(label, field, hspin, tags)
+    function SymbolicSpinBasis(label::L, field::P, spin, tags::T) where {L,P,T}
+        new{L,P,T}(label, field, _to_halfint(spin), tags)
     end
 end
 
-SymbolicSpinBasis(label::L, field::P=nothing, spin::J=nothing) where {L,P,J} = SymbolicSpinBasis(label, field, spin, Tags(nothing))
+SymbolicSpinBasis(label, field=nothing, spin=nothing) = SymbolicSpinBasis(label, field, spin, Tags(nothing))
 Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field && a.spin == b.spin && a.tags == b.tags
 Base.isless(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = (a.field, a.label, a.tags) < (b.field, b.label, b.tags)
 Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
@@ -111,10 +114,16 @@ function add_tag(H::SpinSpace{T,S}, tag) where {T,S}
     newsym = add_tag(H.sym, tag)
     SpinSpace{T,typeof(newsym)}(H.spin, H.basisstates, newsym, H.state_index)
 end
-hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:HalfInteger,<:Any}) = SpinSpace(sym, sym.spin)
-hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:Nothing,<:Any}, J) = SpinSpace(sym, J)
-hilbert_space(sym::SpinField{J}, labels, constraint=NoSymmetry()) where J<:HalfInteger = tensor_product(map(l -> hilbert_space(sym[l]), labels); constraint)
-hilbert_space(sym::SpinField{Nothing}, labels, J, constraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], J), labels); constraint)
+hilbert_space(sym::SymbolicSpinBasis) = SpinSpace(sym)
+function hilbert_space(sym::SymbolicSpinBasis, J)
+    sym.spin isa Nothing || throw(ArgumentError("Spin value was already given in the symbolic basis; use hilbert_space(sym) instead."))
+    SpinSpace(sym, J)
+end
+hilbert_space(sym::SpinField, labels::Union{AbstractVector,Tuple,AbstractRange}, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l]), labels); constraint)
+function hilbert_space(sym::SpinField, labels, J, constraint=NoSymmetry())
+    sym.spin isa Nothing || throw(ArgumentError("Spin value was already given in the spin field; omit J."))
+    tensor_product(map(l -> hilbert_space(sym[l], J), labels); constraint)
+end
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
 
