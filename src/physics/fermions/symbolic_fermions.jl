@@ -59,7 +59,7 @@ Base.iszero(x::FermionSym) = false
 symbolic_group(h::FermionSym) = symbolic_group(h.basis)
 symbolic_basis(h::FermionSym) = h.basis
 change_basis(h::FermionSym, newbasis) = FermionSym(h.creation, h.label, newbasis)
-atomic_id(h::FermionSym) = Fill(_normalize_sym(h), 1) # == atomic_id of the single-mode FermionicSpace (a 1-element vector of modes); the Fill wrapper does not heap-allocate, unlike the vector
+atomic_id(h::FermionSym) = _normalize_sym(h) # names the single-mode FermionicSpace of h
 label(h::FermionSym) = h.label
 group_id(f::FermionSym) = symbolic_group(f)
 

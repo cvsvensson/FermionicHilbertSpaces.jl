@@ -29,8 +29,8 @@ maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
 Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
 basisstates(H::FermionicSpace{F}) where F = TypedIterator{F}(Iterators.map(F, UnitRange{UInt64}(0, dim(H) - 1)))
-basisstate(ind, ::FermionicSpace{F}) where F = (F ∘ FockNumber)(ind - 1)
-state_index(state::FockNumber, ::FermionicSpace) = state.f + 1
+basisstate(ind::Integer, ::FermionicSpace{F}) where F = (F ∘ FockNumber)(ind - 1)
+state_index(state::FockNumber, H::FermionicSpace) = iszero(state.f >> nbr_of_modes(H)) ? state.f + one(state.f) : zero(state.f)
 function dim(H::FermionicSpace)
     N = nbr_of_modes(H)
     N < 63 ? 1 << N : BigInt(1) << N
@@ -42,9 +42,18 @@ end
 nbr_of_modes(H::FermionicSpace) = length(H.modes)
 nbr_of_modes(H::AbstractHilbertSpace) = nbr_of_modes(parent(H))
 group_id(H::FermionicSpace) = H.group
-# The id of a fermionic space is its (normalized) vector of modes. It is concrete and non-allocating.
-# A single FermionSym has the id of the corresponding single-mode space, see `atomic_id(::FermionSym)`.
-atomic_id(h::FermionicSpace) = h.modes
+# The atoms of a fermionic space are its single modes, named by the (normalized) mode itself,
+# like the FermionSym `f[i]`. The trivial space without modes is named by its group.
+function atomic_id(H::FermionicSpace)
+    nbr_of_modes(H) == 1 && return only(H.modes)
+    nbr_of_modes(H) == 0 && return H.group
+    throw(ArgumentError("Only single-mode fermionic spaces have an atomic_id, use atom_ids for $H"))
+end
+atom_ids(H::FermionicSpace) = nbr_of_modes(H) == 0 ? [H.group] : H.modes
+function atom_position(x, H::FermionicSpace)
+    nbr_of_modes(H) == 0 && return Int(atomic_id(x) == H.group)
+    get(H.mode_ordering, atomic_id(x), 0)
+end
 label(h::FermionicSpace) = label(only(h.modes))
 mode_ordering(H::FermionicSpace) = H.mode_ordering
 modes(H::FermionicSpace) = H.modes
@@ -59,13 +68,13 @@ isconstrained(f::FermionSym) = false
 
 partial_trace_phase_factor_eltype(::FermionicSpace) = Complex{Int}
 
-function _find_position(f::FermionSym, H::FermionicSpace)
-    get(H.mode_ordering, _normalize_sym(f), 0)
-end
-function _find_position(f::FermionicSpace, H::FermionicSpace)
-    nbr_of_modes(f) == 1 || throw(ArgumentError("Can only find position of single-mode group within another group"))
-    return _find_position(only(modes(f)), H)
-end
+"""
+    mode_position(op, H)
+
+Position of the mode that the operator `op` acts on, in the mode ordering of `H` (e.g. the
+Jordan-Wigner order of fermions), or `0` if `H` has no such mode.
+"""
+mode_position(f::FermionSym, H) = get(mode_ordering(H), _normalize_sym(f), 0)
 
 function combine_into_group(group::FermionicGroup, fermions)
     if all(f -> group_id(f) == group, fermions)
@@ -80,8 +89,9 @@ isconstrained(H::FermionicSpace) = false
 combine_states(states, H::FermionicSpace{F}) where F = (catenate_fock_states(states, H.modes, F),), (1,)
 
 state_mapper(H::FermionicSpace, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
-function state_mapper(H::FermionicSpace, Hs)
-    fermionpositions = [[_find_position(atom, H) for atom in atomic_factors(group)] for group in Hs]
+state_mapper(H::FermionicSpace, Hs) = _fock_mapper(H, Hs)
+function _fock_mapper(H, Hs)
+    fermionpositions = [[atom_position(atom, H) for atom in atomic_factors(Hsub)] for Hsub in Hs]
     all(x -> x > 0, Iterators.flatten(fermionpositions)) || throw(ArgumentError("All subspaces must be part of the group"))
     FockMapper(Tuple(fermionpositions))
 end
@@ -110,8 +120,7 @@ function _compact_fermionic_modes(io::IO, c::FermionicSpace;
     print(io, join(_truncate(map(fmt, groups), max_groups, edge_groups), ", "))
 end
 function embedding_unitary(partition, H::FermionicSpace)
-    atoms = atomic_factors(H)
-    positions = [[_find_position(atom, atoms) for atom in atomic_factors(group)] for group in partition]
+    positions = [[atom_position(atom, H) for atom in atomic_factors(group)] for group in partition]
     masks = map(focknbr_from_site_indices, positions)
     Diagonal([phase_factor_u(positions, masks, state) for state in basisstates(H)])
 end
@@ -124,13 +133,13 @@ function (processor::CombineFockNumbersProcessor{T})(full_state, spaces) where T
 end
 # _init_results(spaces, ::CombineFockNumbersProcessor{T}) where T = T[]
 
-focknbr_from_site_label(mode::FermionSym, H::FermionicSpace) = focknbr_from_site_index(_find_position(mode, H))
+focknbr_from_site_label(mode::FermionSym, H::FermionicSpace) = focknbr_from_site_index(mode_position(mode, H))
 focknbr_from_site_labels(Hsub::FermionicSpace, H::FermionicSpace) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
 
 
 
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{FockNumber{I}}) where {I}
-    position = _find_position(op, space)
+    position = mode_position(op, space)
     iszero(position) && throw(ArgumentError("Operator ($op) contains a factor that is not part of the fermionic space ($space)"))
     return one(I) << (position - 1)
 end
@@ -290,7 +299,6 @@ end
     end
 end
 
-_find_position(f::AbstractSym, H::ProductSpace) = _find_position(f, parent(H))
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::AbstractVector{<:AbstractBasisState}) = ConstrainedSpace(hilbert_space(a, labels), states)
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::AbstractConstraint)
@@ -318,8 +326,6 @@ function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constrai
     dict = OrderedDict(zip(numbers, state_blocks))
     _sector_space(H, dict, constraint)
 end
-
-issubsystem(Hsub::AbstractHilbertSpace, H::FermionicSpace) = isorderedsubsystem(Hsub, H)
 
 @testitem "Commuting fermionic operators: Lindbladian and number conservation" begin
     @fermions c_l
@@ -579,6 +585,10 @@ end
         @test collect(basisstates(tensor_product(H, hilbert_space(f, 1:1)))) == collect(basisstates(hilbert_space(f, 1:1)))
         @test mb == representation(b'b, tensor_product(H, Hb))
     end
+    # states with occupied modes beyond those of the space have index 0
+    H = hilbert_space(f, 1:2)
+    @test [state_index(FockNumber(n), H) for n in 0:5] == [1, 2, 3, 4, 0, 0]
+    @test state_index(FockNumber(1), hilbert_space(f, 1:0)) == 0
 end
 
 

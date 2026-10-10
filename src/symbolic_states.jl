@@ -42,8 +42,8 @@ function Base.show(io::IO, s::SymbolicState)
     print(io, ")")
 end
 
-Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.bra && atomic_id(a.space) == atomic_id(b.space)
-Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(atomic_id(a.space), h)))
+Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.bra && _same_space_id(a.space, b.space)
+Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(atom_ids(a.space), h)))
 Base.isless(a::SymbolicState, b::SymbolicState) = hash(a) < hash(b)
 Base.adjoint(s::SymbolicState) = SymbolicState(s.space, s.bra, s.ket)
 
@@ -57,7 +57,12 @@ interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
 interpret_state(state, space::Union{TransposedSpace,SectorHilbertSpace,ConstrainedSpace}) = interpret_state(state, parent(space))
 state_index(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = state_index(interpret_state(state, space), space)
-basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(state_index(state, space), space)
+basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(_checked_state_index(state, space), space)
+function _checked_state_index(state, space)
+    i = state_index(state, space)
+    iszero(i) && throw(ArgumentError("The state $state is not in the Hilbert space"))
+    i
+end
 
 function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{B}) where {I,B<:FockNumber{I}}
     all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only '0' and '1', got \"$input\""))
@@ -75,8 +80,8 @@ function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{Boson
 end
 
 function interpret_state(input, space::ProductSpace{B}) where B
-    length(input) == length(factors(space)) || throw(ArgumentError("Product-state input must have length $(length(factors(space))), got $(length(input))"))
-    return B(map(interpret_state, input, factors(space)))
+    length(input) == length(groups(space)) || throw(ArgumentError("Product-state input must have length $(length(groups(space))), got $(length(input))"))
+    return B(map(interpret_state, input, groups(space)))
 end
 interpret_state(char::AbstractChar, space::AbstractHilbertSpace) = interpret_state(string(char), space)
 
@@ -92,9 +97,8 @@ function (k::Kets{B})(inputs...) where B
     return SymbolicState(k.space, parsed, nothing)
 end
 
-function _same_space_id(a, b)
-    atomic_id(a) == atomic_id(b)
-end
+# Symbolic states are tied to the degrees of freedom of their space, not to its basis
+_same_space_id(a, b) = a === b || atom_ids(a) == atom_ids(b)
 
 function _apply_symbolic_operator_to_state(op::AbstractSym, state::AbstractBasisState, space::AbstractHilbertSpace; transpose=false)
     term = NCMul(1, [op])
@@ -113,6 +117,7 @@ _order_hash(x) = hash(symbolic_group(x))
 
 function NonCommutativeProducts.mul_effect(a::SymbolicState, b::SymbolicState)
     if !_same_space_id(a.space, b.space)
+        group_id(a) == group_id(b) && throw(ArgumentError("Cannot multiply symbolic states on different spaces of the same group: $(a.space) and $(b.space)"))
         return _order_hash(a) > _order_hash(b) ? Swap(1) : nothing
     end
     if has_bra(a) && has_ket(b)
@@ -231,14 +236,14 @@ For a product of ket SymbolicStates, apply each ket's operator action in sequenc
 and return a sparse column vector. For bras, return the adjoint row vector.
 """
 function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
-    ind = state_index(state, space)
+    ind = _checked_state_index(state, space)
     TT = T === Missing ? Int : T
     v = SparseArrays.spzeros(TT, dim(space))
     v[ind] = one(TT)
     return v
 end
 function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerDenseRepr{T}; kwargs...) where {B,T}
-    ind = state_index(state, space)
+    ind = _checked_state_index(state, space)
     TT = T === Missing ? Int : T
     v = zeros(TT, dim(space))
     v[ind] = one(TT)
@@ -252,7 +257,7 @@ vector_representation(op, space, repr; kwargs...) = vector_representation(op, sp
 function vector_representation(op::NCMul, space::AbstractHilbertSpace, repr=EagerSparseRepr(); type=_operator_type(op), kwargs...)
     symstates = op.factors
     group_ids = map(state -> group_id(state.space), symstates)
-    perm = map(id -> findfirst(==(id) ∘ group_id, factors(space)), group_ids)
+    perm = map(id -> findfirst(==(id) ∘ group_id, groups(space)), group_ids)
     all(!isnothing, perm) || throw(ArgumentError("Spaces of symbolic states in NCMul do not match the factor spaces of the provided ProductSpace"))
     basis_state(symstate::SymbolicState) = type == :kets ? symstate.ket : symstate.bra
     vec = if length(group_ids) == 1
@@ -348,6 +353,17 @@ end
     vsec = representation(ssec, Hn1)
     @test vsec[1] == 1
     @test count(!iszero, vsec) == 1
+end
+
+@testitem "basisstate from string" begin
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    for s in ("00", "10", "01", "11")
+        @test state_index(basisstate(s, H), H) == state_index(s, H)
+    end
+    @test basisstate('1', hilbert_space(f, 1:1)) == basisstate(2, hilbert_space(f, 1:1))
+    @test_throws ArgumentError basisstate("111", H)
+    @test_throws ArgumentError basisstate("12", H)
 end
 
 @testitem "Symbolic ket and bra algebra" begin
@@ -536,4 +552,3 @@ end
     end
 end
 
-_find_position(op::SymbolicState, space::FermionicSpace) = nothing

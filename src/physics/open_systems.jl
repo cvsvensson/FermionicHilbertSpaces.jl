@@ -14,16 +14,22 @@ dim(H::TransposedSpace) = dim(H.parent)
 isconstrained(H::TransposedSpace) = isconstrained(H.parent)
 group_id(H::TransposedSpace) = group_id(H.parent)
 atomic_id(H::TransposedSpace) = atomic_id(H.parent)
+atom_ids(H::TransposedSpace) = atom_ids(H.parent)
+atom_position(x, H::TransposedSpace) = atom_position(x, H.parent)
+mode_ordering(H::TransposedSpace) = mode_ordering(H.parent)
 atomic_factors(H::TransposedSpace) = map(TransposedSpace, atomic_factors(H.parent)) # (H,)
 add_tag(H::TransposedSpace, tag) = TransposedSpace(add_tag(H.parent, tag))
 groups(H::TransposedSpace) = map(TransposedSpace, groups(H.parent))
 factors(H::TransposedSpace) = map(TransposedSpace, factors(H.parent))
-TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, factors(H)), map(TransposedSpace, H.atoms))
+TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, groups(H)))
 TransposedSpace(H::ConstrainedSpace) = ConstrainedSpace(TransposedSpace(parent(H)), H.states, H.state_index)
 TransposedSpace(H::SectorHilbertSpace) = SectorHilbertSpace(TransposedSpace(parent(H)), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)
 state_mapper(H::TransposedSpace, Hs) = state_mapper(H.parent, Hs)
 combine_states(states, H::TransposedSpace) = combine_states(states, H.parent)
 Base.parent(H::TransposedSpace) = H.parent
+partial_trace_phase_factor(f1, f2, H::TransposedSpace) = partial_trace_phase_factor(f1, f2, parent(H))
+partial_trace_phase_factor_eltype(H::TransposedSpace) = partial_trace_phase_factor_eltype(parent(H))
+partial_transpose_phase_factor(f1, f2, H::TransposedSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
 
 function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSpace}
     only(unique(map(group_id, spaces))) == group || throw(ArgumentError("All spaces must belong to the same group"))
@@ -203,8 +209,6 @@ function _apply_local_operators(op, state, space::TransposedSpace, precomp)
 end
 
 maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))
-_find_position(f::TransposedSpace, H::FermionicSpace) = _find_position(parent(f), H)
-_find_position(op::AbstractSym, H::TransposedSpace) = _find_position(op, parent(H))
 function _wrap(space, ::TransposedSpace)
     TransposedSpace(space)
 end

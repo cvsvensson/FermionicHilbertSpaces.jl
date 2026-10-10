@@ -14,7 +14,6 @@ end
 SectorHilbertSpace(space::P, ordered_basis_states::AbstractVector{B}, state_to_index::OrderedDict{B,Int}, qn_to_states::OrderedDict{Q,Vector{B}}, constraint::C) where {B,P,Q,C} = SectorHilbertSpace{B,P,Q,C}(space, ordered_basis_states, state_to_index, qn_to_states, constraint)
 Base.hash(H::SectorHilbertSpace, h::UInt) = hash((H.parent, H.ordered_basis_states, H.state_to_index, H.qn_to_states), h)
 Base.:(==)(H1::SectorHilbertSpace, H2::SectorHilbertSpace) = H1 === H2 || (H1.parent == H2.parent && H1.ordered_basis_states == H2.ordered_basis_states && H1.state_to_index == H2.state_to_index && H1.qn_to_states == H2.qn_to_states)
-atomic_substate(n, f, space::SectorHilbertSpace) = atomic_substate(n, f, parent(space))
 
 sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
 function sector_space(space, states, sector_function, constraint)
@@ -71,13 +70,12 @@ dim(H::SectorHilbertSpace) = length(H.ordered_basis_states)
 atomic_factors(H::SectorHilbertSpace) = atomic_factors(H.parent)
 factors(H::SectorHilbertSpace) = factors(parent(H))
 groups(H::SectorHilbertSpace) = groups(parent(H))
-atomic_id(H::SectorHilbertSpace) = atomic_id(parent(H))
+atom_ids(H::SectorHilbertSpace) = atom_ids(parent(H))
+atom_position(x, H::SectorHilbertSpace) = atom_position(x, parent(H))
 group_id(H::SectorHilbertSpace) = group_id(parent(H))
 
 isconstrained(H::SectorHilbertSpace) = true
 basisstates(H::SectorHilbertSpace) = H.ordered_basis_states
-_find_position(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace) = _find_position(Hsub, parent(H))
-_find_position(op::AbstractSym, H::SectorHilbertSpace) = _find_position(op, parent(H))
 
 combine_states(substates, H::SectorHilbertSpace) = combine_states(substates, parent(H))
 partial_trace_phase_factor_eltype(space::SectorHilbertSpace) = partial_trace_phase_factor_eltype(parent(space))

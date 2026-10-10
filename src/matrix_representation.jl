@@ -170,7 +170,7 @@ function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
 end
 
 function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr, chunking; kwargs...)
-    spaces = factors(space)
+    spaces = groups(space)
     length(spaces) == 1 && return _term_matrix_representation(op, only(spaces), repr, chunking; kwargs...)
     prodop = partition_product(op, bases, spaces)
     matrices = map(enumerate(spaces)) do (n, local_space)
@@ -220,7 +220,7 @@ function _matrix_representation(op::NCMul, bases, space, repr, chunking; kwargs.
     if isempty(op.factors)
         return op.coeff * I(dim(space))
     else
-        newop = length(bases) > 1 ? partition_product(op, bases, factors(space)) : op
+        newop = length(bases) > 1 ? partition_product(op, bases, groups(space)) : op
         return _term_matrix_representation(newop, space, repr, chunking; kwargs...)
     end
 end
@@ -379,10 +379,7 @@ function _canonicalize_repr(s::Symbol)
 end
 
 
-# group_ids(space::ProductSpace) = unique(Iterators.map(group_id, factors(space)))
-group_ids(space::ProductSpace) = map(group_id, factors(space))
-group_ids(space::Union{AbstractAtomicHilbertSpace,AbstractGroupedHilbertSpace}) = (group_id(space),)
-group_ids(space::AbstractHilbertSpace) = group_ids(parent(space))
+group_ids(space::AbstractHilbertSpace) = map(group_id, groups(space))
 
 trivial_operator(op::Union{UniformScaling,Number}) = true
 trivial_operator(op::NCMul) = length(op.factors) == 0
