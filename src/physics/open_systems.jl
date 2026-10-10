@@ -26,6 +26,7 @@ combine_states(states, H::TransposedSpace) = combine_states(states, H.parent)
 Base.parent(H::TransposedSpace) = H.parent
 partial_trace_phase_factor(f1, f2, H::TransposedSpace) = partial_trace_phase_factor(f1, f2, parent(H))
 partial_trace_phase_factor_eltype(H::TransposedSpace) = partial_trace_phase_factor_eltype(parent(H))
+partial_transpose_phase_factor_eltype(H::TransposedSpace) = partial_transpose_phase_factor_eltype(parent(H))
 partial_transpose_phase_factor(f1, f2, H::TransposedSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
 
 function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSpace}

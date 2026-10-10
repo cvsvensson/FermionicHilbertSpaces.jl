@@ -332,6 +332,18 @@ end
     @test partial_transpose(m, H, Hsb) ≈ expected
 end
 
+@testitem "Partial transpose map for composite fermionic spaces" begin
+    using SparseArrays
+    @fermions f
+    @fermions g
+
+    Hf = hilbert_space(f, 1:1)
+    Hg = hilbert_space(g, 1:1)
+    H = tensor_product(Hf, Hg)
+    pt = partial_transpose(H, Hf)
+    @test eltype(sparse(pt)) == Complex{Int}
+end
+
 @testmodule PartialTranspose begin
     using LinearAlgebra, SparseArrays, Random, Test
     using FermionicHilbertSpaces

@@ -276,6 +276,7 @@ _find_position(target::AbstractAtomicHilbertSpace, parent::AbstractAtomicHilbert
 _find_position(target::AbstractGroupedHilbertSpace, parent::AbstractGroupedHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
 
 partial_trace_phase_factor_eltype(space::ProductSpace) = promote_type((partial_trace_phase_factor_eltype(H) for H in factors(space))...)
+partial_transpose_phase_factor_eltype(space::ProductSpace) = promote_type((partial_transpose_phase_factor_eltype(H) for H in factors(space))...)
 function partial_trace_phase_factor(state1, state2, space::ProductSpace)
     # product of phase factors from each space and substate
     pf = 1
