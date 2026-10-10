@@ -256,7 +256,7 @@ end
 
 
 state_index(state::AbstractFockState, H::MajoranaHilbertSpace) = state_index(state, H.parent)
-mode_position(f::MajoranaSym, H::AbstractHilbertSpace) = get(mode_ordering(H), f, 0)
+mode_position(f::MajoranaSym, H) = get(mode_ordering(H), f, 0)
 
 function _precomputation_before_operator_application(op::MajoranaSym, space::AbstractHilbertSpace{<:FockNumber})
     majoranaposition = mode_position(op, space)

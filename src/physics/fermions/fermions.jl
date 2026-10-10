@@ -74,7 +74,7 @@ partial_trace_phase_factor_eltype(::FermionicSpace) = Complex{Int}
 Position of the mode that the operator `op` acts on, in the mode ordering of `H` (e.g. the
 Jordan-Wigner order of fermions), or `0` if `H` has no such mode.
 """
-mode_position(f::FermionSym, H::AbstractHilbertSpace) = get(mode_ordering(H), _normalize_sym(f), 0)
+mode_position(f::FermionSym, H) = get(mode_ordering(H), _normalize_sym(f), 0)
 
 function combine_into_group(group::FermionicGroup, fermions)
     if all(f -> group_id(f) == group, fermions)
