@@ -1,27 +1,31 @@
-struct SpinField{J,I}
+_check_spin(J) = (J isa Real && ishalfinteger(J) && J >= 0) ? J : throw(ArgumentError("Spin J must be a nonnegative half-integer such as 1//2 or 1, got $(repr(J))."))
+_to_halfint(::Nothing) = nothing
+_to_halfint(spin) = HalfInt(_check_spin(spin))
+
+struct SpinField{I}
     name::Symbol
-    spin::J
+    spin::Union{Nothing,HalfInt}
     tags::I
+    SpinField(name::Symbol, spin, tags::I) where I = new{I}(name, _to_halfint(spin), tags)
 end
-SpinField(name::Symbol, spin::J=nothing) where J = SpinField(name, spin isa Nothing ? nothing : HalfInteger(spin), Tags(nothing))
+SpinField(name::Symbol, spin=nothing) = SpinField(name, spin, Tags(nothing))
 Base.:(==)(a::SpinField, b::SpinField) = a.name == b.name
 Base.hash(b::SpinField, h::UInt) = hash(b.name, h)
 Base.show(io::IO, b::SpinField) = print(io, "SpinField(", b.name, ")")
 tags(s::SpinField) = s.tags
 add_tag(s::SpinField, tag) = SpinField(s.name, s.spin, add_tag(s.tags, tag))
 
-struct SymbolicSpinBasis{L,P,J,T<:Tags}
+struct SymbolicSpinBasis{L,P,T<:Tags}
     label::L
     field::P
-    spin::J
+    spin::Union{Nothing,HalfInt}
     tags::T
-    function SymbolicSpinBasis(label::L, field::P, spin::J, tags::T) where {L,P,J,T}
-        hspin = spin isa Nothing ? nothing : HalfInteger(spin)
-        new{L,P,typeof(hspin),T}(label, field, hspin, tags)
+    function SymbolicSpinBasis(label::L, field::P, spin, tags::T) where {L,P,T}
+        new{L,P,T}(label, field, _to_halfint(spin), tags)
     end
 end
 
-SymbolicSpinBasis(label::L, field::P=nothing, spin::J=nothing) where {L,P,J} = SymbolicSpinBasis(label, field, spin, Tags(nothing))
+SymbolicSpinBasis(label, field=nothing, spin=nothing) = SymbolicSpinBasis(label, field, spin, Tags(nothing))
 Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field && a.spin == b.spin && a.tags == b.tags
 Base.isless(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = (a.field, a.label, a.tags) < (b.field, b.label, b.tags)
 Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
@@ -93,13 +97,13 @@ struct SpinSpace{T<:Integer,S} <: AbstractAtomicHilbertSpace{SpinState{T}}
     state_index::Dict{SpinState{T},Int}
 end
 function SpinSpace(sym::S, J) where {S<:SymbolicSpinBasis}
-    Jhalf = HalfInteger(J)
+    Jhalf = HalfInteger(_check_spin(J))
     states = spin_basisstates(Jhalf)
     T = typeof(twice(Jhalf))
     state_index = Dict(s => i for (i, s) in enumerate(states))
     SpinSpace{T,S}(Jhalf, states, sym, state_index)
 end
-SpinSpace(sym::S) where {S<:SymbolicSpinBasis} = (sym.spin isa Nothing ? throw(ArgumentError("SpinSpace requires a symbolic spin with explicit spin value.")) : SpinSpace(sym, sym.spin))
+SpinSpace(sym::S) where {S<:SymbolicSpinBasis} = (sym.spin isa Nothing ? throw(ArgumentError("$sym has no spin value. Pass J to hilbert_space, e.g. `hilbert_space(s, 1//2)` or `hilbert_space(s, labels, 1//2)`, or set it when creating the basis with `@spin s 1//2` or `@spins s 1//2`.")) : SpinSpace(sym, sym.spin))
 SpinSpace(label, J) = SpinSpace(SymbolicSpinBasis(label, nothing, J), J)
 basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
@@ -111,10 +115,20 @@ function add_tag(H::SpinSpace{T,S}, tag) where {T,S}
     newsym = add_tag(H.sym, tag)
     SpinSpace{T,typeof(newsym)}(H.spin, H.basisstates, newsym, H.state_index)
 end
-hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:HalfInteger,<:Any}) = SpinSpace(sym, sym.spin)
-hilbert_space(sym::SymbolicSpinBasis{<:Any,<:Any,<:Nothing,<:Any}, J) = SpinSpace(sym, J)
-hilbert_space(sym::SpinField{J}, labels, constraint=NoSymmetry()) where J<:HalfInteger = tensor_product(map(l -> hilbert_space(sym[l]), labels); constraint)
-hilbert_space(sym::SpinField{Nothing}, labels, J, constraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], J), labels); constraint)
+_check_spin_unset(sym) = sym.spin isa Nothing || throw(ArgumentError("Spin value was already given in the $(sym isa SpinField ? "spin field" : "symbolic basis"); omit J."))
+hilbert_space(sym::SymbolicSpinBasis) = SpinSpace(sym)
+function hilbert_space(sym::SymbolicSpinBasis, J)
+    _check_spin_unset(sym)
+    SpinSpace(sym, J)
+end
+# Tuples and vectors are mapped over directly; other iterables (generators, sets, matrices) are flattened to a vector.
+_field_labels(labels::Union{Tuple,AbstractVector}) = labels
+_field_labels(labels) = vec(collect(labels))
+hilbert_space(sym::SpinField, labels, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l]), _field_labels(labels)); constraint)
+function hilbert_space(sym::SpinField, labels, J, constraint::AbstractConstraint=NoSymmetry())
+    _check_spin_unset(sym)
+    tensor_product(map(l -> hilbert_space(sym[l], J), _field_labels(labels)); constraint)
+end
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
 
@@ -162,7 +176,7 @@ function operators(H::SpinSpace)
 end
 
 @testitem "Spin" begin
-    using FermionicHilbertSpaces: spin_basisstates, SpinSpace, SpinState, operators
+    using FermionicHilbertSpaces: spin_basisstates, SpinSpace, SpinState, operators, SpinField
     using LinearAlgebra
     @test spin_basisstates(1 // 2) == [SpinState(-1 // 2), SpinState(1 // 2)]
     @test spin_basisstates(1) == [SpinState(-1), SpinState(0), SpinState(1)]
@@ -185,6 +199,17 @@ end
 
     ops1 = operators(H1)
     @test all(partial_trace(embed(op, H1 => P), P => H1) ≈ dim(H2) * op for op in values(ops1))
+
+    # Invalid or missing spin values
+    @spins t
+    for J in (-1 // 2, 1 // 3, 0.3, "1/2", nothing)
+        @test_throws ArgumentError hilbert_space(s, J)
+        @test_throws ArgumentError hilbert_space(t, 1:2, J)
+    end
+    @test_throws ArgumentError SpinField(:x, -1)
+    @test_throws "has no spin value" hilbert_space(t, 1:2)
+    @test_throws "has no spin value" hilbert_space(s)
+    @test dim(hilbert_space(s, 0)) == 1
 
     @fermions f
     Hf = hilbert_space(f, 1:2)

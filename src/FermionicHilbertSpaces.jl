@@ -9,7 +9,7 @@ import SciMLOperators
 using FillArrays: Zeros, Fill, Eye
 using OrderedCollections: OrderedDict
 using BitPermutations: BitPermutations, AbstractBitPermutation, BitPermutation, bitpermute
-using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice
+using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice, ishalfinteger
 using SparseArrays: SparseArrays, AbstractSparseMatrix, SparseVector, findnz,
     nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
 using TestItems: TestItems, @testitem, @testmodule

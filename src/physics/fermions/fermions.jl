@@ -1,15 +1,13 @@
 
-struct FermionicSpace{F,L,FG<:FermionicGroup,A} <: AbstractGroupedHilbertSpace{F}
+struct FermionicSpace{F,L,FG<:FermionicGroup} <: AbstractGroupedHilbertSpace{F}
     modes::Vector{L}
     mode_ordering::OrderedDict{L,Int}
     group::FG
-    atomic_id::A
     function FermionicSpace(_modes::AbstractVector{L}, group::FG, ::Type{F}=FockNumber{default_fock_representation(length(_modes))}) where {F,L<:FermionSym,FG<:FermionicGroup}
         modes = map(_normalize_sym, _modes)
         mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("Duplicate modes in fermionic group"))
-        id = length(modes) == 1 ? atomic_id(only(modes)) : map(atomic_id, modes)
-        new{F,L,FG,typeof(id)}(modes, mode_ordering, group, id)
+        new{F,L,FG}(modes, mode_ordering, group)
     end
 end
 function FermionicSpace(factors::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F,L<:FermionicSpace}
@@ -44,7 +42,9 @@ end
 nbr_of_modes(H::FermionicSpace) = length(H.modes)
 nbr_of_modes(H::AbstractHilbertSpace) = nbr_of_modes(parent(H))
 group_id(H::FermionicSpace) = H.group
-atomic_id(h::FermionicSpace) = h.atomic_id
+# The id of a fermionic space is its (normalized) vector of modes. It is concrete and non-allocating.
+# A single FermionSym has the id of the corresponding single-mode space, see `atomic_id(::FermionSym)`.
+atomic_id(h::FermionicSpace) = h.modes
 label(h::FermionicSpace) = label(only(h.modes))
 mode_ordering(H::FermionicSpace) = H.mode_ordering
 modes(H::FermionicSpace) = H.modes
