@@ -194,12 +194,7 @@ function basisstate(n::Integer, H::TruncatedBosonicHilbertSpace)
     BosonicState(n - 1)
 end
 dim(H::TruncatedBosonicHilbertSpace) = H.dimension
-function state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace)
-    if s.n < 0 || s.n >= dim(H)
-        throw(ArgumentError("State $s is not in the Hilbert space"))
-    end
-    s.n + 1
-end
+state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace) = 0 <= s.n < dim(H) ? s.n + 1 : 0
 add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add_tag(H.sym, tag), H.dimension)
 
 hilbert_space(sym::BosonField, labels, dimension::Int, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], dimension), labels); constraint)
@@ -250,6 +245,9 @@ mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
     @test basisstate(4, H) == BosonicState(3)
     @test state_index(BosonicState(0), H) == 1
     @test state_index(BosonicState(3), H) == 4
+    # states outside the truncation are not in H
+    @test state_index(BosonicState(4), H) == 0
+    @test state_index(BosonicState(-1), H) == 0
 end
 
 @testitem "Bosonic matrix representations" begin

@@ -108,7 +108,11 @@ SpinSpace(label, J) = SpinSpace(SymbolicSpinBasis(label, nothing, J), J)
 basisstates(H::SpinSpace) = H.basisstates
 basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
-state_index(s::SpinState, space::SpinSpace) = Int(s.m + space.spin + 1)
+function state_index(s::SpinState, space::SpinSpace)
+    t = twice(s.m) + twice(space.spin) # 2(m + J)
+    i = (t >> 1) + one(t) # (checking i against dim rather than t against 4J avoids slow SLP vectorization in products of spins)
+    (iseven(t) && 1 <= i <= dim(space)) ? i : zero(t)
+end
 
 atomic_id(H::SpinSpace) = symbolic_group(H.sym)
 function add_tag(H::SpinSpace{T,S}, tag) where {T,S}
@@ -193,6 +197,9 @@ end
     @test S[:X] * S[:Y] - S[:Y] * S[:X] ≈ im * S[:Z]
     @test S[:Y] * S[:Z] - S[:Z] * S[:Y] ≈ im * S[:X]
     @test S[:Z] * S[:X] - S[:X] * S[:Z] ≈ im * S[:Y]
+    # states outside the space have index 0
+    @test [state_index(SpinState(m), H) for m in -3//2:1//2:3//2] == [0, 0, 1, 0, 2, 0, 0]
+    @test [state_index(SpinState(m), hilbert_space(s, 1)) for m in -2:1//2:2] == [0, 0, 1, 0, 2, 0, 3, 0, 0]
     H1, H2 = [SpinSpace(k, 1 // 2) for k in 1:2]
     P = tensor_product(H1, H2)
     @test partial_trace(1.0 * I(dim(P)), P => H1) ≈ dim(H2) * I(dim(H1))

@@ -50,8 +50,9 @@ function basisstate(n::Integer, H::ProductSpace{B}) where B
     ProductState(map(basisstate, inds, H.factors))
 end
 function state_index(state::AbstractBasisState, H::ProductSpace{B}) where B
-    cartesian_index = CartesianIndex(Tuple(map(state_index, state.states, H.factors)))
-    H.lininds[cartesian_index]
+    inds = map(state_index, state.states, H.factors)
+    all(>(0), inds) || return 0
+    H.lininds[CartesianIndex(inds)]
 end
 _find_atom_position(Hsub::AbstractAtomicHilbertSpace, H::ProductSpace) = get(H.atom_ordering, Hsub, 0)
 function _find_position(Hsub, H::ProductSpace)
@@ -107,6 +108,10 @@ end
         @test state_index(state, H) == i
         @test basisstate(i, H) == state
     end
+    # a state that is missing in any factor is not in H
+    @test state_index(ProductState((FockNumber(0), FockNumber(0), FermionicHilbertSpaces.BosonicState(2))), H2) == 0
+    @test state_index(ProductState((FockNumber(4), FockNumber(0), FermionicHilbertSpaces.BosonicState(1))), H2) == 0
+    @test state_index(ProductState((FockNumber(3), FockNumber(1), FermionicHilbertSpaces.BosonicState(1))), H2) == dim(H2)
 
     mapper = state_mapper(H, (Ha, Hb))
     for state in basisstates(H)

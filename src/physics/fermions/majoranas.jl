@@ -166,7 +166,7 @@ modes(H::MajoranaHilbertSpace) = keys(H.majoranaindices)
 Base.:(==)(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace) = H1.majoranaindices == H2.majoranaindices && H1.parent == H2.parent && H1.sym == H2.sym
 Base.hash(H::MajoranaHilbertSpace, h::UInt) = hash(H.majoranaindices, hash(H.parent, hash(H.sym, h)))
 basisstates(m::MajoranaHilbertSpace) = basisstates(m.parent)
-basisstate(i, m::MajoranaHilbertSpace) = basisstate(i, m.parent)
+basisstate(i::Integer, m::MajoranaHilbertSpace) = basisstate(i, m.parent)
 Base.parent(H::MajoranaHilbertSpace) = H.parent
 isconstrained(H::MajoranaHilbertSpace) = false
 group_id(H::MajoranaHilbertSpace) = symbolic_group(H.sym)

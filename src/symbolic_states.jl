@@ -57,7 +57,12 @@ interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
 interpret_state(state, space::Union{TransposedSpace,SectorHilbertSpace,ConstrainedSpace}) = interpret_state(state, parent(space))
 state_index(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = state_index(interpret_state(state, space), space)
-basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(state_index(state, space), space)
+basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(_checked_state_index(state, space), space)
+function _checked_state_index(state, space)
+    i = state_index(state, space)
+    iszero(i) && throw(ArgumentError("The state $state is not in the Hilbert space"))
+    i
+end
 
 function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{B}) where {I,B<:FockNumber{I}}
     all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only '0' and '1', got \"$input\""))
@@ -231,14 +236,14 @@ For a product of ket SymbolicStates, apply each ket's operator action in sequenc
 and return a sparse column vector. For bras, return the adjoint row vector.
 """
 function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
-    ind = state_index(state, space)
+    ind = _checked_state_index(state, space)
     TT = T === Missing ? Int : T
     v = SparseArrays.spzeros(TT, dim(space))
     v[ind] = one(TT)
     return v
 end
 function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerDenseRepr{T}; kwargs...) where {B,T}
-    ind = state_index(state, space)
+    ind = _checked_state_index(state, space)
     TT = T === Missing ? Int : T
     v = zeros(TT, dim(space))
     v[ind] = one(TT)
@@ -348,6 +353,17 @@ end
     vsec = representation(ssec, Hn1)
     @test vsec[1] == 1
     @test count(!iszero, vsec) == 1
+end
+
+@testitem "basisstate from string" begin
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    for s in ("00", "10", "01", "11")
+        @test state_index(basisstate(s, H), H) == state_index(s, H)
+    end
+    @test basisstate('1', hilbert_space(f, 1:1)) == basisstate(2, hilbert_space(f, 1:1))
+    @test_throws ArgumentError basisstate("111", H)
+    @test_throws ArgumentError basisstate("12", H)
 end
 
 @testitem "Symbolic ket and bra algebra" begin

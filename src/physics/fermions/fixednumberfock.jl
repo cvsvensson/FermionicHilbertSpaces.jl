@@ -219,7 +219,7 @@ Base.hash(x::SingleParticleHilbertSpace, h::UInt) = hash(x.parent, h)
 A hilbert space suitable for non-interacting systems with fermion number conservation. Matrix representations of symbolic operators give the single particle hamiltonian, without any contribution from the identity matrix.
 """
 single_particle_hilbert_space(f::SymbolicFermionBasis, labels) = SingleParticleHilbertSpace(f, labels)
-basisstate(ind, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
+basisstate(ind::Integer, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
 state_index(state::AbstractFockState, H::SingleParticleHilbertSpace) = state_index(state, parent(H))
 
 @testitem "Single particle hilbert space" begin
