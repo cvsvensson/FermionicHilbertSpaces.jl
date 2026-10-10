@@ -17,7 +17,7 @@ symbolic_group(h::AbstractAtomicHilbertSpace) = h
 struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
     factors::C
     atoms::Vector{A}
-    atom_ordering::Dict{A,Int}
+    atom_index::Dict{Any,Int} # atomic_id => position in atoms. Only used for lookups, so not concretely typed
     fast_path::T
     lininds::LI
     cartinds::CI
@@ -26,13 +26,14 @@ struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
         atoms = collect(Iterators.flatten(map(atomic_factors, factors)))
         A = eltype(atoms)
         B = ProductState{Tuple{map(statetype, factors)...}}
-        atom_ordering = Dict{A,Int}(a => i for (i, a) in enumerate(atoms))
+        atom_index = Dict{Any,Int}(atomic_id(a) => i for (i, a) in enumerate(atoms))
+        length(atom_index) == length(atoms) || throw(ArgumentError("Duplicate atoms in product space"))
         fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
         lininds = LinearIndices(map(dim, factors))
         cartinds = CartesianIndices(map(dim, factors))
         LI = typeof(lininds)
         CI = typeof(cartinds)
-        new{B,C,A,typeof(fast_path),LI,CI}(factors, atoms, atom_ordering, fast_path, lininds, cartinds)
+        new{B,C,A,typeof(fast_path),LI,CI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
     end
 end
 fast_path(space::ProductSpace) = space.fast_path
@@ -43,8 +44,7 @@ atomic_factors(H::ProductSpace) = H.atoms
 factors(H::ProductSpace) = H.factors
 groups(H::ProductSpace) = H.factors
 dim(H::ProductSpace) = prod(dim, groups(H); init=1)
-atomic_id(H::ProductSpace) = H.atom_ordering
-group_id(H::ProductSpace) = H.atom_ordering
+atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
 basisstates(H::ProductSpace{B}) where B = TypedIterator{B}(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
 function basisstate(n::Integer, H::ProductSpace{B}) where B
@@ -56,20 +56,14 @@ function state_index(state::AbstractBasisState, H::ProductSpace{B}) where B
     all(>(0), inds) || return 0
     H.lininds[CartesianIndex(inds)]
 end
-_find_atom_position(Hsub::AbstractAtomicHilbertSpace, H::ProductSpace) = get(H.atom_ordering, Hsub, 0)
-function _find_position(Hsub, H::ProductSpace)
-    pos = findfirst(==(Hsub), H.factors)
-    isnothing(pos) && return 0
-    return pos
-end
-
 
 maximum_particles(H::ProductSpace) = sum(maximum_particles, groups(H))
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
 parity(state::ProductState) = prod(parity, atomic_factors(state))
 
+
 @testitem "ProductSpace" begin
-    import FermionicHilbertSpaces: state_index, basisstate, state_mapper, ProductState, substate, complementary_subsystem, atomic_factors, split_state
+    import FermionicHilbertSpaces: state_index, basisstate, state_mapper, ProductState, substate, complementary_subsystem, atomic_factors, atomic_id, split_state
     @fermions a b
     @fermions c
     Ha = hilbert_space(a[1])
@@ -79,7 +73,7 @@ parity(state::ProductState) = prod(parity, atomic_factors(state))
     @test length(H.factors) == 2
     @test length(H.atoms) == 3
     @test dim(H) == dim(Ha) * dim(Hb) * dim(Hc)
-    @test H.atom_ordering == Dict(Ha => 1, Hb => 2, Hc => 3)
+    @test H.atom_index == Dict(atomic_id(Ha) => 1, atomic_id(Hb) => 2, atomic_id(Hc) => 3)
     @test_throws ArgumentError tensor_product([Ha, Ha])
 
     Hab = H.factors[1]
@@ -260,9 +254,6 @@ end
 
 unique_split(::Any) = false
 unique_combine(::Any) = false
-
-_find_position(target::AbstractAtomicHilbertSpace, parent::AbstractAtomicHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
-_find_position(target::AbstractGroupedHilbertSpace, parent::AbstractGroupedHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
 
 partial_trace_phase_factor_eltype(space::ProductSpace) = promote_type((partial_trace_phase_factor_eltype(H) for H in groups(space))...)
 function partial_trace_phase_factor(state1, state2, space::ProductSpace)
@@ -516,34 +507,35 @@ function ProductSpaceMapper(source::ProductSpace, targets)
     targets = Tuple(targets)
     sfactors = factors(source)
 
-    # Atom bookkeeping: which factor owns each atom, and where inside it.
-    A = eltype(source.atoms)
-    atom_factor = Dict{A,Int}()
-    atom_pos = Dict{A,Int}()
+    # Atom bookkeeping, by name: which factor owns each atom, and where inside it.
+    # The targets' bases are not checked here, that is done by `match_atoms` in the callers.
+    atom_factor = Dict{Any,Int}()
+    atom_pos = Dict{Any,Int}()
     for (ci, f) in enumerate(sfactors)
         for (k, a) in enumerate(atomic_factors(f))
-            atom_factor[a] = ci
-            atom_pos[a] = k
+            atom_factor[atomic_id(a)] = ci
+            atom_pos[atomic_id(a)] = k
         end
     end
 
     # Validate: every target atom exists in the source, no duplicates.
-    seen = Set{A}()
+    seen = Set()
     for t in targets, a in atomic_factors(t)
-        haskey(atom_factor, a) || throw(ArgumentError("Atom $a not in source space"))
-        a ∈ seen && throw(ArgumentError("Atom $a duplicated across targets"))
-        push!(seen, a)
+        haskey(atom_factor, atomic_id(a)) || throw(ArgumentError("Atom $a not in source space"))
+        atomic_id(a) ∈ seen && throw(ArgumentError("Atom $a duplicated across targets"))
+        push!(seen, atomic_id(a))
     end
 
     # Build the piece table: one piece per group of each target.
     # Each group must lie inside a single source factor.
     pieces = [
         begin
-            owners = unique(atom_factor[a] for a in atomic_factors(g))
+            ids = atom_ids(g)
+            owners = unique(atom_factor[id] for id in ids)
             length(owners) == 1 ||
                 throw(ArgumentError("Target group $g spans several source factors; this is not supported"))
             (factor=only(owners), target=ti, group_slot=si, space=g,
-                pos=minimum(atom_pos[a] for a in atomic_factors(g)))
+                pos=minimum(atom_pos[id] for id in ids))
         end
         for (ti, t) in enumerate(targets) for (si, g) in enumerate(groups(t))
     ]

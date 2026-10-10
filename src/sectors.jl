@@ -70,13 +70,12 @@ dim(H::SectorHilbertSpace) = length(H.ordered_basis_states)
 atomic_factors(H::SectorHilbertSpace) = atomic_factors(H.parent)
 factors(H::SectorHilbertSpace) = factors(parent(H))
 groups(H::SectorHilbertSpace) = groups(parent(H))
-atomic_id(H::SectorHilbertSpace) = atomic_id(parent(H))
+atom_ids(H::SectorHilbertSpace) = atom_ids(parent(H))
+atom_position(x, H::SectorHilbertSpace) = atom_position(x, parent(H))
 group_id(H::SectorHilbertSpace) = group_id(parent(H))
 
 isconstrained(H::SectorHilbertSpace) = true
 basisstates(H::SectorHilbertSpace) = H.ordered_basis_states
-_find_position(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace) = _find_position(Hsub, parent(H))
-_find_position(op::AbstractSym, H::SectorHilbertSpace) = _find_position(op, parent(H))
 
 combine_states(substates, H::SectorHilbertSpace) = combine_states(substates, parent(H))
 partial_trace_phase_factor_eltype(space::SectorHilbertSpace) = partial_trace_phase_factor_eltype(parent(space))

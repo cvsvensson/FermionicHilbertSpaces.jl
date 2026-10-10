@@ -42,8 +42,8 @@ function Base.show(io::IO, s::SymbolicState)
     print(io, ")")
 end
 
-Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.bra && atomic_id(a.space) == atomic_id(b.space)
-Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(atomic_id(a.space), h)))
+Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.bra && _same_space_id(a.space, b.space)
+Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(atom_ids(a.space), h)))
 Base.isless(a::SymbolicState, b::SymbolicState) = hash(a) < hash(b)
 Base.adjoint(s::SymbolicState) = SymbolicState(s.space, s.bra, s.ket)
 
@@ -97,9 +97,8 @@ function (k::Kets{B})(inputs...) where B
     return SymbolicState(k.space, parsed, nothing)
 end
 
-function _same_space_id(a, b)
-    atomic_id(a) == atomic_id(b)
-end
+# Symbolic states are tied to the degrees of freedom of their space, not to its basis
+_same_space_id(a, b) = a === b || atom_ids(a) == atom_ids(b)
 
 function _apply_symbolic_operator_to_state(op::AbstractSym, state::AbstractBasisState, space::AbstractHilbertSpace; transpose=false)
     term = NCMul(1, [op])
@@ -552,4 +551,3 @@ end
     end
 end
 
-_find_position(op::SymbolicState, space::FermionicSpace) = nothing

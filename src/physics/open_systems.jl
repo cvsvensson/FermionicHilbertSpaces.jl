@@ -14,6 +14,9 @@ dim(H::TransposedSpace) = dim(H.parent)
 isconstrained(H::TransposedSpace) = isconstrained(H.parent)
 group_id(H::TransposedSpace) = group_id(H.parent)
 atomic_id(H::TransposedSpace) = atomic_id(H.parent)
+atom_ids(H::TransposedSpace) = atom_ids(H.parent)
+atom_position(x, H::TransposedSpace) = atom_position(x, H.parent)
+mode_ordering(H::TransposedSpace) = mode_ordering(H.parent)
 atomic_factors(H::TransposedSpace) = map(TransposedSpace, atomic_factors(H.parent)) # (H,)
 add_tag(H::TransposedSpace, tag) = TransposedSpace(add_tag(H.parent, tag))
 groups(H::TransposedSpace) = map(TransposedSpace, groups(H.parent))
@@ -206,8 +209,6 @@ function _apply_local_operators(op, state, space::TransposedSpace, precomp)
 end
 
 maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))
-_find_position(f::TransposedSpace, H::FermionicSpace) = _find_position(parent(f), H)
-_find_position(op::AbstractSym, H::TransposedSpace) = _find_position(op, parent(H))
 function _wrap(space, ::TransposedSpace)
     TransposedSpace(space)
 end
