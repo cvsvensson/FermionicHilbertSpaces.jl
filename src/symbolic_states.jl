@@ -117,6 +117,7 @@ _order_hash(x) = hash(symbolic_group(x))
 
 function NonCommutativeProducts.mul_effect(a::SymbolicState, b::SymbolicState)
     if !_same_space_id(a.space, b.space)
+        group_id(a) == group_id(b) && throw(ArgumentError("Cannot multiply symbolic states on different spaces of the same group: $(a.space) and $(b.space)"))
         return _order_hash(a) > _order_hash(b) ? Swap(1) : nothing
     end
     if has_bra(a) && has_ket(b)

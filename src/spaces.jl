@@ -435,6 +435,9 @@ end
     @test issubsystem(pair, Hm)
     @test subregion([pair], Hm) == pair
 
+    # symbolic states on different spaces of the same group can't be multiplied
+    @test_throws ArgumentError Kets(hilbert_space(f, 1:2))("10") * Kets(hilbert_space(f, 2:3))("01")
+
     # transposed spaces support partial traces, consistent with transposition
     Hsub = hilbert_space(f, [1, 3])
     m = rand(ComplexF64, dim(Hf), dim(Hf))
