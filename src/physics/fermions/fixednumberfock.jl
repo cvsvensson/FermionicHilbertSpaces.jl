@@ -121,7 +121,7 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
 end
 
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{<:FixedNumberFockState})
-    position = _find_position(op, space)
+    position = mode_position(op, space)
     position == 0 && throw(ArgumentError("Operator ($op) contains a factor that is not part of the fermionic space ($space)"))
     return position
 end
@@ -292,13 +292,11 @@ function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSpar
     isquadratic(op) && isnumberconserving(op) || throw(ArgumentError("Only quadratic, number conserving operators supported for SingleParticleHilbertSpace"))
     _matrix_representation_single_space(remove_identity(op), H, repr, chunking; kwargs...)
 end
-_find_position(op, H::SingleParticleHilbertSpace) = _find_position(op, parent(H))
 function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::SingleParticleHilbertSpace; kwargs...)
-    ordering = mode_ordering(H)
     if length(op.factors) != 2
         throw(ArgumentError("Only two-fermion operators supported for free fermions"))
     end
-    fockstates = (SingleParticleState(_find_position(op.factors[1], H)), SingleParticleState(_find_position(op.factors[2], H)))
+    fockstates = (SingleParticleState(mode_position(op.factors[1], H)), SingleParticleState(mode_position(op.factors[2], H)))
     inind = state_index(fockstates[2], H)
     outind = state_index(fockstates[1], H)
     sign = (-1)^op.factors[2].creation
