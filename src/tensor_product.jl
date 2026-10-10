@@ -384,7 +384,7 @@ function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; c
         U = basis_transformation(Hsub, H)
         return U * m * U'
     end
-    mout = zeros(eltype(m), dim(Hsub), dim(Hsub))
+    mout = zeros(promote_type(eltype(m), partial_trace_phase_factor_eltype(H)), dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
 function basis_transformation(H1, H2)
@@ -502,7 +502,7 @@ function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::Fu
 end
 
 """
-    partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, mapper=state_mapper((Hsub, complement), H); skipmissing=true, phase_factors=true)
+    partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, mapper=state_mapper(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
 
 Compute the partial trace of `m` from `H` to `Hsub`. 
 """
