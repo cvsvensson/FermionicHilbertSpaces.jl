@@ -25,12 +25,37 @@ with additional arguments such as constraints.
 """
 hilbert_space
 
-factors(H::AbstractAtomicHilbertSpace) = (H,)
+"""
+    atomic_factors(H)
+
+Return the atoms of `H`: the indivisible spaces it is built from. Atoms are fixed points,
+`atomic_factors(a) == (a,)`. For product spaces they are ordered group-major, i.e.
+`atomic_factors(H)` is the concatenation of `atomic_factors.(groups(H))`.
+"""
 atomic_factors(H::AbstractAtomicHilbertSpace) = (H,)
-factors(H::AbstractGroupedHilbertSpace) = atomic_factors(H)
+
+"""
+    groups(H)
+
+Return the groups of `H`, which line up with the slots of its basis states: for a product
+space, `groups(H)[i]` is the space of `state.states[i]`; otherwise `groups(H) == (H,)`.
+Groups are fixed points, `groups(g) == (g,)`, and they are the factors of the ordinary
+tensor product, so `tensor_product(groups(H))` recovers `H` (without its constraints).
+"""
 groups(H::AbstractAtomicHilbertSpace) = (H,)
 groups(H::AbstractGroupedHilbertSpace) = (H,)
-atomic_substate(n, f, ::AbstractGroupedHilbertSpace) = substate(n, f)
+
+"""
+    factors(H)
+
+Split `H` one level down: a product space into its groups, a grouped space (such as a
+fermionic space) into its atoms, and an atomic space into itself. Use this when building
+partitions, permutations and constraints. Internal code that needs the state layout
+should use `groups` instead.
+"""
+factors(H::AbstractAtomicHilbertSpace) = (H,)
+factors(H::AbstractGroupedHilbertSpace) = atomic_factors(H)
+
 isconstrained(H::AbstractAtomicHilbertSpace) = false
 atomic_factors(f::AbstractSym) = (f,)
 atomic_id(f::AbstractSym) = symbolic_group(f) # generic fallback

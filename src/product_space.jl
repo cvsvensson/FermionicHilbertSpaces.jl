@@ -13,7 +13,7 @@ Base.hash(s::ProductState, h::UInt) = hash(s.states, h)
 Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
 
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
-# ProductSpaces consists of a list of atomic spaces and factor spaces
+# ProductSpaces consists of a list of groups (stored as `factors`) and their atoms, in group-major order
 struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
     factors::C
     atoms::Vector{A}
@@ -21,8 +21,10 @@ struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
     fast_path::T
     lininds::LI
     cartinds::CI
-    function ProductSpace(factors::C, atoms::Vector{A}) where {C,A}
+    function ProductSpace(factors::C) where {C}
         length(factors) == 0 && throw(ArgumentError("Product space must have at least one factor"))
+        atoms = collect(Iterators.flatten(map(atomic_factors, factors)))
+        A = eltype(atoms)
         B = ProductState{Tuple{map(statetype, factors)...}}
         atom_ordering = Dict{A,Int}(a => i for (i, a) in enumerate(atoms))
         fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
@@ -40,7 +42,7 @@ Base.hash(H::ProductSpace, h::UInt) = hash(H.factors, hash(H.atoms, h))
 atomic_factors(H::ProductSpace) = H.atoms
 factors(H::ProductSpace) = H.factors
 groups(H::ProductSpace) = H.factors
-dim(H::ProductSpace) = prod(dim, factors(H); init=1)
+dim(H::ProductSpace) = prod(dim, groups(H); init=1)
 atomic_id(H::ProductSpace) = H.atom_ordering
 group_id(H::ProductSpace) = H.atom_ordering
 
@@ -62,22 +64,9 @@ function _find_position(Hsub, H::ProductSpace)
 end
 
 
-maximum_particles(H::ProductSpace) = sum(maximum_particles, factors(H))
+maximum_particles(H::ProductSpace) = sum(maximum_particles, groups(H))
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
 parity(state::ProductState) = prod(parity, atomic_factors(state))
-
-function atomic_substate(n, f::ProductState, space::ProductSpace)
-    count = 0
-    for (k, s) in enumerate(factors(space))
-        add = length(atomic_factors(s))
-        if count < n <= count + add
-            return substate(n - count, substate(k, f))
-        end
-        count += add
-    end
-    throw(ArgumentError("Invalid substate index"))
-end
-
 
 @testitem "ProductSpace" begin
     import FermionicHilbertSpaces: state_index, basisstate, state_mapper, ProductState, substate, complementary_subsystem, atomic_factors, split_state
@@ -275,7 +264,7 @@ unique_combine(::Any) = false
 _find_position(target::AbstractAtomicHilbertSpace, parent::AbstractAtomicHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
 _find_position(target::AbstractGroupedHilbertSpace, parent::AbstractGroupedHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
 
-partial_trace_phase_factor_eltype(space::ProductSpace) = promote_type((partial_trace_phase_factor_eltype(H) for H in factors(space))...)
+partial_trace_phase_factor_eltype(space::ProductSpace) = promote_type((partial_trace_phase_factor_eltype(H) for H in groups(space))...)
 function partial_trace_phase_factor(state1, state2, space::ProductSpace)
     # product of phase factors from each space and substate
     pf = 1
@@ -313,7 +302,7 @@ function has_internal_rep(space::AbstractHilbertSpace, ::Type{T}) where {T}
     has_internal_rep(state, space, T)
 end
 function has_internal_rep(state::ProductState, space::ProductSpace, ::Type{T}) where {T}
-    all(Iterators.map((s, f) -> has_internal_rep(s, f, T), state.states, factors(space)))
+    all(Iterators.map((s, f) -> has_internal_rep(s, f, T), state.states, groups(space)))
 end
 
 function has_internal_rep(state, space, ::Type{T}) where {T}
@@ -348,7 +337,7 @@ physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state,
 function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::ProductSpace, precomps) where B
     if !ismissing(fast_path(space))
         T = typeof(fast_path(space))
-        internal_reps = map((s, f) -> _internal_rep(s, f, T), state.states, factors(space))
+        internal_reps = map((s, f) -> _internal_rep(s, f, T), state.states, groups(space))
         newrep, amp = _apply_local_operators_fast(ops, internal_reps, space, precomps)
         return ProductState{B}(newrep), amp
     else
@@ -410,7 +399,7 @@ function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductStat
     return ProductState{B}(newstates), amp
 end
 
-add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors), map(a -> add_tag(a, tag), H.atoms))
+add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors))
 
 
 ##

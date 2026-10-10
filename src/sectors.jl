@@ -14,7 +14,6 @@ end
 SectorHilbertSpace(space::P, ordered_basis_states::AbstractVector{B}, state_to_index::OrderedDict{B,Int}, qn_to_states::OrderedDict{Q,Vector{B}}, constraint::C) where {B,P,Q,C} = SectorHilbertSpace{B,P,Q,C}(space, ordered_basis_states, state_to_index, qn_to_states, constraint)
 Base.hash(H::SectorHilbertSpace, h::UInt) = hash((H.parent, H.ordered_basis_states, H.state_to_index, H.qn_to_states), h)
 Base.:(==)(H1::SectorHilbertSpace, H2::SectorHilbertSpace) = H1 === H2 || (H1.parent == H2.parent && H1.ordered_basis_states == H2.ordered_basis_states && H1.state_to_index == H2.state_to_index && H1.qn_to_states == H2.qn_to_states)
-atomic_substate(n, f, space::SectorHilbertSpace) = atomic_substate(n, f, parent(space))
 
 sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
 function sector_space(space, states, sector_function, constraint)

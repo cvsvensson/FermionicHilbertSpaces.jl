@@ -13,7 +13,7 @@ function tensor_product_no_constraints(spaces)
     space = if length(factors) == 1
         only(factors)
     else
-        ProductSpace(Tuple(factors), collect(atoms))
+        ProductSpace(Tuple(factors))
     end
     if any(isconstrained, spaces)
         mapper = state_mapper(space, spaces)

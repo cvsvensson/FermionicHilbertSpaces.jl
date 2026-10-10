@@ -80,8 +80,8 @@ function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{Boson
 end
 
 function interpret_state(input, space::ProductSpace{B}) where B
-    length(input) == length(factors(space)) || throw(ArgumentError("Product-state input must have length $(length(factors(space))), got $(length(input))"))
-    return B(map(interpret_state, input, factors(space)))
+    length(input) == length(groups(space)) || throw(ArgumentError("Product-state input must have length $(length(groups(space))), got $(length(input))"))
+    return B(map(interpret_state, input, groups(space)))
 end
 interpret_state(char::AbstractChar, space::AbstractHilbertSpace) = interpret_state(string(char), space)
 
@@ -257,7 +257,7 @@ vector_representation(op, space, repr; kwargs...) = vector_representation(op, sp
 function vector_representation(op::NCMul, space::AbstractHilbertSpace, repr=EagerSparseRepr(); type=_operator_type(op), kwargs...)
     symstates = op.factors
     group_ids = map(state -> group_id(state.space), symstates)
-    perm = map(id -> findfirst(==(id) ∘ group_id, factors(space)), group_ids)
+    perm = map(id -> findfirst(==(id) ∘ group_id, groups(space)), group_ids)
     all(!isnothing, perm) || throw(ArgumentError("Spaces of symbolic states in NCMul do not match the factor spaces of the provided ProductSpace"))
     basis_state(symstate::SymbolicState) = type == :kets ? symstate.ket : symstate.bra
     vec = if length(group_ids) == 1

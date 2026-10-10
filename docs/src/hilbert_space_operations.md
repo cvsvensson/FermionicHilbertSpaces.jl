@@ -89,6 +89,9 @@ factors(Hf)
 ```@example hilbert_space_ops
 FermionicHilbertSpaces.atomic_factors(Hfb)
 ```
+The atoms are always ordered group by group, so `tensor_product(f1, b1, f2)` and `tensor_product(f1, f2, b1)` give the same space. Only the order within a fermionic group matters.
+
+Internally, `FermionicHilbertSpaces.groups(H)` returns the spaces that line up with the slots of a basis state: for a product space these are the same as `factors(H)`, while any other space is a single group, `groups(H) == (H,)`.
 
 ### Sectors and quantum numbers
 
