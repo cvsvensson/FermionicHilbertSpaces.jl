@@ -89,6 +89,11 @@ factors(Hf)
 ```@example hilbert_space_ops
 FermionicHilbertSpaces.atomic_factors(Hfb)
 ```
+The atoms are always ordered group by group, so `tensor_product(f1, b1, f2)` and `tensor_product(f1, f2, b1)` give the same space. Only the order within a fermionic group matters.
+
+Internally, `FermionicHilbertSpaces.groups(H)` returns the spaces that line up with the slots of a basis state: for a product space these are the same as `factors(H)`, while any other space is a single group, `groups(H) == (H,)`.
+
+When you pass symbols or spaces to `subregion`, they are looked up by name only, so `subregion([b[1]], H)` returns the bosonic mode as it appears in `H`, whatever its truncation. Operations that use the subsystem's own basis, such as `partial_trace(m, H => Hsub)` and `embed`, instead require the atoms of `Hsub` to match those of `H` exactly. A convenient way to get such a matching `Hsub` is `subregion`.
 
 ### Sectors and quantum numbers
 

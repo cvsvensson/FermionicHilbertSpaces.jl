@@ -171,9 +171,11 @@ Base.parent(H::MajoranaHilbertSpace) = H.parent
 isconstrained(H::MajoranaHilbertSpace) = false
 group_id(H::MajoranaHilbertSpace) = symbolic_group(H.sym)
 add_tag(H::MajoranaHilbertSpace, tag) = MajoranaHilbertSpace(H.majoranaindices, add_tag(parent(H), tag), add_tag(H.sym, tag))
+# The atoms of a Majorana space are pairs of Majoranas (one fermionic mode each), named by the
+# pair. A single Majorana does not name an atom: its `atomic_id` is that of its whole group.
 function atomic_id(H::MajoranaHilbertSpace)
-    # length(H.majoranaindices) == 2 || throw(ArgumentError("Atomic ID is only defined for MajoranaHilbertSpaces with exactly 2 Majoranas."))
-    (H.sym, H.majoranaindices)
+    length(H.majoranaindices) == 2 || throw(ArgumentError("Only Majorana spaces with exactly two Majoranas have an atomic_id, use atom_ids for $H"))
+    Tuple(keys(H.majoranaindices))
 end
 
 function combine_into_group(group::MajoranaGroup, spaces)
@@ -194,10 +196,7 @@ end
 function combine_states(states, ::MajoranaHilbertSpace)
     (only(states),), (1,)
 end
-function state_mapper(H::MajoranaHilbertSpace, Hs)
-    state_mapper(parent(H), Hs)
-end
-_find_position(f::MajoranaHilbertSpace, H::FermionicSpace) = _find_position(parent(f), H)
+state_mapper(H::MajoranaHilbertSpace, Hs) = _fock_mapper(H, Hs)
 partial_trace_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_trace_phase_factor(f1, f2, parent(H))
 partial_transpose_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
 partial_trace_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_trace_phase_factor_eltype(parent(H))
@@ -257,10 +256,10 @@ end
 
 
 state_index(state::AbstractFockState, H::MajoranaHilbertSpace) = state_index(state, H.parent)
-_find_position(f::MajoranaSym, H::MajoranaHilbertSpace) = get(H.majoranaindices, f, 0)
+mode_position(f::MajoranaSym, H) = get(mode_ordering(H), f, 0)
 
 function _precomputation_before_operator_application(op::MajoranaSym, space::AbstractHilbertSpace{<:FockNumber})
-    majoranaposition = _find_position(op, space)
+    majoranaposition = mode_position(op, space)
     fermionposition = div(majoranaposition + 1, 2)
     dagger = iseven(majoranaposition)
     return fermionposition, dagger
@@ -332,5 +331,5 @@ end
     Hb = hilbert_space(b,2)
     @test dim(tensor_product(H, Hb)) == dim(H) * dim(Hb) # this errored for constrained spaces before, fixed by defining combine_states for MajoranaHilbertSpace
 
-    @test dim(tensor_product(H, Hb; constraint = ParityConservation(1,[H]))) == dim(H) * dim(Hb) # fixed by allowing atomic_id for spaces with more than 2 Majoranas
+    @test dim(tensor_product(H, Hb; constraint = ParityConservation(1,[H]))) == dim(H) * dim(Hb) # constraint subspaces are matched by atom_ids
 end
