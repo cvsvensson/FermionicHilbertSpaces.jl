@@ -29,8 +29,8 @@ maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
 Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
 basisstates(H::FermionicSpace{F}) where F = TypedIterator{F}(Iterators.map(F, UnitRange{UInt64}(0, dim(H) - 1)))
-basisstate(ind, ::FermionicSpace{F}) where F = (F ∘ FockNumber)(ind - 1)
-state_index(state::FockNumber, ::FermionicSpace) = state.f + 1
+basisstate(ind::Integer, ::FermionicSpace{F}) where F = (F ∘ FockNumber)(ind - 1)
+state_index(state::FockNumber, H::FermionicSpace) = iszero(state.f >> nbr_of_modes(H)) ? state.f + one(state.f) : zero(state.f)
 function dim(H::FermionicSpace)
     N = nbr_of_modes(H)
     N < 63 ? 1 << N : BigInt(1) << N
@@ -57,7 +57,8 @@ nbr_of_modes(f::FermionSym) = 1
 maximum_particles(f::FermionSym) = 1
 isconstrained(f::FermionSym) = false
 
-partial_trace_phase_factor_eltype(::FermionicSpace) = Complex{Int}
+partial_trace_phase_factor_eltype(::FermionicSpace) = Int
+partial_transpose_phase_factor_eltype(::FermionicSpace) = Complex{Int}
 
 function _find_position(f::FermionSym, H::FermionicSpace)
     get(H.mode_ordering, _normalize_sym(f), 0)
@@ -579,6 +580,10 @@ end
         @test collect(basisstates(tensor_product(H, hilbert_space(f, 1:1)))) == collect(basisstates(hilbert_space(f, 1:1)))
         @test mb == representation(b'b, tensor_product(H, Hb))
     end
+    # states with occupied modes beyond those of the space have index 0
+    H = hilbert_space(f, 1:2)
+    @test [state_index(FockNumber(n), H) for n in 0:5] == [1, 2, 3, 4, 0, 0]
+    @test state_index(FockNumber(1), hilbert_space(f, 1:0)) == 0
 end
 
 
