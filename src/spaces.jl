@@ -441,13 +441,16 @@ end
     @test subregion([pair], Hm) == pair
     # and their fast atom_ids, atom_position and atomic_factor agree with the generic definitions
     using FermionicHilbertSpaces: atom_position, atomic_factor, nbr_of_atoms
-    for H in (Hm, hilbert_space(γ, [1, :a, 2, 3]), hilbert_space(γ, 1:4, ParityConservation(1)))
+    # including spaces with several Majorana names from one block
+    @majoranas ma mc
+    Hac = tensor_product(hilbert_space(ma, 1:2), hilbert_space(mc, 1:2))
+    for H in (Hm, hilbert_space(γ, [1, :a, 2, 3]), hilbert_space(γ, 1:4, ParityConservation(1)), Hac, tensor_product(Hac, Hb))
         ids = map(atomic_id, atomic_factors(H))
         @test atom_ids(H) == ids
         @test eltype(atom_ids(H)) == eltype(ids)
         @test nbr_of_atoms(H) == length(atomic_factors(H))
         @test [atomic_factor(H, i) for i in 1:nbr_of_atoms(H)] == collect(atomic_factors(H))
-        others = [γ[1], f[1], first(atomic_factors(hilbert_space(γ, [2, 1]))), first(atomic_factors(hilbert_space(γ, [1, 3])))]
+        others = [γ[1], f[1], first(atomic_factors(hilbert_space(γ, [2, 1]))), first(atomic_factors(hilbert_space(γ, [1, 3]))), atomic_factors(Hac)...]
         for x in vcat(collect(atomic_factors(Hm)), others)
             @test atom_position(x, H) == something(findfirst(==(atomic_id(x)), ids), 0)
         end

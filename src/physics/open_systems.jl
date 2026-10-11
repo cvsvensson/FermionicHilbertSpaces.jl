@@ -38,6 +38,9 @@ function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSp
     TransposedSpace(FermionicSpace(map(H -> H.parent, spaces), group))
 end
 
+combine_into_group(group::MajoranaGroup, spaces::AbstractVector{<:TransposedSpace}) =
+    TransposedSpace(combine_into_group(group, map(parent, spaces)))
+
 
 tag_left(base) = add_tag(base, :left)
 tag_right(base) = add_tag(base, :right)
@@ -119,6 +122,21 @@ end
     Mexpected = representation((c_left[1]' * s_left[:z]) * (c_right[1]' * s_right[:z]) + (c_left[1]' * s_left[:z]), H)
     @test M ≈ Mexpected
     @test reshape(reshape(M, H => (Hleft, Hs, Hright)), (Hleft, Hs, Hright) => H) == M
+end
+
+@testitem "open_system on Majorana spaces" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: open_system
+
+    @majoranas γ
+    Hfull, Hleft, Hright, left, right = open_system(hilbert_space(γ, 1:4))
+    @test dim(Hfull) == 16
+
+    op = γ[1] * γ[2] + 0.5 * γ[3] * γ[4]
+    M = representation(left(op) * right(op) + left(op), Hfull)
+    @test size(M) == (16, 16)
+    Mexpected = representation((left(γ[1]) * left(γ[2]) + 0.5 * left(γ[3]) * left(γ[4])) * (right(γ[1]) * right(γ[2]) + 0.5 * right(γ[3]) * right(γ[4])) + left(op), Hfull)
+    @test M ≈ Mexpected
 end
 
 @testitem "Matrix representation of transposed spaces" begin
