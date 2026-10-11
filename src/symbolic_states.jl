@@ -43,7 +43,8 @@ function Base.show(io::IO, s::SymbolicState)
 end
 
 Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.bra && _same_space_id(a.space, b.space)
-Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(atom_ids(a.space), h)))
+# Equal spaces share a group, so hashing the group is consistent with `==` and much cheaper
+Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(group_id(a.space), h)))
 Base.isless(a::SymbolicState, b::SymbolicState) = hash(a) < hash(b)
 Base.adjoint(s::SymbolicState) = SymbolicState(s.space, s.bra, s.ket)
 

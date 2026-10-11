@@ -177,6 +177,18 @@ function atomic_id(H::MajoranaHilbertSpace)
     length(H.majoranaindices) == 2 || throw(ArgumentError("Only Majorana spaces with exactly two Majoranas have an atomic_id, use atom_ids for $H"))
     Tuple(keys(H.majoranaindices))
 end
+# Fast versions of the generic definitions, without building the atoms. The Majoranas of the
+# k:th pair sit at positions 2k-1 and 2k.
+function atom_ids(H::MajoranaHilbertSpace)
+    γs = collect(keys(H.majoranaindices))
+    [(γs[2k-1], γs[2k]) for k in 1:length(γs)÷2]
+end
+function atom_position(x, H::MajoranaHilbertSpace)
+    id = atomic_id(x)
+    id isa Tuple{Any,Any} || return 0 # only pairs name atoms
+    p = get(H.majoranaindices, id[1], 0)
+    isodd(p) && get(H.majoranaindices, id[2], 0) == p + 1 ? (p + 1) ÷ 2 : 0
+end
 
 function combine_into_group(group::MajoranaGroup, spaces)
     fermionic_space = combine_into_group(group.group, map(parent, spaces))
@@ -276,15 +288,14 @@ function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace
     return state, amp * op.coeff
 end
 
-function atomic_factors(H::MajoranaHilbertSpace)
-    parent_atoms = atomic_factors(H.parent)
-    # convert to majoranas
+atomic_factors(H::MajoranaHilbertSpace) = map(i -> atomic_factor(H, i), 1:nbr_of_modes(H.parent))
+function atomic_factor(H::MajoranaHilbertSpace, i)
+    # convert the i:th fermionic atom to majoranas
+    atom = atomic_factor(H.parent, i)
+    fsym = only(modes(atom))
     γ = H.sym
-    map(enumerate(parent_atoms)) do (i, atom)
-        fsym = only(modes(atom))
-        majoranaindices = OrderedDict(γ[fsym.label[1]] => 1, γ[fsym.label[2]] => 2)
-        MajoranaHilbertSpace(majoranaindices, atom, H.sym)
-    end
+    majoranaindices = OrderedDict(γ[fsym.label[1]] => 1, γ[fsym.label[2]] => 2)
+    MajoranaHilbertSpace(majoranaindices, atom, H.sym)
 end
 @testitem "Majorana matrix representations" begin
     using LinearAlgebra

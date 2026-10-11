@@ -49,6 +49,8 @@ Return the atoms of `H`: the indivisible spaces it is built from. Atoms are fixe
 `atomic_factors(H)` is the concatenation of `atomic_factors.(groups(H))`.
 """
 atomic_factors(H::AbstractAtomicHilbertSpace) = (H,)
+# The i:th atom of `H`. Overload to avoid building all atoms.
+atomic_factor(H, i) = atomic_factors(H)[i]
 
 """
     groups(H)
@@ -99,6 +101,9 @@ order within each group, have equal `atom_ids` whatever their truncation, transp
 constraints.
 """
 atom_ids(H) = map(atomic_id, atomic_factors(H))
+
+# Number of atoms of `H`, without building them
+nbr_of_atoms(H) = length(atom_ids(H))
 
 """
     atom_position(x, H)
@@ -434,6 +439,26 @@ end
     pair = first(atomic_factors(Hm))
     @test issubsystem(pair, Hm)
     @test subregion([pair], Hm) == pair
+    # and their fast atom_ids, atom_position and atomic_factor agree with the generic definitions
+    using FermionicHilbertSpaces: atom_position, atomic_factor, nbr_of_atoms
+    for H in (Hm, hilbert_space(γ, [1, :a, 2, 3]), hilbert_space(γ, 1:4, ParityConservation(1)))
+        ids = map(atomic_id, atomic_factors(H))
+        @test atom_ids(H) == ids
+        @test eltype(atom_ids(H)) == eltype(ids)
+        @test nbr_of_atoms(H) == length(atomic_factors(H))
+        @test [atomic_factor(H, i) for i in 1:nbr_of_atoms(H)] == collect(atomic_factors(H))
+        others = [γ[1], f[1], first(atomic_factors(hilbert_space(γ, [2, 1]))), first(atomic_factors(hilbert_space(γ, [1, 3])))]
+        for x in vcat(collect(atomic_factors(Hm)), others)
+            @test atom_position(x, H) == something(findfirst(==(atomic_id(x)), ids), 0)
+        end
+    end
+    # symbolic states on equal but distinct spaces are equal and hash alike
+    k1 = Ket("01", hilbert_space(γ, 1:4))
+    k2 = Ket("01", hilbert_space(γ, 1:4))
+    @test k1.space !== k2.space
+    @test k1 == k2
+    @test hash(k1) == hash(k2)
+    @test k1 != Ket("01", hilbert_space(γ, [3, 4, 1, 2]))
 
     # symbolic states on different spaces of the same group can't be multiplied
     @test_throws ArgumentError Kets(hilbert_space(f, 1:2))("10") * Kets(hilbert_space(f, 2:3))("01")
@@ -491,25 +516,33 @@ Throws an `ArgumentError` describing the first violation.
 """
 function match_atoms(Hsub, H::AbstractHilbertSpace)
     positions, problem = _match_atoms(Hsub, H)
-    isnothing(problem) || throw(ArgumentError(problem))
+    isnothing(problem) || throw(ArgumentError(_match_atoms_message(problem, Hsub, H)))
     return positions
 end
 
-# Positions of the atoms of Hsub in H, and why Hsub is not a subsystem of H (or nothing)
+# Positions of the atoms of Hsub in H, and why Hsub is not a subsystem of H (or nothing).
+# The reason is a tuple (kind, data...), only formatted by `match_atoms` when it throws.
 function _match_atoms(Hsub, H)
     sub_atoms = collect(atomic_factors(Hsub))
-    atoms = atomic_factors(H)
     positions = map(a -> atom_position(a, H), sub_atoms)
     for (a, pos) in zip(sub_atoms, positions)
-        iszero(pos) && return positions, "Atom $a is not in $H"
-        a == atoms[pos] || return positions, "Atom $a is in H, but with the basis $(atoms[pos]). Use `subregion` to get the subsystem in the basis of H."
+        iszero(pos) && return positions, (:missing, a)
+        atom = atomic_factor(H, pos)
+        a == atom || return positions, (:basis, a, atom)
     end
-    allunique(positions) || return positions, "Duplicate atoms in subsystem $Hsub"
+    allunique(positions) || return positions, (:duplicate,)
     sub_groups = map(group_id, sub_atoms)
     for id in unique(sub_groups)
-        issorted(positions[findall(==(id), sub_groups)]) || return positions, "The atoms of $Hsub are not in the same order as in $H"
+        issorted(positions[findall(==(id), sub_groups)]) || return positions, (:order,)
     end
     return positions, nothing
+end
+function _match_atoms_message(problem, Hsub, H)
+    kind = first(problem)
+    kind == :missing && return "Atom $(problem[2]) is not in $H"
+    kind == :basis && return "Atom $(problem[2]) is in H, but with the basis $(problem[3]). Use `subregion` to get the subsystem in the basis of H."
+    kind == :duplicate && return "Duplicate atoms in subsystem $Hsub"
+    return "The atoms of $Hsub are not in the same order as in $H"
 end
 
 """
@@ -538,7 +571,7 @@ each atom of `H` exactly once.
 """
 function ispartition(partition, H::AbstractHilbertSpace)
     matches = map(Hsub -> _match_atoms(Hsub, H), partition)
-    all(isnothing ∘ last, matches) && ispartition(map(first, matches), length(atomic_factors(H)))
+    all(isnothing ∘ last, matches) && ispartition(map(first, matches), nbr_of_atoms(H))
 end
 
 """
@@ -548,7 +581,7 @@ Like `ispartition`, but the atoms of each subsystem must also be in the same ord
 """
 function isorderedpartition(partition, H::AbstractHilbertSpace)
     matches = map(Hsub -> _match_atoms(Hsub, H), partition)
-    all(isnothing ∘ last, matches) && isorderedpartition(map(first, matches), length(atomic_factors(H)))
+    all(isnothing ∘ last, matches) && isorderedpartition(map(first, matches), nbr_of_atoms(H))
 end
 
 """

@@ -41,6 +41,7 @@ isconstrained(H::ProductSpace) = false
 Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1.factors == H2.factors && H1.atoms == H2.atoms
 Base.hash(H::ProductSpace, h::UInt) = hash(H.factors, hash(H.atoms, h))
 atomic_factors(H::ProductSpace) = H.atoms
+nbr_of_atoms(H::ProductSpace) = length(H.atoms)
 factors(H::ProductSpace) = H.factors
 groups(H::ProductSpace) = H.factors
 dim(H::ProductSpace) = prod(dim, groups(H); init=1)

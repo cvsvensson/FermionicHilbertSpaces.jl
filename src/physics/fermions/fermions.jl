@@ -37,8 +37,9 @@ function dim(H::FermionicSpace)
 end
 function atomic_factors(H::FermionicSpace)
     length(H.modes) < 2 && return [H] # for single or trivial spaces
-    return map(m -> FermionicSpace([m], H.group, statetype(H)), H.modes)
+    return map(i -> atomic_factor(H, i), eachindex(H.modes))
 end
+atomic_factor(H::FermionicSpace, i) = length(H.modes) < 2 ? H : FermionicSpace([H.modes[i]], H.group, statetype(H))
 nbr_of_modes(H::FermionicSpace) = length(H.modes)
 nbr_of_modes(H::AbstractHilbertSpace) = nbr_of_modes(parent(H))
 group_id(H::FermionicSpace) = H.group
@@ -247,7 +248,7 @@ end
 Return a dictionary of fermionic annihilation operators for the Hilbert space `H`.
 """
 function fermions(H)
-    M = length(atomic_factors(H))
+    M = nbr_of_atoms(H)
     labelvec = map(label, atomic_factors(H))
     reps = [fermion_sparse_matrix(n, H) for n in 1:M]
     OrderedDict(zip(labelvec, reps))

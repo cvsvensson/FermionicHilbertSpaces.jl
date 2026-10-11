@@ -23,6 +23,7 @@ basisstates(H::ConstrainedSpace) = H.states
 basisstate(n::Integer, H::ConstrainedSpace) = H.states[n]
 state_index(state, H::ConstrainedSpace{B}) where B = get(H.state_index, state, 0)
 atomic_factors(H::ConstrainedSpace) = atomic_factors(parent(H))
+atomic_factor(H::ConstrainedSpace, i) = atomic_factor(parent(H), i)
 groups(H::ConstrainedSpace) = groups(parent(H))
 factors(H::ConstrainedSpace) = factors(parent(H))
 atom_ids(H::ConstrainedSpace) = atom_ids(parent(H))

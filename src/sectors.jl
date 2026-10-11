@@ -68,6 +68,7 @@ end
 Base.parent(H::SectorHilbertSpace) = H.parent
 dim(H::SectorHilbertSpace) = length(H.ordered_basis_states)
 atomic_factors(H::SectorHilbertSpace) = atomic_factors(H.parent)
+atomic_factor(H::SectorHilbertSpace, i) = atomic_factor(H.parent, i)
 factors(H::SectorHilbertSpace) = factors(parent(H))
 groups(H::SectorHilbertSpace) = groups(parent(H))
 atom_ids(H::SectorHilbertSpace) = atom_ids(parent(H))
