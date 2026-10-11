@@ -651,6 +651,57 @@ end
           reshape((H1, H2) => He; skipmissing=true)(G)
 end
 
+@testitem "Reshape missing states: truncated bosons" begin
+    using LinearAlgebra, Random
+    Random.seed!(1)
+    @bosons b
+    @fermions f
+
+    # Truncated boson: 3 levels -> 2 levels drops the top level
+    Hb3 = hilbert_space(b[1], 3)
+    Hb2 = hilbert_space(b[1], 2)
+    Hb4 = hilbert_space(b[1], 4)
+    Hf = hilbert_space(f, 1:2)
+    H = tensor_product(Hb3, Hf)
+    v = rand(ComplexF64, dim(H))
+    m = rand(ComplexF64, dim(H), dim(H))
+
+    @test_throws ArgumentError reshape(v, H => (Hb2, Hf))
+    @test_throws ArgumentError reshape(m, H => (Hb2, Hf))
+    vs = reshape(v, H => (Hb2, Hf); skipmissing=true)
+    @test size(vs) == (2, 4)
+    @test norm(vs) < norm(v)
+    # Agrees with going through the full space and truncating explicitly
+    v3 = reshape(v, H => (Hb3, Hf))
+    @test vs ≈ v3[1:2, :]
+    ms = reshape(m, H => (Hb2, Hf); skipmissing=true)
+    @test size(ms) == (2, 4, 2, 4)
+
+    # Entries that vanish on the missing states are fine
+    v_low = reshape(vcat(v3[1:2, :], zeros(1, 4)), (Hb3, Hf) => H)
+    @test reshape(v_low, H => (Hb2, Hf)) ≈ v3[1:2, :]
+
+    # Embedding 3 -> 4 drops nothing
+    v4 = reshape(v, H => (Hb4, Hf))
+    @test v4[1:3, :] ≈ v3
+    @test iszero(v4[4, :])
+    @test norm(v4) ≈ norm(v)
+
+    # Precomputed form, both call methods
+    rmap = reshape(H => (Hb2, Hf))
+    @test_throws ArgumentError rmap(m)
+    @test_throws ArgumentError rmap(zeros(ComplexF64, 2, 4, 2, 4), m)
+    rmap_skip = reshape(H => (Hb2, Hf); skipmissing=true)
+    @test rmap_skip(m) == ms
+    @test rmap_skip(zeros(ComplexF64, 2, 4, 2, 4), m) == ms
+    @test reshape(H => (Hb4, Hf))(v) == v4
+
+    # Many-to-many with missing states
+    @test_throws ArgumentError reshape(v3, (Hb3, Hf) => (Hf, Hb2))
+    @test reshape(v3, (Hb3, Hf) => (Hf, Hb2); skipmissing=true) ≈ transpose(vs)
+    @test reshape(v3, (Hb3, Hf) => (Hf, Hb4)) ≈ transpose(v4)
+end
+
 function reshape_to_matrix(t::AbstractArray{<:Any,N}, leftindices::NTuple{NL,Int}) where {N,NL}
     rightindices::NTuple{N - NL,Int} = Tuple(setdiff(ntuple(identity, N), leftindices))
     reshape_to_matrix(t, leftindices, rightindices)
