@@ -66,7 +66,8 @@ nbr_of_modes(f::FermionSym) = 1
 maximum_particles(f::FermionSym) = 1
 isconstrained(f::FermionSym) = false
 
-partial_trace_phase_factor_eltype(::FermionicSpace) = Complex{Int}
+partial_trace_phase_factor_eltype(::FermionicSpace) = Int
+partial_transpose_phase_factor_eltype(::FermionicSpace) = Complex{Int}
 
 """
     mode_position(op, H)
