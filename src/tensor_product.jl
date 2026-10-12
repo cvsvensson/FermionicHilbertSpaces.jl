@@ -852,7 +852,7 @@ end
     Hf2 = hilbert_space(f, 1:2)
     Hf1 = hilbert_space(f, 1:2, NumberConservation(1))
     Hs1 = hilbert_space(s, 1//2)
-    Hs2 = hilbert_space(s, 1)
+    Hs2 = hilbert_space(s, 3//2)
     tp(h) = h
     tp((h1, h2)::Tuple) = tensor_product((h1, h2))
     for (hsmall, hbig) in [(Hb1, Hb2), (Hb1, (Hb2, Hf1)),
@@ -895,7 +895,7 @@ end
             Mbigrestricted = zeros(eltype(Mbig), dim(Hbig), dim(Hbig))
             Mbigrestricted[inds, inds] = Mbig[inds, inds]
             ptM = partial_trace(Mbigrestricted, Hbig => Hsmall, alg=FullPartialTraceAlg(), skipmissing=false)
-            @test ptM[inds, inds] == Mbigrestricted[inds, inds]
+            @test ptM == Mbigrestricted[inds, inds]
             @test partial_trace(Mbigrestricted, Hbig => Hsmall, alg=SubsystemPartialTraceAlg(), skipmissing=false) == ptM
 
             @test embed(Mbigrestricted, Hbig => Hsmall) ≈ Mbigrestricted[inds, inds]
