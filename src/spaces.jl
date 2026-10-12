@@ -36,9 +36,11 @@ hilbert_space
 #   truncation, transposition and constraints; composite spaces are named by `atom_ids`, and
 #   positions are found with `atom_position`. This is what subregion, the state mappers,
 #   SymbolicState equality and constraint subspaces use.
-# - The basis is checked once, by `match_atoms`, wherever the caller's own subsystem basis is
-#   used (issubsystem, complementary_subsystem, ispartition): every atom must then also be `==`
-#   to the atom of the same name in the parent.
+# - `match_atoms` (issubsystem, complementary_subsystem, ispartition) also matches atoms by
+#   name only. A subsystem atom may have a different basis than the atom of the same name in
+#   the parent (truncation, spin, transposition); such a difference shows up as missing states,
+#   which each operation (partial trace, embed, ...) handles. Complements are built from the
+#   parent's atoms.
 # - Operators match at the group level, `symbolic_group(op) == group_id(group)`.
 
 """
@@ -385,7 +387,8 @@ end
         @test group_id(H) == symbolic_group(op)
     end
 
-    # lookup by name resolves to the parent's atom, the subsystem predicates also check the basis
+    # lookup by name resolves to the parent's atom, and the subsystem predicates also match by
+    # name, so a different truncation is accepted
     Hb3 = hilbert_space(b[1], 3)
     Hb5 = hilbert_space(b[1], 5)
     Hbig = tensor_product(Hb3, hilbert_space(b[2], 3))
@@ -394,10 +397,10 @@ end
     @test subregion([Hb5], Hbig) == Hb3
     @test subregion([b[1]], Hbig) == Hb3
     @test issubsystem(Hb3, Hbig)
-    @test !issubsystem(Hb5, Hbig)
-    @test !ispartition([Hb5, hilbert_space(b[2], 3)], Hbig)
-    @test_throws ArgumentError complementary_subsystem(Hbig, Hb5)
-    @test_throws ArgumentError partial_trace(Matrix(I, dim(Hbig), dim(Hbig)), Hbig => Hb5)
+    @test issubsystem(Hb5, Hbig)
+    @test ispartition([Hb5, hilbert_space(b[2], 3)], Hbig)
+    @test complementary_subsystem(Hbig, Hb5) == hilbert_space(b[2], 3)
+    @test partial_trace(Matrix(I, dim(Hbig), dim(Hbig)), Hbig => Hb5) == Diagonal([3, 3, 3, 0, 0])
 
     # composite spaces are named by their atoms, ignoring truncation and constraints
     @test atom_ids(Hbig) == atom_ids(tensor_product(Hb5, hilbert_space(b[2], 2)))
@@ -405,14 +408,14 @@ end
     @test atom_ids(hilbert_space(f, 1:2)) != atom_ids(hilbert_space(f, [2, 1]))
     @test_throws ArgumentError atomic_id(hilbert_space(f, 1:2))
 
-    # transposition is part of the basis, not of the name, so it is rejected in both directions
+    # transposition is not part of the name, so it is not checked by the predicates
     Hf12 = hilbert_space(f, 1:2)
     Hf1t = TransposedSpace(hilbert_space(f[1]))
     @test atomic_id(Hf1t) == atomic_id(f[1])
-    @test !issubsystem(Hf1t, Hf12)
-    @test !issubsystem(hilbert_space(f[1]), TransposedSpace(Hf12))
+    @test issubsystem(Hf1t, Hf12)
+    @test issubsystem(hilbert_space(f[1]), TransposedSpace(Hf12))
     @test issubsystem(Hf1t, TransposedSpace(Hf12))
-    @test_throws ArgumentError complementary_subsystem(Hf12, Hf1t)
+    @test complementary_subsystem(Hf12, Hf1t) == hilbert_space(f[2])
     @test complementary_subsystem(TransposedSpace(Hf12), Hf1t) == TransposedSpace(hilbert_space(f[2]))
 
     # atom order is canonical (group-major), so interleaving doesn't matter
@@ -511,7 +514,6 @@ Return the positions of the atoms of `Hsub` among `atomic_factors(H)`, after che
 `Hsub` is a subsystem of `H`. Each atom of `Hsub` is looked up by name (`atom_position`) and
 must then
 - occur in `H`, and only once in `Hsub`,
-- have the same basis as the atom of that name in `H` (truncation, spin, transposition),
 - keep the relative order it has in `H` among the atoms of its group (e.g. the
   Jordan-Wigner order of fermions). The order between groups does not matter.
 
@@ -530,8 +532,6 @@ function _match_atoms(Hsub, H)
     positions = map(a -> atom_position(a, H), sub_atoms)
     for (a, pos) in zip(sub_atoms, positions)
         iszero(pos) && return positions, (:missing, a)
-        atom = atomic_factor(H, pos)
-        a == atom || return positions, (:basis, a, atom)
     end
     allunique(positions) || return positions, (:duplicate,)
     sub_groups = map(group_id, sub_atoms)
@@ -543,7 +543,6 @@ end
 function _match_atoms_message(problem, Hsub, H)
     kind = first(problem)
     kind == :missing && return "Atom $(problem[2]) is not in $H"
-    kind == :basis && return "Atom $(problem[2]) is in H, but with the basis $(problem[3]). Use `subregion` to get the subsystem in the basis of H."
     kind == :duplicate && return "Duplicate atoms in subsystem $Hsub"
     return "The atoms of $Hsub are not in the same order as in $H"
 end

@@ -137,6 +137,7 @@ function space_indices(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace)
     qn = quantumnumbers(H)[indexin]
     indices(qn, H)
 end
+space_indices(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = space_indices_generic(Hsub, H)
 function space_indices_generic(Hsub, H)
     # fallback for when the sector space isn't exactly in the sectors list (e.g. due to constraints)
     map(basisstates(Hsub)) do state
