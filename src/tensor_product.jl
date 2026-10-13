@@ -13,7 +13,7 @@ function tensor_product_no_constraints(spaces)
     space = if length(factors) == 1
         only(factors)
     else
-        ProductSpace(Tuple(factors), collect(atoms))
+        ProductSpace(Tuple(factors))
     end
     if any(isconstrained, spaces)
         mapper = state_mapper(space, spaces)
@@ -380,28 +380,66 @@ end
 partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_trace(vec_to_density_matrix(v), H, Hsub; kwargs...)
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
-    if isnothing(complement)
-        U = basis_transformation(Hsub, H)
-        return U * m * U'
-    end
+    isnothing(complement) && return change_basis(m, H, Hsub; kwargs...)
     mout = zeros(promote_type(eltype(m), partial_trace_phase_factor_eltype(H)), dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
-function basis_transformation(H1, H2)
-    #transforms from the basis of H1 to the basis of H2. Assumes they are the same basis states, just ordered differently. If they are not the same, this will throw an error.
-    dim(H1) == dim(H2) || throw(ArgumentError("Hilbert spaces must have the same dimension for a basis transformation"))
-    I = Vector{Int}(undef, dim(H1))
-    J = Vector{Int}(undef, dim(H2))
-    V = ones(Int, dim(H1))
-    for (i, f1) in enumerate(basisstates(H1))
-        j = state_index(f1, H2)
-        if iszero(j)
-            throw(ArgumentError("The state $f1 in the first Hilbert space does not exist in the second Hilbert space"))
+
+"""
+    basis_transformation(Hfrom, Hto)
+
+Return `(U, dropped)`, where `U` is the sparse `dim(Hto) × dim(Hfrom)` matrix with
+`U[i, j] = 1` if basis state `j` of `Hfrom` is basis state `i` of `Hto`, and `dropped` are the
+indices of the states of `Hfrom` that do not exist in `Hto`. States of `Hto` that do not exist
+in `Hfrom` give zero rows.
+"""
+function basis_transformation(Hfrom, Hto)
+    Is = Int[]
+    Js = Int[]
+    dropped = Int[]
+    for (j, f) in enumerate(basisstates(Hfrom))
+        i = state_index(f, Hto)
+        if iszero(i)
+            push!(dropped, j)
+        else
+            push!(Is, i)
+            push!(Js, j)
         end
-        J[i] = j
-        I[i] = i
     end
-    return SparseArrays.sparse!(I, J, V)
+    U = SparseArrays.sparse!(Is, Js, ones(Int, length(Is)), dim(Hto), dim(Hfrom))
+    return U, dropped
+end
+
+"""
+    change_basis(m, Hfrom => Hto; skipmissing=false)
+
+Express `m` in the basis of `Hto`, where `Hfrom` and `Hto` have the same atoms but possibly
+different (or differently ordered) basis states. Unless `skipmissing=true`, throws an
+`ArgumentError` if `m` has nonzero elements involving states of `Hfrom` that are not in `Hto`.
+"""
+function change_basis(m, Hfrom::AbstractHilbertSpace, Hto::AbstractHilbertSpace; skipmissing=false, kwargs...)
+    U, dropped = basis_transformation(Hfrom, Hto)
+    if !skipmissing
+        for j in dropped
+            _has_support_on(m, j) && throw(ArgumentError("The state $(basisstate(j, Hfrom)) has nonzero weight but is not in the target Hilbert space. Pass `skipmissing=true` to drop it."))
+        end
+    end
+    return _change_basis(m, U)
+end
+_change_basis(m::AbstractMatrix, U) = U * m * U'
+_change_basis(v::AbstractVector, U) = U * v
+_change_basis(m::UniformScaling, U) = m.λ * (U * U')
+
+_has_support_on(m::AbstractMatrix, j) = !iszero(view(m, j, :)) || !iszero(view(m, :, j))
+_has_support_on(v::AbstractVector, j) = !iszero(v[j])
+_has_support_on(m::UniformScaling, j) = !iszero(m.λ)
+
+function basis_transformation_map(Hfrom, Hto; skipmissing=false, kwargs...)
+    U, dropped = basis_transformation(Hfrom, Hto)
+    if !skipmissing && !isempty(dropped)
+        throw(ArgumentError("The state $(basisstate(first(dropped), Hfrom)) is not in the target Hilbert space. Pass `skipmissing=true` to drop such states."))
+    end
+    kron(conj(U), U)
 end
 
 """
@@ -657,10 +695,7 @@ function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub),
     partial_trace_map(H, Hsub, complement, alg; kwargs...)
 end
 
-function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...)
-    U = basis_transformation(Hsub, H)
-    kron(conj(U), U)
-end
+partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = basis_transformation_map(H, Hsub; kwargs...)
 function partial_trace_map(H, Hsub, complement::AbstractHilbertSpace, ::SubsystemPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
     indK = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
@@ -801,9 +836,71 @@ end
     m12full = rand(ComplexF64, dim(H), dim(H))
     @test_throws ArgumentError partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.FullPartialTraceAlg(), skipmissing=false)
     @test partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.FullPartialTraceAlg(), skipmissing=true) ≈
-        partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg()) # This is a bit problematic, because the subsystem partial trace algorithm will not enumerate all possible states in H, and can silently give the wrong result.
+        partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg(), skipmissing=true)
 
     H = hilbert_space(a, 1:4, NumberConservation(1))
     @test_throws ArgumentError generalized_kron((m1, m2), (H1, H2) => H)
     @test generalized_kron((m1, m2), (H1, H2) => H; skipmissing=true) ≈ tensor_product((m1, m2), (H1, H2) => H) # Since tensor_product first embeds both operators in the full Hilbert space (which can be done) and then multiplies them, it won't complain about missing states.
+end
+
+@testitem "Partial trace and embed across truncations" begin
+    import FermionicHilbertSpaces: FullPartialTraceAlg, SubsystemPartialTraceAlg
+    @fermions f
+    @bosons b
+    @spin s
+    Hb1, Hb2 = (hilbert_space(b[1], n) for n in 2:3)
+    Hf2 = hilbert_space(f, 1:2)
+    Hf1 = hilbert_space(f, 1:2, NumberConservation(1))
+    Hs1 = hilbert_space(s, 1//2)
+    Hs2 = hilbert_space(s, 3//2)
+    tp(h) = h
+    tp((h1, h2)::Tuple) = tensor_product((h1, h2))
+    for (hsmall, hbig) in [(Hb1, Hb2), (Hb1, (Hb2, Hf1)),
+        (Hf1, Hf2), (Hf1, (Hb1, Hf2)),
+        ((Hb1, Hf1), (Hb2, Hf1)), ((Hb1, Hf1), (Hb1, Hf2)), ((Hb1, Hf1), (Hb2, Hf2)),
+        ((Hb2, Hf1), (Hb2, Hf2)),
+        ((Hb1, Hf2), (Hb2, Hf2)),
+        (Hs1, Hs2), ((Hs1, (Hs2, Hf1)))]
+        Hsmall = tp(hsmall)
+        Hbig = tp(hbig)
+        dsmall = dim(Hsmall)
+        dbig = dim(Hbig)
+        Msmall = rand(dsmall, dsmall)
+        Mbig = rand(dbig, dbig)
+
+        @test_throws ArgumentError partial_trace(Mbig, Hbig => Hsmall, alg=FullPartialTraceAlg())
+        @test size(partial_trace(Mbig, Hbig => Hsmall, alg=FullPartialTraceAlg(), skipmissing=true)) == (dsmall, dsmall)
+        @test size(partial_trace(Mbig, Hbig => Hsmall, alg=SubsystemPartialTraceAlg(), skipmissing=true)) == (dsmall, dsmall)
+        @test_throws ArgumentError partial_trace(Hbig => Hsmall, alg=FullPartialTraceAlg()) # drops states, so errors
+
+        @test size(embed(Msmall, Hsmall => Hbig)) == (dim(Hbig), dim(Hbig))
+        emb = embed(Hsmall => Hbig)
+        @test emb(Msmall) ≈ embed(Msmall, Hsmall => Hbig)
+
+
+        same_space = try
+            FermionicHilbertSpaces.match_atoms(Hbig, Hsmall)
+            true
+        catch e
+            false
+        end
+        if same_space # if Hsmall has the same labels, but smaller basis set:
+            @test size(partial_trace(Msmall, Hsmall => Hbig)) == (dim(Hbig), dim(Hbig))
+
+            pt = partial_trace(Hsmall => Hbig)
+            @test_throws ArgumentError embed(Hbig => Hsmall) # drops states, so errors
+            emb = embed(Hsmall => Hbig)
+
+            inds = indices(Hsmall, Hbig)[:]
+            Mbigrestricted = zeros(eltype(Mbig), dim(Hbig), dim(Hbig))
+            Mbigrestricted[inds, inds] = Mbig[inds, inds]
+            ptM = partial_trace(Mbigrestricted, Hbig => Hsmall, alg=FullPartialTraceAlg(), skipmissing=false)
+            @test ptM == Mbigrestricted[inds, inds]
+            @test partial_trace(Mbigrestricted, Hbig => Hsmall, alg=SubsystemPartialTraceAlg(), skipmissing=false) == ptM
+
+            @test embed(Mbigrestricted, Hbig => Hsmall) ≈ Mbigrestricted[inds, inds]
+            @test_throws ArgumentError embed(Mbig, Hbig => Hsmall) # drops states, so errors
+            @test emb(Msmall) ≈ pt(Msmall) ≈ partial_trace(Msmall, Hsmall => Hbig) ≈ embed(Msmall, Hsmall => Hbig)
+        end
+    end
 end
