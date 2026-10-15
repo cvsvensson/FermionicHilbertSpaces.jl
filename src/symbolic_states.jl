@@ -51,7 +51,51 @@ symbolic_group(s::SymbolicState) = group_id(s.space)
 group_id(s::SymbolicState) = group_id(s.space)
 
 @nc SymbolicState AbstractSym
-NonCommutativeProducts.isfilterable(::SymbolicState) = false
+
+## Grading
+# Each space carries a grade k^m b^n in the bicyclic monoid, where a ket has (m, n) = (1, 0) and a bra (0, 1).
+# States in different spaces commute, so the grade of an expression is the product over spaces, stored as a map
+# from the atomic id of the space to its bicyclic grade. Spaces with the identity grade (0, 0) are left out,
+# and the identity overall is `nothing`. Operators have the identity grade.
+# NonCommutativeProducts stores grades in sets, so the dict of a StateGrade must never be mutated after construction.
+struct Bicyclic
+    m::Int
+    n::Int
+end
+function _bicyclic_mul(g::Bicyclic, h::Bicyclic)
+    t = max(g.n, h.m)
+    Bicyclic(g.m - g.n + t, h.n - h.m + t)
+end
+_isidentity(g::Bicyclic) = g == Bicyclic(0, 0)
+
+struct StateGrade
+    grades::Dict{Any,Bicyclic}
+end
+Base.:(==)(a::StateGrade, b::StateGrade) = a.grades == b.grades
+Base.isequal(a::StateGrade, b::StateGrade) = isequal(a.grades, b.grades)
+Base.hash(a::StateGrade, h::UInt) = hash(a.grades, hash(StateGrade, h))
+function Base.show(io::IO, g::StateGrade)
+    print(io, "StateGrade(")
+    join(io, ("$(k) => ($(v.m), $(v.n))" for (k, v) in g.grades), ", ")
+    print(io, ")")
+end
+_stategrade(d) = isempty(d) ? nothing : StateGrade(d)
+
+function NonCommutativeProducts.grade(s::SymbolicState)
+    g = Bicyclic(Int(has_ket(s)), Int(has_bra(s)))
+    _isidentity(g) ? nothing : StateGrade(Dict{Any,Bicyclic}(atomic_id(s.space) => g))
+end
+# One grading for all spaces, so that it combines with other declared gradings into a ProductGrade
+NonCommutativeProducts.grading(::Type{StateGrade}) = StateGrade
+function NonCommutativeProducts.mul_grade(a::StateGrade, b::StateGrade)
+    d = copy(a.grades)
+    for (k, g) in b.grades
+        h = haskey(d, k) ? _bicyclic_mul(d[k], g) : g
+        _isidentity(h) ? delete!(d, k) : (d[k] = h)
+    end
+    _stategrade(d)
+end
+NonCommutativeProducts.adjoint_grade(a::StateGrade) = StateGrade(Dict{Any,Bicyclic}(k => Bicyclic(g.n, g.m) for (k, g) in a.grades))
 
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
@@ -182,7 +226,8 @@ function representation(op; kwargs...)
     reducer(s1, ::Missing) = s1
     reducer(s1, s2) = s1==s2 ? s1 : throw(ArgumentError("Cannot represent a product of symbolic states in different spaces"))
     if _operator_type(op) in (:kets, :bras, :ketbras)
-        space = NonCommutativeProducts.ncmapreduce(op -> op.space, (reducer, reducer), op; scalarmap=x->missing)
+        _iszero_ncadd(op) && throw(ArgumentError("Can't infer the space of the zero state $op, please provide a space argument"))
+        space =NonCommutativeProducts.ncmapreduce(op -> op.space, (reducer, reducer), op; scalarmap=x->missing)
         return representation(op, space; kwargs...)
     else
         throw(ArgumentError("Don't know the space of the operator $op, please provide a space argument"))
@@ -200,6 +245,7 @@ function _operator_type(op::SymbolicState)
 end
 _operator_type(::Union{UniformScaling,Number}) = :operator
 function _operator_type(op)
+    _iszero_ncadd(op) && return _zero_operator_type(op)
     hasket = false
     hasbra = false
     hasketbra = false
@@ -228,6 +274,23 @@ function _operator_type(op)
         return :mixed
     end
 end
+_iszero_ncadd(op) = op isa NCAdd && iszero(op.coeff) && isempty(op.dict)
+# A zero has no factors left to inspect, so classify it by its grades instead
+function _zero_operator_type(op)
+    types = unique(_grade_type(g) for g in NonCommutativeProducts.grades(op))
+    isempty(types) && return :operator
+    length(types) == 1 ? only(types) : :mixed
+end
+_grade_type(::Nothing) = :operator
+function _grade_type(g::StateGrade)
+    allequal(values(g.grades)) || return :mixed
+    b = first(values(g.grades))
+    b == Bicyclic(1, 0) && return :kets
+    b == Bicyclic(0, 1) && return :bras
+    b == Bicyclic(1, 1) && return :ketbras
+    return :mixed
+end
+_grade_type(g) = :mixed
 
 """
     vector_representation(op::NCMul, space) -> vector or adjoint-vector
@@ -237,18 +300,21 @@ and return a sparse column vector. For bras, return the adjoint row vector.
 """
 function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
     ind = _checked_state_index(state, space)
-    TT = T === Missing ? Int : T
-    v = SparseArrays.spzeros(TT, dim(space))
-    v[ind] = one(TT)
+    v = _zero_vector(space, repr)
+    v[ind] = one(eltype(v))
     return v
 end
 function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerDenseRepr{T}; kwargs...) where {B,T}
     ind = _checked_state_index(state, space)
-    TT = T === Missing ? Int : T
-    v = zeros(TT, dim(space))
-    v[ind] = one(TT)
+    v = _zero_vector(space, repr)
+    v[ind] = one(eltype(v))
     return v
 end
+_vector_eltype(::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T === Missing ? Int : T
+_zero_vector(space, repr::EagerSparseRepr, T=_vector_eltype(repr)) = SparseArrays.spzeros(T, dim(space))
+_zero_vector(space, repr::EagerDenseRepr, T=_vector_eltype(repr)) = zeros(T, dim(space))
+_zero_matrix(space, ::EagerSparseRepr, T) = SparseArrays.spzeros(T, dim(space), dim(space))
+_zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(space), dim(space))
 function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     vector_representation(1 * s, space, repr; kwargs...)
 end
@@ -276,6 +342,13 @@ function vector_representation(op::NCMul, space::AbstractHilbertSpace, repr=Eage
 end
 function vector_representation(op::NCAdd, space::AbstractHilbertSpace, repr=EagerSparseRepr(); type=_operator_type(op), kwargs...)
     iszero(op.coeff) || throw(ArgumentError("NCAdd with nonzero coeff is not supported for vector_representation"))
+    if isempty(op.dict) # a zero ket or bra
+        type in (:kets, :bras) || throw(ArgumentError("vector_representation called on an NCAdd that is not purely kets or bras"))
+        # same eltype as the nonzero path, where each basis vector is scaled by a coefficient
+        _repr = _canonicalize_repr(repr)
+        vec = _zero_vector(space, _repr, promote_type(_vector_eltype(_repr), valtype(op.dict)))
+        return type == :kets ? vec : transpose(vec)
+    end
     return sum(coeff * vector_representation(term, space, repr; type, kwargs...) for (term, coeff) in pairs(op.dict))
 end
 
@@ -300,6 +373,10 @@ function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr();
     if type == :kets || type == :bras
         return vector_representation(op, space, repr; type, kwargs...)
     elseif type == :ketbras
+        _repr = _canonicalize_repr(repr)
+        if _iszero_ncadd(op) && _repr isa Union{EagerSparseRepr,EagerDenseRepr}
+            return _zero_matrix(space, _repr, mat_eltype(op))
+        end
         return matrix_representation(op, space, repr; kwargs...)
     else
         return matrix_representation(op, space, repr; kwargs...)
@@ -550,6 +627,61 @@ end
         ketbra = vb("0") * vs("↑") * vf("1") * (vb("0") * vs("↑") * vf("0"))'
         @test FermionicHilbertSpaces._operator_type(ketbra) == :ketbras
     end
+end
+
+@testitem "Grading of symbolic states" begin
+    import FermionicHilbertSpaces.NonCommutativeProducts as NC
+    using FermionicHilbertSpaces: _operator_type
+    @fermions f
+    @boson b
+    Hf = hilbert_space(f, 1:2)
+    Hb = hilbert_space(b, 4)
+    vf = Kets(Hf)
+    vb = Kets(Hb)
+    ket, bra, ketbra = NC.grade(vf("10")), NC.grade(vf("10")'), NC.grade(vf("10") * vf("01")')
+
+    # the grade is the kind of an expression, independent of the labels
+    @test NC.grade(vf("01")) == NC.grade(vf("10") * vf("01")' * vf("01")) == ket
+    @test NC.grade(f[1] * vf("10") * vf("01")') == ketbra
+    @test NC.grade(vf("10")' * vf("10")) === NC.grade(f[1]' * f[2]) === nothing
+
+    # each space is graded separately, independently of order and bracketing
+    @test NC.grade(vf("10") * vb("1")) != ket
+    @test NC.grade(vf("10") * vb("1")) == NC.grade(vb("1") * vf("10"))
+    @test NC.grade((vf("10") * vb("1")) * vf("01")') == NC.grade(vf("10") * (vb("1") * vf("01")'))
+    @test NC.grade((vf("10") * vb("1"))') == NC.grade(vf("10")' * vb("1")')
+
+    # zeros keep their kind
+    z = f[1] * vf("00")
+    zkb = z * vf("10")'
+    @test iszero(z) && iszero(zkb)
+    @test NC.grades(z) == NC.grades(vf("10") * vf("00")' * vf("11")) == Set([ket])
+    @test NC.grades(z') == NC.grades(vf("00")' * f[1]') == Set([bra])
+    @test NC.grades(vf("10")' * vf("11")) == Set([nothing])
+    @test NC.grades(b * vb("0") * vf("10")) == NC.grades(vb("0") * vf("10"))
+    @test _operator_type.((z, z', zkb, vf("10") - vf("10"), b * vb("0") * vf("10"))) == (:kets, :bras, :ketbras, :kets, :kets)
+
+    # zeros represent like nonzero expressions of the same kind, but have no space to infer
+    for c in (1, 1.0, 1.0im), x in (c * vf("10"), c * vf("10")', c * vf("10") * vf("01")')
+        zx = x - x
+        @test iszero(representation(zx, Hf))
+        @test typeof(representation(zx, Hf)) == typeof(representation(x, Hf))
+        @test typeof(representation(zx, Hf, :dense)) == typeof(representation(x, Hf, :dense))
+        @test size(representation(zx, Hf)) == size(representation(x, Hf))
+    end
+    @test_throws ArgumentError representation(z)
+    @test_throws ArgumentError representation(z')
+
+    # states combined with operators or states of other spaces are mixed
+    @test _operator_type(b * vf("10")) == _operator_type(vf("10")' * b) == _operator_type(vb("0") * vf("10")') == :mixed
+    @test_throws ArgumentError representation(b * vf("10"))
+
+    # products respect the grading
+    kb = FermionicHilbertSpaces.SymbolicState(Hf, vf("10").ket, vf("01").ket)
+    pairs = [(vf("10")', vf("10")), (vf("10")', vf("01")), (vf("10"), vf("01")'), (kb, vf("01")), (kb, vf("10")),
+        (vf("01")', kb), (kb, kb), (kb, kb'), (f[1], kb), (f[1], vf("10")), (f[1], vf("00")), (vf("00")', f[1]'),
+        (vf("10"), vb("1")), (b, vb("0"))]
+    @test all(((x, y),) -> NC.check_grading(x, y), pairs)
 end
 
 _find_position(op::SymbolicState, space::FermionicSpace) = nothing
