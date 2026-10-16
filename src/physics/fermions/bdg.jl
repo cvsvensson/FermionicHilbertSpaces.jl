@@ -32,14 +32,24 @@ struct BdGHilbertSpace{H}
     end
 end
 """
-    bdg_hilbert_space(labels)
+    BdG()
 
-This hilbert space uses Nambu states to describe non-interacting systems with superconductive pairing. Matrix representations of quadratic operators take the form \\
-    [H  Δ; 
--Δ*  -H*] \\
-where H is hermitian and Δ is antisymmetric.
+Marker passed as the last argument of `hilbert_space(f, labels, BdG())` to select the Bogoliubov-de Gennes (Nambu) space of non-interacting fermions with superconducting pairing.
 """
-bdg_hilbert_space(f, labels) = BdGHilbertSpace(f, labels)
+struct BdG end
+
+"""
+    hilbert_space(f::SymbolicFermionBasis, labels, ::BdG)
+
+The Nambu space with one particle state and one hole state for each of the modes `f[l]`, `l in labels`. The matrix representation of a quadratic operator is the Bogoliubov-de Gennes matrix
+
+    [H   Δ
+    -Δ* -H*]
+
+where `H` is hermitian and `Δ` is antisymmetric, without any contribution from the identity operator. Operators that are not quadratic in the fermions cannot be represented. The space wraps a constrained fermionic space, available through `parent`, and does not combine with tensor products or partial traces.
+"""
+hilbert_space(f::SymbolicFermionBasis, labels, ::BdG) = BdGHilbertSpace(f, labels)
+@deprecate bdg_hilbert_space(f, labels) hilbert_space(f, labels, BdG())
 dim(h::BdGHilbertSpace) = dim(h.parent)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
 Base.:(==)(a::BdGHilbertSpace, b::BdGHilbertSpace) = a === b || a.parent == b.parent
@@ -75,7 +85,7 @@ end
 @testitem "BdG" begin
     @fermions f
     h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
-    H = bdg_hilbert_space(f, 1:2)
+    H = hilbert_space(f, 1:2, BdG())
     @test representation(h + 1, H) == representation(h, H)
 
     h = rand(ComplexF64, 2, 2) + hc
@@ -91,7 +101,7 @@ end
 
 @testitem "BdG space does not combine with generic space operations" begin
     @fermions f
-    H = bdg_hilbert_space(f, 1:2)
+    H = hilbert_space(f, 1:2, BdG())
     @test !(H isa FermionicHilbertSpaces.AbstractHilbertSpace)
     m = rand(dim(H), dim(H))
     @test_throws MethodError partial_trace(m, H, H)
@@ -283,7 +293,7 @@ end
     using LinearAlgebra
     @fermions f
     N = 4
-    H = bdg_hilbert_space(f, 1:N)
+    H = hilbert_space(f, 1:N, BdG())
     ham = sum(rand(ComplexF64) * f[n]'f[k] + rand(ComplexF64) * f[n]'f[k]' + hc for (n, k) in Iterators.product(1:N, 1:N))
     h = representation(ham, H)
     @test ishermitian(h)
@@ -309,7 +319,7 @@ const DEFAULT_PH_CUTOFF = 1e-12
     using LinearAlgebra
     @fermions f
     symham = f[1]' * f[2] + f[1]' * f[2]' + hc
-    H = bdg_hilbert_space(f, 1:2)
+    H = hilbert_space(f, 1:2, BdG())
     mat = representation(symham, H)
     vals, vecs = eigen(Matrix(mat), BdGEigen(); canon_alg=FermionicHilbertSpaces.SVDCanon())
     @test vals ≈ [-1, 0, 0, 1]
@@ -320,7 +330,7 @@ const DEFAULT_PH_CUTOFF = 1e-12
 
     # three site
     symham = f[1]' * f[2] + f[2]' * f[3] + f[1]' * f[2]' + f[2]' * f[3]' + hc
-    H = bdg_hilbert_space(f, 1:3)
+    H = hilbert_space(f, 1:3, BdG())
     Hmb = hilbert_space(f, 1:3)
     matmb = representation(symham, Hmb)
     mat = representation(symham, H)

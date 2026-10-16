@@ -22,12 +22,12 @@ labels = shuffle(1:10)
 SUITE["symbolic"]["deep_product"] = @benchmarkable prod($f[l] for l in $labels) * prod($f[l]' for l in $labels)
 SUITE["matrix_representation"]["standard"] = @benchmarkable matrix_representation($op, $H)
 
-Hsp = single_particle_hilbert_space(f, 1:1000)
+Hsp = hilbert_space(f, 1:1000, SingleParticle())
 opsp = sum(rand() * f[n]' * f[n] for n in 1:1000) + sum(rand(ComplexF64) * f[n]' * f[n+1] + hc for n in 1:999)
 SUITE["matrix_representation"]["free_fermion"] = @benchmarkable matrix_representation($opsp, $Hsp)
 
 opsp_bdg = opsp + sum(rand(ComplexF64) * f[n]' * f[n+1]' + hc for n in 1:999)
-Hbdg = bdg_hilbert_space(f, 1:1000)
+Hbdg = hilbert_space(f, 1:1000, BdG())
 SUITE["matrix_representation"]["bdg"] = @benchmarkable matrix_representation($opsp_bdg, $Hbdg)
 
 SUITE["complement"]["fermions"] = @benchmarkable FermionicHilbertSpaces.complementary_subsystem($H, $Hsub)

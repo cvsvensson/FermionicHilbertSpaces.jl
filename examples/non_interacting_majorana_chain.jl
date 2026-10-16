@@ -28,7 +28,7 @@ t = 1.0
 α = 0.5
 Vz_c = 2sqrt((μ + 2t)^2 + Δ^2)
 Vz_c2 = 2sqrt((μ - 2t)^2 + Δ^2)
-Hbdg = bdg_hilbert_space(c, [(n, s) for n in 1:N for s in (:↑, :↓)])
+Hbdg = hilbert_space(c, [(n, s) for n in 1:N for s in (:↑, :↓)], BdG())
 
 ## Scan Zeeman field
 Vzs = range(0.0, Vz_c2 * 1.2, length=40)

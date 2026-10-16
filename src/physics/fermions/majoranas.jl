@@ -142,7 +142,7 @@ end
 
 @testitem "Majorana triple products vs matrices" begin
     @majoranas γ
-    H = majorana_hilbert_space(γ, 1:4)
+    H = hilbert_space(γ, 1:4)
     ops = [γ[i] for i in 1:4]
     mats = [representation(op, H) for op in ops]
     for i in eachindex(ops), j in eachindex(ops), k in eachindex(ops)
@@ -209,9 +209,7 @@ function majoranas(H::MajoranaHilbertSpace)
 end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
 
-hilbert_space(y::SymbolicMajoranaBasis, labels, args...; kwargs...) = majorana_hilbert_space(y, labels, args...; kwargs...)
-
-function majorana_hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
+function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
     iseven(length(labels)) || throw(ArgumentError("Must be an even number of Majoranas to define a Hilbert space."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
     f = SymbolicFermionBasis(y.name, tags(y).group)
@@ -219,6 +217,7 @@ function majorana_hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
     MajoranaHilbertSpace(majorana_position, Hf, y)
 end
+@deprecate majorana_hilbert_space(y, labels, args...; kwargs...) hilbert_space(y, labels, args...; kwargs...)
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = _wrap(MajoranaHilbertSpace(majoranaindices, parent(space), sym), space)
 
@@ -248,8 +247,8 @@ end
 
 @testitem "Partial trace of symbolic Majoranas" begin
     @majoranas y
-    H = majorana_hilbert_space(y, 1:6)
-    Hsub = subregion(majorana_hilbert_space(y, 3:4), H)
+    H = hilbert_space(y, 1:6)
+    Hsub = subregion(hilbert_space(y, 3:4), H)
     op = 1 + 3y[1] + 2y[3] + 4y[1] * y[6] + 3y[4] * y[1] + y[3] * y[4] + y[1] * y[3] * y[4] + y[1] * y[2] * y[6]
     op2 = 3 + 0y[1] # NCterms(op2) is empty
     @test representation(partial_trace(op, H => Hsub), Hsub) == partial_trace(representation(op, H), H => Hsub)
@@ -311,7 +310,7 @@ end
 @testitem "majoranas returns one matrix per label" begin
     using FermionicHilbertSpaces: majoranas
     @majoranas γ
-    H = majorana_hilbert_space(γ, 1:4)
+    H = hilbert_space(γ, 1:4)
     M = majoranas(H)
     @test length(M) == 4
     @test collect(keys(M)) == collect(1:4)

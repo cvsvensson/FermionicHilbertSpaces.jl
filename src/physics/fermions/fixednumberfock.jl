@@ -214,18 +214,26 @@ basisstates(h::SingleParticleHilbertSpace) = basisstates(h.parent)
 Base.:(==)(a::SingleParticleHilbertSpace, b::SingleParticleHilbertSpace) = a === b || a.parent == b.parent
 Base.hash(x::SingleParticleHilbertSpace, h::UInt) = hash(x.parent, h)
 """
-    single_particle_hilbert_space(labels)
+    SingleParticle()
 
-A hilbert space suitable for non-interacting systems with fermion number conservation. Matrix representations of symbolic operators give the single particle hamiltonian, without any contribution from the identity matrix.
+Marker passed as the last argument of `hilbert_space(f, labels, SingleParticle())` to select the single-particle space of non-interacting fermions with number conservation.
 """
-single_particle_hilbert_space(f::SymbolicFermionBasis, labels) = SingleParticleHilbertSpace(f, labels)
+struct SingleParticle end
+
+"""
+    hilbert_space(f::SymbolicFermionBasis, labels, ::SingleParticle)
+
+The space spanned by the states ``c_n^\\dagger |0\\rangle`` for the modes `f[l]`, `l in labels`, suitable for non-interacting systems with fermion number conservation. The matrix representation of a quadratic operator is the single-particle matrix, without any contribution from the identity operator. The space wraps a constrained fermionic space, available through `parent`, and does not combine with tensor products or partial traces.
+"""
+hilbert_space(f::SymbolicFermionBasis, labels, ::SingleParticle) = SingleParticleHilbertSpace(f, labels)
+@deprecate single_particle_hilbert_space(f, labels) hilbert_space(f, labels, SingleParticle())
 basisstate(ind::Integer, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
 state_index(state::AbstractFockState, H::SingleParticleHilbertSpace) = state_index(state, parent(H))
 
 @testitem "Single particle hilbert space" begin
     using LinearAlgebra
     @fermions f
-    H = single_particle_hilbert_space(f, 1:2)
+    H = hilbert_space(f, 1:2, SingleParticle())
     opmul = f[1]' * f[2]
     @test representation(opmul, H) ≈ representation(opmul, parent(H))
     opadd = opmul + hc
@@ -233,6 +241,17 @@ state_index(state::AbstractFockState, H::SingleParticleHilbertSpace) = state_ind
     @test ham ≈ representation(opadd, parent(H))
     @test representation(opadd + I, H) == representation(opadd, H)
     @test representation(opadd + I, H) == representation(opadd + I, parent(H)) - I
+end
+
+@testitem "Deprecated special space constructors" begin
+    @fermions f
+    @majoranas γ
+    Hsp = @test_deprecated single_particle_hilbert_space(f, 1:2)
+    Hbdg = @test_deprecated bdg_hilbert_space(f, 1:2)
+    Hmaj = @test_deprecated majorana_hilbert_space(γ, 1:4, ParityConservation(1))
+    @test Hsp == hilbert_space(f, 1:2, SingleParticle())
+    @test Hbdg == hilbert_space(f, 1:2, BdG())
+    @test Hmaj == hilbert_space(γ, 1:4, ParityConservation(1))
 end
 
 @testitem "Partial trace consistency: FockNumber vs FixedNumberFockState" begin

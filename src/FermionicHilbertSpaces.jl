@@ -37,7 +37,7 @@ export @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
-export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
+export SingleParticle, BdG
 export symmetric_sector
 
 """
