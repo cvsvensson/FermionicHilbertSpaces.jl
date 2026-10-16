@@ -36,7 +36,7 @@ function _add_permutation_operator!(P, (states, state_index), mapper, perm, weig
     for (j, state) in enumerate(states)
         state2 = permute_state(state, mapper, perm)
         i = state_index(state2)
-        iszero(i) && throw(ArgumentError("Permutation maps a basis state outside the constrained space"))
+        iszero(i) && throw(ArgumentError("The permutation maps the basis state `$state` outside the space."))
         push_inds_amps!(P, i, j, weight)
     end
     return P
@@ -53,12 +53,12 @@ projector is first constructed on `Hsub = tensor_product(Hs...)` and then embedd
 back into `H` via `embed(Psub, Hsub => H)`.
 """
 function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothing, ::Type{T}=_default_projector_eltype(weights); normalize=true, sparse=true) where T
-    isempty(perms) && throw(ArgumentError("At least one permutation is required"))
+    isempty(perms) && throw(ArgumentError("`perms` must contain at least one permutation."))
 
     # Subsystem branch: Hs does not partition H, treat as a proper subsystem.
     if !ispartition(Hs, H)
         Hsub = subregion(tensor_product(Hs...), H)
-        issubsystem(Hsub, H) || throw(ArgumentError("Hs is neither a partition nor a subsystem of H"))
+        issubsystem(Hsub, H) || throw(ArgumentError("`Hs` must be a partition or a subsystem of `H`."))
         Psub = permutation_projector(Hsub, Hs, perms, weights, T; normalize)
         return embed(Psub, Hsub => H)
     end
@@ -66,7 +66,7 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothi
     ws = if isnothing(weights)
         ones(T, length(perms))
     else
-        length(weights) == length(perms) || throw(ArgumentError("weights must match perms length"))
+        length(weights) == length(perms) || throw(ArgumentError("`weights` and `perms` must have the same length, got $(length(weights)) and $(length(perms))."))
         weights
     end
 
@@ -120,10 +120,10 @@ case the sector is constructed on `tensor_product(Hs...)` and embedded back into
 """
 function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type{T}=Float64;
     orth_method=_QR(), kwargs...) where T
-    isempty(Hs) && throw(ArgumentError("At least one factor space is required"))
+    isempty(Hs) && throw(ArgumentError("`Hs` must contain at least one factor space."))
 
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
-    length(perms) == length(weights) || throw(ArgumentError("Generated weights must match generated permutations"))
+    length(perms) == length(weights) || throw(ArgumentError("The generated weights and permutations must have the same length, got $(length(weights)) and $(length(perms))."))
     P = permutation_projector(H, Hs, perms, weights, T; kwargs...)
     trP = tr(P)
     rank = try

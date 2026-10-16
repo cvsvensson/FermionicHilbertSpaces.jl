@@ -46,13 +46,13 @@ function LazyOperator(op::O, space::S, chunking::C, precomp::P; projection=false
 end
 
 function _lazy_output_prototype(L::LazyOperator, input::AbstractVector)
-    size(L, 2) == length(input) || throw(DimensionMismatch("input has size $(size(input)) but operator has size $(size(L))"))
+    size(L, 2) == length(input) || throw(DimensionMismatch("The input must have length $(size(L, 2)), got $(length(input))"))
     T = promote_type(eltype(L), eltype(input))
     return similar(input, T, size(L, 1))
 end
 
 function _lazy_output_prototype(L::LazyOperator, input::AbstractMatrix)
-    size(input, 1) == size(L, 2) || throw(DimensionMismatch("input has size $(size(input)) but operator has size $(size(L))"))
+    size(input, 1) == size(L, 2) || throw(DimensionMismatch("The input must have $(size(L, 2)) rows, got size $(size(input))"))
     T = promote_type(eltype(L), eltype(input))
     return similar(input, T, (size(L, 1), size(input, 2)))
 end
@@ -116,9 +116,9 @@ function LinearAlgebra.mul!(y::AbstractVector, L::LazyOperator, x::AbstractVecto
 end
 
 function LinearAlgebra.mul!(Y::AbstractMatrix, L::LazyOperator, X::AbstractMatrix, α=true, β=false)
-    size(X, 1) == size(L, 2) || throw(DimensionMismatch("input has size $(size(X)) but operator has size $(size(L))"))
+    size(X, 1) == size(L, 2) || throw(DimensionMismatch("The input must have $(size(L, 2)) rows, got size $(size(X))"))
     expected_size = (size(L, 1), size(X, 2))
-    size(Y) == expected_size || throw(DimensionMismatch("output has size $(size(Y)) but expected $expected_size"))
+    size(Y) == expected_size || throw(DimensionMismatch("The output must have size $expected_size, got $(size(Y))"))
     lazy_mul!(Y, L, X, α, β)
     return Y
 end
@@ -232,7 +232,7 @@ function Base.:*(L::LazyOperator, x::AbstractVecOrMat)
 end
 get_input(::LazyRepr{Missing}, H) = dim(H) < 1e4 ? Vector{mat_eltype(H)}(undef, dim(H)) : spzeros(mat_eltype(H), dim(H))
 function get_input(rep::LazyRepr{<:AbstractArray}, H)
-    dim(H) == size(rep.input, 1) || throw(DimensionMismatch("input has size $(size(rep.input)) but expected $(dim(H))"))
+    dim(H) == size(rep.input, 1) || throw(DimensionMismatch("The input must have $(dim(H)) rows, got size $(size(rep.input))"))
     return rep.input
 end
 function get_input(rep::LazyRepr{Symbol}, H)

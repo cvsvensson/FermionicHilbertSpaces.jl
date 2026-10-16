@@ -128,12 +128,12 @@ state_index(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilber
 basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(_checked_state_index(state, space), space)
 function _checked_state_index(state, space)
     i = state_index(state, space)
-    iszero(i) && throw(ArgumentError("The state $state is not in the Hilbert space"))
+    iszero(i) && throw(ArgumentError("The state `$state` is not in the Hilbert space."))
     i
 end
 
 function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{B}) where {I,B<:FockNumber{I}}
-    all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only '0' and '1', got \"$input\""))
+    all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only `'0'` and `'1'`, got `\"$input\"`."))
     bits = map(c -> c == '1', collect(input))
     return B(focknbr_from_bits(bits, I))
 end
@@ -142,7 +142,7 @@ function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{Boson
     n = try
         parse(Int, input)
     catch
-        throw(ArgumentError("Invalid bosonic occupation string \"$input\""))
+        throw(ArgumentError("A bosonic occupation string must be an integer, got `\"$input\"`."))
     end
     BosonicState(n)
 end
@@ -209,8 +209,8 @@ function NonCommutativeProducts.mul_effect(a::SymbolicState, b::SymbolicState)
 end
 
 function apply_local_operator(op::SymbolicState, state, space::AbstractHilbertSpace, precomp)
-    _same_space_id(space, op.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
-    isketbra(op) || throw(ArgumentError("apply_local_operator is only defined for ketbra SymbolicState operators"))
+    _same_space_id(space, op.space) || throw(ArgumentError("The space of the symbolic state must match the provided space."))
+    isketbra(op) || throw(ArgumentError("`apply_local_operator` is only defined for ketbra `SymbolicState` operators."))
     return state == op.bra ? (op.ket, 1) : (state, 0)
 end
 
@@ -366,13 +366,13 @@ function vector_representation(op::NCMul, space::AbstractHilbertSpace, repr=Eage
     elseif type == :bras
         return transpose(vec)
     else
-        throw(ArgumentError("vector_representation called on an NCMul that is not purely kets or bras"))
+        throw(ArgumentError("`vector_representation` requires an `NCMul` that is purely kets or purely bras."))
     end
 end
 function vector_representation(op::NCAdd, space::AbstractHilbertSpace, repr=EagerSparseRepr(); type=_operator_type(op), kwargs...)
-    iszero(op.coeff) || throw(ArgumentError("NCAdd with nonzero coeff is not supported for vector_representation"))
+    iszero(op.coeff) || throw(ArgumentError("`vector_representation` does not support an `NCAdd` with nonzero `coeff`, got $(op.coeff)."))
     if isempty(op.dict) # a zero ket or bra
-        type in (:kets, :bras) || throw(ArgumentError("vector_representation called on an NCAdd that is not purely kets or bras"))
+        type in (:kets, :bras) || throw(ArgumentError("`vector_representation` requires an `NCAdd` that is purely kets or purely bras."))
         # same eltype as the nonzero path, where each basis vector is scaled by a coefficient
         _repr = _canonicalize_repr(repr)
         vec = _zero_vector(space, _repr, promote_type(_vector_eltype(_repr), valtype(op.dict)))

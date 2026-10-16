@@ -195,8 +195,8 @@ end
 # |ψ⟩ ↦ map * vec(ψψ†) without forming ψψ†. Shared by PartialTraceMap and PartialTransposeMap.
 function _apply_superop_on_pure_state!(w::AbstractVector, mat::SparseMatrixCSC, ψ::AbstractVector)
     D = length(ψ)
-    size(mat, 2) == D^2 || throw(DimensionMismatch("map has $(size(mat, 2)) columns, expected length(ψ)^2 = $(D^2)"))
-    length(w) == size(mat, 1) || throw(DimensionMismatch("output has length $(length(w)), expected $(size(mat, 1))"))
+    size(mat, 2) == D^2 || throw(DimensionMismatch("The map must have `length(ψ)^2` = $(D^2) columns, got $(size(mat, 2))"))
+    length(w) == size(mat, 1) || throw(DimensionMismatch("The output vector must have length $(size(mat, 1)), got $(length(w))"))
     fill!(w, zero(eltype(w)))
     colptr = SparseArrays.getcolptr(mat)
     rows = rowvals(mat)
@@ -414,7 +414,7 @@ end
     """
     function check_partial_transpose(fam::PTFamily, H, A;
         B=setdiff(1:nbr_of_modes(H), A), rng=Xoshiro(1), atol=1e-8)
-        (isempty(A) || isempty(B)) && throw(ArgumentError("A and B must both be non-empty"))
+        (isempty(A) || isempty(B)) && throw(ArgumentError("`A` and `B` must both be non-empty, got `A` = $A and `B` = $B"))
         kw = fam.kwargs
         HA, HB = hilbert_space(fam.basis, A), hilbert_space(fam.basis, B)
         RA, RB, RAB = (partial_transpose(H, S; kw...) for S in (HA, HB, H))

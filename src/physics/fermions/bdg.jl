@@ -7,7 +7,7 @@ Base.:(==)(n1::NambuState, n2::NambuState) = n1.state == n2.state && n1.hole == 
 Base.hash(n::NambuState, h::UInt) = hash(n.hole, hash(n.state, h))
 
 function togglefermions(sites, daggers, f::NambuState)
-    (length(sites) == 2 == length(daggers)) || throw(ArgumentError("Must act with exactly two fermions on a NambuState"))
+    (length(sites) == 2 == length(daggers)) || throw(ArgumentError("Exactly two fermions must act on a `NambuState`, got $(length(sites))."))
     allowed = sites[2] == only(f.state.sites) && daggers[2] == f.hole
     state = NambuState(SingleParticleState(sites[1]), !daggers[1])
     return state, allowed
@@ -208,7 +208,7 @@ function enforce_ph_symmetry(F::Eigen, canon_alg=SVDCanon(); cutoff=DEFAULT_PH_C
     if isreal(F.values)
         enforce_ph_symmetry(real(F.values), F.vectors, canon_alg; cutoff)
     else
-        throw(ArgumentError("Eigenvalues must be real"))
+        throw(ArgumentError("The eigenvalues must be real, got $(F.values)."))
     end
 end
 
@@ -246,7 +246,7 @@ end
 
 #Symmetric form of SVD for symmetric matrices, Takagi/Autonne decomposition
 function symmetric_SVD(M)
-    issymmetric(M) || throw(ArgumentError("Matrix must be symmetric"))
+    issymmetric(M) || throw(ArgumentError("`M` must be symmetric."))
     n = size(M, 1)
     block_matrix = [
         -real(M) imag(M);
@@ -278,8 +278,8 @@ canonicalize_particle_pair(v1, v2, ::SVDCanon) = canonicalize_particle_pair([v1 
 
 
 function canonicalize_particle_pair(vs::AbstractMatrix, ::SVDCanon)
-    size(vs, 2) == 2 || throw(ArgumentError("Matrix must have exactly two columns for SVD canonicalization"))
-    vs'vs ≈ I || throw(ArgumentError("Quasiparticles must be orthonormal"))
+    size(vs, 2) == 2 || throw(ArgumentError("`vs` must have exactly two columns for SVD canonicalization, got $(size(vs, 2))."))
+    vs'vs ≈ I || throw(ArgumentError("The quasiparticle vectors `vs` must be orthonormal."))
     n = div(size(vs, 1), 2)
     mat = Symmetric(transpose(vs) * [0I I(n); I(n) 0I] * vs)
     U, D = symmetric_SVD(mat)

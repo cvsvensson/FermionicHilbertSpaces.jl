@@ -188,9 +188,7 @@ Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a
 Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.dimension, h))
 basisstates(H::TruncatedBosonicHilbertSpace) = TypedIterator{BosonicState}(Iterators.map(BosonicState, 0:(dim(H)-1)))
 function basisstate(n::Integer, H::TruncatedBosonicHilbertSpace)
-    if n < 1 || n > dim(H)
-        throw(ArgumentError("Basis state index $n is out of bounds for Hilbert space with dimension $(dim(H))"))
-    end
+    1 <= n <= dim(H) || throw(BoundsError(H, n))
     BosonicState(n - 1)
 end
 dim(H::TruncatedBosonicHilbertSpace) = H.dimension

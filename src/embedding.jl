@@ -28,12 +28,12 @@ function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
 end
 
 function (op::EmbedMap)(m::AbstractMatrix)
-    size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match the size of `Hsub`"))
+    size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(m), dim(op.H))
 end
 
 function (op::EmbedMap)(out::AbstractMatrix, m::AbstractMatrix)
-    size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match the size of `Hsub`"))
+    size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
     size(out) == (dim(op.H), dim(op.H)) || throw(DimensionMismatch("The output matrix must have size ($(dim(op.H)), $(dim(op.H))), got $(size(out))"))
     mul!(vec(out), op.map, _vectorize_pt_density_matrix(m))
     out

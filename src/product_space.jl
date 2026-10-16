@@ -1,6 +1,6 @@
 
 combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
-combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("Don't know how to combine spaces $spaces with atomic group $group_id into a group"))
+combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("The group `$group_id` requires a single space, got $spaces."))
 struct ProductState{B} <: AbstractBasisState
     states::B
 end
@@ -22,7 +22,7 @@ struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
     lininds::LI
     cartinds::CI
     function ProductSpace(factors::C, atoms::Vector{A}) where {C,A}
-        length(factors) == 0 && throw(ArgumentError("Product space must have at least one factor"))
+        length(factors) == 0 && throw(ArgumentError("A product space must have at least one factor."))
         B = ProductState{Tuple{map(statetype, factors)...}}
         atom_ordering = Dict{A,Int}(a => i for (i, a) in enumerate(atoms))
         fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
@@ -75,7 +75,7 @@ function atomic_substate(n, f::ProductState, space::ProductSpace)
         end
         count += add
     end
-    throw(ArgumentError("Invalid substate index"))
+    throw(ArgumentError("The substate index `n` must be between 1 and the number of atomic factors, got $n."))
 end
 
 
@@ -303,7 +303,7 @@ struct ProductOperator{C,O,S}
     end
 end
 function ProductOperator(ops::O, spaces::S, inds::Vector{Int}) where {O,S}
-    length(ops) == length(spaces) || throw(ArgumentError("Length of ops and spaces must match"))
+    length(ops) == length(spaces) || throw(ArgumentError("`ops` and `spaces` must have the same length, got $(length(ops)) and $(length(spaces))."))
     C = promote_type(Iterators.map(mat_eltype, ops)...)
     ProductOperator{C}(ops, spaces, inds)
 end
@@ -542,8 +542,8 @@ function ProductSpaceMapper(source::ProductSpace, targets)
     # Validate: every target atom exists in the source, no duplicates.
     seen = Set{A}()
     for t in targets, a in atomic_factors(t)
-        haskey(atom_factor, a) || throw(ArgumentError("Atom $a not in source space"))
-        a ∈ seen && throw(ArgumentError("Atom $a duplicated across targets"))
+        haskey(atom_factor, a) || throw(ArgumentError("Each target atom must be an atom of the source space, got `$a` which is not."))
+        a ∈ seen && throw(ArgumentError("Each atom may appear in only one target, got `$a` in several."))
         push!(seen, a)
     end
 
@@ -553,7 +553,7 @@ function ProductSpaceMapper(source::ProductSpace, targets)
         begin
             owners = unique(atom_factor[a] for a in atomic_factors(g))
             length(owners) == 1 ||
-                throw(ArgumentError("Target group $g spans several source factors; this is not supported"))
+                throw(ArgumentError("A target group must lie within a single source factor, got `$g` which spans several."))
             (factor=only(owners), target=ti, group_slot=si, space=g,
                 pos=minimum(atom_pos[a] for a in atomic_factors(g)))
         end

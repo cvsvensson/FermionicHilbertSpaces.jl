@@ -252,7 +252,7 @@ end
     bath2 = HEOMBosonicBath(2, 1, [1.0, 2.0], [1.0, 1.0])
     H2 = heom_bosonic_aux_space(bath2)
     @test dim(H2) == 3
-    @test basisstates(H2)[1].n isa NTuple{2,Int}
+    @test first(basisstates(H2)).n isa NTuple{2,Int}
 
     # N_exp=2, m_max=2 → 1 + 2 + 3 = 6 states
     bath3 = HEOMBosonicBath(3, 2, [1.0, 2.0], [1.0, 1.0])

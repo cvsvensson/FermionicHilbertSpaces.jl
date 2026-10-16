@@ -58,7 +58,7 @@ function operator_indices_and_amplitudes_generic!(accumulator, op, space::Abstra
                 if projection
                     continue
                 else
-                    throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
+                    throw(ArgumentError("The operator maps outside of the provided space. Pass `projection=true` to ignore those states."))
                 end
             else
                 push_inds_amps!(accumulator, outind, inind, amp)
@@ -77,7 +77,7 @@ function chunked_operator_indices_and_amplitudes_generic!(accumulator, op, space
                 if projection
                     continue
                 else
-                    throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
+                    throw(ArgumentError("The operator maps outside of the provided space. Pass `projection=true` to ignore those states."))
                 end
             else
                 push_inds_amps!(accumulator, outind, inind - col_offset, amp)
@@ -150,7 +150,7 @@ function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
             push!(ops, NCMul(coeff, ___concretize(v, concr)))
         end
     end
-    n == length(op.factors) || throw(ArgumentError("Not all factors were assigned to a basis."))
+    n == length(op.factors) || throw(ArgumentError("Not all factors of the operator belong to a basis of the provided space."))
     return ProductOperator(___concretize(ops, TupleConcretizer()), spaces[inds], inds)
 end
 
@@ -267,7 +267,7 @@ function finalize!(m::Matrix, space)
     return m
 end
 function finalize!(m::Matrix, N::Int, M::Int)
-    size(m) == (N, M) || throw(ArgumentError("Matrix size $(size(m)) does not match expected size ($N, $M)."))
+    size(m) == (N, M) || throw(ArgumentError("The matrix must have size ($N, $M), got $(size(m))."))
     return m
 end
 
@@ -359,7 +359,7 @@ function matrix_representation(op, space::AbstractHilbertSpace, type=EagerSparse
     end
     op_groups = symbolic_groups(op)
     space_groups = group_ids(space)
-    all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
+    all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic bases of the operator must match the atomic groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
     return _matrix_representation(op, space_groups, space, repr, chunking; projection, kwargs...)
 end
 _canonicalize_repr(t) = t
@@ -370,7 +370,7 @@ function _canonicalize_repr(s::Symbol)
     s == :sparse && return EagerSparseRepr()
     s == :dense && return EagerDenseRepr()
     s == :lazy && return LazyRepr()
-    throw(ArgumentError("Invalid type argument: $s. Expected :sparse, :dense, or :lazy."))
+    throw(ArgumentError("The representation type must be `:sparse`, `:dense` or `:lazy`, got `:$s`."))
 end
 
 
@@ -657,7 +657,7 @@ _sum_matrices(matrices, ::LazyRepr; tree_split=10) = sum(matrices)
 _sum_matrices(matrices, ::Union{EagerSparseRepr,EagerDenseRepr}; tree_split=10) = _sum_tree(matrices, tree_split)
 function _sum_tree(matrices, k)
     n = length(matrices)
-    n == 0 && throw(ArgumentError("Empty collection"))
+    n == 0 && throw(ArgumentError("Cannot sum an empty collection of matrices."))
     n == 1 && return only(matrices)
     n <= k && return map(+, matrices...)
 

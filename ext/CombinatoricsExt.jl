@@ -6,7 +6,7 @@ import FermionicHilbertSpaces: _resolve_sector_permutations_and_weights
 
 function _resolve_sector_permutations_and_weights(Hs, sector::Symbol, ::Type{T}) where T
     n = length(Hs)
-    n > 0 || throw(ArgumentError("At least one factor space is required"))
+    n > 0 || throw(ArgumentError("`Hs` must contain at least one factor space."))
 
     perms = permutations(1:n)
     if sector === :symmetric
@@ -17,7 +17,7 @@ function _resolve_sector_permutations_and_weights(Hs, sector::Symbol, ::Type{T})
         return perms, weights
     end
 
-    throw(ArgumentError("Unknown sector :$(sector). Expected :symmetric or :antisymmetric"))
+    throw(ArgumentError("The sector must be `:symmetric` or `:antisymmetric`, got `:$sector`."))
 end
 
 end

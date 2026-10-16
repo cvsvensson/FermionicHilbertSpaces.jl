@@ -89,7 +89,7 @@ decides the signs, use `tensor_product(ms, Hs => H)`, which is the usual entry p
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
 function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kwargs...)
-    kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
+    kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the dimensions of `Hs`, got sizes $(map(size, ms)) and dimensions $(map(dim, Hs))."))
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs, H)
     extend_state = state_mapper(H, Hs)
@@ -98,7 +98,7 @@ function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kw
     elseif N == 2
         return generalized_kron_mat!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
     end
-    throw(ArgumentError("Only 1D or 2D arrays are supported"))
+    throw(ArgumentError("Only 1D or 2D arrays are supported, got $(N)D."))
 end
 
 generalized_kron(Hs::Pair; kwargs...) = (ms...) -> generalized_kron(ms, Hs; kwargs...)
@@ -147,13 +147,13 @@ function _foreach_kron_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbertSp
             K1 = state_index(fullstate1, H)
             if iszero(K1)
                 skipmissing && continue
-                throw(ArgumentError("The state $fullstate1 does not exist in the full Hilbert space"))
+                throw(ArgumentError("The state `$fullstate1` is not in the full Hilbert space."))
             end
             for (fullstate2, w2) in zip(fullstates2, amps2)
                 K2 = state_index(fullstate2, H)
                 if iszero(K2)
                     skipmissing && continue
-                    throw(ArgumentError("The state $fullstate2 does not exist in the full Hilbert space"))
+                    throw(ArgumentError("The state `$fullstate2` is not in the full Hilbert space."))
                 end
                 op(K1, K2, w1 * w2 * v * pfh(fullstate1, fullstate2))
             end
@@ -205,7 +205,7 @@ function _foreach_kron_vec_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbe
             K = state_index(fullfock, H)
             if iszero(K)
                 skipmissing && continue
-                throw(ArgumentError("The state $fullfock does not exist in the full Hilbert space"))
+                throw(ArgumentError("The state `$fullfock` is not in the full Hilbert space."))
             end
             op(K, w * v * pfu(fullfock))
         end
@@ -291,7 +291,7 @@ function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilb
         # All matrices are row vectors, so we can treat them as vectors and then reshape the result
         return transpose(generalized_kron(map(vec, ms), Hs, H; kwargs...))
     end
-    throw(ArgumentError("All elements of `ms` in tensor_product must be either vectors or matrices"))
+    throw(ArgumentError("The elements of `ms` must be either all square matrices, all column vectors or all row vectors, got sizes $(map(size, ms))."))
 end
 _issquare(m) = size(m, 1) == size(m, 2)
 _issquare(m::UniformScaling) = true
@@ -383,7 +383,7 @@ end
 
 partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_trace(vec_to_density_matrix(v), H, Hsub; kwargs...)
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
-    size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
+    size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
     if isnothing(complement)
         U = basis_transformation(Hsub, H)
         return U * m * U'
@@ -393,14 +393,14 @@ function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; c
 end
 function basis_transformation(H1, H2)
     #transforms from the basis of H1 to the basis of H2. Assumes they are the same basis states, just ordered differently. If they are not the same, this will throw an error.
-    dim(H1) == dim(H2) || throw(ArgumentError("Hilbert spaces must have the same dimension for a basis transformation"))
+    dim(H1) == dim(H2) || throw(ArgumentError("The Hilbert spaces must have the same dimension for a basis transformation, got $(dim(H1)) and $(dim(H2))."))
     I = Vector{Int}(undef, dim(H1))
     J = Vector{Int}(undef, dim(H2))
     V = ones(Int, dim(H1))
     for (i, f1) in enumerate(basisstates(H1))
         j = state_index(f1, H2)
         if iszero(j)
-            throw(ArgumentError("The state $f1 in the first Hilbert space does not exist in the second Hilbert space"))
+            throw(ArgumentError("The state `$f1` of the first Hilbert space is not in the second Hilbert space."))
         end
         J[i] = j
         I[i] = i
@@ -458,13 +458,13 @@ function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::Su
                     J1 = state_index(fullf1, H)
                     if iszero(J1)
                         skipmissing && continue
-                        throw(ArgumentError("The state $fullf1 is not in the full Hilbert space"))
+                        throw(ArgumentError("The state `$fullf1` is not in the full Hilbert space."))
                     end
                     for (fullf2, w2) in zip(fullstates2, amps2)
                         J2 = state_index(fullf2, H)
                         if iszero(J2)
                             skipmissing && continue
-                            throw(ArgumentError("The state $fullf2 is not in the full Hilbert space"))
+                            throw(ArgumentError("The state `$fullf2` is not in the full Hilbert space."))
                         end
                         s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
                         op(J1, J2, K1, K2, w1 * w2 * s2 * conj(s1))
@@ -489,14 +489,14 @@ function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::Fu
             K1 = state_index(f1sub, Hsub)
             if iszero(K1)
                 skipmissing && continue
-                throw(ArgumentError("The state $f1sub is not in the subsystem Hilbert space"))
+                throw(ArgumentError("The state `$f1sub` is not in the subsystem Hilbert space."))
             end
             for ((f2sub, f2bar), w2) in zip(splits2, amps2)
                 f1bar != f2bar && continue
                 K2 = state_index(f2sub, Hsub)
                 if iszero(K2)
                     skipmissing && continue
-                    throw(ArgumentError("The state $f2sub is not in the subsystem Hilbert space"))
+                    throw(ArgumentError("The state `$f2sub` is not in the subsystem Hilbert space."))
                 end
                 s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
                 s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
@@ -676,7 +676,7 @@ end
 
 
 function project_on_parities(op::AbstractArray, H, Hs, parities)
-    length(Hs) == length(parities) || throw(ArgumentError("The number of parities must match the number of subsystems"))
+    length(Hs) == length(parities) || throw(ArgumentError("The number of `parities` must match the number of subsystems, got $(length(parities)) parities and $(length(Hs)) subsystems."))
     for (bsub, parity) in zip(Hs, parities)
         op = project_on_subparity(op, H, bsub, parity)
     end
@@ -692,7 +692,7 @@ project_on_parity(op::AbstractArray, H::AbstractHilbertSpace, parity) = project_
 
 function project_on_parity(op::AbstractMatrix, P::AbstractMatrix, parity)
     parity in (-1, 1) ||
-        throw(ArgumentError("Parity must be either 1 or -1"))
+        throw(ArgumentError("`parity` must be either `1` or `-1`, got $parity."))
     return (op + parity * (P * op * P)) / 2
 end
 function project_on_parity(op::AbstractVector, P::AbstractMatrix, parity)
@@ -701,7 +701,7 @@ function project_on_parity(op::AbstractVector, P::AbstractMatrix, parity)
     elseif parity == -1
         return (op .- P * op) ./ 2
     else
-        throw(ArgumentError("Parity must be either 1 or -1"))
+        throw(ArgumentError("`parity` must be either `1` or `-1`, got $parity."))
     end
 end
 

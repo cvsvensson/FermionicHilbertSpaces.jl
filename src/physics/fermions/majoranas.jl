@@ -85,7 +85,7 @@ function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym)
         swap = Swap((-1)^(a.basis.group == b.basis.group))
         return swap
     else
-        throw(ArgumentError("Don't know how to multiply $a * $b"))
+        throw(ArgumentError("Cannot multiply `$a` and `$b`."))
     end
 end
 
@@ -210,7 +210,7 @@ end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
 
 function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
-    iseven(length(labels)) || throw(ArgumentError("Must be an even number of Majoranas to define a Hilbert space."))
+    iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even to define a Hilbert space, got $(length(labels))."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
     f = SymbolicFermionBasis(y.name, tags(y).group)
     Hf = hilbert_space(f, pairs, args...; kwargs...)

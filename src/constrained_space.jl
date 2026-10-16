@@ -50,7 +50,7 @@ function constrain_space(space, constraint::AbstractConstraint, states=basisstat
         filtered_states = collect(Iterators.filter(f, states))
         return ConstrainedSpace(space, filtered_states)
     else
-        throw(ArgumentError("Constraint $(constraint) is not supported for constraining spaces."))
+        throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     end
 end
 add_tag(H::ConstrainedSpace, tag) = ConstrainedSpace(add_tag(parent(H), tag), H.states, H.state_index)

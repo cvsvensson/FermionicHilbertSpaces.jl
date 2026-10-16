@@ -13,9 +13,28 @@ const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace
 	basisstates(H)
 
 Return an iterable of basis states for the Hilbert space `H`, in the order used by
-matrix representations and indexing utilities.
+matrix representations and indexing utilities. The result supports `length` and `eltype`
+and can be iterated. Indexing is not part of the contract; use `basisstate(i, H)` for the
+`i`-th state, or `collect(basisstates(H))` for an indexable vector.
 """
 basisstates
+
+"""
+    basisstate(i, H)
+
+Return the `i`-th basis state of the Hilbert space `H`, in the order of `basisstates(H)`.
+Throws a `BoundsError` if `i` is not in `1:dim(H)`. A string or character that spells a
+state of `H` is accepted in place of an index, and an `ArgumentError` is thrown if it is not a state of `H`.
+"""
+basisstate
+
+"""
+    state_index(state, H)
+
+Return the index of the basis state `state` in the Hilbert space `H`, the inverse of
+`basisstate`. Returns `0` if `state` is not a state of `H`; no exception is thrown in that case.
+"""
+state_index
 
 """
 	hilbert_space(args...)
@@ -115,7 +134,7 @@ kron_phase_factor(mapper::AbstractStateMapper) = throw(MethodError(kron_phase_fa
 
 struct AtomicStateMapper <: AbstractStateMapper end
 function state_mapper(H::AbstractAtomicHilbertSpace, Hs)
-    atomic_id(only(Hs)) == atomic_id(H) || throw(ArgumentError("For atomic subspaces, the only valid partition is the whole space"))
+    atomic_id(only(Hs)) == atomic_id(H) || throw(ArgumentError("For atomic subspaces, the only valid partition is the whole space, got `Hs` = $Hs"))
     AtomicStateMapper()
 end
 function split_state(state, ::AtomicStateMapper)
@@ -150,15 +169,15 @@ Hsub = subregion((H1, H3), H)
 function subregion(Hs, H::AbstractHilbertSpace)
     Hs_items = Hs isa Tuple || Hs isa AbstractVector ? Hs : (Hs,)
     input_ids = map(atomic_id, Iterators.flatten(Iterators.map(atomic_factors, Hs_items)))
-    isempty(input_ids) && throw(ArgumentError("Hs must contain at least one space or symbolic operator"))
+    isempty(input_ids) && throw(ArgumentError("`Hs` must contain at least one space or symbolic operator."))
     Hatoms = collect(atomic_factors(H))
     Hatom_ids = map(atomic_id, Hatoms)
     positions = map(id -> findfirst(==(id), Hatom_ids), input_ids)
-    all(!isnothing, positions) || throw(ArgumentError("The spaces/operators in Hs must match atomic factors in H, but the following were not found: $(input_ids[findall(isnothing, positions)])."))
-    length(unique(positions)) == length(positions) || throw(ArgumentError("Hs contains duplicate atomic factors"))
+    all(!isnothing, positions) || throw(ArgumentError("The spaces/operators in `Hs` must match atomic factors of `H`, got the following unmatched ids: $(input_ids[findall(isnothing, positions)])."))
+    length(unique(positions)) == length(positions) || throw(ArgumentError("`Hs` must not contain duplicate atomic factors, got ids $input_ids."))
 
     Hsub = tensor_product(Hatoms[positions])
-    issubsystem(Hsub, H) || throw(ArgumentError("The spaces in Hs must be a subsystem of H"))
+    issubsystem(Hsub, H) || throw(ArgumentError("The spaces in `Hs` must form a subsystem of `H`."))
     mapper = state_mapper(H, (Hsub,)) #TODO: this is before the next line, only because it checks that the fermions are ordered correctly. We should probably split that check out into a separate function.
     !isconstrained(H) && return Hsub
     states = _find_subregion_states(H, mapper)
@@ -233,11 +252,11 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
     # Verify Hsub is actually a subsystem of H
     inparent = in(atomic_factors(H))
     for a in atomic_factors(Hsub)
-        inparent(a) || throw(ArgumentError("Atom $a in subsystem not found in parent space"))
+        inparent(a) || throw(ArgumentError("The atoms of `Hsub` must be atoms of `H`, got `$a` which is not."))
     end
 
     # Check for duplicates in Hsub
-    length(atomic_factors(Hsub)) == length(sub_atoms) || throw(ArgumentError("Duplicate atoms in subsystem"))
+    length(atomic_factors(Hsub)) == length(sub_atoms) || throw(ArgumentError("The atoms of `Hsub` must be distinct, got duplicates in $(atomic_factors(Hsub))."))
 
     # Filter atoms preserving original order
     remaining = collect(Iterators.filter(a -> !(a in sub_atoms), atomic_factors(H)))
@@ -395,4 +414,29 @@ function isorderedpartition(partition, N::Int)
     end
     all(covered) || return false
     return true
+end
+
+@testitem "basisstate and state_index failure model" begin
+    using FermionicHilbertSpaces: basisstate, state_index
+    @fermions f
+    @spin s
+    @boson b
+    Hf = hilbert_space(f, 1:2)
+    Hs = hilbert_space(s, 1)
+    Hb = hilbert_space(b, 3)
+    spaces = (
+        Hf, Hs, Hb,
+        hilbert_space(f, 1:2, NumberConservation()),
+        hilbert_space(f, 1:2, NumberConservation(1)),
+        tensor_product(Hf, Hs),
+    )
+    for H in spaces
+        for i in (0, -1, dim(H) + 1)
+            @test_throws BoundsError basisstate(i, H)
+        end
+        @test basisstate(1, H) == first(basisstates(H))
+        @test basisstate(dim(H), H) == last(collect(basisstates(H)))
+        @test all(i -> state_index(basisstate(i, H), H) == i, 1:dim(H))
+    end
+    @test state_index(FermionicHilbertSpaces.BosonicState(3), Hb) == 0
 end

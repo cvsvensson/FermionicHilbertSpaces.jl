@@ -178,15 +178,14 @@ NumberConservation(space::AbstractHilbertSpace) = NumberConservation(missing; sp
     ParityConservation(space)
 
 Constraint enforcing allowed fermion parities, optionally on selected spaces.
-`parities` is a parity or a collection of parities, each `-1` or `1`. With a single
-`space`, the parity is measured on that space only.
+`parities` is a parity or a collection of parities, each `-1` or `1`. 
 """
 struct ParityConservation{H} <: AbstractConstraint
     allowed_parities::Vector{Int}
     spaces::H
     function ParityConservation(_allowed, _spaces)
         allowed = _normalize_constraint_values(_allowed)
-        allowed in Set([[-1, 1], [1], [-1]]) || throw(ArgumentError("Allowed parities must be a subset of [-1, 1]"))
+        allowed in Set([[-1, 1], [1], [-1]]) || throw(ArgumentError("The allowed parities must be a subset of `[-1, 1]`, got $allowed."))
         subspace = _normalize_constraint_subspace(_spaces)
         new{typeof(subspace)}(allowed, subspace)
     end

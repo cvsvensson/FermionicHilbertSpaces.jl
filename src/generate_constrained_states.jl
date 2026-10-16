@@ -110,7 +110,7 @@ function _contribution_values(subspaces, fw::WeightedFunction)
 end
 function __contribution_values(space, func)
     values = unique(Iterators.map(func, basisstates(space)))
-    isempty(values) && throw(ArgumentError("Cannot build AdditiveConstraint from a space with no basis states"))
+    isempty(values) && throw(ArgumentError("Cannot build an `AdditiveConstraint` from a space with no basis states."))
     values
 end
 hilbert_space(space::AbstractHilbertSpace) = space
@@ -125,7 +125,7 @@ function _additive_branch_constraint(allowed_values, functions, subspaces, allsp
     atom_ids = collect(map(atomic_id, allspaces))
     positions = map(subspaces) do subspace
         pos = findfirst(==(atomic_id(subspace)), atom_ids)
-        isnothing(pos) && throw(ArgumentError("All AdditiveConstraint subspaces must be present in the generated space"))
+        isnothing(pos) && throw(ArgumentError("All subspaces of an `AdditiveConstraint` must be present in the generated space, but `$(atomic_id(subspace))` is not."))
         pos
     end
     contribution_values = _contribution_values(subspaces, functions)

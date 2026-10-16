@@ -197,15 +197,15 @@ function _expand_single_mapping(t::AbstractArray, mapping::Pair)
     ndims(t) == n && return (mapping,)
     ndims(t) == 2n && return (mapping, mapping)
     throw(ArgumentError("The mapping $mapping consumes $n indices, but the array has \
-                         $(ndims(t)). Give one mapping per index group, or use repeat=true."))
+                         $(ndims(t)). Give one mapping per index group, or use `repeat=true`."))
 end
 
 function _repeat_mapping(t::AbstractArray, mappings)
     length(mappings) == 1 ||
-        throw(ArgumentError("repeat=true requires exactly one mapping"))
+        throw(ArgumentError("`repeat=true` requires exactly one mapping, got $(length(mappings))"))
     n = length(_mapping_spaces(only(mappings))[1])
     ndims(t) % n == 0 ||
-        throw(DimensionMismatch("ndims(t) = $(ndims(t)) is not divisible by $n"))
+        throw(DimensionMismatch("`ndims(t)` must be divisible by $n, got $(ndims(t))"))
     return ntuple(_ -> only(mappings), ndims(t) ÷ n)
 end
 

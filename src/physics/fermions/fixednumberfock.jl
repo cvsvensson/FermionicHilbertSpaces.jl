@@ -122,7 +122,7 @@ end
 
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{<:FixedNumberFockState})
     position = _find_position(op, space)
-    position == 0 && throw(ArgumentError("Operator ($op) contains a factor that is not part of the fermionic space ($space)"))
+    position == 0 && throw(ArgumentError("The operator `$op` contains a factor that is not part of the fermionic space `$space`."))
     return position
 end
 function apply_local_operators(op::NCMul, f::FixedNumberFockState, H::AbstractHilbertSpace, sites; transpose)
@@ -316,7 +316,7 @@ _find_position(op, H::SingleParticleHilbertSpace) = _find_position(op, parent(H)
 function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::SingleParticleHilbertSpace; kwargs...)
     ordering = mode_ordering(H)
     if length(op.factors) != 2
-        throw(ArgumentError("Only two-fermion operators supported for free fermions"))
+        throw(ArgumentError("Only two-fermion operators are supported for free fermions, got $(length(op.factors)) factors."))
     end
     fockstates = (SingleParticleState(_find_position(op.factors[1], H)), SingleParticleState(_find_position(op.factors[2], H)))
     inind = state_index(fockstates[2], H)
