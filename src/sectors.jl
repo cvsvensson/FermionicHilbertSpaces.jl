@@ -363,7 +363,7 @@ end
 end
 
 @testitem "Sector propagation with custom SectorConstraint" begin
-    import FermionicHilbertSpaces: SectorConstraint, fermionnumber
+    import FermionicHilbertSpaces: fermionnumber
     @fermions f
     k = 2
 

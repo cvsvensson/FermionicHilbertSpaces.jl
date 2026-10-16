@@ -34,7 +34,7 @@
 # Let's consider 5 sites, each with spin 3/2.
 
 using FermionicHilbertSpaces, LinearAlgebra
-using FermionicHilbertSpaces: SectorConstraint, SpinState
+using FermionicHilbertSpaces: SpinState
 
 N = 5
 J = 1.0

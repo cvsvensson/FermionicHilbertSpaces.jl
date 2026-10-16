@@ -1,5 +1,5 @@
 using FermionicHilbertSpaces
-using FermionicHilbertSpaces: FilterConstraint, parity
+using FermionicHilbertSpaces: parity
 
 N = 3
 @spins S

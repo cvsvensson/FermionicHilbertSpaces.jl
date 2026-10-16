@@ -279,7 +279,7 @@ constrain_space
 end
 
 @testitem "ProductConstraint filtering" begin
-    using FermionicHilbertSpaces: FilterConstraint, particle_number
+    using FermionicHilbertSpaces: particle_number
     @fermions f
     H = hilbert_space(f, 1:2)
     constraint = NumberConservation(1) * FilterConstraint(state -> state != basisstate(2, H))

@@ -120,7 +120,7 @@ end
 end
 
 @testitem "FilterConstraint agrees with NumberConservation" begin
-    using FermionicHilbertSpaces: SectorConstraint, FilterConstraint, particle_number
+    using FermionicHilbertSpaces: particle_number
     @fermions f
     N = 4
     H = hilbert_space(f, 1:N)
