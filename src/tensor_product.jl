@@ -605,32 +605,7 @@ function _apply_ptmap_on_vec(ptmap::PartialTraceMap, ψ::AbstractVector)
     _apply_ptmap_on_vec!(w, ptmap, ψ)
     return w
 end
-function _apply_ptmap_on_vec!(w::AbstractVector, ptmap::PartialTraceMap, ψ::AbstractVector)
-    mat = ptmap.map
-    D = length(ψ) # dim(ptmap.H), the column-major decode below relies on this
-    fill!(w, zero(eltype(w)))
-
-    rows = rowvals(mat)
-    vals = nonzeros(mat)
-
-    @inbounds for c in 1:size(mat, 2)
-        ptr_start = mat.colptr[c]
-        ptr_end = mat.colptr[c+1] - 1
-        ptr_start > ptr_end && continue  # skip empty column
-
-        j = (c - 1) % D + 1
-        k = div(c - 1, D) + 1
-
-        val_ψ = ψ[j] * conj(ψ[k])
-        iszero(val_ψ) && continue
-
-        for ptr in ptr_start:ptr_end
-            w[rows[ptr]] += vals[ptr] * val_ψ
-        end
-    end
-
-    return w
-end
+_apply_ptmap_on_vec!(w::AbstractVector, ptmap::PartialTraceMap, ψ::AbstractVector) = _apply_superop_on_pure_state!(w, ptmap.map, ψ)
 
 function (op::PartialTraceMap)(out, in::AbstractMatrix)
     vout = _canonicalize_pt_output(out, op.Hsub)

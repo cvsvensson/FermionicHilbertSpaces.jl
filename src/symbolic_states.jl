@@ -127,7 +127,6 @@ function interpret_state(input, space::ProductSpace{B}) where B
     length(input) == length(factors(space)) || throw(ArgumentError("Product-state input must have length $(length(factors(space))), got $(length(input))"))
     return B(map(interpret_state, input, factors(space)))
 end
-interpret_state(char::AbstractChar, space::AbstractHilbertSpace) = interpret_state(string(char), space)
 
 function (k::Kets{B})(inputs...) where B
     raw = if length(inputs) == 1
@@ -188,12 +187,6 @@ function apply_local_operator(op::SymbolicState, state, space::AbstractHilbertSp
     _same_space_id(space, op.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
     isketbra(op) || throw(ArgumentError("apply_local_operator is only defined for ketbra SymbolicState operators"))
     return state == op.bra ? (op.ket, 1) : (state, 0)
-end
-function apply_local_operators(_op::NCMul{C,<:SymbolicState}, state, space::AbstractHilbertSpace, precomp) where C
-    op = only(_op.factors)
-    _same_space_id(space, op.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
-    isketbra(op) || throw(ArgumentError("apply_local_operator is only defined for ketbra SymbolicState operators"))
-    return state == op.bra ? (op.ket, _op.coeff) : (state, zero(eltype(_op.coeff)))
 end
 
 function NonCommutativeProducts.mul_effect(op::AbstractSym, s::SymbolicState)

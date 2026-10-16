@@ -97,7 +97,6 @@ function push_inds_amps!(m::Matrix, outind, inind, amp)
 end
 
 
-_apply_local_operators(op::Missing, state, space, precomp) = state, 1
 function _apply_local_operators(op, state, space, precomp)
     apply_local_operators(op, state, space, precomp; transpose=false)
 end

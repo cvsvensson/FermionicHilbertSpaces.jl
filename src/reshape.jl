@@ -1,3 +1,7 @@
+# Both sides of a mapping are a Hilbert space or a collection of Hilbert spaces.
+const _SpaceGroup = Union{AbstractHilbertSpace,Tuple{Vararg{AbstractHilbertSpace}},AbstractVector{<:AbstractHilbertSpace}}
+const _SpaceMapping = Pair{<:_SpaceGroup,<:_SpaceGroup}
+
 """
     reshape(t, mappings...; repeat=false)
 
@@ -60,7 +64,8 @@ where every index lives on `H`:
     # equivalent to reshape(A, H => (H1, H2), H => (H1, H2), H => (H1, H2))
 
 """
-function Base.reshape(t::AbstractArray, mappings::Pair...; repeat=false)
+function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat=false)
+    mappings = (mapping, rest...)
     mappings = if repeat
         _repeat_mapping(t, mappings)
     elseif length(mappings) == 1
@@ -120,8 +125,8 @@ function (op::ReshapeMap)(out::AbstractArray, t::AbstractArray)
     _reshape!(out, t, blocks, Hsouts)
 end
 
-function Base.reshape(mappings::Pair...; repeat=false)
-    mappings_t = Tuple(mappings)
+function Base.reshape(mapping::_SpaceMapping, rest::_SpaceMapping...; repeat=false)
+    mappings_t = (mapping, rest...)
     precomputed = Tuple(map(_precompute_mapping, mappings_t))
     ReshapeMap(mappings_t, repeat, precomputed)
 end
@@ -234,8 +239,11 @@ function _mapper(Hsin, Hsout)
         nothing
     end
 end
+const _OneSpace = Tuple{AbstractHilbertSpace}
+const _SeveralSpaces = Tuple{AbstractHilbertSpace,AbstractHilbertSpace,Vararg{AbstractHilbertSpace}}
+
 # Split: H => (H1, H2, ...)
-function _transitions(Hsin::Tuple{<:AbstractHilbertSpace}, Hsout, mapper)
+function _transitions(Hsin::_OneSpace, Hsout::_SeveralSpaces, mapper)
     H = only(Hsin)
     transitions = []
     for f in basisstates(H)
@@ -251,7 +259,7 @@ function _transitions(Hsin::Tuple{<:AbstractHilbertSpace}, Hsout, mapper)
 end
 
 # Combine: (H1, H2, ...) => H
-function _transitions(Hsin, Hsout::Tuple{<:AbstractHilbertSpace}, mapper)
+function _transitions(Hsin::_SeveralSpaces, Hsout::_OneSpace, mapper)
     H = only(Hsout)
     transitions = []
     for fs in Base.product(basisstates.(Hsin)...)
@@ -267,7 +275,7 @@ function _transitions(Hsin, Hsout::Tuple{<:AbstractHilbertSpace}, mapper)
 end
 
 # Many-to-many: (H1, H2, ...) => (K1, K2, ...)
-function _transitions(Hsin, Hsout, mapper::_ComposedMapper)
+function _transitions(Hsin::_SeveralSpaces, Hsout::_SeveralSpaces, mapper::_ComposedMapper)
     transitions = []
     for fs in Base.product(basisstates.(Hsin)...)
         Iin = map(state_index, fs, Hsin)
@@ -285,7 +293,7 @@ function _transitions(Hsin, Hsout, mapper::_ComposedMapper)
 end
 
 # Identity: H => H
-function _transitions(Hsin::Tuple{<:AbstractHilbertSpace}, Hsout::Tuple{<:AbstractHilbertSpace}, ::Nothing)
+function _transitions(Hsin::_OneSpace, Hsout::_OneSpace, ::Nothing)
     H = only(Hsin)
     return [((I,), (I,), 1) for I in 1:dim(H)]
 end

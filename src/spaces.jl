@@ -123,9 +123,10 @@ This is primarily used for product spaces where the subsystem is specified by a 
 
 # Examples
 ```julia
-H1 = hilbert_space(1:1)
-H2 = hilbert_space(2:2)
-H3 = hilbert_space(3:3)
+@fermions f
+H1 = hilbert_space(f, 1:1)
+H2 = hilbert_space(f, 2:2)
+H3 = hilbert_space(f, 3:3)
 H = tensor_product((H1, H2, H3))
 Hsub = subregion((H1, H3), H)
 ```

@@ -52,8 +52,9 @@ state_index(state::NambuState, H::BdGHilbertSpace) = state_index(state, parent(H
 _find_position(op::AbstractSym, H::BdGHilbertSpace) = _find_position(op, parent(H))
 
 
-representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
-function matrix_representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
+const _BdGOperator = Union{AbstractFermionSym,NCMul,NCAdd}
+representation(op::_BdGOperator, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
+function matrix_representation(op::_BdGOperator, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
     isquadratic(op) || throw(ArgumentError("Operator must be quadratic in fermions to be represented on a BdG Hilbert space."))
     normal_order_to_bdg(_matrix_representation_single_space(remove_identity(op), H, repr, chunking; kwargs...))
 end

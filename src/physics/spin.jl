@@ -154,6 +154,7 @@ function interpret_state(input::AbstractString, H::SpinSpace{T}) where {T}
     end
     return SpinState(m)
 end
+interpret_state(input::AbstractChar, H::SpinSpace) = interpret_state(string(input), H)
 
 spin_basisstates(J::HalfInteger) = [SpinState(i - J) for i in 0:twice(J)]
 spin_basisstates(j) = spin_basisstates(HalfInteger(j))

@@ -343,7 +343,7 @@ function precomputation_before_operator_application(ops::ProductOperator, space:
     return map(precomputation_before_operator_application, ops.ops, ops.spaces)
 end
 
-internal_rep(state, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))
+internal_rep(state::ProductState, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))
 physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state, space)
 
 function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::ProductSpace, precomps) where B
@@ -362,7 +362,7 @@ function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::Abst
     newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
     return _internal_rep(newstate, space, T), amp
 end
-function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::NTuple{N,InternalRep{T}}, space::ProductSpace, precomps) where {C,T,N}
+function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::Tuple{InternalRep{T},Vararg{InternalRep{T}}}, space::ProductSpace, precomps) where {C,T}
     # amp::C = one(C)
     # newreps::NTuple{N,InternalRep{T}} = internal_reps
     # n::Int = 0
