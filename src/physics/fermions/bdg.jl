@@ -23,13 +23,12 @@ function normal_order_to_bdg(m::AbstractMatrix)
         -conj(Δ) -conj(h)]
 end
 
-struct BdGHilbertSpace{B,H} <: AbstractHilbertSpace{B}
+struct BdGHilbertSpace{H}
     parent::H
     function BdGHilbertSpace(f::SymbolicFermionBasis, labels)
         states = vec([NambuState(i, hole) for (i, label) in enumerate(labels), hole in (true, false)])
         H = hilbert_space(f, labels, states)
-        B = statetype(H)
-        return new{B,typeof(H)}(H)
+        return new{typeof(H)}(H)
     end
 end
 """
@@ -48,6 +47,8 @@ Base.hash(x::BdGHilbertSpace, h::UInt) = hash(x.parent, h)
 modes(H::BdGHilbertSpace) = modes(H.parent)
 basisstates(h::BdGHilbertSpace) = basisstates(h.parent)
 Base.parent(h::BdGHilbertSpace) = h.parent
+Base.keys(h::BdGHilbertSpace) = keys(h.parent)
+basisstate(ind::Integer, H::BdGHilbertSpace) = basisstate(ind, parent(H))
 state_index(state::NambuState, H::BdGHilbertSpace) = state_index(state, parent(H))
 _find_position(op::AbstractSym, H::BdGHilbertSpace) = _find_position(op, parent(H))
 
@@ -60,7 +61,7 @@ function matrix_representation(op::_BdGOperator, H::BdGHilbertSpace, repr=EagerS
 end
 
 
-function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::AbstractHilbertSpace{NambuState}; kwargs...)
+function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::Union{BdGHilbertSpace,AbstractHilbertSpace{NambuState}}; kwargs...)
     nambustates = (NambuState(_find_position(op.factors[1], H), op.factors[1].creation),
         NambuState(_find_position(op.factors[2], H), !op.factors[2].creation))
     inind = state_index(nambustates[2], H)
@@ -86,6 +87,16 @@ end
         sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:2, m in 1:2)
     bdg_ham2 = representation(op, H)
     @test bdg_ham ≈ bdg_ham2
+end
+
+@testitem "BdG space does not combine with generic space operations" begin
+    @fermions f
+    H = bdg_hilbert_space(f, 1:2)
+    @test !(H isa FermionicHilbertSpaces.AbstractHilbertSpace)
+    m = rand(dim(H), dim(H))
+    @test_throws MethodError partial_trace(m, H, H)
+    @test_throws MethodError embed(m, H, H)
+    @test_throws MethodError subregion(H, H)
 end
 
 
