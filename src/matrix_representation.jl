@@ -312,15 +312,23 @@ function symbolic_groups(op)
 end
 
 """
-    representation(op_or_state, space::AbstractHilbertSpace; kwargs...)
+    representation(op_or_state, space::AbstractHilbertSpace, [type]; kwargs...)
+    representation(state_expression; kwargs...)
 
-Return a concrete representation of `op_or_state` in Hilbert space `space`.
+Return a concrete representation of `op_or_state` in Hilbert space `space`. This is the main entry point, which calls
+[`matrix_representation`](@ref) for operators and [`vector_representation`](@ref) for states.
 
-- For symbolic operators, returns a sparse matrix by default. A third argument selects the type:
+- For symbolic operators and numbers, returns a sparse matrix by default. The optional `type` selects the format:
   `:dense` gives a dense matrix, and `:lazy` (or `LazyRepr()`) gives a matrix-free
-  `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`.
-- For `AbstractBasisState`, returns a one-hot sparse column vector.
-- For `SymbolicState` (ket/bra), returns the corresponding column/row vector.
+  `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`. A number `c` gives `c` times the identity.
+- For `AbstractBasisState` and strings such as `"10"`, returns a one-hot sparse column vector.
+- For `SymbolicState` kets and bras, and sums of them, returns the corresponding column or row vector.
+- For ketbras, and operators that contain ketbras, returns a matrix.
+
+Expressions that combine kets or bras with operators or with states of other spaces have no representation and throw an
+`ArgumentError`. Without the `space` argument, only expressions of symbolic states are accepted, and the space is taken from the states.
+The single-particle space `hilbert_space(f, labels, SingleParticle())` and the Bogoliubov-de Gennes space `hilbert_space(f, labels, BdG())`
+represent quadratic fermionic operators only, and a number is represented by the zero matrix.
 """
 function representation(state::AbstractBasisState, space::AbstractHilbertSpace; kwargs...)
     vector_representation(state, space)
@@ -585,6 +593,15 @@ end
 ## 
 remove_identity(a::NCMul) = a
 remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict)
+
+# The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
+_isscalar_operator(op) = op isa Union{Number,UniformScaling} || (op isa Union{NCMul,NCAdd} && NonCommutativeProducts.isscalar(op))
+_isfermionic(op) = op isa Union{NCMul,NCAdd,AbstractSym} && NonCommutativeProducts.ncmapreduce(x -> x isa AbstractFermionSym, (&, &), op; scalarmap=Returns(true))
+function _identity_free_zero(H, repr)
+    _repr = _canonicalize_repr(repr)
+    _repr isa Union{EagerSparseRepr,EagerDenseRepr} || throw(ArgumentError("Only the :sparse and :dense representations are supported on $(typeof(H)). Got $repr."))
+    _zero_matrix(H, _repr, Int)
+end
 
 ## Symmetries
 isnumberconserving(x::AbstractFermionSym) = false

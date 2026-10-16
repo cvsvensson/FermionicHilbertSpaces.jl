@@ -243,13 +243,19 @@ function representation(op; kwargs...)
     reducer(::Missing, ::Missing) = missing
     reducer(s1, ::Missing) = s1
     reducer(s1, s2) = s1==s2 ? s1 : throw(ArgumentError("Cannot represent a product of symbolic states in different spaces"))
-    if _operator_type(op) in (:kets, :bras, :ketbras)
+    type = _operator_type(op)
+    if type in (:kets, :bras, :ketbras)
         _iszero_ncadd(op) && throw(ArgumentError("Can't infer the space of the zero state $op, please provide a space argument"))
         space =NonCommutativeProducts.ncmapreduce(op -> op.space, (reducer, reducer), op; scalarmap=x->missing)
         return representation(op, space; kwargs...)
+    elseif type == :mixed
+        throw(_mixed_error(op))
     else
-        throw(ArgumentError("Don't know the space of the operator $op, please provide a space argument"))
+        throw(ArgumentError("Don't know the space of the operator $op. Pass the Hilbert space, as in representation(op, H)."))
     end
+end
+function _mixed_error(op)
+    ArgumentError("Cannot represent $op, which combines kets or bras with operators or with states of other spaces. Apply the operators to the states first, or represent the parts separately with matrix_representation(op, H) and vector_representation(state, H).")
 end
 
 function _operator_type(op::SymbolicState)
@@ -262,7 +268,12 @@ function _operator_type(op::SymbolicState)
     end
 end
 _operator_type(::Union{UniformScaling,Number}) = :operator
-function _operator_type(op)
+_operator_type(op) = throw(ArgumentError("Cannot represent an object of type $(typeof(op)). Expected a symbolic operator or state, or a number. Basis states and state strings can be represented with representation(state, H)."))
+# Returns one of
+#   :kets, :bras, :ketbras  the expression is built from symbolic states of that kind (and scalars) only,
+#   :operator               there are no kets and bras: operators, scalars, and ketbras combined with operators,
+#   :mixed                  kets or bras are combined with other states or operators, which has no representation.
+function _operator_type(op::Union{NCMul,NCAdd,AbstractSym})
     _iszero_ncadd(op) && return _zero_operator_type(op)
     hasket = false
     hasbra = false
@@ -286,7 +297,7 @@ function _operator_type(op)
         return :bras
     elseif hasketbra && !hasket && !hasbra && !hasop
         return :ketbras
-    elseif !hasket && !hasbra && hasop
+    elseif !hasket && !hasbra
         return :operator
     else
         return :mixed
@@ -371,15 +382,16 @@ function vector_representation(op::NCAdd, space::AbstractHilbertSpace, repr=Eage
 end
 
 function representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
-    _same_space_id(space, s.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
     if isket(s) || isbra(s)
+        _same_space_id(space, s.space) || throw(ArgumentError("The space of the symbolic ket or bra must match the provided space. A vector needs a state for every factor of a product space."))
         return vector_representation(s, space, repr; kwargs...)
     end
     matrix_representation(s, space, repr; kwargs...)
 end
 function matrix_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
-    _same_space_id(space, s.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
-    isketbra(s) || throw(ArgumentError("matrix_representation is only defined for ketbra SymbolicState operators"))
+    isketbra(s) || throw(ArgumentError("`matrix_representation` is only defined for ketbra `SymbolicState` operators. Use `vector_representation(state, H)` for a ket or bra."))
+    # a ketbra on one factor of a product space acts as the identity on the other factors
+    _same_space_id(space, s.space) || return matrix_representation(1 * s, space, repr; kwargs...)
     ket_vec = vector_representation(SymbolicState(space, s.ket, nothing), space, repr)
     bra_vec = vector_representation(SymbolicState(space, nothing, s.bra), space, repr)
     return ket_vec * bra_vec
@@ -396,6 +408,8 @@ function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr();
             return _zero_matrix(space, _repr, mat_eltype(op))
         end
         return matrix_representation(op, space, repr; kwargs...)
+    elseif type == :mixed
+        throw(_mixed_error(op))
     else
         return matrix_representation(op, space, repr; kwargs...)
     end
@@ -448,6 +462,128 @@ end
     vsec = representation(ssec, Hn1)
     @test vsec[1] == 1
     @test count(!iszero, vsec) == 1
+end
+
+@testitem "representation of different kinds of input" begin
+    using LinearAlgebra, SparseArrays
+    @fermions f
+    @majoranas γ
+    @boson b
+    @spin s 1 // 2
+    Hf = hilbert_space(f, 1:2)
+    df = dim(Hf)
+    idf = Matrix(I, df, df)
+
+    @testset "scalars" begin
+        @test Matrix(representation(2, Hf)) == 2 * idf
+        @test Matrix(representation(I, Hf)) == idf
+        @test iszero(representation(0, Hf))
+        @test representation(2, Hf, :dense) == 2 * idf
+        @test_throws ArgumentError representation(2)
+        @test_throws ArgumentError representation(I)
+    end
+
+    @testset "operators that reduce to a scalar" begin
+        op = f[1] - f[1] + 2
+        @test Matrix(representation(op, Hf)) == 2 * idf
+        @test Matrix(representation((f[1] + 2) - f[1], Hf)) == 2 * idf
+        @test Matrix(representation(f[1]' * f[1] - f[1]' * f[1] + 2, Hf)) == 2 * idf
+        @test_throws ArgumentError representation(op)
+    end
+
+    @testset "zero operators" begin
+        @test iszero(representation(0 * f[1], Hf))
+        @test size(representation(0 * f[1], Hf)) == (df, df)
+        @test iszero(representation(f[1] - f[1], Hf))
+        @test size(representation(f[1] - f[1], Hf)) == (df, df)
+        @test_throws ArgumentError representation(0 * f[1])
+        @test_throws ArgumentError representation(f[1] - f[1])
+    end
+
+    @testset "spin" begin
+        Hs = hilbert_space(s)
+        id2 = Matrix(I, 2, 2)
+        # s[:I] and products that reduce to a number are Rationals or expressions without operators
+        @test Matrix(representation(s[:I], Hs)) == id2
+        @test Matrix(representation(s[:z] * s[:z], Hs)) ≈ id2 / 4
+        @test iszero(representation(s[:+] * s[:+], Hs))
+        @test representation(s[:x], Hs) == matrix_representation(s[:x], Hs)
+        @test Matrix(representation(s[:x], Hs)) ≈ [0 0.5; 0.5 0]
+        @test_throws ArgumentError representation(s[:I])
+    end
+
+    @testset "majoranas and bosons" begin
+        Hm = hilbert_space(γ, 1:4)
+        @test representation(γ[1], Hm) == matrix_representation(γ[1], Hm)
+        @test Matrix(representation(γ[1] * γ[1], Hm)) == Matrix(I, dim(Hm), dim(Hm))
+        m12 = Matrix(representation(γ[1] * γ[2], Hm))
+        @test Matrix(representation(γ[1] * γ[2] + 1, Hm)) == m12 + I
+        @test_throws ArgumentError representation(γ[1])
+
+        Hb = hilbert_space(b, 4)
+        @test representation(b, Hb) == matrix_representation(b, Hb)
+        nb = Matrix(representation(b' * b, Hb))
+        @test sort(diag(nb)) ≈ collect(0:3)
+        @test Matrix(representation(b' * b + 2, Hb)) ≈ nb + 2I
+        @test_throws ArgumentError representation(b)
+    end
+
+    @testset "ketbras combined with operators" begin
+        Hb = hilbert_space(b, 3)
+        H = tensor_product(Hf, Hb)
+        vf, vb = Kets(Hf), Kets(Hb)
+        kb = vb("0") * vb("1")'
+        @test representation(kb, H) ≈ embed(representation(kb, Hb), Hb => H)
+        @test representation(kb, H) == matrix_representation(kb, H)
+        op = f[1]' * kb
+        @test representation(op, H) == matrix_representation(op, H)
+        @test representation(op, H) ≈ representation(f[1]', H) * representation(kb, H)
+        @test representation(op, H, :dense) ≈ representation(op, H)
+        @test_throws ArgumentError representation(op)
+
+        proj = vf("10") * vf("10")'
+        @test Matrix(representation(proj + 1, Hf)) == Matrix(representation(proj, Hf)) + I
+    end
+
+    @testset "kets and bras combined with other objects" begin
+        Hb = hilbert_space(b, 3)
+        H = tensor_product(Hf, Hb)
+        vf, vb = Kets(Hf), Kets(Hb)
+        @test_throws ArgumentError representation(f[1]' * vb("0"), H)
+        @test_throws ArgumentError representation(f[1]' * vb("0"))
+        @test_throws ArgumentError representation(vf("10") * vb("1")', H)
+        @test_throws ArgumentError representation(vb("1"), H)
+        @test_throws ArgumentError representation(vf("10") + 1, Hf)
+    end
+
+    @testset "basis states, strings and unsupported input" begin
+        @test representation("10", Hf) == representation(basisstate("10", Hf), Hf)
+        @test_throws ArgumentError representation("10")
+        @test_throws ArgumentError representation([1, 2], Hf)
+    end
+
+    @testset "single-particle and BdG spaces" begin
+        h = f[1]' * f[2] + hc
+        Hsp = hilbert_space(f, 1:2, SingleParticle())
+        @test representation(h, Hsp) == matrix_representation(h, Hsp)
+        @test size(representation(2, Hsp)) == (2, 2)
+        @test iszero(representation(2, Hsp))
+        @test iszero(representation(I, Hsp))
+        @test iszero(representation(f[1]' * f[1] - f[1]' * f[1] + 2, Hsp))
+        @test_throws ArgumentError representation(f[1], Hsp)
+        @test_throws ArgumentError representation(b' * b, Hsp)
+        @test_throws ArgumentError representation(Ket("10", Hf), Hsp)
+
+        hbdg = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
+        Hbdg = hilbert_space(f, 1:2, BdG())
+        @test representation(hbdg, Hbdg) == matrix_representation(hbdg, Hbdg)
+        @test size(representation(2, Hbdg)) == (4, 4)
+        @test iszero(representation(2, Hbdg))
+        @test iszero(representation(I, Hbdg))
+        @test_throws ArgumentError representation(f[1], Hbdg)
+        @test_throws ArgumentError representation(b' * b, Hbdg)
+        @test_throws ArgumentError representation(Ket("10", Hf), Hbdg)
+    end
 end
 
 @testitem "basisstate from string" begin

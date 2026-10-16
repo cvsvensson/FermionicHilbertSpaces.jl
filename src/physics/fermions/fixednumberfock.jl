@@ -308,7 +308,8 @@ end
 
 representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
-    isquadratic(op) && isnumberconserving(op) || throw(ArgumentError("Only quadratic, number conserving operators supported for SingleParticleHilbertSpace"))
+    _isscalar_operator(op) && return _identity_free_zero(H, repr)
+    _isfermionic(op) && isquadratic(op) && isnumberconserving(op) || throw(ArgumentError("Only quadratic, number conserving fermionic operators can be represented on a SingleParticleHilbertSpace. Use `hilbert_space(f, labels)` and `matrix_representation(op, H)` for other operators."))
     _matrix_representation_single_space(remove_identity(op), H, repr, chunking; kwargs...)
 end
 _find_position(op, H::SingleParticleHilbertSpace) = _find_position(op, parent(H))
