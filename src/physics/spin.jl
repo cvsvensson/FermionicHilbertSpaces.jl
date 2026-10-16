@@ -27,7 +27,10 @@ end
 
 SymbolicSpinBasis(label, field=nothing, spin=nothing) = SymbolicSpinBasis(label, field, spin, Tags(nothing))
 Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field && a.spin == b.spin && a.tags == b.tags
-Base.isless(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = (a.field, a.label, a.tags) < (b.field, b.label, b.tags)
+_spin_order_key(s::SymbolicSpinBasis) = (_spin_field_name(s.field), s.label, s.tags, s.spin)
+_spin_field_name(::Nothing) = nothing
+_spin_field_name(f::SpinField) = f.name
+Base.isless(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = _content_cmp(_spin_order_key(a), _spin_order_key(b)) < 0
 Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
 Base.getindex(s::SymbolicSpinBasis, ::Colon) = [SpinSym(σ, s) for σ in (:x, :y, :z)]
 Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.tags, hash(x.spin, hash(x.field, hash(x.label, h))))

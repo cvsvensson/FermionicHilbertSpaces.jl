@@ -37,7 +37,7 @@ and commute with Majoranas in other `@majoranas` blocks.
 See also [`@fermions`](@ref).
 """
 macro majoranas(xs...)
-    group = MajoranaGroup(FermionicGroup(Tags((hash(xs),))))
+    group = MajoranaGroup(FermionicGroup(Tags((xs,))))
     defs = map(xs) do x
         :($(esc(x)) = SymbolicMajoranaBasis($(Expr(:quote, x)), $group))
     end

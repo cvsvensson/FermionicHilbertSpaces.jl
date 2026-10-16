@@ -56,7 +56,19 @@ end
 
 Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.bra && atomic_id(a.space) == atomic_id(b.space)
 Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(atomic_id(a.space), h)))
-Base.isless(a::SymbolicState, b::SymbolicState) = hash(a) < hash(b)
+# States are ordered by group, then by space, then by ket and bra, where a missing ket or bra comes first.
+function Base.isless(a::SymbolicState, b::SymbolicState)
+    c = _group_cmp(a, b)
+    c == 0 || return c < 0
+    ida, idb = atomic_id(a.space), atomic_id(b.space)
+    ida == idb || return _content_cmp(ida, idb) < 0
+    c = _state_cmp(a.ket, b.ket)
+    c == 0 ? _state_cmp(a.bra, b.bra) < 0 : c < 0
+end
+_state_cmp(::Nothing, ::Nothing) = 0
+_state_cmp(::Nothing, _) = -1
+_state_cmp(_, ::Nothing) = 1
+_state_cmp(a, b) = _content_cmp(a, b)
 Base.adjoint(s::SymbolicState) = SymbolicState(s.space, s.bra, s.ket)
 
 symbolic_group(s::SymbolicState) = group_id(s.space)
@@ -169,11 +181,12 @@ function _term_matrix_representation(op::NCMul{<:Any,<:SymbolicState}, H::Abstra
     matrix_representation(only(op.factors), H, t; kwargs...)
 end
 
-_order_hash(x) = hash(symbolic_group(x))
+# Factors from different groups are put in the order of their groups
+_group_cmp(a, b) = _content_cmp(symbolic_group(a), symbolic_group(b))
 
 function NonCommutativeProducts.mul_effect(a::SymbolicState, b::SymbolicState)
     if !_same_space_id(a.space, b.space)
-        return _order_hash(a) > _order_hash(b) ? Swap(1) : nothing
+        return _group_cmp(a, b) > 0 ? Swap(1) : nothing
     end
     if has_bra(a) && has_ket(b)
         coeff = a.bra == b.ket ? 1 : 0
@@ -203,7 +216,7 @@ end
 
 function NonCommutativeProducts.mul_effect(op::AbstractSym, s::SymbolicState)
     if !(symbolic_group(op) == group_id(s.space))
-        return _order_hash(op) > _order_hash(s) ? Swap(1) : nothing
+        return _group_cmp(op, s) > 0 ? Swap(1) : nothing
     end
     if !has_ket(s)
         throw(ArgumentError("Cannot act with operator $op on the left of $s"))
@@ -214,7 +227,7 @@ end
 
 function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
     if !(symbolic_group(op) == group_id(s.space))
-        return _order_hash(s) > _order_hash(op) ? Swap(1) : nothing
+        return _group_cmp(s, op) > 0 ? Swap(1) : nothing
     end
     if !has_bra(s)
         throw(ArgumentError("Cannot act with operator $op on the right of $s"))

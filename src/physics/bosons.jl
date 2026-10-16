@@ -71,7 +71,7 @@ function Base.show(io::IO, x::BosonSym)
 end
 Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && isequal(a.basis, b.basis)
 Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, h)))
-_boson_name(s::BosonSym) = s.basis isa Nothing ? (s.label, tags(s)) : (s.basis.name, s.label, tags(s))
+_boson_name(s::BosonSym) = s.basis isa Nothing ? (s.label, tags(s)) : (s.basis.name, s.label, tags(s.basis))
 # Normal ordering of a = b^m, c = b†^n: b^m b†^n = Σₖ k! C(m,k) C(n,k) b†^(n-k) b^(m-k)
 function _boson_normal_order(a::BosonSym, c::BosonSym)
     m, n = -a.exp, c.exp
@@ -95,7 +95,7 @@ function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
             end
         end
     end
-    if _boson_name(a) > _boson_name(b)
+    if _content_cmp(_boson_name(a), _boson_name(b)) > 0
         return Swap(1)
     else
         return nothing

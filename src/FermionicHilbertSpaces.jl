@@ -56,13 +56,81 @@ const hc = HC()
 
 abstract type AbstractSym end
 
+# `_content_cmp(a, b)` is a total order on identifiers (tags, group ids, basis states) that depends only on their
+# content, so it is the same in every session and on every platform. It returns -1, 0 or 1 like `cmp`.
+# Values of different kinds compare by `_kind_rank`. Tuples and arrays compare lexicographically, then by length.
+# Other values compare by type name, then field by field.
+_kind_rank(::Nothing) = 0
+_kind_rank(::Real) = 1
+_kind_rank(::AbstractChar) = 2
+_kind_rank(::AbstractString) = 3
+_kind_rank(::Symbol) = 4
+_kind_rank(::Type) = 5
+_kind_rank(::Tuple) = 6
+_kind_rank(::AbstractArray) = 7
+_kind_rank(::AbstractDict) = 8
+_kind_rank(_) = 9
 
+_content_cmp(::Nothing, ::Nothing) = 0
+_content_cmp(a::Real, b::Real) = cmp(a, b)
+_content_cmp(a::AbstractChar, b::AbstractChar) = cmp(a, b)
+_content_cmp(a::AbstractString, b::AbstractString) = cmp(a, b)
+_content_cmp(a::Symbol, b::Symbol) = cmp(a, b)
+_type_name(T::Union{DataType,UnionAll}) = nameof(T)
+_type_name(T) = Symbol(string(T))
+function _content_cmp(a::Type, b::Type)
+    a === b && return 0
+    c = cmp(_type_name(a), _type_name(b))
+    c == 0 ? cmp(string(a), string(b)) : c
+end
+_content_cmp(::Tuple{}, ::Tuple{}) = 0
+_content_cmp(::Tuple{}, ::Tuple) = -1
+_content_cmp(::Tuple, ::Tuple{}) = 1
+function _content_cmp(a::Tuple, b::Tuple)
+    c = _content_cmp(first(a), first(b))
+    c == 0 ? _content_cmp(_tuple_tail(a...), _tuple_tail(b...)) : c
+end
+_tuple_tail(_, rest...) = rest
+function _content_cmp(a::AbstractArray, b::AbstractArray)
+    for (x, y) in zip(a, b)
+        c = _content_cmp(x, y)
+        c == 0 || return c
+    end
+    return cmp(length(a), length(b))
+end
+# Dicts have no intrinsic order, so their entries are sorted first
+function _content_cmp(a::AbstractDict, b::AbstractDict)
+    lt(x, y) = _content_cmp(x, y) < 0
+    _content_cmp(sort!(collect(a); lt), sort!(collect(b); lt))
+end
+function _content_cmp(a, b)
+    ra, rb = _kind_rank(a), _kind_rank(b)
+    ra == rb || return cmp(ra, rb)
+    Ta, Tb = typeof(a), typeof(b)
+    if Ta !== Tb
+        c = cmp(nameof(Ta), nameof(Tb))
+        c == 0 || return c
+    end
+    na, nb = nfields(a), nfields(b)
+    for i in 1:min(na, nb)
+        c = _content_cmp(getfield(a, i), getfield(b, i))
+        c == 0 || return c
+    end
+    return cmp(na, nb)
+end
+
+# The tags that identify a group of symbolic operators. `tags` is `nothing` or a tuple. For `@fermions` and
+# `@majoranas` the first element is the tuple of names given to the macro, so the names determine the group.
+# Elements appended by `add_tag` are symbols such as `:left` and `:right`.
+# Tags are ordered by `_content_cmp` of `tags`. For groups created by the macros this is the lexicographic order
+# of the macro's names, e.g. the operators of `@fermions a` sort before those of `@fermions b`.
 struct Tags{T}
     tags::T
 end
 Base.hash(id::Tags, h::UInt) = hash(id.tags, h)
 Base.:(==)(a::Tags, b::Tags) = a.tags == b.tags
-Base.isless(a::Tags, b::Tags) = isless(hash(a.tags), hash(b.tags))
+_content_cmp(a::Tags, b::Tags) = _content_cmp(a.tags, b.tags)
+Base.isless(a::Tags, b::Tags) = _content_cmp(a, b) < 0
 tagset(id::Tags) = id.tags
 tagset(::Tags{Nothing}) = ()
 tagset(x) = tagset(tags(x))
