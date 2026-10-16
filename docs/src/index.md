@@ -9,8 +9,6 @@ CurrentModule = FermionicHilbertSpaces
 
 Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`.
 
-!!! note
-    Loading the package calls `NonCommutativeProducts.enable_autosort!()`. This turns on autosorting of non-commutative products for every user of NonCommutativeProducts in the Julia session, not only for this package.
 
 ## Functionality
 

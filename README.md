@@ -15,8 +15,6 @@ The goal of this package is that you should be able to define your own physics a
 
 Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`.
 
-Loading the package calls `NonCommutativeProducts.enable_autosort!()`, which turns on autosorting of non-commutative products for every user of NonCommutativeProducts in the Julia session, not only for this package.
-
 
 ## Quick example
 Let's define a small fermionic system, find the ground state and compute the entanglement entropy of half the system.
