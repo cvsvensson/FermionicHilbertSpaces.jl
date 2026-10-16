@@ -8,14 +8,14 @@ Constructed via `matrix_representation(op, space, :lazy)`. `LazyOperator` confor
 the `SciMLOperators.AbstractSciMLOperator` interface.
 """
 mutable struct LazyOperator{O,S,T,C,P}
-    op::O
-    space::S
-    chunking::C
-    precomp::P
-    projection::Bool
-    conjugate::Bool
-    ishermitian::Bool
-    size::Tuple{Int,Int}
+    const op::O
+    const space::S
+    const chunking::C
+    const precomp::P
+    const projection::Bool
+    const conjugate::Bool
+    const ishermitian::Bool
+    const size::Tuple{Int,Int}
     cache::Any
 end
 
