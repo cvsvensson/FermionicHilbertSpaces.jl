@@ -99,19 +99,6 @@ end
     @test_throws MethodError subregion(H, H)
 end
 
-
-function isantisymmetric(A::AbstractMatrix)
-    indsm, indsn = axes(A)
-    if indsm != indsn
-        return false
-    end
-    for i = first(indsn):last(indsn), j = (i):last(indsn)
-        if A[i, j] != -A[j, i]
-            return false
-        end
-    end
-    return true
-end
 function isbdgmatrix(A::AbstractMatrix)
     # Check if A is a BdG matrix, i.e., it has the form:
     # [H, Δ; -conj(Δ), -conj(H)]

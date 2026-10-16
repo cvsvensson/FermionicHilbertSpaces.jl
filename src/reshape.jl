@@ -524,15 +524,3 @@ end
     )
     @test B_twostep ≈ B
 end
-
-function reshape_to_matrix(t::AbstractArray{<:Any,N}, leftindices::NTuple{NL,Int}) where {N,NL}
-    rightindices::NTuple{N - NL,Int} = Tuple(setdiff(ntuple(identity, N), leftindices))
-    reshape_to_matrix(t, leftindices, rightindices)
-end
-function reshape_to_matrix(t::AbstractArray{<:Any,N}, leftindices::NTuple{NL,Int}, rightindices::NTuple{NR,Int}) where {N,NL,NR}
-    @assert NL + NR == N
-    tperm = permutedims(t, (leftindices..., rightindices...))
-    lsize = prod(i -> size(t, i), leftindices, init=1)
-    rsize = prod(i -> size(t, i), rightindices, init=1)
-    reshape(tperm, lsize, rsize)
-end

@@ -50,12 +50,6 @@ function tensor_product(spaces; constraint=NoSymmetry())
     end
 end
 
-function check_tensor_product_basis_compatibility(b1::AbstractHilbertSpace, b2::AbstractHilbertSpace, b3::AbstractHilbertSpace)
-    if vcat(collect(keys(b1)), collect(keys(b2))) != collect(keys(b3))
-        throw(ArgumentError("The labels of the output basis are not the same (or ordered the same) as the labels of the input bases. $(keys(b1)) * $(keys(b2)) != $(keys(b3))"))
-    end
-end
-
 size_compatible(m, H) = size(m) == ntuple(_ -> dim(H), ndims(m))
 size_compatible(m::UniformScaling, H) = true
 kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, Hs))
@@ -285,7 +279,6 @@ Compute the ordered product of the fermionic embeddings of the matrices `ms` in 
 """
 function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
-    # isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
     if all(_issquare, ms)
         return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
     elseif all(_isket, ms)

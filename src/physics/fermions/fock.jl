@@ -148,9 +148,6 @@ end
 
 permute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
 
-shift_right(f::FockNumber, M) = FockNumber(f.f << M)
-
-
 @testitem "Fock" begin
     using Random
     using FermionicHilbertSpaces: bits, _bit, focknbr_from_bits, focknbr_from_site_indices, focknbr_from_site_index

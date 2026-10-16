@@ -124,20 +124,6 @@ function apply_local_operators(op::NCMul, state, space, precomps; transpose)
     end
 end
 
-
-"""
-    partition_factors_by_basis(factors::Vector, bases::Vector)
-
-Partition a vector of operator factors into groups by their symbolic basis.
-"""
-function partition_factors_by_basis(factors::Vector, bases)
-    partition = Iterators.map(bases) do basis
-        v = filter(==(basis) ∘ symbolic_group, factors)
-        length(v) > 0 ? Tuple(v) : v #missing
-    end
-    sum(length, skipmissing(partition)) == length(factors) || throw(ArgumentError("Not all factors were assigned to a basis."))
-    return partition
-end
 struct TupleConcretizer end
 struct VecConcretizer end
 struct NoConcretizer end
