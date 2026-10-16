@@ -306,7 +306,6 @@ end
 struct LazyPhaseMap{M,F} <: AbstractMatrix{Int}
     fockstates::Vector{F}
 end
-Base.length(p::LazyPhaseMap) = length(p.fockstates)
 Base.size(p::LazyPhaseMap) = (length(p.fockstates), length(p.fockstates))
 function Base.show(io::IO, p::LazyPhaseMap{M,F}) where {M,F}
     print(io, "LazyPhaseMap{$M,$F}(")

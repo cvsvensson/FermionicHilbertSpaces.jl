@@ -150,13 +150,13 @@ end
     end
 end
 
-struct MajoranaHilbertSpace{B,L,H} <: AbstractGroupedHilbertSpace{B}
+struct MajoranaHilbertSpace{B,L,H,S<:SymbolicMajoranaBasis} <: AbstractGroupedHilbertSpace{B}
     majoranaindices::L
     parent::H
-    sym::SymbolicMajoranaBasis
-    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::SymbolicMajoranaBasis) where {L,H<:FermionicSpace}
+    sym::S
+    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::S) where {L,H<:FermionicSpace,S<:SymbolicMajoranaBasis}
         B = statetype(parent)
-        new{B,L,H}(majoranaindices, parent, sym)
+        new{B,L,H,S}(majoranaindices, parent, sym)
     end
 end
 

@@ -4,6 +4,18 @@ struct Kets{B,H}
 end
 Ket(label, H) = Kets(H)(label)
 
+function Base.show(io::IO, k::Kets)
+    print(io, "Kets(")
+    show(IOContext(io, :compact => true), k.space)
+    print(io, ")")
+end
+
+@testitem "Kets show" begin
+    @fermions f
+    kets = Kets(hilbert_space(f, 1:2))
+    @test occursin("Kets", repr(kets))
+end
+
 struct SymbolicState{K,B,H} <: AbstractSym
     space::H
     ket::K
