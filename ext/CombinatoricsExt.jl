@@ -1,7 +1,8 @@
 module CombinatoricsExt
 
 using Combinatorics: permutations, parity
-import FermionicHilbertSpaces: _resolve_sector_permutations_and_weights, Fill
+using FillArrays: Fill
+import FermionicHilbertSpaces: _resolve_sector_permutations_and_weights
 
 function _resolve_sector_permutations_and_weights(Hs, sector::Symbol, ::Type{T}) where T
     n = length(Hs)

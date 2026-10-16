@@ -1,7 +1,8 @@
 module PartitionedArraysExt
 
-import PartitionedArrays: DebugArray, own_to_global, psparse, uniform_partition
-import FermionicHilbertSpaces: NonCommutativeProducts.NCAdd, NonCommutativeProducts.NCMul, NonCommutativeProducts.NCterms, PartitionedSparseRepr, _matrix_representation_single_space, _sum_matrices, _term_matrix_representation, dim, mat_eltype, sparse_matrix_accumulator, chunked_operator_indices_and_amplitudes!, push_inds_amps!
+import PartitionedArrays: own_to_global, psparse, uniform_partition
+using NonCommutativeProducts: NCAdd, NCMul, NCterms
+import FermionicHilbertSpaces: PartitionedSparseRepr, _matrix_representation_single_space, _term_matrix_representation, dim, mat_eltype, sparse_matrix_accumulator, chunked_operator_indices_and_amplitudes!, push_inds_amps!
 
 function _resolve_ranks(repr::PartitionedSparseRepr)
     repr.nparts > 0 || throw(ArgumentError("nparts must be positive, got $(repr.nparts)."))
