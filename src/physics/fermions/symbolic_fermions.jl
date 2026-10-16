@@ -36,7 +36,7 @@ and commute with fermions in other `@fermions` blocks.
 See also [`@majoranas`](@ref).
 """
 macro fermions(xs...)
-    group = FermionicGroup(Tags((hash(xs),)))
+    group = FermionicGroup(Tags((xs,)))
     defs = map(xs) do x
         :($(esc(x)) = SymbolicFermionBasis($(Expr(:quote, x)), $group))
     end
@@ -175,6 +175,54 @@ mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
         @test op - 1.0I == op - 1.0 == -(1.0I - op) == -(1.0 - op)
     end
 
+end
+
+@testitem "Deterministic ordering of groups" begin
+    using FermionicHilbertSpaces: Tags, tags, add_tag, SymbolicState
+    @fermions a
+    @fermions b
+    @fermions c d
+    @majoranas γ
+
+    # the groups are identified by the names given to the macro, not by a hash of them
+    @test tags(a).id.tags == ((:a,),)
+    @test tags(c).id.tags == ((:c, :d),)
+    @test tags(γ).group.id.tags == ((:γ,),)
+    a_old = a
+    @fermions a
+    @test a == a_old
+
+    # groups are in lexicographic order of the names given to the macro
+    @test tags(a) < tags(b) < tags(c)
+    @test a[2] < b[1] && b[1] < c[1] && !(b[1] < a[2])
+    @test a[1]' < b[1]
+    @test only(keys((b[1] * a[1]).dict)).factors == [a[1], b[1]]
+    @test only(keys((c[1] * b[1]' * a[2]).dict)).factors == [a[2], b[1]', c[1]]
+
+    # the order is total and consistent with ==
+    ts = [Tags(nothing), Tags((:left,)), Tags((:right,)), tags(a).id, tags(b).id, tags(c).id,
+        add_tag(tags(a).id, :left), add_tag(tags(a).id, :right), add_tag(add_tag(tags(a).id, :left), :right),
+        Tags(((:a,),)), Tags(((:a, :b),))]
+    for x in ts, y in ts
+        @test (x == y) == (!(x < y) && !(y < x))
+        @test !(x < y && y < x)
+    end
+    @test issorted(sort(ts))
+    @test sort(ts) == sort(reverse(ts))
+
+    # symbolic states are ordered by group, space, ket and bra
+    @boson bb
+    Hf = hilbert_space(a, 1:1)
+    Hb = hilbert_space(bb, 3)
+    vf, vb = Kets(Hf), Kets(Hb)
+    @test vf("0") < vf("1")
+    @test vf("0")' < vf("0")
+    states = [vf("0"), vf("1"), vf("0")', vf("1")', SymbolicState(Hf, vf("1").ket, vf("0").ket),
+        vb("0"), vb("2"), vb("1")']
+    for x in states, y in states
+        @test (x == y) == (!(x < y) && !(y < x))
+    end
+    @test issorted(sort(states))
 end
 
 @testitem "Fermionic triple products vs matrices" begin

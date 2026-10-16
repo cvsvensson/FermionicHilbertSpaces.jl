@@ -4,6 +4,18 @@ struct Kets{B,H}
 end
 Ket(label, H) = Kets(H)(label)
 
+function Base.show(io::IO, k::Kets)
+    print(io, "Kets(")
+    show(IOContext(io, :compact => true), k.space)
+    print(io, ")")
+end
+
+@testitem "Kets show" begin
+    @fermions f
+    kets = Kets(hilbert_space(f, 1:2))
+    @test occursin("Kets", repr(kets))
+end
+
 struct SymbolicState{K,B,H} <: AbstractSym
     space::H
     ket::K
@@ -44,14 +56,70 @@ end
 
 Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.bra && atomic_id(a.space) == atomic_id(b.space)
 Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(atomic_id(a.space), h)))
-Base.isless(a::SymbolicState, b::SymbolicState) = hash(a) < hash(b)
+# States are ordered by group, then by space, then by ket and bra, where a missing ket or bra comes first.
+function Base.isless(a::SymbolicState, b::SymbolicState)
+    c = _group_cmp(a, b)
+    c == 0 || return c < 0
+    ida, idb = atomic_id(a.space), atomic_id(b.space)
+    ida == idb || return _content_cmp(ida, idb) < 0
+    c = _state_cmp(a.ket, b.ket)
+    c == 0 ? _state_cmp(a.bra, b.bra) < 0 : c < 0
+end
+_state_cmp(::Nothing, ::Nothing) = 0
+_state_cmp(::Nothing, _) = -1
+_state_cmp(_, ::Nothing) = 1
+_state_cmp(a, b) = _content_cmp(a, b)
 Base.adjoint(s::SymbolicState) = SymbolicState(s.space, s.bra, s.ket)
 
 symbolic_group(s::SymbolicState) = group_id(s.space)
 group_id(s::SymbolicState) = group_id(s.space)
 
 @nc SymbolicState AbstractSym
-NonCommutativeProducts.isfilterable(::SymbolicState) = false
+
+## Grading
+# Each space carries a grade k^m b^n in the bicyclic monoid, where a ket has (m, n) = (1, 0) and a bra (0, 1).
+# States in different spaces commute, so the grade of an expression is the product over spaces, stored as a map
+# from the atomic id of the space to its bicyclic grade. Spaces with the identity grade (0, 0) are left out,
+# and the identity overall is `nothing`. Operators have the identity grade.
+# NonCommutativeProducts stores grades in sets, so the dict of a StateGrade must never be mutated after construction.
+struct Bicyclic
+    m::Int
+    n::Int
+end
+function _bicyclic_mul(g::Bicyclic, h::Bicyclic)
+    t = max(g.n, h.m)
+    Bicyclic(g.m - g.n + t, h.n - h.m + t)
+end
+_isidentity(g::Bicyclic) = g == Bicyclic(0, 0)
+
+struct StateGrade
+    grades::Dict{Any,Bicyclic}
+end
+Base.:(==)(a::StateGrade, b::StateGrade) = a.grades == b.grades
+Base.isequal(a::StateGrade, b::StateGrade) = isequal(a.grades, b.grades)
+Base.hash(a::StateGrade, h::UInt) = hash(a.grades, hash(StateGrade, h))
+function Base.show(io::IO, g::StateGrade)
+    print(io, "StateGrade(")
+    join(io, ("$(k) => ($(v.m), $(v.n))" for (k, v) in g.grades), ", ")
+    print(io, ")")
+end
+_stategrade(d) = isempty(d) ? nothing : StateGrade(d)
+
+function NonCommutativeProducts.grade(s::SymbolicState)
+    g = Bicyclic(Int(has_ket(s)), Int(has_bra(s)))
+    _isidentity(g) ? nothing : StateGrade(Dict{Any,Bicyclic}(atomic_id(s.space) => g))
+end
+# One grading for all spaces, so that it combines with other declared gradings into a ProductGrade
+NonCommutativeProducts.grading(::Type{StateGrade}) = StateGrade
+function NonCommutativeProducts.mul_grade(a::StateGrade, b::StateGrade)
+    d = copy(a.grades)
+    for (k, g) in b.grades
+        h = haskey(d, k) ? _bicyclic_mul(d[k], g) : g
+        _isidentity(h) ? delete!(d, k) : (d[k] = h)
+    end
+    _stategrade(d)
+end
+NonCommutativeProducts.adjoint_grade(a::StateGrade) = StateGrade(Dict{Any,Bicyclic}(k => Bicyclic(g.n, g.m) for (k, g) in a.grades))
 
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
@@ -60,12 +128,12 @@ state_index(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilber
 basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(_checked_state_index(state, space), space)
 function _checked_state_index(state, space)
     i = state_index(state, space)
-    iszero(i) && throw(ArgumentError("The state $state is not in the Hilbert space"))
+    iszero(i) && throw(ArgumentError("The state `$state` is not in the Hilbert space."))
     i
 end
 
 function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{B}) where {I,B<:FockNumber{I}}
-    all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only '0' and '1', got \"$input\""))
+    all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only `'0'` and `'1'`, got `\"$input\"`."))
     bits = map(c -> c == '1', collect(input))
     return B(focknbr_from_bits(bits, I))
 end
@@ -74,7 +142,7 @@ function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{Boson
     n = try
         parse(Int, input)
     catch
-        throw(ArgumentError("Invalid bosonic occupation string \"$input\""))
+        throw(ArgumentError("A bosonic occupation string must be an integer, got `\"$input\"`."))
     end
     BosonicState(n)
 end
@@ -83,7 +151,6 @@ function interpret_state(input, space::ProductSpace{B}) where B
     length(input) == length(factors(space)) || throw(ArgumentError("Product-state input must have length $(length(factors(space))), got $(length(input))"))
     return B(map(interpret_state, input, factors(space)))
 end
-interpret_state(char::AbstractChar, space::AbstractHilbertSpace) = interpret_state(string(char), space)
 
 function (k::Kets{B})(inputs...) where B
     raw = if length(inputs) == 1
@@ -114,11 +181,12 @@ function _term_matrix_representation(op::NCMul{<:Any,<:SymbolicState}, H::Abstra
     matrix_representation(only(op.factors), H, t; kwargs...)
 end
 
-_order_hash(x) = hash(symbolic_group(x))
+# Factors from different groups are put in the order of their groups
+_group_cmp(a, b) = _content_cmp(symbolic_group(a), symbolic_group(b))
 
 function NonCommutativeProducts.mul_effect(a::SymbolicState, b::SymbolicState)
     if !_same_space_id(a.space, b.space)
-        return _order_hash(a) > _order_hash(b) ? Swap(1) : nothing
+        return _group_cmp(a, b) > 0 ? Swap(1) : nothing
     end
     if has_bra(a) && has_ket(b)
         coeff = a.bra == b.ket ? 1 : 0
@@ -141,20 +209,14 @@ function NonCommutativeProducts.mul_effect(a::SymbolicState, b::SymbolicState)
 end
 
 function apply_local_operator(op::SymbolicState, state, space::AbstractHilbertSpace, precomp)
-    _same_space_id(space, op.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
-    isketbra(op) || throw(ArgumentError("apply_local_operator is only defined for ketbra SymbolicState operators"))
+    _same_space_id(space, op.space) || throw(ArgumentError("The space of the symbolic state must match the provided space."))
+    isketbra(op) || throw(ArgumentError("`apply_local_operator` is only defined for ketbra `SymbolicState` operators."))
     return state == op.bra ? (op.ket, 1) : (state, 0)
-end
-function apply_local_operators(_op::NCMul{C,<:SymbolicState}, state, space::AbstractHilbertSpace, precomp) where C
-    op = only(_op.factors)
-    _same_space_id(space, op.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
-    isketbra(op) || throw(ArgumentError("apply_local_operator is only defined for ketbra SymbolicState operators"))
-    return state == op.bra ? (op.ket, _op.coeff) : (state, zero(eltype(_op.coeff)))
 end
 
 function NonCommutativeProducts.mul_effect(op::AbstractSym, s::SymbolicState)
     if !(symbolic_group(op) == group_id(s.space))
-        return _order_hash(op) > _order_hash(s) ? Swap(1) : nothing
+        return _group_cmp(op, s) > 0 ? Swap(1) : nothing
     end
     if !has_ket(s)
         throw(ArgumentError("Cannot act with operator $op on the left of $s"))
@@ -165,7 +227,7 @@ end
 
 function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
     if !(symbolic_group(op) == group_id(s.space))
-        return _order_hash(s) > _order_hash(op) ? Swap(1) : nothing
+        return _group_cmp(s, op) > 0 ? Swap(1) : nothing
     end
     if !has_bra(s)
         throw(ArgumentError("Cannot act with operator $op on the right of $s"))
@@ -181,12 +243,19 @@ function representation(op; kwargs...)
     reducer(::Missing, ::Missing) = missing
     reducer(s1, ::Missing) = s1
     reducer(s1, s2) = s1==s2 ? s1 : throw(ArgumentError("Cannot represent a product of symbolic states in different spaces"))
-    if _operator_type(op) in (:kets, :bras, :ketbras)
-        space = NonCommutativeProducts.ncmapreduce(op -> op.space, (reducer, reducer), op; scalarmap=x->missing)
+    type = _operator_type(op)
+    if type in (:kets, :bras, :ketbras)
+        _iszero_ncadd(op) && throw(ArgumentError("Can't infer the space of the zero state $op, please provide a space argument"))
+        space =NonCommutativeProducts.ncmapreduce(op -> op.space, (reducer, reducer), op; scalarmap=x->missing)
         return representation(op, space; kwargs...)
+    elseif type == :mixed
+        throw(_mixed_error(op))
     else
-        throw(ArgumentError("Don't know the space of the operator $op, please provide a space argument"))
+        throw(ArgumentError("Don't know the space of the operator $op. Pass the Hilbert space, as in representation(op, H)."))
     end
+end
+function _mixed_error(op)
+    ArgumentError("Cannot represent $op, which combines kets or bras with operators or with states of other spaces. Apply the operators to the states first, or represent the parts separately with matrix_representation(op, H) and vector_representation(state, H).")
 end
 
 function _operator_type(op::SymbolicState)
@@ -199,7 +268,13 @@ function _operator_type(op::SymbolicState)
     end
 end
 _operator_type(::Union{UniformScaling,Number}) = :operator
-function _operator_type(op)
+_operator_type(op) = throw(ArgumentError("Cannot represent an object of type $(typeof(op)). Expected a symbolic operator or state, or a number. Basis states and state strings can be represented with representation(state, H)."))
+# Returns one of
+#   :kets, :bras, :ketbras  the expression is built from symbolic states of that kind (and scalars) only,
+#   :operator               there are no kets and bras: operators, scalars, and ketbras combined with operators,
+#   :mixed                  kets or bras are combined with other states or operators, which has no representation.
+function _operator_type(op::Union{NCMul,NCAdd,AbstractSym})
+    _iszero_ncadd(op) && return _zero_operator_type(op)
     hasket = false
     hasbra = false
     hasketbra = false
@@ -222,12 +297,29 @@ function _operator_type(op)
         return :bras
     elseif hasketbra && !hasket && !hasbra && !hasop
         return :ketbras
-    elseif !hasket && !hasbra && hasop
+    elseif !hasket && !hasbra
         return :operator
     else
         return :mixed
     end
 end
+_iszero_ncadd(op) = op isa NCAdd && iszero(op.coeff) && isempty(op.dict)
+# A zero has no factors left to inspect, so classify it by its grades instead
+function _zero_operator_type(op)
+    types = unique(_grade_type(g) for g in NonCommutativeProducts.grades(op))
+    isempty(types) && return :operator
+    length(types) == 1 ? only(types) : :mixed
+end
+_grade_type(::Nothing) = :operator
+function _grade_type(g::StateGrade)
+    allequal(values(g.grades)) || return :mixed
+    b = first(values(g.grades))
+    b == Bicyclic(1, 0) && return :kets
+    b == Bicyclic(0, 1) && return :bras
+    b == Bicyclic(1, 1) && return :ketbras
+    return :mixed
+end
+_grade_type(g) = :mixed
 
 """
     vector_representation(op::NCMul, space) -> vector or adjoint-vector
@@ -237,18 +329,21 @@ and return a sparse column vector. For bras, return the adjoint row vector.
 """
 function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
     ind = _checked_state_index(state, space)
-    TT = T === Missing ? Int : T
-    v = SparseArrays.spzeros(TT, dim(space))
-    v[ind] = one(TT)
+    v = _zero_vector(space, repr)
+    v[ind] = one(eltype(v))
     return v
 end
 function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerDenseRepr{T}; kwargs...) where {B,T}
     ind = _checked_state_index(state, space)
-    TT = T === Missing ? Int : T
-    v = zeros(TT, dim(space))
-    v[ind] = one(TT)
+    v = _zero_vector(space, repr)
+    v[ind] = one(eltype(v))
     return v
 end
+_vector_eltype(::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T === Missing ? Int : T
+_zero_vector(space, repr::EagerSparseRepr, T=_vector_eltype(repr)) = SparseArrays.spzeros(T, dim(space))
+_zero_vector(space, repr::EagerDenseRepr, T=_vector_eltype(repr)) = zeros(T, dim(space))
+_zero_matrix(space, ::EagerSparseRepr, T) = SparseArrays.spzeros(T, dim(space), dim(space))
+_zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(space), dim(space))
 function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     vector_representation(1 * s, space, repr; kwargs...)
 end
@@ -271,24 +366,32 @@ function vector_representation(op::NCMul, space::AbstractHilbertSpace, repr=Eage
     elseif type == :bras
         return transpose(vec)
     else
-        throw(ArgumentError("vector_representation called on an NCMul that is not purely kets or bras"))
+        throw(ArgumentError("`vector_representation` requires an `NCMul` that is purely kets or purely bras."))
     end
 end
 function vector_representation(op::NCAdd, space::AbstractHilbertSpace, repr=EagerSparseRepr(); type=_operator_type(op), kwargs...)
-    iszero(op.coeff) || throw(ArgumentError("NCAdd with nonzero coeff is not supported for vector_representation"))
+    iszero(op.coeff) || throw(ArgumentError("`vector_representation` does not support an `NCAdd` with nonzero `coeff`, got $(op.coeff)."))
+    if isempty(op.dict) # a zero ket or bra
+        type in (:kets, :bras) || throw(ArgumentError("`vector_representation` requires an `NCAdd` that is purely kets or purely bras."))
+        # same eltype as the nonzero path, where each basis vector is scaled by a coefficient
+        _repr = _canonicalize_repr(repr)
+        vec = _zero_vector(space, _repr, promote_type(_vector_eltype(_repr), valtype(op.dict)))
+        return type == :kets ? vec : transpose(vec)
+    end
     return sum(coeff * vector_representation(term, space, repr; type, kwargs...) for (term, coeff) in pairs(op.dict))
 end
 
 function representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
-    _same_space_id(space, s.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
     if isket(s) || isbra(s)
+        _same_space_id(space, s.space) || throw(ArgumentError("The space of the symbolic ket or bra must match the provided space. A vector needs a state for every factor of a product space."))
         return vector_representation(s, space, repr; kwargs...)
     end
     matrix_representation(s, space, repr; kwargs...)
 end
 function matrix_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
-    _same_space_id(space, s.space) || throw(ArgumentError("Symbolic state space does not match the provided space"))
-    isketbra(s) || throw(ArgumentError("matrix_representation is only defined for ketbra SymbolicState operators"))
+    isketbra(s) || throw(ArgumentError("`matrix_representation` is only defined for ketbra `SymbolicState` operators. Use `vector_representation(state, H)` for a ket or bra."))
+    # a ketbra on one factor of a product space acts as the identity on the other factors
+    _same_space_id(space, s.space) || return matrix_representation(1 * s, space, repr; kwargs...)
     ket_vec = vector_representation(SymbolicState(space, s.ket, nothing), space, repr)
     bra_vec = vector_representation(SymbolicState(space, nothing, s.bra), space, repr)
     return ket_vec * bra_vec
@@ -300,7 +403,13 @@ function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr();
     if type == :kets || type == :bras
         return vector_representation(op, space, repr; type, kwargs...)
     elseif type == :ketbras
+        _repr = _canonicalize_repr(repr)
+        if _iszero_ncadd(op) && _repr isa Union{EagerSparseRepr,EagerDenseRepr}
+            return _zero_matrix(space, _repr, mat_eltype(op))
+        end
         return matrix_representation(op, space, repr; kwargs...)
+    elseif type == :mixed
+        throw(_mixed_error(op))
     else
         return matrix_representation(op, space, repr; kwargs...)
     end
@@ -353,6 +462,128 @@ end
     vsec = representation(ssec, Hn1)
     @test vsec[1] == 1
     @test count(!iszero, vsec) == 1
+end
+
+@testitem "representation of different kinds of input" begin
+    using LinearAlgebra, SparseArrays
+    @fermions f
+    @majoranas γ
+    @boson b
+    @spin s 1 // 2
+    Hf = hilbert_space(f, 1:2)
+    df = dim(Hf)
+    idf = Matrix(I, df, df)
+
+    @testset "scalars" begin
+        @test Matrix(representation(2, Hf)) == 2 * idf
+        @test Matrix(representation(I, Hf)) == idf
+        @test iszero(representation(0, Hf))
+        @test representation(2, Hf, :dense) == 2 * idf
+        @test_throws ArgumentError representation(2)
+        @test_throws ArgumentError representation(I)
+    end
+
+    @testset "operators that reduce to a scalar" begin
+        op = f[1] - f[1] + 2
+        @test Matrix(representation(op, Hf)) == 2 * idf
+        @test Matrix(representation((f[1] + 2) - f[1], Hf)) == 2 * idf
+        @test Matrix(representation(f[1]' * f[1] - f[1]' * f[1] + 2, Hf)) == 2 * idf
+        @test_throws ArgumentError representation(op)
+    end
+
+    @testset "zero operators" begin
+        @test iszero(representation(0 * f[1], Hf))
+        @test size(representation(0 * f[1], Hf)) == (df, df)
+        @test iszero(representation(f[1] - f[1], Hf))
+        @test size(representation(f[1] - f[1], Hf)) == (df, df)
+        @test_throws ArgumentError representation(0 * f[1])
+        @test_throws ArgumentError representation(f[1] - f[1])
+    end
+
+    @testset "spin" begin
+        Hs = hilbert_space(s)
+        id2 = Matrix(I, 2, 2)
+        # s[:I] and products that reduce to a number are Rationals or expressions without operators
+        @test Matrix(representation(s[:I], Hs)) == id2
+        @test Matrix(representation(s[:z] * s[:z], Hs)) ≈ id2 / 4
+        @test iszero(representation(s[:+] * s[:+], Hs))
+        @test representation(s[:x], Hs) == matrix_representation(s[:x], Hs)
+        @test Matrix(representation(s[:x], Hs)) ≈ [0 0.5; 0.5 0]
+        @test_throws ArgumentError representation(s[:I])
+    end
+
+    @testset "majoranas and bosons" begin
+        Hm = hilbert_space(γ, 1:4)
+        @test representation(γ[1], Hm) == matrix_representation(γ[1], Hm)
+        @test Matrix(representation(γ[1] * γ[1], Hm)) == Matrix(I, dim(Hm), dim(Hm))
+        m12 = Matrix(representation(γ[1] * γ[2], Hm))
+        @test Matrix(representation(γ[1] * γ[2] + 1, Hm)) == m12 + I
+        @test_throws ArgumentError representation(γ[1])
+
+        Hb = hilbert_space(b, 4)
+        @test representation(b, Hb) == matrix_representation(b, Hb)
+        nb = Matrix(representation(b' * b, Hb))
+        @test sort(diag(nb)) ≈ collect(0:3)
+        @test Matrix(representation(b' * b + 2, Hb)) ≈ nb + 2I
+        @test_throws ArgumentError representation(b)
+    end
+
+    @testset "ketbras combined with operators" begin
+        Hb = hilbert_space(b, 3)
+        H = tensor_product(Hf, Hb)
+        vf, vb = Kets(Hf), Kets(Hb)
+        kb = vb("0") * vb("1")'
+        @test representation(kb, H) ≈ embed(representation(kb, Hb), Hb => H)
+        @test representation(kb, H) == matrix_representation(kb, H)
+        op = f[1]' * kb
+        @test representation(op, H) == matrix_representation(op, H)
+        @test representation(op, H) ≈ representation(f[1]', H) * representation(kb, H)
+        @test representation(op, H, :dense) ≈ representation(op, H)
+        @test_throws ArgumentError representation(op)
+
+        proj = vf("10") * vf("10")'
+        @test Matrix(representation(proj + 1, Hf)) == Matrix(representation(proj, Hf)) + I
+    end
+
+    @testset "kets and bras combined with other objects" begin
+        Hb = hilbert_space(b, 3)
+        H = tensor_product(Hf, Hb)
+        vf, vb = Kets(Hf), Kets(Hb)
+        @test_throws ArgumentError representation(f[1]' * vb("0"), H)
+        @test_throws ArgumentError representation(f[1]' * vb("0"))
+        @test_throws ArgumentError representation(vf("10") * vb("1")', H)
+        @test_throws ArgumentError representation(vb("1"), H)
+        @test_throws ArgumentError representation(vf("10") + 1, Hf)
+    end
+
+    @testset "basis states, strings and unsupported input" begin
+        @test representation("10", Hf) == representation(basisstate("10", Hf), Hf)
+        @test_throws ArgumentError representation("10")
+        @test_throws ArgumentError representation([1, 2], Hf)
+    end
+
+    @testset "single-particle and BdG spaces" begin
+        h = f[1]' * f[2] + hc
+        Hsp = hilbert_space(f, 1:2, SingleParticle())
+        @test representation(h, Hsp) == matrix_representation(h, Hsp)
+        @test size(representation(2, Hsp)) == (2, 2)
+        @test iszero(representation(2, Hsp))
+        @test iszero(representation(I, Hsp))
+        @test iszero(representation(f[1]' * f[1] - f[1]' * f[1] + 2, Hsp))
+        @test_throws ArgumentError representation(f[1], Hsp)
+        @test_throws ArgumentError representation(b' * b, Hsp)
+        @test_throws ArgumentError representation(Ket("10", Hf), Hsp)
+
+        hbdg = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
+        Hbdg = hilbert_space(f, 1:2, BdG())
+        @test representation(hbdg, Hbdg) == matrix_representation(hbdg, Hbdg)
+        @test size(representation(2, Hbdg)) == (4, 4)
+        @test iszero(representation(2, Hbdg))
+        @test iszero(representation(I, Hbdg))
+        @test_throws ArgumentError representation(f[1], Hbdg)
+        @test_throws ArgumentError representation(b' * b, Hbdg)
+        @test_throws ArgumentError representation(Ket("10", Hf), Hbdg)
+    end
 end
 
 @testitem "basisstate from string" begin
@@ -550,6 +781,61 @@ end
         ketbra = vb("0") * vs("↑") * vf("1") * (vb("0") * vs("↑") * vf("0"))'
         @test FermionicHilbertSpaces._operator_type(ketbra) == :ketbras
     end
+end
+
+@testitem "Grading of symbolic states" begin
+    import FermionicHilbertSpaces.NonCommutativeProducts as NC
+    using FermionicHilbertSpaces: _operator_type
+    @fermions f
+    @boson b
+    Hf = hilbert_space(f, 1:2)
+    Hb = hilbert_space(b, 4)
+    vf = Kets(Hf)
+    vb = Kets(Hb)
+    ket, bra, ketbra = NC.grade(vf("10")), NC.grade(vf("10")'), NC.grade(vf("10") * vf("01")')
+
+    # the grade is the kind of an expression, independent of the labels
+    @test NC.grade(vf("01")) == NC.grade(vf("10") * vf("01")' * vf("01")) == ket
+    @test NC.grade(f[1] * vf("10") * vf("01")') == ketbra
+    @test NC.grade(vf("10")' * vf("10")) === NC.grade(f[1]' * f[2]) === nothing
+
+    # each space is graded separately, independently of order and bracketing
+    @test NC.grade(vf("10") * vb("1")) != ket
+    @test NC.grade(vf("10") * vb("1")) == NC.grade(vb("1") * vf("10"))
+    @test NC.grade((vf("10") * vb("1")) * vf("01")') == NC.grade(vf("10") * (vb("1") * vf("01")'))
+    @test NC.grade((vf("10") * vb("1"))') == NC.grade(vf("10")' * vb("1")')
+
+    # zeros keep their kind
+    z = f[1] * vf("00")
+    zkb = z * vf("10")'
+    @test iszero(z) && iszero(zkb)
+    @test NC.grades(z) == NC.grades(vf("10") * vf("00")' * vf("11")) == Set([ket])
+    @test NC.grades(z') == NC.grades(vf("00")' * f[1]') == Set([bra])
+    @test NC.grades(vf("10")' * vf("11")) == Set([nothing])
+    @test NC.grades(b * vb("0") * vf("10")) == NC.grades(vb("0") * vf("10"))
+    @test _operator_type.((z, z', zkb, vf("10") - vf("10"), b * vb("0") * vf("10"))) == (:kets, :bras, :ketbras, :kets, :kets)
+
+    # zeros represent like nonzero expressions of the same kind, but have no space to infer
+    for c in (1, 1.0, 1.0im), x in (c * vf("10"), c * vf("10")', c * vf("10") * vf("01")')
+        zx = x - x
+        @test iszero(representation(zx, Hf))
+        @test typeof(representation(zx, Hf)) == typeof(representation(x, Hf))
+        @test typeof(representation(zx, Hf, :dense)) == typeof(representation(x, Hf, :dense))
+        @test size(representation(zx, Hf)) == size(representation(x, Hf))
+    end
+    @test_throws ArgumentError representation(z)
+    @test_throws ArgumentError representation(z')
+
+    # states combined with operators or states of other spaces are mixed
+    @test _operator_type(b * vf("10")) == _operator_type(vf("10")' * b) == _operator_type(vb("0") * vf("10")') == :mixed
+    @test_throws ArgumentError representation(b * vf("10"))
+
+    # products respect the grading
+    kb = FermionicHilbertSpaces.SymbolicState(Hf, vf("10").ket, vf("01").ket)
+    pairs = [(vf("10")', vf("10")), (vf("10")', vf("01")), (vf("10"), vf("01")'), (kb, vf("01")), (kb, vf("10")),
+        (vf("01")', kb), (kb, kb), (kb, kb'), (f[1], kb), (f[1], vf("10")), (f[1], vf("00")), (vf("00")', f[1]'),
+        (vf("10"), vb("1")), (b, vb("0"))]
+    @test all(((x, y),) -> NC.check_grading(x, y), pairs)
 end
 
 _find_position(op::SymbolicState, space::FermionicSpace) = nothing

@@ -109,10 +109,17 @@ quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 
 Return the sector of `H` corresponding to quantum number `qn`.
 For `qn === nothing`, this returns `H` for non-sector spaces.
+Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
 """
-sector(qn, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), H.qn_to_states[qn], constraint)
+sector(qn, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), _sector_states(qn, H), constraint)
 sector(::Nothing, H::AbstractHilbertSpace, constraint=NoSymmetry()) = constrain_space(H, constraint)
-sector(qn::Nothing, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), H.qn_to_states[qn], constraint)
+sector(qn::Nothing, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), _sector_states(qn, H), constraint)
+
+function _sector_states(qn, H::SectorHilbertSpace)
+    states = get(H.qn_to_states, qn, nothing)
+    isnothing(states) && throw(ArgumentError("Unknown quantum number, got `$qn`; the available quantum numbers are `$(quantumnumbers(H))`"))
+    states
+end
 
 # sectors(H::SectorHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 """
@@ -122,13 +129,6 @@ Return all sectors of `H` in the same order as `quantumnumbers(H)`.
 """
 sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
 
-"""
-    indices(Hsub, H)
-    indices(qn, H)
-
-Return the basis-state indices in `H` belonging to a given sector, specified
-either by a sector Hilbert space `Hsub` or by a quantum number `qn`.
-"""
 function space_indices(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace)
     sector_list = sectors(H)
     indexin = findfirst(isequal(Hsub), sector_list)
@@ -143,21 +143,27 @@ function space_indices_generic(Hsub, H)
     map(basisstates(Hsub)) do state
         ind = state_index(state, H)
         if iszero(ind)
-            throw(ArgumentError("State $state from sector space $Hsub not found in parent space $H"))
+            throw(ArgumentError("The state `$state` of the sector space `$Hsub` is not in the parent space `$H`."))
         end
         ind
     end
 end
+"""
+    indices(Hsub, H)
+    indices(qn, H)
+
+Return the basis-state indices in `H` belonging to a given sector, specified
+either by a sector Hilbert space `Hsub` or by a quantum number `qn`.
+Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
+"""
 indices(qn, H) = qn_indices(qn, H)
 indices(qn::AbstractHilbertSpace, H::AbstractHilbertSpace) = space_indices(qn, H)
 indices(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace) = space_indices(Hsub, H)
 indices(qn::Q, H::SectorHilbertSpace{B,P,Q}) where {B,P,Q} = qn_indices(qn, H)
 function qn_indices(qn, H::SectorHilbertSpace)
+    _sector_states(qn, H)
     dims = cumsum([length(H.qn_to_states[qn]) for qn in collect(quantumnumbers(H))])
     qn_index = findfirst(isequal(qn), collect(quantumnumbers(H)))
-    if qn_index === nothing
-        throw(ArgumentError("Quantum number $qn not found in Hilbert space $H"))
-    end
     start_index = qn_index == 1 ? 1 : dims[qn_index-1] + 1
     end_index = dims[qn_index]
     start_index:end_index
@@ -207,8 +213,8 @@ end
         Hn = hilbert_space(f, 1:N, NumberConservation(n))
         @test basisstates(Hn) == basisstates(Hns[ind])
         @test basisstates(Hn) == basisstates(sector(n, H))
-        @test basisstates(Hn) == basisstates(H)[indices(Hns[ind], H)]
-        @test basisstates(Hn) == basisstates(H)[indices(n, H)]
+        @test basisstates(Hn) == collect(basisstates(H))[indices(Hns[ind], H)]
+        @test basisstates(Hn) == collect(basisstates(H))[indices(n, H)]
     end
     # no qns
     @majoranas γ
@@ -223,7 +229,7 @@ end
     @test collect(quantumnumbers(HM)) == 0:(N÷2)
     qn = 1
     HMqn = hilbert_space(γ, 1:N, NumberConservation(qn))
-    @test basisstates(HMqn) == basisstates(HM)[indices(qn, HM)]
+    @test basisstates(HMqn) == collect(basisstates(HM))[indices(qn, HM)]
     @test length(sectors(HM)) == N ÷ 2 + 1
     @test all(H -> parent(H) isa FermionicHilbertSpaces.MajoranaHilbertSpace, sectors(HM))
 end
@@ -291,7 +297,9 @@ end
     @test size(sector2, 1) == length(states2)
     @test sector2 == m_f[inds2, inds2]
     # Test that an invalid sector throws an error
-    @test_throws KeyError sector(99, Hf)
+    @test_throws "Unknown quantum number, got `99`" sector(99, Hf)
+    @test_throws "Unknown quantum number, got `99`" indices(99, Hf)
+    @test_throws ArgumentError sector(99, Hf)
     @test_throws ArgumentError indices(99, Hf)
 end
 
@@ -342,7 +350,7 @@ end
     # indices match basisstates
     for qn in qns
         Hsec = sector(qn, H)
-        @test basisstates(H)[indices(qn, H)] == basisstates(Hsec)
+        @test collect(basisstates(H))[indices(qn, H)] == collect(basisstates(Hsec))
     end
 
     # One sector input + one plain input → QN type is plain (e.g. Int)
@@ -363,7 +371,7 @@ end
 end
 
 @testitem "Sector propagation with custom SectorConstraint" begin
-    import FermionicHilbertSpaces: SectorConstraint, fermionnumber
+    import FermionicHilbertSpaces: fermionnumber
     @fermions f
     k = 2
 
@@ -396,7 +404,7 @@ end
 
     # States are still complete and correctly indexed
     for qn in qns
-        @test basisstates(H)[indices(qn, H)] == basisstates(sector(qn, H))
+        @test collect(basisstates(H))[indices(qn, H)] == collect(basisstates(sector(qn, H)))
     end
 
     ##
@@ -410,7 +418,7 @@ end
     end
     @test dim(H) == dim(H1) * dim(H2)
     for qn in qns
-        @test Set(basisstates(H)[indices(qn, H)]) == Set(basisstates(sector(qn, H, subconstraint)))
+        @test Set(collect(basisstates(H))[indices(qn, H)]) == Set(basisstates(sector(qn, H, subconstraint)))
     end
 
 end

@@ -1,9 +1,14 @@
+# Both sides of a mapping are a Hilbert space or a collection of Hilbert spaces.
+const _SpaceGroup = Union{AbstractHilbertSpace,Tuple{Vararg{AbstractHilbertSpace}},AbstractVector{<:AbstractHilbertSpace}}
+const _SpaceMapping = Pair{<:_SpaceGroup,<:_SpaceGroup}
+
 """
     reshape(t, mappings...; repeat=false)
 
 Reshape the array `t` by splitting or combining its indices according to
 Hilbert-space mappings. The mappings are applied left to right, each one
-consuming the next consecutive group of input indices.
+consuming the next consecutive group of input indices. Each mapping reads
+input => output; see [Pair arguments](@ref pair_convention).
 
 # Mapping forms
 
@@ -60,7 +65,8 @@ where every index lives on `H`:
     # equivalent to reshape(A, H => (H1, H2), H => (H1, H2), H => (H1, H2))
 
 """
-function Base.reshape(t::AbstractArray, mappings::Pair...; repeat=false)
+function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat=false)
+    mappings = (mapping, rest...)
     mappings = if repeat
         _repeat_mapping(t, mappings)
     elseif length(mappings) == 1
@@ -120,8 +126,8 @@ function (op::ReshapeMap)(out::AbstractArray, t::AbstractArray)
     _reshape!(out, t, blocks, Hsouts)
 end
 
-function Base.reshape(mappings::Pair...; repeat=false)
-    mappings_t = Tuple(mappings)
+function Base.reshape(mapping::_SpaceMapping, rest::_SpaceMapping...; repeat=false)
+    mappings_t = (mapping, rest...)
     precomputed = Tuple(map(_precompute_mapping, mappings_t))
     ReshapeMap(mappings_t, repeat, precomputed)
 end
@@ -191,15 +197,15 @@ function _expand_single_mapping(t::AbstractArray, mapping::Pair)
     ndims(t) == n && return (mapping,)
     ndims(t) == 2n && return (mapping, mapping)
     throw(ArgumentError("The mapping $mapping consumes $n indices, but the array has \
-                         $(ndims(t)). Give one mapping per index group, or use repeat=true."))
+                         $(ndims(t)). Give one mapping per index group, or use `repeat=true`."))
 end
 
 function _repeat_mapping(t::AbstractArray, mappings)
     length(mappings) == 1 ||
-        throw(ArgumentError("repeat=true requires exactly one mapping"))
+        throw(ArgumentError("`repeat=true` requires exactly one mapping, got $(length(mappings))"))
     n = length(_mapping_spaces(only(mappings))[1])
     ndims(t) % n == 0 ||
-        throw(DimensionMismatch("ndims(t) = $(ndims(t)) is not divisible by $n"))
+        throw(DimensionMismatch("`ndims(t)` must be divisible by $n, got $(ndims(t))"))
     return ntuple(_ -> only(mappings), ndims(t) ÷ n)
 end
 
@@ -234,8 +240,11 @@ function _mapper(Hsin, Hsout)
         nothing
     end
 end
+const _OneSpace = Tuple{AbstractHilbertSpace}
+const _SeveralSpaces = Tuple{AbstractHilbertSpace,AbstractHilbertSpace,Vararg{AbstractHilbertSpace}}
+
 # Split: H => (H1, H2, ...)
-function _transitions(Hsin::Tuple{<:AbstractHilbertSpace}, Hsout, mapper)
+function _transitions(Hsin::_OneSpace, Hsout::_SeveralSpaces, mapper)
     H = only(Hsin)
     transitions = []
     for f in basisstates(H)
@@ -251,7 +260,7 @@ function _transitions(Hsin::Tuple{<:AbstractHilbertSpace}, Hsout, mapper)
 end
 
 # Combine: (H1, H2, ...) => H
-function _transitions(Hsin, Hsout::Tuple{<:AbstractHilbertSpace}, mapper)
+function _transitions(Hsin::_SeveralSpaces, Hsout::_OneSpace, mapper)
     H = only(Hsout)
     transitions = []
     for fs in Base.product(basisstates.(Hsin)...)
@@ -267,7 +276,7 @@ function _transitions(Hsin, Hsout::Tuple{<:AbstractHilbertSpace}, mapper)
 end
 
 # Many-to-many: (H1, H2, ...) => (K1, K2, ...)
-function _transitions(Hsin, Hsout, mapper::_ComposedMapper)
+function _transitions(Hsin::_SeveralSpaces, Hsout::_SeveralSpaces, mapper::_ComposedMapper)
     transitions = []
     for fs in Base.product(basisstates.(Hsin)...)
         Iin = map(state_index, fs, Hsin)
@@ -285,7 +294,7 @@ function _transitions(Hsin, Hsout, mapper::_ComposedMapper)
 end
 
 # Identity: H => H
-function _transitions(Hsin::Tuple{<:AbstractHilbertSpace}, Hsout::Tuple{<:AbstractHilbertSpace}, ::Nothing)
+function _transitions(Hsin::_OneSpace, Hsout::_OneSpace, ::Nothing)
     H = only(Hsin)
     return [((I,), (I,), 1) for I in 1:dim(H)]
 end
@@ -515,16 +524,4 @@ end
         H4 => H4,
     )
     @test B_twostep ≈ B
-end
-
-function reshape_to_matrix(t::AbstractArray{<:Any,N}, leftindices::NTuple{NL,Int}) where {N,NL}
-    rightindices::NTuple{N - NL,Int} = Tuple(setdiff(ntuple(identity, N), leftindices))
-    reshape_to_matrix(t, leftindices, rightindices)
-end
-function reshape_to_matrix(t::AbstractArray{<:Any,N}, leftindices::NTuple{NL,Int}, rightindices::NTuple{NR,Int}) where {N,NL,NR}
-    @assert NL + NR == N
-    tperm = permutedims(t, (leftindices..., rightindices...))
-    lsize = prod(i -> size(t, i), leftindices, init=1)
-    rsize = prod(i -> size(t, i), rightindices, init=1)
-    reshape(tperm, lsize, rsize)
 end

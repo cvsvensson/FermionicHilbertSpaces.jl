@@ -9,17 +9,11 @@ end
 """
     embed(m, Hsub => H; complement=complementary_subsystem(H, Hsub), kwargs...)
 
-Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces. 
+Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces.
+`Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
-"""
-    embed(Hsub => H; kwargs...)
-
-Create a callable embedding operation from `Hsub` into `H`.
-
-The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
-"""
 struct EmbedMap{HS,H,C,K,M}
     Hsub::HS
     H::H
@@ -34,12 +28,12 @@ function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
 end
 
 function (op::EmbedMap)(m::AbstractMatrix)
-    size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match the size of `Hsub`"))
+    size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(m), dim(op.H))
 end
 
 function (op::EmbedMap)(out::AbstractMatrix, m::AbstractMatrix)
-    size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match the size of `Hsub`"))
+    size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
     size(out) == (dim(op.H), dim(op.H)) || throw(DimensionMismatch("The output matrix must have size ($(dim(op.H)), $(dim(op.H))), got $(size(out))"))
     mul!(vec(out), op.map, _vectorize_pt_density_matrix(m))
     out
@@ -67,6 +61,14 @@ Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.
 Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, op.map')
 Base.transpose(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, op.map')
 
+"""
+    embed(Hsub => H; kwargs...)
+
+Create a callable embedding operation from `Hsub` into `H`.
+
+The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
+`Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
+"""
 embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwargs...)
 
 @testitem "Partial trace, embed" begin

@@ -79,7 +79,8 @@ supply_missing_constraint_info(constraint::FilterConstraint, space, spaces) = co
 
 
 """
-    SectorConstraint(reducer, maps=missing, spaces=missing)
+    SectorConstraint(reducer; maps=missing, spaces=missing)
+    SectorConstraint(reducer, maps, spaces)
 
 Constraint that groups complete basis states into sectors according to a
 custom rule. It has the same `reducer`, `maps`, and `spaces` interface
@@ -172,16 +173,19 @@ NumberConservation(allowed, spaces; weights=missing) = NumberConservation(allowe
 NumberConservation(space::AbstractHilbertSpace) = NumberConservation(missing; spaces=(space,), weights=missing)
 
 """
-    ParityConservation(parities=[-1, 1], spaces=missing)
+    ParityConservation(parities=[-1, 1]; spaces=missing)
+    ParityConservation(parities, spaces)
+    ParityConservation(space)
 
 Constraint enforcing allowed fermion parities, optionally on selected spaces.
+`parities` is a parity or a collection of parities, each `-1` or `1`. 
 """
 struct ParityConservation{H} <: AbstractConstraint
     allowed_parities::Vector{Int}
     spaces::H
     function ParityConservation(_allowed, _spaces)
         allowed = _normalize_constraint_values(_allowed)
-        allowed in Set([[-1, 1], [1], [-1]]) || throw(ArgumentError("Allowed parities must be a subset of [-1, 1]"))
+        allowed in Set([[-1, 1], [1], [-1]]) || throw(ArgumentError("The allowed parities must be a subset of `[-1, 1]`, got $allowed."))
         subspace = _normalize_constraint_subspace(_spaces)
         new{typeof(subspace)}(allowed, subspace)
     end
@@ -274,7 +278,7 @@ constrain_space
 end
 
 @testitem "ProductConstraint filtering" begin
-    using FermionicHilbertSpaces: FilterConstraint, particle_number
+    using FermionicHilbertSpaces: particle_number
     @fermions f
     H = hilbert_space(f, 1:2)
     constraint = NumberConservation(1) * FilterConstraint(state -> state != basisstate(2, H))

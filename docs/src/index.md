@@ -9,6 +9,7 @@ CurrentModule = FermionicHilbertSpaces
 
 Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`.
 
+
 ## Functionality
 
 The package helps with three general areas
@@ -44,6 +45,7 @@ To get the matrix representation of this operator on the Hilbert space, do
 ```@example intro
 mat = representation(ham, H)
 ```
+`representation(x, H)` is the main entry point for turning a symbolic expression into numbers: it gives a matrix for an operator and a vector for a state (see [symbolic states](symbolic_states.md)). It chooses what to compute from the type of `x`. The explicit forms `matrix_representation(op, H)` for operators and `vector_representation(state, H)` for states are also available. An optional third argument selects the format, `:sparse` (the default), `:dense` or `:lazy`.
 
 ## Tensor product and partial trace
 You can take tensor products of Hilbert spaces and operators on them, as well as calculate partial traces in a way that is consistent with fermionic anticommutation relations, see [Fermions](fermions.md). In this example, we take the ground state of the hamiltonian above, calculate reduced density matrices and the uncorrelated state $\rho_A \otimes \rho_B$.

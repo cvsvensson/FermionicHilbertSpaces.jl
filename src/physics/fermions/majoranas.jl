@@ -37,7 +37,7 @@ and commute with Majoranas in other `@majoranas` blocks.
 See also [`@fermions`](@ref).
 """
 macro majoranas(xs...)
-    group = MajoranaGroup(FermionicGroup(Tags((hash(xs),))))
+    group = MajoranaGroup(FermionicGroup(Tags((xs,))))
     defs = map(xs) do x
         :($(esc(x)) = SymbolicMajoranaBasis($(Expr(:quote, x)), $group))
     end
@@ -85,7 +85,7 @@ function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym)
         swap = Swap((-1)^(a.basis.group == b.basis.group))
         return swap
     else
-        throw(ArgumentError("Don't know how to multiply $a * $b"))
+        throw(ArgumentError("Cannot multiply `$a` and `$b`."))
     end
 end
 
@@ -142,7 +142,7 @@ end
 
 @testitem "Majorana triple products vs matrices" begin
     @majoranas γ
-    H = majorana_hilbert_space(γ, 1:4)
+    H = hilbert_space(γ, 1:4)
     ops = [γ[i] for i in 1:4]
     mats = [representation(op, H) for op in ops]
     for i in eachindex(ops), j in eachindex(ops), k in eachindex(ops)
@@ -150,13 +150,13 @@ end
     end
 end
 
-struct MajoranaHilbertSpace{B,L,H} <: AbstractGroupedHilbertSpace{B}
+struct MajoranaHilbertSpace{B,L,H,S<:SymbolicMajoranaBasis} <: AbstractGroupedHilbertSpace{B}
     majoranaindices::L
     parent::H
-    sym::SymbolicMajoranaBasis
-    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::SymbolicMajoranaBasis) where {L,H<:FermionicSpace}
+    sym::S
+    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::S) where {L,H<:FermionicSpace,S<:SymbolicMajoranaBasis}
         B = statetype(parent)
-        new{B,L,H}(majoranaindices, parent, sym)
+        new{B,L,H,S}(majoranaindices, parent, sym)
     end
 end
 
@@ -205,20 +205,19 @@ partial_transpose_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_transpo
 
 function majoranas(H::MajoranaHilbertSpace)
     γ = symbolic_basis(H)
-    OrderedDict(l => matrix_representation(γ[l], H) for l in labels(H))
+    OrderedDict(f.label => matrix_representation(γ[f.label], H) for f in modes(H))
 end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
 
-hilbert_space(y::SymbolicMajoranaBasis, labels, args...; kwargs...) = majorana_hilbert_space(y, labels, args...; kwargs...)
-
-function majorana_hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
-    iseven(length(labels)) || throw(ArgumentError("Must be an even number of Majoranas to define a Hilbert space."))
+function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
+    iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even to define a Hilbert space, got $(length(labels))."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
     f = SymbolicFermionBasis(y.name, tags(y).group)
     Hf = hilbert_space(f, pairs, args...; kwargs...)
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
     MajoranaHilbertSpace(majorana_position, Hf, y)
 end
+@deprecate majorana_hilbert_space(y, labels, args...; kwargs...) hilbert_space(y, labels, args...; kwargs...)
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = _wrap(MajoranaHilbertSpace(majoranaindices, parent(space), sym), space)
 
@@ -248,8 +247,8 @@ end
 
 @testitem "Partial trace of symbolic Majoranas" begin
     @majoranas y
-    H = majorana_hilbert_space(y, 1:6)
-    Hsub = subregion(majorana_hilbert_space(y, 3:4), H)
+    H = hilbert_space(y, 1:6)
+    Hsub = subregion(hilbert_space(y, 3:4), H)
     op = 1 + 3y[1] + 2y[3] + 4y[1] * y[6] + 3y[4] * y[1] + y[3] * y[4] + y[1] * y[3] * y[4] + y[1] * y[2] * y[6]
     op2 = 3 + 0y[1] # NCterms(op2) is empty
     @test representation(partial_trace(op, H => Hsub), Hsub) == partial_trace(representation(op, H), H => Hsub)
@@ -306,6 +305,18 @@ end
     @test representation(γ[1] * γ[2], H) == representation(maj(f[(1, 2)]) * maj(f[(1, 2)]'), Hf)
     @test representation(1 + γ[1] + 1im * γ[2] + 0.2 * γ[1] * γ[2], H) ==
           representation(1 + maj(f[(1, 2)]) + 1im * maj(f[(1, 2)]') + 0.2 * maj(f[(1, 2)]) * maj(f[(1, 2)]'), Hf)
+end
+
+@testitem "majoranas returns one matrix per label" begin
+    using FermionicHilbertSpaces: majoranas
+    @majoranas γ
+    H = hilbert_space(γ, 1:4)
+    M = majoranas(H)
+    @test length(M) == 4
+    @test collect(keys(M)) == collect(1:4)
+    for l in 1:4
+        @test M[l] == matrix_representation(γ[l], H)
+    end
 end
 
 @testitem "Majorana hilbert space" begin

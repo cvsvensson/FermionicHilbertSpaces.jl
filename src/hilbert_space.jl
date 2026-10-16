@@ -1,3 +1,12 @@
+"""
+    GenericHilbertSpace(label, basisstates, state_index=Dict(reverse(pair) for pair in enumerate(basisstates)))
+
+Atomic Hilbert space whose basis states are given explicitly by `basisstates`, indexed by integers.
+`label` is returned by `symbolic_group` and `atomic_id` and identifies the space in symbolic expressions.
+`state_index` gives the integer index of a basis state. It is either an `AbstractDict` from basis states
+to indices, or a function that takes a basis state and returns its index. By default it is a dictionary
+built from `basisstates`.
+"""
 struct GenericHilbertSpace{B,L,S,SI} <: AbstractAtomicHilbertSpace{B}
     label::L
     basisstates::S
@@ -19,7 +28,7 @@ atomic_id(H::GenericHilbertSpace) = H.label
 add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag), H.basisstates, H.state_index)
 
 @testitem "GenericHilbertSpace, ProductSpace" begin
-    using FermionicHilbertSpaces: GenericHilbertSpace, Kets, fast_path
+    using FermionicHilbertSpaces: Kets, fast_path
     using LinearAlgebra
     H1 = GenericHilbertSpace(:A, [:a, :b])
     custom_state_index(s) = begin

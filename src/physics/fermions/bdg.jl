@@ -7,7 +7,7 @@ Base.:(==)(n1::NambuState, n2::NambuState) = n1.state == n2.state && n1.hole == 
 Base.hash(n::NambuState, h::UInt) = hash(n.hole, hash(n.state, h))
 
 function togglefermions(sites, daggers, f::NambuState)
-    (length(sites) == 2 == length(daggers)) || throw(ArgumentError("Must act with exactly two fermions on a NambuState"))
+    (length(sites) == 2 == length(daggers)) || throw(ArgumentError("Exactly two fermions must act on a `NambuState`, got $(length(sites))."))
     allowed = sites[2] == only(f.state.sites) && daggers[2] == f.hole
     state = NambuState(SingleParticleState(sites[1]), !daggers[1])
     return state, allowed
@@ -23,24 +23,33 @@ function normal_order_to_bdg(m::AbstractMatrix)
         -conj(Δ) -conj(h)]
 end
 
-struct BdGHilbertSpace{B,H} <: AbstractHilbertSpace{B}
+struct BdGHilbertSpace{H}
     parent::H
     function BdGHilbertSpace(f::SymbolicFermionBasis, labels)
         states = vec([NambuState(i, hole) for (i, label) in enumerate(labels), hole in (true, false)])
         H = hilbert_space(f, labels, states)
-        B = statetype(H)
-        return new{B,typeof(H)}(H)
+        return new{typeof(H)}(H)
     end
 end
 """
-    bdg_hilbert_space(labels)
+    BdG()
 
-This hilbert space uses Nambu states to describe non-interacting systems with superconductive pairing. Matrix representations of quadratic operators take the form \\
-    [H  Δ; 
--Δ*  -H*] \\
-where H is hermitian and Δ is antisymmetric.
+Marker passed as the last argument of `hilbert_space(f, labels, BdG())` to select the Bogoliubov-de Gennes (Nambu) space of non-interacting fermions with superconducting pairing.
 """
-bdg_hilbert_space(f, labels) = BdGHilbertSpace(f, labels)
+struct BdG end
+
+"""
+    hilbert_space(f::SymbolicFermionBasis, labels, ::BdG)
+
+The Nambu space with one particle state and one hole state for each of the modes `f[l]`, `l in labels`. The matrix representation of a quadratic operator is the Bogoliubov-de Gennes matrix
+
+    [H   Δ
+    -Δ* -H*]
+
+where `H` is hermitian and `Δ` is antisymmetric, without any contribution from the identity operator. Operators that are not quadratic in the fermions cannot be represented. The space wraps a constrained fermionic space, available through `parent`, and does not combine with tensor products or partial traces.
+"""
+hilbert_space(f::SymbolicFermionBasis, labels, ::BdG) = BdGHilbertSpace(f, labels)
+@deprecate bdg_hilbert_space(f, labels) hilbert_space(f, labels, BdG())
 dim(h::BdGHilbertSpace) = dim(h.parent)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
 Base.:(==)(a::BdGHilbertSpace, b::BdGHilbertSpace) = a === b || a.parent == b.parent
@@ -48,18 +57,21 @@ Base.hash(x::BdGHilbertSpace, h::UInt) = hash(x.parent, h)
 modes(H::BdGHilbertSpace) = modes(H.parent)
 basisstates(h::BdGHilbertSpace) = basisstates(h.parent)
 Base.parent(h::BdGHilbertSpace) = h.parent
+Base.keys(h::BdGHilbertSpace) = keys(h.parent)
+basisstate(ind::Integer, H::BdGHilbertSpace) = basisstate(ind, parent(H))
 state_index(state::NambuState, H::BdGHilbertSpace) = state_index(state, parent(H))
 _find_position(op::AbstractSym, H::BdGHilbertSpace) = _find_position(op, parent(H))
 
 
 representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
-    isquadratic(op) || throw(ArgumentError("Operator must be quadratic in fermions to be represented on a BdG Hilbert space."))
+    _isscalar_operator(op) && return _identity_free_zero(H, repr)
+    _isfermionic(op) && isquadratic(op) || throw(ArgumentError("Only quadratic fermionic operators can be represented on a BdG Hilbert space. Use `hilbert_space(f, labels)` and `matrix_representation(op, H)` for other operators."))
     normal_order_to_bdg(_matrix_representation_single_space(remove_identity(op), H, repr, chunking; kwargs...))
 end
 
 
-function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::AbstractHilbertSpace{NambuState}; kwargs...)
+function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::Union{BdGHilbertSpace,AbstractHilbertSpace{NambuState}}; kwargs...)
     nambustates = (NambuState(_find_position(op.factors[1], H), op.factors[1].creation),
         NambuState(_find_position(op.factors[2], H), !op.factors[2].creation))
     inind = state_index(nambustates[2], H)
@@ -73,7 +85,7 @@ end
 @testitem "BdG" begin
     @fermions f
     h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
-    H = bdg_hilbert_space(f, 1:2)
+    H = hilbert_space(f, 1:2, BdG())
     @test representation(h + 1, H) == representation(h, H)
 
     h = rand(ComplexF64, 2, 2) + hc
@@ -87,19 +99,16 @@ end
     @test bdg_ham ≈ bdg_ham2
 end
 
-
-function isantisymmetric(A::AbstractMatrix)
-    indsm, indsn = axes(A)
-    if indsm != indsn
-        return false
-    end
-    for i = first(indsn):last(indsn), j = (i):last(indsn)
-        if A[i, j] != -A[j, i]
-            return false
-        end
-    end
-    return true
+@testitem "BdG space does not combine with generic space operations" begin
+    @fermions f
+    H = hilbert_space(f, 1:2, BdG())
+    @test !(H isa FermionicHilbertSpaces.AbstractHilbertSpace)
+    m = rand(dim(H), dim(H))
+    @test_throws MethodError partial_trace(m, H, H)
+    @test_throws MethodError embed(m, H, H)
+    @test_throws MethodError subregion(H, H)
 end
+
 function isbdgmatrix(A::AbstractMatrix)
     # Check if A is a BdG matrix, i.e., it has the form:
     # [H, Δ; -conj(Δ), -conj(H)]
@@ -199,7 +208,7 @@ function enforce_ph_symmetry(F::Eigen, canon_alg=SVDCanon(); cutoff=DEFAULT_PH_C
     if isreal(F.values)
         enforce_ph_symmetry(real(F.values), F.vectors, canon_alg; cutoff)
     else
-        throw(ArgumentError("Eigenvalues must be real"))
+        throw(ArgumentError("The eigenvalues must be real, got $(F.values)."))
     end
 end
 
@@ -237,7 +246,7 @@ end
 
 #Symmetric form of SVD for symmetric matrices, Takagi/Autonne decomposition
 function symmetric_SVD(M)
-    issymmetric(M) || throw(ArgumentError("Matrix must be symmetric"))
+    issymmetric(M) || throw(ArgumentError("`M` must be symmetric."))
     n = size(M, 1)
     block_matrix = [
         -real(M) imag(M);
@@ -269,8 +278,8 @@ canonicalize_particle_pair(v1, v2, ::SVDCanon) = canonicalize_particle_pair([v1 
 
 
 function canonicalize_particle_pair(vs::AbstractMatrix, ::SVDCanon)
-    size(vs, 2) == 2 || throw(ArgumentError("Matrix must have exactly two columns for SVD canonicalization"))
-    vs'vs ≈ I || throw(ArgumentError("Quasiparticles must be orthonormal"))
+    size(vs, 2) == 2 || throw(ArgumentError("`vs` must have exactly two columns for SVD canonicalization, got $(size(vs, 2))."))
+    vs'vs ≈ I || throw(ArgumentError("The quasiparticle vectors `vs` must be orthonormal."))
     n = div(size(vs, 1), 2)
     mat = Symmetric(transpose(vs) * [0I I(n); I(n) 0I] * vs)
     U, D = symmetric_SVD(mat)
@@ -284,7 +293,7 @@ end
     using LinearAlgebra
     @fermions f
     N = 4
-    H = bdg_hilbert_space(f, 1:N)
+    H = hilbert_space(f, 1:N, BdG())
     ham = sum(rand(ComplexF64) * f[n]'f[k] + rand(ComplexF64) * f[n]'f[k]' + hc for (n, k) in Iterators.product(1:N, 1:N))
     h = representation(ham, H)
     @test ishermitian(h)
@@ -310,7 +319,7 @@ const DEFAULT_PH_CUTOFF = 1e-12
     using LinearAlgebra
     @fermions f
     symham = f[1]' * f[2] + f[1]' * f[2]' + hc
-    H = bdg_hilbert_space(f, 1:2)
+    H = hilbert_space(f, 1:2, BdG())
     mat = representation(symham, H)
     vals, vecs = eigen(Matrix(mat), BdGEigen(); canon_alg=FermionicHilbertSpaces.SVDCanon())
     @test vals ≈ [-1, 0, 0, 1]
@@ -321,7 +330,7 @@ const DEFAULT_PH_CUTOFF = 1e-12
 
     # three site
     symham = f[1]' * f[2] + f[2]' * f[3] + f[1]' * f[2]' + f[2]' * f[3]' + hc
-    H = bdg_hilbert_space(f, 1:3)
+    H = hilbert_space(f, 1:3, BdG())
     Hmb = hilbert_space(f, 1:3)
     matmb = representation(symham, Hmb)
     mat = representation(symham, H)
