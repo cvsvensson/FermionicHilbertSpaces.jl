@@ -87,9 +87,16 @@ end
     partial_transpose(m, H, Hsub; Hout=H, complement=complementary_subsystem(H, Hsub), phase_factors=true, skipmissing=false)
     partial_transpose(m, H => Hout, Hsub; kwargs...)
     partial_transpose(H, Hsub; kwargs...)  # -> PartialTransposeMap
+    partial_transpose(H => Hout, Hsub; kwargs...)  # -> PartialTransposeMap
 
 Partial transpose of `m` (an operator on `H`, a pure state, or a vectorized density matrix)
 on the subsystem `Hsub`, which may be any subset of the modes of `H` (contiguous or not).
+The result is an operator on `Hout`, which defaults to `H`. `H => Hout` reads input => output;
+see [Pair arguments](@ref pair_convention).
+
+Without `m`, a callable [`PartialTransposeMap`](@ref) is returned. It takes the same keyword
+arguments, and `partial_transpose(H => Hout, Hsub; kwargs...)` is equivalent to
+`partial_transpose(H, Hsub; Hout, kwargs...)`.
 
 For fermions this is the fermionic partial transpose (partial time reversal)
 `R_A(Ẽ^{ν,ν'}) = i^{k_A} Ẽ^{(ν'_A,ν_B),(ν_A,ν'_B)}` in the fermionic operator basis, which is
@@ -112,6 +119,8 @@ end
 partial_transpose(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub::AbstractHilbertSpace; kwargs...) =
     partial_transpose(m, first(Hs), Hsub; Hout=last(Hs), kwargs...)
 partial_transpose(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = PartialTransposeMap(H, Hsub; kwargs...)
+partial_transpose(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub::AbstractHilbertSpace; kwargs...) =
+    PartialTransposeMap(first(Hs), Hsub; Hout=last(Hs), kwargs...)
 
 
 # Pure state: direct kernel, no superoperator, and no ψψ† either (iterate nonzero pairs).
@@ -290,6 +299,21 @@ end
     @test partial_transpose(m, H => Hfull, HA) ≈ partial_transpose(E * m * E', Hfull, hilbert_space(f, [1, 3]))
     @test partial_transpose(H, HA; Hout=Hfull)(m) ≈ partial_transpose(m, H, HA; Hout=Hfull)
     @test partial_transpose(2I, H => Hfull, HA) ≈ partial_transpose(2I(dim(H)), H => Hfull, HA)
+end
+
+@testitem "Partial transpose: map from a Pair" begin
+    using LinearAlgebra
+    @fermions f
+    H = hilbert_space(f, 1:4, NumberConservation(2))
+    Hfull = hilbert_space(f, 1:4)
+    HA = subregion(hilbert_space(f, [1, 3]), H)
+    m = rand(ComplexF64, dim(H), dim(H))
+    pt = partial_transpose(H => Hfull, HA)
+    @test pt isa FermionicHilbertSpaces.PartialTransposeMap
+    @test pt(m) ≈ partial_transpose(m, H => Hfull, HA)
+    @test pt(m) ≈ partial_transpose(H, HA; Hout=Hfull)(m)
+    @test size(pt(m)) == (dim(Hfull), dim(Hfull))
+    @test partial_transpose(H => Hfull, HA; phase_factors=false)(m) ≈ partial_transpose(m, H => Hfull, HA; phase_factors=false)
 end
 
 @testitem "Partial transpose: bosons, spins, and Majoranas" begin

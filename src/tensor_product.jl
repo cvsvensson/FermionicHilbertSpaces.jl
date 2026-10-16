@@ -86,6 +86,7 @@ The relative order of fermionic embeddings, and so the sign of the result, follo
 not the order of `ms`. For the ordered product in which the order of `ms` and `Hs` given by the caller
 decides the signs, use `tensor_product(ms, Hs => H)`, which is the usual entry point.
 `generalized_kron(ms, Hs => H)` is also accepted, and `generalized_kron(Hs => H)` returns a function of `ms`.
+`Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
 function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kwargs...)
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
@@ -273,9 +274,12 @@ end
 
 """
     tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
+    tensor_product(ms, Hs => H; kwargs...)
+    tensor_product(Hs => H; kwargs...)
 
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
-`kwargs` can be passed a bool `phase_factors`.
+`kwargs` can be passed a bool `phase_factors`. The last form returns a function of `ms`.
+`Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
 function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
@@ -406,8 +410,10 @@ end
 
 """
     partial_trace(m, H => Hsub; complement=complementary_subsystem(H, Hsub))
+    partial_trace(H => Hsub; kwargs...)  # -> PartialTraceMap
 
 Compute the partial trace of `m` from `H` to `Hsub`. Fermionic phase factors are included if both `H` and `Hsub` are Fermionic, unless specified otherwise in `kwargs`.
+`H => Hsub` reads input => output; see [Pair arguments](@ref pair_convention).
 """
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
 

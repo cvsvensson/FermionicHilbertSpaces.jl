@@ -11,6 +11,24 @@ partial traces](fermions.md) for the mathematical background
 and phase-factor conventions behind `tensor_product`, `embed`, `partial_trace`, and
 `partial_transpose`; this page focuses on syntax and usage.
 
+## [Pair arguments](@id pair_convention)
+
+Wherever a function takes a `Pair` of Hilbert spaces, the pair reads
+`input => output`: the left side is the space the argument lives on, and the right
+side is the space of the result. The same order is used for every function:
+
+```julia
+partial_trace(m, H => Hsub)              # m on H, result on Hsub
+embed(m, Hsub => H)                      # m on Hsub, result on H
+partial_transpose(m, H => Hout, Hsub)    # m on H, result on Hout
+generalized_kron(ms, Hs => H)            # ms on the spaces Hs, result on H
+tensor_product(ms, Hs => H)              # ms on the spaces Hs, result on H
+reshape(t, H => (H1, H2))                # t has one axis on H, result has axes on H1 and H2
+```
+
+Called without the array, the same pair returns a callable operation, for example
+`partial_trace(H => Hsub)` or `partial_transpose(H => Hout, Hsub)`.
+
 ## Composing and querying Hilbert spaces
 
 ### Building composite spaces with `tensor_product`
@@ -192,6 +210,7 @@ where the subsystem is inconsistent with the full space may silently give the wr
 partial_transpose(m, H, Hsub; Hout=H,
   complement=complementary_subsystem(H, Hsub), phase_factors=true, skipmissing=false)
 partial_transpose(m, H => Hout, Hsub; kwargs...)
+partial_transpose(H => Hout, Hsub; kwargs...)   # callable map
 ```
 
 Transposes the subsystem `Hsub` of an operator `m` on `H`. A pure state vector is
@@ -262,7 +281,7 @@ H)`, returning a callable that can be applied to different collections of `ms`.
 ### Callable maps and sparse conversion
 
 `partial_trace(H => Hsub; kwargs...)`, `embed(Hsub => H; kwargs...)`, and
-`partial_transpose(H, Hsub; kwargs...)`, called with only spaces, return callable
+`partial_transpose(H, Hsub; kwargs...)` (or `partial_transpose(H => Hout, Hsub; kwargs...)`), called with only spaces, return callable
 operation objects instead of immediately acting on an array:
 
 ```@example hilbert_space_ops

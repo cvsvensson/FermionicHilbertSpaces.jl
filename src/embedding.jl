@@ -9,7 +9,8 @@ end
 """
     embed(m, Hsub => H; complement=complementary_subsystem(H, Hsub), kwargs...)
 
-Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces. 
+Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces.
+`Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
@@ -66,6 +67,7 @@ Base.transpose(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.
 Create a callable embedding operation from `Hsub` into `H`.
 
 The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
+`Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
 embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwargs...)
 

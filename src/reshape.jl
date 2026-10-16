@@ -7,7 +7,8 @@ const _SpaceMapping = Pair{<:_SpaceGroup,<:_SpaceGroup}
 
 Reshape the array `t` by splitting or combining its indices according to
 Hilbert-space mappings. The mappings are applied left to right, each one
-consuming the next consecutive group of input indices.
+consuming the next consecutive group of input indices. Each mapping reads
+input => output; see [Pair arguments](@ref pair_convention).
 
 # Mapping forms
 
