@@ -205,7 +205,7 @@ partial_transpose_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_transpo
 
 function majoranas(H::MajoranaHilbertSpace)
     γ = symbolic_basis(H)
-    OrderedDict(l => matrix_representation(γ[l], H) for l in labels(H))
+    OrderedDict(f.label => matrix_representation(γ[f.label], H) for f in modes(H))
 end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
 
@@ -306,6 +306,18 @@ end
     @test representation(γ[1] * γ[2], H) == representation(maj(f[(1, 2)]) * maj(f[(1, 2)]'), Hf)
     @test representation(1 + γ[1] + 1im * γ[2] + 0.2 * γ[1] * γ[2], H) ==
           representation(1 + maj(f[(1, 2)]) + 1im * maj(f[(1, 2)]') + 0.2 * maj(f[(1, 2)]) * maj(f[(1, 2)]'), Hf)
+end
+
+@testitem "majoranas returns one matrix per label" begin
+    using FermionicHilbertSpaces: majoranas
+    @majoranas γ
+    H = majorana_hilbert_space(γ, 1:4)
+    M = majoranas(H)
+    @test length(M) == 4
+    @test collect(keys(M)) == collect(1:4)
+    for l in 1:4
+        @test M[l] == matrix_representation(γ[l], H)
+    end
 end
 
 @testitem "Majorana hilbert space" begin
