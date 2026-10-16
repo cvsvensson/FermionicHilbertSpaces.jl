@@ -1,3 +1,13 @@
+"""
+    FermionicHilbertSpaces
+
+Symbolic fermions, bosons and spins, Hilbert spaces with constraints, and the tensor
+products, partial traces and matrix representations that connect them.
+
+Loading the package calls `NonCommutativeProducts.enable_autosort!()`. This turns on
+autosorting of non-commutative products for every user of NonCommutativeProducts in the
+Julia session, not only for this package.
+"""
 module FermionicHilbertSpaces
 
 using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Eigen, Hermitian,

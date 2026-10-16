@@ -79,7 +79,8 @@ supply_missing_constraint_info(constraint::FilterConstraint, space, spaces) = co
 
 
 """
-    SectorConstraint(reducer, maps=missing, spaces=missing)
+    SectorConstraint(reducer; maps=missing, spaces=missing)
+    SectorConstraint(reducer, maps, spaces)
 
 Constraint that groups complete basis states into sectors according to a
 custom rule. It has the same `reducer`, `maps`, and `spaces` interface
@@ -172,9 +173,13 @@ NumberConservation(allowed, spaces; weights=missing) = NumberConservation(allowe
 NumberConservation(space::AbstractHilbertSpace) = NumberConservation(missing; spaces=(space,), weights=missing)
 
 """
-    ParityConservation(parities=[-1, 1], spaces=missing)
+    ParityConservation(parities=[-1, 1]; spaces=missing)
+    ParityConservation(parities, spaces)
+    ParityConservation(space)
 
 Constraint enforcing allowed fermion parities, optionally on selected spaces.
+`parities` is a parity or a collection of parities, each `-1` or `1`. With a single
+`space`, the parity is measured on that space only.
 """
 struct ParityConservation{H} <: AbstractConstraint
     allowed_parities::Vector{Int}

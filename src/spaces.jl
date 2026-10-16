@@ -25,6 +25,18 @@ with additional arguments such as constraints.
 """
 hilbert_space
 
+"""
+    factors(H)
+
+Return the factors of `H` as a collection of Hilbert spaces. For a composite space these are
+the spaces it was built from, where atomic spaces that belong to the same group (for example
+the modes of one fermion basis, which are combined into one fermionic space) form a single factor. An atomic space
+has the single factor `H`, and a grouped space has its atomic factors. Constrained and sector
+spaces report the factors of their parent space.
+
+Compare `atomic_factors(H)`, which always returns the indivisible atomic spaces, and
+`groups(H)`, which returns the group of each factor (`(H,)` for a grouped space instead of its atoms).
+"""
 factors(H::AbstractAtomicHilbertSpace) = (H,)
 atomic_factors(H::AbstractAtomicHilbertSpace) = (H,)
 factors(H::AbstractGroupedHilbertSpace) = atomic_factors(H)
@@ -76,8 +88,10 @@ state_mapper(H, Hs) = throw(MethodError(state_mapper, (H, Hs)))
 
 Split a state using `mapper`.
 
-Contract: returns a tuple with one entry per target subsystem. Each entry is a weighted
-collection `((substate, weight), ...)` for that target.
+Returns a pair `(outcomes, weights)`. Each element of `outcomes` is a tuple with one
+substate per target subsystem, and `weights` holds the coefficient of the
+corresponding outcome. A state that splits uniquely gives a single outcome with
+weight `1`, for example `((substate1, substate2),), (1,)`.
 """
 split_state(state, mapper::AbstractStateMapper) = throw(MethodError(split_state, (state, mapper)))
 
@@ -86,7 +100,9 @@ split_state(state, mapper::AbstractStateMapper) = throw(MethodError(split_state,
 
 Combine subsystem states using `mapper`.
 
-Contract: returns a states and weights `states, weights`.
+Returns a pair `(states, weights)`, where `states` holds the resulting states of the
+combined space and `weights` the coefficient of each. A state that combines uniquely
+gives `(state,), (1,)`.
 """
 combine_states(substates, mapper::AbstractStateMapper) = throw(MethodError(combine_states, (substates, mapper)))
 

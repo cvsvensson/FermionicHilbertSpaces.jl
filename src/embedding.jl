@@ -13,13 +13,6 @@ Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fe
 """
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
-"""
-    embed(Hsub => H; kwargs...)
-
-Create a callable embedding operation from `Hsub` into `H`.
-
-The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
-"""
 struct EmbedMap{HS,H,C,K,M}
     Hsub::HS
     H::H
@@ -67,6 +60,13 @@ Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.
 Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, op.map')
 Base.transpose(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, op.map')
 
+"""
+    embed(Hsub => H; kwargs...)
+
+Create a callable embedding operation from `Hsub` into `H`.
+
+The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
+"""
 embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwargs...)
 
 @testitem "Partial trace, embed" begin

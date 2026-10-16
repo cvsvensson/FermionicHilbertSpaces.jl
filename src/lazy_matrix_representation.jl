@@ -2,10 +2,11 @@
     LazyOperator{O,S,T,C,P}
 
 A matrix-free (lazy) representation of a symbolic operator on a Hilbert space.
-Acts directly on vectors and matrices via without constructing a sparse matrix.
+Acts directly on vectors and matrices without constructing a sparse matrix.
 
-Constructed via `matrix_representation(op, space, :lazy)`. `LazyOperator` conforms to
-the `SciMLOperators.AbstractSciMLOperator` interface.
+`matrix_representation(op, space, :lazy)` returns a `SciMLOperators.FunctionOperator`
+that wraps a `LazyOperator`. The bare `LazyOperator` is available as
+`LazyOperator(op, space, chunking)`.
 """
 mutable struct LazyOperator{O,S,T,C,P}
     const op::O

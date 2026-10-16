@@ -330,7 +330,9 @@ end
 
 Return a concrete representation of `op_or_state` in Hilbert space `space`.
 
-- For symbolic operators, returns a sparse matrix (or lazy operator when `lazy=true`).
+- For symbolic operators, returns a sparse matrix by default. A third argument selects the type:
+  `:dense` gives a dense matrix, and `:lazy` (or `LazyRepr()`) gives a matrix-free
+  `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`.
 - For `AbstractBasisState`, returns a one-hot sparse column vector.
 - For `SymbolicState` (ket/bra), returns the corresponding column/row vector.
 """

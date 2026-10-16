@@ -1,10 +1,7 @@
 
 
-"""
-    tensor_product(spaces; constraint=NoSymmetry())
-
-Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
-"""
+# Combines `spaces` into one space without applying any new constraint.
+# Constraints already present on the input spaces are carried over.
 function tensor_product_no_constraints(spaces)
     atoms = Iterators.flatten(Iterators.map(atomic_factors, spaces))
     groups = groupby(group_id, atoms; sortkeys=false, sortvals=false)
@@ -22,6 +19,12 @@ function tensor_product_no_constraints(spaces)
     end
     return space
 end
+"""
+    tensor_product(spaces...; constraint=NoSymmetry())
+    tensor_product(spaces; constraint=NoSymmetry())
+
+Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
+"""
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 function tensor_product(spaces; constraint=NoSymmetry())
     if length(spaces) == 1
@@ -83,7 +86,12 @@ end
 """
     generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
 
-Compute the tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the tensor_product product of `Hs`.
+Compute the tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the `tensor_product` of `Hs`.
+
+The relative order of fermionic embeddings, and so the sign of the result, follows the fermion mode ordering of `H`,
+not the order of `ms`. For the ordered product in which the order of `ms` and `Hs` given by the caller
+decides the signs, use `tensor_product(ms, Hs => H)`, which is the usual entry point.
+`generalized_kron(ms, Hs => H)` is also accepted, and `generalized_kron(Hs => H)` returns a function of `ms`.
 """
 function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kwargs...)
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
