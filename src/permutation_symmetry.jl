@@ -42,10 +42,19 @@ function _add_permutation_operator!(P, (states, state_index), mapper, perm, weig
     return P
 end
 """
-    permutation_projector(H, Hs, perms, weights=nothing, T = Float64; normalize=true)
+    permutation_projector(H, Hs, perms[, weights[, T]]; normalize=true, sparse=true)
 
 Build a group-averaged projector/operator from permutation operators:
-`P = sum(weights[g] * R_g for g)`.
+`P = sum(weights[g] * R_g for g)`, where `R_g` permutes the factors `Hs` according to
+`perms[g]`. Without `weights`, every weight is one.
+
+`T` is the element type of `P`. It defaults to `Int` without `weights`, and otherwise to
+the element type of `weights`.
+
+Keywords:
+- `normalize`: rescale `P` by `tr(P) / sum(abs2, P)`, which makes `P^2 == P` when `P` is
+  proportional to a projector.
+- `sparse`: return a `SparseMatrixCSC` if `true`, and a `Matrix` otherwise.
 
 `Hs` may be either a full partition of `H` (covering all atomic factors) or a proper
 subsystem list (covering only a subset of atomic factors). In the subsystem case the
@@ -59,8 +68,9 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothi
     if !ispartition(Hs, H)
         Hsub = subregion(tensor_product(Hs...), H)
         issubsystem(Hsub, H) || throw(ArgumentError("`Hs` must be a partition or a subsystem of `H`."))
-        Psub = permutation_projector(Hsub, Hs, perms, weights, T; normalize)
-        return embed(Psub, Hsub => H)
+        Psub = permutation_projector(Hsub, Hs, perms, weights, T; normalize, sparse)
+        P = embed(Psub, Hsub => H)
+        return sparse ? P : Matrix(P)
     end
 
     ws = if isnothing(weights)
@@ -109,29 +119,48 @@ function _default_projector_eltype(weights)
 end
 
 """
-    symmetric_sector(H, Hs, sector=:symmetric, T=Float64; normalize=true, cutoff=0.9, atol=1e-10)
+    symmetric_sector(H, Hs, sector=:symmetric, T=Float64; orth_method=:qr, normalize=true, sparse=true)
 
-Construct the projector onto symmetric sectors of `H` under permutations of the partition `Hs`. 
+Return a basis for the sector of `H` selected by `sector`, under permutations of the
+factors `Hs`.
 
-If `Combinatorics.jl` is loaded, `sector` can be `:symmetric` or `:antisymmetric` to automatically generate the full set of permutations and weights for the symmetric or antisymmetric representation. Otherwise, `sector` must be a tuple of `(perms, weights)` to specify the permutations and their corresponding weights directly.
+`sector` is either a tuple `(perms, weights)`, with permutations of `1:length(Hs)` and
+one weight per permutation, or, if `Combinatorics.jl` is loaded, `:symmetric` or
+`:antisymmetric`, which use all permutations with weight one or the permutation sign.
+`T` is the element type of the projector.
+
+The projector is built with `permutation_projector(H, Hs, perms, weights, T; normalize, sparse)`.
+`orth_method` selects what is returned:
+- `:qr`: a matrix with orthonormal columns spanning the sector, from a QR decomposition
+  of the projector.
+- `:eig`: a matrix with orthonormal columns spanning the sector, from the eigenvectors of
+  the projector with eigenvalue one. The projector is converted to a dense matrix.
+- `nothing`: the projector itself.
 
 `Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
 case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
 """
 function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type{T}=Float64;
-    orth_method=_QR(), kwargs...) where T
+    orth_method=:qr, kwargs...) where T
     isempty(Hs) && throw(ArgumentError("`Hs` must contain at least one factor space."))
+    method = _orth_method(orth_method)
 
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
     length(perms) == length(weights) || throw(ArgumentError("The generated weights and permutations must have the same length, got $(length(weights)) and $(length(perms))."))
     P = permutation_projector(H, Hs, perms, weights, T; kwargs...)
     trP = tr(P)
     rank = try
-        Int(trP) 
+        Int(trP)
     catch e
         round(Int, real(trP))
     end
-    _remove_columns!(P, orth_method, rank)
+    _remove_columns!(P, method, rank)
+end
+_orth_method(method::Union{_QR,_EIG,Nothing}) = method
+function _orth_method(method)
+    method === :qr && return _QR()
+    method === :eig && return _EIG()
+    throw(ArgumentError("`orth_method` must be `:qr`, `:eig` or `nothing`, got `$(repr(method))`."))
 end
 _resolve_sector_permutations_and_weights(Hs, (perms, weights), T) = (perms, weights) # for direct input of perms and weights
 
@@ -210,6 +239,19 @@ end
     @test Ttriv' * Ttriv ≈ Ttriv
     @test Tsign' * Tsign ≈ Tsign
 
+    # orth_method values
+    using FermionicHilbertSpaces: _QR, _EIG
+    @test symmetric_sector(H, [H1, H2], sympw; orth_method=:qr) == Ptriv
+    @test symmetric_sector(H, [H1, H2], sympw; orth_method=_QR()) == Ptriv
+    for w in (sympw, antisymw)
+        Q = symmetric_sector(H, [H1, H2], w; orth_method=:eig)
+        @test Q' * Q ≈ I
+        @test Q * Q' ≈ symmetric_sector(H, [H1, H2], w; orth_method=nothing)
+        @test symmetric_sector(H, [H1, H2], w; orth_method=_EIG()) == Q
+    end
+    @test_throws ArgumentError symmetric_sector(H, [H1, H2], sympw; orth_method=:svd)
+    @test symmetric_sector(H, [H1, H2], sympw; orth_method=nothing, sparse=false) isa Matrix
+
     H3 = hilbert_space(f, 3:3)
     H123 = tensor_product(H1, H2, H3)
     Hs3 = [H1, H2, H3]
@@ -249,6 +291,8 @@ end
     Tanti_sub = symmetric_sector(H123, Hs_sub, :antisymmetric; orth_method=nothing)
     @test Qsym * Qsym' ≈ Tsym_sub
     @test Qanti * Qanti' ≈ Tanti_sub
+
+    @test permutation_projector(H123, Hs_sub, [idperm, swapperm]; sparse=false) isa Matrix
 
     # Invalid input: Hs not a subsystem of H
     @test_throws ArgumentError permutation_projector(H, [H1, H3], [idperm, swapperm])
