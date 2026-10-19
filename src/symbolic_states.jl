@@ -322,10 +322,12 @@ end
 _grade_type(g) = :mixed
 
 """
-    vector_representation(op::NCMul, space) -> vector or adjoint-vector
+    vector_representation(state, space, [repr]; kwargs...) -> vector or transposed vector
 
-For a product of ket SymbolicStates, apply each ket's operator action in sequence
-and return a sparse column vector. For bras, return the adjoint row vector.
+Return the vector of `state` in `space`. `state` is a basis state, a symbolic ket or bra, or a product or sum of
+symbolic kets or of symbolic bras. Kets give a column vector, and bras give the transpose of one.
+The optional `repr` selects the format: `:sparse` (the default), `:dense`, or a format object
+(`EagerSparseRepr()`, `EagerDenseRepr()`).
 """
 function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
     ind = _checked_state_index(state, space)
@@ -349,36 +351,46 @@ function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, re
 end
 vector_representation(op, space, repr; kwargs...) = vector_representation(op, space, _canonicalize_repr(repr); kwargs...)
 
-function vector_representation(op::NCMul, space::AbstractHilbertSpace, repr=EagerSparseRepr(); type=_operator_type(op), kwargs...)
+function vector_representation(op::Union{NCMul,NCAdd}, space::AbstractHilbertSpace, repr=EagerSparseRepr(); type=nothing, kwargs...)
+    if isnothing(type)
+        kind = _operator_type(op)
+    else
+        Base.depwarn("The `type` keyword of `vector_representation` is deprecated. Kets and bras are inferred from the expression.", :vector_representation)
+        kind = type
+    end
+    _vector_representation(op, space, repr, kind; kwargs...)
+end
+# `kind` is `:kets` or `:bras`, as computed by `_operator_type`
+function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, kind; kwargs...)
     symstates = op.factors
     group_ids = map(state -> group_id(state.space), symstates)
     perm = map(id -> findfirst(==(id) ∘ group_id, factors(space)), group_ids)
     all(!isnothing, perm) || throw(ArgumentError("Spaces of symbolic states in NCMul do not match the factor spaces of the provided ProductSpace"))
-    basis_state(symstate::SymbolicState) = type == :kets ? symstate.ket : symstate.bra
+    basis_state(symstate::SymbolicState) = kind == :kets ? symstate.ket : symstate.bra
     vec = if length(group_ids) == 1
         op.coeff * vector_representation(basis_state(only(symstates)), space, repr)
     else
         prodstate = ProductState(ntuple(n -> basis_state(symstates[perm[n]]), length(perm)))
         op.coeff * vector_representation(prodstate, space, repr)
     end
-    if type == :kets
+    if kind == :kets
         return vec
-    elseif type == :bras
+    elseif kind == :bras
         return transpose(vec)
     else
         throw(ArgumentError("`vector_representation` requires an `NCMul` that is purely kets or purely bras."))
     end
 end
-function vector_representation(op::NCAdd, space::AbstractHilbertSpace, repr=EagerSparseRepr(); type=_operator_type(op), kwargs...)
+function _vector_representation(op::NCAdd, space::AbstractHilbertSpace, repr, kind; kwargs...)
     iszero(op.coeff) || throw(ArgumentError("`vector_representation` does not support an `NCAdd` with nonzero `coeff`, got $(op.coeff)."))
     if isempty(op.dict) # a zero ket or bra
-        type in (:kets, :bras) || throw(ArgumentError("`vector_representation` requires an `NCAdd` that is purely kets or purely bras."))
+        kind in (:kets, :bras) || throw(ArgumentError("`vector_representation` requires an `NCAdd` that is purely kets or purely bras."))
         # same eltype as the nonzero path, where each basis vector is scaled by a coefficient
         _repr = _canonicalize_repr(repr)
         vec = _zero_vector(space, _repr, promote_type(_vector_eltype(_repr), valtype(op.dict)))
-        return type == :kets ? vec : transpose(vec)
+        return kind == :kets ? vec : transpose(vec)
     end
-    return sum(coeff * vector_representation(term, space, repr; type, kwargs...) for (term, coeff) in pairs(op.dict))
+    return sum(coeff * _vector_representation(term, space, repr, kind; kwargs...) for (term, coeff) in pairs(op.dict))
 end
 
 function representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
@@ -401,11 +413,11 @@ end
 function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     type = _operator_type(op)
     if type == :kets || type == :bras
-        return vector_representation(op, space, repr; type, kwargs...)
+        return _vector_representation(op, space, repr, type; kwargs...)
     elseif type == :ketbras
         _repr = _canonicalize_repr(repr)
         if _iszero_ncadd(op) && _repr isa Union{EagerSparseRepr,EagerDenseRepr}
-            return _zero_matrix(space, _repr, mat_eltype(op))
+            return _zero_matrix(space, _repr, _repr_eltype(mat_eltype(op), _repr))
         end
         return matrix_representation(op, space, repr; kwargs...)
     elseif type == :mixed
@@ -462,6 +474,21 @@ end
     vsec = representation(ssec, Hn1)
     @test vsec[1] == 1
     @test count(!iszero, vsec) == 1
+end
+
+@testitem "vector_representation of symbolic kets and bras" begin
+    @fermions f
+    Hf = hilbert_space(f, 1:2)
+    vf = Kets(Hf)
+    ket = 2 * vf("10") + vf("01")
+    v = vector_representation(ket, Hf)
+    @test v == representation(ket, Hf)
+    @test vector_representation(ket', Hf) == transpose(v)
+    @test vector_representation(1 * vf("10"), Hf, :dense) isa Vector
+
+    # the deprecated `type` keyword still selects kets or bras
+    @test (@test_deprecated vector_representation(ket, Hf; type=:kets)) == v
+    @test (@test_deprecated vector_representation(ket', Hf; type=:bras)) == transpose(v)
 end
 
 @testitem "representation of different kinds of input" begin

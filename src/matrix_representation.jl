@@ -225,8 +225,12 @@ function _matrix_representation(op, bases, space, repr, chunking; kwargs...) #As
 end
 
 
-matrix_accumulator(op::ProductOperator, space, repr) = matrix_accumulator(mat_eltype(op), 1, (dim(space), dim(space)), repr)
-matrix_accumulator(op, space, repr) = matrix_accumulator(mat_eltype(op), length(NCterms(op)), (dim(space), dim(space)), repr)
+matrix_accumulator(op::ProductOperator, space, repr) = matrix_accumulator(_repr_eltype(mat_eltype(op), repr), 1, (dim(space), dim(space)), repr)
+matrix_accumulator(op, space, repr) = matrix_accumulator(_repr_eltype(mat_eltype(op), repr), length(NCterms(op)), (dim(space), dim(space)), repr)
+
+# The element type given in the format (e.g. `EagerSparseRepr{ComplexF64}()`) takes precedence over the operator's
+_repr_eltype(default, ::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T === Missing ? default : T
+_repr_eltype(default, _) = default
 
 function matrix_accumulator(::Type{T}, N::Int, (d1, d2)::Tuple{Int,Int}, ::EagerSparseRepr) where T
     length_guess = Int(floor(1 + log2(N + 1))) .* (d1, d2) # mild increase with number of terms
@@ -340,7 +344,7 @@ end
 Return the matrix representation of symbolic operator `op` in Hilbert space `space`.
 
 The optional `repr` selects the format, as in [`representation`](@ref): `:sparse` (the default), `:dense`, `:lazy`,
-or a format object (`EagerSparseRepr()`, `EagerDenseRepr()`, `LazyRepr()`).
+or a format object (`EagerSparseRepr()`, `EagerDenseRepr()`, `LazyRepr()`). A numeric element type also works as `repr`: `ComplexF64` gives a sparse matrix with that element type, and `Matrix{Float64}` gives a dense matrix with that element type.
 
 Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
 
@@ -358,7 +362,7 @@ function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparse
         op, space, :sparse; projection, chunking, kwargs...))
     repr = _canonicalize_repr(repr)
     if trivial_operator(op)
-        return get_trivial_op_coeff(op) * I(dim(space))
+        return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
     end
     op_groups = symbolic_groups(op)
     space_groups = group_ids(space)
@@ -381,6 +385,12 @@ end
 group_ids(space::ProductSpace) = map(group_id, factors(space))
 group_ids(space::Union{AbstractAtomicHilbertSpace,AbstractGroupedHilbertSpace}) = (group_id(space),)
 group_ids(space::AbstractHilbertSpace) = group_ids(parent(space))
+
+# A format without an element type keeps the structured identity; a typed format gives a matrix of that element type
+_convert_repr_eltype(M, ::Union{EagerSparseRepr{Missing},EagerDenseRepr{Missing}}) = M
+_convert_repr_eltype(M, ::EagerSparseRepr{T}) where T = SparseArrays.sparse(T.(M))
+_convert_repr_eltype(M, ::EagerDenseRepr{T}) where T = Matrix{T}(M)
+_convert_repr_eltype(M, _) = M
 
 trivial_operator(op::Union{UniformScaling,Number}) = true
 trivial_operator(op::NCMul) = length(op.factors) == 0
