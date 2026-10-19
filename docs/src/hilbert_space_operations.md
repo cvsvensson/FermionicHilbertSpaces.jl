@@ -207,9 +207,9 @@ where the subsystem is inconsistent with the full space may silently give the wr
 ### `partial_transpose`: transposing a subsystem
 
 ```julia
-partial_transpose(m, H, Hsub; Hout=H,
+partial_transpose(m, H, Hsub;
   complement=complementary_subsystem(H, Hsub), phase_factors=true, skipmissing=false)
-partial_transpose(m, H => Hout, Hsub; kwargs...)
+partial_transpose(m, H => Hout, Hsub; kwargs...)  # result on Hout
 partial_transpose(H => Hout, Hsub; kwargs...)   # callable map
 ```
 
@@ -232,7 +232,7 @@ negativity > 0 # PPT criteria for entanglement
 The partial transpose need not preserve particle-number or parity constraints.
 If a transposed state is missing from `Hout`, the default behavior is to throw an
 `ArgumentError`. Pass a larger output space, such as the unconstrained space on the
-same modes, with `Hout`; `skipmissing=true` instead drops terms whose output states
+same modes, as `H => Hout`; `skipmissing=true` instead drops terms whose output states
 are absent. Set `phase_factors=false` to disable the fermionic phase factors and
 compute the ordinary subsystem transpose.
 
