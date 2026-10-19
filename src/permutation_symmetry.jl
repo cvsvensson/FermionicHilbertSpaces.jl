@@ -148,12 +148,9 @@ function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
     length(perms) == length(weights) || throw(ArgumentError("The generated weights and permutations must have the same length, got $(length(weights)) and $(length(perms))."))
     P = permutation_projector(H, Hs, perms, weights, T; kwargs...)
-    trP = tr(P)
-    rank = try
-        Int(trP)
-    catch e
-        round(Int, real(trP))
-    end
+
+    tr2 = sum(abs2, P)
+    rank = iszero(tr2) ? 0 : round(Int, real(tr(P))^2 / tr2)
     _remove_columns!(P, method, rank)
 end
 _orth_method(method::Union{_QR,_EIG,Nothing}) = method
@@ -286,11 +283,17 @@ end
     @test Qsym' * Qsym ≈ I
     @test Qanti' * Qanti ≈ I
 
+    # The normalize keyword only rescales the projector, so the sector basis must not change
+    @test size(symmetric_sector(H123, Hs3, :symmetric; normalize=false), 2) == size(symmetric_sector(H123, Hs3, :symmetric), 2)
+    Qanti_unnorm = symmetric_sector(H123, Hs_sub, :antisymmetric; normalize=false)
+    @test size(Qanti_unnorm, 2) == size(Qanti, 2)
+
     # Q*Q' should equal the full space projector (orth_method=nothing)
     Tsym_sub = symmetric_sector(H123, Hs_sub, :symmetric; orth_method=nothing)
     Tanti_sub = symmetric_sector(H123, Hs_sub, :antisymmetric; orth_method=nothing)
     @test Qsym * Qsym' ≈ Tsym_sub
     @test Qanti * Qanti' ≈ Tanti_sub
+    @test Qanti_unnorm * Qanti_unnorm' ≈ Tanti_sub
 
     @test permutation_projector(H123, Hs_sub, [idperm, swapperm]; sparse=false) isa Matrix
 
