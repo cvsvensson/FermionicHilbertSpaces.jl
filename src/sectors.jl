@@ -111,9 +111,9 @@ Return the sector of `H` corresponding to quantum number `qn`.
 For `qn === nothing`, this returns `H` for non-sector spaces.
 Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
 """
-sector(qn, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), _sector_states(qn, H), constraint)
+sector(qn, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
 sector(::Nothing, H::AbstractHilbertSpace, constraint=NoSymmetry()) = constrain_space(H, constraint)
-sector(qn::Nothing, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), _sector_states(qn, H), constraint)
+sector(qn::Nothing, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
 
 function _sector_states(qn, H::SectorHilbertSpace)
     states = get(H.qn_to_states, qn, nothing)

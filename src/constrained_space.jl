@@ -38,7 +38,7 @@ partial_transpose_phase_factor_eltype(space::ConstrainedSpace) = partial_transpo
 partial_transpose_phase_factor(f1, f2, H::ConstrainedSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
 atomic_substate(n, f, space::ConstrainedSpace) = atomic_substate(n, f, parent(space))
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
-constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}, constraint::AbstractConstraint=NoSymmetry()) where B = constrain_space(space, constraint, states)
+constrain_space(space::AbstractHilbertSpace, states::AbstractVector) = constrain_space(space, NoSymmetry(), states)
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, states)
 function constrain_space(space, constraint::AbstractConstraint, states=basisstates(space))
@@ -103,6 +103,18 @@ fast_path(space::ConstrainedSpace) = fast_path(parent(space))
     H2 = constrain_space(H1, NumberConservation(0:1))
     H3 = constrain_space(H2, NumberConservation(1:2))
     @test basisstates(H3) == basisstates(constrain_space(H, NumberConservation(1)))
+
+    # explicit states, alone or as candidates for a constraint
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    states = collect(basisstates(H))[2:6]
+    Hs = constrain_space(H, states)
+    @test basisstates(Hs) == states
+    @test Hs == constrain_space(H, NoSymmetry(), states)
+    Hc = constrain_space(H, NumberConservation(1), states)
+    one_particle = Set(basisstates(constrain_space(H, NumberConservation(1))))
+    @test basisstates(Hc) == filter(in(one_particle), states)
+    @test_throws MethodError constrain_space(H, states, NumberConservation(1))
 end
 
 @testitem "Constraining a ConstrainedSpace keeps only its states" begin

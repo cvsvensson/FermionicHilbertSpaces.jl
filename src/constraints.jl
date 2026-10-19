@@ -262,11 +262,18 @@ sectors(::AbstractConstraint) = nothing
 
 
 """
-    constrain_space(space, constraint; kwargs...)
+    constrain_space(space, constraint[, states])
     constrain_space(space, states)
 
-Build a constrained Hilbert space from `space`, either by applying a constraint or
-by explicitly providing a list of allowed basis states.
+Build a constrained Hilbert space from `space`.
+
+With a `constraint`, keep the basis states of `space` that satisfy it. If `states` is
+given, only those states are candidates. Constraints that group states into sectors,
+such as `NumberConservation`, return a space with sectors, with states ordered by sector.
+`constrain_space(space, NoSymmetry())` returns `space` unchanged.
+
+With only `states`, return the subspace spanned by exactly those basis states, in the
+given order; this is equivalent to `constrain_space(space, NoSymmetry(), states)`.
 """
 constrain_space
 
