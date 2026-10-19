@@ -84,3 +84,11 @@ embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwar
     mfull = emb(msub)
     @test pt(mfull) ≈ msub * dim(Hcomp)
 end
+
+@testitem "Partial trace of a UniformScaling" begin
+    using LinearAlgebra
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    Hsub = hilbert_space(f, [2])
+    @test partial_trace(2I, H, Hsub) ≈ 2 * partial_trace(I(dim(H)), H, Hsub)
+end
