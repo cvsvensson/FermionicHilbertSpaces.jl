@@ -76,7 +76,7 @@ macro spins(name)
     return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)))), :($(esc(name))))
 end
 macro spins(name, spin)
-    return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)), $(esc(spin)))))
+    return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)), $(esc(spin)))), :($(esc(name))))
 end
 
 
@@ -221,6 +221,11 @@ end
     @test_throws "has no spin value" hilbert_space(t, 1:2)
     @test_throws "has no spin value" hilbert_space(s)
     @test dim(hilbert_space(s, 0)) == 1
+
+    # every spin macro form returns the created basis
+    @test (@spins u 1 // 2) === u
+    @test (@spins v) === v
+    @test (@spin w 1) === w
 
     @fermions f
     Hf = hilbert_space(f, 1:2)
