@@ -1,21 +1,34 @@
 """
-    GenericHilbertSpace(label, basisstates, state_index=Dict(reverse(pair) for pair in enumerate(basisstates)))
+    GenericHilbertSpace(label, basisstates[, state_index])
+    GenericHilbertSpace{B}(label, basisstates[, state_index])
 
 Atomic Hilbert space whose basis states are given explicitly by `basisstates`, indexed by integers.
 `label` is returned by `symbolic_group` and `atomic_id` and identifies the space in symbolic expressions.
 `state_index` gives the integer index of a basis state. It is either an `AbstractDict` from basis states
 to indices, or a function that takes a basis state and returns its index. By default it is a dictionary
 built from `basisstates`.
+
+`B` is the basis-state type and defaults to `eltype(basisstates)`. When `B` is given and `basisstates`
+is an `AbstractVector` or `Tuple`, its elements are converted to `B`.
 """
 struct GenericHilbertSpace{B,L,S,SI} <: AbstractAtomicHilbertSpace{B}
     label::L
     basisstates::S
     state_index::SI
-    function GenericHilbertSpace(label::L, basisstates, state_index=Dict(reverse(pair) for pair in enumerate(basisstates))) where L
-        B = eltype(basisstates)
-        new{B,L,typeof(basisstates),typeof(state_index)}(label, basisstates, state_index)
-    end
+    GenericHilbertSpace{B,L,S,SI}(label, basisstates, state_index) where {B,L,S,SI} = new{B,L,S,SI}(label, basisstates, state_index)
 end
+GenericHilbertSpace(label, basisstates, args...) = GenericHilbertSpace{eltype(basisstates)}(label, basisstates, args...)
+function GenericHilbertSpace{B}(label, basisstates) where B
+    states = _convert_basisstates(B, basisstates)
+    GenericHilbertSpace{B}(label, states, Dict(reverse(pair) for pair in enumerate(states)))
+end
+function GenericHilbertSpace{B}(label, basisstates, state_index) where B
+    states = _convert_basisstates(B, basisstates)
+    GenericHilbertSpace{B,typeof(label),typeof(states),typeof(state_index)}(label, states, state_index)
+end
+_convert_basisstates(::Type{B}, states::AbstractVector) where B = convert(AbstractVector{B}, states)::AbstractVector{B}
+_convert_basisstates(::Type{B}, states::Tuple) where B = map(s -> convert(B, s)::B, states)
+_convert_basisstates(::Type, states) = states
 Base.:(==)(H1::GenericHilbertSpace, H2::GenericHilbertSpace) = H1 === H2 || (H1.label == H2.label && H1.basisstates == H2.basisstates)
 Base.hash(H::GenericHilbertSpace, h::UInt) = hash((H.label, H.basisstates), h)
 basisstates(H::GenericHilbertSpace) = H.basisstates
@@ -39,6 +52,18 @@ add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag)
     H2 = GenericHilbertSpace(:B, (:c, :d), custom_state_index)
     @test all(state_index(b, H1) == n for (n, b) in enumerate(basisstates(H1)))
     @test all(state_index(b, H2) == n for (n, b) in enumerate(basisstates(H2)))
+
+    # Basis-state type parameter
+    @test GenericHilbertSpace(:a, [1, 2, 3]) == GenericHilbertSpace{Int}(:a, [1, 2, 3])
+    @test GenericHilbertSpace(:a, [1, 2, 3]) isa GenericHilbertSpace{Int}
+    Hf64 = GenericHilbertSpace{Float64}(:a, [1, 2])
+    @test Hf64 isa GenericHilbertSpace{Float64}
+    @test basisstates(Hf64) == [1.0, 2.0] && eltype(basisstates(Hf64)) == Float64
+    @test state_index(2.0, Hf64) == 2
+    Ht = GenericHilbertSpace{Float64}(:t, (1, 2), s -> Int(s))
+    @test basisstates(Ht) === (1.0, 2.0)
+    @test state_index(2.0, Ht) == 2
+    @test GenericHilbertSpace(:r, 1:3) isa GenericHilbertSpace{Int,Symbol,UnitRange{Int}}
 
     P = tensor_product(H1, H2)
     @test dim(P) == dim(H1) * dim(H2)
