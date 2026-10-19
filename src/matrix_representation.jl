@@ -312,13 +312,13 @@ function symbolic_groups(op)
 end
 
 """
-    representation(op_or_state, space::AbstractHilbertSpace, [type]; kwargs...)
+    representation(op_or_state, space::AbstractHilbertSpace, [repr]; kwargs...)
     representation(state_expression; kwargs...)
 
 Return a concrete representation of `op_or_state` in Hilbert space `space`. This is the main entry point, which calls
 [`matrix_representation`](@ref) for operators and [`vector_representation`](@ref) for states.
 
-- For symbolic operators and numbers, returns a sparse matrix by default. The optional `type` selects the format:
+- For symbolic operators and numbers, returns a sparse matrix by default. The optional `repr` selects the format:
   `:dense` gives a dense matrix, and `:lazy` (or `LazyRepr()`) gives a matrix-free
   `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`. A number `c` gives `c` times the identity.
 - For `AbstractBasisState` and strings such as `"10"`, returns a one-hot sparse column vector.
@@ -335,9 +335,12 @@ function representation(state::AbstractBasisState, space::AbstractHilbertSpace; 
 end
 
 """
-    matrix_representation(op, space::AbstractHilbertSpace; kwargs...)
+    matrix_representation(op, space::AbstractHilbertSpace, [repr]; kwargs...)
 
 Return the matrix representation of symbolic operator `op` in Hilbert space `space`.
+
+The optional `repr` selects the format, as in [`representation`](@ref): `:sparse` (the default), `:dense`, `:lazy`,
+or a format object (`EagerSparseRepr()`, `EagerDenseRepr()`, `LazyRepr()`).
 
 Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
 
@@ -350,10 +353,10 @@ M = matrix_representation(op, H)
 size(M) == (dim(H), dim(H))
 ```
 """
-function matrix_representation(op, space::AbstractHilbertSpace, type=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
-    type === :dense && return Matrix(matrix_representation(
+function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
+    repr === :dense && return Matrix(matrix_representation(
         op, space, :sparse; projection, chunking, kwargs...))
-    repr = _canonicalize_repr(type)
+    repr = _canonicalize_repr(repr)
     if trivial_operator(op)
         return get_trivial_op_coeff(op) * I(dim(space))
     end

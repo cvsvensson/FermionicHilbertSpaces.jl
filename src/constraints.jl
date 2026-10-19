@@ -28,16 +28,16 @@ supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c
 supply_missing_constraint_info(constraint::ProductConstraint, space, spaces) = ProductConstraint(map(cons -> supply_missing_constraint_info(cons, space, spaces), constraint.constraints))
 
 """
-    FilterConstraint(reducer)
-    FilterConstraint(reducer, functions, spaces)
+    FilterConstraint(reducer; maps=missing, spaces=missing)
+    FilterConstraint(reducer, maps, spaces)
 
 Constraint that keeps complete basis states for which `reducer` returns `true`.
 
 With only `reducer`, the reducer is called directly as `reducer(state)`. When
-`functions` and `spaces` are provided, the state is split into the selected
-spaces, each function is applied to its corresponding subspace, and the
+`maps` and `spaces` are provided, the state is split into the selected
+spaces, each map is applied to its corresponding subspace, and the
 reducer is called on the resulting values. A single function is applied to all
-spaces; a collection of functions supplies one function per subspace.
+spaces; a collection of maps supplies one function per subspace.
 """
 struct FilterConstraint{R,FS,H} <: AbstractConstraint
     reducer::R
@@ -119,9 +119,12 @@ supply_missing_constraint_info(constraint::SectorConstraint, space, spaces) = su
 
 """
     AdditiveConstraint(allowed_values; spaces=missing, maps=missing)
+    AdditiveConstraint(allowed_values, maps)
 
-Constraint enforcing that the sum of user-specified per-subspace contributions lies
-in `allowed_values`.
+Constraint enforcing that the sum of per-subspace contributions lies in
+`allowed_values`. The contribution of each subspace in `spaces` is the value of
+its map applied to the subspace's state. A single function in `maps` is applied
+to all spaces; a collection of maps supplies one function per subspace.
 
 The constraint is evaluated on the factors used during state generation. For a
 composite Hilbert space this means `atomic_factors(space)`.
@@ -143,11 +146,13 @@ supply_missing_constraint_info(constraint::AdditiveConstraint{<:Any,Missing}, sp
 supply_missing_constraint_info(constraint::AdditiveConstraint, space, spaces) = constraint
 
 """
-    NumberConservation(allowed, spaces, weights)
-    NumberConservation(allowed=missing; spaces=missing, weights=missing)
+    NumberConservation(total=missing; spaces=missing, weights=missing)
+    NumberConservation(total, spaces; weights=missing)
+    NumberConservation(total, spaces, weights)
+    NumberConservation(space)
 
-Constraint enforcing conservation of a (possibly weighted) particle number.
-`total` can be a single value or collection of allowed values.
+Constraint enforcing conservation of a (possibly weighted) particle number, optionally on selected spaces.
+`total` can be a single value or collection of allowed values; `missing` allows any value.
 """
 struct NumberConservation{T,H,W} <: AbstractConstraint
     total::T
@@ -168,8 +173,8 @@ supports_filtering(::NumberConservation) = true
 supports_sector_grouping(::NumberConservation) = true
 supply_missing_constraint_info(constraint::NumberConservation{<:Any,Missing}, space, spaces) = NumberConservation(constraint.total, spaces, constraint.weights)
 supply_missing_constraint_info(constraint::NumberConservation, space, spaces) = constraint
-NumberConservation(allowed=missing; weights=missing, spaces=missing) = NumberConservation(allowed, spaces, weights)
-NumberConservation(allowed, spaces; weights=missing) = NumberConservation(allowed; spaces, weights)
+NumberConservation(total=missing; weights=missing, spaces=missing) = NumberConservation(total, spaces, weights)
+NumberConservation(total, spaces; weights=missing) = NumberConservation(total; spaces, weights)
 NumberConservation(space::AbstractHilbertSpace) = NumberConservation(missing; spaces=(space,), weights=missing)
 
 """
