@@ -351,14 +351,8 @@ function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, re
 end
 vector_representation(op, space, repr; kwargs...) = vector_representation(op, space, _canonicalize_repr(repr); kwargs...)
 
-function vector_representation(op::Union{NCMul,NCAdd}, space::AbstractHilbertSpace, repr=EagerSparseRepr(); type=nothing, kwargs...)
-    if isnothing(type)
-        kind = _operator_type(op)
-    else
-        Base.depwarn("The `type` keyword of `vector_representation` is deprecated. Kets and bras are inferred from the expression.", :vector_representation)
-        kind = type
-    end
-    _vector_representation(op, space, repr, kind; kwargs...)
+function vector_representation(op::Union{NCMul,NCAdd}, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
+    _vector_representation(op, space, repr, _operator_type(op); kwargs...)
 end
 # `kind` is `:kets` or `:bras`, as computed by `_operator_type`
 function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, kind; kwargs...)
@@ -485,10 +479,6 @@ end
     @test v == representation(ket, Hf)
     @test vector_representation(ket', Hf) == transpose(v)
     @test vector_representation(1 * vf("10"), Hf, :dense) isa Vector
-
-    # the deprecated `type` keyword still selects kets or bras
-    @test (@test_deprecated vector_representation(ket, Hf; type=:kets)) == v
-    @test (@test_deprecated vector_representation(ket', Hf; type=:bras)) == transpose(v)
 end
 
 @testitem "representation of different kinds of input" begin
