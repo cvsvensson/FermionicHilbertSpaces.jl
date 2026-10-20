@@ -27,7 +27,7 @@ function Base.show(io::IO, pc::ParityConservation{H}) where {H}
     else
         lines = ["allowed_parities: $(_parity(pc.allowed_parities))"]
         !ismissing(pc.spaces) && push!(lines, "subspaces: $(length(pc.spaces))")
-        print(io, "ParityConservation(", join(lines, ""), ")")
+        print(io, "ParityConservation(", join(lines, ", "), ")")
     end
 end
 
