@@ -190,3 +190,14 @@ SUITE["permutations"]["many_small"] = @benchmarkable symmetric_sector($H, $Hs, :
 H = hilbert_space(S, 1:4)
 Hs = factors(H)
 SUITE["permutations"]["few_large"] = @benchmarkable symmetric_sector($H, $Hs, :symmetric)
+
+## Symbolic states: repeated application of a projected operator (as in Krylov solves).
+# Projecting with Q = I - Σ|b⟩⟨b| produces zero-coefficient terms; if kept, they pile up.
+@fermions f c
+H = tensor_product(hilbert_space(f, 1:2), hilbert_space(c, 1:6))
+kets = Kets(H)
+pert = sum(0.1 * f[1]' * c[n] + hc for n in 1:6)
+Q = I - sum(b * b' for b in kets.(["0", "10", "11", "01"]))
+Hq = Q * (f[1]' * f[2] + hc + 10.0 * sum(c[n]'c[n] for n in 1:6) + pert) * Q
+ψ = Q * pert * kets("10")
+SUITE["symbolic_states"]["projected_op_on_state"] = @benchmarkable $Hq * ($Hq * ($Hq * $ψ))
