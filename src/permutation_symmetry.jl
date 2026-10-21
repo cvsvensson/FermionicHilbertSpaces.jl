@@ -24,13 +24,23 @@ function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T}=Int) 
     add_permutation_operator!(P, (basisstates(H), Base.Fix2(state_index, H)), state_mapper(H, Hs), perm, one(T))
 end
 function add_permutation_operator!(P, (states, state_index), mapper, perm, weight=1)
-    _perm = if unique_split_state(first(states), mapper) isa Tuple
-        Tuple(perm)
-    else
-        perm
-    end
-    return _add_permutation_operator!(P, (states, state_index), mapper, _perm, weight)
+    substates = unique_split_state(first(states), mapper)
+    return _add_permutation_operator!(P, (states, state_index), mapper, _match_perm(perm, substates), weight)
 end
+function add_permutation_operators!(P, (states, state_index), mapper, perms, weights)
+    substates = unique_split_state(first(states), mapper)
+    for (perm, w) in zip(perms, weights)
+        _add_permutation_operator!(P, (states, state_index), mapper, _match_perm(perm, substates), w)
+    end
+    return P
+end
+
+# Convert `perm` to the container type that `permute_state` uses for `substates`.
+function _match_perm(perm, ::NTuple{N,Any}) where N
+    length(perm) == N || throw(ArgumentError("The permutation `$perm` must have length $N, the number of factors."))
+    return ntuple(i -> perm[i], Val(N))
+end
+_match_perm(perm, substates) = perm
 
 function _add_permutation_operator!(P, (states, state_index), mapper, perm, weight)
     for (j, state) in enumerate(states)
@@ -96,9 +106,7 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothi
     mapper = state_mapper(H, Hs)
     states = basisstates(H)
     si = Base.Fix2(state_index, H)
-    for (perm, w) in zip(perms, ws)
-        add_permutation_operator!(accum, (states, si), mapper, perm, w)
-    end
+    add_permutation_operators!(accum, (states, si), mapper, perms, ws)
     P = if sparse
         SparseArrays.sparse(finalize!(accum, H))
     else
@@ -276,6 +284,9 @@ end
     Pmanual3 = permutation_projector(H123, Hs3, perms3, ws3)
     Pauto3 = symmetric_sector(H123, Hs3, :antisymmetric, orth_method=nothing)
     @test Pmanual3 ≈ Pauto3
+    # Permutations must have one entry per factor
+    @test_throws ArgumentError permutation_operator(H123, Hs3, [2, 1])
+    @test_throws ArgumentError permutation_projector(H123, Hs3, [[2, 1, 3, 4]])
 
     @test_throws ArgumentError symmetric_sector(H, [H1, H2], :invalid)
 
