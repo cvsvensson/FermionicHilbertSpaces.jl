@@ -246,9 +246,30 @@ function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs.
     end
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
 end
-function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
+function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
     matrices = [_matrix_representation(term, bases, space, repr, NoChunking(); kwargs...) for term in NCterms(op)]
     _sum_matrices(matrices, repr; tree_split=tree_split) + op.coeff * _matrix_representation(missing, bases, space, repr, NoChunking(); kwargs...)
+end
+# Spaces with a basis-state loop (for example a constrained space over a ProductSpace) collect all terms in one accumulator.
+# The terms are accumulated in the (typed) element type of their matrices, and the identity term is added in the element
+# type promoted with that of `Eye`, as on a ProductSpace.
+function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
+    spaces = groups(space)
+    prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
+    Tterms = mapreduce(prodop -> _repr_eltype(mat_eltype(prodop), repr), promote_type, prodops)
+    accumulator = matrix_accumulator(Tterms, length(prodops), (dim(space), dim(space)), repr)
+    for prodop in prodops
+        operator_indices_and_amplitudes!(accumulator, prodop, space; kwargs...)
+    end
+    identity_matrix = _matrix_representation(missing, bases, space, repr, NoChunking())
+    T = promote_type(Tterms, Base.promote_op(*, typeof(op.coeff), eltype(identity_matrix)))
+    if Tterms == T
+        iszero(op.coeff) || add_identity!!(accumulator, op.coeff, space)
+        return finalize!(accumulator, space)
+    end
+    summed = finalize!(accumulator, space)
+    iszero(op.coeff) && return convert(AbstractMatrix{T}, summed)
+    return summed + op.coeff * identity_matrix
 end
 
 function _matrix_representation(op, bases, space, repr, chunking; kwargs...) #Assume op is a single symbolic operator
@@ -492,6 +513,40 @@ end
     @test_throws ArgumentError matrix_representation(op, Hg)
 end
 
+
+@testitem "Constrained product space agrees with the unconstrained one" begin
+    using SparseArrays, LinearAlgebra
+    @fermions f
+    @spin s 1 // 2
+    @bosons b
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(s), hilbert_space(b, 1:2, 3))
+    states = collect(basisstates(H))[1:2:end]
+    inds = [state_index(state, H) for state in states]
+    Hc = constrain_space(H, states)
+    ops = [f[1]' * f[2] * s[:+] + hc + 2 * b[1]' * b[2] + hc + 1,
+        0.5 * f[1]' * f[1] * b[1]' * b[1] + s[:z] * b[2]' * b[2],
+        1im * f[1]' * s[:-] * b[2] + hc + 2.5,
+        f[1]' * f[2] + f[2]' * f[1]]
+    for op in ops, repr in (:sparse, :dense, ComplexF64, Matrix{ComplexF64})
+        M = matrix_representation(op, H, repr)
+        Mc = matrix_representation(op, Hc, repr; projection=true)
+        @test typeof(Mc) == typeof(M)
+        @test Mc ≈ M[inds, inds]
+    end
+    # The terms are built in the element type of a typed representation; the identity term promotes it with Float64.
+    # Products of rounded group matrices (H) and rounded products (Hc) differ by rounding.
+    for op in ops[[1, 2, 4]]
+        M = matrix_representation(op, H, Float32)
+        Mc = matrix_representation(op, Hc, Float32; projection=true)
+        @test typeof(Mc) == typeof(M)
+        @test isapprox(Mc, M[inds, inds]; rtol=1e-6)
+    end
+    @test typeof(matrix_representation(ops[4], Hc, Int; projection=true)) == typeof(matrix_representation(ops[4], H, Int))
+    @test_throws InexactError matrix_representation(2 * s[:z] * b[1]' + hc, Hc, Int; projection=true)
+    @test_throws InexactError matrix_representation(2 * s[:z] * b[1]' + hc, H, Int)
+    @test matrix_representation(ops[1], Hc, ComplexF64; projection=true) isa SparseMatrixCSC{ComplexF64}
+    @test matrix_representation(ops[2], Hc, Matrix{ComplexF64}; projection=true) isa Matrix{ComplexF64}
+end
 
 @testitem "Dense/sparse/lazy matrix representation agree" begin
     using SparseArrays, LinearAlgebra
