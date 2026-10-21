@@ -150,24 +150,29 @@ __concretize(x::NCMul, concr) = NCMul(x.coeff, ___concretize(x.factors, concr))
 __concretize(x::NCAdd, concr) = sum(__concretize(term, concr) for term in NCterms(x)) + x.coeff
 __concretize(x::ProductOperator, concr) = ProductOperator(map(op -> __concretize(op, concr), x.ops), x.spaces, x.inds)
 
+"""
+    partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
+
+Split `op` into a `ProductOperator` with one `NCMul` for each basis in `bases` that `op` acts on, keeping the order
+of the factors within each basis. The coefficient of `op` goes to the operator on the first such basis. The
+result holds these operators as a tuple, the matching entries of `spaces`, and their positions in `bases`.
+"""
 function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
-    used_coeff::Bool = false
-    n::Int = 0
-    inds = Int[]
-    ops = NCMul[]
-    for (i, basis) in enumerate(bases)
-        v = [fac for fac in op.factors if symbolic_group(fac) == basis]
-        if length(v) > 0
-            coeff = used_coeff ? one(op.coeff) : op.coeff
-            used_coeff = true
-            n += length(v)
-            push!(inds, i)
-            push!(ops, NCMul(coeff, ___concretize(v, concr)))
-        end
+    factors = op.factors
+    group_inds = [_basis_index(symbolic_group(fac), bases) for fac in factors]
+    any(iszero, group_inds) && throw(ArgumentError("Not all factors were assigned to a basis."))
+    inds = sort!(unique(group_inds))
+    ops = ntuple(length(inds)) do k
+        v = [fac for (fac, i) in zip(factors, group_inds) if i == inds[k]]
+        NCMul(k == 1 ? op.coeff : one(op.coeff), ___concretize(v, concr))
     end
-    n == length(op.factors) || throw(ArgumentError("Not all factors were assigned to a basis."))
-    return ProductOperator(___concretize(ops, TupleConcretizer()), spaces[inds], inds)
+    return ProductOperator(ops, spaces[inds], inds)
 end
+# Position of `basis` in `bases`, or 0 if it is not there.
+_basis_index(basis, bases::Tuple) = __basis_index(basis, bases, 1)
+__basis_index(basis, ::Tuple{}, i) = 0
+__basis_index(basis, bases::Tuple, i) = first(bases) == basis ? i : __basis_index(basis, Base.tail(bases), i + 1)
+_basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
 
 function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr, chunking; kwargs...)
     spaces = groups(space)
