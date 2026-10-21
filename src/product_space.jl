@@ -244,6 +244,20 @@ parity(state::ProductState) = prod(parity, atomic_factors(state))
 
 end
 
+@testitem "ProductSpaceMapper combines vectors of substates" begin
+    import FermionicHilbertSpaces: state_mapper, combine_states, basisstates
+    @fermions f
+    @spins S 1 // 2
+    Hs = [hilbert_space(S[n]) for n in 1:3]
+    H = tensor_product(hilbert_space(f, 1:2), Hs...)
+    targets = (hilbert_space(f, 1:2), Hs...)
+    mapper = state_mapper(H, targets)
+    for substates in Iterators.product(map(basisstates, targets)...)
+        @test combine_states(collect(Any, substates), mapper) == combine_states(substates, mapper)
+    end
+    @test_throws ArgumentError combine_states(Any[first(basisstates(Hs[1]))], mapper)
+end
+
 @testitem "Fermion ordering" begin
     import FermionicHilbertSpaces: state_mapper
     @fermions f
@@ -592,6 +606,11 @@ function combine_states(substates::Tuple, sp::ProductSpaceMapper)
     return (ProductState(states),), (1,)
 end
 combine_states(substates, sp::ProductSpaceMapper) = combine_states(Tuple(substates), sp)
+# A vector of substates has one entry per target; the mapper type gives that number statically
+function combine_states(substates::AbstractVector, sp::ProductSpaceMapper{<:Any,<:Any,<:Any,<:NTuple{N,Any}}) where {N}
+    length(substates) == N || throw(ArgumentError("Expected $N substates, got $(length(substates))."))
+    combine_states(ntuple(i -> substates[firstindex(substates)+i-1], Val(N)), sp)
+end
 combine_states(states::Tuple, ::ProductSpace{ProductState{B}}) where B = (ProductState{B}(B(states)),), (1,)
 
 # ─── Phase factors ───────────────────────────────────────────────────────────
