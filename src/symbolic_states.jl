@@ -215,6 +215,10 @@ function apply_local_operator(op::SymbolicState, state, space::AbstractHilbertSp
     return state == op.bra ? (op.ket, 1) : (state, 0)
 end
 
+# The effect `amp * state` of an operator on a state, as a mul_effect value. A vanishing amplitude removes the term.
+# Otherwise this is a Tuple-backed product with the coefficient `amp * 1` of `amp * state`, which needs no factor vector.
+_scaled_state(amp, state) = iszero(amp) ? 0 : NCMul(amp * 1, (state,))
+
 function NonCommutativeProducts.mul_effect(op::AbstractSym, s::SymbolicState)
     if !(symbolic_group(op) == group_id(s.space))
         return _group_isless(s, op) ? Swap(1) : nothing
@@ -223,7 +227,7 @@ function NonCommutativeProducts.mul_effect(op::AbstractSym, s::SymbolicState)
         throw(ArgumentError("Cannot act with operator $op on the left of $s"))
     end
     newket, amp = _apply_symbolic_operator_to_state(op, s.ket, s.space)
-    return amp * SymbolicState(s.space, newket, s.bra)
+    return _scaled_state(amp, SymbolicState(s.space, newket, s.bra))
 end
 
 function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
@@ -234,7 +238,7 @@ function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
         throw(ArgumentError("Cannot act with operator $op on the right of $s"))
     end
     newbra, amp = _apply_symbolic_operator_to_state(op, s.bra, s.space; transpose=true)
-    return amp * SymbolicState(s.space, s.ket, newbra)
+    return _scaled_state(amp, SymbolicState(s.space, s.ket, newbra))
 end
 
 
@@ -730,6 +734,24 @@ end
     Hcons = constrain_space(H, NumberConservation())
     representation(opb, Hcons) * representation(opf, Hcons) == representation(opb, Hcons) * representation(opf, Hcons)
     @test b' * op == (sqrt(2) * vb("2")vb("0")' + sqrt(2) * vb("2")vb("4")') * opf
+end
+
+@testitem "Operators on symbolic states give the coefficient amp * state" begin
+    using NonCommutativeProducts: NCAdd
+    @fermions f
+    vf = Kets(hilbert_space(f, 1:2))
+    @spin s 1 // 2
+    vs = Kets(hilbert_space(s))
+    # the amplitude 1.0 of a spin raising operator keeps the coefficient type Float64
+    for (x, ref) in ((f[2]' * vf("10"), -1 * vf("11")), (vf("10")' * f[2], -1 * vf("11")'),
+        (s[:+] * vs("↓"), 1.0 * vs("↑")), (vs("↑")' * s[:+], 1.0 * vs("↓")'), (s[:z] * vs("↑"), 0.5 * vs("↑")))
+        @test x == ref
+        @test valtype(x.dict) == valtype(NCAdd(ref).dict)
+    end
+    # a vanishing amplitude removes the term, also inside sums
+    @test f[1] * vf("00") == 0
+    @test s[:+] * vs("↑") == 0
+    @test (f[1] + f[2]') * vf("00") == vf("01")
 end
 
 @testitem "Interleaved operators and states in product spaces" begin
