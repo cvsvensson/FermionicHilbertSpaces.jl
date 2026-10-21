@@ -131,15 +131,17 @@ function combine_states(f, fm::FockMapper{N}) where N
     end
     (FockNumber{IT}(result),), (1,)
 end
-function catenate_fock_states(fock_states, spaces, T)
+function catenate_fock_states(fock_states, spaces, ::Type{T}) where T
     num = zero(T)
     shift = 0
     for (state, space) in zip(fock_states, spaces)
-        num |= state << shift
+        num |= convert(T, state) << shift
         shift += nbr_of_modes(space)
     end
+    shift <= _max_fock_modes(T) || throw(ArgumentError("Cannot store $shift modes in a $T."))
     num
 end
+_max_fock_modes(::Type{FockNumber{I}}) where {I<:Integer} = isbitstype(I) ? 8 * sizeof(I) - (I <: Signed) : typemax(Int)
 
 function concatenate_and_permute(fs, widths, permutation, ::Type{T}) where T
     mask = foldl(concatenate, zip(fs, widths); init=(zero(T), 0)) |> first
@@ -277,6 +279,20 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
         @test split(fock((2,))) == (fock((2,)), fock((1,)))
         @test split(fock((1, 3))) == (fock((1,)), fock((2,)))
         @test_throws ArgumentError _combine((fock((1, 2)), fock((1, 2))), fockmapper)
+    end
+
+    @testset "catenate_fock_states" begin
+        catenate_fock_states = FermionicHilbertSpaces.catenate_fock_states
+        @fermions g
+        modes = [hilbert_space(g[k]) for k in 1:64]
+        states = [FockNumber{UInt64}(isodd(k) || k == 64) for k in 1:64]
+        expected = sum(big(2)^(k - 1) for k in 1:64 if isodd(k) || k == 64)
+        @test catenate_fock_states(states, modes, FockNumber{UInt64}) isa FockNumber{UInt64}
+        @test catenate_fock_states(states, modes, FockNumber{UInt64}).f == expected
+        @test catenate_fock_states(states, modes, FockNumber{BigInt}) == FockNumber(expected)
+        @test catenate_fock_states(states[1:63], modes[1:63], FockNumber{Int}) isa FockNumber{Int}
+        @test catenate_fock_states(states[1:63], modes[1:63], FockNumber{Int}).f == expected - big(2)^63
+        @test_throws ArgumentError catenate_fock_states(states, modes, FockNumber{Int})
     end
 
     @testset "number of modes of the full space" begin
