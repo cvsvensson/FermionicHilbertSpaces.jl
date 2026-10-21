@@ -98,7 +98,7 @@ state_mapper(H::FermionicSpace, Hs) = _fock_mapper(H, Hs)
 function _fock_mapper(H, Hs)
     fermionpositions = [[atom_position(atom, H) for atom in atomic_factors(Hsub)] for Hsub in Hs]
     all(x -> x > 0, Iterators.flatten(fermionpositions)) || throw(ArgumentError("All subspaces in `Hs` must be part of `H`, got positions $fermionpositions."))
-    FockMapper(Tuple(fermionpositions))
+    FockMapper(Tuple(fermionpositions), nbr_of_modes(H))
 end
 
 _truncate(items, max, edge) =
