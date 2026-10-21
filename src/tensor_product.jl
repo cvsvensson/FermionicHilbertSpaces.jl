@@ -488,31 +488,36 @@ function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, :
     # `inds` is unused: this algorithm enumerates subsystem and complement states directly.
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
-    for f1 in substates
-        K1 = state_index(f1, Hsub)
-        for f2 in substates
-            K2 = state_index(f2, Hsub)
-            s2 = phase_factors ? partial_trace_phase_factor(f1, f2, Hsub) : 1
-            for fbar in barstates
-                fullstates1, amps1 = combine_states((f1, fbar), mapper)
-                fullstates2, amps2 = combine_states((f2, fbar), mapper)
-                for (fullf1, w1) in zip(fullstates1, amps1)
-                    J1 = state_index(fullf1, H)
-                    if iszero(J1)
-                        skipmissing && continue
-                        throw(ArgumentError("The state $fullf1 is not in the full Hilbert space"))
-                    end
-                    for (fullf2, w2) in zip(fullstates2, amps2)
-                        J2 = state_index(fullf2, H)
-                        if iszero(J2)
-                            skipmissing && continue
-                            throw(ArgumentError("The state $fullf2 is not in the full Hilbert space"))
-                        end
-                        s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
-                        op(J1, J2, K1, K2, w1 * w2 * s2 * conj(s1))
-                    end
+    (isempty(substates) || isempty(barstates)) && return nothing
+    # Buffer for the full states that one complement state forms with the subsystem states,
+    # as (K, J, w, fullstate, substate). Its element type is taken from the first combination,
+    # which assumes that `combine_states` returns the same types for all inputs; a mismatch
+    # raises a `TypeError` when pushing.
+    f0 = first(substates)
+    fullstates0, amps0 = combine_states((f0, first(barstates)), mapper)
+    hits = Tuple{Int,Int,eltype(amps0),eltype(fullstates0),typeof(f0)}[]
+    _subsystem_partial_trace_terms(op, hits, H, Hsub, substates, barstates, mapper, phase_factors, skipmissing)
+end
+function _subsystem_partial_trace_terms(op, hits, H, Hsub, substates, barstates, mapper, phase_factors, skipmissing)
+    for fbar in barstates
+        # combine every subsystem state with fbar once, keeping the states that exist in H
+        empty!(hits)
+        for f in substates
+            K = state_index(f, Hsub)
+            fullstates, amps = combine_states((f, fbar), mapper)
+            for (fullf, w) in zip(fullstates, amps)
+                J = state_index(fullf, H)
+                if iszero(J)
+                    skipmissing && continue
+                    throw(ArgumentError("The state $fullf is not in the full Hilbert space"))
                 end
+                push!(hits, (Int(K), Int(J), w, fullf, f)::eltype(hits))
             end
+        end
+        for (K1, J1, w1, fullf1, f1) in hits, (K2, J2, w2, fullf2, f2) in hits
+            s2 = phase_factors ? partial_trace_phase_factor(f1, f2, Hsub) : 1
+            s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
+            op(J1, J2, K1, K2, w1 * w2 * s2 * conj(s1))
         end
     end
     return nothing
@@ -881,6 +886,33 @@ end
     H = hilbert_space(a, 1:4, NumberConservation(1))
     @test_throws ArgumentError generalized_kron((m1, m2), (H1, H2) => H)
     @test generalized_kron((m1, m2), (H1, H2) => H; skipmissing=true) ≈ tensor_product((m1, m2), (H1, H2) => H) # Since tensor_product first embeds both operators in the full Hilbert space (which can be done) and then multiplies them, it won't complain about missing states.
+end
+
+@testitem "Partial trace algorithms agree, including missing states" begin
+    import FermionicHilbertSpaces: FullPartialTraceAlg, SubsystemPartialTraceAlg
+    using SparseArrays
+    @fermions a
+    @bosons b
+    H = hilbert_space(a, 1:4, NumberConservation(2))
+    Hsub = hilbert_space(a, 1:2)
+    Hcomp = hilbert_space(a, 3:4) # combined with Hsub, it gives states that are not in H
+    m = rand(ComplexF64, dim(H), dim(H))
+    Sub, Full = SubsystemPartialTraceAlg(), FullPartialTraceAlg()
+    @test_throws ArgumentError partial_trace(m, H => Hsub; complement=Hcomp, alg=Sub, skipmissing=false)
+    @test_throws ArgumentError partial_trace(H => Hsub; complement=Hcomp, alg=Sub, skipmissing=false)
+    ref = partial_trace(m, H => Hsub; alg=Full, skipmissing=true)
+    @test partial_trace(m, H => Hsub; complement=Hcomp, alg=Sub) ≈ ref
+    @test partial_trace(sparse(m), H => Hsub; alg=Full, skipmissing=true) ≈ ref
+    @test partial_trace(m, H => Hsub; complement=Hcomp, alg=Sub, phase_factors=false) ≈ partial_trace(m, H => Hsub; alg=Full, skipmissing=true, phase_factors=false)
+    @test_throws ArgumentError partial_trace(sparse(m), hilbert_space(a, 1:4) => hilbert_space(a, 1:2, NumberConservation(1)); alg=Full, skipmissing=false)
+
+    # mixed product space with a constraint
+    Hp = tensor_product(hilbert_space(a, 1:2), hilbert_space(b, 1:2, 3); constraint=NumberConservation(2))
+    Hpsub = subregion(tensor_product(hilbert_space(a[1]), hilbert_space(b[1], 3)), Hp)
+    mp = rand(ComplexF64, dim(Hp), dim(Hp))
+    mps = sprand(ComplexF64, dim(Hp), dim(Hp), 0.2)
+    @test partial_trace(mp, Hp => Hpsub; alg=Sub) ≈ partial_trace(mp, Hp => Hpsub; alg=Full)
+    @test partial_trace(mps, Hp => Hpsub; alg=Sub) ≈ partial_trace(mps, Hp => Hpsub; alg=Full) ≈ partial_trace(Matrix(mps), Hp => Hpsub; alg=Full)
 end
 
 @testitem "Partial trace and embed across truncations" begin
