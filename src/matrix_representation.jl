@@ -103,25 +103,51 @@ function _apply_local_operators(op, state, space, precomp)
 end
 
 function apply_local_operators(op::NCMul, state, space, precomps; transpose)
-    amp = op.coeff
+    # Accumulate in the element type of the matrix so that `amp` keeps one type through the loop.
+    T = mat_eltype(op)
+    amp = convert(T, op.coeff)
     if !transpose
         for (factor, precomp) in Iterators.reverse(zip(op.factors, precomps))
             state, _amp = apply_local_operator(factor, state, space, precomp)
-            if iszero(_amp)
-                return state, zero(mat_eltype(op))
-            end
+            iszero(_amp) && return state, zero(T)
             amp *= _amp
         end
-        return state, amp
-    elseif transpose
+    else
         for (factor, precomp) in zip(op.factors, precomps)
             state, _amp = apply_local_operator(adjoint(factor), state, space, precomp)
-            if iszero(_amp)
-                return state, zero(mat_eltype(op))
-            end
+            iszero(_amp) && return state, zero(T)
             amp *= conj(_amp)
         end
-        return state, amp
+    end
+    return state, amp
+end
+
+@testitem "apply_local_operators amplitude type" begin
+    using FermionicHilbertSpaces: NCMul, apply_local_operators, precomputation_before_operator_application, basisstates, mat_eltype
+    @spin s 1 // 2
+    @boson b
+    Hs = hilbert_space(s)
+    Hb = hilbert_space(b, 4)
+    for (H, factors) in ((Hs, [s[:+], s[:z]]), (Hs, [s[:-], s[:+]]), (Hb, [b', b', b]), (Hb, [b, b]))
+        for coeff in (2, 2.0, 2im, 2 // 3, 1.5 + 0.5im)
+            op = NCMul(coeff, factors)
+            T = mat_eltype(op)
+            precomp = precomputation_before_operator_application(op, H)
+            for state in basisstates(H), transpose in (false, true)
+                newstate, amp = @inferred apply_local_operators(op, state, H, precomp; transpose)
+                @test amp isa T
+                # reference: apply factor by factor with ordinary promotion
+                ref = coeff
+                refstate = state
+                for factor in (transpose ? adjoint.(factors) : reverse(factors))
+                    refstate, a = FermionicHilbertSpaces.apply_local_operator(factor, refstate, H, nothing)
+                    ref *= transpose ? conj(a) : a
+                    iszero(a) && break
+                end
+                @test amp == ref
+                iszero(ref) || @test newstate == refstate
+            end
+        end
     end
 end
 
