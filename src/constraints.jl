@@ -242,7 +242,7 @@ function branch_constraint(constraint::ParityConservation, spaces)
 end
 
 function branch_constraint(constraint::NumberConservation{T,H,W}, spaces) where {T,H,W}
-    subspaces = H === Missing ? spaces : constraint.spaces
+    subspaces = H === Missing ? missing : constraint.spaces
     if W === Missing
         return additive_branch_constraint(constraint.total, particle_number, subspaces, spaces)
     end
