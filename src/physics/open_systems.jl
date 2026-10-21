@@ -14,11 +14,15 @@ dim(H::TransposedSpace) = dim(H.parent)
 isconstrained(H::TransposedSpace) = isconstrained(H.parent)
 group_id(H::TransposedSpace) = group_id(H.parent)
 atomic_id(H::TransposedSpace) = atomic_id(H.parent)
+atom_ids(H::TransposedSpace) = atom_ids(H.parent)
+atom_position(x, H::TransposedSpace) = atom_position(x, H.parent)
+mode_ordering(H::TransposedSpace) = mode_ordering(H.parent)
 atomic_factors(H::TransposedSpace) = map(TransposedSpace, atomic_factors(H.parent)) # (H,)
+atomic_factor(H::TransposedSpace, i) = TransposedSpace(atomic_factor(H.parent, i))
 add_tag(H::TransposedSpace, tag) = TransposedSpace(add_tag(H.parent, tag))
 groups(H::TransposedSpace) = map(TransposedSpace, groups(H.parent))
 factors(H::TransposedSpace) = map(TransposedSpace, factors(H.parent))
-TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, factors(H)), map(TransposedSpace, H.atoms))
+TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, groups(H)))
 TransposedSpace(H::ConstrainedSpace) = ConstrainedSpace(TransposedSpace(parent(H)), H.states, H.state_index)
 TransposedSpace(H::SectorHilbertSpace) = SectorHilbertSpace(TransposedSpace(parent(H)), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)
 state_mapper(H::TransposedSpace, Hs) = state_mapper(H.parent, Hs)
@@ -33,6 +37,9 @@ function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSp
     only(unique(map(group_id, spaces))) == group || throw(ArgumentError("All spaces must belong to the group `$group`."))
     TransposedSpace(FermionicSpace(map(H -> H.parent, spaces), group))
 end
+
+combine_into_group(group::MajoranaGroup, spaces::AbstractVector{<:TransposedSpace}) =
+    TransposedSpace(combine_into_group(group, map(parent, spaces)))
 
 
 tag_left(base) = add_tag(base, :left)
@@ -115,6 +122,21 @@ end
     Mexpected = representation((c_left[1]' * s_left[:z]) * (c_right[1]' * s_right[:z]) + (c_left[1]' * s_left[:z]), H)
     @test M ≈ Mexpected
     @test reshape(reshape(M, H => (Hleft, Hs, Hright)), (Hleft, Hs, Hright) => H) == M
+end
+
+@testitem "open_system on Majorana spaces" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: open_system
+
+    @majoranas γ
+    Hfull, Hleft, Hright, left, right = open_system(hilbert_space(γ, 1:4))
+    @test dim(Hfull) == 16
+
+    op = γ[1] * γ[2] + 0.5 * γ[3] * γ[4]
+    M = representation(left(op) * right(op) + left(op), Hfull)
+    @test size(M) == (16, 16)
+    Mexpected = representation((left(γ[1]) * left(γ[2]) + 0.5 * left(γ[3]) * left(γ[4])) * (right(γ[1]) * right(γ[2]) + 0.5 * right(γ[3]) * right(γ[4])) + left(op), Hfull)
+    @test M ≈ Mexpected
 end
 
 @testitem "Matrix representation of transposed spaces" begin
@@ -207,8 +229,6 @@ function _apply_local_operators(op, state, space::TransposedSpace, precomp)
 end
 
 maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))
-_find_position(f::TransposedSpace, H::FermionicSpace) = _find_position(parent(f), H)
-_find_position(op::AbstractSym, H::TransposedSpace) = _find_position(op, parent(H))
 function _wrap(space, ::TransposedSpace)
     TransposedSpace(space)
 end

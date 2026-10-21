@@ -4,8 +4,6 @@ struct ConstrainedSpace{B,H,S} <: AbstractHilbertSpace{B}
     states::S
     state_index::Dict{B,Int}
 end
-_find_position(Hsub::AbstractHilbertSpace, H::ConstrainedSpace) = _find_position(Hsub, parent(H))
-_find_position(op::AbstractSym, H::ConstrainedSpace) = _find_position(op, parent(H))
 
 Base.:(==)(H1::ConstrainedSpace, H2::ConstrainedSpace) = H1.parent == H2.parent && H1.states == H2.states && H1.state_index == H2.state_index
 Base.hash(H::ConstrainedSpace, h::UInt) = hash(H.parent, hash(H.states, hash(H.state_index, h)))
@@ -25,9 +23,11 @@ basisstate(n::Integer, H::ConstrainedSpace) = H.states[n]
 state_index(state, H::ConstrainedSpace{B}) where B = get(H.state_index, state, 0)
 state_index(state::Union{AbstractString,AbstractChar}, H::ConstrainedSpace) = state_index(interpret_state(state, H), H)
 atomic_factors(H::ConstrainedSpace) = atomic_factors(parent(H))
+atomic_factor(H::ConstrainedSpace, i) = atomic_factor(parent(H), i)
 groups(H::ConstrainedSpace) = groups(parent(H))
 factors(H::ConstrainedSpace) = factors(parent(H))
-atomic_id(H::ConstrainedSpace) = atomic_id(parent(H))
+atom_ids(H::ConstrainedSpace) = atom_ids(parent(H))
+atom_position(x, H::ConstrainedSpace) = atom_position(x, parent(H))
 group_id(H::ConstrainedSpace) = group_id(parent(H))
 isconstrained(H::ConstrainedSpace) = true
 combine_states(substates, sp::ConstrainedSpace) = combine_states(substates, parent(sp))
@@ -36,7 +36,6 @@ partial_trace_phase_factor_eltype(space::ConstrainedSpace) = partial_trace_phase
 partial_transpose_phase_factor_eltype(space::ConstrainedSpace) = partial_transpose_phase_factor_eltype(parent(space))
 
 partial_transpose_phase_factor(f1, f2, H::ConstrainedSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
-atomic_substate(n, f, space::ConstrainedSpace) = atomic_substate(n, f, parent(space))
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
 constrain_space(space::AbstractHilbertSpace, states::AbstractVector) = constrain_space(space, NoSymmetry(), states)
 

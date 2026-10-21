@@ -60,7 +60,6 @@ Base.parent(h::BdGHilbertSpace) = h.parent
 Base.keys(h::BdGHilbertSpace) = keys(h.parent)
 basisstate(ind::Integer, H::BdGHilbertSpace) = basisstate(ind, parent(H))
 state_index(state::NambuState, H::BdGHilbertSpace) = state_index(state, parent(H))
-_find_position(op::AbstractSym, H::BdGHilbertSpace) = _find_position(op, parent(H))
 
 
 representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
@@ -72,8 +71,8 @@ end
 
 
 function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::Union{BdGHilbertSpace,AbstractHilbertSpace{NambuState}}; kwargs...)
-    nambustates = (NambuState(_find_position(op.factors[1], H), op.factors[1].creation),
-        NambuState(_find_position(op.factors[2], H), !op.factors[2].creation))
+    nambustates = (NambuState(mode_position(op.factors[1], H), op.factors[1].creation),
+        NambuState(mode_position(op.factors[2], H), !op.factors[2].creation))
     inind = state_index(nambustates[2], H)
     outind = state_index(nambustates[1], H)
     push!(outinds, outind)

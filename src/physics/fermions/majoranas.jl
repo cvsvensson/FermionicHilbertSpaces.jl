@@ -170,10 +170,27 @@ basisstate(i::Integer, m::MajoranaHilbertSpace) = basisstate(i, m.parent)
 Base.parent(H::MajoranaHilbertSpace) = H.parent
 isconstrained(H::MajoranaHilbertSpace) = false
 group_id(H::MajoranaHilbertSpace) = symbolic_group(H.sym)
-add_tag(H::MajoranaHilbertSpace, tag) = MajoranaHilbertSpace(H.majoranaindices, add_tag(parent(H), tag), add_tag(H.sym, tag))
+function add_tag(H::MajoranaHilbertSpace, tag)
+    majoranaindices = OrderedDict(add_tag(γ, tag) => n for (γ, n) in H.majoranaindices)
+    MajoranaHilbertSpace(majoranaindices, add_tag(parent(H), tag), add_tag(H.sym, tag))
+end
+# The atoms of a Majorana space are pairs of Majoranas (one fermionic mode each), named by the
+# pair. A single Majorana does not name an atom: its `atomic_id` is that of its whole group.
 function atomic_id(H::MajoranaHilbertSpace)
-    # length(H.majoranaindices) == 2 || throw(ArgumentError("Atomic ID is only defined for MajoranaHilbertSpaces with exactly 2 Majoranas."))
-    (H.sym, H.majoranaindices)
+    length(H.majoranaindices) == 2 || throw(ArgumentError("Only Majorana spaces with exactly two Majoranas have an atomic_id, use atom_ids for $H"))
+    Tuple(keys(H.majoranaindices))
+end
+# Fast versions of the generic definitions, without building the atoms. The Majoranas of the
+# k:th pair sit at positions 2k-1 and 2k.
+function atom_ids(H::MajoranaHilbertSpace)
+    γs = collect(keys(H.majoranaindices))
+    [(γs[2k-1], γs[2k]) for k in 1:length(γs)÷2]
+end
+function atom_position(x, H::MajoranaHilbertSpace)
+    id = atomic_id(x)
+    id isa Tuple{Any,Any} || return 0 # only pairs name atoms
+    p = get(H.majoranaindices, id[1], 0)
+    isodd(p) && get(H.majoranaindices, id[2], 0) == p + 1 ? (p + 1) ÷ 2 : 0
 end
 
 function combine_into_group(group::MajoranaGroup, spaces)
@@ -194,10 +211,7 @@ end
 function combine_states(states, ::MajoranaHilbertSpace)
     (only(states),), (1,)
 end
-function state_mapper(H::MajoranaHilbertSpace, Hs)
-    state_mapper(parent(H), Hs)
-end
-_find_position(f::MajoranaHilbertSpace, H::FermionicSpace) = _find_position(parent(f), H)
+state_mapper(H::MajoranaHilbertSpace, Hs) = _fock_mapper(H, Hs)
 partial_trace_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_trace_phase_factor(f1, f2, parent(H))
 partial_transpose_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
 partial_trace_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_trace_phase_factor_eltype(parent(H))
@@ -257,10 +271,10 @@ end
 
 
 state_index(state::AbstractFockState, H::MajoranaHilbertSpace) = state_index(state, H.parent)
-_find_position(f::MajoranaSym, H::MajoranaHilbertSpace) = get(H.majoranaindices, f, 0)
+mode_position(f::MajoranaSym, H) = get(mode_ordering(H), f, 0)
 
 function _precomputation_before_operator_application(op::MajoranaSym, space::AbstractHilbertSpace{<:FockNumber})
-    majoranaposition = _find_position(op, space)
+    majoranaposition = mode_position(op, space)
     fermionposition = div(majoranaposition + 1, 2)
     dagger = iseven(majoranaposition)
     return fermionposition, dagger
@@ -277,14 +291,17 @@ function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace
 end
 
 function atomic_factors(H::MajoranaHilbertSpace)
-    parent_atoms = atomic_factors(H.parent)
-    # convert to majoranas
-    γ = H.sym
-    map(enumerate(parent_atoms)) do (i, atom)
-        fsym = only(modes(atom))
-        majoranaindices = OrderedDict(γ[fsym.label[1]] => 1, γ[fsym.label[2]] => 2)
-        MajoranaHilbertSpace(majoranaindices, atom, H.sym)
-    end
+    γs = collect(keys(H.majoranaindices))
+    map(i -> _majorana_atomic_factor(H, i, γs), 1:nbr_of_modes(H.parent))
+end
+atomic_factor(H::MajoranaHilbertSpace, i) = _majorana_atomic_factor(H, i, collect(keys(H.majoranaindices)))
+# The i:th atom is the i:th fermionic atom of the parent, with the Majoranas at positions 2i-1
+# and 2i. The Majoranas are taken from the space's own keys, not rebuilt from `H.sym`, since a
+# space can hold Majoranas with several names from one `@majoranas` block.
+function _majorana_atomic_factor(H::MajoranaHilbertSpace, i, γs)
+    atom = atomic_factor(H.parent, i)
+    γ1, γ2 = γs[2i-1], γs[2i]
+    MajoranaHilbertSpace(OrderedDict(γ1 => 1, γ2 => 2), atom, symbolic_basis(γ1))
 end
 @testitem "Majorana matrix representations" begin
     using LinearAlgebra
@@ -344,5 +361,28 @@ end
     Hb = hilbert_space(b,2)
     @test dim(tensor_product(H, Hb)) == dim(H) * dim(Hb) # this errored for constrained spaces before, fixed by defining combine_states for MajoranaHilbertSpace
 
-    @test dim(tensor_product(H, Hb; constraint = ParityConservation(1,[H]))) == dim(H) * dim(Hb) # fixed by allowing atomic_id for spaces with more than 2 Majoranas
+    @test dim(tensor_product(H, Hb; constraint = ParityConservation(1,[H]))) == dim(H) * dim(Hb) # constraint subspaces are matched by atom_ids
+end
+
+@testitem "Majorana spaces with several names" begin
+    using FermionicHilbertSpaces: atom_ids, atomic_id, atomic_factors, add_tag
+    @majoranas a c
+    @bosons b
+    Ha, Hc = hilbert_space(a, 1:2), hilbert_space(c, 1:2)
+    Hac = tensor_product(Ha, Hc)
+    # each atom keeps its own Majoranas, so the atoms of a and c are distinct
+    @test collect(atomic_factors(Hac)) == [Ha, Hc]
+    @test atom_ids(Hac) == map(atomic_id, atomic_factors(Hac))
+    @test allunique(atom_ids(Hac))
+    @test dim(tensor_product(Hac, hilbert_space(b[1], 2))) == 8
+    @test subregion([Hc], Hac) == Hc
+
+    # tagging tags the Majoranas of the space too
+    @majoranas γ
+    H = hilbert_space(γ, 1:4)
+    Hl = add_tag(H, :left)
+    @test atom_ids(Hl) == map(atomic_id, atomic_factors(Hl))
+    @test isdisjoint(atom_ids(Hl), atom_ids(H))
+    @test dim(tensor_product(H, Hl)) == dim(H)^2
+    @test representation(add_tag(γ[1] * γ[3], :left), Hl) == representation(γ[1] * γ[3], H)
 end

@@ -54,14 +54,16 @@ function Base.show(io::IO, s::SymbolicState)
     print(io, ")")
 end
 
-Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.bra && atomic_id(a.space) == atomic_id(b.space)
-Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(atomic_id(a.space), h)))
+Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.bra && _same_space_id(a.space, b.space)
+Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(group_id(a.space), h)))
 # States are ordered by group, then by space, then by ket and bra, where a missing ket or bra comes first.
 function Base.isless(a::SymbolicState, b::SymbolicState)
     c = _group_cmp(a, b)
     c == 0 || return c < 0
-    ida, idb = atomic_id(a.space), atomic_id(b.space)
-    ida == idb || return _content_cmp(ida, idb) < 0
+    if a.space !== b.space
+        c = _content_cmp(atom_ids(a.space), atom_ids(b.space))
+        c == 0 || return c < 0
+    end
     c = _state_cmp(a.ket, b.ket)
     c == 0 ? _state_cmp(a.bra, b.bra) < 0 : c < 0
 end
@@ -79,7 +81,7 @@ group_id(s::SymbolicState) = group_id(s.space)
 ## Grading
 # Each space carries a grade k^m b^n in the bicyclic monoid, where a ket has (m, n) = (1, 0) and a bra (0, 1).
 # States in different spaces commute, so the grade of an expression is the product over spaces, stored as a map
-# from the atomic id of the space to its bicyclic grade. Spaces with the identity grade (0, 0) are left out,
+# from the group of the space to its bicyclic grade. Spaces with the identity grade (0, 0) are left out,
 # and the identity overall is `nothing`. Operators have the identity grade.
 # NonCommutativeProducts stores grades in sets, so the dict of a StateGrade must never be mutated after construction.
 struct Bicyclic
@@ -107,7 +109,7 @@ _stategrade(d) = isempty(d) ? nothing : StateGrade(d)
 
 function NonCommutativeProducts.grade(s::SymbolicState)
     g = Bicyclic(Int(has_ket(s)), Int(has_bra(s)))
-    _isidentity(g) ? nothing : StateGrade(Dict{Any,Bicyclic}(atomic_id(s.space) => g))
+    _isidentity(g) ? nothing : StateGrade(Dict{Any,Bicyclic}(group_id(s.space) => g))
 end
 # One grading for all spaces, so that it combines with other declared gradings into a ProductGrade
 NonCommutativeProducts.grading(::Type{StateGrade}) = StateGrade
@@ -148,8 +150,8 @@ function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{Boson
 end
 
 function interpret_state(input, space::ProductSpace{B}) where B
-    length(input) == length(factors(space)) || throw(ArgumentError("Product-state input must have length $(length(factors(space))), got $(length(input))"))
-    return B(map(interpret_state, input, factors(space)))
+    length(input) == length(groups(space)) || throw(ArgumentError("Product-state input must have length $(length(groups(space))), got $(length(input))"))
+    return B(map(interpret_state, input, groups(space)))
 end
 
 function (k::Kets{B})(inputs...) where B
@@ -164,9 +166,8 @@ function (k::Kets{B})(inputs...) where B
     return SymbolicState(k.space, parsed, nothing)
 end
 
-function _same_space_id(a, b)
-    atomic_id(a) == atomic_id(b)
-end
+# Symbolic states are tied to the degrees of freedom of their space, not to its basis
+_same_space_id(a, b) = a === b || atom_ids(a) == atom_ids(b)
 
 function _apply_symbolic_operator_to_state(op::AbstractSym, state::AbstractBasisState, space::AbstractHilbertSpace; transpose=false)
     term = NCMul(1, [op])
@@ -186,6 +187,7 @@ _group_cmp(a, b) = _content_cmp(symbolic_group(a), symbolic_group(b))
 
 function NonCommutativeProducts.mul_effect(a::SymbolicState, b::SymbolicState)
     if !_same_space_id(a.space, b.space)
+        group_id(a) == group_id(b) && throw(ArgumentError("Cannot multiply symbolic states on different spaces of the same group, got `$(a.space)` and `$(b.space)`."))
         return _group_cmp(a, b) > 0 ? Swap(1) : nothing
     end
     if has_bra(a) && has_ket(b)
@@ -245,7 +247,7 @@ function representation(op; kwargs...)
     reducer(s1, s2) = s1==s2 ? s1 : throw(ArgumentError("Cannot represent a product of symbolic states in different spaces"))
     type = _operator_type(op)
     if type in (:kets, :bras, :ketbras)
-        _iszero_ncadd(op) && throw(ArgumentError("Can't infer the space of the zero state $op, please provide a space argument"))
+        _iszero_ncadd(op) && throw(ArgumentError("Cannot infer the space of the zero state `$op`. Pass the Hilbert space, as in representation(op, H)."))
         space =NonCommutativeProducts.ncmapreduce(op -> op.space, (reducer, reducer), op; scalarmap=x->missing)
         return representation(op, space; kwargs...)
     elseif type == :mixed
@@ -358,7 +360,7 @@ end
 function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, kind; kwargs...)
     symstates = op.factors
     group_ids = map(state -> group_id(state.space), symstates)
-    perm = map(id -> findfirst(==(id) ∘ group_id, factors(space)), group_ids)
+    perm = map(id -> findfirst(==(id) ∘ group_id, groups(space)), group_ids)
     all(!isnothing, perm) || throw(ArgumentError("Spaces of symbolic states in NCMul do not match the factor spaces of the provided ProductSpace"))
     basis_state(symstate::SymbolicState) = kind == :kets ? symstate.ket : symstate.bra
     vec = if length(group_ids) == 1
@@ -855,4 +857,3 @@ end
     @test all(((x, y),) -> NC.check_grading(x, y), pairs)
 end
 
-_find_position(op::SymbolicState, space::FermionicSpace) = nothing

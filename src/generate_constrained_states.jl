@@ -122,10 +122,10 @@ function additive_branch_constraint(allowed_sums, functions, _subspaces, allspac
 end
 function _additive_branch_constraint(allowed_values, functions, subspaces, allspaces)
     ismissing(allowed_values) && return BranchConstraint((partial, depth, spaces) -> true)
-    atom_ids = collect(map(atomic_id, allspaces))
+    space_ids = map(collect ∘ atom_ids, allspaces) # collect, since spaces may be given as symbols
     positions = map(subspaces) do subspace
-        pos = findfirst(==(atomic_id(subspace)), atom_ids)
-        isnothing(pos) && throw(ArgumentError("All subspaces of an `AdditiveConstraint` must be present in the generated space, but `$(atomic_id(subspace))` is not."))
+        pos = findfirst(==(collect(atom_ids(subspace))), space_ids)
+        isnothing(pos) && throw(ArgumentError("All subspaces of an `AdditiveConstraint` must be present in the generated space, but `$subspace` is not."))
         pos
     end
     contribution_values = _contribution_values(subspaces, functions)

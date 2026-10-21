@@ -107,6 +107,11 @@ factors(Hf)
 ```@example hilbert_space_ops
 FermionicHilbertSpaces.atomic_factors(Hfb)
 ```
+The atoms are always ordered group by group, so `tensor_product(f1, b1, f2)` and `tensor_product(f1, f2, b1)` give the same space. Only the order within a fermionic group matters.
+
+Internally, `FermionicHilbertSpaces.groups(H)` returns the spaces that line up with the slots of a basis state: for a product space these are the same as `factors(H)`, while any other space is a single group, `groups(H) == (H,)`.
+
+When you pass symbols or spaces to `subregion`, they are looked up by name only, so `subregion([b[1]], H)` returns the bosonic mode as it appears in `H`, whatever its truncation. Operations that use the subsystem's own basis, such as `partial_trace(m, H => Hsub)` and `embed`, instead require the atoms of `Hsub` to match those of `H` exactly. A convenient way to get such a matching `Hsub` is `subregion`.
 
 ### Sectors and quantum numbers
 
@@ -300,7 +305,7 @@ maps are useful when the same operation is applied many times.
 ### `reshape`: splitting and combining array axes
 
 ```julia
-reshape(t::AbstractArray, mappings...; repeat=false)
+reshape(t::AbstractArray, mappings...; repeat=false, skipmissing=false)
 ```
 
 Reshapes the array `t` by splitting or combining its axes according to
@@ -322,7 +327,7 @@ between vectorized and matrix forms
 Hl = hilbert_space(fl, 1:1)
 Hr = hilbert_space(fr, 1:1)
 Hlr = tensor_product(Hl, Hr)
-vlr = representation("00", Hlr) + 2*representation("11", Hlr) 
+vlr = representation("00", Hlr) + 2*representation("10", Hlr)
 rho = reshape(vlr, Hlr => (Hl, Hr))
 ```
 
@@ -331,8 +336,9 @@ This works with constraints as well
 Hlrconstrained = constrain_space(Hlr, NumberConservation([0, 1]))
 reshape(rho, (Hl, Hr) => Hlrconstrained)
 ```
-In this case, note that one element was silently dropped as it is not in the output space.
-This is not checked.
+If the array has a nonzero component on a basis state that is missing in the
+output space, `reshape` throws an `ArgumentError`. Pass `skipmissing=true` to
+drop such components instead.
 
 #### Multiple mappings
 

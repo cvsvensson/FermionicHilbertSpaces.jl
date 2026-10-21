@@ -1,7 +1,7 @@
 module OhMyThreadsExt
 using SparseArrays: SparseArrays, findnz, nonzeros, nzrange, rowvals
 using OhMyThreads: OhMyThreads, Scheduler, chunks, tforeach, tmap
-using FermionicHilbertSpaces: FermionicHilbertSpaces, factors
+using FermionicHilbertSpaces: FermionicHilbertSpaces, groups
 using LinearAlgebra: LinearAlgebra, rmul!
 using NonCommutativeProducts: NCAdd, NCMul, NCterms
 import SciMLOperators: cache_operator
@@ -283,7 +283,7 @@ function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerSpars
     T = mat_eltype(op)
     ncterms = if length(bases) > 1
         map(NCterms(op)) do term
-            partition_product(term, bases, factors(space))
+            partition_product(term, bases, groups(space))
         end
     else
         collect(NCterms(op))

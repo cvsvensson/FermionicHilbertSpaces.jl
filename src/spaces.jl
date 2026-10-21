@@ -44,28 +44,100 @@ with additional arguments such as constraints.
 """
 hilbert_space
 
+## Decomposition of spaces
+# Every space is a two-level tree: atoms, collected into groups, and a product space is the
+# ordinary tensor product of its groups. Wrapper spaces (ConstrainedSpace, SectorHilbertSpace,
+# TransposedSpace) forward all of the functions below to their parent (TransposedSpace also
+# wraps the results in TransposedSpace).
+#
+# Identity of atoms is kept separate from their basis:
+# - Lookups only use names. `atomic_id` names an atom (or a symbol naming one) and ignores
+#   truncation, transposition and constraints; composite spaces are named by `atom_ids`, and
+#   positions are found with `atom_position`. This is what subregion, the state mappers,
+#   SymbolicState equality and constraint subspaces use.
+# - `match_atoms` (issubsystem, complementary_subsystem, ispartition) also matches atoms by
+#   name only. A subsystem atom may have a different basis than the atom of the same name in
+#   the parent (truncation, spin, transposition); such a difference shows up as missing states,
+#   which each operation (partial trace, embed, ...) handles. Complements are built from the
+#   parent's atoms.
+# - Operators match at the group level, `symbolic_group(op) == group_id(group)`.
+
+"""
+    atomic_factors(H)
+
+Return the atoms of `H`: the indivisible spaces it is built from. Atoms are fixed points,
+`atomic_factors(a) == (a,)`. For product spaces they are ordered group-major, i.e.
+`atomic_factors(H)` is the concatenation of `atomic_factors.(groups(H))`.
+"""
+atomic_factors(H::AbstractAtomicHilbertSpace) = (H,)
+# The i:th atom of `H`. Overload to avoid building all atoms.
+atomic_factor(H, i) = atomic_factors(H)[i]
+
+"""
+    groups(H)
+
+Return the groups of `H`, which line up with the slots of its basis states: for a product
+space, `groups(H)[i]` is the space of `state.states[i]`; otherwise `groups(H) == (H,)`.
+Groups are fixed points, `groups(g) == (g,)`, and they are the factors of the ordinary
+tensor product, so `tensor_product(groups(H))` recovers `H` (without its constraints).
+"""
+groups(H::AbstractAtomicHilbertSpace) = (H,)
+groups(H::AbstractGroupedHilbertSpace) = (H,)
+
 """
     factors(H)
 
-Return the factors of `H` as a collection of Hilbert spaces. For a composite space these are
-the spaces it was built from, where atomic spaces that belong to the same group (for example
-the modes of one fermion basis, which are combined into one fermionic space) form a single factor. An atomic space
-has the single factor `H`, and a grouped space has its atomic factors. Constrained and sector
-spaces report the factors of their parent space.
-
-Compare `atomic_factors(H)`, which always returns the indivisible atomic spaces, and
-`groups(H)`, which returns the group of each factor (`(H,)` for a grouped space instead of its atoms).
+Split `H` one level down: a product space into its groups, a grouped space (such as a
+fermionic space) into its atoms, and an atomic space into itself. Use this when building
+partitions, permutations and constraints. Internal code that needs the state layout
+should use `groups` instead.
 """
 factors(H::AbstractAtomicHilbertSpace) = (H,)
-atomic_factors(H::AbstractAtomicHilbertSpace) = (H,)
 factors(H::AbstractGroupedHilbertSpace) = atomic_factors(H)
-groups(H::AbstractAtomicHilbertSpace) = (H,)
-groups(H::AbstractGroupedHilbertSpace) = (H,)
-atomic_substate(n, f, ::AbstractGroupedHilbertSpace) = substate(n, f)
+
+"""
+    group_id(atom)
+
+Key used by `tensor_product` to merge atoms into one group (see `combine_into_group`).
+It equals `symbolic_group(op)` for every symbolic operator `op` acting on the atom.
+"""
+group_id(H::AbstractAtomicHilbertSpace) = atomic_id(H)
+
+"""
+    atomic_id(atom)
+
+Name of an atom: the key that identifies its degrees of freedom. It is built only from
+symbolic identity (basis, label and tags), never from truncation, spin value, transposition
+or constraints, so a symbol naming a whole atom has the same id as the atom. Only atoms and
+symbols have an `atomic_id`; composite spaces are named by `atom_ids`.
+"""
+atomic_id(f::AbstractSym) = symbolic_group(f) # generic fallback
+
+"""
+    atom_ids(H)
+
+Names of the atoms of `H`, `map(atomic_id, atomic_factors(H))`. Since atoms are ordered
+group-major, this is canonical: two spaces over the same degrees of freedom, in the same
+order within each group, have equal `atom_ids` whatever their truncation, transposition or
+constraints.
+"""
+atom_ids(H) = map(atomic_id, atomic_factors(H))
+
+# Number of atoms of `H`, without building them
+nbr_of_atoms(H) = length(atom_ids(H))
+
+"""
+    atom_position(x, H)
+
+Position among `atomic_factors(H)` of the atom named by `x` (an atom or a symbol naming one),
+or `0` if `H` has no such atom. The lookup is by `atomic_id` only, so the basis of `x` is
+not compared; see `match_atoms` for that.
+"""
+atom_position(x, H::AbstractHilbertSpace) = something(findfirst(==(atomic_id(x)), atom_ids(H)), 0)
+atom_position(x, H::AbstractAtomicHilbertSpace) = atomic_id(x) == atomic_id(H) ? 1 : 0
+
 isconstrained(H::AbstractAtomicHilbertSpace) = false
 atomic_factors(f::AbstractSym) = (f,)
-atomic_id(f::AbstractSym) = symbolic_group(f) # generic fallback
-group_id(H::AbstractAtomicHilbertSpace) = atomic_id(H)
 
 partial_trace_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1
 
@@ -134,7 +206,7 @@ kron_phase_factor(mapper::AbstractStateMapper) = throw(MethodError(kron_phase_fa
 
 struct AtomicStateMapper <: AbstractStateMapper end
 function state_mapper(H::AbstractAtomicHilbertSpace, Hs)
-    atomic_id(only(Hs)) == atomic_id(H) || throw(ArgumentError("For atomic subspaces, the only valid partition is the whole space, got `Hs` = $Hs"))
+    atom_ids(only(Hs)) == atom_ids(H) || throw(ArgumentError("For atomic subspaces, the only valid partition is the whole space, got `Hs` = $Hs"))
     AtomicStateMapper()
 end
 function split_state(state, ::AtomicStateMapper)
@@ -168,19 +240,17 @@ Hsub = subregion((H1, H3), H)
 """
 function subregion(Hs, H::AbstractHilbertSpace)
     Hs_items = Hs isa Tuple || Hs isa AbstractVector ? Hs : (Hs,)
-    input_ids = map(atomic_id, Iterators.flatten(Iterators.map(atomic_factors, Hs_items)))
-    isempty(input_ids) && throw(ArgumentError("`Hs` must contain at least one space or symbolic operator."))
-    Hatoms = collect(atomic_factors(H))
-    Hatom_ids = map(atomic_id, Hatoms)
-    positions = map(id -> findfirst(==(id), Hatom_ids), input_ids)
-    all(!isnothing, positions) || throw(ArgumentError("The spaces/operators in `Hs` must match atomic factors of `H`, got the following unmatched ids: $(input_ids[findall(isnothing, positions)])."))
-    length(unique(positions)) == length(positions) || throw(ArgumentError("`Hs` must not contain duplicate atomic factors, got ids $input_ids."))
+    names = collect(Iterators.flatten(Iterators.map(atomic_factors, Hs_items)))
+    isempty(names) && throw(ArgumentError("`Hs` must contain at least one space or symbolic operator."))
+    positions = map(x -> atom_position(x, H), names)
+    all(>(0), positions) || throw(ArgumentError("The spaces/operators in `Hs` must match atomic factors of `H`, got the following unmatched ones: $(names[iszero.(positions)])."))
+    allunique(positions) || throw(ArgumentError("`Hs` must not contain duplicate atomic factors, got $names."))
 
-    Hsub = tensor_product(Hatoms[positions])
-    issubsystem(Hsub, H) || throw(ArgumentError("The spaces in `Hs` must form a subsystem of `H`."))
-    mapper = state_mapper(H, (Hsub,)) #TODO: this is before the next line, only because it checks that the fermions are ordered correctly. We should probably split that check out into a separate function.
+    # Resolve the names to H's own atoms, so the basis of the subregion is that of H
+    Hsub = tensor_product(collect(atomic_factors(H))[positions])
+    match_atoms(Hsub, H) # checks the ordering within groups
     !isconstrained(H) && return Hsub
-    states = _find_subregion_states(H, mapper)
+    states = _find_subregion_states(H, state_mapper(H, (Hsub,)))
     ConstrainedSpace(Hsub, states)
 end
 
@@ -212,6 +282,221 @@ end
     @test complementary_subsystem(H, subregion([f[3], b[2]], H)) ==
           subregion([f[1], f[2], b[1], b[3]], H)
 
+end
+
+@testitem "Matching syms and spaces with mutable labels" begin
+    # Labels are compared by value: separately allocated but equal vectors must give the same
+    # syms, spaces and atomic ids, otherwise subregion, partial_trace and states break.
+    using FermionicHilbertSpaces: atomic_id, SymbolicState, basisstate
+    using LinearAlgebra
+    @fermions f
+    @spins s 1 // 2
+    @bosons b
+    l1() = [1, 2] # fresh vector on each call
+    l2() = [3, 4]
+    for (x, space) in [(f, l -> hilbert_space(f[l])), (s, l -> hilbert_space(s[l])), (b, l -> hilbert_space(b[l], 2))]
+        @test x[l1()] == x[l1()]
+        @test hash(x[l1()]) == hash(x[l1()])
+        @test atomic_id(x[l1()]) == atomic_id(space(l1()))
+        @test atomic_id(x[l1()]) != atomic_id(space(l2()))
+    end
+
+    # Product space matched against freshly built subspaces and states
+    Hf() = tensor_product(hilbert_space(f, [l1(), l2()]), hilbert_space(s, [l1(), l2()]), hilbert_space(b, [l1(), l2()], 2))
+    H = Hf()
+    @test H == Hf()
+    @test hash(H) == hash(Hf())
+    Hsub = tensor_product(hilbert_space(f[l2()]), hilbert_space(s[l1()]), hilbert_space(b[l2()], 2))
+    @test subregion([f[l2()], s[l1()], b[l2()]], H) == Hsub
+    @test partial_trace(1.0*I(dim(H)), H => Hsub) == 8 * I(dim(Hsub))
+    @test SymbolicState(Hf(), basisstate(2, H))' * SymbolicState(Hf(), basisstate(2, H)) == 1
+end
+
+@testitem "Space decomposition contract" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: atomic_factors, groups, factors, group_id, group_ids, atomic_id,
+        atom_ids, atom_position, issubsystem, ispartition, complementary_subsystem, TransposedSpace, GenericHilbertSpace,
+        ConstrainedSpace, SectorHilbertSpace, ProductState
+    @fermions f
+    @fermions g
+    @bosons b
+    @spins s 1 // 2
+    @majoranas γ
+    Hf = hilbert_space(f, 1:3)
+    Hfb = tensor_product(hilbert_space(f, 1:2), hilbert_space(b[1], 2))
+    zoo = [
+        Hf,
+        hilbert_space(f[1]),
+        hilbert_space(b[1], 3),
+        hilbert_space(s[1]),
+        Hfb,
+        tensor_product(hilbert_space(f[1]), hilbert_space(b[1], 2), hilbert_space(f[2])),
+        tensor_product(hilbert_space(f, 1:2), hilbert_space(g, 1:2)),
+        hilbert_space(γ, 1:4),
+        hilbert_space(f, 1:3, NumberConservation(1)),
+        tensor_product(hilbert_space(f, 1:2), hilbert_space(b[1], 2); constraint=NumberConservation(1)),
+        constrain_space(Hfb, collect(basisstates(Hfb))[1:5]),
+        TransposedSpace(hilbert_space(f, 1:2)),
+        TransposedSpace(Hfb),
+        tensor_product(GenericHilbertSpace(:A, [:a, :b]), GenericHilbertSpace(:B, [:c, :d, :e])),
+    ]
+    unwrap(H) = H isa Union{ConstrainedSpace,SectorHilbertSpace} ? parent(H) : H
+    flat_atoms(spaces) = reduce(vcat, map(collect ∘ atomic_factors, spaces))
+    for H in zoo
+        atoms = collect(atomic_factors(H))
+        grps = collect(groups(H))
+        # atoms and groups are fixed points
+        @test all(a -> collect(atomic_factors(a)) == [a], atoms)
+        @test all(gr -> collect(groups(gr)) == [gr], grps)
+        # canonical group-major atom order, and factors refine to the same atoms
+        @test atoms == flat_atoms(grps)
+        @test atoms == flat_atoms(factors(H))
+        # round trips through tensor_product
+        @test tensor_product(atoms) == unwrap(H)
+        @test tensor_product(grps) == unwrap(H)
+        @test tensor_product(collect(factors(H))) == unwrap(H)
+        # state layout: one slot per group
+        for state in basisstates(H)
+            slots = state isa ProductState ? state.states : (state,)
+            @test length(slots) == length(grps)
+            @test all(state_index(x, gr) > 0 for (x, gr) in zip(slots, grps))
+        end
+        @test collect(group_ids(H)) == map(group_id, grps)
+        @test allunique(group_ids(H))
+        @test allunique(atom_ids(H))
+        @test [atom_position(a, H) for a in atoms] == eachindex(atoms)
+        # subsystems
+        @test ispartition(atoms, H)
+        @test ispartition(grps, H)
+        @test collect(atomic_factors(subregion(atoms, H))) == atoms
+        ρ = rand(ComplexF64, dim(H), dim(H))
+        ρ = ρ + ρ'
+        for a in atoms
+            @test issubsystem(a, H)
+            @test collect(atomic_factors(subregion([a], H))) == [a]
+            comp = complementary_subsystem(H, a)
+            @test (isnothing(comp) ? [] : collect(atomic_factors(comp))) == filter(!=(a), atoms)
+            @test tr(partial_trace(ρ, H => a)) ≈ tr(ρ)
+        end
+    end
+
+    # wrappers forward the decomposition to their parent
+    for H in (Hf, Hfb)
+        for W in (constrain_space(H, NumberConservation(1)), constrain_space(H, collect(basisstates(H))[1:2]))
+            @test atomic_factors(W) == atomic_factors(H)
+            @test groups(W) == groups(H)
+            @test factors(W) == factors(H)
+            @test atom_ids(W) == atom_ids(H)
+        end
+        Ht = TransposedSpace(H)
+        @test collect(atomic_factors(Ht)) == map(TransposedSpace, collect(atomic_factors(H)))
+        @test collect(groups(Ht)) == map(TransposedSpace, collect(groups(H)))
+        @test collect(factors(Ht)) == map(TransposedSpace, collect(factors(H)))
+        @test atom_ids(Ht) == atom_ids(H)
+    end
+end
+
+@testitem "Atom identity and ordering" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: atomic_factors, atomic_id, atom_ids, group_id, symbolic_group, issubsystem,
+        ispartition, complementary_subsystem, TransposedSpace
+    @fermions f
+    @bosons b
+    @spins s 1 // 2
+    # a symbol naming a whole atom has the atom's id, and operators act on the atom's group
+    for (sym, op, H) in ((f[1], f[1]', hilbert_space(f[1])),
+        (b[1], b[1]', hilbert_space(b[1], 3)),
+        (s[1], s[1][:z], hilbert_space(s[1])))
+        @test atomic_id(sym) == atomic_id(H)
+        @test group_id(H) == symbolic_group(op)
+    end
+
+    # lookup by name resolves to the parent's atom, and the subsystem predicates also match by
+    # name, so a different truncation is accepted
+    Hb3 = hilbert_space(b[1], 3)
+    Hb5 = hilbert_space(b[1], 5)
+    Hbig = tensor_product(Hb3, hilbert_space(b[2], 3))
+    @test atomic_id(Hb3) == atomic_id(Hb5)
+    @test Hb3 != Hb5
+    @test subregion([Hb5], Hbig) == Hb3
+    @test subregion([b[1]], Hbig) == Hb3
+    @test issubsystem(Hb3, Hbig)
+    @test issubsystem(Hb5, Hbig)
+    @test ispartition([Hb5, hilbert_space(b[2], 3)], Hbig)
+    @test complementary_subsystem(Hbig, Hb5) == hilbert_space(b[2], 3)
+    @test partial_trace(Matrix(I, dim(Hbig), dim(Hbig)), Hbig => Hb5) == Diagonal([3, 3, 3, 0, 0])
+
+    # composite spaces are named by their atoms, ignoring truncation and constraints
+    @test atom_ids(Hbig) == atom_ids(tensor_product(Hb5, hilbert_space(b[2], 2)))
+    @test atom_ids(hilbert_space(f, 1:2)) == atom_ids(hilbert_space(f, 1:2, NumberConservation(1)))
+    @test atom_ids(hilbert_space(f, 1:2)) != atom_ids(hilbert_space(f, [2, 1]))
+    @test_throws ArgumentError atomic_id(hilbert_space(f, 1:2))
+
+    # transposition is not part of the name, so it is not checked by the predicates
+    Hf12 = hilbert_space(f, 1:2)
+    Hf1t = TransposedSpace(hilbert_space(f[1]))
+    @test atomic_id(Hf1t) == atomic_id(f[1])
+    @test issubsystem(Hf1t, Hf12)
+    @test issubsystem(hilbert_space(f[1]), TransposedSpace(Hf12))
+    @test issubsystem(Hf1t, TransposedSpace(Hf12))
+    @test complementary_subsystem(Hf12, Hf1t) == hilbert_space(f[2])
+    @test complementary_subsystem(TransposedSpace(Hf12), Hf1t) == TransposedSpace(hilbert_space(f[2]))
+
+    # atom order is canonical (group-major), so interleaving doesn't matter
+    Hf1, Hf2, Hb = hilbert_space(f[1]), hilbert_space(f[2]), hilbert_space(b[1], 2)
+    A = tensor_product(Hf1, Hb, Hf2)
+    B = tensor_product(Hf1, Hf2, Hb)
+    @test A == B
+    @test hash(A) == hash(B)
+    @test collect(atomic_factors(A)) == [Hf1, Hf2, Hb]
+
+    # ordering within a fermionic group is checked regardless of wrappers
+    Hf = hilbert_space(f, 1:3)
+    for H in (Hf, hilbert_space(f, 1:3, NumberConservation(1)), constrain_space(Hf, collect(basisstates(Hf))[1:4]), tensor_product(Hf, Hb))
+        @test issubsystem(hilbert_space(f, [1, 3]), H)
+        @test !issubsystem(hilbert_space(f, [3, 1]), H)
+        @test !issubsystem(hilbert_space(f, [4]), H)
+    end
+    # but not between groups
+    @test issubsystem(tensor_product(Hb, Hf1), tensor_product(Hf, Hb))
+
+    # Majorana spaces recognise their own atoms
+    @majoranas γ
+    Hm = hilbert_space(γ, 1:4)
+    pair = first(atomic_factors(Hm))
+    @test issubsystem(pair, Hm)
+    @test subregion([pair], Hm) == pair
+    # and their fast atom_ids, atom_position and atomic_factor agree with the generic definitions
+    using FermionicHilbertSpaces: atom_position, atomic_factor, nbr_of_atoms
+    # including spaces with several Majorana names from one block
+    @majoranas ma mc
+    Hac = tensor_product(hilbert_space(ma, 1:2), hilbert_space(mc, 1:2))
+    for H in (Hm, hilbert_space(γ, [1, :a, 2, 3]), hilbert_space(γ, 1:4, ParityConservation(1)), Hac, tensor_product(Hac, Hb))
+        ids = map(atomic_id, atomic_factors(H))
+        @test atom_ids(H) == ids
+        @test eltype(atom_ids(H)) == eltype(ids)
+        @test nbr_of_atoms(H) == length(atomic_factors(H))
+        @test [atomic_factor(H, i) for i in 1:nbr_of_atoms(H)] == collect(atomic_factors(H))
+        others = [γ[1], f[1], first(atomic_factors(hilbert_space(γ, [2, 1]))), first(atomic_factors(hilbert_space(γ, [1, 3]))), atomic_factors(Hac)...]
+        for x in vcat(collect(atomic_factors(Hm)), others)
+            @test atom_position(x, H) == something(findfirst(==(atomic_id(x)), ids), 0)
+        end
+    end
+    # symbolic states on equal but distinct spaces are equal and hash alike
+    k1 = Ket("01", hilbert_space(γ, 1:4))
+    k2 = Ket("01", hilbert_space(γ, 1:4))
+    @test k1.space !== k2.space
+    @test k1 == k2
+    @test hash(k1) == hash(k2)
+    @test k1 != Ket("01", hilbert_space(γ, [3, 4, 1, 2]))
+
+    # symbolic states on different spaces of the same group can't be multiplied
+    @test_throws ArgumentError Kets(hilbert_space(f, 1:2))("10") * Kets(hilbert_space(f, 2:3))("01")
+
+    # transposed spaces support partial traces, consistent with transposition
+    Hsub = hilbert_space(f, [1, 3])
+    m = rand(ComplexF64, dim(Hf), dim(Hf))
+    @test partial_trace(transpose(m), TransposedSpace(Hf) => TransposedSpace(Hsub)) ≈ transpose(partial_trace(m, Hf => Hsub))
 end
 
 function _find_subregion_states(H, mapper)
@@ -246,21 +531,107 @@ function _find_compatible_complementary_states(H, Hsub, mapper)
 end
 
 
-function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
-    sub_atoms = Set(atomic_factors(Hsub))
+"""
+    match_atoms(Hsub, H)
 
-    # Verify Hsub is actually a subsystem of H
-    inparent = in(atomic_factors(H))
-    for a in atomic_factors(Hsub)
-        inparent(a) || throw(ArgumentError("The atoms of `Hsub` must be atoms of `H`, got `$a` which is not."))
+Return the positions of the atoms of `Hsub` among `atomic_factors(H)`, after checking that
+`Hsub` is a subsystem of `H`. Each atom of `Hsub` is looked up by name (`atom_position`) and
+must then
+- occur in `H`, and only once in `Hsub`,
+- keep the relative order it has in `H` among the atoms of its group (e.g. the
+  Jordan-Wigner order of fermions). The order between groups does not matter.
+
+Throws an `ArgumentError` describing the first violation.
+"""
+function match_atoms(Hsub, H::AbstractHilbertSpace)
+    positions, problem = _match_atoms(Hsub, H)
+    isnothing(problem) || throw(ArgumentError(_match_atoms_message(problem, Hsub, H)))
+    return positions
+end
+
+# Positions of the atoms of Hsub in H, and why Hsub is not a subsystem of H (or nothing).
+# The reason is a tuple (kind, data...), only formatted by `match_atoms` when it throws.
+function _match_atoms(Hsub, H)
+    sub_atoms = collect(atomic_factors(Hsub))
+    positions = map(a -> atom_position(a, H), sub_atoms)
+    for (a, pos) in zip(sub_atoms, positions)
+        iszero(pos) && return positions, (:missing, a)
     end
+    allunique(positions) || return positions, (:duplicate,)
+    sub_groups = map(group_id, sub_atoms)
+    for id in unique(sub_groups)
+        issorted(positions[findall(==(id), sub_groups)]) || return positions, (:order,)
+    end
+    return positions, nothing
+end
+function _match_atoms_message(problem, Hsub, H)
+    kind = first(problem)
+    kind == :missing && return "The atoms of `Hsub` must be atoms of `H`, got `$(problem[2])` which is not in `$H`."
+    kind == :duplicate && return "The atoms of `Hsub` must be distinct, got duplicates in `$Hsub`."
+    return "The atoms of `Hsub` must keep their order within each group of `H`, got `$Hsub` and `$H`."
+end
 
-    # Check for duplicates in Hsub
-    length(atomic_factors(Hsub)) == length(sub_atoms) || throw(ArgumentError("The atoms of `Hsub` must be distinct, got duplicates in $(atomic_factors(Hsub))."))
+"""
+    match_same_atoms(H1, H2)
 
-    # Filter atoms preserving original order
-    remaining = collect(Iterators.filter(a -> !(a in sub_atoms), atomic_factors(H)))
-    # isempty(remaining) && throw(ArgumentError("Complementary subsystem is empty"))
+Check that `H1` and `H2` have the same atoms, in the same order within each group (see
+`match_atoms`). The order between groups may differ. Throws an `ArgumentError` otherwise.
+"""
+function match_same_atoms(H1, H2)
+    match_atoms(H1, H2)
+    nbr_of_atoms(H1) == nbr_of_atoms(H2) || throw(ArgumentError("`H1` and `H2` must have the same atoms, but `$H2` has atoms that are not in `$H1`."))
+    return nothing
+end
+
+"""
+    issubsystem(Hsub, H)
+
+Check that `Hsub` is a subsystem of `H`, see `match_atoms`.
+"""
+issubsystem(Hsub, H::AbstractHilbertSpace) = isnothing(last(_match_atoms(Hsub, H)))
+
+"""
+    isorderedsubsystem(Hsub, H)
+
+Check that `Hsub` is a subsystem of `H` whose atoms are in the same order as in `H`, also
+between groups.
+"""
+function isorderedsubsystem(Hsub, H::AbstractHilbertSpace)
+    positions, problem = _match_atoms(Hsub, H)
+    isnothing(problem) && issorted(positions)
+end
+
+"""
+    ispartition(Hs, H::AbstractHilbertSpace)
+
+Check that the spaces `Hs` are subsystems of `H` (see `match_atoms`) that together contain
+each atom of `H` exactly once.
+"""
+function ispartition(partition, H::AbstractHilbertSpace)
+    matches = map(Hsub -> _match_atoms(Hsub, H), partition)
+    all(isnothing ∘ last, matches) && ispartition(map(first, matches), nbr_of_atoms(H))
+end
+
+"""
+    isorderedpartition(Hs, H::AbstractHilbertSpace)
+
+Like `ispartition`, but the atoms of each subsystem must also be in the same order as in `H`.
+"""
+function isorderedpartition(partition, H::AbstractHilbertSpace)
+    matches = map(Hsub -> _match_atoms(Hsub, H), partition)
+    all(isnothing ∘ last, matches) && isorderedpartition(map(first, matches), nbr_of_atoms(H))
+end
+
+"""
+    complementary_subsystem(H, Hsub)
+
+Return the subsystem of `H` made of the atoms not in `Hsub`, or `nothing` if there are none.
+`Hsub` must be a subsystem of `H`, see `match_atoms`. If `H` is constrained, the complement
+only keeps the states that are compatible with some state of `Hsub`.
+"""
+function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
+    positions = match_atoms(Hsub, H)
+    remaining = [a for (n, a) in enumerate(atomic_factors(H)) if n ∉ positions]
     isempty(remaining) && return nothing
     Hcomp = tensor_product(remaining)
     if isconstrained(H)
@@ -272,28 +643,10 @@ function complementary_subsystem(H::AbstractHilbertSpace, Hsub)
     return Hcomp
 end
 
-_find_position(n, v::Union{<:AbstractVector,<:Base.Generator}) = (pos = findfirst(==(n), v); isnothing(pos) ? 0 : pos)
-_find_atom_position(atom, H::AbstractGroupedHilbertSpace) = _find_position(atom, H)
-_find_atom_position(atom, H::AbstractHilbertSpace) = _find_position(atom, atomic_factors(H))
+# Position of `x` in the collection `v`, or 0
+_position_in(x, v) = something(findfirst(==(x), v), 0)
 
-function isorderedsubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
-    positions = [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)]
-    all(pos -> pos > 0, positions) || return false
-    issorted(positions) || return false
-    return true
-end
-function isorderedpartition(Hsubs, H::AbstractHilbertSpace)
-    positions = map(Hsub -> [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)], Hsubs)
-    isorderedpartition(positions, length(atomic_factors(H)))
-end
-function issubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace)
-    positions = [_find_atom_position(atom, H) for atom in atomic_factors(Hsub)]
-    all(pos -> pos > 0, positions)
-end
-function ispartition(partition, H::AbstractHilbertSpace)
-    partition_inds = [_find_atom_position(atom, H) for part in partition for atom in atomic_factors(part)]
-    ispartition(partition_inds, length(atomic_factors(H)))
-end
+# Partitions of positions 1:N, or of the elements of `labels`
 function ispartition(partition, N::Int)
     covered = falses(N)
     for subsystem in partition
@@ -310,7 +663,7 @@ function ispartition(partition, labels)
     covered = falses(n)
     for subsystem in partition
         for label in subsystem
-            pos = _find_position(label, labels)
+            pos = _position_in(label, labels)
             pos == 0 && return false
             covered[pos] && return false
             covered[pos] = true
@@ -390,7 +743,7 @@ function isorderedpartition(partition, order)
     for subsystem in partition
         lastpos = 0
         for label in subsystem
-            pos = _find_position(label, order)
+            pos = _position_in(label, order)
             pos == 0 && return false
             pos > lastpos || return false
             covered[pos] && return false
