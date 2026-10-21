@@ -68,15 +68,14 @@ weights = [[cis(2π * k * s / N) for s in 0:N-1] for k in momenta];
 
 # In each magnetization sector, `symmetric_sector` constructs a matrix `P`
 # whose columns form a basis for an irrep's subspace. `factors(sec)` identifies
-# the tensor factors permuted by the group, and `ComplexF64` is the element type
-# of the projector, since the weights are complex. We diagonalize $P^\dagger H P$;
+# the tensor factors permuted by the group. We diagonalize $P^\dagger H P$;
 # an absent irrep gets energy `Inf`. 
 
 function sector_energies(M)
     sec = sector(M, space)
     HM = representation(H, sec)
     return map(weights) do w
-        P = symmetric_sector(sec, factors(sec), (perms, w), ComplexF64)
+        P = symmetric_sector(sec, factors(sec), (perms, w))
         size(P, 2) == 0 && return Inf
         eigmin(Hermitian(Matrix(P' * HM * P)))
     end
