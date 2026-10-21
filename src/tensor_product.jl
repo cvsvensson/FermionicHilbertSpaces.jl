@@ -466,9 +466,35 @@ _effective_dim(m::AbstractMatrix, H) = length(m)
 _effective_dim(m::AbstractSparseMatrix, H) = nnz(m)
 _effective_dim(::UniformScaling, H) = dim(H)
 
-default_partial_trace_alg(m::AbstractMatrix, Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+# Relative cost of reading the input element of one SubsystemPartialTraceAlg term, which
+# is a search for sparse matrices.
+const _DENSE_SUBSYSTEM_TERM_COST = 5
+_subsystem_term_cost(m) = _DENSE_SUBSYSTEM_TERM_COST
+_subsystem_term_cost(::AbstractSparseMatrix) = 20
+
+"""
+    _prefer_subsystem_alg(dsub, d, dcomp, nvisits, term_cost)
+
+Cost model for choosing the partial-trace algorithm, in units of one visit of an input
+element by `FullPartialTraceAlg`. `SubsystemPartialTraceAlg` combines every subsystem state
+with every complement state (cost 16 each) and then visits about `d^2 ÷ dcomp` terms
+(`term_cost` each). `FullPartialTraceAlg` splits every basis state of the full space
+(cost 25 each) and visits the `nvisits` input elements. The weights are measured on
+fermionic, spin and mixed product spaces.
+"""
+_prefer_subsystem_alg(dsub, d, dcomp, nvisits, term_cost) =
+    16 * dsub * dcomp + term_cost * (d^2 ÷ max(dcomp, 1)) < 25 * d + nvisits
+
+function default_partial_trace_alg(m::AbstractMatrix, Hsub, H, Hcomp)
+    prefer_sub = _prefer_subsystem_alg(dim(Hsub), dim(H), dim(Hcomp), _effective_dim(m, H), _subsystem_term_cost(m))
+    return prefer_sub ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+end
 default_partial_trace_alg(m::AbstractMatrix, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
-default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+# For a map, FullPartialTraceAlg visits every element of a dim(H) x dim(H) input
+function default_partial_trace_alg(Hsub, H, Hcomp)
+    prefer_sub = _prefer_subsystem_alg(dim(Hsub), dim(H), dim(Hcomp), dim(H)^2, _DENSE_SUBSYSTEM_TERM_COST)
+    return prefer_sub ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+end
 default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 
 partial_trace_phase_factor_eltype(::AbstractAtomicHilbertSpace) = Int
@@ -886,6 +912,20 @@ end
     H = hilbert_space(a, 1:4, NumberConservation(1))
     @test_throws ArgumentError generalized_kron((m1, m2), (H1, H2) => H)
     @test generalized_kron((m1, m2), (H1, H2) => H; skipmissing=true) ≈ tensor_product((m1, m2), (H1, H2) => H) # Since tensor_product first embeds both operators in the full Hilbert space (which can be done) and then multiplies them, it won't complain about missing states.
+end
+
+@testitem "Default partial trace algorithm" begin
+    using SparseArrays
+    import FermionicHilbertSpaces: default_partial_trace_alg, complementary_subsystem, FullPartialTraceAlg, SubsystemPartialTraceAlg
+    @fermions f
+    for H in (hilbert_space(f, 1:8), hilbert_space(f, 1:12, NumberConservation(3)))
+        Hsub = subregion(hilbert_space(f, 1:2), H)
+        Hc = complementary_subsystem(H, Hsub)
+        d = dim(H)
+        @test default_partial_trace_alg(zeros(d, d), Hsub, H, Hc) == SubsystemPartialTraceAlg()
+        @test default_partial_trace_alg(Hsub, H, Hc) == SubsystemPartialTraceAlg()
+        @test default_partial_trace_alg(sprand(d, d, 2 / d), Hsub, H, Hc) == FullPartialTraceAlg()
+    end
 end
 
 @testitem "Partial trace algorithms agree, including missing states" begin
