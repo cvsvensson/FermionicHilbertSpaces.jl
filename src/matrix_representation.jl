@@ -747,7 +747,9 @@ end
 
 ## 
 remove_identity(a::NCMul) = a
-remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict)
+# The result shares the terms dictionary of `a`. With filtering turned off the constructor does not mutate it,
+# and its callers in the single-particle and BdG representations only read it.
+remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict; filter_zeros=false, filter_scalars=false)
 
 # The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
 _isscalar_operator(op) = op isa Union{Number,UniformScaling} || (op isa Union{NCMul,NCAdd} && NonCommutativeProducts.isscalar(op))
