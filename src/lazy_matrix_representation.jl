@@ -221,8 +221,12 @@ function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:ProductOperator}, x
     return y
 end
 
-function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCAdd}, x::AbstractVecOrMat, α, β)
-    rmul!(y, β)
+function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd}, x::AbstractVecOrMat, α, β) where T
+    if iszero(β)
+        fill!(y, zero(T))
+    else
+        rmul!(y, β)
+    end
     op = L.op
     for (term, coeff, precomp) in L.precomp
         _apply_single_term!(y, x, L.space, term, precomp, coeff * α, L.conjugate, L.projection, L.chunking)
@@ -306,6 +310,9 @@ end
     @test L(copy(w), v, u, p, t) ≈ M * v
     @test L(copy(Wm), Vm, u, p, t) ≈ M * Vm
     @test L(copy(w), v, u, p, t, α, β) ≈ α .* (M * v) .+ β .* w
+    # a zero β overwrites the output, including non-finite entries
+    @test L(fill(NaN + 0im, dim(Hf)), v, u, p, t, α, 0.0) ≈ α .* (M * v)
+    @test L(fill(NaN + 0im, dim(Hf), 3), Vm, u, p, t, α, 0.0) ≈ α .* (M * Vm)
     @test L(copy(Wm), Vm, u, p, t, α, β) ≈ α .* (M * Vm) .+ β .* Wm
     vs = sprandn(dim(Hf), 0.5)
     ws = sprandn(ComplexF64, dim(Hf), 0.5)
@@ -408,6 +415,8 @@ end
 
     @test Lt * v ≈ M * v
     @test Ls * v ≈ M * v
+    @test mul!(fill(NaN + 0im, dim(Hf)), Lt, v, 0.5, 0.0) ≈ 0.5 * (M * v)
+    @test mul!(fill(NaN + 0im, dim(Hf)), Ls, v, 0.5, 0.0) ≈ 0.5 * (M * v)
     @test Lt * V ≈ M * V
     @test Ls * V ≈ M * V
     @test Lt * vs ≈ M * vs
