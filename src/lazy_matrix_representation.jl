@@ -256,6 +256,53 @@ function __matrix_representation(op::NCAdd, bases, space, repr::LazyRepr, chunki
     return _lazy_sum(mats)
 end
 
+# On an unconstrained product space, the terms that act on a single group are summed into one
+# lazy operator on that group, which is embedded with identities on the other groups. The
+# scalar coefficient goes into the first of these. Terms acting on several groups are
+# represented one by one, as in the generic method.
+function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::LazyRepr, chunking; kwargs...)
+    if chunking isa TermChunking
+        @warn "TermChunking is not supported for LazyRepr. Ignoring chunking strategy."
+        chunking = NoChunking()
+    end
+    spaces = groups(space)
+    local_terms = [eltype(op.dict)[] for _ in spaces]
+    mats = []
+    for (term, coeff) in op.dict
+        n = _single_group_index(term, bases)
+        if isnothing(n)
+            push!(mats, _matrix_representation(NCMul(coeff, term.factors), bases, space, repr, chunking; kwargs...))
+        else
+            push!(local_terms[n], term => coeff)
+        end
+    end
+    scalar = op.coeff
+    local_mats = []
+    for (n, terms) in enumerate(local_terms)
+        isempty(terms) && continue
+        # factor vectors with the narrowest element type that holds every factor of the group
+        S = mapreduce(((term, _),) -> mapreduce(typeof, typejoin, term.factors), typejoin, terms)
+        local_op = NCAdd(scalar, Dict(NCMul(term.coeff, convert(Vector{S}, term.factors)) => coeff for (term, coeff) in terms))
+        scalar = zero(scalar)
+        local_mat = _matrix_representation_single_space(local_op, spaces[n], repr, chunking; T=mat_eltype(op), kwargs...)
+        factor_mats = [m == n ? local_mat : SciMLOperators.IdentityOperator(dim(spaces[m])) for m in eachindex(spaces)]
+        push!(local_mats, foldl(kron, Iterators.reverse(factor_mats)))
+    end
+    if !iszero(scalar)
+        push!(mats, scalar * _matrix_representation(missing, bases, space, repr, NoChunking(); kwargs...))
+    end
+    return _lazy_sum(vcat(local_mats, mats))
+end
+
+# The index of the group in `bases` that all factors of `term` belong to, or `nothing` if
+# the factors belong to several groups or there are no factors.
+function _single_group_index(term, bases)
+    isempty(term.factors) && return nothing
+    group = symbolic_group(first(term.factors))
+    all(fac -> symbolic_group(fac) == group, term.factors) || return nothing
+    return findfirst(==(group), bases)
+end
+
 _as_scimloperator(m::SciMLOperators.AbstractSciMLOperator) = m
 _as_scimloperator(m::AbstractMatrix) = SciMLOperators.MatrixOperator(m)
 function _lazy_sum(mats)
@@ -365,6 +412,53 @@ end
 
     # @test !ishermitian(L)
     # @test ishermitian(matrix_representation(op + hc, Hcons; lazy=true, projection=true)) #SciMLOperators doesn't check termwise ishermitian for an added operator
+end
+
+@testitem "lazy matrix_representation on product spaces" begin
+    using FermionicHilbertSpaces.SciMLOperators
+    using LinearAlgebra, SparseArrays
+    using FermionicHilbertSpaces: open_system
+    function lazy_matches(op, H)
+        L = representation(op, H, :lazy)
+        M = representation(op, H)
+        v = randn(ComplexF64, dim(H))
+        V = randn(ComplexF64, dim(H), 2)
+        w = randn(ComplexF64, dim(H))
+        Lc = cache_operator(L, v)
+        y = copy(w)
+        mul!(y, Lc, v, 0.3, -0.7)
+        return L * v ≈ M * v && L' * v ≈ M' * v && transpose(L) * v ≈ transpose(M) * v &&
+               L * V ≈ M * V && y ≈ 0.3 * (M * v) - 0.7 * w && concretize(L) ≈ M
+    end
+
+    @fermions c
+    N = 3
+    Hopen, _, _, left, right = open_system(c, 1:N)
+    ham = sum((0.3n) * c[n]' * c[n] for n in 1:N) + sum(0.2im * c[n]' * c[n+1] + hc for n in 1:(N-1))
+    dissipator(L) = left(L) * right(L') - 0.5 * (left(L' * L) + right(L' * L))
+    liouvillian = 1im * (left(ham) - right(ham)) + sum(dissipator(sqrt(0.1n) * c[n]) for n in 1:N)
+    @test lazy_matches(liouvillian, Hopen)
+    @test lazy_matches(liouvillian + 0.5, Hopen)
+    @test lazy_matches(left(ham) + 2, Hopen)
+    @test lazy_matches(right(ham), Hopen)
+    @test lazy_matches(left(c[1]) * right(c[1]') + left(c[2]') * right(c[3]), Hopen)
+    # the terms acting only on the left or only on the right are summed into one operator each
+    @test length(representation(liouvillian, Hopen, :lazy).ops) == 2 + N
+
+    @fermions f
+    @boson b
+    @spin s 1 // 2
+    Hf = hilbert_space(f, 1:2)
+    H = tensor_product(Hf, hilbert_space(b, 3), hilbert_space(s))
+    op = f[1]' * f[2] + hc + 0.3 * b' * b + 0.2 * (b' + b) * f[1]' * f[1] + 0.7 * s[:z] +
+         0.1 * s[:x] * (b + b') + 0.05 * f[2]' * f[2] * s[:z] * b' * b + f[1] * s[:x] + 0.4
+    @test lazy_matches(op, H)
+    @test lazy_matches(0.3 * b' * b + b' + b, H)
+    @test lazy_matches(f[1]' * s[:x] * b + hc, H)
+
+    # terms of one group with factors of different concrete types, and a complex coefficient
+    H2 = tensor_product(hilbert_space(f, [1, :a]), hilbert_space(b, 3))
+    @test lazy_matches(1im * f[1]' * f[:a] + hc + 0.5im * f[1]' * f[1] + b' * b, H2)
 end
 
 @testitem "lazy matrix_representation chunking" begin
