@@ -129,8 +129,10 @@ end
 # realistic group order and irrep dimension. Other element types are exact or symbolic.
 function _is_negligible(P::AbstractArray{<:Union{AbstractFloat,Complex{<:AbstractFloat}}}, ws)
     scale = maximum(abs, ws)
-    return maximum(abs, P; init=zero(real(eltype(P)))) <= sqrt(eps(real(eltype(P)))) * scale
+    return _max_abs(P) <= sqrt(eps(real(eltype(P)))) * scale
 end
+_max_abs(P::SparseMatrixCSC) = maximum(abs, nonzeros(P); init=zero(real(eltype(P))))
+_max_abs(P) = maximum(abs, P; init=zero(real(eltype(P))))
 _is_negligible(P, ws) = false
 
 function _default_projector_eltype(weights)
