@@ -43,7 +43,7 @@ ham = zero(1.0 * f[0, 0] * f[1, 1] + 1.0)
 for xy in disc
     add!!(ham, potential(xy) * f[xy]' * f[xy])
     for nbr in neighbours(xy...)
-        add!!(ham, hopping(nbr, xy) * f[nbr]' * f[xy] + hc)
+        add!!(ham, hopping(nbr, xy) * f[nbr]' * f[xy])
     end
 end
 # And get a matrix representation of it on the single particle hilbert space

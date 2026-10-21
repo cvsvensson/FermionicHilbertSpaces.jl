@@ -12,10 +12,15 @@
 # \qquad d_\chi = \chi(e).
 # ```
 #
-# To calculate the projector, you need the permutation operator and the value 
-# $\chi(g)$ for each $g$. FermionicHilbertSpaces.jl can
-# handle the permutations, but not the characters: 
-# obtain them separately with e.g. [Oscar.jl](https://github.com/oscar-system/Oscar.jl). With a list of permutations and their weights for a particular irrep, `symmetric_sector(H, Hs, (perms, weights))` constructs a matrix whose columns form a basis for the sector.
+# To calculate the projector, you need the permutation operator and the value
+# $\chi(g)$ for each $g$. FermionicHilbertSpaces.jl handles the permutations,
+# and you supply the characters. With a list of permutations and their weights
+# $\chi(g)^*$ for a particular irrep, `symmetric_sector(H, Hs, (perms, weights))`
+# constructs a matrix whose columns form a basis for the sector.
+#
+# For translations the characters are simple phases, as shown below. For other
+# groups, such as the dihedral group that also includes reflections, character
+# tables can be computed with e.g. [Oscar.jl](https://github.com/oscar-system/Oscar.jl).
 
 # ## Example: a Heisenberg ring
 #
@@ -28,9 +33,8 @@
 # \qquad \mathbf{S}_{N+1}=\mathbf{S}_1.
 # ```
 #
-# We first separate total-magnetization sectors $M=\sum_k S_k^z$, 
-# then use the ring's translation and reflection symmetries. 
-# These form the dihedral group $D_N$ of order $2N$.
+# We first separate total-magnetization sectors $M=\sum_k S_k^z$,
+# then use the ring's translation symmetry.
 # Let's consider 5 sites, each with spin 3/2.
 
 using FermionicHilbertSpaces, LinearAlgebra
@@ -48,47 +52,36 @@ mags = quantumnumbers(space)
 H = J * sum(S[k][op] * S[mod1(k + 1, N)][op] for k in 1:N for op in (:x, :y, :z)) -
     h * sum(S[k][:z] for k in 1:N)
 
-# Oscar supplies the group elements and character table. We convert each
-# element to a permutation vector that FermionicHilbertSpaces.jl can use.
+# Translations form the cyclic group $\mathbb{Z}_N$ with $N$ elements. We write
+# each as a permutation vector, which is the format FermionicHilbertSpaces.jl
+# takes: translation `s` sends site `i` to `mod1(i + s, N)`, for `s` in `0:N-1`.
 
-using Oscar: PermGroup, dihedral_group, character_table
-G = dihedral_group(PermGroup, 2N)
-perms = map(Vector, G)
-chis = character_table(G)
-weights = [map(Float64 ∘ χ, G) for χ in chis];
+perms = [[mod1(i + s, N) for i in 1:N] for s in 0:N-1]
 
-# Label each irrep using its dimension, the character of a one-site rotation,
-# and, for one-dimensional irreps, the character of a reflection. For this
-# even ring, the one-dimensional irreps are A₁, A₂, B₁, and B₂; the remaining
-# irreps Eₖ pair momenta +k and -k.
+# Every irrep of $\mathbb{Z}_N$ is one-dimensional and labelled by a momentum
+# $k$, with character $\chi_k(s) = e^{-2\pi i k s/N}$. The weights are the
+# conjugated characters $\chi_k(s)^* = e^{2\pi i k s/N}$.
 
-r = only(g for g in G if Vector(g) == [2:N; 1]) # rotation
-σ = only(g for g in G if Vector(g) == [1; N:-1:2]) # reflection
-function irrep_label(χ)
-    d = round(Int, Float64(χ(one(G))))
-    k = round(Int, N / (2π) * acos(Float64(χ(r)) / d))
-    d == 2 && return "E$k (k=±$k)"
-    return (k == 0 ? "A" : "B") *
-        (Float64(χ(σ)) > 0 ? "₁" : "₂") * " (k=$k)"
-end
-labels = map(irrep_label, chis)
+momenta = (-(N - 1) ÷ 2):(N ÷ 2)
+labels = ["k = $k" for k in momenta]
+weights = [[cis(2π * k * s / N) for s in 0:N-1] for k in momenta];
 
 # In each magnetization sector, `symmetric_sector` constructs a matrix `P`
 # whose columns form a basis for an irrep's subspace. `factors(sec)` identifies
-# the tensor factors permuted by the group. We diagonalize $P^\dagger H P$;
+# the tensor factors permuted by the group, and `ComplexF64` is the element type
+# of the projector, since the weights are complex. We diagonalize $P^\dagger H P$;
 # an absent irrep gets energy `Inf`. 
 
-using KrylovKit, OhMyThreads
 function sector_energies(M)
     sec = sector(M, space)
-    HM = real(representation(H, sec))
+    HM = representation(H, sec)
     return map(weights) do w
-        P = symmetric_sector(sec, factors(sec), (perms, w))
+        P = symmetric_sector(sec, factors(sec), (perms, w), ComplexF64)
         size(P, 2) == 0 && return Inf
-        eigsolve(Hermitian(P' * HM * P), 1, :SR; tol=1e-6, ishermitian=true)[1][1]
+        eigmin(Hermitian(Matrix(P' * HM * P)))
     end
 end
-energies = stack(tmap(sector_energies, mags; scheduler=DynamicScheduler()))
+energies = stack(map(sector_energies, mags))
 E0, idx = findmin(energies)
 (; E0, irrep=labels[idx[1]], M=mags[idx[2]])
 
@@ -98,7 +91,7 @@ using Plots
 best_irrep_per_M = map(argmin, eachcol(energies))
 best_M_per_irrep = map(argmin, eachrow(energies))
 p = heatmap(labels, mags, permutedims(energies);
-    xlabel="irrep of D$N (momentum k in units of 2π/N)",
+    xlabel="momentum (units of 2π/N)",
     ylabel="magnetization M",
     title="Lowest energy per symmetry sector",
     c=:viridis, yticks=mags, frame=:box)
