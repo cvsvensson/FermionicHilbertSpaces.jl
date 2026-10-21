@@ -183,7 +183,7 @@ function PartialTransposeMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace
     PartialTransposeMap(H, Hsub, complement, Hout, kwargs, smap)
 end
 
-# |ψ⟩ ↦ map * vec(ψψ†) without forming ψψ† (same as _apply_ptmap_on_vec!, but on a bare matrix)
+# |ψ⟩ ↦ map * vec(ψψ†) without forming ψψ†, for the CSC map of a PartialTransposeMap.
 function _apply_superop_on_pure_state!(w::AbstractVector, mat::SparseMatrixCSC, ψ::AbstractVector)
     D = length(ψ)
     fill!(w, zero(eltype(w)))
