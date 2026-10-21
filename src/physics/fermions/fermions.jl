@@ -96,10 +96,15 @@ combine_states(states, H::FermionicSpace{F}) where F = (catenate_fock_states(sta
 state_mapper(H::FermionicSpace, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
 state_mapper(H::FermionicSpace, Hs) = _fock_mapper(H, Hs)
 function _fock_mapper(H, Hs)
-    fermionpositions = [[atom_position(atom, H) for atom in atomic_factors(Hsub)] for Hsub in Hs]
+    fermionpositions = [[atom_position(atom, H) for atom in _fock_atoms(Hsub)] for Hsub in Hs]
     all(x -> x > 0, Iterators.flatten(fermionpositions)) || throw(ArgumentError("All subspaces in `Hs` must be part of `H`, got positions $fermionpositions."))
     FockMapper(Tuple(fermionpositions), nbr_of_modes(H))
 end
+# The atoms of `Hsub`, or for fermionic spaces the modes naming them, which `atom_position`
+# accepts without building one single-mode space per mode.
+_fock_atoms(Hsub) = atomic_factors(Hsub)
+_fock_atoms(Hsub::FermionicSpace) = nbr_of_modes(Hsub) == 0 ? (Hsub,) : modes(Hsub)
+_fock_atoms(Hsub::Union{ConstrainedSpace,SectorHilbertSpace}) = _fock_atoms(parent(Hsub))
 
 _truncate(items, max, edge) =
     length(items) <= max ? items : [items[1:edge]; "..."; items[(end-edge+1):end]]
