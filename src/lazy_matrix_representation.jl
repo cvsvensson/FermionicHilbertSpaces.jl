@@ -238,6 +238,45 @@ function Base.:*(L::LazyOperator, x::AbstractVecOrMat)
     y = similar(x, T)
     return mul!(y, L, x)
 end
+
+# The output entries of all terms are collected as (index, value) pairs; `sparsevec` sums
+# the values with equal index.
+function Base.:*(L::LazyOperator, x::SparseArrays.AbstractSparseVector)
+    size(L, 2) == length(x) || throw(DimensionMismatch("The input must have length $(size(L, 2)), got $(length(x))"))
+    T = promote_type(eltype(L), eltype(x))
+    outinds = Int[]
+    amps = T[]
+    for (term, coeff, precomp) in _lazy_terms(L)
+        _push_single_term!(outinds, amps, x, L.space, term, precomp, coeff, L.conjugate, L.projection)
+    end
+    if L.op isa NCAdd && !iszero(L.op.coeff)
+        scalar_coeff = L.conjugate ? conj(L.op.coeff) : L.op.coeff
+        append!(outinds, SparseArrays.nonzeroinds(x))
+        append!(amps, scalar_coeff .* SparseArrays.nonzeros(x))
+    end
+    return SparseArrays.sparsevec(outinds, amps, size(L, 1))
+end
+_lazy_terms(L::LazyOperator{<:NCAdd}) = L.precomp
+_lazy_terms(L::LazyOperator) = ((L.op, true, L.precomp),)
+
+function _push_single_term!(outinds, amps, x, space, term, precomp, _coeff, conjugate, projection)
+    coeff = (conjugate ? conj(_coeff) : _coeff)
+    for (n, xn) in zip(SparseArrays.nonzeroinds(x), SparseArrays.nonzeros(x))
+        iszero(xn) && continue
+        state = basisstate(n, space)
+        newstate, _amp = _apply_local_operators(term, state, space, precomp)
+        if !iszero(_amp)
+            outind = state_index(newstate, space)
+            if iszero(outind)
+                projection && continue
+                throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
+            end
+            amp = (conjugate ? conj(_amp) : _amp) * coeff
+            push!(outinds, outind)
+            push!(amps, amp * xn)
+        end
+    end
+end
 get_input(::LazyRepr{Missing}, H) = dim(H) < 1e4 ? Vector{mat_eltype(H)}(undef, dim(H)) : spzeros(mat_eltype(H), dim(H))
 function get_input(rep::LazyRepr{<:AbstractArray}, H)
     dim(H) == size(rep.input, 1) || throw(DimensionMismatch("input has size $(size(rep.input)) but expected $(dim(H))"))
@@ -363,6 +402,9 @@ end
     @test transpose(L) * Vcons_s ≈ transpose(M) * Vcons_s
     @test (L * vcons_s) isa SparseVector
     @test (L * Vcons_s) isa SparseMatrixCSC
+    @test L' * vcons_s ≈ M' * vcons_s
+    @test transpose(L) * vcons_s ≈ transpose(M) * vcons_s
+    @test_throws ArgumentError representation(op, Hcons, :lazy) * sparse(ones(dim(Hcons)))
     @test Matrix(L) ≈ M
     @test Matrix(L') ≈ M'
     @test Matrix(transpose(L)) ≈ transpose(M)
