@@ -248,15 +248,19 @@ function _matrix_representation_single_space(op::NCAdd, H, rep::LazyRepr, chunki
 end
 
 function __matrix_representation(op::NCAdd, bases, space, repr::LazyRepr, chunking; kwargs...)
-    terms = collect(NCterms(op))
     chunking isa TermChunking && @warn "TermChunking is not supported for LazyRepr. Ignoring chunking strategy."
-    mat = sum(terms) do term
-        _matrix_representation(term, bases, space, repr, chunking; kwargs...)
-    end
+    mats = Any[_matrix_representation(term, bases, space, repr, chunking; kwargs...) for term in NCterms(op)]
     if !iszero(op.coeff)
-        mat += op.coeff * _matrix_representation(missing, bases, space, repr, NoChunking(); kwargs...)
+        push!(mats, op.coeff * _matrix_representation(missing, bases, space, repr, NoChunking(); kwargs...))
     end
-    return mat
+    return _lazy_sum(mats)
+end
+
+_as_scimloperator(m::SciMLOperators.AbstractSciMLOperator) = m
+_as_scimloperator(m::AbstractMatrix) = SciMLOperators.MatrixOperator(m)
+function _lazy_sum(mats)
+    length(mats) == 1 && return only(mats)
+    return SciMLOperators.AddedOperator(Tuple(map(_as_scimloperator, mats)))
 end
 
 @testitem "lazy matrix_representation" begin
