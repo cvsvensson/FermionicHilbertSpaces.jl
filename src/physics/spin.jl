@@ -83,7 +83,7 @@ end
 SpinState(m) = SpinState(HalfInteger(m))
 Base.:(==)(a::SpinState, b::SpinState) = a.m == b.m
 Base.isless(a::SpinState, b::SpinState) = a.m < b.m
-Base.hash(x::SpinState, h::UInt) = hash(x.m, h)
+Base.hash(x::SpinState, h::UInt) = hash(twice(x.m), h)
 
 internal_rep(state::SpinState, ::AbstractHilbertSpace, ::Type{Int}) = Int(twice(state.m))
 physical_rep(state::Int, ::Type{SpinState}) = SpinState(half(state))
@@ -180,10 +180,14 @@ function operators(H::SpinSpace)
 end
 
 @testitem "Spin" begin
-    using FermionicHilbertSpaces: spin_basisstates, SpinSpace, SpinState, operators, SpinField
+    using FermionicHilbertSpaces: spin_basisstates, SpinSpace, SpinState, operators, SpinField, Half
     using LinearAlgebra
     @test spin_basisstates(1 // 2) == [SpinState(-1 // 2), SpinState(1 // 2)]
     @test spin_basisstates(1) == [SpinState(-1), SpinState(0), SpinState(1)]
+    # equal states hash equally, also across integer types
+    s16 = SpinState{Int16}(Half{Int16}(3 // 2))
+    @test s16 == SpinState(3 // 2) && hash(s16) == hash(SpinState(3 // 2))
+    @test hash(SpinState(1 // 2)) != hash(SpinState(-1 // 2))
 
     @spin s
     H = hilbert_space(s, 1 // 2)
