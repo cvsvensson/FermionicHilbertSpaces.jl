@@ -122,7 +122,7 @@ decompositions or from eigendecompositions of the diagonal blocks of the project
 Both decompositions assume that the projector is proportional to an orthogonal
 projector, which holds when `perms` form a group and `weights` are proportional to a
 character of it or to its complex conjugate. Each diagonal block `B` contributes at most
-`round(Int, real(tr(B))^2 / sum(abs2, B))` columns, which is its rank in that case.
+`round(Int, abs2(tr(B)) / sum(abs2, B))` columns, which is its rank in that case.
 
 `Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
 case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
@@ -175,7 +175,7 @@ end
 _max_column_norm(P::AbstractMatrix) = maximum(norm, eachcol(P); init=zero(real(eltype(P))))
 function _trace_rank(B)
     s = sum(abs2, B)
-    return iszero(s) ? 0 : round(Int, real(tr(B))^2 / s)
+    return iszero(s) ? 0 : round(Int, abs2(tr(B)) / s)
 end
 
 # Column-pivoted Gram-Schmidt QR of `B`, stopped after `r` columns or once every residual
@@ -205,9 +205,12 @@ function _block_basis(B, ::_QR, tol, r)
     end
     return Q[:, 1:k]
 end
-# Eigenvectors of `Hermitian(B)` for the at most `r` eigenvalues of largest magnitude,
-# among those larger than `tol` in magnitude.
+# Eigenvectors for the at most `r` eigenvalues of largest magnitude, among those larger
+# than `tol` in magnitude. `B` is a multiple of a projector; its overall phase, which is
+# that of its trace, is divided out so that the remainder is Hermitian.
 function _block_basis(B, ::_EIG, tol, r)
+    t = tr(B)
+    iszero(t) || (B ./= t / abs(t))
     E = eigen!(Hermitian(B))
     order = sortperm(E.values; by=abs, rev=true)
     keep = filter(i -> abs(E.values[i]) > tol, first(order, r))
@@ -404,5 +407,19 @@ end
             @test Q' * Q ≈ I
             @test Q * Q' ≈ P
         end
+    end
+end
+
+@testitem "Permutation symmetry with a global phase in the weights" begin
+    using FermionicHilbertSpaces: symmetric_sector, _QR, _EIG
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    Hs = factors(H)
+    perms = [[1, 2], [2, 1]]
+    for orth_method in (_QR(), _EIG())
+        Q = symmetric_sector(H, Hs, (perms, im .* [1.0, 1.0]), ComplexF64; orth_method, normalize=false)
+        @test size(Q, 2) == 3
+        Q = symmetric_sector(H, Hs, (perms, cis(pi / 4) .* [1.0, 1.0]), ComplexF64; orth_method)
+        @test size(Q, 2) == 3
     end
 end
