@@ -32,7 +32,7 @@ _convert_basisstates(::Type, states) = states
 Base.:(==)(H1::GenericHilbertSpace, H2::GenericHilbertSpace) = H1 === H2 || (H1.label == H2.label && H1.basisstates == H2.basisstates)
 Base.hash(H::GenericHilbertSpace, h::UInt) = hash((H.label, H.basisstates), h)
 basisstates(H::GenericHilbertSpace) = H.basisstates
-basisstate(ind::Integer, H::GenericHilbertSpace) = H.basisstates[ind]
+Base.@propagate_inbounds basisstate(ind::Integer, H::GenericHilbertSpace) = H.basisstates[ind]
 Base.keys(H::GenericHilbertSpace) = (H.label,)
 state_index(state::B, H::GenericHilbertSpace{B,<:Any,<:Any,<:AbstractDict}) where B = get(H.state_index, state, 0)
 state_index(state::B, H::GenericHilbertSpace{B}) where B = H.state_index(state)

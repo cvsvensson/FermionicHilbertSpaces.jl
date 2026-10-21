@@ -86,7 +86,7 @@ partial_transpose_phase_factor(f1, f2, H::SectorHilbertSpace) = partial_transpos
 state_mapper(H::SectorHilbertSpace, Hs) = state_mapper(parent(H), Hs)
 mode_ordering(H::SectorHilbertSpace) = mode_ordering(parent(H))
 
-basisstate(ind::Integer, H::SectorHilbertSpace) = H.ordered_basis_states[ind]
+Base.@propagate_inbounds basisstate(ind::Integer, H::SectorHilbertSpace) = H.ordered_basis_states[ind]
 
 state_index(state::AbstractBasisState, H::SectorHilbertSpace{B}) where B = get(H.state_to_index, state, 0)
 add_tag(H::SectorHilbertSpace, tag) = SectorHilbertSpace(add_tag(parent(H), tag), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)

@@ -19,7 +19,7 @@ end
 
 dim(H::ConstrainedSpace) = length(H.states)
 basisstates(H::ConstrainedSpace) = H.states
-basisstate(n::Integer, H::ConstrainedSpace) = H.states[n]
+Base.@propagate_inbounds basisstate(n::Integer, H::ConstrainedSpace) = H.states[n]
 state_index(state, H::ConstrainedSpace{B}) where B = get(H.state_index, state, 0)
 state_index(state::Union{AbstractString,AbstractChar}, H::ConstrainedSpace) = state_index(interpret_state(state, H), H)
 atomic_factors(H::ConstrainedSpace) = atomic_factors(parent(H))

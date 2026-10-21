@@ -528,10 +528,11 @@ function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::Fu
     splitsamps = map(Base.Fix2(split_state, mapper), basisstates(H))
     for I in inds
         J1, J2 = I[1], I[2]
-        f1 = basisstate(J1, H)
-        f2 = basisstate(J2, H)
+        # `splitsamps` has one entry per basis state of `H`, so these lookups bounds-check J1 and J2.
         splits1, amps1 = splitsamps[J1]
         splits2, amps2 = splitsamps[J2]
+        f1 = @inbounds basisstate(J1, H)
+        f2 = @inbounds basisstate(J2, H)
         for ((f1sub, f1bar), w1) in zip(splits1, amps1)
             K1 = state_index(f1sub, Hsub)
             if iszero(K1)

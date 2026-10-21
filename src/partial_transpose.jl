@@ -29,9 +29,9 @@ function _foreach_partial_transpose_term(op, inds, H, Hsub, Hout, splits, mapper
         J1, J2 = I[1], I[2]
         f1 = basisstate(J1, H)
         f2 = basisstate(J2, H)
-        s_in = phase_factors ? conj(partial_trace_phase_factor(f1, f2, H)) : 1 # Fock(H) → operator basis
         splits1, amps1 = splits[J1]
         splits2, amps2 = splits[J2]
+        s_in = phase_factors ? conj(partial_trace_phase_factor(f1, f2, H)) : 1 
         for ((a1, b1...), w1) in zip(splits1, amps1), ((a2, b2...), w2) in zip(splits2, amps2)
             s_sub = phase_factors ? partial_transpose_phase_factor(a1, a2, Hsub) : 1 # local transpose
             gs1, us1 = combine_states((a2, b1...), mapper_out)

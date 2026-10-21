@@ -48,7 +48,7 @@ dim(H::ProductSpace) = prod(dim, groups(H); init=1)
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
 basisstates(H::ProductSpace{B}) where B = TypedIterator{B}(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
-function basisstate(n::Integer, H::ProductSpace{B}) where B
+Base.@propagate_inbounds function basisstate(n::Integer, H::ProductSpace{B}) where B
     inds = Tuple(H.cartinds[n])
     ProductState(map(basisstate, inds, H.factors))
 end
