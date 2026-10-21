@@ -195,7 +195,7 @@ function PartialTransposeMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace
     PartialTransposeMap(H, Hsub, complement, Hout, kwargs, smap)
 end
 
-# |ψ⟩ ↦ map * vec(ψψ†) without forming ψψ†. Shared by PartialTraceMap and PartialTransposeMap.
+# |ψ⟩ ↦ map * vec(ψψ†) without forming ψψ†, for the CSC map of a PartialTransposeMap.
 function _apply_superop_on_pure_state!(w::AbstractVector, mat::SparseMatrixCSC, ψ::AbstractVector)
     D = length(ψ)
     size(mat, 2) == D^2 || throw(DimensionMismatch("The map must have `length(ψ)^2` = $(D^2) columns, got $(size(mat, 2))"))

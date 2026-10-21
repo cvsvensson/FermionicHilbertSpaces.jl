@@ -22,7 +22,10 @@ end
 
 function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
     map = if isnothing(complement)
-        basis_transformation_map(Hsub, H; skipmissing, kwargs...)
+        # stored as the adjoint of the map in the partial-trace direction
+        U = basis_transformation_map(Hsub, H; skipmissing, kwargs...)
+        rows, cols, vals = findnz(U)
+        _superoperator_coo(cols, rows, conj(vals), size(U, 2), dim(H))'
     else
         partial_trace_map(H, Hsub; complement, alg, skipmissing=skipmissing, kwargs...)'
     end
@@ -57,7 +60,7 @@ function (op::EmbedMap)(m::UniformScaling)
     mfull = m.λ * I(dim(op.Hsub))
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(mfull), dim(op.H))
 end
-SparseArrays.sparse(op::EmbedMap) = op.map
+SparseArrays.sparse(op::EmbedMap) = sparse(op.map)
 Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, op.map')
 Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, op.map')
 Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, op.map')
