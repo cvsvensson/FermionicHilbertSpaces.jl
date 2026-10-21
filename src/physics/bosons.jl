@@ -71,7 +71,6 @@ function Base.show(io::IO, x::BosonSym)
 end
 Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && isequal(a.basis, b.basis)
 Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, h)))
-_boson_name(s::BosonSym) = s.basis isa Nothing ? (s.label, tags(s)) : (s.basis.name, s.label, tags(s.basis))
 # Normal ordering of a = b^m, c = b†^n: b^m b†^n = Σₖ k! C(m,k) C(n,k) b†^(n-k) b^(m-k)
 function _boson_normal_order(a::BosonSym, c::BosonSym)
     m, n = -a.exp, c.exp
@@ -84,7 +83,7 @@ function _boson_normal_order(a::BosonSym, c::BosonSym)
     return AddTerms(terms)
 end
 function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
-    if _boson_name(a) == _boson_name(b)
+    if symbolic_group(a) == symbolic_group(b)
         if sign(a.exp) == sign(b.exp)
             return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
         else
@@ -95,7 +94,7 @@ function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
             end
         end
     end
-    if _content_cmp(_boson_name(a), _boson_name(b)) > 0
+    if _group_isless(b, a)
         return Swap(1)
     else
         return nothing
@@ -226,8 +225,9 @@ function apply_local_operator(factor::BosonSym, state::BosonicState, space::Trun
     end
     return BosonicState(n), amplitude
 end
-symbolic_group(f::BosonSym{<:Any,B}) where B = (f.basis, f.label, f.tags)
-symbolic_group(f::BosonSym{<:Any,Nothing}) = (BosonSym, f.label, f.tags)
+# Group ids are `(name, label, tags)`. A boson without a basis has its own label as name and `()` as label.
+symbolic_group(f::BosonSym{<:Any,<:BosonField}) = (f.basis.name, f.label, f.basis.tags)
+symbolic_group(f::BosonSym{<:Any,Nothing}) = (f.label, (), f.tags)
 symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
 symbolic_basis(H::TruncatedBosonicHilbertSpace) = symbolic_group(H)
 atomic_id(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)

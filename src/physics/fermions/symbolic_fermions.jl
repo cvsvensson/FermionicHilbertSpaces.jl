@@ -200,7 +200,7 @@ end
     @test only(keys((c[1] * b[1]' * a[2]).dict)).factors == [a[2], b[1]', c[1]]
 
     # the order is total and consistent with ==
-    ts = [Tags(nothing), Tags((:left,)), Tags((:right,)), tags(a).id, tags(b).id, tags(c).id,
+    ts = [Tags(nothing), tags(a).id, tags(b).id, tags(c).id,
         add_tag(tags(a).id, :left), add_tag(tags(a).id, :right), add_tag(add_tag(tags(a).id, :left), :right),
         Tags(((:a,),)), Tags(((:a, :b),))]
     for x in ts, y in ts

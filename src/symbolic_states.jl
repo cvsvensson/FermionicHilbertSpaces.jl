@@ -58,19 +58,21 @@ Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.br
 Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(group_id(a.space), h)))
 # States are ordered by group, then by space, then by ket and bra, where a missing ket or bra comes first.
 function Base.isless(a::SymbolicState, b::SymbolicState)
-    c = _group_cmp(a, b)
-    c == 0 || return c < 0
+    _group_isless(a, b) && return true
+    _group_isless(b, a) && return false
     if a.space !== b.space
-        c = _content_cmp(atom_ids(a.space), atom_ids(b.space))
-        c == 0 || return c < 0
+        ia, ib = atom_ids(a.space), atom_ids(b.space)
+        isless(ia, ib) && return true
+        isless(ib, ia) && return false
     end
-    c = _state_cmp(a.ket, b.ket)
-    c == 0 ? _state_cmp(a.bra, b.bra) < 0 : c < 0
+    _isless_missing_first(a.ket, b.ket) && return true
+    _isless_missing_first(b.ket, a.ket) && return false
+    _isless_missing_first(a.bra, b.bra)
 end
-_state_cmp(::Nothing, ::Nothing) = 0
-_state_cmp(::Nothing, _) = -1
-_state_cmp(_, ::Nothing) = 1
-_state_cmp(a, b) = _content_cmp(a, b)
+_isless_missing_first(::Nothing, ::Nothing) = false
+_isless_missing_first(::Nothing, _) = true
+_isless_missing_first(_, ::Nothing) = false
+_isless_missing_first(a, b) = isless(a, b)
 Base.adjoint(s::SymbolicState) = SymbolicState(s.space, s.bra, s.ket)
 
 symbolic_group(s::SymbolicState) = group_id(s.space)
@@ -182,13 +184,10 @@ function _term_matrix_representation(op::NCMul{<:Any,<:SymbolicState}, H::Abstra
     matrix_representation(only(op.factors), H, t; kwargs...)
 end
 
-# Factors from different groups are put in the order of their groups
-_group_cmp(a, b) = _content_cmp(symbolic_group(a), symbolic_group(b))
-
 function NonCommutativeProducts.mul_effect(a::SymbolicState, b::SymbolicState)
     if !_same_space_id(a.space, b.space)
         group_id(a) == group_id(b) && throw(ArgumentError("Cannot multiply symbolic states on different spaces of the same group, got `$(a.space)` and `$(b.space)`."))
-        return _group_cmp(a, b) > 0 ? Swap(1) : nothing
+        return _group_isless(b, a) ? Swap(1) : nothing
     end
     if has_bra(a) && has_ket(b)
         coeff = a.bra == b.ket ? 1 : 0
@@ -218,7 +217,7 @@ end
 
 function NonCommutativeProducts.mul_effect(op::AbstractSym, s::SymbolicState)
     if !(symbolic_group(op) == group_id(s.space))
-        return _group_cmp(op, s) > 0 ? Swap(1) : nothing
+        return _group_isless(s, op) ? Swap(1) : nothing
     end
     if !has_ket(s)
         throw(ArgumentError("Cannot act with operator $op on the left of $s"))
@@ -229,7 +228,7 @@ end
 
 function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
     if !(symbolic_group(op) == group_id(s.space))
-        return _group_cmp(s, op) > 0 ? Swap(1) : nothing
+        return _group_isless(op, s) ? Swap(1) : nothing
     end
     if !has_bra(s)
         throw(ArgumentError("Cannot act with operator $op on the right of $s"))
