@@ -344,52 +344,20 @@ function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::Abst
     return _internal_rep(newstate, space, T), amp
 end
 function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::NTuple{N,InternalRep{T}}, space::ProductSpace, precomps) where {C,T,N}
-    # amp::C = one(C)
-    # newreps::NTuple{N,InternalRep{T}} = internal_reps
-    # n::Int = 0
-    # map(ops.ops, ops.spaces, precomps, ops.inds) do op, local_space, precomp, n
-    #     internal_rep::InternalRep{T} = internal_reps[n]
-    #     new_local_rep::InternalRep{T}, local_amp::C = _apply_local_operators(op, internal_rep, local_space, precomp)
-    #     amp *= local_amp
-    #     newreps = Base.setindex(newreps, new_local_rep, n)
-    #     return nothing
-    # end
-    amp, newreps = foldl(
-        zip(ops.inds, ops.ops, ops.spaces, precomps);
-        init=(one(C), internal_reps)
-    ) do (amp, newreps), (n, op, local_space, precomp)
-        ismissing(op) && return (amp, newreps)
-        new_local_rep::InternalRep{T}, local_amp::C =
-            _apply_local_operators(op, internal_reps[n], local_space, precomp)
-        return (amp * local_amp, Base.setindex(newreps, new_local_rep, n))
-    end
-    return newreps, amp
+    return _apply_group_operators(one(C), internal_reps, internal_reps, ops.inds, 1, ops.ops, ops.spaces, precomps)
 end
 function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductState{B}, space::ProductSpace, precomps) where {C,B<:Tuple}
-    # amp::C = one(C)
-    # newstates::B = state.states
-    # n::Int = 0
-    # println(typeof(ops.ops), typeof(ops.spaces), typeof(precomps), typeof(ops.inds))
-    # for (op, local_space, precomp, n) in zip(ops.ops, ops.spaces, precomps, ops.inds)
-    #     # n += 1
-    #     ismissing(op) && return newstates
-    #     subst = state.states[n]
-    #     new_local_state, local_amp::C = _apply_local_operators(op, subst, local_space, precomp)
-    #     amp *= local_amp
-    #     newstates = Base.setindex(newstates, new_local_state, n)
-    # end
-
-    amp, newstates = foldl(
-        zip(ops.inds, ops.ops, ops.spaces, precomps);
-        init=(one(C), state.states)
-    ) do (amp, newstates), (n, op, local_space, precomp)
-        ismissing(op) && return (amp, newstates)
-        new_local_state, local_amp::C =
-            _apply_local_operators(op, state.states[n], local_space, precomp)
-        return (amp * local_amp, Base.setindex(newstates, new_local_state, n))
-    end
-
+    newstates, amp = _apply_group_operators(one(C), state.states, state.states, ops.inds, 1, ops.ops, ops.spaces, precomps)
     return ProductState{B}(newstates), amp
+end
+# Apply the k-th local operator to the substate `states[inds[k]]` and recurse over the remaining
+# operators. Recursing over the tuples `ops`, `spaces` and `precomps` keeps each call concretely typed.
+_apply_group_operators(amp, states, newstates, inds, k, ::Tuple{}, ::Tuple{}, ::Tuple{}) = (newstates, amp)
+function _apply_group_operators(amp::C, states, newstates, inds, k, ops::Tuple, spaces::Tuple, precomps::Tuple) where {C}
+    n = inds[k]
+    new_local_state, local_amp = _apply_local_operators(first(ops), states[n], first(spaces), first(precomps))
+    return _apply_group_operators(amp * convert(C, local_amp), states, Base.setindex(newstates, new_local_state, n),
+        inds, k + 1, Base.tail(ops), Base.tail(spaces), Base.tail(precomps))
 end
 
 add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors))
