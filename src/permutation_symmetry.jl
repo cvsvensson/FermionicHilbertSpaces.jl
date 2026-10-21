@@ -155,11 +155,15 @@ element type of `weights`, for example `ComplexF64` for complex weights.
 
 The projector is built with `permutation_projector(H, Hs, perms, weights, T; normalize, sparse)`.
 `orth_method` selects what is returned:
-- `:qr`: a matrix with orthonormal columns spanning the sector, from a QR decomposition
-  of the projector.
+- `:qr`: a matrix with orthonormal columns spanning the sector, from column-pivoted QR
+  decompositions of the diagonal blocks of the projector.
 - `:eig`: a matrix with orthonormal columns spanning the sector, from the eigenvectors of
-  the projector with eigenvalue one. The projector is converted to a dense matrix.
+  the diagonal blocks of the projector with nonzero eigenvalue.
 - `nothing`: the projector itself.
+Both `:qr` and `:eig` assume that the projector is proportional to an orthogonal
+projector, which holds when `perms` form a group and `weights` are proportional to a
+character of it or to its complex conjugate. Each diagonal block `B` contributes at most
+`round(Int, real(tr(B))^2 / sum(abs2, B))` columns, which is its rank in that case.
 
 `Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
 case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
@@ -173,10 +177,7 @@ function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type
     length(perms) == length(weights) || throw(ArgumentError("The generated weights and permutations must have the same length, got $(length(weights)) and $(length(perms))."))
     P = permutation_projector(H, Hs, perms, weights, T; kwargs...)
     isnothing(method) && return P
-
-    tr2 = sum(abs2, P)
-    rank = iszero(tr2) ? 0 : round(Int, real(tr(P))^2 / tr2)
-    _remove_columns!(P, method, rank)
+    _sector_basis(P, method)
 end
 _default_sector_eltype(sector) = Float64
 function _default_sector_eltype((perms, weights)::Tuple)
@@ -191,29 +192,135 @@ function _orth_method(method)
 end
 _resolve_sector_permutations_and_weights(Hs, (perms, weights), T) = (perms, weights) # for direct input of perms and weights
 
-function _remove_columns!(P::Matrix, ::_QR, M::Int=round(Int, tr(P)))
-    F = try
-        qr!(P, ColumnNorm())
-    catch e
-        qr(P, ColumnNorm())
+# Orthonormal basis for the range of `P`. `P` is block diagonal over the connected
+# components of its sparsity pattern, so each block is decomposed separately.
+function _sector_basis(P, method)
+    F = float(eltype(P))
+    # Let `P` be p times an orthogonal projector. Its columns have norm at most p, its
+    # nonzero eigenvalues are p, and for an n×n block every pivot of the `_QR` method of
+    # `_block_basis` inside the block's rank is at least p/sqrt(n), while
+    # rounding errors are of order eps*p. sqrt(eps) times the largest column norm lies
+    # between the two for any block with fewer than about 1/eps states.
+    # Each block also keeps at most `_trace_rank` columns, which is its rank when the block
+    # is proportional to a projector.
+    tol = sqrt(eps(real(F))) * _max_column_norm(P)
+    blocks = _connected_blocks(P)
+    loc = zeros(Int, size(P, 1))
+    bases = map(blocks) do idx
+        B = _dense_block(P, idx, loc)
+        _block_basis(B, method, tol, _trace_rank(B))
     end
-    big_cols = findall(>(0.1) ∘ abs, diag(F.R))
-    return F.Q[:, big_cols]
-end
-_remove_columns!(P::AbstractMatrix, ::_EIG, M::Int) = _remove_columns!(Matrix(P), _EIG(), M) # ensure we have a dense matrix for the decomposition
-function _remove_columns!(P::Matrix, ::_EIG, M::Int)
-    E = try
-        eigen!(Hermitian(P))
-    catch e
-        eigen(Hermitian(P))
+    Q = zeros(F, size(P, 1), sum(B -> size(B, 2), bases; init=0))
+    col = 0
+    for (idx, B) in zip(blocks, bases)
+        Q[idx, col+1:col+size(B, 2)] = B
+        col += size(B, 2)
     end
-    keep = findall(>(0.9) ∘ abs, E.values)  # λ ≈ 1 subspace
-    return E.vectors[:, keep]  # already orthonormal
+    return Q
 end
-function _remove_columns!(P::SparseMatrixCSC, ::_QR, M::Int)
-    F = qr(P; tol=0.1)
-    F.Q[invperm(F.prow), 1:M]
+
+function _max_column_norm(P::SparseMatrixCSC)
+    vals = nonzeros(P)
+    z = zero(real(eltype(P)))
+    column_norm(j) = sqrt(sum(k -> abs2(vals[k]), nzrange(P, j); init=z))
+    return maximum(column_norm, axes(P, 2); init=z)
 end
+_max_column_norm(P::AbstractMatrix) = maximum(norm, eachcol(P); init=zero(real(eltype(P))))
+function _trace_rank(B)
+    s = sum(abs2, B)
+    return iszero(s) ? 0 : round(Int, real(tr(B))^2 / s)
+end
+
+# Column-pivoted Gram-Schmidt QR of `B`, stopped after `r` columns or once every residual
+# column norm (the next diagonal entry of R) is at most `tol`. Returns the orthonormal
+# columns found. Stopping early keeps the cost proportional to the rank of `B`.
+function _block_basis(B, ::_QR, tol, r)
+    m, n = size(B)
+    kmax = min(m, n, r)
+    Q = zeros(eltype(B), m, kmax)
+    norms = zeros(real(eltype(B)), n)
+    w = zeros(eltype(B), n)
+    k = 0
+    while k < kmax
+        for c in 1:n
+            norms[c] = sum(abs2, view(B, :, c))
+        end
+        j = argmax(norms)
+        sqrt(norms[j]) > tol || break
+        v = B[:, j]
+        Qk = view(Q, :, 1:k)
+        v .-= Qk * (Qk' * v)  # reorthogonalize against the columns found so far
+        v ./= norm(v)
+        k += 1
+        Q[:, k] = v
+        mul!(w, B', v)
+        mul!(B, v, w', -1, 1)  # B -= v * v' * B
+    end
+    return Q[:, 1:k]
+end
+# Eigenvectors of `Hermitian(B)` for the at most `r` eigenvalues of largest magnitude,
+# among those larger than `tol` in magnitude.
+function _block_basis(B, ::_EIG, tol, r)
+    E = eigen!(Hermitian(B))
+    order = sortperm(E.values; by=abs, rev=true)
+    keep = filter(i -> abs(E.values[i]) > tol, first(order, r))
+    return E.vectors[:, keep]
+end
+
+function _dense_block(P::SparseMatrixCSC, idx, loc)
+    loc[idx] = eachindex(idx)
+    B = zeros(float(eltype(P)), length(idx), length(idx))
+    rows, vals = rowvals(P), nonzeros(P)
+    for (jl, j) in enumerate(idx), k in nzrange(P, j)
+        iszero(vals[k]) || (B[loc[rows[k]], jl] = vals[k])
+    end
+    return B
+end
+_dense_block(P::AbstractMatrix, idx, loc) = Matrix{float(eltype(P))}(P[idx, idx])
+
+# Index sets of the connected components of the graph with an edge i-j for each
+# nonzero P[i, j], each sorted, ordered by their smallest index.
+function _connected_blocks(P::SparseMatrixCSC)
+    parent = collect(1:size(P, 2))
+    rows, vals = rowvals(P), nonzeros(P)
+    for j in axes(P, 2), k in nzrange(P, j)
+        iszero(vals[k]) || _union!(parent, rows[k], j)
+    end
+    return _components(parent)
+end
+function _connected_blocks(P::AbstractMatrix)
+    parent = collect(1:size(P, 2))
+    for j in axes(P, 2), i in axes(P, 1)
+        iszero(P[i, j]) || _union!(parent, i, j)
+    end
+    return _components(parent)
+end
+function _find_root!(parent, i)
+    while parent[i] != i
+        parent[i] = parent[parent[i]]
+        i = parent[i]
+    end
+    return i
+end
+function _union!(parent, i, j)
+    a, b = _find_root!(parent, i), _find_root!(parent, j)
+    a != b && (parent[a] = b)
+    return parent
+end
+function _components(parent)
+    label = zeros(Int, length(parent))
+    comps = Vector{Int}[]
+    for i in eachindex(parent)
+        r = _find_root!(parent, i)
+        if iszero(label[r])
+            push!(comps, Int[])
+            label[r] = length(comps)
+        end
+        push!(comps[label[r]], i)
+    end
+    return comps
+end
+
 
 
 @testitem "Permutation symmetry" begin
@@ -364,4 +471,50 @@ end
 
     # Invalid input: Hs not a subsystem of H
     @test_throws ArgumentError permutation_projector(H, [H1, H3], [idperm, swapperm])
+end
+
+@testitem "Permutation symmetry with a 120-state orbit" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: permutation_projector, symmetric_sector, AdditiveConstraint
+    using Combinatorics: permutations, parity
+    # The orbit of the states with substates {-2,-1,0,1,2} has 5! = 120 states. The rank
+    # tolerance must keep its sector vectors, although its projector columns have norm 1/sqrt(120)
+    @spins S 2
+    H = hilbert_space(S, 1:5, AdditiveConstraint(0; maps=s -> s.m))
+    Hs = factors(H)
+    perms = collect(permutations(1:5))
+    for (ws, rank) in ((ones(120), 12), ([(-1.0)^parity(p) for p in perms], 1))
+        P = permutation_projector(H, Hs, perms, ws, Float64)
+        @test tr(P) ≈ rank
+        for orth_method in (:qr, :eig) # weights scaled so that P is half a projector
+            @test size(symmetric_sector(H, Hs, (perms, ws ./ 240); orth_method, normalize=false), 2) == rank
+        end
+        for kwargs in ((; sparse=true), (; sparse=false), (; orth_method=:eig), (; normalize=false))
+            Q = symmetric_sector(H, Hs, (perms, ws); kwargs...)
+            @test size(Q, 2) == rank
+            @test Q' * Q ≈ I
+            @test Q * Q' ≈ P
+        end
+    end
+end
+
+@testitem "Permutation symmetry with complex weights" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: permutation_projector, symmetric_sector
+    # Irreducible representations of the cyclic group acting on 4 modes. The orbits of the
+    # 16 Fock states have sizes 1, 1, 2, 4, 4, 4, so the sector dimensions are 6, 3, 4, 3.
+    @fermions f
+    H = hilbert_space(f, 1:4)
+    Hs = factors(H)
+    perms = [circshift(1:4, j) for j in 0:3]
+    for (k, rank) in zip(0:3, (6, 3, 4, 3))
+        ws = [cis(2pi * k * j / 4) for j in 0:3]
+        P = permutation_projector(H, Hs, perms, ws, ComplexF64)
+        for orth_method in (:qr, :eig)
+            Q = symmetric_sector(H, Hs, (perms, ws), ComplexF64; orth_method)
+            @test size(Q, 2) == rank
+            @test Q' * Q ≈ I
+            @test Q * Q' ≈ P
+        end
+    end
 end
