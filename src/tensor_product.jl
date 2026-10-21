@@ -617,6 +617,18 @@ function _full_partial_trace!(mout, m, splits, H, Hsub, phase_factors, skipmissi
     end
     return mout
 end
+# Sparse input: visit the stored entries with nzrange and pass the stored value to the kernel
+function _full_partial_trace!(mout, m::SparseMatrixCSC, splits, H, Hsub, phase_factors, skipmissing)
+    rows = rowvals(m)
+    vals = nonzeros(m)
+    for J2 in axes(m, 2), p in nzrange(m, J2)
+        x = vals[p]
+        _foreach_full_partial_trace_pair_term(rows[p], J2, splits, H, Hsub, phase_factors, skipmissing) do _, _, K1, K2, v
+            mout[K1, K2] += v * x
+        end
+    end
+    return mout
+end
 
 """
     partial_trace(H => Hsub; kwargs...)
