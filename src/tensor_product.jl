@@ -650,7 +650,9 @@ end
 
 Base.size(A::SuperOperatorCOO) = (A.nrows, A.D^2)
 SparseArrays.nnz(A::SuperOperatorCOO) = length(A.vals)
-SparseArrays.nnz(A::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}) = nnz(parent(A))
+const _TransposedSuperOperatorCOO = Union{LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO},LinearAlgebra.Transpose{<:Any,<:SuperOperatorCOO}}
+const _AnySuperOperatorCOO = Union{SuperOperatorCOO,_TransposedSuperOperatorCOO}
+SparseArrays.nnz(A::_TransposedSuperOperatorCOO) = nnz(parent(A))
 Base.copy(A::SuperOperatorCOO{T}) where T = SuperOperatorCOO{T}(A.nrows, A.D, copy(A.blockptr), copy(A.rows), copy(A.cols), copy(A.vals))
 
 # Positions of the stored entries in column `c`
@@ -688,7 +690,37 @@ function Base.:(==)(A::SuperOperatorCOO, B::SuperOperatorCOO)
            count(!iszero, A.vals) == count(!iszero, B.vals)
 end
 Base.:(==)(A::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}, B::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}) = parent(A) == parent(B)
+Base.:(==)(A::LinearAlgebra.Transpose{<:Any,<:SuperOperatorCOO}, B::LinearAlgebra.Transpose{<:Any,<:SuperOperatorCOO}) = parent(A) == parent(B)
 SparseArrays.sparse(A::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}) = copy(adjoint(SparseMatrixCSC(parent(A))))
+SparseArrays.sparse(A::LinearAlgebra.Transpose{<:Any,<:SuperOperatorCOO}) = copy(transpose(SparseMatrixCSC(parent(A))))
+
+# Operations without a dedicated kernel go through the sparse matrix, so that they never
+# fall back to the generic code that visits all `nrows * D^2` entries.
+Base.transpose(A::SuperOperatorCOO) = LinearAlgebra.Transpose(A)
+Base.:(==)(A::_AnySuperOperatorCOO, B::_AnySuperOperatorCOO) = sparse(A) == sparse(B)
+Base.:(==)(A::_AnySuperOperatorCOO, B::AbstractMatrix) = sparse(A) == B
+Base.:(==)(A::AbstractMatrix, B::_AnySuperOperatorCOO) = A == sparse(B)
+Base.isapprox(A::_AnySuperOperatorCOO, B::_AnySuperOperatorCOO; kwargs...) = isapprox(sparse(A), sparse(B); kwargs...)
+Base.isapprox(A::_AnySuperOperatorCOO, B::AbstractMatrix; kwargs...) = isapprox(sparse(A), B; kwargs...)
+Base.isapprox(A::AbstractMatrix, B::_AnySuperOperatorCOO; kwargs...) = isapprox(A, sparse(B); kwargs...)
+Base.Matrix(A::_AnySuperOperatorCOO) = Matrix(sparse(A))
+Base.Array(A::_AnySuperOperatorCOO) = Matrix(A)
+Base.show(io::IO, mime::MIME"text/plain", A::_AnySuperOperatorCOO) = show(io, mime, sparse(A))
+LinearAlgebra.norm(A::SuperOperatorCOO, p::Real=2) = LinearAlgebra.norm(A.vals, p)
+LinearAlgebra.norm(A::_TransposedSuperOperatorCOO, p::Real=2) = LinearAlgebra.norm(parent(A), p)
+
+# Scaling and negation act on the stored values
+_scaled(A::SuperOperatorCOO, vals) = SuperOperatorCOO(A.nrows, A.D, copy(A.blockptr), copy(A.rows), copy(A.cols), vals)
+Base.:*(a::Number, A::SuperOperatorCOO) = _scaled(A, a .* A.vals)
+Base.:*(A::SuperOperatorCOO, a::Number) = _scaled(A, A.vals .* a)
+Base.:/(A::SuperOperatorCOO, a::Number) = _scaled(A, A.vals ./ a)
+Base.:-(A::SuperOperatorCOO) = _scaled(A, -A.vals)
+Base.:*(a::Number, A::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}) = adjoint(conj(a) * parent(A))
+Base.:*(a::Number, A::LinearAlgebra.Transpose{<:Any,<:SuperOperatorCOO}) = transpose(a * parent(A))
+Base.:*(A::_TransposedSuperOperatorCOO, a::Number) = a * A
+Base.:/(A::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}, a::Number) = adjoint(parent(A) / conj(a))
+Base.:/(A::LinearAlgebra.Transpose{<:Any,<:SuperOperatorCOO}, a::Number) = transpose(parent(A) / a)
+Base.:-(A::_TransposedSuperOperatorCOO) = (-1) * A
 
 function _superop_scale_output!(y, β)
     if iszero(β)
@@ -737,27 +769,31 @@ function LinearAlgebra.mul!(y::AbstractVector, A::SuperOperatorCOO, x::SparseArr
     end
     return y
 end
-function LinearAlgebra.mul!(y::AbstractVector, B::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}, x::AbstractVector, α::Number, β::Number)
+_entry_op(::LinearAlgebra.Adjoint) = conj
+_entry_op(::LinearAlgebra.Transpose) = identity
+function LinearAlgebra.mul!(y::AbstractVector, B::_TransposedSuperOperatorCOO, x::AbstractVector, α::Number, β::Number)
     _check_superop_mul(y, B, x)
     _superop_scale_output!(y, β)
     A = parent(B)
+    op = _entry_op(B)
     for p in eachindex(A.vals)
-        y[A.cols[p]] += conj(A.vals[p]) * x[A.rows[p]] * α
+        y[A.cols[p]] += op(A.vals[p]) * x[A.rows[p]] * α
     end
     return y
 end
 
 Base.:*(A::SuperOperatorCOO, x::SparseArrays.AbstractSparseVector) = sparse(mul!(zeros(promote_type(eltype(A), eltype(x)), size(A, 1)), A, x))
-function Base.:*(B::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}, x::SparseArrays.AbstractSparseVector)
+function Base.:*(B::_TransposedSuperOperatorCOO, x::SparseArrays.AbstractSparseVector)
     _check_superop_mul(Base.OneTo(size(B, 1)), B, x)
     A = parent(B)
+    op = _entry_op(B)
     xd = Vector(x)
     T = promote_type(eltype(B), eltype(x))
     inds = Int[]
     vals = T[]
     # the stored entries are sorted by column of A, i.e. by output index
     for p in eachindex(A.vals)
-        v = conj(A.vals[p]) * xd[A.rows[p]]
+        v = op(A.vals[p]) * xd[A.rows[p]]
         iszero(v) && continue
         c = A.cols[p]
         if !isempty(inds) && last(inds) == c
@@ -1146,6 +1182,56 @@ end
     ptp = partial_trace(hilbert_space(f, 1:2) => Hp)
     @test sparse(ptp) isa SparseMatrixCSC
     @test ptp'.map == embed(Hp => hilbert_space(f, 1:2)).map
+end
+
+@testitem "SuperOperatorCOO operations stay sparse" begin
+    using SparseArrays, LinearAlgebra
+    import FermionicHilbertSpaces: _superoperator_coo, SuperOperatorCOO
+    # 50 x 90000 would take 36 MB as a dense matrix
+    nrows, D, n = 50, 300, 200
+    A = _superoperator_coo(rand(1:nrows, n), rand(1:D^2, n), rand(ComplexF64, n), nrows, D)
+    S = sparse(A)
+    x = rand(ComplexF64, nrows)
+    xs = sparse(x)
+    ops = (A, A', transpose(A))
+    refs = (S, S', transpose(S))
+    for (B, R) in zip(ops, refs)
+        @test size(B) == size(R)
+        @test sparse(B) == R
+        @test B == R
+        @test R == B
+        @test B == copy(B)
+        @test B ≈ R
+        @test R ≈ B
+        @test Matrix(B) == Matrix(R)
+        @test norm(B) ≈ norm(R)
+        @test norm(B, 1) ≈ norm(R, 1)
+        @test 2 * B == 2 * R
+        @test B * 2 == R * 2
+        @test (1 + 2im) * B == (1 + 2im) * R
+        @test B / 2 == R / 2
+        @test -B == -R
+    end
+    @test A * 2 isa SuperOperatorCOO
+    @test (2A)' isa Adjoint{<:Any,<:SuperOperatorCOO}
+    @test (A' == transpose(A)) == (sparse(A') == sparse(transpose(A)))
+    y = rand(ComplexF64, size(A, 2))
+    @test A * y ≈ S * y
+    @test transpose(A) * x ≈ transpose(S) * x
+    @test transpose(A) * xs ≈ transpose(S) * x
+    @test A' * xs ≈ S' * x
+    z = rand(ComplexF64, size(A, 1))
+    @test mul!(copy(y), transpose(A), z, 2, 3) ≈ 2 * transpose(S) * z + 3 * y
+    @test nnz(transpose(A)) == nnz(A)
+    @test sprint(show, MIME("text/plain"), A) == sprint(show, MIME("text/plain"), S)
+    # a dense matrix would take 36 MB; the sparse conversion and the length-D^2 output are the largest allocations
+    function allocations(A, a, x)
+        2A; A * 2; A / 2; -A; a * A'; A == A; A' == A'; A ≈ sparse(A)
+        return @allocated(begin
+            2A; A * 2; A / 2; -A; a * A'; A == A; A' == A'; A ≈ sparse(A); transpose(A) * x
+        end)
+    end
+    @test allocations(A, 2, x) < 8_000_000
 end
 
 @testitem "Partial trace and embed across truncations" begin
