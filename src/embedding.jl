@@ -1,8 +1,6 @@
 function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
-    if isnothing(complement)
-        return m
-    end
+    isnothing(complement) && return change_basis(m, Hsub, H; kwargs...)
     return generalized_kron((m, I), (Hsub, complement), H; kwargs...)
 end
 
@@ -29,7 +27,11 @@ struct EmbedMap{HS,H,C,K,M}
 end
 
 function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
-    map = partial_trace_map(H, Hsub; complement, alg, skipmissing=skipmissing, kwargs...)'
+    map = if isnothing(complement)
+        basis_transformation_map(Hsub, H; skipmissing, kwargs...)
+    else
+        partial_trace_map(H, Hsub; complement, alg, skipmissing=skipmissing, kwargs...)'
+    end
     EmbedMap(Hsub, H, complement, kwargs, map)
 end
 
