@@ -286,7 +286,7 @@ maps are useful when the same operation is applied many times.
 ### `reshape`: splitting and combining array axes
 
 ```julia
-reshape(t::AbstractArray, mappings...; repeat=false)
+reshape(t::AbstractArray, mappings...; repeat=false, skipmissing=false)
 ```
 
 Reshapes the array `t` by splitting or combining its axes according to
@@ -308,7 +308,7 @@ between vectorized and matrix forms
 Hl = hilbert_space(fl, 1:1)
 Hr = hilbert_space(fr, 1:1)
 Hlr = tensor_product(Hl, Hr)
-vlr = representation("00", Hlr) + 2*representation("11", Hlr) 
+vlr = representation("00", Hlr) + 2*representation("10", Hlr)
 rho = reshape(vlr, Hlr => (Hl, Hr))
 ```
 
@@ -317,8 +317,9 @@ This works with constraints as well
 Hlrconstrained = constrain_space(Hlr, NumberConservation([0, 1]))
 reshape(rho, (Hl, Hr) => Hlrconstrained)
 ```
-In this case, note that one element was silently dropped as it is not in the output space.
-This is not checked.
+If the array has a nonzero component on a basis state that is missing in the
+output space, `reshape` throws an `ArgumentError`. Pass `skipmissing=true` to
+drop such components instead.
 
 #### Multiple mappings
 
