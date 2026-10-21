@@ -142,7 +142,7 @@ function additive_branch_constraint(allowed_sums, functions, _subspaces, allspac
     allowed_values = _normalize_constraint_values(allowed_sums)
     ismissing(allowed_values) && return BranchConstraint((partial, depth, spaces) -> true)
     subspaces = map(hilbert_space, ismissing(_subspaces) ? allspaces : _subspaces)
-    positions = _subspace_positions(subspaces, allspaces)
+    positions = ismissing(_subspaces) ? (1:length(allspaces)) : _subspace_positions(subspaces, allspaces)
     _additive_branch_constraint(allowed_values, functions, subspaces, positions, length(allspaces))
 end
 function _subspace_positions(subspaces, allspaces)
