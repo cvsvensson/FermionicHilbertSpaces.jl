@@ -107,20 +107,18 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothi
     states = basisstates(H)
     si = Base.Fix2(state_index, H)
     add_permutation_operators!(accum, (states, si), mapper, perms, ws)
-    P = if sparse
-        SparseArrays.sparse(finalize!(accum, H))
-    else
-        accum
-    end
-    
+    P = sparse ? _to_sparse(finalize!(accum, H)) : accum
     _is_negligible(P, ws) && (P = zero(P))
     if normalize
         tr2 = sum(abs2, P)
         tr1 = tr(P)
-        iszero(tr2) || (P *= (tr1 / tr2))
+        iszero(tr2) || (P = _rmul!!(P, tr1 / tr2))
     end
     return P
 end
+_to_sparse(P::SparseMatrixCSC) = P
+_to_sparse(P) = SparseArrays.sparse(P)
+_rmul!!(P, c) = promote_type(eltype(P), typeof(c)) == eltype(P) ? rmul!(P, c) : P * c
 
 # Floating point sums of weights that cancel exactly leave roundoff of order
 # eps * sqrt(length(ws)) * maximum(abs, ws). For weights c * conj(χ(g)) of an irrep χ of
