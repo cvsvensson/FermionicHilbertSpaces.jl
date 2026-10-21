@@ -751,9 +751,20 @@ remove_identity(a::NCMul) = a
 # and its callers in the single-particle and BdG representations only read it.
 remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict; filter_zeros=false, filter_scalars=false)
 
+# Whether every term of `op` is a product of two `FermionSym`s, with one creation and one annihilation
+# operator if `number_conserving`. Majoranas and other operators give `false`.
+_is_quadratic_fermion_operator(op, number_conserving) = false
+_is_quadratic_fermion_operator(op::NCMul, number_conserving) = _is_quadratic_fermion_term(op.factors, number_conserving)
+_is_quadratic_fermion_operator(op::NCAdd, number_conserving) = all(term -> _is_quadratic_fermion_term(term.factors, number_conserving), keys(op.dict))
+function _is_quadratic_fermion_term(factors, number_conserving)
+    length(factors) == 2 || return false
+    a, b = factors
+    (a isa FermionSym && b isa FermionSym) || return false
+    return !number_conserving || a.creation != b.creation
+end
+
 # The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
 _isscalar_operator(op) = op isa Union{Number,UniformScaling} || (op isa Union{NCMul,NCAdd} && NonCommutativeProducts.isscalar(op))
-_isfermionic(op) = op isa Union{NCMul,NCAdd,AbstractSym} && NonCommutativeProducts.ncmapreduce(x -> x isa AbstractFermionSym, (&, &), op; scalarmap=Returns(true))
 function _identity_free_zero(H, repr)
     _repr = _canonicalize_repr(repr)
     _repr isa Union{EagerSparseRepr,EagerDenseRepr} || throw(ArgumentError("Only the :sparse and :dense representations are supported on $(typeof(H)). Got $repr."))
@@ -793,6 +804,32 @@ isquadratic(x::NCAdd) = all(isquadratic, NCterms(x))
     @test isquadratic(f[1]f[2])
     @test !isquadratic(f[1]f[2] * f[3])
     @test isquadratic(f[1]f[2] + f[3] * f[3]' + 1)
+end
+
+@testitem "Single-particle and BdG operator checks" begin
+    @fermions f
+    @majoranas γ
+    @spin s 1 // 2
+    Hsp = hilbert_space(f, 1:3, SingleParticle())
+    Hbdg = hilbert_space(f, 1:3, BdG())
+    op = 1.0 * f[1]' * f[2] + hc + f[3]' * f[3] + 2
+    opcopy = copy(op)
+    Msp = matrix_representation(op, Hsp)
+    Mbdg = matrix_representation(op, Hbdg)
+    @test op == opcopy
+    @test op.coeff == 2
+    @test op.dict == opcopy.dict
+    @test Msp == matrix_representation(op - 2, Hsp)
+    @test Mbdg == matrix_representation(op - 2, Hbdg)
+    @test matrix_representation(f[1]' * f[2]' + hc, Hbdg) isa AbstractMatrix
+    for H in (Hsp, Hbdg)
+        @test_throws ArgumentError matrix_representation(f[1]' * f[2] * f[3]' * f[3], H)
+        @test_throws ArgumentError matrix_representation(f[1]', H)
+        @test_throws ArgumentError matrix_representation(f[1]' * f[2] + f[3]', H)
+        @test_throws ArgumentError matrix_representation(1im * γ[1] * γ[2], H)
+        @test_throws ArgumentError matrix_representation(f[1]' * s[:z], H)
+    end
+    @test_throws ArgumentError matrix_representation(f[1]' * f[2]' + hc, Hsp)
 end
 
 @testitem "Consistency between + and add!!" begin
