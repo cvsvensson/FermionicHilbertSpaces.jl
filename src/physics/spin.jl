@@ -302,7 +302,7 @@ Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.basis == b.basis && a.exp
 Base.hash(a::SpinSym, h::UInt) = hash(a.exponent, hash(a.op, hash(a.basis, h)))
 symbolic_group(f::SpinSym) = symbolic_group(f.basis)
 symbolic_basis(f::SpinSym) = f.basis
-change_basis(f::SpinSym, newbasis) = SpinSym(f.op, newbasis, f.exponent)
+with_basis(f::SpinSym, newbasis) = SpinSym(f.op, newbasis, f.exponent)
 
 mat_eltype(::Type{<:SpinSym}) = Float64
 

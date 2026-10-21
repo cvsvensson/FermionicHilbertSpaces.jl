@@ -63,7 +63,7 @@ end
 function add_tag(factor::AbstractSym, tag)
     basis = symbolic_basis(factor)
     new_basis = add_tag(basis, tag)
-    return change_basis(factor, new_basis)
+    return with_basis(factor, new_basis)
 end
 add_tag(expr, tag) = NonCommutativeProducts.ncmap(Base.Fix2(add_tag, tag), expr)
 

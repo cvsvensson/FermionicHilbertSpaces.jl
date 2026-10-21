@@ -49,10 +49,10 @@ Base.getindex(b::BosonField, is...) = BosonSym(is, b, -1)
 Base.adjoint(x::BosonSym) = BosonSym(x.label, x.basis, x.tags, -x.exp)
 Base.iszero(x::BosonSym) = false
 symbolic_basis(x::BosonSym{<:Any,<:BosonField}) = x.basis
-change_basis(x::BosonSym, newbasis) = BosonSym(x.label, newbasis, x.exp)
+with_basis(x::BosonSym, newbasis) = BosonSym(x.label, newbasis, x.exp)
 const BosonSymWithBasis = BosonSym{L,B,Nothing} where {L,B<:BosonField}
 const BosonSymWithoutBasis = BosonSym{L,Nothing,T} where {L,T<:Tags}
-add_tag(x::BosonSymWithBasis, tag) = change_basis(x, add_tag(x.basis, tag))
+add_tag(x::BosonSymWithBasis, tag) = with_basis(x, add_tag(x.basis, tag))
 add_tag(x::BosonSymWithoutBasis, tag) = BosonSym(x.label, add_tag(x.tags, tag), x.exp)
 tags(x::BosonSym) = x.tags
 function Base.show(io::IO, x::BosonSym)

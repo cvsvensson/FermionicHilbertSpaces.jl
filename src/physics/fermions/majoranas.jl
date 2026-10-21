@@ -58,7 +58,7 @@ Base.adjoint(x::MajoranaSym) = MajoranaSym(x.label, x.basis)
 Base.iszero(x::MajoranaSym) = false
 symbolic_group(f::AbstractMajoranaSym) = symbolic_group(f.basis)
 symbolic_basis(f::AbstractMajoranaSym) = f.basis
-change_basis(f::MajoranaSym, newbasis) = MajoranaSym(f.label, newbasis)
+with_basis(f::MajoranaSym, newbasis) = MajoranaSym(f.label, newbasis)
 function Base.show(io::IO, x::MajoranaSym)
     print(io, _symbolic_name_with_tags(x.basis.name, x.basis; skip_first=1))
     if Base.isiterable(typeof(x.label))
