@@ -548,6 +548,18 @@ function _match_atoms_message(problem, Hsub, H)
 end
 
 """
+    match_same_atoms(H1, H2)
+
+Check that `H1` and `H2` have the same atoms, in the same order within each group (see
+`match_atoms`). The order between groups may differ. Throws an `ArgumentError` otherwise.
+"""
+function match_same_atoms(H1, H2)
+    match_atoms(H1, H2)
+    nbr_of_atoms(H1) == nbr_of_atoms(H2) || throw(ArgumentError("$H2 has atoms that are not in $H1"))
+    return nothing
+end
+
+"""
     issubsystem(Hsub, H)
 
 Check that `Hsub` is a subsystem of `H`, see `match_atoms`.

@@ -391,14 +391,21 @@ end
 Return `(U, dropped)`, where `U` is the sparse `dim(Hto) × dim(Hfrom)` matrix with
 `U[i, j] = 1` if basis state `j` of `Hfrom` is basis state `i` of `Hto`, and `dropped` are the
 indices of the states of `Hfrom` that do not exist in `Hto`. States of `Hto` that do not exist
-in `Hfrom` give zero rows.
+in `Hfrom` give zero rows. `Hfrom` and `Hto` must have the same atoms (see `match_same_atoms`),
+but their groups may come in different orders.
 """
 function basis_transformation(Hfrom, Hto)
+    match_same_atoms(Hfrom, Hto)
+    # the mapper puts each state of Hfrom in the group order of Hto
+    return _basis_transformation(Hfrom, Hto, state_mapper(Hto, (Hfrom,)))
+end
+function _basis_transformation(Hfrom, Hto, mapper)
     Is = Int[]
     Js = Int[]
     dropped = Int[]
+    _to_state(f)  = only(first(combine_states((f,), mapper)))
     for (j, f) in enumerate(basisstates(Hfrom))
-        i = state_index(f, Hto)
+        i = state_index(_to_state(f), Hto)
         if iszero(i)
             push!(dropped, j)
         else
@@ -412,11 +419,13 @@ end
 
 """
     change_basis(m, Hfrom => Hto; skipmissing=false)
+    change_basis(m, Hfrom, Hto; skipmissing=false)
 
 Express `m` in the basis of `Hto`, where `Hfrom` and `Hto` have the same atoms but possibly
 different (or differently ordered) basis states. Unless `skipmissing=true`, throws an
 `ArgumentError` if `m` has nonzero elements involving states of `Hfrom` that are not in `Hto`.
 """
+change_basis(m, Hs::PairWithHilbertSpaces; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
 function change_basis(m, Hfrom::AbstractHilbertSpace, Hto::AbstractHilbertSpace; skipmissing=false, kwargs...)
     U, dropped = basis_transformation(Hfrom, Hto)
     if !skipmissing
@@ -903,4 +912,36 @@ end
             @test emb(Msmall) ≈ pt(Msmall) ≈ partial_trace(Msmall, Hsmall => Hbig) ≈ embed(Msmall, Hsmall => Hbig)
         end
     end
+end
+
+@testitem "change_basis requires the same atoms" begin
+    import FermionicHilbertSpaces: change_basis, basis_transformation
+    @fermions f
+    @bosons b
+    Hb1 = hilbert_space(b[1], 3)
+    Hb2 = hilbert_space(b[2], 3)
+    Hf = hilbert_space(f, 1:2)
+
+    # Different atoms with identical basis states
+    @test_throws ArgumentError basis_transformation(Hb1, Hb2)
+    @test_throws ArgumentError change_basis(rand(3, 3), Hb1, Hb2)
+    @test_throws ArgumentError indices(Hb1, Hb2)
+    # Missing or extra atoms
+    @test_throws ArgumentError change_basis(rand(3, 3), Hb1, tensor_product(Hb1, Hf))
+    @test_throws ArgumentError change_basis(rand(12, 12), tensor_product(Hb1, Hf), Hb1)
+
+    # Pair syntax
+    m = rand(3, 3)
+    @test change_basis(m, Hb1 => hilbert_space(b[1], 4)) == change_basis(m, Hb1, hilbert_space(b[1], 4))
+
+    # Groups in different orders
+    Hfb = tensor_product(Hf, Hb1)
+    Hbf = tensor_product(Hb1, Hf)
+    op = f[1]' * f[2] * b[1]' + hc
+    mfb = representation(op, Hfb)
+    mbf = representation(op, Hbf)
+    @test change_basis(mfb, Hfb => Hbf) ≈ mbf
+    @test change_basis(mbf, Hbf => Hfb) ≈ mfb
+    v = rand(dim(Hfb))
+    @test change_basis(change_basis(v, Hfb => Hbf), Hbf => Hfb) == v
 end
