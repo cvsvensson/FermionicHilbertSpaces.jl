@@ -146,7 +146,8 @@ end
 _same_space_id(a, b) = a === b || atom_ids(a) == atom_ids(b)
 
 function _apply_symbolic_operator_to_state(op::AbstractSym, state::AbstractBasisState, space::AbstractHilbertSpace; transpose=false)
-    term = NCMul(1, [op])
+    # Tuple-backed, so that the term and its precomputation (a map over the factors) need no vectors
+    term = NCMul(1, (op,))
     precomp = precomputation_before_operator_application(term, space)
     if transpose
         return apply_local_operators(term, state, space, precomp; transpose=true)
@@ -581,6 +582,26 @@ end
     @test f[1] * vf("00") == 0
     @test s[:+] * vs("↑") == 0
     @test (f[1] + f[2]') * vf("00") == vf("01")
+end
+
+@testitem "Operators on symbolic states agree with matrix representations" begin
+    # the operator acts as a product with a Tuple of factors, on fermionic, constrained, spin, boson and product spaces
+    @fermions f
+    @spin s 1
+    @boson b
+    for (H, ops) in ((hilbert_space(f, 1:3), (f[2]', f[1], f[3]' * f[1])),
+        (hilbert_space(f, 1:3, NumberConservation(1)), (f[2]' * f[1], f[3]' * f[2])),
+        (hilbert_space(s), (s[:+], s[:-], s[:z])), (hilbert_space(b, 4), (b, b')),
+        (tensor_product(hilbert_space(f, 1:2), hilbert_space(s)), (f[1]', s[:+], f[2]' * f[1] * s[:z])))
+        for op in ops, st in basisstates(H)
+            ket = FermionicHilbertSpaces.SymbolicState(H, st, nothing)
+            v = Vector(representation(ket, H))
+            M = Matrix(matrix_representation(op, H))
+            Mv, vM = M * v, vec(transpose(v) * M)
+            @test iszero(Mv) ? iszero(op * ket) : Vector(representation(op * ket, H)) ≈ Mv
+            @test iszero(vM) ? iszero(ket' * op) : vec(collect(representation(ket' * op, H))) ≈ vM
+        end
+    end
 end
 
 @testitem "Interleaved operators and states in product spaces" begin
