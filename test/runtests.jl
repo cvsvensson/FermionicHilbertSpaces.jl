@@ -284,6 +284,40 @@ end
     @test representation(1 + f[1], H) == I + representation(f[1], H)
 end
 
+@testitem "partition_product with interleaved factors" begin
+    using FermionicHilbertSpaces: partition_product, group_ids, groups, NCMul
+    @fermions a
+    @fermions b
+    @fermions c
+    H = tensor_product(hilbert_space(a, 1:2), hilbert_space(b, 1:2), hilbert_space(c, 1:2))
+    # Products of symbolic operators are normal ordered, so the interleaved factors are built directly.
+    # Operators on different groups commute, so each interleaved product must equal the product of its per-group parts.
+    for (op, parts) in (
+        (NCMul(3.0, [a[1]', b[1], a[2], b[2]']), (a[1]' * a[2], b[1] * b[2]')),
+        (NCMul(2.0, [b[2], c[1]', a[1]', c[2], b[1]', a[2]]), (a[1]' * a[2], b[2] * b[1]', c[1]' * c[2])),
+        (NCMul(-1.5, [c[2]', a[1], c[1], a[2]']), (a[1] * a[2]', c[2]' * c[1])),
+    )
+        expected = op.coeff * prod(representation(part, H) for part in parts)
+        @test !iszero(expected)
+        @test representation(op, H) ≈ expected
+    end
+
+    # The coefficient is carried by the first factor of the partitioned operator, and the factor order within a group is kept.
+    op = NCMul(3.0, [a[1]', b[1], a[2], b[2]'])
+    prodop = partition_product(op, group_ids(H), groups(H))
+    @test prodop.inds == [1, 2]
+    @test prodop.ops[1].coeff == 3.0
+    @test prodop.ops[2].coeff == 1.0
+    @test [f.label for f in prodop.ops[1].factors] == [1, 2]
+    @test [f.label for f in prodop.ops[2].factors] == [1, 2]
+    @test [f.creation for f in prodop.ops[1].factors] == [true, false]
+    @test [f.creation for f in prodop.ops[2].factors] == [false, true]
+
+    # Factors of a group which is not among the bases are rejected.
+    Hab = tensor_product(hilbert_space(a, 1:2), hilbert_space(b, 1:2))
+    @test_throws ArgumentError partition_product(NCMul(1.0, [a[1]', c[1], b[1]]), group_ids(Hab), groups(Hab))
+end
+
 @testitem "state_index for states which are convertible but not identical" begin
     # These tests failed when state_index was overly restrictive on the type of the state argument.
     using FermionicHilbertSpaces: state_index, BosonicState, ProductState

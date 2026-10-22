@@ -135,9 +135,7 @@ __concretize(x::ProductOperator, concr) = ProductOperator(map(op -> __concretize
 """
     partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
 
-Split `op` into a `ProductOperator` with one `NCMul` for each basis in `bases` that `op` acts on, keeping the order
-of the factors within each basis. The coefficient of `op` goes to the operator on the first such basis. The
-result holds these operators as a tuple, the matching entries of `spaces`, and their positions in `bases`.
+Split `op` into a `ProductOperator` with one `NCMul` per basis it acts on. The coefficient goes to the first of them.
 """
 function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
     factors = op.factors
@@ -151,9 +149,6 @@ function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
     return ProductOperator(ops, spaces[inds], inds)
 end
 # Position of `basis` in `bases`, or 0 if it is not there.
-_basis_index(basis, bases::Tuple) = __basis_index(basis, bases, 1)
-__basis_index(basis, ::Tuple{}, i) = 0
-__basis_index(basis, bases::Tuple, i) = first(bases) == basis ? i : __basis_index(basis, Base.tail(bases), i + 1)
 _basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
 
 function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr, chunking; kwargs...)
