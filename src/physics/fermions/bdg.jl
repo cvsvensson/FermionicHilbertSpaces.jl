@@ -65,7 +65,7 @@ state_index(state::NambuState, H::BdGHilbertSpace) = state_index(state, parent(H
 representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
-    _isfermionic(op) && isquadratic(op) || throw(ArgumentError("Only quadratic fermionic operators can be represented on a BdG Hilbert space. Use `hilbert_space(f, labels)` and `matrix_representation(op, H)` for other operators."))
+    _is_quadratic_fermion_operator(op, false) || throw(ArgumentError("Only quadratic fermionic operators can be represented on a BdG Hilbert space. Use `hilbert_space(f, labels)` and `matrix_representation(op, H)` for other operators."))
     normal_order_to_bdg(_matrix_representation_single_space(remove_identity(op), H, repr, chunking; kwargs...))
 end
 
