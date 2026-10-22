@@ -1,10 +1,7 @@
 
 
-"""
-    tensor_product(spaces; constraint=NoSymmetry())
-
-Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
-"""
+# Combines `spaces` into one space without applying any new constraint.
+# Constraints already present on the input spaces are carried over.
 function tensor_product_no_constraints(spaces)
     atoms = Iterators.flatten(Iterators.map(atomic_factors, spaces))
     groups = groupby(group_id, atoms; sortkeys=false, sortvals=false)
@@ -22,6 +19,12 @@ function tensor_product_no_constraints(spaces)
     end
     return space
 end
+"""
+    tensor_product(spaces...; constraint=NoSymmetry())
+    tensor_product(spaces; constraint=NoSymmetry())
+
+Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
+"""
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 function tensor_product(spaces; constraint=NoSymmetry())
     if length(spaces) == 1
@@ -44,12 +47,6 @@ function tensor_product(spaces; constraint=NoSymmetry())
         return ConstrainedSpace(full_space, filtered_states)
     else
         return ConstrainedSpace(full_space, states)
-    end
-end
-
-function check_tensor_product_basis_compatibility(b1::AbstractHilbertSpace, b2::AbstractHilbertSpace, b3::AbstractHilbertSpace)
-    if vcat(collect(keys(b1)), collect(keys(b2))) != collect(keys(b3))
-        throw(ArgumentError("The labels of the output basis are not the same (or ordered the same) as the labels of the input bases. $(keys(b1)) * $(keys(b2)) != $(keys(b3))"))
     end
 end
 
@@ -83,10 +80,16 @@ end
 """
     generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
 
-Compute the tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the tensor_product product of `Hs`.
+Compute the tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the `tensor_product` of `Hs`.
+
+The relative order of fermionic embeddings, and so the sign of the result, follows the fermion mode ordering of `H`,
+not the order of `ms`. For the ordered product in which the order of `ms` and `Hs` given by the caller
+decides the signs, use `tensor_product(ms, Hs => H)`, which is the usual entry point.
+`generalized_kron(ms, Hs => H)` is also accepted, and `generalized_kron(Hs => H)` returns a function of `ms`.
+`Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
 function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kwargs...)
-    kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the sizes of `Hs`"))
+    kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the dimensions of `Hs`, got sizes $(map(size, ms)) and dimensions $(map(dim, Hs))."))
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs, H)
     extend_state = state_mapper(H, Hs)
@@ -95,7 +98,7 @@ function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kw
     elseif N == 2
         return generalized_kron_mat!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
     end
-    throw(ArgumentError("Only 1D or 2D arrays are supported"))
+    throw(ArgumentError("Only 1D or 2D arrays are supported, got $(N)D."))
 end
 
 generalized_kron(Hs::Pair; kwargs...) = (ms...) -> generalized_kron(ms, Hs; kwargs...)
@@ -144,13 +147,13 @@ function _foreach_kron_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbertSp
             K1 = state_index(fullstate1, H)
             if iszero(K1)
                 skipmissing && continue
-                throw(ArgumentError("The state $fullstate1 does not exist in the full Hilbert space"))
+                throw(ArgumentError("The state `$fullstate1` is not in the full Hilbert space."))
             end
             for (fullstate2, w2) in zip(fullstates2, amps2)
                 K2 = state_index(fullstate2, H)
                 if iszero(K2)
                     skipmissing && continue
-                    throw(ArgumentError("The state $fullstate2 does not exist in the full Hilbert space"))
+                    throw(ArgumentError("The state `$fullstate2` is not in the full Hilbert space."))
                 end
                 op(K1, K2, w1 * w2 * v * pfh(fullstate1, fullstate2))
             end
@@ -202,7 +205,7 @@ function _foreach_kron_vec_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbe
             K = state_index(fullfock, H)
             if iszero(K)
                 skipmissing && continue
-                throw(ArgumentError("The state $fullfock does not exist in the full Hilbert space"))
+                throw(ArgumentError("The state `$fullfock` is not in the full Hilbert space."))
             end
             op(K, w * v * pfu(fullfock))
         end
@@ -271,13 +274,15 @@ end
 
 """
     tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
+    tensor_product(ms, Hs => H; kwargs...)
+    tensor_product(Hs => H; kwargs...)
 
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
-`kwargs` can be passed a bool `phase_factors`.
+`kwargs` can be passed a bool `phase_factors`. The last form returns a function of `ms`.
+`Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
 function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
-    # isorderedpartition(Hs, H) || throw(ArgumentError("The subsystems must be a partition consistent with the jordan-wigner ordering of the full system"))
     if all(_issquare, ms)
         return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
     elseif all(_isket, ms)
@@ -286,7 +291,7 @@ function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilb
         # All matrices are row vectors, so we can treat them as vectors and then reshape the result
         return transpose(generalized_kron(map(vec, ms), Hs, H; kwargs...))
     end
-    throw(ArgumentError("All elements of `ms` in tensor_product must be either vectors or matrices"))
+    throw(ArgumentError("The elements of `ms` must be either all square matrices, all column vectors or all row vectors, got sizes $(map(size, ms))."))
 end
 _issquare(m) = size(m, 1) == size(m, 2)
 _issquare(m::UniformScaling) = true
@@ -305,7 +310,6 @@ end
 struct LazyPhaseMap{M,F} <: AbstractMatrix{Int}
     fockstates::Vector{F}
 end
-Base.length(p::LazyPhaseMap) = length(p.fockstates)
 Base.size(p::LazyPhaseMap) = (length(p.fockstates), length(p.fockstates))
 function Base.show(io::IO, p::LazyPhaseMap{M,F}) where {M,F}
     print(io, "LazyPhaseMap{$M,$F}(")
@@ -379,7 +383,7 @@ end
 
 partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_trace(vec_to_density_matrix(v), H, Hsub; kwargs...)
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
-    size_compatible(m, H) || throw(ArgumentError("The size of `m` must match the size of `H`"))
+    size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
     isnothing(complement) && return change_basis(m, H, Hsub; kwargs...)
     mout = zeros(promote_type(eltype(m), partial_trace_phase_factor_eltype(H)), dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
@@ -453,8 +457,10 @@ end
 
 """
     partial_trace(m, H => Hsub; complement=complementary_subsystem(H, Hsub))
+    partial_trace(H => Hsub; kwargs...)  # -> PartialTraceMap
 
 Compute the partial trace of `m` from `H` to `Hsub`. Fermionic phase factors are included if both `H` and `Hsub` are Fermionic, unless specified otherwise in `kwargs`.
+`H => Hsub` reads input => output; see [Pair arguments](@ref pair_convention).
 """
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
 
@@ -466,8 +472,8 @@ _effective_dim(m::AbstractMatrix, H) = length(m)
 _effective_dim(m::AbstractSparseMatrix, H) = nnz(m)
 _effective_dim(::UniformScaling, H) = dim(H)
 
-default_partial_trace_alg(m::AbstractMatrix, Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
-default_partial_trace_alg(m::AbstractMatrix, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+default_partial_trace_alg(m::Union{AbstractMatrix,UniformScaling}, Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+default_partial_trace_alg(m::Union{AbstractMatrix,UniformScaling}, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 
@@ -508,7 +514,7 @@ function _subsystem_partial_trace_terms(op, hits, H, Hsub, substates, barstates,
                 J = state_index(fullf, H)
                 if iszero(J)
                     skipmissing && continue
-                    throw(ArgumentError("The state $fullf is not in the full Hilbert space"))
+                    throw(ArgumentError("The state `$fullf` is not in the full Hilbert space."))
                 end
                 push!(hits, (Int(K), Int(J), w, fullf, f)::eltype(hits))
             end
@@ -527,22 +533,23 @@ function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::Fu
     splitsamps = map(Base.Fix2(split_state, mapper), basisstates(H))
     for I in inds
         J1, J2 = I[1], I[2]
-        f1 = basisstate(J1, H)
-        f2 = basisstate(J2, H)
+        # `splitsamps` has one entry per basis state of `H`, so these lookups bounds-check J1 and J2.
         splits1, amps1 = splitsamps[J1]
         splits2, amps2 = splitsamps[J2]
+        f1 = @inbounds basisstate(J1, H)
+        f2 = @inbounds basisstate(J2, H)
         for ((f1sub, f1bar), w1) in zip(splits1, amps1)
             K1 = state_index(f1sub, Hsub)
             if iszero(K1)
                 skipmissing && continue
-                throw(ArgumentError("The state $f1sub is not in the subsystem Hilbert space"))
+                throw(ArgumentError("The state `$f1sub` is not in the subsystem Hilbert space."))
             end
             for ((f2sub, f2bar), w2) in zip(splits2, amps2)
                 f1bar != f2bar && continue
                 K2 = state_index(f2sub, Hsub)
                 if iszero(K2)
                     skipmissing && continue
-                    throw(ArgumentError("The state $f2sub is not in the subsystem Hilbert space"))
+                    throw(ArgumentError("The state `$f2sub` is not in the subsystem Hilbert space."))
                 end
                 s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
                 s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
@@ -554,10 +561,29 @@ function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::Fu
 end
 
 """
-    partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, mapper=state_mapper(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
+    partial_trace!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), alg, phase_factors=true, skipmissing)
+    partial_trace!(mout, m, H => Hsub; kwargs...)
 
-Compute the partial trace of `m` from `H` to `Hsub`. 
+In-place partial trace of `m` (an operator on `H` or a pure state) from `H` to `Hsub`, written
+to `mout`, which must have size `(dim(Hsub), dim(Hsub))`. See [`partial_trace`](@ref).
+
+`alg` is `SubsystemPartialTraceAlg()` or `FullPartialTraceAlg()`, chosen from the dimensions
+and sparsity of `m` by default. `skipmissing` defaults to `true` for `SubsystemPartialTraceAlg()`
+and `false` for `FullPartialTraceAlg()`.
 """
+partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_trace!(mout, vec_to_density_matrix(v), H, Hsub; kwargs...)
+function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
+    size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
+    size(mout) == (dim(Hsub), dim(Hsub)) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(mout))"))
+    if isnothing(complement)
+        U = basis_transformation(Hsub, H)
+        mout .= U * m * U'
+        return mout
+    end
+    partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
+end
+partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
+
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::SubsystemPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
     fill!(mout, zero(eltype(mout)))
     _foreach_partial_trace_term(nothing, H, Hsub, complement, mapper, SubsystemPartialTraceAlg(); skipmissing, phase_factors) do J1, J2, K1, K2, v
@@ -566,7 +592,7 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
     return mout
 end
 
-function partial_trace!(mout, m::AbstractMatrix, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::FullPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); phase_factors=true, skipmissing=false)
+function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::FullPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); phase_factors=true, skipmissing=false)
     fill!(mout, zero(eltype(mout)))
     _foreach_partial_trace_term(tensor_product_iterator(m, H), H, Hsub, complement, mapper, FullPartialTraceAlg(); phase_factors, skipmissing) do J1, J2, K1, K2, v
         mout[K1, K2] += v * m[J1, J2]
@@ -657,32 +683,7 @@ function _apply_ptmap_on_vec(ptmap::PartialTraceMap, ψ::AbstractVector)
     _apply_ptmap_on_vec!(w, ptmap, ψ)
     return w
 end
-function _apply_ptmap_on_vec!(w::AbstractVector, ptmap::PartialTraceMap, ψ::AbstractVector)
-    mat = ptmap.map
-    D = length(ψ) # dim(ptmap.H), the column-major decode below relies on this
-    fill!(w, zero(eltype(w)))
-
-    rows = rowvals(mat)
-    vals = nonzeros(mat)
-
-    @inbounds for c in 1:size(mat, 2)
-        ptr_start = mat.colptr[c]
-        ptr_end = mat.colptr[c+1] - 1
-        ptr_start > ptr_end && continue  # skip empty column
-
-        j = (c - 1) % D + 1
-        k = div(c - 1, D) + 1
-
-        val_ψ = ψ[j] * conj(ψ[k])
-        iszero(val_ψ) && continue
-
-        for ptr in ptr_start:ptr_end
-            w[rows[ptr]] += vals[ptr] * val_ψ
-        end
-    end
-
-    return w
-end
+_apply_ptmap_on_vec!(w::AbstractVector, ptmap::PartialTraceMap, ψ::AbstractVector) = _apply_superop_on_pure_state!(w, ptmap.map, ψ)
 
 function (op::PartialTraceMap)(out, in::AbstractMatrix)
     vout = _canonicalize_pt_output(out, op.Hsub)
@@ -744,7 +745,7 @@ end
 
 
 function project_on_parities(op::AbstractArray, H, Hs, parities)
-    length(Hs) == length(parities) || throw(ArgumentError("The number of parities must match the number of subsystems"))
+    length(Hs) == length(parities) || throw(ArgumentError("The number of `parities` must match the number of subsystems, got $(length(parities)) parities and $(length(Hs)) subsystems."))
     for (bsub, parity) in zip(Hs, parities)
         op = project_on_subparity(op, H, bsub, parity)
     end
@@ -760,7 +761,7 @@ project_on_parity(op::AbstractArray, H::AbstractHilbertSpace, parity) = project_
 
 function project_on_parity(op::AbstractMatrix, P::AbstractMatrix, parity)
     parity in (-1, 1) ||
-        throw(ArgumentError("Parity must be either 1 or -1"))
+        throw(ArgumentError("`parity` must be either `1` or `-1`, got $parity."))
     return (op + parity * (P * op * P)) / 2
 end
 function project_on_parity(op::AbstractVector, P::AbstractMatrix, parity)
@@ -769,7 +770,7 @@ function project_on_parity(op::AbstractVector, P::AbstractMatrix, parity)
     elseif parity == -1
         return (op .- P * op) ./ 2
     else
-        throw(ArgumentError("Parity must be either 1 or -1"))
+        throw(ArgumentError("`parity` must be either `1` or `-1`, got $parity."))
     end
 end
 
