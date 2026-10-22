@@ -76,16 +76,19 @@ struct FockMapper{N,P1,W,P2,M} <: AbstractStateMapper
     masks::M
     isfullpartition::Bool
 end
-function FockMapper(fermionpositions::P) where P
+# `N` is the number of modes of the full space and sets the integer type of combined states.
+# The bit permutation is only built when the subsystems cover all `N` modes.
+FockMapper(fermionpositions) = FockMapper(fermionpositions, maximum(maximum, fermionpositions))
+function FockMapper(fermionpositions::P, N) where P
     widths = map(length, fermionpositions)
-    N = maximum(maximum, fermionpositions)
+    Nmax = maximum(maximum, fermionpositions)
+    Nmax <= N || throw(ArgumentError("Fermion positions must be at most the number of modes $N, got $fermionpositions."))
     perm = mapreduce(collect, vcat, fermionpositions)
     all(issorted, fermionpositions) || throw(ArgumentError("The fermions in each subsystem must be ordered as in the full system, got unsorted fermion positions $fermionpositions."))
-    # permutation = isperm(perm) && N < 64 ? BitPermutation{UInt}(perm)' : nothing
     T = default_fock_representation(N)
-    permutation = isperm(perm) && N < 64 ? BitPermutation{T}(perm)' : nothing
+    permutation = length(perm) == N && isperm(perm) && N < 64 ? BitPermutation{T}(perm)' : nothing
     masks = map(Xp -> focknbr_from_site_indices(Xp), fermionpositions)
-    isfullpartition = ispartition(fermionpositions, N)
+    isfullpartition = ispartition(fermionpositions, Nmax)
     P1 = typeof(fermionpositions)
     W = typeof(widths)
     P2 = typeof(permutation)
@@ -128,15 +131,17 @@ function combine_states(f, fm::FockMapper{N}) where N
     end
     (FockNumber{IT}(result),), (1,)
 end
-function catenate_fock_states(fock_states, spaces, T)
+function catenate_fock_states(fock_states, spaces, ::Type{T}) where T
     num = zero(T)
     shift = 0
     for (state, space) in zip(fock_states, spaces)
-        num |= state << shift
+        num |= convert(T, state) << shift
         shift += nbr_of_modes(space)
     end
+    shift <= _max_fock_modes(T) || throw(ArgumentError("Cannot store $shift modes in a $T."))
     num
 end
+_max_fock_modes(::Type{FockNumber{I}}) where {I<:Integer} = isbitstype(I) ? 8 * sizeof(I) - (I <: Signed) : typemax(Int)
 
 function concatenate_and_permute(fs, widths, permutation, ::Type{T}) where T
     mask = foldl(concatenate, zip(fs, widths); init=(zero(T), 0)) |> first
@@ -274,6 +279,35 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
         @test split(fock((2,))) == (fock((2,)), fock((1,)))
         @test split(fock((1, 3))) == (fock((1,)), fock((2,)))
         @test_throws ArgumentError _combine((fock((1, 2)), fock((1, 2))), fockmapper)
+    end
+
+    @testset "number of modes of the full space" begin
+        # Mappers for different subsystems of one space have the same type
+        @test typeof(FockMapper(([1, 2],), 6)) == typeof(FockMapper(([3, 5],), 6)) == typeof(FockMapper(([4, 6],), 6))
+        @test_throws ArgumentError FockMapper(((1, 7),), 6)
+        # Covering only the first modes of a larger space is still a full partition of those modes
+        fockmapper = FockMapper(((1, 3), (2,)), 70)
+        combined = _combine((fock((1, 2)), fock((1,))), fockmapper)
+        @test combined == fock((1, 2, 3))
+        @test combined isa FockNumber{BigInt}
+        @test _split(fock((2, 3)), fockmapper) == (fock((2,)), fock((1,)))
+        fockmapper = FockMapper(((1, 3), (2,)), 3)
+        @test _combine((fock((1, 2)), fock((1,))), fockmapper) == fock((1, 2, 3))
+        @test !isnothing(fockmapper.permutation)
+    end
+
+    @testset "catenate_fock_states" begin
+        catenate_fock_states = FermionicHilbertSpaces.catenate_fock_states
+        @fermions g
+        modes = [hilbert_space(g[k]) for k in 1:64]
+        states = [FockNumber{UInt64}(isodd(k) || k == 64) for k in 1:64]
+        expected = sum(big(2)^(k - 1) for k in 1:64 if isodd(k) || k == 64)
+        @test catenate_fock_states(states, modes, FockNumber{UInt64}) isa FockNumber{UInt64}
+        @test catenate_fock_states(states, modes, FockNumber{UInt64}).f == expected
+        @test catenate_fock_states(states, modes, FockNumber{BigInt}) == FockNumber(expected)
+        @test catenate_fock_states(states[1:63], modes[1:63], FockNumber{Int}) isa FockNumber{Int}
+        @test catenate_fock_states(states[1:63], modes[1:63], FockNumber{Int}).f == expected - big(2)^63
+        @test_throws ArgumentError catenate_fock_states(states, modes, FockNumber{Int})
     end
 end
 
