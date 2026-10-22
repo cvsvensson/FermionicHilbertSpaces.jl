@@ -14,7 +14,7 @@ square_grid = [indomain(xy) ? xy : missing for xy in Iterators.product(xs, ys)]
 disc = collect(skipmissing(square_grid))
 shifts = [(1, 0), (0, 1), (-1, 0), (0, -1)]
 neighbours(Nx, Ny) = ((Nx + dx, Ny + dy) for (dx, dy) in shifts if indomain((Nx + dx, Ny + dy)))
-H = single_particle_hilbert_space(f, disc)
+H = hilbert_space(f, disc, SingleParticle())
 # For plotting heatmaps later, we need a function to map a vector over the disc to a matrix on the 2d grid
 function vec_to_square_grid(v::AbstractVector{T}) where T
     count = 0
@@ -43,7 +43,7 @@ ham = zero(1.0 * f[0, 0] * f[1, 1] + 1.0)
 for xy in disc
     add!!(ham, potential(xy) * f[xy]' * f[xy])
     for nbr in neighbours(xy...)
-        add!!(ham, hopping(nbr, xy) * f[nbr]' * f[xy] + hc)
+        add!!(ham, hopping(nbr, xy) * f[nbr]' * f[xy])
     end
 end
 # And get a matrix representation of it on the single particle hilbert space

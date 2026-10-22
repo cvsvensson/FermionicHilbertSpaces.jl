@@ -13,9 +13,28 @@ const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace
 	basisstates(H)
 
 Return an iterable of basis states for the Hilbert space `H`, in the order used by
-matrix representations and indexing utilities.
+matrix representations and indexing utilities. The result supports `length` and `eltype`
+and can be iterated. Indexing is not part of the contract; use `basisstate(i, H)` for the
+`i`-th state, or `collect(basisstates(H))` for an indexable vector.
 """
 basisstates
+
+"""
+    basisstate(i, H)
+
+Return the `i`-th basis state of the Hilbert space `H`, in the order of `basisstates(H)`.
+Throws a `BoundsError` if `i` is not in `1:dim(H)`. A string or character that spells a
+state of `H` is accepted in place of an index, and an `ArgumentError` is thrown if it is not a state of `H`.
+"""
+basisstate
+
+"""
+    state_index(state, H)
+
+Return the index of the basis state `state` in the Hilbert space `H`, the inverse of
+`basisstate`. Returns `0` if `state` is not a state of `H`; no exception is thrown in that case.
+"""
+state_index
 
 """
 	hilbert_space(args...)
@@ -160,8 +179,10 @@ state_mapper(H, Hs) = throw(MethodError(state_mapper, (H, Hs)))
 
 Split a state using `mapper`.
 
-Contract: returns a tuple with one entry per target subsystem. Each entry is a weighted
-collection `((substate, weight), ...)` for that target.
+Returns a pair `(outcomes, weights)`. Each element of `outcomes` is a tuple with one
+substate per target subsystem, and `weights` holds the coefficient of the
+corresponding outcome. A state that splits uniquely gives a single outcome with
+weight `1`, for example `((substate1, substate2),), (1,)`.
 """
 split_state(state, mapper::AbstractStateMapper) = throw(MethodError(split_state, (state, mapper)))
 
@@ -170,7 +191,9 @@ split_state(state, mapper::AbstractStateMapper) = throw(MethodError(split_state,
 
 Combine subsystem states using `mapper`.
 
-Contract: returns a states and weights `states, weights`.
+Returns a pair `(states, weights)`, where `states` holds the resulting states of the
+combined space and `weights` the coefficient of each. A state that combines uniquely
+gives `(state,), (1,)`.
 """
 combine_states(substates, mapper::AbstractStateMapper) = throw(MethodError(combine_states, (substates, mapper)))
 
@@ -183,7 +206,7 @@ kron_phase_factor(mapper::AbstractStateMapper) = throw(MethodError(kron_phase_fa
 
 struct AtomicStateMapper <: AbstractStateMapper end
 function state_mapper(H::AbstractAtomicHilbertSpace, Hs)
-    atom_ids(only(Hs)) == atom_ids(H) || throw(ArgumentError("For atomic subspaces, the only valid partition is the whole space"))
+    atom_ids(only(Hs)) == atom_ids(H) || throw(ArgumentError("For atomic subspaces, the only valid partition is the whole space, got `Hs` = $Hs"))
     AtomicStateMapper()
 end
 function split_state(state, ::AtomicStateMapper)
@@ -207,9 +230,10 @@ This is primarily used for product spaces where the subsystem is specified by a 
 
 # Examples
 ```julia
-H1 = hilbert_space(1:1)
-H2 = hilbert_space(2:2)
-H3 = hilbert_space(3:3)
+@fermions f
+H1 = hilbert_space(f, 1:1)
+H2 = hilbert_space(f, 2:2)
+H3 = hilbert_space(f, 3:3)
 H = tensor_product((H1, H2, H3))
 Hsub = subregion((H1, H3), H)
 ```
@@ -217,10 +241,10 @@ Hsub = subregion((H1, H3), H)
 function subregion(Hs, H::AbstractHilbertSpace)
     Hs_items = Hs isa Tuple || Hs isa AbstractVector ? Hs : (Hs,)
     names = collect(Iterators.flatten(Iterators.map(atomic_factors, Hs_items)))
-    isempty(names) && throw(ArgumentError("Hs must contain at least one space or symbolic operator"))
+    isempty(names) && throw(ArgumentError("`Hs` must contain at least one space or symbolic operator."))
     positions = map(x -> atom_position(x, H), names)
-    all(>(0), positions) || throw(ArgumentError("The spaces/operators in Hs must match atomic factors in H, but the following were not found: $(names[iszero.(positions)])."))
-    allunique(positions) || throw(ArgumentError("Hs contains duplicate atomic factors"))
+    all(>(0), positions) || throw(ArgumentError("The spaces/operators in `Hs` must match atomic factors of `H`, got the following unmatched ones: $(names[iszero.(positions)])."))
+    allunique(positions) || throw(ArgumentError("`Hs` must not contain duplicate atomic factors, got $names."))
 
     # Resolve the names to H's own atoms, so the basis of the subregion is that of H
     Hsub = tensor_product(collect(atomic_factors(H))[positions])
@@ -542,9 +566,9 @@ function _match_atoms(Hsub, H)
 end
 function _match_atoms_message(problem, Hsub, H)
     kind = first(problem)
-    kind == :missing && return "Atom $(problem[2]) is not in $H"
-    kind == :duplicate && return "Duplicate atoms in subsystem $Hsub"
-    return "The atoms of $Hsub are not in the same order as in $H"
+    kind == :missing && return "The atoms of `Hsub` must be atoms of `H`, got `$(problem[2])` which is not in `$H`."
+    kind == :duplicate && return "The atoms of `Hsub` must be distinct, got duplicates in `$Hsub`."
+    return "The atoms of `Hsub` must keep their order within each group of `H`, got `$Hsub` and `$H`."
 end
 
 """
@@ -555,7 +579,7 @@ Check that `H1` and `H2` have the same atoms, in the same order within each grou
 """
 function match_same_atoms(H1, H2)
     match_atoms(H1, H2)
-    nbr_of_atoms(H1) == nbr_of_atoms(H2) || throw(ArgumentError("$H2 has atoms that are not in $H1"))
+    nbr_of_atoms(H1) == nbr_of_atoms(H2) || throw(ArgumentError("`H1` and `H2` must have the same atoms, but `$H2` has atoms that are not in `$H1`."))
     return nothing
 end
 
@@ -743,4 +767,29 @@ function isorderedpartition(partition, N::Int)
     end
     all(covered) || return false
     return true
+end
+
+@testitem "basisstate and state_index failure model" begin
+    using FermionicHilbertSpaces: basisstate, state_index
+    @fermions f
+    @spin s
+    @boson b
+    Hf = hilbert_space(f, 1:2)
+    Hs = hilbert_space(s, 1)
+    Hb = hilbert_space(b, 3)
+    spaces = (
+        Hf, Hs, Hb,
+        hilbert_space(f, 1:2, NumberConservation()),
+        hilbert_space(f, 1:2, NumberConservation(1)),
+        tensor_product(Hf, Hs),
+    )
+    for H in spaces
+        for i in (0, -1, dim(H) + 1)
+            @test_throws BoundsError basisstate(i, H)
+        end
+        @test basisstate(1, H) == first(basisstates(H))
+        @test basisstate(dim(H), H) == last(collect(basisstates(H)))
+        @test all(i -> state_index(basisstate(i, H), H) == i, 1:dim(H))
+    end
+    @test state_index(FermionicHilbertSpaces.BosonicState(3), Hb) == 0
 end
