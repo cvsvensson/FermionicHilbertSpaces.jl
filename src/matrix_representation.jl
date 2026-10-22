@@ -132,24 +132,23 @@ __concretize(x::NCMul, concr) = NCMul(x.coeff, ___concretize(x.factors, concr))
 __concretize(x::NCAdd, concr) = sum(__concretize(term, concr) for term in NCterms(x)) + x.coeff
 __concretize(x::ProductOperator, concr) = ProductOperator(map(op -> __concretize(op, concr), x.ops), x.spaces, x.inds)
 
+"""
+    partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
+
+Split `op` into a `ProductOperator` with one `NCMul` per basis it acts on. The coefficient goes to the first of them.
+"""
 function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
-    used_coeff::Bool = false
-    n::Int = 0
-    inds = Int[]
-    ops = NCMul[]
-    for (i, basis) in enumerate(bases)
-        v = [fac for fac in op.factors if symbolic_group(fac) == basis]
-        if length(v) > 0
-            coeff = used_coeff ? one(op.coeff) : op.coeff
-            used_coeff = true
-            n += length(v)
-            push!(inds, i)
-            push!(ops, NCMul(coeff, ___concretize(v, concr)))
-        end
+    factors = op.factors
+    group_inds = [_basis_index(symbolic_group(fac), bases) for fac in factors]
+    any(iszero, group_inds) && throw(ArgumentError("Not all factors of the operator belong to a basis of the provided space."))
+    inds = sort!(unique(group_inds))
+    ops = ntuple(length(inds)) do k
+        v = [fac for (fac, i) in zip(factors, group_inds) if i == inds[k]]
+        NCMul(k == 1 ? op.coeff : one(op.coeff), ___concretize(v, concr))
     end
-    n == length(op.factors) || throw(ArgumentError("Not all factors of the operator belong to a basis of the provided space."))
-    return ProductOperator(___concretize(ops, TupleConcretizer()), spaces[inds], inds)
+    return ProductOperator(ops, spaces[inds], inds)
 end
+_basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
 
 function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr, chunking; kwargs...)
     spaces = groups(space)
@@ -212,9 +211,30 @@ function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs.
     end
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
 end
-function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
+function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
     matrices = [_matrix_representation(term, bases, space, repr, NoChunking(); kwargs...) for term in NCterms(op)]
     _sum_matrices(matrices, repr; tree_split=tree_split) + op.coeff * _matrix_representation(missing, bases, space, repr, NoChunking(); kwargs...)
+end
+# Spaces with a basis-state loop (for example a constrained space over a ProductSpace) collect all terms in one accumulator.
+# The terms are accumulated in the element type of their matrices, and the identity term is added in that element type
+# promoted with the element type of `Eye`, as on a ProductSpace.
+function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
+    spaces = groups(space)
+    prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
+    Tterms = mapreduce(mat_eltype, promote_type, prodops)
+    accumulator = matrix_accumulator(Tterms, length(prodops), (dim(space), dim(space)), repr)
+    for prodop in prodops
+        operator_indices_and_amplitudes!(accumulator, prodop, space; kwargs...)
+    end
+    identity_matrix = _matrix_representation(missing, bases, space, repr, NoChunking())
+    T = promote_type(Tterms, Base.promote_op(*, typeof(op.coeff), eltype(identity_matrix)))
+    if Tterms == T
+        iszero(op.coeff) || add_identity!!(accumulator, op.coeff, space)
+        return finalize!(accumulator, space)
+    end
+    summed = finalize!(accumulator, space)
+    iszero(op.coeff) && return convert(AbstractMatrix{T}, summed)
+    return summed + op.coeff * identity_matrix
 end
 
 function _matrix_representation(op, bases, space, repr, chunking; kwargs...) #Assume op is a single symbolic operator
@@ -459,6 +479,33 @@ end
 end
 
 
+@testitem "Constrained product space agrees with the unconstrained one" begin
+    using SparseArrays, LinearAlgebra
+    using FermionicHilbertSpaces: EagerDenseRepr
+    @fermions f
+    @spin s 1 // 2
+    @bosons b
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(s), hilbert_space(b, 1:2, 3))
+    states = collect(basisstates(H))[1:2:end]
+    inds = [state_index(state, H) for state in states]
+    Hc = constrain_space(H, states)
+    ops = [f[1]' * f[2] * s[:+] + hc + 2 * b[1]' * b[2] + hc + 1,
+        0.5 * f[1]' * f[1] * b[1]' * b[1] + s[:z] * b[2]' * b[2],
+        1im * f[1]' * s[:-] * b[2] + hc + 2.5,
+        f[1]' * f[2] + f[2]' * f[1]]
+    for op in ops, repr in (:sparse, :dense, EagerDenseRepr())
+        M = matrix_representation(op, H, repr)
+        Mc = matrix_representation(op, Hc, repr; projection=true)
+        @test typeof(Mc) == typeof(M)
+        @test Mc ≈ M[inds, inds]
+    end
+    # Integer terms keep their element type; the identity term promotes it with Float64.
+    op_int = 2 * f[1]' * f[2] * b[1]' + hc
+    @test typeof(matrix_representation(op_int, Hc; projection=true)) == typeof(matrix_representation(op_int, H))
+    @test typeof(matrix_representation(op_int + 1, Hc; projection=true)) == typeof(matrix_representation(op_int + 1, H))
+    @test matrix_representation(op_int + 1, Hc; projection=true) ≈ matrix_representation(op_int + 1, H)[inds, inds]
+end
+
 @testitem "Dense/sparse/lazy matrix representation agree" begin
     using SparseArrays, LinearAlgebra
     import FermionicHilbertSpaces.SciMLOperators: concretize
@@ -603,11 +650,22 @@ remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict)
 
 # The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
 _isscalar_operator(op) = op isa Union{Number,UniformScaling} || (op isa Union{NCMul,NCAdd} && NonCommutativeProducts.isscalar(op))
-_isfermionic(op) = op isa Union{NCMul,NCAdd,AbstractSym} && NonCommutativeProducts.ncmapreduce(x -> x isa AbstractFermionSym, (&, &), op; scalarmap=Returns(true))
 function _identity_free_zero(H, repr)
     _repr = _canonicalize_repr(repr)
     _repr isa Union{EagerSparseRepr,EagerDenseRepr} || throw(ArgumentError("Only the :sparse and :dense representations are supported on $(typeof(H)). Got $repr."))
     _zero_matrix(H, _repr, Int)
+end
+
+# Whether every term of `op` is a product of two `FermionSym`s, with one creation and one annihilation
+# operator if `number_conserving`. Majoranas and other operators give `false`.
+_is_quadratic_fermion_operator(op, number_conserving) = false
+_is_quadratic_fermion_operator(op::NCMul, number_conserving) = _is_quadratic_fermion_term(op.factors, number_conserving)
+_is_quadratic_fermion_operator(op::NCAdd, number_conserving) = all(term -> _is_quadratic_fermion_term(term.factors, number_conserving), keys(op.dict))
+function _is_quadratic_fermion_term(factors, number_conserving)
+    length(factors) == 2 || return false
+    a, b = factors
+    (a isa FermionSym && b isa FermionSym) || return false
+    return !number_conserving || a.creation != b.creation
 end
 
 ## Symmetries
@@ -643,6 +701,26 @@ isquadratic(x::NCAdd) = all(isquadratic, NCterms(x))
     @test isquadratic(f[1]f[2])
     @test !isquadratic(f[1]f[2] * f[3])
     @test isquadratic(f[1]f[2] + f[3] * f[3]' + 1)
+end
+
+@testitem "Single-particle and BdG operator checks" begin
+    @fermions f
+    @majoranas γ
+    @spin s 1 // 2
+    Hsp = single_particle_hilbert_space(f, 1:3)
+    Hbdg = bdg_hilbert_space(f, 1:3)
+    op = 1.0 * f[1]' * f[2] + hc + f[3]' * f[3] + 2
+    @test matrix_representation(op, Hsp) == matrix_representation(op - 2, Hsp)
+    @test matrix_representation(op, Hbdg) == matrix_representation(op - 2, Hbdg)
+    @test matrix_representation(f[1]' * f[2]' + hc, Hbdg) isa AbstractMatrix
+    for H in (Hsp, Hbdg)
+        @test_throws ArgumentError matrix_representation(f[1]' * f[2] * f[3]' * f[3], H)
+        @test_throws ArgumentError matrix_representation(f[1]', H)
+        @test_throws ArgumentError matrix_representation(f[1]' * f[2] + f[3]', H)
+        @test_throws ArgumentError matrix_representation(1im * γ[1] * γ[2], H)
+        @test_throws ArgumentError matrix_representation(f[1]' * s[:z], H)
+    end
+    @test_throws ArgumentError matrix_representation(f[1]' * f[2]' + hc, Hsp)
 end
 
 @testitem "Consistency between + and add!!" begin
