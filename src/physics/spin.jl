@@ -27,7 +27,10 @@ end
 
 SymbolicSpinBasis(label, field=nothing, spin=nothing) = SymbolicSpinBasis(label, field, spin, Tags(nothing))
 Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field && a.spin == b.spin && a.tags == b.tags
-Base.isless(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = (a.field, a.label, a.tags) < (b.field, b.label, b.tags)
+_spin_order_key(s::SymbolicSpinBasis) = (_spin_field_name(s.field), s.label, s.tags, something(s.spin, -1))
+_spin_field_name(::Nothing) = Symbol("")
+_spin_field_name(f::SpinField) = f.name
+Base.isless(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = isless(_spin_order_key(a), _spin_order_key(b))
 Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
 Base.getindex(s::SymbolicSpinBasis, ::Colon) = [SpinSym(σ, s) for σ in (:x, :y, :z)]
 Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.tags, hash(x.spin, hash(x.field, hash(x.label, h))))
@@ -73,7 +76,7 @@ macro spins(name)
     return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)))), :($(esc(name))))
 end
 macro spins(name, spin)
-    return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)), $(esc(spin)))))
+    return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)), $(esc(spin)))), :($(esc(name))))
 end
 
 
@@ -106,7 +109,7 @@ end
 SpinSpace(sym::S) where {S<:SymbolicSpinBasis} = (sym.spin isa Nothing ? throw(ArgumentError("$sym has no spin value. Pass J to hilbert_space, e.g. `hilbert_space(s, 1//2)` or `hilbert_space(s, labels, 1//2)`, or set it when creating the basis with `@spin s 1//2` or `@spins s 1//2`.")) : SpinSpace(sym, sym.spin))
 SpinSpace(label, J) = SpinSpace(SymbolicSpinBasis(label, nothing, J), J)
 basisstates(H::SpinSpace) = H.basisstates
-basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
+Base.@propagate_inbounds basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 function state_index(s::SpinState, space::SpinSpace)
     t = twice(s.m) + twice(space.spin) # 2(m + J)
@@ -119,7 +122,7 @@ function add_tag(H::SpinSpace{T,S}, tag) where {T,S}
     newsym = add_tag(H.sym, tag)
     SpinSpace{T,typeof(newsym)}(H.spin, H.basisstates, newsym, H.state_index)
 end
-_check_spin_unset(sym) = sym.spin isa Nothing || throw(ArgumentError("Spin value was already given in the $(sym isa SpinField ? "spin field" : "symbolic basis"); omit J."))
+_check_spin_unset(sym) = sym.spin isa Nothing || throw(ArgumentError("The spin value was already given in the $(sym isa SpinField ? "spin field" : "symbolic basis"), so `J` must be omitted."))
 hilbert_space(sym::SymbolicSpinBasis) = SpinSpace(sym)
 function hilbert_space(sym::SymbolicSpinBasis, J)
     _check_spin_unset(sym)
@@ -146,14 +149,15 @@ function interpret_state(input::AbstractString, H::SpinSpace{T}) where {T}
     m = try
         parse(HalfInt, input)
     catch
-        throw(ArgumentError("Invalid spin state string \"$input\""))
+        throw(ArgumentError("A spin state string must be `\"up\"`, `\"down\"` or a half-integer, got `\"$input\"`."))
     end
     m = convert(Half{T}, m)
     if m < -Jhalf || m > Jhalf
-        throw(ArgumentError("Spin state m must be between -J and J, got $m for J=$Jhalf."))
+        throw(ArgumentError("The spin state `m` must be between `-J` and `J`, got `m` = $m for `J` = $Jhalf."))
     end
     return SpinState(m)
 end
+interpret_state(input::AbstractChar, H::SpinSpace) = interpret_state(string(input), H)
 
 spin_basisstates(J::HalfInteger) = [SpinState(i - J) for i in 0:twice(J)]
 spin_basisstates(j) = spin_basisstates(HalfInteger(j))
@@ -218,6 +222,11 @@ end
     @test_throws "has no spin value" hilbert_space(s)
     @test dim(hilbert_space(s, 0)) == 1
 
+    # every spin macro form returns the created basis
+    @test (@spins u 1 // 2) === u
+    @test (@spins v) === v
+    @test (@spin w 1) === w
+
     @fermions f
     Hf = hilbert_space(f, 1:2)
     mf = rand(dim(Hf), dim(Hf))
@@ -240,13 +249,13 @@ struct SpinSym{B} <: AbstractSym
     end
 end
 function SpinSym(op, basis::B, exponent::Integer=1) where {B}
-    exponent < 0 && throw(ArgumentError("Spin operator exponent must be >= 0, got $exponent."))
+    exponent < 0 && throw(ArgumentError("The spin operator `exponent` must be nonnegative, got $exponent."))
     exponent == 0 && return 1 // 1
     if op in _spin_x_aliases
-        exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators."))
+        exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators, got `exponent` = $exponent for `$op`."))
         return SpinSym{B}(:+, basis, 1) / 2 + SpinSym{B}(:-, basis, 1) / 2
     elseif op in _spin_y_aliases
-        exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators."))
+        exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators, got `exponent` = $exponent for `$op`."))
         return SpinSym{B}(:+, basis, 1) / (2im) - SpinSym{B}(:-, basis, 1) / (2im)
     elseif op in _spin_identity_aliases
         return 1 // 1
@@ -274,7 +283,7 @@ function _canonical_spin_alias(op)
     elseif op in _spin_minus_aliases
         :-
     else
-        throw(ArgumentError("Invalid spin operator symbol: $op."))
+        throw(ArgumentError("Invalid spin operator symbol, got `$op`."))
     end
 end
 
@@ -293,7 +302,7 @@ Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.basis == b.basis && a.exp
 Base.hash(a::SpinSym, h::UInt) = hash(a.exponent, hash(a.op, hash(a.basis, h)))
 symbolic_group(f::SpinSym) = symbolic_group(f.basis)
 symbolic_basis(f::SpinSym) = f.basis
-change_basis(f::SpinSym, newbasis) = SpinSym(f.op, newbasis, f.exponent)
+with_basis(f::SpinSym, newbasis) = SpinSym(f.op, newbasis, f.exponent)
 
 mat_eltype(::Type{<:SpinSym}) = Float64
 
@@ -305,7 +314,7 @@ function Base.adjoint(x::SpinSym{B}) where B
     elseif x.op == :z
         x
     else
-        throw(ArgumentError("Invalid spin operator symbol: $(x.op)."))
+        throw(ArgumentError("Invalid spin operator symbol, got `$(x.op)`."))
     end
 end
 _spin_name(a::SymbolicSpinBasis) = a.field isa Nothing ? a.label : Symbol(a.field.name, a.label)
@@ -331,7 +340,7 @@ function NonCommutativeProducts.mul_effect(a::S, b::S) where S<:SpinSym
     if a.basis < b.basis
         return nothing
     end
-    a.basis == b.basis || throw(ArgumentError("Symbolic groups must be comparable for multiplication."))
+    a.basis == b.basis || throw(ArgumentError("The symbolic bases must be comparable for multiplication, got `$(a.basis)` and `$(b.basis)`."))
 
     if a.op == b.op && a.op in (:+, :-, :z)
         exponent = a.exponent + b.exponent
@@ -436,7 +445,7 @@ function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace, p
         newstate = SpinState(m - op.exponent)
         return (newstate, amplitude)
     else
-        throw(ArgumentError("Invalid spin operator symbol: $(op.op)."))
+        throw(ArgumentError("Invalid spin operator symbol, got `$(op.op)`."))
     end
 end
 

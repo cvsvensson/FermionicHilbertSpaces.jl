@@ -153,7 +153,6 @@ symbolic_group(b::FloquetBasis) = b
 # ## Building the Hilbert space
 
 # Now we can make a Hilbert space and get matrix representations of the Floquet operators.  
-using FermionicHilbertSpaces: GenericHilbertSpace
 floquet_basis = FloquetBasis(0)
 F = FloquetLadder(floquet_basis)       # raising operator F
 Nf = FloquetNumber(1, floquet_basis)    # photon number N
@@ -164,7 +163,6 @@ representation(F, Hfloq; projection=true) # we need projection=true because we'v
 # Now Floquet operators will work together algebraically with the spin operators, and we can get matrix represnentations of such mixed operators. Let's do some physics.
 # ## Driven two level system.
 # We'll take a spin 1 as our physical system and couple it to the Floquet space to model a driven three-level system.  The full Hilbert space is a product of the spin and Floquet spaces, and the Hamiltonian is a symbolic expression mixing spin and Floquet operators. When making the full space, we use the SectorConstraint to organize the basis states in Floquet sectors, which will be convenient later.
-using FermionicHilbertSpaces: SectorConstraint
 @spin σ
 Hspin = hilbert_space(σ, 1)
 floquet_sectors = SectorConstraint(only; maps=s -> s.mode, spaces=[Hfloq])
