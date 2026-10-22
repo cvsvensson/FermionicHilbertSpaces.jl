@@ -68,7 +68,7 @@ Let's use a `FilterConstraint` to keep only states where the particle numbers ar
 ```@example constraints
 @bosons b
 H = hilbert_space(b, 1:2, 3)
-using FermionicHilbertSpaces: FilterConstraint, SectorConstraint, particle_number
+using FermionicHilbertSpaces: particle_number
 constraint = FilterConstraint(issorted; maps = particle_number, spaces = factors(H))
 basisstates(constrain_space(H, constraint)) 
 ```
