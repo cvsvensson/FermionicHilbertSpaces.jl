@@ -567,7 +567,7 @@ end
 end
 
 @testitem "Operators on symbolic states give the coefficient amp * state" begin
-    using NonCommutativeProducts: NCAdd
+    using FermionicHilbertSpaces.NonCommutativeProducts: NCAdd
     @fermions f
     vf = Kets(hilbert_space(f, 1:2))
     @spin s 1 // 2
