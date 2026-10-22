@@ -8,7 +8,7 @@ TransposedSpace(H::TransposedSpace) = parent(H)
 Base.:(==)(a::TransposedSpace, b::TransposedSpace) = a.parent == b.parent
 Base.hash(H::TransposedSpace, h::UInt) = hash(H.parent, h)
 basisstates(H::TransposedSpace) = basisstates(H.parent)
-basisstate(i::Integer, H::TransposedSpace) = basisstate(i, H.parent)
+Base.@propagate_inbounds basisstate(i::Integer, H::TransposedSpace) = basisstate(i, H.parent)
 state_index(state::B, H::TransposedSpace{B}) where B = state_index(state, H.parent)
 dim(H::TransposedSpace) = dim(H.parent)
 isconstrained(H::TransposedSpace) = isconstrained(H.parent)
@@ -34,7 +34,7 @@ partial_transpose_phase_factor_eltype(H::TransposedSpace) = partial_transpose_ph
 partial_transpose_phase_factor(f1, f2, H::TransposedSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
 
 function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSpace}
-    only(unique(map(group_id, spaces))) == group || throw(ArgumentError("All spaces must belong to the same group"))
+    only(unique(map(group_id, spaces))) == group || throw(ArgumentError("All spaces must belong to the group `$group`."))
     TransposedSpace(FermionicSpace(map(H -> H.parent, spaces), group))
 end
 
@@ -63,7 +63,7 @@ end
 function add_tag(factor::AbstractSym, tag)
     basis = symbolic_basis(factor)
     new_basis = add_tag(basis, tag)
-    return change_basis(factor, new_basis)
+    return with_basis(factor, new_basis)
 end
 add_tag(expr, tag) = NonCommutativeProducts.ncmap(Base.Fix2(add_tag, tag), expr)
 
