@@ -1,6 +1,6 @@
 
 combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
-combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("Don't know how to combine spaces $spaces with atomic group $group_id into a group"))
+combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("The group `$group_id` requires a single space, got $spaces."))
 struct ProductState{B} <: AbstractBasisState
     states::B
 end
@@ -22,12 +22,12 @@ struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
     lininds::LI
     cartinds::CI
     function ProductSpace(factors::C) where {C}
-        length(factors) == 0 && throw(ArgumentError("Product space must have at least one factor"))
+        length(factors) == 0 && throw(ArgumentError("A product space must have at least one factor."))
         atoms = collect(Iterators.flatten(map(atomic_factors, factors)))
         A = eltype(atoms)
         B = ProductState{Tuple{map(statetype, factors)...}}
         atom_index = Dict{Any,Int}(atomic_id(a) => i for (i, a) in enumerate(atoms))
-        length(atom_index) == length(atoms) || throw(ArgumentError("Duplicate atoms in product space"))
+        length(atom_index) == length(atoms) || throw(ArgumentError("The atoms of a product space must be distinct, got duplicates in $(map(atomic_id, atoms))."))
         fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
         lininds = LinearIndices(map(dim, factors))
         cartinds = CartesianIndices(map(dim, factors))
@@ -48,7 +48,7 @@ dim(H::ProductSpace) = prod(dim, groups(H); init=1)
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
 basisstates(H::ProductSpace{B}) where B = TypedIterator{B}(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
-function basisstate(n::Integer, H::ProductSpace{B}) where B
+Base.@propagate_inbounds function basisstate(n::Integer, H::ProductSpace{B}) where B
     inds = Tuple(H.cartinds[n])
     ProductState(map(basisstate, inds, H.factors))
 end
@@ -258,21 +258,12 @@ unique_combine(::Any) = false
 
 partial_trace_phase_factor_eltype(space::ProductSpace) = promote_type((partial_trace_phase_factor_eltype(H) for H in groups(space))...)
 partial_transpose_phase_factor_eltype(space::ProductSpace) = promote_type((partial_transpose_phase_factor_eltype(H) for H in groups(space))...)
+
 function partial_trace_phase_factor(state1, state2, space::ProductSpace)
-    # product of phase factors from each space and substate
-    pf = 1
-    for (s1, s2, group) in zip(state1.states, state2.states, space.factors)
-        pf *= partial_trace_phase_factor(s1, s2, group)
-    end
-    return pf
+    prod(map(partial_trace_phase_factor, state1.states, state2.states, space.factors); init=1)
 end
 function partial_transpose_phase_factor(state1, state2, space::ProductSpace)
-    # product of phase factors from each space and substate
-    pf = 1
-    for (s1, s2, group) in zip(state1.states, state2.states, space.factors)
-        pf *= partial_transpose_phase_factor(s1, s2, group)
-    end
-    return pf
+    prod(map(partial_transpose_phase_factor, state1.states, state2.states, space.factors); init=1)
 end
 
 struct ProductOperator{C,O,S}
@@ -284,7 +275,7 @@ struct ProductOperator{C,O,S}
     end
 end
 function ProductOperator(ops::O, spaces::S, inds::Vector{Int}) where {O,S}
-    length(ops) == length(spaces) || throw(ArgumentError("Length of ops and spaces must match"))
+    length(ops) == length(spaces) || throw(ArgumentError("`ops` and `spaces` must have the same length, got $(length(ops)) and $(length(spaces))."))
     C = promote_type(Iterators.map(mat_eltype, ops)...)
     ProductOperator{C}(ops, spaces, inds)
 end
@@ -324,7 +315,7 @@ function precomputation_before_operator_application(ops::ProductOperator, space:
     return map(precomputation_before_operator_application, ops.ops, ops.spaces)
 end
 
-internal_rep(state, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))
+internal_rep(state::ProductState, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))
 physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state, space)
 
 function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::ProductSpace, precomps) where B
@@ -343,7 +334,7 @@ function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::Abst
     newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
     return _internal_rep(newstate, space, T), amp
 end
-function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::NTuple{N,InternalRep{T}}, space::ProductSpace, precomps) where {C,T,N}
+function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::Tuple{InternalRep{T},Vararg{InternalRep{T}}}, space::ProductSpace, precomps) where {C,T}
     # amp::C = one(C)
     # newreps::NTuple{N,InternalRep{T}} = internal_reps
     # n::Int = 0
@@ -523,8 +514,8 @@ function ProductSpaceMapper(source::ProductSpace, targets)
     # Validate: every target atom exists in the source, no duplicates.
     seen = Set()
     for t in targets, a in atomic_factors(t)
-        haskey(atom_factor, atomic_id(a)) || throw(ArgumentError("Atom $a not in source space"))
-        atomic_id(a) ∈ seen && throw(ArgumentError("Atom $a duplicated across targets"))
+        haskey(atom_factor, atomic_id(a)) || throw(ArgumentError("Each target atom must be an atom of the source space, got `$a` which is not."))
+        atomic_id(a) ∈ seen && throw(ArgumentError("Each atom may appear in only one target, got `$a` in several."))
         push!(seen, atomic_id(a))
     end
 
@@ -535,7 +526,7 @@ function ProductSpaceMapper(source::ProductSpace, targets)
             ids = atom_ids(g)
             owners = unique(atom_factor[id] for id in ids)
             length(owners) == 1 ||
-                throw(ArgumentError("Target group $g spans several source factors; this is not supported"))
+                throw(ArgumentError("A target group must lie within a single source factor, got `$g` which spans several."))
             (factor=only(owners), target=ti, group_slot=si, space=g,
                 pos=minimum(atom_pos[id] for id in ids))
         end

@@ -1,10 +1,11 @@
 module PartitionedArraysExt
 
-import PartitionedArrays: DebugArray, own_to_global, psparse, uniform_partition
-import FermionicHilbertSpaces: NonCommutativeProducts.NCAdd, NonCommutativeProducts.NCMul, NonCommutativeProducts.NCterms, PartitionedSparseRepr, _matrix_representation_single_space, _sum_matrices, _term_matrix_representation, dim, mat_eltype, sparse_matrix_accumulator, chunked_operator_indices_and_amplitudes!, push_inds_amps!
+import PartitionedArrays: own_to_global, psparse, uniform_partition
+using NonCommutativeProducts: NCAdd, NCMul, NCterms
+import FermionicHilbertSpaces: PartitionedSparseRepr, _matrix_representation_single_space, _term_matrix_representation, dim, mat_eltype, sparse_matrix_accumulator, chunked_operator_indices_and_amplitudes!, push_inds_amps!
 
 function _resolve_ranks(repr::PartitionedSparseRepr)
-    repr.nparts > 0 || throw(ArgumentError("nparts must be positive, got $(repr.nparts)."))
+    repr.nparts > 0 || throw(ArgumentError("`nparts` must be positive, got $(repr.nparts)."))
     ranks_source = LinearIndices((repr.nparts,))
     return repr.backend(ranks_source)
 end
@@ -13,7 +14,7 @@ function _resolve_partitions(repr::PartitionedSparseRepr, n::Int)
     has_row = !isnothing(repr.row_partition)
     has_col = !isnothing(repr.col_partition)
     if has_row != has_col
-        throw(ArgumentError("row_partition and col_partition must be both provided or both omitted."))
+        throw(ArgumentError("`row_partition` and `col_partition` must be both provided or both omitted."))
     end
     if has_row
         return repr.row_partition, repr.col_partition
