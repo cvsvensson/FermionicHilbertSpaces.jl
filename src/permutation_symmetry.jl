@@ -668,15 +668,15 @@ end
 end
 
 @testitem "Permutation symmetry with a global phase in the weights" begin
-    using FermionicHilbertSpaces: symmetric_sector, _QR, _EIG
+    using LinearAlgebra
     @fermions f
     H = hilbert_space(f, 1:2)
     Hs = factors(H)
     perms = [[1, 2], [2, 1]]
-    for orth_method in (_QR(), _EIG())
-        Q = symmetric_sector(H, Hs, (perms, im .* [1.0, 1.0]), ComplexF64; orth_method, normalize=false)
-        @test size(Q, 2) == 3
-        Q = symmetric_sector(H, Hs, (perms, cis(pi / 4) .* [1.0, 1.0]), ComplexF64; orth_method)
-        @test size(Q, 2) == 3
+    P = symmetric_sector(H, Hs, (perms, [1.0, 1.0]); orth_method=nothing)
+    for phase in (im, cis(pi / 4)), orth_method in (:qr, :eig), normalize in (true, false)
+        Q = symmetric_sector(H, Hs, (perms, phase .* [1.0, 1.0]); orth_method, normalize)
+        @test Q' * Q ≈ I
+        @test Q * Q' ≈ P
     end
 end
