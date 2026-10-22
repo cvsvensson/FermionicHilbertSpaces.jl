@@ -8,11 +8,6 @@ using Combinatorics # loads CombinatoricsExt, which symmetric_sector uses
 const FHS = FermionicHilbertSpaces
 const SUITE = BenchmarkGroup()
 
-# Benchmarks created below run for 1 second unless they set `seconds`
-# themselves. The global default is restored at the end of this file.
-const DEFAULT_SECONDS = BenchmarkTools.DEFAULT_PARAMETERS.seconds
-BenchmarkTools.DEFAULT_PARAMETERS.seconds = 1
-
 # Each section draws its random inputs from its own seeded RNG, so adding or
 # removing a section does not change the inputs of the others.
 #
@@ -44,19 +39,13 @@ let rng = Xoshiro(1)
     SUITE["matrix_representation"]["bdg"] = @benchmarkable matrix_representation($opsp_bdg, $Hbdg)
 end
 
-## Fermions: partial trace and embedding in a parity-conserving space
-let rng = Xoshiro(2)
+## Fermions: complementary subsystem in a parity-conserving space
+let
     @fermions f
     N = 12
     H = hilbert_space(f, 1:N, ParityConservation())
     Hsub = hilbert_space(f, 1:div(N, 4), ParityConservation())
     SUITE["complement"]["fermions"] = @benchmarkable FHS.complementary_subsystem($H, $Hsub)
-    Hcomp = FHS.complementary_subsystem(H, Hsub)
-    SUITE["partial_trace"]["fermions"]["map"] = @benchmarkable partial_trace($(H => Hsub); complement=$Hcomp) seconds = 3
-    ψ = normalize(rand(rng, ComplexF64, dim(H)))
-    SUITE["partial_trace"]["fermions"]["pure_state"] = @benchmarkable partial_trace($ψ, $(H => Hsub); complement=$Hcomp)
-    msub = rand(rng, ComplexF64, dim(Hsub), dim(Hsub))
-    SUITE["embed"]["fermions"] = @benchmarkable embed($msub, $(Hsub => H); complement=$Hcomp)
 end
 
 ## Partial trace and embedding: eager calls and precomputed maps
@@ -73,11 +62,7 @@ let rng = Xoshiro(7)
     g = SUITE["partial_trace"]["precomputed"]
     g["construct"] = @benchmarkable partial_trace($(H => Hsub); complement=$Hcomp)
     g["eager_matrix"] = @benchmarkable partial_trace($ρ, $(H => Hsub); complement=$Hcomp)
-    g["apply_matrix"] = @benchmarkable $pt($ρ)
     g["apply_matrix_inplace"] = @benchmarkable $pt($out_m, $ρ)
-    g["apply_vectorized_inplace"] = @benchmarkable $pt($out_v, $(vec(ρ)))
-    g["eager_pure_state"] = @benchmarkable partial_trace($ψ, $(H => Hsub); complement=$Hcomp)
-    g["apply_pure_state"] = @benchmarkable $pt($ψ)
     g["apply_pure_state_inplace"] = @benchmarkable $pt($out_v, $ψ)
 
     msub = rand(rng, ComplexF64, dim(Hsub), dim(Hsub))
@@ -86,7 +71,6 @@ let rng = Xoshiro(7)
     g = SUITE["embed"]["precomputed"]
     g["construct"] = @benchmarkable embed($(Hsub => H); complement=$Hcomp, skipmissing=true)
     g["eager"] = @benchmarkable embed($msub, $(Hsub => H); complement=$Hcomp, skipmissing=true)
-    g["apply"] = @benchmarkable $emb($msub)
     g["apply_inplace"] = @benchmarkable $emb($out, $msub)
 end
 
@@ -101,14 +85,12 @@ let rng = Xoshiro(3)
     H34 = tensor_product(H3, H4)
     H = tensor_product(H12, H34)
     M = rand(rng, ComplexF64, dim(H12), dim(H34))
-    SUITE["reshape"]["mat_to_tens"] = @benchmarkable reshape($M, $H12 => ($H1, $H2), $H34 => ($H3, $H4))
     SUITE["reshape"]["mat_to_vec"] = @benchmarkable reshape($M, ($H12, $H34) => $H)
     A = rand(rng, ComplexF64, dim(H12), dim(H12), dim(H12))
     SUITE["reshape"]["repeat"] = @benchmarkable reshape($A, $(H12 => (H1, H2)); repeat=true)
     rmap = reshape(H12 => (H1, H2), H34 => (H3, H4))
     out = zeros(ComplexF64, dim(H1), dim(H2), dim(H3), dim(H4))
     SUITE["reshape"]["precomputed"]["construct"] = @benchmarkable reshape($(H12 => (H1, H2)), $(H34 => (H3, H4))) evals = 4
-    SUITE["reshape"]["precomputed"]["apply"] = @benchmarkable $rmap($M) evals = 4
     SUITE["reshape"]["precomputed"]["apply_inplace"] = @benchmarkable $rmap($out, $M) evals = 4
 end
 
@@ -119,37 +101,37 @@ for (N, key) in ((60, "hilbert_space_N60"), (64, "hilbert_space_N64_bigint"))
     weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
     allowed_ones = [[0, 1], [-1, 0], [2]]
     constraint = prod(NumberConservation(allowed, missing, w) for (allowed, w) in zip(allowed_ones, weights))
-    SUITE["generate_states"][key] = @benchmarkable hilbert_space($f, $(1:N), $constraint) seconds = 3
+    SUITE["generate_states"][key] = @benchmarkable hilbert_space($f, $(1:N), $constraint)
 end
 
 ## Partial trace algorithms
-# Each input is traced with both algorithms forced through `alg`, and with
-# the algorithm that `partial_trace` picks by default.
+# Each input is traced with the algorithm forced through `alg`. Which
+# algorithm `partial_trace` picks by default is checked in the tests.
 let rng = Xoshiro(4)
     @fermions f
     algs = ("SubAlg" => FHS.SubsystemPartialTraceAlg(), "FullAlg" => FHS.FullPartialTraceAlg())
-    function add_cases!(g, m, H, Hsub)
+    function add_cases!(g, m, H, Hsub, names)
         Hcomp = FHS.complementary_subsystem(H, Hsub)
         for (name, alg) in algs
+            name in names || continue
             g[name] = @benchmarkable partial_trace($m, $H, $Hsub; complement=$Hcomp, alg=$alg)
         end
-        g["default"] = @benchmarkable partial_trace($m, $H, $Hsub; complement=$Hcomp)
     end
     g = SUITE["partial_trace_algorithms"]
 
     # A number-conserving space and a large subsystem, where FullAlg is expected to be faster.
+    # SubAlg does not use the sparsity of `m`, so it is measured on the sparse input only.
     H = hilbert_space(f, 1:30, NumberConservation(2))
     Hsub = subregion(hilbert_space(f, 1:10), H)
     d = dim(H)
-    add_cases!(g["Sparse space"]["Dense"], rand(rng, ComplexF64, d, d), H, Hsub)
-    add_cases!(g["Sparse space"]["Sparse"], sprand(rng, ComplexF64, d, d, 0.01), H, Hsub)
+    add_cases!(g["Sparse space"]["Dense"], rand(rng, ComplexF64, d, d), H, Hsub, ("FullAlg",))
+    add_cases!(g["Sparse space"]["Sparse"], sprand(rng, ComplexF64, d, d, 0.01), H, Hsub, ("SubAlg", "FullAlg"))
 
     # An unconstrained space and a small subsystem, where SubAlg is expected to be faster.
     H = hilbert_space(f, 1:10)
     Hsub = subregion(hilbert_space(f, 1:2), H)
     d = dim(H)
-    add_cases!(g["Full space"]["Dense"], rand(rng, ComplexF64, d, d), H, Hsub)
-    add_cases!(g["Full space"]["Sparse"], sprand(rng, ComplexF64, d, d, 0.01), H, Hsub)
+    add_cases!(g["Full space"]["Dense"], rand(rng, ComplexF64, d, d), H, Hsub, ("SubAlg", "FullAlg"))
 end
 
 ## Product spaces
@@ -235,21 +217,18 @@ let
     SUITE["permutations"]["few_large"] = @benchmarkable symmetric_sector($H, $Hs, :symmetric)
 end
 
-## Lazy operator for a closed system, with the sparse matrix as reference
+## Lazy operator for a closed system
 let rng = Xoshiro(8)
     @fermions f
     N = 14
     H = hilbert_space(f, 1:N, NumberConservation(7))
     ham = sum(rand(rng) * f[n]' * f[n] for n in 1:N) + sum(f[n]' * f[n+1] + hc for n in 1:N-1) +
           sum(f[n]' * f[n] * f[n+1]' * f[n+1] for n in 1:N-1)
-    SUITE["lazy"]["construct"] = @benchmarkable representation($ham, $H, :lazy)
     L = representation(ham, H, :lazy)
     x = randn(rng, ComplexF64, dim(H))
     y = similar(x)
     L_cached = FHS.SciMLOperators.cache_operator(L, x)
-    SUITE["lazy"]["mul!"] = @benchmarkable mul!($y, $L_cached, $x)
-    M = matrix_representation(ham, H)
-    SUITE["lazy"]["sparse_mul!_reference"] = @benchmarkable mul!($y, $M, $x)
+    SUITE["matrix_application"]["lazy hamiltonian"]["mul!"] = @benchmarkable mul!($y, $L_cached, $x)
 end
 
 ## Spin-1/2 Heisenberg chain with Sz conservation
@@ -260,7 +239,7 @@ let
     H = hilbert_space(S, 1:N, Sz0)
     heisenberg = sum(S[k][:x] * S[k+1][:x] + S[k][:y] * S[k+1][:y] + S[k][:z] * S[k+1][:z] for k in 1:N-1) + sum(0.1k * S[k][:z] for k in 1:N)
     g = SUITE["spin"]
-    g["hilbert_space_Sz0"] = @benchmarkable hilbert_space($S, $(1:14), $Sz0)
+    g["hilbert_space_Sz0"] = @benchmarkable hilbert_space($S, $(1:N), $Sz0)
     g["symbolic_heisenberg"] =
         @benchmarkable sum($S[k][:x] * $S[k+1][:x] + $S[k][:y] * $S[k+1][:y] + $S[k][:z] * $S[k+1][:z] for k in 1:$N-1)
     g["matrix_representation_heisenberg"] = @benchmarkable matrix_representation($heisenberg, $H)
@@ -281,9 +260,7 @@ let
     Hnd = constrain_space(H, no_double)
     g = SUITE["hubbard"]
     g["space"] = @benchmarkable tensor_product(hilbert_space($f, $modes_up, NumberConservation(3)), hilbert_space($f, $modes_dn, NumberConservation(2)))
-    g["symbolic"] = @benchmarkable $hubbard($f, $N, 1.0, 4.0)
     g["matrix_representation"] = @benchmarkable matrix_representation($ham, $H)
-    g["constrain_no_double_occupation"] = @benchmarkable constrain_space($H, $no_double)
     g["matrix_representation_projected"] = @benchmarkable matrix_representation($ham, $Hnd; projection=true)
 
     # Many sites, few particles: one constraint per site.
@@ -291,7 +268,7 @@ let
     H30 = tensor_product(hilbert_space(f, [(i, :↑) for i in 1:N], NumberConservation(2)),
         hilbert_space(f, [(i, :↓) for i in 1:N], NumberConservation(1)))
     no_double30 = prod(NumberConservation(0:1, [f[k, :↑], f[k, :↓]]) for k in 1:N)
-    g["constrain_no_double_occupation_N30"] = @benchmarkable constrain_space($H30, $no_double30) seconds = 3
+    g["constrain_no_double_occupation_N30"] = @benchmarkable constrain_space($H30, $no_double30)
 end
 
 ## Bose-Hubbard chain
@@ -300,7 +277,6 @@ let
     N = 6
     H = hilbert_space(b, 1:N, 6, NumberConservation(6))
     ham = sum(-1.0 * b[n]' * b[n+1] + hc for n in 1:N-1) + sum(0.5 * b[n]' * b[n]' * b[n] * b[n] for n in 1:N)
-    SUITE["bosons"]["hilbert_space"] = @benchmarkable hilbert_space($b, $(1:N), 6, NumberConservation(6))
     SUITE["bosons"]["matrix_representation"] = @benchmarkable matrix_representation($ham, $H)
 end
 
@@ -313,7 +289,6 @@ let rng = Xoshiro(9)
     m = rand(rng, ComplexF64, dim(H), dim(H))
     ptmap = partial_transpose(H, Hsub; complement=Hcomp)
     g = SUITE["partial_transpose"]
-    g["eager"] = @benchmarkable partial_transpose($m, $H, $Hsub; complement=$Hcomp)
     g["construct"] = @benchmarkable partial_transpose($H, $Hsub; complement=$Hcomp)
     g["apply"] = @benchmarkable $ptmap($m)
 end
@@ -339,7 +314,6 @@ let
     H = hilbert_space(f, 1:N, NumberConservation())
     hop = sum(f[n]' * f[n+1] + hc for n in 1:N-1)
     g = SUITE["sectors"]
-    g["construct_all"] = @benchmarkable hilbert_space($f, $(1:N), NumberConservation())
     g["sectors"] = @benchmarkable sectors($H)
     g["matrix_representation_sectors"] = @benchmarkable matrix_representation($hop, $H)
 end
@@ -380,7 +354,6 @@ let rng = Xoshiro(12)
     ψ = hop * (hop * (hop * k0))
     strings = [join(rand(rng, ('0', '1'), 10)) for _ in 1:1000]
     g = SUITE["symbolic_states"]
-    g["op_on_ket"] = @benchmarkable $hop * ($hop * ($hop * $k0))
     g["parse_kets"] = @benchmarkable map($kets, $strings)
     g["vector_representation"] = @benchmarkable representation($ψ, $H)
 end
@@ -393,12 +366,11 @@ let
     SUITE["majorana"]["matrix_representation"] = @benchmarkable matrix_representation($op, $H)
 end
 
-BenchmarkTools.DEFAULT_PARAMETERS.seconds = DEFAULT_SECONDS
-
-# Fixing `evals` makes `tune!` unnecessary. One evaluation per sample is
-# accurate for every benchmark that takes more than a few microseconds; the
-# faster ones set `evals` themselves.
+# Every benchmark samples for one second. Fixing `evals` makes `tune!`
+# unnecessary. One evaluation per sample is accurate for every benchmark that
+# takes more than a few microseconds; the faster ones set `evals` themselves.
 for (_, b) in BenchmarkTools.leaves(SUITE)
+    b.params.seconds = 1
     b.params.evals_set && continue
     b.params.evals = 1
     b.params.evals_set = true
