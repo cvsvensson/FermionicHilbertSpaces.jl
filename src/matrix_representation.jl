@@ -102,26 +102,23 @@ function _apply_local_operators(op, state, space, precomp)
 end
 
 function apply_local_operators(op::NCMul, state, space, precomps; transpose)
-    amp = op.coeff
+    # Accumulate in the element type of the matrix so that `amp` keeps one type through the loop.
+    T = mat_eltype(op)
+    amp = convert(T, op.coeff)
     if !transpose
         for (factor, precomp) in Iterators.reverse(zip(op.factors, precomps))
             state, _amp = apply_local_operator(factor, state, space, precomp)
-            if iszero(_amp)
-                return state, zero(mat_eltype(op))
-            end
+            iszero(_amp) && return state, zero(T)
             amp *= _amp
         end
-        return state, amp
-    elseif transpose
+    else
         for (factor, precomp) in zip(op.factors, precomps)
             state, _amp = apply_local_operator(adjoint(factor), state, space, precomp)
-            if iszero(_amp)
-                return state, zero(mat_eltype(op))
-            end
+            iszero(_amp) && return state, zero(T)
             amp *= conj(_amp)
         end
-        return state, amp
     end
+    return state, amp
 end
 
 struct TupleConcretizer end

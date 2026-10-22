@@ -258,21 +258,12 @@ unique_combine(::Any) = false
 
 partial_trace_phase_factor_eltype(space::ProductSpace) = promote_type((partial_trace_phase_factor_eltype(H) for H in groups(space))...)
 partial_transpose_phase_factor_eltype(space::ProductSpace) = promote_type((partial_transpose_phase_factor_eltype(H) for H in groups(space))...)
+
 function partial_trace_phase_factor(state1, state2, space::ProductSpace)
-    # product of phase factors from each space and substate
-    pf = 1
-    for (s1, s2, group) in zip(state1.states, state2.states, space.factors)
-        pf *= partial_trace_phase_factor(s1, s2, group)
-    end
-    return pf
+    prod(map(partial_trace_phase_factor, state1.states, state2.states, space.factors); init=1)
 end
 function partial_transpose_phase_factor(state1, state2, space::ProductSpace)
-    # product of phase factors from each space and substate
-    pf = 1
-    for (s1, s2, group) in zip(state1.states, state2.states, space.factors)
-        pf *= partial_transpose_phase_factor(s1, s2, group)
-    end
-    return pf
+    prod(map(partial_transpose_phase_factor, state1.states, state2.states, space.factors); init=1)
 end
 
 struct ProductOperator{C,O,S}
