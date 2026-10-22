@@ -133,7 +133,7 @@ function _contribution_values(subspaces, fw::WeightedFunction)
 end
 function __contribution_values(space, func)
     values = unique(Iterators.map(func, basisstates(space)))
-    isempty(values) && throw(ArgumentError("Cannot build AdditiveConstraint from a space with no basis states"))
+    isempty(values) && throw(ArgumentError("Cannot build an `AdditiveConstraint` from a space with no basis states."))
     values
 end
 hilbert_space(space::AbstractHilbertSpace) = space
@@ -149,7 +149,7 @@ function _subspace_positions(subspaces, allspaces)
     space_ids = map(collect ∘ atom_ids, allspaces) # collect, since spaces may be given as symbols
     map(subspaces) do subspace
         pos = findfirst(==(collect(atom_ids(subspace))), space_ids)
-        isnothing(pos) && throw(ArgumentError("All AdditiveConstraint subspaces must be present in the generated space"))
+        isnothing(pos) && throw(ArgumentError("All subspaces of an `AdditiveConstraint` must be present in the generated space, but `$subspace` is not."))
         pos
     end
 end
