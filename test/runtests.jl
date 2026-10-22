@@ -250,6 +250,30 @@ end
     @test_throws DimensionMismatch pt(zeros(ComplexF64, dsub^2 - 1), m)
 end
 
+@testitem "Default partial trace algorithm" begin
+    using SparseArrays
+    import FermionicHilbertSpaces: default_partial_trace_alg, complementary_subsystem,
+        FullPartialTraceAlg, SubsystemPartialTraceAlg
+    @fermions f
+
+    # A large subsystem of a number-conserving space: the full algorithm is chosen.
+    H = hilbert_space(f, 1:30, NumberConservation(2))
+    Hsub = subregion(hilbert_space(f, 1:10), H)
+    Hcomp = complementary_subsystem(H, Hsub)
+    m = rand(ComplexF64, dim(H), dim(H))
+    @test default_partial_trace_alg(Hsub, H, Hcomp) isa FullPartialTraceAlg
+    @test default_partial_trace_alg(m, Hsub, H, Hcomp) isa FullPartialTraceAlg
+    @test default_partial_trace_alg(sprand(ComplexF64, dim(H), dim(H), 0.01), Hsub, H, Hcomp) isa FullPartialTraceAlg
+
+    # A small subsystem of an unconstrained space: the subsystem algorithm is chosen.
+    H = hilbert_space(f, 1:10)
+    Hsub = subregion(hilbert_space(f, 1:2), H)
+    Hcomp = complementary_subsystem(H, Hsub)
+    m = rand(ComplexF64, dim(H), dim(H))
+    @test default_partial_trace_alg(Hsub, H, Hcomp) isa SubsystemPartialTraceAlg
+    @test default_partial_trace_alg(m, Hsub, H, Hcomp) isa SubsystemPartialTraceAlg
+end
+
 @testitem "Identity in matrix_representation" begin
     using LinearAlgebra
     @fermions f

@@ -11,6 +11,24 @@ partial traces](fermions.md) for the mathematical background
 and phase-factor conventions behind `tensor_product`, `embed`, `partial_trace`, and
 `partial_transpose`; this page focuses on syntax and usage.
 
+## [Pair arguments](@id pair_convention)
+
+Wherever a function takes a `Pair` of Hilbert spaces, the pair reads
+`input => output`: the left side is the space the argument lives on, and the right
+side is the space of the result. The same order is used for every function:
+
+```julia
+partial_trace(m, H => Hsub)              # m on H, result on Hsub
+embed(m, Hsub => H)                      # m on Hsub, result on H
+partial_transpose(m, H => Hout, Hsub)    # m on H, result on Hout
+generalized_kron(ms, Hs => H)            # ms on the spaces Hs, result on H
+tensor_product(ms, Hs => H)              # ms on the spaces Hs, result on H
+reshape(t, H => (H1, H2))                # t has one axis on H, result has axes on H1 and H2
+```
+
+Called without the array, the same pair returns a callable operation, for example
+`partial_trace(H => Hsub)` or `partial_transpose(H => Hout, Hsub)`.
+
 ## Composing and querying Hilbert spaces
 
 ### Building composite spaces with `tensor_product`
@@ -93,7 +111,7 @@ The atoms are always ordered group by group, so `tensor_product(f1, b1, f2)` and
 
 Internally, `FermionicHilbertSpaces.groups(H)` returns the spaces that line up with the slots of a basis state: for a product space these are the same as `factors(H)`, while any other space is a single group, `groups(H) == (H,)`.
 
-When you pass symbols or spaces to `subregion`, they are looked up by name only, so `subregion([b[1]], H)` returns the bosonic mode as it appears in `H`, whatever its truncation. Operations that use the subsystem's own basis, such as `partial_trace(m, H => Hsub)` and `embed`, instead require the atoms of `Hsub` to match those of `H` exactly. A convenient way to get such a matching `Hsub` is `subregion`.
+When you pass symbols or spaces to `subregion`, they are looked up by name only, so `subregion([b[1]], H)` returns the bosonic mode as it appears in `H`, whatever its truncation. `partial_trace(m, H => Hsub)` and `embed` also look up atoms by name, so an `Hsub` built with a different truncation loses states: `partial_trace` drops them silently, and `embed` throws an error if they carry nonzero weight. Use `subregion` to get an `Hsub` whose basis matches `H`.
 
 ### Sectors and quantum numbers
 
@@ -194,9 +212,10 @@ where the subsystem is inconsistent with the full space may silently give the wr
 ### `partial_transpose`: transposing a subsystem
 
 ```julia
-partial_transpose(m, H, Hsub; Hout=H,
+partial_transpose(m, H, Hsub;
   complement=complementary_subsystem(H, Hsub), phase_factors=true, skipmissing=false)
-partial_transpose(m, H => Hout, Hsub; kwargs...)
+partial_transpose(m, H => Hout, Hsub; kwargs...)  # result on Hout
+partial_transpose(H => Hout, Hsub; kwargs...)   # callable map
 ```
 
 Transposes the subsystem `Hsub` of an operator `m` on `H`. A pure state vector is
@@ -218,7 +237,7 @@ negativity > 0 # PPT criteria for entanglement
 The partial transpose need not preserve particle-number or parity constraints.
 If a transposed state is missing from `Hout`, the default behavior is to throw an
 `ArgumentError`. Pass a larger output space, such as the unconstrained space on the
-same modes, with `Hout`; `skipmissing=true` instead drops terms whose output states
+same modes, as `H => Hout`; `skipmissing=true` instead drops terms whose output states
 are absent. Set `phase_factors=false` to disable the fermionic phase factors and
 compute the ordinary subsystem transpose.
 
@@ -267,7 +286,7 @@ H)`, returning a callable that can be applied to different collections of `ms`.
 ### Callable maps and sparse conversion
 
 `partial_trace(H => Hsub; kwargs...)`, `embed(Hsub => H; kwargs...)`, and
-`partial_transpose(H, Hsub; kwargs...)`, called with only spaces, return callable
+`partial_transpose(H, Hsub; kwargs...)` (or `partial_transpose(H => Hout, Hsub; kwargs...)`), called with only spaces, return callable
 operation objects instead of immediately acting on an array:
 
 ```@example hilbert_space_ops
