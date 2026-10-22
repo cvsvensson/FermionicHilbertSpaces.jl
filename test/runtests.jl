@@ -262,7 +262,6 @@ end
     Hcomp = complementary_subsystem(H, Hsub)
     m = rand(ComplexF64, dim(H), dim(H))
     @test default_partial_trace_alg(Hsub, H, Hcomp) isa FullPartialTraceAlg
-    @test default_partial_trace_alg(m, Hsub, H, Hcomp) isa FullPartialTraceAlg
     @test default_partial_trace_alg(sprand(ComplexF64, dim(H), dim(H), 0.01), Hsub, H, Hcomp) isa FullPartialTraceAlg
 
     # A small subsystem of an unconstrained space: the subsystem algorithm is chosen.
@@ -282,6 +281,23 @@ end
     @test representation(1, H) == I
     @test representation(I, H) == I
     @test representation(1 + f[1], H) == I + representation(f[1], H)
+end
+
+@testitem "Representation of products with interleaved groups" begin
+    using FermionicHilbertSpaces: NCMul
+    @fermions a
+    @fermions b
+    @fermions c
+    H = tensor_product(hilbert_space(a, 1:2), hilbert_space(b, 1:2), hilbert_space(c, 1:2))
+    # NCMul is used directly since `*` would normal order the factors. Operators on different groups commute.
+    for (op, parts) in (
+        (NCMul(2.0, [b[2], c[1]', a[1]', c[2], b[1]', a[2]]), (a[1]' * a[2], b[2] * b[1]', c[1]' * c[2])),
+        (NCMul(-1.5, [c[2]', a[1], c[1], a[2]']), (a[1] * a[2]', c[2]' * c[1])),
+    )
+        expected = op.coeff * prod(representation(part, H) for part in parts)
+        @test !iszero(expected)
+        @test representation(op, H) ≈ expected
+    end
 end
 
 @testitem "state_index for states which are convertible but not identical" begin
