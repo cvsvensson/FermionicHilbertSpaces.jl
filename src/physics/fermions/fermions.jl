@@ -6,12 +6,12 @@ struct FermionicSpace{F,L,FG<:FermionicGroup} <: AbstractGroupedHilbertSpace{F}
     function FermionicSpace(_modes::AbstractVector{L}, group::FG, ::Type{F}=FockNumber{default_fock_representation(length(_modes))}) where {F,L<:FermionSym,FG<:FermionicGroup}
         modes = map(_normalize_sym, _modes)
         mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
-        length(mode_ordering) == length(modes) || throw(ArgumentError("Duplicate modes in fermionic group"))
+        length(mode_ordering) == length(modes) || throw(ArgumentError("The modes of a fermionic group must be distinct, got $modes."))
         new{F,L,FG}(modes, mode_ordering, group)
     end
 end
 function FermionicSpace(factors::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F,L<:FermionicSpace}
-    all(c -> group_id(c) == group, factors) || throw(ArgumentError("Not all factors belong to the same group"))
+    all(c -> group_id(c) == group, factors) || throw(ArgumentError("All factors must belong to the group `$group`."))
     fermionsyms = collect(Iterators.flatten(Iterators.map(modes, factors)))
     FermionicSpace(fermionsyms, group, F)
 end
@@ -21,7 +21,7 @@ end
 function FermionicSpace(a::SymbolicFermionBasis, modes::AbstractVector{F}) where {F<:FermionSym}
     agroup = symbolic_group(a)
     if length(modes) > 0
-        all(mode -> group_id(mode) == agroup, modes) || throw(ArgumentError("All modes must belong to the same group as the basis"))
+        all(mode -> group_id(mode) == agroup, modes) || throw(ArgumentError("All modes must belong to the group `$agroup` of the basis."))
     end
     return FermionicSpace(modes, agroup)
 end
@@ -29,7 +29,10 @@ maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
 Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
 basisstates(H::FermionicSpace{F}) where F = TypedIterator{F}(Iterators.map(F, UnitRange{UInt64}(0, dim(H) - 1)))
-basisstate(ind::Integer, ::FermionicSpace{F}) where F = (F ∘ FockNumber)(ind - 1)
+Base.@propagate_inbounds function basisstate(ind::Integer, H::FermionicSpace{F}) where F
+    @boundscheck (ind >= 1 && iszero((ind - 1) >> nbr_of_modes(H))) || throw(BoundsError(H, ind))
+    (F ∘ FockNumber)(ind - 1)
+end
 state_index(state::FockNumber, H::FermionicSpace) = iszero(state.f >> nbr_of_modes(H)) ? state.f + one(state.f) : zero(state.f)
 function dim(H::FermionicSpace)
     N = nbr_of_modes(H)
@@ -82,7 +85,7 @@ function combine_into_group(group::FermionicGroup, fermions)
     if all(f -> group_id(f) == group, fermions)
         return FermionicSpace(fermions, group)
     else
-        throw(ArgumentError("Not all fermions belong to the same group"))
+        throw(ArgumentError("All fermions must belong to the group `$group`."))
     end
 end
 
@@ -94,7 +97,7 @@ state_mapper(H::FermionicSpace, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,
 state_mapper(H::FermionicSpace, Hs) = _fock_mapper(H, Hs)
 function _fock_mapper(H, Hs)
     fermionpositions = [[atom_position(atom, H) for atom in _fock_atoms(Hsub)] for Hsub in Hs]
-    all(x -> x > 0, Iterators.flatten(fermionpositions)) || throw(ArgumentError("All subspaces must be part of the group"))
+    all(x -> x > 0, Iterators.flatten(fermionpositions)) || throw(ArgumentError("All subspaces in `Hs` must be part of `H`, got positions $fermionpositions."))
     FockMapper(Tuple(fermionpositions), nbr_of_modes(H))
 end
 # The atoms of `Hsub`, or for fermionic spaces the modes naming them, which `atom_position`
@@ -147,7 +150,7 @@ focknbr_from_site_labels(Hsub::FermionicSpace, H::FermionicSpace) = mapreduce(Ba
 
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{FockNumber{I}}) where {I}
     position = mode_position(op, space)
-    iszero(position) && throw(ArgumentError("Operator ($op) contains a factor that is not part of the fermionic space ($space)"))
+    iszero(position) && throw(ArgumentError("The operator `$op` contains a factor that is not part of the fermionic space `$space`."))
     return one(I) << (position - 1)
 end
 

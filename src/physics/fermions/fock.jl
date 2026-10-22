@@ -84,7 +84,7 @@ function FockMapper(fermionpositions::P, N) where P
     Nmax = maximum(maximum, fermionpositions)
     Nmax <= N || throw(ArgumentError("Fermion positions must be at most the number of modes $N, got $fermionpositions."))
     perm = mapreduce(collect, vcat, fermionpositions)
-    all(issorted, fermionpositions) || throw(ArgumentError("The order of fermions in each subsystem should be ordered as in the full system, but the provided fermion positions are not sorted: $fermionpositions"))
+    all(issorted, fermionpositions) || throw(ArgumentError("The fermions in each subsystem must be ordered as in the full system, got unsorted fermion positions $fermionpositions."))
     T = default_fock_representation(N)
     permutation = length(perm) == N && isperm(perm) && N < 64 ? BitPermutation{T}(perm)' : nothing
     masks = map(Xp -> focknbr_from_site_indices(Xp), fermionpositions)
@@ -114,7 +114,7 @@ function substate(mask::FockNumber{T1}, f::FockNumber{T2}) where {T1,T2}
 end
 function _require_full_partition(fm::FockMapper)
     fm.isfullpartition && return fm
-    throw(ArgumentError("combine_states requires a full non-overlapping partition, but split_state may be used with partial or overlapping fermion subregions: $(fm.fermionpositions)"))
+    throw(ArgumentError("`combine_states` requires a full non-overlapping partition, but `split_state` also accepts partial or overlapping fermion subregions, got $(fm.fermionpositions)."))
 end
 
 function combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:AbstractBitPermutation}) where {N}
@@ -150,9 +150,6 @@ function concatenate((lastf, lastwidth)::Tuple{FockNumber,Int}, (f, width)::Tupl
 end
 
 permute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
-
-shift_right(f::FockNumber, M) = FockNumber(f.f << M)
-
 
 @testitem "Fock" begin
     using Random
