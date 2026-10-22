@@ -998,6 +998,20 @@ end
         @test emb'(m) ≈ pt(m)
         @test_throws DimensionMismatch pt(sprand(dim(H) + 1, dim(H) + 1, 0.5))
     end
+
+    # spaces may have complex phase factors: the maps and their adjoints act as the superoperator S
+    H, Hsub = Hcons, subregion(Hfull, Hcons)
+    D, n = dim(H), dim(Hsub)
+    S = sprand(ComplexF64, n^2, D^2, 0.2)
+    pt = FermionicHilbertSpaces.PartialTraceMap(H, Hsub, nothing, (;), FermionicHilbertSpaces._transposed_superoperator(findnz(S)..., n^2, D^2))
+    m = sprand(ComplexF64, D, D, 0.3)
+    msub = sprand(ComplexF64, n, n, 0.5)
+    ψ = rand(ComplexF64, D)
+    @test pt(m) ≈ reshape(S * vec(Matrix(m)), n, n)
+    @test pt(ψ) ≈ reshape(S * vec(ψ * ψ'), n, n)
+    @test pt'(msub) ≈ reshape(S' * vec(Matrix(msub)), D, D)
+    @test pt'(Matrix(msub)) ≈ reshape(S' * vec(Matrix(msub)), D, D)
+    @test pt''(m) ≈ pt(m)
 end
 
 @testitem "Partial trace and embed across truncations" begin
