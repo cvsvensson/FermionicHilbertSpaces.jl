@@ -34,7 +34,7 @@ end
 function LazyOperator(_op, space::S, chunking::C=NoChunking(); projection=false, conjugate=false, ishermitian=_ishermitian(_op), T=mat_eltype(_op), concretizer=NoConcretizer()
 ) where {S,C<:AbstractChunkingStrategy}
     op = __concretize(_op, concretizer)
-    precomp = precomputation_before_operator_application(op, space)
+    precomp = lazy_precomputation(op, space)
     O = typeof(op)
     P = typeof(precomp)
     dims = (dim(space), dim(space))
@@ -43,6 +43,16 @@ end
 function LazyOperator(op::O, space::S, chunking::C, precomp::P; projection=false, conjugate=false, ishermitian=_ishermitian(op), T=mat_eltype(op)) where {O,S,C<:AbstractChunkingStrategy,P}
     dims = (dim(space), dim(space))
     LazyOperator{O,S,T,C,P}(op, space, chunking, precomp, projection, conjugate, ishermitian, dims, nothing)
+end
+
+# Data that `lazy_mul!` needs to apply `op` on `space`, computed once when the `LazyOperator`
+# is constructed. For an `NCAdd` it is a vector with one `(term, coeff, precomp)` tuple per
+# entry `term => coeff` of `op.dict`.
+lazy_precomputation(op, space) = precomputation_before_operator_application(op, space)
+function lazy_precomputation(op::NCAdd, space)
+    map(collect(op.dict)) do (term, coeff)
+        (term, coeff, precomputation_before_operator_application(term, space))
+    end
 end
 
 function _lazy_output_prototype(L::LazyOperator, input::AbstractVector)
@@ -218,8 +228,7 @@ function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd}, x::Abstract
         rmul!(y, β)
     end
     op = L.op
-    for (term, coeff) in op.dict
-        precomp = precomputation_before_operator_application(term, L.space)
+    for (term, coeff, precomp) in L.precomp
         _apply_single_term!(y, x, L.space, term, precomp, coeff * α, L.conjugate, L.projection, L.chunking)
     end
     if !iszero(op.coeff) && !iszero(α)
