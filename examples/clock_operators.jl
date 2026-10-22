@@ -7,8 +7,7 @@
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
 import FermionicHilbertSpaces: AbstractBasisState, AbstractSym,
-    GenericHilbertSpace, apply_local_operator, mat_eltype,
-    symbolic_group, SectorConstraint
+    apply_local_operator, mat_eltype, symbolic_group
 import FermionicHilbertSpaces.NonCommutativeProducts: @nc, mul_effect
 
 # ## Defining the clock operators and states
