@@ -301,13 +301,10 @@ end
 
 _int_state_index(state, H) = Int(state_index(state, H))
 
-# Collect the `(Iin, Iout, weight)` entries into a concretely typed vector, and move the
-# entries whose output state is missing (an index 0 in `Iout`) to `dropped`.
 function _transitions_and_dropped(entries, Hsin, Hsout)
     all_entries = collect(entries)
     dropped = NTuple{length(Hsin),Int}[]
-    # The entries of one `Iin` are contiguous (each `_transitions` method yields them from
-    # one outer iteration), so comparing with the last dropped index removes duplicates.
+    # Entries of one `Iin` are contiguous, so comparing with `last(dropped)` deduplicates.
     for (Iin, Iout, _) in all_entries
         any(iszero, Iout) && (isempty(dropped) || last(dropped) != Iin) && push!(dropped, Iin)
     end
@@ -322,9 +319,7 @@ function _transitions(Hsin::_OneSpace, Hsout::_OneSpace, ::Nothing)
     return (; transitions, dropped=NTuple{1,Int}[], linear=_local_linear(transitions, Hsin, Hsout))
 end
 
-# The transitions with the index tuples replaced by zero-based linear offsets within the
-# block's own dimensions. A block occupies contiguous dimensions of the full array, so its
-# contribution to a linear index there is this offset times the stride of its first dimension.
+# Zero-based linear offsets of each transition within the block's own dimensions.
 function _local_linear(transitions, Hsin, Hsout)
     stridesin = Base.front(accumulate(*, (1, map(dim, Hsin)...)))
     stridesout = Base.front(accumulate(*, (1, map(dim, Hsout)...)))
@@ -376,7 +371,6 @@ function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts; skipmi
     return _reshape_kernel!(tout, t, blocks, Hsouts)
 end
 
-# Accumulate `tout[Iout...] += w * t[Iin...]` over all combinations of one transition per block.
 function _reshape_kernel!(tout, t, blocks, Hsouts)
     if _has_linear_indices(t) && _has_linear_indices(tout)
         stridesin = _block_strides(size(t), map(b -> _group_length(b.dropped), blocks))
@@ -402,8 +396,7 @@ end
 
 _has_linear_indices(a) = IndexStyle(a) isa IndexLinear && !Base.has_offset_axes(a)
 
-# The stride of the first dimension of each block, for blocks of `lengths` dimensions
-# laid out consecutively in an array of size `sz`.
+# Stride of the first dimension of each block of `lengths` consecutive dimensions.
 function _block_strides(sz, lengths)
     strides = Base.front(accumulate(*, (1, sz...)))
     offsets = Base.front(accumulate(+, (0, lengths...)))
