@@ -289,7 +289,7 @@ end
 
 representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
-    isquadratic(op) && isnumberconserving(op) || throw(ArgumentError("Only quadratic, number conserving operators supported for SingleParticleHilbertSpace"))
+    _is_quadratic_fermion_operator(op, true) || throw(ArgumentError("Only quadratic, number conserving operators supported for SingleParticleHilbertSpace"))
     _matrix_representation_single_space(remove_identity(op), H, repr, chunking; kwargs...)
 end
 function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::SingleParticleHilbertSpace; kwargs...)
