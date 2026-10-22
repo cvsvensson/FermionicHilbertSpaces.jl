@@ -217,10 +217,15 @@ function sector_function(cons::C, space::AbstractHilbertSpace) where {C<:Union{<
 end
 function sector_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
     subspace_functions = map(cons -> sector_function(cons, space), constraint.constraints)
+    V = mapreduce(f -> nonmissingtype(Base.promote_op(f, statetype(space))), typejoin, subspace_functions; init=Union{})
     function sector(state)
-        sectors = map(f -> f(state), subspace_functions)
-        any(ismissing, sectors) && return missing
-        return sectors
+        sectors = Vector{V}(undef, length(subspace_functions))
+        for (i, f) in enumerate(subspace_functions)
+            label = f(state)
+            ismissing(label) && return missing
+            sectors[i] = label
+        end
+        return isconcretetype(V) ? sectors : map(identity, sectors) # narrow the element type
     end
 end
 function filter_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
@@ -283,6 +288,17 @@ constrain_space
     @fermions f
     H = hilbert_space(f, labels, qn)
     @test collect(quantumnumbers(H)) == [[n, (-1)^n] for n in 0:4]
+    @test all(q -> q isa Vector{Int}, quantumnumbers(H))
+    # Sector labels of mixed types
+    qn_mixed = NumberConservation() * FermionicHilbertSpaces.SectorConstraint(s -> isodd(s.f) ? :odd : :even)
+    H_mixed = hilbert_space(f, labels, qn_mixed)
+    @test dim(H_mixed) == 2^4
+    @test Set(quantumnumbers(H_mixed)) == Set(Any[n, s] for n in 0:4, s in (:odd, :even) if !(n == 0 && s == :odd) && !(n == 4 && s == :even))
+    # Integer and floating-point labels keep their own types
+    qn_numeric = NumberConservation() * FermionicHilbertSpaces.SectorConstraint(s -> isodd(s.f) ? 0.5 : 1.5)
+    q_numeric = collect(quantumnumbers(hilbert_space(f, 1:2, qn_numeric)))
+    @test [0, 1.5] in q_numeric
+    @test all(q -> q[1] isa Int && q[2] isa Float64, q_numeric)
     qn = prod(NumberConservation(missing, hilbert_space(f[l])) for l in labels)
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
