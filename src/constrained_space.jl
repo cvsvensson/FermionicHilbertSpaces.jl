@@ -9,8 +9,7 @@ Base.:(==)(H1::ConstrainedSpace, H2::ConstrainedSpace) = H1.parent == H2.parent 
 Base.hash(H::ConstrainedSpace, h::UInt) = hash(H.parent, hash(H.states, hash(H.state_index, h)))
 Base.parent(H::ConstrainedSpace) = H.parent
 function ConstrainedSpace(space::ConstrainedSpace, states)
-    intersect(states, space.states)
-    ConstrainedSpace(parent(space), states)
+    ConstrainedSpace(parent(space), intersect(states, space.states))
 end
 function ConstrainedSpace(space::H, states::S) where {H,S}
     B = eltype(states)
@@ -20,8 +19,9 @@ end
 
 dim(H::ConstrainedSpace) = length(H.states)
 basisstates(H::ConstrainedSpace) = H.states
-basisstate(n::Integer, H::ConstrainedSpace) = H.states[n]
+Base.@propagate_inbounds basisstate(n::Integer, H::ConstrainedSpace) = H.states[n]
 state_index(state, H::ConstrainedSpace{B}) where B = get(H.state_index, state, 0)
+state_index(state::Union{AbstractString,AbstractChar}, H::ConstrainedSpace) = state_index(interpret_state(state, H), H)
 atomic_factors(H::ConstrainedSpace) = atomic_factors(parent(H))
 atomic_factor(H::ConstrainedSpace, i) = atomic_factor(parent(H), i)
 groups(H::ConstrainedSpace) = groups(parent(H))
@@ -37,7 +37,7 @@ partial_transpose_phase_factor_eltype(space::ConstrainedSpace) = partial_transpo
 
 partial_transpose_phase_factor(f1, f2, H::ConstrainedSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
-constrain_space(space::AbstractHilbertSpace, states::AbstractVector{B}, constraint::AbstractConstraint=NoSymmetry()) where B = constrain_space(space, constraint, states)
+constrain_space(space::AbstractHilbertSpace, states::AbstractVector) = constrain_space(space, NoSymmetry(), states)
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, states)
 function constrain_space(space, constraint::AbstractConstraint, states=basisstates(space))
@@ -49,7 +49,7 @@ function constrain_space(space, constraint::AbstractConstraint, states=basisstat
         filtered_states = collect(Iterators.filter(f, states))
         return ConstrainedSpace(space, filtered_states)
     else
-        throw(ArgumentError("Constraint $(constraint) is not supported for constraining spaces."))
+        throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     end
 end
 add_tag(H::ConstrainedSpace, tag) = ConstrainedSpace(add_tag(parent(H), tag), H.states, H.state_index)
@@ -102,10 +102,36 @@ fast_path(space::ConstrainedSpace) = fast_path(parent(space))
     H2 = constrain_space(H1, NumberConservation(0:1))
     H3 = constrain_space(H2, NumberConservation(1:2))
     @test basisstates(H3) == basisstates(constrain_space(H, NumberConservation(1)))
+
+    # explicit states, alone or as candidates for a constraint
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    states = collect(basisstates(H))[2:6]
+    Hs = constrain_space(H, states)
+    @test basisstates(Hs) == states
+    @test Hs == constrain_space(H, NoSymmetry(), states)
+    Hc = constrain_space(H, NumberConservation(1), states)
+    one_particle = Set(basisstates(constrain_space(H, NumberConservation(1))))
+    @test basisstates(Hc) == filter(in(one_particle), states)
+    @test_throws MethodError constrain_space(H, states, NumberConservation(1))
+end
+
+@testitem "Constraining a ConstrainedSpace keeps only its states" begin
+    using FermionicHilbertSpaces: ConstrainedSpace
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    H1 = ConstrainedSpace(H, collect(basisstates(H))[2:3])
+    kept = collect(basisstates(H1))
+    outside = first(s for s in basisstates(H) if s ∉ kept)
+    states = [outside, kept[2], kept[1]]
+    H2 = ConstrainedSpace(H1, states)
+    @test basisstates(H2) == [kept[2], kept[1]]
+    @test dim(H2) == 2
+    @test parent(H2) == parent(H1)
 end
 
 @testitem "FilterConstraint agrees with NumberConservation" begin
-    using FermionicHilbertSpaces: SectorConstraint, FilterConstraint, particle_number
+    using FermionicHilbertSpaces: particle_number
     @fermions f
     N = 4
     H = hilbert_space(f, 1:N)
