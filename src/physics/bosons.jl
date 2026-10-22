@@ -49,10 +49,10 @@ Base.getindex(b::BosonField, is...) = BosonSym(is, b, -1)
 Base.adjoint(x::BosonSym) = BosonSym(x.label, x.basis, x.tags, -x.exp)
 Base.iszero(x::BosonSym) = false
 symbolic_basis(x::BosonSym{<:Any,<:BosonField}) = x.basis
-change_basis(x::BosonSym, newbasis) = BosonSym(x.label, newbasis, x.exp)
+with_basis(x::BosonSym, newbasis) = BosonSym(x.label, newbasis, x.exp)
 const BosonSymWithBasis = BosonSym{L,B,Nothing} where {L,B<:BosonField}
 const BosonSymWithoutBasis = BosonSym{L,Nothing,T} where {L,T<:Tags}
-add_tag(x::BosonSymWithBasis, tag) = change_basis(x, add_tag(x.basis, tag))
+add_tag(x::BosonSymWithBasis, tag) = with_basis(x, add_tag(x.basis, tag))
 add_tag(x::BosonSymWithoutBasis, tag) = BosonSym(x.label, add_tag(x.tags, tag), x.exp)
 tags(x::BosonSym) = x.tags
 function Base.show(io::IO, x::BosonSym)
@@ -71,7 +71,6 @@ function Base.show(io::IO, x::BosonSym)
 end
 Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && isequal(a.basis, b.basis)
 Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, h)))
-_boson_name(s::BosonSym) = s.basis isa Nothing ? (s.label, tags(s)) : (s.basis.name, s.label, tags(s))
 # Normal ordering of a = b^m, c = b†^n: b^m b†^n = Σₖ k! C(m,k) C(n,k) b†^(n-k) b^(m-k)
 function _boson_normal_order(a::BosonSym, c::BosonSym)
     m, n = -a.exp, c.exp
@@ -84,7 +83,7 @@ function _boson_normal_order(a::BosonSym, c::BosonSym)
     return AddTerms(terms)
 end
 function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
-    if _boson_name(a) == _boson_name(b)
+    if symbolic_group(a) == symbolic_group(b)
         if sign(a.exp) == sign(b.exp)
             return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
         else
@@ -95,7 +94,7 @@ function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
             end
         end
     end
-    if _boson_name(a) > _boson_name(b)
+    if _group_isless(b, a)
         return Swap(1)
     else
         return nothing
@@ -187,19 +186,17 @@ end
 Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)
 Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.dimension, h))
 basisstates(H::TruncatedBosonicHilbertSpace) = TypedIterator{BosonicState}(Iterators.map(BosonicState, 0:(dim(H)-1)))
-function basisstate(n::Integer, H::TruncatedBosonicHilbertSpace)
-    if n < 1 || n > dim(H)
-        throw(ArgumentError("Basis state index $n is out of bounds for Hilbert space with dimension $(dim(H))"))
-    end
+Base.@propagate_inbounds function basisstate(n::Integer, H::TruncatedBosonicHilbertSpace)
+    @boundscheck 1 <= n <= dim(H) || throw(BoundsError(H, n))
     BosonicState(n - 1)
 end
 dim(H::TruncatedBosonicHilbertSpace) = H.dimension
 state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace) = 0 <= s.n < dim(H) ? s.n + 1 : 0
 add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add_tag(H.sym, tag), H.dimension)
 
-hilbert_space(sym::BosonField, labels, dimension::Int, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], dimension), labels); constraint)
-hilbert_space(sym::BosonSym, dimension::Int) = TruncatedBosonicHilbertSpace(sym, dimension)
-hilbert_space(sym::BosonSym, dimension::Int, constraint::AbstractConstraint) = constrain_space(hilbert_space(sym, dimension), constraint)
+hilbert_space(sym::BosonField, labels, dimension::Integer, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], dimension), labels); constraint)
+hilbert_space(sym::BosonSym, dimension::Integer) = TruncatedBosonicHilbertSpace(sym, dimension)
+hilbert_space(sym::BosonSym, dimension::Integer, constraint::AbstractConstraint) = constrain_space(hilbert_space(sym, dimension), constraint)
 particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 maximum_particles(H::TruncatedBosonicHilbertSpace) = dim(H) - 1
@@ -228,8 +225,9 @@ function apply_local_operator(factor::BosonSym, state::BosonicState, space::Trun
     end
     return BosonicState(n), amplitude
 end
-symbolic_group(f::BosonSym{<:Any,B}) where B = (f.basis, f.label, f.tags)
-symbolic_group(f::BosonSym{<:Any,Nothing}) = (BosonSym, f.label, f.tags)
+# Group ids are `(name, label, tags)`. A boson without a basis has its own label as name and `()` as label.
+symbolic_group(f::BosonSym{<:Any,<:BosonField}) = (f.basis.name, f.label, f.basis.tags)
+symbolic_group(f::BosonSym{<:Any,Nothing}) = (f.label, (), f.tags)
 symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
 symbolic_basis(H::TruncatedBosonicHilbertSpace) = symbolic_group(H)
 atomic_id(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
