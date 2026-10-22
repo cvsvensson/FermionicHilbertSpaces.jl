@@ -7,7 +7,7 @@ using NonCommutativeProducts: NCAdd, NCMul, NCterms
 import SciMLOperators: cache_operator
 
 import OhMyThreads: Schedulers.chunking_args, Consecutive
-import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, _matrix_representation, _matrix_representation_single_space, __matrix_representation, finalize!, mat_eltype, matrix_accumulator, operator_indices_and_amplitudes!, NoChunking, chunked_operator_indices_and_amplitudes!, partition_product, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, precomputation_before_operator_application, basisstate, state_index, dim, _lazy_output_prototype, cache_operator!
+import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, _matrix_representation, _matrix_representation_single_space, __matrix_representation, finalize!, mat_eltype, matrix_accumulator, operator_indices_and_amplitudes!, NoChunking, chunked_operator_indices_and_amplitudes!, partition_product, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, basisstate, state_index, dim, _lazy_output_prototype, cache_operator!
 
 function _reduce_add!(y, partials)
     isempty(partials) && return y
@@ -26,11 +26,11 @@ function _state_chunk_data(space, chunking::StateChunking)
     return basis_chunks
 end
 
-function _term_chunk_data(op::NCAdd, chunking::TermChunking)
+function _term_chunk_data(terms, chunking::TermChunking)
     scheduler = chunking.scheduler
     scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
     n = get_nchunks(scheduler)
-    term_chunks = collect(chunks(collect(NCterms(op)); n, split=Consecutive()))
+    term_chunks = collect(chunks(terms; n, split=Consecutive()))
     return term_chunks
 end
 
@@ -66,7 +66,7 @@ function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd,<:Any,<:Any,<
         rmul!(y, β)
     end
     op = L.op
-    term_chunks = _term_chunk_data(op, L.chunking)
+    term_chunks = _term_chunk_data(L.precomp, L.chunking)
     cache_operator!(L, y)
     chnl = L.cache
     scheduler = L.chunking.scheduler
@@ -74,9 +74,8 @@ function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd,<:Any,<:Any,<
     tforeach(term_chunks; scheduler) do local_terms
         local_mat = take!(chnl)
         fill!(local_mat, zero(eltype(local_mat)))
-        for term in local_terms
-            precomp = precomputation_before_operator_application(term, L.space)
-            _apply_single_term!(local_mat, x, L.space, term, precomp, α, L.conjugate, L.projection, NoChunking())
+        for (term, coeff, precomp) in local_terms
+            _apply_single_term!(local_mat, x, L.space, term, precomp, coeff * α, L.conjugate, L.projection, NoChunking())
         end
         lock(lk) do
             y .+= local_mat
@@ -121,9 +120,8 @@ function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd,<:Any,<:Any,<
         rmul!(y, β)
     end
     cache_operator!(L, y)
-    for term in NCterms(L.op)
-        precomp = precomputation_before_operator_application(term, L.space)
-        _apply_single_term!(y, x, L.space, term, precomp, α, L.conjugate, L.projection, L.chunking, L.cache)
+    for (term, coeff, precomp) in L.precomp
+        _apply_single_term!(y, x, L.space, term, precomp, coeff * α, L.conjugate, L.projection, L.chunking, L.cache)
     end
     if !iszero(L.op.coeff) && !iszero(α)
         scalar_coeff = α * (L.conjugate ? conj(L.op.coeff) : L.op.coeff)
