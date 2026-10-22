@@ -655,7 +655,6 @@ end
 # The adjoint of a stored superoperator, materialized so that it is again a SparseMatrixCSC or its transpose
 _adjoint_superop(S::LinearAlgebra.Transpose{<:Any,<:SparseMatrixCSC}) = conj(parent(S))
 _adjoint_superop(S::SparseMatrixCSC) = transpose(conj(S))
-_adjoint_superop(S) = S'
 
 # w = S * vec(ψψ†) for S = transpose(St), without forming ψψ†
 function _apply_superop_on_pure_state!(w::AbstractVector, S::LinearAlgebra.Transpose{<:Any,<:SparseMatrixCSC}, ψ::AbstractVector)
@@ -676,7 +675,6 @@ function _apply_superop_on_pure_state!(w::AbstractVector, S::LinearAlgebra.Trans
     return w
 end
 
-_superop_mul_matrix!(y::AbstractVector, S::AbstractMatrix, m::SparseMatrixCSC) = mul!(y, S, m[:])
 # y = S * vec(m) for S = transpose(St) and a sparse D × D matrix m: each stored entry of S looks up
 # its matrix element of m by binary search in the column of m.
 function _superop_mul_matrix!(y::AbstractVector, S::LinearAlgebra.Transpose{<:Any,<:SparseMatrixCSC}, m::SparseMatrixCSC)
