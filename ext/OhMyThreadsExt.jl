@@ -1,12 +1,13 @@
 module OhMyThreadsExt
-using SparseArrays
-using OhMyThreads
-using FermionicHilbertSpaces
-using LinearAlgebra
+using SparseArrays: SparseArrays, findnz, nonzeros, nzrange, rowvals
+using OhMyThreads: OhMyThreads, Scheduler, chunks, tforeach, tmap
+using FermionicHilbertSpaces: FermionicHilbertSpaces, groups
+using LinearAlgebra: LinearAlgebra, rmul!
+using NonCommutativeProducts: NCAdd, NCMul, NCterms
 import SciMLOperators: cache_operator
 
 import OhMyThreads: Schedulers.chunking_args, Consecutive
-import FermionicHilbertSpaces: NCAdd, NCterms, EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, _matrix_representation, _matrix_representation_single_space, __matrix_representation, finalize!, mat_eltype, matrix_accumulator, operator_indices_and_amplitudes!, push_inds_amps!, NoChunking, chunked_operator_indices_and_amplitudes!, partition_product, groups, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, precomputation_before_operator_application, basisstate, state_index, dim, _lazy_output_prototype, NonCommutativeProducts.NCMul
+import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, _matrix_representation, _matrix_representation_single_space, __matrix_representation, finalize!, mat_eltype, matrix_accumulator, operator_indices_and_amplitudes!, NoChunking, chunked_operator_indices_and_amplitudes!, partition_product, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, precomputation_before_operator_application, basisstate, state_index, dim, _lazy_output_prototype, cache_operator!
 
 function _reduce_add!(y, partials)
     isempty(partials) && return y
@@ -19,7 +20,7 @@ end
 
 function _state_chunk_data(space, chunking::StateChunking)
     scheduler = chunking.scheduler
-    scheduler isa Scheduler || throw(ArgumentError("Unsupported chunking scheduler of type $(typeof(scheduler)). Expected an OhMyThreads Scheduler."))
+    scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
     n = get_nchunks(scheduler)
     basis_chunks = collect(chunks(1:dim(space); n, split=Consecutive()))
     return basis_chunks
@@ -27,7 +28,7 @@ end
 
 function _term_chunk_data(op::NCAdd, chunking::TermChunking)
     scheduler = chunking.scheduler
-    scheduler isa Scheduler || throw(ArgumentError("Unsupported chunking scheduler of type $(typeof(scheduler)). Expected an OhMyThreads Scheduler."))
+    scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
     n = get_nchunks(scheduler)
     term_chunks = collect(chunks(collect(NCterms(op)); n, split=Consecutive()))
     return term_chunks
@@ -134,7 +135,7 @@ end
 function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, precomp, _coeff, conjugate, projection, chunking::StateChunking, chnl::Channel)
     coeff = (conjugate ? conj(_coeff) : _coeff)
     scheduler = chunking.scheduler
-    scheduler isa Scheduler || throw(ArgumentError("Unsupported chunking scheduler of type $(typeof(scheduler)). Expected an OhMyThreads Scheduler."))
+    scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
     n = get_nchunks(scheduler)
     basis_chunks = collect(chunks(1:dim(space); n, split=Consecutive()))
     lk = ReentrantLock()
@@ -166,7 +167,7 @@ end
 function _apply_single_term!(y::AbstractVector, x::SparseArrays.AbstractSparseVector, space, term, precomp, _coeff, conjugate, projection, chunking::StateChunking, chnl::Channel)
     coeff = (conjugate ? conj(_coeff) : _coeff)
     scheduler = chunking.scheduler
-    scheduler isa Scheduler || throw(ArgumentError("Unsupported chunking scheduler of type $(typeof(scheduler)). Expected an OhMyThreads Scheduler."))
+    scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
     n = get_nchunks(scheduler)
     basis_chunks = collect(chunks(1:dim(space); n, split=Consecutive()))
     inds, vals = findnz(x)
@@ -200,7 +201,7 @@ end
 function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, _coeff, conjugate, projection, chunking::StateChunking, chnl::Channel)
     coeff = (conjugate ? conj(_coeff) : _coeff)
     scheduler = chunking.scheduler
-    scheduler isa Scheduler || throw(ArgumentError("Unsupported chunking scheduler of type $(typeof(scheduler)). Expected an OhMyThreads Scheduler."))
+    scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
     n = get_nchunks(scheduler)
     basis_chunks = collect(chunks(1:dim(space); n, split=Consecutive()))
     lk = ReentrantLock()
@@ -230,7 +231,7 @@ end
 function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC, space, term, precomp, _coeff, conjugate, projection, chunking::StateChunking, chnl::Channel)
     coeff = (conjugate ? conj(_coeff) : _coeff)
     scheduler = chunking.scheduler
-    scheduler isa Scheduler || throw(ArgumentError("Unsupported chunking scheduler of type $(typeof(scheduler)). Expected an OhMyThreads Scheduler."))
+    scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
     n = get_nchunks(scheduler)
     basis_chunks = collect(chunks(1:dim(space); n, split=Consecutive()))
     rows = rowvals(x)
@@ -269,7 +270,7 @@ end
 
 function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking::TermChunking; tree_split=10, kwargs...)
     scheduler = chunking.scheduler
-    scheduler isa Scheduler || throw(ArgumentError("Unsupported chunking scheduler of type $(typeof(scheduler)). Expected an OhMyThreads Scheduler."))
+    scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
     terms = collect(NCterms(op))
     mats = tmap(terms; scheduler) do term
         _matrix_representation(term, bases, space, repr, NoChunking(); kwargs...)
@@ -284,7 +285,7 @@ end
 
 function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking::StateChunking; kwargs...)
     scheduler = chunking.scheduler
-    scheduler isa Scheduler || throw(ArgumentError("Unsupported chunking scheduler of type $(typeof(scheduler)). Expected an OhMyThreads Scheduler."))
+    scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
     n = get_nchunks(scheduler)
     basis_chunks = chunks(1:dim(space); n, split=Consecutive())
     T = mat_eltype(op)
@@ -314,7 +315,7 @@ end
 
 function _sum_tree_threaded(matrices, k, scheduler)
     n = length(matrices)
-    n == 0 && throw(ArgumentError("Empty collection"))
+    n == 0 && throw(ArgumentError("Cannot sum an empty collection of matrices."))
     n == 1 && return only(matrices)
     n <= k && return map(+, matrices...)
 
@@ -329,7 +330,7 @@ end
 
 function _matrix_representation_single_space(op::NCAdd, space, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking::TermChunking; tree_split=10, kwargs...)
     scheduler = chunking.scheduler
-    scheduler isa Scheduler || throw(ArgumentError("Unsupported chunking scheduler of type $(typeof(scheduler)). Expected an OhMyThreads Scheduler."))
+    scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
     n = get_nchunks(scheduler)
     chunked_terms = chunks(collect(NCterms(op)); n)
     mats = tmap(chunked_terms; scheduler) do terms
@@ -349,7 +350,7 @@ end
 
 function _matrix_representation_single_space(op::NCAdd, space, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking::StateChunking; kwargs...)
     scheduler = chunking.scheduler
-    scheduler isa Scheduler || throw(ArgumentError("Unsupported chunking scheduler of type $(typeof(scheduler)). Expected an OhMyThreads Scheduler."))
+    scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
     n = get_nchunks(scheduler)
     basis_chunks = chunks(1:dim(space); n, split=Consecutive())
     T = mat_eltype(op)

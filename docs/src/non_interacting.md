@@ -24,10 +24,10 @@ representation(op, H) == h + E * I
 ```
 Often, $h_{nm}$ is of interest because diagonalizing it gives information on the quasiparticles in the system.
 
-!!! tip "Use `single_particle_hilbert_space` instead"
-    For convenience, `single_particle_hilbert_space` can be used define the hilbert space which will give only the single particle states, and will remove the contribution of the identity operator when calling `representation`:
+!!! tip "Use `SingleParticle` instead"
+    For convenience, `hilbert_space(c, 1:N, SingleParticle())` can be used to define the hilbert space which will give only the single particle states, and will remove the contribution of the identity operator when calling `representation`:
     ```julia
-    H = single_particle_hilbert_space(c, 1:N)
+    H = hilbert_space(c, 1:N, SingleParticle())
     representation(op,H) == h # true
     ```
 
@@ -64,10 +64,10 @@ op = E * I + sum(c[i]' * h[i, j] * c[j] + (Δ[i, j] * c[i]' * c[j]' + Δ'[i, j] 
 FermionicHilbertSpaces.isbdgmatrix(ℋ)
 ```
 The matrix returned by `representation` will depend on the ordering of operators in the symbolic operator `op`. If it is normal ordered (which is the default), one can use `FermionicHilbertSpaces.normal_order_to_bdg` to convert it to the choice above.
-!!! tip "Use `bdg_hilbert_space` instead"
-    By defining the hilbert space using `bdg_hilbert_space`, one automatically gets the Nambu states and `representation` will return a matrix of the form above without the need to manually convert it:
+!!! tip "Use `BdG` instead"
+    By defining the hilbert space with `hilbert_space(c, 1:N, BdG())`, one automatically gets the Nambu states and `representation` will return a matrix of the form above without the need to manually convert it:
     ```julia
-    Hbdg = bdg_hilbert_space(c, 1:N)
+    Hbdg = hilbert_space(c, 1:N, BdG())
     representation(op, Hbdg)
     #= example output
     4×4 SparseArrays.SparseMatrixCSC{Float64, Int64} with 12 stored entries:
