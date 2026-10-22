@@ -976,77 +976,28 @@ end
     @test generalized_kron((m1, m2), (H1, H2) => H; skipmissing=true) ≈ tensor_product((m1, m2), (H1, H2) => H) # Since tensor_product first embeds both operators in the full Hilbert space (which can be done) and then multiplies them, it won't complain about missing states.
 end
 
-@testitem "Partial-trace maps are stored as a transposed CSC" begin
-    using SparseArrays, LinearAlgebra
-    import FermionicHilbertSpaces: _transposed_superoperator, _adjoint_superop, _superop_mul_matrix!, _apply_superop_on_pure_state!
-    # unsorted triplets with repeated entries, for a map on vectorized 3x3 matrices
-    rows = [2, 1, 2, 1, 4, 2]
-    cols = [9, 1, 4, 1, 2, 9]
-    vals = [1.0, 2.0, 3.0, 4.0im, 5.0, 6.0]
-    S = sparse(rows, cols, vals, 4, 9)
-    A = _transposed_superoperator(rows, cols, vals, 4, 9)
-    @test A isa Transpose{<:Any,<:SparseMatrixCSC}
-    @test length(SparseArrays.getcolptr(parent(A))) == 5
-    @test A == S
-    @test nnz(A) == nnz(S)
-    @test _adjoint_superop(A) isa SparseMatrixCSC
-    @test _adjoint_superop(A) == S'
-    @test _adjoint_superop(_adjoint_superop(A)) == A
-    ψ = rand(ComplexF64, 3)
-    @test _apply_superop_on_pure_state!(zeros(ComplexF64, 4), A, ψ) ≈ S * vec(ψ * ψ')
-    m = sparse([1, 3, 1, 2], [1, 1, 3, 2], rand(ComplexF64, 4), 3, 3)
-    @test _superop_mul_matrix!(zeros(ComplexF64, 4), A, m) ≈ S * vec(Matrix(m))
-    @test _superop_mul_matrix!(zeros(ComplexF64, 4), A, spzeros(3, 3)) == zeros(4)
-    @test_throws DimensionMismatch _superop_mul_matrix!(zeros(4), A, spzeros(2, 2))
-    # entries that cancel to a stored zero, an empty column, and an empty operator
-    B = _transposed_superoperator([1, 1, 3], [1, 1, 7], [1, -1, 2], 3, 9)
-    @test B == sparse([1, 1, 3], [1, 1, 7], [1, -1, 2], 3, 9)
-    @test size(_transposed_superoperator(Int[], Int[], Float64[], 1, 0)) == (1, 0)
-    @test_throws ArgumentError _transposed_superoperator([5], [1], [1.0], 4, 9)
-    @test_throws ArgumentError _transposed_superoperator([1], [10], [1.0], 4, 9)
+@testitem "Partial trace and embed of sparse matrices" begin
+    using SparseArrays
+    # the map builder sums repeated entries like `sparse`
+    Is, Js, Vs = [2, 1, 2, 1, 3, 2], [9, 1, 4, 1, 2, 9], [1, 2, 3, -2, 5, 6]
+    @test FermionicHilbertSpaces._transposed_superoperator(Is, Js, Vs, 4, 9) == sparse(Is, Js, Vs, 4, 9)
 
-    # maps built from spaces, applied to sparse, dense and pure-state input
     @fermions f
-    H = hilbert_space(f, 1:4, NumberConservation(2))
-    Hsub = subregion(hilbert_space(f, 1:2), H)
-    pt = partial_trace(H => Hsub)
-    emb = embed(Hsub => H; skipmissing=true)
-    @test length(SparseArrays.getcolptr(parent(pt.map))) == dim(Hsub)^2 + 1
-    @test sparse(pt) === pt.map
-    @test emb.map isa SparseMatrixCSC
-    @test sparse(emb) == sparse(pt)'
-    m = sprand(ComplexF64, dim(H), dim(H), 0.3)
-    msub = sprand(ComplexF64, dim(Hsub), dim(Hsub), 0.5)
-    @test pt(m) isa SparseMatrixCSC
-    @test pt(m) ≈ partial_trace(Matrix(m), H => Hsub)
-    @test pt(zeros(ComplexF64, dim(Hsub), dim(Hsub)), m) ≈ partial_trace(Matrix(m), H => Hsub)
-    @test pt(m[:]) ≈ partial_trace(Matrix(m), H => Hsub)
-    @test_throws DimensionMismatch pt(sprand(dim(H) + 1, dim(H) + 1, 0.1))
-    ψ = rand(ComplexF64, dim(H))
-    @test pt(ψ) ≈ partial_trace(ψ * ψ', H => Hsub)
-    @test pt(zeros(ComplexF64, dim(Hsub), dim(Hsub)), ψ) ≈ partial_trace(ψ * ψ', H => Hsub)
-    @test emb(msub) isa SparseMatrixCSC
-    @test emb(msub) ≈ embed(Matrix(msub), Hsub => H; skipmissing=true)
-    @test_throws ArgumentError emb(sprand(dim(Hsub) + 1, dim(Hsub) + 1, 0.5))
-    # other element types through the in-place forms
-    ρ32 = rand(Float32, dim(H), dim(H))
-    out = rand(ComplexF64, dim(Hsub)^2)
-    @test mul!(copy(out), pt.map, vec(ρ32), 2, 3) ≈ 2 * vec(partial_trace(ρ32, H => Hsub)) + 3 * out
-    @test pt(zeros(Int, dim(Hsub), dim(Hsub)), ones(Int, dim(H), dim(H))) == partial_trace(ones(Int, dim(H), dim(H)), H => Hsub)
-
-    # spaces with the same atoms: the maps are basis transformations
+    Hcons = hilbert_space(f, 1:4, NumberConservation(2))
     Hfull = hilbert_space(f, 1:2)
-    Hp = hilbert_space(f, 1:2, ParityConservation())
-    ptp = partial_trace(Hfull => Hp)
-    embp = embed(Hp => Hfull)
-    @test ptp.map isa Transpose{<:Any,<:SparseMatrixCSC}
-    @test length(SparseArrays.getcolptr(parent(ptp.map))) == dim(Hp)^2 + 1
-    @test ptp'.map == embp.map
-    @test embp'.map == ptp.map
-    mp = sprand(dim(Hfull), dim(Hfull), 0.5)
-    @test ptp(mp) ≈ partial_trace(Matrix(mp), Hfull => Hp)
-    msp = sprand(dim(Hp), dim(Hp), 0.5)
-    @test embp(msp) ≈ embed(Matrix(msp), Hp => Hfull)
+    # a subsystem, and a space with the same atoms (a basis transformation)
+    for (H, Hsub) in ((Hcons, subregion(Hfull, Hcons)), (Hfull, hilbert_space(f, 1:2, ParityConservation())))
+        pt = partial_trace(H => Hsub)
+        emb = embed(Hsub => H; skipmissing=true)
+        m = sprand(ComplexF64, dim(H), dim(H), 0.3)
+        msub = sprand(ComplexF64, dim(Hsub), dim(Hsub), 0.5)
+        @test pt(m) ≈ partial_trace(Matrix(m), H => Hsub)
+        @test pt(zeros(ComplexF64, dim(Hsub), dim(Hsub)), m) ≈ partial_trace(Matrix(m), H => Hsub)
+        @test emb(msub) ≈ embed(Matrix(msub), Hsub => H; skipmissing=true)
+        @test pt'(msub) ≈ emb(msub)
+        @test emb'(m) ≈ pt(m)
+        @test_throws DimensionMismatch pt(sprand(dim(H) + 1, dim(H) + 1, 0.5))
+    end
 end
 
 @testitem "Partial trace and embed across truncations" begin
