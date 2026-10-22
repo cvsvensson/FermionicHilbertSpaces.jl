@@ -198,8 +198,6 @@ function apply_local_operators(_op::NCMul{C,<:SymbolicState}, state, space::Abst
     return state == op.bra ? (op.ket, _op.coeff) : (state, zero(eltype(_op.coeff)))
 end
 
-# The effect `amp * state` of an operator on a state, as a mul_effect value. A vanishing amplitude removes the term.
-# Otherwise this is a Tuple-backed product with the coefficient `amp * 1` of `amp * state`, which needs no factor vector.
 _scaled_state(amp, state) = iszero(amp) ? 0 : NCMul(amp * 1, (state,))
 
 function NonCommutativeProducts.mul_effect(op::AbstractSym, s::SymbolicState)
