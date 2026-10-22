@@ -27,7 +27,7 @@ function Base.show(io::IO, pc::ParityConservation{H}) where {H}
     else
         lines = ["allowed_parities: $(_parity(pc.allowed_parities))"]
         !ismissing(pc.spaces) && push!(lines, "subspaces: $(length(pc.spaces))")
-        print(io, "ParityConservation(", join(lines, ""), ")")
+        print(io, "ParityConservation(", join(lines, ", "), ")")
     end
 end
 
@@ -38,7 +38,7 @@ function Base.show(io::IO, ac::AdditiveConstraint{T,H,F}) where {T,H,F}
         print(io, "AdditiveConstraint(", pre, "$nf function(s))")
     else
         lines = ["  allowed_values: " * (ismissing(ac.allowed_values) ? "missing" : sprint(show, ac.allowed_values)),
-            "  functions: $nf function(s)"]
+            "  maps: $nf function(s)"]
         !ismissing(ac.spaces) && push!(lines, "  subspaces: $(length(ac.spaces))")
         print(io, "AdditiveConstraint(\n", join(lines, "\n"), "\n)")
     end
@@ -53,7 +53,7 @@ function Base.show(io::IO, fc::FilterConstraint)
     else
         lines = filter(!isnothing, [
             ismissing(fc.spaces) ? nothing : "subspaces: $(length(fc.spaces))",
-            ismissing(fc.maps) ? nothing : "subspace_functions: $(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s), ",
+            ismissing(fc.maps) ? nothing : "maps: $(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s)",
             "reducer: $(fc.reducer)"])
         print(io, "FilterConstraint(", join(lines, ", "), ")")
     end
@@ -69,9 +69,9 @@ function Base.show(io::IO, bc::SectorConstraint)
     else
         lines = filter(!isnothing, [
             ismissing(fc.spaces) ? nothing : "subspaces: $(length(fc.spaces))",
-            ismissing(fc.maps) ? nothing : "subspace_functions: $(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s), ",
+            ismissing(fc.maps) ? nothing : "maps: $(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s)",
             "reducer: $(fc.reducer)"])
-        print(io, "SectorConstraint(", join(lines, ""), ")")
+        print(io, "SectorConstraint(", join(lines, ", "), ")")
     end
 end
 
