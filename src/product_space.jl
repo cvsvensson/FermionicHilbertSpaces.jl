@@ -258,8 +258,7 @@ unique_combine(::Any) = false
 
 partial_trace_phase_factor_eltype(space::ProductSpace) = promote_type((partial_trace_phase_factor_eltype(H) for H in groups(space))...)
 partial_transpose_phase_factor_eltype(space::ProductSpace) = promote_type((partial_transpose_phase_factor_eltype(H) for H in groups(space))...)
-# Product of the phase factors of the factor spaces. `map` over the (heterogeneous) tuples
-# keeps every call statically dispatched.
+
 function partial_trace_phase_factor(state1, state2, space::ProductSpace)
     prod(map(partial_trace_phase_factor, state1.states, state2.states, space.factors); init=1)
 end
