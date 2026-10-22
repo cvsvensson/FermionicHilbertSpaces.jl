@@ -13,7 +13,7 @@ where ``s_\alpha = \tfrac{1}{2} f^\dagger \sigma_\alpha f`` is the spin operator
 
 ```@example mixed_fermion_spin_boson
 using FermionicHilbertSpaces
-using FermionicHilbertSpaces: FilterConstraint, particle_number, SectorConstraint
+using FermionicHilbertSpaces: particle_number
 using LinearAlgebra
 
 @fermions f

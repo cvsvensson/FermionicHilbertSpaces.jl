@@ -36,16 +36,27 @@ function _add_permutation_operator!(P, (states, state_index), mapper, perm, weig
     for (j, state) in enumerate(states)
         state2 = permute_state(state, mapper, perm)
         i = state_index(state2)
-        iszero(i) && throw(ArgumentError("Permutation maps a basis state outside the constrained space"))
+        iszero(i) && throw(ArgumentError("The permutation maps the basis state `$state` outside the space."))
         push_inds_amps!(P, i, j, weight)
     end
     return P
 end
 """
-    permutation_projector(H, Hs, perms, weights=nothing, T = Float64; normalize=true)
+    permutation_projector(H, Hs, perms[, weights[, T]]; normalize=true, sparse=true)
 
 Build a group-averaged projector/operator from permutation operators:
-`P = sum(weights[g] * R_g for g)`.
+`P = sum(weights[g] * R_g for g)`, where `R_g` permutes the factors `Hs` according to
+`perms[g]`. Without `weights`, every weight is one.
+
+`T` is the element type of `P`. It defaults to `Int` without `weights`, and otherwise to
+the element type of `weights`. For floating point and complex element types, `P` is
+replaced by zero if its largest entry is at most `sqrt(eps)` times the largest weight, so
+that a sector absent from `H` gives an exactly zero `P` instead of roundoff.
+
+Keywords:
+- `normalize`: rescale `P` by `tr(P) / sum(abs2, P)`, which makes `P^2 == P` when `P` is
+  proportional to a projector.
+- `sparse`: return a `SparseMatrixCSC` if `true`, and a `Matrix` otherwise.
 
 `Hs` may be either a full partition of `H` (covering all atomic factors) or a proper
 subsystem list (covering only a subset of atomic factors). In the subsystem case the
@@ -53,20 +64,21 @@ projector is first constructed on `Hsub = tensor_product(Hs...)` and then embedd
 back into `H` via `embed(Psub, Hsub => H)`.
 """
 function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothing, ::Type{T}=_default_projector_eltype(weights); normalize=true, sparse=true) where T
-    isempty(perms) && throw(ArgumentError("At least one permutation is required"))
+    isempty(perms) && throw(ArgumentError("`perms` must contain at least one permutation."))
 
     # Subsystem branch: Hs does not partition H, treat as a proper subsystem.
     if !ispartition(Hs, H)
         Hsub = subregion(tensor_product(Hs...), H)
-        issubsystem(Hsub, H) || throw(ArgumentError("Hs is neither a partition nor a subsystem of H"))
-        Psub = permutation_projector(Hsub, Hs, perms, weights, T; normalize)
-        return embed(Psub, Hsub => H)
+        issubsystem(Hsub, H) || throw(ArgumentError("`Hs` must be a partition or a subsystem of `H`."))
+        Psub = permutation_projector(Hsub, Hs, perms, weights, T; normalize, sparse)
+        P = embed(Psub, Hsub => H)
+        return sparse ? P : Matrix(P)
     end
 
     ws = if isnothing(weights)
         ones(T, length(perms))
     else
-        length(weights) == length(perms) || throw(ArgumentError("weights must match perms length"))
+        length(weights) == length(perms) || throw(ArgumentError("`weights` and `perms` must have the same length, got $(length(weights)) and $(length(perms))."))
         weights
     end
 
@@ -93,6 +105,7 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothi
         accum
     end
     
+    _is_negligible(P, ws) && (P = zero(P))
     if normalize
         tr2 = sum(abs2, P)
         tr1 = tr(P)
@@ -100,6 +113,17 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothi
     end
     return P
 end
+
+# Floating point sums of weights that cancel exactly leave roundoff of order
+# eps * sqrt(length(ws)) * maximum(abs, ws). For weights c * conj(χ(g)) of an irrep χ of
+# dimension d, a nonzero P has a diagonal entry of at least |c| = maximum(abs, ws) / d.
+# Comparing with sqrt(eps) * maximum(abs, ws) separates the two cases for any
+# realistic group order and irrep dimension. Other element types are exact or symbolic.
+function _is_negligible(P::AbstractArray{<:Union{AbstractFloat,Complex{<:AbstractFloat}}}, ws)
+    scale = maximum(abs, ws)
+    return maximum(abs, P; init=zero(real(eltype(P)))) <= sqrt(eps(real(eltype(P)))) * scale
+end
+_is_negligible(P, ws) = false
 
 function _default_projector_eltype(weights)
     isnothing(weights) && return Int
@@ -109,16 +133,23 @@ function _default_projector_eltype(weights)
 end
 
 """
-    symmetric_sector(H, Hs, sector=:symmetric, T=Float64; normalize=true, cutoff=0.9, atol=1e-10)
+    symmetric_sector(H, Hs, sector=:symmetric, T=default; orth_method=:qr, normalize=true, sparse=true)
 
-Construct the projector onto symmetric sectors of `H` under permutations of the partition `Hs`. 
+Return a basis for the sector of `H` selected by `sector`, under permutations of the
+factors `Hs`.
 
-If `Combinatorics.jl` is loaded, `sector` can be `:symmetric` or `:antisymmetric` to automatically generate the full set of permutations and weights for the symmetric or antisymmetric representation. Otherwise, `sector` must be a tuple of `(perms, weights)` to specify the permutations and their corresponding weights directly.
+`sector` is either a tuple `(perms, weights)`, with permutations of `1:length(Hs)` and
+one weight per permutation, or, if `Combinatorics.jl` is loaded, `:symmetric` or
+`:antisymmetric`, which use all permutations with weight one or the permutation sign.
+`T` is the element type of the projector. It defaults to `Float64` for `:symmetric` and
+`:antisymmetric`, and for a tuple `(perms, weights)` to the floating point version of the
+element type of `weights`, for example `ComplexF64` for complex weights.
 
-`orth_method` selects what is returned. With `_QR()` (the default) or `_EIG()`, it is a
-matrix with orthonormal columns spanning the sector, from column-pivoted QR
-decompositions or from eigendecompositions of the diagonal blocks of the projector. With
-`nothing`, it is the projector itself.
+The projector is built with `permutation_projector(H, Hs, perms, weights, T; normalize, sparse)`.
+`orth_method` is `:qr` or `_QR()` (the default), `:eig` or `_EIG()`, or `nothing`. With
+`:qr` or `:eig`, the result is a matrix with orthonormal columns spanning the sector, from
+column-pivoted QR decompositions or from eigendecompositions of the diagonal blocks of the
+projector. With `nothing`, it is the projector itself.
 Both decompositions assume that the projector is proportional to an orthogonal
 projector, which holds when `perms` form a group and `weights` are proportional to a
 character of it or to its complex conjugate. Each diagonal block `B` contributes at most
@@ -127,15 +158,27 @@ character of it or to its complex conjugate. Each diagonal block `B` contributes
 `Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
 case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
 """
-function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type{T}=Float64;
-    orth_method=_QR(), kwargs...) where T
-    isempty(Hs) && throw(ArgumentError("At least one factor space is required"))
+function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type{T}=_default_sector_eltype(sector);
+    orth_method=:qr, kwargs...) where T
+    isempty(Hs) && throw(ArgumentError("`Hs` must contain at least one factor space."))
+    method = _orth_method(orth_method)
 
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
-    length(perms) == length(weights) || throw(ArgumentError("Generated weights must match generated permutations"))
+    length(perms) == length(weights) || throw(ArgumentError("The generated weights and permutations must have the same length, got $(length(weights)) and $(length(perms))."))
     P = permutation_projector(H, Hs, perms, weights, T; kwargs...)
-    isnothing(orth_method) && return P
-    _sector_basis(P, orth_method)
+    isnothing(method) && return P
+    _sector_basis(P, method)
+end
+_default_sector_eltype(sector) = Float64
+function _default_sector_eltype((perms, weights)::Tuple)
+    T = _default_projector_eltype(weights)
+    return T <: Union{Real,Complex} ? float(T) : T
+end
+_orth_method(method::Union{_QR,_EIG,Nothing}) = method
+function _orth_method(method)
+    method === :qr && return _QR()
+    method === :eig && return _EIG()
+    throw(ArgumentError("`orth_method` must be `:qr`, `:eig` or `nothing`, got `$(repr(method))`."))
 end
 _resolve_sector_permutations_and_weights(Hs, (perms, weights), T) = (perms, weights) # for direct input of perms and weights
 
@@ -320,6 +363,19 @@ end
     @test Ttriv' * Ttriv ≈ Ttriv
     @test Tsign' * Tsign ≈ Tsign
 
+    # orth_method values
+    using FermionicHilbertSpaces: _QR, _EIG
+    @test symmetric_sector(H, [H1, H2], sympw; orth_method=:qr) == Ptriv
+    @test symmetric_sector(H, [H1, H2], sympw; orth_method=_QR()) == Ptriv
+    for w in (sympw, antisymw)
+        Q = symmetric_sector(H, [H1, H2], w; orth_method=:eig)
+        @test Q' * Q ≈ I
+        @test Q * Q' ≈ symmetric_sector(H, [H1, H2], w; orth_method=nothing)
+        @test symmetric_sector(H, [H1, H2], w; orth_method=_EIG()) == Q
+    end
+    @test_throws ArgumentError symmetric_sector(H, [H1, H2], sympw; orth_method=:svd)
+    @test symmetric_sector(H, [H1, H2], sympw; orth_method=nothing, sparse=false) isa Matrix
+
     H3 = hilbert_space(f, 3:3)
     H123 = tensor_product(H1, H2, H3)
     Hs3 = [H1, H2, H3]
@@ -354,11 +410,54 @@ end
     @test Qsym' * Qsym ≈ I
     @test Qanti' * Qanti ≈ I
 
+    # The normalize keyword only rescales the projector, so the sector basis must not change
+    @test size(symmetric_sector(H123, Hs3, :symmetric; normalize=false), 2) == size(symmetric_sector(H123, Hs3, :symmetric), 2)
+    Qanti_unnorm = symmetric_sector(H123, Hs_sub, :antisymmetric; normalize=false)
+    @test size(Qanti_unnorm, 2) == size(Qanti, 2)
+
     # Q*Q' should equal the full space projector (orth_method=nothing)
     Tsym_sub = symmetric_sector(H123, Hs_sub, :symmetric; orth_method=nothing)
     Tanti_sub = symmetric_sector(H123, Hs_sub, :antisymmetric; orth_method=nothing)
     @test Qsym * Qsym' ≈ Tsym_sub
     @test Qanti * Qanti' ≈ Tanti_sub
+    @test Qanti_unnorm * Qanti_unnorm' ≈ Tanti_sub
+
+    @test permutation_projector(H123, Hs_sub, [idperm, swapperm]; sparse=false) isa Matrix
+
+    # Symbolic element types: the projector is returned without a rank computation
+    using Symbolics: Num, symbolic_to_float, substitute, @variables
+    @variables x
+    Psym = symmetric_sector(H, [H1, H2], :symmetric, Num; orth_method=nothing)
+    @test Float64.(symbolic_to_float.(Matrix(Psym))) ≈ symmetric_sector(H, [H1, H2], :symmetric; orth_method=nothing)
+    Pwx = symmetric_sector(H, [H1, H2], ([idperm, swapperm], [1, x]), Num; orth_method=nothing, normalize=false, sparse=false)
+    @test Float64.(symbolic_to_float.(Matrix(substitute.(Pwx, Ref(x => -1))))) ≈ symmetric_sector(H, [H1, H2], antisymw; orth_method=nothing, normalize=false, sparse=false)
+
+    # Complex weights give a complex basis without passing the element type
+    cw = ([idperm, swapperm], [1.0 + 0im, cis(0.3)])
+    Qc = symmetric_sector(H, [H1, H2], cw)
+    @test eltype(Qc) <: Complex
+    @test size(Qc, 2) == 3
+    @test eltype(symmetric_sector(H, [H1, H2], ([idperm, swapperm], [1, -1]))) == Float64
+
+    # Irreps absent from the space give an empty basis, not a rank-1 projector from roundoff
+    @spins S 1
+    N = 4
+    spinspace = hilbert_space(S, 1:N, SectorConstraint(sum; maps=st -> st.m))
+    translations = [[mod1(i + r, N) for i in 1:N] for r in 0:(N-1)]
+    for M in (4, 3) # one state (fully polarized), then four states (one spin lowered)
+        sec = sector(M, spinspace)
+        dims = map(0:(N-1)) do k
+            w = [cis(2π * k * r / N) for r in 0:(N-1)]
+            Q = symmetric_sector(sec, factors(sec), (translations, w))
+            @test Q' * Q ≈ I
+            for method in (:eig, :qr)
+                @test size(symmetric_sector(sec, factors(sec), (translations, w); orth_method=method, normalize=false), 2) == size(Q, 2)
+            end
+            size(Q, 2)
+        end
+        @test sum(dims) == dim(sec)
+        M == 4 && @test dims == [1, 0, 0, 0]
+    end
 
     # Invalid input: Hs not a subsystem of H
     @test_throws ArgumentError permutation_projector(H, [H1, H3], [idperm, swapperm])

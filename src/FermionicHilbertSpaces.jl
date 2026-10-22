@@ -1,3 +1,10 @@
+"""
+    FermionicHilbertSpaces
+
+Symbolic fermions, bosons and spins, Hilbert spaces with constraints, and the tensor
+products, partial traces and matrix representations that connect them.
+
+"""
 module FermionicHilbertSpaces
 
 using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Eigen, Hermitian,
@@ -26,8 +33,9 @@ export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
 export @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
+export SectorConstraint, FilterConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
-export majorana_hilbert_space, single_particle_hilbert_space, bdg_hilbert_space
+export SingleParticle, BdG
 export symmetric_sector
 
 """
@@ -45,13 +53,25 @@ const hc = HC()
 
 abstract type AbstractSym end
 
+# Factors from different groups are ordered by the type name of the group id, then by `isless`.
+# The type name depends only on the code, so the order is the same in every session and on every platform.
+function _group_isless(a, b)
+    ga, gb = symbolic_group(a), symbolic_group(b)
+    na, nb = nameof(typeof(ga)), nameof(typeof(gb))
+    na == nb ? isless(ga, gb) : isless(na, nb)
+end
 
+# The tags that identify a group of symbolic operators. `tags` is `nothing` or a tuple. For `@fermions` and
+# `@majoranas` the first element is the tuple of names given to the macro, so the names determine the group.
+# Elements appended by `add_tag` are symbols such as `:left` and `:right`.
+# Tags are ordered by `isless` of their tag tuples. For groups created by the macros this is the lexicographic order
+# of the macro's names, e.g. the operators of `@fermions a` sort before those of `@fermions b`.
 struct Tags{T}
     tags::T
 end
 Base.hash(id::Tags, h::UInt) = hash(id.tags, h)
 Base.:(==)(a::Tags, b::Tags) = a.tags == b.tags
-Base.isless(a::Tags, b::Tags) = isless(hash(a.tags), hash(b.tags))
+Base.isless(a::Tags, b::Tags) = isless(tagset(a), tagset(b))
 tagset(id::Tags) = id.tags
 tagset(::Tags{Nothing}) = ()
 tagset(x) = tagset(tags(x))
