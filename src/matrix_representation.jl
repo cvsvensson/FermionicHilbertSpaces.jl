@@ -148,7 +148,6 @@ function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
     end
     return ProductOperator(ops, spaces[inds], inds)
 end
-# Position of `basis` in `bases`, or 0 if it is not there.
 _basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
 
 function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr, chunking; kwargs...)
