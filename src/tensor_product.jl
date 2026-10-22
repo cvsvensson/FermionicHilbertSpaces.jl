@@ -447,12 +447,21 @@ _has_support_on(m::AbstractMatrix, j) = !iszero(view(m, j, :)) || !iszero(view(m
 _has_support_on(v::AbstractVector, j) = !iszero(v[j])
 _has_support_on(m::UniformScaling, j) = !iszero(m.λ)
 
-function basis_transformation_map(Hfrom, Hto; skipmissing=false, kwargs...)
+function _checked_basis_transformation(Hfrom, Hto; skipmissing=false)
     U, dropped = basis_transformation(Hfrom, Hto)
     if !skipmissing && !isempty(dropped)
         throw(ArgumentError("The state $(basisstate(first(dropped), Hfrom)) is not in the target Hilbert space. Pass `skipmissing=true` to drop such states."))
     end
+    return U
+end
+function basis_transformation_map(Hfrom, Hto; skipmissing=false, kwargs...)
+    U = _checked_basis_transformation(Hfrom, Hto; skipmissing)
     kron(conj(U), U)
+end
+# transpose(basis_transformation_map(Hfrom, Hto)), whose column pointer runs over dim(Hto)^2 instead of dim(Hfrom)^2 columns
+function transposed_basis_transformation_map(Hfrom, Hto; skipmissing=false, kwargs...)
+    U = _checked_basis_transformation(Hfrom, Hto; skipmissing)
+    kron(sparse(U'), sparse(transpose(U)))
 end
 
 """
@@ -596,6 +605,103 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
 end
 
 """
+    _transposed_superoperator(Is, Js, Vs, nout, nin)
+
+Return the `nout × nin` superoperator `S` with `S[Is[p], Js[p]] = Vs[p]` (repeated entries are
+summed) as `transpose(St)`, where `St` is a `SparseMatrixCSC`. For partial-trace maps `nin = dim(H)^2`
+is much larger than `nout = dim(Hsub)^2`, and storing the transpose keeps the column pointer at length
+`nout + 1`. Building `St` with `sparse(Js, Is, Vs, nin, nout)` would need `O(nin)` scratch space, so the
+entries are sorted by output index with a counting sort instead.
+"""
+function _transposed_superoperator(Is::AbstractVector{<:Integer}, Js::AbstractVector{<:Integer}, Vs::AbstractVector{T}, nout::Integer, nin::Integer) where T
+    N = length(Vs)
+    length(Is) == length(Js) == N || throw(DimensionMismatch("Is, Js and Vs must have the same length"))
+    colptr = zeros(Int, nout + 1)
+    colptr[1] = 1
+    for (I, J) in zip(Is, Js)
+        1 <= I <= nout || throw(ArgumentError("row index $I out of range 1:$nout"))
+        1 <= J <= nin || throw(ArgumentError("column index $J out of range 1:$nin"))
+        colptr[I+1] += 1
+    end
+    cumsum!(colptr, colptr)
+    next = colptr[1:nout]
+    perm = Vector{Int}(undef, N)
+    for p in 1:N
+        perm[next[Is[p]]] = p
+        next[Is[p]] += 1
+    end
+    # sort each column of St by row and sum repeated entries
+    rows = sizehint!(Int[], N)
+    vals = sizehint!(T[], N)
+    newptr = similar(colptr)
+    newptr[1] = 1
+    for K in 1:nout
+        r = colptr[K]:(colptr[K+1]-1)
+        length(r) > 1 && sort!(view(perm, r); by=p -> Js[p])
+        for q in r
+            p = perm[q]
+            if length(vals) >= newptr[K] && rows[end] == Js[p]
+                vals[end] += Vs[p]
+            else
+                push!(rows, Js[p])
+                push!(vals, Vs[p])
+            end
+        end
+        newptr[K+1] = length(vals) + 1
+    end
+    return transpose(SparseMatrixCSC(nin, nout, newptr, rows, vals))
+end
+
+# The adjoint of a stored superoperator, materialized so that it is again a SparseMatrixCSC or its transpose
+_adjoint_superop(S::LinearAlgebra.Transpose{<:Any,<:SparseMatrixCSC}) = conj(parent(S))
+_adjoint_superop(S::SparseMatrixCSC) = transpose(conj(S))
+
+# w = S * vec(ψψ†) for S = transpose(St), without forming ψψ†
+function _apply_superop_on_pure_state!(w::AbstractVector, S::LinearAlgebra.Transpose{<:Any,<:SparseMatrixCSC}, ψ::AbstractVector)
+    D = length(ψ)
+    size(S, 2) == D^2 || throw(DimensionMismatch("The map must have `length(ψ)^2` = $(D^2) columns, got $(size(S, 2))"))
+    length(w) == size(S, 1) || throw(DimensionMismatch("The output vector must have length $(size(S, 1)), got $(length(w))"))
+    St = parent(S)
+    rows = rowvals(St)
+    vals = nonzeros(St)
+    @inbounds for K in axes(St, 2)
+        acc = zero(eltype(w))
+        for p in nzrange(St, K)
+            k, j = divrem(rows[p] - 1, D) .+ 1 # rows[p] is the column-major linear index of (j, k) in ψψ†
+            acc += vals[p] * (ψ[j] * conj(ψ[k]))
+        end
+        w[K] = acc
+    end
+    return w
+end
+
+# y = S * vec(m) for S = transpose(St) and a sparse D × D matrix m: each stored entry of S looks up
+# its matrix element of m by binary search in the column of m.
+function _superop_mul_matrix!(y::AbstractVector, S::LinearAlgebra.Transpose{<:Any,<:SparseMatrixCSC}, m::SparseMatrixCSC)
+    D = size(m, 1)
+    size(m, 2) == D && size(S, 2) == D^2 || throw(DimensionMismatch("The input matrix must be square with $(size(S, 2)) entries, got size $(size(m))"))
+    length(y) == size(S, 1) || throw(DimensionMismatch("The output vector must have length $(size(S, 1)), got $(length(y))"))
+    St = parent(S)
+    rows = rowvals(St)
+    vals = nonzeros(St)
+    mrows = rowvals(m)
+    mvals = nonzeros(m)
+    @inbounds for K in axes(St, 2)
+        acc = zero(eltype(y))
+        for p in nzrange(St, K)
+            k, j = divrem(rows[p] - 1, D) .+ 1
+            rng = nzrange(m, k)
+            i = searchsortedfirst(view(mrows, rng), j)
+            if i <= length(rng) && mrows[rng[i]] == j
+                acc += vals[p] * mvals[rng[i]]
+            end
+        end
+        y[K] = acc
+    end
+    return y
+end
+
+"""
     partial_trace(H => Hsub; kwargs...)
 
 Create a callable partial-trace operation from `H` to `Hsub`.
@@ -639,8 +745,10 @@ function _canonicalize_pt_input(v::AbstractVector, H::AbstractHilbertSpace)
         throw(DimensionMismatch("The input vector must have length $(dim(H)^2) (interpreted as a vectorized density matrix) or $(dim(H)) (interpreted as a pure state, which is then converted to a density matrix), got $(length(v))"))
     end
 end
-function _canonicalize_pt_input(m::AbstractMatrix, H::AbstractHilbertSpace)
+_check_pt_input_size(m::AbstractMatrix, H::AbstractHilbertSpace) =
     size(m) == (dim(H), dim(H)) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
+function _canonicalize_pt_input(m::AbstractMatrix, H::AbstractHilbertSpace)
+    _check_pt_input_size(m, H)
     return _vectorize_pt_density_matrix(m)
 end
 function _canonicalize_pt_input(m::UniformScaling, H::AbstractHilbertSpace)
@@ -658,6 +766,19 @@ end
 function (op::PartialTraceMap)(in::AbstractMatrix)
     v = _canonicalize_pt_input(in, op.H)
     _devectorize_pt_output(op.map * v, dim(op.Hsub))
+end
+# Sparse input: apply the map to the stored entries, without vectorizing the matrix
+function (op::PartialTraceMap)(in::SparseMatrixCSC)
+    _check_pt_input_size(in, op.H)
+    n = dim(op.Hsub)
+    w = _superop_mul_matrix!(zeros(promote_type(eltype(op.map), eltype(in)), n^2), op.map, in)
+    return sparse(reshape(w, n, n))
+end
+function (op::PartialTraceMap)(out, in::SparseMatrixCSC)
+    vout = _canonicalize_pt_output(out, op.Hsub)
+    _check_pt_input_size(in, op.H)
+    _superop_mul_matrix!(vout, op.map, in)
+    out
 end
 function (op::PartialTraceMap)(in::AbstractVector)
     if length(in) == dim(op.H)
@@ -705,7 +826,7 @@ function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub),
     partial_trace_map(H, Hsub, complement, alg; kwargs...)
 end
 
-partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = basis_transformation_map(H, Hsub; kwargs...)
+partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = transpose(transposed_basis_transformation_map(H, Hsub; kwargs...))
 function partial_trace_map(H, Hsub, complement::AbstractHilbertSpace, ::SubsystemPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
     indK = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
@@ -719,7 +840,7 @@ function partial_trace_map(H, Hsub, complement::AbstractHilbertSpace, ::Subsyste
         push!(Js, indJ[J1, J2])
         push!(Vs, v)
     end
-    return SparseArrays.sparse!(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
+    return _transposed_superoperator(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
 
 function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement::AbstractHilbertSpace, ::FullPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
@@ -735,7 +856,7 @@ function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, 
         push!(Js, indJ[J1, J2])
         push!(Vs, v)
     end
-    return SparseArrays.sparse!(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
+    return _transposed_superoperator(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
 
 
@@ -851,6 +972,30 @@ end
     H = hilbert_space(a, 1:4, NumberConservation(1))
     @test_throws ArgumentError generalized_kron((m1, m2), (H1, H2) => H)
     @test generalized_kron((m1, m2), (H1, H2) => H; skipmissing=true) ≈ tensor_product((m1, m2), (H1, H2) => H) # Since tensor_product first embeds both operators in the full Hilbert space (which can be done) and then multiplies them, it won't complain about missing states.
+end
+
+@testitem "Partial trace and embed of sparse matrices" begin
+    using SparseArrays
+    # the map builder sums repeated entries like `sparse`
+    Is, Js, Vs = [2, 1, 2, 1, 3, 2], [9, 1, 4, 1, 2, 9], [1, 2, 3, -2, 5, 6]
+    @test FermionicHilbertSpaces._transposed_superoperator(Is, Js, Vs, 4, 9) == sparse(Is, Js, Vs, 4, 9)
+
+    @fermions f
+    Hcons = hilbert_space(f, 1:4, NumberConservation(2))
+    Hfull = hilbert_space(f, 1:2)
+    # a subsystem, and a space with the same atoms (a basis transformation)
+    for (H, Hsub) in ((Hcons, subregion(Hfull, Hcons)), (Hfull, hilbert_space(f, 1:2, ParityConservation())))
+        pt = partial_trace(H => Hsub)
+        emb = embed(Hsub => H; skipmissing=true)
+        m = sprand(ComplexF64, dim(H), dim(H), 0.3)
+        msub = sprand(ComplexF64, dim(Hsub), dim(Hsub), 0.5)
+        @test pt(m) ≈ partial_trace(Matrix(m), H => Hsub)
+        @test pt(zeros(ComplexF64, dim(Hsub), dim(Hsub)), m) ≈ partial_trace(Matrix(m), H => Hsub)
+        @test emb(msub) ≈ embed(Matrix(msub), Hsub => H; skipmissing=true)
+        @test pt'(msub) ≈ emb(msub)
+        @test emb'(m) ≈ pt(m)
+        @test_throws DimensionMismatch pt(sprand(dim(H) + 1, dim(H) + 1, 0.5))
+    end
 end
 
 @testitem "Partial trace and embed across truncations" begin

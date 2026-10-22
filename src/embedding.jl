@@ -24,7 +24,7 @@ function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
     map = if isnothing(complement)
         basis_transformation_map(Hsub, H; skipmissing, kwargs...)
     else
-        partial_trace_map(H, Hsub; complement, alg, skipmissing=skipmissing, kwargs...)'
+        _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, skipmissing=skipmissing, kwargs...))
     end
     EmbedMap(Hsub, H, complement, kwargs, map)
 end
@@ -32,6 +32,32 @@ end
 function (op::EmbedMap)(m::AbstractMatrix)
     size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(m), dim(op.H))
+end
+function (op::EmbedMap)(m::SparseMatrixCSC)
+    size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
+    _embed_sparse_matrix(op.map, m, dim(op.H))
+end
+
+# map * vec(m) for a sparse map of size D^2 × n^2 and a sparse n × n matrix m. Multiplying with the
+# sparse vector m[:] would allocate a dense vector of length D^2, so the output entries are
+# collected and assembled into a D × D matrix instead.
+function _embed_sparse_matrix(map::SparseMatrixCSC, m::SparseMatrixCSC, D)
+    n = size(m, 1)
+    rows = rowvals(map)
+    vals = nonzeros(map)
+    T = promote_type(eltype(map), eltype(m))
+    J1s = Int[]
+    J2s = Int[]
+    Vs = T[]
+    for (k1, k2, x) in zip(findnz(m)...)
+        for p in nzrange(map, k1 + (k2 - 1) * n)
+            J2, J1 = divrem(rows[p] - 1, D) .+ 1
+            push!(J1s, J1)
+            push!(J2s, J2)
+            push!(Vs, vals[p] * x)
+        end
+    end
+    return sparse(J1s, J2s, Vs, D, D)
 end
 
 function (op::EmbedMap)(out::AbstractMatrix, m::AbstractMatrix)
@@ -58,10 +84,10 @@ function (op::EmbedMap)(m::UniformScaling)
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(mfull), dim(op.H))
 end
 SparseArrays.sparse(op::EmbedMap) = op.map
-Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, op.map')
-Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, op.map')
-Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, op.map')
-Base.transpose(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, op.map')
+Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
+Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
+Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
+Base.transpose(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
 
 """
     embed(Hsub => H; kwargs...)
