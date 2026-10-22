@@ -1,5 +1,5 @@
 using FermionicHilbertSpaces
-using LinearAlgebra, SparseArrays
+using LinearAlgebra
 
 N = 62 # If you go above 62, BigInt is used which is slower
 n = 2
@@ -14,7 +14,7 @@ ham = Hermitian(representation(hamiltonian, H))
 
 ## Solve for ground state
 using KrylovKit
-vals, vecs = eigsolve(v -> ham * v, rand(size(ham, 1)), 1)
+vals, vecs = eigsolve(v -> ham * v, rand(size(ham, 1)), 1, :SR; ishermitian=true)
 
 ## Partial trace to half the system
 Hsub = subregion(hilbert_space(c, 1:div(N, 2)), H)
