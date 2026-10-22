@@ -8,15 +8,6 @@ using Combinatorics # loads CombinatoricsExt, which symmetric_sector uses
 const FHS = FermionicHilbertSpaces
 const SUITE = BenchmarkGroup()
 
-# Each section draws its random inputs from its own seeded RNG, so adding or
-# removing a section does not change the inputs of the others.
-#
-# Benchmarks of partial traces, embeddings and partial transposes pass
-# `complement=` so that the complementary subsystem, which is benchmarked on
-# its own under "complement", is not recomputed in every sample.
-# `tensor_product` of matrices has no such keyword, so its benchmarks include
-# computing the complement.
-
 ## Fermions: spaces, symbolic algebra, matrix representations
 let rng = Xoshiro(1)
     @fermions f
@@ -239,7 +230,6 @@ let
     H = hilbert_space(S, 1:N, Sz0)
     heisenberg = sum(S[k][:x] * S[k+1][:x] + S[k][:y] * S[k+1][:y] + S[k][:z] * S[k+1][:z] for k in 1:N-1) + sum(0.1k * S[k][:z] for k in 1:N)
     g = SUITE["spin"]
-    g["hilbert_space_Sz0"] = @benchmarkable hilbert_space($S, $(1:N), $Sz0)
     g["symbolic_heisenberg"] =
         @benchmarkable sum($S[k][:x] * $S[k+1][:x] + $S[k][:y] * $S[k+1][:y] + $S[k][:z] * $S[k+1][:z] for k in 1:$N-1)
     g["matrix_representation_heisenberg"] = @benchmarkable matrix_representation($heisenberg, $H)
@@ -307,30 +297,6 @@ let rng = Xoshiro(10)
     g["spaces"] = @benchmarkable tensor_product($H1, $H2) evals = 10
 end
 
-## Number sectors: construction and matrix representation in a sector-ordered basis
-let
-    @fermions f
-    N = 12
-    H = hilbert_space(f, 1:N, NumberConservation())
-    hop = sum(f[n]' * f[n+1] + hc for n in 1:N-1)
-    g = SUITE["sectors"]
-    g["sectors"] = @benchmarkable sectors($H)
-    g["matrix_representation_sectors"] = @benchmarkable matrix_representation($hop, $H)
-end
-
-## Basis state lookup
-let rng = Xoshiro(11)
-    @fermions f
-    H = hilbert_space(f, 1:16, NumberConservation(8))
-    states = shuffle(rng, collect(basisstates(H)))
-    SUITE["state_index"]["constrained"] = @benchmarkable sum(s -> state_index(s, $H), $states)
-    N = 12
-    Hprod = tensor_product(hilbert_space(f, [(i, :↑) for i in 1:N], NumberConservation(3)),
-        hilbert_space(f, [(i, :↓) for i in 1:N], NumberConservation(2)))
-    states_prod = shuffle(rng, collect(basisstates(Hprod)))
-    SUITE["state_index"]["product_space"] = @benchmarkable sum(s -> state_index(s, $Hprod), $states_prod)
-end
-
 ## Symbolic states
 let
     # Repeated application of a projected operator, as in Krylov solves.
@@ -344,26 +310,6 @@ let
     Hq = Q * (f[1]' * f[2] + hc + 10.0 * sum(c[n]'c[n] for n in 1:6) + pert) * Q
     ψ = Q * pert * kets("10")
     SUITE["symbolic_states"]["projected_op_on_state"] = @benchmarkable $Hq * ($Hq * ($Hq * $ψ))
-end
-let rng = Xoshiro(12)
-    @fermions f
-    H = hilbert_space(f, 1:10)
-    kets = Kets(H)
-    hop = sum(f[n]' * f[n+1] + hc for n in 1:9)
-    k0 = kets("1010101010")
-    ψ = hop * (hop * (hop * k0))
-    strings = [join(rand(rng, ('0', '1'), 10)) for _ in 1:1000]
-    g = SUITE["symbolic_states"]
-    g["parse_kets"] = @benchmarkable map($kets, $strings)
-    g["vector_representation"] = @benchmarkable representation($ψ, $H)
-end
-
-## Majoranas
-let
-    @majoranas γ
-    H = hilbert_space(γ, 1:20)
-    op = sum(1im * γ[2n-1] * γ[2n] for n in 1:10) + sum(1im * γ[n] * γ[n+1] * γ[n+2] * γ[n+3] for n in 1:17)
-    SUITE["majorana"]["matrix_representation"] = @benchmarkable matrix_representation($op, $H)
 end
 
 # Every benchmark samples for one second. Fixing `evals` makes `tune!`
