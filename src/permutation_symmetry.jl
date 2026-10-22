@@ -121,7 +121,16 @@ end
 
 Construct the projector onto symmetric sectors of `H` under permutations of the partition `Hs`. 
 
-If `Combinatorics.jl` is loaded, `sector` can be `:symmetric` or `:antisymmetric` to automatically generate the full set of permutations and weights for the symmetric or antisymmetric representation. Otherwise, `sector` must be a tuple of `(perms, weights)` to specify the permutations and their corresponding weights directly.
+`sector` is either a tuple `(perms, weights)` with the permutations and their weights, or
+`:symmetric` or `:antisymmetric`, which stand for all permutations with weight one or the
+permutation sign.
+
+For `:symmetric` and `:antisymmetric` with `Hs` a partition of `H` and `orth_method` not
+`nothing`, the basis is built directly from the orbits of the basis states under
+permutations, with one column per orbit that contributes to the sector. The basis then
+has element type `float(T)`, and the keywords `normalize` and `sparse` have no effect.
+In the remaining cases, the projector is built with `permutation_projector`, and
+`:symmetric` and `:antisymmetric` require `Combinatorics.jl` to be loaded.
 
 `Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
 case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
@@ -129,6 +138,9 @@ case the sector is constructed on `tensor_product(Hs...)` and embedded back into
 function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type{T}=Float64;
     orth_method=_QR(), kwargs...) where T
     isempty(Hs) && throw(ArgumentError("At least one factor space is required"))
+    if sector isa Symbol && !isnothing(orth_method) && ispartition(Hs, H)
+        return _orbit_sector_basis(H, Hs, _sector_parity(sector), T; kwargs...)
+    end
 
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
     length(perms) == length(weights) || throw(ArgumentError("Generated weights must match generated permutations"))
@@ -142,6 +154,99 @@ function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type
     _remove_columns!(P, orth_method, rank)
 end
 _resolve_sector_permutations_and_weights(Hs, (perms, weights), T) = (perms, weights) # for direct input of perms and weights
+
+_sector_parity(sector::Symbol) = sector === :symmetric ? 1 : sector === :antisymmetric ? -1 :
+    throw(ArgumentError("The sector must be `:symmetric` or `:antisymmetric`, got `:$sector`."))
+
+# Orthonormal basis of the symmetric (`parity = 1`) or antisymmetric (`parity = -1`)
+# sector of `H` under all permutations of the partition `Hs`.
+# `permute_state` returns one basis state and discards the amplitude that `combine_states`
+# returns, so every permutation acts as a permutation matrix on the basis. The
+# group-averaged projector is then a sum over orbits of basis states, and each orbit
+# contributes one column with entries `sign(g) / sqrt(length(orbit))`, where `g` maps the
+# orbit's first state to the entry's state. In the antisymmetric case an orbit whose
+# states are fixed by an odd permutation contributes nothing.
+# The orbits are found with the adjacent transpositions, which generate all permutations.
+function _orbit_sector_basis(H, Hs, parity, ::Type{T}; normalize=true, sparse=true) where T
+    # `normalize` and `sparse` only affect the projector, which is never built here.
+    states = basisstates(H)
+    mapper = state_mapper(H, Hs)
+    n = length(Hs)
+    substates = unique_split_state(first(states), mapper)
+    gens = [_match_perm([1:k-1; k + 1; k; k+2:n], substates) for k in 1:n-1]
+    parent, rel, odd = _signed_orbits(states, Base.Fix2(state_index, H), mapper, gens, parity)
+
+    d = length(parent)
+    label = zeros(Int, d)  # column of each orbit root, -1 for dropped orbits
+    firstsign = Int[]
+    sizes = Int[]
+    roots = Vector{Int}(undef, d)
+    signs = Vector{Int}(undef, d)
+    for x in 1:d
+        r, s = _find_signed!(parent, rel, x)
+        roots[x], signs[x] = r, s
+        if iszero(label[r])
+            if odd[r]
+                label[r] = -1
+            else
+                push!(firstsign, s)
+                push!(sizes, 0)
+                label[r] = length(sizes)
+            end
+        end
+        label[r] > 0 && (sizes[label[r]] += 1)
+    end
+    F = float(T)
+    Q = zeros(F, d, length(sizes))
+    for x in 1:d
+        c = label[roots[x]]
+        c > 0 && (Q[x, c] = signs[x] * firstsign[c] / sqrt(real(F)(sizes[c])))
+    end
+    return Q
+end
+
+# Signed union-find over the basis states: `parent` and `rel` encode a forest where the
+# amplitude of state `x` in its orbit's column is `rel[x]` times that of `parent[x]`. Each
+# generator application `i = g(j)` requires amplitude(i) = parity * amplitude(j). An orbit
+# whose constraints contradict each other is marked in `odd`: such an orbit contains a
+# closed walk with an odd number of transpositions, so a state in it is fixed by an odd
+# permutation.
+function _signed_orbits(states, state_index, mapper, gens, parity)
+    d = length(states)
+    parent = collect(1:d)
+    rel = ones(Int, d)
+    odd = falses(d)
+    for (j, state) in enumerate(states), g in gens
+        i = state_index(permute_state(state, mapper, g))
+        iszero(i) && throw(ArgumentError("The permutation maps the basis state `$state` outside the space."))
+        ri, si = _find_signed!(parent, rel, i)
+        rj, sj = _find_signed!(parent, rel, j)
+        if ri == rj
+            si == parity * sj || (odd[ri] = true)
+        else
+            parent[ri] = rj
+            rel[ri] = si * parity * sj
+            odd[rj] |= odd[ri]
+        end
+    end
+    return parent, rel, odd
+end
+
+# Root of `x` and the sign of `x` relative to the root, compressing the path to the root.
+function _find_signed!(parent, rel, x)
+    r, s = x, 1
+    while parent[r] != r
+        s *= rel[r]
+        r = parent[r]
+    end
+    y, sy = x, s
+    while parent[y] != r && parent[y] != y
+        next, snext = parent[y], sy * rel[y]
+        parent[y], rel[y] = r, sy
+        y, sy = next, snext
+    end
+    return r, s
+end
 
 function _remove_columns!(P::Matrix, ::_QR, M::Int=round(Int, tr(P)))
     F = try
@@ -202,8 +307,11 @@ end
     Ptriv = symmetric_sector(H, [H1, H2], sympw)
     Psign = symmetric_sector(H, [H1, H2], antisymw)
 
-    @test Ptriv == symmetric_sector(H, [H1, H2], :symmetric)
-    @test Psign == symmetric_sector(H, [H1, H2], :antisymmetric)
+    # The bases span the same sector; the basis vectors themselves may differ
+    Qtriv = symmetric_sector(H, [H1, H2], :symmetric)
+    Qsign = symmetric_sector(H, [H1, H2], :antisymmetric)
+    @test Ptriv * Ptriv' ≈ Qtriv * Qtriv'
+    @test Psign * Psign' ≈ Qsign * Qsign'
 
     @test size(Psign, 2) == 1
     @test size(Ptriv, 2) == 3
@@ -263,4 +371,46 @@ end
 
     # Invalid input: Hs not a subsystem of H
     @test_throws ArgumentError permutation_projector(H, [H1, H3], [idperm, swapperm])
+end
+
+@testitem "Symmetric and antisymmetric sectors from orbits" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: permutation_operator, symmetric_sector, AdditiveConstraint, _QR, _EIG
+    using Combinatorics: permutations
+    @fermions f
+    @spins S 1 // 2
+    @bosons b
+    sites = [tensor_product(hilbert_space(f[k, :u]), hilbert_space(f[k, :d])) for k in 1:3]
+    bosons = [hilbert_space(b[k], 3) for k in 1:3]
+    mixed = [tensor_product(hilbert_space(S[k]), hilbert_space(f[10+k])) for k in 1:3]
+    Hspins = hilbert_space(S, 1:5, AdditiveConstraint(1 // 2; maps=s -> s.m))
+    Hferm = hilbert_space(f, 1:5, NumberConservation(2))
+    cases = [(hilbert_space(f, 1:4), factors(hilbert_space(f, 1:4))), (Hferm, factors(Hferm)),
+        (Hspins, factors(Hspins)), (tensor_product(sites), sites),
+        (tensor_product(bosons), bosons), (tensor_product(mixed), mixed)]
+    for (H, Hs) in cases
+        # The orbit construction relies on every permutation acting as a permutation matrix
+        for perm in permutations(1:length(Hs))
+            R = permutation_operator(H, Hs, perm)
+            @test all(x -> x == 0 || x == 1, R)
+            @test all(==(1), sum(R; dims=1)) && all(==(1), sum(R; dims=2))
+        end
+        for sector in (:symmetric, :antisymmetric)
+            P = symmetric_sector(H, Hs, sector; orth_method=nothing)
+            for orth_method in (_QR(), _EIG())
+                Q = symmetric_sector(H, Hs, sector; orth_method)
+                @test Q isa Matrix{Float64}
+                @test size(Q, 2) == round(Int, tr(P))
+                @test Q' * Q ≈ I
+                @test Q * Q' ≈ P
+            end
+        end
+    end
+    # The orbit basis is computed in the requested precision
+    Qbig = symmetric_sector(cases[1]..., :symmetric, BigFloat)
+    @test eltype(Qbig) == BigFloat && size(Qbig, 2) == 5 && maximum(abs, Qbig' * Qbig - I) < 1e-60
+    # Single factor: the sector is the whole space
+    H1 = hilbert_space(f, 1:1)
+    @test symmetric_sector(H1, [H1], :antisymmetric) ≈ I
+    @test_throws ArgumentError symmetric_sector(cases[1]..., :invalid)
 end
