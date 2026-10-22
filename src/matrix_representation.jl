@@ -183,13 +183,10 @@ function _kron_groups(matrices, active, repr::EagerSparseRepr)
     T = isnothing(n_identity) ? eltype(core) : promote_type(eltype(core), eltype(matrices[n_identity]))
     r = prod(n -> size(matrices[n], 1), 1:first_active-1; init=1)
     l = prod(n -> size(matrices[n], 1), last_active+1:length(matrices); init=1)
+    l == r == 1 && return convert(SparseMatrixCSC{T,Int}, core)
     return _kron_identities(core, l, r, T)
 end
-"""
-    _kron_identities(A, l, r, T)
-
-Return `kron(I(l), A, I(r))` for a sparse CSC matrix `A`, as a `SparseMatrixCSC` with element type `T`.
-"""
+# kron(I(l), A, I(r)) for a SparseMatrixCSC `A`, with element type `T`
 function _kron_identities(A, l, r, ::Type{T}) where {T}
     m, n = size(A)
     rows = rowvals(A)
@@ -578,6 +575,7 @@ end
     M = matrix_representation(op, H)
     @test M isa SparseMatrixCSC{Float64}
     @test M ≈ kron(I(dim(Hb)), Ms, Mf) + kron(Mb, I(dim(Hs) * dim(Hf))) + adjoint(kron(I(dim(Hb)), Ms, Mf) + kron(Mb, I(dim(Hs) * dim(Hf))))
+    @test matrix_representation(2 * f[1]' * f[2] * b[1]' + hc, H) isa SparseMatrixCSC{Float64}
 end
 
 @testitem "Dense/sparse/lazy matrix representation agree" begin
