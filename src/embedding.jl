@@ -38,9 +38,7 @@ function (op::EmbedMap)(m::SparseMatrixCSC)
     _embed_sparse_matrix(op.map, m, dim(op.H))
 end
 
-# map * vec(m) for a sparse map of size D^2 × n^2 and a sparse n × n matrix m. Multiplying with the
-# sparse vector m[:] would allocate a dense vector of length D^2, so the output entries are
-# collected and assembled into a D × D matrix instead.
+# map * vec(m) as a sparse D × D matrix, avoiding the dense length-D^2 vector that map * m[:] would allocate
 function _embed_sparse_matrix(map::SparseMatrixCSC, m::SparseMatrixCSC, D)
     n = size(m, 1)
     rows = rowvals(map)

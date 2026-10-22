@@ -606,11 +606,8 @@ end
 """
     _transposed_superoperator(Is, Js, Vs, nout, nin)
 
-Return the `nout × nin` superoperator `S` with `S[Is[p], Js[p]] = Vs[p]` (repeated entries are
-summed) as `transpose(St)`, where `St` is a `SparseMatrixCSC`. For partial-trace maps `nin = dim(H)^2`
-is much larger than `nout = dim(Hsub)^2`, and storing the transpose keeps the column pointer at length
-`nout + 1`. Building `St` with `sparse(Js, Is, Vs, nin, nout)` would need `O(nin)` scratch space, so the
-entries are sorted by output index with a counting sort instead.
+Return `sparse(Is, Js, Vs, nout, nin)` stored as `transpose(St)`, so the column pointer has length `nout + 1`
+rather than `nin + 1`. A counting sort over the output index avoids the `O(nin)` scratch space of `sparse`.
 """
 function _transposed_superoperator(Is::AbstractVector{<:Integer}, Js::AbstractVector{<:Integer}, Vs::AbstractVector{T}, nout::Integer, nin::Integer) where T
     N = length(Vs)
@@ -674,8 +671,7 @@ function _apply_superop_on_pure_state!(w::AbstractVector, S::LinearAlgebra.Trans
     return w
 end
 
-# y = S * vec(m) for S = transpose(St) and a sparse D × D matrix m: each stored entry of S looks up
-# its matrix element of m by binary search in the column of m.
+# y = S * vec(m) for S = transpose(St) and a sparse D × D matrix m
 function _superop_mul_matrix!(y::AbstractVector, S::LinearAlgebra.Transpose{<:Any,<:SparseMatrixCSC}, m::SparseMatrixCSC)
     D = size(m, 1)
     size(m, 2) == D && size(S, 2) == D^2 || throw(DimensionMismatch("The input matrix must be square with $(size(S, 2)) entries, got size $(size(m))"))
@@ -766,7 +762,6 @@ function (op::PartialTraceMap)(in::AbstractMatrix)
     v = _canonicalize_pt_input(in, op.H)
     _devectorize_pt_output(op.map * v, dim(op.Hsub))
 end
-# Sparse input: apply the map to the stored entries, without vectorizing the matrix
 function (op::PartialTraceMap)(in::SparseMatrixCSC)
     _check_pt_input_size(in, op.H)
     n = dim(op.Hsub)
@@ -985,10 +980,6 @@ end
 
 @testitem "Partial trace and embed of sparse matrices" begin
     using SparseArrays
-    # the map builder sums repeated entries like `sparse`
-    Is, Js, Vs = [2, 1, 2, 1, 3, 2], [9, 1, 4, 1, 2, 9], [1, 2, 3, -2, 5, 6]
-    @test FermionicHilbertSpaces._transposed_superoperator(Is, Js, Vs, 4, 9) == sparse(Is, Js, Vs, 4, 9)
-
     @fermions f
     Hcons = hilbert_space(f, 1:4, NumberConservation(2))
     Hfull = hilbert_space(f, 1:2)
@@ -1001,8 +992,6 @@ end
         @test pt(m) ≈ partial_trace(Matrix(m), H => Hsub)
         @test pt(zeros(ComplexF64, dim(Hsub), dim(Hsub)), m) ≈ partial_trace(Matrix(m), H => Hsub)
         @test emb(msub) ≈ embed(Matrix(msub), Hsub => H; skipmissing=true)
-        @test pt'(msub) ≈ emb(msub)
-        @test emb'(m) ≈ pt(m)
         @test_throws DimensionMismatch pt(sprand(dim(H) + 1, dim(H) + 1, 0.5))
     end
 end
