@@ -447,12 +447,21 @@ _has_support_on(m::AbstractMatrix, j) = !iszero(view(m, j, :)) || !iszero(view(m
 _has_support_on(v::AbstractVector, j) = !iszero(v[j])
 _has_support_on(m::UniformScaling, j) = !iszero(m.λ)
 
-function basis_transformation_map(Hfrom, Hto; skipmissing=false, kwargs...)
+function _checked_basis_transformation(Hfrom, Hto; skipmissing=false)
     U, dropped = basis_transformation(Hfrom, Hto)
     if !skipmissing && !isempty(dropped)
         throw(ArgumentError("The state $(basisstate(first(dropped), Hfrom)) is not in the target Hilbert space. Pass `skipmissing=true` to drop such states."))
     end
+    return U
+end
+function basis_transformation_map(Hfrom, Hto; skipmissing=false, kwargs...)
+    U = _checked_basis_transformation(Hfrom, Hto; skipmissing)
     kron(conj(U), U)
+end
+# transpose(basis_transformation_map(Hfrom, Hto)), whose column pointer runs over dim(Hto)^2 instead of dim(Hfrom)^2 columns
+function transposed_basis_transformation_map(Hfrom, Hto; skipmissing=false, kwargs...)
+    U = _checked_basis_transformation(Hfrom, Hto; skipmissing)
+    kron(sparse(U'), sparse(transpose(U)))
 end
 
 """
@@ -596,287 +605,102 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
 end
 
 """
-    SuperOperatorCOO{T} <: AbstractMatrix{T}
+    _transposed_superoperator(Is, Js, Vs, nout, nin)
 
-Sparse `nrows × D^2` matrix of a linear map acting on vectorized `D × D` matrices: column
-`c = J1 + (J2 - 1) * D` corresponds to the input matrix element `(J1, J2)`. The nonzeros are
-stored as `(rows[p], cols[p], vals[p])`, sorted by column and then by row, with no repeated
-entries. Instead of a column pointer over all `D^2` columns, `blockptr[J2]:blockptr[J2+1]-1`
-are the entries of the columns that belong to column `J2` of the input matrix.
-
-This is the storage of `PartialTraceMap`; `EmbedMap` stores its adjoint. Multiplication with
-dense and sparse vectors, and with the adjoint, costs `O(nnz)` plus the length of the output.
+Return the `nout × nin` superoperator `S` with `S[Is[p], Js[p]] = Vs[p]` (repeated entries are
+summed) as `transpose(St)`, where `St` is a `SparseMatrixCSC`. For partial-trace maps `nin = dim(H)^2`
+is much larger than `nout = dim(Hsub)^2`, and storing the transpose keeps the column pointer at length
+`nout + 1`. Building `St` with `sparse(Js, Is, Vs, nin, nout)` would need `O(nin)` scratch space, so the
+entries are sorted by output index with a counting sort instead.
 """
-struct SuperOperatorCOO{T} <: AbstractMatrix{T}
-    nrows::Int
-    D::Int
-    blockptr::Vector{Int}
-    rows::Vector{Int}
-    cols::Vector{Int}
-    vals::Vector{T}
-end
-
-"""
-    _superoperator_coo(rows, cols, vals, nrows, D)
-
-Build a `SuperOperatorCOO` from coordinate triplets in any order, summing repeated entries.
-"""
-function _superoperator_coo(rows::AbstractVector{<:Integer}, cols::AbstractVector{<:Integer}, vals::AbstractVector{T}, nrows::Integer, D::Integer) where T
-    n = length(vals)
-    length(rows) == length(cols) == n || throw(DimensionMismatch("rows, cols and vals must have the same length"))
-    _block(c) = div(c - 1, D) + 1
-    # counting sort by input column J2
-    blockptr = zeros(Int, D + 1)
-    blockptr[1] = 1
-    for c in cols
-        1 <= c <= D^2 || throw(ArgumentError("column index $c out of range 1:$(D^2)"))
-        blockptr[_block(c)+1] += 1
-    end
-    cumsum!(blockptr, blockptr)
-    next = blockptr[1:D]
-    perm = Vector{Int}(undef, n)
-    for p in 1:n
-        b = _block(cols[p])
-        perm[next[b]] = p
-        next[b] += 1
-    end
-    # within each block, sort by column and then by row
-    for b in 1:D
-        r = blockptr[b]:(blockptr[b+1]-1)
-        length(r) > 1 && sort!(view(perm, r); by=p -> (cols[p], rows[p]))
-    end
-    # combine repeated entries
-    newrows = sizehint!(Int[], n)
-    newcols = sizehint!(Int[], n)
-    newvals = sizehint!(T[], n)
-    newptr = similar(blockptr)
-    newptr[1] = 1
-    for b in 1:D
-        for q in blockptr[b]:(blockptr[b+1]-1)
-            p = perm[q]
-            r, c = rows[p], cols[p]
-            1 <= r <= nrows || throw(ArgumentError("row index $r out of range 1:$nrows"))
-            if length(newvals) >= newptr[b] && newcols[end] == c && newrows[end] == r
-                newvals[end] += vals[p]
-            else
-                push!(newrows, r)
-                push!(newcols, c)
-                push!(newvals, vals[p])
-            end
-        end
-        newptr[b+1] = length(newvals) + 1
-    end
-    return SuperOperatorCOO{T}(nrows, D, newptr, newrows, newcols, newvals)
-end
-function _superoperator_coo(A::SparseMatrixCSC, D::Integer)
-    size(A, 2) == D^2 || throw(DimensionMismatch("The matrix must have D^2 = $(D^2) columns, got $(size(A, 2))"))
-    rows, cols, vals = findnz(A)
-    _superoperator_coo(rows, cols, vals, size(A, 1), D)
-end
-
-Base.size(A::SuperOperatorCOO) = (A.nrows, A.D^2)
-SparseArrays.nnz(A::SuperOperatorCOO) = length(A.vals)
-const _TransposedSuperOperatorCOO = Union{LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO},LinearAlgebra.Transpose{<:Any,<:SuperOperatorCOO}}
-const _AnySuperOperatorCOO = Union{SuperOperatorCOO,_TransposedSuperOperatorCOO}
-SparseArrays.nnz(A::_TransposedSuperOperatorCOO) = nnz(parent(A))
-Base.copy(A::SuperOperatorCOO{T}) where T = SuperOperatorCOO{T}(A.nrows, A.D, copy(A.blockptr), copy(A.rows), copy(A.cols), copy(A.vals))
-
-# Positions of the stored entries in column `c`
-function _column_range(A::SuperOperatorCOO, c::Integer)
-    b = div(c - 1, A.D) + 1
-    block = A.blockptr[b]:(A.blockptr[b+1]-1)
-    return searchsorted(view(A.cols, block), c) .+ (first(block) - 1)
-end
-
-Base.@propagate_inbounds function Base.getindex(A::SuperOperatorCOO{T}, i::Int, j::Int) where T
-    @boundscheck checkbounds(A, i, j)
-    for p in _column_range(A, j)
-        A.rows[p] == i && return A.vals[p]
-    end
-    return zero(T)
-end
-
-function SparseArrays.SparseMatrixCSC(A::SuperOperatorCOO)
-    m, n = size(A)
-    colptr = zeros(Int, n + 1)
+function _transposed_superoperator(Is::AbstractVector{<:Integer}, Js::AbstractVector{<:Integer}, Vs::AbstractVector{T}, nout::Integer, nin::Integer) where T
+    N = length(Vs)
+    length(Is) == length(Js) == N || throw(DimensionMismatch("Is, Js and Vs must have the same length"))
+    colptr = zeros(Int, nout + 1)
     colptr[1] = 1
-    for c in A.cols
-        colptr[c+1] += 1
+    for (I, J) in zip(Is, Js)
+        1 <= I <= nout || throw(ArgumentError("row index $I out of range 1:$nout"))
+        1 <= J <= nin || throw(ArgumentError("column index $J out of range 1:$nin"))
+        colptr[I+1] += 1
     end
     cumsum!(colptr, colptr)
-    SparseMatrixCSC(m, n, colptr, copy(A.rows), copy(A.vals))
-end
-SparseArrays.sparse(A::SuperOperatorCOO) = SparseMatrixCSC(A)
-
-# Equality of the stored nonzero values, without materializing either matrix
-function Base.:(==)(A::SuperOperatorCOO, B::SuperOperatorCOO)
-    size(A) == size(B) || return false
-    nonzero_entries(X) = ((X.rows[p], X.cols[p], X.vals[p]) for p in eachindex(X.vals) if !iszero(X.vals[p]))
-    return all(splat(==), Iterators.zip(nonzero_entries(A), nonzero_entries(B))) &&
-           count(!iszero, A.vals) == count(!iszero, B.vals)
-end
-Base.:(==)(A::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}, B::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}) = parent(A) == parent(B)
-Base.:(==)(A::LinearAlgebra.Transpose{<:Any,<:SuperOperatorCOO}, B::LinearAlgebra.Transpose{<:Any,<:SuperOperatorCOO}) = parent(A) == parent(B)
-SparseArrays.sparse(A::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}) = copy(adjoint(SparseMatrixCSC(parent(A))))
-SparseArrays.sparse(A::LinearAlgebra.Transpose{<:Any,<:SuperOperatorCOO}) = copy(transpose(SparseMatrixCSC(parent(A))))
-
-# Operations without a dedicated kernel go through the sparse matrix, so that they never
-# fall back to the generic code that visits all `nrows * D^2` entries.
-Base.transpose(A::SuperOperatorCOO) = LinearAlgebra.Transpose(A)
-Base.:(==)(A::_AnySuperOperatorCOO, B::_AnySuperOperatorCOO) = sparse(A) == sparse(B)
-Base.:(==)(A::_AnySuperOperatorCOO, B::AbstractMatrix) = sparse(A) == B
-Base.:(==)(A::AbstractMatrix, B::_AnySuperOperatorCOO) = A == sparse(B)
-Base.isapprox(A::_AnySuperOperatorCOO, B::_AnySuperOperatorCOO; kwargs...) = isapprox(sparse(A), sparse(B); kwargs...)
-Base.isapprox(A::_AnySuperOperatorCOO, B::AbstractMatrix; kwargs...) = isapprox(sparse(A), B; kwargs...)
-Base.isapprox(A::AbstractMatrix, B::_AnySuperOperatorCOO; kwargs...) = isapprox(A, sparse(B); kwargs...)
-Base.Matrix(A::_AnySuperOperatorCOO) = Matrix(sparse(A))
-Base.Array(A::_AnySuperOperatorCOO) = Matrix(A)
-Base.show(io::IO, mime::MIME"text/plain", A::_AnySuperOperatorCOO) = show(io, mime, sparse(A))
-LinearAlgebra.norm(A::SuperOperatorCOO, p::Real=2) = LinearAlgebra.norm(A.vals, p)
-LinearAlgebra.norm(A::_TransposedSuperOperatorCOO, p::Real=2) = LinearAlgebra.norm(parent(A), p)
-
-# Scaling and negation act on the stored values
-_scaled(A::SuperOperatorCOO, vals) = SuperOperatorCOO(A.nrows, A.D, copy(A.blockptr), copy(A.rows), copy(A.cols), vals)
-Base.:*(a::Number, A::SuperOperatorCOO) = _scaled(A, a .* A.vals)
-Base.:*(A::SuperOperatorCOO, a::Number) = _scaled(A, A.vals .* a)
-Base.:/(A::SuperOperatorCOO, a::Number) = _scaled(A, A.vals ./ a)
-Base.:-(A::SuperOperatorCOO) = _scaled(A, -A.vals)
-Base.:*(a::Number, A::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}) = adjoint(conj(a) * parent(A))
-Base.:*(a::Number, A::LinearAlgebra.Transpose{<:Any,<:SuperOperatorCOO}) = transpose(a * parent(A))
-Base.:*(A::_TransposedSuperOperatorCOO, a::Number) = a * A
-Base.:/(A::LinearAlgebra.Adjoint{<:Any,<:SuperOperatorCOO}, a::Number) = adjoint(parent(A) / conj(a))
-Base.:/(A::LinearAlgebra.Transpose{<:Any,<:SuperOperatorCOO}, a::Number) = transpose(parent(A) / a)
-Base.:-(A::_TransposedSuperOperatorCOO) = (-1) * A
-
-function _superop_scale_output!(y, β)
-    if iszero(β)
-        fill!(y, zero(eltype(y)))
-    elseif !isone(β)
-        rmul!(y, β)
+    next = colptr[1:nout]
+    perm = Vector{Int}(undef, N)
+    for p in 1:N
+        perm[next[Is[p]]] = p
+        next[Is[p]] += 1
     end
-    return y
-end
-function _check_superop_mul(y, A, x)
-    size(A, 2) == length(x) || throw(DimensionMismatch("matrix has $(size(A, 2)) columns, vector has length $(length(x))"))
-    size(A, 1) == length(y) || throw(DimensionMismatch("matrix has $(size(A, 1)) rows, output has length $(length(y))"))
-end
-
-function LinearAlgebra.mul!(y::AbstractVector, A::SuperOperatorCOO, x::AbstractVector, α::Number, β::Number)
-    _check_superop_mul(y, A, x)
-    _superop_scale_output!(y, β)
-    for p in eachindex(A.vals)
-        y[A.rows[p]] += A.vals[p] * x[A.cols[p]] * α
-    end
-    return y
-end
-function LinearAlgebra.mul!(y::AbstractVector, A::SuperOperatorCOO, x::SparseArrays.AbstractSparseVector, α::Number, β::Number)
-    _check_superop_mul(y, A, x)
-    _superop_scale_output!(y, β)
-    # The stored indices of x and the entries of each block are both sorted by column, so
-    # one forward scan per block finds the entries of every column of x in that block.
-    D = A.D
-    block = 0
-    p = 1
-    pend = 0
-    for (c, xc) in zip(SparseArrays.nonzeroinds(x), nonzeros(x))
-        b = div(c - 1, D) + 1
-        if b != block
-            block = b
-            p = A.blockptr[b]
-            pend = A.blockptr[b+1] - 1
-        end
-        while p <= pend && A.cols[p] < c
-            p += 1
-        end
-        while p <= pend && A.cols[p] == c
-            y[A.rows[p]] += A.vals[p] * xc * α
-            p += 1
-        end
-    end
-    return y
-end
-_entry_op(::LinearAlgebra.Adjoint) = conj
-_entry_op(::LinearAlgebra.Transpose) = identity
-function LinearAlgebra.mul!(y::AbstractVector, B::_TransposedSuperOperatorCOO, x::AbstractVector, α::Number, β::Number)
-    _check_superop_mul(y, B, x)
-    _superop_scale_output!(y, β)
-    A = parent(B)
-    op = _entry_op(B)
-    for p in eachindex(A.vals)
-        y[A.cols[p]] += op(A.vals[p]) * x[A.rows[p]] * α
-    end
-    return y
-end
-
-Base.:*(A::SuperOperatorCOO, x::SparseArrays.AbstractSparseVector) = sparse(mul!(zeros(promote_type(eltype(A), eltype(x)), size(A, 1)), A, x))
-function Base.:*(B::_TransposedSuperOperatorCOO, x::SparseArrays.AbstractSparseVector)
-    _check_superop_mul(Base.OneTo(size(B, 1)), B, x)
-    A = parent(B)
-    op = _entry_op(B)
-    xd = Vector(x)
-    T = promote_type(eltype(B), eltype(x))
-    inds = Int[]
-    vals = T[]
-    # the stored entries are sorted by column of A, i.e. by output index
-    for p in eachindex(A.vals)
-        v = op(A.vals[p]) * xd[A.rows[p]]
-        iszero(v) && continue
-        c = A.cols[p]
-        if !isempty(inds) && last(inds) == c
-            vals[end] += v
-        else
-            push!(inds, c)
-            push!(vals, v)
-        end
-    end
-    return SparseVector(size(B, 1), inds, vals)
-end
-
-_superop_mul_matrix!(y::AbstractVector, A::AbstractMatrix, m::SparseMatrixCSC) = mul!(y, A, m[:])
-# y = A * vec(m) for a sparse D × D matrix m. The entries of each column of m and of the
-# corresponding block of A are both sorted, so one forward scan per block finds them.
-function _superop_mul_matrix!(y::AbstractVector, A::SuperOperatorCOO, m::SparseMatrixCSC)
-    D = A.D
-    size(m) == (D, D) || throw(DimensionMismatch("The input matrix must have size ($D, $D), got $(size(m))"))
-    length(y) == size(A, 1) || throw(DimensionMismatch("The output vector must have length $(size(A, 1)), got $(length(y))"))
-    fill!(y, zero(eltype(y)))
-    mrows = rowvals(m)
-    mvals = nonzeros(m)
-    for J2 in 1:D
-        p = A.blockptr[J2]
-        pend = A.blockptr[J2+1] - 1
-        offset = (J2 - 1) * D
-        for q in nzrange(m, J2)
-            p > pend && break
-            c = mrows[q] + offset
-            x = mvals[q]
-            while p <= pend && A.cols[p] < c
-                p += 1
-            end
-            while p <= pend && A.cols[p] == c
-                y[A.rows[p]] += A.vals[p] * x
-                p += 1
+    # sort each column of St by row and sum repeated entries
+    rows = sizehint!(Int[], N)
+    vals = sizehint!(T[], N)
+    newptr = similar(colptr)
+    newptr[1] = 1
+    for K in 1:nout
+        r = colptr[K]:(colptr[K+1]-1)
+        length(r) > 1 && sort!(view(perm, r); by=p -> Js[p])
+        for q in r
+            p = perm[q]
+            if length(vals) >= newptr[K] && rows[end] == Js[p]
+                vals[end] += Vs[p]
+            else
+                push!(rows, Js[p])
+                push!(vals, Vs[p])
             end
         end
+        newptr[K+1] = length(vals) + 1
     end
-    return y
+    return transpose(SparseMatrixCSC(nin, nout, newptr, rows, vals))
 end
 
-# w = A * vec(ψψ†), without forming ψψ†
-function _apply_superop_on_pure_state!(w::AbstractVector, A::SuperOperatorCOO, ψ::AbstractVector)
-    D = A.D
-    length(ψ) == D || throw(DimensionMismatch("The state must have length $D, got $(length(ψ))"))
-    length(w) == size(A, 1) || throw(DimensionMismatch("The output vector must have length $(size(A, 1)), got $(length(w))"))
-    fill!(w, zero(eltype(w)))
-    for J2 in 1:D
-        ψ2 = conj(ψ[J2])
-        iszero(ψ2) && continue
-        offset = (J2 - 1) * D
-        for p in A.blockptr[J2]:(A.blockptr[J2+1]-1)
-            w[A.rows[p]] += A.vals[p] * (ψ[A.cols[p]-offset] * ψ2)
+# The adjoint of a stored superoperator, materialized so that it is again a SparseMatrixCSC or its transpose
+_adjoint_superop(S::LinearAlgebra.Transpose{<:Any,<:SparseMatrixCSC}) = conj(parent(S))
+_adjoint_superop(S::SparseMatrixCSC) = transpose(conj(S))
+_adjoint_superop(S) = S'
+
+# w = S * vec(ψψ†) for S = transpose(St), without forming ψψ†
+function _apply_superop_on_pure_state!(w::AbstractVector, S::LinearAlgebra.Transpose{<:Any,<:SparseMatrixCSC}, ψ::AbstractVector)
+    D = length(ψ)
+    size(S, 2) == D^2 || throw(DimensionMismatch("The map must have `length(ψ)^2` = $(D^2) columns, got $(size(S, 2))"))
+    length(w) == size(S, 1) || throw(DimensionMismatch("The output vector must have length $(size(S, 1)), got $(length(w))"))
+    St = parent(S)
+    rows = rowvals(St)
+    vals = nonzeros(St)
+    @inbounds for K in axes(St, 2)
+        acc = zero(eltype(w))
+        for p in nzrange(St, K)
+            k, j = divrem(rows[p] - 1, D) .+ 1 # rows[p] is the column-major linear index of (j, k) in ψψ†
+            acc += vals[p] * (ψ[j] * conj(ψ[k]))
         end
+        w[K] = acc
     end
     return w
+end
+
+_superop_mul_matrix!(y::AbstractVector, S::AbstractMatrix, m::SparseMatrixCSC) = mul!(y, S, m[:])
+# y = S * vec(m) for S = transpose(St) and a sparse D × D matrix m: each stored entry of S looks up
+# its matrix element of m by binary search in the column of m.
+function _superop_mul_matrix!(y::AbstractVector, S::LinearAlgebra.Transpose{<:Any,<:SparseMatrixCSC}, m::SparseMatrixCSC)
+    D = size(m, 1)
+    size(m, 2) == D && size(S, 2) == D^2 || throw(DimensionMismatch("The input matrix must be square with $(size(S, 2)) entries, got size $(size(m))"))
+    length(y) == size(S, 1) || throw(DimensionMismatch("The output vector must have length $(size(S, 1)), got $(length(y))"))
+    St = parent(S)
+    rows = rowvals(St)
+    vals = nonzeros(St)
+    mrows = rowvals(m)
+    mvals = nonzeros(m)
+    @inbounds for K in axes(St, 2)
+        acc = zero(eltype(y))
+        for p in nzrange(St, K)
+            k, j = divrem(rows[p] - 1, D) .+ 1
+            rng = nzrange(m, k)
+            i = searchsortedfirst(view(mrows, rng), j)
+            if i <= length(rng) && mrows[rng[i]] == j
+                acc += vals[p] * mvals[rng[i]]
+            end
+        end
+        y[K] = acc
+    end
+    return y
 end
 
 """
@@ -997,14 +821,14 @@ function (op::PartialTraceMap)(out, in::AbstractVector)
     mul!(vout, op.map, vin)
     out
 end
-SparseArrays.sparse(op::PartialTraceMap) = sparse(op.map)
+SparseArrays.sparse(op::PartialTraceMap) = op.map
 
 partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = PartialTraceMap(first(Hs), last(Hs); kwargs...)
 function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
     partial_trace_map(H, Hsub, complement, alg; kwargs...)
 end
 
-partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = _superoperator_coo(basis_transformation_map(H, Hsub; kwargs...), dim(H))
+partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = transpose(transposed_basis_transformation_map(H, Hsub; kwargs...))
 function partial_trace_map(H, Hsub, complement::AbstractHilbertSpace, ::SubsystemPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=true, phase_factors=true)
     indK = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
@@ -1018,7 +842,7 @@ function partial_trace_map(H, Hsub, complement::AbstractHilbertSpace, ::Subsyste
         push!(Js, indJ[J1, J2])
         push!(Vs, v)
     end
-    return _superoperator_coo(Is, Js, Vs, dim(Hsub)^2, dim(H))
+    return _transposed_superoperator(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
 
 function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement::AbstractHilbertSpace, ::FullPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
@@ -1034,7 +858,7 @@ function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, 
         push!(Js, indJ[J1, J2])
         push!(Vs, v)
     end
-    return _superoperator_coo(Is, Js, Vs, dim(Hsub)^2, dim(H))
+    return _transposed_superoperator(Is, Js, Vs, dim(Hsub)^2, dim(H)^2)
 end
 
 
@@ -1152,47 +976,45 @@ end
     @test generalized_kron((m1, m2), (H1, H2) => H; skipmissing=true) ≈ tensor_product((m1, m2), (H1, H2) => H) # Since tensor_product first embeds both operators in the full Hilbert space (which can be done) and then multiplies them, it won't complain about missing states.
 end
 
-@testitem "SuperOperatorCOO storage of partial-trace maps" begin
+@testitem "Partial-trace maps are stored as a transposed CSC" begin
     using SparseArrays, LinearAlgebra
-    import FermionicHilbertSpaces: _superoperator_coo, SuperOperatorCOO
+    import FermionicHilbertSpaces: _transposed_superoperator, _adjoint_superop, _superop_mul_matrix!, _apply_superop_on_pure_state!
     # unsorted triplets with repeated entries, for a map on vectorized 3x3 matrices
     rows = [2, 1, 2, 1, 4, 2]
     cols = [9, 1, 4, 1, 2, 9]
-    vals = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
-    A = _superoperator_coo(rows, cols, vals, 4, 3)
+    vals = [1.0, 2.0, 3.0, 4.0im, 5.0, 6.0]
     S = sparse(rows, cols, vals, 4, 9)
-    @test A isa SuperOperatorCOO
-    @test sparse(A) isa SparseMatrixCSC
-    @test sparse(A) == S == A
+    A = _transposed_superoperator(rows, cols, vals, 4, 9)
+    @test A isa Transpose{<:Any,<:SparseMatrixCSC}
+    @test length(SparseArrays.getcolptr(parent(A))) == 5
+    @test A == S
     @test nnz(A) == nnz(S)
-    @test sparse(A') == S'
-    x = rand(ComplexF64, 9)
-    y = rand(ComplexF64, 4)
-    @test A * x ≈ S * x
-    @test A * sparse(x) ≈ S * x
-    @test A' * y ≈ S' * y
-    @test A' * sparse(y) ≈ S' * y
-    @test mul!(copy(y), A, x, 2, 3) ≈ 2 * S * x + 3 * y
-    @test mul!(copy(x), A', y, 2, 3) ≈ 2 * S' * y + 3 * x
+    @test _adjoint_superop(A) isa SparseMatrixCSC
+    @test _adjoint_superop(A) == S'
+    @test _adjoint_superop(_adjoint_superop(A)) == A
     ψ = rand(ComplexF64, 3)
-    @test FermionicHilbertSpaces._apply_superop_on_pure_state!(zeros(ComplexF64, 4), A, ψ) ≈ S * vec(ψ * ψ')
-    @test_throws DimensionMismatch A * rand(8)
-    # an empty block, entries that cancel to a stored zero, and an empty operator
-    B = _superoperator_coo([1, 1, 2], [1, 1, 7], [1, -1, 2], 2, 3)
-    @test B.blockptr == [1, 2, 2, 3]
-    @test B == sparse([1, 1, 2], [1, 1, 7], [1, -1, 2], 2, 9)
-    @test B * sparse([0, 0, 0, 4, 0, 0, 1, 0, 0]) == [0, 2]
-    @test size(_superoperator_coo(Int[], Int[], Float64[], 1, 0)) == (1, 0)
-    @test_throws ArgumentError _superoperator_coo([3], [1], [1.0], 2, 3)
-    @test_throws ArgumentError _superoperator_coo([1], [10], [1.0], 2, 3)
-    @test_throws DimensionMismatch _superoperator_coo(sparse([1], [1], [1.0], 2, 10), 3)
+    @test _apply_superop_on_pure_state!(zeros(ComplexF64, 4), A, ψ) ≈ S * vec(ψ * ψ')
+    m = sparse([1, 3, 1, 2], [1, 1, 3, 2], rand(ComplexF64, 4), 3, 3)
+    @test _superop_mul_matrix!(zeros(ComplexF64, 4), A, m) ≈ S * vec(Matrix(m))
+    @test _superop_mul_matrix!(zeros(ComplexF64, 4), A, spzeros(3, 3)) == zeros(4)
+    @test_throws DimensionMismatch _superop_mul_matrix!(zeros(4), A, spzeros(2, 2))
+    # entries that cancel to a stored zero, an empty column, and an empty operator
+    B = _transposed_superoperator([1, 1, 3], [1, 1, 7], [1, -1, 2], 3, 9)
+    @test B == sparse([1, 1, 3], [1, 1, 7], [1, -1, 2], 3, 9)
+    @test size(_transposed_superoperator(Int[], Int[], Float64[], 1, 0)) == (1, 0)
+    @test_throws ArgumentError _transposed_superoperator([5], [1], [1.0], 4, 9)
+    @test_throws ArgumentError _transposed_superoperator([1], [10], [1.0], 4, 9)
 
-    # maps built from spaces, applied to sparse and dense input
+    # maps built from spaces, applied to sparse, dense and pure-state input
     @fermions f
     H = hilbert_space(f, 1:4, NumberConservation(2))
     Hsub = subregion(hilbert_space(f, 1:2), H)
     pt = partial_trace(H => Hsub)
     emb = embed(Hsub => H; skipmissing=true)
+    @test length(SparseArrays.getcolptr(parent(pt.map))) == dim(Hsub)^2 + 1
+    @test sparse(pt) === pt.map
+    @test emb.map isa SparseMatrixCSC
+    @test sparse(emb) == sparse(pt)'
     m = sprand(ComplexF64, dim(H), dim(H), 0.3)
     msub = sprand(ComplexF64, dim(Hsub), dim(Hsub), 0.5)
     @test pt(m) isa SparseMatrixCSC
@@ -1200,64 +1022,31 @@ end
     @test pt(zeros(ComplexF64, dim(Hsub), dim(Hsub)), m) ≈ partial_trace(Matrix(m), H => Hsub)
     @test pt(m[:]) ≈ partial_trace(Matrix(m), H => Hsub)
     @test_throws DimensionMismatch pt(sprand(dim(H) + 1, dim(H) + 1, 0.1))
+    ψ = rand(ComplexF64, dim(H))
+    @test pt(ψ) ≈ partial_trace(ψ * ψ', H => Hsub)
+    @test pt(zeros(ComplexF64, dim(Hsub), dim(Hsub)), ψ) ≈ partial_trace(ψ * ψ', H => Hsub)
     @test emb(msub) isa SparseMatrixCSC
     @test emb(msub) ≈ embed(Matrix(msub), Hsub => H; skipmissing=true)
-    @test sparse(emb) == sparse(pt)'
-    # spaces with the same atoms: the maps are basis transformations
-    Hp = hilbert_space(f, 1:2, ParityConservation())
-    ptp = partial_trace(hilbert_space(f, 1:2) => Hp)
-    @test sparse(ptp) isa SparseMatrixCSC
-    @test ptp'.map == embed(Hp => hilbert_space(f, 1:2)).map
-end
+    @test_throws ArgumentError emb(sprand(dim(Hsub) + 1, dim(Hsub) + 1, 0.5))
+    # other element types through the in-place forms
+    ρ32 = rand(Float32, dim(H), dim(H))
+    out = rand(ComplexF64, dim(Hsub)^2)
+    @test mul!(copy(out), pt.map, vec(ρ32), 2, 3) ≈ 2 * vec(partial_trace(ρ32, H => Hsub)) + 3 * out
+    @test pt(zeros(Int, dim(Hsub), dim(Hsub)), ones(Int, dim(H), dim(H))) == partial_trace(ones(Int, dim(H), dim(H)), H => Hsub)
 
-@testitem "SuperOperatorCOO operations stay sparse" begin
-    using SparseArrays, LinearAlgebra
-    import FermionicHilbertSpaces: _superoperator_coo, SuperOperatorCOO
-    # 50 x 90000 would take 36 MB as a dense matrix
-    nrows, D, n = 50, 300, 200
-    A = _superoperator_coo(rand(1:nrows, n), rand(1:D^2, n), rand(ComplexF64, n), nrows, D)
-    S = sparse(A)
-    x = rand(ComplexF64, nrows)
-    xs = sparse(x)
-    ops = (A, A', transpose(A))
-    refs = (S, S', transpose(S))
-    for (B, R) in zip(ops, refs)
-        @test size(B) == size(R)
-        @test sparse(B) == R
-        @test B == R
-        @test R == B
-        @test B == copy(B)
-        @test B ≈ R
-        @test R ≈ B
-        @test Matrix(B) == Matrix(R)
-        @test norm(B) ≈ norm(R)
-        @test norm(B, 1) ≈ norm(R, 1)
-        @test 2 * B == 2 * R
-        @test B * 2 == R * 2
-        @test (1 + 2im) * B == (1 + 2im) * R
-        @test B / 2 == R / 2
-        @test -B == -R
-    end
-    @test A * 2 isa SuperOperatorCOO
-    @test (2A)' isa Adjoint{<:Any,<:SuperOperatorCOO}
-    @test (A' == transpose(A)) == (sparse(A') == sparse(transpose(A)))
-    y = rand(ComplexF64, size(A, 2))
-    @test A * y ≈ S * y
-    @test transpose(A) * x ≈ transpose(S) * x
-    @test transpose(A) * xs ≈ transpose(S) * x
-    @test A' * xs ≈ S' * x
-    z = rand(ComplexF64, size(A, 1))
-    @test mul!(copy(y), transpose(A), z, 2, 3) ≈ 2 * transpose(S) * z + 3 * y
-    @test nnz(transpose(A)) == nnz(A)
-    @test sprint(show, MIME("text/plain"), A) == sprint(show, MIME("text/plain"), S)
-    # a dense matrix would take 36 MB; the sparse conversion and the length-D^2 output are the largest allocations
-    function allocations(A, a, x)
-        2A; A * 2; A / 2; -A; a * A'; A == A; A' == A'; A ≈ sparse(A)
-        return @allocated(begin
-            2A; A * 2; A / 2; -A; a * A'; A == A; A' == A'; A ≈ sparse(A); transpose(A) * x
-        end)
-    end
-    @test allocations(A, 2, x) < 8_000_000
+    # spaces with the same atoms: the maps are basis transformations
+    Hfull = hilbert_space(f, 1:2)
+    Hp = hilbert_space(f, 1:2, ParityConservation())
+    ptp = partial_trace(Hfull => Hp)
+    embp = embed(Hp => Hfull)
+    @test ptp.map isa Transpose{<:Any,<:SparseMatrixCSC}
+    @test length(SparseArrays.getcolptr(parent(ptp.map))) == dim(Hp)^2 + 1
+    @test ptp'.map == embp.map
+    @test embp'.map == ptp.map
+    mp = sprand(dim(Hfull), dim(Hfull), 0.5)
+    @test ptp(mp) ≈ partial_trace(Matrix(mp), Hfull => Hp)
+    msp = sprand(dim(Hp), dim(Hp), 0.5)
+    @test embp(msp) ≈ embed(Matrix(msp), Hp => Hfull)
 end
 
 @testitem "Partial trace and embed across truncations" begin
