@@ -58,7 +58,7 @@ function operator_indices_and_amplitudes_generic!(accumulator, op, space::Abstra
                 if projection
                     continue
                 else
-                    throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
+                    throw(ArgumentError("The operator maps outside of the provided space. Pass `projection=true` to ignore those states."))
                 end
             else
                 push_inds_amps!(accumulator, outind, inind, amp)
@@ -77,7 +77,7 @@ function chunked_operator_indices_and_amplitudes_generic!(accumulator, op, space
                 if projection
                     continue
                 else
-                    throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
+                    throw(ArgumentError("The operator maps outside of the provided space. Pass `projection=true` to ignore those states."))
                 end
             else
                 push_inds_amps!(accumulator, outind, inind - col_offset, amp)
@@ -97,48 +97,30 @@ function push_inds_amps!(m::Matrix, outind, inind, amp)
 end
 
 
-_apply_local_operators(op::Missing, state, space, precomp) = state, 1
 function _apply_local_operators(op, state, space, precomp)
     apply_local_operators(op, state, space, precomp; transpose=false)
 end
 
 function apply_local_operators(op::NCMul, state, space, precomps; transpose)
-    amp = op.coeff
+    # Accumulate in the element type of the matrix so that `amp` keeps one type through the loop.
+    T = mat_eltype(op)
+    amp = convert(T, op.coeff)
     if !transpose
         for (factor, precomp) in Iterators.reverse(zip(op.factors, precomps))
             state, _amp = apply_local_operator(factor, state, space, precomp)
-            if iszero(_amp)
-                return state, zero(mat_eltype(op))
-            end
+            iszero(_amp) && return state, zero(T)
             amp *= _amp
         end
-        return state, amp
-    elseif transpose
+    else
         for (factor, precomp) in zip(op.factors, precomps)
             state, _amp = apply_local_operator(adjoint(factor), state, space, precomp)
-            if iszero(_amp)
-                return state, zero(mat_eltype(op))
-            end
+            iszero(_amp) && return state, zero(T)
             amp *= conj(_amp)
         end
-        return state, amp
     end
+    return state, amp
 end
 
-
-"""
-    partition_factors_by_basis(factors::Vector, bases::Vector)
-
-Partition a vector of operator factors into groups by their symbolic basis.
-"""
-function partition_factors_by_basis(factors::Vector, bases)
-    partition = Iterators.map(bases) do basis
-        v = filter(==(basis) ∘ symbolic_group, factors)
-        length(v) > 0 ? Tuple(v) : v #missing
-    end
-    sum(length, skipmissing(partition)) == length(factors) || throw(ArgumentError("Not all factors were assigned to a basis."))
-    return partition
-end
 struct TupleConcretizer end
 struct VecConcretizer end
 struct NoConcretizer end
@@ -165,7 +147,7 @@ function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
             push!(ops, NCMul(coeff, ___concretize(v, concr)))
         end
     end
-    n == length(op.factors) || throw(ArgumentError("Not all factors were assigned to a basis."))
+    n == length(op.factors) || throw(ArgumentError("Not all factors of the operator belong to a basis of the provided space."))
     return ProductOperator(___concretize(ops, TupleConcretizer()), spaces[inds], inds)
 end
 
@@ -240,8 +222,12 @@ function _matrix_representation(op, bases, space, repr, chunking; kwargs...) #As
 end
 
 
-matrix_accumulator(op::ProductOperator, space, repr) = matrix_accumulator(mat_eltype(op), 1, (dim(space), dim(space)), repr)
-matrix_accumulator(op, space, repr) = matrix_accumulator(mat_eltype(op), length(NCterms(op)), (dim(space), dim(space)), repr)
+matrix_accumulator(op::ProductOperator, space, repr) = matrix_accumulator(_repr_eltype(mat_eltype(op), repr), 1, (dim(space), dim(space)), repr)
+matrix_accumulator(op, space, repr) = matrix_accumulator(_repr_eltype(mat_eltype(op), repr), length(NCterms(op)), (dim(space), dim(space)), repr)
+
+# The element type given in the format (e.g. `EagerSparseRepr{ComplexF64}()`) takes precedence over the operator's
+_repr_eltype(default, ::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T === Missing ? default : T
+_repr_eltype(default, _) = default
 
 function matrix_accumulator(::Type{T}, N::Int, (d1, d2)::Tuple{Int,Int}, ::EagerSparseRepr) where T
     length_guess = Int(floor(1 + log2(N + 1))) .* (d1, d2) # mild increase with number of terms
@@ -282,7 +268,7 @@ function finalize!(m::Matrix, space)
     return m
 end
 function finalize!(m::Matrix, N::Int, M::Int)
-    size(m) == (N, M) || throw(ArgumentError("Matrix size $(size(m)) does not match expected size ($N, $M)."))
+    size(m) == (N, M) || throw(ArgumentError("The matrix must have size ($N, $M), got $(size(m))."))
     return m
 end
 
@@ -327,22 +313,35 @@ function symbolic_groups(op)
 end
 
 """
-    representation(op_or_state, space::AbstractHilbertSpace; kwargs...)
+    representation(op_or_state, space::AbstractHilbertSpace, [repr]; kwargs...)
+    representation(state_expression; kwargs...)
 
-Return a concrete representation of `op_or_state` in Hilbert space `space`.
+Return a concrete representation of `op_or_state` in Hilbert space `space`. This is the main entry point, which calls
+[`matrix_representation`](@ref) for operators and [`vector_representation`](@ref) for states.
 
-- For symbolic operators, returns a sparse matrix (or lazy operator when `lazy=true`).
-- For `AbstractBasisState`, returns a one-hot sparse column vector.
-- For `SymbolicState` (ket/bra), returns the corresponding column/row vector.
+- For symbolic operators and numbers, returns a sparse matrix by default. The optional `repr` selects the format:
+  `:dense` gives a dense matrix, and `:lazy` (or `LazyRepr()`) gives a matrix-free
+  `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`. A number `c` gives `c` times the identity.
+- For `AbstractBasisState` and strings such as `"10"`, returns a one-hot sparse column vector.
+- For `SymbolicState` kets and bras, and sums of them, returns the corresponding column or row vector.
+- For ketbras, and operators that contain ketbras, returns a matrix.
+
+Expressions that combine kets or bras with operators or with states of other spaces have no representation and throw an
+`ArgumentError`. Without the `space` argument, only expressions of symbolic states are accepted, and the space is taken from the states.
+The single-particle space `hilbert_space(f, labels, SingleParticle())` and the Bogoliubov-de Gennes space `hilbert_space(f, labels, BdG())`
+represent quadratic fermionic operators only, and a number is represented by the zero matrix.
 """
 function representation(state::AbstractBasisState, space::AbstractHilbertSpace; kwargs...)
     vector_representation(state, space)
 end
 
 """
-    matrix_representation(op, space::AbstractHilbertSpace; kwargs...)
+    matrix_representation(op, space::AbstractHilbertSpace, [repr]; kwargs...)
 
 Return the matrix representation of symbolic operator `op` in Hilbert space `space`.
+
+The optional `repr` selects the format, as in [`representation`](@ref): `:sparse` (the default), `:dense`, `:lazy`,
+or a format object (`EagerSparseRepr()`, `EagerDenseRepr()`, `LazyRepr()`). A numeric element type also works as `repr`: `ComplexF64` gives a sparse matrix with that element type, and `Matrix{Float64}` gives a dense matrix with that element type.
 
 Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
 
@@ -355,16 +354,16 @@ M = matrix_representation(op, H)
 size(M) == (dim(H), dim(H))
 ```
 """
-function matrix_representation(op, space::AbstractHilbertSpace, type=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
-    type === :dense && return Matrix(matrix_representation(
+function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
+    repr === :dense && return Matrix(matrix_representation(
         op, space, :sparse; projection, chunking, kwargs...))
-    repr = _canonicalize_repr(type)
+    repr = _canonicalize_repr(repr)
     if trivial_operator(op)
-        return get_trivial_op_coeff(op) * I(dim(space))
+        return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
     end
     op_groups = symbolic_groups(op)
     space_groups = group_ids(space)
-    all(in(space_groups), op_groups) || throw(ArgumentError("Symbolic bases in operator do not match the atomic groups of the provided space. Operator groups: $op_groups, space groups: $space_groups"))
+    all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic bases of the operator must match the atomic groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
     return _matrix_representation(op, space_groups, space, repr, chunking; projection, kwargs...)
 end
 _canonicalize_repr(t) = t
@@ -375,11 +374,17 @@ function _canonicalize_repr(s::Symbol)
     s == :sparse && return EagerSparseRepr()
     s == :dense && return EagerDenseRepr()
     s == :lazy && return LazyRepr()
-    throw(ArgumentError("Invalid type argument: $s. Expected :sparse, :dense, or :lazy."))
+    throw(ArgumentError("The representation type must be `:sparse`, `:dense` or `:lazy`, got `:$s`."))
 end
 
 
 group_ids(space::AbstractHilbertSpace) = map(group_id, groups(space))
+
+# A format without an element type keeps the structured identity; a typed format gives a matrix of that element type
+_convert_repr_eltype(M, ::Union{EagerSparseRepr{Missing},EagerDenseRepr{Missing}}) = M
+_convert_repr_eltype(M, ::EagerSparseRepr{T}) where T = SparseArrays.sparse(T.(M))
+_convert_repr_eltype(M, ::EagerDenseRepr{T}) where T = Matrix{T}(M)
+_convert_repr_eltype(M, _) = M
 
 trivial_operator(op::Union{UniformScaling,Number}) = true
 trivial_operator(op::NCMul) = length(op.factors) == 0
@@ -596,6 +601,14 @@ end
 remove_identity(a::NCMul) = a
 remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict)
 
+# The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
+_isscalar_operator(op) = op isa Union{Number,UniformScaling} || (op isa Union{NCMul,NCAdd} && NonCommutativeProducts.isscalar(op))
+function _identity_free_zero(H, repr)
+    _repr = _canonicalize_repr(repr)
+    _repr isa Union{EagerSparseRepr,EagerDenseRepr} || throw(ArgumentError("Only the :sparse and :dense representations are supported on $(typeof(H)). Got $repr."))
+    _zero_matrix(H, _repr, Int)
+end
+
 # Whether every term of `op` is a product of two `FermionSym`s, with one creation and one annihilation
 # operator if `number_conserving`. Majoranas and other operators give `false`.
 _is_quadratic_fermion_operator(op, number_conserving) = false
@@ -682,7 +695,7 @@ _sum_matrices(matrices, ::LazyRepr; tree_split=10) = sum(matrices)
 _sum_matrices(matrices, ::Union{EagerSparseRepr,EagerDenseRepr}; tree_split=10) = _sum_tree(matrices, tree_split)
 function _sum_tree(matrices, k)
     n = length(matrices)
-    n == 0 && throw(ArgumentError("Empty collection"))
+    n == 0 && throw(ArgumentError("Cannot sum an empty collection of matrices."))
     n == 1 && return only(matrices)
     n <= k && return map(+, matrices...)
 
