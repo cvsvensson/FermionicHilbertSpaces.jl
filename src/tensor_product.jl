@@ -502,31 +502,30 @@ function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::Su
     # `inds` is unused: this algorithm enumerates subsystem and complement states directly.
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
-    for f1 in substates
-        K1 = state_index(f1, Hsub)
-        for f2 in substates
-            K2 = state_index(f2, Hsub)
-            s2 = phase_factors ? partial_trace_phase_factor(f1, f2, Hsub) : 1
-            for fbar in barstates
-                fullstates1, amps1 = combine_states((f1, fbar), mapper)
-                fullstates2, amps2 = combine_states((f2, fbar), mapper)
-                for (fullf1, w1) in zip(fullstates1, amps1)
-                    J1 = state_index(fullf1, H)
-                    if iszero(J1)
-                        skipmissing && continue
-                        throw(ArgumentError("The state `$fullf1` is not in the full Hilbert space."))
-                    end
-                    for (fullf2, w2) in zip(fullstates2, amps2)
-                        J2 = state_index(fullf2, H)
-                        if iszero(J2)
-                            skipmissing && continue
-                            throw(ArgumentError("The state `$fullf2` is not in the full Hilbert space."))
-                        end
-                        s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
-                        op(J1, J2, K1, K2, w1 * w2 * s2 * conj(s1))
-                    end
+    (isempty(substates) || isempty(barstates)) && return nothing
+    # (K, J, w, fullstate, substate) for each state in H formed with one complement state;
+    # element types are taken from the first combination.
+    f0 = first(substates)
+    fullstates0, amps0 = combine_states((f0, first(barstates)), mapper)
+    hits = Tuple{Int,Int,eltype(amps0),eltype(fullstates0),typeof(f0)}[]
+    for fbar in barstates
+        empty!(hits)
+        for f in substates
+            K = state_index(f, Hsub)
+            fullstates, amps = combine_states((f, fbar), mapper)
+            for (fullf, w) in zip(fullstates, amps)
+                J = state_index(fullf, H)
+                if iszero(J)
+                    skipmissing && continue
+                    throw(ArgumentError("The state `$fullf` is not in the full Hilbert space."))
                 end
+                push!(hits, (K, J, w, fullf, f))
             end
+        end
+        for (K1, J1, w1, fullf1, f1) in hits, (K2, J2, w2, fullf2, f2) in hits
+            s2 = phase_factors ? partial_trace_phase_factor(f1, f2, Hsub) : 1
+            s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
+            op(J1, J2, K1, K2, w1 * w2 * s2 * conj(s1))
         end
     end
     return nothing
@@ -968,6 +967,16 @@ end
     @test_throws ArgumentError partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.FullPartialTraceAlg(), skipmissing=false)
     @test partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.FullPartialTraceAlg(), skipmissing=true) ≈
         partial_trace(m12full, H => H1; alg=FermionicHilbertSpaces.SubsystemPartialTraceAlg(), skipmissing=true)
+    Hsub, Hcomp = hilbert_space(a, 1:2), hilbert_space(a, 3:4) # together they form states that are not in H
+    @test_throws ArgumentError partial_trace(m12full, H => Hsub; complement=Hcomp, alg=alg2, skipmissing=false)
+    @test partial_trace(m12full, H => Hsub; complement=Hcomp, alg=alg2, phase_factors=false) ≈
+          partial_trace(m12full, H => Hsub; alg=alg1, skipmissing=true, phase_factors=false)
+
+    @bosons b
+    Hp = tensor_product(hilbert_space(a, 1:2), hilbert_space(b, 1:2, 3); constraint=NumberConservation(2))
+    Hpsub = subregion(tensor_product(hilbert_space(a[1]), hilbert_space(b[1], 3)), Hp)
+    mp = rand(ComplexF64, dim(Hp), dim(Hp))
+    @test partial_trace(mp, Hp => Hpsub; alg=alg2) ≈ partial_trace(mp, Hp => Hpsub; alg=alg1)
 
     H = hilbert_space(a, 1:4, NumberConservation(1))
     @test_throws ArgumentError generalized_kron((m1, m2), (H1, H2) => H)
