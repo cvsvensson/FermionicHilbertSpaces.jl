@@ -116,22 +116,24 @@ end
 hilbert_space(space::AbstractHilbertSpace) = space
 additive_branch_constraint(allowed_sums, functions, allspaces) = additive_branch_constraint(allowed_sums, functions, missing, allspaces)
 function additive_branch_constraint(allowed_sums, functions, _subspaces, allspaces)
-    subspaces = ismissing(_subspaces) ? allspaces : _subspaces
     allowed_values = _normalize_constraint_values(allowed_sums)
-    _additive_branch_constraint(allowed_values, functions, map(hilbert_space, subspaces), allspaces)
+    subspaces = map(hilbert_space, ismissing(_subspaces) ? allspaces : _subspaces)
+    positions = ismissing(_subspaces) ? (1:length(allspaces)) : _subspace_positions(subspaces, allspaces)
+    _additive_branch_constraint(allowed_values, functions, subspaces, positions, length(allspaces))
 end
-function _additive_branch_constraint(allowed_values, functions, subspaces, allspaces)
-    ismissing(allowed_values) && return BranchConstraint((partial, depth, spaces) -> true)
+function _subspace_positions(subspaces, allspaces)
     space_ids = map(collect ∘ atom_ids, allspaces) # collect, since spaces may be given as symbols
-    positions = map(subspaces) do subspace
+    return map(subspaces) do subspace
         pos = findfirst(==(collect(atom_ids(subspace))), space_ids)
         isnothing(pos) && throw(ArgumentError("All subspaces of an `AdditiveConstraint` must be present in the generated space, but `$subspace` is not."))
         pos
     end
+end
+function _additive_branch_constraint(allowed_values, functions, subspaces, positions, n)
+    ismissing(allowed_values) && return BranchConstraint((partial, depth, spaces) -> true)
     contribution_values = _contribution_values(subspaces, functions)
     T = typeof(sum(first, contribution_values))
     # T = mapreduce(eltype, promote_type, contribution_values; init=eltype(allowed_values))
-    n = length(allspaces)
     contribution_min = zeros(T, n)
     contribution_max = zeros(T, n)
     for (pos, vals) in zip(positions, contribution_values)
