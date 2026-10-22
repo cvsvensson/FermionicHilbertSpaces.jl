@@ -59,8 +59,12 @@ function _cache_matches(L, cache, input::AbstractVecOrMat)
     return size(buf) == (size(L, 1), size(input)[2:end]...)
 end
 
-function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCAdd,<:Any,<:Any,<:TermChunking}, x::AbstractVecOrMat, α, β)
-    rmul!(y, β)
+function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd,<:Any,<:Any,<:TermChunking}, x::AbstractVecOrMat, α, β) where T
+    if iszero(β)
+        fill!(y, zero(T))
+    else
+        rmul!(y, β)
+    end
     op = L.op
     term_chunks = _term_chunk_data(L.precomp, L.chunking)
     cache_operator!(L, y)
@@ -109,8 +113,12 @@ function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:ProductOperator,<:A
     return y
 end
 
-function lazy_mul!(y::AbstractVecOrMat, L::LazyOperator{<:NCAdd,<:Any,<:Any,<:StateChunking}, x::AbstractVecOrMat, α, β)
-    rmul!(y, β)
+function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd,<:Any,<:Any,<:StateChunking}, x::AbstractVecOrMat, α, β) where T
+    if iszero(β)
+        fill!(y, zero(T))
+    else
+        rmul!(y, β)
+    end
     cache_operator!(L, y)
     for (term, coeff, precomp) in L.precomp
         _apply_single_term!(y, x, L.space, term, precomp, coeff * α, L.conjugate, L.projection, L.chunking, L.cache)
