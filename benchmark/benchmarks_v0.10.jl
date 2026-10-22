@@ -81,8 +81,8 @@ let rng = Xoshiro(3)
     SUITE["reshape"]["repeat"] = @benchmarkable reshape($A, $(H12 => (H1, H2)); repeat=true)
     rmap = reshape(H12 => (H1, H2), H34 => (H3, H4))
     out = zeros(ComplexF64, dim(H1), dim(H2), dim(H3), dim(H4))
-    SUITE["reshape"]["precomputed"]["construct"] = @benchmarkable reshape($(H12 => (H1, H2)), $(H34 => (H3, H4))) evals = 4
-    SUITE["reshape"]["precomputed"]["apply_inplace"] = @benchmarkable $rmap($out, $M) evals = 4
+    SUITE["reshape"]["precomputed"]["construct"] = @benchmarkable reshape($(H12 => (H1, H2)), $(H34 => (H3, H4)))
+    SUITE["reshape"]["precomputed"]["apply_inplace"] = @benchmarkable $rmap($out, $M)
 end
 
 ## Constrained state generation, through the public constructor. With 64 or
@@ -142,7 +142,7 @@ let rng = Xoshiro(5)
     SUITE["partial_trace"]["product space"]["map"] = @benchmarkable partial_trace($(H => Hsub); complement=$Hcomp)
     m = rand(rng, ComplexF64, dim(H), dim(H))
     pt = partial_trace(H => Hsub; complement=Hcomp)
-    SUITE["partial_trace"]["product space"]["apply_precomputed"] = @benchmarkable $pt($m) evals = 10
+    SUITE["partial_trace"]["product space"]["apply_precomputed"] = @benchmarkable $pt($m)
     msub = rand(rng, ComplexF64, dim(Hsub), dim(Hsub))
     SUITE["embed"]["product space"] = @benchmarkable embed($msub, $(Hsub => H); complement=$Hcomp)
 end
@@ -294,7 +294,7 @@ let rng = Xoshiro(10)
     g = SUITE["tensor_product"]
     g["matrices"] = @benchmarkable tensor_product(($A1, $A2), ($H1, $H2) => $H12)
     g["generalized_kron"] = @benchmarkable generalized_kron(($A1, $A2), ($H1, $H2), $H12)
-    g["spaces"] = @benchmarkable tensor_product($H1, $H2) evals = 10
+    g["spaces"] = @benchmarkable tensor_product($H1, $H2)
 end
 
 ## Symbolic states
@@ -313,11 +313,31 @@ let
 end
 
 # Every benchmark samples for one second. Fixing `evals` makes `tune!`
-# unnecessary. One evaluation per sample is accurate for every benchmark that
-# takes more than a few microseconds; the faster ones set `evals` themselves.
-for (_, b) in BenchmarkTools.leaves(SUITE)
+# unnecessary. Benchmarks that take less than about 200 µs per evaluation run
+# several evaluations per sample, so that the sample is long compared with
+# timer and scheduling noise; the rest run one.
+const EVALS = Dict(
+    "tensor_product/spaces" => 25,
+    "partial_trace/product space/apply_precomputed" => 64,
+    "reshape/precomputed/apply_inplace" => 16,
+    "reshape/precomputed/construct" => 10,
+    "partial_trace_algorithms/Full space/Dense/SubAlg" => 6,
+    "complement/fermions" => 4,
+    "embed/product space" => 4,
+    "partial_trace_algorithms/Sparse space/Sparse/FullAlg" => 4,
+    "complement/product space" => 3,
+    "partial_trace/product space/map" => 3,
+    "reshape/mat_to_vec" => 3,
+    "partial_trace/precomputed/apply_pure_state_inplace" => 3,
+    "hilbert_space" => 2,
+    "symbolic/sum" => 2,
+    "symbolic_states/projected_op_on_state" => 2,
+    "open_system/liouvillian_symbolic" => 2,
+    "matrix_application/lazy liouvillian/mul!" => 2,
+    "partial_trace/precomputed/apply_matrix_inplace" => 2,
+)
+for (key, b) in BenchmarkTools.leaves(SUITE)
     b.params.seconds = 1
-    b.params.evals_set && continue
-    b.params.evals = 1
+    b.params.evals = get(EVALS, join(key, "/"), 1)
     b.params.evals_set = true
 end
