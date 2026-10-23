@@ -310,6 +310,45 @@ function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
     return _scaled_state(amp, SymbolicState(s.space, s.ket, newbra))
 end
 
+# A bra and a ket in the same space contract to zero unless their basis states are equal, so `inner` only forms the
+# products of terms with equal states. Ketbras have no key and are paired with every term.
+function NonCommutativeProducts.contraction_key(s::SymbolicState)
+    isket(s) && return s.ket
+    isbra(s) && return s.bra
+    return nothing
+end
+
+# An operator string acting on a sum of kets in one space is applied to each basis state with one precomputation, as
+# in `matrix_representation`. Other products are sorted factor by factor.
+function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any,<:AbstractSym}, b::NCAdd)
+    space = _ket_sum_space(b)
+    if isnothing(space) || !all(op -> !(op isa SymbolicState) && symbolic_group(op) == group_id(space), x.factors)
+        return invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any,NCMul,NCAdd}, c, x, b)
+    end
+    precomp = precomputation_before_operator_application(x, space)
+    for (factors, coeff) in NonCommutativeProducts.termpairs(b)
+        newket, amp = _apply_local_operators(x, only(factors).ket, space, precomp)
+        iszero(amp) && continue
+        c = add!!(c, NCMul(amp * coeff, [SymbolicState(space, newket, nothing)]))
+    end
+    return c
+end
+# The space of the sum `b` if each of its terms is a single ket in that space, and `nothing` otherwise
+function _ket_sum_space(b::NCAdd)
+    space = nothing
+    for (factors, _) in NonCommutativeProducts.termpairs(b)
+        length(factors) == 1 || return nothing
+        s = only(factors)
+        (s isa SymbolicState && isket(s)) || return nothing
+        if isnothing(space)
+            space = s.space
+        elseif !_same_space_id(space, s.space)
+            return nothing
+        end
+    end
+    return space
+end
+
 
 representation(s::SymbolicState; kwargs...) = representation(s, s.space; kwargs...)
 function representation(op; kwargs...)
@@ -841,6 +880,35 @@ end
             @test iszero(vM) ? iszero(ket' * op) : vec(collect(representation(ket' * op, H))) ≈ vM
         end
     end
+end
+
+@testitem "Operators on sums of kets and inner products of sums agree with matrix representations" begin
+    using LinearAlgebra, Random
+    using FermionicHilbertSpaces.NonCommutativeProducts.VectorInterface: inner
+    Random.seed!(1)
+    @fermions f
+    @spin s 1
+    @boson b
+    for (H, op) in ((hilbert_space(f, 1:4), 0.5 + f[2]' * f[1] + hc + 2.0 * f[3]' * f[3] * f[4]' * f[4] - f[4]),
+        (hilbert_space(f, 1:4, NumberConservation(2)), f[2]' * f[1] + 1im * f[4]' * f[3] + hc),
+        (hilbert_space(s), s[:+] + 0.3 * s[:z] * s[:-]), (hilbert_space(b, 4), b' * b + b + 1),
+        (tensor_product(hilbert_space(f, 1:2), hilbert_space(s)), f[1]' * s[:+] + f[2] + hc))
+        states = collect(basisstates(H))
+        ψ = sum(randn() * FermionicHilbertSpaces.SymbolicState(H, st, nothing) for st in states)
+        φ = sum(randn(ComplexF64) * FermionicHilbertSpaces.SymbolicState(H, st, nothing) for st in states[1:2:end])
+        v, w = Vector(representation(ψ, H)), Vector(representation(φ, H))
+        M = Matrix(matrix_representation(op, H))
+        @test Vector(representation(op * ψ, H)) ≈ M * v
+        @test inner(φ, ψ) ≈ dot(w, v)
+        @test inner(φ, op * ψ) ≈ dot(w, M * v)
+        @test norm(ψ) ≈ norm(v)
+    end
+    # Products that are not an operator string on a sum of kets in one space are sorted factor by factor
+    Hf, Hs = hilbert_space(f, 1:2), hilbert_space(s)
+    kf, ks = Kets(Hf), Kets(Hs)
+    @test (f[1]' + s[:+]) * (kf("00") + kf("01")) == kf("10") + kf("11") + s[:+] * (kf("00") + kf("01"))
+    @test f[1]' * (kf("00") + kf("01") * kf("00")') == kf("10") + f[1]' * kf("01") * kf("00")'
+    @test f[1]' * (kf("00") + ks("0")) == kf("10") + f[1]' * ks("0")
 end
 
 @testitem "Interleaved operators and states in product spaces" begin
