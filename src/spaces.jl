@@ -13,21 +13,33 @@ const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace
 	basisstates(H)
 
 Return the basis states of the Hilbert space `H`, in the order used by matrix
-representations and indexing utilities. The result supports `length`, `eltype`, iteration
-and indexing, with `basisstates(H)[i] == basisstate(i, H)`.
+representations and indexing utilities. The result is a lazy collection, not an
+`AbstractVector`. It supports iteration, `eltype`, `length` (equal to `dim(H)`, which may be
+wider than `Int`), `keys`, `first` and `last`, and indexing with
+`basisstates(H)[i] == basisstate(i, H)`. It compares equal to a vector of the same states.
+Use `collect` to get a `Vector`.
 """
 basisstates
 
-# The vector returned by `basisstates`. Iteration uses `iter`, and indexing uses `basisstate`.
-struct BasisStates{B,H,I} <: AbstractVector{B}
+# The collection returned by `basisstates`. Iteration uses `iter`, and indexing uses `basisstate`.
+struct BasisStates{B,H,I}
     space::H
     iter::I
 end
 BasisStates(space::AbstractHilbertSpace{B}, iter) where B = BasisStates{B,typeof(space),typeof(iter)}(space, iter)
-Base.size(bs::BasisStates) = (Int(length(bs.iter)),)
-Base.@propagate_inbounds Base.getindex(bs::BasisStates, i::Int) = basisstate(i, bs.space)
+Base.eltype(::Type{<:BasisStates{B}}) where B = B
+Base.length(bs::BasisStates) = dim(bs.space)
 Base.iterate(bs::BasisStates) = iterate(bs.iter)
 Base.iterate(bs::BasisStates, state) = iterate(bs.iter, state)
+Base.keys(bs::BasisStates) = Base.OneTo(length(bs))
+Base.firstindex(bs::BasisStates) = 1
+Base.lastindex(bs::BasisStates) = length(bs)
+Base.@propagate_inbounds Base.getindex(bs::BasisStates, i::Integer) = basisstate(i, bs.space)
+Base.:(==)(a::BasisStates, b::BasisStates) = _equal_states(a, b)
+Base.:(==)(a::BasisStates, b::AbstractVector) = _equal_states(a, b)
+Base.:(==)(a::AbstractVector, b::BasisStates) = _equal_states(a, b)
+_equal_states(a, b) = length(a) == length(b) && all(splat(==), zip(a, b))
+Base.hash(bs::BasisStates, h::UInt) = hash(collect(bs), h)
 # Spaces store a plain vector of their states, not a vector tied to another space
 _stored_states(states) = states
 _stored_states(bs::BasisStates) = collect(bs)
@@ -805,4 +817,16 @@ end
         @test all(i -> state_index(basisstate(i, H), H) == i, 1:dim(H))
     end
     @test state_index(FermionicHilbertSpaces.BosonicState(3), Hb) == 0
+end
+
+@testitem "Basis states collection" begin
+    @fermions f
+    H = hilbert_space(f, 1:70)
+    bs = basisstates(H)
+    @test length(bs) == dim(H)
+    @test first(bs) == basisstate(1, H)
+    @test last(bs) == bs[end] == basisstate(dim(H), H)
+    i = dim(H) ÷ 3
+    @test state_index(bs[i], H) == i
+    @test_throws BoundsError bs[dim(H) + 1]
 end

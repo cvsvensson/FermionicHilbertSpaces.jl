@@ -253,7 +253,7 @@ end
     states = FermionicHilbertSpaces.generate_states(H.modes, qn)
     H2 = hilbert_space(f, 1:5, qn)
     T = FermionicHilbertSpaces.statetype(H2)
-    @test sort(basisstates(H2)) == sort(map(state -> FermionicHilbertSpaces.catenate_fock_states(state, H.modes, T), states))
+    @test sort(collect(basisstates(H2))) == sort(map(state -> FermionicHilbertSpaces.catenate_fock_states(state, H.modes, T), states))
     @test all(iseven ∘ fermionnumber, basisstates(H2))
 end
 

@@ -38,7 +38,7 @@ partial_transpose_phase_factor_eltype(space::ConstrainedSpace) = partial_transpo
 
 partial_transpose_phase_factor(f1, f2, H::ConstrainedSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
-constrain_space(space::AbstractHilbertSpace, states::AbstractVector) = constrain_space(space, NoSymmetry(), states)
+constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}) = constrain_space(space, NoSymmetry(), states)
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, states)
 function constrain_space(space, constraint::AbstractConstraint, states=basisstates(space))

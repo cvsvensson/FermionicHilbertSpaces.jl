@@ -474,7 +474,7 @@ end
     for space in (hilbert_space(f, 1:3), hilbert_space(b, 3), hilbert_space(s), Hp, H, sector(1, Hn))
         bs = basisstates(space)
         @test bs == collect(bs) == [basisstate(i, space) for i in 1:dim(space)]
-        @test size(bs) isa Tuple{Int}
+        @test length(bs) == dim(space)
     end
 
     Hg = FermionicHilbertSpaces.GenericHilbertSpace(:x, [FockNumber(0), FockNumber(3)])

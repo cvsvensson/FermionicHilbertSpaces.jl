@@ -314,7 +314,7 @@ end
 end
 
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
-hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::AbstractVector{<:AbstractBasisState}) = ConstrainedSpace(hilbert_space(a, labels), states)
+hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState},BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::AbstractConstraint)
     length(labels) == 0 && return hilbert_space(a, labels)
     tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
