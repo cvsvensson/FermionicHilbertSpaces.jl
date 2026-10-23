@@ -185,7 +185,7 @@ struct TruncatedBosonicHilbertSpace{L,B} <: AbstractAtomicHilbertSpace{BosonicSt
 end
 Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)
 Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.dimension, h))
-basisstates(H::TruncatedBosonicHilbertSpace) = TypedIterator{BosonicState}(Iterators.map(BosonicState, 0:(dim(H)-1)))
+basisstates(H::TruncatedBosonicHilbertSpace) = BasisStates(H, TypedIterator{BosonicState}(Iterators.map(BosonicState, 0:(dim(H)-1))))
 Base.@propagate_inbounds function basisstate(n::Integer, H::TruncatedBosonicHilbertSpace)
     @boundscheck 1 <= n <= dim(H) || throw(BoundsError(H, n))
     BosonicState(n - 1)

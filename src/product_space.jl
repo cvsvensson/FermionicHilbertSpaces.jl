@@ -47,7 +47,7 @@ groups(H::ProductSpace) = H.factors
 dim(H::ProductSpace) = prod(dim, groups(H); init=1)
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
-basisstates(H::ProductSpace{B}) where B = TypedIterator{B}(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
+basisstates(H::ProductSpace{B}) where B = BasisStates(H, TypedIterator{B}(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...))))
 Base.@propagate_inbounds function basisstate(n::Integer, H::ProductSpace{B}) where B
     inds = Tuple(H.cartinds[n])
     ProductState(map(basisstate, inds, H.factors))
@@ -87,7 +87,7 @@ parity(state::ProductState) = prod(parity, atomic_factors(state))
     @test dim(H2) == dim(H) * dim(Hboson)
     @test length(H2.factors) == 3
 
-    @test collect(basisstates(H2)) == [ProductState((s_f.states..., s_b)) for s_f in basisstates(H), s_b in basisstates(Hboson)]
+    @test collect(basisstates(H2)) == vec([ProductState((s_f.states..., s_b)) for s_f in basisstates(H), s_b in basisstates(Hboson)])
     for (i, state) in enumerate(basisstates(H))
         @test state_index(state, H) == i
         @test basisstate(i, H) == state

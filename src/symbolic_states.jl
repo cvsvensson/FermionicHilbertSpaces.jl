@@ -54,15 +54,6 @@ function Base.show(io::IO, s::SymbolicState)
     has_bra(s) && print(io, "⟨", _state_label(s.bra, s.space), "|")
 end
 
-# The label of a basis state inside a ket or bra, in the format that `Kets` accepts as input
-_state_label(state, space) = _state_label_atomic(state, _unwrap_space(space))
-_unwrap_space(H::Union{TransposedSpace,SectorHilbertSpace,ConstrainedSpace}) = _unwrap_space(parent(H))
-_unwrap_space(H) = H
-_state_label_atomic(f::FockNumber, H) = join(digits(Int, f.f; base=2, pad=nbr_of_modes(H)))
-_state_label_atomic(s::BosonicState, H) = string(s.n)
-_state_label_atomic(s::SpinState, H::SpinSpace) = H.spin == 1 // 2 ? (s.m > 0 ? "↑" : "↓") : string(s.m)
-_state_label_atomic(s, H) = sprint(print, s)
-
 Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.bra && _same_space_id(a.space, b.space)
 Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(group_id(a.space), h)))
 # States are ordered by group, then by space, then by ket and bra, where a missing ket or bra comes first.

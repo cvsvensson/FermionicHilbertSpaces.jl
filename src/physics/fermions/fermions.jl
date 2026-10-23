@@ -28,7 +28,7 @@ end
 maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
 Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
-basisstates(H::FermionicSpace{F}) where F = TypedIterator{F}(Iterators.map(F, UnitRange{UInt64}(0, dim(H) - 1)))
+basisstates(H::FermionicSpace{F}) where F = BasisStates(H, TypedIterator{F}(Iterators.map(F, UnitRange{UInt64}(0, dim(H) - 1))))
 Base.@propagate_inbounds function basisstate(ind::Integer, H::FermionicSpace{F}) where F
     @boundscheck (ind >= 1 && iszero((ind - 1) >> nbr_of_modes(H))) || throw(BoundsError(H, ind))
     (F ∘ FockNumber)(ind - 1)
