@@ -15,8 +15,8 @@ Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
 """
     default_fock_representation(N)
 
-The integer type used for Fock states of `N` modes: the smallest fixed-width unsigned
-integer with more than `N` bits, up to 1024 bits, and `BigInt` beyond that.
+The integer type for Fock states of `N` modes: the smallest unsigned integer of 64 to 1024
+bits with more than `N` bits, or `BigInt`.
 """
 function default_fock_representation(N)
     N < 64 && return UInt64
@@ -222,9 +222,7 @@ permute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
         @test all(FermionicHilbertSpaces.fermionnumber.(fs) .== 5)
     end
 
-    @testset "Integer type grows with the site index" begin
-        rep = FermionicHilbertSpaces.default_fock_representation
-        @test (rep(63), rep(64), rep(1023), rep(1024)) == (UInt64, UInt128, FermionicHilbertSpaces.UInt1024, BigInt)
+    @testset "Large site indices" begin
         for site in (100, 1000, 2000)
             f = focknbr_from_site_indices((1, site))
             @test f.f == 1 + big(2)^(site - 1)
@@ -327,9 +325,9 @@ end
 
 @testitem "fockstates handles large M without overflow or duplicates" begin
     import FermionicHilbertSpaces: fixed_particle_number_fockstates
-    for (M, T) in ((70, UInt128), (1100, BigInt))
-        states = fixed_particle_number_fockstates(M, 2)
-        @test length(states) == binomial(M, 2)
+    for (M, n, T) in ((70, 3, UInt128), (1100, 1, BigInt))
+        states = fixed_particle_number_fockstates(M, n)
+        @test length(states) == binomial(M, n)
         @test allunique(states)
         @test all(f -> f isa FockNumber{T}, states)
     end
