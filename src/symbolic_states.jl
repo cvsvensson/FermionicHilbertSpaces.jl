@@ -16,6 +16,17 @@ end
     @test occursin("Kets", repr(kets))
 end
 
+@testitem "Symbolic state show" begin
+    @fermions f
+    @boson b
+    @spin s 1 // 2
+    vf = Kets(hilbert_space(f, 1:2))
+    @test repr(vf("00")) == "|00⟩"
+    @test repr(vf("10") * vf("01")') == "|10⟩⟨01|"
+    @test repr(Ket("2", hilbert_space(b, 4))') == "⟨2|"
+    @test repr(Ket("↑", hilbert_space(s))) == "|↑⟩"
+end
+
 struct SymbolicState{K,B,H} <: AbstractSym
     space::H
     ket::K
@@ -39,20 +50,18 @@ isbra(s::SymbolicState) = has_bra(s) && !has_ket(s)
 isketbra(s::SymbolicState) = has_ket(s) && has_bra(s)
 
 function Base.show(io::IO, s::SymbolicState)
-    if isket(s)
-        print(io, "Ket(")
-        show(IOContext(io, :compact => true), s.ket)
-    elseif isbra(s)
-        print(io, "Bra(")
-        show(IOContext(io, :compact => true), s.bra)
-    else
-        print(io, "KetBra(")
-        show(IOContext(io, :compact => true), s.ket)
-        print(io, ", ")
-        show(IOContext(io, :compact => true), s.bra)
-    end
-    print(io, ")")
+    has_ket(s) && print(io, "|", _state_label(s.ket, s.space), "⟩")
+    has_bra(s) && print(io, "⟨", _state_label(s.bra, s.space), "|")
 end
+
+# The label of a basis state inside a ket or bra, in the format that `Kets` accepts as input
+_state_label(state, space) = _state_label_atomic(state, _unwrap_space(space))
+_unwrap_space(H::Union{TransposedSpace,SectorHilbertSpace,ConstrainedSpace}) = _unwrap_space(parent(H))
+_unwrap_space(H) = H
+_state_label_atomic(f::FockNumber, H) = join(digits(Int, f.f; base=2, pad=nbr_of_modes(H)))
+_state_label_atomic(s::BosonicState, H) = string(s.n)
+_state_label_atomic(s::SpinState, H::SpinSpace) = H.spin == 1 // 2 ? (s.m > 0 ? "↑" : "↓") : string(s.m)
+_state_label_atomic(s, H) = sprint(print, s)
 
 Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.bra && _same_space_id(a.space, b.space)
 Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(group_id(a.space), h)))
