@@ -10,11 +10,11 @@ H = hilbert_space(c, [(j, s) for j in 1:L for s in (:↑, :↓)])
 dim(H)
 
 # The Hubbard Hamiltonian with hopping `t`, on-site repulsion `U` and chemical potential `μ`,
-# written as a list of local terms that sum to `H`.
+# written as a sum of local terms.
 t, U, μ = 1.0, 4.0, 0.5
 n(j, s) = c[j, s]' * c[j, s]
-hterms = [[-t * c[j, s]' * c[j+1, s] + hc for j in 1:L-1 for s in (:↑, :↓)];
-          [U * n(j, :↑) * n(j, :↓) - μ * (n(j, :↑) + n(j, :↓)) for j in 1:L]]
+ham = sum(-t * c[j, s]' * c[j+1, s] + hc for j in 1:L-1 for s in (:↑, :↓)) +
+      sum(U * n(j, :↑) * n(j, :↓) - μ * (n(j, :↑) + n(j, :↓)) for j in 1:L)
 
 # The η-pairing operator creates a doubly occupied site with a staggered phase.
 # The phase makes η† commute with the hopping on a bipartite lattice, so the states
@@ -23,16 +23,16 @@ hterms = [[-t * c[j, s]' * c[j+1, s] + hc for j in 1:L-1 for s in (:↑, :↓)];
 
 # Starting from the vacuum, we apply η† repeatedly. ψₙ is a sparse sum over the
 # binomial(L, n) ways of placing n doublons.
-ψs = [Kets(H)("0"^(2L)) + 0]
+ψs = [Ket("0"^(2L), H) + 0]
 for _ in 1:2
     push!(ψs, η * ψs[end])
 end
 
-# `H` acts term by term on each symbolic state, and we compare with the expected energy.
+# The Hamiltonian acts directly on each symbolic state, and we compare with the expected energy.
 for (k, ψ) in enumerate(ψs)
     N = k - 1
     E = N * (U - 2μ)
-    residual = norm(sum(h * ψ for h in hterms) - E * ψ)
+    residual = norm(ham * ψ - E * ψ)
     println("n = $N: E = $E, basis states = $(length(ψ.dict)) = $(binomial(L, N)), residual = $residual")
 end
 

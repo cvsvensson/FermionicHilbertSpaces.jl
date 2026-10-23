@@ -8,9 +8,9 @@ using FermionicHilbertSpaces, KrylovKit, LinearAlgebra
 import KrylovKit.VectorInterface: inner
 
 # The bath has `N` spinful levels with energies between -1 and 1, the middle one at the Fermi level.
-# With 84 modes, the Hilbert space has dimension ``2^{84}``. No basis is ever enumerated.
+# With 164 modes, the Hilbert space has dimension ``2^{164}``. No basis is ever enumerated.
 @fermions d c
-N = 41
+N = 81
 εd, U, V = -1.0, 3.0, 0.05
 εk = range(-1, 1, length=N)
 kF = (N + 1) ÷ 2
@@ -22,7 +22,7 @@ Vhyb = sum(V * d[σ]' * c[k, σ] + hc for k in 1:N for σ in spins)
 
 # The low-energy states have one electron on the impurity, one electron at the Fermi level, and all levels below it filled.
 # We build them by acting with creation operators on the empty state.
-vacuum = Kets(H)("0"^(2N + 2))
+vacuum = Ket("0"^(2N + 2), H)
 fermi_sea = prod(c[k, σ]' for k in 1:kF-1 for σ in spins) * vacuum
 low_energy = [d[σ]' * c[kF, τ]' * fermi_sea for σ in spins for τ in spins]
 E0 = εd + 2sum(εk[1:kF-1])
