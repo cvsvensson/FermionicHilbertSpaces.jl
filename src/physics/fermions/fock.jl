@@ -12,12 +12,21 @@ Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
 Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
 Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
 
-function default_fock_representation(::Val{N}) where N
-    N < 64 ? UInt64 : BigInt
-end
+"""
+    default_fock_representation(N)
+
+The integer type for Fock states of `N` modes: the smallest unsigned integer of 64 to 1024
+bits with more than `N` bits, or `BigInt`.
+"""
 function default_fock_representation(N)
-    N < 64 ? UInt64 : BigInt
+    N < 64 && return UInt64
+    N < 128 && return UInt128
+    N < 256 && return UInt256
+    N < 512 && return UInt512
+    N < 1024 && return UInt1024
+    return BigInt
 end
+default_fock_representation(::Val{N}) where N = default_fock_representation(N)
 
 Base.:⊻(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f ⊻ f2.f)
 Base.:⊻(f1::Integer, f2::FockNumber) = FockNumber(f1 ⊻ f2.f)
@@ -213,11 +222,12 @@ permute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
         @test all(FermionicHilbertSpaces.fermionnumber.(fs) .== 5)
     end
 
-    @testset "Large site indices use BigInt" begin
-        f = focknbr_from_site_indices((1, 1000,))
-        @test f isa FockNumber{BigInt}
-        @test f.f == 1 + BigInt(2)^(1000 - 1)
-        @test focknbr_from_site_index(1000).f == f.f - 1
+    @testset "Large site indices" begin
+        for site in (100, 1000, 2000)
+            f = focknbr_from_site_indices((1, site))
+            @test f.f == 1 + big(2)^(site - 1)
+            @test focknbr_from_site_index(site).f == f.f - 1
+        end
     end
 end
 
@@ -289,11 +299,22 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
         fockmapper = FockMapper(((1, 3), (2,)), 70)
         combined = _combine((fock((1, 2)), fock((1,))), fockmapper)
         @test combined == fock((1, 2, 3))
-        @test combined isa FockNumber{BigInt}
+        @test combined isa FockNumber{UInt128}
         @test _split(fock((2, 3)), fockmapper) == (fock((2,)), fock((1,)))
         fockmapper = FockMapper(((1, 3), (2,)), 3)
         @test _combine((fock((1, 2)), fock((1,))), fockmapper) == fock((1, 2, 3))
         @test !isnothing(fockmapper.permutation)
+    end
+
+    @testset "wide integers" begin
+        for N in (100, 200, 400, 800, 1100)
+            fermionpositions = (collect(1:3:N), setdiff(1:N, 1:3:N))
+            fockmapper = FockMapper(fermionpositions, N)
+            sites = [n for n in 1:N if n % 5 in (0, 2)]
+            substates = map(pos -> fock(findall(in(sites), pos)), fermionpositions)
+            @test _split(fock(sites), fockmapper) == substates
+            @test _combine(substates, fockmapper) == fock(sites)
+        end
     end
 
     @testset "catenate_fock_states" begin
@@ -315,19 +336,15 @@ end
 
 @testitem "fockstates handles large M without overflow or duplicates" begin
     import FermionicHilbertSpaces: fixed_particle_number_fockstates
-    # For large M, fockstates should use BigInt and not overflow
-    M = 70
-    n = 3
-    states = fixed_particle_number_fockstates(M, n)
-    # All states should be unique
-    @test length(states) == length(unique(states))
-    # All states should be non-negative
-    @test all(f -> f.f >= 0, states)
-    # Check that the type is FockNumber{BigInt} for large M
-    @test all(f -> f isa FockNumber{BigInt}, states)
+    for (M, n, T) in ((70, 3, UInt128), (1100, 1, BigInt))
+        states = fixed_particle_number_fockstates(M, n)
+        @test length(states) == binomial(M, n)
+        @test allunique(states)
+        @test all(f -> f isa FockNumber{T}, states)
+    end
 end
 
-@testitem "BigInts" begin
+@testitem "Spaces with more than 64 modes" begin
     @fermions f
     N = 70
     H = hilbert_space(f, 1:N, NumberConservation(1))
@@ -343,4 +360,25 @@ end
     emb = embed(Hsubbig => H; complement=Hsubsmall)
     pt = partial_trace(H => Hsubbig)
     @test emb.map == pt'.map
+end
+
+@testitem "Spaces with more than 128 modes" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: focknbr_from_site_index, SubsystemPartialTraceAlg, FullPartialTraceAlg
+    @fermions f
+    N = 200
+    H = hilbert_space(f, 1:N, NumberConservation(1))
+    hopping = matrix_representation(sum(f[n]' * f[n+1] + hc for n in 1:N-1), H)
+    @test eigvals(Hermitian(Matrix(hopping))) ≈ sort(2cos.(π * (1:N) / (N + 1)))
+
+    # A one-particle state reduced to every third mode has eigenvalues p and 1 - p
+    subsites = 1:3:N
+    Hsub = subregion([f[n] for n in subsites], H)
+    ψ = normalize(sin.(1:dim(H)))
+    p = sum(abs2(ψ[state_index(focknbr_from_site_index(n), H)]) for n in subsites)
+    for alg in (SubsystemPartialTraceAlg(), FullPartialTraceAlg())
+        ρ = partial_trace(ψ * ψ', H => Hsub; alg)
+        @test sort(eigvals(Hermitian(ρ)))[end-1:end] ≈ sort([p, 1 - p])
+        @test tr(ρ) ≈ 1
+    end
 end
