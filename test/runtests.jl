@@ -260,18 +260,19 @@ end
     H = hilbert_space(f, 1:30, NumberConservation(2))
     Hsub = subregion(hilbert_space(f, 1:10), H)
     Hcomp = complementary_subsystem(H, Hsub)
-    m = rand(ComplexF64, dim(H), dim(H))
     @test default_partial_trace_alg(Hsub, H, Hcomp) isa FullPartialTraceAlg
-    @test default_partial_trace_alg(m, Hsub, H, Hcomp) isa FullPartialTraceAlg
     @test default_partial_trace_alg(sprand(ComplexF64, dim(H), dim(H), 0.01), Hsub, H, Hcomp) isa FullPartialTraceAlg
 
-    # A small subsystem of an unconstrained space: the subsystem algorithm is chosen.
+    # A small subsystem of an unconstrained space.
     H = hilbert_space(f, 1:10)
+    d = dim(H)
     Hsub = subregion(hilbert_space(f, 1:2), H)
     Hcomp = complementary_subsystem(H, Hsub)
-    m = rand(ComplexF64, dim(H), dim(H))
+    m = rand(ComplexF64, d, d)
     @test default_partial_trace_alg(Hsub, H, Hcomp) isa SubsystemPartialTraceAlg
     @test default_partial_trace_alg(m, Hsub, H, Hcomp) isa SubsystemPartialTraceAlg
+    @test default_partial_trace_alg(sprand(ComplexF64, d, d, 0.5), Hsub, H, Hcomp) isa SubsystemPartialTraceAlg
+    @test default_partial_trace_alg(sprand(ComplexF64, d, d, 4 / d), Hsub, H, Hcomp) isa FullPartialTraceAlg
 end
 
 @testitem "Identity in matrix_representation" begin

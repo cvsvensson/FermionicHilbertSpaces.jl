@@ -481,7 +481,15 @@ _effective_dim(m::AbstractMatrix, H) = length(m)
 _effective_dim(m::AbstractSparseMatrix, H) = nnz(m)
 _effective_dim(::UniformScaling, H) = dim(H)
 
-default_partial_trace_alg(m::Union{AbstractMatrix,UniformScaling}, Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+# Costs in units of one input-element visit by FullPartialTraceAlg, which visits the stored elements.
+# SubsystemPartialTraceAlg combines every subsystem state with every complement state, then visits
+# about d^2 ÷ dcomp terms, each reading the input (a binary search if `m` is sparse).
+function default_partial_trace_alg(m::Union{AbstractMatrix,UniformScaling}, Hsub, H, Hcomp)
+    dsub, d, dcomp = dim(Hsub), dim(H), dim(Hcomp)
+    readcost = m isa AbstractSparseMatrix ? 20 : 5
+    subcost = 16 * dsub * dcomp + readcost * (d^2 ÷ max(dcomp, 1))
+    return subcost < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+end
 default_partial_trace_alg(m::Union{AbstractMatrix,UniformScaling}, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
@@ -1020,6 +1028,9 @@ end
         m = sprand(ComplexF64, dim(H), dim(H), 0.3)
         msub = sprand(ComplexF64, dim(Hsub), dim(Hsub), 0.5)
         @test pt(m) ≈ partial_trace(Matrix(m), H => Hsub)
+        for alg in (FermionicHilbertSpaces.FullPartialTraceAlg(), FermionicHilbertSpaces.SubsystemPartialTraceAlg())
+            @test partial_trace(m, H => Hsub; alg) ≈ partial_trace(Matrix(m), H => Hsub)
+        end
         @test pt(zeros(ComplexF64, dim(Hsub), dim(Hsub)), m) ≈ partial_trace(Matrix(m), H => Hsub)
         @test emb(msub) ≈ embed(Matrix(msub), Hsub => H; skipmissing=true)
         @test_throws DimensionMismatch pt(sprand(dim(H) + 1, dim(H) + 1, 0.5))
