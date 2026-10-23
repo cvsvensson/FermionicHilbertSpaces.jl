@@ -40,7 +40,11 @@ end
 state_index(state::FockNumber, H::FermionicSpace) = iszero(state.f >> nbr_of_modes(H)) ? state.f + one(state.f) : zero(state.f)
 function dim(H::FermionicSpace)
     N = nbr_of_modes(H)
-    N < 63 ? 1 << N : one(default_fock_representation(N)) << N
+    N < 63 ? 1 << N : big(1) << N
+end
+function dim(H::FermionicSpace{FockNumber{I}}) where I
+    N = nbr_of_modes(H)
+    N < 63 ? 1 << N : one(I) << N
 end
 function atomic_factors(H::FermionicSpace)
     length(H.modes) < 2 && return [H] # for single or trivial spaces
