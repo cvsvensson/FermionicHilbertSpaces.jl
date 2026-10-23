@@ -230,8 +230,6 @@ let
     H = hilbert_space(S, 1:N, Sz0)
     heisenberg = sum(S[k][:x] * S[k+1][:x] + S[k][:y] * S[k+1][:y] + S[k][:z] * S[k+1][:z] for k in 1:N-1) + sum(0.1k * S[k][:z] for k in 1:N)
     g = SUITE["spin"]
-    g["symbolic_heisenberg"] =
-        @benchmarkable sum($S[k][:x] * $S[k+1][:x] + $S[k][:y] * $S[k+1][:y] + $S[k][:z] * $S[k+1][:z] for k in 1:$N-1)
     g["matrix_representation_heisenberg"] = @benchmarkable matrix_representation($heisenberg, $H)
 end
 
