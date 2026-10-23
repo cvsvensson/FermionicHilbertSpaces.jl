@@ -16,7 +16,6 @@ mutable struct LazyOperator{O,S,T,C,P}
     const projection::Bool
     const conjugate::Bool
     const ishermitian::Bool
-    const size::Tuple{Int,Int}
     cache::Any
 end
 
@@ -37,12 +36,10 @@ function LazyOperator(_op, space::S, chunking::C=NoChunking(); projection=false,
     precomp = lazy_precomputation(op, space)
     O = typeof(op)
     P = typeof(precomp)
-    dims = (dim(space), dim(space))
-    LazyOperator{O,S,T,C,P}(op, space, chunking, precomp, projection, conjugate, ishermitian, dims, nothing)
+    LazyOperator{O,S,T,C,P}(op, space, chunking, precomp, projection, conjugate, ishermitian, nothing)
 end
 function LazyOperator(op::O, space::S, chunking::C, precomp::P; projection=false, conjugate=false, ishermitian=_ishermitian(op), T=mat_eltype(op)) where {O,S,C<:AbstractChunkingStrategy,P}
-    dims = (dim(space), dim(space))
-    LazyOperator{O,S,T,C,P}(op, space, chunking, precomp, projection, conjugate, ishermitian, dims, nothing)
+    LazyOperator{O,S,T,C,P}(op, space, chunking, precomp, projection, conjugate, ishermitian, nothing)
 end
 
 # Data that `lazy_mul!` needs to apply `op` on `space`, computed once when the `LazyOperator`
@@ -68,8 +65,9 @@ function _lazy_output_prototype(L::LazyOperator, input::AbstractMatrix)
 end
 
 
+# The default cache, `similar(input, T, dims)`, fails for lengths that do not fit in an `Int`.
 function scimloperator(L::LazyOperator, input=Vector{eltype(L)}(undef, dim(L.space)), output=input; kwargs...)
-    SciMLOperators.FunctionOperator(L, input, output; ishermitian=ishermitian(L), op_adjoint=adjoint(L), isconstant=true, T=eltype(L), islinear=true, batch=true, kwargs...)
+    SciMLOperators.FunctionOperator(L, input, output; ishermitian=ishermitian(L), op_adjoint=adjoint(L), isconstant=true, T=eltype(L), islinear=true, batch=true, cache=(similar(input), similar(output)), kwargs...)
 end
 
 (L::LazyOperator)(w, v, u, p, t, α, β) = mul!(w, L, v, α, β)
@@ -82,7 +80,7 @@ function _ishermitian(x::ProductOperator)
     _ishermitian(prod(x.ops))
 end
 
-Base.size(L::LazyOperator) = L.size
+Base.size(L::LazyOperator) = (d = dim(L.space); (d, d))
 Base.size(L::LazyOperator, i::Int) = size(L)[i]
 Base.eltype(::LazyOperator{O,S,T,C,P}) where {O,S,T,C,P} = T
 Base.conj(L::LazyOperator) = LazyOperator(L.op, L.space, L.chunking, L.precomp; projection=L.projection, conjugate=!L.conjugate, ishermitian=L.ishermitian)
@@ -100,7 +98,10 @@ function Base.transpose(L::LazyOperator{<:ProductOperator{C}}) where C
     newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces), L.op.inds)
     LazyOperator(newop, TransposedSpace(L.space), L.chunking, L.precomp; projection=L.projection, conjugate=L.conjugate, ishermitian=L.ishermitian)
 end
-Base.transpose(L::SciMLOperators.FunctionOperator{<:Any,<:Any,<:Any,<:Any,<:LazyOperator}) = scimloperator(transpose(L.op))
+function Base.transpose(L::SciMLOperators.FunctionOperator{<:Any,<:Any,<:Any,<:Any,<:LazyOperator})
+    isnothing(L.cache) && return scimloperator(transpose(L.op))
+    return scimloperator(transpose(L.op), first(L.cache))
+end
 LinearAlgebra.ishermitian(L::LazyOperator) = L.ishermitian
 
 function _eager_matrix_representation(L::LazyOperator{<:Union{NCMul,ProductOperator}})
@@ -253,7 +254,7 @@ end
 function Base.:*(L::LazyOperator, x::SparseArrays.AbstractSparseVector)
     size(L, 2) == length(x) || throw(DimensionMismatch("The input must have length $(size(L, 2)), got $(length(x))"))
     T = promote_type(eltype(L), eltype(x))
-    outinds = Int[]
+    outinds = typeof(size(L, 1))[]
     amps = T[]
     push_entry = (i, v) -> (push!(outinds, i); push!(amps, v))
     for (term, coeff, precomp) in _lazy_terms(L)
@@ -268,14 +269,15 @@ function Base.:*(L::LazyOperator, x::SparseArrays.AbstractSparseVector)
 end
 _lazy_terms(L::LazyOperator{<:NCAdd}) = L.precomp
 _lazy_terms(L::LazyOperator) = ((L.op, true, L.precomp),)
-get_input(::LazyRepr{Missing}, H) = dim(H) < 1e4 ? Vector{mat_eltype(H)}(undef, dim(H)) : spzeros(mat_eltype(H), dim(H))
+_sparse_input(H) = (d = dim(H); spzeros(mat_eltype(H), typeof(d), d))
+get_input(::LazyRepr{Missing}, H) = dim(H) < 1e4 ? Vector{mat_eltype(H)}(undef, dim(H)) : _sparse_input(H)
 function get_input(rep::LazyRepr{<:AbstractArray}, H)
     dim(H) == size(rep.input, 1) || throw(DimensionMismatch("The input must have $(dim(H)) rows, got size $(size(rep.input))"))
     return rep.input
 end
 function get_input(rep::LazyRepr{Symbol}, H)
     rep.input == :dense && return Vector{mat_eltype(H)}(undef, dim(H))
-    rep.input == :sparse && return spzeros(mat_eltype(H), dim(H))
+    rep.input == :sparse && return _sparse_input(H)
 end
 
 function _term_matrix_representation(op::Union{NCMul,ProductOperator}, H::AbstractHilbertSpace, rep::LazyRepr, chunking; kwargs...)
@@ -453,6 +455,30 @@ end
 
     # @test !ishermitian(L)
     # @test ishermitian(matrix_representation(op + hc, Hcons; lazy=true, projection=true)) #SciMLOperators doesn't check termwise ishermitian for an added operator
+end
+
+@testitem "lazy matrix_representation with dimensions wider than Int" begin
+    using SparseArrays
+    import FermionicHilbertSpaces: focknbr_from_site_indices, state_index
+    @fermions f
+    op = 0.3 * f[1]' * f[2] + 0.7im * f[2]' * f[3] + hc + 0.5 * f[1]' * f[1] + 0.2
+    Hsmall = hilbert_space(f, 1:3)
+    M = representation(op, Hsmall)
+    for N in (63, 70, 200, 1100)
+        H = hilbert_space(f, 1:N)
+        @test dim(H) == big(2)^N
+        # the states of `Hsmall` with mode N occupied
+        high = focknbr_from_site_indices((N,)).f
+        inds = [state_index(FockNumber(high | (k - 1)), H) for k in 1:dim(Hsmall)]
+        v = randn(ComplexF64, dim(Hsmall))
+        x = sparsevec(inds, v, dim(H))
+        L = representation(op, H, :lazy)
+        for (Lop, Mop) in ((L, M), (L', M'), (transpose(L), transpose(M)))
+            y = Lop * x
+            @test y isa SparseVector && length(y) == dim(H) && nnz(y) == length(inds)
+            @test [y[i] for i in inds] ≈ Mop * v
+        end
+    end
 end
 
 @testitem "lazy matrix_representation on product spaces" begin
