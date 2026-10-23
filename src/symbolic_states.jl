@@ -310,17 +310,13 @@ function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
     return _scaled_state(amp, SymbolicState(s.space, s.ket, newbra))
 end
 
-# A bra and a ket in the same space contract to zero unless their basis states are equal, so `inner` only forms the
-# products of terms with equal states. Ketbras have no key and are paired with every term.
-function NonCommutativeProducts.contraction_key(s::SymbolicState)
-    isket(s) && return s.ket
-    isbra(s) && return s.bra
-    return nothing
-end
+# Kets are basis vectors: ⟨a|b⟩ is zero unless a and b are the same basis state of the same group, so `inner` only
+# forms the products of terms with equal keys. Bras and ketbras have no key and are paired with every term.
+NonCommutativeProducts.contraction_key(s::SymbolicState) = isket(s) ? (group_id(s.space), s.ket) : nothing
 
 # An operator string acting on a sum of kets in one space is applied to each basis state with one precomputation, as
 # in `matrix_representation`. Other products are sorted factor by factor.
-function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any,<:AbstractSym}, b::NCAdd)
+function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any,<:AbstractSym}, b::NCAdd{<:Any,<:NCMul{<:Any,<:SymbolicState}})
     space = _ket_sum_space(b)
     if isnothing(space) || !all(op -> !(op isa SymbolicState) && symbolic_group(op) == group_id(space), x.factors)
         return invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any,NCMul,NCAdd}, c, x, b)
@@ -909,6 +905,8 @@ end
     @test (f[1]' + s[:+]) * (kf("00") + kf("01")) == kf("10") + kf("11") + s[:+] * (kf("00") + kf("01"))
     @test f[1]' * (kf("00") + kf("01") * kf("00")') == kf("10") + f[1]' * kf("01") * kf("00")'
     @test f[1]' * (kf("00") + ks("0")) == kf("10") + f[1]' * ks("0")
+    # Only kets have contraction keys, so the ketbra term is paired with |00⟩ and leaves the ket |01⟩
+    @test_throws ArgumentError inner(kf("01") + kf("00") * kf("01")', kf("00"))
 end
 
 @testitem "Interleaved operators and states in product spaces" begin
