@@ -12,12 +12,21 @@ Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
 Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
 Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
 
-function default_fock_representation(::Val{N}) where N
-    N < 64 ? UInt64 : BigInt
-end
+"""
+    default_fock_representation(N)
+
+The integer type used for Fock states of `N` modes: the smallest fixed-width unsigned
+integer with more than `N` bits, up to 1024 bits, and `BigInt` beyond that.
+"""
 function default_fock_representation(N)
-    N < 64 ? UInt64 : BigInt
+    N < 64 && return UInt64
+    N < 128 && return UInt128
+    N < 256 && return UInt256
+    N < 512 && return UInt512
+    N < 1024 && return UInt1024
+    return BigInt
 end
+default_fock_representation(::Val{N}) where N = default_fock_representation(N)
 
 Base.:⊻(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f ⊻ f2.f)
 Base.:⊻(f1::Integer, f2::FockNumber) = FockNumber(f1 ⊻ f2.f)
@@ -213,11 +222,14 @@ permute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
         @test all(FermionicHilbertSpaces.fermionnumber.(fs) .== 5)
     end
 
-    @testset "Large site indices use BigInt" begin
-        f = focknbr_from_site_indices((1, 1000,))
-        @test f isa FockNumber{BigInt}
-        @test f.f == 1 + BigInt(2)^(1000 - 1)
-        @test focknbr_from_site_index(1000).f == f.f - 1
+    @testset "Integer type grows with the site index" begin
+        rep = FermionicHilbertSpaces.default_fock_representation
+        @test (rep(63), rep(64), rep(1023), rep(1024)) == (UInt64, UInt128, FermionicHilbertSpaces.UInt1024, BigInt)
+        for site in (100, 1000, 2000)
+            f = focknbr_from_site_indices((1, site))
+            @test f.f == 1 + big(2)^(site - 1)
+            @test focknbr_from_site_index(site).f == f.f - 1
+        end
     end
 end
 
@@ -289,7 +301,7 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
         fockmapper = FockMapper(((1, 3), (2,)), 70)
         combined = _combine((fock((1, 2)), fock((1,))), fockmapper)
         @test combined == fock((1, 2, 3))
-        @test combined isa FockNumber{BigInt}
+        @test combined isa FockNumber{UInt128}
         @test _split(fock((2, 3)), fockmapper) == (fock((2,)), fock((1,)))
         fockmapper = FockMapper(((1, 3), (2,)), 3)
         @test _combine((fock((1, 2)), fock((1,))), fockmapper) == fock((1, 2, 3))
@@ -315,19 +327,15 @@ end
 
 @testitem "fockstates handles large M without overflow or duplicates" begin
     import FermionicHilbertSpaces: fixed_particle_number_fockstates
-    # For large M, fockstates should use BigInt and not overflow
-    M = 70
-    n = 3
-    states = fixed_particle_number_fockstates(M, n)
-    # All states should be unique
-    @test length(states) == length(unique(states))
-    # All states should be non-negative
-    @test all(f -> f.f >= 0, states)
-    # Check that the type is FockNumber{BigInt} for large M
-    @test all(f -> f isa FockNumber{BigInt}, states)
+    for (M, T) in ((70, UInt128), (1100, BigInt))
+        states = fixed_particle_number_fockstates(M, 2)
+        @test length(states) == binomial(M, 2)
+        @test allunique(states)
+        @test all(f -> f isa FockNumber{T}, states)
+    end
 end
 
-@testitem "BigInts" begin
+@testitem "Spaces with more than 64 modes" begin
     @fermions f
     N = 70
     H = hilbert_space(f, 1:N, NumberConservation(1))

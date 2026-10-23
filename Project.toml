@@ -4,6 +4,7 @@ version = "0.10.0"
 authors = ["Viktor Svensson", "William Samuelson"]
 
 [deps]
+BitIntegers = "c3b6d118-76ef-56ca-8cc7-ebb389d030a1"
 BitPermutations = "81206824-6155-40a8-95f7-18696067be4d"
 FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
 HalfIntegers = "f0d1745a-41c9-11e9-1dd9-e5d34d218721"
@@ -28,6 +29,7 @@ OhMyThreadsExt = "OhMyThreads"
 PartitionedArraysExt = "PartitionedArrays"
 
 [compat]
+BitIntegers = "0.3"
 BitPermutations = "0.3"
 Combinatorics = "1"
 FillArrays = "1"

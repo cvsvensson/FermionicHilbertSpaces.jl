@@ -86,8 +86,8 @@ let rng = Xoshiro(3)
 end
 
 ## Constrained state generation, through the public constructor. With 64 or
-## more modes the Fock states are stored as BigInt.
-for (N, key) in ((60, "hilbert_space_N60"), (64, "hilbert_space_N64_bigint"))
+## more modes the Fock states are stored as UInt128.
+for (N, key) in ((60, "hilbert_space_N60"), (64, "hilbert_space_N64"))
     @fermions f
     weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
     allowed_ones = [[0, 1], [-1, 0], [2]]
