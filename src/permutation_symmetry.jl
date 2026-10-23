@@ -64,8 +64,8 @@ replaced by zero if its largest entry is at most `sqrt(eps)` times the largest w
 that a sector absent from `H` gives an exactly zero `P` instead of roundoff.
 
 Keywords:
-- `normalize`: rescale `P` by `tr(P) / sum(abs2, P)`, which makes `P^2 == P` when `P` is
-  proportional to a projector.
+- `normalize`: rescale `P` by `conj(tr(P)) / sum(abs2, P)`, which makes `P^2 == P` when `P`
+  is proportional to a projector.
 - `sparse`: return a `SparseMatrixCSC` if `true`, and a `Matrix` otherwise.
 
 `Hs` may be either a full partition of `H` (covering all atomic factors) or a proper
@@ -117,7 +117,7 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothi
     if normalize
         tr2 = sum(abs2, P)
         tr1 = tr(P)
-        iszero(tr2) || (P *= (tr1 / tr2))
+        iszero(tr2) || (P *= (conj(tr1) / tr2))
     end
     return P
 end
@@ -141,7 +141,7 @@ function _default_projector_eltype(weights)
 end
 
 """
-    symmetric_sector(H, Hs, sector=:symmetric, T=default; orth_method=:qr, normalize=true, sparse=true)
+    symmetric_sector(H, Hs, sector=:symmetric, T=default; orth_method=:qr, check=true, normalize=true, sparse=true)
 
 Return a basis for the sector of `H` selected by `sector`, under permutations of the
 factors `Hs`.
@@ -169,14 +169,19 @@ In the remaining cases, the projector is built with
 
 `:qr` and `:eig` find the numerical rank with a tolerance relative to the scale of the
 projector, so they assume that the projector is proportional to an orthogonal projector.
-This holds when `perms` form a group and `weights` are proportional to a character of it
-or to its complex conjugate.
+This holds when `perms` form a group and `weights` are a positive multiple of a character
+of it or of its complex conjugate.
+
+With `check=true` and a tuple `(perms, weights)`, `symmetric_sector` throws an
+`ArgumentError` if `perms` does not contain the identity permutation or its weight is not
+real and positive, and, for `orth_method` not `nothing`, if the projector is not
+Hermitian. `check=false` skips these checks.
 
 `Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
 case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
 """
 function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type{T}=_default_sector_eltype(sector);
-    orth_method=:qr, kwargs...) where T
+    orth_method=:qr, check=true, kwargs...) where T
     isempty(Hs) && throw(ArgumentError("`Hs` must contain at least one factor space."))
     method = _orth_method(orth_method)
     if sector isa Symbol && !isnothing(method) && ispartition(Hs, H)
@@ -185,9 +190,39 @@ function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type
 
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
     length(perms) == length(weights) || throw(ArgumentError("The generated weights and permutations must have the same length, got $(length(weights)) and $(length(perms))."))
+    check && sector isa Tuple && _check_identity_weight(perms, weights)
     P = permutation_projector(H, Hs, perms, weights, T; kwargs...)
     isnothing(method) && return P
+    check && sector isa Tuple && _check_hermitian(P)
     _sector_basis(P, method)
+end
+
+const _CHECK_HINT = "Pass `check=false` to skip this check."
+
+function _check_identity_weight(perms, weights)
+    found = false
+    for (perm, w) in zip(perms, weights)
+        _isidentity(perm) || continue
+        found = true
+        _is_positive_weight(w) || throw(ArgumentError("The weight of the identity permutation is $w, but for a positive multiple of a character it is real and positive. $_CHECK_HINT"))
+    end
+    found || throw(ArgumentError("`perms` does not contain the identity permutation, so it is not a group. $_CHECK_HINT"))
+    return nothing
+end
+_isidentity(perm) = all(i -> perm[i] == i, eachindex(perm))
+
+# Weights of other types, such as symbolic ones, are not checked.
+_is_positive_weight(w) = true
+_is_positive_weight(w::Union{Integer,Rational,AbstractFloat}) = w > 0
+function _is_positive_weight(w::Complex{<:Union{Integer,Rational,AbstractFloat}})
+    return abs(imag(w)) <= sqrt(eps(float(real(typeof(w))))) * abs(w) && real(w) > 0
+end
+
+_check_hermitian(P) = nothing
+function _check_hermitian(P::AbstractMatrix{<:Union{AbstractFloat,Complex{<:AbstractFloat}}})
+    maximum(abs, P - P'; init=zero(real(eltype(P)))) <= _rank_tol(P) ||
+        throw(ArgumentError("The projector is not Hermitian, so `weights` are not a multiple of a character of the group formed by `perms`, or of its complex conjugate. $_CHECK_HINT"))
+    return nothing
 end
 _default_sector_eltype(sector) = Float64
 function _default_sector_eltype((perms, weights)::Tuple)
@@ -536,4 +571,22 @@ end
     H1 = hilbert_space(f, 1:1)
     @test symmetric_sector(H1, [H1], :antisymmetric) ≈ I
     @test_throws ArgumentError symmetric_sector(cases[1]..., :invalid)
+end
+
+@testitem "Checks on the weights of symmetric_sector" begin
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    Hs = factors(H)
+    cyclic = [circshift(1:3, j) for j in 0:2]
+    chi = [cis(2pi * j / 3) for j in 0:2]
+    for ws in (cis(pi / 4) .* chi, -ones(3))
+        @test_throws ArgumentError symmetric_sector(H, Hs, (cyclic, ws); orth_method=nothing)
+    end
+    # normalize divides out a complex scale
+    @test symmetric_sector(H, Hs, (cyclic, cis(pi / 4) .* chi); orth_method=nothing, check=false) ≈
+          symmetric_sector(H, Hs, (cyclic, chi); orth_method=nothing)
+    @test_throws ArgumentError symmetric_sector(H, Hs, (cyclic[2:3], chi[2:3]))
+    # The Hermitian check runs only when a basis is computed
+    @test_throws ArgumentError symmetric_sector(H, Hs, (cyclic, [1.0, 1.0, 0.0]))
+    @test symmetric_sector(H, Hs, (cyclic, [1.0, 1.0, 0.0]); orth_method=nothing) isa AbstractMatrix
 end
