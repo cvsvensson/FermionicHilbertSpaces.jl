@@ -306,6 +306,17 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
         @test !isnothing(fockmapper.permutation)
     end
 
+    @testset "wide integers" begin
+        for N in (100, 200, 400, 800, 1100)
+            fermionpositions = (collect(1:3:N), setdiff(1:N, 1:3:N))
+            fockmapper = FockMapper(fermionpositions, N)
+            sites = [n for n in 1:N if n % 5 in (0, 2)]
+            substates = map(pos -> fock(findall(in(sites), pos)), fermionpositions)
+            @test _split(fock(sites), fockmapper) == substates
+            @test _combine(substates, fockmapper) == fock(sites)
+        end
+    end
+
     @testset "catenate_fock_states" begin
         catenate_fock_states = FermionicHilbertSpaces.catenate_fock_states
         @fermions g
@@ -349,4 +360,25 @@ end
     emb = embed(Hsubbig => H; complement=Hsubsmall)
     pt = partial_trace(H => Hsubbig)
     @test emb.map == pt'.map
+end
+
+@testitem "Spaces with more than 128 modes" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: focknbr_from_site_index, SubsystemPartialTraceAlg, FullPartialTraceAlg
+    @fermions f
+    N = 200
+    H = hilbert_space(f, 1:N, NumberConservation(1))
+    hopping = matrix_representation(sum(f[n]' * f[n+1] + hc for n in 1:N-1), H)
+    @test eigvals(Hermitian(Matrix(hopping))) ≈ sort(2cos.(π * (1:N) / (N + 1)))
+
+    # A one-particle state reduced to every third mode has eigenvalues p and 1 - p
+    subsites = 1:3:N
+    Hsub = subregion([f[n] for n in subsites], H)
+    ψ = normalize(sin.(1:dim(H)))
+    p = sum(abs2(ψ[state_index(focknbr_from_site_index(n), H)]) for n in subsites)
+    for alg in (SubsystemPartialTraceAlg(), FullPartialTraceAlg())
+        ρ = partial_trace(ψ * ψ', H => Hsub; alg)
+        @test sort(eigvals(Hermitian(ρ)))[end-1:end] ≈ sort([p, 1 - p])
+        @test tr(ρ) ≈ 1
+    end
 end
