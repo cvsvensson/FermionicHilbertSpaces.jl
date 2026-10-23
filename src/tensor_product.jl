@@ -481,16 +481,13 @@ _effective_dim(m::AbstractMatrix, H) = length(m)
 _effective_dim(m::AbstractSparseMatrix, H) = nnz(m)
 _effective_dim(::UniformScaling, H) = dim(H)
 
-# Cost model for the direct partial trace, in units of one input-element visit by FullPartialTraceAlg.
+# Costs in units of one input-element visit by FullPartialTraceAlg, which visits the stored elements.
 # SubsystemPartialTraceAlg combines every subsystem state with every complement state, then visits
 # about d^2 ÷ dcomp terms, each reading the input (a binary search if `m` is sparse).
-# FullPartialTraceAlg visits the stored input elements.
-const _PT_COMBINE_COST = 16
-_pt_subsystem_term_cost(m) = 5
-_pt_subsystem_term_cost(::AbstractSparseMatrix) = 20
 function default_partial_trace_alg(m::Union{AbstractMatrix,UniformScaling}, Hsub, H, Hcomp)
     dsub, d, dcomp = dim(Hsub), dim(H), dim(Hcomp)
-    subcost = _PT_COMBINE_COST * dsub * dcomp + _pt_subsystem_term_cost(m) * (d^2 ÷ max(dcomp, 1))
+    readcost = m isa AbstractSparseMatrix ? 20 : 5
+    subcost = 16 * dsub * dcomp + readcost * (d^2 ÷ max(dcomp, 1))
     return subcost < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 end
 default_partial_trace_alg(m::Union{AbstractMatrix,UniformScaling}, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
