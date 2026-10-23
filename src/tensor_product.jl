@@ -491,14 +491,15 @@ partial_trace_phase_factor_eltype(::AbstractAtomicHilbertSpace) = Int
 """
     _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, alg; phase_factors, skipmissing)
 
-Kernel shared by the direct and sparse-map partial trace. Calls `op(J1, J2, K1, K2, v)` for
+Kernel of the partial-trace map builders, and of the direct partial trace with
+`SubsystemPartialTraceAlg`. Calls `op(J1, J2, K1, K2, v)` for
 each contribution, where `(J1, J2)` indexes the input matrix in `H`, `(K1, K2)` the output
 matrix in `Hsub`, and `v` excludes the input matrix element. `inds` is ignored by
 `SubsystemPartialTraceAlg` (pass `nothing`); `FullPartialTraceAlg` visits the index pairs in
 `inds`. When `skipmissing=false`, a missing state throws `ArgumentError`.
 """
-function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::SubsystemPartialTraceAlg;
-    phase_factors=true, skipmissing=true)
+function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, ::SubsystemPartialTraceAlg;
+    phase_factors=true, skipmissing=true) where {F}
     # `inds` is unused: this algorithm enumerates subsystem and complement states directly.
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
@@ -531,33 +532,44 @@ function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::Su
     return nothing
 end
 
-function _foreach_partial_trace_term(op, inds, H, Hsub, complement, mapper, ::FullPartialTraceAlg;
-    phase_factors=true, skipmissing=false)
-    splitsamps = map(Base.Fix2(split_state, mapper), basisstates(H))
+function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, ::FullPartialTraceAlg;
+    phase_factors=true, skipmissing=false) where {F}
+    splits = _full_partial_trace_splits(H, Hsub, mapper)
     for I in inds
-        J1, J2 = I[1], I[2]
-        # `splitsamps` has one entry per basis state of `H`, so these lookups bounds-check J1 and J2.
-        splits1, amps1 = splitsamps[J1]
-        splits2, amps2 = splitsamps[J2]
-        f1 = @inbounds basisstate(J1, H)
-        f2 = @inbounds basisstate(J2, H)
-        for ((f1sub, f1bar), w1) in zip(splits1, amps1)
-            K1 = state_index(f1sub, Hsub)
-            if iszero(K1)
+        _foreach_full_partial_trace_pair_term(op, I[1], I[2], splits, H, Hsub, phase_factors, skipmissing)
+    end
+    return nothing
+end
+
+# For each basis state f of `H`: `(f, ((K, fsub, fbar, w), ...))`, with one entry per split of f,
+# where K is the index of fsub in `Hsub` (0 if fsub is not in `Hsub`).
+function _full_partial_trace_splits(H, Hsub, mapper)
+    map(basisstates(H)) do f
+        substates, amps = split_state(f, mapper)
+        (f, map((s, w) -> (state_index(first(s), Hsub), first(s), last(s), w), substates, amps))
+    end
+end
+
+# The FullPartialTraceAlg contributions of the input matrix element (J1, J2).
+# `splits` has one entry per basis state of `H`, so indexing it bounds-checks J1 and J2.
+# Inlining it into the loops over (J1, J2) matters: most pairs have no contribution.
+@inline function _foreach_full_partial_trace_pair_term(op, J1, J2, splits, H, Hsub, phase_factors, skipmissing)
+    f1, splits1 = splits[J1]
+    f2, splits2 = splits[J2]
+    for (K1, f1sub, f1bar, w1) in splits1
+        if iszero(K1)
+            skipmissing && continue
+            throw(ArgumentError("The state `$f1sub` is not in the subsystem Hilbert space."))
+        end
+        for (K2, f2sub, f2bar, w2) in splits2
+            f1bar != f2bar && continue
+            if iszero(K2)
                 skipmissing && continue
-                throw(ArgumentError("The state `$f1sub` is not in the subsystem Hilbert space."))
+                throw(ArgumentError("The state `$f2sub` is not in the subsystem Hilbert space."))
             end
-            for ((f2sub, f2bar), w2) in zip(splits2, amps2)
-                f1bar != f2bar && continue
-                K2 = state_index(f2sub, Hsub)
-                if iszero(K2)
-                    skipmissing && continue
-                    throw(ArgumentError("The state `$f2sub` is not in the subsystem Hilbert space."))
-                end
-                s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
-                s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
-                op(J1, J2, K1, K2, w1 * w2 * s2 * conj(s1))
-            end
+            s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
+            s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
+            op(J1, J2, K1, K2, w1 * w2 * s2 * conj(s1))
         end
     end
     return nothing
@@ -597,8 +609,26 @@ end
 
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, ::FullPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); phase_factors=true, skipmissing=false)
     fill!(mout, zero(eltype(mout)))
-    _foreach_partial_trace_term(tensor_product_iterator(m, H), H, Hsub, complement, mapper, FullPartialTraceAlg(); phase_factors, skipmissing) do J1, J2, K1, K2, v
-        mout[K1, K2] += v * m[J1, J2]
+    splits = _full_partial_trace_splits(H, Hsub, mapper)
+    _full_partial_trace!(mout, m, splits, H, Hsub, phase_factors, skipmissing)
+end
+function _full_partial_trace!(mout, m, splits, H, Hsub, phase_factors, skipmissing)
+    for I in tensor_product_iterator(m, H)
+        _foreach_full_partial_trace_pair_term(I[1], I[2], splits, H, Hsub, phase_factors, skipmissing) do J1, J2, K1, K2, v
+            mout[K1, K2] += v * m[J1, J2]
+        end
+    end
+    return mout
+end
+# Sparse input: visit the stored entries with nzrange and pass the stored value to the kernel
+function _full_partial_trace!(mout, m::SparseMatrixCSC, splits, H, Hsub, phase_factors, skipmissing)
+    rows = rowvals(m)
+    vals = nonzeros(m)
+    for J2 in axes(m, 2), p in nzrange(m, J2)
+        x = vals[p]
+        _foreach_full_partial_trace_pair_term(rows[p], J2, splits, H, Hsub, phase_factors, skipmissing) do _, _, K1, K2, v
+            mout[K1, K2] += v * x
+        end
     end
     return mout
 end
