@@ -12,12 +12,25 @@ const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace
 """
 	basisstates(H)
 
-Return an iterable of basis states for the Hilbert space `H`, in the order used by
-matrix representations and indexing utilities. The result supports `length` and `eltype`
-and can be iterated. Indexing is not part of the contract; use `basisstate(i, H)` for the
-`i`-th state, or `collect(basisstates(H))` for an indexable vector.
+Return the basis states of the Hilbert space `H`, in the order used by matrix
+representations and indexing utilities. The result supports `length`, `eltype`, iteration
+and indexing, with `basisstates(H)[i] == basisstate(i, H)`.
 """
 basisstates
+
+# The vector returned by `basisstates`. Iteration uses `iter`, and indexing uses `basisstate`.
+struct BasisStates{B,H,I} <: AbstractVector{B}
+    space::H
+    iter::I
+end
+BasisStates(space::AbstractHilbertSpace{B}, iter) where B = BasisStates{B,typeof(space),typeof(iter)}(space, iter)
+Base.size(bs::BasisStates) = (Int(length(bs.iter)),)
+Base.@propagate_inbounds Base.getindex(bs::BasisStates, i::Int) = basisstate(i, bs.space)
+Base.iterate(bs::BasisStates) = iterate(bs.iter)
+Base.iterate(bs::BasisStates, state) = iterate(bs.iter, state)
+# Spaces store a plain vector of their states, not a vector tied to another space
+_stored_states(states) = states
+_stored_states(bs::BasisStates) = collect(bs)
 
 """
     basisstate(i, H)
