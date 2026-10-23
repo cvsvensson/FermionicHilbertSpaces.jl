@@ -15,9 +15,8 @@ Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
 """
     default_fock_representation(N)
 
-The integer type for Fock states of `N` modes: `UInt64` for fewer than 63 modes, otherwise
-the smallest unsigned integer of 128 to 1024 bits with more than `N` bits, or `BigInt`.
-The dimension `2^N` then fits in `fock_index_type` of that type.
+The integer type for Fock states of `N` modes: `UInt64` below 63 modes, so that `2^N` fits in
+an `Int`, otherwise the smallest of `UInt128` to `UInt1024` with more than `N` bits, or `BigInt`.
 """
 function default_fock_representation(N)
     N < 63 && return UInt64
@@ -32,8 +31,7 @@ default_fock_representation(::Val{N}) where N = default_fock_representation(N)
 """
     fock_index_type(I)
 
-The integer type of the dimension and the state indices of a fermionic space with Fock states
-stored in `I`: `Int` if `I` is no wider than `Int`, otherwise `I`.
+The integer type of the dimension and state indices of a space with Fock states stored in `I`.
 """
 fock_index_type(::Type{I}) where I = sizeof(I) <= sizeof(Int) ? Int : I
 fock_index_type(::Type{BigInt}) = BigInt

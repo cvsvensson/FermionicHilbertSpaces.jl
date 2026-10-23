@@ -13,15 +13,11 @@ const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace
 	basisstates(H)
 
 Return the basis states of the Hilbert space `H`, in the order used by matrix
-representations and indexing utilities. The result is a lazy collection, not an
-`AbstractVector`. It supports iteration, `eltype`, `length` (equal to `dim(H)`, which may be
-wider than `Int`), `keys`, `first` and `last`, and indexing with
-`basisstates(H)[i] == basisstate(i, H)`. It compares equal to a vector of the same states.
-Use `collect` to get a `Vector`.
+representations. The result has `length(basisstates(H)) == dim(H)` and can be iterated and
+indexed, with `basisstates(H)[i] == basisstate(i, H)`. Use `collect` to get a `Vector`.
 """
 basisstates
 
-# The collection returned by `basisstates`. Iteration uses `iter`, and indexing uses `basisstate`.
 struct BasisStates{B,H,I}
     space::H
     iter::I

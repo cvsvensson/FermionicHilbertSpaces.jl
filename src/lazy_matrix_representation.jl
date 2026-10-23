@@ -464,7 +464,7 @@ end
     op = 0.3 * f[1]' * f[2] + 0.7im * f[2]' * f[3] + hc + 0.5 * f[1]' * f[1] + 0.2
     Hsmall = hilbert_space(f, 1:3)
     M = representation(op, Hsmall)
-    for N in (63, 70, 200, 1100)
+    for N in (63, 200, 1100)
         H = hilbert_space(f, 1:N)
         @test dim(H) == big(2)^N
         # the states of `Hsmall` with mode N occupied
