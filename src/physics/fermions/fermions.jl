@@ -28,15 +28,19 @@ end
 maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
 Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
-basisstates(H::FermionicSpace{F}) where F = BasisStates(H, Iterators.map(F, UnitRange{UInt64}(0, dim(H) - 1)))
+basisstates(H::FermionicSpace{FockNumber{I}}) where I = BasisStates(H, Iterators.map(FockNumber{I}, UnitRange{I}(0, dim(H) - 1)))
 Base.@propagate_inbounds function basisstate(ind::Integer, H::FermionicSpace{F}) where F
     @boundscheck (ind >= 1 && iszero((ind - 1) >> nbr_of_modes(H))) || throw(BoundsError(H, ind))
     (F ∘ FockNumber)(ind - 1)
 end
-state_index(state::FockNumber, H::FermionicSpace) = iszero(state.f >> nbr_of_modes(H)) ? state.f + one(state.f) : zero(state.f)
-function dim(H::FermionicSpace)
-    N = nbr_of_modes(H)
-    N < 63 ? 1 << N : BigInt(1) << N
+function state_index(state::FockNumber, H::FermionicSpace{FockNumber{I}}) where I
+    T = fock_index_type(I)
+    iszero(state.f >> nbr_of_modes(H)) ? T(state.f) + one(T) : zero(T)
+end
+function dim(H::FermionicSpace{FockNumber{I}}) where I
+    d = one(fock_index_type(I)) << nbr_of_modes(H)
+    d > 0 || throw(OverflowError("$(nbr_of_modes(H)) modes have more states than fit in $(fock_index_type(I))"))
+    return d
 end
 function atomic_factors(H::FermionicSpace)
     length(H.modes) < 2 && return [H] # for single or trivial spaces
@@ -310,7 +314,7 @@ end
 end
 
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
-hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::AbstractVector{<:AbstractBasisState}) = ConstrainedSpace(hilbert_space(a, labels), states)
+hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState},BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::AbstractConstraint)
     length(labels) == 0 && return hilbert_space(a, labels)
     tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
