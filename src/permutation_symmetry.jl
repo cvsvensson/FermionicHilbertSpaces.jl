@@ -164,8 +164,13 @@ In the remaining cases, the projector is built with
 - `:qr`: a matrix with orthonormal columns spanning the sector, from a QR decomposition
   of the projector.
 - `:eig`: a matrix with orthonormal columns spanning the sector, from the eigenvectors of
-  the projector with eigenvalue one. The projector is converted to a dense matrix.
+  the projector with nonzero eigenvalue.
 - `nothing`: the projector itself.
+
+`:qr` and `:eig` find the numerical rank with a tolerance relative to the scale of the
+projector, so they assume that the projector is proportional to an orthogonal projector.
+This holds when `perms` form a group and `weights` are proportional to a character of it
+or to its complex conjugate.
 
 `Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
 case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
@@ -182,10 +187,7 @@ function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type
     length(perms) == length(weights) || throw(ArgumentError("The generated weights and permutations must have the same length, got $(length(weights)) and $(length(perms))."))
     P = permutation_projector(H, Hs, perms, weights, T; kwargs...)
     isnothing(method) && return P
-
-    tr2 = sum(abs2, P)
-    rank = iszero(tr2) ? 0 : round(Int, real(tr(P))^2 / tr2)
-    _remove_columns!(P, method, rank)
+    _sector_basis(P, method)
 end
 _default_sector_eltype(sector) = Float64
 function _default_sector_eltype((perms, weights)::Tuple)
@@ -293,28 +295,24 @@ function _find_signed!(parent, rel, x)
     return r, s
 end
 
-function _remove_columns!(P::Matrix, ::_QR, M::Int=round(Int, tr(P)))
-    F = try
-        qr!(P, ColumnNorm())
-    catch e
-        qr(P, ColumnNorm())
-    end
-    big_cols = findall(>(0.1) ∘ abs, diag(F.R))
-    return F.Q[:, big_cols]
+# For `P = p * Π` with `Π` an orthogonal projector, the pivots inside the rank are at least
+# `p / sqrt(dim)` and the nonzero eigenvalues are `p`, while roundoff is of order `eps * p`.
+# A tolerance of `sqrt(eps)` times the largest column norm (at most `p`) separates the two.
+_rank_tol(P) = sqrt(eps(real(float(eltype(P))))) * sqrt(maximum(sum(abs2, P; dims=1); init=zero(real(eltype(P)))))
+
+function _sector_basis(P::AbstractMatrix, ::_QR)
+    F = qr(Matrix{float(eltype(P))}(P), ColumnNorm())
+    k = count(>(_rank_tol(P)) ∘ abs, diag(F.R))
+    return Matrix(F.Q)[:, 1:k]
 end
-_remove_columns!(P::AbstractMatrix, ::_EIG, M::Int) = _remove_columns!(Matrix(P), _EIG(), M) # ensure we have a dense matrix for the decomposition
-function _remove_columns!(P::Matrix, ::_EIG, M::Int)
-    E = try
-        eigen!(Hermitian(P))
-    catch e
-        eigen(Hermitian(P))
-    end
-    keep = findall(>(0.9) ∘ abs, E.values)  # λ ≈ 1 subspace
-    return E.vectors[:, keep]  # already orthonormal
+function _sector_basis(P::SparseMatrixCSC, ::_QR)
+    F = qr(P; tol=_rank_tol(P))
+    return F.Q[invperm(F.prow), 1:rank(F)]
 end
-function _remove_columns!(P::SparseMatrixCSC, ::_QR, M::Int)
-    F = qr(P; tol=0.1)
-    F.Q[invperm(F.prow), 1:M]
+function _sector_basis(P::AbstractMatrix, ::_EIG)
+    E = eigen!(Hermitian(Matrix{float(eltype(P))}(P)))
+    tol = sqrt(eps(real(eltype(E.values)))) * maximum(abs, E.values; init=zero(eltype(E.values)))
+    return E.vectors[:, abs.(E.values) .> tol]
 end
 
 
@@ -441,7 +439,7 @@ end
     @test Float64.(symbolic_to_float.(Matrix(substitute.(Pwx, Ref(x => -1))))) ≈ symmetric_sector(H, [H1, H2], antisymw; orth_method=nothing, normalize=false, sparse=false)
 
     # Complex weights give a complex basis without passing the element type
-    cw = ([idperm, swapperm], [1.0 + 0im, cis(0.3)])
+    cw = ([idperm, swapperm], [1.0 + 0im, 1.0 + 0im])
     Qc = symmetric_sector(H, [H1, H2], cw)
     @test eltype(Qc) <: Complex
     @test size(Qc, 2) == 3
@@ -469,6 +467,33 @@ end
 
     # Invalid input: Hs not a subsystem of H
     @test_throws ArgumentError permutation_projector(H, [H1, H3], [idperm, swapperm])
+end
+
+@testitem "Sector bases from the projector" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: permutation_projector, symmetric_sector, AdditiveConstraint
+    using Combinatorics: permutations, parity
+    function check(H, Hs, (perms, ws), rank)
+        P = permutation_projector(H, Hs, perms, ws, eltype(ws))
+        for orth_method in (:qr, :eig), sparse in (true, false), normalize in (true, false)
+            Q = symmetric_sector(H, Hs, (perms, ws); orth_method, sparse, normalize)
+            @test size(Q, 2) == rank
+            @test Q' * Q ≈ I
+            @test Q * Q' ≈ P
+        end
+    end
+    # An orbit of 5! = 120 states, whose projector columns have small norm
+    @spins S 2
+    H = hilbert_space(S, 1:5, AdditiveConstraint(0; maps=s -> s.m))
+    perms = collect(permutations(1:5))
+    check(H, factors(H), (perms, fill(1 / 240, 120)), 12)
+    check(H, factors(H), (perms, [(-1.0)^parity(p) for p in perms]), 1)
+    # Complex characters of the cyclic group on 4 modes
+    @fermions f
+    H = hilbert_space(f, 1:4)
+    for (k, rank) in zip(0:3, (6, 3, 4, 3))
+        check(H, factors(H), ([circshift(1:4, j) for j in 0:3], [cis(2pi * k * j / 4) for j in 0:3]), rank)
+    end
 end
 
 @testitem "Symmetric and antisymmetric sectors from orbits" begin
