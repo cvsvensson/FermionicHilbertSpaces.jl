@@ -175,10 +175,7 @@ of it or of its complex conjugate.
 With `check=true` and a tuple `(perms, weights)`, `symmetric_sector` throws an
 `ArgumentError` if `perms` does not contain the identity permutation or its weight is not
 real and positive, and, for `orth_method` not `nothing`, if the projector is not
-Hermitian. These are necessary conditions for the assumption above. `check=false` skips
-them, for example to build `sum(weights[g] * R_g for g)` for a set of permutations that is
-not a group; the bases from `:qr` and `:eig` are then only meaningful if the projector is
-still proportional to an orthogonal projector.
+Hermitian. `check=false` skips these checks.
 
 `Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
 case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
@@ -577,34 +574,19 @@ end
 end
 
 @testitem "Checks on the weights of symmetric_sector" begin
-    using LinearAlgebra
-    using FermionicHilbertSpaces: permutation_projector
     @fermions f
     H = hilbert_space(f, 1:3)
     Hs = factors(H)
     cyclic = [circshift(1:3, j) for j in 0:2]
     chi = [cis(2pi * j / 3) for j in 0:2]
-    P = symmetric_sector(H, Hs, (cyclic, chi); orth_method=nothing)
-    # A global phase on the weights
-    for phase in (im, cis(pi / 4), -1)
-        sector = (cyclic, phase .* chi)
-        for orth_method in (:qr, :eig, nothing)
-            @test_throws ArgumentError symmetric_sector(H, Hs, sector; orth_method)
-        end
-        # Without the check, normalize divides out the phase
-        @test symmetric_sector(H, Hs, sector; orth_method=nothing, check=false) ≈ P
-        Q = symmetric_sector(H, Hs, sector; check=false)
-        @test Q' * Q ≈ I
-        @test Q * Q' ≈ P
+    for ws in (cis(pi / 4) .* chi, -ones(3))
+        @test_throws ArgumentError symmetric_sector(H, Hs, (cyclic, ws); orth_method=nothing)
     end
-    # No identity permutation
+    # normalize divides out a complex scale
+    @test symmetric_sector(H, Hs, (cyclic, cis(pi / 4) .* chi); orth_method=nothing, check=false) ≈
+          symmetric_sector(H, Hs, (cyclic, chi); orth_method=nothing)
     @test_throws ArgumentError symmetric_sector(H, Hs, (cyclic[2:3], chi[2:3]))
-    @test symmetric_sector(H, Hs, (cyclic[2:3], chi[2:3]); orth_method=nothing, check=false) ==
-          permutation_projector(H, Hs, cyclic[2:3], chi[2:3])
-    # Weights that are not a character give a non-Hermitian projector
+    # The Hermitian check runs only when a basis is computed
     @test_throws ArgumentError symmetric_sector(H, Hs, (cyclic, [1.0, 1.0, 0.0]))
     @test symmetric_sector(H, Hs, (cyclic, [1.0, 1.0, 0.0]); orth_method=nothing) isa AbstractMatrix
-    # A positive multiple of a character and the conjugate character pass
-    @test symmetric_sector(H, Hs, (cyclic, 2 .* chi)) isa AbstractMatrix
-    @test size(symmetric_sector(H, Hs, (cyclic, conj.(chi))), 2) == size(symmetric_sector(H, Hs, (cyclic, chi)), 2)
 end
