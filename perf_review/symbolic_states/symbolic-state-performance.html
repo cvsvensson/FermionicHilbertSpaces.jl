@@ -1,0 +1,298 @@
+<title>Symbolic State Performance</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,650&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column for an engineering report, with wide tables and code allowed to scroll inside their own boxes. */
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --fg: #1b2230;
+  --muted: #5a6475;
+  --rule: #d9dee7;
+  --accent: #3a5ba0;
+  --accent-soft: #e6ecf7;
+  --code-bg: #eef1f6;
+  --good: #2f7d4f;
+  --bad: #a33a3a;
+  --display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --surface: #191f29; --fg: #e3e7ee; --muted: #9aa4b5; --rule: #2c3442;
+    --accent: #8fb0ee; --accent-soft: #1f2a3e; --code-bg: #1d2430; --good: #6fc391; --bad: #e08585;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #191f29; --fg: #e3e7ee; --muted: #9aa4b5; --rule: #2c3442;
+  --accent: #8fb0ee; --accent-soft: #1f2a3e; --code-bg: #1d2430; --good: #6fc391; --bad: #e08585;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.6; }
+main {
+  max-width: 820px; margin: 0 auto;
+  padding-block: 40px 80px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.25; }
+h1 { font-size: 2.1rem; font-weight: 650; margin: 0 0 .4rem; }
+h2 { font-size: 1.5rem; font-weight: 650; margin: 3rem 0 .8rem; padding-top: 1.2rem; border-top: 1px solid var(--rule); }
+h3 { font-size: 1.15rem; font-weight: 650; margin: 2rem 0 .5rem; }
+p, li { max-width: 68ch; }
+.lede { color: var(--muted); font-size: 1.05rem; margin-top: 0; }
+.eyebrow { font-family: var(--mono); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: .3rem; }
+code { font-family: var(--mono); font-size: .88em; background: var(--code-bg); padding: .08em .3em; border-radius: 3px; }
+pre { font-family: var(--mono); font-size: .84rem; line-height: 1.5; background: var(--code-bg); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+pre code { background: none; padding: 0; font-size: inherit; }
+.table-wrap { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .92rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; }
+td.num { text-align: right; white-space: nowrap; }
+.bad { color: var(--bad); font-weight: 500; }
+.good { color: var(--good); font-weight: 500; }
+.callout { background: var(--accent-soft); border-radius: 6px; padding: 14px 18px; margin: 1.2rem 0; }
+.callout p { margin: .3rem 0; }
+.req { border: 1px solid var(--rule); background: var(--surface); border-radius: 6px; padding: 4px 18px 10px; margin: 1.2rem 0; }
+.req h3 { margin-top: 1rem; }
+.tag { font-family: var(--mono); font-size: .75rem; padding: 1px 7px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; vertical-align: middle; white-space: nowrap; }
+.label { font-weight: 600; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+small, .muted { color: var(--muted); }
+</style>
+
+<main>
+  <div class="eyebrow">FermionicHilbertSpaces.jl · NonCommutativeProducts.jl</div>
+  <h1>Symbolic State Performance</h1>
+  <p class="lede">What limits linear algebra with symbolic states in large Hilbert spaces, what FermionicHilbertSpaces (FHS) can fix itself, and what it needs from NonCommutativeProducts (NCP).</p>
+
+  <h2 id="summary">Summary</h2>
+  <p>Four new tutorials use symbolic kets as sparse vectors in spaces of dimension 2<sup>64</sup> to 2<sup>200</sup>: an η-pairing tower, a Hubbard bound state found with KrylovKit <code>eigsolve</code>, a Schrieffer–Wolff Kondo coupling found with <code>linsolve</code>, and the fourth-order toric-code coupling of the Kitaev honeycomb model. All four reproduce their analytic results. The problem sizes they can reach, however, are set by overhead rather than by the physics:</p>
+  <ul>
+    <li><span class="label">Inner products</span> of two ket sums form every pair of terms. At 1024 terms, <code>inner</code> takes 624 ms. A dictionary lookup takes 0.02 ms.</li>
+    <li><span class="label">Operator times ket sum</span> goes through generic symbolic sorting. Zero products are removed one at a time from the middle of a vector, so the cost per pair grows with the problem size. Applying each operator term directly to the basis states is 25–75× faster.</li>
+    <li><span class="label">Abstract key types:</span> ket sums are keyed by <code>NCMul{Int,AbstractSym,Vector{AbstractSym}}</code>, so hashing and comparison go through dynamic dispatch.</li>
+    <li><span class="label">BigInt Fock states</span> are used from 64 modes upward. Applying an operator to a basis state then costs 10–40× more than with <code>UInt64</code>.</li>
+  </ul>
+  <div class="callout">
+    <p><span class="label">Recommendation.</span> FHS should add a concrete sparse state type, keyed by basis state, with a direct operator-application kernel and fixed-width Fock integers. This removes the hot path from NCP and fixes most of the ergonomic problems as well.</p>
+    <p>Independently, NCP should make products of sums linear in the number of term pairs and offer a few extension points. Those changes benefit symbolic operator algebra in general, including commutators, powers of H and operator growth, which a state type does not cover.</p>
+  </div>
+
+  <h2 id="measurements">Measurements</h2>
+  <p>The measurements use a spinful Hubbard ring with L sites (2L modes), a two-particle ket sum with L<sup>2</sup> terms, and a Hamiltonian with 5L terms. They were taken with Julia 1.13, NCP 0.5.0 and FHS main, using one thread and the minimum of warm runs. The "direct" column applies each operator term to each basis state with the same kernel that <code>matrix_representation</code> uses, and accumulates the result in a <code>Dict</code>. It is a 15-line prototype, and its results agree term by term with <code>ham * ψ</code>.</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Operation</th><th>Size</th><th class="num">Current</th><th class="num">Direct / Dict</th><th class="num">Speed-up</th></tr></thead>
+    <tbody>
+      <tr><td><code>inner(ψ, ψ)</code></td><td>256 terms</td><td class="num">14.6 ms, 12.7 MiB</td><td class="num">0.01 ms</td><td class="num">~1500×</td></tr>
+      <tr><td><code>inner(ψ, ψ)</code></td><td>1024 terms</td><td class="num bad">624 ms, 210 MiB</td><td class="num">0.02 ms</td><td class="num">~30000×</td></tr>
+      <tr><td><code>ham * ψ</code></td><td>80 × 256, UInt64</td><td class="num">12.1 ms</td><td class="num">0.16 ms</td><td class="num">75×</td></tr>
+      <tr><td><code>ham * ψ</code></td><td>160 × 1024, BigInt</td><td class="num">374 ms, 73 MiB</td><td class="num">15 ms</td><td class="num">25×</td></tr>
+      <tr><td><code>Σ h * ψ</code>, term by term</td><td>160 × 1024</td><td class="num">198 ms</td><td class="num">n/a</td><td class="num"></td></tr>
+      <tr><td>direct, per (term, state) pair</td><td>UInt64 vs BigInt</td><td class="num">n/a</td><td class="num">8 ns vs 90–340 ns</td><td class="num">10–40×</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>The current paths scale badly:</p>
+  <ul>
+    <li><span class="label">Inner product:</span> four times as many terms makes <code>inner</code> 43 times slower, roughly <em>n</em><sup>2.7</sup>.</li>
+    <li><span class="label">Operator application:</span> the cost per pair of <code>ham * ψ</code> rises from 0.6 µs to 2.3 µs as the problem grows.</li>
+  </ul>
+  <p>The tutorials ran into the same limits:</p>
+  <ul>
+    <li><span class="label">η-pairing:</span> <code>ham * ψ</code> on 4950 terms with 500 Hamiltonian terms took 114 s. Applying the Hamiltonian term by term took 4 s.</li>
+    <li><span class="label">Bound state:</span> Lanczos stalls beyond L = 24 because of <code>norm</code>, so the page uses L = 16.</li>
+    <li><span class="label">Kitaev:</span> the page computes diagonal energies as <code>inner(t, H0*t)</code>. On 4851 terms this took 134 s and allocated 75 GB, so the page applies the middle resolvent only to the shared terms.</li>
+  </ul>
+
+  <h2 id="diagnosis">Where the time goes</h2>
+  <h3>1. Inner product forms all pairs</h3>
+  <p><code>VectorInterface.inner(x, y)</code> (NCP <code>src/vectorinterface.jl</code>) evaluates <code>x' * y</code> with autosort on and then reads off the scalar. For kets, <code>x'</code> is a sum of <em>n</em> bras, and the product is a vector of <em>n</em>·<em>m</em> two-factor products. Each one is sorted with <code>mul_effect(bra, ket)</code>, which returns 0 or 1. Almost all pairs vanish. Every zero is removed with <code>deleteat!</code> from the middle of the vector of products (<code>_apply_effect!!</code> in <code>src/sorting.jl</code>), and that is where the extra exponent comes from. Profiling in the η-pairing run attributed 86% of the time to <code>unsafe_copyto!</code> under <code>deleteat!</code>.</p>
+
+  <h3>2. Operator × ket sum uses generic sorting</h3>
+  <p><code>ham * ψ</code> goes to <code>_add_sorted_products!!</code> (NCP <code>src/add.jl</code>). It collects all <em>m</em>·<em>n</em> products such as <code>[c†, c, ket]</code> into one vector and bubble-sorts them, with the same zero deletion as above. Each <code>mul_effect(op, ket)</code> in FHS (<code>src/symbolic_states.jl:221</code>) then applies <em>one</em> operator factor at a time through <code>_apply_symbolic_operator_to_state</code>, building a one-factor <code>NCMul</code> and its precomputation on every call. The kernel FHS already has for matrices, <code>precomputation_before_operator_application</code> plus <code>_apply_local_operators</code>, applies a whole operator string in one pass, with one precomputation per operator term.</p>
+
+  <h3>3. Abstract keys</h3>
+  <p><code>@nc SymbolicState AbstractSym</code> makes every product of an operator and a ket a <code>Vector{AbstractSym}</code> product. After sorting, the single remaining ket factor keeps that container type, and <code>to_add_dict_type</code> keys the sum by <code>NCMul{Int,AbstractSym,Vector{AbstractSym}}</code>. Every hash, every <code>==</code> and every factor access is then a dynamic dispatch. Ket sums also do not keep a stable type through <code>op * x</code>, which KrylovKit's typed containers rely on.</p>
+
+  <h3>4. BigInt from 64 modes</h3>
+  <p><code>default_fock_representation</code> (<code>src/physics/fermions/fock.jl:15</code>) picks <code>UInt64</code> for fewer than 64 modes and <code>BigInt</code> otherwise. Every bit operation on a BigInt allocates. A spinful chain with 32 sites already crosses this threshold.</p>
+
+  <h2 id="fhs">FHS: proposed fixes</h2>
+
+  <h3>F1. A concrete sparse state type <span class="tag">largest gain</span></h3>
+  <p>The proposal is a vector type for states that is keyed by the basis state of its space and applies operators with the matrix kernel. It sits next to <code>SymbolicState</code> and does not replace it. Symbolic kets, bras and ketbras stay as they are for algebra: ketbras as operators, interleaving across spaces, and <code>representation</code>. The new type is what you use once you want to do linear algebra.</p>
+<pre><code>struct SparseState{B,T,H&lt;:AbstractHilbertSpace}
+    space::H
+    amplitudes::Dict{B,T}       # basis state =&gt; amplitude, zeros never stored
+end
+SparseState(space, amplitudes::Dict{B,T}) where {B,T} = SparseState{B,T,typeof(space)}(space, amplitudes)
+
+# Construction
+SparseState(H, label, ::Type{T}=Float64) where {T} = SparseState(H, Dict(interpret_state(label, H) =&gt; one(T)))
+vacuum(H, ::Type{T}=Float64) where {T} = SparseState(H, Dict(vacuum_state(H) =&gt; one(T)))
+SparseState(x)                  # from a SymbolicState, or an NCMul/NCAdd of kets in one space, via terms(x)
+
+# Operator application: one precomputation per operator term, then one kernel call per basis state
+function Base.:*(op::Union{AbstractSym,NCMul,NCAdd}, ψ::SparseState{B,T}) where {B,T}
+    S = promote_type(T, mat_eltype(op))
+    out = Dict{B,S}()
+    c = additive_coeff(op)                           # the identity part of op
+    iszero(c) || foreach(((s, a),) -&gt; out[s] = c * a, ψ.amplitudes)
+    for term in operator_terms(op)                   # the non-scalar terms
+        precomp = precomputation_before_operator_application(term, ψ.space)
+        for (s, a) in ψ.amplitudes
+            newstate, amp = _apply_local_operators(term, s, ψ.space, precomp)
+            iszero(amp) &amp;&amp; continue
+            out[newstate] = get(out, newstate, zero(S)) + amp * a
+        end
+    end
+    filter!(kv -&gt; !iszero(last(kv)), out)
+    return SparseState(ψ.space, out)
+end
+
+# Inner product: iterate the smaller dictionary, look up in the larger
+function VectorInterface.inner(ψ::SparseState, φ::SparseState)
+    _check_same_space(ψ, φ)
+    a, b, flip = length(ψ) &lt;= length(φ) ? (ψ, φ, false) : (φ, ψ, true)
+    S = promote_type(scalartype(ψ), scalartype(φ))
+    z = sum((conj(v) * get(b.amplitudes, s, zero(S)) for (s, v) in a.amplitudes); init=zero(S))
+    return flip ? conj(z) : z
+end</code></pre>
+  <p>The type also needs the following methods:</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Area</th><th>Methods</th></tr></thead>
+    <tbody>
+      <tr><td>Vector space</td><td><code>+</code>, <code>-</code>, scalar <code>*</code> and <code>/</code>, <code>==</code>, <code>isapprox</code>, <code>zero</code></td></tr>
+      <tr><td>VectorInterface (KrylovKit)</td><td><code>scalartype</code>, <code>zerovector(!!)</code>, <code>scale(!!)</code>, <code>add(!!)</code>, <code>inner</code>; <code>LinearAlgebra.norm</code>, <code>dot</code>. NCP's KrylovKit extension already defines <code>apply(op, x) = op * x</code>, so a symbolic Hamiltonian works as the linear map without further code.</td></tr>
+      <tr><td>Bras</td><td><code>adjoint(ψ)</code> returns a thin <code>SparseBra</code> wrapper; <code>bra * ket</code> is <code>inner</code>; <code>bra * op * ket</code> gets its own three-argument method, so that <code>op * ket</code> is evaluated first</td></tr>
+      <tr><td>Inspection</td><td><code>length</code>, <code>pairs</code>, <code>keys</code>, <code>getindex(ψ, label)</code>, and <code>show</code> listing the leading terms by their occupied modes (e.g. <code>0.71|c[3,↑] c[3,↓]⟩ + …</code>) with the term count and the space dimension</td></tr>
+      <tr><td>Maps over terms</td><td><code>map_amplitudes(f, ψ)</code> with <code>f(state, amp)</code>, and <code>diagonal_element(op, state, H)</code>. A resolvent of a diagonal H<sub>0</sub> then takes one line: <code>map_amplitudes((s, a) -&gt; a / (E0 - diagonal_element(H0, s, H)), φ)</code></td></tr>
+      <tr><td>Conversion</td><td><code>vector_representation(ψ)</code> / <code>representation(ψ)</code> for small spaces, through <code>state_index</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p><span class="label">Design decisions to make:</span></p>
+  <ul>
+    <li><span class="label">Constrained spaces.</span> Checking whether each new state is in a <code>ConstrainedSpace</code> may require its basis. The simplest rule is that a <code>SparseState</code> lives in an unconstrained space, and symmetries are respected because the operators conserve them.</li>
+    <li><span class="label">Amplitude type closure.</span> <code>op * ψ</code> promotes the amplitude type, for example to complex for S<sup>y</sup>. KrylovKit requires <code>apply</code> to return the type of its input vector. Starting from a complex vector covers this, and the docs should say so.</li>
+    <li><span class="label">Repeated application.</span> In Krylov loops, the precomputations could be cached in a prepared operator. Their cost is proportional to the number of operator terms, which is small next to (operator terms) × (state terms), so this can wait.</li>
+    <li><span class="label">Naming.</span> <code>SparseState</code> is a placeholder. It could instead be what <code>Kets(H)</code> returns in a later release, if the duplication proves confusing.</li>
+  </ul>
+  <p><span class="label">Tests:</span></p>
+  <ul>
+    <li>Compare <code>op * ψ</code> with the existing symbolic path and with <code>matrix_representation(op, H) * vector_representation(ψ, H)</code>, over random small operators on fermionic, spin, boson, product and Majorana spaces.</li>
+    <li>Check VectorInterface conformance with <code>VectorInterface.TestUtils</code>, if available.</li>
+    <li>Add a KrylovKit <code>eigsolve</code> smoke test.</li>
+  </ul>
+  <p><span class="label">Effort:</span> roughly 250 lines plus tests.</p>
+
+  <h3>F2. Fixed-width Fock integers above 63 modes</h3>
+  <p>Change <code>default_fock_representation</code> (<code>src/physics/fermions/fock.jl:15–20</code>) to use <code>UInt64</code> up to 63 modes, <code>UInt128</code> up to 127, and a fixed-width type above that. There are two options for the fixed-width type:</p>
+  <ul>
+    <li><code>BitIntegers.jl</code>, which adds a dependency and provides <code>UInt256</code>, <code>UInt512</code> and so on.</li>
+    <li>A small <code>NTuple{K,UInt64}</code> bitstring type implementing <code>&amp;</code>, <code>|</code>, <code>⊻</code>, <code>~</code>, shifts, <code>count_ones</code>, <code>iszero</code>, <code>hash</code> and <code>isless</code>. The fermion kernel uses only these operations, plus parity counts of masked bits.</li>
+  </ul>
+  <p>Keep <code>BigInt</code> only as an explicit opt-in.</p>
+  <p>Also review the indexing side:</p>
+  <ul>
+    <li><code>dim</code> (<code>fermions.jl:39</code>) still needs <code>BigInt</code> for the count.</li>
+    <li><code>state_index</code> computes <code>state.f + 1</code>. That cannot overflow below the width limit, but symbolic-only workflows never need it.</li>
+  </ul>
+  <p>The measured gap per kernel call is 8 ns with <code>UInt64</code> against 90–340 ns with <code>BigInt</code>. <code>UInt128</code> should be close to <code>UInt64</code>; I have not measured it.</p>
+
+  <h3>F3. Small ergonomic fixes</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Friction seen in the tutorials</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Vacuum written as <code>Ket("0"^(2L), H)</code></td><td><code>vacuum(H)</code>, and <code>Kets(H)()</code> for the all-empty state</td></tr>
+      <tr><td><code>hilbert_space(d, (:↑, :↓))</code> is a MethodError</td><td>Accept any iterable of labels (<code>collect</code> them)</td></tr>
+      <tr><td>Kets in large spaces print as <code>Ket(|0⟩)</code> or a truncated bitstring</td><td>Show occupied modes by label for spaces above about 16 modes</td></tr>
+      <tr><td><code>import KrylovKit.VectorInterface: inner</code> in the pages</td><td>Use <code>LinearAlgebra.dot</code>, which already works on sums, in the tutorials and docs. Making <code>inner</code> public needs care, because the name clashes across packages.</td></tr>
+      <tr><td>Term count via <code>ψ.dict</code> or <code>collect(terms(ψ))</code>; <code>Ket(...) + 0</code> to make a one-term sum</td><td><code>length(::SparseState)</code> (F1). For NCP sums, see N5.</td></tr>
+      <tr><td><code>eigsolve</code> leaks into other momentum sectors without <code>eager=true</code></td><td>Explain this in the symbolic-states docs. It is KrylovKit behaviour in a small invariant subspace, not a package bug.</td></tr>
+      <tr><td>Hand-built <code>P = Σ b b'</code>, <code>Q = I - P</code></td><td>With F1, <code>project_out(ψ, basis)</code> is a few dictionary deletions</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Effect on the tutorials</h3>
+  <p>With F1 to F3, each page gets shorter and can reach larger sizes:</p>
+  <ul>
+    <li><span class="label">η-pairing:</span> the term-by-term workaround goes away, and n = 3 at L = 100 (161 700 terms) becomes feasible.</li>
+    <li><span class="label">Bound state:</span> L of 100 or more becomes feasible. Lanczos cost then scales with L<sup>2</sup> per iteration.</li>
+    <li><span class="label">Kitaev:</span> the internal <code>.dict</code> access and the dictionary-lookup workaround both disappear.</li>
+    <li><span class="label">Kondo:</span> loses <code>import inner</code> and the padded vacuum string.</li>
+  </ul>
+
+  <h3>Suggested order</h3>
+  <ol>
+    <li>F3 items that need no new type: <code>vacuum</code>, tuple labels, <code>dot</code> in the docs, and <code>show</code>. These are small PRs that can land right away.</li>
+    <li>F2, fixed-width integers. This change is self-contained and also speeds up matrix building for spaces with 64 or more modes.</li>
+    <li>F1, <code>SparseState</code>, in its own PR with tests. Then rewrite the four tutorials on top of it.</li>
+  </ol>
+
+  <h2 id="ncp">NCP: requirements</h2>
+  <p>The requirements below come from FHS's use of NCP as the arithmetic for basis kets and operators. Each one states what we need and why, and gives a loose idea for meeting it. The NCP developers know the internals better, and a different solution is welcome as long as it meets the requirement.</p>
+
+  <div class="req">
+    <h3>N1. Products of sums cost a constant amount per term pair</h3>
+    <p><span class="label">Requirement.</span> For <code>a * b</code> with <em>m</em> and <em>n</em> terms, the time should be proportional to <em>m</em>·<em>n</em> (times the sorting work per product). Peak memory should be bounded by the size of the result plus a small working set, not by <em>m</em>·<em>n</em>. Products that sort to zero should cost no more than sorting them.</p>
+    <p><span class="label">Why.</span> <code>H * ψ</code> and <code>x' * y</code> produce mostly zero products. Removing them one at a time with <code>deleteat!</code> from a vector of all products (<code>_apply_effect!!</code>, reached from <code>_add_sorted_products!!</code>) makes the cost per pair grow with the problem size. Measured: 0.6 µs to 2.3 µs per pair from 20k to 164k pairs, and 114 s against 4 s for the same work split term by term.</p>
+    <p><span class="label">Acceptance.</span> The time per pair of <code>ham * ψ</code> stays flat across about 10<sup>4</sup> to 10<sup>6</sup> pairs.</p>
+    <p><span class="label">Loose idea.</span> Sort each product to completion and add it straight into the result dictionary, instead of keeping all products in one vector. Alternatively, mark zeros and compact once, or swap-remove instead of <code>deleteat!</code>.</p>
+  </div>
+
+  <div class="req">
+    <h3>N2. Inner products that do not form every pair</h3>
+    <p><span class="label">Requirement.</span> When the terms of x and y contract pairwise to scalars, and downstream can say which pairs can be nonzero, <code>inner(x, y)</code> should cost about O(<em>n</em><sub>x</sub> + <em>n</em><sub>y</sub>). In FHS's case, the nonzero pairs are those with equal basis states. The result must still match <code>scalar(x' * y)</code>.</p>
+    <p><span class="label">Why.</span> Krylov methods call <code>inner</code> and <code>norm</code> several times per iteration. With all pairs formed, they dominate the run: one <code>norm</code> takes 1.1 s at 1024 terms, against 0.4 s for applying H.</p>
+    <p><span class="label">Loose idea.</span> Add an opt-in hook. An atom type declares a hashable <code>contraction_key(term)</code>, or a <code>contract_terms(a, b)</code> together with a key, so that NCP can group the terms of y by key and pair only terms with matching keys. Another option is a public function that <code>inner</code> calls, which downstream can specialize on the key type. N1 alone would already bring this down from about <em>n</em><sup>2.7</sup> to <em>n</em><sup>2</sup>.</p>
+  </div>
+
+  <div class="req">
+    <h3>N3. Concrete, stable term types</h3>
+    <p><span class="label">Requirement.</span> When every factor of a sorted result has the same concrete type, the sum's key type should use that type rather than the declared supertype of the mixed product. Downstream should also be able to rely on <code>op * x</code> returning <code>typeof(x)</code> when x is a sum of kets and op maps kets to kets.</p>
+    <p><span class="label">Why.</span> Keys of type <code>NCMul{Int,AbstractSym,Vector{AbstractSym}}</code> make every hash and comparison dynamic. KrylovKit stores vectors in containers typed by the first vector, so type changes between iterations either error or force conversions.</p>
+    <p><span class="label">Loose idea.</span> Narrow the factor container to the element type it actually holds when building the result in <code>_sum_sorted_terms</code>. Alternatively, add a hook through which downstream declares the result key type for a pair of operand key types.</p>
+  </div>
+
+  <div class="req">
+    <h3>N4. An extension point for multiplying two terms</h3>
+    <p><span class="label">Requirement.</span> Downstream should be able to supply the result of <em>term</em> × <em>term</em> for given factor types, bypassing <code>mul_effect</code> between adjacent factors. It should also be able to do per-left-term preparation once and reuse it for every right term.</p>
+    <p><span class="label">Why.</span> FHS can apply a whole operator string to a basis state in one kernel call, with a precomputation per operator term. That is about 8 ns per pair, against about 600 ns through pairwise <code>mul_effect</code>. Today that kernel is only reachable outside NCP arithmetic.</p>
+    <p><span class="label">Loose idea.</span> Add <code>mul_terms(a::NCMul, b::NCMul)</code>, which defaults to catenating and sorting and which downstream specializes on factor types. A <code>prepare(a)</code> and <code>mul_terms(prepared, b)</code> pair would cover the reuse. If F1 lands in FHS, this matters less for states, but it would still speed up mixed expressions.</p>
+  </div>
+
+  <div class="req">
+    <h3>N5. Cheap public access to terms</h3>
+    <p><span class="label">Requirement.</span> NCP should provide public ways to:</p>
+    <ul>
+      <li>count the terms of a sum in O(1);</li>
+      <li>iterate over (key or factors, coefficient) pairs without allocating an <code>NCMul</code> per term;</li>
+      <li>map a function of (term, coefficient) over a sum to produce a new sum.</li>
+    </ul>
+    <p><span class="label">Why.</span> The tutorials reached into <code>x.dict</code> to count terms and to apply a diagonal resolvent. <code>terms(x)</code> is a filtered iterator with no <code>length</code>, and <code>NCterms</code> allocates a product per term.</p>
+    <p><span class="label">Loose idea.</span> Add <code>nterms(x)</code>, <code>pairs</code>-style iteration over the internal dictionary as a public read-only view, and <code>map_coefficients(f, x)</code> where <code>f</code> receives the term too.</p>
+  </div>
+
+  <div class="req">
+    <h3>N6. Fewer allocations per product</h3>
+    <p><span class="label">Requirement.</span> Forming and sorting a short product, with up to about four factors, should allocate at most once.</p>
+    <p><span class="label">Why.</span> <code>catenate</code> uses <code>vcat</code>, and the Kondo run showed about 667k allocations for one application of an 83-term operator to a 100-term state.</p>
+    <p><span class="label">Loose idea.</span> Use tuple-backed products through sorting where the length is known, or reuse scratch buffers for catenation.</p>
+  </div>
+
+  <p class="muted">Priority from FHS's side: N1 first, because it helps every user of NCP and needs no new API. Then N3 and N5. N2 and N4 matter less once FHS has its own state type, but they remain the general solution for mixed symbolic expressions.</p>
+
+  <h2 id="method">How this was measured</h2>
+  <p>The measurements come from <code>bench.jl</code> (current paths) and <code>direct.jl</code> (prototype kernel) on an i7-13700T running Windows 11, with <code>--threads=1</code>. The η-pairing, Kondo, bound-state and Kitaev figures were reported by the agents that wrote those tutorials, which are on the branch <code>symbolic-showcases</code>. The NCP source references are to version 0.5.0 (commit <code>85bf84c</code>).</p>
+</main>
