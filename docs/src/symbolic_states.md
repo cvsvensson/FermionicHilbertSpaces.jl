@@ -26,6 +26,16 @@ vf("10")'
 
 Other space types parse their labels differently. Bosons use an occupation-number string, e.g. `vb("3")` for a boson space `vb = Kets(hilbert_space(b, 1))`. For a `ProductSpace`, pass one label per factor, either as separate arguments or as a tuple: `vfb("0", "2")` for a fermion factor and a boson factor combined with `tensor_product`.
 
+`Kets(H)` can also be indexed and iterated. `vf[i]` is the ket of the `i`-th basis state, in the order of `basisstates(H)` and of the vector and matrix representations:
+
+```@example states
+vf[2], vf[end]
+```
+
+```@example states
+foreach(println, vf)
+```
+
 ## Algebra
 
 Multiplying a bra and a ket gives their overlap (`0` if the states differ):
@@ -107,12 +117,3 @@ overlap = ket' * ket        # 1, since the state is normalized
 projector = ket * ket'      # a rank-1 projector operator
 representation(projector, H)
 ```
-
-## Linear algebra in large spaces
-
-Sums of symbolic kets store only their nonzero amplitudes, and operators act on them without a basis, so they can be used in Hilbert spaces far too large to enumerate. They support `norm` and `inner`, and KrylovKit accepts them as vectors with a symbolic operator as the linear map. The following tutorials use this:
-
-- [η-pairing in a Hubbard chain](literate_output/eta_pairing.md): exact eigenstates in a space of dimension ``2^{200}``.
-- [Bound doublons with KrylovKit](literate_output/hubbard_bound_state.md): `eigsolve` on symbolic states.
-- [Schrieffer–Wolff and the Kondo coupling](literate_output/schrieffer_wolff_kondo.md): a second-order effective Hamiltonian with `linsolve`.
-- [Toric code from the Kitaev honeycomb](literate_output/kitaev_honeycomb_toric_code.md): fourth-order perturbation theory on a 64-spin torus.

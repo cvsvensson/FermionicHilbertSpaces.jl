@@ -31,7 +31,7 @@ Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
 function basisstates(H::FermionicSpace{F}) where F
     d = dim(H)
     T = d isa Int ? UInt64 : typeof(d)
-    TypedIterator{F}(Iterators.map(F, UnitRange{T}(0, d - 1)))
+    BasisStates(H, Iterators.map(F, UnitRange{UInt64}(0, dim(H) - 1)))
 end
 Base.@propagate_inbounds function basisstate(ind::Integer, H::FermionicSpace{F}) where F
     @boundscheck (ind >= 1 && iszero((ind - 1) >> nbr_of_modes(H))) || throw(BoundsError(H, ind))

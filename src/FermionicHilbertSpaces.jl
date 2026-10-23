@@ -87,23 +87,6 @@ end
 add_tag(t::Tags, tag) = Tags((t.tags..., tag))
 add_tag(::Tags{Nothing}, tag) = Tags((tag,))
 
-struct TypedIterator{T,I}
-    iter::I
-end
-
-# Constructor with explicit type
-TypedIterator{T}(iter) where T = TypedIterator{T,typeof(iter)}(iter)
-# Iterator interface
-Base.iterate(ti::TypedIterator) = iterate(ti.iter)
-Base.iterate(ti::TypedIterator, state) = iterate(ti.iter, state)
-Base.IteratorSize(::Type{<:TypedIterator{T,I}}) where {T,I} = Base.IteratorSize(I)
-Base.IteratorEltype(::Type{<:TypedIterator}) = Base.HasEltype()
-Base.eltype(::Type{<:TypedIterator{T}}) where T = T
-Base.length(ti::TypedIterator) = length(ti.iter)
-Base.size(ti::TypedIterator) = size(ti.iter)
-Base.keys(ti::TypedIterator) = keys(ti.iter)
-Base.last(ti::TypedIterator{T}) where T = T(last(ti.iter))
-
 function _resolve_sector_permutations_and_weights end # for Combinatorics extension
 function cache_operator! end # for OhMyThreads extension
 

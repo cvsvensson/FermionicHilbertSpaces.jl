@@ -108,7 +108,7 @@ function SpinSpace(sym::S, J) where {S<:SymbolicSpinBasis}
 end
 SpinSpace(sym::S) where {S<:SymbolicSpinBasis} = (sym.spin isa Nothing ? throw(ArgumentError("$sym has no spin value. Pass J to hilbert_space, e.g. `hilbert_space(s, 1//2)` or `hilbert_space(s, labels, 1//2)`, or set it when creating the basis with `@spin s 1//2` or `@spins s 1//2`.")) : SpinSpace(sym, sym.spin))
 SpinSpace(label, J) = SpinSpace(SymbolicSpinBasis(label, nothing, J), J)
-basisstates(H::SpinSpace) = H.basisstates
+basisstates(H::SpinSpace) = BasisStates(H, H.basisstates)
 Base.@propagate_inbounds basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
 function state_index(s::SpinState, space::SpinSpace)
