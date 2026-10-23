@@ -3,6 +3,12 @@ struct Kets{B,H}
     Kets(space::H) where H = new{statetype(space),H}(space)
 end
 Ket(label, H) = Kets(H)(label)
+# The basis kets of the space, in the order of `basisstates`
+Base.length(k::Kets) = dim(k.space)
+Base.getindex(k::Kets, i::Integer) = SymbolicState(k.space, basisstate(i, k.space), nothing)
+Base.iterate(k::Kets, i=1) = i > length(k) ? nothing : (k[i], i + 1)
+# A ket of a product space is a product of kets of its factors
+Base.IteratorEltype(::Type{<:Kets}) = Base.EltypeUnknown()
 
 function Base.show(io::IO, k::Kets)
     print(io, "Kets(")
@@ -25,6 +31,23 @@ end
     @test repr(vf("10") * vf("01")') == "|10⟩⟨01|"
     @test repr(Ket("2", hilbert_space(b, 4))') == "⟨2|"
     @test repr(Ket("↑", hilbert_space(s))) == "|↑⟩"
+end
+
+@testitem "Kets indexing" begin
+    @fermions f
+    @boson b
+    Hf = hilbert_space(f, 1:2, NumberConservation())
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(b, 3))
+    for space in (Hf, H)
+        kets = Kets(space)
+        @test length(kets) == length(collect(kets)) == dim(space)
+        for i in 1:dim(space)
+            v = representation(kets[i], space)
+            @test v[i] == 1 && count(!iszero, v) == 1
+        end
+    end
+    @test Kets(Hf)[2] == Kets(Hf)("10")
+    @test Kets(H)[6] == Kets(H)("10", "1")
 end
 
 struct SymbolicState{K,B,H} <: AbstractSym
