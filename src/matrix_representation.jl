@@ -156,13 +156,58 @@ function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr, chu
     prodop = partition_product(op, bases, spaces)
     matrices = map(enumerate(spaces)) do (n, local_space)
         m = findfirst(==(n), prodop.inds)
-        op = !isnothing(m) ? prodop.ops[m] : missing
-        _term_matrix_representation(op, local_space, repr, chunking; kwargs...)
+        local_op = !isnothing(m) ? prodop.ops[m] : missing
+        _term_matrix_representation(local_op, local_space, repr, chunking; kwargs...)
     end
-
+    return _kron_groups(matrices, prodop.inds, repr)
+end
+# Kronecker product of the group matrices, with the first group as the fastest-varying index.
+# Only the groups in `active` have a matrix other than the identity.
+_kron_groups(matrices, active, repr) = _kron_groups_generic(matrices, repr)
+function _kron_groups_generic(matrices, repr)
     mergedmatrices = _merge_diags(matrices, repr)
-    length(spaces) == 1 && return first(mergedmatrices)
     return foldl(kron, Iterators.reverse(mergedmatrices))
+end
+function _kron_groups(matrices, active, repr::EagerSparseRepr)
+    if isempty(active) || !all(n -> matrices[n] isa SparseMatrixCSC, active)
+        return _kron_groups_generic(matrices, repr)
+    end
+    first_active, last_active = extrema(active)
+    # Bool identities between the active groups keep the element type and the values of the other factors
+    inner = map(first_active:last_active) do n
+        n in active ? matrices[n] : sparse(I(size(matrices[n], 1)))
+    end
+    core = foldl(kron, Iterators.reverse(inner))
+    # The element type also includes that of the identity matrices of the inactive groups
+    n_identity = findfirst(!in(active), eachindex(matrices))
+    T = isnothing(n_identity) ? eltype(core) : promote_type(eltype(core), eltype(matrices[n_identity]))
+    r = prod(n -> size(matrices[n], 1), 1:first_active-1; init=1)
+    l = prod(n -> size(matrices[n], 1), last_active+1:length(matrices); init=1)
+    l == r == 1 && return convert(SparseMatrixCSC{T,Int}, core)
+    return _kron_identities(core, l, r, T)
+end
+# kron(I(l), A, I(r)) for a SparseMatrixCSC `A`, with element type `T`
+function _kron_identities(A, l, r, ::Type{T}) where {T}
+    m, n = size(A)
+    rows = rowvals(A)
+    vals = nonzeros(A)
+    nzA = nnz(A)
+    colptr = Vector{Int}(undef, l * n * r + 1)
+    rowval = Vector{Int}(undef, l * nzA * r)
+    nzval = Vector{T}(undef, l * nzA * r)
+    colptr[1] = 1
+    k = 1
+    col = 1
+    for b in 0:l-1, j in 1:n, q in 1:r
+        for p in nzrange(A, j)
+            rowval[k] = (b * m + rows[p] - 1) * r + q
+            nzval[k] = vals[p]
+            k += 1
+        end
+        col += 1
+        colptr[col] = k
+    end
+    return SparseMatrixCSC(l * m * r, l * n * r, colptr, rowval, nzval)
 end
 function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; kwargs...)
     Eye(dim(space))
@@ -213,7 +258,11 @@ function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs.
 end
 function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
     matrices = [_matrix_representation(term, bases, space, repr, NoChunking(); kwargs...) for term in NCterms(op)]
-    _sum_matrices(matrices, repr; tree_split=tree_split) + op.coeff * _matrix_representation(missing, bases, space, repr, NoChunking(); kwargs...)
+    summed = _sum_matrices(matrices, repr; tree_split=tree_split)
+    identity_term = op.coeff * _matrix_representation(missing, bases, space, repr, NoChunking(); kwargs...)
+    iszero(op.coeff) || return summed + identity_term
+    T = promote_type(eltype(summed), eltype(identity_term))
+    return convert(AbstractMatrix{T}, summed)
 end
 # Spaces with a basis-state loop (for example a constrained space over a ProductSpace) collect all terms in one accumulator.
 # The terms are accumulated in the element type of their matrices, and the identity term is added in that element type
@@ -504,6 +553,29 @@ end
     @test typeof(matrix_representation(op_int, Hc; projection=true)) == typeof(matrix_representation(op_int, H))
     @test typeof(matrix_representation(op_int + 1, Hc; projection=true)) == typeof(matrix_representation(op_int + 1, H))
     @test matrix_representation(op_int + 1, Hc; projection=true) ≈ matrix_representation(op_int + 1, H)[inds, inds]
+end
+
+@testitem "Product-space term matrices padded by identities" begin
+    using SparseArrays, LinearAlgebra
+    @fermions f
+    @spin s 1 // 2
+    @bosons b
+    Hf = hilbert_space(f, 1:2)
+    Hs = hilbert_space(s)
+    Hb = hilbert_space(b, 1:2, 3)
+    H = tensor_product(Hf, Hs, Hb)
+    Mf = matrix_representation(f[1]' * f[2], Hf)
+    Mb = matrix_representation(2 * b[1]' * b[2], Hb)
+    Ms = matrix_representation(s[:z], Hs)
+    @test matrix_representation(2 * f[1]' * f[2] * b[1]' * b[2], H) == kron(Mb, I(dim(Hs)), Mf)
+    @test matrix_representation(f[1]' * f[2], H) == kron(I(dim(Hb) * dim(Hs)), Mf)
+    @test matrix_representation(2 * b[1]' * b[2], H) == kron(Mb, I(dim(Hs) * dim(Hf)))
+    @test matrix_representation(s[:z], H) == kron(I(dim(Hb)), Ms, I(dim(Hf)))
+    op = f[1]' * f[2] * s[:z] + 2 * b[1]' * b[2] + hc
+    M = matrix_representation(op, H)
+    @test M isa SparseMatrixCSC{Float64}
+    @test M ≈ kron(I(dim(Hb)), Ms, Mf) + kron(Mb, I(dim(Hs) * dim(Hf))) + adjoint(kron(I(dim(Hb)), Ms, Mf) + kron(Mb, I(dim(Hs) * dim(Hf))))
+    @test matrix_representation(2 * f[1]' * f[2] * b[1]' + hc, H) isa SparseMatrixCSC{Float64}
 end
 
 @testitem "Dense/sparse/lazy matrix representation agree" begin
