@@ -267,76 +267,65 @@ const _SeveralSpaces = Tuple{AbstractHilbertSpace,AbstractHilbertSpace,Vararg{Ab
 # Split: H => (H1, H2, ...)
 function _transitions(Hsin::_OneSpace, Hsout::_SeveralSpaces, mapper)
     H = only(Hsin)
-    transitions = []
-    dropped = NTuple{1,Int}[]
-    for f in basisstates(H)
-        Iin = (state_index(f, H),)
+    entries = Iterators.flatten(Iterators.map(basisstates(H)) do f
+        Iin = (Int(state_index(f, H)),)
         substates, ws = split_state(f, mapper)
-        isdropped = false
-        for (states, w) in zip(substates, ws)
-            Iout = map(state_index, states, Hsout)
-            if any(iszero, Iout)
-                isdropped = true
-                continue
-            end
-            push!(transitions, (Iin, Iout, w))
-        end
-        isdropped && push!(dropped, Iin)
-    end
-    return (; transitions=map(identity, transitions), dropped)  # narrow the element type
+        ((Iin, map(_int_state_index, states, Hsout), w) for (states, w) in zip(substates, ws))
+    end)
+    return _transitions_and_dropped(entries, Hsin, Hsout)
 end
 
 # Combine: (H1, H2, ...) => H
 function _transitions(Hsin::_SeveralSpaces, Hsout::_OneSpace, mapper)
     H = only(Hsout)
-    transitions = []
-    dropped = NTuple{length(Hsin),Int}[]
-    for fs in Base.product(basisstates.(Hsin)...)
-        Iin = map(state_index, fs, Hsin)
+    entries = Iterators.flatten(Iterators.map(Base.product(basisstates.(Hsin)...)) do fs
+        Iin = map(_int_state_index, fs, Hsin)
         states, ws = combine_states(fs, mapper)
-        isdropped = false
-        for (f, w) in zip(states, ws)
-            Iout = (state_index(f, H),)
-            if any(iszero, Iout)
-                isdropped = true
-                continue
-            end
-            push!(transitions, (Iin, Iout, w))
-        end
-        isdropped && push!(dropped, Iin)
-    end
-    return (; transitions=map(identity, transitions), dropped)
+        ((Iin, (_int_state_index(f, H),), w) for (f, w) in zip(states, ws))
+    end)
+    return _transitions_and_dropped(entries, Hsin, Hsout)
 end
 
 # Many-to-many: (H1, H2, ...) => (K1, K2, ...)
 function _transitions(Hsin::_SeveralSpaces, Hsout::_SeveralSpaces, mapper::_ComposedMapper)
-    transitions = []
-    dropped = NTuple{length(Hsin),Int}[]
-    for fs in Base.product(basisstates.(Hsin)...)
-        Iin = map(state_index, fs, Hsin)
+    entries = Iterators.flatten(Iterators.map(Base.product(basisstates.(Hsin)...)) do fs
+        Iin = map(_int_state_index, fs, Hsin)
         mid_states, ws1 = combine_states(fs, mapper.combine_mapper)
-        isdropped = false
-        for (fmid, w1) in zip(mid_states, ws1)
+        Iterators.flatten(Iterators.map(zip(mid_states, ws1)) do (fmid, w1)
             out_states, ws2 = split_state(fmid, mapper.split_mapper)
-            for (states, w2) in zip(out_states, ws2)
-                Iout = map(state_index, states, Hsout)
-                if any(iszero, Iout)
-                    isdropped = true
-                    continue
-                end
-                push!(transitions, (Iin, Iout, w1 * w2))
-            end
-        end
-        isdropped && push!(dropped, Iin)
+            ((Iin, map(_int_state_index, states, Hsout), w1 * w2) for (states, w2) in zip(out_states, ws2))
+        end)
+    end)
+    return _transitions_and_dropped(entries, Hsin, Hsout)
+end
+
+_int_state_index(state, H) = Int(state_index(state, H))
+
+function _transitions_and_dropped(entries, Hsin, Hsout)
+    all_entries = collect(entries)
+    dropped = NTuple{length(Hsin),Int}[]
+    # Entries of one `Iin` are contiguous, so comparing with `last(dropped)` deduplicates.
+    for (Iin, Iout, _) in all_entries
+        any(iszero, Iout) && (isempty(dropped) || last(dropped) != Iin) && push!(dropped, Iin)
     end
-    return (; transitions=map(identity, transitions), dropped)
+    transitions = isempty(dropped) ? all_entries : filter(e -> !any(iszero, e[2]), all_entries)
+    return (; transitions, dropped, linear=_local_linear(transitions, Hsin, Hsout))
 end
 
 # Identity: H => H
 function _transitions(Hsin::_OneSpace, Hsout::_OneSpace, ::Nothing)
     H = only(Hsin)
-    return (; transitions=[((I,), (I,), 1) for I in 1:dim(H)], dropped=NTuple{1,Int}[])
+    transitions = [((I,), (I,), 1) for I in 1:dim(H)]
+    return (; transitions, dropped=NTuple{1,Int}[], linear=_local_linear(transitions, Hsin, Hsout))
 end
+
+# Zero-based linear offsets of each transition within the block's own dimensions.
+function _local_linear(transitions, Hsin, Hsout)
+    stridesin = Base.front(accumulate(*, (1, map(dim, Hsin)...)))
+    stridesout = Base.front(accumulate(*, (1, map(dim, Hsout)...)))
+    return [(_linear_offset(Iin, stridesin), _linear_offset(Iout, stridesout), w) for (Iin, Iout, w) in transitions]
+end
+_linear_offset(I, strides) = sum(map((i, s) -> (i - 1) * s, I, strides); init=0)
 
 _group_length(::AbstractVector{NTuple{N,Int}}) where {N} = N
 
@@ -369,20 +358,8 @@ end
 
 function _reshape(t::AbstractArray, blocks, Hsouts; skipmissing=false)
     skipmissing || _check_dropped(t, blocks)
-    Hsout_all = _flatten(Hsouts)
-    tout = zeros(eltype(t), map(dim, Hsout_all)...)
-
-    for transitions in Base.product(map(b -> b.transitions, blocks)...)
-        Iin = _flatten(map(tr -> tr[1], transitions))
-        tval = t[Iin...]
-        iszero(tval) && continue
-
-        Iout = _flatten(map(tr -> tr[2], transitions))
-        w = prod(tr -> tr[3], transitions)
-        tout[Iout...] += w * tval
-    end
-
-    return tout
+    tout = zeros(eltype(t), map(dim, _flatten(Hsouts))...)
+    return _reshape_kernel!(tout, t, blocks, Hsouts)
 end
 
 function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts; skipmissing=false)
@@ -391,17 +368,39 @@ function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts; skipmi
     skipmissing || _check_dropped(t, blocks)
 
     fill!(tout, zero(eltype(tout)))
-    for transitions in Base.product(map(b -> b.transitions, blocks)...)
-        Iin = _flatten(map(tr -> tr[1], transitions))
-        tval = t[Iin...]
-        iszero(tval) && continue
+    return _reshape_kernel!(tout, t, blocks, Hsouts)
+end
 
-        Iout = _flatten(map(tr -> tr[2], transitions))
-        w = prod(tr -> tr[3], transitions)
-        tout[Iout...] += w * tval
+function _reshape_kernel!(tout, t, blocks, Hsouts)
+    if _has_linear_indices(t) && _has_linear_indices(tout)
+        stridesin = _block_strides(size(t), map(b -> _group_length(b.dropped), blocks))
+        stridesout = _block_strides(size(tout), map(length, Hsouts))
+        for entries in Base.product(map(b -> b.linear, blocks)...)
+            tval = t[1+sum(map((e, s) -> e[1] * s, entries, stridesin))]
+            iszero(tval) && continue
+            tout[1+sum(map((e, s) -> e[2] * s, entries, stridesout))] += prod(last, entries) * tval
+        end
+    else
+        for transitions in Base.product(map(b -> b.transitions, blocks)...)
+            Iin = _flatten(map(tr -> tr[1], transitions))
+            tval = t[Iin...]
+            iszero(tval) && continue
+
+            Iout = _flatten(map(tr -> tr[2], transitions))
+            w = prod(tr -> tr[3], transitions)
+            tout[Iout...] += w * tval
+        end
     end
-
     return tout
+end
+
+_has_linear_indices(a) = IndexStyle(a) isa IndexLinear && !Base.has_offset_axes(a)
+
+# Stride of the first dimension of each block of `lengths` consecutive dimensions.
+function _block_strides(sz, lengths)
+    strides = Base.front(accumulate(*, (1, sz...)))
+    offsets = Base.front(accumulate(+, (0, lengths...)))
+    return map(o -> strides[o+1], offsets)
 end
 
 @testitem "Reshape Properties" begin
@@ -595,6 +594,41 @@ end
         H4 => H4,
     )
     @test B_twostep ≈ B
+end
+
+@testitem "Reshape of arrays without linear indexing" begin
+    using Random
+    Random.seed!(2)
+    @fermions f
+    H1 = hilbert_space(f, 1:2, NumberConservation())
+    H2 = hilbert_space(f, 3:4, ParityConservation())
+    H = tensor_product(H1, H2)
+    M = rand(ComplexF64, dim(H), dim(H))
+    Mt = PermutedDimsArray(permutedims(M), (2, 1)) # a Cartesian-indexed copy of M
+    @test IndexStyle(Mt) isa IndexCartesian
+    T = reshape(M, H => (H1, H2))
+    @test reshape(Mt, H => (H1, H2)) == T
+    @test reshape(PermutedDimsArray(permutedims(T, (4, 3, 2, 1)), (4, 3, 2, 1)), (H1, H2) => H) == reshape(T, (H1, H2) => H)
+    out = similar(T)
+    @test reshape(H => (H1, H2))(out, Mt) == T
+    outt = PermutedDimsArray(similar(T, reverse(size(T))), (4, 3, 2, 1))
+    @test reshape(H => (H1, H2))(outt, M) == T
+
+    # Many-to-many
+    K1 = hilbert_space(f, [1, 3])
+    K2 = hilbert_space(f, [2, 4])
+    V = reshape(rand(ComplexF64, dim(H)), H => (H1, H2))
+    Vt = PermutedDimsArray(permutedims(V), (2, 1))
+    @test reshape(Vt, (H1, H2) => (K1, K2)) == reshape(V, (H1, H2) => (K1, K2))
+
+    # Missing states
+    Hfull = hilbert_space(f, 1:4)
+    Hae = hilbert_space(f, 1:2, ParityConservation(1))
+    Hb = hilbert_space(f, 3:4)
+    Mf = rand(ComplexF64, dim(Hfull), dim(Hfull))
+    Mft = PermutedDimsArray(permutedims(Mf), (2, 1))
+    @test_throws ArgumentError reshape(Mft, Hfull => (Hae, Hb))
+    @test reshape(Mft, Hfull => (Hae, Hb); skipmissing=true) == reshape(Mf, Hfull => (Hae, Hb); skipmissing=true)
 end
 
 @testitem "Reshape missing states" begin

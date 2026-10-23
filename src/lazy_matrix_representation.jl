@@ -149,19 +149,24 @@ function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, 
     end
 end
 
-function _apply_single_term!(y::AbstractVector, x::SparseArrays.AbstractSparseVector, space, term, precomp, _coeff, conjugate, projection, ::Union{NoChunking,TermChunking})
+function _apply_single_term!(y::AbstractVector, x::SparseArrays.AbstractSparseVector, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking,TermChunking})
+    _foreach_term_entry((i, v) -> (y[i] += v), x, space, term, precomp, coeff, conjugate, projection)
+end
+
+# Calls `f(outind, value)` for each output entry of `coeff * term` applied to the sparse `x`.
+function _foreach_term_entry(f, x::SparseArrays.AbstractSparseVector, space, term, precomp, _coeff, conjugate, projection)
     coeff = (conjugate ? conj(_coeff) : _coeff)
-    inds, vals = findnz(x)
-    for (n, xn) in zip(inds, vals)
+    for (n, xn) in zip(SparseArrays.nonzeroinds(x), nonzeros(x))
+        iszero(xn) && continue
         state = basisstate(n, space)
-        state, _amp = _apply_local_operators(term, state, space, precomp)
-        if !iszero(_amp)
-            outind = state_index(state, space)
-            amp = (conjugate ? conj(_amp) : _amp) * coeff
-            if !projection || !iszero(outind)
-                y[outind] += amp * xn
-            end
+        newstate, _amp = _apply_local_operators(term, state, space, precomp)
+        iszero(_amp) && continue
+        outind = state_index(newstate, space)
+        if iszero(outind)
+            projection && continue
+            throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
         end
+        f(outind, (conjugate ? conj(_amp) : _amp) * coeff * xn)
     end
 end
 
@@ -243,6 +248,26 @@ function Base.:*(L::LazyOperator, x::AbstractVecOrMat)
     y = similar(x, T)
     return mul!(y, L, x)
 end
+
+# `sparsevec` sums the collected values with equal index.
+function Base.:*(L::LazyOperator, x::SparseArrays.AbstractSparseVector)
+    size(L, 2) == length(x) || throw(DimensionMismatch("The input must have length $(size(L, 2)), got $(length(x))"))
+    T = promote_type(eltype(L), eltype(x))
+    outinds = Int[]
+    amps = T[]
+    push_entry = (i, v) -> (push!(outinds, i); push!(amps, v))
+    for (term, coeff, precomp) in _lazy_terms(L)
+        _foreach_term_entry(push_entry, x, L.space, term, precomp, coeff, L.conjugate, L.projection)
+    end
+    if L.op isa NCAdd && !iszero(L.op.coeff)
+        scalar_coeff = L.conjugate ? conj(L.op.coeff) : L.op.coeff
+        append!(outinds, SparseArrays.nonzeroinds(x))
+        append!(amps, scalar_coeff .* nonzeros(x))
+    end
+    return SparseArrays.sparsevec(outinds, amps, size(L, 1))
+end
+_lazy_terms(L::LazyOperator{<:NCAdd}) = L.precomp
+_lazy_terms(L::LazyOperator) = ((L.op, true, L.precomp),)
 get_input(::LazyRepr{Missing}, H) = dim(H) < 1e4 ? Vector{mat_eltype(H)}(undef, dim(H)) : spzeros(mat_eltype(H), dim(H))
 function get_input(rep::LazyRepr{<:AbstractArray}, H)
     dim(H) == size(rep.input, 1) || throw(DimensionMismatch("The input must have $(dim(H)) rows, got size $(size(rep.input))"))
@@ -418,6 +443,9 @@ end
     @test transpose(L) * Vcons_s ≈ transpose(M) * Vcons_s
     @test (L * vcons_s) isa SparseVector
     @test (L * Vcons_s) isa SparseMatrixCSC
+    @test L' * vcons_s ≈ M' * vcons_s
+    @test transpose(L) * vcons_s ≈ transpose(M) * vcons_s
+    @test_throws ArgumentError representation(op, Hcons, :lazy) * sparse(ones(dim(Hcons)))
     @test Matrix(L) ≈ M
     @test Matrix(L') ≈ M'
     @test Matrix(transpose(L)) ≈ transpose(M)
