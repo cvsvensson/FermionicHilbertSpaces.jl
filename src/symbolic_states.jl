@@ -5,10 +5,15 @@ end
 Ket(label, H) = Kets(H)(label)
 # The basis kets of the space, in the order of `basisstates`
 Base.length(k::Kets) = dim(k.space)
+Base.firstindex(k::Kets) = 1
+Base.lastindex(k::Kets) = length(k)
+Base.keys(k::Kets) = Base.OneTo(length(k))
 Base.getindex(k::Kets, i::Integer) = SymbolicState(k.space, basisstate(i, k.space), nothing)
 Base.iterate(k::Kets, i=1) = i > length(k) ? nothing : (k[i], i + 1)
-# A ket of a product space is a product of kets of its factors
-Base.IteratorEltype(::Type{<:Kets}) = Base.EltypeUnknown()
+Base.eltype(::Type{Kets{B,H}}) where {B,H} = _ket_type(B, H)
+_ket_type(B, H) = SymbolicState{B,Nothing,H}
+# A ket of a product space is a sum with a single term, the product of kets of its groups, whose type is inferred
+_ket_type(::Type{B}, ::Type{H}) where {B<:ProductState,H} = Base.promote_op(getindex, Kets{B,H}, Int)
 
 function Base.show(io::IO, k::Kets)
     print(io, "Kets(")
@@ -48,6 +53,41 @@ end
     end
     @test Kets(Hf)[2] == Kets(Hf)("10")
     @test Kets(H)[6] == Kets(H)("10", "1")
+    @test Kets(H)[end] == Kets(H)("11", "2")
+    @test eachindex(Kets(H)) == 1:dim(H)
+end
+
+@testitem "Kets eltype" begin
+    @fermions f
+    @boson b
+    @boson a
+    @spin s 1 // 2
+    Hf, Hb, Hs = hilbert_space(f, 1:2), hilbert_space(b, 3), hilbert_space(s)
+    spaces = (Hf, hilbert_space(f, 1:2, NumberConservation()), Hb, Hs,
+        tensor_product(Hf, Hb), tensor_product(Hf, Hs, Hb), tensor_product(hilbert_space(a, 1), Hb),
+        tensor_product(Hf, hilbert_space(f, 3:4)))
+    for space in spaces
+        kets = Kets(space)
+        k = @inferred kets[1]
+        @test isconcretetype(eltype(kets))
+        @test eltype(kets) == typeof(k)
+        @test eltype(collect(kets)) == eltype(kets)
+        @test kets[end] == kets[dim(space)]
+    end
+end
+
+@testitem "Product space states" begin
+    import FermionicHilbertSpaces: SymbolicState, interpret_state
+    @fermions f
+    @boson b
+    @spin s 1 // 2
+    # The groups of H are not in sorted order, so the factors of its states are reordered
+    H = tensor_product(hilbert_space(b, 3), hilbert_space(s), hilbert_space(f, 1:2))
+    kf, ks, kb = Ket("01", hilbert_space(f, 1:2)), Ket("↓", hilbert_space(s)), Ket("2", hilbert_space(b, 3))
+    x = interpret_state(("2", "↓", "01"), H)
+    @test (@inferred SymbolicState(H, x, nothing)) == kf * ks * kb
+    @test (@inferred SymbolicState(H, nothing, x)) == kf' * ks' * kb'
+    @test (@inferred SymbolicState(H, x, x)) == (kf * kf') * (ks * ks') * (kb * kb')
 end
 
 struct SymbolicState{K,B,H} <: AbstractSym
@@ -56,14 +96,21 @@ struct SymbolicState{K,B,H} <: AbstractSym
     bra::B
 end
 
+# A state of a product space is the product of states of its groups
 function SymbolicState(space, ket::ProductState, bra::Nothing)
-    mapreduce(SymbolicState, *, groups(space), ket.states)
+    _group_product(map(SymbolicState, groups(space), ket.states))
 end
 function SymbolicState(space, ket::Nothing, bra::ProductState)
-    mapreduce(SymbolicState, *, groups(space), Ref(nothing), bra.states)
+    _group_product(map((g, b) -> SymbolicState(g, nothing, b), groups(space), bra.states))
 end
 function SymbolicState(space, ket::ProductState, bra::ProductState)
-    mapreduce(SymbolicState, *, groups(space), ket.states, bra.states)
+    _group_product(map(SymbolicState, groups(space), ket.states, bra.states))
+end
+# The sorted product of states of distinct groups, which commute. It is built directly rather than with `*`
+# so that its type is inferrable, and equals the autosorted product: a sum with the single term `1 * factors`.
+function _group_product(states::Tuple)
+    factors = sort!([states...]; lt=_group_isless)
+    NCAdd(NCMul(1, factors))
 end
 SymbolicState(space, state) = SymbolicState(space, state, nothing)
 has_ket(s::SymbolicState) = !isnothing(s.ket)

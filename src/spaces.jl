@@ -12,10 +12,9 @@ const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace
 """
 	basisstates(H)
 
-Return the basis states of the Hilbert space `H` as a vector, in the order used by
-matrix representations and indexing utilities. `basisstates(H)[i] == basisstate(i, H)`.
-The vector is lazy for spaces without stored states, and prints the states as labels of `H`,
-such as one occupation digit per fermionic mode.
+Return the basis states of the Hilbert space `H`, in the order used by matrix
+representations and indexing utilities. The result supports `length`, `eltype`, iteration
+and indexing, with `basisstates(H)[i] == basisstate(i, H)`.
 """
 basisstates
 

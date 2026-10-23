@@ -29,7 +29,11 @@ Other space types parse their labels differently. Bosons use an occupation-numbe
 `Kets(H)` can also be indexed and iterated. `vf[i]` is the ket of the `i`-th basis state, in the order of `basisstates(H)` and of the vector and matrix representations:
 
 ```@example states
-collect(vf)
+vf[2], vf[end]
+```
+
+```@example states
+foreach(println, vf)
 ```
 
 ## Algebra

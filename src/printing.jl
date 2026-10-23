@@ -283,7 +283,7 @@ Base.show(io::IO, s::SpinState) = print(io, "SpinState(", s.m, ")")
 Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace: ", m.sym); show(IOContext(io, :compact => true), m.parent))
 
 
-Base.show(io::IO, f::FockNumber) = print(io, "FockNumber(", string(f.f; base=10), ")")
+Base.show(io::IO, f::FockNumber) = print(io, "FockNumber(", f.f, ")")
 
 
 
@@ -307,24 +307,34 @@ function Base.show(io::IO, state::ProductState)
     print(io, "))")
 end
 
-# The label of a basis state of `space`, in the format that `Kets` accepts as input
+# A short label for a basis state of `space`. Fock states are labeled by one occupation digit per mode.
 _state_label(state, space) = _state_label_atomic(state, _unwrap_space(space))
 _unwrap_space(H::Union{TransposedSpace,SectorHilbertSpace,ConstrainedSpace}) = _unwrap_space(parent(H))
 _unwrap_space(H) = H
-_state_label_atomic(f::FockNumber, H) = join(digits(Int, f.f; base=2, pad=nbr_of_modes(H)))
+const _FermionModeSpace = Union{FermionicSpace,MajoranaHilbertSpace}
+_state_label_atomic(f::FockNumber, H::_FermionModeSpace) = join(digits(Int, f.f; base=2, pad=nbr_of_modes(H)))
+_state_label_atomic(f::FixedNumberFockState, H::_FermionModeSpace) = _state_label_atomic(FockNumber(f), H)
+_state_label_atomic(s::NambuState, H::_FermionModeSpace) = (s.hole ? "h" : "p") * _state_label_atomic(s.state, H)
 _state_label_atomic(s::BosonicState, H) = string(s.n)
 _state_label_atomic(s::SpinState, H::SpinSpace) = H.spin == 1 // 2 ? (s.m > 0 ? "↑" : "↓") : string(s.m)
 _state_label_atomic(s::ProductState, H::ProductSpace) = "(" * join(map(_state_label, s.states, H.factors), ", ") * ")"
 _state_label_atomic(s, H) = sprint(print, s)
 
-# The space and iterator parameters are long and carry no information for the reader
-Base.show(io::IO, ::Type{BasisStates{B,H,I}}) where {B,H,I} = print(io, "BasisStates{", B, ", …}")
 function Base.show(io::IO, bs::BasisStates)
+    max_items = 20
+    n = length(bs)
     print(io, "[")
-    join(io, (_state_label(s, bs.space) for s in bs), ", ")
+    if get(io, :limit, false) && n > max_items
+        join(io, (_state_label(bs[i], bs.space) for i in 1:max_items÷2), ", ")
+        print(io, "  …  ")
+        join(io, (_state_label(bs[i], bs.space) for i in n-max_items÷2+1:n), ", ")
+    else
+        join(io, (_state_label(s, bs.space) for s in bs), ", ")
+    end
     print(io, "]")
 end
-function Base.show(io::IO, ::MIME"text/plain", bs::BasisStates; max_rows=8)
+function Base.show(io::IO, ::MIME"text/plain", bs::BasisStates)
+    max_rows = 8
     n = length(bs)
     print(io, n, "-element basis of ")
     show(IOContext(io, :compact => true), bs.space)
@@ -466,4 +476,20 @@ end
         @test bs == collect(bs) == [basisstate(i, space) for i in 1:dim(space)]
         @test size(bs) isa Tuple{Int}
     end
+
+    Hg = FermionicHilbertSpaces.GenericHilbertSpace(:x, [FockNumber(0), FockNumber(3)])
+    @test repr(basisstates(Hg)) == "[FockNumber(0), FockNumber(3)]"
+    @test occursin("FockNumber(3)", repr(MIME"text/plain"(), basisstates(Hg)))
+    @majoranas γ
+    @test repr(basisstates(hilbert_space(γ, 1:4, ParityConservation(1)))) == "[00, 11]"
+
+    bs6 = basisstates(hilbert_space(f, 1:6))
+    @test repr(bs6) == "[" * join(map(n -> join(digits(n; base=2, pad=6)), 0:63), ", ") * "]"
+    limited = sprint(show, bs6; context=:limit => true)
+    @test startswith(limited, "[000000, 100000, ") && endswith(limited, ", 011111, 111111]")
+    @test count(", ", limited) == 18 && occursin("  …  ", limited)
+    @test sprint(show, basisstates(H); context=:limit => true) == "[1000, 0100, 0010, 0001]"
+
+    @test repr(basisstates(hilbert_space(f, 1:3, FermionicHilbertSpaces.SingleParticle()))) == "[100, 010, 001]"
+    @test repr(basisstates(hilbert_space(f, 1:2, FermionicHilbertSpaces.BdG()))) == "[h10, h01, p10, p01]"
 end
