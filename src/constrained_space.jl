@@ -11,14 +11,15 @@ Base.parent(H::ConstrainedSpace) = H.parent
 function ConstrainedSpace(space::ConstrainedSpace, states)
     ConstrainedSpace(parent(space), intersect(states, space.states))
 end
-function ConstrainedSpace(space::H, states::S) where {H,S}
-    B = eltype(states)
-    state_index = Dict{B,Int}(s => i for (i, s) in enumerate(states))
-    ConstrainedSpace{B,H,S}(space, states, state_index)
+function ConstrainedSpace(space::H, states) where {H}
+    stored = _stored_states(states)
+    B = eltype(stored)
+    state_index = Dict{B,Int}(s => i for (i, s) in enumerate(stored))
+    ConstrainedSpace{B,H,typeof(stored)}(space, stored, state_index)
 end
 
 dim(H::ConstrainedSpace) = length(H.states)
-basisstates(H::ConstrainedSpace) = H.states
+basisstates(H::ConstrainedSpace) = BasisStates(H, H.states)
 Base.@propagate_inbounds basisstate(n::Integer, H::ConstrainedSpace) = H.states[n]
 state_index(state, H::ConstrainedSpace{B}) where B = get(H.state_index, state, 0)
 state_index(state::Union{AbstractString,AbstractChar}, H::ConstrainedSpace) = state_index(interpret_state(state, H), H)
