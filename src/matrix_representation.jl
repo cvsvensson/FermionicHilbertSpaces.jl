@@ -49,18 +49,19 @@ function chunked_operator_indices_and_amplitudes!(accumulator, op, space::Abstra
     return chunked_operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp, input_inds, col_offset; kwargs...)
 end
 
+# Whether `outind` lies outside the space and `projection` allows skipping it. Throws if it lies outside and `projection` is false.
+function _skip_outside(outind, projection)
+    iszero(outind) || return false
+    projection || throw(ArgumentError("The operator maps outside of the provided space. Pass `projection=true` to ignore those states."))
+    return true
+end
+
 function operator_indices_and_amplitudes_generic!(accumulator, op, space::AbstractHilbertSpace, precomp; projection)
     for (inind, state) in enumerate(basisstates(space))
         newstate, amp = _apply_local_operators(op, state, space, precomp)
         if !iszero(amp)
             outind = state_index(newstate, space)
-            if iszero(outind)
-                if projection
-                    continue
-                else
-                    throw(ArgumentError("The operator maps outside of the provided space. Pass `projection=true` to ignore those states."))
-                end
-            else
+            if !_skip_outside(outind, projection)
                 push_inds_amps!(accumulator, outind, inind, amp)
             end
         end
@@ -73,13 +74,7 @@ function chunked_operator_indices_and_amplitudes_generic!(accumulator, op, space
         newstate, amp = _apply_local_operators(op, state, space, precomp)
         if !iszero(amp)
             outind = state_index(newstate, space)
-            if iszero(outind)
-                if projection
-                    continue
-                else
-                    throw(ArgumentError("The operator maps outside of the provided space. Pass `projection=true` to ignore those states."))
-                end
-            else
+            if !_skip_outside(outind, projection)
                 push_inds_amps!(accumulator, outind, inind - col_offset, amp)
             end
         end

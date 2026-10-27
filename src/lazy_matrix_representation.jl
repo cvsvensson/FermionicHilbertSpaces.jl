@@ -142,7 +142,7 @@ function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, 
         state, _amp = _apply_local_operators(term, state, space, precomp)
         if !iszero(_amp)
             outind = state_index(state, space)
-            if !projection || !iszero(outind)
+            if !_skip_outside(outind, projection)
                 amp = (conjugate ? conj(_amp) : _amp)
                 y[outind] += amp * xn
             end
@@ -163,10 +163,7 @@ function _foreach_term_entry(f, x::SparseArrays.AbstractSparseVector, space, ter
         newstate, _amp = _apply_local_operators(term, state, space, precomp)
         iszero(_amp) && continue
         outind = state_index(newstate, space)
-        if iszero(outind)
-            projection && continue
-            throw(ArgumentError("Operator maps outside of the provided space. Set projection=true to ignore those states."))
-        end
+        _skip_outside(outind, projection) && continue
         f(outind, (conjugate ? conj(_amp) : _amp) * coeff * xn)
     end
 end
@@ -178,7 +175,7 @@ function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, 
         if !iszero(_amp)
             outind = state_index(newstate, space)
             amp = (conjugate ? conj(_amp) : _amp) * coeff
-            if !projection || !iszero(outind)
+            if !_skip_outside(outind, projection)
                 @views y[outind, :] .+= amp .* x[n, :]
             end
         end
@@ -198,7 +195,7 @@ function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC,
             if !iszero(_amp)
                 outind = state_index(newstate, space)
                 amp = (conjugate ? conj(_amp) : _amp) * coeff
-                if !projection || !iszero(outind)
+                if !_skip_outside(outind, projection)
                     y[outind, col] += amp * xn
                 end
             end
@@ -447,7 +444,10 @@ end
     @test (L * Vcons_s) isa SparseMatrixCSC
     @test L' * vcons_s ≈ M' * vcons_s
     @test transpose(L) * vcons_s ≈ transpose(M) * vcons_s
-    @test_throws ArgumentError representation(op, Hcons, :lazy) * sparse(ones(dim(Hcons)))
+    Lnoproj = representation(op, Hcons, :lazy)
+    @test_throws ArgumentError Lnoproj * sparse(ones(dim(Hcons)))
+    @test_throws ArgumentError Lnoproj * ones(dim(Hcons))
+    @test_throws ArgumentError Lnoproj * ones(dim(Hcons), 2)
     @test Matrix(L) ≈ M
     @test Matrix(L') ≈ M'
     @test Matrix(transpose(L)) ≈ transpose(M)
