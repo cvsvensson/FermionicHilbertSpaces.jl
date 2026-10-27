@@ -192,6 +192,7 @@ Base.@propagate_inbounds function basisstate(n::Integer, H::TruncatedBosonicHilb
 end
 dim(H::TruncatedBosonicHilbertSpace) = H.dimension
 state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace) = 0 <= s.n < dim(H) ? s.n + 1 : 0
+has_arithmetic_state_index(::TruncatedBosonicHilbertSpace) = true
 add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add_tag(H.sym, tag), H.dimension)
 
 hilbert_space(sym::BosonField, labels, dimension::Integer, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], dimension), labels); constraint)

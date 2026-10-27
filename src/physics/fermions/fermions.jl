@@ -37,6 +37,8 @@ function state_index(state::FockNumber, H::FermionicSpace{FockNumber{I}}) where 
     T = fock_index_type(I)
     iszero(state.f >> nbr_of_modes(H)) ? T(state.f) + one(T) : zero(T)
 end
+# Below 63 modes, `dim(H)` is an `Int` and computing it does not throw
+has_arithmetic_state_index(H::FermionicSpace{<:FockNumber}) = nbr_of_modes(H) < 63
 function dim(H::FermionicSpace{FockNumber{I}}) where I
     d = one(fock_index_type(I)) << nbr_of_modes(H)
     d > 0 || throw(OverflowError("$(nbr_of_modes(H)) modes have more states than fit in $(fock_index_type(I))"))

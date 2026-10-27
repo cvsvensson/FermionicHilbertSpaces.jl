@@ -57,6 +57,8 @@ function state_index(state::AbstractBasisState, H::ProductSpace{B}) where B
     all(>(0), inds) || return 0
     H.lininds[CartesianIndex(inds)]
 end
+# `lininds` is exact only when the product of the factor dimensions fits in an `Int`
+has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && prod(big ∘ dim, H.factors) <= typemax(Int)
 
 maximum_particles(H::ProductSpace) = sum(maximum_particles, groups(H))
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
