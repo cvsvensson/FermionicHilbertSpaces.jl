@@ -259,24 +259,17 @@ function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Un
     T = promote_type(eltype(summed), eltype(identity_term))
     return convert(AbstractMatrix{T}, summed)
 end
-# Spaces with a basis-state loop (for example a constrained space over a ProductSpace) collect all terms in one accumulator.
-# The terms are accumulated in the element type of their matrices, and the identity term is added in that element type
+# Spaces with a basis-state loop (for example a constrained space over a ProductSpace) build the sum of all terms in one pass.
+# The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the element type of `Eye`, as on a ProductSpace.
 function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
     spaces = groups(space)
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
     Tterms = mapreduce(mat_eltype, promote_type, prodops)
-    accumulator = matrix_accumulator(Tterms, length(prodops), (dim(space), dim(space)), repr)
-    for prodop in prodops
-        operator_indices_and_amplitudes!(accumulator, prodop, space; kwargs...)
-    end
     identity_matrix = _matrix_representation(missing, bases, space, repr, NoChunking())
     T = promote_type(Tterms, Base.promote_op(*, typeof(op.coeff), eltype(identity_matrix)))
-    if Tterms == T
-        iszero(op.coeff) || add_identity!!(accumulator, op.coeff, space)
-        return finalize!(accumulator, space)
-    end
-    summed = finalize!(accumulator, space)
+    Tterms == T && return _terms_matrix(Tterms, prodops, op.coeff, space, repr; kwargs...)
+    summed = _terms_matrix(Tterms, prodops, zero(op.coeff), space, repr; kwargs...)
     iszero(op.coeff) && return convert(AbstractMatrix{T}, summed)
     return summed + op.coeff * identity_matrix
 end
@@ -338,14 +331,149 @@ end
 
 
 function _matrix_representation_single_space(op::NCAdd, space, repr::Union{EagerSparseRepr,EagerDenseRepr}, ::NoChunking; kwargs...)
-    accumulator = matrix_accumulator(op, space, repr)
-    for term in NCterms(op)
+    _terms_matrix(_repr_eltype(mat_eltype(op), repr), NCterms(op), op.coeff, space, repr; kwargs...)
+end
+
+const SPARSE_BLOCK_SIZE = 4096
+# Sparse matrices of spaces up to this dimension are faster to build with `_accumulated_matrix`
+const ACCUMULATED_SPARSE_MAX_DIM = 2^16
+
+# The matrix of `sum(terms) + coeff * I` with element type `T`
+_terms_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
+function _terms_matrix(::Type{T}, terms, coeff, space, repr::EagerSparseRepr; kwargs...) where T
+    dim(space) <= ACCUMULATED_SPARSE_MAX_DIM && return _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
+    return _blocked_sparse_matrix(T, terms, coeff, space; kwargs...)
+end
+
+function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T
+    accumulator = matrix_accumulator(T, length(terms), (dim(space), dim(space)), repr)
+    for term in terms
         operator_indices_and_amplitudes!(accumulator, term, space; kwargs...)
     end
-    if !iszero(op.coeff)
-        add_identity!!(accumulator, op.coeff, space)
+    iszero(coeff) || add_identity!!(accumulator, coeff, space)
+    return finalize!(accumulator, space)
+end
+
+# Builds the matrix one block of columns at a time: the entries of a block are collected term by term,
+# then sorted into columns, with duplicate entries summed in the order of the terms.
+function _blocked_sparse_matrix(::Type{T}, terms, coeff, space; kwargs...) where T
+    N = dim(space)
+    B = SPARSE_BLOCK_SIZE
+    precomps = [(term, precomputation_before_operator_application(term, space)) for term in terms]
+    colptr = Vector{Int}(undef, N + 1)
+    colptr[1] = 1
+    rowval = Int[]
+    nzval = T[]
+    capacity = 0
+    block = (rows, cols, amps) = (Int[], Int[], T[])
+    foreach(v -> sizehint!(v, min(B, N) * floor(Int, 1 + log2(length(precomps) + 1))), block)
+    sortedrows = Int[]
+    sortedamps = T[]
+    sortbuffers = (Int[], Int[], T[])
+    colstarts = Vector{Int}(undef, min(B, N) + 1)
+    for c0 in 0:B:N-1
+        nb = min(B, N - c0)
+        foreach(empty!, block)
+        for (term, precomp) in precomps
+            chunked_operator_indices_and_amplitudes_generic!(block, term, space, precomp, c0+1:c0+nb, c0; kwargs...)
+        end
+        if !iszero(coeff)
+            append!(rows, c0+1:c0+nb)
+            append!(cols, 1:nb)
+            append!(amps, Fill(coeff, nb))
+        end
+        fill!(colstarts, 0)
+        for j in cols
+            colstarts[j+1] += 1
+        end
+        colstarts[1] = 1
+        for j in 1:nb
+            colstarts[j+1] += colstarts[j]
+        end
+        resize!(sortedrows, length(rows))
+        resize!(sortedamps, length(rows))
+        for (r, j, a) in zip(rows, cols, amps)
+            q = colstarts[j]
+            sortedrows[q] = r
+            sortedamps[q] = a
+            colstarts[j] = q + 1
+        end
+        # Now column j ends at colstarts[j]-1. The merged columns are written to the first n entries.
+        n = 0
+        start = 1
+        for j in 1:nb
+            stop = colstarts[j] - 1
+            n = _sort_merge_column!(sortedrows, sortedamps, start, stop, n, N, sortbuffers)
+            colptr[c0+j+1] = length(rowval) + n + 1
+            start = stop + 1
+        end
+        total = length(rowval) + n
+        if total > capacity
+            # Extrapolate to the remaining columns, with a margin
+            capacity = total + ceil(Int, total / (c0 + nb) * (N - c0 - nb) * 3 / 2)
+            sizehint!(rowval, capacity)
+            sizehint!(nzval, capacity)
+        end
+        append!(rowval, view(sortedrows, 1:n))
+        append!(nzval, view(sortedamps, 1:n))
     end
-    finalize!(accumulator, space)
+    isconcretetype(T) || (nzval = identity.(nzval))
+    return SparseMatrixCSC(N, N, colptr, rowval, nzval)
+end
+
+# Writes the entries start:stop of `rows` and `amps` after entry n, sorted by row and with the entries of equal rows
+# summed in their order. Returns the new number of written entries. The rows are at most N.
+function _sort_merge_column!(rows, amps, start, stop, n, N, (slots, rowbuf, ampbuf))
+    if stop - start < 32
+        for k in start+1:stop
+            r = rows[k]
+            a = amps[k]
+            q = k - 1
+            while q >= start && rows[q] > r
+                rows[q+1] = rows[q]
+                amps[q+1] = amps[q]
+                q -= 1
+            end
+            rows[q+1] = r
+            amps[q+1] = a
+        end
+        colstart = n + 1
+        for k in start:stop
+            if n >= colstart && rows[n] == rows[k]
+                amps[n] += amps[k]
+            else
+                n += 1
+                rows[n] = rows[k]
+                amps[n] = amps[k]
+            end
+        end
+        return n
+    end
+    # Long columns are merged first, with `slots[r]` the position of row r in `ampbuf`.
+    # `slots` is allocated at the first long column and is all zeros between calls.
+    isempty(slots) && append!(slots, zeros(Int, N))
+    resize!(rowbuf, stop - start + 1)
+    resize!(ampbuf, stop - start + 1)
+    m = 0
+    for k in start:stop
+        r = rows[k]
+        if iszero(slots[r])
+            m += 1
+            slots[r] = m
+            rowbuf[m] = r
+            ampbuf[m] = amps[k]
+        else
+            ampbuf[slots[r]] += amps[k]
+        end
+    end
+    sort!(view(rowbuf, 1:m))
+    for r in view(rowbuf, 1:m)
+        n += 1
+        rows[n] = r
+        amps[n] = ampbuf[slots[r]]
+        slots[r] = 0
+    end
+    return n
 end
 
 function _term_matrix_representation(op, H::AbstractHilbertSpace, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
@@ -608,6 +736,36 @@ end
     direct_dense = matrix_representation(op, Hf, FermionicHilbertSpaces.EagerDenseRepr())
     @test direct_dense isa Matrix
     @test direct_dense == Md_single
+end
+
+@testitem "Sparse matrix of a sum of many terms" begin
+    using SparseArrays, LinearAlgebra
+    @fermions f
+    N = 18
+    H = hilbert_space(f, 1:N, NumberConservation(8:9))
+    # Diagonal terms and the identity add up in the same entries
+    terms = [[(i < j ? 1 + 0.5im : 1 - 0.5im) * f[i]' * f[j] for i in 1:N for j in 1:N if i != j];
+        [f[i]' * f[i] for i in 1:N];
+        [2 * f[i]' * f[i] * f[i+1]' * f[i+1] for i in 1:N-1]]
+    M = matrix_representation(sum(terms) + 1.5, H)
+    @test M isa SparseMatrixCSC{ComplexF64}
+    entries = map(findnz, [matrix_representation(term, H) for term in terms])
+    @test M == sparse((reduce(vcat, getindex.(entries, k)) for k in 1:3)..., dim(H), dim(H)) + 1.5I
+
+    # f[1]' and f[1] map some states out of the space
+    @test_throws ArgumentError matrix_representation(f[1]' + f[1] + 1, H)
+    @test matrix_representation(f[1]' + f[1] + 1, H; projection=true) ==
+          matrix_representation(f[1]', H; projection=true) + matrix_representation(f[1], H; projection=true) + I
+
+    # A constrained space with several groups, and an identity coefficient that widens the element type
+    @boson b
+    Hprod = tensor_product(hilbert_space(f, 1:12), hilbert_space(b, 17))
+    Hc = tensor_product(hilbert_space(f, 1:12), hilbert_space(b, 17); constraint=NumberConservation(1:27))
+    inds = [state_index(state, Hprod) for state in basisstates(Hc)]
+    op = sum(f[i]' * f[i+1] + hc for i in 1:11) + sum(f[i]' * b + hc for i in 1:12) + 2 * b' * b + f[1]' + hc + 0.5im
+    M = matrix_representation(op, Hc; projection=true)
+    @test M isa SparseMatrixCSC{ComplexF64}
+    @test M == matrix_representation(op, Hprod)[inds, inds]
 end
 
 @testitem "Scheduler extension correctness" begin
