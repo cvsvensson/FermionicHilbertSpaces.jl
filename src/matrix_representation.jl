@@ -717,10 +717,21 @@ remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict)
 
 # The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
 _isscalar_operator(op) = op isa Union{Number,UniformScaling} || (op isa Union{NCMul,NCAdd} && NonCommutativeProducts.isscalar(op))
-function _identity_free_zero(H, repr)
+_identity_free_zero(H, repr) = _zero_matrix(H, _eager_repr(repr, H), Int)
+function _eager_repr(repr, H)
     _repr = _canonicalize_repr(repr)
     _repr isa Union{EagerSparseRepr,EagerDenseRepr} || throw(ArgumentError("Only the :sparse and :dense representations are supported on $(typeof(H)). Got $repr."))
-    _zero_matrix(H, _repr, Int)
+    return _repr
+end
+# The matrix of a sum of two-fermion terms, where `entry(term, H)` gives the row, column and value of the one entry of each term
+function _quadratic_matrix(entry, op, H, repr)
+    accumulator = matrix_accumulator(op, H, _eager_repr(repr, H))
+    for term in NCterms(op)
+        outind, inind, amp = entry(term, H)
+        (iszero(outind) || iszero(inind)) && throw(ArgumentError("The operator `$term` contains a factor that is not part of the fermionic space `$H`."))
+        push_inds_amps!(accumulator, outind, inind, amp)
+    end
+    finalize!(accumulator, H)
 end
 
 # Whether every term of `op` is a product of two `FermionSym`s, with one creation and one annihilation

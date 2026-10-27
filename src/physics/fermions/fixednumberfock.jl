@@ -243,6 +243,17 @@ state_index(state::AbstractFockState, H::SingleParticleHilbertSpace) = state_ind
     @test representation(opadd + I, H) == representation(opadd + I, parent(H)) - I
 end
 
+@testitem "Single particle space representation formats" begin
+    @fermions f
+    H = hilbert_space(f, 1:3, SingleParticle())
+    op = sum(rand(ComplexF64) * f[i]' * f[j] for i in 1:3, j in 1:3)
+    M = representation(op, H)
+    D = representation(op, H, :dense)
+    @test D isa Matrix && D == M
+    @test representation(op, H, ComplexF64) == M
+    @test_throws ArgumentError representation(op, H, :lazy)
+end
+
 @testitem "Deprecated special space constructors" begin
     @fermions f
     @majoranas γ
@@ -310,20 +321,13 @@ representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunki
 function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
     _is_quadratic_fermion_operator(op, true) || throw(ArgumentError("Only quadratic, number conserving fermionic operators can be represented on a SingleParticleHilbertSpace. Use `hilbert_space(f, labels)` and `matrix_representation(op, H)` for other operators."))
-    _matrix_representation_single_space(remove_identity(op), H, repr, chunking; kwargs...)
+    _quadratic_matrix(_single_particle_entry, remove_identity(op), H, repr)
 end
-function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::SingleParticleHilbertSpace; kwargs...)
-    if length(op.factors) != 2
-        throw(ArgumentError("Only two-fermion operators are supported for free fermions, got $(length(op.factors)) factors."))
-    end
-    fockstates = (SingleParticleState(mode_position(op.factors[1], H)), SingleParticleState(mode_position(op.factors[2], H)))
-    inind = state_index(fockstates[2], H)
-    outind = state_index(fockstates[1], H)
-    sign = (-1)^op.factors[2].creation
-    push!(outinds, outind)
-    push!(ininds, inind)
-    push!(amps, sign * op.coeff)
-    return (outinds, ininds, amps)
+function _single_particle_entry(term, H)
+    a, b = term.factors
+    outind = state_index(SingleParticleState(mode_position(a, H)), H)
+    inind = state_index(SingleParticleState(mode_position(b, H)), H)
+    return outind, inind, (-1)^b.creation * term.coeff
 end
 
 
