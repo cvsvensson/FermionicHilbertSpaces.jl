@@ -831,6 +831,27 @@ end
     @test state_index(FermionicHilbertSpaces.BosonicState(3), Hb) == 0
 end
 
+@testitem "state_index of spaces whose states are strings or characters" begin
+    using FermionicHilbertSpaces: state_index, basisstate, GenericHilbertSpace, constrain_space
+    for states in (["a", "b", "c"], ['a', 'b', 'c'])
+        H = GenericHilbertSpace(:A, states)
+        Hc = constrain_space(H, states[[1, 3]])
+        @test [state_index(s, H) for s in states] == [1, 2, 3]
+        @test [state_index(s, Hc) for s in states] == [1, 0, 2]
+        @test basisstate(states[3], Hc) == states[3]
+        @test_throws MethodError state_index(1, H)
+    end
+end
+
+@testitem "state_index of states that do not fit a product space" begin
+    using FermionicHilbertSpaces: state_index, ProductState, FockNumber
+    @fermions f
+    @spin s 1 // 2
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(s))
+    @test state_index(ProductState((FockNumber(1),)), H) == 0
+    @test_throws MethodError state_index(FockNumber(1), H)
+end
+
 @testitem "Basis states collection" begin
     @fermions f
     H = hilbert_space(f, 1:70)
