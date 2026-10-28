@@ -334,10 +334,6 @@ end
 function finalize!(m::Matrix, space)
     return m
 end
-function finalize!(m::Matrix, N::Int, M::Int)
-    size(m) == (N, M) || throw(ArgumentError("The matrix must have size ($N, $M), got $(size(m))."))
-    return m
-end
 
 
 function _matrix_representation_single_space(op::NCAdd, space, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
