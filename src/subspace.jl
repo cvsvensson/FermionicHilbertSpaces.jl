@@ -1,33 +1,54 @@
 """
     AbstractSubspace{B,P} <: AbstractHilbertSpace{B}
 
-A space spanned by a subset of the basis states of `parent(H)::P`, which is never itself an
-`AbstractSubspace`. A subtype implements
+A space spanned by some of the basis states of `parent(H)::P`. A subtype implements
 
-- `parent(H)`: the space whose basis states `H` selects.
-- `subspace_states(H)`: the basis states of `H`, in order.
-- `subspace_index(H)`: a `SubspaceIndex` of `subspace_states(H)`.
-- `rewrap(H, newparent, index)`: the space with the same states as `H` over `newparent`, with
-  the `SubspaceIndex` `index`.
+- `parent(H)`: the space that `H` is a subspace of. It is never an `AbstractSubspace`.
+- `subspace_states(H)`: the basis states of `H`, in order, each appearing once.
+- `subspace_index(H)`: `SubspaceIndex(parent(H), subspace_states(H))`, built once by the
+  constructor.
+- `rewrap(H, newparent)`: the space with the same states and index as `H` over `newparent`,
+  which has the same basis states and `state_index` as `parent(H)`.
 
 It may also implement `subspace_key(H)`, the values compared by `==` and `hash`, which
-defaults to `(parent(H), subspace_states(H))`, and `_show_details(io, H)`, printed after the
+defaults to `(parent(H), subspace_states(H))`, and `show_details(io, H)`, printed after the
 parent by `show`.
+
+The states are meant to be basis states of `parent(H)`, but this is not checked. Some
+spaces store other states over a `FermionicSpace` parent: `hilbert_space(f, labels, states)`
+with `FixedNumberFockState`s, `BdG` spaces with `NambuState`s and `SingleParticle` spaces
+with `SingleParticleState`s.
+
+`SubspaceIndex` throws when its `parent` is an `AbstractSubspace`, so a constructor that
+builds the index as above keeps `parent(H)` from being a subspace. The package calls
+`rewrap` only with `newparent` made from `parent(H)` by `add_tag`, `TransposedSpace` or a
+Majorana space, none of which is a subspace.
+
+A subtype gets `dim`, `basisstates`, `basisstate`, `state_index`, `==`, `hash`, `show`,
+`add_tag` and `TransposedSpace`. The functions that describe its modes and apply operators
+are forwarded to `parent(H)`, so that matrix representations, tensor products, partial
+traces, `subregion` and `constrain_space` work on it.
 """
 abstract type AbstractSubspace{B,P} <: AbstractHilbertSpace{B} end
 
 """
     SubspaceIndex(parent, states)
 
-Lookup of the position of each of `states` among `states`, for `subspace_index`, where
-`states` are basis states of `parent`. Throws an `ArgumentError` if a state appears more
-than once.
+The position in `states` of each of `states`, which `state_index(state, H)` of a subspace
+`H` with these states over `parent` returns. Throws an `ArgumentError` if a state appears
+more than once, or if `parent` is an `AbstractSubspace`.
 """
 struct SubspaceIndex{B}
     positions::Union{Vector{Int32},Dict{B,Int}}
     SubspaceIndex{B}(positions) where {B} = new{B}(positions)
 end
-SubspaceIndex(parent, states) = SubspaceIndex{eltype(states)}(something(root_index_table(parent, states), position_dict(states)))
+SubspaceIndex(parent, states) = SubspaceIndex{eltype(states)}(something(index_table(parent, states), position_dict(states)))
+SubspaceIndex(::AbstractSubspace, states) = throw(nested_subspace_error())
+nested_subspace_error() = ArgumentError("The parent of a subspace cannot be a subspace.")
+
+# `space` and `states`, or, when `space` is a subspace, its parent and those of `states` in it.
+unnest(space, states) = (space, states)
+unnest(space::AbstractSubspace, states) = (parent(space), collect(Iterators.filter(s -> !iszero(state_index(s, space)), states)))
 
 subspace_key(H::AbstractSubspace) = (parent(H), subspace_states(H))
 Base.:(==)(H1::AbstractSubspace, H2::AbstractSubspace) = H1 === H2 || (nameof(typeof(H1)) === nameof(typeof(H2)) && subspace_key(H1) == subspace_key(H2))
@@ -36,7 +57,7 @@ Base.hash(H::AbstractSubspace, h::UInt) = hash(subspace_key(H), h)
 dim(H::AbstractSubspace) = length(subspace_states(H))
 basisstates(H::AbstractSubspace) = BasisStates(H, subspace_states(H))
 Base.@propagate_inbounds basisstate(n::Integer, H::AbstractSubspace) = subspace_states(H)[n]
-state_index(state, H::AbstractSubspace) = state_position(subspace_index(H).positions, state, H)
+state_index(state::Union{AbstractBasisState,B}, H::AbstractSubspace{B}) where {B} = state_position(subspace_index(H).positions, state, H)
 state_index(state::Union{AbstractString,AbstractChar}, H::AbstractSubspace) = state_index(interpret_state(state, H), H)
 isconstrained(H::AbstractSubspace) = true
 
@@ -52,8 +73,7 @@ partial_transpose_phase_factor(s1, s2, H::AbstractSubspace) = partial_transpose_
 state_mapper(H::AbstractSubspace, Hs) = state_mapper(parent(H), Hs)
 _apply_local_operators(ops, state::AbstractBasisState, H::AbstractSubspace, precomp) = _apply_local_operators(ops, state, parent(H), precomp)
 
-add_tag(H::AbstractSubspace, tag) = rewrap(H, add_tag(parent(H), tag), subspace_index(H))
-_wrap(space, H::AbstractSubspace) = rewrap(H, space, SubspaceIndex(space, subspace_states(H)))
+add_tag(H::AbstractSubspace, tag) = rewrap(H, add_tag(parent(H), tag))
 
 @testitem "Nested subspaces equal the directly constructed ones" begin
     using FermionicHilbertSpaces: fermionnumber
@@ -73,7 +93,7 @@ _wrap(space, H::AbstractSubspace) = rewrap(H, space, SubspaceIndex(space, subspa
 end
 
 @testitem "A subtype implementing only the AbstractSubspace primitives" begin
-    using FermionicHilbertSpaces: AbstractSubspace, SubspaceIndex, state_index, basisstate
+    using FermionicHilbertSpaces: AbstractSubspace, SubspaceIndex
     import FermionicHilbertSpaces: subspace_states, subspace_index, rewrap
     struct EveryOtherState{B,P} <: AbstractSubspace{B,P}
         space::P
@@ -87,7 +107,7 @@ end
     Base.parent(H::EveryOtherState) = H.space
     subspace_states(H::EveryOtherState) = H.states
     subspace_index(H::EveryOtherState) = H.lookup
-    rewrap(H::EveryOtherState, space, index) = EveryOtherState(space, H.states, index)
+    rewrap(H::EveryOtherState, space) = EveryOtherState(space, H.states, H.lookup)
 
     @fermions f
     H = hilbert_space(f, 1:3)

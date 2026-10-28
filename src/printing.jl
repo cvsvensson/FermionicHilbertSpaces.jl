@@ -152,12 +152,12 @@ function Base.show(io::IO, H::AbstractSubspace)
         print(io, "$(dim(H))-dimensional $name\n")
         print(io, "Parent: ")
         show(IOContext(io, :compact => true), parent(H))
-        _show_details(io, H)
+        show_details(io, H)
     end
 end
-_show_details(io, H) = nothing
+show_details(io, H) = nothing
 
-function _show_details(io, H::SectorHilbertSpace)
+function show_details(io, H::SectorHilbertSpace)
     qns = collect(keys(H.qn_to_states))
     nsectors = length(qns)
 

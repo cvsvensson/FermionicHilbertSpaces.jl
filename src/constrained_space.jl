@@ -6,19 +6,18 @@ struct ConstrainedSpace{B,H,S} <: AbstractSubspace{B,H}
     ConstrainedSpace{B,H,S}(parent, states, index) where {B,H,S} = new{B,H,S}(parent, states, index)
 end
 
-function ConstrainedSpace(space::AbstractSubspace, states)
-    ConstrainedSpace(parent(space), collect(Iterators.filter(s -> !iszero(state_index(s, space)), _stored_states(states))))
-end
 function ConstrainedSpace(space, states)
-    stored = _stored_states(states)
-    ConstrainedSpace(space, stored, SubspaceIndex(space, stored))
+    parent, members = unnest(space, states)
+    stored = _stored_states(members)
+    ConstrainedSpace(parent, stored, SubspaceIndex(parent, stored))
 end
 ConstrainedSpace(space::H, states::S, index) where {H,S} = ConstrainedSpace{eltype(states),H,S}(space, states, index)
+ConstrainedSpace(::AbstractSubspace, states, index) = throw(nested_subspace_error())
 
 Base.parent(H::ConstrainedSpace) = H.parent
 subspace_states(H::ConstrainedSpace) = H.states
 subspace_index(H::ConstrainedSpace) = H.index
-rewrap(H::ConstrainedSpace, parent, index) = ConstrainedSpace(parent, H.states, index)
+rewrap(H::ConstrainedSpace, parent) = ConstrainedSpace(parent, H.states, H.index)
 
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
 constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}) = constrain_space(space, NoSymmetry(), states)
@@ -60,13 +59,13 @@ const INDEX_TABLE_RATIO = 32 # maximum table entries per state
 const INDEX_TABLE_MAX_LENGTH = 2^28
 
 """
-    root_index_table(space, states)
+    index_table(space, states)
 
 Table mapping `state_index(state, space)` to the position of `state` in `states`,
 or `0` for states of `space` not in `states`, or `nothing` when no table is used.
 Throws an `ArgumentError` if a state appears more than once.
 """
-function root_index_table(space, states)
+function index_table(space, states)
     (has_arithmetic_state_index(space) && eltype(states) == statetype(space)) || return nothing
     length(states) <= typemax(Int32) || return nothing
     d = dim(space)

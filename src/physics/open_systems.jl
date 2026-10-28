@@ -24,7 +24,7 @@ add_tag(H::TransposedSpace, tag) = TransposedSpace(add_tag(H.parent, tag))
 groups(H::TransposedSpace) = map(TransposedSpace, groups(H.parent))
 factors(H::TransposedSpace) = map(TransposedSpace, factors(H.parent))
 TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, groups(H)))
-TransposedSpace(H::AbstractSubspace) = rewrap(H, TransposedSpace(parent(H)), subspace_index(H))
+TransposedSpace(H::AbstractSubspace) = rewrap(H, TransposedSpace(parent(H)))
 state_mapper(H::TransposedSpace, Hs) = state_mapper(H.parent, Hs)
 combine_states(states, H::TransposedSpace) = combine_states(states, H.parent)
 Base.parent(H::TransposedSpace) = H.parent
@@ -229,6 +229,4 @@ function _apply_local_operators(op, state, space::TransposedSpace, precomp)
 end
 
 maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))
-function _wrap(space, ::TransposedSpace)
-    TransposedSpace(space)
-end
+rewrap(::TransposedSpace, space) = TransposedSpace(space)

@@ -39,6 +39,8 @@ export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export SingleParticle, BdG
 export symmetric_sector
 
+public AbstractSubspace, SubspaceIndex, subspace_states, subspace_index, rewrap, subspace_key, show_details
+
 """
     HC
 Represents the Hermitian conjugate.

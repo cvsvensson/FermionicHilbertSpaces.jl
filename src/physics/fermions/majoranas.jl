@@ -233,7 +233,7 @@ function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...
 end
 @deprecate majorana_hilbert_space(y, labels, args...; kwargs...) hilbert_space(y, labels, args...; kwargs...)
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
-MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = _wrap(MajoranaHilbertSpace(majoranaindices, parent(space), sym), space)
+MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
 
 function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
     parent_subregion = subregion(parent(Hsub), parent(H))
