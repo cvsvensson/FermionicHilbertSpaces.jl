@@ -965,6 +965,13 @@ function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, 
     Is = Int[]
     Js = Int[]
     Vs = T[]
+    # When every combination of a subsystem state and a complement state is in H, the number of terms is exactly dim(H) * dim(Hsub).
+    if dim(H) == dim(Hsub) * dim(complement)
+        n = dim(H) * dim(Hsub)
+        sizehint!(Is, n)
+        sizehint!(Js, n)
+        sizehint!(Vs, n)
+    end
     _foreach_partial_trace_term(CartesianIndices((dim(H), dim(H))), H, Hsub, complement, mapper, alg; phase_factors) do J1, J2, K1, K2, v
         push!(Is, indK[K1, K2])
         push!(Js, indJ[J1, J2])
