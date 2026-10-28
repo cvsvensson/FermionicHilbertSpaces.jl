@@ -336,7 +336,7 @@ end
 
 const SPARSE_BLOCK_SIZE = 4096
 # Sparse matrices of spaces up to this dimension are faster to build with `_accumulated_matrix`
-const ACCUMULATED_SPARSE_MAX_DIM = 2^16
+const ACCUMULATED_SPARSE_MAX_DIM = 2^13
 
 # The matrix of `sum(terms) + coeff * I` with element type `T`
 _terms_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
