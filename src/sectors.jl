@@ -21,16 +21,21 @@ function sector_space(space, states, sector_function, constraint)
     _qntostates = groupby(sector_function, states, B)
     _sector_space(space, _qntostates, constraint)
 end
-function groupby(f::F, itr; sortkeys=false, sortvals=false) where {F}
-    B = eltype(itr)
-    d = OrderedDict{Any,Vector{B}}()
+function _group(f::F, itr, ::Type{B}) where {F,B}
+    K = nonmissingtype(Base.promote_op(f, eltype(itr)))
+    _group!(OrderedDict{isconcretetype(K) ? K : Any,Vector{B}}(), f, itr)
+end
+function _group!(d, f::F, itr) where {F}
     for x in itr
         key = f(x)
         ismissing(key) && continue
-        push!(get!(d, key) do
-            B[]
-        end, x)
+        push!(get!(valtype(d), d, key), x)
     end
+    d
+end
+function groupby(f::F, itr; sortkeys=false, sortvals=false) where {F}
+    B = eltype(itr)
+    d = _group(f, itr, B)
     _ks = identity.(keys(d))
     K = eltype(_ks)
     ks = sortkeys ? sort!(_ks) : _ks
@@ -41,14 +46,7 @@ function groupby(f::F, itr; sortkeys=false, sortvals=false) where {F}
     newdict
 end
 function groupby(f::F, itr, ::Type{B}; sortkeys=:auto, sortvals=false) where {F,B}
-    d = OrderedDict{Any,Vector{B}}()
-    for x in itr
-        key = f(x)
-        ismissing(key) && continue
-        push!(get!(d, key) do
-            B[]
-        end, x)
-    end
+    d = _group(f, itr, B)
     _ks = identity.(keys(d))
     K = eltype(_ks)
     sortkeys = sortkeys == :auto ? Base.hasmethod(isless, Tuple{K,K}) : false
