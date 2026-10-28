@@ -54,7 +54,9 @@ basisstate
     state_index(state, H)
 
 Return the index of the basis state `state` in the Hilbert space `H`, the inverse of
-`basisstate`. Returns `0` if `state` is not a state of `H`; no exception is thrown in that case.
+`basisstate`. Returns `0` if `state` has the state type of `H` but is not a basis state of `H`.
+Constrained spaces and sectors also return `0` for an `AbstractBasisState` of another type.
+Other arguments are not supported and may throw; an integer, for example, throws a `MethodError`.
 """
 state_index
 
