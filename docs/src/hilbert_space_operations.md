@@ -214,7 +214,6 @@ from `m`.
 `embed(m, Hsub => H)` returns the compression of `m ⊗ I` onto `H`, the adjoint of the partial
 trace. By default it throws if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude,
 as `matrix_representation` does for an operator that does not preserve the constraint of `H`.
-An operator that preserves the particle number of a number-conserving `H` embeds without error.
 
 The maps `partial_trace(H => Hsub)` and `embed(Hsub => H)` check each input they are applied
 to in the same way; `sparse(op)` is the unchecked map.

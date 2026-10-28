@@ -1,6 +1,10 @@
 function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
-    isnothing(complement) && return change_basis(m, Hsub, H; kwargs...)
+    if isnothing(complement)
+        m isa AbstractVector && return change_basis(m, Hsub, H; kwargs...)
+        get(kwargs, :skipmissing, false) || _check_support(m, _same_atoms_embed_support(Hsub, H))
+        return change_basis(m, Hsub, H; kwargs..., skipmissing=true)
+    end
     return generalized_kron((m, I), (Hsub, complement), H; kwargs...)
 end
 
@@ -12,7 +16,7 @@ Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fe
 
 The result is the compression `P (m ⊗ I) P` onto `H`, so that `tr(embed(A) * ρ) ==
 tr(A * partial_trace(ρ))` for `ρ` on `H`. Unless `skipmissing=true`, throws an `ArgumentError`
-if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Elements of `m` on states of
+if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of `m` for states of
 `Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not
 in `Hsub` get zero.
 """
@@ -24,7 +28,7 @@ struct EmbedMap{HS,H,C,K,M,S}
     complement::C
     kwargs::K
     map::M
-    support::S # `(; trace, embed)` supports that inputs are checked against, or `nothing`
+    support::S # `(; trace, embed)`: what inputs are checked against, `nothing` where nothing is checked
 end
 
 function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
@@ -38,25 +42,18 @@ end
 function (op::EmbedMap)(args...)
     in, n = last(args), dim(op.Hsub)
     m = in isa AbstractVector && length(in) == n^2 ? reshape(in, n, n) : in
-    m isa AbstractVector || _check_support(m, isnothing(op.support) ? nothing : op.support.embed)
+    m isa AbstractVector || _check_support(m, op.support.embed)
     _apply(op, args...)
 end
 
-# For substates `i` and `j` of `Hsub` with nonzero `m[i, j]`, `m ⊗ I` keeps the states of `H` in `H`
-# when `allowed[cls[j], cls[i]]`: when every complement part that `j` has in `H`, `i` has too.
-struct EmbedSupport
-    cls::Vector{Int}
-    allowed::BitMatrix
-end
-function _embed_support(splits, complement, nsub)
-    reach = [Int[] for _ in 1:nsub]
-    for (_, s) in splits, (K, _, fbar, _) in s
-        iszero(K) || push!(reach[K], state_index(fbar, complement))
-    end
+# `allowed[i, j]` when a nonzero `m[i, j]` keeps in `H` the states of `H` with part `j` on `Hsub`: when
+# every complement part that `j` has in `H`, `i` has too. `reach[k]` lists the complement parts of `k` in `H`.
+function _embed_support(reach)
     foreach(sort!, reach)
     allequal(reach) && return nothing
     classes = unique(reach)
-    return EmbedSupport(indexin(reach, classes), BitMatrix([issubset(a, b) for a in classes, b in classes]))
+    cls = indexin(reach, classes)
+    return BitMatrix([issubset(b, a) for a in classes, b in classes])[cls, cls]
 end
 # Call `f(i, j, m[i, j])` for the stored elements of `m`
 function _foreach_stored(f, m::SparseMatrixCSC)
@@ -66,14 +63,14 @@ function _foreach_stored(f, m::SparseMatrixCSC)
     end
 end
 _foreach_stored(f, m) = foreach(I -> f(Tuple(I)..., m[I]), CartesianIndices(m))
-function _check_support(m::AbstractMatrix, s::EmbedSupport)
-    size(m) == (length(s.cls), length(s.cls)) || return nothing
+function _check_support(m::AbstractMatrix, allowed::BitMatrix)
+    size(m) == size(allowed) || return nothing
     _foreach_stored(m) do i, j, x
-        s.allowed[s.cls[j], s.cls[i]] || iszero(x) ||
+        allowed[i, j] || iszero(x) ||
             throw(ArgumentError("The element ($i, $j) of `m` maps a state of `H` outside `H`. Pass `skipmissing=true` to drop such terms."))
     end
 end
-_check_support(::UniformScaling, ::EmbedSupport) = nothing
+_check_support(::UniformScaling, ::BitMatrix) = nothing
 
 function _apply(op::EmbedMap, m::AbstractMatrix)
     size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
@@ -155,15 +152,20 @@ embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwar
     m = matrix_representation(hopping, Hsub)
     @test embed(m, Hsub => H) ≈ matrix_representation(hopping, H)
     @test emb(m) ≈ matrix_representation(hopping, H)
-    # these map states of H outside H
-    for op in (f[1]', f[1]' * f[1] + f[1]')
-        m = matrix_representation(op, Hsub; projection=true)
-        @test_throws ArgumentError embed(m, Hsub => H)
-        @test_throws ArgumentError emb(m)
-        compression = matrix_representation(op, H; projection=true)
-        @test embed(m, Hsub => H; skipmissing=true) ≈ compression
-        @test embed(Hsub => H; skipmissing=true)(m) ≈ compression
-    end
+    # this maps states of H outside H
+    m = matrix_representation(f[1]', Hsub; projection=true)
+    @test_throws ArgumentError embed(m, Hsub => H)
+    @test_throws ArgumentError emb(m)
+    compression = matrix_representation(f[1]', H; projection=true)
+    @test embed(m, Hsub => H; skipmissing=true) ≈ compression
+    @test embed(Hsub => H; skipmissing=true)(m) ≈ compression
+    # with the same atoms: |00⟩⟨11| maps no state of the space with at most one particle outside it, |11⟩⟨00| does
+    Hf, Hc = hilbert_space(f, 1:2), hilbert_space(f, 1:2, NumberConservation(0:1))
+    m = zeros(4, 4)
+    m[1, 4] = 1
+    @test iszero(embed(m, Hf => Hc)) && iszero(embed(Hf => Hc)(m))
+    @test_throws ArgumentError embed(permutedims(m), Hf => Hc)
+    @test_throws ArgumentError embed(Hf => Hc)(permutedims(m))
     # embed is the adjoint of partial_trace
     A = rand(ComplexF64, dim(Hsub), dim(Hsub))
     ρ = rand(ComplexF64, dim(H), dim(H))

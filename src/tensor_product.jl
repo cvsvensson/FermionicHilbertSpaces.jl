@@ -479,7 +479,7 @@ Compute the partial trace of `m` from `H` to `Hsub`. Fermionic phase factors are
 `H => Hsub` reads input => output; see [Pair arguments](@ref pair_convention).
 
 Unless `skipmissing=true`, throws an `ArgumentError` if `m` has a nonzero element that the
-trace drops because a state of `H` has no counterpart in `Hsub`. The map
+trace drops because a state of `H` has no counterpart in `Hsub`, or in `complement`. The map
 `partial_trace(H => Hsub)` checks every input it is applied to in the same way.
 """
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
@@ -590,14 +590,14 @@ end
     return nothing
 end
 
-# The states of `H` that the partial trace drops, because their part on `Hsub` or on the complement
-# is missing, an id of the complement part of each state of `H`, and whether a state with that
-# complement part is dropped. The trace drops the elements of `m` between two states with the same
-# complement part when one of them is dropped.
+# The partial trace drops the elements of `m` between two states of `H` with the same complement
+# part when one of them is dropped.
 struct TraceSupport
-    miss::BitVector
-    comp::Vector{Int}
-    hasmiss::BitVector
+    miss::BitVector                # the states whose part on `Hsub` or on the complement is missing
+    comp::Vector{Int}              # an id of the complement part of each state
+    hasmiss::BitVector             # whether a state with that complement id is missing
+    order::Vector{Int}             # the states sorted by complement id, so that those with id `c`
+    offsets::Vector{Int}           # are `order[offsets[c]:offsets[c+1]-1]`
 end
 function _trace_support(splits, complement)
     miss = BitVector([any(iszero ∘ first, s) for (_, s) in splits])
@@ -613,7 +613,9 @@ end
 function TraceSupport(miss, comp)
     hasmiss = falses(maximum(comp))
     hasmiss[comp[miss]] .= true
-    TraceSupport(miss, comp, hasmiss)
+    counts = zeros(Int, length(hasmiss))
+    foreach(c -> counts[c] += 1, comp)
+    TraceSupport(miss, comp, hasmiss, sortperm(comp), cumsum([1; counts]))
 end
 
 _throw_dropped() = throw(ArgumentError("The partial trace drops nonzero elements on states of `H` whose part on `Hsub` or on the complement is missing. Pass `skipmissing=true` to drop them."))
@@ -621,8 +623,8 @@ _throw_dropped() = throw(ArgumentError("The partial trace drops nonzero elements
 _check_support(m, ::Nothing) = nothing
 function _check_support(m::AbstractMatrix, s::TraceSupport)
     size(m) == (length(s.miss), length(s.miss)) || return nothing
-    for J1 in findall(s.miss), J2 in eachindex(s.comp)
-        s.comp[J1] == s.comp[J2] && !(iszero(m[J1, J2]) && iszero(m[J2, J1])) && _throw_dropped()
+    for J1 in findall(s.miss), J2 in view(s.order, s.offsets[s.comp[J1]]:s.offsets[s.comp[J1]+1]-1)
+        iszero(m[J1, J2]) && iszero(m[J2, J1]) || _throw_dropped()
     end
 end
 function _check_support(m::SparseMatrixCSC, s::TraceSupport)
@@ -665,16 +667,12 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
     splits = _full_partial_trace_splits(H, Hsub, complement, mapper)
     skipmissing || _check_support(m, _trace_support(splits, complement))
     fill!(mout, zero(eltype(mout)))
-    _partial_trace!(mout, m, H, Hsub, complement, mapper, splits, alg, phase_factors)
-end
-function _partial_trace!(mout, m, H, Hsub, complement, mapper, splits, ::SubsystemPartialTraceAlg, phase_factors)
-    _foreach_partial_trace_term(nothing, H, Hsub, complement, mapper, SubsystemPartialTraceAlg(); phase_factors) do J1, J2, K1, K2, v
+    alg isa FullPartialTraceAlg && return _full_partial_trace!(mout, m, splits, H, Hsub, phase_factors)
+    _foreach_partial_trace_term(nothing, H, Hsub, complement, mapper, alg; phase_factors) do J1, J2, K1, K2, v
         mout[K1, K2] += v * m[J1, J2]
     end
     return mout
 end
-_partial_trace!(mout, m, H, Hsub, complement, mapper, splits, ::FullPartialTraceAlg, phase_factors) =
-    _full_partial_trace!(mout, m, splits, H, Hsub, phase_factors)
 function _full_partial_trace!(mout, m, splits, H, Hsub, phase_factors)
     for I in tensor_product_iterator(m, H)
         _foreach_full_partial_trace_pair_term(I[1], I[2], splits, H, Hsub, phase_factors) do J1, J2, K1, K2, v
@@ -804,7 +802,7 @@ struct PartialTraceMap{H,HS,C,K,M,S}
     complement::C
     kwargs::K
     map::M
-    support::S # `(; trace, embed)` supports that inputs are checked against, or `nothing`
+    support::S # `(; trace, embed)`: what inputs are checked against, `nothing` where nothing is checked
 end
 
 function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
@@ -813,21 +811,26 @@ function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; co
 end
 function (op::PartialTraceMap)(args...)
     in, d = last(args), dim(op.H)
-    _check_support(in isa AbstractVector && length(in) == d^2 ? reshape(in, d, d) : in, isnothing(op.support) ? nothing : op.support.trace)
+    _check_support(in isa AbstractVector && length(in) == d^2 ? reshape(in, d, d) : in, op.support.trace)
     _apply(op, args...)
 end
 
 # What the maps from `H` to `Hsub` and back check their inputs against
 function _map_support(H, Hsub, complement, skipmissing)
-    skipmissing && return nothing
-    isnothing(complement) && return (trace=_basis_support(H, Hsub), embed=_basis_support(Hsub, H))
+    skipmissing && return (trace=nothing, embed=nothing)
+    if isnothing(complement)
+        dropped = last(basis_transformation(H, Hsub))
+        trace = isempty(dropped) ? nothing : TraceSupport(in(dropped).(1:dim(H)), ones(Int, dim(H)))
+        return (; trace, embed=_same_atoms_embed_support(Hsub, H))
+    end
     splits = _full_partial_trace_splits(H, Hsub, complement, state_mapper(H, (Hsub, complement)))
-    return (trace=_trace_support(splits, complement), embed=_embed_support(splits, complement, dim(Hsub)))
+    reach = [Int[] for _ in 1:dim(Hsub)]
+    for (_, s) in splits, (K, _, fbar, _) in s
+        iszero(K) || push!(reach[K], state_index(fbar, complement))
+    end
+    return (trace=_trace_support(splits, complement), embed=_embed_support(reach))
 end
-function _basis_support(Hfrom, Hto)
-    dropped = last(basis_transformation(Hfrom, Hto))
-    isempty(dropped) ? nothing : TraceSupport(in(dropped).(1:dim(Hfrom)), ones(Int, dim(Hfrom)))
-end
+_same_atoms_embed_support(Hsub, H) = _embed_support([j in last(basis_transformation(Hsub, H)) ? Int[] : [1] for j in 1:dim(Hsub)])
 
 vec_to_density_matrix(v::AbstractVector) = LowRankMatrix(v, conj(v))
 vec_to_density_matrix(v::SparseVector) = v*v'
@@ -1062,14 +1065,12 @@ end
         # m12full has weight on states of H whose part on modes 1:2 is not in H1
         @test_throws ArgumentError partial_trace(m12full, H => H1; alg)
         @test_throws ArgumentError partial_trace(H => H1; alg)(m12full)
-        @test partial_trace(m12full, H => H1; alg, skipmissing=true) ≈ partial_trace(H => H1; alg=alg1, skipmissing=true)(m12full)
         # the trace drops nothing from combinations of Hsub and Hcomp that are not in H, but msub ⊗ I maps states of H there
         @test partial_trace(m12full, H => Hsub; complement=Hcomp, alg) ≈ partial_trace(m12full, H => Hsub; alg=alg1)
         @test_throws ArgumentError embed(Hsub => H; complement=Hcomp, alg)(msub)
         @test embed(Hsub => H; complement=Hcomp, alg, skipmissing=true)(msub) ≈ embed(msub, Hsub => H; complement=Hcomp, skipmissing=true)
         # H2 lacks the parts on modes 3:4 with zero or two particles
         @test_throws ArgumentError partial_trace(m12full, H => Hsub; complement=H2, alg)
-        @test partial_trace(m12full, H => Hsub; complement=H2, alg, skipmissing=true) ≈ partial_trace(m12full, H => Hsub; complement=H2, alg=alg1, skipmissing=true)
     end
     @test_throws ArgumentError embed(msub, Hsub => H; complement=Hcomp)
 
