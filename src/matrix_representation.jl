@@ -265,13 +265,13 @@ end
 function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
     spaces = groups(space)
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
-    Tterms = mapreduce(mat_eltype, promote_type, prodops)
+    Tterms = _repr_eltype(mapreduce(mat_eltype, promote_type, prodops), repr)
     accumulator = matrix_accumulator(Tterms, length(prodops), (dim(space), dim(space)), repr)
     for prodop in prodops
         operator_indices_and_amplitudes!(accumulator, prodop, space; kwargs...)
     end
     identity_matrix = _matrix_representation(missing, bases, space, repr, NoChunking())
-    T = promote_type(Tterms, Base.promote_op(*, typeof(op.coeff), eltype(identity_matrix)))
+    T = _repr_eltype(promote_type(Tterms, Base.promote_op(*, typeof(op.coeff), eltype(identity_matrix))), repr)
     if Tterms == T
         iszero(op.coeff) || add_identity!!(accumulator, op.coeff, space)
         return finalize!(accumulator, space)
@@ -548,6 +548,20 @@ end
     @test typeof(matrix_representation(op_int, Hc; projection=true)) == typeof(matrix_representation(op_int, H))
     @test typeof(matrix_representation(op_int + 1, Hc; projection=true)) == typeof(matrix_representation(op_int + 1, H))
     @test matrix_representation(op_int + 1, Hc; projection=true) ≈ matrix_representation(op_int + 1, H)[inds, inds]
+end
+
+@testitem "Requested element type on a constrained product space" begin
+    using SparseArrays
+    using FermionicHilbertSpaces: EagerSparseRepr, EagerDenseRepr
+    @fermions f
+    @boson b
+    H = tensor_product(hilbert_space(f, 1:3), hilbert_space(b, 3); constraint=NumberConservation(1:2))
+    op = f[1]' * f[2] + b' * f[1] + 1
+    for (Repr, T) in ((EagerSparseRepr, ComplexF32), (EagerDenseRepr, Float32))
+        M = matrix_representation(op, H, Repr{T}())
+        @test eltype(M) == T
+        @test M ≈ matrix_representation(op, H)
+    end
 end
 
 @testitem "Product-space term matrices padded by identities" begin
