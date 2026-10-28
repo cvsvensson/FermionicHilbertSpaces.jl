@@ -9,14 +9,16 @@ struct SectorHilbertSpace{B,P,Q,C} <: AbstractSubspace{B,P}
     ordered_basis_states::Vector{B}
     qn_to_states::OrderedDict{Q,Vector{B}}
     constraint::C
-    index::Union{Vector{Int32},Dict{B,Int}}
+    index::SubspaceIndex{B}
     SectorHilbertSpace{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index) where {B,P,Q,C} = new{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index)
 end
 SectorHilbertSpace(parent::P, ordered_basis_states::AbstractVector{B}, qn_to_states::AbstractDict{Q}, constraint::C, index) where {B,P,Q,C} = SectorHilbertSpace{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index)
-SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, state_positions(space, ordered_basis_states))
+SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, SubspaceIndex(space, ordered_basis_states))
 SectorHilbertSpace(space::AbstractSubspace, ordered_basis_states, qn_to_states, constraint) = SectorHilbertSpace(parent(space), ordered_basis_states, qn_to_states, constraint)
 
+Base.parent(H::SectorHilbertSpace) = H.parent
 subspace_states(H::SectorHilbertSpace) = H.ordered_basis_states
+subspace_index(H::SectorHilbertSpace) = H.index
 subspace_key(H::SectorHilbertSpace) = (parent(H), H.ordered_basis_states, H.qn_to_states)
 rewrap(H::SectorHilbertSpace, parent, index) = SectorHilbertSpace(parent, H.ordered_basis_states, H.qn_to_states, H.constraint, index)
 

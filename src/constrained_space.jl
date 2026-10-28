@@ -2,7 +2,7 @@
 struct ConstrainedSpace{B,H,S} <: AbstractSubspace{B,H}
     parent::H
     states::S
-    index::Union{Vector{Int32},Dict{B,Int}}
+    index::SubspaceIndex{B}
     ConstrainedSpace{B,H,S}(parent, states, index) where {B,H,S} = new{B,H,S}(parent, states, index)
 end
 
@@ -11,11 +11,13 @@ function ConstrainedSpace(space::AbstractSubspace, states)
 end
 function ConstrainedSpace(space, states)
     stored = _stored_states(states)
-    ConstrainedSpace(space, stored, state_positions(space, stored))
+    ConstrainedSpace(space, stored, SubspaceIndex(space, stored))
 end
 ConstrainedSpace(space::H, states::S, index) where {H,S} = ConstrainedSpace{eltype(states),H,S}(space, states, index)
 
+Base.parent(H::ConstrainedSpace) = H.parent
 subspace_states(H::ConstrainedSpace) = H.states
+subspace_index(H::ConstrainedSpace) = H.index
 rewrap(H::ConstrainedSpace, parent, index) = ConstrainedSpace(parent, H.states, index)
 
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
@@ -62,6 +64,7 @@ const INDEX_TABLE_MAX_LENGTH = 2^28
 
 Table mapping `state_index(state, space)` to the position of `state` in `states`,
 or `0` for states of `space` not in `states`, or `nothing` when no table is used.
+Throws an `ArgumentError` if a state appears more than once.
 """
 function root_index_table(space, states)
     (has_arithmetic_state_index(space) && eltype(states) == statetype(space)) || return nothing
@@ -72,12 +75,20 @@ function root_index_table(space, states)
     for (i, state) in enumerate(states)
         k = state_index(state, space)
         iszero(k) && return nothing
+        iszero(table[k]) || throw(_duplicate_state_error(state))
         table[k] = i
     end
     return table
 end
-# Index from each of `states` to its position: a table over the arithmetic `state_index` of `space` when it fits, else a `Dict`.
-state_positions(space, states) = something(root_index_table(space, states), Dict{eltype(states),Int}(s => i for (i, s) in enumerate(states)))
+# The position of each of `states`, which must appear once each.
+function position_dict(states)
+    d = Dict{eltype(states),Int}()
+    for (i, state) in enumerate(states)
+        get!(d, state, i) == i || throw(_duplicate_state_error(state))
+    end
+    return d
+end
+_duplicate_state_error(state) = ArgumentError("The state `$state` appears more than once.")
 state_position(d::Dict, state, H) = get(d, state, 0)
 function state_position(table::Vector{Int32}, state, H)
     (state isa statetype(H) || same_state_kind(state, statetype(H))) || return 0
