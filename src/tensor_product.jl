@@ -617,11 +617,7 @@ partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractH
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
     size(mout) == (dim(Hsub), dim(Hsub)) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(mout))"))
-    if isnothing(complement)
-        U = basis_transformation(Hsub, H)
-        mout .= U * m * U'
-        return mout
-    end
+    isnothing(complement) && return copyto!(mout, change_basis(m, H, Hsub; kwargs...))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
 partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
@@ -1107,6 +1103,17 @@ end
             @test emb(Msmall) ≈ pt(Msmall) ≈ partial_trace(Msmall, Hsmall => Hbig) ≈ embed(Msmall, Hsmall => Hbig)
         end
     end
+end
+
+@testitem "In-place partial trace onto the same atoms" begin
+    import FermionicHilbertSpaces: partial_trace!
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    Hsub = hilbert_space(f, 1:2, ParityConservation()) # the same states, ordered by parity
+    m = rand(ComplexF64, dim(H), dim(H))
+    mout = zeros(ComplexF64, dim(Hsub), dim(Hsub))
+    @test partial_trace!(mout, m, H => Hsub) === mout
+    @test mout ≈ partial_trace(m, H => Hsub)
 end
 
 @testitem "change_basis requires the same atoms" begin
