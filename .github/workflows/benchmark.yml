@@ -12,3 +12,55 @@ jobs:
       - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
           julia-version: '1'
+
+      - name: List performance regressions
+        shell: bash
+        env:
+          GITHUB_TOKEN: ""
+          BASE_REV: ${{ github.event.repository.default_branch }}
+          HEAD_REV: ${{ github.event.pull_request.head.sha }}
+        run: |
+          julia -e '
+            using AirspeedVelocity: load_results
+            const MAX_RATIO = 1.5 # largest PR/base ratio of the median time or of the memory not reported
+            base, head = ENV["BASE_REV"], ENV["HEAD_REV"]
+            pkg = String(only(m[1] for m in eachmatch(r"^name\s*=\s*\"(.*)\"$"m, read("Project.toml", String))))
+            results = load_results(pkg, [base, head]; input_dir="results")
+            regressions = String[]
+            for (name, new) in results[head]
+                (name == "time_to_load" || !haskey(results[base], name)) && continue
+                old = results[base][name]
+                for (key, label) in (("median", "time"), ("memory", "memory"))
+                    ratio = new[key] / max(old[key], 1)
+                    ratio > MAX_RATIO && push!(regressions, "| `$name` | $label | × $(round(ratio, digits=2)) |")
+                end
+            end
+            open("regressions.md", "w") do io
+                isempty(regressions) && return
+                println(io, "### ⚠️ Performance regressions\n\nBenchmarks more than × $MAX_RATIO slower or larger than on `$base`:\n")
+                println(io, "| benchmark | | PR / $base |\n|---|---|---|")
+                foreach(r -> println(io, r), regressions)
+            end'
+
+      - name: Comment on performance regressions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          marker='<!-- performance-regressions -->'
+          existing=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | tail -n 1)
+          if [[ -s regressions.md ]]; then
+            body="$marker"$'\n'"$(cat regressions.md)"
+          elif [[ -n "$existing" ]]; then
+            body="$marker"$'\n'"No performance regressions in the latest benchmark run."
+          else
+            exit 0
+          fi
+          if [[ -n "$existing" ]]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$existing" -f body="$body" > /dev/null
+          else
+            gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="$body" > /dev/null
+          fi
