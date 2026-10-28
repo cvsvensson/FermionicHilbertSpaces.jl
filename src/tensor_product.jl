@@ -646,9 +646,9 @@ function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, :
     return nothing
 end
 
-# For each basis state f of `H`: `((K, fbar, w), ...)`, with one entry per split of f into
-# (fsub, fbar), where K is the index of fsub in `Hsub`, or 0 if fsub is not in `Hsub` or fbar is
-# not in `complement`. w includes the phase factor σ of f with the first state split off the same
+# For each basis state f of `H`: `((K, Kbar, w), ...)`, with one entry per split of f into
+# (fsub, fbar), where K and Kbar are the indices of fsub in `Hsub` and of fbar in `complement`,
+# and K is 0 if fsub is not in `Hsub` or fbar is not in `complement`. w includes the phase factor σ of f with the first state split off the same
 # complement state, so that the phase factor of a pair of states is σ1 * σ2.
 function _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
     refs = Vector{Union{Nothing,Tuple{eltype(basisstates(H)),eltype(basisstates(Hsub))}}}(nothing, dim(complement))
@@ -656,11 +656,11 @@ function _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
         substates, amps = split_state(f, mapper)
         map(substates, amps) do (fsub, fbar), w
             Kbar = state_index(fbar, complement)
-            iszero(Kbar) && return (0, fbar, w)
+            iszero(Kbar) && return (0, Kbar, w)
             ref = refs[Kbar]
             isnothing(ref) && (ref = refs[Kbar] = (f, fsub))
             σ = phase_factors ? _partial_trace_state_sign(f, fsub, ref[1], ref[2], H, Hsub) : 1
-            (state_index(fsub, Hsub), fbar, w * σ)
+            (state_index(fsub, Hsub), Kbar, w * σ)
         end
     end
 end
@@ -669,10 +669,10 @@ end
 # `splits` has one entry per basis state of `H`, so indexing it bounds-checks J1 and J2.
 # Inlining it into the loops over (J1, J2) matters: most pairs have no contribution.
 @inline function _foreach_full_partial_trace_pair_term(op, J1, J2, splits)
-    for (K1, f1bar, s1) in splits[J1]
+    for (K1, b1, s1) in splits[J1]
         iszero(K1) && continue
-        for (K2, f2bar, s2) in splits[J2]
-            f1bar != f2bar && continue
+        for (K2, b2, s2) in splits[J2]
+            b1 != b2 && continue
             iszero(K2) && continue
             op(J1, J2, K1, K2, s1 * s2)
         end
@@ -711,7 +711,7 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
     covered = if alg isa FullPartialTraceAlg
         splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
         _full_partial_trace!(mout, m, splits, H)
-        BitVector([any(!iszero ∘ first, s) for s in splits])
+        _covered(splits)
     else
         _subsystem_partial_trace!(mout, m, H, Hsub, complement, mapper, phase_factors)
     end
@@ -726,6 +726,37 @@ function _subsystem_partial_trace!(mout, m, H, Hsub, complement, mapper, phase_f
         mout[K1, K2] += v * m[J1, J2]
     end
     return covered
+end
+# Which states of `H` the trace keeps, from the splits of `_full_partial_trace_splits`
+_covered(splits) = BitVector([any(!iszero ∘ first, s) for s in splits])
+# m = U * transpose(V). The complement states b that split off the same subsystem states Ks form
+# a group. With BU[k, (i, r)] = s * U[J, r] for the state J that splits into (Ks[k], bs[i]) with
+# weight s, and BV likewise, each group adds BU * transpose(BV) to mout[Ks, Ks].
+function _subsystem_partial_trace!(mout, m::LowRankMatrix, H, Hsub, complement, mapper, phase_factors)
+    splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
+    # (K, J, s) for each state J that splits into (K, b), per complement state b
+    byb = [eltype(eltype(splits))[] for _ in 1:dim(complement)]
+    for (J, ss) in pairs(splits), (K, b, s) in ss
+        iszero(K) || push!(byb[b], (K, J, s))
+    end
+    groups = Dict{Vector{Int},Vector{eltype(byb)}}() # Ks => the entries of each b in the group
+    for es in byb
+        isempty(es) && continue
+        sort!(es; by=first)
+        push!(get!(() -> eltype(byb)[], groups, first.(es)), es)
+    end
+    (; U, V) = m
+    T = promote_type(eltype(U), eltype(V), partial_trace_phase_factor_eltype(H))
+    for (Ks, ess) in groups
+        BU = Array{T}(undef, length(Ks), length(ess), size(U, 2))
+        BV = similar(BU)
+        for r in axes(BU, 3), (i, es) in pairs(ess), (k, (_, J, s)) in pairs(es)
+            BU[k, i, r] = s * U[J, r]
+            BV[k, i, r] = s * V[J, r]
+        end
+        mout[Ks, Ks] .+= reshape(BU, length(Ks), :) * transpose(reshape(BV, length(Ks), :))
+    end
+    return _covered(splits)
 end
 function _full_partial_trace!(mout, m, splits, H)
     for I in tensor_product_iterator(m, H)
@@ -1135,6 +1166,18 @@ end
         @test pt(zeros(ComplexF64, dim(Hsub), dim(Hsub)), m) ≈ partial_trace(Matrix(m), H => Hsub)
         @test emb(msub) ≈ embed(Matrix(msub), Hsub => H; skipmissing=true)
         @test_throws DimensionMismatch pt(sprand(dim(H) + 1, dim(H) + 1, 0.5))
+    end
+end
+
+@testitem "Partial trace of a low-rank matrix" begin
+    import FermionicHilbertSpaces: LowRankMatrix, FullPartialTraceAlg, SubsystemPartialTraceAlg
+    @fermions f
+    H = hilbert_space(f, 1:6, NumberConservation(3))
+    Hsub = subregion(hilbert_space(f, [1, 3, 5]), H)
+    L = LowRankMatrix(rand(ComplexF64, dim(H), 2), rand(ComplexF64, dim(H), 2))
+    ref = partial_trace(Matrix(L), H => Hsub; alg=FullPartialTraceAlg())
+    for alg in (FullPartialTraceAlg(), SubsystemPartialTraceAlg())
+        @test partial_trace(L, H => Hsub; alg) ≈ ref
     end
 end
 
