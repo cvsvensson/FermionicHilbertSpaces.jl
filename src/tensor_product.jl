@@ -605,65 +605,76 @@ function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, :
     substates = basisstates(Hsub)
     barstates = basisstates(complement)
     (isempty(substates) || isempty(barstates)) && return nothing
-    # (K, J, w, fullstate, substate) for each state in H formed with one complement state;
-    # element types are taken from the first combination.
+    # (K, J, w) for each state of H formed with one complement state, where w includes the phase
+    # factor σ of the state with the first such state, so that the phase factor of a pair is σ1 * σ2.
     f0 = first(substates)
     fullstates0, amps0 = combine_states((f0, first(barstates)), mapper)
-    hits = Tuple{Int,Int,eltype(amps0),eltype(fullstates0),typeof(f0)}[]
+    hits = Tuple{Int,Int,eltype(amps0)}[]
     for fbar in barstates
         empty!(hits)
+        ref = nothing
         for f in substates
             K = state_index(f, Hsub)
             fullstates, amps = combine_states((f, fbar), mapper)
             for (fullf, w) in zip(fullstates, amps)
                 J = state_index(fullf, H)
                 iszero(J) && continue
-                push!(hits, (K, J, w, fullf, f))
+                isnothing(ref) && (ref = (fullf, f))
+                σ = phase_factors ? _partial_trace_state_sign(fullf, f, ref[1], ref[2], H, Hsub) : 1
+                push!(hits, (K, J, w * σ))
             end
         end
-        for (K1, J1, w1, fullf1, f1) in hits, (K2, J2, w2, fullf2, f2) in hits
-            s2 = phase_factors ? partial_trace_phase_factor(f1, f2, Hsub) : 1
-            s1 = phase_factors ? partial_trace_phase_factor(fullf1, fullf2, H) : 1
-            op(J1, J2, K1, K2, w1 * w2 * s2 * conj(s1))
+        for (K1, J1, s1) in hits, (K2, J2, s2) in hits
+            op(J1, J2, K1, K2, s1 * s2)
         end
     end
     return nothing
 end
+
+# The phase factor of the pair (f, fref) of states of `H`, whose parts on `Hsub` are fsub and fsubref.
+# For states with the same complement state, the phase factor of a pair (f1, f2) is the product of
+# the phase factors of (f1, fref) and (f2, fref), for any fref with that complement state.
+_partial_trace_state_sign(f, fsub, fref, fsubref, H, Hsub) =
+    partial_trace_phase_factor(fsub, fsubref, Hsub) * conj(partial_trace_phase_factor(f, fref, H))
 
 function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, ::FullPartialTraceAlg;
     phase_factors=true) where {F}
-    splits = _full_partial_trace_splits(H, Hsub, complement, mapper)
+    splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
     for I in inds
-        _foreach_full_partial_trace_pair_term(op, I[1], I[2], splits, H, Hsub, phase_factors)
+        _foreach_full_partial_trace_pair_term(op, I[1], I[2], splits)
     end
     return nothing
 end
 
-# For each basis state f of `H`: `(f, ((K, fsub, fbar, w), ...))`, with one entry per split of f,
-# where K is the index of fsub in `Hsub`, or 0 if fsub is not in `Hsub` or fbar is not in `complement`.
-function _full_partial_trace_splits(H, Hsub, complement, mapper)
+# For each basis state f of `H`: `((K, fbar, w), ...)`, with one entry per split of f into
+# (fsub, fbar), where K is the index of fsub in `Hsub`, or 0 if fsub is not in `Hsub` or fbar is
+# not in `complement`. w includes the phase factor σ of f with the first state split off the same
+# complement state, so that the phase factor of a pair of states is σ1 * σ2.
+function _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
+    refs = Vector{Union{Nothing,Tuple{eltype(basisstates(H)),eltype(basisstates(Hsub))}}}(nothing, dim(complement))
     map(basisstates(H)) do f
         substates, amps = split_state(f, mapper)
-        (f, map(substates, amps) do (fsub, fbar), w
-            (iszero(state_index(fbar, complement)) ? 0 : state_index(fsub, Hsub), fsub, fbar, w)
-        end)
+        map(substates, amps) do (fsub, fbar), w
+            Kbar = state_index(fbar, complement)
+            iszero(Kbar) && return (0, fbar, w)
+            ref = refs[Kbar]
+            isnothing(ref) && (ref = refs[Kbar] = (f, fsub))
+            σ = phase_factors ? _partial_trace_state_sign(f, fsub, ref[1], ref[2], H, Hsub) : 1
+            (state_index(fsub, Hsub), fbar, w * σ)
+        end
     end
 end
 
 # The FullPartialTraceAlg contributions of the input matrix element (J1, J2).
 # `splits` has one entry per basis state of `H`, so indexing it bounds-checks J1 and J2.
 # Inlining it into the loops over (J1, J2) matters: most pairs have no contribution.
-@inline function _foreach_full_partial_trace_pair_term(op, J1, J2, splits, H, Hsub, phase_factors)
-    f1, splits1 = splits[J1]
-    f2, splits2 = splits[J2]
-    for (K1, f1sub, f1bar, w1) in splits1
+@inline function _foreach_full_partial_trace_pair_term(op, J1, J2, splits)
+    for (K1, f1bar, s1) in splits[J1]
         iszero(K1) && continue
-        for (K2, f2sub, f2bar, w2) in splits2
+        for (K2, f2bar, s2) in splits[J2]
             f1bar != f2bar && continue
             iszero(K2) && continue
-            s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
-            s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
-            op(J1, J2, K1, K2, w1 * w2 * s2 * conj(s1))
+            op(J1, J2, K1, K2, s1 * s2)
         end
     end
     return nothing
@@ -698,9 +709,9 @@ partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace};
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
     fill!(mout, zero(eltype(mout)))
     covered = if alg isa FullPartialTraceAlg
-        splits = _full_partial_trace_splits(H, Hsub, complement, mapper)
-        _full_partial_trace!(mout, m, splits, H, Hsub, phase_factors)
-        BitVector([any(!iszero ∘ first, s) for (_, s) in splits])
+        splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
+        _full_partial_trace!(mout, m, splits, H)
+        BitVector([any(!iszero ∘ first, s) for s in splits])
     else
         _subsystem_partial_trace!(mout, m, H, Hsub, complement, mapper, phase_factors)
     end
@@ -716,21 +727,21 @@ function _subsystem_partial_trace!(mout, m, H, Hsub, complement, mapper, phase_f
     end
     return covered
 end
-function _full_partial_trace!(mout, m, splits, H, Hsub, phase_factors)
+function _full_partial_trace!(mout, m, splits, H)
     for I in tensor_product_iterator(m, H)
-        _foreach_full_partial_trace_pair_term(I[1], I[2], splits, H, Hsub, phase_factors) do J1, J2, K1, K2, v
+        _foreach_full_partial_trace_pair_term(I[1], I[2], splits) do J1, J2, K1, K2, v
             mout[K1, K2] += v * m[J1, J2]
         end
     end
     return mout
 end
 # Sparse input: visit the stored entries with nzrange and pass the stored value to the kernel
-function _full_partial_trace!(mout, m::SparseMatrixCSC, splits, H, Hsub, phase_factors)
+function _full_partial_trace!(mout, m::SparseMatrixCSC, splits, H)
     rows = rowvals(m)
     vals = nonzeros(m)
     for J2 in axes(m, 2), p in nzrange(m, J2)
         x = vals[p]
-        _foreach_full_partial_trace_pair_term(rows[p], J2, splits, H, Hsub, phase_factors) do _, _, K1, K2, v
+        _foreach_full_partial_trace_pair_term(rows[p], J2, splits) do _, _, K1, K2, v
             mout[K1, K2] += v * x
         end
     end
