@@ -236,6 +236,26 @@ function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpa
 end
 
 
+@testitem "Vector tensor product of a fermion group split across spin-carrying targets" begin
+    using LinearAlgebra
+    @fermions f
+    @spin s 1 // 2
+    Hs1 = tensor_product(hilbert_space(f, 2:2), hilbert_space(s))
+    Hs2 = hilbert_space(f, 1:1)
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(s))
+    rep(op, H) = representation(op, H, :dense)
+    # the fermion vacuum with the given amplitudes on the spin states
+    function vacuum(H, n, amplitudes)
+        v = zeros(dim(H))
+        v[findall(iszero, diag(rep(n, H)))] .= amplitudes
+        v
+    end
+    ψ1 = rep(f[2]', Hs1) * vacuum(Hs1, f[2]' * f[2], [0.6, 0.8])
+    ψ2 = rep(f[1]', Hs2) * vacuum(Hs2, f[1]' * f[1], [1.0])
+    reference = rep(f[2]', H) * (rep(f[1]', H) * vacuum(H, f[1]' * f[1] + f[2]' * f[2], [0.6, 0.8]))
+    @test tensor_product((ψ1, ψ2), (Hs1, Hs2), H) ≈ reference
+end
+
 @testitem "generalized_kron_vec! direct call" begin
     using Random
     Random.seed!(1234)
