@@ -607,7 +607,7 @@ function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, :
     barstates = basisstates(complement)
     (isempty(substates) || isempty(barstates)) && return nothing
     # (K, J, w) for each state of H formed with one complement state, where w includes the phase
-    # factor σ of the pair (this state, the first such state), so that the phase factor of a pair is σ1 * σ2.
+    # factor σ of the pair (this state, the first such state), so that the phase factor of a pair is σ1 * conj(σ2).
     f0 = first(substates)
     fullstates0, amps0 = combine_states((f0, first(barstates)), mapper)
     hits = Tuple{Int,Int,eltype(amps0)}[]
@@ -626,15 +626,15 @@ function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, :
             end
         end
         for (K1, J1, s1) in hits, (K2, J2, s2) in hits
-            op(J1, J2, K1, K2, s1 * s2)
+            op(J1, J2, K1, K2, s1 * conj(s2))
         end
     end
     return nothing
 end
 
 # The phase factor of the pair (f, fref) of states of `H`, whose parts on `Hsub` are fsub and fsubref.
-# For states with the same complement state, the phase factor of a pair (f1, f2) is the product of
-# the phase factors of (f1, fref) and (f2, fref), for any fref with that complement state.
+# For states with the same complement state, the phase factor of a pair (f1, f2) is
+# σ(f1) * conj(σ(f2)), where σ(f) is the phase factor of (f, fref) for any fref with that complement state.
 _partial_trace_state_sign(f, fsub, fref, fsubref, H, Hsub) =
     partial_trace_phase_factor(fsub, fsubref, Hsub) * conj(partial_trace_phase_factor(f, fref, H))
 
@@ -651,7 +651,7 @@ end
 # (fsub, fbar), where K and Kbar are the indices of fsub in `Hsub` and of fbar in `complement`,
 # and K is 0 if fsub is not in `Hsub` or fbar is not in `complement`. w includes the phase factor
 # σ of f with the first state split off the same complement state, so that the phase factor of a
-# pair of states is σ1 * σ2.
+# pair of states is σ1 * conj(σ2).
 function _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
     refs = Vector{Union{Nothing,Tuple{eltype(basisstates(H)),eltype(basisstates(Hsub))}}}(nothing, dim(complement))
     map(basisstates(H)) do f
@@ -676,7 +676,7 @@ end
         for (K2, b2, s2) in splits[J2]
             b1 != b2 && continue
             iszero(K2) && continue
-            op(J1, J2, K1, K2, s1 * s2)
+            op(J1, J2, K1, K2, s1 * conj(s2))
         end
     end
     return nothing
