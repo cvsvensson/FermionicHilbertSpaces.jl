@@ -228,7 +228,7 @@ The space spanned by the states ``c_n^\\dagger |0\\rangle`` for the modes `f[l]`
 hilbert_space(f::SymbolicFermionBasis, labels, ::SingleParticle) = SingleParticleHilbertSpace(f, labels)
 @deprecate single_particle_hilbert_space(f, labels) hilbert_space(f, labels, SingleParticle())
 Base.@propagate_inbounds basisstate(ind::Integer, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
-state_index(state::AbstractFockState, H::SingleParticleHilbertSpace) = state_index(state, parent(H))
+_state_index(state, H::SingleParticleHilbertSpace) = _state_index(state, parent(H))
 
 @testitem "Single particle hilbert space" begin
     using LinearAlgebra

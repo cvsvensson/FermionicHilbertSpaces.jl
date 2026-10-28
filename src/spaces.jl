@@ -54,11 +54,14 @@ basisstate
     state_index(state, H)
 
 Return the index of the basis state `state` in the Hilbert space `H`, the inverse of
-`basisstate`. Returns `0` if `state` has the state type of `H` but is not a basis state of `H`.
-Constrained spaces and sectors also return `0` for an `AbstractBasisState` of another type.
-Other arguments are not supported and may throw; an integer, for example, throws a `MethodError`.
+`basisstate`. A string or character that spells a state of `H` is accepted in place of the state.
+Returns `0` for a state of the same kind as the states of `H` (the same type up to type parameters)
+that is not in `H`, and throws a `MethodError` for a value of another kind.
+
+Spaces implement the lookup of a basis state as a method of `_state_index(state, H)`.
 """
-state_index
+state_index(state, H) = _state_index(state, H)
+state_index(state::Union{AbstractString,AbstractChar}, H) = _state_index(interpret_state(state, H), H)
 
 """
 	hilbert_space(args...)
@@ -831,6 +834,29 @@ end
         @test all(i -> state_index(basisstate(i, H), H) == i, 1:dim(H))
     end
     @test state_index(FermionicHilbertSpaces.BosonicState(3), Hb) == 0
+end
+
+@testitem "state_index of strings, transposed spaces and foreign kinds" begin
+    using FermionicHilbertSpaces: TransposedSpace
+    for states in (["a", "b", "c"], ['a', 'b', 'c'])
+        H = GenericHilbertSpace(:A, states)
+        Hc = constrain_space(H, states[[1, 3]])
+        @test [state_index(s, H) for s in states] == [1, 2, 3]
+        @test [state_index(s, Hc) for s in states] == [1, 0, 2]
+        @test [state_index(s, TransposedSpace(H)) for s in states] == [1, 2, 3]
+        @test basisstate(states[3], Hc) == states[3]
+    end
+    @fermions f
+    @spin s 1//2
+    Hf = hilbert_space(f, 1:2)
+    @test state_index(FockNumber(1), TransposedSpace(Hf)) == state_index(FockNumber(1), Hf)
+    H = GenericHilbertSpace(:A, ["a", "b"])
+    @test_throws MethodError state_index(1, H)
+    @test_throws MethodError state_index(BosonicState(0), Hf)
+    @test_throws MethodError state_index(BosonicState(0), constrain_space(H, ["a"]))
+    @test_throws MethodError state_index(BosonicState(0), hilbert_space(f, 1:2, NumberConservation(1)))
+    Hp = tensor_product(Hf, hilbert_space(s))
+    @test_throws MethodError state_index(ProductState((FockNumber(0),)), Hp)
 end
 
 @testitem "Basis states collection" begin

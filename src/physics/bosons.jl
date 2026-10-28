@@ -191,7 +191,7 @@ Base.@propagate_inbounds function basisstate(n::Integer, H::TruncatedBosonicHilb
     BosonicState(n - 1)
 end
 dim(H::TruncatedBosonicHilbertSpace) = H.dimension
-state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace) = 0 <= s.n < dim(H) ? s.n + 1 : 0
+_state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace) = 0 <= s.n < dim(H) ? s.n + 1 : 0
 has_arithmetic_state_index(::TruncatedBosonicHilbertSpace) = true
 add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add_tag(H.sym, tag), H.dimension)
 

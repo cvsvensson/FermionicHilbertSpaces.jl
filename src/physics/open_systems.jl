@@ -9,7 +9,7 @@ Base.:(==)(a::TransposedSpace, b::TransposedSpace) = a.parent == b.parent
 Base.hash(H::TransposedSpace, h::UInt) = hash(H.parent, h)
 basisstates(H::TransposedSpace) = basisstates(H.parent)
 Base.@propagate_inbounds basisstate(i::Integer, H::TransposedSpace) = basisstate(i, H.parent)
-state_index(state::AbstractBasisState, H::TransposedSpace) = state_index(state, H.parent)
+_state_index(state, H::TransposedSpace) = _state_index(state, H.parent)
 has_arithmetic_state_index(H::TransposedSpace) = has_arithmetic_state_index(H.parent)
 dim(H::TransposedSpace) = dim(H.parent)
 isconstrained(H::TransposedSpace) = isconstrained(H.parent)
