@@ -621,7 +621,7 @@ end
 @testitem "Scheduler extension correctness" begin
     using SparseArrays, LinearAlgebra
     using OhMyThreads
-    import FermionicHilbertSpaces: TermChunking, StateChunking
+    import FermionicHilbertSpaces: TermChunking, StateChunking, EagerDenseRepr, EagerSparseRepr
 
     @fermions f
     H = hilbert_space(f, 1:4)
@@ -634,16 +634,29 @@ end
     @test M_terms == M_serial
     @test M_states == M_serial
 
-    M_terms_dense = matrix_representation(op, H, :dense; chunking=TermChunking(scheduler))
-    M_states_dense = matrix_representation(op, H, :dense; chunking=StateChunking(scheduler))
+    M_terms_dense = matrix_representation(op, H, EagerDenseRepr(); chunking=TermChunking(scheduler))
+    M_states_dense = matrix_representation(op, H, EagerDenseRepr(); chunking=StateChunking(scheduler))
     @test M_terms_dense == M_serial
     @test M_states_dense == M_serial
+
+    # Element type of an abstract representation type
+    op_int = f[4]' * f[4] + f[4]' * f[3] * f[3]' * f[4]
+    @test typeof(matrix_representation(op_int, H, EagerSparseRepr{Number}(); chunking=StateChunking(scheduler))) == typeof(matrix_representation(op_int, H, EagerSparseRepr{Number}()))
+
+    # Space of dimension zero
+    H0 = constrain_space(hilbert_space(f, 1:2), NumberConservation(5))
+    @test matrix_representation(f[1]' * f[2] + 1, H0; chunking=StateChunking(scheduler)) == matrix_representation(f[1]' * f[2] + 1, H0)
+
+    # Larger space
+    Hl = hilbert_space(f, 1:13)
+    opl = sum(f[k]' * f[k+1] + hc for k in 1:12) + sum(k * f[k]' * f[k] * f[k+1]' * f[k+1] for k in 1:12) + 1.5
+    @test matrix_representation(opl, Hl; chunking=StateChunking(StaticScheduler(; nchunks=3))) == matrix_representation(opl, Hl)
 end
 
 @testitem "Chunking on product and constrained spaces" begin
     using SparseArrays, LinearAlgebra
     using OhMyThreads
-    import FermionicHilbertSpaces: TermChunking, StateChunking
+    import FermionicHilbertSpaces: TermChunking, StateChunking, EagerDenseRepr
 
     scheduler = StaticScheduler(; nchunks=4)
 
@@ -661,8 +674,8 @@ end
     @test M_terms_prod == M_serial_prod
     @test M_states_prod == M_serial_prod
 
-    M_terms_prod_dense = matrix_representation(op_prod, Hprod, :dense; chunking=TermChunking(scheduler))
-    M_states_prod_dense = matrix_representation(op_prod, Hprod, :dense; chunking=StateChunking(scheduler))
+    M_terms_prod_dense = matrix_representation(op_prod, Hprod, EagerDenseRepr(); chunking=TermChunking(scheduler))
+    M_states_prod_dense = matrix_representation(op_prod, Hprod, EagerDenseRepr(); chunking=StateChunking(scheduler))
     @test M_terms_prod_dense == M_serial_prod
     @test M_states_prod_dense == M_serial_prod
 
@@ -676,8 +689,8 @@ end
     @test M_terms_cons == M_serial_cons
     @test M_states_cons == M_serial_cons
 
-    M_terms_cons_dense = matrix_representation(op_cons, Hc, :dense; chunking=TermChunking(scheduler))
-    M_states_cons_dense = matrix_representation(op_cons, Hc, :dense; chunking=StateChunking(scheduler))
+    M_terms_cons_dense = matrix_representation(op_cons, Hc, EagerDenseRepr(); chunking=TermChunking(scheduler))
+    M_states_cons_dense = matrix_representation(op_cons, Hc, EagerDenseRepr(); chunking=StateChunking(scheduler))
     @test M_terms_cons_dense == M_serial_cons
     @test M_states_cons_dense == M_serial_cons
 
@@ -695,24 +708,10 @@ end
     @test M_terms_cons_prod == M_serial_cons_prod
     @test M_states_cons_prod == M_serial_cons_prod
 
-    M_terms_cons_prod_dense = matrix_representation(op_cons_prod, Hcons_prod, :dense; chunking=TermChunking(scheduler))
-    M_states_cons_prod_dense = matrix_representation(op_cons_prod, Hcons_prod, :dense; chunking=StateChunking(scheduler))
+    M_terms_cons_prod_dense = matrix_representation(op_cons_prod, Hcons_prod, EagerDenseRepr(); chunking=TermChunking(scheduler))
+    M_states_cons_prod_dense = matrix_representation(op_cons_prod, Hcons_prod, EagerDenseRepr(); chunking=StateChunking(scheduler))
     @test M_terms_cons_prod_dense == M_serial_cons_prod
     @test M_states_cons_prod_dense == M_serial_cons_prod
-end
-
-@testitem "Chunking across column blocks" begin
-    using OhMyThreads
-    import FermionicHilbertSpaces: TermChunking, StateChunking
-
-    @fermions f
-    H = hilbert_space(f, 1:13)
-    op = sum(f[k]' * f[k+1] + hc for k in 1:12) + sum(k * f[k]' * f[k] * f[k+1]' * f[k+1] for k in 1:12) + 1.5
-    # Three chunks of a space with two blocks of columns, so chunk boundaries fall inside blocks
-    scheduler = StaticScheduler(; nchunks=3)
-    M = matrix_representation(op, H)
-    @test matrix_representation(op, H; chunking=TermChunking(scheduler)) == M
-    @test matrix_representation(op, H; chunking=StateChunking(scheduler)) == M
 end
 
 @testitem "Distributed sparse matrix representation" begin

@@ -1,6 +1,9 @@
 const SPARSE_BLOCK_SIZE = 4096
 
-_terms_matrix(::Type{T}, terms, coeff, space, ::EagerSparseRepr, ::NoChunking; kwargs...) where T = _blocked_sparse_matrix(T, _precomputed_terms(terms, space), coeff, space; kwargs...)
+_terms_matrix(::Type{T}, terms, coeff, space, ::EagerSparseRepr, ::NoChunking; kwargs...) where T = _narrowed(_blocked_sparse_matrix(T, _precomputed_terms(terms, space), coeff, space; kwargs...))
+
+# `m` with its element type narrowed to that of its stored entries when `eltype(m)` is abstract
+_narrowed(m) = isconcretetype(eltype(m)) ? m : SparseMatrixCSC(size(m)..., SparseArrays.getcolptr(m), rowvals(m), identity.(nonzeros(m)))
 
 _precomputed_terms(terms, space) = [(term, precomputation_before_operator_application(term, space)) for term in terms]
 
@@ -68,7 +71,6 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
         append!(nzval, view(sortedamps, 1:n))
     end
     foreach(v -> sizehint!(v, length(v)), (rowval, nzval))
-    isconcretetype(T) || (nzval = identity.(nzval))
     return SparseMatrixCSC(N, M, colptr, rowval, nzval)
 end
 
