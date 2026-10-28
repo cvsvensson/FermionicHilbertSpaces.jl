@@ -87,6 +87,10 @@ bosonic ADO multi-index by one.
 
     Adown(l) |n₁,…,nₗ,…⟩ = |n₁,…,nₗ−1,…⟩   (zero if nₗ = 0)
 
+Their adjoints move the other way with the amplitudes swapped: `Aup(l)'` lowers with
+amplitude nₗ and `Adown(l)'` raises with amplitude 1. The field `weighted` records
+whether the amplitude is the occupation (as for `Aup` and `Aup'`) or 1.
+
     :damping
 Symbolic diagonal operator representing the hierarchy damping.
     W |n⟩ = (−Σₗ χₗ nₗ) |n⟩
@@ -95,27 +99,18 @@ struct HEOMBosonicOp{B<:HEOMBosonicBath} <: AbstractSym
     type::Symbol
     l::Int
     bath::B
+    weighted::Bool
 end
+HEOMBosonicOp(type, l, bath) = HEOMBosonicOp(type, l, bath, type == :up)
 
 function Base.show(io::IO, op::HEOMBosonicOp)
-    if op.type == :up
-        print(io, "Aup(", op.l, ")")
-    elseif op.type == :down
-        print(io, "Adown(", op.l, ")")
-    elseif op.type == :damping
-        print(io, "W_aux")
-    end
+    op.type == :damping && return print(io, "W_aux")
+    is_adjoint = (op.type == :up) != op.weighted
+    print(io, op.weighted ? "Aup(" : "Adown(", op.l, ")", is_adjoint ? "'" : "")
 end
-Base.adjoint(op::HEOMBosonicOp) = begin
-    if op.type == :up
-        HEOMBosonicOp(:down, op.l, op.bath)
-    elseif op.type == :down
-        HEOMBosonicOp(:up, op.l, op.bath)
-    elseif op.type == :damping
-        op   # W is Hermitian
-    else
-        throw(ArgumentError("Unknown HEOMBosonicOp type: ", op.type))
-    end
+function Base.adjoint(op::HEOMBosonicOp)
+    op.type == :damping && return op # W is real and diagonal
+    return HEOMBosonicOp(op.type == :up ? :down : :up, op.l, op.bath, op.weighted)
 end
 
 ## Algebra
@@ -155,13 +150,13 @@ Base.show(io::IO, s::HEOMBosonicAuxState) = print(io, "ADO", s.n)
         if sum(n) >= op.bath.m_max
             return state, zero(amp)
         end
-        return HEOMBosonicAuxState{N}(Base.setindex(n, n[op.l] + 1, op.l)), amp * (n[op.l] + 1)
+        return HEOMBosonicAuxState{N}(Base.setindex(n, n[op.l] + 1, op.l)), op.weighted ? amp * (n[op.l] + 1) : amp
     elseif op.type == :down
         nl = n[op.l]
         if iszero(nl)
             return state, zero(amp)
         end
-        return HEOMBosonicAuxState{N}(Base.setindex(n, nl - 1, op.l)), amp
+        return HEOMBosonicAuxState{N}(Base.setindex(n, nl - 1, op.l)), op.weighted ? amp * nl : amp
     elseif op.type == :damping
         decay = -sum(op.bath.χ[l] * n[l] for l in eachindex(n))
         return HEOMBosonicAuxState{N}(n), amp * decay
@@ -279,6 +274,10 @@ end
 
     # Adown: |0⟩→0, |1⟩→|0⟩, |2⟩→|1⟩
     @test Md ≈ [0 1 0; 0 0 1; 0 0 0]
+
+    @test representation(Aup', H; projection=true) ≈ Mu'
+    @test representation(Adown', H; projection=true) ≈ Md'
+    @test repr.((Aup, Aup', Adown, Adown')) == ("Aup(1)", "Aup(1)'", "Adown(1)", "Adown(1)'")
 
     # W: |n⟩ → -χ*n |n⟩  →  diagonal  [0, -2, -4]
     @test Mw ≈ diagm([0.0, -2.0, -4.0])
