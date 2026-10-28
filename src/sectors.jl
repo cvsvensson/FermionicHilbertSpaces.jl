@@ -4,27 +4,30 @@
 Hilbert space whose basis is grouped into sectors labeled by quantum numbers.
 Use `quantumnumbers`, `sector`, and `indices` to access individual sectors.
 """
-struct SectorHilbertSpace{B,P,Q,C} <: AbstractHilbertSpace{B}
+struct SectorHilbertSpace{B,P,Q,C} <: AbstractSubspace{B,P}
     parent::P
     ordered_basis_states::Vector{B}
     qn_to_states::OrderedDict{Q,Vector{B}}
     constraint::C
-    index::Union{Vector{Int32},Dict{B,Int}}
+    index::SubspaceIndex{B}
     SectorHilbertSpace{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index) where {B,P,Q,C} = new{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index)
 end
-SectorHilbertSpace(parent::P, ordered_basis_states::AbstractVector{B}, qn_to_states::AbstractDict{Q}, constraint::C, index) where {B,P,Q,C} = SectorHilbertSpace{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index)
-function SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint)
-    parent = _strip_constrained(space)
-    SectorHilbertSpace(parent, ordered_basis_states, qn_to_states, constraint, state_positions(parent, ordered_basis_states))
-end
-Base.hash(H::SectorHilbertSpace, h::UInt) = hash((H.parent, H.ordered_basis_states, H.qn_to_states), h)
-Base.:(==)(H1::SectorHilbertSpace, H2::SectorHilbertSpace) = H1 === H2 || (H1.parent == H2.parent && H1.ordered_basis_states == H2.ordered_basis_states && H1.qn_to_states == H2.qn_to_states)
+SectorHilbertSpace(parent, ordered_basis_states, qn_to_states, constraint, index) = SectorHilbertSpace{eltype(ordered_basis_states),typeof(parent),keytype(qn_to_states),typeof(constraint)}(parent, ordered_basis_states, qn_to_states, constraint, index)
+SectorHilbertSpace(::AbstractSubspace, ordered_basis_states, qn_to_states, constraint, index) = throw(nested_subspace_error())
+SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, SubspaceIndex(space, ordered_basis_states))
+
+Base.parent(H::SectorHilbertSpace) = H.parent
+subspace_states(H::SectorHilbertSpace) = H.ordered_basis_states
+subspace_index(H::SectorHilbertSpace) = H.index
+subspace_key(H::SectorHilbertSpace) = (parent(H), H.ordered_basis_states, H.qn_to_states)
+rewrap(H::SectorHilbertSpace, parent) = SectorHilbertSpace(parent, H.ordered_basis_states, H.qn_to_states, H.constraint, H.index)
 
 sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
 function sector_space(space, states, sector_function, constraint)
     B = statetype(space)
-    _qntostates = groupby(sector_function, states, B)
-    _sector_space(space, _qntostates, constraint)
+    parent, members = unnest(space, states)
+    _qntostates = groupby(sector_function, members, B)
+    _sector_space(parent, _qntostates, constraint)
 end
 function _group(f::F, itr, ::Type{B}) where {F,B}
     K = nonmissingtype(Base.promote_op(f, eltype(itr)))
@@ -67,34 +70,6 @@ function _sector_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}, 
     SectorHilbertSpace(space, ordered_states, qn_to_states, constraint)
 end
 
-Base.parent(H::SectorHilbertSpace) = H.parent
-dim(H::SectorHilbertSpace) = length(H.ordered_basis_states)
-atomic_factors(H::SectorHilbertSpace) = atomic_factors(H.parent)
-atomic_factor(H::SectorHilbertSpace, i) = atomic_factor(H.parent, i)
-factors(H::SectorHilbertSpace) = factors(parent(H))
-groups(H::SectorHilbertSpace) = groups(parent(H))
-atom_ids(H::SectorHilbertSpace) = atom_ids(parent(H))
-atom_position(x, H::SectorHilbertSpace) = atom_position(x, parent(H))
-group_id(H::SectorHilbertSpace) = group_id(parent(H))
-
-isconstrained(H::SectorHilbertSpace) = true
-basisstates(H::SectorHilbertSpace) = BasisStates(H, H.ordered_basis_states)
-
-combine_states(substates, H::SectorHilbertSpace) = combine_states(substates, parent(H))
-partial_trace_phase_factor_eltype(space::SectorHilbertSpace) = partial_trace_phase_factor_eltype(parent(space))
-partial_transpose_phase_factor_eltype(space::SectorHilbertSpace) = partial_transpose_phase_factor_eltype(parent(space))
-partial_trace_phase_factor(s1, s2, H::SectorHilbertSpace) = partial_trace_phase_factor(s1, s2, parent(H))
-partial_transpose_phase_factor(f1, f2, H::SectorHilbertSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
-state_mapper(H::SectorHilbertSpace, Hs) = state_mapper(parent(H), Hs)
-mode_ordering(H::SectorHilbertSpace) = mode_ordering(parent(H))
-
-Base.@propagate_inbounds basisstate(ind::Integer, H::SectorHilbertSpace) = H.ordered_basis_states[ind]
-
-state_index(state::AbstractBasisState, H::SectorHilbertSpace) = state_position(H.index, state, H)
-add_tag(H::SectorHilbertSpace, tag) = SectorHilbertSpace(add_tag(parent(H), tag), H.ordered_basis_states, H.qn_to_states, H.constraint, H.index)
-
-fast_path(space::SectorHilbertSpace) = fast_path(parent(space))
-
 
 """
     quantumnumbers(H)
@@ -131,13 +106,9 @@ Return all sectors of `H` in the same order as `quantumnumbers(H)`.
 sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
 
 function space_indices(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace)
-    sector_list = sectors(H)
-    indexin = findfirst(isequal(Hsub), sector_list)
-    if indexin === nothing
-        return space_indices_generic(Hsub, H)
-    end
-    qn = quantumnumbers(H)[indexin]
-    indices(qn, H)
+    # `Hsub` is a sector of `H` when it equals `sector(qn, H)` for some `qn`
+    qn = Hsub isa ConstrainedSpace && parent(Hsub) == parent(H) ? findfirst(isequal(subspace_states(Hsub)), H.qn_to_states) : nothing
+    isnothing(qn) ? space_indices_generic(Hsub, H) : qn_indices(qn, H)
 end
 space_indices(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = space_indices_generic(Hsub, H)
 function space_indices_generic(Hsub, H)
@@ -435,6 +406,20 @@ end
     @test length(inds[2]) == 0
 end
 
-function _wrap(space, wrapping::SectorHilbertSpace)
-    SectorHilbertSpace(space, wrapping.ordered_basis_states, wrapping.qn_to_states, wrapping.constraint)
+@testitem "A sector of a subspace keeps only the states of the subspace" begin
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    states = collect(basisstates(H))
+    Hc = constrain_space(H, states[1:4])
+    for constraint in (NumberConservation(), ParityConservation())
+        @test Set(basisstates(constrain_space(Hc, constraint, states))) == Set(states[1:4])
+    end
+end
+
+@testitem "state_index of a subspace takes only states" begin
+    @fermions f
+    @test_throws MethodError state_index(1, hilbert_space(f, 1:2, NumberConservation()))
+    Hg = constrain_space(GenericHilbertSpace(:A, [:a, :b, :c]), [:a, :c])
+    @test state_index(:c, Hg) == 2
+    @test state_index(:b, Hg) == 0
 end

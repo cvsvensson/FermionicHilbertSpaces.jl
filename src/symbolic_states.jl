@@ -197,7 +197,7 @@ NonCommutativeProducts.adjoint_grade(a::StateGrade) = StateGrade(Dict{Any,Bicycl
 
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
-interpret_state(state, space::Union{TransposedSpace,SectorHilbertSpace,ConstrainedSpace}) = interpret_state(state, parent(space))
+interpret_state(state, space::Union{TransposedSpace,AbstractSubspace}) = interpret_state(state, parent(space))
 state_index(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = state_index(interpret_state(state, space), space)
 basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(_checked_state_index(state, space), space)
 function _checked_state_index(state, space)
