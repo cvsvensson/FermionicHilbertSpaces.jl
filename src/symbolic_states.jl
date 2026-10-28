@@ -836,7 +836,7 @@ end
 
     @test_nowarn representation(op, constrain_space(H, ParityConservation(1))) # Just to check that no error is thrown
     Hcons = constrain_space(H, NumberConservation())
-    representation(opb, Hcons) * representation(opf, Hcons) == representation(opb, Hcons) * representation(opf, Hcons)
+    @test representation(op, Hcons) ≈ representation(opb, Hcons) * representation(opf, Hcons)
     @test b' * op == (sqrt(2) * vb("2")vb("0")' + sqrt(2) * vb("2")vb("4")') * opf
 end
 

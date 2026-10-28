@@ -310,8 +310,8 @@ end
     # they are == but not ===
     @test state == sf0 
     @test state !== sf0
-    state_index(sf0, H) == 1
-    state_index(sf0, Hcons) == 1
+    @test state_index(sf0, H) == 1
+    @test state_index(sf0, Hcons) == 1
 
     @boson b
     Hb = hilbert_space(b, 1)
