@@ -495,7 +495,9 @@ function default_partial_trace_alg(m::Union{AbstractMatrix,UniformScaling}, Hsub
     return subcost < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 end
 default_partial_trace_alg(m::Union{AbstractMatrix,UniformScaling}, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
-default_partial_trace_alg(Hsub, H, Hcomp) = dim(Hsub)^2 * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+# Building a map, both algorithms emit the same terms, so only the states they visit differ:
+# every subsystem and complement state combination, or every pair of basis states of H.
+default_partial_trace_alg(Hsub, H, Hcomp) = 8 * dim(Hsub) * dim(Hcomp) < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 default_partial_trace_alg(Hsub, H, ::Nothing) = dim(Hsub)^2 < dim(H)^2 ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 
 partial_trace_phase_factor_eltype(::AbstractAtomicHilbertSpace) = Int
