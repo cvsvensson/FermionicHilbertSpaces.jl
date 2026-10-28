@@ -112,6 +112,10 @@ function FockMapper(fermionpositions::P, N) where P
     M = typeof(masks)
     FockMapper{N,P1,W,P2,M}(fermionpositions, widths, permutation, masks, isfullpartition)
 end
+function target_ordered(mapper::FockMapper{N}, route::Tuple) where {N}
+    perm = sortperm(collect(route); by=piece_key)
+    FockMapper(mapper.fermionpositions[perm], N)
+end
 unique_split(::FockMapper) = true
 unique_combine(::FockMapper) = true
 function Base.show(io::IO, fm::FockMapper{N}) where N

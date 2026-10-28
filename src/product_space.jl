@@ -603,10 +603,14 @@ function kron_phase_factor(sp::ProductSpaceMapper)
         prod(map((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))
     end
 end
+# A leaf mapper orders its pieces by position inside the factor. The phase factor of
+# `phase_factor_u` depends on the order of the fermionic pieces, which is the order of the targets.
+piece_key(::PieceIndex{b,s}) where {b,s} = (b, s)
+target_ordered(mapper, route) = mapper
 function phase_factor_u(sp::ProductSpaceMapper)
     # Build per-leaf phase-factor functions (Uncovered → nothing, others → recurse)
-    leaf_pfus = map(sp.leaves) do leaf
-        leaf isa Uncovered ? nothing : phase_factor_u(leaf.mapper)
+    leaf_pfus = map(sp.leaves, sp.factor_routes) do leaf, route
+        leaf isa Uncovered ? nothing : phase_factor_u(target_ordered(leaf.mapper, route))
     end
 
     function phase_factor(state)
