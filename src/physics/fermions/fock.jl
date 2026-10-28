@@ -356,11 +356,13 @@ end
     Hcomp = FermionicHilbertSpaces.complementary_subsystem(H, Hsubsmall)
     @test Hcomp == Hsubbig
 
-    emb = embed(Hsubsmall => H; complement=Hsubbig)
+    # embedding into the one-particle space drops the combinations with zero or two particles
+    @test_throws ArgumentError embed(Hsubsmall => H; complement=Hsubbig)
+    emb = embed(Hsubsmall => H; complement=Hsubbig, skipmissing=true)
     pt = partial_trace(H => Hsubsmall)
     @test emb.map == pt'.map
 
-    emb = embed(Hsubbig => H; complement=Hsubsmall)
+    emb = embed(Hsubbig => H; complement=Hsubsmall, skipmissing=true)
     pt = partial_trace(H => Hsubbig)
     @test emb.map == pt'.map
 end

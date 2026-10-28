@@ -9,6 +9,10 @@ end
 
 Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
+
+Unless `skipmissing=true`, throws an `ArgumentError` if a nonzero element of `m` combined with
+a state of `complement` gives a state that is not in `H`, as happens when embedding into a
+space with a constraint, such as a fixed particle number.
 """
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
@@ -24,9 +28,17 @@ function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
     map = if isnothing(complement)
         basis_transformation_map(Hsub, H; skipmissing, kwargs...)
     else
-        _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, skipmissing=skipmissing, kwargs...))
+        skipmissing || _check_embed_support(H, Hsub, complement, state_mapper(H, (Hsub, complement)))
+        _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, skipmissing=true, kwargs...))
     end
     EmbedMap(Hsub, H, complement, kwargs, map)
+end
+
+function _check_embed_support(H, Hsub, complement, mapper)
+    for fbar in basisstates(complement), f in basisstates(Hsub), fullf in first(combine_states((f, fbar), mapper))
+        iszero(state_index(fullf, H)) && throw(ArgumentError("The state `$fullf` is not in the full Hilbert space. Pass `skipmissing=true` to drop such states."))
+    end
+    return nothing
 end
 
 function (op::EmbedMap)(m::AbstractMatrix)
@@ -94,6 +106,8 @@ Create a callable embedding operation from `Hsub` into `H`.
 
 The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
+Unless `skipmissing=true`, throws an `ArgumentError` if a state of `Hsub` combined with a state
+of the complement is not in `H`.
 """
 embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwargs...)
 

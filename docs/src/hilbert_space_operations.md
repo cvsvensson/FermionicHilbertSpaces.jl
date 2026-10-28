@@ -203,11 +203,16 @@ Msub = partial_trace(M, H => Hsub)
 Two algorithms are available, `SubsystemPartialTraceAlg` and
 `FullPartialTraceAlg`; by default `partial_trace` picks whichever is cheaper based
 on the sizes of `Hsub`, `H`, and the complementary subsystem, but you can force
-one with the `alg` keyword. The `skipmissing` keyword controls what happens when
-a combination of a substate and a complement state does not occur in `H` — this
-can happen for constrained spaces, and defaults to the safer choice for each
-algorithm. But, SubsystemPartialTraceAlg may not detect missing states, and in cases 
-where the subsystem is inconsistent with the full space may silently give the wrong result.
+one with the `alg` keyword. Both give the same result and throw in the same cases.
+
+When a state of `H` has no counterpart in `Hsub`, as for a truncated subsystem, the trace
+drops the elements of `m` on that state. By default `partial_trace` then throws an
+`ArgumentError` if any dropped element is nonzero, and the map `partial_trace(H => Hsub)`
+throws if any such state exists; `skipmissing=true` drops them silently. Combinations of a
+subsystem state and a complement state that are not in `H` drop nothing from `m`.
+`embed` is the other way around: it throws if a nonzero element of `m` combined with a
+complement state gives a state that is not in `H`, as when embedding into a space with a fixed
+particle number, and the map `embed(Hsub => H)` throws if any such combination exists.
 
 ### `partial_transpose`: transposing a subsystem
 
