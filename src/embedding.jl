@@ -1,11 +1,15 @@
-function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), kwargs...)
+function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), skipmissing=false, kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
     if isnothing(complement)
-        m isa AbstractVector && return change_basis(m, Hsub, H; kwargs...)
-        get(kwargs, :skipmissing, false) || _check_support(m, _same_atoms_embed_support(Hsub, H))
-        return change_basis(m, Hsub, H; kwargs..., skipmissing=true)
+        m isa AbstractVector && return change_basis(m, Hsub, H; skipmissing, kwargs...)
+        if !(skipmissing || m isa UniformScaling)
+            dropped = last(basis_transformation(Hsub, H))
+            iszero(m[dropped, setdiff(axes(m, 2), dropped)]) ||
+                throw(ArgumentError("`m` maps a state of `H` outside `H` with nonzero amplitude. Pass `skipmissing=true` to drop such terms."))
+        end
+        return change_basis(m, Hsub, H; skipmissing=true, kwargs...)
     end
-    return generalized_kron((m, I), (Hsub, complement), H; kwargs...)
+    return generalized_kron((m, I), (Hsub, complement), H; skipmissing, kwargs...)
 end
 
 """
@@ -22,61 +26,29 @@ in `Hsub` get zero.
 """
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
-struct EmbedMap{HS,H,C,K,M,S}
+struct EmbedMap{HS,H,C,K,M}
     Hsub::HS
     H::H
     complement::C
     kwargs::K
     map::M
-    support::S # `(; trace, embed)`: what inputs are checked against, `nothing` where nothing is checked
 end
 
+# The map is the compression onto `H` and checks nothing, so `skipmissing` has no effect.
 function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
     map = if isnothing(complement)
         basis_transformation_map(Hsub, H; skipmissing=true, kwargs...)
     else
         _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, kwargs...))
     end
-    EmbedMap(Hsub, H, complement, kwargs, map, _map_support(H, Hsub, complement, skipmissing))
-end
-function (op::EmbedMap)(args...)
-    in, n = last(args), dim(op.Hsub)
-    m = in isa AbstractVector && length(in) == n^2 ? reshape(in, n, n) : in
-    m isa AbstractVector || _check_support(m, op.support.embed)
-    _apply(op, args...)
+    EmbedMap(Hsub, H, complement, kwargs, map)
 end
 
-# `allowed[i, j]` when a nonzero `m[i, j]` keeps in `H` the states of `H` with part `j` on `Hsub`: when
-# every complement part that `j` has in `H`, `i` has too. `reach[k]` lists the complement parts of `k` in `H`.
-function _embed_support(reach)
-    foreach(sort!, reach)
-    allequal(reach) && return nothing
-    classes = unique(reach)
-    cls = indexin(reach, classes)
-    return BitMatrix([issubset(b, a) for a in classes, b in classes])[cls, cls]
-end
-# Call `f(i, j, m[i, j])` for the stored elements of `m`
-function _foreach_stored(f, m::SparseMatrixCSC)
-    rows, vals = rowvals(m), nonzeros(m)
-    for j in axes(m, 2), p in nzrange(m, j)
-        f(rows[p], j, vals[p])
-    end
-end
-_foreach_stored(f, m) = foreach(I -> f(Tuple(I)..., m[I]), CartesianIndices(m))
-function _check_support(m::AbstractMatrix, allowed::BitMatrix)
-    size(m) == size(allowed) || return nothing
-    _foreach_stored(m) do i, j, x
-        allowed[i, j] || iszero(x) ||
-            throw(ArgumentError("The element ($i, $j) of `m` maps a state of `H` outside `H`. Pass `skipmissing=true` to drop such terms."))
-    end
-end
-_check_support(::UniformScaling, ::BitMatrix) = nothing
-
-function _apply(op::EmbedMap, m::AbstractMatrix)
+function (op::EmbedMap)(m::AbstractMatrix)
     size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(m), dim(op.H))
 end
-function _apply(op::EmbedMap, m::SparseMatrixCSC)
+function (op::EmbedMap)(m::SparseMatrixCSC)
     size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
     _embed_sparse_matrix(op.map, m, dim(op.H))
 end
@@ -101,34 +73,34 @@ function _embed_sparse_matrix(map::SparseMatrixCSC, m::SparseMatrixCSC, D)
     return sparse(J1s, J2s, Vs, D, D)
 end
 
-function _apply(op::EmbedMap, out::AbstractMatrix, m::AbstractMatrix)
+function (op::EmbedMap)(out::AbstractMatrix, m::AbstractMatrix)
     size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
     size(out) == (dim(op.H), dim(op.H)) || throw(DimensionMismatch("The output matrix must have size ($(dim(op.H)), $(dim(op.H))), got $(size(out))"))
     mul!(vec(out), op.map, _vectorize_pt_density_matrix(m))
     out
 end
 
-function _apply(op::EmbedMap, v::AbstractVector)
+function (op::EmbedMap)(v::AbstractVector)
     length(v) == dim(op.Hsub)^2 || throw(DimensionMismatch("The input vector must have length $(dim(op.Hsub)^2), got $(length(v))"))
     op.map * v
 end
 
-function _apply(op::EmbedMap, out::AbstractVector, v::AbstractVector)
+function (op::EmbedMap)(out::AbstractVector, v::AbstractVector)
     length(v) == dim(op.Hsub)^2 || throw(DimensionMismatch("The input vector must have length $(dim(op.Hsub)^2), got $(length(v))"))
     length(out) == dim(op.H)^2 || throw(DimensionMismatch("The output vector must have length $(dim(op.H)^2), got $(length(out))"))
     mul!(out, op.map, v)
     out
 end
 
-function _apply(op::EmbedMap, m::UniformScaling)
+function (op::EmbedMap)(m::UniformScaling)
     mfull = m.λ * I(dim(op.Hsub))
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(mfull), dim(op.H))
 end
 SparseArrays.sparse(op::EmbedMap) = op.map
-Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map), op.support)
-Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map), op.support)
-Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map), op.support)
-Base.transpose(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map), op.support)
+Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
+Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
+Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
+Base.transpose(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
 
 """
     embed(Hsub => H; kwargs...)
@@ -137,7 +109,7 @@ Create a callable embedding operation from `Hsub` into `H`.
 
 The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
-Applying it throws as [`embed`](@ref) does, unless `skipmissing=true`; `sparse(op)` is not checked.
+It is the compression onto `H` and, unlike [`embed`](@ref), does not check its input.
 """
 embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwargs...)
 
@@ -155,17 +127,15 @@ embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwar
     # this maps states of H outside H
     m = matrix_representation(f[1]', Hsub; projection=true)
     @test_throws ArgumentError embed(m, Hsub => H)
-    @test_throws ArgumentError emb(m)
     compression = matrix_representation(f[1]', H; projection=true)
     @test embed(m, Hsub => H; skipmissing=true) ≈ compression
-    @test embed(Hsub => H; skipmissing=true)(m) ≈ compression
+    @test emb(m) ≈ compression # the map is the compression and does not check
     # with the same atoms: |00⟩⟨11| maps no state of the space with at most one particle outside it, |11⟩⟨00| does
     Hf, Hc = hilbert_space(f, 1:2), hilbert_space(f, 1:2, NumberConservation(0:1))
     m = zeros(4, 4)
     m[1, 4] = 1
     @test iszero(embed(m, Hf => Hc)) && iszero(embed(Hf => Hc)(m))
     @test_throws ArgumentError embed(permutedims(m), Hf => Hc)
-    @test_throws ArgumentError embed(Hf => Hc)(permutedims(m))
     # embed is the adjoint of partial_trace
     A = rand(ComplexF64, dim(Hsub), dim(Hsub))
     ρ = rand(ComplexF64, dim(H), dim(H))

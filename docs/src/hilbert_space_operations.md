@@ -206,8 +206,8 @@ on the sizes of `Hsub`, `H`, and the complementary subsystem, but you can force
 one with the `alg` keyword. Both give the same result and throw in the same cases.
 
 When a state of `H` has no counterpart in `Hsub`, as for a truncated subsystem, the trace
-drops the elements of `m` on that state. By default `partial_trace` then throws an
-`ArgumentError` if any dropped element is nonzero; `skipmissing=true` drops them silently.
+drops that state. By default `partial_trace` then throws an `ArgumentError` if `m` has a
+nonzero element in its row or column; `skipmissing=true` drops them silently.
 Combinations of a subsystem state and a complement state that are not in `H` drop nothing
 from `m`.
 
@@ -215,8 +215,8 @@ from `m`.
 trace. By default it throws if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude,
 as `matrix_representation` does for an operator that does not preserve the constraint of `H`.
 
-The maps `partial_trace(H => Hsub)` and `embed(Hsub => H)` check each input they are applied
-to in the same way; `sparse(op)` is the unchecked map.
+The maps `partial_trace(H => Hsub)` and `embed(Hsub => H)` skip the same states, but do not
+check their input: they are the linear maps that the eager functions compute when nothing is dropped.
 
 ### `partial_transpose`: transposing a subsystem
 

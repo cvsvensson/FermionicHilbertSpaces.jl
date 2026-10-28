@@ -190,10 +190,8 @@ end
     Hconstrained = hilbert_space(f, 1:4, NumberConservation(2))
     Hsub_constrained = subregion(hilbert_space(f, 1:2), Hconstrained)
     msub_constrained = rand(ComplexF64, dim(Hsub_constrained), dim(Hsub_constrained))
-    @test_throws ArgumentError embed(Hsub_constrained => Hconstrained)(msub_constrained)
     @test_throws ArgumentError embed(msub_constrained, Hsub_constrained => Hconstrained)
-    emb_constrained_skipmissing = embed(Hsub_constrained => Hconstrained; skipmissing=true)
-    @test emb_constrained_skipmissing(msub_constrained) ≈ embed(msub_constrained, Hsub_constrained => Hconstrained; skipmissing=true)
+    @test embed(Hsub_constrained => Hconstrained)(msub_constrained) ≈ embed(msub_constrained, Hsub_constrained => Hconstrained; skipmissing=true)
 
     # A whole-space partial trace must produce a basis-transformation map.
     Hsame = hilbert_space(f, 1:2, NoSymmetry())
