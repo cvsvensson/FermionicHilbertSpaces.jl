@@ -287,9 +287,12 @@ _repr_eltype(default, ::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T
 _repr_eltype(default, _) = default
 
 function matrix_accumulator(::Type{T}, N::Int, (d1, d2)::Tuple{Int,Int}, ::EagerSparseRepr) where T
-    length_guess = Int(floor(1 + log2(N + 1))) .* (d1, d2) # mild increase with number of terms
-    return sparse_matrix_accumulator(T, length_guess)
+    return sparse_matrix_accumulator(T, _sparse_length_guess.(N, (d1, d2)))
 end
+# Initial number of entries reserved for N terms on d states, mildly increasing with the number of terms
+_sparse_length_guess(N, d) = ndigits(N + 1; base=2) * d
+# `len` entries from `done` units of work, extrapolated with a margin to `todo` more units
+_extrapolated_length(len, done, todo) = len + ceil(Int, len / done * todo * 3 / 2)
 
 function sparse_matrix_accumulator(::Type{T}, (N, M)) where T
     outinds = Int[]
@@ -311,8 +314,14 @@ function finalize!((outinds, ininds, amps), space)
     finalize!((outinds, ininds, amps), N, N)
 end
 function finalize!((outinds, ininds, amps), N, M)
-    isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, M)
-    return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, M)
+    L = length(outinds)
+    isconcretetype(eltype(amps)) && return _trimmed!(SparseArrays.sparse!(outinds, ininds, amps, N, M), L)
+    return _trimmed!(SparseArrays.sparse!(outinds, ininds, identity.(amps), N, M), L)
+end
+# `sparse!` stores the matrix in the vectors of its L input entries. Releases their unused room unless L is small.
+function _trimmed!(S, L)
+    L > 2^12 && foreach(v -> sizehint!(v, length(v)), (SparseArrays.getcolptr(S), rowvals(S), nonzeros(S)))
+    return S
 end
 
 function matrix_accumulator(::Type{T}, N::Int, (d1, d2), ::EagerDenseRepr) where T
@@ -346,13 +355,35 @@ function _terms_matrix(::Type{T}, terms, coeff, space, repr::EagerSparseRepr; kw
 end
 
 function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T
-    accumulator = matrix_accumulator(T, length(terms), (dim(space), dim(space)), repr)
-    for term in terms
+    N = length(terms)
+    d = dim(space)
+    accumulator, capacity = _sum_accumulator(T, N, d, repr)
+    identity_length = iszero(coeff) ? 0 : d
+    for (k, term) in enumerate(terms)
         operator_indices_and_amplitudes!(accumulator, term, space; kwargs...)
+        capacity = _reserve_remaining!(accumulator, capacity, k, N, identity_length)
     end
     iszero(coeff) || add_identity!!(accumulator, coeff, space)
     return finalize!(accumulator, space)
 end
+
+# An accumulator for N terms on d states, and the number of entries reserved in it
+function _sum_accumulator(::Type{T}, N, d, ::EagerSparseRepr) where T
+    capacity = _sparse_length_guess(N, d)
+    return sparse_matrix_accumulator(T, (capacity, capacity)), capacity
+end
+_sum_accumulator(::Type{T}, N, d, repr) where T = (matrix_accumulator(T, N, (d, d), repr), 0)
+
+# After k of N terms: once the next term, estimated as the average of the first k, and `extra` entries would exceed
+# `capacity`, reserves room for the remaining terms and the `extra` entries. Returns the new capacity.
+function _reserve_remaining!(accumulator::NTuple{3,Vector}, capacity, k, N, extra)
+    len = length(first(accumulator))
+    len + cld(len, k) + extra <= capacity && return capacity
+    capacity = _extrapolated_length(len, k, N - k) + extra
+    foreach(v -> sizehint!(v, capacity; shrink=false), accumulator)
+    return capacity
+end
+_reserve_remaining!(accumulator, capacity, k, N, extra) = capacity
 
 # Builds the matrix one block of columns at a time: the entries of a block are collected term by term,
 # then sorted into columns, with duplicate entries summed in the order of the terms.
@@ -366,7 +397,7 @@ function _blocked_sparse_matrix(::Type{T}, terms, coeff, space; kwargs...) where
     nzval = T[]
     capacity = 0
     block = (rows, cols, amps) = (Int[], Int[], T[])
-    foreach(v -> sizehint!(v, min(B, N) * floor(Int, 1 + log2(length(precomps) + 1))), block)
+    foreach(v -> sizehint!(v, _sparse_length_guess(length(precomps), min(B, N))), block)
     sortedrows = Int[]
     sortedamps = T[]
     sortbuffers = (Int[], Int[], T[])
@@ -409,14 +440,14 @@ function _blocked_sparse_matrix(::Type{T}, terms, coeff, space; kwargs...) where
         end
         total = length(rowval) + n
         if total > capacity
-            # Extrapolate to the remaining columns, with a margin
-            capacity = total + ceil(Int, total / (c0 + nb) * (N - c0 - nb) * 3 / 2)
+            capacity = _extrapolated_length(total, c0 + nb, N - c0 - nb)
             sizehint!(rowval, capacity)
             sizehint!(nzval, capacity)
         end
         append!(rowval, view(sortedrows, 1:n))
         append!(nzval, view(sortedamps, 1:n))
     end
+    foreach(v -> sizehint!(v, length(v)), (rowval, nzval))
     isconcretetype(T) || (nzval = identity.(nzval))
     return SparseMatrixCSC(N, N, colptr, rowval, nzval)
 end
