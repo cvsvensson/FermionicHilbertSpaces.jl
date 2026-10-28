@@ -82,7 +82,7 @@ end
 
 Compute the fermionic tensor product of the matrices or vectors in `ms` on the spaces `Hs`, as an array on `H`, which defaults to the `tensor_product` of `Hs`.
 
-For vectors the result is the same as `tensor_product(ms, Hs => H)`. For matrices, write each local basis operator
+For vectors, the result is the product state, the same as `tensor_product(ms, Hs => H)`. For matrices, write each local basis operator
 as a product of single-mode factors (one of `c c†`, `c†`, `c`, `c†c` per mode) in the mode order of its space;
 `generalized_kron` multiplies the factors of all spaces together in the mode order of `H`, and extends this linearly.
 The result does not depend on the order of `ms` and `Hs`, and is in general not a product of embeddings: for
@@ -285,9 +285,8 @@ end
 
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`,
 so that `tensor_product((A, B), (HA, HB) => H) == embed(A, HA => H) * embed(B, HB => H)`.
-For vectors the result is `ψ₁ψ₂⋯|0⟩`, where `ψₖ` is the polynomial in creation operators that creates `ms[k]` from
-the vacuum. Swapping two odd vectors flips the sign; for vectors without definite fermion parity, the order of `ms`
-changes more than the sign.
+For vectors, the result is the product state: if each `ms[k] = ψₖ|0⟩` with `ψₖ` an operator on the modes of `Hs[k]`,
+the result is `ψ₁ψ₂⋯|0⟩`. Swapping two odd states flips the sign.
 `kwargs` can be passed a bool `phase_factors`. The last form returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """

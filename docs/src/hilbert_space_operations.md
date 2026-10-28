@@ -270,16 +270,16 @@ f12 = tensor_product((f1, f2), (H1, H2) => H)
 It can be used for vectors as well to build a product state from its factors,
 but note that this is only well-defined for fermions if each state respects 
 super-selection: it must not be a superposition of states with different fermion parity.
-For such states, swapping two odd factors flips the sign of the result; for states
-without definite parity, the order of the factors changes more than the sign.
+If each `ms[k] = ψₖ|0⟩` with `ψₖ` an operator on the modes of `Hs[k]`, the result is
+`ψ₁ψ₂⋯|0⟩`. Swapping two odd states flips the sign.
 ```@example hilbert_space_ops
 v1 = representation("0", H1)
 v2 = representation("10", H2)
 v12 = tensor_product((v1, v2), (H1, H2) => H)
 ```
 
-`generalized_kron(ms, Hs, H=tensor_product(Hs); kwargs...)` gives the same
-result as `tensor_product` for vectors. For matrices it computes the fermionic tensor
+`generalized_kron(ms, Hs, H=tensor_product(Hs); kwargs...)` returns the
+same product state as `tensor_product` for vectors. For matrices it computes the fermionic tensor
 product instead (see [Fermionic tensor products](fermions.md)), which does not depend
 on the order of `ms`. It equals `tensor_product` when each space in `Hs` covers
 consecutive modes of `H` and `Hs` is listed in that order. On other partitions it is
