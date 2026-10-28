@@ -252,14 +252,8 @@ function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs.
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
 end
 function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
-    # The first level of the sum tree is formed while the terms are built, so that only one group of term matrices is alive at a time.
-    terms = NCterms(op)
-    groupsize = length(terms) <= tree_split ? max(length(terms), 1) : cld(length(terms), tree_split)
-    partials = map(Iterators.partition(terms, groupsize)) do group
-        matrices = [_matrix_representation(term, bases, space, repr, NoChunking(); kwargs...) for term in group]
-        _sum_matrices(matrices, repr; tree_split=tree_split)
-    end
-    return _add_identity_term(_sum_matrices(partials, repr; tree_split=tree_split), op.coeff, bases, space, repr)
+    matrices = (_matrix_representation(term, bases, space, repr, NoChunking(); kwargs...) for term in NCterms(op))
+    return _add_identity_term(_sum_matrices(matrices, repr; tree_split=tree_split), op.coeff, bases, space, repr)
 end
 # `summed + coeff * I`, with the element type of `summed` promoted with that of `coeff * I` also when `coeff` is zero
 function _add_identity_term(summed, coeff, bases, space, repr)
