@@ -1,6 +1,8 @@
 const SPARSE_BLOCK_SIZE = 4096
 
-_terms_matrix(::Type{T}, terms, coeff, space, ::EagerSparseRepr; kwargs...) where T = _blocked_sparse_matrix(T, terms, coeff, space; kwargs...)
+_terms_matrix(::Type{T}, terms, coeff, space, ::EagerSparseRepr, ::NoChunking; kwargs...) where T = _blocked_sparse_matrix(T, _precomputed_terms(terms, space), coeff, space; kwargs...)
+
+_precomputed_terms(terms, space) = [(term, precomputation_before_operator_application(term, space)) for term in terms]
 
 # `len` entries from `done` units of work, extrapolated with a margin to `todo` more units
 _extrapolated_length(len, done, todo) = len + ceil(Int, len / done * todo * 3 / 2)
@@ -28,20 +30,22 @@ function _collect_block!(block, capacity, precomps, coeff, space, incols, offset
     return capacity
 end
 
-# Builds the matrix one block of columns at a time: the entries of a block are collected term by term,
-# then sorted into columns, with duplicate entries summed in the order of the terms.
-# A nonempty matrix that fits in one block is built by `sparse!` from that block.
-function _blocked_sparse_matrix(::Type{T}, terms, coeff, space; kwargs...) where T
+# Builds the columns `incols` of the matrix one block of columns at a time: the entries of a block are collected
+# term by term, then sorted into columns, with duplicate entries summed in the order of the terms.
+# A nonempty range of columns that fits in one block is built by `sparse!` from that block.
+# `precomps` holds pairs `(term, precomp)` from `_precomputed_terms`.
+function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(space); kwargs...) where T
     N = dim(space)
+    M = length(incols)
+    offset = first(incols) - 1
     B = SPARSE_BLOCK_SIZE
-    precomps = [(term, precomputation_before_operator_application(term, space)) for term in terms]
-    blockcapacity = _sparse_length_guess(length(precomps), min(B, N))
+    blockcapacity = _sparse_length_guess(length(precomps), min(B, M))
     block = (rows, cols, amps) = sparse_matrix_accumulator(T, (blockcapacity, blockcapacity))
-    if 0 < N <= B
-        _collect_block!(block, blockcapacity, precomps, coeff, space, 1:N, 0; kwargs...)
-        return finalize!(block, space)
+    if 0 < M <= B
+        _collect_block!(block, blockcapacity, precomps, coeff, space, incols, offset; kwargs...)
+        return finalize!(block, N, M)
     end
-    colptr = Vector{Int}(undef, N + 1)
+    colptr = Vector{Int}(undef, M + 1)
     colptr[1] = 1
     rowval = Int[]
     nzval = T[]
@@ -50,9 +54,9 @@ function _blocked_sparse_matrix(::Type{T}, terms, coeff, space; kwargs...) where
     sortedamps = T[]
     mergebuffers = (zeros(Int, N), Int[], T[])
     colstarts = Vector{Int}(undef, B + 1)
-    for c0 in 0:B:N-1
-        nb = min(B, N - c0)
-        blockcapacity = _collect_block!(block, blockcapacity, precomps, coeff, space, c0+1:c0+nb, c0; kwargs...)
+    for c0 in 0:B:M-1
+        nb = min(B, M - c0)
+        blockcapacity = _collect_block!(block, blockcapacity, precomps, coeff, space, offset+c0+1:offset+c0+nb, offset + c0; kwargs...)
         fill!(colstarts, 0)
         for j in cols
             colstarts[j+1] += 1
@@ -80,7 +84,7 @@ function _blocked_sparse_matrix(::Type{T}, terms, coeff, space; kwargs...) where
         end
         total = length(rowval) + n
         if total > capacity
-            capacity = _extrapolated_length(total, c0 + nb, N - c0 - nb)
+            capacity = _extrapolated_length(total, c0 + nb, M - c0 - nb)
             sizehint!(rowval, capacity)
             sizehint!(nzval, capacity)
         end
@@ -89,7 +93,7 @@ function _blocked_sparse_matrix(::Type{T}, terms, coeff, space; kwargs...) where
     end
     foreach(v -> sizehint!(v, length(v)), (rowval, nzval))
     isconcretetype(T) || (nzval = identity.(nzval))
-    return SparseMatrixCSC(N, N, colptr, rowval, nzval)
+    return SparseMatrixCSC(N, M, colptr, rowval, nzval)
 end
 
 # Writes the entries start:stop of `rows` and `amps` after entry n, sorted by row and with the entries of equal rows
