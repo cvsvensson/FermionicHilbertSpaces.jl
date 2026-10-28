@@ -586,7 +586,7 @@ end
     @fermions f
     H = hilbert_space(f, 1:1)
     @test_throws ArgumentError representation(f[2], H)
-    @test_throws ArgumentError matrix_representation(f[2], H)
+    @test_throws ArgumentError representation(f[2], H)
 end
 
 @testitem "Trivial fermionic space" begin

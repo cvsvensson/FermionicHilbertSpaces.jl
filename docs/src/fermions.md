@@ -34,7 +34,7 @@ The two coincide when each subsystem consists of consecutive modes of ``\mathcal
 ```math
 c_1^\dagger c_3 \,\tilde{\otimes}\, c_2^\dagger c_4 = c_1^\dagger c_2^\dagger c_3 c_4 = -(c_1^\dagger c_3)(c_2^\dagger c_4),
 ```
-and `generalized_kron` of two density matrices need not be a density matrix. Use `tensor_product` for product states, for products of local observables, and for anything that should equal a product of embedded operators, such as `matrix_representation` of a product of symbolic operators.
+and `generalized_kron` of two density matrices need not be a density matrix. Use `tensor_product` for product states, for products of local observables, and for anything that should equal a product of embedded operators, such as `representation` of a product of symbolic operators.
 
 ### The fermionic partial trace
 The partial trace is most often used to calculate reduced density matrices. The fundamental property is that for an observable ``A`` on the subsystem ``X``, the expectation value of ``A`` in a state ``\rho`` on the full system is equal to the expectation value of ``A`` in the reduced state ``\rho_X = \text{Tr}_{\bar X}[\rho]``.

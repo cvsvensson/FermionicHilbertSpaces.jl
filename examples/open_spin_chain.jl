@@ -45,7 +45,7 @@ println("Closed-system max norm error: ", max_norm_error)
 using FermionicHilbertSpaces: open_system
 Hopen, Hleft, Hright, left, right = open_system(S, 1:N)
 
-lindbladian_sym = 1im * (left(ham_sym) - right(ham_sym))
+lindbladian_sym = -1im * (left(ham_sym) - right(ham_sym))
 dissipator(op) = left(op) * right(op) - 0.5 * (left(op)' * left(op) + right(op)' * right(op))
 for k in 1:N
     jump_op = 2 * sqrt(γ_deph[k]) * S[k][:z]

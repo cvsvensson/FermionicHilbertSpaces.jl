@@ -4,7 +4,7 @@
 A matrix-free (lazy) representation of a symbolic operator on a Hilbert space.
 Acts directly on vectors and matrices without constructing a sparse matrix.
 
-`matrix_representation(op, space, :lazy)` returns a `SciMLOperators.FunctionOperator`
+`representation(op, space, :lazy)` returns a `SciMLOperators.FunctionOperator`
 that wraps a `LazyOperator`. The bare `LazyOperator` is available as
 `LazyOperator(op, space, chunking)`.
 """
@@ -454,7 +454,7 @@ end
     @test Matrix(transpose(L)') ≈ conj(M)
 
     # @test !ishermitian(L)
-    # @test ishermitian(matrix_representation(op + hc, Hcons; lazy=true, projection=true)) #SciMLOperators doesn't check termwise ishermitian for an added operator
+    # @test ishermitian(representation(op + hc, Hcons; lazy=true, projection=true)) #SciMLOperators doesn't check termwise ishermitian for an added operator
 end
 
 @testitem "lazy matrix_representation with dimensions wider than Int" begin
@@ -503,7 +503,7 @@ end
     Hopen, _, _, left, right = open_system(c, 1:N)
     ham = sum((0.3n) * c[n]' * c[n] for n in 1:N) + sum(0.2im * c[n]' * c[n+1] + hc for n in 1:(N-1))
     dissipator(L) = left(L) * right(L') - 0.5 * (left(L' * L) + right(L' * L))
-    liouvillian = 1im * (left(ham) - right(ham)) + sum(dissipator(sqrt(0.1n) * c[n]) for n in 1:N)
+    liouvillian = -1im * (left(ham) - right(ham)) + sum(dissipator(sqrt(0.1n) * c[n]) for n in 1:N)
     @test lazy_matches(liouvillian + 0.5, Hopen)
     @test lazy_matches(left(ham) + 2, Hopen)
     @test lazy_matches(left(c[1]) * right(c[1]') + left(c[2]') * right(c[3]), Hopen)

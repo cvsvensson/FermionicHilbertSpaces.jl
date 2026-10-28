@@ -206,6 +206,15 @@ end
     @test S[:X] * S[:Y] - S[:Y] * S[:X] ≈ im * S[:Z]
     @test S[:Y] * S[:Z] - S[:Z] * S[:Y] ≈ im * S[:X]
     @test S[:Z] * S[:X] - S[:X] * S[:Z] ≈ im * S[:Y]
+    # spin algebra for higher spins
+    for j in (1, 3 // 2, 2)
+        Sj = operators(hilbert_space(s, j))
+        @test all(Sj[a] * Sj[b] - Sj[b] * Sj[a] ≈ im * Sj[c] for (a, b, c) in ((:X, :Y, :Z), (:Y, :Z, :X), (:Z, :X, :Y)))
+        @test Sj[:X]^2 + Sj[:Y]^2 + Sj[:Z]^2 ≈ j * (j + 1) * I
+    end
+    S1 = operators(hilbert_space(s, 1))
+    @test S1[:Z] == [-1 0 0; 0 0 0; 0 0 1]
+    @test S1[:+] ≈ [0 0 0; √2 0 0; 0 √2 0]
     # states outside the space have index 0
     @test [state_index(SpinState(m), H) for m in -3//2:1//2:3//2] == [0, 0, 1, 0, 2, 0, 0]
     @test [state_index(SpinState(m), hilbert_space(s, 1)) for m in -2:1//2:2] == [0, 0, 1, 0, 2, 0, 3, 0, 0]
@@ -585,6 +594,17 @@ end
     @test S_mat[:z] == [-1//2 0; 0 1//2]
     @test S_mat[:x] == [0 1//2; 1//2 0]
     @test S_mat[:y] == [0 im//2; -im//2 0]
+end
+
+@testitem "Heisenberg dimer" begin
+    using LinearAlgebra
+    @spins s 1 // 2
+    H = hilbert_space(s, 1:2)
+    dot_spins(a, b) = sum(a[c] * b[c] for c in (:x, :y, :z))
+    # singlet at -3/4, triplet at 1/4
+    @test eigvals(Hermitian(representation(dot_spins(s[1], s[2]), H, :dense))) ≈ [-3 / 4, 1 / 4, 1 / 4, 1 / 4]
+    Stot = (s[1][c] + s[2][c] for c in (:x, :y, :z))
+    @test eigvals(Hermitian(representation(sum(S^2 for S in Stot), H, :dense))) ≈ [0, 2, 2, 2]
 end
 
 @testitem "Spin: spin-aware vs not" begin

@@ -253,7 +253,7 @@ mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
     @test m == numberoperator(H)
 
     H2 = hilbert_space(f, 1:N, NumberConservation(1))
-    @test numberoperator(H2) == matrix_representation(sym, H2)
+    @test numberoperator(H2) == representation(sym, H2)
 
     Nsub = 3
     Hsub = subregion(H.modes[1:Nsub], H2)
