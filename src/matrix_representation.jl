@@ -314,8 +314,14 @@ function finalize!((outinds, ininds, amps), space)
     finalize!((outinds, ininds, amps), N, N)
 end
 function finalize!((outinds, ininds, amps), N, M)
-    isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, M)
-    return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, M)
+    L = length(outinds)
+    isconcretetype(eltype(amps)) && return _trimmed!(SparseArrays.sparse!(outinds, ininds, amps, N, M), L)
+    return _trimmed!(SparseArrays.sparse!(outinds, ininds, identity.(amps), N, M), L)
+end
+# `sparse!` stores the matrix in the vectors of its L input entries. Releases their unused room unless L is small.
+function _trimmed!(S, L)
+    L > 2^12 && foreach(v -> sizehint!(v, length(v)), (SparseArrays.getcolptr(S), rowvals(S), nonzeros(S)))
+    return S
 end
 
 function matrix_accumulator(::Type{T}, N::Int, (d1, d2), ::EagerDenseRepr) where T
@@ -441,6 +447,7 @@ function _blocked_sparse_matrix(::Type{T}, terms, coeff, space; kwargs...) where
         append!(rowval, view(sortedrows, 1:n))
         append!(nzval, view(sortedamps, 1:n))
     end
+    foreach(v -> sizehint!(v, length(v)), (rowval, nzval))
     isconcretetype(T) || (nzval = identity.(nzval))
     return SparseMatrixCSC(N, N, colptr, rowval, nzval)
 end
