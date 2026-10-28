@@ -105,7 +105,7 @@ function FockMapper(fermionpositions::P, N) where P
     T = default_fock_representation(N)
     permutation = length(perm) == N && isperm(perm) && N < 64 ? BitPermutation{T}(perm)' : nothing
     masks = map(Xp -> focknbr_from_site_indices(Xp), fermionpositions)
-    isfullpartition = ispartition(fermionpositions, Nmax)
+    isfullpartition = ispartition(fermionpositions, N)
     P1 = typeof(fermionpositions)
     W = typeof(widths)
     P2 = typeof(permutation)
@@ -303,12 +303,7 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
         # Mappers for different subsystems of one space have the same type
         @test typeof(FockMapper(([1, 2],), 6)) == typeof(FockMapper(([3, 5],), 6)) == typeof(FockMapper(([4, 6],), 6))
         @test_throws ArgumentError FockMapper(((1, 7),), 6)
-        # Covering only the first modes of a larger space is still a full partition of those modes
-        fockmapper = FockMapper(((1, 3), (2,)), 70)
-        combined = _combine((fock((1, 2)), fock((1,))), fockmapper)
-        @test combined == fock((1, 2, 3))
-        @test combined isa FockNumber{UInt128}
-        @test _split(fock((2, 3)), fockmapper) == (fock((2,)), fock((1,)))
+        @test_throws ArgumentError _combine((fock((1, 2)), fock((1,))), FockMapper(((1, 3), (2,)), 70))
         fockmapper = FockMapper(((1, 3), (2,)), 3)
         @test _combine((fock((1, 2)), fock((1,))), fockmapper) == fock((1, 2, 3))
         @test !isnothing(fockmapper.permutation)
