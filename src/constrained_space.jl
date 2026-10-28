@@ -2,26 +2,26 @@
 struct ConstrainedSpace{B,H,S} <: AbstractHilbertSpace{B}
     parent::H
     states::S
-    state_index::Dict{B,Int}
+    index::Union{Vector{Int32},Dict{B,Int}}
+    ConstrainedSpace{B,H,S}(parent, states, index) where {B,H,S} = new{B,H,S}(parent, states, index)
 end
 
-Base.:(==)(H1::ConstrainedSpace, H2::ConstrainedSpace) = H1.parent == H2.parent && H1.states == H2.states && H1.state_index == H2.state_index
-Base.hash(H::ConstrainedSpace, h::UInt) = hash(H.parent, hash(H.states, hash(H.state_index, h)))
+Base.:(==)(H1::ConstrainedSpace, H2::ConstrainedSpace) = H1.parent == H2.parent && H1.states == H2.states
+Base.hash(H::ConstrainedSpace, h::UInt) = hash(H.parent, hash(H.states, h))
 Base.parent(H::ConstrainedSpace) = H.parent
 function ConstrainedSpace(space::ConstrainedSpace, states)
     ConstrainedSpace(parent(space), intersect(states, space.states))
 end
-function ConstrainedSpace(space::H, states) where {H}
+function ConstrainedSpace(space, states)
     stored = _stored_states(states)
-    B = eltype(stored)
-    state_index = Dict{B,Int}(s => i for (i, s) in enumerate(stored))
-    ConstrainedSpace{B,H,typeof(stored)}(space, stored, state_index)
+    ConstrainedSpace(space, stored, state_positions(space, stored))
 end
+ConstrainedSpace(space::H, states::S, index) where {H,S} = ConstrainedSpace{eltype(states),H,S}(space, states, index)
 
 dim(H::ConstrainedSpace) = length(H.states)
 basisstates(H::ConstrainedSpace) = BasisStates(H, H.states)
 Base.@propagate_inbounds basisstate(n::Integer, H::ConstrainedSpace) = H.states[n]
-state_index(state, H::ConstrainedSpace{B}) where B = get(H.state_index, state, 0)
+state_index(state, H::ConstrainedSpace) = state_position(H.index, state, H)
 state_index(state::Union{AbstractString,AbstractChar}, H::ConstrainedSpace) = state_index(interpret_state(state, H), H)
 atomic_factors(H::ConstrainedSpace) = atomic_factors(parent(H))
 atomic_factor(H::ConstrainedSpace, i) = atomic_factor(parent(H), i)
@@ -53,7 +53,7 @@ function constrain_space(space, constraint::AbstractConstraint, states=basisstat
         throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     end
 end
-add_tag(H::ConstrainedSpace, tag) = ConstrainedSpace(add_tag(parent(H), tag), H.states, H.state_index)
+add_tag(H::ConstrainedSpace, tag) = ConstrainedSpace(add_tag(parent(H), tag), H.states, H.index)
 
 allowed_values(::NumberConservation{Missing,Missing,Missing}, space, mapper) = 0:maximum_particles(space)
 function allowed_values(nc::NumberConservation{Missing}, space, mapper)
@@ -67,12 +67,65 @@ allowed_values(p::ParityConservation, space, mapper) = p.allowed_parities
 allowed_values(c::AdditiveConstraint, space, mapper) = c.allowed_values
 
 function _wrap(space, wrapping::ConstrainedSpace)
-    ConstrainedSpace(space, wrapping.states, wrapping.state_index)
+    ConstrainedSpace(space, wrapping.states)
 end
 
 _apply_local_operators(ops, state::AbstractBasisState, space::Union{SectorHilbertSpace,ConstrainedSpace}, precomp) = _apply_local_operators(ops, state, parent(space), precomp)
 
 fast_path(space::ConstrainedSpace) = fast_path(parent(space))
+
+"""
+    has_arithmetic_state_index(H)
+
+Whether `state_index(state, H)` is computed from `state` alone, without a lookup table, and is
+the exact index in `1:dim(H)` of each basis state of `H` and `0` for other states of type `statetype(H)`.
+"""
+has_arithmetic_state_index(H) = false
+
+# The unconstrained space whose states the constrained space `H` selects from.
+root_space(H) = H
+root_space(H::Union{ConstrainedSpace,SectorHilbertSpace}) = root_space(parent(H))
+
+const INDEX_TABLE_RATIO = 32 # maximum table entries per state
+const INDEX_TABLE_MAX_LENGTH = 2^28
+
+"""
+    root_index_table(space, states)
+
+Table mapping `state_index(state, root_space(space))` to the position of `state` in `states`,
+or `0` for root states not in `states`, or `nothing` when no table is used.
+"""
+function root_index_table(space, states)
+    root = root_space(space)
+    has_arithmetic_state_index(root) || return nothing
+    B = statetype(root)
+    (eltype(states) == B || all(state -> same_state_kind(state, B), states)) || return nothing
+    length(states) <= typemax(Int32) || return nothing
+    d = dim(root)
+    (d isa Int && d <= min(INDEX_TABLE_RATIO * length(states), INDEX_TABLE_MAX_LENGTH)) || return nothing
+    table = zeros(Int32, d)
+    for (i, state) in enumerate(states)
+        k = state_index(state, root)
+        iszero(k) && return nothing
+        table[k] = i
+    end
+    return table
+end
+# Index from each of `states` to its position: a table over the root's arithmetic `state_index` when it fits, else a `Dict`.
+state_positions(space, states) = something(root_index_table(space, states), Dict{eltype(states),Int}(s => i for (i, s) in enumerate(states)))
+state_position(d::Dict, state, H) = get(d, state, 0)
+function state_position(table::Vector{Int32}, state, H)
+    (state isa statetype(H) || same_state_kind(state, statetype(H))) || return 0
+    k = state_index(state, root_space(H))
+    iszero(k) ? 0 : Int(table[k])
+end
+# Whether `state` has the type `B` up to type parameters, so that `state_index` of a space with states of type `B` accepts it.
+same_state_kind(state, ::Type{B}) where {B} = _type_family(typeof(state)) === _type_family(B)
+_type_family(T) = (parentmodule(T), nameof(T))
+same_state_kind(state::ProductState, ::Type{ProductState{S}}) where {S<:Tuple} = state.states isa Tuple && length(state.states) == fieldcount(S) && all(map(same_state_kind, state.states, fieldtypes(S)))
+# Drops a ConstrainedSpace wrapper, whose states contain those of a sector built on it.
+_strip_constrained(space) = space
+_strip_constrained(H::ConstrainedSpace) = parent(H)
 
 @testitem "constrain_space" begin
     @fermions f
@@ -202,11 +255,40 @@ mode_ordering(H::ConstrainedSpace) = mode_ordering(parent(H))
     @test m == numberoperator(H)
 
     H2 = hilbert_space(f, 1:N, NumberConservation(1))
-    @test numberoperator(H2) == matrix_representation(sym, H2)
+    @test numberoperator(H2) == representation(sym, H2)
 
     Nsub = 3
     Hsub = subregion(H.modes[1:Nsub], H2)
     @test dim(Hsub) == Nsub + 1
+end
+
+@testitem "state_index of constrained and sector spaces" begin
+    import FermionicHilbertSpaces: state_index, basisstate, statetype, add_tag, TransposedSpace, BosonicState
+    @fermions f
+    @boson b
+    @spin s 1 // 2
+    Hsector = tensor_product(hilbert_space(f, 1:3, NumberConservation(1)), hilbert_space(f, 4:6, NumberConservation(2)))
+    Hprod = tensor_product(hilbert_space(f, 1:2), hilbert_space(b, 3), hilbert_space(s))
+    Hconstrained = constrain_space(Hprod, collect(basisstates(Hprod))[1:3:end])
+    Hprod_sector = tensor_product(hilbert_space(f, 1:3, NumberConservation(1)), hilbert_space(b, 4, NumberConservation(0:2)))
+    T = statetype(hilbert_space(f, 1:70))
+    Hlarge = constrain_space(hilbert_space(f, 1:70), [T(0), T(1), T(UInt128(1) << 69)])
+    Hint = hilbert_space(f, 1:4, [FockNumber(6), FockNumber(1), FockNumber(2)])
+    for H in (Hsector, Hconstrained, Hprod_sector, Hlarge, Hint, TransposedSpace(Hsector), add_tag(Hsector, :x), add_tag(Hconstrained, :x))
+        @test all(state_index(basisstate(i, H), H) == i for i in 1:dim(H))
+    end
+    @test state_index(statetype(Hsector)(0), Hsector) == 0
+    @test state_index(statetype(Hsector)(1 << 10), Hsector) == 0
+    @test state_index(basisstate(2, Hprod), Hconstrained) == 0
+    @test state_index(T(2), Hlarge) == 0
+    @test state_index(FockNumber(3), Hint) == 0
+    @test state_index(statetype(hilbert_space(f, 1:4))(1), Hint) == 2
+    @test state_index(BosonicState(0), Hsector) == 0
+    @test state_index(FockNumber(0), Hconstrained) == 0
+
+    Ha, Hb = hilbert_space(f, 1:3), hilbert_space(f, 4:6)
+    Hsector2 = constrain_space(tensor_product(Ha, Hb), NumberConservation(1, [Ha]) * NumberConservation(2, [Hb]))
+    @test Hsector2 == Hsector && hash(Hsector2) == hash(Hsector)
 end
 
 """

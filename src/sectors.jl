@@ -7,13 +7,18 @@ Use `quantumnumbers`, `sector`, and `indices` to access individual sectors.
 struct SectorHilbertSpace{B,P,Q,C} <: AbstractHilbertSpace{B}
     parent::P
     ordered_basis_states::Vector{B}
-    state_to_index::OrderedDict{B,Int}
     qn_to_states::OrderedDict{Q,Vector{B}}
     constraint::C
+    index::Union{Vector{Int32},Dict{B,Int}}
+    SectorHilbertSpace{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index) where {B,P,Q,C} = new{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index)
 end
-SectorHilbertSpace(space::P, ordered_basis_states::AbstractVector{B}, state_to_index::OrderedDict{B,Int}, qn_to_states::OrderedDict{Q,Vector{B}}, constraint::C) where {B,P,Q,C} = SectorHilbertSpace{B,P,Q,C}(space, ordered_basis_states, state_to_index, qn_to_states, constraint)
-Base.hash(H::SectorHilbertSpace, h::UInt) = hash((H.parent, H.ordered_basis_states, H.state_to_index, H.qn_to_states), h)
-Base.:(==)(H1::SectorHilbertSpace, H2::SectorHilbertSpace) = H1 === H2 || (H1.parent == H2.parent && H1.ordered_basis_states == H2.ordered_basis_states && H1.state_to_index == H2.state_to_index && H1.qn_to_states == H2.qn_to_states)
+SectorHilbertSpace(parent::P, ordered_basis_states::AbstractVector{B}, qn_to_states::AbstractDict{Q}, constraint::C, index) where {B,P,Q,C} = SectorHilbertSpace{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index)
+function SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint)
+    parent = _strip_constrained(space)
+    SectorHilbertSpace(parent, ordered_basis_states, qn_to_states, constraint, state_positions(parent, ordered_basis_states))
+end
+Base.hash(H::SectorHilbertSpace, h::UInt) = hash((H.parent, H.ordered_basis_states, H.qn_to_states), h)
+Base.:(==)(H1::SectorHilbertSpace, H2::SectorHilbertSpace) = H1 === H2 || (H1.parent == H2.parent && H1.ordered_basis_states == H2.ordered_basis_states && H1.qn_to_states == H2.qn_to_states)
 
 sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
 function sector_space(space, states, sector_function, constraint)
@@ -59,8 +64,7 @@ end
 
 function _sector_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}, constraint) where {Q,B}
     ordered_states::Vector{B} = vcat(values(qn_to_states)...)
-    state_indexdict = OrderedDict(zip(ordered_states, Base.OneTo(length(ordered_states))))
-    SectorHilbertSpace(space, ordered_states, state_indexdict, qn_to_states, constraint)
+    SectorHilbertSpace(space, ordered_states, qn_to_states, constraint)
 end
 
 Base.parent(H::SectorHilbertSpace) = H.parent
@@ -86,8 +90,8 @@ mode_ordering(H::SectorHilbertSpace) = mode_ordering(parent(H))
 
 Base.@propagate_inbounds basisstate(ind::Integer, H::SectorHilbertSpace) = H.ordered_basis_states[ind]
 
-state_index(state::AbstractBasisState, H::SectorHilbertSpace{B}) where B = get(H.state_to_index, state, 0)
-add_tag(H::SectorHilbertSpace, tag) = SectorHilbertSpace(add_tag(parent(H), tag), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)
+state_index(state::AbstractBasisState, H::SectorHilbertSpace) = state_position(H.index, state, H)
+add_tag(H::SectorHilbertSpace, tag) = SectorHilbertSpace(add_tag(parent(H), tag), H.ordered_basis_states, H.qn_to_states, H.constraint, H.index)
 
 fast_path(space::SectorHilbertSpace) = fast_path(parent(space))
 
@@ -231,6 +235,26 @@ end
     @test basisstates(HMqn) == collect(basisstates(HM))[indices(qn, HM)]
     @test length(sectors(HM)) == N ÷ 2 + 1
     @test all(H -> parent(H) isa FermionicHilbertSpaces.MajoranaHilbertSpace, sectors(HM))
+end
+
+@testitem "Number-conserving Hamiltonian is block diagonal in sectors" begin
+    using LinearAlgebra
+    @fermions f
+    N = 4
+    ham = sum(rand(ComplexF64) * f[i]' * f[j] + hc for i in 1:N, j in 1:N) +
+          sum(rand() * f[i]' * f[i] * f[j]' * f[j] for i in 1:N, j in 1:N)
+    H = hilbert_space(f, 1:N, NumberConservation())
+    M = representation(ham, H, :dense)
+    spectrum(m) = eigvals(Hermitian(m))
+    sector_spectra = map(quantumnumbers(H)) do n
+        inds = indices(n, H)
+        rest = setdiff(1:dim(H), inds)
+        @test iszero(M[inds, rest])
+        Hn = hilbert_space(f, 1:N, NumberConservation(n))
+        @test spectrum(M[inds, inds]) ≈ spectrum(representation(ham, Hn, :dense))
+        spectrum(M[inds, inds])
+    end
+    @test sort(reduce(vcat, sector_spectra)) ≈ spectrum(representation(ham, hilbert_space(f, 1:N), :dense))
 end
 
 
@@ -432,5 +456,5 @@ end
 end
 
 function _wrap(space, wrapping::SectorHilbertSpace)
-    SectorHilbertSpace(space, wrapping.ordered_basis_states, wrapping.state_to_index, wrapping.qn_to_states, wrapping.constraint)
+    SectorHilbertSpace(space, wrapping.ordered_basis_states, wrapping.qn_to_states, wrapping.constraint)
 end
