@@ -51,6 +51,20 @@ basisstates(H)
 constrain_space(H, ParityConservation(1, [Hb])) # keep only even parity of the bosonic part
 ```
 
+A sector of fixed fermion number can be combined with unconstrained bosons:
+```@example constraints
+@fermions c
+@bosons b
+Hc = hilbert_space(c, 1:3, NumberConservation(1))
+Hb = hilbert_space(b, 1:3, 4) # each mode has the levels |0⟩…|3⟩
+H = tensor_product(Hc, Hb)
+```
+Alternatively, the constraint can be given to the tensor product, with `spaces` selecting the fermionic factor. This gives the same basis states, in a different order.
+```@example constraints
+Hc_full = hilbert_space(c, 1:3)
+tensor_product(Hc_full, Hb; constraint = NumberConservation(1, [Hc_full]))
+```
+
 ### FilterConstraint and SectorConstraint
 - `FilterConstraint(...)`:
     A flexible filtering constraint.
