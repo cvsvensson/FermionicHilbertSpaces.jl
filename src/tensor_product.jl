@@ -606,7 +606,7 @@ function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, :
     barstates = basisstates(complement)
     (isempty(substates) || isempty(barstates)) && return nothing
     # (K, J, w) for each state of H formed with one complement state, where w includes the phase
-    # factor σ of the state with the first such state, so that the phase factor of a pair is σ1 * σ2.
+    # factor σ of the pair (this state, the first such state), so that the phase factor of a pair is σ1 * σ2.
     f0 = first(substates)
     fullstates0, amps0 = combine_states((f0, first(barstates)), mapper)
     hits = Tuple{Int,Int,eltype(amps0)}[]
