@@ -371,7 +371,7 @@ end
     @fermions f
     N = 200
     H = hilbert_space(f, 1:N, NumberConservation(1))
-    hopping = matrix_representation(sum(f[n]' * f[n+1] + hc for n in 1:N-1), H)
+    hopping = representation(sum(f[n]' * f[n+1] + hc for n in 1:N-1), H)
     @test eigvals(Hermitian(Matrix(hopping))) ≈ sort(2cos.(π * (1:N) / (N + 1)))
 
     # A one-particle state reduced to every third mode has eigenvalues p and 1 - p

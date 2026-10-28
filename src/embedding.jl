@@ -121,13 +121,13 @@ embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwar
     emb = embed(Hsub => H)
     @test embed(Matrix(I, dim(Hsub), dim(Hsub)), Hsub => H) == I
     hopping = sum(f[n]' * f[n+1] + hc for n in 1:3)
-    m = matrix_representation(hopping, Hsub)
-    @test embed(m, Hsub => H) ≈ matrix_representation(hopping, H)
-    @test emb(m) ≈ matrix_representation(hopping, H)
+    m = representation(hopping, Hsub)
+    @test embed(m, Hsub => H) ≈ representation(hopping, H)
+    @test emb(m) ≈ representation(hopping, H)
     # this maps states of H outside H
-    m = matrix_representation(f[1]', Hsub; projection=true)
+    m = representation(f[1]', Hsub; projection=true)
     @test_throws ArgumentError embed(m, Hsub => H)
-    compression = matrix_representation(f[1]', H; projection=true)
+    compression = representation(f[1]', H; projection=true)
     @test embed(m, Hsub => H; skipmissing=true) ≈ compression
     @test emb(m) ≈ compression # the map is the compression and does not check
     # with the same atoms: |00⟩⟨11| maps no state of the space with at most one particle outside it, |11⟩⟨00| does

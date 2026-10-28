@@ -213,7 +213,7 @@ from `m`.
 
 `embed(m, Hsub => H)` returns the compression of `m ⊗ I` onto `H`, the adjoint of the partial
 trace. By default it throws if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude,
-as `matrix_representation` does for an operator that does not preserve the constraint of `H`.
+as `representation` does for an operator that does not preserve the constraint of `H`.
 
 The maps `partial_trace(H => Hsub)` and `embed(Hsub => H)` skip the same states, but do not
 check their input: they are the linear maps that the eager functions compute when nothing is dropped.
@@ -299,9 +299,9 @@ density matrix:
 H = hilbert_space(f, 1:4)
 H13 = hilbert_space(f, [1, 3])
 H24 = hilbert_space(f, [2, 4])
-A = matrix_representation(f[1]' * f[3], H13)
-B = matrix_representation(f[2]' * f[4], H24)
-AB = matrix_representation(f[1]' * f[3] * f[2]' * f[4], H)
+A = representation(f[1]' * f[3], H13)
+B = representation(f[2]' * f[4], H24)
+AB = representation(f[1]' * f[3] * f[2]' * f[4], H)
 tensor_product((A, B), (H13, H24) => H) ≈ AB, generalized_kron((A, B), (H13, H24) => H) ≈ -AB
 ```
 
