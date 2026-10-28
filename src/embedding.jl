@@ -13,7 +13,8 @@ Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fe
 The result is the compression `P (m ⊗ I) P` onto `H`, so that `tr(embed(A) * ρ) ==
 tr(A * partial_trace(ρ))` for `ρ` on `H`. Unless `skipmissing=true`, throws an `ArgumentError`
 if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Elements of `m` on states of
-`Hsub` that no state of `H` contains are dropped.
+`Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not
+in `Hsub` get zero.
 """
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
@@ -23,48 +24,63 @@ struct EmbedMap{HS,H,C,K,M,S}
     complement::C
     kwargs::K
     map::M
-    splits::S # `nothing` when inputs are not checked
+    support::S # `(; trace, embed)` supports that inputs are checked against, or `nothing`
 end
 
 function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
     map = if isnothing(complement)
-        basis_transformation_map(Hsub, H; skipmissing, kwargs...)
+        basis_transformation_map(Hsub, H; skipmissing=true, kwargs...)
     else
         _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, kwargs...))
     end
-    EmbedMap(Hsub, H, complement, kwargs, map, _map_check_splits(H, Hsub, complement, skipmissing))
+    EmbedMap(Hsub, H, complement, kwargs, map, _map_support(H, Hsub, complement, skipmissing))
+end
+function (op::EmbedMap)(args...)
+    in, n = last(args), dim(op.Hsub)
+    m = in isa AbstractVector && length(in) == n^2 ? reshape(in, n, n) : in
+    m isa AbstractVector || _check_support(m, isnothing(op.support) ? nothing : op.support.embed)
+    _apply(op, args...)
 end
 
-# Throw if `m ⊗ I` maps a state of `H` outside `H`: if `m[i, j]` is nonzero and substate `j` combines
-# into `H` with a complement state that substate `i` does not combine with. `splits` is
-# `_full_partial_trace_splits(H, Hsub, mapper)`.
-function _check_embed_support(m, Hsub, splits)
-    pairs = Set((K, fbar) for (_, s) in splits for (K, _, fbar, _) in s if !iszero(K))
-    bysub = Dict(K => typeof(fbar)[] for (K, fbar) in pairs)
-    for (K, fbar) in pairs
-        push!(bysub[K], fbar)
-    end
-    for I in tensor_product_iterator(m, Hsub)
-        i, j = Tuple(I)
-        (iszero(m[i, j]) || all(fbar -> (i, fbar) in pairs, get(bysub, j, ()))) && continue
-        throw(ArgumentError("The element ($i, $j) of `m` maps a state of `H` outside `H`. Pass `skipmissing=true` to drop such terms."))
-    end
-    return nothing
+# For substates `i` and `j` of `Hsub` with nonzero `m[i, j]`, `m ⊗ I` keeps the states of `H` in `H`
+# when `allowed[cls[j], cls[i]]`: when every complement part that `j` has in `H`, `i` has too.
+struct EmbedSupport
+    cls::Vector{Int}
+    allowed::BitMatrix
 end
-function _check_map_input(op::EmbedMap, in)
-    isnothing(op.splits) && return nothing
-    n = dim(op.Hsub)
-    _check_embed_support(in isa AbstractVector ? reshape(in, n, n) : in, op.Hsub, op.splits)
+function _embed_support(splits, complement, nsub)
+    reach = [Int[] for _ in 1:nsub]
+    for (_, s) in splits, (K, _, fbar, _) in s
+        iszero(K) || push!(reach[K], state_index(fbar, complement))
+    end
+    foreach(sort!, reach)
+    allequal(reach) && return nothing
+    classes = unique(reach)
+    return EmbedSupport(indexin(reach, classes), BitMatrix([issubset(a, b) for a in classes, b in classes]))
 end
+# Call `f(i, j, m[i, j])` for the stored elements of `m`
+function _foreach_stored(f, m::SparseMatrixCSC)
+    rows, vals = rowvals(m), nonzeros(m)
+    for j in axes(m, 2), p in nzrange(m, j)
+        f(rows[p], j, vals[p])
+    end
+end
+_foreach_stored(f, m) = foreach(I -> f(Tuple(I)..., m[I]), CartesianIndices(m))
+function _check_support(m::AbstractMatrix, s::EmbedSupport)
+    size(m) == (length(s.cls), length(s.cls)) || return nothing
+    _foreach_stored(m) do i, j, x
+        s.allowed[s.cls[j], s.cls[i]] || iszero(x) ||
+            throw(ArgumentError("The element ($i, $j) of `m` maps a state of `H` outside `H`. Pass `skipmissing=true` to drop such terms."))
+    end
+end
+_check_support(::UniformScaling, ::EmbedSupport) = nothing
 
-function (op::EmbedMap)(m::AbstractMatrix)
+function _apply(op::EmbedMap, m::AbstractMatrix)
     size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
-    _check_map_input(op, m)
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(m), dim(op.H))
 end
-function (op::EmbedMap)(m::SparseMatrixCSC)
+function _apply(op::EmbedMap, m::SparseMatrixCSC)
     size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
-    _check_map_input(op, m)
     _embed_sparse_matrix(op.map, m, dim(op.H))
 end
 
@@ -88,38 +104,34 @@ function _embed_sparse_matrix(map::SparseMatrixCSC, m::SparseMatrixCSC, D)
     return sparse(J1s, J2s, Vs, D, D)
 end
 
-function (op::EmbedMap)(out::AbstractMatrix, m::AbstractMatrix)
+function _apply(op::EmbedMap, out::AbstractMatrix, m::AbstractMatrix)
     size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
     size(out) == (dim(op.H), dim(op.H)) || throw(DimensionMismatch("The output matrix must have size ($(dim(op.H)), $(dim(op.H))), got $(size(out))"))
-    _check_map_input(op, m)
     mul!(vec(out), op.map, _vectorize_pt_density_matrix(m))
     out
 end
 
-function (op::EmbedMap)(v::AbstractVector)
+function _apply(op::EmbedMap, v::AbstractVector)
     length(v) == dim(op.Hsub)^2 || throw(DimensionMismatch("The input vector must have length $(dim(op.Hsub)^2), got $(length(v))"))
-    _check_map_input(op, v)
     op.map * v
 end
 
-function (op::EmbedMap)(out::AbstractVector, v::AbstractVector)
+function _apply(op::EmbedMap, out::AbstractVector, v::AbstractVector)
     length(v) == dim(op.Hsub)^2 || throw(DimensionMismatch("The input vector must have length $(dim(op.Hsub)^2), got $(length(v))"))
     length(out) == dim(op.H)^2 || throw(DimensionMismatch("The output vector must have length $(dim(op.H)^2), got $(length(out))"))
-    _check_map_input(op, v)
     mul!(out, op.map, v)
     out
 end
 
-function (op::EmbedMap)(m::UniformScaling)
-    _check_map_input(op, m)
+function _apply(op::EmbedMap, m::UniformScaling)
     mfull = m.λ * I(dim(op.Hsub))
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(mfull), dim(op.H))
 end
 SparseArrays.sparse(op::EmbedMap) = op.map
-Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map), op.splits)
-Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map), op.splits)
-Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map), op.splits)
-Base.transpose(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map), op.splits)
+Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map), op.support)
+Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map), op.support)
+Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map), op.support)
+Base.transpose(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map), op.support)
 
 """
     embed(Hsub => H; kwargs...)

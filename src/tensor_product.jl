@@ -553,7 +553,7 @@ end
 
 function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, ::FullPartialTraceAlg;
     phase_factors=true) where {F}
-    splits = _full_partial_trace_splits(H, Hsub, mapper)
+    splits = _full_partial_trace_splits(H, Hsub, complement, mapper)
     for I in inds
         _foreach_full_partial_trace_pair_term(op, I[1], I[2], splits, H, Hsub, phase_factors)
     end
@@ -561,11 +561,13 @@ function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, :
 end
 
 # For each basis state f of `H`: `(f, ((K, fsub, fbar, w), ...))`, with one entry per split of f,
-# where K is the index of fsub in `Hsub` (0 if fsub is not in `Hsub`).
-function _full_partial_trace_splits(H, Hsub, mapper)
+# where K is the index of fsub in `Hsub`, or 0 if fsub is not in `Hsub` or fbar is not in `complement`.
+function _full_partial_trace_splits(H, Hsub, complement, mapper)
     map(basisstates(H)) do f
         substates, amps = split_state(f, mapper)
-        (f, map((s, w) -> (state_index(first(s), Hsub), first(s), last(s), w), substates, amps))
+        (f, map(substates, amps) do (fsub, fbar), w
+            (iszero(state_index(fbar, complement)) ? 0 : state_index(fsub, Hsub), fsub, fbar, w)
+        end)
     end
 end
 
@@ -578,7 +580,8 @@ end
     for (K1, f1sub, f1bar, w1) in splits1
         iszero(K1) && continue
         for (K2, f2sub, f2bar, w2) in splits2
-            (iszero(K2) || f1bar != f2bar) && continue
+            f1bar != f2bar && continue
+            iszero(K2) && continue
             s1 = phase_factors ? partial_trace_phase_factor(f1, f2, H) : 1
             s2 = phase_factors ? partial_trace_phase_factor(f1sub, f2sub, Hsub) : 1
             op(J1, J2, K1, K2, w1 * w2 * s2 * conj(s1))
@@ -587,21 +590,57 @@ end
     return nothing
 end
 
-# Throw if `m` is nonzero between two states of `H` with the same complement state, one of which
-# has a subsystem state that is not in `Hsub`: the partial trace drops such elements.
-function _check_partial_trace_support(m, splits)
-    all(((_, s),) -> all(!iszero ∘ first, s), splits) && return nothing
-    bycomplement = Dict(fbar => Int[] for (_, s) in splits for (_, _, fbar, _) in s)
-    for (J, (_, s)) in enumerate(splits), (_, _, fbar, _) in s
-        push!(bycomplement[fbar], J)
-    end
-    for (J1, (f, s)) in enumerate(splits), (K, fsub, fbar, _) in s
-        iszero(K) || continue
-        any(J2 -> !iszero(m[J1, J2]) || !iszero(m[J2, J1]), bycomplement[fbar]) &&
-            throw(ArgumentError("The part `$fsub` of the state `$f` is not in the subsystem Hilbert space. Pass `skipmissing=true` to drop such elements."))
-    end
-    return nothing
+# The states of `H` that the partial trace drops, because their part on `Hsub` or on the complement
+# is missing, an id of the complement part of each state of `H`, and whether a state with that
+# complement part is dropped. The trace drops the elements of `m` between two states with the same
+# complement part when one of them is dropped.
+struct TraceSupport
+    miss::BitVector
+    comp::Vector{Int}
+    hasmiss::BitVector
 end
+function _trace_support(splits, complement)
+    miss = BitVector([any(iszero ∘ first, s) for (_, s) in splits])
+    any(miss) || return nothing
+    absent = Dict{typeof(first(last(first(splits)))[3]),Int}() # complement parts that are not in `complement`
+    comp = map(splits) do (_, s)
+        fbar = first(s)[3]
+        c = state_index(fbar, complement)
+        iszero(c) ? dim(complement) + get!(absent, fbar, length(absent) + 1) : c
+    end
+    return TraceSupport(miss, comp)
+end
+function TraceSupport(miss, comp)
+    hasmiss = falses(maximum(comp))
+    hasmiss[comp[miss]] .= true
+    TraceSupport(miss, comp, hasmiss)
+end
+
+_throw_dropped() = throw(ArgumentError("The partial trace drops nonzero elements on states of `H` whose part on `Hsub` or on the complement is missing. Pass `skipmissing=true` to drop them."))
+# Throw if the partial trace drops a nonzero element of `m`. A size mismatch is left to the caller.
+_check_support(m, ::Nothing) = nothing
+function _check_support(m::AbstractMatrix, s::TraceSupport)
+    size(m) == (length(s.miss), length(s.miss)) || return nothing
+    for J1 in findall(s.miss), J2 in eachindex(s.comp)
+        s.comp[J1] == s.comp[J2] && !(iszero(m[J1, J2]) && iszero(m[J2, J1])) && _throw_dropped()
+    end
+end
+function _check_support(m::SparseMatrixCSC, s::TraceSupport)
+    size(m) == (length(s.miss), length(s.miss)) || return nothing
+    rows, vals = rowvals(m), nonzeros(m)
+    for J2 in axes(m, 2)
+        s.hasmiss[s.comp[J2]] || continue
+        for p in nzrange(m, J2)
+            J1 = rows[p]
+            !iszero(vals[p]) && (s.miss[J1] || s.miss[J2]) && s.comp[J1] == s.comp[J2] && _throw_dropped()
+        end
+    end
+end
+# a pure state ψ, standing for ψψ'
+_check_support(ψ::AbstractVector, s::TraceSupport) = length(ψ) == length(s.miss) && any(s.miss .& .!iszero.(ψ)) && _throw_dropped()
+_check_support(m::LowRankMatrix, s::TraceSupport) = size(m.U, 2) == 1 && iszero.(m.U) == iszero.(m.V) ?
+    _check_support(vec(m.U), s) : invoke(_check_support, Tuple{AbstractMatrix,TraceSupport}, m, s)
+_check_support(m::UniformScaling, s::TraceSupport) = iszero(m.λ) || _throw_dropped()
 
 """
     partial_trace!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), alg, phase_factors=true, skipmissing=false)
@@ -623,19 +662,19 @@ end
 partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
 
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
-    skipmissing || _check_partial_trace_support(m, _full_partial_trace_splits(H, Hsub, mapper))
+    splits = _full_partial_trace_splits(H, Hsub, complement, mapper)
+    skipmissing || _check_support(m, _trace_support(splits, complement))
     fill!(mout, zero(eltype(mout)))
-    _partial_trace!(mout, m, H, Hsub, complement, mapper, alg, phase_factors)
+    _partial_trace!(mout, m, H, Hsub, complement, mapper, splits, alg, phase_factors)
 end
-function _partial_trace!(mout, m, H, Hsub, complement, mapper, ::SubsystemPartialTraceAlg, phase_factors)
+function _partial_trace!(mout, m, H, Hsub, complement, mapper, splits, ::SubsystemPartialTraceAlg, phase_factors)
     _foreach_partial_trace_term(nothing, H, Hsub, complement, mapper, SubsystemPartialTraceAlg(); phase_factors) do J1, J2, K1, K2, v
         mout[K1, K2] += v * m[J1, J2]
     end
     return mout
 end
-function _partial_trace!(mout, m, H, Hsub, complement, mapper, ::FullPartialTraceAlg, phase_factors)
-    _full_partial_trace!(mout, m, _full_partial_trace_splits(H, Hsub, mapper), H, Hsub, phase_factors)
-end
+_partial_trace!(mout, m, H, Hsub, complement, mapper, splits, ::FullPartialTraceAlg, phase_factors) =
+    _full_partial_trace!(mout, m, splits, H, Hsub, phase_factors)
 function _full_partial_trace!(mout, m, splits, H, Hsub, phase_factors)
     for I in tensor_product_iterator(m, H)
         _foreach_full_partial_trace_pair_term(I[1], I[2], splits, H, Hsub, phase_factors) do J1, J2, K1, K2, v
@@ -765,22 +804,29 @@ struct PartialTraceMap{H,HS,C,K,M,S}
     complement::C
     kwargs::K
     map::M
-    splits::S # `nothing` when inputs are not checked
+    support::S # `(; trace, embed)` supports that inputs are checked against, or `nothing`
 end
 
-function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
+function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
     map = partial_trace_map(H, Hsub, complement, alg; kwargs...)
-    PartialTraceMap(H, Hsub, complement, kwargs, map, _map_check_splits(H, Hsub, complement, get(kwargs, :skipmissing, false)))
+    PartialTraceMap(H, Hsub, complement, kwargs, map, _map_support(H, Hsub, complement, skipmissing))
 end
-_map_check_splits(H, Hsub, complement, skipmissing) =
-    skipmissing || isnothing(complement) ? nothing : _full_partial_trace_splits(H, Hsub, state_mapper(H, (Hsub, complement)))
+function (op::PartialTraceMap)(args...)
+    in, d = last(args), dim(op.H)
+    _check_support(in isa AbstractVector && length(in) == d^2 ? reshape(in, d, d) : in, isnothing(op.support) ? nothing : op.support.trace)
+    _apply(op, args...)
+end
 
-# Throw if applying the map to `in` would drop nonzero values; `in` is a matrix or a vector as the map accepts
-function _check_map_input(op::PartialTraceMap, in)
-    isnothing(op.splits) && return nothing
-    d = dim(op.H)
-    m = in isa AbstractVector ? (length(in) == d ? vec_to_density_matrix(in) : reshape(in, d, d)) : in
-    _check_partial_trace_support(m, op.splits)
+# What the maps from `H` to `Hsub` and back check their inputs against
+function _map_support(H, Hsub, complement, skipmissing)
+    skipmissing && return nothing
+    isnothing(complement) && return (trace=_basis_support(H, Hsub), embed=_basis_support(Hsub, H))
+    splits = _full_partial_trace_splits(H, Hsub, complement, state_mapper(H, (Hsub, complement)))
+    return (trace=_trace_support(splits, complement), embed=_embed_support(splits, complement, dim(Hsub)))
+end
+function _basis_support(Hfrom, Hto)
+    dropped = last(basis_transformation(Hfrom, Hto))
+    isempty(dropped) ? nothing : TraceSupport(in(dropped).(1:dim(Hfrom)), ones(Int, dim(Hfrom)))
 end
 
 vec_to_density_matrix(v::AbstractVector) = LowRankMatrix(v, conj(v))
@@ -824,39 +870,33 @@ function _canonicalize_pt_output(m::AbstractMatrix, Hsub::AbstractHilbertSpace)
     return vec(m)
 end
 
-function (op::PartialTraceMap)(in::AbstractMatrix)
+function _apply(op::PartialTraceMap, in::AbstractMatrix)
     v = _canonicalize_pt_input(in, op.H)
-    _check_map_input(op, in)
     _devectorize_pt_output(op.map * v, dim(op.Hsub))
 end
-function (op::PartialTraceMap)(in::SparseMatrixCSC)
+function _apply(op::PartialTraceMap, in::SparseMatrixCSC)
     _check_pt_input_size(in, op.H)
-    _check_map_input(op, in)
     n = dim(op.Hsub)
     w = _superop_mul_matrix!(zeros(promote_type(eltype(op.map), eltype(in)), n^2), op.map, in)
     return sparse(reshape(w, n, n))
 end
-function (op::PartialTraceMap)(out, in::SparseMatrixCSC)
+function _apply(op::PartialTraceMap, out, in::SparseMatrixCSC)
     vout = _canonicalize_pt_output(out, op.Hsub)
     _check_pt_input_size(in, op.H)
-    _check_map_input(op, in)
     _superop_mul_matrix!(vout, op.map, in)
     out
 end
-function (op::PartialTraceMap)(in::AbstractVector)
+function _apply(op::PartialTraceMap, in::AbstractVector)
     if length(in) == dim(op.H)
         # pure state: apply the map directly, without forming the density matrix
-        _check_map_input(op, in)
         w = _apply_ptmap_on_vec(op, in)
         return reshape(w, dim(op.Hsub), dim(op.Hsub))
     end
     v = _canonicalize_pt_input(in, op.H)
-    _check_map_input(op, in)
     _devectorize_pt_output(op.map * v, dim(op.Hsub))
 end
-function (op::PartialTraceMap)(in::UniformScaling)
+function _apply(op::PartialTraceMap, in::UniformScaling)
     v = _canonicalize_pt_input(in, op.H)
-    _check_map_input(op, in)
     _devectorize_pt_output(op.map * v, dim(op.Hsub))
 end
 
@@ -867,24 +907,21 @@ function _apply_ptmap_on_vec(ptmap::PartialTraceMap, ψ::AbstractVector)
 end
 _apply_ptmap_on_vec!(w::AbstractVector, ptmap::PartialTraceMap, ψ::AbstractVector) = _apply_superop_on_pure_state!(w, ptmap.map, ψ)
 
-function (op::PartialTraceMap)(out, in::AbstractMatrix)
+function _apply(op::PartialTraceMap, out, in::AbstractMatrix)
     vout = _canonicalize_pt_output(out, op.Hsub)
     vin = _canonicalize_pt_input(in, op.H)
-    _check_map_input(op, in)
     mul!(vout, op.map, vin)
     out
 end
-function (op::PartialTraceMap)(out, in::AbstractVector)
+function _apply(op::PartialTraceMap, out, in::AbstractVector)
     if length(in) == dim(op.H)
         # pure state: apply the map directly, without forming the density matrix
         vout = _canonicalize_pt_output(out, op.Hsub)
-        _check_map_input(op, in)
         _apply_ptmap_on_vec!(vout, op, in)
         return out
     end
     vout = _canonicalize_pt_output(out, op.Hsub)
     vin = _canonicalize_pt_input(in, op.H)
-    _check_map_input(op, in)
     mul!(vout, op.map, vin)
     out
 end
@@ -895,9 +932,9 @@ function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub),
     partial_trace_map(H, Hsub, complement, alg; kwargs...)
 end
 
-partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = transpose(transposed_basis_transformation_map(H, Hsub; kwargs...))
-# The map skips missing states whatever `skipmissing` is; `PartialTraceMap` and `EmbedMap` check their inputs.
-function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement::AbstractHilbertSpace, alg::AbstractPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
+# The map skips missing states; `PartialTraceMap` and `EmbedMap` check their inputs.
+partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = transpose(transposed_basis_transformation_map(H, Hsub; skipmissing=true, kwargs...))
+function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement::AbstractHilbertSpace, alg::AbstractPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); phase_factors=true)
     indK = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
     T = partial_trace_phase_factor_eltype(H)
@@ -1030,6 +1067,9 @@ end
         @test partial_trace(m12full, H => Hsub; complement=Hcomp, alg) ≈ partial_trace(m12full, H => Hsub; alg=alg1)
         @test_throws ArgumentError embed(Hsub => H; complement=Hcomp, alg)(msub)
         @test embed(Hsub => H; complement=Hcomp, alg, skipmissing=true)(msub) ≈ embed(msub, Hsub => H; complement=Hcomp, skipmissing=true)
+        # H2 lacks the parts on modes 3:4 with zero or two particles
+        @test_throws ArgumentError partial_trace(m12full, H => Hsub; complement=H2, alg)
+        @test partial_trace(m12full, H => Hsub; complement=H2, alg, skipmissing=true) ≈ partial_trace(m12full, H => Hsub; complement=H2, alg=alg1, skipmissing=true)
     end
     @test_throws ArgumentError embed(msub, Hsub => H; complement=Hcomp)
 
@@ -1040,8 +1080,10 @@ end
     @test partial_trace(mp, Hp => Hpsub; alg=alg2) ≈ partial_trace(mp, Hp => Hpsub; alg=alg1)
 
     H = hilbert_space(a, 1:4, NumberConservation(1))
-    # no state of H is a product of states of H1 and H2, so the kron maps no state of H outside H
-    @test generalized_kron((m1, m2), (H1, H2) => H) ≈ tensor_product((m1, m2), (H1, H2) => H)
+    v1, v2 = [0, 1, 0, 0], [1, 0, 0, 0] # one particle on mode 1, and the vacuum
+    Hfull = hilbert_space(a, 1:4)
+    @test generalized_kron((v1, v2), (Hsub, Hcomp) => H) == FermionicHilbertSpaces.change_basis(generalized_kron((v1, v2), (Hsub, Hcomp) => Hfull), Hfull => H)
+    @test_throws ArgumentError generalized_kron((ones(4), v2), (Hsub, Hcomp) => H)
 end
 
 @testitem "Partial trace and embed of sparse matrices" begin
@@ -1109,7 +1151,7 @@ end
             @test size(partial_trace(Msmall, Hsmall => Hbig)) == (dim(Hbig), dim(Hbig))
 
             pt = partial_trace(Hsmall => Hbig)
-            @test_throws ArgumentError embed(Hbig => Hsmall) # drops states, so errors
+            @test_throws ArgumentError embed(Hbig => Hsmall)(Mbig) # drops nonzero elements, so errors
             emb = embed(Hsmall => Hbig)
 
             inds = indices(Hsmall, Hbig)[:]
