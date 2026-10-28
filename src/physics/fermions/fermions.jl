@@ -110,7 +110,7 @@ end
 # accepts without building one single-mode space per mode.
 _fock_atoms(Hsub) = atomic_factors(Hsub)
 _fock_atoms(Hsub::FermionicSpace) = nbr_of_modes(Hsub) == 0 ? (Hsub,) : modes(Hsub)
-_fock_atoms(Hsub::Union{ConstrainedSpace,SectorHilbertSpace}) = _fock_atoms(parent(Hsub))
+_fock_atoms(Hsub::AbstractSubspace) = _fock_atoms(parent(Hsub))
 
 _truncate(items, max, edge) =
     length(items) <= max ? items : [items[1:edge]; "..."; items[(end-edge+1):end]]
