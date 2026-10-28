@@ -55,9 +55,7 @@ the exact index in `1:dim(H)` of each basis state of `H` and `0` for other state
 """
 has_arithmetic_state_index(H) = false
 
-# Maximum table entries per state. A `Dict` from `FockNumber`s to positions takes 30 to 50
-# bytes per state, so a table of `Int32`s is at most about as large.
-const INDEX_TABLE_RATIO = 8
+const INDEX_TABLE_RATIO = 32 # maximum table entries per state
 const INDEX_TABLE_MAX_LENGTH = 2^28
 
 """
