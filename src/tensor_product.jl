@@ -305,7 +305,7 @@ function ordered_product(ms, Hs, H; phase_factors=true, skipmissing=false)
         complement = complementary_subsystem(H, Hk)
         mapper = state_mapper(H, isnothing(complement) ? (Hk,) : (Hk, complement))
         phase = phase_factors && !isnothing(complement) ? kron_phase_factor(mapper) : (f1, f2) -> 1
-        (_sparse_square(m, dim(Hk)), Hk, mapper, phase)
+        (sparse(m isa UniformScaling ? m(dim(Hk)) : m), Hk, mapper, phase)
     end
     return _ordered_product(factors, H, promote_type(Int, Base.promote_eltype(ms...)), skipmissing)
 end
@@ -325,8 +325,6 @@ function _ordered_product(factors, H, ::Type{T}, skipmissing) where {T}
     end
     return sparse(Is, Js, Vs, dim(H), dim(H))
 end
-_sparse_square(m, n) = sparse(m)
-_sparse_square(m::UniformScaling, n) = sparse(m, n, n)
 
 _apply_factors(op, ::Tuple{}, state, v) = op(state, v)
 function _apply_factors(op::F, factors, state, v) where {F}
@@ -363,8 +361,9 @@ tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> 
     @test_throws ArgumentError tensor_product((cdag1, c3'), (H1, H3) => H)
     Hs = hilbert_space(f, 1:4, NumberConservation(1:3))
     @test tensor_product((cdag1, c3), (H1, H3) => Hs) ≈ matrix_representation(f[1]' * f[3], Hs)
-    Heven = hilbert_space(f, 1:4, ParityConservation(1))
-    @test tensor_product((cdag1, c3'), (H1, H3) => Heven) ≈ matrix_representation(f[1]' * f[3]', Heven)
+    H13, H24 = hilbert_space(f, [1, 3]), hilbert_space(f, [2, 4])
+    cdag3, c2 = matrix_representation(f[3]', H13), matrix_representation(f[2], H24)
+    @test tensor_product((cdag3, c2), (H13, H24) => H) ≈ matrix_representation(f[3]' * f[2], H)
 
     @bosons b
     Hb = hilbert_space(b, 1:3, 3)
