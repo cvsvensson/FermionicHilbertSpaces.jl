@@ -270,19 +270,21 @@ f12 = tensor_product((f1, f2), (H1, H2) => H)
 It can be used for vectors as well to build a product state from its factors,
 but note that this is only well-defined for fermions if each state respects 
 super-selection: it must not be a superposition of states with different fermion parity.
+For such states, swapping two odd factors flips the sign of the result; for states
+without definite parity, the order of the factors changes more than the sign.
 ```@example hilbert_space_ops
 v1 = representation("0", H1)
 v2 = representation("10", H2)
 v12 = tensor_product((v1, v2), (H1, H2) => H)
 ```
 
-`generalized_kron(ms, Hs, H=tensor_product(Hs); kwargs...)` computes the fermionic
-tensor product instead (see [Fermionic tensor products](fermions.md)), which does
-not depend on the order of `ms`. For matrices it equals
-`tensor_product` only when each space in `Hs` covers consecutive modes of `H` and
-`Hs` is listed in that order; for vectors the two are the same. On other partitions
-`generalized_kron` is not a product of embeddings, and `generalized_kron` of density
-matrices need not be a density matrix:
+`generalized_kron(ms, Hs, H=tensor_product(Hs); kwargs...)` gives the same
+result as `tensor_product` for vectors. For matrices it computes the fermionic tensor
+product instead (see [Fermionic tensor products](fermions.md)), which does not depend
+on the order of `ms`. It equals `tensor_product` when each space in `Hs` covers
+consecutive modes of `H` and `Hs` is listed in that order. On other partitions it is
+not a product of embeddings, and `generalized_kron` of density matrices need not be a
+density matrix:
 
 ```@example hilbert_space_ops
 H = hilbert_space(f, 1:4)

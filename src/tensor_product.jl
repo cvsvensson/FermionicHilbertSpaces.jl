@@ -82,13 +82,14 @@ end
 
 Compute the fermionic tensor product of the matrices or vectors in `ms` on the spaces `Hs`, as an array on `H`, which defaults to the `tensor_product` of `Hs`.
 
-This is the product of eqs. (14b) and (15) in J. Phys. A 54, 393001 (2021): a local basis operator is a product of
-single-mode factors in the mode order of its space, and the result is the product of all these factors in the mode
-order of `H`. It does not depend on the order of `ms` and `Hs`. For matrices it is not, in general, a product of
-embeddings, and equals `tensor_product(ms, Hs => H)` only when each space in `Hs` covers consecutive modes of `H` and
-`Hs` is listed in that order; otherwise `generalized_kron` of density matrices need not be a density matrix.
-For vectors the two functions agree. Use `tensor_product` for product states, local observables, and anything that
-should equal a product of embedded operators.
+For vectors the result is the same as `tensor_product(ms, Hs => H)`. For matrices, write each local basis operator
+as a product of single-mode factors (one of `c c†`, `c†`, `c`, `c†c` per mode) in the mode order of its space;
+`generalized_kron` multiplies the factors of all spaces together in the mode order of `H`, and extends this linearly.
+The result does not depend on the order of `ms` and `Hs`, and is in general not a product of embeddings: for
+`A = c₁†c₃` on modes `[1, 3]` and `B = c₂†c₄` on modes `[2, 4]` it gives `c₁†c₂†c₃c₄ = -(c₁†c₃)(c₂†c₄)`.
+It equals `tensor_product(ms, Hs => H)` when each space in `Hs` covers consecutive modes of `H` and `Hs` is listed
+in that order. Otherwise `generalized_kron` of density matrices need not be a density matrix.
+Use `tensor_product` for product states, local observables, and anything that should equal a product of embedded operators.
 
 `generalized_kron(ms, Hs => H)` is also accepted, and `generalized_kron(Hs => H)` returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
@@ -282,9 +283,11 @@ end
     tensor_product(ms, Hs => H; kwargs...)
     tensor_product(Hs => H; kwargs...)
 
-Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`
-(eq. (26) in J. Phys. A 54, 393001 (2021)), so that `tensor_product((A, B), (HA, HB) => H) == embed(A, HA => H) * embed(B, HB => H)`.
-For vectors the result is the product state, the same as `generalized_kron(ms, Hs => H)`.
+Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`,
+so that `tensor_product((A, B), (HA, HB) => H) == embed(A, HA => H) * embed(B, HB => H)`.
+For vectors the result is `ψ₁ψ₂⋯|0⟩`, where `ψₖ` is the polynomial in creation operators that creates `ms[k]` from
+the vacuum. Swapping two odd vectors flips the sign; for vectors without definite fermion parity, the order of `ms`
+changes more than the sign.
 `kwargs` can be passed a bool `phase_factors`. The last form returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
