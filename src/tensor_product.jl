@@ -278,13 +278,18 @@ end
     tensor_product(Hs => H; kwargs...)
 
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
+If `H` is constrained, the result is the ordered product on the unconstrained space restricted to `H`, as `matrix_representation`
+of the corresponding symbolic product. Terms that take a state of `H` outside `H` throw an `ArgumentError` unless `skipmissing=true`,
+which drops them. A matrix on a constrained space in `Hs` acts as zero on states outside that space.
 `kwargs` can be passed a bool `phase_factors`. The last form returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
 function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     if all(_issquare, ms)
-        return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
+        # on an unconstrained space, the product of embeddings is the same and faster for dense factors
+        isconstrained(H) || return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
+        return ordered_product(Tuple(ms), Tuple(Hs), H; kwargs...)
     elseif all(_isket, ms)
         return generalized_kron(map(vec, ms), Hs, H; kwargs...)
     elseif all(_isbra, ms)
@@ -293,6 +298,51 @@ function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilb
     end
     throw(ArgumentError("The elements of `ms` must be either all square matrices, all column vectors or all row vectors, got sizes $(map(size, ms))."))
 end
+# Apply the factors right to left to each basis state of H. Only the final states are looked up in H.
+function ordered_product(ms, Hs, H; phase_factors=true, skipmissing=false)
+    kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the dimensions of `Hs`, got sizes $(map(size, ms)) and dimensions $(map(dim, Hs))."))
+    factors = map(ms, Hs) do m, Hk
+        complement = complementary_subsystem(H, Hk)
+        mapper = state_mapper(H, isnothing(complement) ? (Hk,) : (Hk, complement))
+        phase = phase_factors && !isnothing(complement) ? kron_phase_factor(mapper) : (f1, f2) -> 1
+        (_sparse_square(m, dim(Hk)), Hk, mapper, phase)
+    end
+    return _ordered_product(factors, H, promote_type(Int, Base.promote_eltype(ms...)), skipmissing)
+end
+function _ordered_product(factors, H, ::Type{T}, skipmissing) where {T}
+    Is, Js, Vs = Int[], Int[], T[]
+    for (K2, state) in enumerate(basisstates(H))
+        _apply_factors(factors, state, 1) do fullstate, v
+            K1 = state_index(fullstate, H)
+            if iszero(K1)
+                (skipmissing || iszero(v)) && return
+                throw(ArgumentError("The product takes a state of the Hilbert space to `$fullstate`, which is not in it. Pass `skipmissing=true` to drop such terms."))
+            end
+            push!(Is, K1)
+            push!(Js, K2)
+            push!(Vs, v)
+        end
+    end
+    return sparse(Is, Js, Vs, dim(H), dim(H))
+end
+_sparse_square(m, n) = sparse(m)
+_sparse_square(m::UniformScaling, n) = sparse(m, n, n)
+
+_apply_factors(op, ::Tuple{}, state, v) = op(state, v)
+function _apply_factors(op::F, factors, state, v) where {F}
+    m, Hk, mapper, phase = last(factors)
+    for (parts, w) in zip(split_state(state, mapper)...)
+        j = state_index(first(parts), Hk)
+        iszero(j) && continue
+        for p in nzrange(m, j)
+            newstates, ws = combine_states((basisstate(rowvals(m)[p], Hk), Base.tail(parts)...), mapper)
+            for (newstate, w2) in zip(newstates, ws)
+                _apply_factors(op, Base.front(factors), newstate, v * w * w2 * nonzeros(m)[p] * phase(newstate, state))
+            end
+        end
+    end
+end
+
 _issquare(m) = size(m, 1) == size(m, 2)
 _issquare(m::UniformScaling) = true
 _isket(m::AbstractVecOrMat) = ndims(m) == 1 || (ndims(m) == 2 && size(m, 2) == 1)
@@ -302,6 +352,26 @@ _isbra(m::UniformScaling) = false
 
 tensor_product(ms::Union{<:AbstractVector,<:Tuple}, HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = tensor_product(ms, first(HsH), last(HsH); kwargs...)
 tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> tensor_product(ms, first(HsH), last(HsH); kwargs...)
+
+@testitem "Ordered product on constrained spaces" begin
+    @fermions f
+    H1, H3 = hilbert_space(f, 1:1), hilbert_space(f, 3:3)
+    cdag1, c3 = matrix_representation(f[1]', H1), matrix_representation(f[3], H3)
+    H = hilbert_space(f, 1:4, NumberConservation(2))
+    @test tensor_product((cdag1, c3), (H1, H3) => H) ≈ matrix_representation(f[1]' * f[3], H)
+    @test tensor_product((c3, cdag1), (H3, H1) => H) ≈ matrix_representation(f[3] * f[1]', H)
+    @test_throws ArgumentError tensor_product((cdag1, c3'), (H1, H3) => H)
+    Hs = hilbert_space(f, 1:4, NumberConservation(1:3))
+    @test tensor_product((cdag1, c3), (H1, H3) => Hs) ≈ matrix_representation(f[1]' * f[3], Hs)
+    Heven = hilbert_space(f, 1:4, ParityConservation(1))
+    @test tensor_product((cdag1, c3'), (H1, H3) => Heven) ≈ matrix_representation(f[1]' * f[3]', Heven)
+
+    @bosons b
+    Hb = hilbert_space(b, 1:3, 3)
+    B1, B3 = factors(Hb)[1], factors(Hb)[3]
+    HbN = constrain_space(Hb, NumberConservation(2))
+    @test tensor_product((matrix_representation(b[1]', B1), matrix_representation(b[3], B3)), (B1, B3) => HbN) ≈ matrix_representation(b[1]' * b[3], HbN)
+end
 
 struct PhaseMap{F}
     phases::Matrix{Int}
@@ -1013,7 +1083,7 @@ end
 
     H = hilbert_space(a, 1:4, NumberConservation(1))
     @test_throws ArgumentError generalized_kron((m1, m2), (H1, H2) => H)
-    @test generalized_kron((m1, m2), (H1, H2) => H; skipmissing=true) ≈ tensor_product((m1, m2), (H1, H2) => H) # Since tensor_product first embeds both operators in the full Hilbert space (which can be done) and then multiplies them, it won't complain about missing states.
+    @test generalized_kron((m1, m2), (H1, H2) => H; skipmissing=true) ≈ tensor_product((m1, m2), (H1, H2) => H) # tensor_product does not throw, since no term takes a state of H outside H
 end
 
 @testitem "Partial trace and embed of sparse matrices" begin
