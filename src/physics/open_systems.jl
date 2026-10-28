@@ -24,8 +24,7 @@ add_tag(H::TransposedSpace, tag) = TransposedSpace(add_tag(H.parent, tag))
 groups(H::TransposedSpace) = map(TransposedSpace, groups(H.parent))
 factors(H::TransposedSpace) = map(TransposedSpace, factors(H.parent))
 TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, groups(H)))
-TransposedSpace(H::ConstrainedSpace) = ConstrainedSpace(TransposedSpace(parent(H)), H.states, H.index)
-TransposedSpace(H::SectorHilbertSpace) = SectorHilbertSpace(TransposedSpace(parent(H)), H.ordered_basis_states, H.qn_to_states, H.constraint, H.index)
+TransposedSpace(H::AbstractSubspace) = rewrap(H, TransposedSpace(parent(H)))
 state_mapper(H::TransposedSpace, Hs) = state_mapper(H.parent, Hs)
 combine_states(states, H::TransposedSpace) = combine_states(states, H.parent)
 Base.parent(H::TransposedSpace) = H.parent
@@ -86,6 +85,17 @@ add_tag(expr, tag) = NonCommutativeProducts.ncmap(Base.Fix2(add_tag, tag), expr)
     @spin s 1 // 2
     Hs = hilbert_space(s)
     @test representation(s[:x], TransposedSpace(Hs)) == transpose(representation(s[:x], Hs))
+end
+
+@testitem "add_tag and TransposedSpace of a product sector" begin
+    using FermionicHilbertSpaces: add_tag, TransposedSpace
+    @fermions f
+    @bosons b
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(b[1], 3); constraint=NumberConservation(1))
+    op = 2f[1]' * f[2] + f[2]' * b[1] + b[1]' * b[1]
+    m = representation(op, H)
+    @test representation(op, TransposedSpace(H)) == transpose(m)
+    @test representation(add_tag(op, :t), add_tag(H, :t)) == m
 end
 
 @testitem "open_system symbolic left-right interface" begin
@@ -265,6 +275,4 @@ function _apply_local_operators(op, state, space::TransposedSpace, precomp)
 end
 
 maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))
-function _wrap(space, ::TransposedSpace)
-    TransposedSpace(space)
-end
+rewrap(::TransposedSpace, space) = TransposedSpace(space)
