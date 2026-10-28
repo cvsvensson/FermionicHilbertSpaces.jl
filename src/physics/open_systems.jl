@@ -87,6 +87,17 @@ add_tag(expr, tag) = NonCommutativeProducts.ncmap(Base.Fix2(add_tag, tag), expr)
     @test representation(s[:x], TransposedSpace(Hs)) == transpose(representation(s[:x], Hs))
 end
 
+@testitem "add_tag and TransposedSpace of a product sector" begin
+    using FermionicHilbertSpaces: add_tag, TransposedSpace
+    @fermions f
+    @bosons b
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(b[1], 3); constraint=NumberConservation(1))
+    op = 2f[1]' * f[2] + f[2]' * b[1] + b[1]' * b[1]
+    m = representation(op, H)
+    @test representation(op, TransposedSpace(H)) == transpose(m)
+    @test representation(add_tag(op, :t), add_tag(H, :t)) == m
+end
+
 @testitem "open_system symbolic left-right interface" begin
     using FermionicHilbertSpaces: open_system
     @fermions c

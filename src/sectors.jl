@@ -108,13 +108,9 @@ Return all sectors of `H` in the same order as `quantumnumbers(H)`.
 sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
 
 function space_indices(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace)
-    sector_list = sectors(H)
-    indexin = findfirst(isequal(Hsub), sector_list)
-    if indexin === nothing
-        return space_indices_generic(Hsub, H)
-    end
-    qn = quantumnumbers(H)[indexin]
-    indices(qn, H)
+    # `Hsub` is a sector of `H` when it equals `sector(qn, H)` for some `qn`
+    qn = Hsub isa ConstrainedSpace && parent(Hsub) == parent(H) ? findfirst(isequal(subspace_states(Hsub)), H.qn_to_states) : nothing
+    isnothing(qn) ? space_indices_generic(Hsub, H) : qn_indices(qn, H)
 end
 space_indices(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = space_indices_generic(Hsub, H)
 function space_indices_generic(Hsub, H)
