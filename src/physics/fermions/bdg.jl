@@ -363,7 +363,7 @@ const DEFAULT_PH_CUTOFF = 1e-12
     symham = f[1]' * f[2] + f[2]' * f[3] + f[1]' * f[2]' + f[2]' * f[3]' + hc
     H = hilbert_space(f, 1:3, BdG())
     Hmb = hilbert_space(f, 1:3)
-    matmb = representation(symham, Hmb)
+    matmb = representation(symham, Hmb, :dense)
     mat = representation(symham, H)
     vals, vecs = eigen(Matrix(mat), BdGEigen(); canon_alg=FermionicHilbertSpaces.SVDCanon())
     @test 1 ≈ abs(vecs[:, 3][1]^2 + vecs[:, 4][1]^2) / (abs2(vecs[:, 3][1]) + abs2(vecs[:, 4][1]))
@@ -377,13 +377,13 @@ const DEFAULT_PH_CUTOFF = 1e-12
         occupations = Iterators.product(ntuple(_ -> (0, 1), length(e))...)
         sort(vec([trh / 2 + sum((2 .* n .- 1) .* e) for n in occupations]))
     end
-    @test eigvals(Hermitian(Matrix(matmb))) ≈ mb_energies(vals[4:6], 0)
+    @test eigvals(Hermitian(matmb)) ≈ mb_energies(vals[4:6], 0)
 
     h = rand(ComplexF64, 3, 3) + hc
     Δ = rand(ComplexF64, 3, 3)
     Δ = Δ - transpose(Δ)
     symham = sum(f[n]' * h[n, m] * f[m] for n in 1:3, m in 1:3) +
              sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:3, m in 1:3)
-    vals, _ = eigen(Matrix(representation(symham, H)), BdGEigen())
-    @test eigvals(Hermitian(Matrix(representation(symham, Hmb)))) ≈ mb_energies(vals[4:6], real(tr(h)))
+    vals, _ = eigen(representation(symham, H, :dense), BdGEigen())
+    @test eigvals(Hermitian(representation(symham, Hmb, :dense))) ≈ mb_energies(vals[4:6], real(tr(h)))
 end

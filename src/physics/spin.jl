@@ -601,9 +601,9 @@ end
     H = hilbert_space(s, 1:2)
     dot_spins(a, b) = sum(a[c] * b[c] for c in (:x, :y, :z))
     # singlet at -3/4, triplet at 1/4
-    @test eigvals(Hermitian(Matrix(representation(dot_spins(s[1], s[2]), H)))) ≈ [-3 / 4, 1 / 4, 1 / 4, 1 / 4]
+    @test eigvals(Hermitian(representation(dot_spins(s[1], s[2]), H, :dense))) ≈ [-3 / 4, 1 / 4, 1 / 4, 1 / 4]
     Stot = (s[1][c] + s[2][c] for c in (:x, :y, :z))
-    @test eigvals(Hermitian(Matrix(representation(sum(S^2 for S in Stot), H)))) ≈ [0, 2, 2, 2]
+    @test eigvals(Hermitian(representation(sum(S^2 for S in Stot), H, :dense))) ≈ [0, 2, 2, 2]
 end
 
 @testitem "Spin: spin-aware vs not" begin

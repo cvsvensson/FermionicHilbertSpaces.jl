@@ -233,11 +233,11 @@ end
     dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
     ham = 1.0 * c[1]'c[1]
     lindbladian = -1im * (left(ham) - right(ham)) + dissipator(√γin * c[1]') + dissipator(√γout * c[1])
-    mat = representation(lindbladian, Hlr)
+    mat = representation(lindbladian, Hlr, :dense)
     Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
     @test norm(mat' * Ivec) < 1e-12
 
-    ρ = reshape(nullspace(Matrix(mat))[:, 1], Hlr => (Hl, Hr))
+    ρ = reshape(nullspace(mat)[:, 1], Hlr => (Hl, Hr))
     ρ ./= tr(ρ)
     @test ρ ≈ ρ'
     @test all(≥(-1e-12), eigvals(Hermitian(ρ)))
@@ -250,7 +250,7 @@ end
     L = 0.5 * c[1] + 0.8 * c[2]'
     mat = representation(-1im * (left(ham) - right(ham)) + dissipator(L), Hlr)
     H2 = hilbert_space(c, 1:2)
-    Hm, Lm = Matrix(representation(ham, H2)), Matrix(representation(L, H2))
+    Hm, Lm = representation(ham, H2, :dense), representation(L, H2, :dense)
     P = Diagonal([(-1)^count_ones(i - 1) for i in 1:dim(H2)]) # parity in the Fock basis
     X = rand(ComplexF64, 4, 4)
     ρ = (X + X' + P * (X + X') * P) / 4
