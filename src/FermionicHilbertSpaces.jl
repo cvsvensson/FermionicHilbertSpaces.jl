@@ -93,6 +93,7 @@ function cache_operator! end # for OhMyThreads extension
 ## Files
 include("spaces.jl")
 include("hilbert_space.jl")
+include("subspace.jl")
 include("sectors.jl")
 include("product_space.jl")
 
