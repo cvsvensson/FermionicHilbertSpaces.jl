@@ -739,8 +739,8 @@ function _full_partial_trace!(mout, m, splits, H)
 end
 # Low-rank input m = U * transpose(V). The complement states that split off the same subsystem
 # states Ks form a group. With BU[k, (i, r)] = s * U[J, r] for the state J that splits into
-# (Ks[k], the i-th complement state of the group) with weight s, and BV likewise, each group adds
-# BU * transpose(BV) to mout[Ks, Ks].
+# (Ks[k], the i-th complement state of the group) with weight s, and BV likewise with conj(s) in
+# place of s, each group adds BU * transpose(BV) to mout[Ks, Ks].
 function _full_partial_trace!(mout, m::LowRankMatrix, splits, H)
     # (K, J, s) for each state J that splits into (K, b), per complement state b
     byb = Dict{Int,Vector{Tuple{Int,Int,eltype(eltype(eltype(splits)))}}}()
@@ -759,7 +759,7 @@ function _full_partial_trace!(mout, m::LowRankMatrix, splits, H)
         BV = similar(BU)
         for r in axes(BU, 3), (i, es) in pairs(ess), (k, (_, J, s)) in pairs(es)
             BU[k, i, r] = s * U[J, r]
-            BV[k, i, r] = s * V[J, r]
+            BV[k, i, r] = conj(s) * V[J, r]
         end
         mout[Ks, Ks] .+= reshape(BU, length(Ks), :) * transpose(reshape(BV, length(Ks), :))
     end
