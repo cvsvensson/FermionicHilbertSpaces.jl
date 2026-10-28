@@ -569,6 +569,7 @@ struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
 
 _effective_dim(m::AbstractMatrix, H) = length(m)
 _effective_dim(m::AbstractSparseMatrix, H) = nnz(m)
+_effective_dim(m::LowRankMatrix, H) = length(m.U) + length(m.V)
 _effective_dim(::UniformScaling, H) = dim(H)
 
 # Costs in units of one input-element visit by FullPartialTraceAlg, which visits the stored elements.
@@ -648,8 +649,9 @@ end
 
 # For each basis state f of `H`: `((K, Kbar, w), ...)`, with one entry per split of f into
 # (fsub, fbar), where K and Kbar are the indices of fsub in `Hsub` and of fbar in `complement`,
-# and K is 0 if fsub is not in `Hsub` or fbar is not in `complement`. w includes the phase factor σ of f with the first state split off the same
-# complement state, so that the phase factor of a pair of states is σ1 * σ2.
+# and K is 0 if fsub is not in `Hsub` or fbar is not in `complement`. w includes the phase factor
+# σ of f with the first state split off the same complement state, so that the phase factor of a
+# pair of states is σ1 * σ2.
 function _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
     refs = Vector{Union{Nothing,Tuple{eltype(basisstates(H)),eltype(basisstates(Hsub))}}}(nothing, dim(complement))
     map(basisstates(H)) do f
@@ -711,7 +713,7 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
     covered = if alg isa FullPartialTraceAlg
         splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
         _full_partial_trace!(mout, m, splits, H)
-        _covered(splits)
+        BitVector([any(!iszero ∘ first, s) for s in splits])
     else
         _subsystem_partial_trace!(mout, m, H, Hsub, complement, mapper, phase_factors)
     end
@@ -727,23 +729,28 @@ function _subsystem_partial_trace!(mout, m, H, Hsub, complement, mapper, phase_f
     end
     return covered
 end
-# Which states of `H` the trace keeps, from the splits of `_full_partial_trace_splits`
-_covered(splits) = BitVector([any(!iszero ∘ first, s) for s in splits])
-# m = U * transpose(V). The complement states b that split off the same subsystem states Ks form
-# a group. With BU[k, (i, r)] = s * U[J, r] for the state J that splits into (Ks[k], bs[i]) with
-# weight s, and BV likewise, each group adds BU * transpose(BV) to mout[Ks, Ks].
-function _subsystem_partial_trace!(mout, m::LowRankMatrix, H, Hsub, complement, mapper, phase_factors)
-    splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
-    # (K, J, s) for each state J that splits into (K, b), per complement state b
-    byb = [eltype(eltype(splits))[] for _ in 1:dim(complement)]
-    for (J, ss) in pairs(splits), (K, b, s) in ss
-        iszero(K) || push!(byb[b], (K, J, s))
+function _full_partial_trace!(mout, m, splits, H)
+    for I in tensor_product_iterator(m, H)
+        _foreach_full_partial_trace_pair_term(I[1], I[2], splits) do J1, J2, K1, K2, v
+            mout[K1, K2] += v * m[J1, J2]
+        end
     end
-    groups = Dict{Vector{Int},Vector{eltype(byb)}}() # Ks => the entries of each b in the group
-    for es in byb
-        isempty(es) && continue
+    return mout
+end
+# Low-rank input m = U * transpose(V). The complement states that split off the same subsystem
+# states Ks form a group. With BU[k, (i, r)] = s * U[J, r] for the state J that splits into
+# (Ks[k], the i-th complement state of the group) with weight s, and BV likewise, each group adds
+# BU * transpose(BV) to mout[Ks, Ks].
+function _full_partial_trace!(mout, m::LowRankMatrix, splits, H)
+    # (K, J, s) for each state J that splits into (K, b), per complement state b
+    byb = Dict{Int,Vector{Tuple{Int,Int,eltype(eltype(eltype(splits)))}}}()
+    for (J, ss) in pairs(splits), (K, b, s) in ss
+        iszero(K) || push!(get!(() -> valtype(byb)(), byb, b), (K, J, s))
+    end
+    groups = Dict{Vector{Int},Vector{valtype(byb)}}() # Ks => the entries of each b in the group
+    for es in values(byb)
         sort!(es; by=first)
-        push!(get!(() -> eltype(byb)[], groups, first.(es)), es)
+        push!(get!(() -> valtype(byb)[], groups, first.(es)), es)
     end
     (; U, V) = m
     T = promote_type(eltype(U), eltype(V), partial_trace_phase_factor_eltype(H))
@@ -755,14 +762,6 @@ function _subsystem_partial_trace!(mout, m::LowRankMatrix, H, Hsub, complement, 
             BV[k, i, r] = s * V[J, r]
         end
         mout[Ks, Ks] .+= reshape(BU, length(Ks), :) * transpose(reshape(BV, length(Ks), :))
-    end
-    return _covered(splits)
-end
-function _full_partial_trace!(mout, m, splits, H)
-    for I in tensor_product_iterator(m, H)
-        _foreach_full_partial_trace_pair_term(I[1], I[2], splits) do J1, J2, K1, K2, v
-            mout[K1, K2] += v * m[J1, J2]
-        end
     end
     return mout
 end
