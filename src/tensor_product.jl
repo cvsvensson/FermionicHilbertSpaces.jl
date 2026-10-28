@@ -75,6 +75,10 @@ kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, 
     H12 = tensor_product(H1, H2)
     m_too_large = rand(dim(H12) + 1, dim(H12) + 1)
     @test_throws ArgumentError partial_trace(m_too_large, H12 => H1)
+
+    Hfull = hilbert_space(a, 1:4)
+    c = matrix_representation(a[1], H1)
+    @test_throws ArgumentError generalized_kron((c,), (H1,) => Hfull)
 end
 
 """
