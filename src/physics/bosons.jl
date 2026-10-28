@@ -279,6 +279,8 @@ end
     @test madag == a'
     @test representation(b, H) == ma
     @test madag * ma + 1im * I ≈ representation(b' * b + 1im, H)
+    # the truncation breaks [a, a†] = 1 only at the cutoff
+    @test ma * madag - madag * ma ≈ Diagonal([ones(d - 1); -(d - 1)])
 end
 
 @testitem "Bosonic triple products vs matrices" begin
@@ -345,7 +347,7 @@ end
     expected = kron(reverse([fmat, smat, bmat])...)
     @test mop ≈ expected
 
-    @test_throws ArgumentError matrix_representation(s_expr, FermionicHilbertSpaces.SpinSpace(:Not, 1 // 2))
+    @test_throws ArgumentError representation(s_expr, FermionicHilbertSpaces.SpinSpace(:Not, 1 // 2))
 
     Hsb = tensor_product(Hs, Hb)
     @test partial_trace(1.0 * I(dim(Hsb)), Hsb => Hs) ≈ dim(Hb) * I(dim(Hs))
@@ -354,7 +356,7 @@ end
     trf = tr(fmat)
     trs = tr(smat)
     trb = tr(bmat)
-    partial_trace(mop, H => Hf; complement=Hsb) ≈ trb * trs * fmat
+    @test partial_trace(mop, H => Hf; complement=Hsb) ≈ trb * trs * fmat
     @test partial_trace(mop, H => Hf) ≈ trb * trs * fmat
     @test partial_trace(mop, H => Hs) ≈ trb * trf * smat
     @test partial_trace(mop, H => Hb) ≈ trs * trf * bmat
@@ -372,5 +374,33 @@ end
     @test Hf == subregion([f[1]], H)
     @test Hs == subregion([S], H)
     @test Hb == subregion([b], H)
+end
+
+@testitem "Reduced states are physical" begin
+    using LinearAlgebra
+
+    @fermions f
+    @spin S
+    @boson b
+    Hf = hilbert_space(f, 1:1)
+    Hs = hilbert_space(S, 1 // 2)
+    Hb = hilbert_space(b, 3)
+    H = tensor_product(Hf, Hs, Hb)
+    ψ = normalize(rand(ComplexF64, dim(H)))
+    ρ = ψ * ψ'
+    for Hsub in (Hf, Hs, Hb)
+        ρsub = partial_trace(ρ, H => Hsub)
+        @test ρsub ≈ ρsub'
+        @test tr(ρsub) ≈ 1
+        @test eigmin(Hermitian(ρsub)) >= -1e-12
+    end
+
+    # the singlet (|↑↓⟩ - |↓↑⟩)/√2 is maximally entangled
+    @spin S1 1 // 2
+    @spin S2 1 // 2
+    H1 = hilbert_space(S1)
+    H12 = tensor_product(H1, hilbert_space(S2))
+    singlet = [0, 1, -1, 0] / sqrt(2)
+    @test partial_trace(singlet * singlet', H12 => H1) ≈ I / 2
 end
 

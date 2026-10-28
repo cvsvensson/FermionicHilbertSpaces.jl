@@ -77,7 +77,7 @@ kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, 
     @test_throws ArgumentError partial_trace(m_too_large, H12 => H1)
 
     Hfull = hilbert_space(a, 1:4)
-    c = matrix_representation(a[1], H1)
+    c = representation(a[1], H1)
     @test_throws ArgumentError generalized_kron((c,), (H1,) => Hfull)
 end
 
@@ -292,7 +292,7 @@ end
 
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
 If `H` is unconstrained, `tensor_product((A, B), (HA, HB) => H) == embed(A, HA => H) * embed(B, HB => H)`.
-If `H` is constrained, the result is the ordered product on the unconstrained space restricted to `H`, as `matrix_representation`
+If `H` is constrained, the result is the ordered product on the unconstrained space restricted to `H`, as `representation`
 of the corresponding symbolic product. Terms that take a state of `H` outside `H` throw an `ArgumentError` unless `skipmissing=true`,
 which drops them. A matrix on a constrained space in `Hs` acts as zero on states outside that space.
 For vectors, the result is the product state: if each `ms[k] = ψₖ|0⟩` with `ψₖ` an operator on the modes of `Hs[k]`,
@@ -370,22 +370,22 @@ tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> 
 @testitem "Ordered product on constrained spaces" begin
     @fermions f
     H1, H3 = hilbert_space(f, 1:1), hilbert_space(f, 3:3)
-    cdag1, c3 = matrix_representation(f[1]', H1), matrix_representation(f[3], H3)
+    cdag1, c3 = representation(f[1]', H1), representation(f[3], H3)
     H = hilbert_space(f, 1:4, NumberConservation(2))
-    @test tensor_product((cdag1, c3), (H1, H3) => H) ≈ matrix_representation(f[1]' * f[3], H)
-    @test tensor_product((c3, cdag1), (H3, H1) => H) ≈ matrix_representation(f[3] * f[1]', H)
+    @test tensor_product((cdag1, c3), (H1, H3) => H) ≈ representation(f[1]' * f[3], H)
+    @test tensor_product((c3, cdag1), (H3, H1) => H) ≈ representation(f[3] * f[1]', H)
     @test_throws ArgumentError tensor_product((cdag1, c3'), (H1, H3) => H)
     Hs = hilbert_space(f, 1:4, NumberConservation(1:3))
-    @test tensor_product((cdag1, c3), (H1, H3) => Hs) ≈ matrix_representation(f[1]' * f[3], Hs)
+    @test tensor_product((cdag1, c3), (H1, H3) => Hs) ≈ representation(f[1]' * f[3], Hs)
     H13, H24 = hilbert_space(f, [1, 3]), hilbert_space(f, [2, 4])
-    cdag3, c2 = matrix_representation(f[3]', H13), matrix_representation(f[2], H24)
-    @test tensor_product((cdag3, c2), (H13, H24) => H) ≈ matrix_representation(f[3]' * f[2], H)
+    cdag3, c2 = representation(f[3]', H13), representation(f[2], H24)
+    @test tensor_product((cdag3, c2), (H13, H24) => H) ≈ representation(f[3]' * f[2], H)
 
     @bosons b
     Hb = hilbert_space(b, 1:3, 3)
     B1, B3 = factors(Hb)[1], factors(Hb)[3]
     HbN = constrain_space(Hb, NumberConservation(2))
-    @test tensor_product((matrix_representation(b[1]', B1), matrix_representation(b[3], B3)), (B1, B3) => HbN) ≈ matrix_representation(b[1]' * b[3], HbN)
+    @test tensor_product((representation(b[1]', B1), representation(b[3], B3)), (B1, B3) => HbN) ≈ representation(b[1]' * b[3], HbN)
 end
 
 struct PhaseMap{F}

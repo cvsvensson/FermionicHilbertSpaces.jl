@@ -364,7 +364,7 @@ function representation(op; kwargs...)
     end
 end
 function _mixed_error(op)
-    ArgumentError("Cannot represent $op, which combines kets or bras with operators or with states of other spaces. Apply the operators to the states first, or represent the parts separately with matrix_representation(op, H) and vector_representation(state, H).")
+    ArgumentError("Cannot represent $op, which combines kets or bras with operators or with states of other spaces. Apply the operators to the states first, or represent the operators and the states separately with representation.")
 end
 
 function _operator_type(op::SymbolicState)
@@ -757,8 +757,8 @@ end
 
     @test f[2]' * vf("10") == -vf("11")
     @test vf("10")' * f[2] == -vf("11")'
-    @test representation(f[2]' * vf("10"), Hf) ≈ matrix_representation(f[2]', Hf) * representation(vf("10"), Hf)
-    @test representation(vf("10")' * f[2], Hf) ≈ representation(vf("10")', Hf) * matrix_representation(f[2], Hf)
+    @test representation(f[2]' * vf("10"), Hf) ≈ representation(f[2]', Hf) * representation(vf("10"), Hf)
+    @test representation(vf("10")' * f[2], Hf) ≈ representation(vf("10")', Hf) * representation(f[2], Hf)
 
     @test vf("11")' * f[2]' * vf("10") == -1
 
@@ -836,7 +836,7 @@ end
 
     @test_nowarn representation(op, constrain_space(H, ParityConservation(1))) # Just to check that no error is thrown
     Hcons = constrain_space(H, NumberConservation())
-    representation(opb, Hcons) * representation(opf, Hcons) == representation(opb, Hcons) * representation(opf, Hcons)
+    @test representation(op, Hcons) ≈ representation(opb, Hcons) * representation(opf, Hcons)
     @test b' * op == (sqrt(2) * vb("2")vb("0")' + sqrt(2) * vb("2")vb("4")') * opf
 end
 
@@ -870,7 +870,7 @@ end
         for op in ops, st in basisstates(H)
             ket = FermionicHilbertSpaces.SymbolicState(H, st, nothing)
             v = Vector(representation(ket, H))
-            M = Matrix(matrix_representation(op, H))
+            M = representation(op, H, :dense)
             Mv, vM = M * v, vec(transpose(v) * M)
             @test iszero(Mv) ? iszero(op * ket) : Vector(representation(op * ket, H)) ≈ Mv
             @test iszero(vM) ? iszero(ket' * op) : vec(collect(representation(ket' * op, H))) ≈ vM
@@ -893,7 +893,7 @@ end
         ψ = sum(randn() * FermionicHilbertSpaces.SymbolicState(H, st, nothing) for st in states)
         φ = sum(randn(ComplexF64) * FermionicHilbertSpaces.SymbolicState(H, st, nothing) for st in states[1:2:end])
         v, w = Vector(representation(ψ, H)), Vector(representation(φ, H))
-        M = Matrix(matrix_representation(op, H))
+        M = representation(op, H, :dense)
         @test Vector(representation(op * ψ, H)) ≈ M * v
         @test inner(φ, ψ) ≈ dot(w, v)
         @test inner(φ, op * ψ) ≈ dot(w, M * v)

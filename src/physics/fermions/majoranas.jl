@@ -219,7 +219,7 @@ partial_transpose_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_transpo
 
 function majoranas(H::MajoranaHilbertSpace)
     γ = symbolic_basis(H)
-    OrderedDict(f.label => matrix_representation(γ[f.label], H) for f in modes(H))
+    OrderedDict(f.label => representation(γ[f.label], H) for f in modes(H))
 end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
 
@@ -331,7 +331,7 @@ end
     @test length(M) == 4
     @test collect(keys(M)) == collect(1:4)
     for l in 1:4
-        @test M[l] == matrix_representation(γ[l], H)
+        @test M[l] == representation(γ[l], H)
     end
 end
 

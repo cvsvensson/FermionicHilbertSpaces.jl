@@ -473,8 +473,8 @@ get_trivial_op_coeff(op) = op
 
     # Test simple product operator: f[1]' * f[1] ⊗ S_z
     op = f[1]' * f[1] * s[:z]
-    M = matrix_representation(op, H)
-    @test M == kron(matrix_representation(s[:z], Hs), matrix_representation(f[1]' * f[1], Hf))
+    M = representation(op, H)
+    @test M == kron(representation(s[:z], Hs), representation(f[1]' * f[1], Hf))
 
     # Verify dimensions: (2^2) × 2 = 8×8
     @test size(M) == (8, 8)
@@ -485,16 +485,16 @@ get_trivial_op_coeff(op) = op
     # Test 2: Sum of mixed operators
     ops = [f[1]' * f[1] * s[:z], f[2]' * f[2] * s[:+], 2im]
     op_mixed = sum(ops)
-    M_mixed = matrix_representation(op_mixed, H)
+    M_mixed = representation(op_mixed, H)
     @test size(M_mixed) == (8, 8)
-    @test M_mixed == sum(matrix_representation(op, H) for op in ops)
+    @test M_mixed == sum(representation(op, H) for op in ops)
 
 
     # Test 3: Verify the result is hermitian for hermitian operators
     op_herm = f[1]' * f[2] * s[:z] + hc
-    M_herm = matrix_representation(op_herm, H)
+    M_herm = representation(op_herm, H)
     @test M_herm ≈ M_herm'  # Should be hermitian
-    @test M_herm == matrix_representation(op_herm', H)
+    @test M_herm == representation(op_herm', H)
 end
 
 @testitem "Three-space product" begin
@@ -510,16 +510,16 @@ end
     H = tensor_product(Hf, Hg, Hs)
     # Operator acting on all three spaces
     op = f[1]' * f[1] * g[1]' * g[1] * s[:z]
-    M = matrix_representation(op, H)
-    @test M == kron(reverse([matrix_representation(f[1]' * f[1], Hf), matrix_representation(g[1]' * g[1], Hg), matrix_representation(s[:z], Hs)])...)
+    M = representation(op, H)
+    @test M == kron(reverse([representation(f[1]' * f[1], Hf), representation(g[1]' * g[1], Hg), representation(s[:z], Hs)])...)
 
     # Should have dimension 2 × 2 × 2 = 8
     @test size(M) == (8, 8)
     @test M isa SparseMatrixCSC
 
-    @test_throws ArgumentError matrix_representation(op, Hs)
-    @test_throws ArgumentError matrix_representation(op, Hf)
-    @test_throws ArgumentError matrix_representation(op, Hg)
+    @test_throws ArgumentError representation(op, Hs)
+    @test_throws ArgumentError representation(op, Hf)
+    @test_throws ArgumentError representation(op, Hg)
 end
 
 
@@ -538,16 +538,16 @@ end
         1im * f[1]' * s[:-] * b[2] + hc + 2.5,
         f[1]' * f[2] + f[2]' * f[1]]
     for op in ops, repr in (:sparse, :dense, EagerDenseRepr())
-        M = matrix_representation(op, H, repr)
-        Mc = matrix_representation(op, Hc, repr; projection=true)
+        M = representation(op, H, repr)
+        Mc = representation(op, Hc, repr; projection=true)
         @test typeof(Mc) == typeof(M)
         @test Mc ≈ M[inds, inds]
     end
     # Integer terms keep their element type; the identity term promotes it with Float64.
     op_int = 2 * f[1]' * f[2] * b[1]' + hc
-    @test typeof(matrix_representation(op_int, Hc; projection=true)) == typeof(matrix_representation(op_int, H))
-    @test typeof(matrix_representation(op_int + 1, Hc; projection=true)) == typeof(matrix_representation(op_int + 1, H))
-    @test matrix_representation(op_int + 1, Hc; projection=true) ≈ matrix_representation(op_int + 1, H)[inds, inds]
+    @test typeof(representation(op_int, Hc; projection=true)) == typeof(representation(op_int, H))
+    @test typeof(representation(op_int + 1, Hc; projection=true)) == typeof(representation(op_int + 1, H))
+    @test representation(op_int + 1, Hc; projection=true) ≈ representation(op_int + 1, H)[inds, inds]
 end
 
 @testitem "Product-space term matrices padded by identities" begin
@@ -559,18 +559,18 @@ end
     Hs = hilbert_space(s)
     Hb = hilbert_space(b, 1:2, 3)
     H = tensor_product(Hf, Hs, Hb)
-    Mf = matrix_representation(f[1]' * f[2], Hf)
-    Mb = matrix_representation(2 * b[1]' * b[2], Hb)
-    Ms = matrix_representation(s[:z], Hs)
-    @test matrix_representation(2 * f[1]' * f[2] * b[1]' * b[2], H) == kron(Mb, I(dim(Hs)), Mf)
-    @test matrix_representation(f[1]' * f[2], H) == kron(I(dim(Hb) * dim(Hs)), Mf)
-    @test matrix_representation(2 * b[1]' * b[2], H) == kron(Mb, I(dim(Hs) * dim(Hf)))
-    @test matrix_representation(s[:z], H) == kron(I(dim(Hb)), Ms, I(dim(Hf)))
+    Mf = representation(f[1]' * f[2], Hf)
+    Mb = representation(2 * b[1]' * b[2], Hb)
+    Ms = representation(s[:z], Hs)
+    @test representation(2 * f[1]' * f[2] * b[1]' * b[2], H) == kron(Mb, I(dim(Hs)), Mf)
+    @test representation(f[1]' * f[2], H) == kron(I(dim(Hb) * dim(Hs)), Mf)
+    @test representation(2 * b[1]' * b[2], H) == kron(Mb, I(dim(Hs) * dim(Hf)))
+    @test representation(s[:z], H) == kron(I(dim(Hb)), Ms, I(dim(Hf)))
     op = f[1]' * f[2] * s[:z] + 2 * b[1]' * b[2] + hc
-    M = matrix_representation(op, H)
+    M = representation(op, H)
     @test M isa SparseMatrixCSC{Float64}
     @test M ≈ kron(I(dim(Hb)), Ms, Mf) + kron(Mb, I(dim(Hs) * dim(Hf))) + adjoint(kron(I(dim(Hb)), Ms, Mf) + kron(Mb, I(dim(Hs) * dim(Hf))))
-    @test matrix_representation(2 * f[1]' * f[2] * b[1]' + hc, H) isa SparseMatrixCSC{Float64}
+    @test representation(2 * f[1]' * f[2] * b[1]' + hc, H) isa SparseMatrixCSC{Float64}
 end
 
 @testitem "Dense/sparse/lazy matrix representation agree" begin
@@ -581,9 +581,9 @@ end
 
     Hf = hilbert_space(f, 1:2)
     op = f[1]' * f[2] + 1im * f[2]' * f[1] + 2
-    Md = matrix_representation(op, Hf, :dense)
-    Ms = matrix_representation(op, Hf)
-    Ml = concretize(matrix_representation(op, Hf, :lazy))
+    Md = representation(op, Hf, :dense)
+    Ms = representation(op, Hf)
+    Ml = concretize(representation(op, Hf, :lazy))
     @test Md isa Matrix
     @test Md == Matrix(Ms)
     @test Md == Ms
@@ -593,19 +593,19 @@ end
     Hs = hilbert_space(s)
     Hprod = tensor_product(Hf, Hs)
     op_prod = f[1]' * f[2] * s[:z] + 2 * f[2]' * f[1] * s[:x] + 1im
-    Md = matrix_representation(op_prod, Hprod, :dense)
-    Ms = matrix_representation(op_prod, Hprod)
-    Ml = concretize(matrix_representation(op_prod, Hprod, :lazy))
+    Md = representation(op_prod, Hprod, :dense)
+    Ms = representation(op_prod, Hprod)
+    Ml = concretize(representation(op_prod, Hprod, :lazy))
     @test Md isa Matrix
     @test Md == Matrix(Ms)
     @test Md == Ms
     @test Md == Ml
 
-    trivial = matrix_representation(2, Hf, :dense)
+    trivial = representation(2, Hf, :dense)
     @test trivial isa Matrix
     @test trivial == Matrix(2I, dim(Hf), dim(Hf))
 
-    direct_dense = matrix_representation(op, Hf, FermionicHilbertSpaces.EagerDenseRepr())
+    direct_dense = representation(op, Hf, FermionicHilbertSpaces.EagerDenseRepr())
     @test direct_dense isa Matrix
     @test direct_dense == Md_single
 end
@@ -619,15 +619,15 @@ end
     H = hilbert_space(f, 1:4)
     op = f[1]' * f[2] + 1im * f[2]' * f[1] + f[3]' * f[4] + f[4]' * f[3] + 2
 
-    M_serial = matrix_representation(op, H)
+    M_serial = representation(op, H)
     scheduler = StaticScheduler(; nchunks=4)
-    M_terms = matrix_representation(op, H; chunking=TermChunking(scheduler))
-    M_states = matrix_representation(op, H; chunking=StateChunking(scheduler))
+    M_terms = representation(op, H; chunking=TermChunking(scheduler))
+    M_states = representation(op, H; chunking=StateChunking(scheduler))
     @test M_terms ≈ M_serial
     @test M_states ≈ M_serial
 
-    M_terms_dense = matrix_representation(op, H, :dense; chunking=TermChunking(scheduler))
-    M_states_dense = matrix_representation(op, H, :dense; chunking=StateChunking(scheduler))
+    M_terms_dense = representation(op, H, :dense; chunking=TermChunking(scheduler))
+    M_states_dense = representation(op, H, :dense; chunking=StateChunking(scheduler))
     @test M_terms_dense ≈ M_serial
     @test M_states_dense ≈ M_serial
 end
@@ -647,14 +647,14 @@ end
     Hprod = tensor_product(Hf, Hs)
     op_prod = f[1]' * f[2] * s[:z] + 2 * f[2]' * f[3] * s[:x] + hc + 1im
 
-    M_serial_prod = matrix_representation(op_prod, Hprod)
-    M_terms_prod = matrix_representation(op_prod, Hprod; chunking=TermChunking(scheduler))
-    M_states_prod = matrix_representation(op_prod, Hprod; chunking=StateChunking(scheduler))
+    M_serial_prod = representation(op_prod, Hprod)
+    M_terms_prod = representation(op_prod, Hprod; chunking=TermChunking(scheduler))
+    M_states_prod = representation(op_prod, Hprod; chunking=StateChunking(scheduler))
     @test M_terms_prod ≈ M_serial_prod
     @test M_states_prod ≈ M_serial_prod
 
-    M_terms_prod_dense = matrix_representation(op_prod, Hprod, :dense; chunking=TermChunking(scheduler))
-    M_states_prod_dense = matrix_representation(op_prod, Hprod, :dense; chunking=StateChunking(scheduler))
+    M_terms_prod_dense = representation(op_prod, Hprod, :dense; chunking=TermChunking(scheduler))
+    M_states_prod_dense = representation(op_prod, Hprod, :dense; chunking=StateChunking(scheduler))
     @test M_terms_prod_dense ≈ M_serial_prod
     @test M_states_prod_dense ≈ M_serial_prod
 
@@ -662,14 +662,14 @@ end
     Hc = constrain_space(Hf, NumberConservation(1:2))
     op_cons = f[1]' * f[2] + f[2]' * f[3] + hc + 2
 
-    M_serial_cons = matrix_representation(op_cons, Hc)
-    M_terms_cons = matrix_representation(op_cons, Hc; chunking=TermChunking(scheduler))
-    M_states_cons = matrix_representation(op_cons, Hc; chunking=StateChunking(scheduler))
+    M_serial_cons = representation(op_cons, Hc)
+    M_terms_cons = representation(op_cons, Hc; chunking=TermChunking(scheduler))
+    M_states_cons = representation(op_cons, Hc; chunking=StateChunking(scheduler))
     @test M_terms_cons ≈ M_serial_cons
     @test M_states_cons ≈ M_serial_cons
 
-    M_terms_cons_dense = matrix_representation(op_cons, Hc, :dense; chunking=TermChunking(scheduler))
-    M_states_cons_dense = matrix_representation(op_cons, Hc, :dense; chunking=StateChunking(scheduler))
+    M_terms_cons_dense = representation(op_cons, Hc, :dense; chunking=TermChunking(scheduler))
+    M_states_cons_dense = representation(op_cons, Hc, :dense; chunking=StateChunking(scheduler))
     @test M_terms_cons_dense ≈ M_serial_cons
     @test M_states_cons_dense ≈ M_serial_cons
 
@@ -681,14 +681,14 @@ end
     Hcons_prod = tensor_product(Hf1, Hg1)
     op_cons_prod = f[1]' * f[2] + g[1]' * g[2] + hc + 1
 
-    M_serial_cons_prod = matrix_representation(op_cons_prod, Hcons_prod)
-    M_terms_cons_prod = matrix_representation(op_cons_prod, Hcons_prod; chunking=TermChunking(scheduler))
-    M_states_cons_prod = matrix_representation(op_cons_prod, Hcons_prod; chunking=StateChunking(scheduler))
+    M_serial_cons_prod = representation(op_cons_prod, Hcons_prod)
+    M_terms_cons_prod = representation(op_cons_prod, Hcons_prod; chunking=TermChunking(scheduler))
+    M_states_cons_prod = representation(op_cons_prod, Hcons_prod; chunking=StateChunking(scheduler))
     @test M_terms_cons_prod ≈ M_serial_cons_prod
     @test M_states_cons_prod ≈ M_serial_cons_prod
 
-    M_terms_cons_prod_dense = matrix_representation(op_cons_prod, Hcons_prod, :dense; chunking=TermChunking(scheduler))
-    M_states_cons_prod_dense = matrix_representation(op_cons_prod, Hcons_prod, :dense; chunking=StateChunking(scheduler))
+    M_terms_cons_prod_dense = representation(op_cons_prod, Hcons_prod, :dense; chunking=TermChunking(scheduler))
+    M_states_cons_prod_dense = representation(op_cons_prod, Hcons_prod, :dense; chunking=StateChunking(scheduler))
     @test M_terms_cons_prod_dense ≈ M_serial_cons_prod
     @test M_states_cons_prod_dense ≈ M_serial_cons_prod
 end
@@ -701,9 +701,9 @@ end
     H = hilbert_space(f, 1:3)
     op = f[1]' * f[2] + (1 + 2im) * f[3]' * f[1] + 2.0
 
-    M_ref = matrix_representation(op, H)
+    M_ref = representation(op, H)
     rep = PartitionedSparseRepr(; backend=DebugArray)
-    M_dist = matrix_representation(op, H, rep)
+    M_dist = representation(op, H, rep)
 
     v = pvector(M_dist.col_partition) do inds
         rand(length(inds))
@@ -788,17 +788,17 @@ end
     Hsp = single_particle_hilbert_space(f, 1:3)
     Hbdg = bdg_hilbert_space(f, 1:3)
     op = 1.0 * f[1]' * f[2] + hc + f[3]' * f[3] + 2
-    @test matrix_representation(op, Hsp) == matrix_representation(op - 2, Hsp)
-    @test matrix_representation(op, Hbdg) == matrix_representation(op - 2, Hbdg)
-    @test matrix_representation(f[1]' * f[2]' + hc, Hbdg) isa AbstractMatrix
+    @test representation(op, Hsp) == representation(op - 2, Hsp)
+    @test representation(op, Hbdg) == representation(op - 2, Hbdg)
+    @test representation(f[1]' * f[2]' + hc, Hbdg) isa AbstractMatrix
     for H in (Hsp, Hbdg)
-        @test_throws ArgumentError matrix_representation(f[1]' * f[2] * f[3]' * f[3], H)
-        @test_throws ArgumentError matrix_representation(f[1]', H)
-        @test_throws ArgumentError matrix_representation(f[1]' * f[2] + f[3]', H)
-        @test_throws ArgumentError matrix_representation(1im * γ[1] * γ[2], H)
-        @test_throws ArgumentError matrix_representation(f[1]' * s[:z], H)
+        @test_throws ArgumentError representation(f[1]' * f[2] * f[3]' * f[3], H)
+        @test_throws ArgumentError representation(f[1]', H)
+        @test_throws ArgumentError representation(f[1]' * f[2] + f[3]', H)
+        @test_throws ArgumentError representation(1im * γ[1] * γ[2], H)
+        @test_throws ArgumentError representation(f[1]' * s[:z], H)
     end
-    @test_throws ArgumentError matrix_representation(f[1]' * f[2]' + hc, Hsp)
+    @test_throws ArgumentError representation(f[1]' * f[2]' + hc, Hsp)
 end
 
 @testitem "Consistency between + and add!!" begin

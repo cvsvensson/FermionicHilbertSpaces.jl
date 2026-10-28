@@ -234,6 +234,41 @@ end
     @test Mright ≈ kron(transpose(MA * MB), I(dim(H)))
 end
 
+@testitem "Lindblad steady state of a fermionic level" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: open_system
+
+    @fermions c
+    γin, γout = 0.3, 0.7
+    Hlr, Hl, Hr, left, right = open_system(c, 1:1)
+    dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
+    ham = 1.0 * c[1]'c[1]
+    lindbladian = -1im * (left(ham) - right(ham)) + dissipator(√γin * c[1]') + dissipator(√γout * c[1])
+    mat = representation(lindbladian, Hlr, :dense)
+    Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
+    @test norm(mat' * Ivec) < 1e-12
+
+    ρ = reshape(nullspace(mat)[:, 1], Hlr => (Hl, Hr))
+    ρ ./= tr(ρ)
+    @test ρ ≈ ρ'
+    @test all(≥(-1e-12), eigvals(Hermitian(ρ)))
+    @test tr(representation(c[1]'c[1], hilbert_space(c, 1:1)) * ρ) ≈ γin / (γin + γout)
+
+    # Two modes with hopping and an odd jump operator, against the matrix formula
+    # dρ/dt = -i[H,ρ] + LρL† - ½{L†L,ρ} on an even ρ
+    Hlr, Hl, Hr, left, right = open_system(c, 1:2)
+    ham = 0.4 * (c[1]'c[2] + c[2]'c[1]) + 0.3 * c[1]'c[1]
+    L = 0.5 * c[1] + 0.8 * c[2]'
+    mat = representation(-1im * (left(ham) - right(ham)) + dissipator(L), Hlr)
+    H2 = hilbert_space(c, 1:2)
+    Hm, Lm = representation(ham, H2, :dense), representation(L, H2, :dense)
+    P = Diagonal([(-1)^count_ones(i - 1) for i in 1:dim(H2)]) # parity in the Fock basis
+    X = rand(ComplexF64, 4, 4)
+    ρ = (X + X' + P * (X + X') * P) / 4
+    dρ = reshape(mat * reshape(ρ, (Hl, Hr) => Hlr), Hlr => (Hl, Hr))
+    @test dρ ≈ -1im * (Hm * ρ - ρ * Hm) + Lm * ρ * Lm' - 0.5 * (Lm'Lm * ρ + ρ * Lm'Lm)
+end
+
 function _apply_local_operators(op, state, space::TransposedSpace, precomp)
     newstate, amp = apply_local_operators(op, state, parent(space), precomp; transpose=true)
     return newstate, amp

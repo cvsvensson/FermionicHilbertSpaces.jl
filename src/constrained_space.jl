@@ -66,7 +66,9 @@ or `0` for states of `space` not in `states`, or `nothing` when no table is used
 Throws an `ArgumentError` if a state appears more than once.
 """
 function index_table(space, states)
-    (has_arithmetic_state_index(space) && eltype(states) == statetype(space)) || return nothing
+    has_arithmetic_state_index(space) || return nothing
+    B = statetype(space)
+    (eltype(states) == B || all(state -> same_state_kind(state, B), states)) || return nothing
     d = dim(space)
     (d isa Int && d <= min(INDEX_TABLE_RATIO * length(states), INDEX_TABLE_MAX_LENGTH)) || return nothing
     table = zeros(Int32, d)
@@ -223,7 +225,7 @@ end
     @test m == numberoperator(H)
 
     H2 = hilbert_space(f, 1:N, NumberConservation(1))
-    @test numberoperator(H2) == matrix_representation(sym, H2)
+    @test numberoperator(H2) == representation(sym, H2)
 
     Nsub = 3
     Hsub = subregion(H.modes[1:Nsub], H2)
@@ -241,13 +243,16 @@ end
     Hprod_sector = tensor_product(hilbert_space(f, 1:3, NumberConservation(1)), hilbert_space(b, 4, NumberConservation(0:2)))
     T = statetype(hilbert_space(f, 1:70))
     Hlarge = constrain_space(hilbert_space(f, 1:70), [T(0), T(1), T(UInt128(1) << 69)])
-    for H in (Hsector, Hconstrained, Hprod_sector, Hlarge, TransposedSpace(Hsector), add_tag(Hsector, :x), add_tag(Hconstrained, :x))
+    Hint = hilbert_space(f, 1:4, [FockNumber(6), FockNumber(1), FockNumber(2)])
+    for H in (Hsector, Hconstrained, Hprod_sector, Hlarge, Hint, TransposedSpace(Hsector), add_tag(Hsector, :x), add_tag(Hconstrained, :x))
         @test all(state_index(basisstate(i, H), H) == i for i in 1:dim(H))
     end
     @test state_index(statetype(Hsector)(0), Hsector) == 0
     @test state_index(statetype(Hsector)(1 << 10), Hsector) == 0
     @test state_index(basisstate(2, Hprod), Hconstrained) == 0
     @test state_index(T(2), Hlarge) == 0
+    @test state_index(FockNumber(3), Hint) == 0
+    @test state_index(statetype(hilbert_space(f, 1:4))(1), Hint) == 2
     @test state_index(BosonicState(0), Hsector) == 0
     @test state_index(FockNumber(0), Hconstrained) == 0
 
