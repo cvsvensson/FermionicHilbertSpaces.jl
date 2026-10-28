@@ -109,7 +109,7 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     h = a[1]' * a[2] + 1im * a[1]' * a[2]' + hc
     H = hilbert_space(a, 1:2, FermionicHilbertSpaces.SingleParticleState.(1:3))
     @test_throws ArgumentError representation(h, H)
-    @test_throws ArgumentError matrix_representation(h, H)
+    @test_throws ArgumentError representation(h, H)
 
     N = 10
     H = hilbert_space(a, 1:N, SingleParticleState.(1:N))
@@ -320,7 +320,7 @@ end
 representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
-    _is_quadratic_fermion_operator(op, true) || throw(ArgumentError("Only quadratic, number conserving fermionic operators can be represented on a SingleParticleHilbertSpace. Use `hilbert_space(f, labels)` and `matrix_representation(op, H)` for other operators."))
+    _is_quadratic_fermion_operator(op, true) || throw(ArgumentError("Only quadratic, number conserving fermionic operators can be represented on a SingleParticleHilbertSpace. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
     _quadratic_matrix(_single_particle_entry, remove_identity(op), H, repr)
 end
 function _single_particle_entry(term, H)
