@@ -240,8 +240,7 @@ function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
     MajoranaHilbertSpace(Hsub.majoranaindices, parent_subregion, Hsub.sym)
 end
 
-partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg::FullPartialTraceAlg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
-partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg::SubsystemPartialTraceAlg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
+partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg::AbstractPartialTraceAlg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
 
 function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,S<:AbstractMajoranaSym,F}
     sub_modes = modes(Hsub)

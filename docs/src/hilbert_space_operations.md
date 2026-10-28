@@ -111,7 +111,7 @@ The atoms are always ordered group by group, so `tensor_product(f1, b1, f2)` and
 
 Internally, `FermionicHilbertSpaces.groups(H)` returns the spaces that line up with the slots of a basis state: for a product space these are the same as `factors(H)`, while any other space is a single group, `groups(H) == (H,)`.
 
-When you pass symbols or spaces to `subregion`, they are looked up by name only, so `subregion([b[1]], H)` returns the bosonic mode as it appears in `H`, whatever its truncation. `partial_trace(m, H => Hsub)` and `embed` also look up atoms by name, so an `Hsub` built with a different truncation loses states: `partial_trace` drops them silently, and `embed` throws an error if they carry nonzero weight. Use `subregion` to get an `Hsub` whose basis matches `H`.
+When you pass symbols or spaces to `subregion`, they are looked up by name only, so `subregion([b[1]], H)` returns the bosonic mode as it appears in `H`, whatever its truncation. `partial_trace(m, H => Hsub)` and `embed` also look up atoms by name, so an `Hsub` built with a different truncation loses states: `partial_trace` throws an error if they carry nonzero weight, unless `skipmissing=true`, and `embed` gives zero on the states of `H` whose part on `Hsub` is lost. Use `subregion` to get an `Hsub` whose basis matches `H`.
 
 ### Sectors and quantum numbers
 
@@ -203,11 +203,20 @@ Msub = partial_trace(M, H => Hsub)
 Two algorithms are available, `SubsystemPartialTraceAlg` and
 `FullPartialTraceAlg`; by default `partial_trace` picks whichever is cheaper based
 on the sizes of `Hsub`, `H`, and the complementary subsystem, but you can force
-one with the `alg` keyword. The `skipmissing` keyword controls what happens when
-a combination of a substate and a complement state does not occur in `H` — this
-can happen for constrained spaces, and defaults to the safer choice for each
-algorithm. But, SubsystemPartialTraceAlg may not detect missing states, and in cases 
-where the subsystem is inconsistent with the full space may silently give the wrong result.
+one with the `alg` keyword. Both give the same result and throw in the same cases.
+
+When a state of `H` has no counterpart in `Hsub`, as for a truncated subsystem, the trace
+drops that state. By default `partial_trace` then throws an `ArgumentError` if `m` has a
+nonzero element in its row or column; `skipmissing=true` drops them silently.
+Combinations of a subsystem state and a complement state that are not in `H` drop nothing
+from `m`.
+
+`embed(m, Hsub => H)` returns the compression of `m ⊗ I` onto `H`, the adjoint of the partial
+trace. By default it throws if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude,
+as `matrix_representation` does for an operator that does not preserve the constraint of `H`.
+
+The maps `partial_trace(H => Hsub)` and `embed(Hsub => H)` skip the same states, but do not
+check their input: they are the linear maps that the eager functions compute when nothing is dropped.
 
 ### `partial_transpose`: transposing a subsystem
 
