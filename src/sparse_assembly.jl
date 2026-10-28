@@ -55,7 +55,7 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
     capacity = 0
     sortedrows = Int[]
     sortedamps = T[]
-    mergebuffers = (zeros(Int, N), Int[], T[])
+    slots = zeros(Int, N)
     colstarts = Vector{Int}(undef, B + 1)
     for c0 in 0:B:M-1
         nb = min(B, M - c0)
@@ -81,7 +81,7 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
         start = 1
         for j in 1:nb
             stop = colstarts[j] - 1
-            n = _sort_merge_column!(sortedrows, sortedamps, start, stop, n, mergebuffers)
+            n = _merge_sort_column!(sortedrows, sortedamps, n, start:stop, slots)
             colptr[c0+j+1] = length(rowval) + n + 1
             start = stop + 1
         end
@@ -98,31 +98,37 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
     return SparseMatrixCSC(N, M, colptr, rowval, nzval)
 end
 
-# Writes the entries start:stop of `rows` and `amps` after entry n, sorted by row and with the entries of equal rows
-# summed in their order. Returns the new number of written entries.
-# Equal rows are merged before sorting, with `slots[r]` the position of row r in `rowbuf` and `ampbuf`.
-# `slots` has one entry per row of the matrix and is all zeros between calls.
-function _sort_merge_column!(rows, amps, start, stop, n, (slots, rowbuf, ampbuf))
-    resize!(rowbuf, stop - start + 1)
-    resize!(ampbuf, stop - start + 1)
-    m = 0
-    for k in start:stop
+# Moves the entries `ks` of `rows` and `amps` to the positions after n, sorted by row and with the entries of equal
+# rows summed in their order. Requires n < first(ks). Returns the new number of entries.
+# `slots[r]` is the position of row r while the column is merged; `slots` is all zeros between calls.
+function _merge_sort_column!(rows, amps, n, ks, slots)
+    n0 = n
+    for k in ks
         r = rows[k]
         if iszero(slots[r])
-            m += 1
-            slots[r] = m
-            rowbuf[m] = r
-            ampbuf[m] = amps[k]
+            n += 1
+            slots[r] = n
+            rows[n] = r
+            amps[n] = amps[k]
         else
-            ampbuf[slots[r]] += amps[k]
+            amps[slots[r]] += amps[k]
         end
     end
-    sort!(view(rowbuf, 1:m))
-    for r in view(rowbuf, 1:m)
-        n += 1
-        rows[n] = r
-        amps[n] = ampbuf[slots[r]]
+    for r in view(rows, n0+1:n)
         slots[r] = 0
+    end
+    # Insertion sort, since a column has few entries
+    for i in n0+2:n
+        r = rows[i]
+        a = amps[i]
+        p = i - 1
+        while p > n0 && rows[p] > r
+            rows[p+1] = rows[p]
+            amps[p+1] = amps[p]
+            p -= 1
+        end
+        rows[p+1] = r
+        amps[p+1] = a
     end
     return n
 end
