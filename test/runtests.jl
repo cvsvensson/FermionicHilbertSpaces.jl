@@ -312,6 +312,8 @@ end
     @test state !== sf0
     @test state_index(sf0, H) == 1
     @test state_index(sf0, Hcons) == 1
+    Hsector = tensor_product(Hcons, hilbert_space(f, 4:5, NumberConservation(1)))
+    @test all(state_index(FockNumber(Int(s.f)), Hsector) == i for (i, s) in enumerate(basisstates(Hsector)))
 
     @boson b
     Hb = hilbert_space(b, 1)

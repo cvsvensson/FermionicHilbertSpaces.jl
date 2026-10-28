@@ -116,6 +116,7 @@ function state_index(s::SpinState, space::SpinSpace)
     i = (t >> 1) + one(t) # (checking i against dim rather than t against 4J avoids slow SLP vectorization in products of spins)
     (iseven(t) && 1 <= i <= dim(space)) ? i : zero(t)
 end
+has_arithmetic_state_index(::SpinSpace) = true
 
 atomic_id(H::SpinSpace) = symbolic_group(H.sym)
 function add_tag(H::SpinSpace{T,S}, tag) where {T,S}
