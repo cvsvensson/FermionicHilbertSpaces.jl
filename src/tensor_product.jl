@@ -75,16 +75,26 @@ kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, 
     H12 = tensor_product(H1, H2)
     m_too_large = rand(dim(H12) + 1, dim(H12) + 1)
     @test_throws ArgumentError partial_trace(m_too_large, H12 => H1)
+
+    Hfull = hilbert_space(a, 1:4)
+    c = matrix_representation(a[1], H1)
+    @test_throws ArgumentError generalized_kron((c,), (H1,) => Hfull)
 end
 
 """
     generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
 
-Compute the tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the `tensor_product` of `Hs`.
+Compute the fermionic tensor product of the matrices or vectors in `ms` on the spaces `Hs`, as an array on `H`, which defaults to the `tensor_product` of `Hs`.
 
-The relative order of fermionic embeddings, and so the sign of the result, follows the fermion mode ordering of `H`,
-not the order of `ms`. For the ordered product in which the order of `ms` and `Hs` given by the caller
-decides the signs, use `tensor_product(ms, Hs => H)`, which is the usual entry point.
+For vectors, the result is the product state, the same as `tensor_product(ms, Hs => H)`. For matrices, write each local basis operator
+as a product of single-mode factors (one of `c c†`, `c†`, `c`, `c†c` per mode) in the mode order of its space;
+`generalized_kron` multiplies the factors of all spaces together in the mode order of `H`, and extends this linearly.
+The result does not depend on the order of `ms` and `Hs`, and is in general not a product of embeddings: for
+`A = c₁†c₃` on modes `[1, 3]` and `B = c₂†c₄` on modes `[2, 4]` it gives `c₁†c₂†c₃c₄ = -(c₁†c₃)(c₂†c₄)`.
+It equals `tensor_product(ms, Hs => H)` when each space in `Hs` covers consecutive modes of `H` and `Hs` is listed
+in that order. Otherwise `generalized_kron` of density matrices need not be a density matrix.
+Use `tensor_product` for product states, local observables, and anything that should equal a product of embedded operators.
+
 `generalized_kron(ms, Hs => H)` is also accepted, and `generalized_kron(Hs => H)` returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
@@ -278,9 +288,12 @@ end
     tensor_product(Hs => H; kwargs...)
 
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
+If `H` is unconstrained, `tensor_product((A, B), (HA, HB) => H) == embed(A, HA => H) * embed(B, HB => H)`.
 If `H` is constrained, the result is the ordered product on the unconstrained space restricted to `H`, as `matrix_representation`
 of the corresponding symbolic product. Terms that take a state of `H` outside `H` throw an `ArgumentError` unless `skipmissing=true`,
 which drops them. A matrix on a constrained space in `Hs` acts as zero on states outside that space.
+For vectors, the result is the product state: if each `ms[k] = ψₖ|0⟩` with `ψₖ` an operator on the modes of `Hs[k]`,
+the result is `ψ₁ψ₂⋯|0⟩`. Swapping two odd states flips the sign.
 `kwargs` can be passed a bool `phase_factors`. The last form returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
