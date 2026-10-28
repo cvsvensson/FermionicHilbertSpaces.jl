@@ -253,23 +253,26 @@ function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs.
 end
 function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
     matrices = [_matrix_representation(term, bases, space, repr, NoChunking(); kwargs...) for term in NCterms(op)]
-    summed = _sum_matrices(matrices, repr; tree_split=tree_split)
-    identity_term = op.coeff * _matrix_representation(missing, bases, space, repr, NoChunking(); kwargs...)
-    iszero(op.coeff) || return summed + identity_term
+    return _add_identity_term(_sum_matrices(matrices, repr; tree_split=tree_split), op.coeff, bases, space, repr)
+end
+# `summed + coeff * I`, with the element type of `summed` promoted with that of `coeff * I` also when `coeff` is zero
+function _add_identity_term(summed, coeff, bases, space, repr)
+    identity_term = coeff * _matrix_representation(missing, bases, space, repr, NoChunking())
+    iszero(coeff) || return summed + identity_term
     T = promote_type(eltype(summed), eltype(identity_term))
     return convert(AbstractMatrix{T}, summed)
 end
 # On spaces with a basis-state loop (for example a constrained space over a ProductSpace), `_terms_matrix` builds the sum of all terms.
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the element type of `Eye`, as on a ProductSpace.
-function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
+function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; tree_split=10, kwargs...)
     spaces = groups(space)
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
     Tterms = mapreduce(mat_eltype, promote_type, prodops)
     identity_matrix = _matrix_representation(missing, bases, space, repr, NoChunking())
     T = promote_type(Tterms, Base.promote_op(*, typeof(op.coeff), eltype(identity_matrix)))
-    Tterms == T && return _terms_matrix(Tterms, prodops, op.coeff, space, repr; kwargs...)
-    summed = _terms_matrix(Tterms, prodops, zero(op.coeff), space, repr; kwargs...)
+    Tterms == T && return _terms_matrix(Tterms, prodops, op.coeff, space, repr, chunking; kwargs...)
+    summed = _terms_matrix(Tterms, prodops, zero(op.coeff), space, repr, chunking; kwargs...)
     iszero(op.coeff) && return convert(AbstractMatrix{T}, summed)
     return summed + op.coeff * identity_matrix
 end
@@ -337,12 +340,12 @@ function finalize!(m::Matrix, N::Int, M::Int)
 end
 
 
-function _matrix_representation_single_space(op::NCAdd, space, repr::Union{EagerSparseRepr,EagerDenseRepr}, ::NoChunking; kwargs...)
-    _terms_matrix(_repr_eltype(mat_eltype(op), repr), NCterms(op), op.coeff, space, repr; kwargs...)
+function _matrix_representation_single_space(op::NCAdd, space, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
+    _terms_matrix(_repr_eltype(mat_eltype(op), repr), NCterms(op), op.coeff, space, repr, chunking; kwargs...)
 end
 
 # The matrix of `sum(terms) + coeff * I` with element type `T`
-_terms_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
+_terms_matrix(::Type{T}, terms, coeff, space, repr, ::NoChunking; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 
 function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T
     accumulator = matrix_accumulator(T, length(terms), (dim(space), dim(space)), repr)
@@ -628,13 +631,13 @@ end
     scheduler = StaticScheduler(; nchunks=4)
     M_terms = matrix_representation(op, H; chunking=TermChunking(scheduler))
     M_states = matrix_representation(op, H; chunking=StateChunking(scheduler))
-    @test M_terms ≈ M_serial
-    @test M_states ≈ M_serial
+    @test M_terms == M_serial
+    @test M_states == M_serial
 
     M_terms_dense = matrix_representation(op, H, :dense; chunking=TermChunking(scheduler))
     M_states_dense = matrix_representation(op, H, :dense; chunking=StateChunking(scheduler))
-    @test M_terms_dense ≈ M_serial
-    @test M_states_dense ≈ M_serial
+    @test M_terms_dense == M_serial
+    @test M_states_dense == M_serial
 end
 
 @testitem "Chunking on product and constrained spaces" begin
@@ -655,13 +658,13 @@ end
     M_serial_prod = matrix_representation(op_prod, Hprod)
     M_terms_prod = matrix_representation(op_prod, Hprod; chunking=TermChunking(scheduler))
     M_states_prod = matrix_representation(op_prod, Hprod; chunking=StateChunking(scheduler))
-    @test M_terms_prod ≈ M_serial_prod
-    @test M_states_prod ≈ M_serial_prod
+    @test M_terms_prod == M_serial_prod
+    @test M_states_prod == M_serial_prod
 
     M_terms_prod_dense = matrix_representation(op_prod, Hprod, :dense; chunking=TermChunking(scheduler))
     M_states_prod_dense = matrix_representation(op_prod, Hprod, :dense; chunking=StateChunking(scheduler))
-    @test M_terms_prod_dense ≈ M_serial_prod
-    @test M_states_prod_dense ≈ M_serial_prod
+    @test M_terms_prod_dense == M_serial_prod
+    @test M_states_prod_dense == M_serial_prod
 
     # Constrained single space
     Hc = constrain_space(Hf, NumberConservation(1:2))
@@ -670,13 +673,13 @@ end
     M_serial_cons = matrix_representation(op_cons, Hc)
     M_terms_cons = matrix_representation(op_cons, Hc; chunking=TermChunking(scheduler))
     M_states_cons = matrix_representation(op_cons, Hc; chunking=StateChunking(scheduler))
-    @test M_terms_cons ≈ M_serial_cons
-    @test M_states_cons ≈ M_serial_cons
+    @test M_terms_cons == M_serial_cons
+    @test M_states_cons == M_serial_cons
 
     M_terms_cons_dense = matrix_representation(op_cons, Hc, :dense; chunking=TermChunking(scheduler))
     M_states_cons_dense = matrix_representation(op_cons, Hc, :dense; chunking=StateChunking(scheduler))
-    @test M_terms_cons_dense ≈ M_serial_cons
-    @test M_states_cons_dense ≈ M_serial_cons
+    @test M_terms_cons_dense == M_serial_cons
+    @test M_states_cons_dense == M_serial_cons
 
     # Constrained product space
     @fermions g
@@ -689,13 +692,27 @@ end
     M_serial_cons_prod = matrix_representation(op_cons_prod, Hcons_prod)
     M_terms_cons_prod = matrix_representation(op_cons_prod, Hcons_prod; chunking=TermChunking(scheduler))
     M_states_cons_prod = matrix_representation(op_cons_prod, Hcons_prod; chunking=StateChunking(scheduler))
-    @test M_terms_cons_prod ≈ M_serial_cons_prod
-    @test M_states_cons_prod ≈ M_serial_cons_prod
+    @test M_terms_cons_prod == M_serial_cons_prod
+    @test M_states_cons_prod == M_serial_cons_prod
 
     M_terms_cons_prod_dense = matrix_representation(op_cons_prod, Hcons_prod, :dense; chunking=TermChunking(scheduler))
     M_states_cons_prod_dense = matrix_representation(op_cons_prod, Hcons_prod, :dense; chunking=StateChunking(scheduler))
-    @test M_terms_cons_prod_dense ≈ M_serial_cons_prod
-    @test M_states_cons_prod_dense ≈ M_serial_cons_prod
+    @test M_terms_cons_prod_dense == M_serial_cons_prod
+    @test M_states_cons_prod_dense == M_serial_cons_prod
+end
+
+@testitem "Chunking across column blocks" begin
+    using OhMyThreads
+    import FermionicHilbertSpaces: TermChunking, StateChunking
+
+    @fermions f
+    H = hilbert_space(f, 1:13)
+    op = sum(f[k]' * f[k+1] + hc for k in 1:12) + sum(k * f[k]' * f[k] * f[k+1]' * f[k+1] for k in 1:12) + 1.5
+    # Three chunks of a space with two blocks of columns, so chunk boundaries fall inside blocks
+    scheduler = StaticScheduler(; nchunks=3)
+    M = matrix_representation(op, H)
+    @test matrix_representation(op, H; chunking=TermChunking(scheduler)) == M
+    @test matrix_representation(op, H; chunking=StateChunking(scheduler)) == M
 end
 
 @testitem "Distributed sparse matrix representation" begin

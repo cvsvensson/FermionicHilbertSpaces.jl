@@ -4,7 +4,7 @@
 
 ## Parallelization
 
-Matrix construction can be parallelized by passing a chunking strategy to `representation`. The two supported options are `TermChunking(scheduler)`, which splits work by operator terms, and `StateChunking(scheduler)`, which splits work by basis states. Any [OhMyThreads](https://github.com/JuliaFolds2/OhMyThreads.jl) scheduler can be used, for example `StaticScheduler`.
+Matrix construction can be parallelized by passing a chunking strategy to `representation`: `TermChunking(scheduler)` or `StateChunking(scheduler)`, with any [OhMyThreads](https://github.com/JuliaFolds2/OhMyThreads.jl) scheduler, for example `StaticScheduler`. For sparse and dense matrices the two do the same: the columns are split into one range per chunk of the scheduler, and the ranges are built in parallel. On a product space the terms are built in parallel instead. The result equals the serial one. For lazy operators, `TermChunking` splits the product with a vector by terms and `StateChunking` by basis states.
 
 ```@example parallelization
 using FermionicHilbertSpaces, OhMyThreads
