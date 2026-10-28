@@ -113,7 +113,7 @@ end
 state_positions(space, states) = something(root_index_table(space, states), Dict{eltype(states),Int}(s => i for (i, s) in enumerate(states)))
 state_position(d::Dict, state, H) = get(d, state, 0)
 function state_position(table::Vector{Int32}, state, H)
-    same_state_kind(state, statetype(H)) || return 0
+    (state isa statetype(H) || same_state_kind(state, statetype(H))) || return 0
     k = state_index(state, root_space(H))
     iszero(k) ? 0 : Int(table[k])
 end
