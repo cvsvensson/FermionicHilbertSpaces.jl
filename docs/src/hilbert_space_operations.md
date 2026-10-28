@@ -207,12 +207,17 @@ one with the `alg` keyword. Both give the same result and throw in the same case
 
 When a state of `H` has no counterpart in `Hsub`, as for a truncated subsystem, the trace
 drops the elements of `m` on that state. By default `partial_trace` then throws an
-`ArgumentError` if any dropped element is nonzero, and the map `partial_trace(H => Hsub)`
-throws if any such state exists; `skipmissing=true` drops them silently. Combinations of a
-subsystem state and a complement state that are not in `H` drop nothing from `m`.
-`embed` is the other way around: it throws if a nonzero element of `m` combined with a
-complement state gives a state that is not in `H`, as when embedding into a space with a fixed
-particle number, and the map `embed(Hsub => H)` throws if any such combination exists.
+`ArgumentError` if any dropped element is nonzero; `skipmissing=true` drops them silently.
+Combinations of a subsystem state and a complement state that are not in `H` drop nothing
+from `m`.
+
+`embed(m, Hsub => H)` returns the compression of `m ⊗ I` onto `H`, the adjoint of the partial
+trace. By default it throws if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude,
+as `matrix_representation` does for an operator that does not preserve the constraint of `H`.
+An operator that preserves the particle number of a number-conserving `H` embeds without error.
+
+The maps `partial_trace(H => Hsub)` and `embed(Hsub => H)` check each input they are applied
+to in the same way; `sparse(op)` is the unchecked map.
 
 ### `partial_transpose`: transposing a subsystem
 
