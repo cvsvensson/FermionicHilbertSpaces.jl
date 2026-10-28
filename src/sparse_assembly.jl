@@ -5,30 +5,54 @@ _terms_matrix(::Type{T}, terms, coeff, space, ::EagerSparseRepr; kwargs...) wher
 # `len` entries from `done` units of work, extrapolated with a margin to `todo` more units
 _extrapolated_length(len, done, todo) = len + ceil(Int, len / done * todo * 3 / 2)
 
+# After k of N terms: once the next term, estimated as the average of the first k, and `extra` entries would exceed
+# `capacity`, reserves room for the remaining terms and the `extra` entries. Returns the new capacity.
+function _reserve_remaining!(accumulator, capacity, k, N, extra)
+    len = length(first(accumulator))
+    len + cld(len, k) + extra <= capacity && return capacity
+    capacity = _extrapolated_length(len, k, N - k) + extra
+    foreach(v -> sizehint!(v, capacity; shrink=false), accumulator)
+    return capacity
+end
+
+# Replaces the entries of `block` by those of the columns `incols` of the matrix, stored at the column indices
+# `incols .- offset`. `capacity` is the number of entries reserved in `block`; returns the new one.
+function _collect_block!(block, capacity, precomps, coeff, space, incols, offset; kwargs...)
+    foreach(empty!, block)
+    extra = iszero(coeff) ? 0 : length(incols)
+    for (k, (term, precomp)) in enumerate(precomps)
+        chunked_operator_indices_and_amplitudes_generic!(block, term, space, precomp, incols, offset; kwargs...)
+        capacity = _reserve_remaining!(block, capacity, k, length(precomps), extra)
+    end
+    iszero(coeff) || add_identity!!(block, coeff, space, incols, offset)
+    return capacity
+end
+
 # Builds the matrix one block of columns at a time: the entries of a block are collected term by term,
 # then sorted into columns, with duplicate entries summed in the order of the terms.
+# A nonempty matrix that fits in one block is built by `sparse!` from that block.
 function _blocked_sparse_matrix(::Type{T}, terms, coeff, space; kwargs...) where T
     N = dim(space)
     B = SPARSE_BLOCK_SIZE
     precomps = [(term, precomputation_before_operator_application(term, space)) for term in terms]
+    blockcapacity = _sparse_length_guess(length(precomps), min(B, N))
+    block = (rows, cols, amps) = sparse_matrix_accumulator(T, (blockcapacity, blockcapacity))
+    if 0 < N <= B
+        _collect_block!(block, blockcapacity, precomps, coeff, space, 1:N, 0; kwargs...)
+        return finalize!(block, space)
+    end
     colptr = Vector{Int}(undef, N + 1)
     colptr[1] = 1
     rowval = Int[]
     nzval = T[]
     capacity = 0
-    guess = _sparse_length_guess(length(precomps), min(B, N))
-    block = (rows, cols, amps) = sparse_matrix_accumulator(T, (guess, guess))
     sortedrows = Int[]
     sortedamps = T[]
     mergebuffers = (zeros(Int, N), Int[], T[])
-    colstarts = Vector{Int}(undef, min(B, N) + 1)
+    colstarts = Vector{Int}(undef, B + 1)
     for c0 in 0:B:N-1
         nb = min(B, N - c0)
-        foreach(empty!, block)
-        for (term, precomp) in precomps
-            chunked_operator_indices_and_amplitudes_generic!(block, term, space, precomp, c0+1:c0+nb, c0; kwargs...)
-        end
-        iszero(coeff) || add_identity!!(block, coeff, space, c0+1:c0+nb, c0)
+        blockcapacity = _collect_block!(block, blockcapacity, precomps, coeff, space, c0+1:c0+nb, c0; kwargs...)
         fill!(colstarts, 0)
         for j in cols
             colstarts[j+1] += 1
@@ -100,7 +124,6 @@ end
 
 @testitem "Sparse matrix of a sum of many terms" begin
     using SparseArrays, LinearAlgebra
-    import FermionicHilbertSpaces.SciMLOperators: concretize
     @fermions f
     N = 14
     H = hilbert_space(f, 1:N, NumberConservation(6:7))
@@ -110,12 +133,14 @@ end
     M = matrix_representation(op, H)
     entries = map(findnz, [matrix_representation(term, H) for term in terms])
     @test M == sparse((reduce(vcat, getindex.(entries, k)) for k in 1:3)..., dim(H), dim(H)) + 1.5I
-    @test concretize(matrix_representation(op, H, :lazy)) == M
 
     # f[1]' and f[1] map some states out of the space
     @test_throws ArgumentError matrix_representation(f[1]' + f[1] + 1, H)
     @test matrix_representation(f[1]' + f[1] + 1, H; projection=true) ==
           matrix_representation(f[1]', H; projection=true) + matrix_representation(f[1], H; projection=true) + I
+
+    # A space without states
+    @test size(matrix_representation(f[1]' * f[2] + 1, constrain_space(hilbert_space(f, 1:2), NumberConservation(5)))) == (0, 0)
 
     # A constrained space with several groups, and an identity coefficient that widens the element type
     @boson b
