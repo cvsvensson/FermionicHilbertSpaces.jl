@@ -962,10 +962,9 @@ function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, 
     indK = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
     T = partial_trace_phase_factor_eltype(H)
-    n_est = dim(Hsub)^2 * dim(complement)
-    Is = sizehint!(Int[], n_est)
-    Js = sizehint!(Int[], n_est)
-    Vs = sizehint!(T[], n_est)
+    Is = Int[]
+    Js = Int[]
+    Vs = T[]
     _foreach_partial_trace_term(CartesianIndices((dim(H), dim(H))), H, Hsub, complement, mapper, alg; phase_factors) do J1, J2, K1, K2, v
         push!(Is, indK[K1, K2])
         push!(Js, indJ[J1, J2])
