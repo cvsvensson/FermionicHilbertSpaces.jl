@@ -31,6 +31,7 @@ Base.keys(bs::BasisStates) = Base.OneTo(length(bs))
 Base.firstindex(bs::BasisStates) = 1
 Base.lastindex(bs::BasisStates) = length(bs)
 Base.@propagate_inbounds Base.getindex(bs::BasisStates, i::Integer) = basisstate(i, bs.space)
+Base.getindex(bs::BasisStates, I::AbstractVector{<:Integer}) = [bs[i] for i in I]
 Base.:(==)(a::BasisStates, b::BasisStates) = _equal_states(a, b)
 Base.:(==)(a::BasisStates, b::AbstractVector) = _equal_states(a, b)
 Base.:(==)(a::AbstractVector, b::BasisStates) = _equal_states(a, b)
@@ -839,5 +840,6 @@ end
     @test last(bs) == bs[end] == basisstate(dim(H), H)
     i = dim(H) ÷ 3
     @test state_index(bs[i], H) == i
+    @test bs[1:3] == collect(Iterators.take(bs, 3))
     @test_throws BoundsError bs[dim(H) + 1]
 end
