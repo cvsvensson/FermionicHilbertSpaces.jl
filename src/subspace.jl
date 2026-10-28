@@ -27,10 +27,13 @@ struct SubspaceIndex{B}
     positions::Union{Vector{Int32},Dict{B,Int}}
     SubspaceIndex{B}(positions) where {B} = new{B}(positions)
 end
-SubspaceIndex(parent, states) = SubspaceIndex{eltype(states)}(something(root_index_table(parent, states), position_dict(states)))
+function SubspaceIndex(parent, states)
+    table = root_index_table(parent, states)
+    SubspaceIndex{eltype(states)}(isnothing(table) ? position_dict(states) : table)
+end
 
 subspace_key(H::AbstractSubspace) = (parent(H), subspace_states(H))
-Base.:(==)(H1::AbstractSubspace, H2::AbstractSubspace) = H1 === H2 || (nameof(typeof(H1)) === nameof(typeof(H2)) && subspace_key(H1) == subspace_key(H2))
+Base.:(==)(H1::AbstractSubspace, H2::AbstractSubspace) = H1 === H2 || (_type_family(typeof(H1)) === _type_family(typeof(H2)) && subspace_key(H1) == subspace_key(H2))
 Base.hash(H::AbstractSubspace, h::UInt) = hash(subspace_key(H), h)
 
 dim(H::AbstractSubspace) = length(subspace_states(H))
@@ -65,11 +68,13 @@ _wrap(space, H::AbstractSubspace) = rewrap(H, space, SubspaceIndex(space, subspa
     Hsector = constrain_space(constrain_space(H, states), NumberConservation())
     @test Hsector == constrain_space(H, NumberConservation(), states)
     @test parent(Hsector) == H
+    @test hash(Hsector) == hash(constrain_space(H, NumberConservation(), states))
 
     # a constrained space of a sector space
     Hconstrained = constrain_space(hilbert_space(f, 1:3, NumberConservation(1:2)), states)
     @test Hconstrained == constrain_space(H, filter(s -> fermionnumber(s) in 1:2, states))
     @test parent(Hconstrained) == H
+    @test hash(Hconstrained) == hash(constrain_space(H, filter(s -> fermionnumber(s) in 1:2, states)))
 end
 
 @testitem "A subtype implementing only the AbstractSubspace primitives" begin
@@ -103,4 +108,6 @@ end
     H = hilbert_space(f, 1:2)
     states = collect(basisstates(H))
     @test_throws ArgumentError constrain_space(H, states[[1, 2, 1]])
+    @test_throws ArgumentError constrain_space(H, NumberConservation(), states[[1, 2, 1]])
+    @test_throws ArgumentError constrain_space(GenericHilbertSpace(:A, [:a, :b, :c]), [:a, :a])
 end
