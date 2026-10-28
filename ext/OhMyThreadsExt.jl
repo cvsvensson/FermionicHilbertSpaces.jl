@@ -7,7 +7,7 @@ using NonCommutativeProducts: NCAdd, NCMul, NCterms
 import SciMLOperators: cache_operator
 
 import OhMyThreads: Schedulers.chunking_args, Consecutive
-import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, ProductSpace, _matrix_representation, __matrix_representation, _terms_matrix, _precomputed_terms, _blocked_sparse_matrix, _add_identity_term, matrix_accumulator, add_identity!!, NoChunking, chunked_operator_indices_and_amplitudes_generic!, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, basisstate, state_index, _skip_outside, dim, _lazy_output_prototype, cache_operator!
+import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, ProductSpace, _matrix_representation, __matrix_representation, _terms_matrix, _precomputed_terms, _blocked_sparse_matrix, _narrowed, _add_identity_term, matrix_accumulator, add_identity!!, NoChunking, chunked_operator_indices_and_amplitudes_generic!, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, basisstate, state_index, _skip_outside, dim, _lazy_output_prototype, cache_operator!
 
 function _reduce_add!(y, partials)
     isempty(partials) && return y
@@ -18,12 +18,15 @@ function _reduce_add!(y, partials)
     return y
 end
 
-function _state_chunk_data(space, chunking::StateChunking)
+const ThreadedChunking = Union{TermChunking,StateChunking}
+
+# Consecutive ranges of basis-state indices, one per chunk of the scheduler, and the single range `1:0` when the space is empty
+function _state_chunk_data(space, chunking::ThreadedChunking)
     scheduler = chunking.scheduler
     scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
     n = get_nchunks(scheduler)
     basis_chunks = collect(chunks(1:dim(space); n, split=Consecutive()))
-    return basis_chunks
+    return isempty(basis_chunks) ? [1:0] : basis_chunks
 end
 
 function _term_chunk_data(terms, chunking::TermChunking)
@@ -266,42 +269,20 @@ function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC,
 end
 
 
-const ThreadedChunking = Union{TermChunking,StateChunking}
-
-function _column_chunks(space, chunking::ThreadedChunking)
-    scheduler = chunking.scheduler
-    scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
-    return chunks(1:dim(space); n=get_nchunks(scheduler), split=Consecutive())
-end
-
 # Each chunk of columns is built as its own sparse matrix by the serial blocked build, and the chunks are concatenated.
 function _terms_matrix(::Type{T}, terms, coeff, space, ::EagerSparseRepr, chunking::ThreadedChunking; kwargs...) where T
     precomps = _precomputed_terms(terms, space)
-    mats = tmap(_column_chunks(space, chunking); scheduler=chunking.scheduler) do cols
+    mats = tmap(_state_chunk_data(space, chunking); scheduler=chunking.scheduler) do cols
         _blocked_sparse_matrix(T, precomps, coeff, space, cols; kwargs...)
     end
-    return _hcat_sparse(mats)
-end
-# Concatenates sparse matrices with the same number of rows in one pass
-function _hcat_sparse(mats)
-    length(mats) == 1 && return only(mats)
-    colptr = [1; reduce(vcat, map(m -> view(SparseArrays.getcolptr(m), 2:size(m, 2)+1), mats))]
-    k = 1
-    for m in mats
-        ncols = size(m, 2)
-        colptr[k+1:k+ncols] .+= colptr[k] - 1
-        k += ncols
-    end
-    rowval = reduce(vcat, map(rowvals, mats))
-    nzval = reduce(vcat, map(nonzeros, mats))
-    return SparseArrays.SparseMatrixCSC(size(first(mats), 1), k - 1, colptr, rowval, nzval)
+    return _narrowed(hcat(mats...))
 end
 
 # Each task writes the columns of its chunk of the shared matrix.
 function _terms_matrix(::Type{T}, terms, coeff, space, repr::EagerDenseRepr, chunking::ThreadedChunking; kwargs...) where T
     precomps = _precomputed_terms(terms, space)
     m = matrix_accumulator(T, length(precomps), (dim(space), dim(space)), repr)
-    tforeach(_column_chunks(space, chunking); scheduler=chunking.scheduler) do cols
+    tforeach(_state_chunk_data(space, chunking); scheduler=chunking.scheduler) do cols
         for (term, precomp) in precomps
             chunked_operator_indices_and_amplitudes_generic!(m, term, space, precomp, cols, 0; kwargs...)
         end
