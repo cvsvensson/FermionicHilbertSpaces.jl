@@ -245,9 +245,12 @@ kron_phase_factor(::AtomicStateMapper) = (f1, f2) -> 1
 """
     subregion(Hs, H::AbstractHilbertSpace)
 
-Return the subsystem of `H` spanned by the factors `Hs`.
+Return the subsystem of `H` spanned by the factors `Hs`, given as a space, a symbolic
+operator, or a list/tuple of spaces or symbolic operators (e.g. `[f[1], b[2]]`).
 
-This is primarily used for product spaces where the subsystem is specified by a list/tuple of factor spaces.
+If `Hs` contains only symbolic operators, their order does not matter: the modes are ordered
+as in `H`. If any element of `Hs` is a space, the modes must keep their order within each
+group of `H` (e.g. the Jordan-Wigner order of fermions), otherwise an `ArgumentError` is thrown.
 
 # Examples
 ```julia
@@ -257,6 +260,7 @@ H2 = hilbert_space(f, 2:2)
 H3 = hilbert_space(f, 3:3)
 H = tensor_product((H1, H2, H3))
 Hsub = subregion((H1, H3), H)
+Hsub == subregion([f[3], f[1]], H)
 ```
 """
 function subregion(Hs, H::AbstractHilbertSpace)
@@ -266,6 +270,7 @@ function subregion(Hs, H::AbstractHilbertSpace)
     positions = map(x -> atom_position(x, H), names)
     all(>(0), positions) || throw(ArgumentError("The spaces/operators in `Hs` must match atomic factors of `H`, got the following unmatched ones: $(names[iszero.(positions)])."))
     allunique(positions) || throw(ArgumentError("`Hs` must not contain duplicate atomic factors, got $names."))
+    any(x -> x isa AbstractHilbertSpace, Hs_items) || sort!(positions)
 
     # Resolve the names to H's own atoms, so the basis of the subregion is that of H
     Hsub = tensor_product(collect(atomic_factors(H))[positions])
@@ -285,7 +290,8 @@ end
     Hbsub = subregion([b[2]], H)
     Hsub = subregion([f[1], b[2]], H)
     @test Hsub == tensor_product(Hfsub, Hbsub)
-    @test_throws ArgumentError subregion([f[2], f[1]], H)
+    @test subregion([b[2], f[1]], H) == subregion([f[1], b[2]], H)
+    @test_throws ArgumentError subregion(hilbert_space(f, [2, 1]), H)
     @test_throws ArgumentError subregion([f[4]], H)
     @test subregion(Hf, H) == Hf
     @test subregion(Hb, H) == Hb
@@ -303,6 +309,15 @@ end
     @test complementary_subsystem(H, subregion([f[3], b[2]], H)) ==
           subregion([f[1], f[2], b[1], b[3]], H)
 
+end
+
+@testitem "Subregion: symbols interleaving the factors of a product of sectors" begin
+    @fermions f
+    up = [(i, :↑) for i in 1:4]
+    dn = [(i, :↓) for i in 1:4]
+    H = tensor_product(hilbert_space(f, up, NumberConservation(2)), hilbert_space(f, dn, NumberConservation(2)))
+    @test subregion([f[(i, σ)] for i in 1:2 for σ in (:↑, :↓)], H) ==
+          subregion(hilbert_space(f, [up[1:2]; dn[1:2]]), H)
 end
 
 @testitem "Matching syms and spaces with mutable labels" begin

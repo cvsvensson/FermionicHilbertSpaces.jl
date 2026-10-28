@@ -76,7 +76,7 @@ basisstates(Hsub)
 Here the total particle number is fixed to 1, so the subregion on modes `1:2` has
 exactly three compatible states: `(1,0)`, `(0,1)`, and `(0,0)`.
 
-In some cases `subregion` can also be called with symbolic operators instead of Hilbert spaces
+In some cases `subregion` can also be called with symbolic operators instead of Hilbert spaces. Their order does not matter: the modes of the result are ordered as in `H`.
 ```@example hilbert_space_ops
 Hsub = subregion([f[k] for k in 1:2], H)
 ```
