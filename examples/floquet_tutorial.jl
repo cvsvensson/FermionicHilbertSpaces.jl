@@ -1,7 +1,7 @@
-# # Floquet Systems: Defining Custom Algebras and Matrix Representations
+# # Floquet Systems
 
-# This tutorial shows how to define a custom noncommutative operator algebra and matrix 
-# representations, which works together with the other symbolic operators and spaces in FermionicHilbertSpaces.jl.
+# This example defines an operator algebra and matrix representations for the Floquet space of a
+# periodically driven system, and couples it to a spin to compute the quasienergies of a driven three-level system.
 
 # ## Background: Floquet theory 
 
@@ -27,13 +27,9 @@
 
 # ## Defining the custom Floquet algebra
 
-# Here's what you need to define a new algebra and matrix representations:
-# 1. **Symbolic types** — structs representing your operators 
-# 2. **`@nc` declaration** — registers types with the algebraic machinery
-# 3. **`@commutative` declaration** — declares commutativity with other algebras
-# 4. **`mul_effect`** — the multiplication / commutation rules
-# 5. **`apply_local_operator`** — how operators act on basis states
-# 6. **`symbolic_group`** — links operators to their Hilbert space
+# The steps for defining a new algebra are listed on the [Clock operators](clock_operators.md) page.
+# Compared to the clock operators, the Floquet operators also commute with operators of other algebras
+# through `@commutative`, and their `mul_effect` simplifies products.
 
 # Let's load the package and import some things we need to overload or use
 using FermionicHilbertSpaces
