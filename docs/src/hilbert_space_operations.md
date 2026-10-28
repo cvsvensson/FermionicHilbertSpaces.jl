@@ -276,12 +276,28 @@ v2 = representation("10", H2)
 v12 = tensor_product((v1, v2), (H1, H2) => H)
 ```
 
-`generalized_kron(ms, Hs, H=tensor_product(Hs); kwargs...)` computes the same kind
-of combination, but using the mode ordering of `H` itself to decide the relative
-order of the embeddings, rather than the order in which `ms` are given — this
-matches plain `kron` when there are no fermionic phase factors. Both functions
-also accept the curried form `tensor_product(Hs => H)` / `generalized_kron(Hs =>
-H)`, returning a callable that can be applied to different collections of `ms`.
+`generalized_kron(ms, Hs, H=tensor_product(Hs); kwargs...)` computes the fermionic
+tensor product instead (see [Fermionic tensor products](fermions.md)), which does
+not depend on the order of `ms`. For matrices it equals
+`tensor_product` only when each space in `Hs` covers consecutive modes of `H` and
+`Hs` is listed in that order; for vectors the two are the same. On other partitions
+`generalized_kron` is not a product of embeddings, and `generalized_kron` of density
+matrices need not be a density matrix:
+
+```@example hilbert_space_ops
+H = hilbert_space(f, 1:4)
+H13 = hilbert_space(f, [1, 3])
+H24 = hilbert_space(f, [2, 4])
+A = matrix_representation(f[1]' * f[3], H13)
+B = matrix_representation(f[2]' * f[4], H24)
+AB = matrix_representation(f[1]' * f[3] * f[2]' * f[4], H)
+tensor_product((A, B), (H13, H24) => H) ≈ AB, generalized_kron((A, B), (H13, H24) => H) ≈ -AB
+```
+
+Use `tensor_product` for product states, local observables, and anything that
+should equal a product of embedded operators. Both functions also accept the
+curried form `tensor_product(Hs => H)` / `generalized_kron(Hs => H)`, returning a
+callable that can be applied to different collections of `ms`.
 
 ### Callable maps and sparse conversion
 

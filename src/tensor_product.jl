@@ -80,11 +80,16 @@ end
 """
     generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
 
-Compute the tensor product of matrices or vectors in `ms` with respect to the spaces `Hs`, respectively. Return a matrix in the space `H`, which defaults to the `tensor_product` of `Hs`.
+Compute the fermionic tensor product of the matrices or vectors in `ms` on the spaces `Hs`, as an array on `H`, which defaults to the `tensor_product` of `Hs`.
 
-The relative order of fermionic embeddings, and so the sign of the result, follows the fermion mode ordering of `H`,
-not the order of `ms`. For the ordered product in which the order of `ms` and `Hs` given by the caller
-decides the signs, use `tensor_product(ms, Hs => H)`, which is the usual entry point.
+This is the product of eqs. (14b) and (15) in J. Phys. A 54, 393001 (2021): a local basis operator is a product of
+single-mode factors in the mode order of its space, and the result is the product of all these factors in the mode
+order of `H`. It does not depend on the order of `ms` and `Hs`. For matrices it is not, in general, a product of
+embeddings, and equals `tensor_product(ms, Hs => H)` only when each space in `Hs` covers consecutive modes of `H` and
+`Hs` is listed in that order; otherwise `generalized_kron` of density matrices need not be a density matrix.
+For vectors the two functions agree. Use `tensor_product` for product states, local observables, and anything that
+should equal a product of embedded operators.
+
 `generalized_kron(ms, Hs => H)` is also accepted, and `generalized_kron(Hs => H)` returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
@@ -277,7 +282,9 @@ end
     tensor_product(ms, Hs => H; kwargs...)
     tensor_product(Hs => H; kwargs...)
 
-Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
+Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`
+(eq. (26) in J. Phys. A 54, 393001 (2021)), so that `tensor_product((A, B), (HA, HB) => H) == embed(A, HA => H) * embed(B, HB => H)`.
+For vectors the result is the product state, the same as `generalized_kron(ms, Hs => H)`.
 `kwargs` can be passed a bool `phase_factors`. The last form returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
