@@ -252,7 +252,7 @@ function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs.
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
 end
 function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
-    matrices = [_matrix_representation(term, bases, space, repr, NoChunking(); kwargs...) for term in NCterms(op)]
+    matrices = (_matrix_representation(term, bases, space, repr, NoChunking(); kwargs...) for term in NCterms(op))
     return _add_identity_term(_sum_matrices(matrices, repr; tree_split=tree_split), op.coeff, bases, space, repr)
 end
 # `summed + coeff * I`, with the element type of `summed` promoted with that of `coeff * I` also when `coeff` is zero
