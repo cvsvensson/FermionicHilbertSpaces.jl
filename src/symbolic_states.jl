@@ -1,3 +1,9 @@
+"""
+    Kets(H)
+
+Callable that turns a label into a symbolic ket of `H`, as in `Kets(H)("10")`. The label is
+parsed by [`interpret_state`](@ref). `Kets(H)[i]` is the ket of `basisstate(i, H)`.
+"""
 struct Kets{B,H}
     space::H
     Kets(space::H) where H = new{statetype(space),H}(space)
@@ -195,6 +201,14 @@ function NonCommutativeProducts.mul_grade(a::StateGrade, b::StateGrade)
 end
 NonCommutativeProducts.adjoint_grade(a::StateGrade) = StateGrade(Dict{Any,Bicyclic}(k => Bicyclic(g.n, g.m) for (k, g) in a.grades))
 
+"""
+    interpret_state(input, space)
+    interpret_state(input, ::Type{B})
+
+Convert `input`, such as the string `"10"`, to a basis state of `space`, or to a state of
+type `B`. [`Kets`](@ref), `basisstate` and `state_index` call it for strings and characters.
+A custom basis-state type adds a method for the inputs it accepts; a state is returned as it is.
+"""
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
 interpret_state(state, space::Union{TransposedSpace,AbstractSubspace}) = interpret_state(state, parent(space))
