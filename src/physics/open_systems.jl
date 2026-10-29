@@ -9,7 +9,7 @@ Base.:(==)(a::TransposedSpace, b::TransposedSpace) = a.parent == b.parent
 Base.hash(H::TransposedSpace, h::UInt) = hash(H.parent, h)
 basisstates(H::TransposedSpace) = basisstates(H.parent)
 Base.@propagate_inbounds basisstate(i::Integer, H::TransposedSpace) = basisstate(i, H.parent)
-state_index(state::AbstractBasisState, H::TransposedSpace) = state_index(state, H.parent)
+_state_index(state, H::TransposedSpace) = _state_index(state, H.parent)
 has_arithmetic_state_index(H::TransposedSpace) = has_arithmetic_state_index(H.parent)
 dim(H::TransposedSpace) = dim(H.parent)
 isconstrained(H::TransposedSpace) = isconstrained(H.parent)
@@ -133,6 +133,16 @@ end
     Mexpected = representation((c_left[1]' * s_left[:z]) * (c_right[1]' * s_right[:z]) + (c_left[1]' * s_left[:z]), H)
     @test M ≈ Mexpected
     @test reshape(reshape(M, H => (Hleft, Hs, Hright)), (Hleft, Hs, Hright) => H) == M
+end
+
+@testitem "open_system commutator of a single boson" begin
+    using FermionicHilbertSpaces: open_system
+    @boson a
+    @bosons b
+    Ha, _, _, left, right = open_system(a, 3)
+    Hb, _, _, _, _ = open_system(b[1], 3)
+    @test left(a) != right(a)
+    @test representation(left(a' * a) - right(a' * a), Ha) == representation(left(b[1]' * b[1]) - right(b[1]' * b[1]), Hb)
 end
 
 @testitem "open_system on Majorana spaces" begin

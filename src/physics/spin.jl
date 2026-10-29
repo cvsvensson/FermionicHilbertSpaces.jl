@@ -111,7 +111,7 @@ SpinSpace(label, J) = SpinSpace(SymbolicSpinBasis(label, nothing, J), J)
 basisstates(H::SpinSpace) = BasisStates(H, H.basisstates)
 Base.@propagate_inbounds basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
-function state_index(s::SpinState, space::SpinSpace)
+function _state_index(s::SpinState, space::SpinSpace)
     t = twice(s.m) + twice(space.spin) # 2(m + J)
     i = (t >> 1) + one(t) # (checking i against dim rather than t against 4J avoids slow SLP vectorization in products of spins)
     (iseven(t) && 1 <= i <= dim(space)) ? i : zero(t)
