@@ -7,10 +7,10 @@ products, partial traces and matrix representations that connect them.
 """
 module FermionicHilbertSpaces
 
-using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Eigen, Hermitian,
-    Symmetric, UniformScaling, diag, diagind, dot,
-    eigen, eigen!, eigvals, eigvecs, ishermitian, issymmetric,
-    mul!, normalize, qr, rank, rmul!, schur, svdvals, tr, I
+using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Hermitian,
+    UniformScaling, diag, diagind, dot,
+    eigen!, eigvals, eigvecs, ishermitian,
+    mul!, normalize, qr, rank, rmul!, svdvals, tr, I
 using LowRankMatrices: LowRankMatrices, LowRankMatrix
 import SciMLOperators
 import SciMLOperators: update_coefficients!
@@ -37,11 +37,10 @@ export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
-export SingleParticle, BdG
 export ParametricSparseMatrix
 export symmetric_sector
 export open_system
-public particle_number, Axes, dissipator, BdGEigen
+public particle_number, Axes, dissipator, FreeFermions
 
 """
     HC
@@ -131,7 +130,6 @@ include("physics/fermions/fermions.jl")
 include("physics/fermions/operators.jl")
 include("physics/fermions/majoranas.jl")
 include("physics/fermions/fixednumberfock.jl")
-include("physics/fermions/bdg.jl")
 
 
 include("physics/bosons.jl")
@@ -140,6 +138,7 @@ include("physics/open_systems.jl")
 include("symbolic_states.jl")
 
 include("printing.jl")
+include("physics/fermions/free_fermions.jl")
 
 function __init__()
     NonCommutativeProducts.enable_autosort!()
