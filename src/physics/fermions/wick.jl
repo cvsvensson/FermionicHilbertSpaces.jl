@@ -130,9 +130,9 @@ mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilber
     for (H, outside) in ((hilbert_space(f, 1:N, SingleParticle()), f[1]' * f[2]'), (hilbert_space(f, 1:N, BdG()), f[1]' * f[2]' * f[3]))
         G0 = zeros(dim(H), dim(H))
         @test_throws ArgumentError expectation(outside + n, G0, H)
-        @test_throws ArgumentError FermionicHilbertSpaces.mean_field(outside + n, G0, H)
+        @test_throws ArgumentError mean_field(outside + n, G0, H)
         @test expectation(outside, G0, H; projection = true) === 0.0
-        @test FermionicHilbertSpaces.mean_field(outside + n, G0, H; projection = true) == n
+        @test mean_field(outside + n, G0, H; projection = true) == n
     end
 end
 
