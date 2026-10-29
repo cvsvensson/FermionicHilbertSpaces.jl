@@ -536,14 +536,9 @@ Express `m` in the basis of `Hto`, where `Hfrom` and `Hto` have the same atoms b
 different (or differently ordered) basis states. Unless `skipmissing=true`, throws an
 `ArgumentError` if `m` has nonzero elements involving states of `Hfrom` that are not in `Hto`.
 
-Either side can be an [`Axes`](@ref) with one space per axis of `m`; a bare space means that
-space on every axis. Across the pair the order is input => output, while inside each `Axes` it
-is rows first, `Axes(Hout, Hin)`. So `change_basis(m, H => Axes(Hout, Hin))` is the block of a
-matrix `m` on `H` with rows on `Hout` and columns on `Hin`, and `change_basis(blk, Axes(Hout, Hin) => H)`
-places that block in a matrix on `H` that is zero elsewhere. Each axis is checked against its own
-space: the rows of `m` against the states missing from the output row space, the columns against
-those missing from the output column space. Extracting a block from a matrix with elements outside
-the block therefore needs `skipmissing=true`.
+Either side can be an [`Axes`](@ref), one space per axis of `m`: `change_basis(m, H => Axes(Hout, Hin))`
+extracts the block of `m` with rows on `Hout` and columns on `Hin`, and `change_basis(blk, Axes(Hout, Hin) => H)`
+places it in a matrix on `H` that is zero elsewhere.
 """
 change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
 function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; skipmissing = false, kwargs...)
