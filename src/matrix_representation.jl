@@ -425,7 +425,7 @@ Unless `Hout == Hin`, only the eager formats without chunking are supported.
 The optional `repr` selects the format, as in [`representation`](@ref): `:sparse` (the default), `:dense`, `:lazy`,
 or a format object (`EagerSparseRepr()`, `EagerDenseRepr()`, `LazyRepr()`). A numeric element type also works as `repr`: `ComplexF64` gives a sparse matrix with that element type, and `Matrix{Float64}` gives a dense matrix with that element type.
 
-Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space (outside `Hout` with `Axes`). Projection drops matrix elements to states outside the space, so an operator that changes a conserved quantity gives zero on a single sector; use a space that contains both sectors instead. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
+Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space (outside `Hout` with `Axes`). Projection drops matrix elements to states outside the space, so an operator that changes a conserved quantity gives zero on a single sector; use `Axes(Hout, Hin)` with the two sectors instead. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
 
 # Examples
 ```julia
