@@ -356,7 +356,7 @@ end
 @testitem "Number-conserving space with more than 1024 modes" begin
     @fermions f
     M = 1100
-    ham = sum(f[n+1]'f[n] + hc for n in 1:M-1)
+    ham = sum(f[n + 1]'f[n] + hc for n in 1:(M - 1))
     H = hilbert_space(f, 1:M, NumberConservation(1))
     @test representation(ham, H) == representation(ham, hilbert_space(f, 1:M, SingleParticle()))
 end
