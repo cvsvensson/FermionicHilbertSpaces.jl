@@ -546,7 +546,7 @@ those missing from the output column space. Extracting a block from a matrix wit
 the block therefore needs `skipmissing=true`.
 """
 change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
-function change_basis(m, Hfrom::Union{AbstractHilbertSpace,Axes}, Hto::Union{AbstractHilbertSpace,Axes}; skipmissing=false, kwargs...)
+function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; skipmissing = false, kwargs...)
     n = m isa UniformScaling ? 2 : ndims(m)
     from, to = _per_axis(Hfrom, n), _per_axis(Hto, n)
     size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, and a `UniformScaling` needs the same space on both axes, got $(summary(m))."))
@@ -1360,13 +1360,13 @@ end
     m = rand(dim(H), dim(H))
 
     @test_throws ArgumentError change_basis(m, H => Axes(Hout, Hin))
-    blk = change_basis(m, H => Axes(Hout, Hin); skipmissing=true)
+    blk = change_basis(m, H => Axes(Hout, Hin); skipmissing = true)
     @test blk == m[rows, cols]
 
     @test change_basis(change_basis(blk, Axes(Hout, Hin) => H), H => Axes(Hout, Hin)) == blk
 
-    @test change_basis(2I, H => Axes(Hout, Hin); skipmissing=true) == 2I(dim(H))[rows, cols]
+    @test change_basis(2I, H => Axes(Hout, Hin); skipmissing = true) == 2I(dim(H))[rows, cols]
     @test_throws ArgumentError change_basis(2I, Axes(Hout, Hin) => H)
     v = rand(dim(H))
-    @test change_basis(v, H => Axes(Hout); skipmissing=true) == v[rows]
+    @test change_basis(v, H => Axes(Hout); skipmissing = true) == v[rows]
 end
