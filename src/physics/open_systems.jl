@@ -135,6 +135,16 @@ end
     @test reshape(reshape(M, H => (Hleft, Hs, Hright)), (Hleft, Hs, Hright) => H) == M
 end
 
+@testitem "open_system commutator of a single boson" begin
+    using FermionicHilbertSpaces: open_system
+    @boson a
+    @bosons b
+    Ha, _, _, left, right = open_system(a, 3)
+    Hb, _, _, _, _ = open_system(b[1], 3)
+    @test left(a) != right(a)
+    @test representation(left(a' * a) - right(a' * a), Ha) == representation(left(b[1]' * b[1]) - right(b[1]' * b[1]), Hb)
+end
+
 @testitem "open_system on Majorana spaces" begin
     using LinearAlgebra
     using FermionicHilbertSpaces: open_system
