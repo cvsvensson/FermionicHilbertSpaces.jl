@@ -150,31 +150,23 @@ ground_states' * representation(symham, H) * ground_states
 
 ### Operators between two spaces with `Axes`
 
-`representation(op, Axes(Hout, Hin))` returns the `dim(Hout) × dim(Hin)` matrix of `op`
-as a map from `Hin` to `Hout`. `Axes` lists the space of each axis of one array, rows
-first like `axes(m)`, and a bare space `H` means `Axes(H, H)`. This differs from the
-[Pair arguments](@ref pair_convention): `H => Hout` maps an array on `H` to an array on
-`Hout`, while `Axes` gives the spaces of a single array's axes. The two spaces must have
-the same groups (the same modes, and for bosons the same truncation), for example two
-particle-number sectors. A ket or bra has the single axis `Axes(H)`. `Axes` is public but
-not exported.
+`representation(op, Axes(Hout, Hin))` returns the matrix of `op` as a map from `Hin` to
+`Hout`, with rows on `Hout` and columns on `Hin`, like `axes(m)`. A bare space `H` means the
+same space on every axis, and a ket or bra has the single axis `Axes(H)`. The two spaces must
+have the same groups, for example two particle-number sectors of the same modes. Unlike the
+[Pair arguments](@ref pair_convention), where `H => Hout` maps one array to another, `Axes`
+names the spaces of a single array. `Axes` is public but not exported.
 
-An annihilation operator maps the 2-particle sector to the 1-particle sector. Its matrix
-elements between the 2-particle ground state and the 1-particle eigenstates are the
-weights in the Lehmann representation of the Green's function:
+Annihilating a fermion maps the 2-particle states of four modes to the 1-particle states, so
+its matrix has a row for each of the 4 one-particle states and a column for each of the 6
+two-particle states:
 
 ```@example hilbert_space_ops
 using FermionicHilbertSpaces: Axes
 H2 = hilbert_space(f, 1:4, NumberConservation(2))
 H1 = hilbert_space(f, 1:4, NumberConservation(1))
-symham = sum(f[n]' * f[n+1] + hc for n in 1:3) + sum(f[n]'f[n] * f[n+1]'f[n+1] for n in 1:3)
-E2, V2 = eigen(Hermitian(representation(symham, H2, :dense)))
-E1, V1 = eigen(Hermitian(representation(symham, H1, :dense)))
-c1 = representation(f[1], Axes(H1, H2))
-V1' * c1 * V2[:, 1]
+representation(f[1], Axes(H1, H2))
 ```
-
-The poles are at the energies `E2[1] .- E1`.
 
 ### Basic introspection
 
