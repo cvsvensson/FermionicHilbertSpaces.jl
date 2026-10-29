@@ -15,8 +15,9 @@ module FreeFermions
         _state_label_atomic, apply_local_operators, basisstate, basisstates, dim, expectation,
         hilbert_space, matrix_representation, mode_ordering, modes, representation
     using LinearAlgebra: LinearAlgebra, Diagonal, Eigen, Hermitian, Symmetric, UniformScaling, I,
-        det, diag, eigen, issymmetric, normalize, schur
+        det, diag, eigen, issymmetric, normalize, svd
     using NonCommutativeProducts: NonCommutativeProducts, @nc, AddTerms, NCAdd, NCMul, NCterms, Swap
+
     using TestItems: @testitem
 
     export SingleParticle, BdG, BdGEigen, NambuState, SingleParticleState, quasiparticle, symbolic_operator,
