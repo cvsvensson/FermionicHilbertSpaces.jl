@@ -215,18 +215,18 @@ end
 # Within a degenerate eigenspace `eigen` returns an arbitrary basis, so the partner of a
 # negative-energy column is built as its particle-hole conjugate. That map is antiunitary and
 # takes the e-eigenspace onto the -e one, so the columns stay orthonormal.
-function enforce_ph_symmetry(es, ops; cutoff=DEFAULT_PH_CUTOFF)
+function enforce_ph_symmetry(es, ops; cutoff = DEFAULT_PH_CUTOFF)
     N = div(length(es), 2)
     for k in 1:N
         k2 = quasiparticle_adjoint_index(k, N)
-        isapprox(es[k], -es[k2]; atol=cutoff, rtol=sqrt(eps(eltype(es)))) || @warn "The spectrum is not particle-hole symmetric: es[$k] = $(es[k]) and es[$k2] = $(es[k2])."
+        isapprox(es[k], -es[k2]; atol = cutoff, rtol = sqrt(eps(eltype(es)))) || @warn "The spectrum is not particle-hole symmetric: es[$k] = $(es[k]) and es[$k2] = $(es[k2])."
         if es[k] < -cutoff
             ops[:, k2] = quasiparticle_adjoint(ops[:, k])
             es[k2] = -es[k]
         end
     end
     m = count(>=(-cutoff), view(es, 1:N))
-    zero_modes = (N-m+1):(N+m)
+    zero_modes = (N - m + 1):(N + m)
     isempty(zero_modes) || (ops[:, zero_modes] = canonicalize_zero_modes(ops[:, zero_modes]))
     return es, ops
 end
@@ -240,8 +240,8 @@ function canonicalize_zero_modes(Z)
     U, _ = symmetric_SVD(Symmetric(transpose(Z) * [0I I(n); I(n) 0I] * Z))
     Y = Z * conj(U)
     Ya = Y[:, 1:m]
-    Yb = reverse(Y[:, (m+1):end]; dims=2)
-    return [Ya + im * Yb reverse(Ya - im * Yb; dims=2)] / sqrt(2)
+    Yb = reverse(Y[:, (m + 1):end]; dims = 2)
+    return [Ya + im * Yb reverse(Ya - im * Yb; dims = 2)] / sqrt(2)
 end
 
 #Symmetric form of SVD for symmetric matrices, Takagi/Autonne decomposition
@@ -321,7 +321,7 @@ end
         Hm = representation(op, Hmb, :dense)
         γ(k) = representation(sum(F.vectors[i, k] * f[i]' + F.vectors[N + i, k] * f[i] for i in 1:N), Hmb, :dense)
         for k in 1:2N
-            @test Hm * γ(k) - γ(k) * Hm ≈ 2F.values[k] * γ(k) atol = 1e-12
+            @test Hm * γ(k) - γ(k) * Hm ≈ 2F.values[k] * γ(k) atol = 1.0e-12
             @test γ(2N + 1 - k) ≈ γ(k)'
         end
     end
