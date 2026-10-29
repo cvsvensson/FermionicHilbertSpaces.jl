@@ -763,7 +763,7 @@ end
 # place of s, each group adds BU * transpose(BV) to mout[Ks, Ks].
 function _full_partial_trace!(mout, m::LowRankMatrix, splits, H)
     # (K, J, s) for each state J that splits into (K, b), per complement state b
-    byb = Dict{Int,Vector{Tuple{Int,Int,eltype(eltype(eltype(splits)))}}}()
+    byb = Dict{Int,Vector{Tuple{Int,Int,fieldtype(eltype(eltype(splits)), 3)}}}()
     for (J, ss) in pairs(splits), (K, b, s) in ss
         iszero(K) || push!(get!(() -> valtype(byb)(), byb, b), (K, J, s))
     end
