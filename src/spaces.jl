@@ -18,6 +18,38 @@ abstract type AbstractGroupedHilbertSpace{B} <: AbstractProductHilbertSpace{B} e
 const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}
 
 """
+    Axes(H1, H2, ...)
+
+The Hilbert spaces of an array's axes, in axis order: `Axes(Hout, Hin)` for an operator from `Hin`
+to `Hout`, `Axes(H)` for a vector. A bare space `H` means `H` on every axis. Public, not exported.
+
+# Examples
+```julia
+using FermionicHilbertSpaces: Axes
+@fermions f
+H2 = hilbert_space(f, 1:2, NumberConservation(2))
+H1 = hilbert_space(f, 1:2, NumberConservation(1))
+representation(f[1], Axes(H1, H2)) # a dim(H1) × dim(H2) matrix
+```
+"""
+struct Axes{S<:Tuple{Vararg{AbstractHilbertSpace}}}
+    spaces::S
+end
+Axes(spaces::AbstractHilbertSpace...) = Axes(spaces)
+_input_space(H) = H
+_output_space(H) = H
+_input_space(ax::Axes) = last(ax.spaces)
+_output_space(ax::Axes) = first(ax.spaces)
+# Returns `(Hout, Hin)`. Operators act on the states of `Hin` within `Hin`'s groups, so `Hout` must have the same groups:
+# equal atoms are not enough, as a boson truncated at another number of states acts differently.
+function _operator_axes(ax::Axes)
+    length(ax.spaces) == 2 || throw(ArgumentError("An operator has the two axes `Axes(Hout, Hin)`, got $(length(ax.spaces)) axes."))
+    Hout, Hin = ax.spaces
+    groups(Hout) == groups(Hin) || throw(ArgumentError("The spaces of `Axes(Hout, Hin)` must have the same groups, for example two sectors of the same space, got $Hout and $Hin."))
+    return Hout, Hin
+end
+
+"""
 	basisstates(H)
 
 Return the basis states of the Hilbert space `H`, in the order used by matrix

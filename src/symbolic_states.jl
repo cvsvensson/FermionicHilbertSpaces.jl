@@ -466,8 +466,8 @@ end
 _vector_eltype(::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T === Missing ? Int : T
 _zero_vector(space, repr::EagerSparseRepr, T=_vector_eltype(repr)) = SparseArrays.spzeros(T, dim(space))
 _zero_vector(space, repr::EagerDenseRepr, T=_vector_eltype(repr)) = zeros(T, dim(space))
-_zero_matrix(space, ::EagerSparseRepr, T) = SparseArrays.spzeros(T, dim(space), dim(space))
-_zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(space), dim(space))
+_zero_matrix(space, ::EagerSparseRepr, T) = SparseArrays.spzeros(T, dim(_output_space(space)), dim(_input_space(space)))
+_zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(_output_space(space)), dim(_input_space(space)))
 function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     vector_representation(1 * s, space, repr; kwargs...)
 end
@@ -528,9 +528,11 @@ function matrix_representation(s::SymbolicState, space::AbstractHilbertSpace, re
 end
 
 
-function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
+function representation(op, space::Union{AbstractHilbertSpace,Axes}, repr=EagerSparseRepr(); kwargs...)
+    space isa Axes && _operator_axes(space)
     type = _operator_type(op)
     if type == :kets || type == :bras
+        space isa Axes && throw(ArgumentError("A ket or bra has one axis, as in `representation(state, Axes(H))` or `representation(state, H)`."))
         return _vector_representation(op, space, repr, type; kwargs...)
     elseif type == :ketbras
         _repr = _canonicalize_repr(repr)
@@ -546,6 +548,11 @@ function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr();
 end
 function representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr=EagerSparseRepr(); kwargs...) where B
     return vector_representation(state, space, repr; kwargs...)
+end
+function representation(state, ax::Axes{<:Tuple{AbstractHilbertSpace}}, repr=EagerSparseRepr(); kwargs...)
+    state isa Union{AbstractBasisState,AbstractString,AbstractChar} || _operator_type(state) in (:kets, :bras) ||
+        throw(ArgumentError("An operator has the two axes `Axes(Hout, Hin)`, got one axis."))
+    return representation(state, only(ax.spaces), repr; kwargs...)
 end
 
 
