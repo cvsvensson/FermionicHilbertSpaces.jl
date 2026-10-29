@@ -69,6 +69,33 @@ function ground_state_parity(F::Eigen)
     return Int(p)
 end
 
+"""
+    gaussian_state(G, H, Hbdg::BdGHilbertSpace)
+
+The density matrix on the many-body space `H` of the Gaussian state with Nambu correlation matrix `G`, so that `correlation_matrix(gaussian_state(G, H, Hbdg), H, Hbdg) ≈ G`. `H` must have exactly the modes of `Hbdg`.
+
+```jldoctest
+julia> @fermions f;
+
+julia> G = [1 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 1]; # f[1] occupied, f[2] empty
+
+julia> gaussian_state(G, hilbert_space(f, 1:2), hilbert_space(f, 1:2, BdG())) ≈ [0 0 0 0; 0 1 0 0; 0 0 0 0; 0 0 0 0]
+true
+```
+"""
+function gaussian_state(G, H, Hbdg::BdGHilbertSpace)
+    N = length(modes(Hbdg))
+    dim(H) == 2^N || throw(ArgumentError("The many-body space must have exactly the $N modes of the BdG space."))
+    # transpose(G)[i, j] = ⟨Ψ_j' Ψ_i⟩, so ⟨γ' γ⟩ = v' * transpose(G) * v for γ' = quasiparticle(v, Hbdg)
+    occupations, vecs = eigen(transpose(G) - I / 2, BdGEigen())
+    factors = map(1:N) do k
+        creator = representation(quasiparticle(vecs[:, k], Hbdg), H, :dense)
+        n = occupations[k] + 1 / 2
+        n * creator * creator' + (1 - n) * creator' * creator
+    end
+    return prod(factors)
+end
+
 @testitem "BdG correlation matrix and parity" begin
     using LinearAlgebra
     using FermionicHilbertSpaces: BdGEigen
@@ -95,4 +122,30 @@ end
     @test parities[1] == 1 && parities[3] == -1
     vals, vecs = eigen(representation(quadratic, Hbdg, :dense), BdGEigen())
     @test_throws ArgumentError ground_state_parity(Eigen(vals, 2 * vecs))
+end
+
+@testitem "Gaussian state from a correlation matrix" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: BdGEigen
+    @fermions f
+    N = 4
+    Hmb = hilbert_space(f, 1:N)
+    Hbdg = hilbert_space(f, 1:N, BdG())
+    h = rand(ComplexF64, N, N) + hc
+    Δ = rand(ComplexF64, N, N)
+    Δ = Δ - transpose(Δ)
+    ham = sum(f[n]' * h[n, m] * f[m] + Δ[n, m] * f[n]' * f[m]' + hc for n in 1:N, m in 1:N)
+
+    G = correlation_matrix(eigen(representation(ham, Hbdg, :dense), BdGEigen()))
+    ψ = eigvecs(Hermitian(representation(ham, Hmb, :dense)))[:, 1]
+    for sub in ([1, 3], 1:N)
+        Hsub = hilbert_space(f, sub)
+        Gsub = G[[sub; sub .+ N], [sub; sub .+ N]]
+        @test gaussian_state(Gsub, Hsub, hilbert_space(f, sub, BdG())) ≈ partial_trace(ψ * ψ', Hmb => Hsub)
+    end
+
+    ρ = exp(-Hermitian(representation(ham, Hmb, :dense)))
+    ρ /= tr(ρ)
+    Gthermal = correlation_matrix(ρ, Hmb, Hbdg)
+    @test gaussian_state(Gthermal, Hmb, Hbdg) ≈ ρ
 end

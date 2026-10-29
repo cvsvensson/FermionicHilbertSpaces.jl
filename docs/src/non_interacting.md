@@ -125,3 +125,8 @@ H = hilbert_space(f, 1:N)
 @assert sum(A .* G) + tr(A[1:N, 1:N]) ≈ dot(ψ, representation(ham, H, :dense), ψ)
 S
 ```
+
+Conversely, `gaussian_state(G, H, Hbdg)` builds the many-body density matrix on `H` of the Gaussian state with correlation matrix `G`. The reduced correlation matrix gives the reduced density matrix:
+```@example entanglement
+gaussian_state(Gsub, hilbert_space(f, sub), hilbert_space(f, sub, BdG())) ≈ ρsub
+```
