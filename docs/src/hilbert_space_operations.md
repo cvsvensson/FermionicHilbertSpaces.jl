@@ -155,13 +155,16 @@ as a map from `Hin` to `Hout`. `Axes` lists the space of each axis of one array,
 first like `axes(m)`, and a bare space `H` means `Axes(H, H)`. This differs from the
 [Pair arguments](@ref pair_convention): `H => Hout` maps an array on `H` to an array on
 `Hout`, while `Axes` gives the spaces of a single array's axes. The two spaces must have
-the same modes, for example two particle-number sectors.
+the same groups (the same modes, and for bosons the same truncation), for example two
+particle-number sectors. A ket or bra has the single axis `Axes(H)`. `Axes` is public but
+not exported.
 
 An annihilation operator maps the 2-particle sector to the 1-particle sector. Its matrix
 elements between the 2-particle ground state and the 1-particle eigenstates are the
 weights in the Lehmann representation of the Green's function:
 
 ```@example hilbert_space_ops
+using FermionicHilbertSpaces: Axes
 H2 = hilbert_space(f, 1:4, NumberConservation(2))
 H1 = hilbert_space(f, 1:4, NumberConservation(1))
 symham = sum(f[n]' * f[n+1] + hc for n in 1:3) + sum(f[n]'f[n] * f[n+1]'f[n+1] for n in 1:3)
