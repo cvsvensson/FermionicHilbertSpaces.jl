@@ -293,7 +293,7 @@ end
     Hb = hilbert_space(b, 3)
     H2 = tensor_product(hilbert_space(f, 1:2, NumberConservation(1)), hilbert_space(f, 3:4, ParityConservation(-1)))
     Hf1, Hf2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
-    H3 = tensor_product(Hf1, Hf2; constraint=NumberConservation(1, [Hf1]) * NumberConservation(1, [Hf2]))
+    H3 = tensor_product(Hf1, Hf2; constraint = NumberConservation(1, [Hf1]) * NumberConservation(1, [Hf2]))
     for H in (H2, H3)
         H4 = tensor_product(H, Hb)
         @test dim(H4) == dim(H) * dim(Hb)
@@ -325,7 +325,7 @@ function localize_constraint(c::ProductConstraint, H::SectorHilbertSpace)
     end
     ProductConstraint(localized)
 end
-_localize_sub_constraint(c::NumberConservation{<:Any,Missing}, allowed, H) = NumberConservation(allowed, H, c.weights)
+_localize_sub_constraint(c::NumberConservation{<:Any, Missing}, allowed, H) = NumberConservation(allowed, H, c.weights)
 _localize_sub_constraint(c::ParityConservation{Missing}, allowed, H) = ParityConservation(allowed, H)
 _localize_sub_constraint(c::AbstractConstraint, _allowed, _H) = c
 function localize_constraint(c::SectorConstraint{<:FilterConstraint{<:Any,Missing,Missing}}, H::SectorHilbertSpace)
