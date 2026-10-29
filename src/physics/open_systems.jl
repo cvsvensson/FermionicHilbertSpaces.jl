@@ -209,7 +209,7 @@ end
     @majoranas m
     Hm = hilbert_space(m, 1:4)
     Hm_t = TransposedSpace(Hm)
-    A = m[1] * m[2] + 0.5 * m[3] * m[4]
+    A = m[1] * m[2] + 0.5 * m[3] * m[4] + (1 + 2im) * m[2] + 3im * m[1] * m[3] - m[2] * m[3] * m[4]
     @test transpose(representation(A, Hm)) ≈ representation(A, Hm_t)
 end
 

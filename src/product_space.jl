@@ -488,11 +488,9 @@ function ProductSpaceMapper(source::ProductSpace, targets)
     # Atom bookkeeping, by name: which factor owns each atom, and where inside it.
     # The targets' bases are not checked here, that is done by `match_atoms` in the callers.
     atom_factor = Dict{Any,Int}()
-    atom_pos = Dict{Any,Int}()
     for (ci, f) in enumerate(sfactors)
-        for (k, a) in enumerate(atomic_factors(f))
+        for a in atomic_factors(f)
             atom_factor[atomic_id(a)] = ci
-            atom_pos[atomic_id(a)] = k
         end
     end
 
@@ -508,7 +506,7 @@ function ProductSpaceMapper(source::ProductSpace, targets)
     # Each group must lie inside a single source factor. The integer coordinates of the
     # pieces are kept apart from their (heterogeneous) spaces, so that grouping and sorting
     # them works on a concretely typed vector.
-    pieces = NamedTuple{(:factor, :target, :group_slot, :pos),NTuple{4,Int}}[]
+    pieces = NamedTuple{(:factor, :target, :group_slot),NTuple{3,Int}}[]
     piece_spaces = Any[]
     piece_of = Dict{Tuple{Int,Int},Int}()  # (target, group_slot) -> piece
     for (ti, t) in enumerate(targets), (si, g) in enumerate(groups(t))
@@ -516,15 +514,14 @@ function ProductSpaceMapper(source::ProductSpace, targets)
         owners = unique(atom_factor[id] for id in ids)
         length(owners) == 1 ||
             throw(ArgumentError("A target group must lie within a single source factor, got `$g` which spans several."))
-        push!(pieces, (factor=only(owners), target=ti, group_slot=si, pos=minimum(atom_pos[id] for id in ids)))
+        push!(pieces, (factor=only(owners), target=ti, group_slot=si))
         push!(piece_spaces, g)
         piece_of[(ti, si)] = length(pieces)
     end
 
     # Per-factor view: build leaves and factor routes.
-    # A factor's pieces are ordered by where their atoms sit inside the
-    # factor, which is also the order the inner leaf mapper produces them in.
-    order = sortperm(pieces, by=p -> (p.factor, p.pos))
+    # A factor's pieces stay in target and slot order (the sort is stable).
+    order = sortperm(pieces, by=p -> p.factor)
     leaves = Any[]
     factor_routes = Any[]
     piece_slot = zeros(Int, length(pieces))  # piece -> slot within its factor

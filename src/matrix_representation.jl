@@ -252,31 +252,27 @@ function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs.
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
 end
 function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
-    matrices = [_matrix_representation(term, bases, space, repr, NoChunking(); kwargs...) for term in NCterms(op)]
-    summed = _sum_matrices(matrices, repr; tree_split=tree_split)
-    identity_term = op.coeff * _matrix_representation(missing, bases, space, repr, NoChunking(); kwargs...)
-    iszero(op.coeff) || return summed + identity_term
+    matrices = (_matrix_representation(term, bases, space, repr, NoChunking(); kwargs...) for term in NCterms(op))
+    return _add_identity_term(_sum_matrices(matrices, repr; tree_split=tree_split), op.coeff, bases, space, repr)
+end
+# `summed + coeff * I`, with the element type of `summed` promoted with that of `coeff * I` also when `coeff` is zero
+function _add_identity_term(summed, coeff, bases, space, repr)
+    identity_term = coeff * _matrix_representation(missing, bases, space, repr, NoChunking())
+    iszero(coeff) || return summed + identity_term
     T = promote_type(eltype(summed), eltype(identity_term))
     return convert(AbstractMatrix{T}, summed)
 end
-# Spaces with a basis-state loop (for example a constrained space over a ProductSpace) collect all terms in one accumulator.
-# The terms are accumulated in the element type of their matrices, and the identity term is added in that element type
+# On spaces with a basis-state loop (for example a constrained space over a ProductSpace), `_terms_matrix` builds the sum of all terms.
+# The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the element type of `Eye`, as on a ProductSpace.
-function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
+function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; tree_split=10, kwargs...)
     spaces = groups(space)
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
     Tterms = _repr_eltype(mapreduce(mat_eltype, promote_type, prodops), repr)
-    accumulator = matrix_accumulator(Tterms, length(prodops), (dim(space), dim(space)), repr)
-    for prodop in prodops
-        operator_indices_and_amplitudes!(accumulator, prodop, space; kwargs...)
-    end
     identity_matrix = _matrix_representation(missing, bases, space, repr, NoChunking())
     T = _repr_eltype(promote_type(Tterms, Base.promote_op(*, typeof(op.coeff), eltype(identity_matrix))), repr)
-    if Tterms == T
-        iszero(op.coeff) || add_identity!!(accumulator, op.coeff, space)
-        return finalize!(accumulator, space)
-    end
-    summed = finalize!(accumulator, space)
+    Tterms == T && return _terms_matrix(Tterms, prodops, op.coeff, space, repr, chunking; kwargs...)
+    summed = _terms_matrix(Tterms, prodops, zero(op.coeff), space, repr, chunking; kwargs...)
     iszero(op.coeff) && return convert(AbstractMatrix{T}, summed)
     return summed + op.coeff * identity_matrix
 end
@@ -294,9 +290,10 @@ _repr_eltype(default, ::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T
 _repr_eltype(default, _) = default
 
 function matrix_accumulator(::Type{T}, N::Int, (d1, d2)::Tuple{Int,Int}, ::EagerSparseRepr) where T
-    length_guess = Int(floor(1 + log2(N + 1))) .* (d1, d2) # mild increase with number of terms
-    return sparse_matrix_accumulator(T, length_guess)
+    return sparse_matrix_accumulator(T, _sparse_length_guess.(N, (d1, d2)))
 end
+# Initial number of entries reserved for N terms on d states, mildly increasing with the number of terms
+_sparse_length_guess(N, d) = ndigits(N + 1; base=2) * d
 
 function sparse_matrix_accumulator(::Type{T}, (N, M)) where T
     outinds = Int[]
@@ -307,19 +304,25 @@ function sparse_matrix_accumulator(::Type{T}, (N, M)) where T
     sizehint!(amps, N)
     return (outinds, ininds, amps)
 end
-function add_identity!!((outinds, ininds, amps), coeff, space)
-    N = dim(space)
-    append!(ininds, 1:N)
-    append!(outinds, 1:N)
-    append!(amps, Fill(coeff, N))
+# Adds `coeff` at the diagonal entries of the columns `cols`, stored at the column indices `cols .- col_offset`
+function add_identity!!((outinds, ininds, amps), coeff, space, cols=1:dim(space), col_offset=0)
+    append!(outinds, cols)
+    append!(ininds, cols .- col_offset)
+    append!(amps, Fill(coeff, length(cols)))
 end
 function finalize!((outinds, ininds, amps), space)
     N = dim(space)
     finalize!((outinds, ininds, amps), N, N)
 end
 function finalize!((outinds, ininds, amps), N, M)
-    isconcretetype(eltype(amps)) && return SparseArrays.sparse!(outinds, ininds, amps, N, M)
-    return SparseArrays.sparse!(outinds, ininds, identity.(amps), N, M)
+    L = length(outinds)
+    isconcretetype(eltype(amps)) && return _trimmed!(SparseArrays.sparse!(outinds, ininds, amps, N, M), L)
+    return _trimmed!(SparseArrays.sparse!(outinds, ininds, identity.(amps), N, M), L)
+end
+# `sparse!` stores the matrix in the vectors of its L input entries. Releases their unused room unless L is small.
+function _trimmed!(S, L)
+    L > 2^12 && foreach(v -> sizehint!(v, length(v)), (SparseArrays.getcolptr(S), rowvals(S), nonzeros(S)))
+    return S
 end
 
 function matrix_accumulator(::Type{T}, N::Int, (d1, d2), ::EagerDenseRepr) where T
@@ -331,21 +334,22 @@ end
 function finalize!(m::Matrix, space)
     return m
 end
-function finalize!(m::Matrix, N::Int, M::Int)
-    size(m) == (N, M) || throw(ArgumentError("The matrix must have size ($N, $M), got $(size(m))."))
-    return m
+
+
+function _matrix_representation_single_space(op::NCAdd, space, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
+    _terms_matrix(_repr_eltype(mat_eltype(op), repr), NCterms(op), op.coeff, space, repr, chunking; kwargs...)
 end
 
+# The matrix of `sum(terms) + coeff * I` with element type `T`
+_terms_matrix(::Type{T}, terms, coeff, space, repr, ::NoChunking; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 
-function _matrix_representation_single_space(op::NCAdd, space, repr::Union{EagerSparseRepr,EagerDenseRepr}, ::NoChunking; kwargs...)
-    accumulator = matrix_accumulator(op, space, repr)
-    for term in NCterms(op)
+function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T
+    accumulator = matrix_accumulator(T, length(terms), (dim(space), dim(space)), repr)
+    for term in terms
         operator_indices_and_amplitudes!(accumulator, term, space; kwargs...)
     end
-    if !iszero(op.coeff)
-        add_identity!!(accumulator, op.coeff, space)
-    end
-    finalize!(accumulator, space)
+    iszero(coeff) || add_identity!!(accumulator, coeff, space)
+    return finalize!(accumulator, space)
 end
 
 function _term_matrix_representation(op, H::AbstractHilbertSpace, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
@@ -625,7 +629,7 @@ end
 @testitem "Scheduler extension correctness" begin
     using SparseArrays, LinearAlgebra
     using OhMyThreads
-    import FermionicHilbertSpaces: TermChunking, StateChunking
+    import FermionicHilbertSpaces: TermChunking, StateChunking, EagerDenseRepr, EagerSparseRepr
 
     @fermions f
     H = hilbert_space(f, 1:4)
@@ -635,19 +639,32 @@ end
     scheduler = StaticScheduler(; nchunks=4)
     M_terms = representation(op, H; chunking=TermChunking(scheduler))
     M_states = representation(op, H; chunking=StateChunking(scheduler))
-    @test M_terms ≈ M_serial
-    @test M_states ≈ M_serial
+    @test M_terms == M_serial
+    @test M_states == M_serial
 
-    M_terms_dense = representation(op, H, :dense; chunking=TermChunking(scheduler))
-    M_states_dense = representation(op, H, :dense; chunking=StateChunking(scheduler))
-    @test M_terms_dense ≈ M_serial
-    @test M_states_dense ≈ M_serial
+    M_terms_dense = representation(op, H, EagerDenseRepr(); chunking=TermChunking(scheduler))
+    M_states_dense = representation(op, H, EagerDenseRepr(); chunking=StateChunking(scheduler))
+    @test M_terms_dense == M_serial
+    @test M_states_dense == M_serial
+
+    # Element type of an abstract representation type
+    op_int = f[4]' * f[4] + f[4]' * f[3] * f[3]' * f[4]
+    @test typeof(representation(op_int, H, EagerSparseRepr{Number}(); chunking=StateChunking(scheduler))) == typeof(representation(op_int, H, EagerSparseRepr{Number}()))
+
+    # Space of dimension zero
+    H0 = constrain_space(hilbert_space(f, 1:2), NumberConservation(5))
+    @test representation(f[1]' * f[2] + 1, H0; chunking=StateChunking(scheduler)) == representation(f[1]' * f[2] + 1, H0)
+
+    # Larger space
+    Hl = hilbert_space(f, 1:13)
+    opl = sum(f[k]' * f[k+1] + hc for k in 1:12) + sum(k * f[k]' * f[k] * f[k+1]' * f[k+1] for k in 1:12) + 1.5
+    @test representation(opl, Hl; chunking=StateChunking(StaticScheduler(; nchunks=3))) == representation(opl, Hl)
 end
 
 @testitem "Chunking on product and constrained spaces" begin
     using SparseArrays, LinearAlgebra
     using OhMyThreads
-    import FermionicHilbertSpaces: TermChunking, StateChunking
+    import FermionicHilbertSpaces: TermChunking, StateChunking, EagerDenseRepr
 
     scheduler = StaticScheduler(; nchunks=4)
 
@@ -662,13 +679,13 @@ end
     M_serial_prod = representation(op_prod, Hprod)
     M_terms_prod = representation(op_prod, Hprod; chunking=TermChunking(scheduler))
     M_states_prod = representation(op_prod, Hprod; chunking=StateChunking(scheduler))
-    @test M_terms_prod ≈ M_serial_prod
-    @test M_states_prod ≈ M_serial_prod
+    @test M_terms_prod == M_serial_prod
+    @test M_states_prod == M_serial_prod
 
-    M_terms_prod_dense = representation(op_prod, Hprod, :dense; chunking=TermChunking(scheduler))
-    M_states_prod_dense = representation(op_prod, Hprod, :dense; chunking=StateChunking(scheduler))
-    @test M_terms_prod_dense ≈ M_serial_prod
-    @test M_states_prod_dense ≈ M_serial_prod
+    M_terms_prod_dense = representation(op_prod, Hprod, EagerDenseRepr(); chunking=TermChunking(scheduler))
+    M_states_prod_dense = representation(op_prod, Hprod, EagerDenseRepr(); chunking=StateChunking(scheduler))
+    @test M_terms_prod_dense == M_serial_prod
+    @test M_states_prod_dense == M_serial_prod
 
     # Constrained single space
     Hc = constrain_space(Hf, NumberConservation(1:2))
@@ -677,13 +694,13 @@ end
     M_serial_cons = representation(op_cons, Hc)
     M_terms_cons = representation(op_cons, Hc; chunking=TermChunking(scheduler))
     M_states_cons = representation(op_cons, Hc; chunking=StateChunking(scheduler))
-    @test M_terms_cons ≈ M_serial_cons
-    @test M_states_cons ≈ M_serial_cons
+    @test M_terms_cons == M_serial_cons
+    @test M_states_cons == M_serial_cons
 
-    M_terms_cons_dense = representation(op_cons, Hc, :dense; chunking=TermChunking(scheduler))
-    M_states_cons_dense = representation(op_cons, Hc, :dense; chunking=StateChunking(scheduler))
-    @test M_terms_cons_dense ≈ M_serial_cons
-    @test M_states_cons_dense ≈ M_serial_cons
+    M_terms_cons_dense = representation(op_cons, Hc, EagerDenseRepr(); chunking=TermChunking(scheduler))
+    M_states_cons_dense = representation(op_cons, Hc, EagerDenseRepr(); chunking=StateChunking(scheduler))
+    @test M_terms_cons_dense == M_serial_cons
+    @test M_states_cons_dense == M_serial_cons
 
     # Constrained product space
     @fermions g
@@ -696,13 +713,13 @@ end
     M_serial_cons_prod = representation(op_cons_prod, Hcons_prod)
     M_terms_cons_prod = representation(op_cons_prod, Hcons_prod; chunking=TermChunking(scheduler))
     M_states_cons_prod = representation(op_cons_prod, Hcons_prod; chunking=StateChunking(scheduler))
-    @test M_terms_cons_prod ≈ M_serial_cons_prod
-    @test M_states_cons_prod ≈ M_serial_cons_prod
+    @test M_terms_cons_prod == M_serial_cons_prod
+    @test M_states_cons_prod == M_serial_cons_prod
 
-    M_terms_cons_prod_dense = representation(op_cons_prod, Hcons_prod, :dense; chunking=TermChunking(scheduler))
-    M_states_cons_prod_dense = representation(op_cons_prod, Hcons_prod, :dense; chunking=StateChunking(scheduler))
-    @test M_terms_cons_prod_dense ≈ M_serial_cons_prod
-    @test M_states_cons_prod_dense ≈ M_serial_cons_prod
+    M_terms_cons_prod_dense = representation(op_cons_prod, Hcons_prod, EagerDenseRepr(); chunking=TermChunking(scheduler))
+    M_states_cons_prod_dense = representation(op_cons_prod, Hcons_prod, EagerDenseRepr(); chunking=StateChunking(scheduler))
+    @test M_terms_cons_prod_dense == M_serial_cons_prod
+    @test M_states_cons_prod_dense == M_serial_cons_prod
 end
 
 @testitem "Distributed sparse matrix representation" begin
