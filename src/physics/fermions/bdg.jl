@@ -315,7 +315,7 @@ function symmetric_SVD(M)
     ]
     vals, Z = eigen(Symmetric(block_matrix))
     pos = vals .> 0
-    U = Z[(n+1):end, pos] + 1im * Z[1:n, pos]
+    U = Z[(n + 1):end, pos] + 1im * Z[1:n, pos]
     return U, Diagonal(vals[pos])
 end
 
