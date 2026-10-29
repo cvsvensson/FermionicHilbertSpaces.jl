@@ -153,13 +153,15 @@ end
     selected = Ref(0)
     keep(state) = isodd(state.f)
     label(state) = isodd(state.f)
-    function default_subspace_index(::Union{FilterConstraint{typeof(keep)}, SectorConstraint{<:FilterConstraint{typeof(label)}}, ProductConstraint{<:Tuple{NumberConservation, NumberConservation}}}, parent, states)
+    even_total(state) = iseven(count_ones(state.f))
+    function default_subspace_index(::Union{FilterConstraint{typeof(keep)}, SectorConstraint{<:FilterConstraint{typeof(label)}}, ProductConstraint{<:Tuple{SectorConstraint, FilterConstraint{typeof(even_total)}}}}, parent, states)
         selected[] += 1
         LinearSearch(states)
     end
+    Hlabel12 = constrain_space(hilbert_space(f, 1:2), SectorConstraint(label))
     for build in (() -> constrain_space(H, FilterConstraint(keep)), () -> constrain_space(H, SectorConstraint(label)),
             () -> tensor_product(hilbert_space(f, 1:2), hilbert_space(f, 3:4); constraint = FilterConstraint(keep)),
-            () -> tensor_product(hilbert_space(f, 1:2, NumberConservation(1)), hilbert_space(f, 3:4); constraint = NumberConservation(2)),
+            () -> tensor_product(Hlabel12, hilbert_space(f, 3:4); constraint = FilterConstraint(even_total)),
         )
         before = selected[]
         Hsub = build()
