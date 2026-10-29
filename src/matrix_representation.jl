@@ -605,6 +605,7 @@ end
 
 @testitem "Operators between two spaces with Axes" begin
     using LinearAlgebra
+    using FermionicHilbertSpaces: Axes
     @fermions f
     H = hilbert_space(f, 1:3)
     Hin = hilbert_space(f, 1:3, NumberConservation([1, 2]))
@@ -632,6 +633,11 @@ end
     ket = Ket(basisstate(1, Hout), Hout)
     bra = Ket(basisstate(2, Hin), Hin)'
     @test representation(ket * bra, Axes(Hout, Hin)) == vector_representation(ket, Hout) * vector_representation(bra, Hin)
+
+    @test representation(ket, Axes(Hout)) == representation(ket, Hout)
+    @test representation("010", Axes(H)) == representation("010", H)
+    @test_throws ArgumentError representation(f[1], Axes(H))
+    @test_throws ArgumentError representation(ket, Axes(Hout, Hout))
 end
 
 @testitem "Product-space term matrices padded by identities" begin

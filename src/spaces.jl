@@ -16,13 +16,16 @@ The Hilbert spaces of the axes of an array, one per axis and in axis order. For 
 from `Hin` to `Hout` this is `Axes(Hout, Hin)`: rows first, like `axes(m)`. A bare space `H`
 in place of an `Axes` means the same space on every axis, so for matrices `H` is the same as `Axes(H, H)`.
 
-`representation` and `matrix_representation` accept an `Axes`.
+A ket, bra or basis state has the single axis `Axes(H)`.
+
+`representation` and `matrix_representation` accept an `Axes`. `Axes` is public but not exported.
 The result of `reshape(m, Hout => (H1, H2), Hin => (K1, K2))` has axes `Axes(H1, H2, K1, K2)`.
 
 # Examples
 ```julia
+using FermionicHilbertSpaces: Axes
 @fermions f
-Hin = hilbert_space(f, 1:2, NumberConservation(2))
+Hin =hilbert_space(f, 1:2, NumberConservation(2))
 Hout = hilbert_space(f, 1:2, NumberConservation(1))
 m = representation(f[1], Axes(Hout, Hin))
 size(m) == (dim(Hout), dim(Hin))
