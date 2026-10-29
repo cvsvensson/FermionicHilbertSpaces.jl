@@ -71,9 +71,10 @@ The matrix returned by `representation` on this space depends on the ordering of
     Hbdg = hilbert_space(c, 1:N, BdG())
     representation(op, Hbdg) ≈ M # true
     ```
+    The BdG space wraps the constrained space above, available through `parent`, and does not combine with tensor products or partial traces.
 
 ### Quasiparticles
-`eigen(A, BdGEigen())` diagonalizes a BdG matrix while keeping the particle-hole pairing of its eigenvectors. The eigenvalues are sorted, so for `N` modes columns `k` and `2N + 1 - k` are partners with eigenvalues `e` and `-e`. A column `[u; v]` gives the quasiparticle ``\gamma^\dagger = \sum_i u_i c_i^\dagger + v_i c_i``, which raises the energy by ``2e``. See [`BdGEigen`](@ref) for details.
+`eigen(A, BdGEigen())` diagonalizes a BdG matrix while keeping the particle-hole pairing of its eigenvectors. The eigenvalues are sorted, so for `N` modes columns `k` and `2N + 1 - k` are partners with eigenvalues `e` and `-e` whose quasiparticles are adjoints of each other. A column `[u; v]` gives the quasiparticle ``\gamma^\dagger = \sum_i u_i c_i^\dagger + v_i c_i``, which raises the energy by ``2e``. The matrix must be Hermitian, and eigenvalues with `abs(e) <= cutoff * maximum(abs, vals)` are set to zero, with the default `cutoff = 2N * eps` as for `rank`.
 ```@example bdg_particle_hilbert_space
 Hbdg = hilbert_space(c, 1:N, BdG())
 vals, vecs = eigen(representation(op, Hbdg, :dense), BdGEigen())
