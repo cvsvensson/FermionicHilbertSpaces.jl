@@ -32,16 +32,12 @@ struct BdG end
 """
     hilbert_space(f::SymbolicFermionBasis, labels, ::BdG)
 
-The Nambu space with one particle state and one hole state for each of the modes `f[l]`, `l in labels`. With the Nambu vector `Ψ = [f[l] for l in labels; f[l]' for l in labels]`, the matrix representation of a quadratic operator `op` is the unique matrix `M` with the particle-hole symmetry `M == -τx * transpose(M) * τx`, where `τx = [0 I; I 0]`, such that
+The space of Nambu states `[f[l] for l in labels; f[l]' for l in labels]`. `representation` gives the particle-hole symmetric BdG matrix, `[h Δ; -Δ* -h*] / 2` for `op = Σᵢⱼ h[i, j] f[i]' f[j] + (Δ[i, j] f[i]' f[j]' + h.c.) / 2`, and only quadratic operators can be represented.
 
-    op = E + sum(M[i, j] * Ψ[i]' * Ψ[j] for i in eachindex(Ψ), j in eachindex(Ψ))
-
-for some scalar `E`. This holds for any quadratic operator, hermitian or not, and `op * Ψ[i] - Ψ[i] * op == -2 * (M * Ψ)[i]`. For `op = Σᵢⱼ h[i, j] f[i]' f[j] + (Δ[i, j] f[i]' f[j]' + h.c.) / 2` with hermitian `h` and antisymmetric `Δ`,
-
-    M = [h   Δ
-        -Δ* -h*] / 2
-
-Operators that are not quadratic in the fermions cannot be represented. The space wraps a constrained fermionic space, available through `parent`, and does not combine with tensor products or partial traces.
+```julia
+H = hilbert_space(f, 1:2, BdG())
+representation(f[1]' * f[1], H, :dense) # diagm([1, 0, -1, 0]) / 2
+```
 """
 hilbert_space(f::SymbolicFermionBasis, labels, ::BdG) = BdGHilbertSpace(f, labels)
 @deprecate bdg_hilbert_space(f, labels) hilbert_space(f, labels, BdG())
@@ -249,13 +245,11 @@ abstract type AbstractBdGEigenAlg end
 """
     BdGEigen(cutoff = nothing)
 
-Algorithm for `eigen(A, BdGEigen())`, which diagonalizes the BdG matrix `A = representation(op, hilbert_space(f, labels, BdG()), :dense)` of a hermitian operator `op` with `N` modes and returns an `Eigen` with eigenvalues sorted in ascending order and orthonormal eigenvectors. A column `[u; v]` with eigenvalue `e` gives the quasiparticle `γ' = Σᵢ u[i] * f[labels[i]]' + v[i] * f[labels[i]]`, which satisfies `op * γ' - γ' * op = 2e * γ'`. Columns `k` and `2N + 1 - k` are particle-hole partners: their eigenvalues are `e` and `-e` and their quasiparticles are adjoints of each other. Eigenvalues with `abs(e) <= cutoff * maximum(abs, values)` are treated as zero modes; the default `cutoff` is `2N * eps`, as for `rank`.
+Algorithm for `eigen(A, BdGEigen())` on a Hermitian BdG matrix `A` with `N` modes, giving sorted eigenvalues and orthonormal eigenvectors. Columns `k` and `2N + 1 - k` are particle-hole partners with eigenvalues `e` and `-e`, and a column `[u; v]` is the quasiparticle `Σᵢ u[i] f[i]' + v[i] f[i]`. Eigenvalues below `cutoff` (relative, default `2N * eps`) are set to zero.
 
 ```julia
-@fermions f
 H = hilbert_space(f, 1:2, BdG())
-op = f[1]' * f[2] + f[1]' * f[2]' + hc
-vals, vecs = eigen(representation(op, H, :dense), BdGEigen())
+vals, vecs = eigen(representation(f[1]' * f[2] + f[1]' * f[2]' + hc, H, :dense), BdGEigen()) # vals ≈ [-1, 0, 0, 1]
 ```
 """
 struct BdGEigen{T <: Union{Nothing, Real}} <: AbstractBdGEigenAlg
