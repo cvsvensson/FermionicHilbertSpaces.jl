@@ -38,6 +38,10 @@ function FixedNumberFockState{N}(f::FockNumber) where N
     end
     return FixedNumberFockState{N}(sites)
 end
+function interpret_state(f::FockNumber, ::Type{FixedNumberFockState{N}}) where {N}
+    count_ones(f) == N || throw(ArgumentError("The Fock state $f has $(count_ones(f)) particles, expected $N."))
+    return FixedNumberFockState{N}(f)
+end
 
 
 physical_rep(state::T, ::Type{FixedNumberFockState{N}}) where {T,N} = FixedNumberFockState{N}(physical_rep(state, FockNumber))
@@ -119,14 +123,15 @@ end
     import FermionicHilbertSpaces: FixedNumberFockState, vector_representation
     @fermions f
     Hx = hilbert_space(f, 1:3, FixedNumberFockState{1}.(basisstates(hilbert_space(f, 1:3, NumberConservation(1)))))
-    for i in 1:dim(Hx)
-        @test Ket(basisstate(i, Hx), Hx) == Kets(Hx)[i]
-        @test vector_representation(Ket(basisstate(i, Hx), Hx), Hx) == [j == i for j in 1:dim(Hx)]
-    end
+    @test Ket(basisstate(2, Hx), Hx) == Kets(Hx)[2]
+    @test vector_representation(Ket(basisstate(2, Hx), Hx), Hx) == [0, 1, 0]
     @test Ket("010", Hx) == Kets(Hx)[2]
     @test Ket(FockNumber(2), Hx) == Kets(Hx)[2]
-    H = hilbert_space(f, 1:3, NumberConservation(1))
-    @test Ket(FockNumber(2), H) == Kets(H)[2]
+    @test_throws ArgumentError Ket("110", Hx)
+    @spin s 1//2
+    Hf = hilbert_space(f, 1:2)
+    Hp = tensor_product(Hf, hilbert_space(s); constraint = NumberConservation(1, [Hf]))
+    @test Ket(basisstate(1, Hp), Hp) == Kets(Hp)[1]
 end
 
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{<:FixedNumberFockState})

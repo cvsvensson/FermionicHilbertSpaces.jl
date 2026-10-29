@@ -215,8 +215,7 @@ function interpret_state(state, space::Union{TransposedSpace, AbstractSubspace})
     B = statetype(space)
     state isa B && return state
     # A subspace may store its states in a different type than its parent, e.g. FixedNumberFockState
-    parsed = interpret_state(state, parent(space))
-    return parsed isa B ? parsed : B(parsed)
+    return interpret_state(interpret_state(state, parent(space)), B)
 end
 basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(_checked_state_index(state, space), space)
 function _checked_state_index(state, space)
