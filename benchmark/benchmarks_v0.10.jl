@@ -100,6 +100,9 @@ end
 ## Partial trace algorithms
 # Each input is traced with the algorithm forced through `alg`. Which
 # algorithm `partial_trace` picks by default is checked in the tests.
+# FullAlg on a dense input is a tight loop over all pairs of basis states. Its
+# time depends on where the JIT places that loop in memory, so identical code
+# measures at a few distinct speeds, up to about 2× apart, between processes.
 let rng = Xoshiro(4)
     @fermions f
     algs = ("SubAlg" => FHS.SubsystemPartialTraceAlg(), "FullAlg" => FHS.FullPartialTraceAlg())

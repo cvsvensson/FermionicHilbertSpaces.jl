@@ -23,9 +23,10 @@ jobs:
           julia -e '
             using AirspeedVelocity: load_results
             const MAX_RATIO = 1.5 # largest PR/base ratio of the median time or of the memory not reported
-            # The dense FullAlg partial traces run at one of two speeds, about 2× apart, from one
-            # Julia process to the next on identical code, so their time is flagged only above this.
-            const NOISY_TIME = r"^partial_trace_algorithms/.*/Dense/FullAlg$" => 2.5
+            # The dense FullAlg partial traces are a tight loop whose speed depends on where the JIT
+            # places it in memory, which varies between processes: identical code measures up to ~2× apart.
+            const NOISY, NOISY_RATIO = r"^partial_trace_algorithms/.*/Dense/FullAlg$", 2.5
+            max_ratio(name, label) = label == "time" && occursin(NOISY, name) ? NOISY_RATIO : MAX_RATIO
             base, head = ENV["BASE_REV"], ENV["HEAD_REV"]
             pkg = String(only(m[1] for m in eachmatch(r"^name\s*=\s*\"(.*)\"$"m, read("Project.toml", String))))
             results = load_results(pkg, [base, head]; input_dir="results")
@@ -35,13 +36,12 @@ jobs:
                 old = results[base][name]
                 for (key, label) in (("median", "time"), ("memory", "memory"))
                     ratio = new[key] / max(old[key], 1)
-                    max_ratio = label == "time" && occursin(first(NOISY_TIME), name) ? last(NOISY_TIME) : MAX_RATIO
-                    ratio > max_ratio && push!(regressions, "| `$name` | $label | × $(round(ratio, digits=2)) |")
+                    ratio > max_ratio(name, label) && push!(regressions, "| `$name` | $label | × $(round(ratio, digits=2)) |")
                 end
             end
             open("regressions.md", "w") do io
                 isempty(regressions) && return
-                println(io, "### ⚠️ Performance regressions\n\nBenchmarks more than × $MAX_RATIO slower or larger than on `$base`:\n")
+                println(io, "### ⚠️ Performance regressions\n\nBenchmarks more than × $MAX_RATIO slower or larger than on `$base` (× $NOISY_RATIO for the time of dense FullAlg partial traces):\n")
                 println(io, "| benchmark | | PR / $base |\n|---|---|---|")
                 foreach(r -> println(io, r), regressions)
             end'
