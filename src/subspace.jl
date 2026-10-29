@@ -6,7 +6,7 @@ A space spanned by some of the basis states of `parent(H)::P`. A subtype impleme
 - `parent(H)`: the space that `H` is a subspace of. It is never an `AbstractSubspace`.
 - `subspace_states(H)`: the basis states of `H`, in order, each appearing once.
 - `subspace_index(H)`: an index with a [`state_position`](@ref) method for the states of `H`,
-  such as `default_subspace_index(parent(H), constraint, subspace_states(H))`, built once by
+  such as `default_subspace_index(constraint, parent(H), subspace_states(H))`, built once by
   the constructor.
 - `rewrap(H, newparent)`: the space with the same states and index as `H` over `newparent`,
   which has the same basis states and `state_index` as `parent(H)`.
@@ -48,25 +48,35 @@ This is the one method a subspace index implements. `state_index(state, H)` of a
 function state_position end
 
 """
-    default_subspace_index(parent, constraint, states)
+    default_subspace_index(constraint, parent, states)
 
 The index, with a [`state_position`](@ref) method, of the subspace with `states`, in order,
-over `parent`, where `constraint` selected `states`. Constrained and sector spaces build their
-index with it, and `constrain_space`, `sector`, `sectors` and `tensor_product` accept a
-function of the same arguments as their `index` keyword instead. `constraint` is
-`NoSymmetry()` for a subspace given only by its states.
+over `parent`, where `constraint` describes what selected `states`. Constrained and sector
+spaces build their index with it, and `constrain_space`, `sector`, `sectors` and
+`tensor_product` accept a function of the same arguments as their `index` keyword instead.
+The constructor checks the index on a few of `states`.
 
-Methods for specific parent, constraint or state types select a specialized index. Such a
-method checks at runtime that the index fits `states`, such as that they are a whole sector
-in the order the index assumes, and otherwise returns
-`default_subspace_index(parent, NoSymmetry(), states)`.
+`constraint` arrives in the form given by `index_constraint`. A product of constraints is a
+`ProductConstraint` of a tuple. A `NumberConservation` or `ParityConservation` lists, as its
+`spaces`, the atoms of `parent` it acts on. The constraints of the constrained factors of a
+tensor product are included, each acting on its factor. `NoSymmetry()` means that `states`
+were listed explicitly or that nothing is known about them. The sectors of a sector space
+appear as the constraint itself; a quantum number is dispatchable only through its
+constraint type, `NumberConservation`, `ParityConservation`, or `SectorConstraint` through
+the type of its function.
+
+Extend it by adding a method that dispatches on the type of `constraint` alone, and query
+`parent` and `states` in its body; methods that also restrict `parent` would be ambiguous
+with those of other extensions. Such a method checks that its index fits, such as that
+`states` are a whole sector in the order the index assumes, and otherwise returns
+`default_subspace_index(NoSymmetry(), parent, states)`.
 
 The generic method returns a table over `1:dim(parent)` when `parent` has an arithmetic
 `state_index` and is not much larger than `states`, and a `Dict` from state to position
 otherwise. It throws an `ArgumentError` if a state appears more than once, or if `parent` is
 an `AbstractSubspace`.
 """
-default_subspace_index(parent, constraint, states) = generic_subspace_index(parent, states)
+default_subspace_index(constraint, parent, states) = generic_subspace_index(parent, states)
 function generic_subspace_index(parent, states)
     table = index_table(parent, states)
     isnothing(table) ? position_dict(states) : table
@@ -131,7 +141,7 @@ end
     end
     function EveryOtherState(space)
         states = collect(basisstates(space))[1:2:end]
-        EveryOtherState(space, states, default_subspace_index(space, NoSymmetry(), states))
+        EveryOtherState(space, states, default_subspace_index(NoSymmetry(), space, states))
     end
     Base.parent(H::EveryOtherState) = H.space
     subspace_states(H::EveryOtherState) = H.states
@@ -157,30 +167,33 @@ end
     @fermions f
     H = hilbert_space(f, 1:4)
     op = sum(f[i]' * f[i+1] + hc for i in 1:3) + 2 * f[1]' * f[1]
-    reference(Hsub) = (map(s -> state_index(s, Hsub), basisstates(H)), matrix_representation(op, Hsub; projection=true))
+    observed(Hsub) = (map(s -> state_index(s, Hsub), basisstates(H)), matrix_representation(op, Hsub; projection=true))
+    generic(Hsub) = constrain_space(H, collect(basisstates(Hsub)))
 
-    # Passed as a keyword
     states = collect(basisstates(H))[[9, 2, 12, 5, 3]]
-    by_keyword(parent, constraint, states) = LinearSearch(states)
+    by_keyword(constraint, parent, states) = LinearSearch(states)
     for constraint in (states, NumberConservation(1:2))
-        @test reference(constrain_space(H, constraint; index=by_keyword)) == reference(constrain_space(H, constraint))
+        Hsub = constrain_space(H, constraint; index=by_keyword)
+        @test observed(Hsub) == observed(generic(Hsub))
+        @test observed(sectors(Hsub; index=by_keyword)[end]) == observed(generic(sectors(Hsub)[end]))
     end
-    Hsectors = constrain_space(H, NumberConservation(1:2); index=by_keyword)
-    @test reference(sector(2, Hsectors; index=by_keyword)) == reference(sector(2, constrain_space(H, NumberConservation(1:2))))
+    wrong(constraint, parent, states) = LinearSearch(reverse(states))
+    @test_throws ArgumentError constrain_space(H, states; index=wrong)
 
-    # Selected by a method for a constraint type
     selected = Ref(0)
     keep(state) = isodd(state.f)
     label(state) = isodd(state.f)
-    function default_subspace_index(parent, ::Union{FilterConstraint{typeof(keep)},SectorConstraint{<:FilterConstraint{typeof(label)}}}, states)
+    function default_subspace_index(::Union{FilterConstraint{typeof(keep)},FilterConstraint{<:Any,<:Tuple{typeof(keep)}},SectorConstraint{<:FilterConstraint{typeof(label)}}}, parent, states)
         selected[] += 1
         LinearSearch(states)
     end
-    for constraint in (FilterConstraint(keep), SectorConstraint(label))
+    Hlabel = constrain_space(H, SectorConstraint(label))
+    Hkeep = constrain_space(hilbert_space(f, 1:2), FilterConstraint(keep))
+    for build in (() -> constrain_space(H, FilterConstraint(keep)), () -> sector(true, Hlabel), () -> tensor_product(Hkeep, hilbert_space(f, 3:4)))
         before = selected[]
-        Hsub = constrain_space(H, constraint)
-        @test selected[] == before + 1
-        @test reference(Hsub) == reference(constrain_space(H, collect(basisstates(Hsub))))
+        Hsub = build()
+        @test selected[] > before
+        @test observed(Hsub) == observed(generic(Hsub))
     end
 end
 

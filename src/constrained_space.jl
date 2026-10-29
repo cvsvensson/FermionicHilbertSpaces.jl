@@ -1,22 +1,25 @@
-struct ConstrainedSpace{B,H,S,I} <: AbstractSubspace{B,H}
+struct ConstrainedSpace{B,H,S,C,I} <: AbstractSubspace{B,H}
     parent::H
     states::S
+    constraint::C
     index::I
-    ConstrainedSpace{B,H,S,I}(parent, states, index) where {B,H,S,I} = new{B,H,S,I}(parent, states, index)
+    ConstrainedSpace{B,H,S,C,I}(parent, states, constraint, index) where {B,H,S,C,I} = new{B,H,S,C,I}(parent, states, constraint, index)
 end
 
+# `constraint` is what selected `states`; `NoSymmetry()` means they were listed explicitly.
 function ConstrainedSpace(space, states; constraint=NoSymmetry(), index=default_subspace_index)
     parent, members = unnest(space, states)
     stored = _stored_states(members)
-    ConstrainedSpace(parent, stored, index(parent, constraint, stored))
+    selected_by = constraint isa NoSymmetry ? constraint : coalesce(combine_constraints(own_constraint(space), constraint), NoSymmetry())
+    ConstrainedSpace(parent, stored, selected_by, build_subspace_index(index, selected_by, parent, stored))
 end
-ConstrainedSpace(space::H, states::S, index) where {H,S} = ConstrainedSpace{eltype(states),H,S,typeof(index)}(space, states, index)
-ConstrainedSpace(::AbstractSubspace, states, index) = throw(nested_subspace_error())
+ConstrainedSpace(space::H, states::S, constraint, index) where {H,S} = ConstrainedSpace{eltype(states),H,S,typeof(constraint),typeof(index)}(space, states, constraint, index)
+ConstrainedSpace(::AbstractSubspace, states, constraint, index) = throw(nested_subspace_error())
 
 Base.parent(H::ConstrainedSpace) = H.parent
 subspace_states(H::ConstrainedSpace) = H.states
 subspace_index(H::ConstrainedSpace) = H.index
-rewrap(H::ConstrainedSpace, parent) = ConstrainedSpace(parent, H.states, H.index)
+rewrap(H::ConstrainedSpace, parent) = ConstrainedSpace(parent, H.states, H.constraint, H.index)
 
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry; index=default_subspace_index) = space
 constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}; index=default_subspace_index) = constrain_space(space, NoSymmetry(), states; index)
@@ -34,6 +37,80 @@ function constrain_space(space, constraint::AbstractConstraint, states=basisstat
         throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     end
 end
+
+"""
+    build_subspace_index(build, constraint, parent, states)
+
+`build(index_constraint(constraint, parent), parent, states)`, after checking that it gives the
+first, middle and last of `states` their positions. Throws an `ArgumentError` otherwise.
+"""
+function build_subspace_index(build, constraint, parent, states)
+    index = build(index_constraint(constraint, parent), parent, states)
+    n = length(states)
+    for i in unique!([1, cld(n, 2), n])
+        n == 0 && break
+        state = states[firstindex(states)+i-1]
+        position = state_position(index, state, parent)
+        position == i || throw(ArgumentError("The subspace index $(typeof(index)) gives position $position to the state `$state` at position $i."))
+    end
+    return index
+end
+
+"""
+    index_constraint(constraint, parent)
+
+The form of `constraint` that `default_subspace_index` receives. A product is flattened into a
+`ProductConstraint` of a tuple, or into its only factor, and `NoSymmetry` factors are dropped.
+The `spaces` of an unweighted `NumberConservation` and of a `ParityConservation` become the
+atoms of `parent` they act on, in the order of `parent`, also when `spaces` was `missing`.
+"""
+index_constraint(constraint, parent) = constraint
+function index_constraint(constraint::ProductConstraint, parent)
+    parts = Tuple(Iterators.flatten(map(c -> _product_parts(index_constraint(c, parent)), constraint.constraints)))
+    isempty(parts) && return NoSymmetry()
+    length(parts) == 1 ? only(parts) : ProductConstraint(parts)
+end
+_product_parts(c) = (c,)
+_product_parts(c::ProductConstraint) = c.constraints
+_product_parts(::NoSymmetry) = ()
+index_constraint(c::NumberConservation{<:Any,<:Any,Missing}, parent) = NumberConservation(c.total, parent_atoms(c.spaces, parent), missing)
+index_constraint(c::ParityConservation, parent) = ParityConservation(c.allowed_parities, parent_atoms(c.spaces, parent))
+parent_atoms(::Missing, parent) = collect(atomic_factors(parent))
+function parent_atoms(spaces, parent)
+    positions = [atom_position(atom, parent) for space in spaces for atom in (space isa AbstractHilbertSpace ? atomic_factors(space) : (space,))]
+    any(iszero, positions) && return spaces
+    [atomic_factor(parent, p) for p in sort!(unique!(positions))]
+end
+
+# What selected the states of a space, relative to its parent: `NoSymmetry()` for all of them, `missing` if unknown.
+own_constraint(H) = isconstrained(H) ? missing : NoSymmetry()
+own_constraint(H::ConstrainedSpace) = H.constraint isa NoSymmetry ? missing : H.constraint
+own_constraint(H::SectorHilbertSpace) = isnothing(H.constraint) ? missing : H.constraint
+combine_constraints(a, b) = (ismissing(a) || ismissing(b)) ? missing : a isa NoSymmetry ? b : b isa NoSymmetry ? a : a * b
+
+# What selected the states of the factor `H` of a product, acting on `H` only, or `missing` if unknown.
+factor_constraint(H) = bind_constraint(own_constraint(H), H)
+factor_constraint(H::SectorHilbertSpace) = isnothing(H.constraint) ? missing : localize_constraint(H.constraint, H)
+bind_constraint(c, H) = missing
+bind_constraint(c::NoSymmetry, H) = c
+bind_constraint(c::NumberConservation, H) = ismissing(c.spaces) ? NumberConservation(c.total, (H,), c.weights) : c
+bind_constraint(c::ParityConservation, H) = ismissing(c.spaces) ? ParityConservation(c.allowed_parities, (H,)) : c
+bind_constraint(c::AdditiveConstraint, H) = ismissing(c.spaces) ? missing : c
+bind_constraint(c::FilterConstraint, H) = ismissing(c.spaces) ? missing : c
+bind_constraint(c::FilterConstraint{<:Any,Missing,Missing}, H) = FilterConstraint(only, (c.reducer,), (H,))
+bind_constraint(c::SectorConstraint, H) = ismissing(c.filter.spaces) ? missing : c
+bind_constraint(c::SectorConstraint{<:FilterConstraint{<:Any,Missing,Missing}}, H) = SectorConstraint(only, (c.filter.reducer,), (H,))
+function bind_constraint(c::ProductConstraint, H)
+    parts = map(x -> bind_constraint(x, H), c.constraints)
+    any(ismissing, parts) ? missing : ProductConstraint(parts)
+end
+combined_factor_constraint(spaces) = reduce(combine_constraints, map(factor_constraint, spaces); init=NoSymmetry())
+
+sector_constraint(c, qn) = c
+sector_constraint(::Nothing, qn) = NoSymmetry()
+sector_constraint(c::NumberConservation, qn) = NumberConservation([qn], c.spaces, c.weights)
+sector_constraint(c::ParityConservation, qn) = ParityConservation([qn], c.spaces)
+sector_constraint(c::ProductConstraint, qn) = ProductConstraint(map(sector_constraint, c.constraints, qn))
 
 allowed_values(::NumberConservation{Missing,Missing,Missing}, space, mapper) = 0:maximum_particles(space)
 function allowed_values(nc::NumberConservation{Missing}, space, mapper)
