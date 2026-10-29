@@ -516,7 +516,7 @@ function representation(op, space::Union{AbstractHilbertSpace,Axes}, repr=EagerS
     space isa Axes && _operator_axes(space)
     type = _operator_type(op)
     if type == :kets || type == :bras
-        space isa Axes && throw(ArgumentError("Kets and bras are represented in a single space, as in `representation(state, H)`."))
+        space isa Axes && throw(ArgumentError("A ket or bra has one axis, as in `representation(state, Axes(H))` or `representation(state, H)`."))
         return _vector_representation(op, space, repr, type; kwargs...)
     elseif type == :ketbras
         _repr = _canonicalize_repr(repr)
@@ -532,6 +532,11 @@ function representation(op, space::Union{AbstractHilbertSpace,Axes}, repr=EagerS
 end
 function representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr=EagerSparseRepr(); kwargs...) where B
     return vector_representation(state, space, repr; kwargs...)
+end
+function representation(state, ax::Axes{<:Tuple{AbstractHilbertSpace}}, repr=EagerSparseRepr(); kwargs...)
+    state isa Union{AbstractBasisState,AbstractString,AbstractChar} || _operator_type(state) in (:kets, :bras) ||
+        throw(ArgumentError("An operator has the two axes `Axes(Hout, Hin)`, got one axis."))
+    return representation(state, only(ax.spaces), repr; kwargs...)
 end
 
 
