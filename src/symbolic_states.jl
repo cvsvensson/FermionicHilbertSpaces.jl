@@ -333,35 +333,42 @@ end
 # forms the products of terms with equal keys. Bras and ketbras have no key and are paired with every term.
 NonCommutativeProducts.contraction_key(s::SymbolicState) = isket(s) ? (group_id(s.space), s.ket) : nothing
 
-# An operator string acting on a sum of kets in one space is applied to each basis state with one precomputation, as
-# in `matrix_representation`. Other products are sorted factor by factor.
-function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any,<:AbstractSym}, b::NCAdd{<:Any,<:NCMul{<:Any,<:SymbolicState}})
-    space = _ket_sum_space(b)
-    if isnothing(space) || !all(op -> !(op isa SymbolicState) && symbolic_group(op) == group_id(space), x.factors)
-        return invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any,NCMul,NCAdd}, c, x, b)
-    end
-    precomp = precomputation_before_operator_application(x, space)
-    for (factors, coeff) in NonCommutativeProducts.termpairs(b)
-        newket, amp = _apply_local_operators(x, only(factors).ket, space, precomp)
-        iszero(amp) && continue
-        c = add!!(c, NCMul(amp * coeff, [SymbolicState(space, newket, nothing)]))
+# An operator string acting on a product of kets is applied to the ket of each group it acts on, with one
+# precomputation per group for all terms of `b`, as in `matrix_representation`. Other products are sorted factor by factor.
+function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any,<:AbstractSym}, b::Union{NCAdd,NCMul})
+    sorted_product(c, b) = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any,NCMul,Union{NCAdd,NCMul}}, c, x, b)
+    terms = NonCommutativeProducts.termpairs(b)
+    isempty(terms) && return sorted_product(c, b)
+    groupops = _group_operators(x, first(first(terms)))
+    isnothing(groupops) && return sorted_product(c, b)
+    precomps = [precomputation_before_operator_application(op, space) for (_, space, op) in groupops]
+    for (factors, coeff) in terms
+        if !all(((k, space, _),) -> _is_ket_in(factors, k, space), groupops)
+            c = sorted_product(c, NCMul(coeff, factors))
+            continue
+        end
+        newfactors = copy(factors)
+        amp = x.coeff * coeff
+        for ((k, space, op), precomp) in zip(groupops, precomps)
+            newket, a = _apply_local_operators(op, factors[k].ket, space, precomp)
+            amp *= a
+            iszero(amp) && break
+            newfactors[k] = SymbolicState(space, newket, nothing)
+        end
+        iszero(amp) || (c = add!!(c, NCMul(amp, newfactors)))
     end
     return c
 end
-# The space of the sum `b` if each of its terms is a single ket in that space, and `nothing` otherwise
-function _ket_sum_space(b::NCAdd)
-    space = nothing
-    for (factors, _) in NonCommutativeProducts.termpairs(b)
-        length(factors) == 1 || return nothing
-        s = only(factors)
-        (s isa SymbolicState && isket(s)) || return nothing
-        if isnothing(space)
-            space = s.space
-        elseif !_same_space_id(space, s.space)
-            return nothing
-        end
+_is_ket_in(factors, k, space) = k <= length(factors) && factors[k] isa SymbolicState && isket(factors[k]) && _same_space_id(factors[k].space, space)
+# Tuples `(k, space, op)`, where `op` is the product of the factors of `x` that act on the ket `factors[k]` in `space`,
+# or `nothing` if a factor of `x` acts on none of the kets
+function _group_operators(x::NCMul, factors)
+    inds = map(x.factors) do op
+        op isa SymbolicState && return nothing
+        findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)
     end
-    return space
+    any(isnothing, inds) && return nothing
+    return [(k, factors[k].space, NCMul(one(x.coeff), x.factors[inds .== k])) for k in unique(inds)]
 end
 
 
@@ -945,7 +952,14 @@ end
         @test inner(φ, op * ψ) ≈ dot(w, M * v)
         @test norm(ψ) ≈ norm(v)
     end
-    # Products that are not an operator string on a sum of kets in one space are sorted factor by factor
+    # Kets in a product of spaces are products of one ket per space
+    @spins S 1 // 2
+    H = hilbert_space(S, 1:3)
+    ψ = Ket(["↑", "↓", "↑"], H) + 2 * Ket(["↓", "↓", "↑"], H)
+    op = S[1][:+] * S[2][:-] + S[3][:x] + 0.5 * S[1][:z] * S[2][:z]
+    M = representation(op, H, :dense)
+    @test Vector(representation(op * (op * ψ), H)) ≈ M * M * Vector(representation(ψ, H))
+    # Other products, such as operators on ketbras or on spaces without a ket, are sorted factor by factor
     Hf, Hs = hilbert_space(f, 1:2), hilbert_space(s)
     kf, ks = Kets(Hf), Kets(Hs)
     @test (f[1]' + s[:+]) * (kf("00") + kf("01")) == kf("10") + kf("11") + s[:+] * (kf("00") + kf("01"))
