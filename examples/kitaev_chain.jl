@@ -4,10 +4,9 @@
 # We show how the Hamiltonian can be constructed symbolically or by using matrix representations of the fermionic operators,
 # and how to restrict the Hilbert space to a subspace of a given parity.
 # We solve for the ground states and characterize the locality of the many-body Majoranas.
-# Locality and robustness of many-body Majoranas are quantified in
-# W. Samuelson, J. D. Torres Luna, S. Miles, A. M. Bozkurt, M. Leijnse, M. Wimmer, and V. Svensson,
-# "Quantifying robustness and locality of Majorana bound states in interacting systems",
-# [PRX Quantum 7, 020341 (2026)](https://doi.org/10.1103/pw51-tnsz), [arXiv:2510.20538](https://arxiv.org/abs/2510.20538).
+# Locality and robustness of many-body Majoranas are quantified in Ref. [^1].
+#
+# [^1]: W. Samuelson *et al.*, [PRX Quantum 7, 020341 (2026)](https://doi.org/10.1103/pw51-tnsz), [arXiv:2510.20538](https://arxiv.org/abs/2510.20538).
 
 # We start by importing the necessary packages.
 using FermionicHilbertSpaces
