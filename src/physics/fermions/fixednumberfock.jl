@@ -121,11 +121,11 @@ function _precomputation_before_operator_application(op::FermionSym, space::Abst
     return position
 end
 # The change in particle number is stored as a type parameter so that the state produced by a term has a concrete type.
-function precomputation_before_operator_application(op::NCMul, space::AbstractHilbertSpace{<:FixedNumberFockState})
+function precomputation_before_operator_application(op::NCMul{<:Any, <:FermionSym}, space::AbstractHilbertSpace{<:FixedNumberFockState})
     sites = Tuple(map(factor -> _precomputation_before_operator_application(factor, space), op.factors))
     return sites, Val(sum(factor -> factor.creation ? 1 : -1, op.factors; init = 0))
 end
-function apply_local_operators(op::NCMul, f::FixedNumberFockState{N}, H::AbstractHilbertSpace, (sites, _)::Tuple{Any, Val{Δ}}; transpose) where {N, Δ}
+function apply_local_operators(op::NCMul{<:Any, <:FermionSym}, f::FixedNumberFockState{N}, H::AbstractHilbertSpace, (sites, _)::Tuple{Any, Val{Δ}}; transpose) where {N, Δ}
     if !transpose
         daggers = Iterators.map(op -> op.creation, Iterators.reverse(op.factors))
         state, amp = togglefermions(reverse(sites), daggers, f, Val(N + Δ))
@@ -176,6 +176,17 @@ end
 function permute(f::FixedNumberFockState, permutation::AbstractBitPermutation)
     p = Vector(permutation')
     return FixedNumberFockState(map(s -> p[s], f.sites))
+end
+
+@testitem "Number-changing operators on FixedNumberFockState spaces" begin
+    import FermionicHilbertSpaces: FixedNumberFockState, Axes
+    @fermions f
+    Hk(n) = hilbert_space(f, [4, 1, 3], NumberConservation(n))
+    Hx(n) = hilbert_space(f, [4, 1, 3], FixedNumberFockState{n}.(basisstates(Hk(n))))
+    op = f[3]' * f[1]' * f[1] + f[4]' * f[1] * f[1]'
+    for n in 0:1
+        @test representation(op, Axes(Hx(n + 1), Hx(n))) ≈ representation(op, Axes(Hk(n + 1), Hk(n)))
+    end
 end
 
 @testitem "Vector tensor product of fixed-number states with reordered modes" begin
