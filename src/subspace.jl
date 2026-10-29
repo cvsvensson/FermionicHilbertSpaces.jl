@@ -20,9 +20,8 @@ spaces store other states over a `FermionicSpace` parent: `hilbert_space(f, labe
 with `FixedNumberFockState`s, `BdG` spaces with `NambuState`s and `SingleParticle` spaces
 with `SingleParticleState`s.
 
-`default_subspace_index` throws when its `parent` is an `AbstractSubspace`, unless a more
-specific method applies, so a constructor that builds the index as above keeps `parent(H)`
-from being a subspace. The package calls
+`default_subspace_index` throws when its `parent` is an `AbstractSubspace`, so a constructor
+that builds the index as above keeps `parent(H)` from being a subspace. The package calls
 `rewrap` only with `newparent` made from `parent(H)` by `add_tag`, `TransposedSpace` or a
 Majorana space, none of which is a subspace.
 

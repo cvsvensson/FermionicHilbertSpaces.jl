@@ -284,8 +284,8 @@ given order; this is equivalent to `constrain_space(space, NoSymmetry(), states)
 
 `index(constraint, parent, states)` builds the lookup that `state_index` uses on the result,
 where `states` are its basis states in order. The default, [`default_subspace_index`](@ref),
-selects an index by the types of its arguments; any object with a [`state_position`](@ref)
-method can be returned.
+dispatches on the type of the constraint; any object with a [`state_position`](@ref) method
+can be returned.
 """
 constrain_space
 
