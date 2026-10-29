@@ -29,7 +29,7 @@ end
 
 The Nambu correlation matrix of the modes of `Hsub` in its order, from the correlation matrix `G` on `Hbdg`. `Hsub` must be a BdG space over a subset of the modes of `Hbdg`, such as `hilbert_space(f, sub, BdG())`.
 """
-function partial_trace(G, (H, Hsub)::Pair{<:BdGHilbertSpace,<:BdGHilbertSpace})
+function partial_trace(G, (H, Hsub)::Pair{<:BdGHilbertSpace, <:BdGHilbertSpace})
     p = _mode_positions(H, Hsub)
     inds = [p; p .+ length(modes(H))]
     return G[inds, inds]

@@ -47,7 +47,7 @@ _state_index(state, H::SingleParticleHilbertSpace) = _state_index(state, parent(
 
 The correlation matrix `G[i, j] = ⟨c_i' c_j⟩` of the modes of `Hsub` in its order, from the one on `Hsp`. `Hsub` must be a single-particle space over a subset of the modes of `Hsp`.
 """
-function partial_trace(G, (H, Hsub)::Pair{<:SingleParticleHilbertSpace,<:SingleParticleHilbertSpace})
+function partial_trace(G, (H, Hsub)::Pair{<:SingleParticleHilbertSpace, <:SingleParticleHilbertSpace})
     p = _mode_positions(H, Hsub)
     return G[p, p]
 end
