@@ -63,41 +63,16 @@ module FreeFermions
     include("bdg.jl")
     include("gaussian.jl")
 
-    function Base.show(io::IO, H::BdGHilbertSpace)
-        return if get(io, :compact, false)
-            print(io, "BdGHilbertSpace($(dim(H))-dim, $(div(dim(H), 2)) modes)")
-        else
-            print(io, "$(dim(H))-dimensional BdGHilbertSpace\n")
-            print(io, "Physical modes: ", div(dim(H), 2), "\n")
-            print(io, "Parent: ")
-            show(IOContext(io, :compact => true), parent(H))
-        end
-    end
-
-    function Base.show(io::IO, H::SingleParticleHilbertSpace)
-        return if get(io, :compact, false)
-            print(io, "SingleParticleHilbertSpace($(dim(H))-dim)")
-        else
-            print(io, "$(dim(H))-dimensional SingleParticleHilbertSpace\n")
-            print(io, "Parent: ")
-            show(IOContext(io, :compact => true), parent(H))
-        end
-    end
-    _state_label_atomic(s::NambuState, H::_FermionModeSpace) = (s.hole ? "h" : "p") * _state_label_atomic(s.state, H)
-
 end
 
-@deprecate single_particle_hilbert_space(f, labels) hilbert_space(f, labels, FreeFermions.SingleParticle())
-@deprecate bdg_hilbert_space(f, labels) hilbert_space(f, labels, FreeFermions.BdG())
+@deprecate single_particle_hilbert_space(f, labels) hilbert_space(f, labels, FermionicHilbertSpaces.FreeFermions.SingleParticle())
+@deprecate bdg_hilbert_space(f, labels) hilbert_space(f, labels, FermionicHilbertSpaces.FreeFermions.BdG())
 
 @testitem "Deprecated special space constructors" begin
     using FermionicHilbertSpaces.FreeFermions
     @fermions f
-    @majoranas γ
     Hsp = @test_deprecated single_particle_hilbert_space(f, 1:2)
     Hbdg = @test_deprecated bdg_hilbert_space(f, 1:2)
-    Hmaj = @test_deprecated FermionicHilbertSpaces.majorana_hilbert_space(γ, 1:4, ParityConservation(1))
     @test Hsp == hilbert_space(f, 1:2, SingleParticle())
     @test Hbdg == hilbert_space(f, 1:2, BdG())
-    @test Hmaj == hilbert_space(γ, 1:4, ParityConservation(1))
 end

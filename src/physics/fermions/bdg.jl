@@ -5,6 +5,7 @@ end
 NambuState(i::Integer, hole::Bool) = NambuState(SingleParticleState(i), hole)
 Base.:(==)(n1::NambuState, n2::NambuState) = n1.state == n2.state && n1.hole == n2.hole
 Base.hash(n::NambuState, h::UInt) = hash(n.hole, hash(n.state, h))
+_state_label_atomic(s::NambuState, H::_FermionModeSpace) = (s.hole ? "h" : "p") * _state_label_atomic(s.state, H)
 
 # Ψ' m Ψ == Ψ' m_ph Ψ + tr(m) / 2 by the anticommutation relations, since the vector of adjoints Ψ' equals τx Ψ, and
 # m_ph = -τx transpose(m_ph) τx is the unique particle-hole symmetric representative.
@@ -20,6 +21,16 @@ struct BdGHilbertSpace{H}
         states = vec([NambuState(i, hole) for (i, label) in enumerate(labels), hole in (true, false)])
         H = hilbert_space(f, labels, states)
         return new{typeof(H)}(H)
+    end
+end
+function Base.show(io::IO, H::BdGHilbertSpace)
+    return if get(io, :compact, false)
+        print(io, "BdGHilbertSpace($(dim(H))-dim, $(div(dim(H), 2)) modes)")
+    else
+        print(io, "$(dim(H))-dimensional BdGHilbertSpace\n")
+        print(io, "Physical modes: ", div(dim(H), 2), "\n")
+        print(io, "Parent: ")
+        show(IOContext(io, :compact => true), parent(H))
     end
 end
 """

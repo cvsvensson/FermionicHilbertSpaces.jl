@@ -17,6 +17,15 @@ modes(h::SingleParticleHilbertSpace) = modes(h.parent)
 basisstates(h::SingleParticleHilbertSpace) = basisstates(h.parent)
 Base.:(==)(a::SingleParticleHilbertSpace, b::SingleParticleHilbertSpace) = a === b || a.parent == b.parent
 Base.hash(x::SingleParticleHilbertSpace, h::UInt) = hash(x.parent, h)
+function Base.show(io::IO, H::SingleParticleHilbertSpace)
+    return if get(io, :compact, false)
+        print(io, "SingleParticleHilbertSpace($(dim(H))-dim)")
+    else
+        print(io, "$(dim(H))-dimensional SingleParticleHilbertSpace\n")
+        print(io, "Parent: ")
+        show(IOContext(io, :compact => true), parent(H))
+    end
+end
 """
     SingleParticle()
 
