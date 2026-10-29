@@ -10,7 +10,7 @@ Base.hash(n::NambuState, h::UInt) = hash(n.hole, hash(n.state, h))
 # m_ph = -τx transpose(m_ph) τx is the unique particle-hole symmetric representative.
 function normal_order_to_bdg(m::AbstractMatrix)
     n = size(m, 1) ÷ 2
-    swap = [(n+1):2n; 1:n]
+    swap = [(n + 1):2n; 1:n]
     return (m - permutedims(m)[swap, swap]) / 2
 end
 
