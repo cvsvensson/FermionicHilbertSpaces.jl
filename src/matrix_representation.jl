@@ -399,9 +399,7 @@ Expressions that combine kets or bras with operators or with states of other spa
 The single-particle space `hilbert_space(f, labels, SingleParticle())` and the Bogoliubov-de Gennes space `hilbert_space(f, labels, BdG())`
 represent quadratic fermionic operators only, and a number is represented by the zero matrix.
 """
-function representation(state::AbstractBasisState, space::AbstractHilbertSpace; kwargs...)
-    vector_representation(state, space)
-end
+representation
 
 """
     matrix_representation(op, space::AbstractHilbertSpace, [repr]; kwargs...)

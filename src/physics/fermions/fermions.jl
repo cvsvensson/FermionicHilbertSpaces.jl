@@ -33,7 +33,7 @@ Base.@propagate_inbounds function basisstate(ind::Integer, H::FermionicSpace{F})
     @boundscheck (ind >= 1 && iszero((ind - 1) >> nbr_of_modes(H))) || throw(BoundsError(H, ind))
     (F ∘ FockNumber)(ind - 1)
 end
-function state_index(state::FockNumber, H::FermionicSpace{FockNumber{I}}) where I
+function _state_index(state::FockNumber, H::FermionicSpace{FockNumber{I}}) where I
     T = fock_index_type(I)
     iszero(state.f >> nbr_of_modes(H)) ? T(state.f) + one(T) : zero(T)
 end
