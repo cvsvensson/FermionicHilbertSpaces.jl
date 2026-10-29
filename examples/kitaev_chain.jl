@@ -39,12 +39,12 @@ representation(hsym, H)
 
 
 # Now, let's diagonalize the system.
-# Since parity is conserved, we work in the even and odd parity sectors separately. 
+# Since parity is conserved, we work in the even and odd parity sectors separately.
 (Eo, o), (Ee, e) = map(quantumnumbers(H)) do parity
     Hsec = sector(parity, H)
     ham = representation(hsym, Hsec)
     vals, vecs = eigs(ham; nev=1, which=:SR)
-    (; energy=first(vals), ground_state=embed(vecs[:, 1], Hsec => H))
+    (; energy = first(vals), ground_state = embed(vecs[:, 1], Hsec => H))
 end
 # The ground states are almost degenerate, as expected.
 # Then, we can construct the ground state Majorana operators as
