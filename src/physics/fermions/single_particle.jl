@@ -74,11 +74,11 @@ end
     @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
 end
 
-representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
-function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
+representation(op, H::SingleParticleHilbertSpace, repr = EagerSparseRepr(); chunking = NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking = chunking, kwargs...)
+function matrix_representation(op, H::SingleParticleHilbertSpace, repr = EagerSparseRepr(); chunking = NoChunking(), kwargs...)
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
     _is_quadratic_fermion_operator(op, true) || throw(ArgumentError("Only quadratic, number conserving fermionic operators can be represented on a SingleParticleHilbertSpace. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
-    _quadratic_matrix(_single_particle_entry, remove_identity(op), H, repr)
+    return _quadratic_matrix(_single_particle_entry, remove_identity(op), H, repr)
 end
 expectation(op, G::AbstractMatrix, H::SingleParticleHilbertSpace) = identity_coefficient(op) + dot(transpose(G)', representation(op, H))
 function _single_particle_entry(term, H)
