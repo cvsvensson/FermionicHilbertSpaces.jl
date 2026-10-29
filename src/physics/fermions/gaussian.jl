@@ -44,7 +44,7 @@ The fermionic parity, `1` or `-1`, of the BdG ground state from the eigenvectors
 """
 function ground_state_parity(vecs)
     N = div(size(vecs, 2), 2)
-    return Int(sign(real(det(vecs[:, [2N:-1:N+1; 1:N]]))))
+    return Int(sign(real(det(vecs[:, [2N:-1:(N + 1); 1:N]]))))
 end
 
 @testitem "BdG correlation matrix and parity" begin
