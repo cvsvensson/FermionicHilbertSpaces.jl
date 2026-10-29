@@ -36,7 +36,7 @@ export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
-export SingleParticle, BdG
+export SingleParticle, BdG, BdGEigen
 export symmetric_sector
 export open_system
 public particle_number, Axes
