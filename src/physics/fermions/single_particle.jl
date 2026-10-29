@@ -53,11 +53,11 @@ function partial_trace(G, (H, Hsub)::Pair{<:SingleParticleHilbertSpace, <:Single
 end
 
 """
-    entanglement_entropy(G, Hsp::SingleParticleHilbertSpace)
+    von_neumann_entropy(G, Hsp::SingleParticleHilbertSpace)
 
 The von Neumann entropy of the number-conserving Gaussian state with correlation matrix `G[i, j] = ⟨c_i' c_j⟩` on `Hsp`.
 """
-entanglement_entropy(G, ::SingleParticleHilbertSpace) = entanglement_entropy(G) + entanglement_entropy(I - G)
+von_neumann_entropy(G, ::SingleParticleHilbertSpace) = von_neumann_entropy(G) + von_neumann_entropy(I - G)
 
 @testitem "Single particle hilbert space" begin
     using FermionicHilbertSpaces.FreeFermions
@@ -103,7 +103,7 @@ end
 @testitem "Reduced single particle correlation matrix and entropy" begin
     using FermionicHilbertSpaces.FreeFermions
     using LinearAlgebra
-    import FermionicHilbertSpaces: entanglement_entropy
+    import FermionicHilbertSpaces: von_neumann_entropy
     @fermions f
     N = 4
     Hsp = hilbert_space(f, 1:N, SingleParticle())
@@ -116,7 +116,7 @@ end
     Hsub = hilbert_space(f, sub, SingleParticle())
     @test partial_trace(G, Hsp => Hsub) ≈ [expectation(f[i]' * f[j], ψ, Hmb) for i in sub, j in sub]
     ρ = partial_trace(ψ * ψ', Hmb => hilbert_space(f, sort(sub)))
-    @test entanglement_entropy(partial_trace(G, Hsp => Hsub), Hsub) ≈ entanglement_entropy(ρ)
+    @test von_neumann_entropy(partial_trace(G, Hsp => Hsub), Hsub) ≈ von_neumann_entropy(ρ)
     @test_throws ArgumentError partial_trace(G, Hsp => hilbert_space(f, [1, 5], SingleParticle()))
 end
 

@@ -604,11 +604,11 @@ does not check its input.
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
 
 """
-    entanglement_entropy(ρ)
+    von_neumann_entropy(ρ)
 
 The von Neumann entropy `-tr(ρ log ρ)` of a density matrix `ρ`, such as the reduced state `partial_trace(ψ * ψ', H => Hsub)`.
 """
-entanglement_entropy(ρ) = -sum(_xlogx, eigvals(Hermitian(ρ)))
+von_neumann_entropy(ρ) = -sum(_xlogx, eigvals(Hermitian(ρ)))
 # Clamps the round-off negative eigenvalues of a positive semidefinite matrix
 _xlogx(x) = x > 0 ? x * log(x) : zero(x)
 
@@ -1167,12 +1167,12 @@ end
 end
 
 @testitem "Entanglement entropy" begin
-    import FermionicHilbertSpaces: entanglement_entropy
+    import FermionicHilbertSpaces: von_neumann_entropy
     @fermions f
     H = hilbert_space(f, 1:2)
     ψ = [0, 1, 1, 0] / sqrt(2)
-    @test entanglement_entropy(partial_trace(ψ * ψ', H => hilbert_space(f, 1:1))) ≈ log(2)
-    @test abs(entanglement_entropy(ψ * ψ')) < 1.0e-12
+    @test von_neumann_entropy(partial_trace(ψ * ψ', H => hilbert_space(f, 1:1))) ≈ log(2)
+    @test von_neumann_entropy(ψ * ψ') ≈ 0 atol = 1e-12
 end
 
 @testitem "Partial trace with missing states" begin

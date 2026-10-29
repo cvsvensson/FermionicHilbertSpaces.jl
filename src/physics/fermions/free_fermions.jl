@@ -12,7 +12,7 @@ module FreeFermions
         _FermionModeSpace, _canonicalize_repr, _zero_matrix, exchange_phase, finalize!,
         matrix_accumulator, mode_position, push_inds_amps!, state_index
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,
-        _state_label_atomic, apply_local_operators, basisstate, basisstates, dim, entanglement_entropy, expectation,
+        _state_label_atomic, apply_local_operators, basisstate, basisstates, dim, von_neumann_entropy, expectation,
         hilbert_space, matrix_representation, mode_ordering, modes, partial_trace, representation
     using LinearAlgebra: LinearAlgebra, Diagonal, Eigen, Hermitian, Symmetric, UniformScaling, I,
         det, eigen, issymmetric, normalize, svd

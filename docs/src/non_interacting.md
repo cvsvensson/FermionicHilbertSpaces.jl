@@ -107,11 +107,11 @@ expectation(mf, G, H) ≈ expectation(U, G, H)
 ## Correlation matrices and entanglement
 For the BdG ground state, the correlation matrix ``G`` of the previous section is `correlation_matrix(F)`, where `F` is the result of `eigen(A, BdGEigen())`, and `ground_state_parity(F)` is its fermionic parity. For a many-body state `ψ` on `H`, `correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`.
 
-The reduced correlation matrix of a subsystem of modes is `partial_trace(G, Hbdg => Hsub)`, where `Hsub` is a BdG space over those modes. Its entropy `entanglement_entropy(Gsub, Hsub)`, ``S = -\sum \lambda \log \lambda`` over its eigenvalues ``\lambda``, equals the entropy of the reduced many-body density matrix:
+The reduced correlation matrix of a subsystem of modes is `partial_trace(G, Hbdg => Hsub)`, where `Hsub` is a BdG space over those modes. Its entropy `von_neumann_entropy(Gsub, Hsub)`, ``S = -\sum \lambda \log \lambda`` over its eigenvalues ``\lambda``, equals the entropy of the reduced many-body density matrix:
 ```@example entanglement
 using FermionicHilbertSpaces, LinearAlgebra
 using FermionicHilbertSpaces.FreeFermions
-import FermionicHilbertSpaces: entanglement_entropy
+import FermionicHilbertSpaces: von_neumann_entropy
 @fermions f
 N = 4
 h = Hermitian(rand(ComplexF64, N, N))
@@ -123,12 +123,12 @@ G = correlation_matrix(eigen(A, BdGEigen()))
 sub = 1:2
 Hsub = hilbert_space(f, sub, BdG())
 Gsub = partial_trace(G, Hbdg => Hsub)
-S = entanglement_entropy(Gsub, Hsub)
+S = von_neumann_entropy(Gsub, Hsub)
 
 H = hilbert_space(f, 1:N)
 ψ = eigvecs(Hermitian(representation(ham, H, :dense)))[:, 1]
 ρsub = partial_trace(ψ * ψ', H => hilbert_space(f, sub))
-@assert S ≈ entanglement_entropy(ρsub)
+@assert S ≈ von_neumann_entropy(ρsub)
 @assert Gsub ≈ correlation_matrix(ψ, H, Hsub)
 @assert expectation(ham, G, Hbdg) ≈ expectation(ham, ψ, H)
 S

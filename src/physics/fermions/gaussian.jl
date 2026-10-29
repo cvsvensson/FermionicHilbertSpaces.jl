@@ -35,13 +35,13 @@ function partial_trace(G, (H, Hsub)::Pair{<:BdGHilbertSpace, <:BdGHilbertSpace})
     return G[inds, inds]
 end
 
-"""
-    entanglement_entropy(G, Hbdg::BdGHilbertSpace)
-
-The von Neumann entropy of the Gaussian state with Nambu correlation matrix `G` on `Hbdg`, equal to the entropy of the many-body density matrix `gaussian_state(G, H, Hbdg)`.
-"""
 # The eigenvalues of G are n and 1 - n for each quasiparticle with occupation n, whose entropy is -n log n - (1 - n) log(1 - n).
-entanglement_entropy(G, ::BdGHilbertSpace) = entanglement_entropy(G)
+"""
+    von_neumann_entropy(G, Hbdg::BdGHilbertSpace)
+
+The von Neumann entropy of the Gaussian state with Nambu correlation matrix `G` on `Hbdg`, equal to the entropy of `gaussian_state(G, H, Hbdg)` for a many-body space `H`.
+"""
+von_neumann_entropy(G, ::BdGHilbertSpace) = von_neumann_entropy(G)
 
 """
     correlation_matrix(F::LinearAlgebra.Eigen)
@@ -178,7 +178,7 @@ end
 @testitem "Reduced BdG correlation matrix and entropy" begin
     using LinearAlgebra
     using FermionicHilbertSpaces.FreeFermions
-    import FermionicHilbertSpaces: entanglement_entropy
+    import FermionicHilbertSpaces: von_neumann_entropy
     @fermions f
     N = 4
     Hmb = hilbert_space(f, 1:N)
@@ -195,7 +195,7 @@ end
     for state in (ψ * ψ', ρ)
         Gsub = partial_trace(correlation_matrix(state, Hmb, Hbdg), Hbdg => Hsub)
         @test Gsub ≈ correlation_matrix(state, Hmb, Hsub)
-        @test entanglement_entropy(Gsub, Hsub) ≈ entanglement_entropy(partial_trace(state, Hmb => hilbert_space(f, sort(sub))))
+        @test von_neumann_entropy(Gsub, Hsub) ≈ von_neumann_entropy(partial_trace(state, Hmb => hilbert_space(f, sort(sub))))
     end
     @test_throws ArgumentError partial_trace(rand(2N, 2N), Hbdg => hilbert_space(f, [1, 5], BdG()))
 end
