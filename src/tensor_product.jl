@@ -24,6 +24,9 @@ end
     tensor_product(spaces; constraint=NoSymmetry())
 
 Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
+
+Spaces of the same group, such as fermions of one `@fermions` basis, merge into one factor where
+the group first appears. The first factor varies fastest.
 """
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 function tensor_product(spaces; constraint=NoSymmetry())

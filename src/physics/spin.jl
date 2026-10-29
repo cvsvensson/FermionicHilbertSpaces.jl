@@ -54,8 +54,15 @@ end
 """
     @spin s
 
+    @spin s J
+
 Create a symbolic spin basis `s` for constructing spin operators such as
-`s[:z]`, `s[:+]`, and `s[:-]`.
+`s[:x]`, `s[:y]`, `s[:z]`, `s[:+]`, and `s[:-]`. The spin `J` can be given here or later to
+`hilbert_space`.
+
+The operators are spin operators, not Pauli matrices: `s[:z]` has eigenvalues `-J, …, J`, so
+for spin 1/2 `s[:x]` is `σˣ/2`, and `s[:±] = s[:x] ± i s[:y]`. The basis states of
+`hilbert_space(s, J)` are ordered by increasing `s[:z]` eigenvalue, starting at `-J`.
 """
 macro spin(x)
     Expr(:block, :($(esc(x)) = SymbolicSpinBasis($(Expr(:quote, x)))),
@@ -69,8 +76,11 @@ end
 """
     @spins s 
 
+    @spins s J
+
 Create a spin basis `s`. Index into it to get site-specific
-spin bases: `s[1][:z]` gives the z-operator on site 1.
+spin bases: `s[1][:z]` gives the z-operator on site 1. Operators and basis states follow the
+conventions of [`@spin`](@ref).
 """
 macro spins(name)
     return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)))), :($(esc(name))))
