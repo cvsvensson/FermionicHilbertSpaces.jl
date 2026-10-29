@@ -130,3 +130,15 @@ Conversely, `gaussian_state(G, H, Hbdg)` builds the many-body density matrix on 
 ```@example entanglement
 gaussian_state(Gsub, hilbert_space(f, sub), hilbert_space(f, sub, BdG())) ≈ ρsub
 ```
+
+## Expectation values
+On the single-particle and BdG spaces, `expectation(op, G, H)` takes the correlation matrix of the state: ``G_{ij} = \langle c_i^\dagger c_j \rangle`` on the single-particle space and ``G_{ij} = \langle \Psi_i^\dagger \Psi_j \rangle`` on the BdG space. The operator must be quadratic, and its identity part is included. For a thermal state of the single-particle hamiltonian `h`, ``G = (1 + e^{\beta h})^{-T}``:
+```@example expectation
+using FermionicHilbertSpaces, LinearAlgebra
+@fermions c
+H = hilbert_space(c, 1:4, SingleParticle())
+ham = sum(c[n]' * c[n+1] + hc for n in 1:3) + 1
+h = representation(ham, H, :dense)
+G = transpose(inv(I + exp(10 * h)))
+expectation(ham, G, H)
+```
