@@ -39,8 +39,8 @@ mat_eltype(::S) where {S} = mat_eltype(S)
 mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors if a complex number is expected. Override it for specific types if needed.
 
 
-function operator_indices_and_amplitudes!(accumulator, op, space::AbstractHilbertSpace; kwargs...)
-    precomp = precomputation_before_operator_application(op, space)
+function operator_indices_and_amplitudes!(accumulator, op, space; kwargs...)
+    precomp = precomputation_before_operator_application(op, _input_space(space))
     return operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp; kwargs...)
 end
 
@@ -56,11 +56,12 @@ function _skip_outside(outind, projection)
     return true
 end
 
-function operator_indices_and_amplitudes_generic!(accumulator, op, space::AbstractHilbertSpace, precomp; projection)
-    for (inind, state) in enumerate(basisstates(space))
-        newstate, amp = _apply_local_operators(op, state, space, precomp)
+function operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp; projection)
+    Hin, Hout = _input_space(space), _output_space(space)
+    for (inind, state) in enumerate(basisstates(Hin))
+        newstate, amp = _apply_local_operators(op, state, Hin, precomp)
         if !iszero(amp)
-            outind = state_index(newstate, space)
+            outind = state_index(newstate, Hout)
             if !_skip_outside(outind, projection)
                 push_inds_amps!(accumulator, outind, inind, amp)
             end
@@ -310,10 +311,7 @@ function add_identity!!((outinds, ininds, amps), coeff, space, cols=1:dim(space)
     append!(ininds, cols .- col_offset)
     append!(amps, Fill(coeff, length(cols)))
 end
-function finalize!((outinds, ininds, amps), space)
-    N = dim(space)
-    finalize!((outinds, ininds, amps), N, N)
-end
+finalize!(accumulator, space) = finalize!(accumulator, dim(_output_space(space)), dim(_input_space(space)))
 function finalize!((outinds, ininds, amps), N, M)
     L = length(outinds)
     isconcretetype(eltype(amps)) && return _trimmed!(SparseArrays.sparse!(outinds, ininds, amps, N, M), L)
@@ -328,9 +326,16 @@ end
 function matrix_accumulator(::Type{T}, N::Int, (d1, d2), ::EagerDenseRepr) where T
     zeros(T, d1, d2)
 end
-function add_identity!!(m::Matrix{T}, coeff, space) where T
+function add_identity!!(m::Matrix{T}, coeff, space::AbstractHilbertSpace) where T
     m .+= coeff * I(size(m, 1))
 end
+# The identity between two spaces with the same atoms is the overlap of their bases
+function add_identity!!(accumulator, coeff, ax::Axes)
+    rows, cols, _ = findnz(_overlap(ax))
+    foreach((i, j) -> push_inds_amps!(accumulator, i, j, coeff), rows, cols)
+    return accumulator
+end
+_overlap(ax::Axes) = first(basis_transformation(_input_space(ax), _output_space(ax)))
 function finalize!(m::Matrix, space)
     return m
 end
@@ -344,7 +349,7 @@ end
 _terms_matrix(::Type{T}, terms, coeff, space, repr, ::NoChunking; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 
 function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T
-    accumulator = matrix_accumulator(T, length(terms), (dim(space), dim(space)), repr)
+    accumulator = matrix_accumulator(T, length(terms), (dim(_output_space(space)), dim(_input_space(space))), repr)
     for term in terms
         operator_indices_and_amplitudes!(accumulator, term, space; kwargs...)
     end
@@ -382,6 +387,7 @@ end
 
 """
     representation(op_or_state, space::AbstractHilbertSpace, [repr]; kwargs...)
+    representation(op, Axes(Hout, Hin), [repr]; kwargs...)
     representation(state_expression; kwargs...)
 
 Return a concrete representation of `op_or_state` in Hilbert space `space`. This is the main entry point, which calls
@@ -398,6 +404,8 @@ Expressions that combine kets or bras with operators or with states of other spa
 `ArgumentError`. Without the `space` argument, only expressions of symbolic states are accepted, and the space is taken from the states.
 The single-particle space `hilbert_space(f, labels, SingleParticle())` and the Bogoliubov-de Gennes space `hilbert_space(f, labels, BdG())`
 represent quadratic fermionic operators only, and a number is represented by the zero matrix.
+
+With `Axes(Hout, Hin)`, an operator is represented as a map from `Hin` to `Hout`, see [`matrix_representation`](@ref).
 """
 function representation(state::AbstractBasisState, space::AbstractHilbertSpace; kwargs...)
     vector_representation(state, space)
@@ -405,13 +413,19 @@ end
 
 """
     matrix_representation(op, space::AbstractHilbertSpace, [repr]; kwargs...)
+    matrix_representation(op, Axes(Hout, Hin), [repr]; kwargs...)
 
 Return the matrix representation of symbolic operator `op` in Hilbert space `space`.
+
+With [`Axes`](@ref)`(Hout, Hin)`, return the `dim(Hout) × dim(Hin)` matrix of `op` as a map from `Hin` to `Hout`:
+its columns are the basis states of `Hin` and its rows those of `Hout`. `Hout` and `Hin` must have the same atoms in the
+same order, for example two sectors of the same modes. A number `c` gives `c` times the overlap of the two bases.
+Unless `Hout == Hin`, only the eager formats without chunking are supported.
 
 The optional `repr` selects the format, as in [`representation`](@ref): `:sparse` (the default), `:dense`, `:lazy`,
 or a format object (`EagerSparseRepr()`, `EagerDenseRepr()`, `LazyRepr()`). A numeric element type also works as `repr`: `ComplexF64` gives a sparse matrix with that element type, and `Matrix{Float64}` gives a dense matrix with that element type.
 
-Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
+Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space (outside `Hout` with `Axes`). Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
 
 # Examples
 ```julia
@@ -429,10 +443,25 @@ function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparse
     if trivial_operator(op)
         return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
     end
+    return _matrix_representation(op, _checked_group_ids(op, space), space, repr, chunking; projection, kwargs...)
+end
+function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
+    Hout, Hin = _operator_axes(ax)
+    Hout == Hin && return matrix_representation(op, Hin, repr; projection, chunking, kwargs...)
+    repr === :dense && return Matrix(matrix_representation(op, ax, :sparse; projection, chunking, kwargs...))
+    repr = _canonicalize_repr(repr)
+    repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("An operator between two different spaces has only an eager representation without chunking."))
+    trivial_operator(op) && return _convert_repr_eltype(get_trivial_op_coeff(op) * _overlap(ax), repr)
+    bases = _checked_group_ids(op, Hin)
+    op = op + 0
+    terms = [length(bases) > 1 ? partition_product(term, bases, groups(Hin)) : term for term in NCterms(op)]
+    return _accumulated_matrix(_repr_eltype(mat_eltype(op), repr), terms, op.coeff, ax, repr; projection, kwargs...)
+end
+function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
     space_groups = group_ids(space)
     all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic bases of the operator must match the atomic groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
-    return _matrix_representation(op, space_groups, space, repr, chunking; projection, kwargs...)
+    return space_groups
 end
 _canonicalize_repr(t) = t
 _canonicalize_repr(::Type{<:AbstractArray{T}}) where T = EagerDenseRepr{T}()
@@ -566,6 +595,28 @@ end
         @test eltype(M) == T
         @test M ≈ matrix_representation(op, H)
     end
+end
+
+@testitem "Operators between two spaces with Axes" begin
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    Hin = hilbert_space(f, 1:3, NumberConservation([1, 2]))
+    Hout = hilbert_space(f, 1:3, NumberConservation([0, 1]))
+    sliced(op) = representation(op, H)[indices(Hout, H), indices(Hin, H)]
+
+    op = f[1]' * f[2] + hc + 2
+    @test representation(op, Axes(H, H)) == representation(op, H)
+
+    @test representation(f[2] + 3, Axes(Hout, Hin)) == sliced(f[2] + 3)
+
+    @test_throws ArgumentError representation(f[1]' * f[2], Axes(Hout, Hin))
+    @test representation(f[1]' * f[2], Axes(Hout, Hin); projection=true) == sliced(f[1]' * f[2])
+
+    @test_throws ArgumentError representation(f[1], Axes(hilbert_space(f, 1:2), Hin))
+
+    ket = Ket(basisstate(1, Hout), Hout)
+    bra = Ket(basisstate(2, Hin), Hin)'
+    @test representation(ket * bra, Axes(Hout, Hin)) == vector_representation(ket, Hout) * vector_representation(bra, Hin)
 end
 
 @testitem "Product-space term matrices padded by identities" begin

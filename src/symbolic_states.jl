@@ -454,8 +454,8 @@ end
 _vector_eltype(::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T === Missing ? Int : T
 _zero_vector(space, repr::EagerSparseRepr, T=_vector_eltype(repr)) = SparseArrays.spzeros(T, dim(space))
 _zero_vector(space, repr::EagerDenseRepr, T=_vector_eltype(repr)) = zeros(T, dim(space))
-_zero_matrix(space, ::EagerSparseRepr, T) = SparseArrays.spzeros(T, dim(space), dim(space))
-_zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(space), dim(space))
+_zero_matrix(space, ::EagerSparseRepr, T) = SparseArrays.spzeros(T, dim(_output_space(space)), dim(_input_space(space)))
+_zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(_output_space(space)), dim(_input_space(space)))
 function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     vector_representation(1 * s, space, repr; kwargs...)
 end
@@ -504,19 +504,27 @@ function representation(s::SymbolicState, space::AbstractHilbertSpace, repr=Eage
     end
     matrix_representation(s, space, repr; kwargs...)
 end
-function matrix_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
+matrix_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...) = _ketbra_matrix(s, space, repr; kwargs...)
+function matrix_representation(s::SymbolicState, ax::Axes, repr=EagerSparseRepr(); kwargs...)
+    Hout, Hin = _operator_axes(ax)
+    Hout == Hin && return matrix_representation(s, Hin, repr; kwargs...)
+    return _ketbra_matrix(s, ax, repr; kwargs...)
+end
+function _ketbra_matrix(s, space, repr; kwargs...)
     isketbra(s) || throw(ArgumentError("`matrix_representation` is only defined for ketbra `SymbolicState` operators. Use `vector_representation(state, H)` for a ket or bra."))
+    Hout, Hin = _output_space(space), _input_space(space)
     # a ketbra on one factor of a product space acts as the identity on the other factors
-    _same_space_id(space, s.space) || return matrix_representation(1 * s, space, repr; kwargs...)
-    ket_vec = vector_representation(SymbolicState(space, s.ket, nothing), space, repr)
-    bra_vec = vector_representation(SymbolicState(space, nothing, s.bra), space, repr)
+    _same_space_id(Hin, s.space) || return matrix_representation(1 * s, space, repr; kwargs...)
+    ket_vec = vector_representation(SymbolicState(Hout, s.ket, nothing), Hout, repr)
+    bra_vec = vector_representation(SymbolicState(Hin, nothing, s.bra), Hin, repr)
     return ket_vec * bra_vec
 end
 
 
-function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
+function representation(op, space::Union{AbstractHilbertSpace,Axes}, repr=EagerSparseRepr(); kwargs...)
     type = _operator_type(op)
     if type == :kets || type == :bras
+        space isa Axes && throw(ArgumentError("Kets and bras are represented in a single space, as in `representation(state, H)`."))
         return _vector_representation(op, space, repr, type; kwargs...)
     elseif type == :ketbras
         _repr = _canonicalize_repr(repr)

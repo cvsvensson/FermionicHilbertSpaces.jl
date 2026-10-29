@@ -10,6 +10,41 @@ abstract type AbstractGroupedHilbertSpace{B} <: AbstractProductHilbertSpace{B} e
 const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}
 
 """
+    Axes(H1, H2, ...)
+
+The Hilbert spaces of the axes of an array, one per axis and in axis order. For an operator
+from `Hin` to `Hout` this is `Axes(Hout, Hin)`: rows first, like `axes(m)`. A bare space `H`
+in place of an `Axes` means the same space on every axis, so for matrices `H` is the same as `Axes(H, H)`.
+
+`representation` and `matrix_representation` accept an `Axes`.
+The result of `reshape(m, Hout => (H1, H2), Hin => (K1, K2))` has axes `Axes(H1, H2, K1, K2)`.
+
+# Examples
+```julia
+@fermions f
+Hin = hilbert_space(f, 1:2, NumberConservation(2))
+Hout = hilbert_space(f, 1:2, NumberConservation(1))
+m = representation(f[1], Axes(Hout, Hin))
+size(m) == (dim(Hout), dim(Hin))
+```
+"""
+struct Axes{S<:Tuple{Vararg{AbstractHilbertSpace}}}
+    spaces::S
+end
+Axes(spaces::AbstractHilbertSpace...) = Axes(spaces)
+_input_space(H) = H
+_output_space(H) = H
+_input_space(ax::Axes) = last(ax.spaces)
+_output_space(ax::Axes) = first(ax.spaces)
+# Returns `(Hout, Hin)`. Their atoms must agree so that the states of one are directly states of the other.
+function _operator_axes(ax::Axes)
+    length(ax.spaces) == 2 || throw(ArgumentError("An operator has the two axes `Axes(Hout, Hin)`, got $(length(ax.spaces)) axes."))
+    Hout, Hin = ax.spaces
+    atom_ids(Hout) == atom_ids(Hin) || throw(ArgumentError("The spaces of `Axes(Hout, Hin)` must have the same atoms in the same order, got $Hout and $Hin."))
+    return Hout, Hin
+end
+
+"""
 	basisstates(H)
 
 Return the basis states of the Hilbert space `H`, in the order used by matrix
