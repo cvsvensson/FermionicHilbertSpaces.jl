@@ -406,7 +406,7 @@ Expressions that combine kets or bras with operators or with states of other spa
 The single-particle space `hilbert_space(f, labels, SingleParticle())` and the Bogoliubov-de Gennes space `hilbert_space(f, labels, BdG())`
 represent quadratic fermionic operators only, and a number is represented by the zero matrix.
 
-With `Axes(Hout, Hin)`, an operator is represented as a map from `Hin` to `Hout`, see [`matrix_representation`](@ref).
+With `Axes(Hout, Hin)`, `op` is represented as a map from `Hin` to `Hout`.
 """
 representation
 
@@ -416,11 +416,9 @@ representation
 
 Return the matrix representation of symbolic operator `op` in Hilbert space `space`.
 
-With [`Axes`](@ref)`(Hout, Hin)`, return the `dim(Hout) × dim(Hin)` matrix of `op` as a map from `Hin` to `Hout`:
-its columns are the basis states of `Hin` and its rows those of `Hout`. `Hout` and `Hin` must have the same groups,
-for example two sectors of the same modes. A number `c` acts as `c` times the identity, so like any other operator
-it maps the states of `Hin` that are not in `Hout` outside `Hout`.
-Unless `Hout == Hin`, only the eager formats without chunking are supported.
+With [`Axes`](@ref)`(Hout, Hin)`, return the `dim(Hout) × dim(Hin)` matrix of `op` from `Hin` to `Hout`. The two
+spaces must have the same groups, for example two sectors of the same modes. Two different spaces support only eager
+formats without chunking.
 
 The optional `repr` selects the format, as in [`representation`](@ref): `:sparse` (the default), `:dense`, `:lazy`,
 or a format object (`EagerSparseRepr()`, `EagerDenseRepr()`, `LazyRepr()`). A numeric element type also works as `repr`: `ComplexF64` gives a sparse matrix with that element type, and `Matrix{Float64}` gives a dense matrix with that element type.
