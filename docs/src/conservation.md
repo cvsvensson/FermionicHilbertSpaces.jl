@@ -190,7 +190,7 @@ H = \omega a^\dagger a + \omega_0 \sum_i S^z_i + g \sum_i \left(a^\dagger S^-_i 
 ```
 It conserves the number of excitations, the boson number plus ``\sum_i (S^z_i + 1/2)``. Spins have no particle number, so the spin part of the excitation count is written explicitly with an `AdditiveConstraint`, using one map per factor space.
 ```@example tavis_cummings
-using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces
 using FermionicHilbertSpaces: AdditiveConstraint, particle_number
 N = 3
 nmax = 4
@@ -200,18 +200,7 @@ spaces = [hilbert_space(a, nmax + 1); [hilbert_space(S[i]) for i in 1:N]]
 excitations = AdditiveConstraint(0:nmax+N; spaces, maps = [particle_number; fill(s -> Int(s.m + 1//2), N)])
 H = tensor_product(spaces; constraint = excitations)
 ```
-The space is split into one sector per excitation number. The Hamiltonian is block diagonal in these sectors, so each one can be diagonalized on its own. In the single-excitation sector, the symmetric combination of emitter excitations hybridizes with the photon, while the other combinations stay dark at the bare emitter energy.
-```@example tavis_cummings
-ω, ω0, g = 1.0, 1.2, 0.3
-ham = ω * a' * a + ω0 * sum(S[i][:z] for i in 1:N) +
-    g * sum(a' * S[i][:-] + a * S[i][:+] for i in 1:N)
-eigvals(Hermitian(representation(ham, sector(1, H), :dense)))
-```
-Together, the sector spectra make up the spectrum on the unconstrained space.
-```@example tavis_cummings
-sector_energies = mapreduce(Hk -> eigvals(Hermitian(representation(ham, Hk, :dense))), vcat, sectors(H))
-sort(sector_energies) ≈ eigvals(Hermitian(representation(ham, tensor_product(spaces), :dense)))
-```
+The space is split into one sector per excitation number, and the Hamiltonian is block diagonal in these sectors.
 
 ### Fractionalized hilbert space with BranchConstraint
 The ``t-J_z`` model is
