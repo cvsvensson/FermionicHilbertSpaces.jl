@@ -11,7 +11,7 @@ end
 struct OrderEnd end
 @nc Unordered Fluctuation OrderEnd
 Base.:(==)(a::Fluctuation, b::Fluctuation) = a.x == b.x
-Base.hash(a::Fluctuation, h::UInt) = hash(a.x, h)
+Base.hash(a::Fluctuation, h::UInt) = hash(a.x, hash(Fluctuation, h))
 
 NonCommutativeProducts.mul_effect(a::Unordered, b::Fluctuation) = AddTerms((Swap(exchange_phase(a.x, b.x)), a.contraction(a.x, b.x)))
 NonCommutativeProducts.mul_effect(a::Unordered, ::OrderEnd) = Fluctuation(a.x) * OrderEnd()
@@ -19,19 +19,29 @@ NonCommutativeProducts.mul_effect(a::Unordered, ::OrderEnd) = Fluctuation(a.x) *
 NonCommutativeProducts.mul_effect(a::Fluctuation, b::Fluctuation) = a == b ? 0 : isless(b.x, a.x) ? Swap(exchange_phase(a.x, b.x)) : nothing
 NonCommutativeProducts.mul_effect(::Union{Unordered, Fluctuation, OrderEnd}, ::Union{Unordered, Fluctuation, OrderEnd}) = nothing
 
-# `op` as a sum of products of `Fluctuation`s, each followed by `OrderEnd`, with `contraction(x, y) = ⟨xy⟩`
+# Each term of `op` is expanded on its own, since the expansion of the whole sum is much larger than what is kept of it.
+# A sum is traversed through its dictionary, whose entries have a concrete type, unlike those of `termpairs`.
+sum_over_terms(f, op::NCAdd) = mapreduce(((k, c),) -> f(k.factors, c), +, op.dict; init = f((), op.coeff))
 sum_over_terms(f, op) = mapreduce(((fs, c),) -> f(fs, c), +, NonCommutativeProducts.termpairs(1 * op); init = 0)
-state_normal_order(op, contraction) = sum_over_terms((fs, c) -> c * prod(x -> Unordered(x, contraction), fs; init = 1) * OrderEnd(), op)
+# The product of `fs` as a sum of products of `Fluctuation`s, each followed by `OrderEnd`, with `contraction(x, y) = ⟨xy⟩`.
+# The sorter applies the Wick rules, so it must run even when autosort is disabled.
+state_normal_order(fs, contraction) = NonCommutativeProducts.with_autosort(() -> prod(x -> Unordered(x, contraction), fs; init = 1) * OrderEnd(), true)
 fluctuations(fs) = [f.x for f in fs if f isa Fluctuation]
 
 function wick_expectation(op, contraction)
-    terms = NonCommutativeProducts.termpairs(state_normal_order(op, contraction))
-    return sum((c for (fs, c) in terms if isempty(fluctuations(fs))); init = 0)
+    return sum_over_terms(op) do fs, c
+        length(fs) == 2 && return c * contraction(fs[1], fs[2])
+        terms = NonCommutativeProducts.termpairs(state_normal_order(fs, contraction))
+        return c * sum((d for (gs, d) in terms if isempty(fluctuations(gs))); init = 0)
+    end
 end
 function _mean_field(op, contraction)
-    return sum_over_terms(state_normal_order(op, contraction)) do fs, c
-        xs = fluctuations(fs)
-        length(xs) > 2 ? 0 : c * (prod(xs; init = 1) - (length(xs) == 2 ? contraction(xs...) : 0))
+    return sum_over_terms(op) do fs, c
+        length(fs) <= 2 && return c * prod(fs; init = 1)
+        return c * sum_over_terms(state_normal_order(fs, contraction)) do gs, d
+            xs = fluctuations(gs)
+            length(xs) > 2 ? 0 : d * (prod(xs; init = 1) - (length(xs) == 2 ? contraction(xs...) : 0))
+        end
     end
 end
 
@@ -50,7 +60,7 @@ function _contraction(G, H::SingleParticleHilbertSpace)
     end
 end
 # Odd terms vanish without any contraction being looked up, so the modes are checked separately.
-_check_modes(op, H) = (foreach(((fs, _),) -> foreach(x -> _mode_position(x, H), fs), NonCommutativeProducts.termpairs(1 * op)); op)
+_check_modes(op, H) = (sum_over_terms((fs, _) -> (foreach(x -> _mode_position(x, H), fs); 0), op); op)
 expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}) = wick_expectation(_check_modes(op, H), _contraction(G, H))
 
 """
@@ -58,10 +68,11 @@ expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbe
 
 Return the mean-field operator of `op` in the Gaussian state with correlation matrix `G` on the single-particle or BdG
 space `H` (see [`expectation`](@ref)). Every product in `op` is replaced by its part of order at most two in the
-fluctuations `x - ⟨x⟩` (the Hartree, Fock and pairing terms), so the result is quadratic and has the same expectation
-value as `op` in the state.
+fluctuations `x - ⟨x⟩` (the Hartree, Fock and pairing terms), so the result is of degree at most two and has the
+same expectation value as `op` in the state.
 
 ```julia
+@fermions f
 H = hilbert_space(f, 1:2, SingleParticle())
 mean_field(f[1]' * f[1] * f[2]' * f[2], [0.5 0; 0 0.25], H) # 0.25 f[1]' f[1] + 0.5 f[2]' f[2] - 0.125
 ```
@@ -95,6 +106,8 @@ mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilber
     for op in pairing_ops
         @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
     end
+    unsorted_ev = FermionicHilbertSpaces.NonCommutativeProducts.with_autosort(() -> expectation(f[2] * f[1]' * f[2]' * f[1], G, H), false)
+    @test unsorted_ev ≈ expectation(f[2] * f[1]' * f[2]' * f[1], G, H)
 
     for H in (hilbert_space(f, 1:N, SingleParticle()), hilbert_space(f, 1:N, BdG())), op in (f[99], f[1]' * f[1] + f[99])
         G0 = zeros(dim(H), dim(H))
