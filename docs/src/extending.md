@@ -5,8 +5,7 @@ CurrentModule = FermionicHilbertSpaces
 # Extending and performance hooks
 
 This page lists the places where code outside the package can plug in new operators, states
-and spaces, and the options that select a faster way to compute something. Each entry links
-to the full docstring.
+and spaces. Each entry links to the full docstring.
 
 Most of the methods below are not exported. Add methods to them with
 `import FermionicHilbertSpaces: name` or by qualifying the name. They are less stable than
@@ -73,32 +72,3 @@ To restrict a space of custom states, use [`SectorConstraint`](@ref) or
 basis state. With `maps` and `spaces` together, it is called instead on the values that `maps`
 gives for the parts of the state in `spaces`. See
 [Constrained Hilbert spaces and conserved quantum numbers](conservation.md).
-
-## Matrix representations
-
-The third argument of [`representation`](@ref) selects the format:
-
-- `:sparse` or [`EagerSparseRepr`](@ref)`{T}()`: a sparse matrix, the default.
-- `:dense` or [`EagerDenseRepr`](@ref)`{T}()`: a dense matrix.
-- `:lazy` or [`LazyRepr`](@ref)`(input)`: a matrix-free operator, a [`LazyOperator`](@ref) wrapped
-  as a SciMLOperators operator. It needs no storage for the matrix. `input` selects dense or
-  sparse vectors.
-- [`PartitionedSparseRepr`](@ref): a distributed sparse matrix, with PartitionedArrays.jl.
-- A type such as `ComplexF64` or `Matrix{Float32}` fixes the element type.
-
-The `chunking` keyword parallelizes the construction, and the products of lazy operators, with
-OhMyThreads.jl: [`NoChunking`](@ref) (the default), [`TermChunking`](@ref)`(scheduler)` and
-[`StateChunking`](@ref)`(scheduler)`. See [Parallelization](@ref) for how to choose a scheduler.
-For lazy operators on product spaces, `TermChunking` is ignored with a warning.
-
-With threaded chunking, `SciMLOperators.cache_operator(L, v)` allocates the per-thread
-buffers of a lazy operator `L` up front instead of on its first product. Without OhMyThreads
-it makes no difference.
-
-## Partial traces and embeddings
-
-- The `alg` keyword of [`partial_trace`](@ref) selects [`SubsystemPartialTraceAlg`](@ref) or
-  [`FullPartialTraceAlg`](@ref). By default the cheaper one is estimated from the dimensions
-  of the spaces and, for a sparse input, its number of stored elements.
-- `partial_trace(H => Hsub)` and `embed(Hsub => H)` build a map once, which is faster when the
-  same partial trace or embedding is applied to many inputs.
