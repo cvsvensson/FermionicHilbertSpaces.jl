@@ -13,21 +13,30 @@ const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace
 	basisstates(H)
 
 Return the basis states of the Hilbert space `H`, in the order used by matrix
-representations and indexing utilities. The result supports `length`, `eltype`, iteration
-and indexing, with `basisstates(H)[i] == basisstate(i, H)`.
+representations. The result has `length(basisstates(H)) == dim(H)` and can be iterated and
+indexed, with `basisstates(H)[i] == basisstate(i, H)`. Use `collect` to get a `Vector`.
 """
 basisstates
 
-# The vector returned by `basisstates`. Iteration uses `iter`, and indexing uses `basisstate`.
-struct BasisStates{B,H,I} <: AbstractVector{B}
+struct BasisStates{B,H,I}
     space::H
     iter::I
 end
 BasisStates(space::AbstractHilbertSpace{B}, iter) where B = BasisStates{B,typeof(space),typeof(iter)}(space, iter)
-Base.size(bs::BasisStates) = (Int(length(bs.iter)),)
-Base.@propagate_inbounds Base.getindex(bs::BasisStates, i::Int) = basisstate(i, bs.space)
+Base.eltype(::Type{<:BasisStates{B}}) where B = B
+Base.length(bs::BasisStates) = dim(bs.space)
 Base.iterate(bs::BasisStates) = iterate(bs.iter)
 Base.iterate(bs::BasisStates, state) = iterate(bs.iter, state)
+Base.keys(bs::BasisStates) = Base.OneTo(length(bs))
+Base.firstindex(bs::BasisStates) = 1
+Base.lastindex(bs::BasisStates) = length(bs)
+Base.@propagate_inbounds Base.getindex(bs::BasisStates, i::Integer) = basisstate(i, bs.space)
+Base.getindex(bs::BasisStates, I::AbstractVector{<:Integer}) = [bs[i] for i in I]
+Base.:(==)(a::BasisStates, b::BasisStates) = _equal_states(a, b)
+Base.:(==)(a::BasisStates, b::AbstractVector) = _equal_states(a, b)
+Base.:(==)(a::AbstractVector, b::BasisStates) = _equal_states(a, b)
+_equal_states(a, b) = length(a) == length(b) && all(splat(==), zip(a, b))
+Base.hash(bs::BasisStates, h::UInt) = hash(collect(bs), h)
 # Spaces store a plain vector of their states, not a vector tied to another space
 _stored_states(states) = states
 _stored_states(bs::BasisStates) = collect(bs)
@@ -45,7 +54,9 @@ basisstate
     state_index(state, H)
 
 Return the index of the basis state `state` in the Hilbert space `H`, the inverse of
-`basisstate`. Returns `0` if `state` is not a state of `H`; no exception is thrown in that case.
+`basisstate`. Returns `0` if `state` has the state type of `H` but is not a basis state of `H`.
+Constrained spaces and sectors also return `0` for an `AbstractBasisState` of another type.
+Other arguments are not supported and may throw; an integer, for example, throws a `MethodError`.
 """
 state_index
 
@@ -59,9 +70,9 @@ hilbert_space
 
 ## Decomposition of spaces
 # Every space is a two-level tree: atoms, collected into groups, and a product space is the
-# ordinary tensor product of its groups. Wrapper spaces (ConstrainedSpace, SectorHilbertSpace,
-# TransposedSpace) forward all of the functions below to their parent (TransposedSpace also
-# wraps the results in TransposedSpace).
+# ordinary tensor product of its groups. Wrapper spaces (AbstractSubspace, TransposedSpace)
+# forward all of the functions below to their parent (TransposedSpace also wraps the results
+# in TransposedSpace).
 #
 # Identity of atoms is kept separate from their basis:
 # - Lookups only use names. `atomic_id` names an atom (or a symbol naming one) and ignores
@@ -237,9 +248,12 @@ kron_phase_factor(::AtomicStateMapper) = (f1, f2) -> 1
 """
     subregion(Hs, H::AbstractHilbertSpace)
 
-Return the subsystem of `H` spanned by the factors `Hs`.
+Return the subsystem of `H` spanned by the factors `Hs`, given as a space, a symbolic
+operator, or a list/tuple of spaces or symbolic operators (e.g. `[f[1], b[2]]`).
 
-This is primarily used for product spaces where the subsystem is specified by a list/tuple of factor spaces.
+If `Hs` contains only symbolic operators, their order does not matter: the modes are ordered
+as in `H`. If any element of `Hs` is a space, the modes must keep their order within each
+group of `H` (e.g. the Jordan-Wigner order of fermions), otherwise an `ArgumentError` is thrown.
 
 # Examples
 ```julia
@@ -249,6 +263,7 @@ H2 = hilbert_space(f, 2:2)
 H3 = hilbert_space(f, 3:3)
 H = tensor_product((H1, H2, H3))
 Hsub = subregion((H1, H3), H)
+Hsub == subregion([f[3], f[1]], H)
 ```
 """
 function subregion(Hs, H::AbstractHilbertSpace)
@@ -258,6 +273,7 @@ function subregion(Hs, H::AbstractHilbertSpace)
     positions = map(x -> atom_position(x, H), names)
     all(>(0), positions) || throw(ArgumentError("The spaces/operators in `Hs` must match atomic factors of `H`, got the following unmatched ones: $(names[iszero.(positions)])."))
     allunique(positions) || throw(ArgumentError("`Hs` must not contain duplicate atomic factors, got $names."))
+    any(x -> x isa AbstractHilbertSpace, Hs_items) || sort!(positions)
 
     # Resolve the names to H's own atoms, so the basis of the subregion is that of H
     Hsub = tensor_product(collect(atomic_factors(H))[positions])
@@ -277,7 +293,8 @@ end
     Hbsub = subregion([b[2]], H)
     Hsub = subregion([f[1], b[2]], H)
     @test Hsub == tensor_product(Hfsub, Hbsub)
-    @test_throws ArgumentError subregion([f[2], f[1]], H)
+    @test subregion([b[2], f[1]], H) == subregion([f[1], b[2]], H)
+    @test_throws ArgumentError subregion(hilbert_space(f, [2, 1]), H)
     @test_throws ArgumentError subregion([f[4]], H)
     @test subregion(Hf, H) == Hf
     @test subregion(Hb, H) == Hb
@@ -295,6 +312,15 @@ end
     @test complementary_subsystem(H, subregion([f[3], b[2]], H)) ==
           subregion([f[1], f[2], b[1], b[3]], H)
 
+end
+
+@testitem "Subregion: symbols interleaving the factors of a product of sectors" begin
+    @fermions f
+    up = [(i, :↑) for i in 1:4]
+    dn = [(i, :↓) for i in 1:4]
+    H = tensor_product(hilbert_space(f, up, NumberConservation(2)), hilbert_space(f, dn, NumberConservation(2)))
+    @test subregion([f[(i, σ)] for i in 1:2 for σ in (:↑, :↓)], H) ==
+          subregion(hilbert_space(f, [up[1:2]; dn[1:2]]), H)
 end
 
 @testitem "Matching syms and spaces with mutable labels" begin
@@ -329,7 +355,7 @@ end
     using LinearAlgebra
     using FermionicHilbertSpaces: atomic_factors, groups, factors, group_id, group_ids, atomic_id,
         atom_ids, atom_position, issubsystem, ispartition, complementary_subsystem, TransposedSpace, GenericHilbertSpace,
-        ConstrainedSpace, SectorHilbertSpace, ProductState
+        AbstractSubspace, ProductState
     @fermions f
     @fermions g
     @bosons b
@@ -353,7 +379,7 @@ end
         TransposedSpace(Hfb),
         tensor_product(GenericHilbertSpace(:A, [:a, :b]), GenericHilbertSpace(:B, [:c, :d, :e])),
     ]
-    unwrap(H) = H isa Union{ConstrainedSpace,SectorHilbertSpace} ? parent(H) : H
+    unwrap(H) = H isa AbstractSubspace ? parent(H) : H
     flat_atoms(spaces) = reduce(vcat, map(collect ∘ atomic_factors, spaces))
     for H in zoo
         atoms = collect(atomic_factors(H))
@@ -805,4 +831,17 @@ end
         @test all(i -> state_index(basisstate(i, H), H) == i, 1:dim(H))
     end
     @test state_index(FermionicHilbertSpaces.BosonicState(3), Hb) == 0
+end
+
+@testitem "Basis states collection" begin
+    @fermions f
+    H = hilbert_space(f, 1:70)
+    bs = basisstates(H)
+    @test length(bs) == dim(H)
+    @test first(bs) == basisstate(1, H)
+    @test last(bs) == bs[end] == basisstate(dim(H), H)
+    i = dim(H) ÷ 3
+    @test state_index(bs[i], H) == i
+    @test bs[1:3] == collect(Iterators.take(bs, 3))
+    @test_throws BoundsError bs[dim(H) + 1]
 end

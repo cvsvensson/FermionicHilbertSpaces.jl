@@ -76,7 +76,7 @@ basisstates(Hsub)
 Here the total particle number is fixed to 1, so the subregion on modes `1:2` has
 exactly three compatible states: `(1,0)`, `(0,1)`, and `(0,0)`.
 
-In some cases `subregion` can also be called with symbolic operators instead of Hilbert spaces
+In some cases `subregion` can also be called with symbolic operators instead of Hilbert spaces. Their order does not matter: the modes of the result are ordered as in `H`.
 ```@example hilbert_space_ops
 Hsub = subregion([f[k] for k in 1:2], H)
 ```
@@ -111,7 +111,7 @@ The atoms are always ordered group by group, so `tensor_product(f1, b1, f2)` and
 
 Internally, `FermionicHilbertSpaces.groups(H)` returns the spaces that line up with the slots of a basis state: for a product space these are the same as `factors(H)`, while any other space is a single group, `groups(H) == (H,)`.
 
-When you pass symbols or spaces to `subregion`, they are looked up by name only, so `subregion([b[1]], H)` returns the bosonic mode as it appears in `H`, whatever its truncation. `partial_trace(m, H => Hsub)` and `embed` also look up atoms by name, so an `Hsub` built with a different truncation loses states: `partial_trace` drops them silently, and `embed` throws an error if they carry nonzero weight. Use `subregion` to get an `Hsub` whose basis matches `H`.
+When you pass symbols or spaces to `subregion`, they are looked up by name only, so `subregion([b[1]], H)` returns the bosonic mode as it appears in `H`, whatever its truncation. `partial_trace(m, H => Hsub)` and `embed` also look up atoms by name, so an `Hsub` built with a different truncation loses states: `partial_trace` throws an error if they carry nonzero weight, unless `skipmissing=true`, and `embed` gives zero on the states of `H` whose part on `Hsub` is lost. Use `subregion` to get an `Hsub` whose basis matches `H`.
 
 ### Sectors and quantum numbers
 
@@ -203,11 +203,20 @@ Msub = partial_trace(M, H => Hsub)
 Two algorithms are available, `SubsystemPartialTraceAlg` and
 `FullPartialTraceAlg`; by default `partial_trace` picks whichever is cheaper based
 on the sizes of `Hsub`, `H`, and the complementary subsystem, but you can force
-one with the `alg` keyword. The `skipmissing` keyword controls what happens when
-a combination of a substate and a complement state does not occur in `H` — this
-can happen for constrained spaces, and defaults to the safer choice for each
-algorithm. But, SubsystemPartialTraceAlg may not detect missing states, and in cases 
-where the subsystem is inconsistent with the full space may silently give the wrong result.
+one with the `alg` keyword. Both give the same result and throw in the same cases.
+
+When a state of `H` has no counterpart in `Hsub`, as for a truncated subsystem, the trace
+drops that state. By default `partial_trace` then throws an `ArgumentError` if `m` has a
+nonzero element in its row or column; `skipmissing=true` drops them silently.
+Combinations of a subsystem state and a complement state that are not in `H` drop nothing
+from `m`.
+
+`embed(m, Hsub => H)` returns the compression of `m ⊗ I` onto `H`, the adjoint of the partial
+trace. By default it throws if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude,
+as `representation` does for an operator that does not preserve the constraint of `H`.
+
+The maps `partial_trace(H => Hsub)` and `embed(Hsub => H)` skip the same states, but do not
+check their input: they are the linear maps that the eager functions compute when nothing is dropped.
 
 ### `partial_transpose`: transposing a subsystem
 
@@ -270,18 +279,36 @@ f12 = tensor_product((f1, f2), (H1, H2) => H)
 It can be used for vectors as well to build a product state from its factors,
 but note that this is only well-defined for fermions if each state respects 
 super-selection: it must not be a superposition of states with different fermion parity.
+If each `ms[k] = ψₖ|0⟩` with `ψₖ` an operator on the modes of `Hs[k]`, the result is
+`ψ₁ψ₂⋯|0⟩`. Swapping two odd states flips the sign.
 ```@example hilbert_space_ops
 v1 = representation("0", H1)
 v2 = representation("10", H2)
 v12 = tensor_product((v1, v2), (H1, H2) => H)
 ```
 
-`generalized_kron(ms, Hs, H=tensor_product(Hs); kwargs...)` computes the same kind
-of combination, but using the mode ordering of `H` itself to decide the relative
-order of the embeddings, rather than the order in which `ms` are given — this
-matches plain `kron` when there are no fermionic phase factors. Both functions
-also accept the curried form `tensor_product(Hs => H)` / `generalized_kron(Hs =>
-H)`, returning a callable that can be applied to different collections of `ms`.
+`generalized_kron(ms, Hs, H=tensor_product(Hs); kwargs...)` returns the
+same product state as `tensor_product` for vectors. For matrices it computes the fermionic tensor
+product instead (see [Fermionic tensor products](fermions.md)), which does not depend
+on the order of `ms`. It equals `tensor_product` when each space in `Hs` covers
+consecutive modes of `H` and `Hs` is listed in that order. On other partitions it is
+not a product of embeddings, and `generalized_kron` of density matrices need not be a
+density matrix:
+
+```@example hilbert_space_ops
+H = hilbert_space(f, 1:4)
+H13 = hilbert_space(f, [1, 3])
+H24 = hilbert_space(f, [2, 4])
+A = representation(f[1]' * f[3], H13)
+B = representation(f[2]' * f[4], H24)
+AB = representation(f[1]' * f[3] * f[2]' * f[4], H)
+tensor_product((A, B), (H13, H24) => H) ≈ AB, generalized_kron((A, B), (H13, H24) => H) ≈ -AB
+```
+
+Use `tensor_product` for product states, local observables, and anything that
+should equal a product of embedded operators. Both functions also accept the
+curried form `tensor_product(Hs => H)` / `generalized_kron(Hs => H)`, returning a
+callable that can be applied to different collections of `ms`.
 
 ### Callable maps and sparse conversion
 

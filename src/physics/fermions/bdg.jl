@@ -6,13 +6,6 @@ NambuState(i::Integer, hole::Bool) = NambuState(SingleParticleState(i), hole)
 Base.:(==)(n1::NambuState, n2::NambuState) = n1.state == n2.state && n1.hole == n2.hole
 Base.hash(n::NambuState, h::UInt) = hash(n.hole, hash(n.state, h))
 
-function togglefermions(sites, daggers, f::NambuState)
-    (length(sites) == 2 == length(daggers)) || throw(ArgumentError("Exactly two fermions must act on a `NambuState`, got $(length(sites))."))
-    allowed = sites[2] == only(f.state.sites) && daggers[2] == f.hole
-    state = NambuState(SingleParticleState(sites[1]), !daggers[1])
-    return state, allowed
-end
-
 function normal_order_to_bdg(m::AbstractMatrix)
     n = size(m, 1)
     h = m[1:(n÷2), 1:(n÷2)] / 2
@@ -65,20 +58,29 @@ state_index(state::NambuState, H::BdGHilbertSpace) = state_index(state, parent(H
 representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
-    _is_quadratic_fermion_operator(op, false) || throw(ArgumentError("Only quadratic fermionic operators can be represented on a BdG Hilbert space. Use `hilbert_space(f, labels)` and `matrix_representation(op, H)` for other operators."))
-    normal_order_to_bdg(_matrix_representation_single_space(remove_identity(op), H, repr, chunking; kwargs...))
+    _is_quadratic_fermion_operator(op, false) || throw(ArgumentError("Only quadratic fermionic operators can be represented on a BdG Hilbert space. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
+    normal_order_to_bdg(_quadratic_matrix(_bdg_entry, remove_identity(op), H, repr))
+end
+function _bdg_entry(term, H)
+    instate, outstate = _nambu_in_out(term, map(f -> mode_position(f, H), term.factors))
+    return state_index(outstate, H), state_index(instate, H), term.coeff
 end
 
-
-function operator_indices_and_amplitudes!((outinds, ininds, amps), op::NCMul, H::Union{BdGHilbertSpace,AbstractHilbertSpace{NambuState}}; kwargs...)
-    nambustates = (NambuState(mode_position(op.factors[1], H), op.factors[1].creation),
-        NambuState(mode_position(op.factors[2], H), !op.factors[2].creation))
-    inind = state_index(nambustates[2], H)
-    outind = state_index(nambustates[1], H)
-    push!(outinds, outind)
-    push!(ininds, inind)
-    push!(amps, op.coeff)
-    return (outinds, ininds, amps)
+# The term c_a^(d1) c_b^(d2), with `a` and `b` at `positions`, maps the Nambu state (b, !d2) to (a, d1)
+function _nambu_in_out(term, positions)
+    a, b = term.factors
+    return NambuState(positions[2], !b.creation), NambuState(positions[1], a.creation)
+end
+function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{NambuState})
+    position = mode_position(op, space)
+    position == 0 && throw(ArgumentError("The operator `$op` contains a factor that is not part of the fermionic space `$space`."))
+    return position
+end
+function apply_local_operators(op::NCMul, state::NambuState, H::AbstractHilbertSpace, positions; transpose)
+    length(op.factors) == 2 || throw(ArgumentError("Exactly two fermions must act on a `NambuState`, got $(length(op.factors))."))
+    instate, outstate = _nambu_in_out(op, positions)
+    transpose && ((instate, outstate) = (outstate, instate))
+    return state == instate ? (outstate, op.coeff) : (state, zero(op.coeff))
 end
 
 @testitem "BdG" begin
@@ -96,6 +98,36 @@ end
         sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:2, m in 1:2)
     bdg_ham2 = representation(op, H)
     @test bdg_ham ≈ bdg_ham2
+end
+
+@testitem "BdG representation formats" begin
+    @fermions f
+    H = hilbert_space(f, 1:3, BdG())
+    op = sum(rand(ComplexF64) * f[i]' * f[j] + rand(ComplexF64) * f[i]' * f[j]' + hc for i in 1:3, j in 1:3)
+    M = representation(op, H)
+    D = representation(op, H, :dense)
+    @test D isa Matrix && D == M
+    @test representation(op, H, ComplexF64) == M
+    @test_throws ArgumentError representation(op, H, :lazy)
+end
+
+@testitem "Space of Nambu states" begin
+    using LinearAlgebra, OhMyThreads, PartitionedArrays
+    import FermionicHilbertSpaces: NambuState, StateChunking, EagerDenseRepr, PartitionedSparseRepr, normal_order_to_bdg
+    @fermions f
+    N = 3
+    H = hilbert_space(f, 1:N, vec([NambuState(n, hole) for (n, hole) in Base.product(1:N, (true, false))]))
+    op = sum(rand(ComplexF64) * f[i]' * f[j] + rand(ComplexF64) * f[i]' * f[j]' + hc for i in 1:N, j in 1:N) + 2I
+    M = representation(op, H)
+    @test normal_order_to_bdg(M - 2I) ≈ representation(op, hilbert_space(f, 1:N, BdG()))
+    @test representation(op, H, EagerDenseRepr()) == M
+    @test representation(op, H; chunking=StateChunking(StaticScheduler(; nchunks=2))) ≈ M
+    v = rand(ComplexF64, dim(H))
+    @test representation(op, H, :lazy) * v ≈ M * v
+    M_dist = representation(op, H, PartitionedSparseRepr(; backend=DebugArray))
+    w = pvector(inds -> rand(ComplexF64, length(inds)), M_dist.col_partition)
+    @test collect(M_dist * w) ≈ M * collect(w)
+    @test_throws ArgumentError representation(f[1]' * f[2]' * f[3] * f[1], H)
 end
 
 @testitem "BdG space does not combine with generic space operations" begin
@@ -331,11 +363,27 @@ const DEFAULT_PH_CUTOFF = 1e-12
     symham = f[1]' * f[2] + f[2]' * f[3] + f[1]' * f[2]' + f[2]' * f[3]' + hc
     H = hilbert_space(f, 1:3, BdG())
     Hmb = hilbert_space(f, 1:3)
-    matmb = representation(symham, Hmb)
+    matmb = representation(symham, Hmb, :dense)
     mat = representation(symham, H)
     vals, vecs = eigen(Matrix(mat), BdGEigen(); canon_alg=FermionicHilbertSpaces.SVDCanon())
     @test 1 ≈ abs(vecs[:, 3][1]^2 + vecs[:, 4][1]^2) / (abs2(vecs[:, 3][1]) + abs2(vecs[:, 4][1]))
     vals2, vecs2 = eigen(Matrix(mat), BdGEigen(); canon_alg=FermionicHilbertSpaces.ProjectionCanon())
     @test vals ≈ vals2
     @test 1 ≈ abs(vecs2[:, 3][1]^2 + vecs2[:, 4][1]^2) / (abs2(vecs2[:, 3][1]) + abs2(vecs2[:, 4][1]))
+
+    # The BdG matrix is half the Nambu Hamiltonian, so a positive eigenvalue e_k gives a
+    # quasiparticle energy 2e_k, and the many-body energies are tr(h)/2 - Σe_k + Σ n_k 2e_k.
+    function mb_energies(e, trh)
+        occupations = Iterators.product(ntuple(_ -> (0, 1), length(e))...)
+        sort(vec([trh / 2 + sum((2 .* n .- 1) .* e) for n in occupations]))
+    end
+    @test eigvals(Hermitian(matmb)) ≈ mb_energies(vals[4:6], 0)
+
+    h = rand(ComplexF64, 3, 3) + hc
+    Δ = rand(ComplexF64, 3, 3)
+    Δ = Δ - transpose(Δ)
+    symham = sum(f[n]' * h[n, m] * f[m] for n in 1:3, m in 1:3) +
+             sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:3, m in 1:3)
+    vals, _ = eigen(representation(symham, H, :dense), BdGEigen())
+    @test eigvals(Hermitian(representation(symham, Hmb, :dense))) ≈ mb_energies(vals[4:6], real(tr(h)))
 end

@@ -26,13 +26,15 @@ To embed a fermion into a larger space, it must be dressed with a parity operato
     ```
     where ``P`` is the parity operator on ``\mathcal{H}_X``. 
 
-We still have to define in what order ``A`` and ``B`` acts in the expression ``A \tilde{\otimes} B``. Two choices are reasonable: 
-1. decide based on the order we wrote them down, so that ``A \tilde{\otimes} B = - B \tilde{\otimes} A``. 
-2. decide based on the arbitrary fermionic mode ordering, in which case ``A \tilde{\otimes} B = B \tilde{\otimes} A``.
+There are two ways to combine ``A`` and ``B`` into an operator on ``\mathcal{H}``:
+1. `tensor_product((A, B), (HX, HXbar) => H)` is the ordered product of embeddings ``(A \tilde{\otimes} \mathbb 1)(\mathbb 1 \tilde{\otimes} B)``, the algebraic product of eq. (26) in [[1]](#fermion_information_article). The order of the arguments matters: swapping two odd operators flips the sign.
+2. `generalized_kron((A, B), (HX, HXbar) => H)` is the fermionic tensor product ``A \tilde{\otimes} B`` of eqs. (14b) and (15) in [[1]](#fermion_information_article). It is defined on the operator basis: a local basis operator is a product of single-mode factors in the mode order of its subsystem, and the tensor product of such operators is the product of all their single-mode factors in the mode order of ``\mathcal{H}``. It is linear, preserves the Hilbert–Schmidt inner product and does not depend on the order of the arguments. It is not a product of the embeddings in any order: in general ``(A \tilde{\otimes} \mathbb 1)(\mathbb 1 \tilde{\otimes} B) \neq A \tilde{\otimes} B``.
 
-In this package, the first choice is the canonical way and is used by `tensor_product`. This function uses the order in which the operators are passed to it explicitly such that `tensor_product((A, B), (HX, HXbar) => H)` corresponds to the ordered product of embeddings ``A \tilde{\otimes} \mathbb 1) (\mathbb 1 \tilde{\otimes} B)``. The second choice is available with `generalized_kron`.
-
-In this way, our function `tensor_product` is closely related to the `algebraic tensor product` of [[1]](#fermion_information_article).
+The two coincide when each subsystem consists of consecutive modes of ``\mathcal{H}`` and the subsystems are passed in that order. Otherwise they can differ. For example, with ``X = \{1, 3\}`` and ``\bar X = \{2, 4\}``,
+```math
+c_1^\dagger c_3 \,\tilde{\otimes}\, c_2^\dagger c_4 = c_1^\dagger c_2^\dagger c_3 c_4 = -(c_1^\dagger c_3)(c_2^\dagger c_4),
+```
+and `generalized_kron` of two density matrices need not be a density matrix. Use `tensor_product` for product states, for products of local observables, and for anything that should equal a product of embedded operators, such as `representation` of a product of symbolic operators.
 
 ### The fermionic partial trace
 The partial trace is most often used to calculate reduced density matrices. The fundamental property is that for an observable ``A`` on the subsystem ``X``, the expectation value of ``A`` in a state ``\rho`` on the full system is equal to the expectation value of ``A`` in the reduced state ``\rho_X = \text{Tr}_{\bar X}[\rho]``.

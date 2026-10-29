@@ -26,12 +26,13 @@ function GenericHilbertSpace{B}(label, basisstates, state_index) where B
     states = _convert_basisstates(B, basisstates)
     GenericHilbertSpace{B,typeof(label),typeof(states),typeof(state_index)}(label, states, state_index)
 end
-_convert_basisstates(::Type{B}, states::AbstractVector) where B = convert(AbstractVector{B}, _stored_states(states))::AbstractVector{B}
+_convert_basisstates(::Type{B}, states::Union{AbstractVector,BasisStates}) where B = convert(AbstractVector{B}, _stored_states(states))::AbstractVector{B}
 _convert_basisstates(::Type{B}, states::Tuple) where B = map(s -> convert(B, s)::B, states)
 _convert_basisstates(::Type, states) = states
 Base.:(==)(H1::GenericHilbertSpace, H2::GenericHilbertSpace) = H1 === H2 || (H1.label == H2.label && H1.basisstates == H2.basisstates)
 Base.hash(H::GenericHilbertSpace, h::UInt) = hash((H.label, H.basisstates), h)
 basisstates(H::GenericHilbertSpace) = H.basisstates isa AbstractVector ? BasisStates(H, H.basisstates) : H.basisstates
+dim(H::GenericHilbertSpace) = length(H.basisstates)
 Base.@propagate_inbounds basisstate(ind::Integer, H::GenericHilbertSpace) = H.basisstates[ind]
 Base.keys(H::GenericHilbertSpace) = (H.label,)
 state_index(state::B, H::GenericHilbertSpace{B,<:Any,<:Any,<:AbstractDict}) where B = get(H.state_index, state, 0)

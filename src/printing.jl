@@ -142,48 +142,53 @@ end
 
 
 
-function Base.show(io::IO, H::SectorHilbertSpace)
+function Base.show(io::IO, H::AbstractSubspace)
+    name = nameof(typeof(H))
     if get(io, :compact, false)
-        print(io, "SectorHilbertSpace(")
-        show(IOContext(io, :compact => true), H.parent)
+        print(io, name, "(")
+        show(IOContext(io, :compact => true), parent(H))
         print(io, ", $(dim(H))-dim)")
     else
-        print(io, "$(dim(H))-dimensional SectorHilbertSpace\n")
+        print(io, "$(dim(H))-dimensional $name\n")
         print(io, "Parent: ")
-        show(IOContext(io, :compact => true), H.parent)
+        show(IOContext(io, :compact => true), parent(H))
+        show_details(io, H)
+    end
+end
+show_details(io, H) = nothing
 
-        qns = collect(keys(H.qn_to_states))
-        nsectors = length(qns)
+function show_details(io, H::SectorHilbertSpace)
+    qns = collect(keys(H.qn_to_states))
+    nsectors = length(qns)
 
-        if !isempty(qns)
-            max_printed_sectors = 5
-            edge_sectors = 1
+    if !isempty(qns)
+        max_printed_sectors = 5
+        edge_sectors = 1
 
-            if nsectors > max_printed_sectors
-                print(io, "\nSectors: $nsectors total [")
+        if nsectors > max_printed_sectors
+            print(io, "\nSectors: $nsectors total [")
 
-                for (i, qn) in enumerate(qns[1:edge_sectors])
-                    i > 1 && print(io, ", ")
-                    print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
-                end
-
-                print(io, ", ..., ")
-
-                for (i, qn) in enumerate(qns[end-edge_sectors+1:end])
-                    i > 1 && print(io, ", ")
-                    print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
-                end
-
-                print(io, "]")
-            else
-                print(io, "\nSectors: [")
-                for (i, qn) in enumerate(qns)
-                    i > 1 && print(io, ", ")
-                    print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
-                end
-                print(io, "]")
-
+            for (i, qn) in enumerate(qns[1:edge_sectors])
+                i > 1 && print(io, ", ")
+                print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
             end
+
+            print(io, ", ..., ")
+
+            for (i, qn) in enumerate(qns[end-edge_sectors+1:end])
+                i > 1 && print(io, ", ")
+                print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
+            end
+
+            print(io, "]")
+        else
+            print(io, "\nSectors: [")
+            for (i, qn) in enumerate(qns)
+                i > 1 && print(io, ", ")
+                print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
+            end
+            print(io, "]")
+
         end
     end
 end
@@ -219,18 +224,6 @@ function Base.show(io::IO, c::FermionicSpace)
         print(io, "$(dim(c))-dimensional FermionicSpace\nModes: ")
         n > max_modes && print(io, "$n total ")
         _compact_fermionic_modes(io, c; (n > max_modes ? (max_groups=6, edge_groups=3, max_labels_per_group=8, edge_labels=3) : (;))...)
-    end
-end
-
-function Base.show(io::IO, H::ConstrainedSpace)
-    if get(io, :compact, false)
-        print(io, "ConstrainedSpace(")
-        show(IOContext(io, :compact => true), parent(H))
-        print(io, ", $(dim(H))-dim)")
-    else
-        print(io, "$(dim(H))-dimensional ConstrainedSpace\n")
-        print(io, "Parent: ")
-        show(IOContext(io, :compact => true), parent(H))
     end
 end
 
@@ -309,7 +302,7 @@ end
 
 # A short label for a basis state of `space`. Fock states are labeled by one occupation digit per mode.
 _state_label(state, space) = _state_label_atomic(state, _unwrap_space(space))
-_unwrap_space(H::Union{TransposedSpace,SectorHilbertSpace,ConstrainedSpace}) = _unwrap_space(parent(H))
+_unwrap_space(H::Union{TransposedSpace,AbstractSubspace}) = _unwrap_space(parent(H))
 _unwrap_space(H) = H
 const _FermionModeSpace = Union{FermionicSpace,MajoranaHilbertSpace}
 _state_label_atomic(f::FockNumber, H::_FermionModeSpace) = join(digits(Int, f.f; base=2, pad=nbr_of_modes(H)))
@@ -474,7 +467,7 @@ end
     for space in (hilbert_space(f, 1:3), hilbert_space(b, 3), hilbert_space(s), Hp, H, sector(1, Hn))
         bs = basisstates(space)
         @test bs == collect(bs) == [basisstate(i, space) for i in 1:dim(space)]
-        @test size(bs) isa Tuple{Int}
+        @test length(bs) == dim(space)
     end
 
     Hg = FermionicHilbertSpaces.GenericHilbertSpace(:x, [FockNumber(0), FockNumber(3)])

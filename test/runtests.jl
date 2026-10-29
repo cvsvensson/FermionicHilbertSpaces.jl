@@ -190,11 +190,8 @@ end
     Hconstrained = hilbert_space(f, 1:4, NumberConservation(2))
     Hsub_constrained = subregion(hilbert_space(f, 1:2), Hconstrained)
     msub_constrained = rand(ComplexF64, dim(Hsub_constrained), dim(Hsub_constrained))
-    emb_constrained = embed(Hsub_constrained => Hconstrained)
-    emb_constrained_skipmissing = embed(Hsub_constrained => Hconstrained; skipmissing=true)
-    memb = embed(msub_constrained, Hsub_constrained => Hconstrained; skipmissing=true)
-    @test emb_constrained(msub_constrained) ≈ memb # Unfortunately, this should ideally error (the hilbert spaces aren't compatible), but doesn't because the precomputed map goes through the partial trace and selects the algorithm that doesn't see the missing states.
-    @test emb_constrained_skipmissing(msub_constrained) ≈ memb
+    @test_throws ArgumentError embed(msub_constrained, Hsub_constrained => Hconstrained)
+    @test embed(Hsub_constrained => Hconstrained)(msub_constrained) ≈ embed(msub_constrained, Hsub_constrained => Hconstrained; skipmissing=true)
 
     # A whole-space partial trace must produce a basis-transformation map.
     Hsame = hilbert_space(f, 1:2, NoSymmetry())
@@ -260,7 +257,6 @@ end
     H = hilbert_space(f, 1:30, NumberConservation(2))
     Hsub = subregion(hilbert_space(f, 1:10), H)
     Hcomp = complementary_subsystem(H, Hsub)
-    @test default_partial_trace_alg(Hsub, H, Hcomp) isa FullPartialTraceAlg
     @test default_partial_trace_alg(sprand(ComplexF64, dim(H), dim(H), 0.01), Hsub, H, Hcomp) isa FullPartialTraceAlg
 
     # A small subsystem of an unconstrained space.
@@ -314,8 +310,10 @@ end
     # they are == but not ===
     @test state == sf0 
     @test state !== sf0
-    state_index(sf0, H) == 1
-    state_index(sf0, Hcons) == 1
+    @test state_index(sf0, H) == 1
+    @test state_index(sf0, Hcons) == 1
+    Hsector = tensor_product(Hcons, hilbert_space(f, 4:5, NumberConservation(1)))
+    @test all(state_index(FockNumber(Int(s.f)), Hsector) == i for (i, s) in enumerate(basisstates(Hsector)))
 
     @boson b
     Hb = hilbert_space(b, 1)

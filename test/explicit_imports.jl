@@ -15,6 +15,7 @@
         # NonCommutativeProducts interface functions that this package extends or calls.
         Symbol("@commutative"), :grade, :grades, :grading, :mul_grade, :adjoint_grade,
         :mul_effect, :isscalar, :ncmap, :ncmapreduce, :enable_autosort!,
+        :contraction_key, :mul_terms!!, :termpairs,
         # Base internals.
         :promote_op, :promote_eltype, :setindex, :product, :isiterable,
         :show_delim_array, :HasEltype, :broadcasted,

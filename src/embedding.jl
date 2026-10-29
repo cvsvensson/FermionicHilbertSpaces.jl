@@ -1,7 +1,15 @@
-function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), kwargs...)
+function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), skipmissing=false, kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
-    isnothing(complement) && return change_basis(m, Hsub, H; kwargs...)
-    return generalized_kron((m, I), (Hsub, complement), H; kwargs...)
+    if isnothing(complement)
+        m isa AbstractVector && return change_basis(m, Hsub, H; skipmissing, kwargs...)
+        if !(skipmissing || m isa UniformScaling)
+            dropped = last(basis_transformation(Hsub, H))
+            iszero(m[dropped, setdiff(axes(m, 2), dropped)]) ||
+                throw(ArgumentError("`m` maps a state of `H` outside `H` with nonzero amplitude. Pass `skipmissing=true` to drop such terms."))
+        end
+        return change_basis(m, Hsub, H; skipmissing=true, kwargs...)
+    end
+    return generalized_kron((m, I), (Hsub, complement), H; skipmissing, kwargs...)
 end
 
 """
@@ -9,6 +17,12 @@ end
 
 Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
+
+The result is the compression `P (m ⊗ I) P` onto `H`, so that `tr(embed(A) * ρ) ==
+tr(A * partial_trace(ρ))` for `ρ` on `H`. Unless `skipmissing=true`, throws an `ArgumentError`
+if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of `m` for states of
+`Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not
+in `Hsub` get zero.
 """
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
@@ -20,11 +34,12 @@ struct EmbedMap{HS,H,C,K,M}
     map::M
 end
 
+# The map is the compression onto `H` and checks nothing, so `skipmissing` has no effect.
 function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
     map = if isnothing(complement)
-        basis_transformation_map(Hsub, H; skipmissing, kwargs...)
+        basis_transformation_map(Hsub, H; skipmissing=true, kwargs...)
     else
-        _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, skipmissing=skipmissing, kwargs...))
+        _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, kwargs...))
     end
     EmbedMap(Hsub, H, complement, kwargs, map)
 end
@@ -94,8 +109,38 @@ Create a callable embedding operation from `Hsub` into `H`.
 
 The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
+It is the compression onto `H` and, unlike [`embed`](@ref), does not check its input.
 """
 embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwargs...)
+
+@testitem "Embedding into a number sector" begin
+    using LinearAlgebra
+    @fermions f
+    H = hilbert_space(f, 1:12, NumberConservation(2))
+    Hsub = subregion(hilbert_space(f, 1:4), H)
+    emb = embed(Hsub => H)
+    @test embed(Matrix(I, dim(Hsub), dim(Hsub)), Hsub => H) == I
+    hopping = sum(f[n]' * f[n+1] + hc for n in 1:3)
+    m = representation(hopping, Hsub)
+    @test embed(m, Hsub => H) ≈ representation(hopping, H)
+    @test emb(m) ≈ representation(hopping, H)
+    # this maps states of H outside H
+    m = representation(f[1]', Hsub; projection=true)
+    @test_throws ArgumentError embed(m, Hsub => H)
+    compression = representation(f[1]', H; projection=true)
+    @test embed(m, Hsub => H; skipmissing=true) ≈ compression
+    @test emb(m) ≈ compression # the map is the compression and does not check
+    # with the same atoms: |00⟩⟨11| maps no state of the space with at most one particle outside it, |11⟩⟨00| does
+    Hf, Hc = hilbert_space(f, 1:2), hilbert_space(f, 1:2, NumberConservation(0:1))
+    m = zeros(4, 4)
+    m[1, 4] = 1
+    @test iszero(embed(m, Hf => Hc)) && iszero(embed(Hf => Hc)(m))
+    @test_throws ArgumentError embed(permutedims(m), Hf => Hc)
+    # embed is the adjoint of partial_trace
+    A = rand(ComplexF64, dim(Hsub), dim(Hsub))
+    ρ = rand(ComplexF64, dim(H), dim(H))
+    @test tr(embed(A, Hsub => H; skipmissing=true) * ρ) ≈ tr(A * partial_trace(ρ, H => Hsub))
+end
 
 @testitem "Partial trace, embed" begin
     @fermions f

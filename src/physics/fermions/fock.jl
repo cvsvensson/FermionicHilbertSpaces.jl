@@ -15,11 +15,11 @@ Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
 """
     default_fock_representation(N)
 
-The integer type for Fock states of `N` modes: the smallest unsigned integer of 64 to 1024
-bits with more than `N` bits, or `BigInt`.
+The integer type for Fock states of `N` modes: `UInt64` below 63 modes, so that `2^N` fits in
+an `Int`, otherwise the smallest of `UInt128` to `UInt1024` with more than `N` bits, or `BigInt`.
 """
 function default_fock_representation(N)
-    N < 64 && return UInt64
+    N < 63 && return UInt64
     N < 128 && return UInt128
     N < 256 && return UInt256
     N < 512 && return UInt512
@@ -27,6 +27,14 @@ function default_fock_representation(N)
     return BigInt
 end
 default_fock_representation(::Val{N}) where N = default_fock_representation(N)
+
+"""
+    fock_index_type(I)
+
+The integer type of the dimension and state indices of a space with Fock states stored in `I`.
+"""
+fock_index_type(::Type{I}) where I = sizeof(I) <= sizeof(Int) ? Int : I
+fock_index_type(::Type{BigInt}) = BigInt
 
 Base.:⊻(f1::FockNumber, f2::FockNumber) = FockNumber(f1.f ⊻ f2.f)
 Base.:⊻(f1::Integer, f2::FockNumber) = FockNumber(f1 ⊻ f2.f)
@@ -97,7 +105,7 @@ function FockMapper(fermionpositions::P, N) where P
     T = default_fock_representation(N)
     permutation = length(perm) == N && isperm(perm) && N < 64 ? BitPermutation{T}(perm)' : nothing
     masks = map(Xp -> focknbr_from_site_indices(Xp), fermionpositions)
-    isfullpartition = ispartition(fermionpositions, Nmax)
+    isfullpartition = ispartition(fermionpositions, N)
     P1 = typeof(fermionpositions)
     W = typeof(widths)
     P2 = typeof(permutation)
@@ -295,12 +303,7 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
         # Mappers for different subsystems of one space have the same type
         @test typeof(FockMapper(([1, 2],), 6)) == typeof(FockMapper(([3, 5],), 6)) == typeof(FockMapper(([4, 6],), 6))
         @test_throws ArgumentError FockMapper(((1, 7),), 6)
-        # Covering only the first modes of a larger space is still a full partition of those modes
-        fockmapper = FockMapper(((1, 3), (2,)), 70)
-        combined = _combine((fock((1, 2)), fock((1,))), fockmapper)
-        @test combined == fock((1, 2, 3))
-        @test combined isa FockNumber{UInt128}
-        @test _split(fock((2, 3)), fockmapper) == (fock((2,)), fock((1,)))
+        @test_throws ArgumentError _combine((fock((1, 2)), fock((1,))), FockMapper(((1, 3), (2,)), 70))
         fockmapper = FockMapper(((1, 3), (2,)), 3)
         @test _combine((fock((1, 2)), fock((1,))), fockmapper) == fock((1, 2, 3))
         @test !isnothing(fockmapper.permutation)
@@ -368,7 +371,7 @@ end
     @fermions f
     N = 200
     H = hilbert_space(f, 1:N, NumberConservation(1))
-    hopping = matrix_representation(sum(f[n]' * f[n+1] + hc for n in 1:N-1), H)
+    hopping = representation(sum(f[n]' * f[n+1] + hc for n in 1:N-1), H)
     @test eigvals(Hermitian(Matrix(hopping))) ≈ sort(2cos.(π * (1:N) / (N + 1)))
 
     # A one-particle state reduced to every third mode has eigenvalues p and 1 - p

@@ -219,7 +219,7 @@ partial_transpose_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_transpo
 
 function majoranas(H::MajoranaHilbertSpace)
     γ = symbolic_basis(H)
-    OrderedDict(f.label => matrix_representation(γ[f.label], H) for f in modes(H))
+    OrderedDict(f.label => representation(γ[f.label], H) for f in modes(H))
 end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
 
@@ -233,15 +233,14 @@ function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...
 end
 @deprecate majorana_hilbert_space(y, labels, args...; kwargs...) hilbert_space(y, labels, args...; kwargs...)
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
-MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = _wrap(MajoranaHilbertSpace(majoranaindices, parent(space), sym), space)
+MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
 
 function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
     parent_subregion = subregion(parent(Hsub), parent(H))
     MajoranaHilbertSpace(Hsub.majoranaindices, parent_subregion, Hsub.sym)
 end
 
-partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg::FullPartialTraceAlg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
-partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg::SubsystemPartialTraceAlg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
+partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg::AbstractPartialTraceAlg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
 
 function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,S<:AbstractMajoranaSym,F}
     sub_modes = modes(Hsub)
@@ -285,7 +284,11 @@ function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace
     if !transpose
         state, amp = togglemajoranas(Iterators.reverse(fpos), Iterators.reverse(daggers), f)
     else
-        state, amp = togglemajoranas(fpos, Iterators.map(!, daggers), f)
+        # Odd-position Majoranas are real symmetric matrices and even-position ones are
+        # imaginary antisymmetric, so the transpose reverses the product and flips the sign
+        # once per even-position factor.
+        state, amp = togglemajoranas(fpos, daggers, f)
+        isodd(count(daggers)) && (amp = -amp)
     end
     return state, amp * op.coeff
 end
@@ -332,7 +335,7 @@ end
     @test length(M) == 4
     @test collect(keys(M)) == collect(1:4)
     for l in 1:4
-        @test M[l] == matrix_representation(γ[l], H)
+        @test M[l] == representation(γ[l], H)
     end
 end
 
