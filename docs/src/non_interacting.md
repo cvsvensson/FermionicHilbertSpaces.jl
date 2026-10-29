@@ -77,8 +77,20 @@ The matrix returned by `representation` will depend on the ordering of operators
     0.18844     ⋅        -0.297613  -0.169731 =#
     ```
 
+## Expectation values
+On the single-particle and BdG spaces, `expectation(op, G, H)` takes the correlation matrix of the state: ``G_{ij} = \langle c_i^\dagger c_j \rangle`` on the single-particle space and ``G_{ij} = \langle \Psi_i^\dagger \Psi_j \rangle`` on the BdG space. The operator must be quadratic, and its identity part is included. For a thermal state of the single-particle hamiltonian `h`, ``G = (1 + e^{\beta h})^{-T}``:
+```@example expectation
+using FermionicHilbertSpaces, LinearAlgebra
+@fermions c
+H = hilbert_space(c, 1:4, SingleParticle())
+ham = sum(c[n]' * c[n+1] + hc for n in 1:3) + 1
+h = representation(ham, H, :dense)
+G = transpose(inv(I + exp(10 * h)))
+expectation(ham, G, H)
+```
+
 ## Correlation matrices and entanglement
-With ``\Psi = (f; f^\dagger)`` listing the annihilation and then the creation operators of the modes of a BdG space, the Nambu correlation matrix is ``G_{ij} = \langle \Psi_i^\dagger \Psi_j angle``. For the BdG ground state it is `correlation_matrix(F)`, where `F` is the result of `eigen(A, BdGEigen())`, and `ground_state_parity(F)` is its fermionic parity. For a many-body state `ψ` on `H`, `correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`. A hermitian quadratic operator `op` without identity part, with `A = representation(op, Hbdg)` and `N` modes, has ``\langle op angle`` equal to `sum(A .* G) + tr(A[1:N, 1:N])`.
+For the BdG ground state, the correlation matrix ``G`` of the previous section is `correlation_matrix(F)`, where `F` is the result of `eigen(A, BdGEigen())`, and `ground_state_parity(F)` is its fermionic parity. For a many-body state `ψ` on `H`, `correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`.
 
 The rows and columns of a subsystem of modes form the reduced correlation matrix. Its eigenvalues ``\lambda`` give the entanglement entropy ``S = -\sum \lambda \log \lambda`` of the subsystem, which equals the entropy of the reduced many-body density matrix:
 ```@example entanglement
@@ -102,6 +114,6 @@ H = hilbert_space(f, 1:N)
 ρsub = partial_trace(ψ * ψ', H => hilbert_space(f, sub))
 @assert S ≈ entropy(eigvals(Hermitian(ρsub)))
 @assert Gsub ≈ correlation_matrix(ψ, H, hilbert_space(f, sub, BdG()))
-@assert sum(A .* G) + tr(A[1:N, 1:N]) ≈ dot(ψ, representation(ham, H, :dense), ψ)
+@assert expectation(ham, G, Hbdg) ≈ expectation(ham, ψ, H)
 S
 ```
