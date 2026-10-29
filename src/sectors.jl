@@ -21,6 +21,7 @@ subspace_states(H::SectorHilbertSpace) = H.ordered_basis_states
 subspace_index(H::SectorHilbertSpace) = H.index
 subspace_key(H::SectorHilbertSpace) = (parent(H), H.ordered_basis_states, H.qn_to_states)
 rewrap(H::SectorHilbertSpace, parent) = SectorHilbertSpace(parent, H.ordered_basis_states, H.qn_to_states, H.constraint, H.index)
+map_parent(f, H::SectorHilbertSpace) = SectorHilbertSpace(f(parent(H)), H.ordered_basis_states, H.qn_to_states, map_spaces(f, H.constraint), H.index)
 
 sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
 function sector_space(space, states, sector_function, constraint)

@@ -8,7 +8,7 @@ products, partial traces and matrix representations that connect them.
 module FermionicHilbertSpaces
 
 using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Eigen, Hermitian,
-    Symmetric, UniformScaling, cholesky, det, diag, diagind, dot,
+    Symmetric, UniformScaling, det, diag, diagind, dot,
     eigen, eigen!, eigvals, eigvecs, ishermitian, issymmetric,
     mul!, normalize, qr, rank, rmul!, schur, svdvals, tr, I
 using LowRankMatrices: LowRankMatrices, LowRankMatrix
@@ -36,11 +36,11 @@ export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
-export SingleParticle, BdG
+export SingleParticle, BdG, BdGEigen
 export correlation_matrix, ground_state_parity
 export symmetric_sector
 export open_system
-public particle_number, Axes
+public particle_number, Axes, dissipator
 
 """
     HC

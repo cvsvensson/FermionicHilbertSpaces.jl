@@ -52,6 +52,7 @@ reshape(v, Hlr => (Hl, Hr))
 # \langle n \rangle_\text{ss} = \frac{\gamma_\text{in}}{\gamma_\text{in} + \gamma_\text{out}}.
 # ```
 using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces: dissipator
 
 # Parameters
 ε = 1.0
@@ -65,8 +66,7 @@ ham_sym = ε * c[1]'c[1]
 L_in = √γ_in * c[1]'
 L_out = exp(rand() * 2pi * im) * √γ_out * c[1]
 
-# Let's define a helper for the dissipator superoperator and write down the Lindbladian
-dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
+# `dissipator(L)` is the superoperator ρ ↦ LρL† − ½{L†L, ρ}.
 lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(L_in) + dissipator(L_out)
 # Let's get the matrix representation and check that it preserves trace 
 mat = representation(lindbladian, Hlr)
@@ -101,3 +101,28 @@ println("Steady-state occupation ⟨n⟩_ss = $n_ss  (analytic: $n_analytical)")
 constraint = NumberConservation(-1:1, [Hl, Hr], [1, -1])
 Hcons = tensor_product((Hl, Hr); constraint)
 mat_cons = representation(lindbladian, Hcons)
+
+# ## Example: Double dot coupled to a cavity
+
+# `open_system` also accepts a Hilbert space directly, for example a tensor product of
+# a number-conserving fermion sector and a boson. Here one electron is shared between
+# two dots and couples to a lossy cavity mode, truncated to 4 photon levels:
+# ```math
+# H = t\,(f_1^\dagger f_2 + f_2^\dagger f_1) + \omega\, a^\dagger a + g\,(n_1 - n_2)(a + a^\dagger), \qquad
+# L = \sqrt{\kappa}\, a.
+# ```
+@fermions f
+@bosons a
+Hsys = tensor_product(hilbert_space(f, 1:2, NumberConservation(1)), hilbert_space(a[1], 4))
+Hlr, Hl, Hr, left, right = open_system(Hsys)
+t, ω, g, κ = 0.5, 1.0, 0.3, 0.2
+ham_sym = t * (f[1]'f[2] + f[2]'f[1]) + ω * a[1]'a[1] + g * (f[1]'f[1] - f[2]'f[2]) * (a[1] + a[1]')
+lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(√κ * a[1])
+mat = representation(lindbladian, Hlr)
+# The steady state is again the eigenvector with eigenvalue closest to zero
+vals, vecs = eigen(Matrix(mat); sortby = abs)
+ρ = reshape(vecs[:, 1], Hlr => (Hl, Hr))
+ρ ./= tr(ρ)
+# and we can compute, e.g., the photon number in the steady state
+n_photon = representation(left(a[1]'a[1]), Hl)
+tr(n_photon * ρ)
