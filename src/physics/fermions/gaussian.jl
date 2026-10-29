@@ -34,7 +34,7 @@ julia> using FermionicHilbertSpaces, LinearAlgebra; @fermions f;
 
 julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), :dense);
 
-julia> correlation_matrix(Eigen(eigen(A, FermionicHilbertSpaces.BdGEigen())...)) ≈ [1 0; 0 0]
+julia> correlation_matrix(eigen(A, FermionicHilbertSpaces.BdGEigen())) ≈ [1 0; 0 0]
 true
 ```
 """
@@ -54,7 +54,7 @@ julia> using FermionicHilbertSpaces, LinearAlgebra; @fermions f;
 
 julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), :dense);
 
-julia> ground_state_parity(Eigen(eigen(A, FermionicHilbertSpaces.BdGEigen())...))
+julia> ground_state_parity(eigen(A, FermionicHilbertSpaces.BdGEigen()))
 -1
 ```
 """
@@ -105,7 +105,6 @@ end
 
 @testitem "BdG correlation matrix and parity" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: BdGEigen
     @fermions f
     N = 3
     Hmb = hilbert_space(f, 1:N)
@@ -117,8 +116,7 @@ end
     parities = map([-20, 0, 20]) do μ
         ham = quadratic - μ * sum(f[n]' * f[n] for n in 1:N)
         ψ = eigvecs(Hermitian(representation(ham, Hmb, :dense)))[:, 1]
-        vals, vecs = eigen(representation(ham, Hbdg, :dense), BdGEigen())
-        F = Eigen(vals, vecs)
+        F = eigen(representation(ham, Hbdg, :dense), FermionicHilbertSpaces.BdGEigen())
         G = correlation_matrix(F)
         @test G ≈ correlation_matrix(ψ, Hmb, Hbdg) ≈ correlation_matrix(ψ * ψ', Hmb, Hbdg)
         @test expectation(ham, G, Hbdg) ≈ expectation(ham, ψ, Hmb)
@@ -126,8 +124,8 @@ end
         ground_state_parity(F)
     end
     @test parities[1] == 1 && parities[3] == -1
-    vals, vecs = eigen(representation(quadratic, Hbdg, :dense), BdGEigen())
-    @test_throws ArgumentError ground_state_parity(Eigen(vals, 2 * vecs))
+    F = eigen(representation(quadratic, Hbdg, :dense), FermionicHilbertSpaces.BdGEigen())
+    @test_throws ArgumentError ground_state_parity(Eigen(F.values, 2 * F.vectors))
 end
 
 @testitem "Gaussian state from a correlation matrix" begin
@@ -141,7 +139,7 @@ end
     Δ = Δ - transpose(Δ)
     ham = sum(f[n]' * h[n, m] * f[m] + Δ[n, m] * f[n]' * f[m]' + hc for n in 1:N, m in 1:N)
 
-    G = correlation_matrix(eigen(representation(ham, Hbdg, :dense), BdGEigen()))
+    G = correlation_matrix(eigen(representation(ham, Hbdg, :dense), FermionicHilbertSpaces.BdGEigen()))
     ψ = eigvecs(Hermitian(representation(ham, Hmb, :dense)))[:, 1]
     for sub in ([1, 3], 1:N)
         Hsub = hilbert_space(f, sub)
