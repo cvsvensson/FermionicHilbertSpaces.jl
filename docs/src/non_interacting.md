@@ -74,8 +74,9 @@ The matrix returned by `representation` on this space depends on the ordering of
     The BdG space wraps the constrained space above, available through `parent`, and does not combine with tensor products or partial traces.
 
 ### Quasiparticles
-`eigen(A, BdGEigen())` diagonalizes a BdG matrix while keeping the particle-hole pairing of its eigenvectors. The eigenvalues are sorted, so for `N` modes columns `k` and `2N + 1 - k` are partners with eigenvalues `e` and `-e` whose quasiparticles are adjoints of each other. A column `[u; v]` gives the quasiparticle ``\gamma^\dagger = \sum_i u_i c_i^\dagger + v_i c_i``, which raises the energy by ``2e``. The matrix must be Hermitian, and eigenvalues with `abs(e) <= cutoff * maximum(abs, vals)` are set to zero, with the default `cutoff = 2N * eps` as for `rank`.
+`eigen(A, FermionicHilbertSpaces.BdGEigen())` diagonalizes a BdG matrix while keeping the particle-hole pairing of its eigenvectors. The eigenvalues are sorted, so for `N` modes columns `k` and `2N + 1 - k` are partners with eigenvalues `e` and `-e` whose quasiparticles are adjoints of each other. A column `[u; v]` gives the quasiparticle ``\gamma^\dagger = \sum_i u_i c_i^\dagger + v_i c_i``, which raises the energy by ``2e``. The matrix must be Hermitian, and eigenvalues with `abs(e) <= cutoff * maximum(abs, vals)` are set to zero, with the default `cutoff = 2N * eps` as for `rank`.
 ```@example bdg_particle_hilbert_space
+using FermionicHilbertSpaces: BdGEigen
 Hbdg = hilbert_space(c, 1:N, BdG())
 vals, vecs = eigen(representation(op, Hbdg, :dense), BdGEigen())
 vals
@@ -120,4 +121,16 @@ H = hilbert_space(f, 1:N)
 @assert Gsub ≈ correlation_matrix(ψ, H, hilbert_space(f, sub, BdG()))
 @assert expectation(ham, G, Hbdg) ≈ expectation(ham, ψ, H)
 S
+```
+
+## From matrices and eigenvectors back to symbolic operators
+`symbolic_operator(M, H)` turns a matrix on a `BdG` or `SingleParticle` space back into a symbolic operator, and `quasiparticle(v, H)` turns an eigenvector into the operator that creates the corresponding quasiparticle. On the `BdG` space, `symbolic_operator` returns the traceless operator, which differs from the original one by a constant.
+```@example bdg_quasiparticles
+using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces: BdGEigen, quasiparticle, symbolic_operator
+@fermions c
+H = hilbert_space(c, 1:2, BdG())
+M = representation(c[1]' * c[2] + c[1]' * c[2]' + hc, H, :dense)
+vals, vecs = eigen(M, BdGEigen())
+symbolic_operator(M, H), quasiparticle(vecs[:, end], H)
 ```
