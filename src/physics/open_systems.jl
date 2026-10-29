@@ -46,24 +46,21 @@ tag_left(base) = add_tag(base, :left)
 tag_right(base) = add_tag(base, :right)
 
 """
-    open_system(base, args...; kwargs...)
-    open_system(H::AbstractHilbertSpace; kwargs...)
+    open_system(sym, args...; kwargs...)
+    open_system(H; kwargs...)
 
-Return `(Hlr, Hleft, Hright, left, right)` for the vectorized density matrix of a system.
-`Hleft` is a `:left` copy and `Hright` a transposed `:right` copy of the system space, which is
-`hilbert_space(base, args...; kwargs...)` or `H`, and `Hlr` is their tensor product; for `H`, the
-`kwargs` go to `tensor_product`. `left(op)` and `right(op)` tag a symbolic operator so that
-`representation(left(A) * right(B), Hlr)` acts as `ρ ↦ AρB` on the vectorized `ρ`.
-Public, not exported.
+Set up the doubled space for density matrices of a system with Hilbert space `H`, or of
+`hilbert_space(sym, args...; kwargs...)`. For `H`, `kwargs` are passed to `tensor_product`. Returns `(Hlr, Hl, Hr, left, right)`:
 
-# Examples
-```julia
-using FermionicHilbertSpaces: open_system
-@fermions c
-Hlr, Hl, Hr, left, right = open_system(c, 1:1)
-ham = c[1]' * c[1]
-representation(-1im * (left(ham) - right(ham)), Hlr) # the commutator ρ ↦ -i[ham, ρ]
-```
+- `Hl` and `Hr` are copies of the system space tagged `:left` and `:right`. `Hr` is transposed,
+  so that `representation(right(A * B), Hr) == representation(right(B), Hr) * representation(right(A), Hr)`.
+- `Hlr = tensor_product(Hl, Hr)` is the space of vectorized density matrices.
+- `left(op)` and `right(op)` map a symbolic operator of the system to the copy acting on `Hl` or
+  `Hr`, so `left(A) * right(B)` represents `ρ -> A ρ B` and `-1im * (left(H) - right(H))` is
+  the Liouvillian of a Hamiltonian `H`.
+
+Use `reshape(ρ, (Hl, Hr) => Hlr)` and `reshape(v, Hlr => (Hl, Hr))` to convert between density
+matrices and vectors.
 """
 function open_system(base, args...; kwargs...)
     left_basis = tag_left(base)

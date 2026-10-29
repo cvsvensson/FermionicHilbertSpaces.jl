@@ -34,11 +34,12 @@ export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
 export @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
-export SectorConstraint, FilterConstraint, GenericHilbertSpace
+export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export SingleParticle, BdG
 export symmetric_sector
-public Axes, open_system, dissipator
+export open_system
+public particle_number, Axes, dissipator
 
 """
     HC

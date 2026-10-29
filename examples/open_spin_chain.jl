@@ -29,7 +29,6 @@ end
 ham_mat = representation(ham_sym, H, :dense)
 Sz_mats = [representation(-2 * S[k][:z], H) for k in 1:N]
 
-using FermionicHilbertSpaces: SpinState, ProductState, state_index
 state = "↑" * repeat("↓", N - 1)
 ψ0 = representation(state, H, Vector{ComplexF64})
 
@@ -42,7 +41,7 @@ max_norm_error = maximum(abs.(map(ψ -> norm(ψ) - 1.0, sol_closed.u)))
 println("Closed-system max norm error: ", max_norm_error)
 
 # Open-system dephasing with the package's left/right interface.
-using FermionicHilbertSpaces: open_system, dissipator
+using FermionicHilbertSpaces: dissipator
 Hopen, Hleft, Hright, left, right = open_system(S, 1:N)
 
 lindbladian_sym = -1im * (left(ham_sym) - right(ham_sym))
