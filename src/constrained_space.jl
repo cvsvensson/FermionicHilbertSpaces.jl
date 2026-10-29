@@ -66,9 +66,7 @@ or `0` for states of `space` not in `states`, or `nothing` when no table is used
 Throws an `ArgumentError` if a state appears more than once.
 """
 function index_table(space, states)
-    has_arithmetic_state_index(space) || return nothing
-    B = statetype(space)
-    (eltype(states) == B || all(state -> same_state_kind(state, B), states)) || return nothing
+    has_arithmetic_index_of(space, states) || return nothing
     d = dim(space)
     (d isa Int && d <= min(INDEX_TABLE_RATIO * length(states), INDEX_TABLE_MAX_LENGTH)) || return nothing
     table = zeros(Int32, d)
@@ -79,6 +77,47 @@ function index_table(space, states)
         table[k] = i
     end
     return table
+end
+function has_arithmetic_index_of(space, states)
+    B = statetype(space)
+    has_arithmetic_state_index(space) && (eltype(states) == B || all(state -> same_state_kind(state, B), states))
+end
+
+"""
+    bucket_index(space, states)
+
+The `BucketIndex` of `states` in `space`, or `nothing` when `space` has no arithmetic
+`state_index` of type `Int` or `UInt128` for all of `states`.
+Throws an `ArgumentError` if a state appears more than once.
+"""
+function bucket_index(space, states)
+    has_arithmetic_index_of(space, states) || return nothing
+    ks = map(state -> state_index(state, space), states)
+    (ks isa Union{Vector{Int},Vector{UInt128}} && !any(iszero, ks)) || return nothing
+    rs = ks .- one(eltype(ks))
+    shift = 65 - ndigits(length(states); base=2)
+    perm = sortperm(rs; by=r -> (index_bucket(r, shift), r))
+    sorted = rs[perm]
+    for j in 2:length(sorted)
+        sorted[j] == sorted[j-1] && throw(_duplicate_state_error(states[perm[j]]))
+    end
+    offsets = zeros(Int, (1 << (64 - shift)) + 1)
+    for r in sorted
+        offsets[index_bucket(r, shift)+2] += 1
+    end
+    BucketIndex(shift, cumsum!(offsets, offsets), sorted, Vector{Int32}(perm))
+end
+# A hash of `r` rather than its high bits keeps the buckets small when most states share
+# their high bits, as at low filling.
+index_bucket(r, shift) = Int((((r % UInt64) ⊻ ((r >> 32) % UInt64)) * 0x9e3779b97f4a7c15) >> shift)
+function state_position(ind::BucketIndex, state, H)
+    k = state_index(state, parent(H))
+    iszero(k) && return 0
+    r = k - one(k)
+    a = index_bucket(r, ind.shift)
+    lo, hi = ind.offsets[a+1] + 1, ind.offsets[a+2]
+    j = searchsortedfirst(view(ind.sorted, lo:hi), r) + lo - 1
+    (j <= hi && ind.sorted[j] == r) ? Int(ind.positions[j]) : 0
 end
 # The position of each of `states`, which must appear once each.
 function position_dict(states)

@@ -32,6 +32,21 @@ traces, `subregion` and `constrain_space` work on it.
 abstract type AbstractSubspace{B,P} <: AbstractHilbertSpace{B} end
 
 """
+    BucketIndex
+
+The positions of some basis states of a space with an arithmetic `state_index`, keyed by
+`r = state_index(state, space) - 1`. A hash of `r` selects a bucket, a range in `offsets`
+gives the bucket's part of `sorted`, which is searched for `r`, and `positions` holds the
+position of each entry of `sorted`. Built by `bucket_index`.
+"""
+struct BucketIndex{T}
+    shift::Int
+    offsets::Vector{Int}
+    sorted::Vector{T}
+    positions::Vector{Int32}
+end
+
+"""
     SubspaceIndex(parent, states)
 
 The position in `states` of each of `states`, which `state_index(state, H)` of a subspace
@@ -39,12 +54,14 @@ The position in `states` of each of `states`, which `state_index(state, H)` of a
 more than once, or if `parent` is an `AbstractSubspace`.
 """
 struct SubspaceIndex{B}
-    positions::Union{Vector{Int32},Dict{B,Int}}
+    positions::Union{Vector{Int32},BucketIndex{Int},BucketIndex{UInt128},Dict{B,Int}}
     SubspaceIndex{B}(positions) where {B} = new{B}(positions)
 end
 function SubspaceIndex(parent, states)
-    table = index_table(parent, states)
-    SubspaceIndex{eltype(states)}(isnothing(table) ? position_dict(states) : table)
+    positions = index_table(parent, states)
+    isnothing(positions) && (positions = bucket_index(parent, states))
+    isnothing(positions) && (positions = position_dict(states))
+    SubspaceIndex{eltype(states)}(positions)
 end
 SubspaceIndex(::AbstractSubspace, states) = throw(nested_subspace_error())
 nested_subspace_error() = ArgumentError("The parent of a subspace cannot be a subspace.")
@@ -129,4 +146,6 @@ end
     @test_throws ArgumentError constrain_space(H, states[[1, 2, 1]])
     @test_throws ArgumentError constrain_space(H, NumberConservation(), states[[1, 2, 1]])
     @test_throws ArgumentError constrain_space(GenericHilbertSpace(:A, [:a, :b, :c]), [:a, :a])
+    Hlarge = hilbert_space(f, 1:70)
+    @test_throws ArgumentError constrain_space(Hlarge, [FermionicHilbertSpaces.basisstate(i, Hlarge) for i in [1, 2, 1]])
 end
