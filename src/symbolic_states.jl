@@ -225,6 +225,7 @@ function _checked_state_index(state, space)
     i
 end
 
+interpret_state(state::FockNumber, ::Type{B}) where {B<:FockNumber} = convert(B, state)
 function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{B}) where {I,B<:FockNumber{I}}
     all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only `'0'` and `'1'`, got `\"$input\"`."))
     bits = map(c -> c == '1', collect(input))

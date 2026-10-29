@@ -124,6 +124,9 @@ end
         @test vector_representation(Ket(basisstate(i, Hx), Hx), Hx) == [j == i for j in 1:dim(Hx)]
     end
     @test Ket("010", Hx) == Kets(Hx)[2]
+    @test Ket(FockNumber(2), Hx) == Kets(Hx)[2]
+    H = hilbert_space(f, 1:3, NumberConservation(1))
+    @test Ket(FockNumber(2), H) == Kets(H)[2]
 end
 
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{<:FixedNumberFockState})
