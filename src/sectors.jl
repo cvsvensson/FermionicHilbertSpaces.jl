@@ -26,24 +26,22 @@ sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
 function sector_space(space, states, sector_function, constraint)
     B = statetype(space)
     parent, members = unnest(space, states)
+    if members isa Vector{B} && !isempty(members) && allequal(sector_function, members)
+        qn = sector_function(first(members))
+        ismissing(qn) || return _sector_space(parent, OrderedDict(qn => members), constraint)
+    end
     _qntostates = groupby(sector_function, members, B)
     _sector_space(parent, _qntostates, constraint)
 end
-# Groups `itr` by `f`, dropping items with a `missing` key. Each group is allocated at its final size.
-# With `share=true`, a single group holding all of `itr` is `itr` itself when that is a `Vector{B}`.
-function _group(f::F, itr, ::Type{B}; share=false) where {F,B}
+function _group(f::F, itr, ::Type{B}) where {F,B}
     K = nonmissingtype(Base.promote_op(f, eltype(itr)))
-    groupkeys = map(f, itr)
-    counts = OrderedDict{isconcretetype(K) ? K : Any,Int}()
-    for key in groupkeys
-        ismissing(key) || (counts[key] = get(counts, key, 0) + 1)
-    end
-    if share && itr isa Vector{B} && length(counts) == 1 && only(values(counts)) == length(itr)
-        return OrderedDict(only(keys(counts)) => itr)
-    end
-    d = OrderedDict(key => sizehint!(B[], n) for (key, n) in counts)
-    for (x, key) in zip(itr, groupkeys)
-        ismissing(key) || push!(d[key], x)
+    _group!(OrderedDict{isconcretetype(K) ? K : Any,Vector{B}}(), f, itr)
+end
+function _group!(d, f::F, itr) where {F}
+    for x in itr
+        key = f(x)
+        ismissing(key) && continue
+        push!(get!(valtype(d), d, key), x)
     end
     d
 end
@@ -60,7 +58,7 @@ function groupby(f::F, itr; sortkeys=false, sortvals=false) where {F}
     newdict
 end
 function groupby(f::F, itr, ::Type{B}; sortkeys=:auto, sortvals=false) where {F,B}
-    d = _group(f, itr, B; share=!sortvals)
+    d = _group(f, itr, B)
     _ks = identity.(keys(d))
     K = eltype(_ks)
     sortkeys = sortkeys == :auto ? Base.hasmethod(isless, Tuple{K,K}) : false
@@ -72,7 +70,7 @@ function groupby(f::F, itr, ::Type{B}; sortkeys=:auto, sortvals=false) where {F,
 end
 
 function _sector_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}, constraint) where {Q,B}
-    ordered_states::Vector{B} = length(qn_to_states) == 1 ? only(values(qn_to_states)) : vcat(B[], values(qn_to_states)...)
+    ordered_states::Vector{B} = length(qn_to_states) == 1 ? only(values(qn_to_states)) : vcat(values(qn_to_states)...)
     SectorHilbertSpace(space, ordered_states, qn_to_states, constraint)
 end
 
