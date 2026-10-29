@@ -23,13 +23,17 @@ Algebra, from [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommu
 - `@nc MyOp` makes `+` and `*` build symbolic sums and products of `MyOp`.
 - `mul_effect(a::MyOp, b::MyOp)` gives the rule for the product `a * b`: `nothing` keeps it,
   `Swap(c)` rewrites it as `c * b * a`, and `AddTerms((Swap(c), r, ...))` adds further terms.
+  This is required; without it, products such as `X * X` throw a `MethodError`.
 - `@commutative MyOp AbstractSym` declares that `MyOp` commutes with all other operators.
+  This is required for products with the operators of the package.
 
 Connection to Hilbert spaces:
 
 - [`apply_local_operator`](@ref)`(op, state, space, precomp) -> (newstate, amplitude)` defines
   how `op` acts on a basis state. This is required for matrix representations.
 - [`symbolic_group`](@ref)`(op)` returns the label of the space `op` acts on. This is required.
+- `Base.adjoint(op)` returns the adjoint operator. This is required; transposed spaces, as
+  used for open systems, apply `adjoint(op)`.
 - [`mat_eltype`](@ref)`(::Type{<:MyOp})` gives the element type of the matrix elements. The
   default is `Float64`, so operators with complex matrix elements need a method.
 
@@ -56,14 +60,18 @@ the index of a state, which avoids the default dictionary lookup.
   product space act on integers, which is faster.
 - [`has_arithmetic_state_index`](@ref)`(H)` returns `true` for a space type whose
   [`state_index`](@ref) is computed from the state alone. Constrained spaces over such a
-  space then find states with a table instead of a dictionary.
+  space then find states with a table instead of a dictionary. The table relies on
+  `state_index` returning the exact index in `1:dim(H)` for each basis state and `0` for every
+  other state of the same type.
 - [`AbstractSubspace`](@ref) is the supertype of spaces spanned by some basis states of a
   parent space. A subtype implements `parent`, `subspace_states`, `subspace_index` and
   `rewrap`, and gets tensor products, partial traces and matrix representations from its parent.
   [`SubspaceIndex`](@ref) builds the index.
 
 To restrict a space of custom states, use [`SectorConstraint`](@ref) or
-[`FilterConstraint`](@ref) with a `maps` function from states to values; see
+[`FilterConstraint`](@ref). Their required argument is the reducer, which is called on each
+basis state. With `maps` and `spaces` together, it is called instead on the values that `maps`
+gives for the parts of the state in `spaces`. See
 [Constrained Hilbert spaces and conserved quantum numbers](conservation.md).
 
 ## Matrix representations
@@ -81,10 +89,11 @@ The third argument of [`representation`](@ref) selects the format:
 The `chunking` keyword parallelizes the construction, and the products of lazy operators, with
 OhMyThreads.jl: [`NoChunking`](@ref) (the default), [`TermChunking`](@ref)`(scheduler)` and
 [`StateChunking`](@ref)`(scheduler)`. See [Parallelization](@ref) for how to choose a scheduler.
+For lazy operators on product spaces, `TermChunking` is ignored with a warning.
 
-Before many products of a lazy operator `L` with vectors like `v`, call
-`SciMLOperators.cache_operator(L, v)` once, so that the work buffers are allocated once
-rather than on every product.
+With threaded chunking, `SciMLOperators.cache_operator(L, v)` allocates the per-thread
+buffers of a lazy operator `L` up front instead of on its first product. Without OhMyThreads
+it makes no difference.
 
 ## Partial traces and embeddings
 
