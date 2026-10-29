@@ -273,7 +273,7 @@ end
     @majoranas γ
     Hsp = @test_deprecated single_particle_hilbert_space(f, 1:2)
     Hbdg = @test_deprecated bdg_hilbert_space(f, 1:2)
-    Hmaj = @test_deprecated majorana_hilbert_space(γ, 1:4, ParityConservation(1))
+    Hmaj = @test_deprecated FermionicHilbertSpaces.majorana_hilbert_space(γ, 1:4, ParityConservation(1))
     @test Hsp == hilbert_space(f, 1:2, SingleParticle())
     @test Hbdg == hilbert_space(f, 1:2, BdG())
     @test Hmaj == hilbert_space(γ, 1:4, ParityConservation(1))
