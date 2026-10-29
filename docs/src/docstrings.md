@@ -8,5 +8,5 @@ CurrentModule = FermionicHilbertSpaces
 
 # Docstrings
 ```@autodocs
-Modules = [FermionicHilbertSpaces]
+Modules = [FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions]
 ```

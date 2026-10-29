@@ -1,5 +1,6 @@
 using BenchmarkTools
 using FermionicHilbertSpaces
+using FermionicHilbertSpaces.FreeFermions
 using LinearAlgebra
 using SparseArrays
 using Random
