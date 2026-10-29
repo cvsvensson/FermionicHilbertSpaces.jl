@@ -115,6 +115,17 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     @test representation(op, H) ≈ representation(op, Hf)
 end
 
+@testitem "Kets of a space of FixedNumberFockState" begin
+    import FermionicHilbertSpaces: FixedNumberFockState, vector_representation
+    @fermions f
+    Hx = hilbert_space(f, 1:3, FixedNumberFockState{1}.(basisstates(hilbert_space(f, 1:3, NumberConservation(1)))))
+    for i in 1:dim(Hx)
+        @test Ket(basisstate(i, Hx), Hx) == Kets(Hx)[i]
+        @test vector_representation(Ket(basisstate(i, Hx), Hx), Hx) == [j == i for j in 1:dim(Hx)]
+    end
+    @test Ket("010", Hx) == Kets(Hx)[2]
+end
+
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{<:FixedNumberFockState})
     position = mode_position(op, space)
     position == 0 && throw(ArgumentError("The operator `$op` contains a factor that is not part of the fermionic space `$space`."))
