@@ -73,7 +73,7 @@ end
 The density matrix on the many-body space `H` of the Gaussian state with Nambu correlation matrix `G`, so that `correlation_matrix(gaussian_state(G, H, Hbdg), H, Hbdg) ≈ G`. `H` must have exactly the modes of `Hbdg`.
 
 ```jldoctest
-julia> @fermions f;
+julia> using FermionicHilbertSpaces; @fermions f;
 
 julia> G = [1 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 1]; # f[1] occupied, f[2] empty
 
