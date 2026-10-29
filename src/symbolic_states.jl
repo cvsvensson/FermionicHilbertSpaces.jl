@@ -472,7 +472,9 @@ function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, ki
     vec = if length(group_ids) == 1
         op.coeff * vector_representation(basis_state(only(symstates)), space, repr)
     else
-        prodstate = ProductState(ntuple(n -> basis_state(symstates[perm[n]]), length(perm)))
+        # `symstates[i]` belongs to group `perm[i]`, so group n holds `symstates[iperm[n]]`
+        iperm = invperm(perm)
+        prodstate = ProductState(ntuple(n -> basis_state(symstates[iperm[n]]), length(perm)))
         op.coeff * vector_representation(prodstate, space, repr)
     end
     if kind == :kets
@@ -992,6 +994,15 @@ end
         ketbra = vb("0") * vs("↑") * vf("1") * (vb("0") * vs("↑") * vf("0"))'
         @test FermionicHilbertSpaces._operator_type(ketbra) == :ketbras
     end
+end
+
+@testitem "Vector of a ket on factors in non-sorted order" begin
+    using LinearAlgebra
+    @spins S 1 // 2
+    H1, H2, H3 = [hilbert_space(S[i]) for i in 1:3]
+    H = tensor_product(H3, H1, H2)
+    v = representation(Kets(H)("↑", "↓", "↓"), H, :dense)
+    @test [real(dot(v, representation(S[i][:z], H, :dense), v)) for i in 1:3] ≈ [-1 / 2, -1 / 2, 1 / 2]
 end
 
 @testitem "Grading of symbolic states" begin
