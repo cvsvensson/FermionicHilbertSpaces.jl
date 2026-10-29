@@ -3,6 +3,9 @@
 
 Hilbert space whose basis is grouped into sectors labeled by quantum numbers.
 Use `quantumnumbers`, `sector`, and `indices` to access individual sectors.
+`state_index` looks up states with one index over all sectors, built by
+`default_subspace_index(parent, constraint, states)` or the `index` keyword of the function
+that made the space; see [`state_position`](@ref).
 """
 struct SectorHilbertSpace{B,P,Q,C,I} <: AbstractSubspace{B,P}
     parent::P
@@ -14,7 +17,7 @@ struct SectorHilbertSpace{B,P,Q,C,I} <: AbstractSubspace{B,P}
 end
 SectorHilbertSpace(parent, ordered_basis_states, qn_to_states, constraint, index) = SectorHilbertSpace{eltype(ordered_basis_states),typeof(parent),keytype(qn_to_states),typeof(constraint),typeof(index)}(parent, ordered_basis_states, qn_to_states, constraint, index)
 SectorHilbertSpace(::AbstractSubspace, ordered_basis_states, qn_to_states, constraint, index) = throw(nested_subspace_error())
-SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint; index=default_subspace_index) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, index(space, ordered_basis_states))
+SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint; index=default_subspace_index) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, index(space, constraint, ordered_basis_states))
 
 Base.parent(H::SectorHilbertSpace) = H.parent
 subspace_states(H::SectorHilbertSpace) = H.ordered_basis_states
@@ -81,15 +84,16 @@ quantumnumbers(H::SectorHilbertSpace) = collect(keys(H.qn_to_states))
 quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 
 """
-    sector(qn, H)
+    sector(qn, H[, constraint]; index=default_subspace_index)
 
-Return the sector of `H` corresponding to quantum number `qn`.
+Return the sector of `H` corresponding to quantum number `qn`, further constrained by
+`constraint`, with its index built by `index` as in [`constrain_space`](@ref).
 For `qn === nothing`, this returns `H` for non-sector spaces.
 Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
 """
-sector(qn, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
-sector(::Nothing, H::AbstractHilbertSpace, constraint=NoSymmetry()) = constrain_space(H, constraint)
-sector(qn::Nothing, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
+sector(qn, H::SectorHilbertSpace, constraint=NoSymmetry(); index=default_subspace_index) = constrain_space(parent(H), constraint, _sector_states(qn, H); index)
+sector(::Nothing, H::AbstractHilbertSpace, constraint=NoSymmetry(); index=default_subspace_index) = constrain_space(H, constraint; index)
+sector(qn::Nothing, H::SectorHilbertSpace, constraint=NoSymmetry(); index=default_subspace_index) = constrain_space(parent(H), constraint, _sector_states(qn, H); index)
 
 function _sector_states(qn, H::SectorHilbertSpace)
     states = get(H.qn_to_states, qn, nothing)
@@ -103,7 +107,7 @@ end
 
 Return all sectors of `H` in the same order as `quantumnumbers(H)`.
 """
-sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
+sectors(H::AbstractHilbertSpace, constraint=NoSymmetry(); index=default_subspace_index) = map(qn -> sector(qn, H, constraint; index), quantumnumbers(H))
 
 function space_indices(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace)
     # `Hsub` is a sector of `H` when it equals `sector(qn, H)` for some `qn`

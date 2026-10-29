@@ -282,9 +282,10 @@ such as `NumberConservation`, return a space with sectors, with states ordered b
 With only `states`, return the subspace spanned by exactly those basis states, in the
 given order; this is equivalent to `constrain_space(space, NoSymmetry(), states)`.
 
-`index(parent, states)` builds the lookup that `state_index` uses on the result, where
-`states` are its basis states in order; see [`default_subspace_index`](@ref) for the methods
-it must implement.
+`index(parent, constraint, states)` builds the lookup that `state_index` uses on the result,
+where `states` are its basis states in order. The default, [`default_subspace_index`](@ref),
+selects an index by the types of its arguments; any object with a [`state_position`](@ref)
+method can be returned.
 """
 constrain_space
 

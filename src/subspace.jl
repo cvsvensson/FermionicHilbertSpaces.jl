@@ -5,8 +5,9 @@ A space spanned by some of the basis states of `parent(H)::P`. A subtype impleme
 
 - `parent(H)`: the space that `H` is a subspace of. It is never an `AbstractSubspace`.
 - `subspace_states(H)`: the basis states of `H`, in order, each appearing once.
-- `subspace_index(H)`: a subspace index of `H` (see [`default_subspace_index`](@ref)), such
-  as `default_subspace_index(parent(H), subspace_states(H))`, built once by the constructor.
+- `subspace_index(H)`: an index with a [`state_position`](@ref) method for the states of `H`,
+  such as `default_subspace_index(parent(H), constraint, subspace_states(H))`, built once by
+  the constructor.
 - `rewrap(H, newparent)`: the space with the same states and index as `H` over `newparent`,
   which has the same basis states and `state_index` as `parent(H)`.
 
@@ -19,8 +20,9 @@ spaces store other states over a `FermionicSpace` parent: `hilbert_space(f, labe
 with `FixedNumberFockState`s, `BdG` spaces with `NambuState`s and `SingleParticle` spaces
 with `SingleParticleState`s.
 
-`default_subspace_index` throws when its `parent` is an `AbstractSubspace`, so a constructor
-that builds the index as above keeps `parent(H)` from being a subspace. The package calls
+`default_subspace_index` throws when its `parent` is an `AbstractSubspace`, unless a more
+specific method applies, so a constructor that builds the index as above keeps `parent(H)`
+from being a subspace. The package calls
 `rewrap` only with `newparent` made from `parent(H)` by `add_tag`, `TransposedSpace` or a
 Majorana space, none of which is a subspace.
 
@@ -32,32 +34,44 @@ traces, `subregion` and `constrain_space` work on it.
 abstract type AbstractSubspace{B,P} <: AbstractHilbertSpace{B} end
 
 """
-    default_subspace_index(parent, states)
+    state_position(index, state, parent)
 
-The index of the subspace with `states` over `parent` that `constrain_space` builds unless
-given another. It is a table over `1:dim(parent)` when `parent` has an arithmetic
-`state_index` and is not much larger than `states`, and a `Dict` from state to position
-otherwise. Throws an `ArgumentError` if a state appears more than once, or if `parent` is an
-`AbstractSubspace`.
+The position of `state` among the states of the subspace over `parent` that `index` was built
+for, or `0` if `state` is not one of them. `state` has the type of those states up to type
+parameters. A subspace keeps its index when `add_tag` or `TransposedSpace` replaces its parent
+by one with the same basis states and `state_index`, so the result may depend on `parent` only
+through those.
 
-A subspace index is any object `index` that implements
-
-    state_position(index, state, H)
-
-which returns the position of `state` in `subspace_states(H)`, or `0` if `state` is not one
-of them. Here `H` is the subspace that holds `index`, and `state` has the type of its states
-up to type parameters. A space keeps its index when `add_tag` or `TransposedSpace` replaces
-its parent by one with the same basis states and `state_index`, so `state_position` should
-depend on `H` only through such properties.
-
-A function `build(parent, states)` returning a subspace index is accepted as the `index`
-keyword of [`constrain_space`](@ref).
+This is the one method a subspace index implements. `state_index(state, H)` of an
+[`AbstractSubspace`](@ref) `H` returns `state_position(subspace_index(H), state, parent(H))`.
 """
-function default_subspace_index(parent, states)
+function state_position end
+
+"""
+    default_subspace_index(parent, constraint, states)
+
+The index, with a [`state_position`](@ref) method, of the subspace with `states`, in order,
+over `parent`, where `constraint` selected `states`. Constrained and sector spaces build their
+index with it, and `constrain_space`, `sector`, `sectors` and `tensor_product` accept a
+function of the same arguments as their `index` keyword instead. `constraint` is
+`NoSymmetry()` for a subspace given only by its states.
+
+Methods for specific parent, constraint or state types select a specialized index. Such a
+method checks at runtime that the index fits `states`, such as that they are a whole sector
+in the order the index assumes, and otherwise returns
+`default_subspace_index(parent, NoSymmetry(), states)`.
+
+The generic method returns a table over `1:dim(parent)` when `parent` has an arithmetic
+`state_index` and is not much larger than `states`, and a `Dict` from state to position
+otherwise. It throws an `ArgumentError` if a state appears more than once, or if `parent` is
+an `AbstractSubspace`.
+"""
+default_subspace_index(parent, constraint, states) = generic_subspace_index(parent, states)
+function generic_subspace_index(parent, states)
     table = index_table(parent, states)
     isnothing(table) ? position_dict(states) : table
 end
-default_subspace_index(::AbstractSubspace, states) = throw(nested_subspace_error())
+generic_subspace_index(::AbstractSubspace, states) = throw(nested_subspace_error())
 nested_subspace_error() = ArgumentError("The parent of a subspace cannot be a subspace.")
 
 # `space` and `states`, or, when `space` is a subspace, its parent and those of `states` in it.
@@ -71,7 +85,7 @@ Base.hash(H::AbstractSubspace, h::UInt) = hash(subspace_key(H), h)
 dim(H::AbstractSubspace) = length(subspace_states(H))
 basisstates(H::AbstractSubspace) = BasisStates(H, subspace_states(H))
 Base.@propagate_inbounds basisstate(n::Integer, H::AbstractSubspace) = subspace_states(H)[n]
-_state_index(state, H::AbstractSubspace) = state_position(subspace_index(H), _check_state_kind(state, H), H)
+_state_index(state, H::AbstractSubspace) = state_position(subspace_index(H), _check_state_kind(state, H), parent(H))
 isconstrained(H::AbstractSubspace) = true
 
 for f in (:atomic_factors, :groups, :factors, :atom_ids, :group_id, :partial_trace_phase_factor_eltype,
@@ -117,7 +131,7 @@ end
     end
     function EveryOtherState(space)
         states = collect(basisstates(space))[1:2:end]
-        EveryOtherState(space, states, default_subspace_index(space, states))
+        EveryOtherState(space, states, default_subspace_index(space, NoSymmetry(), states))
     end
     Base.parent(H::EveryOtherState) = H.space
     subspace_states(H::EveryOtherState) = H.states
@@ -133,26 +147,40 @@ end
     @test matrix_representation(op, Hsub) == matrix_representation(op, H)[1:2:end, 1:2:end]
 end
 
-@testitem "A custom subspace index" begin
-    import FermionicHilbertSpaces: state_position
+@testitem "Custom subspace indices" begin
+    import FermionicHilbertSpaces: state_position, default_subspace_index
     struct LinearSearch{V}
         states::V
     end
-    state_position(index::LinearSearch, state, H) = something(findfirst(isequal(state), index.states), 0)
-    linear_search(parent, states) = LinearSearch(states)
+    state_position(index::LinearSearch, state, parent) = something(findfirst(isequal(state), index.states), 0)
 
     @fermions f
     H = hilbert_space(f, 1:4)
     op = sum(f[i]' * f[i+1] + hc for i in 1:3) + 2 * f[1]' * f[1]
+    reference(Hsub) = (map(s -> state_index(s, Hsub), basisstates(H)), matrix_representation(op, Hsub; projection=true))
+
+    # Passed as a keyword
     states = collect(basisstates(H))[[9, 2, 12, 5, 3]]
+    by_keyword(parent, constraint, states) = LinearSearch(states)
     for constraint in (states, NumberConservation(1:2))
-        Hdefault = constrain_space(H, constraint)
-        Hcustom = constrain_space(H, constraint; index=linear_search)
-        @test FermionicHilbertSpaces.subspace_index(Hcustom) isa LinearSearch
-        @test Hcustom == Hdefault
-        @test all(state_index(s, Hcustom) == state_index(s, Hdefault) for s in basisstates(H))
-        @test matrix_representation(op, Hcustom; projection=true) == matrix_representation(op, Hdefault; projection=true)
-        @test representation(op, Hcustom, :dense; projection=true) == representation(op, Hdefault, :dense; projection=true)
+        @test reference(constrain_space(H, constraint; index=by_keyword)) == reference(constrain_space(H, constraint))
+    end
+    Hsectors = constrain_space(H, NumberConservation(1:2); index=by_keyword)
+    @test reference(sector(2, Hsectors; index=by_keyword)) == reference(sector(2, constrain_space(H, NumberConservation(1:2))))
+
+    # Selected by a method for a constraint type
+    selected = Ref(0)
+    keep(state) = isodd(state.f)
+    label(state) = isodd(state.f)
+    function default_subspace_index(parent, ::Union{FilterConstraint{typeof(keep)},SectorConstraint{<:FilterConstraint{typeof(label)}}}, states)
+        selected[] += 1
+        LinearSearch(states)
+    end
+    for constraint in (FilterConstraint(keep), SectorConstraint(label))
+        before = selected[]
+        Hsub = constrain_space(H, constraint)
+        @test selected[] == before + 1
+        @test reference(Hsub) == reference(constrain_space(H, collect(basisstates(Hsub))))
     end
 end
 

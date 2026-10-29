@@ -5,10 +5,10 @@ struct ConstrainedSpace{B,H,S,I} <: AbstractSubspace{B,H}
     ConstrainedSpace{B,H,S,I}(parent, states, index) where {B,H,S,I} = new{B,H,S,I}(parent, states, index)
 end
 
-function ConstrainedSpace(space, states; index=default_subspace_index)
+function ConstrainedSpace(space, states; constraint=NoSymmetry(), index=default_subspace_index)
     parent, members = unnest(space, states)
     stored = _stored_states(members)
-    ConstrainedSpace(parent, stored, index(parent, stored))
+    ConstrainedSpace(parent, stored, index(parent, constraint, stored))
 end
 ConstrainedSpace(space::H, states::S, index) where {H,S} = ConstrainedSpace{eltype(states),H,S,typeof(index)}(space, states, index)
 ConstrainedSpace(::AbstractSubspace, states, index) = throw(nested_subspace_error())
@@ -18,7 +18,7 @@ subspace_states(H::ConstrainedSpace) = H.states
 subspace_index(H::ConstrainedSpace) = H.index
 rewrap(H::ConstrainedSpace, parent) = ConstrainedSpace(parent, H.states, H.index)
 
-constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
+constrain_space(space::AbstractHilbertSpace, ::NoSymmetry; index=default_subspace_index) = space
 constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}; index=default_subspace_index) = constrain_space(space, NoSymmetry(), states; index)
 
 constrain_space(space, ::NoSymmetry, states; index=default_subspace_index) = ConstrainedSpace(space, states; index)
@@ -29,7 +29,7 @@ function constrain_space(space, constraint::AbstractConstraint, states=basisstat
     elseif supports_filtering(constraint)
         f = filter_function(constraint, space)
         filtered_states = collect(Iterators.filter(f, states))
-        return ConstrainedSpace(space, filtered_states; index)
+        return ConstrainedSpace(space, filtered_states; constraint, index)
     else
         throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     end
@@ -60,8 +60,7 @@ const INDEX_TABLE_MAX_LENGTH = 2^28
 """
     index_table(space, states)
 
-Table mapping `state_index(state, space)` to the position of `state` in `states`,
-or `0` for states of `space` not in `states`, or `nothing` when no table is used.
+An `IndexTable` of the positions of `states`, or `nothing` when no table is used.
 Throws an `ArgumentError` if a state appears more than once.
 """
 function index_table(space, states)
@@ -77,7 +76,7 @@ function index_table(space, states)
         iszero(table[k]) || throw(_duplicate_state_error(state))
         table[k] = i
     end
-    return table
+    return IndexTable(table)
 end
 # The position of each of `states`, which must appear once each.
 function position_dict(states)
@@ -88,11 +87,20 @@ function position_dict(states)
     return d
 end
 _duplicate_state_error(state) = ArgumentError("The state `$state` appears more than once.")
-state_position(d::Dict, state, H) = get(d, state, 0)
-function state_position(table::Vector{Int32}, state, H)
-    k = state_index(state, parent(H))
-    iszero(k) ? 0 : Int(table[k])
+"""
+    IndexTable(positions)
+
+A subspace index whose `positions[state_index(state, parent)]` is the position of `state`, or
+`0` for a state of `parent` outside the subspace.
+"""
+struct IndexTable
+    positions::Vector{Int32}
 end
+function state_position(table::IndexTable, state, parent)
+    k = state_index(state, parent)
+    iszero(k) ? 0 : Int(table.positions[k])
+end
+state_position(d::Dict, state, parent) = get(d, state, 0)
 # Whether `state` has the type `B` up to type parameters, so that `state_index` of a space with states of type `B` accepts it.
 same_state_kind(state, ::Type{B}) where {B} = _type_family(typeof(state)) === _type_family(B)
 _type_family(T) = (parentmodule(T), nameof(T))
