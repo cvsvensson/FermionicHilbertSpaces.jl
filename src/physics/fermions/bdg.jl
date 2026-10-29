@@ -416,34 +416,15 @@ end
 _nambu_creators(H::SingleParticleHilbertSpace) = map(adjoint, modes(H))
 _nambu_creators(H::BdGHilbertSpace) = vcat(map(adjoint, modes(H)), modes(H))
 
-"""
-    quasiparticle(v, H)
-
-The quasiparticle creation operator `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])` for a column `v` of BdG eigenvectors on a `BdG` space `H` with `N` modes, or `γ' = Σ_n v[n] * f[n]'` on a `SingleParticle` space.
-
-```julia
-@fermions f
-H = hilbert_space(f, 1:2, BdG())
-FermionicHilbertSpaces.quasiparticle([1, 0, 0, 1], H) # f[2] + f†[1]
-```
-"""
+# The creator `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])` for a BdG eigenvector column `v` on a `BdG` space with `N` modes,
+# or `γ' = Σ_n v[n] * f[n]'` on a `SingleParticle` space.
 function quasiparticle(v, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
     creators = _nambu_creators(H)
     length(v) == length(creators) || throw(DimensionMismatch("The vector has length $(length(v)), but the space has dimension $(length(creators))."))
     return sum(c * x for (c, x) in zip(creators, v))
 end
 
-"""
-    quadratic_operator(M, H)
-
-The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space or any matrix on a `SingleParticle` space. On a `BdG` space, `op` is traceless.
-
-```julia
-@fermions f
-H = hilbert_space(f, 1:2, BdG())
-FermionicHilbertSpaces.quadratic_operator(representation(f[1]' * f[1], H, :dense), H) # -0.5I + f†[1]*f[1]
-```
-"""
+# The inverse of `representation`: the operator `op` with `representation(op, H) == M`. On a `BdG` space, `op` is the traceless one.
 function quadratic_operator(M, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
     creators = _nambu_creators(H)
     size(M) == (length(creators), length(creators)) || throw(DimensionMismatch("The matrix has size $(size(M)), but the space has dimension $(length(creators))."))
