@@ -7,15 +7,6 @@ Acts directly on vectors and matrices without constructing a sparse matrix.
 `representation(op, space, :lazy)` returns a `SciMLOperators.FunctionOperator`
 that wraps a `LazyOperator`. The bare `LazyOperator` is available as
 `LazyOperator(op, space, chunking)`.
-
-The keyword `term_maps`, a dictionary such as `Dict()`, makes the operator store, for each term
-of a sum, the basis states the term acts on together with their images and amplitudes. A product
-then only reads these entries, which is faster but takes about as much memory as a sparse matrix.
-The coefficients are stored separately, so a later lazy representation with the same
-`term_maps` and the same space reuses the stored maps of the terms it shares, whatever their
-coefficients. Building the maps checks for states mapped outside the space, as a sparse
-representation does. Terms that act on several groups of a product space are applied without a
-map. `term_maps` requires `chunking=NoChunking()`.
 """
 mutable struct LazyOperator{O,S,T,C,P}
     const op::O
@@ -39,11 +30,10 @@ function Base.show(io::IO, L::LazyOperator)
     show(IOContext(io, :compact => true), L.space)
 end
 
-function LazyOperator(_op, space::S, chunking::C=NoChunking(); projection=false, conjugate=false, ishermitian=_ishermitian(_op), T=mat_eltype(_op), concretizer=NoConcretizer(), term_maps=nothing
+function LazyOperator(_op, space::S, chunking::C=NoChunking(); projection=false, conjugate=false, ishermitian=_ishermitian(_op), T=mat_eltype(_op), concretizer=NoConcretizer()
 ) where {S,C<:AbstractChunkingStrategy}
-    isnothing(term_maps) || chunking isa NoChunking || throw(ArgumentError("`term_maps` requires `chunking=NoChunking()`, got $chunking."))
     op = __concretize(_op, concretizer)
-    precomp = lazy_precomputation(op, space, term_maps, projection)
+    precomp = lazy_precomputation(op, space)
     O = typeof(op)
     P = typeof(precomp)
     LazyOperator{O,S,T,C,P}(op, space, chunking, precomp, projection, conjugate, ishermitian, nothing)
@@ -55,55 +45,10 @@ end
 # Data that `lazy_mul!` needs to apply `op` on `space`, computed once when the `LazyOperator`
 # is constructed. For an `NCAdd` it is a vector with one `(term, coeff, precomp)` tuple per
 # entry `term => coeff` of `op.dict`.
-lazy_precomputation(op, space, term_maps, projection) = precomputation_before_operator_application(op, space)
-function lazy_precomputation(op::NCAdd, space, term_maps, projection)
+lazy_precomputation(op, space) = precomputation_before_operator_application(op, space)
+function lazy_precomputation(op::NCAdd, space)
     map(collect(op.dict)) do (term, coeff)
-        (term, coeff, _term_precomputation(term, space, term_maps, projection))
-    end
-end
-_term_precomputation(term, space, ::Nothing, projection) = precomputation_before_operator_application(term, space)
-function _term_precomputation(term, space, term_maps::AbstractDict, projection)
-    m = get(term_maps, term, nothing)
-    m isa TermMap && m.space === space && m.projection == projection && return m
-    return term_maps[term] = TermMap(term, space, projection)
-end
-
-struct TermMap{S,A}
-    space::S
-    projection::Bool
-    outinds::Vector{Int}
-    ininds::Vector{Int}
-    amps::Vector{A}
-end
-function TermMap(term, space, projection)
-    entries = (Int[], Int[], mat_eltype(term)[])
-    precomp = precomputation_before_operator_application(term, space)
-    operator_indices_and_amplitudes_generic!(entries, term, space, precomp; projection)
-    foreach(v -> sizehint!(v, length(v)), entries)
-    return TermMap(space, projection, entries...)
-end
-
-# An adjoint or transpose shares the maps but acts on the transposed space.
-_map_indices(m::TermMap, space) = space === m.space ? (m.outinds, m.ininds) : (m.ininds, m.outinds)
-
-function _foreach_map_entry(f, x::AbstractVector, space, m::TermMap, _coeff, conjugate)
-    coeff = (conjugate ? conj(_coeff) : _coeff)
-    outinds, ininds = _map_indices(m, space)
-    amps = m.amps
-    for k in eachindex(outinds, ininds, amps)
-        xn = x[ininds[k]]
-        iszero(xn) && continue
-        f(outinds[k], (conjugate ? conj(amps[k]) : amps[k]) * coeff * xn)
-    end
-end
-
-_apply_term!(y, x, space, term, precomp, coeff, conjugate, projection, chunking) =
-    _apply_single_term!(y, x, space, term, precomp, coeff, conjugate, projection, chunking)
-_apply_term!(y::AbstractVector, x::AbstractVector, space, term, m::TermMap, coeff, conjugate, projection, chunking) =
-    _foreach_map_entry((i, v) -> (y[i] += v), x, space, m, coeff, conjugate)
-function _apply_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, m::TermMap, coeff, conjugate, projection, chunking)
-    for col in axes(x, 2)
-        _foreach_map_entry((i, v) -> (y[i, col] += v), view(x, :, col), space, m, coeff, conjugate)
+        (term, coeff, precomputation_before_operator_application(term, space))
     end
 end
 
@@ -222,8 +167,6 @@ function _foreach_term_entry(f, x::SparseArrays.AbstractSparseVector, space, ter
         f(outind, (conjugate ? conj(_amp) : _amp) * coeff * xn)
     end
 end
-_foreach_term_entry(f, x::SparseArrays.AbstractSparseVector, space, term, m::TermMap, coeff, conjugate, projection) =
-    _foreach_map_entry(f, x, space, m, coeff, conjugate)
 
 function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, _coeff, conjugate, projection, ::Union{NoChunking,TermChunking})
     coeff = (conjugate ? conj(_coeff) : _coeff)
@@ -289,7 +232,7 @@ function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd}, x::Abstract
     end
     op = L.op
     for (term, coeff, precomp) in L.precomp
-        _apply_term!(y, x, L.space, term, precomp, coeff * α, L.conjugate, L.projection, L.chunking)
+        _apply_single_term!(y, x, L.space, term, precomp, coeff * α, L.conjugate, L.projection, L.chunking)
     end
     if !iszero(op.coeff) && !iszero(α)
         scalar_coeff = α * (L.conjugate ? conj(op.coeff) : op.coeff)
@@ -512,27 +455,6 @@ end
 
     # @test !ishermitian(L)
     # @test ishermitian(representation(op + hc, Hcons; lazy=true, projection=true)) #SciMLOperators doesn't check termwise ishermitian for an added operator
-end
-
-@testitem "lazy matrix_representation with term_maps" begin
-    using LinearAlgebra, SparseArrays
-    @fermions f
-    H = hilbert_space(f, 1:4, NumberConservation(2))
-    ham(t, U) = sum(t * f[n]' * f[n+1] + hc for n in 1:3) + U * f[1]' * f[1] * f[2]' * f[2] + 0.2
-    maps = Dict()
-    v = randn(ComplexF64, dim(H))
-    V = randn(ComplexF64, dim(H), 2)
-    vs = sprandn(ComplexF64, dim(H), 0.5)
-    for (t, U) in ((1.0, 2.0), (0.3im, -1.0))
-        L = representation(ham(t, U), H, :lazy; term_maps=maps)
-        M = representation(ham(t, U), H)
-        @test L * v ≈ M * v
-        @test L' * v ≈ M' * v
-        @test transpose(L) * v ≈ transpose(M) * v
-        @test L * V ≈ M * V
-        @test L * vs ≈ M * vs
-    end
-    @test_throws ArgumentError representation(f[1]' + f[2], H, :lazy; term_maps=Dict())
 end
 
 @testitem "lazy matrix_representation with dimensions wider than Int" begin
