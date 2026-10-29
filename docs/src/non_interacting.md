@@ -82,7 +82,7 @@ vals
 ```
 
 ## Expectation values
-On the single-particle and BdG spaces, `expectation(op, G, H)` takes the correlation matrix of the state: ``G_{ij} = \langle c_i^\dagger c_j \rangle`` on the single-particle space and ``G_{ij} = \langle \Psi_i^\dagger \Psi_j \rangle`` on the BdG space. The operator must be quadratic, and its identity part is included. For a thermal state of the single-particle hamiltonian `h`, ``G = (1 + e^{\beta h})^{-T}``:
+On the single-particle and BdG spaces, `expectation(op, G, H)` takes the correlation matrix of the state: ``G_{ij} = \langle c_i^\dagger c_j \rangle`` on the single-particle space and ``G_{ij} = \langle \Psi_i^\dagger \Psi_j \rangle`` on the BdG space. The state is the Gaussian state with this correlation matrix, such as a thermal state of a quadratic hamiltonian, so operators of any degree are evaluated with Wick's theorem. For a thermal state of the single-particle hamiltonian `h`, ``G = (1 + e^{\beta h})^{-T}``:
 ```@example expectation
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions c
@@ -91,4 +91,10 @@ ham = sum(c[n]' * c[n+1] + hc for n in 1:3) + 1
 h = representation(ham, H, :dense)
 G = transpose(inv(I + exp(10 * h)))
 expectation(ham, G, H)
+```
+`mean_field(op, G, H)` replaces every product in `op` by its terms of order at most two in the fluctuations around the state, the Hartree, Fock and pairing terms. The result is quadratic, so it can be represented on `H`, and it has the same expectation value as `op`:
+```@example expectation
+U = 2 * c[1]' * c[1] * c[2]' * c[2]
+mf = mean_field(U, G, H)
+expectation(mf, G, H) ≈ expectation(U, G, H)
 ```

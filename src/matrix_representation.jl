@@ -538,7 +538,8 @@ density matrix `ρ` gives `tr(ρ * M)`, where `M = representation(op, H)`. The s
 
 On `hilbert_space(f, labels, SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on
 `hilbert_space(f, labels, BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in
-the order of the BdG space. There `op` must be quadratic, and its identity part is included.
+the order of the BdG space. The state is then the Gaussian state with that correlation matrix, and `op` of any degree
+is evaluated with Wick's theorem.
 
 # Examples
 ```julia

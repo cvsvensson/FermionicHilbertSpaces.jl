@@ -352,7 +352,6 @@ function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSpar
     _is_quadratic_fermion_operator(op, true) || throw(ArgumentError("Only quadratic, number conserving fermionic operators can be represented on a SingleParticleHilbertSpace. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
     _quadratic_matrix(_single_particle_entry, remove_identity(op), H, repr)
 end
-expectation(op, G::AbstractMatrix, H::SingleParticleHilbertSpace) = identity_coefficient(op) + dot(transpose(G)', representation(op, H))
 function _single_particle_entry(term, H)
     a, b = term.factors
     outind = state_index(SingleParticleState(mode_position(a, H)), H)

@@ -63,10 +63,6 @@ function _nambu_matrix(op, H, repr)
     _is_quadratic_fermion_operator(op, false) || throw(ArgumentError("Only quadratic fermionic operators can be represented on a BdG Hilbert space. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
     return _quadratic_matrix(_bdg_entry, remove_identity(op), H, repr)
 end
-function expectation(op, G::AbstractMatrix, H::BdGHilbertSpace)
-    _isscalar_operator(op) && return identity_coefficient(op)
-    return identity_coefficient(op) + dot(transpose(G)', _nambu_matrix(op, H, EagerSparseRepr()))
-end
 function _bdg_entry(term, H)
     instate, outstate = _nambu_in_out(term, map(f -> mode_position(f, H), term.factors))
     return state_index(outstate, H), state_index(instate, H), term.coeff
@@ -149,7 +145,6 @@ end
     for op in (f[1]' * f[2], f[1] * f[2], f[1]' * f[2]', f[1] * f[2]', ham + 2)
         @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
     end
-    @test_throws ArgumentError expectation(f[1]' * f[2]' * f[3] * f[1], G, H)
 end
 
 @testitem "BdG representation formats" begin

@@ -27,7 +27,7 @@ using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, N
 
 export FockNumber, hc, basisstates, dim, state_index, basisstate
 export hilbert_space, subregion
-export parityoperator, numberoperator, matrix_representation, representation, vector_representation, expectation
+export parityoperator, numberoperator, matrix_representation, representation, vector_representation, expectation, mean_field
 export Kets, Ket, ProductState, SpinState, BosonicState
 
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
@@ -129,6 +129,7 @@ include("physics/fermions/operators.jl")
 include("physics/fermions/majoranas.jl")
 include("physics/fermions/fixednumberfock.jl")
 include("physics/fermions/bdg.jl")
+include("physics/fermions/wick.jl")
 
 
 include("physics/bosons.jl")

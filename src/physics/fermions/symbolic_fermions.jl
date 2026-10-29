@@ -86,14 +86,15 @@ Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis,
 
 hilbert_space(f::FermionSym) = FermionicSpace([_normalize_sym(f)], symbolic_group(f))
 
+# The sign λ in a * b = λ * b * a + scalar
+exchange_phase(a::FermionSym, b::FermionSym) = tags(a.basis) == tags(b.basis) ? -1 : 1
 function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     if a == b
         0
     elseif a < b
         nothing
     elseif a > b
-        anti_commuting = tags(a.basis) == tags(b.basis)
-        swap = Swap((-1)^anti_commuting)
+        swap = Swap(exchange_phase(a, b))
         if a.label == b.label && a.basis == b.basis
             return AddTerms((swap, 1))
         else
