@@ -81,6 +81,9 @@ and we can split it into sectors with definite particle numbers with
 constrain_space(Hsub, NumberConservation())
 ```
 
+# Related packages
+FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).
+
 # References
 ```@raw html
 <a name="fermion_information_article"></a>

@@ -100,7 +100,7 @@ map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(Hcons), sectors(Hcons)
 Constraints can be combined by multiplying them:
 ```@example constraints
 Hs = [hilbert_space(f,2k-1:2k) for k in 1:3]
-constraint = prod(NumberConservation(0:1, H) for H in Hs) * NumberConservation(2) # each mode can be occupied by at most one fermion, and the total number of fermions must be 2
+constraint = prod(NumberConservation(0:1, H) for H in Hs) * NumberConservation(2) # each pair of modes holds at most one fermion, and the total number of fermions is 2
 H = tensor_product(Hs; constraint)
 ```
 This constraint is a product of 4 constraints, and the quantum numbers of the resulting space keep track of the quantum numbers of each.

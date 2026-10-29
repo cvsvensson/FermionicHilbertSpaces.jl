@@ -52,7 +52,7 @@ basisstates(h::BdGHilbertSpace) = basisstates(h.parent)
 Base.parent(h::BdGHilbertSpace) = h.parent
 Base.keys(h::BdGHilbertSpace) = keys(h.parent)
 Base.@propagate_inbounds basisstate(ind::Integer, H::BdGHilbertSpace) = basisstate(ind, parent(H))
-state_index(state::NambuState, H::BdGHilbertSpace) = state_index(state, parent(H))
+_state_index(state, H::BdGHilbertSpace) = _state_index(state, parent(H))
 
 
 representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
