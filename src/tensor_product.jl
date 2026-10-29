@@ -3,10 +3,10 @@
 # Combines `spaces` into one space without applying any new constraint.
 # Constraints already present on the input spaces are carried over.
 function tensor_product_no_constraints(spaces)
-    atoms = Iterators.flatten(Iterators.map(atomic_factors, spaces))
-    groups = groupby(group_id, atoms; sortkeys=false, sortvals=false)
-
-    factors = map((id, atoms) -> combine_into_group(id, atoms), keys(groups), values(groups))
+    atoms = collect(Iterators.flatten(Iterators.map(atomic_factors, spaces)))
+    factors = map(unique(map(group_id, atoms))) do id
+        combine_into_group(id, map(identity, filter(a -> group_id(a) == id, atoms)))
+    end
     space = if length(factors) == 1
         only(factors)
     else
