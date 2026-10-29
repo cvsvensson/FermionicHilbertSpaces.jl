@@ -39,7 +39,7 @@ export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export SingleParticle, BdG, BdGEigen
 export symmetric_sector
 export open_system
-public particle_number, Axes, dissipator, correlation_matrix, ground_state_parity
+public particle_number, Axes, dissipator
 
 """
     HC
