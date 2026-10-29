@@ -52,7 +52,7 @@ end
 # Whether `outind` lies outside the space and `projection` allows skipping it. Throws if it lies outside and `projection` is false.
 function _skip_outside(outind, projection)
     iszero(outind) || return false
-    projection || throw(ArgumentError("The operator maps outside of the provided space. Pass `projection=true` to ignore those states."))
+    projection || throw(ArgumentError("The operator maps basis states of this space to states outside it. Pass `projection=true` to drop those matrix elements (correct when the operator should act within this subspace), or use a space that also contains the output states (e.g. one including the neighbouring sectors)."))
     return true
 end
 
@@ -407,9 +407,7 @@ represent quadratic fermionic operators only, and a number is represented by the
 
 With `Axes(Hout, Hin)`, an operator is represented as a map from `Hin` to `Hout`, see [`matrix_representation`](@ref).
 """
-function representation(state::AbstractBasisState, space::AbstractHilbertSpace; kwargs...)
-    vector_representation(state, space)
-end
+representation
 
 """
     matrix_representation(op, space::AbstractHilbertSpace, [repr]; kwargs...)
@@ -425,7 +423,7 @@ Unless `Hout == Hin`, only the eager formats without chunking are supported.
 The optional `repr` selects the format, as in [`representation`](@ref): `:sparse` (the default), `:dense`, `:lazy`,
 or a format object (`EagerSparseRepr()`, `EagerDenseRepr()`, `LazyRepr()`). A numeric element type also works as `repr`: `ComplexF64` gives a sparse matrix with that element type, and `Matrix{Float64}` gives a dense matrix with that element type.
 
-Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space (outside `Hout` with `Axes`). Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
+Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space (outside `Hout` with `Axes`). Projection drops matrix elements to states outside the space, so an operator that changes a conserved quantity gives zero on a single sector; use a space that contains both sectors instead. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
 
 # Examples
 ```julia
