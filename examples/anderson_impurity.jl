@@ -60,13 +60,16 @@ sum(lehmann(siam(6), H, q0).weights) ≈ 1
 # The spectral function is `A(ω) = -Im G(ω + iη)/π`, here with a small broadening `η`. Without
 # interaction, the impurity level spreads over the bath energies around zero. With interaction,
 # the weight moves into two Hubbard peaks. They sit just outside `±U/2` (dashed lines) and
-# approach these lines as `U` grows, while the peak at zero energy shrinks.
+# approach these lines as `U` grows, while the peak at zero energy shrinks. Each curve is shifted
+# up by one from the previous.
 ωs = range(-6, 6; length=1201)
 η = 0.15
-plt = plot(; xlabel="ω", ylabel="A(ω)", legend=:outerright)
+plt = plot(; xlabel="ω", ylabel="A(ω), shifted", yticks=false, legend=false, frame=:box, size=(500, 400),
+    title="Impurity spectral function")
 for (i, U) in enumerate((0, 3, 6, 9))
     sol = lehmann(siam(U), H, q0)
-    plot!(plt, ωs, [-imag(G(ω + im * η, sol)) / π for ω in ωs]; label="U = $U", color=i)
-    U > 0 && vline!(plt, [-U / 2, U / 2]; label="", color=i, linestyle=:dash)
+    plot!(plt, ωs, [i - 1 - imag(G(ω + im * η, sol)) / π for ω in ωs]; lw=2, color=i)
+    U > 0 && plot!(plt, [-U, -U, NaN, U, U] ./ 2, i .- [1, 0, NaN, 1, 0]; color=:gray, ls=:dash)
+    annotate!(plt, -6, i - 0.75, text(" U = $U", 9, :left))
 end
 plt
