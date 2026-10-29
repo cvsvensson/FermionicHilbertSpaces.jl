@@ -334,15 +334,14 @@ end
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the element type of `Eye`, as on a ProductSpace.
 function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; tree_split=10, kwargs...)
-    spaces = groups(space)
+    spaces = groups(_input_space(space))
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
     Tterms = _repr_eltype(mapreduce(mat_eltype, promote_type, prodops), repr)
-    identity_matrix = _matrix_representation(missing, bases, space, repr, NoChunking())
-    T = _repr_eltype(promote_type(Tterms, Base.promote_op(*, typeof(op.coeff), eltype(identity_matrix))), repr)
+    T = _repr_eltype(promote_type(Tterms, Base.promote_op(*, typeof(op.coeff), eltype(Eye(0)))), repr)
     Tterms == T && return _terms_matrix(Tterms, prodops, op.coeff, space, repr, chunking; kwargs...)
     summed = _terms_matrix(Tterms, prodops, zero(op.coeff), space, repr, chunking; kwargs...)
     iszero(op.coeff) && return convert(AbstractMatrix{T}, summed)
-    return summed + op.coeff * identity_matrix
+    return summed + _terms_matrix(T, (), op.coeff, space, repr, NoChunking(); kwargs...)
 end
 
 function _matrix_representation(op, bases, space, repr, chunking; kwargs...) #Assume op is a single symbolic operator
@@ -350,8 +349,9 @@ function _matrix_representation(op, bases, space, repr, chunking; kwargs...) #As
 end
 
 
-matrix_accumulator(op::ProductOperator, space, repr) = matrix_accumulator(_repr_eltype(mat_eltype(op), repr), 1, (dim(space), dim(space)), repr)
-matrix_accumulator(op, space, repr) = matrix_accumulator(_repr_eltype(mat_eltype(op), repr), length(NCterms(op)), (dim(space), dim(space)), repr)
+matrix_accumulator(op::ProductOperator, space, repr) = matrix_accumulator(_repr_eltype(mat_eltype(op), repr), 1, _matrix_size(space), repr)
+matrix_accumulator(op, space, repr) = matrix_accumulator(_repr_eltype(mat_eltype(op), repr), length(NCterms(op)), _matrix_size(space), repr)
+_matrix_size(space) = (dim(_output_space(space)), dim(_input_space(space)))
 
 # The element type given in the format (e.g. `EagerSparseRepr{ComplexF64}()`) takes precedence over the operator's
 _repr_eltype(default, ::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T === Missing ? default : T
@@ -415,9 +415,10 @@ end
 
 # The matrix of `sum(terms) + coeff * I` with element type `T`
 _terms_matrix(::Type{T}, terms, coeff, space, repr, ::NoChunking; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
+_terms_matrix(::Type{T}, terms, coeff, space::Axes, repr::EagerSparseRepr, ::NoChunking; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 
 function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T
-    accumulator = matrix_accumulator(T, length(terms), (dim(_output_space(space)), dim(_input_space(space))), repr)
+    accumulator = matrix_accumulator(T, length(terms), _matrix_size(space), repr)
     for term in terms
         operator_indices_and_amplitudes!(accumulator, term, space; kwargs...)
     end
@@ -425,7 +426,7 @@ function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) wh
     return finalize!(accumulator, space)
 end
 
-function _term_matrix_representation(op, H::AbstractHilbertSpace, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
+function _term_matrix_representation(op, H, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
     _accumulator = matrix_accumulator(op, H, repr)
     accumulator = operator_indices_and_amplitudes!(_accumulator, op, H; kwargs...)
     finalize!(accumulator, H)
@@ -517,15 +518,10 @@ function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=
     repr = _canonicalize_repr(repr)
     repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("Lazy and chunked representations with `Axes(Hout, Hin)` need `Hout == Hin`."))
     if trivial_operator(op)
-        coeff, terms = get_trivial_op_coeff(op), ()
-    else
-        bases = _checked_group_ids(op, Hin)
-        op = op + 0
-        coeff = op.coeff
-        terms = [length(bases) > 1 ? partition_product(term, bases, groups(Hin)) : term for term in NCterms(op)]
+        coeff = get_trivial_op_coeff(op)
+        return _accumulated_matrix(_repr_eltype(typeof(coeff), repr), (), coeff, ax, repr; projection)
     end
-    T = _repr_eltype(mapreduce(mat_eltype, promote_type, terms; init=typeof(coeff)), repr)
-    return _accumulated_matrix(T, terms, coeff, ax, repr; projection, kwargs...)
+    return _matrix_representation(op, _checked_group_ids(op, Hin), ax, repr, chunking; projection, kwargs...)
 end
 function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
