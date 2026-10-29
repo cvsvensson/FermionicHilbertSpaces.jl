@@ -5,6 +5,7 @@ end
 NambuState(i::Integer, hole::Bool) = NambuState(SingleParticleState(i), hole)
 Base.:(==)(n1::NambuState, n2::NambuState) = n1.state == n2.state && n1.hole == n2.hole
 Base.hash(n::NambuState, h::UInt) = hash(n.hole, hash(n.state, h))
+_state_label_atomic(s::NambuState, H::_FermionModeSpace) = (s.hole ? "h" : "p") * _state_label_atomic(s.state, H)
 
 # Ψ' m Ψ == Ψ' m_ph Ψ + tr(m) / 2 by the anticommutation relations, since the vector of adjoints Ψ' equals τx Ψ, and
 # m_ph = -τx transpose(m_ph) τx is the unique particle-hole symmetric representative.
@@ -20,6 +21,16 @@ struct BdGHilbertSpace{H}
         states = vec([NambuState(i, hole) for (i, label) in enumerate(labels), hole in (true, false)])
         H = hilbert_space(f, labels, states)
         return new{typeof(H)}(H)
+    end
+end
+function Base.show(io::IO, H::BdGHilbertSpace)
+    return if get(io, :compact, false)
+        print(io, "BdGHilbertSpace($(dim(H))-dim, $(div(dim(H), 2)) modes)")
+    else
+        print(io, "$(dim(H))-dimensional BdGHilbertSpace\n")
+        print(io, "Physical modes: ", div(dim(H), 2), "\n")
+        print(io, "Parent: ")
+        show(IOContext(io, :compact => true), parent(H))
     end
 end
 """
@@ -40,7 +51,6 @@ representation(f[1]' * f[1], H, :dense) # diagm([1, 0, -1, 0]) / 2
 ```
 """
 hilbert_space(f::SymbolicFermionBasis, labels, ::BdG) = BdGHilbertSpace(f, labels)
-@deprecate bdg_hilbert_space(f, labels) hilbert_space(f, labels, BdG())
 dim(h::BdGHilbertSpace) = dim(h.parent)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
 Base.:(==)(a::BdGHilbertSpace, b::BdGHilbertSpace) = a === b || a.parent == b.parent
@@ -86,6 +96,7 @@ function apply_local_operators(op::NCMul, state::NambuState, H::AbstractHilbertS
 end
 
 @testitem "BdG" begin
+    using FermionicHilbertSpaces.FreeFermions
     @fermions f
     h = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
     H = hilbert_space(f, 1:2, BdG())
@@ -103,6 +114,7 @@ end
 end
 
 @testitem "BdG matrix of non-hermitian operators" begin
+    using FermionicHilbertSpaces.FreeFermions
     using LinearAlgebra
     @fermions f
     N = 3
@@ -118,6 +130,7 @@ end
 end
 
 @testitem "BdG equation of motion" begin
+    using FermionicHilbertSpaces.FreeFermions
     @fermions f
     N = 3
     H = hilbert_space(f, 1:N, BdG())
@@ -132,6 +145,7 @@ end
 end
 
 @testitem "BdG expectation values" begin
+    using FermionicHilbertSpaces.FreeFermions
     using LinearAlgebra
     @fermions f
     N = 3
@@ -148,6 +162,7 @@ end
 end
 
 @testitem "BdG representation formats" begin
+    using FermionicHilbertSpaces.FreeFermions
     @fermions f
     H = hilbert_space(f, 1:3, BdG())
     op = sum(rand(ComplexF64) * f[i]' * f[j] + rand(ComplexF64) * f[i]' * f[j]' + hc for i in 1:3, j in 1:3)
@@ -159,8 +174,10 @@ end
 end
 
 @testitem "Space of Nambu states" begin
+    using FermionicHilbertSpaces.FreeFermions
     using LinearAlgebra, OhMyThreads, PartitionedArrays
-    import FermionicHilbertSpaces: NambuState, StateChunking, EagerDenseRepr, PartitionedSparseRepr, normal_order_to_bdg
+    import FermionicHilbertSpaces: StateChunking, EagerDenseRepr, PartitionedSparseRepr
+    using FermionicHilbertSpaces.FreeFermions: normal_order_to_bdg
     @fermions f
     N = 3
     H = hilbert_space(f, 1:N, vec([NambuState(n, hole) for (n, hole) in Base.product(1:N, (true, false))]))
@@ -178,6 +195,7 @@ end
 end
 
 @testitem "BdG space does not combine with generic space operations" begin
+    using FermionicHilbertSpaces.FreeFermions
     @fermions f
     H = hilbert_space(f, 1:2, BdG())
     @test !(H isa FermionicHilbertSpaces.AbstractHilbertSpace)
@@ -244,7 +262,7 @@ Algorithm for `eigen(A, BdGEigen())` on a Hermitian BdG matrix `A` with `N` mode
 
 ```julia
 H = hilbert_space(f, 1:2, BdG())
-vals, vecs = eigen(representation(f[1]' * f[2] + f[1]' * f[2]' + hc, H, :dense), FermionicHilbertSpaces.BdGEigen()) # vals ≈ [-1, 0, 0, 1]
+vals, vecs = eigen(representation(f[1]' * f[2] + f[1]' * f[2]' + hc, H, :dense), BdGEigen()) # vals ≈ [-1, 0, 0, 1]
 ```
 """
 struct BdGEigen{T <: Union{Nothing, Real}} <: AbstractBdGEigenAlg
@@ -317,7 +335,7 @@ end
 
 @testitem "Takagi" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: symmetric_SVD
+    using FermionicHilbertSpaces.FreeFermions: symmetric_SVD
     import Random: seed!
     seed!(1)
     m = rand(4, 4)
@@ -330,7 +348,7 @@ end
 
 @testitem "BdG on Kitaev Sweet spot" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: BdGEigen
+    using FermionicHilbertSpaces.FreeFermions
     @fermions f
     symham = f[1]' * f[2] + f[1]' * f[2]' + hc
     H = hilbert_space(f, 1:2, BdG())
@@ -365,7 +383,7 @@ end
 
 @testitem "BdGEigen quasiparticles" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: BdGEigen
+    using FermionicHilbertSpaces.FreeFermions
     @fermions f
     function test_quasiparticles(op, N)
         F = eigen(representation(op, hilbert_space(f, 1:N, BdG())), BdGEigen())
@@ -394,7 +412,7 @@ end
         @test A * F.vectors ≈ F.vectors * Diagonal(F.values)
         for k in 1:2N
             @test F.values[2N + 1 - k] == -F.values[k]
-            @test F.vectors[:, 2N + 1 - k] ≈ FermionicHilbertSpaces.quasiparticle_adjoint(F.vectors[:, k])
+            @test F.vectors[:, 2N + 1 - k] ≈ FreeFermions.quasiparticle_adjoint(F.vectors[:, k])
         end
         return F
     end
@@ -419,7 +437,7 @@ The quasiparticle creation operator `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])` 
 ```julia
 @fermions f
 H = hilbert_space(f, 1:2, BdG())
-FermionicHilbertSpaces.quasiparticle([1, 0, 0, 1], H) # f[2] + f†[1]
+quasiparticle([1, 0, 0, 1], H) # f[2] + f†[1]
 ```
 """
 function quasiparticle(v, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
@@ -436,7 +454,7 @@ The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `
 ```julia
 @fermions f
 H = hilbert_space(f, 1:2, BdG())
-FermionicHilbertSpaces.symbolic_operator(representation(f[1]' * f[1], H, :dense), H) # -0.5I + f†[1]*f[1]
+symbolic_operator(representation(f[1]' * f[1], H, :dense), H) # -0.5I + f†[1]*f[1]
 ```
 """
 function symbolic_operator(M, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
@@ -448,7 +466,7 @@ end
 
 @testitem "BdG quadratic operators and quasiparticles" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: BdGEigen, quasiparticle, symbolic_operator
+    using FermionicHilbertSpaces.FreeFermions
     @fermions f
     N = 3
     H = hilbert_space(f, 1:N, BdG())
@@ -472,7 +490,7 @@ end
 
 @testitem "Single particle quadratic operators and quasiparticles" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: quasiparticle, symbolic_operator
+    using FermionicHilbertSpaces.FreeFermions
     @fermions f
     H = hilbert_space(f, 1:3, SingleParticle())
     h = rand(ComplexF64, 3, 3) + hc

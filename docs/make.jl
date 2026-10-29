@@ -13,7 +13,7 @@ for file in literate_files
 end
 
 makedocs(;
-    modules=[FermionicHilbertSpaces],
+    modules = [FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions],
     authors="Viktor Svensson, William Samuelson",
     sitename="FermionicHilbertSpaces.jl",
     format=Documenter.HTML(;

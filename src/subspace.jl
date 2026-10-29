@@ -17,8 +17,8 @@ parent by `show`.
 
 The states are meant to be basis states of `parent(H)`, but this is not checked. Some
 spaces store other states over a `FermionicSpace` parent: `hilbert_space(f, labels, states)`
-with `FixedNumberFockState`s, `BdG` spaces with `NambuState`s and `SingleParticle` spaces
-with `SingleParticleState`s.
+with `FixedNumberFockState`s, `FreeFermions.BdG` spaces with `FreeFermions.NambuState`s and `FreeFermions.SingleParticle` spaces
+with `FreeFermions.SingleParticleState`s.
 
 A subtype gets `dim`, `basisstates`, `basisstate`, `state_index`, `==`, `hash`, `show`,
 `add_tag` and `TransposedSpace`. The functions that describe its modes and apply operators
