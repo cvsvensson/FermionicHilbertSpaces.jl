@@ -76,7 +76,7 @@ _state_index(state, H::AbstractSubspace) = state_position(subspace_index(H), _ch
 isconstrained(H::AbstractSubspace) = true
 
 for f in (:atomic_factors, :groups, :factors, :atom_ids, :group_id, :partial_trace_phase_factor_eltype,
-    :partial_transpose_phase_factor_eltype, :fast_path, :mode_ordering)
+    :partial_transpose_phase_factor_eltype, :fast_path, :mode_ordering, :modes)
     @eval $f(H::AbstractSubspace) = $f(parent(H))
 end
 atomic_factor(H::AbstractSubspace, i) = atomic_factor(parent(H), i)

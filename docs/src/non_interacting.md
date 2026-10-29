@@ -76,3 +76,29 @@ The matrix returned by `representation` will depend on the ordering of operators
     ⋅        -0.18844   -0.449635  -0.297613
     0.18844     ⋅        -0.297613  -0.169731 =#
     ```
+
+## Correlation matrices and entanglement
+The Nambu correlation matrix ``\Gamma_{ij} = \langle \Psi_j^\dagger \Psi_i \rangle`` of the BdG ground state is `correlation_matrix(vecs)`, where `vecs` are the eigenvectors from `eigen(A, BdGEigen())`, and `ground_state_parity(vecs)` is its fermionic parity. For a many-body state `ψ` on `H`, `correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`.
+
+The rows and columns of a subsystem of modes form the reduced correlation matrix. Its eigenvalues ``\lambda`` give the entanglement entropy ``S = -\sum \lambda \log \lambda`` of the subsystem, which equals the entropy of the reduced many-body density matrix:
+```@example entanglement
+using FermionicHilbertSpaces, LinearAlgebra
+@fermions f
+N = 4
+h = Hermitian(rand(ComplexF64, N, N))
+Δ = rand(ComplexF64, N, N) |> m -> m - transpose(m)
+ham = sum(f[i]' * h[i, j] * f[j] + Δ[i, j] * f[i]' * f[j]' + hc for i in 1:N, j in 1:N)
+_, vecs = eigen(representation(ham, hilbert_space(f, 1:N, BdG()), :dense), FermionicHilbertSpaces.BdGEigen())
+Γ = correlation_matrix(vecs)
+A = 1:2
+ΓA = Γ[[A; A .+ N], [A; A .+ N]]
+entropy(λ) = -sum(x -> x > 0 ? x * log(x) : zero(x), λ)
+S = entropy(eigvals(Hermitian(ΓA)))
+
+H = hilbert_space(f, 1:N)
+ψ = eigvecs(Hermitian(representation(ham, H, :dense)))[:, 1]
+ρA = partial_trace(ψ * ψ', H => hilbert_space(f, A))
+@assert S ≈ entropy(eigvals(Hermitian(ρA)))
+@assert ΓA ≈ correlation_matrix(ψ, H, hilbert_space(f, A, BdG()))
+S
+```
