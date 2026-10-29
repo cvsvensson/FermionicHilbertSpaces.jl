@@ -38,7 +38,7 @@ function FixedNumberFockState{N}(f::FockNumber) where N
         sites = Base.setindex(sites, trailing_zeros(bits) + 1, k)
         bits &= bits - one(bits)
     end
-    FixedNumberFockState{N}(sites)
+    return FixedNumberFockState{N}(sites)
 end
 
 
@@ -124,9 +124,9 @@ end
 # The change in particle number is stored as a type parameter so that the state produced by a term has a concrete type.
 function precomputation_before_operator_application(op::NCMul, space::AbstractHilbertSpace{<:FixedNumberFockState})
     sites = Tuple(map(factor -> _precomputation_before_operator_application(factor, space), op.factors))
-    return sites, Val(sum(factor -> factor.creation ? 1 : -1, op.factors; init=0))
+    return sites, Val(sum(factor -> factor.creation ? 1 : -1, op.factors; init = 0))
 end
-function apply_local_operators(op::NCMul, f::FixedNumberFockState{N}, H::AbstractHilbertSpace, (sites, _)::Tuple{Any,Val{Δ}}; transpose) where {N,Δ}
+function apply_local_operators(op::NCMul, f::FixedNumberFockState{N}, H::AbstractHilbertSpace, (sites, _)::Tuple{Any, Val{Δ}}; transpose) where {N, Δ}
     if !transpose
         daggers = Iterators.map(op -> op.creation, Iterators.reverse(op.factors))
         state, amp = togglefermions(reverse(sites), daggers, f, Val(N + Δ))
@@ -142,13 +142,13 @@ end
 Apply creation (`dagger == true`) and annihilation operators at `sites`, in order, to `f`. Returns the
 resulting state with `M` particles and the Jordan-Wigner sign, or a sign of `0` if an operator annihilates the state.
 """
-function togglefermions(sites, daggers, f::FixedNumberFockState, ::Val{M}) where M
+function togglefermions(sites, daggers, f::FixedNumberFockState, ::Val{M}) where {M}
     M < 0 && return f, 0
     jw = false
     for (j, (site, dagger)) in enumerate(zip(sites, daggers))
         occupied = _bit(f, site)
         below = count(<(site), f.sites)
-        for k in 1:j-1
+        for k in 1:(j - 1)
             occupied ⊻= sites[k] == site
             below += sites[k] < site
         end
