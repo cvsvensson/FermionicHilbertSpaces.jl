@@ -40,7 +40,8 @@ makedocs(;
         "Non-interacting systems" => [
             "Non-interacting hilbert spaces" => "non_interacting.md",
             "Example: Free fermions" => "literate_output/free_fermions.md",
-            "Example: Self-consistent mean-field theory" => "literate_output/mean_field.md"],
+            "Example: Self-consistent mean-field theory" => "literate_output/mean_field.md",
+        ],
         "Misc" => "misc.md",
         "Extending and performance hooks" => "extending.md",
         "Functions" => "docstrings.md",

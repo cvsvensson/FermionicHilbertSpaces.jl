@@ -27,11 +27,12 @@ function decouple(term, ctr)
     a, b, c, d = NCP.factors(term)
     return NCP.coefficient(term) * (
         ctr(a, b) * c * d + a * b * ctr(c, d) -
-        ctr(a, c) * b * d - a * c * ctr(b, d) +
-        ctr(a, d) * b * c + a * d * ctr(b, c) -
-        (ctr(a, b) * ctr(c, d) - ctr(a, c) * ctr(b, d) + ctr(a, d) * ctr(b, c)))
+            ctr(a, c) * b * d - a * c * ctr(b, d) +
+            ctr(a, d) * b * c + a * d * ctr(b, c) -
+            (ctr(a, b) * ctr(c, d) - ctr(a, c) * ctr(b, d) + ctr(a, d) * ctr(b, c))
+    )
 end
-mean_field(op, ctr) = mapreduce(term -> decouple(term, ctr), NCP.add!!, NCP.terms(op); init=0)
+mean_field(op, ctr) = mapreduce(term -> decouple(term, ctr), NCP.add!!, NCP.terms(op); init = 0)
 
 # The contractions can be anything that multiplies operators, for example symbolic variables. On a single site,
 # keeping the densities and the pairing amplitude `κ = ⟨c↑c↓⟩`, this gives the familiar Hartree and BCS terms.
@@ -49,7 +50,7 @@ mean_field(op, G, Hbdg) = mean_field(op, (a, b) -> expectation(a * b, G, Hbdg))
 ground_state_correlations(op, Hbdg) = correlation_matrix(eigen(representation(op, Hbdg, :dense), BdGEigen()))
 
 # Taking the new state directly can make the iteration oscillate, so we mix it with the previous one.
-function self_consistent(ham, G, Hbdg; mixing=0.5, tol=1e-8, maxiter=1000)
+function self_consistent(ham, G, Hbdg; mixing = 0.5, tol = 1.0e-8, maxiter = 1000)
     for _ in 1:maxiter
         Gnew = ground_state_correlations(mean_field(ham, G, Hbdg), Hbdg)
         norm(Gnew - G) < tol && return Gnew
