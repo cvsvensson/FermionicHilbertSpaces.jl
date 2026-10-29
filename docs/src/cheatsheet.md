@@ -65,13 +65,10 @@ HA = hilbert_space(f, 1:2)
 -sum(λ * log(λ) for λ in eigvals(Hermitian(ρA)) if λ > 0)
 ```
 
-## Partial transpose and negativity
+## Partial transpose
 ```@example cheat
 ρ = Ψ * Ψ'
 partial_transpose(ρ, H, HA)
-```
-```@example cheat
-FermionicHilbertSpaces.logarithmic_negativity(ρ, H, HA)
 ```
 
 ## Time evolution
