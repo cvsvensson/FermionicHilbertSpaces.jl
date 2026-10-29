@@ -5,10 +5,10 @@ struct ConstrainedSpace{B,H,S,I} <: AbstractSubspace{B,H}
     ConstrainedSpace{B,H,S,I}(parent, states, index) where {B,H,S,I} = new{B,H,S,I}(parent, states, index)
 end
 
-function ConstrainedSpace(space, states; constraint=NoSymmetry(), index=default_subspace_index)
+function ConstrainedSpace(space, states; constraint=NoSymmetry())
     parent, members = unnest(space, states)
     stored = _stored_states(members)
-    ConstrainedSpace(parent, stored, build_subspace_index(index, constraint, parent, stored))
+    ConstrainedSpace(parent, stored, build_subspace_index(constraint, parent, stored))
 end
 ConstrainedSpace(space::H, states::S, index) where {H,S} = ConstrainedSpace{eltype(states),H,S,typeof(index)}(space, states, index)
 ConstrainedSpace(::AbstractSubspace, states, index) = throw(nested_subspace_error())
@@ -18,46 +18,40 @@ subspace_states(H::ConstrainedSpace) = H.states
 subspace_index(H::ConstrainedSpace) = H.index
 rewrap(H::ConstrainedSpace, parent) = ConstrainedSpace(parent, H.states, H.index)
 
-constrain_space(space::AbstractHilbertSpace, ::NoSymmetry; index=default_subspace_index) = space
-constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}; index=default_subspace_index) = constrain_space(space, NoSymmetry(), states; index)
+constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
+constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}) = constrain_space(space, NoSymmetry(), states)
 
-constrain_space(space, ::NoSymmetry, states; index=default_subspace_index) = ConstrainedSpace(space, states; index)
-function constrain_space(space, constraint::AbstractConstraint, states=basisstates(space); index=default_subspace_index)
+constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, states)
+function constrain_space(space, constraint::AbstractConstraint, states=basisstates(space))
     if supports_sector_grouping(constraint)
         f = sector_function(constraint, space)
-        return sector_space(space, states, f, constraint; index)
+        return sector_space(space, states, f, constraint)
     elseif supports_filtering(constraint)
         f = filter_function(constraint, space)
         filtered_states = collect(Iterators.filter(f, states))
-        return ConstrainedSpace(space, filtered_states; constraint, index)
+        return ConstrainedSpace(space, filtered_states; constraint)
     else
         throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     end
 end
 
 """
-    build_subspace_index(build, constraint, parent, states)
+    build_subspace_index(constraint, parent, states)
 
-`build(constraint, parent, states)`, after checking that it gives the first, middle and last of
-`states` their positions. Throws an `ArgumentError` otherwise.
+`default_subspace_index(constraint, parent, states)`, after checking that it gives the first,
+middle and last of `states` their positions. Throws an `ArgumentError` otherwise.
 """
-function build_subspace_index(build, constraint, parent, states)
-    index = build(constraint, parent, states)
+function build_subspace_index(constraint, parent, states)
+    index = default_subspace_index(constraint, parent, states)
+    isempty(states) && return index
     n = length(states)
     for i in unique!([1, cld(n, 2), n])
-        n == 0 && break
         state = states[firstindex(states)+i-1]
         position = state_position(index, state, parent)
         position == i || throw(ArgumentError("The subspace index $(typeof(index)) gives position $position to the state `$state` at position $i."))
     end
     return index
 end
-
-sector_constraint(c, qn) = c
-sector_constraint(::Nothing, qn) = NoSymmetry()
-sector_constraint(c::NumberConservation, qn) = NumberConservation([qn], c.spaces, c.weights)
-sector_constraint(c::ParityConservation, qn) = ParityConservation([qn], c.spaces)
-sector_constraint(c::ProductConstraint, qn) = ProductConstraint(map(sector_constraint, c.constraints, qn))
 
 allowed_values(::NumberConservation{Missing,Missing,Missing}, space, mapper) = 0:maximum_particles(space)
 function allowed_values(nc::NumberConservation{Missing}, space, mapper)
