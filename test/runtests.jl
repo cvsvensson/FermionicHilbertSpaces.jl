@@ -202,6 +202,14 @@ end
     @test pt_same(msame) ≈ msame
     @test sparse(pt_same) == sparse(I(dim(Hsame)^2))
     @test pt_similar(msame) ≈ partial_trace(msame, Hsame => Hsimilar)
+
+    # Tracing onto the whole space returns the input, for matrices and states, constrained or not.
+    for H in (Hsame, Hconstrained)
+        m = rand(ComplexF64, dim(H), dim(H))
+        v = rand(ComplexF64, dim(H))
+        @test partial_trace(m, H => H) ≈ m
+        @test partial_trace(v, H => H) ≈ v * v'
+    end
 end
 
 @testitem "PartialTraceMap variants" begin

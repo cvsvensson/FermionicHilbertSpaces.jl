@@ -1,7 +1,7 @@
-# # Floquet Systems: Defining Custom Algebras and Matrix Representations
+# # Floquet Systems
 
-# This tutorial shows how to define a custom noncommutative operator algebra and matrix 
-# representations, which works together with the other symbolic operators and spaces in FermionicHilbertSpaces.jl.
+# This example defines an operator algebra and matrix representations for the Floquet space of a
+# periodically driven system, and couples it to a spin to compute the quasienergies of a driven three-level system.
 
 # ## Background: Floquet theory 
 
@@ -27,13 +27,9 @@
 
 # ## Defining the custom Floquet algebra
 
-# Here's what you need to define a new algebra and matrix representations:
-# 1. **Symbolic types** — structs representing your operators 
-# 2. **`@nc` declaration** — registers types with the algebraic machinery
-# 3. **`@commutative` declaration** — declares commutativity with other algebras
-# 4. **`mul_effect`** — the multiplication / commutation rules
-# 5. **`apply_local_operator`** — how operators act on basis states
-# 6. **`symbolic_group`** — links operators to their Hilbert space
+# The steps for defining a new algebra are listed on the [Clock operators](clock_operators.md) page.
+# Compared to the clock operators, the Floquet operators also commute with operators of other algebras
+# through `@commutative`, and their `mul_effect` simplifies products.
 
 # Let's load the package and import some things we need to overload or use
 using FermionicHilbertSpaces
@@ -41,7 +37,7 @@ using FermionicHilbertSpaces: AbstractSym
 import FermionicHilbertSpaces.NonCommutativeProducts:
     @nc, NCMul, @commutative, mul_effect
 
-# ### Step 1 — Symbolic types
+# ### Symbolic types
 
 # `FloquetBasis` represents a Floquet degree of freedom (having an `id` allows multiple Floquet modes).
 # `FloquetLadder` represents ``F^k`` and `FloquetNumber` represents ``N^p``.
@@ -63,20 +59,20 @@ Base.show(io::IO, F::FloquetLadder) = print(io, "F^", F.shift)
 Base.show(io::IO, N::FloquetNumber) = print(io, "N^", N.power)
 const Floquets = Union{FloquetLadder,FloquetNumber}
 
-# ### Step 2 — `@nc` declaration
+# ### `@nc` declaration
 
 # Registering types with `@nc` enables symbolic algebra operations (`+`, `*`)
 # on these types and marks their multiplication as noncommutative.
 
 @nc FloquetLadder FloquetNumber
 
-# ### Step 3 — `@commutative` declarations
+# ### `@commutative` declarations
 
 # To make Floquet operators commute with all other AbstractSyms operators we write
 
 @commutative Floquets AbstractSym
 
-# ### Step 4 — Multiplication rules via `mul_effect`
+# ### Multiplication rules via `mul_effect`
 
 # `mul_effect(a, b)` is called when two adjacent factors `a·b` appear in a symbolic
 # product and determines how the pair should be rewritten:
@@ -123,7 +119,7 @@ end
 # ``N \cdot F^k`` is already in normal order (``N`` sorts before ``F``).
 floquet_mul(::FloquetNumber, ::FloquetLadder) = nothing
 
-# ### Step 5 — `apply_local_operator`
+# ### `apply_local_operator`
 
 # This is the bridge between symbolic operators and matrix elements.
 # Given an `NCMul` of Floquet factors and a single basis state, it returns
@@ -142,7 +138,7 @@ apply_local_operator(op::FloquetLadder, state::FloquetState, space, precomp) = F
 # ``N^p`` multiplies the amplitude by ``n^p``, where ``n`` is the current mode index.
 apply_local_operator(op::FloquetNumber, state::FloquetState, space, precomp) = state, state.mode^op.power
 
-# ### Step 6 — `symbolic_group`
+# ### `symbolic_group`
 
 # The matrix-representation machinery uses `symbolic_group` to match operators to Hilbert spaces.
 # We'll associate each Floquet operator with a FloquetBasis and use that object as the label for the Hilbert space
