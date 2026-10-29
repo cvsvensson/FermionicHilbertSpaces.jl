@@ -20,6 +20,7 @@ makedocs(;
         canonical="https://cvsvensson.github.io/FermionicHilbertSpaces.jl",
         edit_link="main",
         assets=String[],
+        size_threshold=400 * 2^10,
     ),
     pages=[
         "Home" => "index.md",
