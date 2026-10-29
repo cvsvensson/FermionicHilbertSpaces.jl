@@ -800,22 +800,35 @@ end
 # (Ks[k], the i-th complement state of the group) with weight s, and BV likewise with conj(s) in
 # place of s, each group adds BU * transpose(BV) to mout[Ks, Ks].
 function _full_partial_trace!(mout, m::LowRankMatrix, splits, H)
-    # (K, J, s) for each state J that splits into (K, b), per complement state b
-    byb = Dict{Int,Vector{Tuple{Int,Int,fieldtype(eltype(eltype(splits)), 3)}}}()
-    for (J, ss) in pairs(splits), (K, b, s) in ss
-        iszero(K) || push!(get!(() -> valtype(byb)(), byb, b), (K, J, s))
+    # (K, J, s) for each state J that splits into (K, b), grouped by b in ranges[b] and sorted by K
+    nb = maximum(((K, b, _),) -> iszero(K) ? 0 : b, Iterators.flatten(splits); init=0)
+    ptr = zeros(Int, nb + 1)
+    for ss in splits, (K, b, _) in ss
+        iszero(K) || (ptr[b+1] += 1)
     end
-    groups = Dict{Vector{Int},Vector{valtype(byb)}}() # Ks => the entries of each b in the group
-    for es in values(byb)
-        sort!(es; by=first)
-        push!(get!(() -> valtype(byb)[], groups, first.(es)), es)
+    ptr[1] = 1
+    cumsum!(ptr, ptr)
+    next = ptr[1:nb]
+    entries = Vector{Tuple{Int,Int,fieldtype(eltype(eltype(splits)), 3)}}(undef, ptr[end] - 1)
+    for (J, ss) in pairs(splits), (K, b, s) in ss
+        iszero(K) && continue
+        entries[next[b]] = (K, J, s)
+        next[b] += 1
+    end
+    ranges = [ptr[b]:ptr[b+1]-1 for b in 1:nb]
+    foreach(r -> sort!(view(entries, r); by=first), ranges)
+    Kall = first.(entries)
+    groups = Dict{typeof(view(Kall, 1:0)),Vector{Int}}() # Ks => the complement states in the group
+    for (b, r) in pairs(ranges)
+        isempty(r) || push!(get!(Vector{Int}, groups, view(Kall, r)), b)
     end
     (; U, V) = m
     T = promote_type(eltype(U), eltype(V), partial_trace_phase_factor_eltype(H))
-    for (Ks, ess) in groups
-        BU = Array{T}(undef, length(Ks), length(ess), size(U, 2))
+    for (Ks, bs) in groups
+        BU = Array{T}(undef, length(Ks), length(bs), size(U, 2))
         BV = similar(BU)
-        for r in axes(BU, 3), (i, es) in pairs(ess), (k, (_, J, s)) in pairs(es)
+        for r in axes(BU, 3), (i, b) in pairs(bs), (k, p) in pairs(ranges[b])
+            (_, J, s) = entries[p]
             BU[k, i, r] = s * U[J, r]
             BV[k, i, r] = conj(s) * V[J, r]
         end
