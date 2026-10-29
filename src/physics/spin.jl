@@ -430,7 +430,7 @@ NonCommutativeProducts.@commutative BosonSym SpinSym
 NonCommutativeProducts.@commutative MajoranaSym SpinSym
 
 """
-    apply_local_operator(op::SpinSym, state::SpinState) -> (newstate, amplitude)
+    apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace, precomp) -> (newstate, amplitude)
 
 Apply a single spin operator to a spin state. Returns (newstate, amplitude) where amplitude is 0 if the operation is not allowed, and a nonzero value otherwise.
 """
