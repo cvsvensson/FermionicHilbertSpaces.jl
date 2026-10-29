@@ -7,11 +7,11 @@ struct ConstrainedSpace{B,H,S,C,I} <: AbstractSubspace{B,H}
 end
 
 # `constraint` is what selected `states`; `NoSymmetry()` means they were listed explicitly.
-function ConstrainedSpace(space, states; constraint=NoSymmetry(), index=default_subspace_index)
+function ConstrainedSpace(space, states; constraint=NoSymmetry())
     parent, members = unnest(space, states)
     stored = _stored_states(members)
     selected_by = constraint isa NoSymmetry ? constraint : index_constraint(coalesce(combine_constraints(own_constraint(space), constraint), NoSymmetry()), parent)
-    ConstrainedSpace(parent, stored, selected_by, build_subspace_index(index, selected_by, parent, stored))
+    ConstrainedSpace(parent, stored, selected_by, build_subspace_index(selected_by, parent, stored))
 end
 ConstrainedSpace(space::H, states::S, constraint, index) where {H,S} = ConstrainedSpace{eltype(states),H,S,typeof(constraint),typeof(index)}(space, states, constraint, index)
 ConstrainedSpace(::AbstractSubspace, states, constraint, index) = throw(nested_subspace_error())
@@ -21,35 +21,35 @@ subspace_states(H::ConstrainedSpace) = H.states
 subspace_index(H::ConstrainedSpace) = H.index
 rewrap(H::ConstrainedSpace, parent) = ConstrainedSpace(parent, H.states, H.constraint, H.index)
 
-constrain_space(space::AbstractHilbertSpace, ::NoSymmetry; index=default_subspace_index) = space
-constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}; index=default_subspace_index) = constrain_space(space, NoSymmetry(), states; index)
+constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
+constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}) = constrain_space(space, NoSymmetry(), states)
 
-constrain_space(space, ::NoSymmetry, states; index=default_subspace_index) = ConstrainedSpace(space, states; index)
-function constrain_space(space, constraint::AbstractConstraint, states=basisstates(space); index=default_subspace_index)
+constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, states)
+function constrain_space(space, constraint::AbstractConstraint, states=basisstates(space))
     if supports_sector_grouping(constraint)
         f = sector_function(constraint, space)
-        return sector_space(space, states, f, constraint; index)
+        return sector_space(space, states, f, constraint)
     elseif supports_filtering(constraint)
         f = filter_function(constraint, space)
         filtered_states = collect(Iterators.filter(f, states))
-        return ConstrainedSpace(space, filtered_states; constraint, index)
+        return ConstrainedSpace(space, filtered_states; constraint)
     else
         throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     end
 end
 
 """
-    build_subspace_index(build, constraint, parent, states)
+    build_subspace_index(constraint, parent, states)
 
-`build(constraint, parent, states)`, after checking that it gives the first, middle and last of
-`states` their positions. Throws an `ArgumentError` otherwise. `constraint` is in the form
-given by `index_constraint`.
+`default_subspace_index(constraint, parent, states)`, after checking that it gives the first,
+middle and last of `states` their positions. Throws an `ArgumentError` otherwise. `constraint`
+is in the form given by `index_constraint`.
 """
-function build_subspace_index(build, constraint, parent, states)
-    index = build(constraint, parent, states)
+function build_subspace_index(constraint, parent, states)
+    index = default_subspace_index(constraint, parent, states)
+    isempty(states) && return index
     n = length(states)
     for i in unique!([1, cld(n, 2), n])
-        n == 0 && break
         state = states[firstindex(states)+i-1]
         position = state_position(index, state, parent)
         position == i || throw(ArgumentError("The subspace index $(typeof(index)) gives position $position to the state `$state` at position $i."))
@@ -92,12 +92,6 @@ combine_constraints(a, b) = (ismissing(a) || ismissing(b)) ? missing : a isa NoS
 # What selected the states of the factor `H` of a product, acting on `H` only, or `missing` if unknown.
 factor_constraint(H) = localize_constraint(own_constraint(H), H)
 combined_factor_constraint(spaces) = reduce(combine_constraints, map(factor_constraint, spaces); init=NoSymmetry())
-
-sector_constraint(c, qn) = c
-sector_constraint(::Nothing, qn) = NoSymmetry()
-sector_constraint(c::NumberConservation, qn) = NumberConservation([qn], c.spaces, c.weights)
-sector_constraint(c::ParityConservation, qn) = ParityConservation([qn], c.spaces)
-sector_constraint(c::ProductConstraint, qn) = ProductConstraint(map(sector_constraint, c.constraints, qn))
 
 allowed_values(::NumberConservation{Missing,Missing,Missing}, space, mapper) = 0:maximum_particles(space)
 function allowed_values(nc::NumberConservation{Missing}, space, mapper)

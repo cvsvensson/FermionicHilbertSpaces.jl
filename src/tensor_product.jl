@@ -13,16 +13,15 @@ function product_space_and_states(spaces)
     return space, _find_combined_states(space, spaces, state_mapper(space, spaces))
 end
 """
-    tensor_product(spaces...; constraint=NoSymmetry(), index=default_subspace_index)
-    tensor_product(spaces; constraint=NoSymmetry(), index=default_subspace_index)
+    tensor_product(spaces...; constraint=NoSymmetry())
+    tensor_product(spaces; constraint=NoSymmetry())
 
 Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
-A constrained result looks up states with an index built by `index`, as in [`constrain_space`](@ref).
 """
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
-function tensor_product(spaces; constraint=NoSymmetry(), index=default_subspace_index)
+function tensor_product(spaces; constraint=NoSymmetry())
     if length(spaces) == 1
-        return constrain_space(only(spaces), constraint; index)
+        return constrain_space(only(spaces), constraint)
     end
     space, factor_states = product_space_and_states(spaces)
     states = isnothing(factor_states) ? basisstates(space) : factor_states
@@ -31,21 +30,21 @@ function tensor_product(spaces; constraint=NoSymmetry(), index=default_subspace_
         combined = _combined_sector_constraint(spaces)
         if ismissing(combined)
             isnothing(factor_states) && return space
-            return ConstrainedSpace(space, factor_states; constraint=coalesce(factors, NoSymmetry()), index)
+            return ConstrainedSpace(space, factor_states; constraint=coalesce(factors, NoSymmetry()))
         end
-        return sector_space(space, states, sector_function(combined, space), combined; index, selected_by=coalesce(factors, NoSymmetry()))
+        return sector_space(space, states, sector_function(combined, space), combined; selected_by=coalesce(factors, NoSymmetry()))
     end
 
     constraint = supply_missing_constraint_info(constraint, space, spaces)
     selected_by = coalesce(combine_constraints(factors, constraint), NoSymmetry())
     states = supports_branch_pruning(constraint) ? generate_states(spaces, constraint, space) : states
     if supports_sector_grouping(constraint) && supports_filtering(constraint)
-        return sector_space(space, states, sector_function(constraint, space), constraint; index, selected_by)
+        return sector_space(space, states, sector_function(constraint, space), constraint; selected_by)
     elseif supports_filtering(constraint)
         filtered_states = collect(Iterators.filter(filter_function(constraint, space), states))
-        return ConstrainedSpace(space, filtered_states; constraint=selected_by, index)
+        return ConstrainedSpace(space, filtered_states; constraint=selected_by)
     else
-        return ConstrainedSpace(space, states; constraint=selected_by, index)
+        return ConstrainedSpace(space, states; constraint=selected_by)
     end
 end
 
@@ -584,7 +583,24 @@ does not check its input.
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
 
 abstract type AbstractPartialTraceAlg end
+"""
+    SubsystemPartialTraceAlg()
+
+Partial-trace algorithm that combines every basis state of the subsystem with every basis state
+of the complement. It is an option for the `alg` keyword of [`partial_trace`](@ref) and of the
+maps `partial_trace(H => Hsub)` and `embed(Hsub => H)`. It is faster when the subsystem and
+its complement have few states compared to the full space.
+"""
 struct SubsystemPartialTraceAlg <: AbstractPartialTraceAlg end
+"""
+    FullPartialTraceAlg()
+
+Partial-trace algorithm that visits pairs of basis states of the full space, or the stored
+elements of a sparse input. It is an option for the `alg` keyword of [`partial_trace`](@ref)
+and of the maps `partial_trace(H => Hsub)` and `embed(Hsub => H)`. It is faster for sparse
+inputs and for constrained spaces with few states compared to the subsystem and its
+complement combined.
+"""
 struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
 
 _effective_dim(m::AbstractMatrix, H) = length(m)
@@ -938,7 +954,7 @@ function _canonicalize_pt_input(v::AbstractVector, H::AbstractHilbertSpace)
     end
 end
 _check_pt_input_size(m::AbstractMatrix, H::AbstractHilbertSpace) =
-    size(m) == (dim(H), dim(H)) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
+    size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
 function _canonicalize_pt_input(m::AbstractMatrix, H::AbstractHilbertSpace)
     _check_pt_input_size(m, H)
     return _vectorize_pt_density_matrix(m)
@@ -951,7 +967,7 @@ function _canonicalize_pt_output(v::AbstractVector, Hsub::AbstractHilbertSpace)
     return v
 end
 function _canonicalize_pt_output(m::AbstractMatrix, Hsub::AbstractHilbertSpace)
-    size(m) == (dim(Hsub), dim(Hsub)) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(m))"))
+    size_compatible(m, Hsub) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(m))"))
     return vec(m)
 end
 
