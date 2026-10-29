@@ -236,6 +236,26 @@ function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpa
 end
 
 
+@testitem "Vector tensor product of a fermion group split across spin-carrying targets" begin
+    using LinearAlgebra
+    @fermions f
+    @spin s 1 // 2
+    Hs1 = tensor_product(hilbert_space(f, 2:2), hilbert_space(s))
+    Hs2 = hilbert_space(f, 1:1)
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(s))
+    rep(op, H) = representation(op, H, :dense)
+    # the fermion vacuum with the given amplitudes on the spin states
+    function vacuum(H, n, amplitudes)
+        v = zeros(dim(H))
+        v[findall(iszero, diag(rep(n, H)))] .= amplitudes
+        v
+    end
+    ψ1 = rep(f[2]', Hs1) * vacuum(Hs1, f[2]' * f[2], [0.6, 0.8])
+    ψ2 = rep(f[1]', Hs2) * vacuum(Hs2, f[1]' * f[1], [1.0])
+    reference = rep(f[2]', H) * (rep(f[1]', H) * vacuum(H, f[1]' * f[1] + f[2]' * f[2], [0.6, 0.8]))
+    @test tensor_product((ψ1, ψ2), (Hs1, Hs2), H) ≈ reference
+end
+
 @testitem "generalized_kron_vec! direct call" begin
     using Random
     Random.seed!(1234)
@@ -1003,10 +1023,16 @@ function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, 
     indK = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
     T = partial_trace_phase_factor_eltype(H)
-    n_est = dim(Hsub)^2 * dim(complement)
-    Is = sizehint!(Int[], n_est)
-    Js = sizehint!(Int[], n_est)
-    Vs = sizehint!(T[], n_est)
+    Is = Int[]
+    Js = Int[]
+    Vs = T[]
+    # When every combination of a subsystem state and a complement state is in H, the number of terms is exactly dim(H) * dim(Hsub).
+    if dim(H) == dim(Hsub) * dim(complement)
+        n = dim(H) * dim(Hsub)
+        sizehint!(Is, n)
+        sizehint!(Js, n)
+        sizehint!(Vs, n)
+    end
     _foreach_partial_trace_term(CartesianIndices((dim(H), dim(H))), H, Hsub, complement, mapper, alg; phase_factors) do J1, J2, K1, K2, v
         push!(Is, indK[K1, K2])
         push!(Js, indJ[J1, J2])

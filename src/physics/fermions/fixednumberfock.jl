@@ -230,6 +230,20 @@ hilbert_space(f::SymbolicFermionBasis, labels, ::SingleParticle) = SingleParticl
 Base.@propagate_inbounds basisstate(ind::Integer, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
 state_index(state::AbstractFockState, H::SingleParticleHilbertSpace) = state_index(state, parent(H))
 
+@testitem "Vector tensor product of fixed-number states with reordered modes" begin
+    import FermionicHilbertSpaces: FixedNumberFockState
+    @fermions f
+    H1 = hilbert_space(f, 1:2, NumberConservation(1))
+    H2 = hilbert_space(f, 3:3, NumberConservation(1))
+    H = hilbert_space(f, [1, 3, 2], NumberConservation(2))
+    H1fix = hilbert_space(f, 1:2, FixedNumberFockState{1}.(basisstates(H1)))
+    H2fix = hilbert_space(f, 3:3, FixedNumberFockState{1}.(basisstates(H2)))
+    Hfix = hilbert_space(f, [1, 3, 2], FixedNumberFockState{2}.(basisstates(H)))
+    v = tensor_product(([1.0, 2.0], [1.0]), (H1, H2), H)
+    vfix = tensor_product(([1.0, 2.0], [1.0]), (H1fix, H2fix), Hfix)
+    @test vfix ≈ v
+end
+
 @testitem "Single particle hilbert space" begin
     using LinearAlgebra
     @fermions f
@@ -316,6 +330,7 @@ end
 function phase_factor_h(f1::FixedNumberFockState, f2::FixedNumberFockState, partition, masks)
     phase_factor_h(FockNumber(f1), FockNumber(f2), partition, masks)
 end
+phase_factor_u(partition, masks, state::FixedNumberFockState) = phase_factor_u(partition, masks, FockNumber(state))
 
 representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)

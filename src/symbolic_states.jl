@@ -494,7 +494,7 @@ function _vector_representation(op::NCAdd, space::AbstractHilbertSpace, repr, ki
         vec = _zero_vector(space, _repr, promote_type(_vector_eltype(_repr), valtype(op.dict)))
         return kind == :kets ? vec : transpose(vec)
     end
-    return sum(coeff * _vector_representation(term, space, repr, kind; kwargs...) for (term, coeff) in pairs(op.dict))
+    return _sum_tree([coeff * _vector_representation(term, space, repr, kind; kwargs...) for (term, coeff) in pairs(op.dict)], 10)
 end
 
 function representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
