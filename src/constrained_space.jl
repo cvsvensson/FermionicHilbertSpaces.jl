@@ -91,13 +91,14 @@ end
 _duplicate_state_error(state) = ArgumentError("The state `$state` appears more than once.")
 state_position(d::Dict, state, H) = get(d, state, 0)
 function state_position(table::Vector{Int32}, state, H)
-    (state isa statetype(H) || same_state_kind(state, statetype(H))) || return 0
     k = state_index(state, parent(H))
     iszero(k) ? 0 : Int(table[k])
 end
 # Whether `state` has the type `B` up to type parameters, so that `state_index` of a space with states of type `B` accepts it.
 same_state_kind(state, ::Type{B}) where {B} = _type_family(typeof(state)) === _type_family(B)
 _type_family(T) = (parentmodule(T), nameof(T))
+# Returns `state` if it is of the kind of the states of the subspace `H`, and throws a `MethodError` otherwise.
+_check_state_kind(state, H) = (state isa statetype(H) || same_state_kind(state, statetype(H))) ? state : throw(MethodError(state_index, (state, H)))
 same_state_kind(state::ProductState, ::Type{ProductState{S}}) where {S<:Tuple} = state.states isa Tuple && length(state.states) == fieldcount(S) && all(map(same_state_kind, state.states, fieldtypes(S)))
 
 @testitem "constrain_space" begin
@@ -253,8 +254,8 @@ end
     @test state_index(T(2), Hlarge) == 0
     @test state_index(FockNumber(3), Hint) == 0
     @test state_index(statetype(hilbert_space(f, 1:4))(1), Hint) == 2
-    @test state_index(BosonicState(0), Hsector) == 0
-    @test state_index(FockNumber(0), Hconstrained) == 0
+    @test_throws MethodError state_index(BosonicState(0), Hsector)
+    @test_throws MethodError state_index(FockNumber(0), Hconstrained)
 
     Ha, Hb = hilbert_space(f, 1:3), hilbert_space(f, 4:6)
     Hsector2 = constrain_space(tensor_product(Ha, Hb), NumberConservation(1, [Ha]) * NumberConservation(2, [Hb]))

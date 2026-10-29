@@ -96,7 +96,7 @@ println("Steady-state occupation ⟨n⟩_ss = $n_ss  (analytic: $n_analytical)")
 # ```math
 # Q = n_l - n_r.
 # ```
-# is conserved. We can constrain to fixed `Q` sectors and get block matrices.
+# We can constrain to fixed `Q` sectors and get block matrices.
 # The Q=0 sector is the physically relevant one if we disallow coherences
 # between different particle number sectors.
 constraint = NumberConservation(-1:1, [Hl, Hr], [1, -1])
