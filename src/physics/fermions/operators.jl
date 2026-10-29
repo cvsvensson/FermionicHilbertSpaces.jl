@@ -16,7 +16,8 @@ end
 """
     parityoperator(H)
 
-Return the fermionic parity operator for the Hilbert space `H`.
+Return the fermionic parity operator `(-1)^N` for the Hilbert space `H`: `1` on even and `-1`
+on odd basis states.
 """
 function parityoperator(H::AbstractHilbertSpace{<:AbstractFockState})
     sparse_operator(Int, f -> (f, parity(f)), H)

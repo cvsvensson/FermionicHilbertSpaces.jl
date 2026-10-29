@@ -41,7 +41,6 @@ ham = sum(S[k][:]'S[k+1][:] for k in 1:(N-1))
 M = representation(ham, H)
 
 # We can exploit the fact that this hamiltonian conserves the total magnetization by
-using FermionicHilbertSpaces: AdditiveConstraint
 constraint = AdditiveConstraint(1; maps=s -> s.m)
 H = hilbert_space(S, 1:N, constraint)
 M = representation(ham, H)

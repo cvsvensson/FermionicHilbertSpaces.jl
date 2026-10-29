@@ -641,7 +641,7 @@ end
     Ha = hilbert_space(f, 1:2)
     Hae = hilbert_space(f, 1:2, ParityConservation(1))
     Hb = hilbert_space(f, 3:4)
-    even = [state_index(s, Ha) for s in basisstates(Hae)]
+    even = indices(Hae, Ha)
     v = rand(ComplexF64, dim(H))
     m = rand(ComplexF64, dim(H), dim(H))
 

@@ -80,7 +80,8 @@ end
 """
     quantumnumbers(H)
 
-Return the quantum-number labels that define the sectors of `H`.
+Return the quantum-number labels that define the sectors of `H`, sorted in increasing order
+when they can be compared. For parity this is `[-1, 1]`: odd before even.
 For spaces without sector structure, this returns `(nothing,)`.
 """
 quantumnumbers(H::SectorHilbertSpace) = collect(keys(H.qn_to_states))
@@ -89,7 +90,8 @@ quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 """
     sector(qn, H)
 
-Return the sector of `H` corresponding to quantum number `qn`.
+Return the sector of `H` corresponding to quantum number `qn`, for example a particle
+number for `NumberConservation` or `1` (even) / `-1` (odd) for `ParityConservation`.
 For `qn === nothing`, this returns `H` for non-sector spaces.
 Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
 """
