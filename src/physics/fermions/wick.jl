@@ -74,12 +74,13 @@ same expectation value as `op` in the state.
 ```julia
 @fermions f
 H = hilbert_space(f, 1:2, SingleParticle())
-FermionicHilbertSpaces.mean_field(f[1]' * f[1] * f[2]' * f[2], [0.5 0; 0 0.25], H) # 0.25 f[1]' f[1] + 0.5 f[2]' f[2] - 0.125
+mean_field(f[1]' * f[1] * f[2]' * f[2], [0.5 0; 0 0.25], H) # 0.25 f[1]' f[1] + 0.5 f[2]' f[2] - 0.125
 ```
 """
 mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}) = _mean_field(_check_modes(op, H), _contraction(G, H))
 
 @testitem "Wick expectation values" begin
+    using FermionicHilbertSpaces.FreeFermions
     using LinearAlgebra
     @fermions f
     N, β = 3, 0.7
@@ -112,7 +113,7 @@ mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilber
     for H in (hilbert_space(f, 1:N, SingleParticle()), hilbert_space(f, 1:N, BdG())), op in (f[99], f[1]' * f[1] + f[99])
         G0 = zeros(dim(H), dim(H))
         @test_throws ArgumentError expectation(op, G0, H)
-        @test_throws ArgumentError FermionicHilbertSpaces.mean_field(op, G0, H)
+        @test_throws ArgumentError mean_field(op, G0, H)
     end
 end
 
@@ -125,10 +126,11 @@ end
     ρ /= tr(ρ)
     ev(op) = tr(ρ * representation(op, H, :dense))
     op = γ[1] * γ[2] * γ[3] * γ[4] + 2 * γ[4] * γ[1] * γ[3] * γ[1] + γ[2] * γ[3]
-    @test FermionicHilbertSpaces.wick_expectation(op, (x, y) -> ev(x * y)) ≈ ev(op)
+    @test FermionicHilbertSpaces.FreeFermions.wick_expectation(op, (x, y) -> ev(x * y)) ≈ ev(op)
 end
 
 @testitem "Mean field" begin
+    using FermionicHilbertSpaces.FreeFermions
     using LinearAlgebra
     @fermions f
     N = 3
@@ -141,19 +143,20 @@ end
     fock = -ev(f[1]' * f[2]) * f[2]' * f[1] - ev(f[2]' * f[1]) * f[1]' * f[2] + ev(f[1]' * f[2]) * ev(f[2]' * f[1])
     pairing = ev(f[1]' * f[2]') * f[2] * f[1] + ev(f[2] * f[1]) * f[1]' * f[2]' - ev(f[1]' * f[2]') * ev(f[2] * f[1])
     Hfock = hilbert_space(f, 1:N)
-    @test representation(FermionicHilbertSpaces.mean_field(n1 * n2, G, H), Hfock, :dense) ≈ representation(hartree + fock + pairing, Hfock, :dense)
+    @test representation(mean_field(n1 * n2, G, H), Hfock, :dense) ≈ representation(hartree + fock + pairing, Hfock, :dense)
 
     op = f[1]' * f[2]' * f[3]' * f[3] * f[1] * f[2] + f[1]' * f[2]' * f[3] * f[1] + hc
-    @test ev(FermionicHilbertSpaces.mean_field(op, G, H)) ≈ ev(op)
+    @test ev(mean_field(op, G, H)) ≈ ev(op)
 end
 
 @testitem "Mean field with symbolic coefficients" begin
+    using FermionicHilbertSpaces.FreeFermions
     using Symbolics
     @variables U
     @fermions f
     H = hilbert_space(f, 1:2, SingleParticle())
     G = [1 // 2 1 // 5; 1 // 5 1 // 4]
     op = f[1]' * f[1] * f[2]' * f[2]
-    mf = FermionicHilbertSpaces.mean_field(U * op, G, H)
+    mf = mean_field(U * op, G, H)
     @test isequal(Symbolics.simplify(expectation(mf, G, H) - U * expectation(op, G, H)), 0)
 end

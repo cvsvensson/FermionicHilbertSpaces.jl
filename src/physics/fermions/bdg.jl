@@ -68,7 +68,7 @@ function matrix_representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); c
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
     return normal_order_to_bdg(_nambu_matrix(op, H, repr))
 end
-# The matrix `m` with `op == identity_coefficient(op) + Ψ' m Ψ`, of which the BdG matrix is the particle-hole symmetric part.
+# The matrix `m` with `op == c + Ψ' m Ψ` for a scalar `c`, of which the BdG matrix is the particle-hole symmetric part.
 function _nambu_matrix(op, H, repr)
     _is_quadratic_fermion_operator(op, false) || throw(ArgumentError("Only quadratic fermionic operators can be represented on a BdG Hilbert space. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
     return _quadratic_matrix(_bdg_entry, remove_identity(op), H, repr)
