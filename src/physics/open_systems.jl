@@ -49,11 +49,12 @@ tag_right(base) = add_tag(base, :right)
     open_system(base, args...; kwargs...)
     open_system(H::AbstractHilbertSpace; kwargs...)
 
-Return `(Hlr, Hleft, Hright, left, right)` for the vectorized density matrix of a system: `Hlr`
-is the tensor product of a `:left` copy `Hleft` and a transposed `:right` copy `Hright` of the
-space `hilbert_space(base, args...; kwargs...)`, or of `H`. `left(op)` and `right(op)` tag a symbolic
-operator so it acts on `ρ` from the left or from the right, `representation(left(A) * right(B), Hlr)`
-being the superoperator `ρ ↦ AρB`. Public, not exported.
+Return `(Hlr, Hleft, Hright, left, right)` for the vectorized density matrix of a system.
+`Hleft` is a `:left` copy and `Hright` a transposed `:right` copy of the system space, which is
+`hilbert_space(base, args...; kwargs...)` or `H`, and `Hlr` is their tensor product; for `H`, the
+`kwargs` go to `tensor_product`. `left(op)` and `right(op)` tag a symbolic operator so that
+`representation(left(A) * right(B), Hlr)` acts as `ρ ↦ AρB` on the vectorized `ρ`.
+Public, not exported.
 
 # Examples
 ```julia
