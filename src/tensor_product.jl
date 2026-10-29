@@ -586,7 +586,24 @@ does not check its input.
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
 
 abstract type AbstractPartialTraceAlg end
+"""
+    SubsystemPartialTraceAlg()
+
+Partial-trace algorithm that combines every basis state of the subsystem with every basis state
+of the complement. It is an option for the `alg` keyword of [`partial_trace`](@ref) and of the
+maps `partial_trace(H => Hsub)` and `embed(Hsub => H)`. It is faster when the subsystem and
+its complement have few states compared to the full space.
+"""
 struct SubsystemPartialTraceAlg <: AbstractPartialTraceAlg end
+"""
+    FullPartialTraceAlg()
+
+Partial-trace algorithm that visits pairs of basis states of the full space, or the stored
+elements of a sparse input. It is an option for the `alg` keyword of [`partial_trace`](@ref)
+and of the maps `partial_trace(H => Hsub)` and `embed(Hsub => H)`. It is faster for sparse
+inputs and for constrained spaces with few states compared to the subsystem and its
+complement combined.
+"""
 struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
 
 _effective_dim(m::AbstractMatrix, H) = length(m)
