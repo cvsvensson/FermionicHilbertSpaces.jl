@@ -1172,7 +1172,7 @@ end
     H = hilbert_space(f, 1:2)
     ψ = [0, 1, 1, 0] / sqrt(2)
     @test von_neumann_entropy(partial_trace(ψ * ψ', H => hilbert_space(f, 1:1))) ≈ log(2)
-    @test von_neumann_entropy(ψ * ψ') ≈ 0 atol = 1e-12
+    @test von_neumann_entropy(ψ * ψ') ≈ 0 atol = 1.0e-12
 end
 
 @testitem "Partial trace with missing states" begin
