@@ -211,7 +211,12 @@ A custom basis-state type adds a method for the inputs it accepts; a state is re
 """
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
-interpret_state(state, space::Union{TransposedSpace,AbstractSubspace}) = interpret_state(state, parent(space))
+function interpret_state(state, space::Union{TransposedSpace, AbstractSubspace})
+    B = statetype(space)
+    state isa B && return state
+    # A subspace may store its states in a different type than its parent, e.g. FixedNumberFockState
+    return interpret_state(interpret_state(state, parent(space)), B)
+end
 basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(_checked_state_index(state, space), space)
 function _checked_state_index(state, space)
     i = state_index(state, space)
@@ -219,6 +224,7 @@ function _checked_state_index(state, space)
     i
 end
 
+interpret_state(state::FockNumber, ::Type{B}) where {B <: FockNumber} = convert(B, state)
 function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{B}) where {I,B<:FockNumber{I}}
     all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only `'0'` and `'1'`, got `\"$input\"`."))
     bits = map(c -> c == '1', collect(input))
