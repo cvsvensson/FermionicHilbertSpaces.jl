@@ -8,7 +8,7 @@ products, partial traces and matrix representations that connect them.
 module FermionicHilbertSpaces
 
 using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Eigen, Hermitian,
-    Symmetric, UniformScaling, cholesky, diag, diagind, dot,
+    Symmetric, UniformScaling, diag, diagind, dot,
     eigen, eigen!, eigvals, eigvecs, ishermitian, issymmetric,
     mul!, normalize, qr, rank, rmul!, schur, svdvals, tr, I
 using LowRankMatrices: LowRankMatrices, LowRankMatrix
@@ -28,18 +28,20 @@ using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, N
 
 export FockNumber, hc, basisstates, dim, state_index, basisstate
 export hilbert_space, subregion
-export parityoperator, numberoperator, matrix_representation, representation, vector_representation
+export parityoperator, numberoperator, matrix_representation, representation, vector_representation, expectation
 export Kets, Ket, ProductState, SpinState, BosonicState
 
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
 export @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
-export SectorConstraint, FilterConstraint, GenericHilbertSpace
+export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
-export SingleParticle, BdG
+export SingleParticle, BdG, BdGEigen
 export ParametricSparseMatrix
 export symmetric_sector
+export open_system
+public particle_number, Axes, dissipator
 
 """
     HC
@@ -54,6 +56,13 @@ Adding this is equivalent to adding the hermitian conjugate.
 """
 const hc = HC()
 
+"""
+    AbstractSym
+
+Supertype of symbolic operators such as fermions, Majoranas, bosons and spins. A custom
+operator type subtypes it, registers itself with `NonCommutativeProducts.@nc` and defines
+[`apply_local_operator`](@ref) and [`symbolic_group`](@ref).
+"""
 abstract type AbstractSym end
 
 # Factors from different groups are ordered by the type name of the group id, then by `isless`.

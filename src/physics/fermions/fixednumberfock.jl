@@ -268,12 +268,26 @@ end
     @test_throws ArgumentError representation(op, H, :lazy)
 end
 
+@testitem "Single particle expectation values" begin
+    using LinearAlgebra
+    @fermions f
+    N = 3
+    H = hilbert_space(f, 1:N, SingleParticle())
+    Hfock = hilbert_space(f, 1:N, NumberConservation())
+    ham = sum(rand(ComplexF64) * f[i]' * f[j] + hc for i in 1:N, j in 1:N)
+    ρ = exp(-representation(ham, Hfock, :dense))
+    ρ /= tr(ρ)
+    G = [tr(ρ * representation(f[i]' * f[j], Hfock, :dense)) for i in 1:N, j in 1:N]
+    op = f[1]' * f[2] + 2 * f[3] * f[1]' + 1
+    @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
+end
+
 @testitem "Deprecated special space constructors" begin
     @fermions f
     @majoranas γ
     Hsp = @test_deprecated single_particle_hilbert_space(f, 1:2)
     Hbdg = @test_deprecated bdg_hilbert_space(f, 1:2)
-    Hmaj = @test_deprecated majorana_hilbert_space(γ, 1:4, ParityConservation(1))
+    Hmaj = @test_deprecated FermionicHilbertSpaces.majorana_hilbert_space(γ, 1:4, ParityConservation(1))
     @test Hsp == hilbert_space(f, 1:2, SingleParticle())
     @test Hbdg == hilbert_space(f, 1:2, BdG())
     @test Hmaj == hilbert_space(γ, 1:4, ParityConservation(1))
@@ -338,6 +352,7 @@ function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSpar
     _is_quadratic_fermion_operator(op, true) || throw(ArgumentError("Only quadratic, number conserving fermionic operators can be represented on a SingleParticleHilbertSpace. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
     _quadratic_matrix(_single_particle_entry, remove_identity(op), H, repr)
 end
+expectation(op, G::AbstractMatrix, H::SingleParticleHilbertSpace) = identity_coefficient(op) + dot(transpose(G)', representation(op, H))
 function _single_particle_entry(term, H)
     a, b = term.factors
     outind = state_index(SingleParticleState(mode_position(a, H)), H)

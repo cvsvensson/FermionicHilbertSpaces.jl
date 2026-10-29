@@ -71,8 +71,8 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     mapper_in=state_mapper(H, _pt_parts(Hsub, complement)),
     mapper_out=_partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in);
     phase_factors=true, skipmissing=false)
-    size(m) == (dim(H), dim(H)) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
-    size(mout) == (dim(Hout), dim(Hout)) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
+    size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
+    size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
     fill!(mout, zero(eltype(mout)))
     splits = _split_all_states(H, mapper_in)
     _foreach_partial_transpose_term(tensor_product_iterator(m, H), H, Hsub, Hout, splits, mapper_out; phase_factors, skipmissing) do J1, J2, K1, K2, v
@@ -297,11 +297,7 @@ end
     HA = subregion(hilbert_space(f, [1, 3]), H)
     m = rand(ComplexF64, dim(H), dim(H))
     @test_throws ArgumentError partial_transpose(m, H, HA) # leaves the N = 2 sector
-    E = zeros(dim(Hfull), dim(H))
-    for s in basisstates(H)
-        E[state_index(s, Hfull), state_index(s, H)] = 1
-    end
-    @test partial_transpose(m, H => Hfull, HA) ≈ partial_transpose(E * m * E', Hfull, hilbert_space(f, [1, 3]))
+    @test partial_transpose(m, H => Hfull, HA) ≈ partial_transpose(embed(m, H => Hfull), Hfull, hilbert_space(f, [1, 3]))
     @test partial_transpose(2I, H => Hfull, HA) ≈ partial_transpose(2I(dim(H)), H => Hfull, HA)
     ψ = rand(ComplexF64, dim(H))
     @test partial_transpose(ψ, H => Hfull, HA) ≈ partial_transpose(ψ * ψ', H => Hfull, HA)

@@ -284,7 +284,6 @@ end
 end
 
 @testset "HEOM full matrix for minimal model" begin
-    using FermionicHilbertSpaces: open_system
     # Minimal model: spin-1/2 system, 1 bath exponential, m_max=1
     # System: H = ω/2 σz,  coupling V = σz
     ω = 1.0
