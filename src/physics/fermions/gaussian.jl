@@ -159,7 +159,7 @@ end
     ρ /= tr(ρ)
     F = eigen(representation(ham, Hbdg, :dense), BdGEigen())
     @test correlation_matrix(F; β = 0.7) ≈ correlation_matrix(ρ, Hmb, Hbdg)
-    @test correlation_matrix(F; β = 1e6) ≈ correlation_matrix(F)
+    @test correlation_matrix(F; β = 1.0e6) ≈ correlation_matrix(F)
 end
 
 @testitem "Single particle correlation matrix" begin
