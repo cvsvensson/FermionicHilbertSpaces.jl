@@ -65,6 +65,7 @@ _state_index(state, H::BdGHilbertSpace) = _state_index(state, parent(H))
 
 representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
+    repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, H, _canonicalize_repr(repr); chunking, kwargs...)
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
     return normal_order_to_bdg(_nambu_matrix(op, H, repr))
 end
