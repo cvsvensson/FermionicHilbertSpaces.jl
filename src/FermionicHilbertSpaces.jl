@@ -39,7 +39,7 @@ export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export SingleParticle, BdG
 export symmetric_sector
 export open_system
-public particle_number
+public particle_number, Axes
 
 """
     HC
@@ -54,6 +54,13 @@ Adding this is equivalent to adding the hermitian conjugate.
 """
 const hc = HC()
 
+"""
+    AbstractSym
+
+Supertype of symbolic operators such as fermions, Majoranas, bosons and spins. A custom
+operator type subtypes it, registers itself with `NonCommutativeProducts.@nc` and defines
+[`apply_local_operator`](@ref) and [`symbolic_group`](@ref).
+"""
 abstract type AbstractSym end
 
 # Factors from different groups are ordered by the type name of the group id, then by `isless`.
