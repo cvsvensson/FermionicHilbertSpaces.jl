@@ -25,6 +25,25 @@ function correlation_matrix(state, H, Hbdg::BdGHilbertSpace)
 end
 
 """
+    partial_trace(G, Hbdg => Hsub::BdGHilbertSpace)
+
+The Nambu correlation matrix of the modes of `Hsub` in its order, from the correlation matrix `G` on `Hbdg`. `Hsub` must be a BdG space over a subset of the modes of `Hbdg`, such as `hilbert_space(f, sub, BdG())`.
+"""
+function partial_trace(G, (H, Hsub)::Pair{<:BdGHilbertSpace,<:BdGHilbertSpace})
+    p = _mode_positions(H, Hsub)
+    inds = [p; p .+ length(modes(H))]
+    return G[inds, inds]
+end
+
+"""
+    entanglement_entropy(G, Hbdg::BdGHilbertSpace)
+
+The von Neumann entropy of the Gaussian state with Nambu correlation matrix `G` on `Hbdg`, equal to the entropy of the many-body density matrix `gaussian_state(G, H, Hbdg)`.
+"""
+# The eigenvalues of G are n and 1 - n for each quasiparticle with occupation n, whose entropy is -n log n - (1 - n) log(1 - n).
+entanglement_entropy(G, ::BdGHilbertSpace) = entanglement_entropy(G)
+
+"""
     correlation_matrix(F::LinearAlgebra.Eigen)
 
 The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground state, where `F` is the result of `eigen(A, BdGEigen())`, assuming no zero-energy modes. It equals `correlation_matrix(ψ, H, Hbdg)` for the many-body ground state `ψ`.
@@ -154,4 +173,29 @@ end
     Gthermal = correlation_matrix(ρ, Hmb, Hbdg)
     @test gaussian_state(Gthermal, Hmb, Hbdg) ≈ ρ
     @test_throws ArgumentError gaussian_state(Diagonal([2; zeros(N - 1); -1; ones(N - 1)]), Hmb, Hbdg)
+end
+
+@testitem "Reduced BdG correlation matrix and entropy" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces.FreeFermions
+    import FermionicHilbertSpaces: entanglement_entropy
+    @fermions f
+    N = 4
+    Hmb = hilbert_space(f, 1:N)
+    Hbdg = hilbert_space(f, 1:N, BdG())
+    h = rand(ComplexF64, N, N) + hc
+    Δ = rand(ComplexF64, N, N)
+    Δ = Δ - transpose(Δ)
+    ham = sum(f[n]' * h[n, m] * f[m] + Δ[n, m] * f[n]' * f[m]' + hc for n in 1:N, m in 1:N)
+    ρ = exp(-Hermitian(representation(ham, Hmb, :dense)))
+    ρ /= tr(ρ)
+    ψ = eigvecs(Hermitian(representation(ham, Hmb, :dense)))[:, 1]
+    sub = [3, 1]
+    Hsub = hilbert_space(f, sub, BdG())
+    for state in (ψ * ψ', ρ)
+        Gsub = partial_trace(correlation_matrix(state, Hmb, Hbdg), Hbdg => Hsub)
+        @test Gsub ≈ correlation_matrix(state, Hmb, Hsub)
+        @test entanglement_entropy(Gsub, Hsub) ≈ entanglement_entropy(partial_trace(state, Hmb => hilbert_space(f, sort(sub))))
+    end
+    @test_throws ArgumentError partial_trace(rand(2N, 2N), Hbdg => hilbert_space(f, [1, 5], BdG()))
 end

@@ -42,6 +42,23 @@ hilbert_space(f::SymbolicFermionBasis, labels, ::SingleParticle) = SingleParticl
 Base.@propagate_inbounds basisstate(ind::Integer, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
 _state_index(state, H::SingleParticleHilbertSpace) = _state_index(state, parent(H))
 
+"""
+    partial_trace(G, Hsp => Hsub::SingleParticleHilbertSpace)
+
+The correlation matrix `G[i, j] = ⟨c_i' c_j⟩` of the modes of `Hsub` in its order, from the one on `Hsp`. `Hsub` must be a single-particle space over a subset of the modes of `Hsp`.
+"""
+function partial_trace(G, (H, Hsub)::Pair{<:SingleParticleHilbertSpace,<:SingleParticleHilbertSpace})
+    p = _mode_positions(H, Hsub)
+    return G[p, p]
+end
+
+"""
+    entanglement_entropy(G, Hsp::SingleParticleHilbertSpace)
+
+The von Neumann entropy of the number-conserving Gaussian state with correlation matrix `G[i, j] = ⟨c_i' c_j⟩` on `Hsp`.
+"""
+entanglement_entropy(G, ::SingleParticleHilbertSpace) = entanglement_entropy(G) + entanglement_entropy(I - G)
+
 @testitem "Single particle hilbert space" begin
     using FermionicHilbertSpaces.FreeFermions
     using LinearAlgebra
@@ -81,6 +98,26 @@ end
     G = [tr(ρ * representation(f[i]' * f[j], Hfock, :dense)) for i in 1:N, j in 1:N]
     op = f[1]' * f[2] + 2 * f[3] * f[1]' + 1
     @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
+end
+
+@testitem "Reduced single particle correlation matrix and entropy" begin
+    using FermionicHilbertSpaces.FreeFermions
+    using LinearAlgebra
+    import FermionicHilbertSpaces: entanglement_entropy
+    @fermions f
+    N = 4
+    Hsp = hilbert_space(f, 1:N, SingleParticle())
+    Hmb = hilbert_space(f, 1:N, NumberConservation(2))
+    ham = sum(rand(ComplexF64) * f[i]' * f[j] + hc for i in 1:N, j in 1:N)
+    U = eigvecs(Hermitian(representation(ham, Hsp, :dense)))[:, 1:2]
+    G = conj(U) * transpose(U)
+    ψ = eigvecs(Hermitian(representation(ham, Hmb, :dense)))[:, 1]
+    sub = [3, 1]
+    Hsub = hilbert_space(f, sub, SingleParticle())
+    @test partial_trace(G, Hsp => Hsub) ≈ [expectation(f[i]' * f[j], ψ, Hmb) for i in sub, j in sub]
+    ρ = partial_trace(ψ * ψ', Hmb => hilbert_space(f, sort(sub)))
+    @test entanglement_entropy(partial_trace(G, Hsp => Hsub), Hsub) ≈ entanglement_entropy(ρ)
+    @test_throws ArgumentError partial_trace(G, Hsp => hilbert_space(f, [1, 5], SingleParticle()))
 end
 
 representation(op, H::SingleParticleHilbertSpace, repr = EagerSparseRepr(); chunking = NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking = chunking, kwargs...)

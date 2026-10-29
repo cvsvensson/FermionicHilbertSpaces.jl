@@ -107,10 +107,11 @@ expectation(mf, G, H) ≈ expectation(U, G, H)
 ## Correlation matrices and entanglement
 For the BdG ground state, the correlation matrix ``G`` of the previous section is `correlation_matrix(F)`, where `F` is the result of `eigen(A, BdGEigen())`, and `ground_state_parity(F)` is its fermionic parity. For a many-body state `ψ` on `H`, `correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`.
 
-The rows and columns of a subsystem of modes form the reduced correlation matrix. Its eigenvalues ``\lambda`` give the entanglement entropy ``S = -\sum \lambda \log \lambda`` of the subsystem, which equals the entropy of the reduced many-body density matrix:
+The reduced correlation matrix of a subsystem of modes is `partial_trace(G, Hbdg => Hsub)`, where `Hsub` is a BdG space over those modes. Its entropy `entanglement_entropy(Gsub, Hsub)`, ``S = -\sum \lambda \log \lambda`` over its eigenvalues ``\lambda``, equals the entropy of the reduced many-body density matrix:
 ```@example entanglement
 using FermionicHilbertSpaces, LinearAlgebra
 using FermionicHilbertSpaces.FreeFermions
+import FermionicHilbertSpaces: entanglement_entropy
 @fermions f
 N = 4
 h = Hermitian(rand(ComplexF64, N, N))
@@ -120,22 +121,22 @@ Hbdg = hilbert_space(f, 1:N, BdG())
 A = representation(ham, Hbdg, :dense)
 G = correlation_matrix(eigen(A, BdGEigen()))
 sub = 1:2
-Gsub = G[[sub; sub .+ N], [sub; sub .+ N]]
-entropy(λ) = -sum(x -> x > 0 ? x * log(x) : zero(x), λ)
-S = entropy(eigvals(Hermitian(Gsub)))
+Hsub = hilbert_space(f, sub, BdG())
+Gsub = partial_trace(G, Hbdg => Hsub)
+S = entanglement_entropy(Gsub, Hsub)
 
 H = hilbert_space(f, 1:N)
 ψ = eigvecs(Hermitian(representation(ham, H, :dense)))[:, 1]
 ρsub = partial_trace(ψ * ψ', H => hilbert_space(f, sub))
-@assert S ≈ entropy(eigvals(Hermitian(ρsub)))
-@assert Gsub ≈ correlation_matrix(ψ, H, hilbert_space(f, sub, BdG()))
+@assert S ≈ entanglement_entropy(ρsub)
+@assert Gsub ≈ correlation_matrix(ψ, H, Hsub)
 @assert expectation(ham, G, Hbdg) ≈ expectation(ham, ψ, H)
 S
 ```
 
 Conversely, `gaussian_state(G, H, Hbdg)` builds the many-body density matrix on `H` of the Gaussian state with correlation matrix `G`. The reduced correlation matrix gives the reduced density matrix:
 ```@example entanglement
-gaussian_state(Gsub, hilbert_space(f, sub), hilbert_space(f, sub, BdG())) ≈ ρsub
+gaussian_state(Gsub, hilbert_space(f, sub), Hsub) ≈ ρsub
 ```
 
 ## From matrices and eigenvectors back to symbolic operators
