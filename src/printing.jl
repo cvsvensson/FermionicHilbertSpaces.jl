@@ -194,27 +194,6 @@ function show_details(io, H::SectorHilbertSpace)
 end
 
 
-function Base.show(io::IO, H::BdGHilbertSpace)
-    if get(io, :compact, false)
-        print(io, "BdGHilbertSpace($(dim(H))-dim, $(div(dim(H), 2)) modes)")
-    else
-        print(io, "$(dim(H))-dimensional BdGHilbertSpace\n")
-        print(io, "Physical modes: ", div(dim(H), 2), "\n")
-        print(io, "Parent: ")
-        show(IOContext(io, :compact => true), parent(H))
-    end
-end
-
-function Base.show(io::IO, H::SingleParticleHilbertSpace)
-    if get(io, :compact, false)
-        print(io, "SingleParticleHilbertSpace($(dim(H))-dim)")
-    else
-        print(io, "$(dim(H))-dimensional SingleParticleHilbertSpace\n")
-        print(io, "Parent: ")
-        show(IOContext(io, :compact => true), parent(H))
-    end
-end
-
 function Base.show(io::IO, c::FermionicSpace)
     max_modes = 10
     if get(io, :compact, false)
@@ -307,7 +286,6 @@ _unwrap_space(H) = H
 const _FermionModeSpace = Union{FermionicSpace,MajoranaHilbertSpace}
 _state_label_atomic(f::FockNumber, H::_FermionModeSpace) = join(digits(Int, f.f; base=2, pad=nbr_of_modes(H)))
 _state_label_atomic(f::FixedNumberFockState, H::_FermionModeSpace) = _state_label_atomic(FockNumber(f), H)
-_state_label_atomic(s::NambuState, H::_FermionModeSpace) = (s.hole ? "h" : "p") * _state_label_atomic(s.state, H)
 _state_label_atomic(s::BosonicState, H) = string(s.n)
 _state_label_atomic(s::SpinState, H::SpinSpace) = H.spin == 1 // 2 ? (s.m > 0 ? "↑" : "↓") : string(s.m)
 _state_label_atomic(s::ProductState, H::ProductSpace) = "(" * join(map(_state_label, s.states, H.factors), ", ") * ")"
@@ -483,6 +461,6 @@ end
     @test count(", ", limited) == 18 && occursin("  …  ", limited)
     @test sprint(show, basisstates(H); context=:limit => true) == "[1000, 0100, 0010, 0001]"
 
-    @test repr(basisstates(hilbert_space(f, 1:3, FermionicHilbertSpaces.SingleParticle()))) == "[100, 010, 001]"
-    @test repr(basisstates(hilbert_space(f, 1:2, FermionicHilbertSpaces.BdG()))) == "[h10, h01, p10, p01]"
+    @test repr(basisstates(hilbert_space(f, 1:3, FermionicHilbertSpaces.FreeFermions.SingleParticle()))) == "[100, 010, 001]"
+    @test repr(basisstates(hilbert_space(f, 1:2, FermionicHilbertSpaces.FreeFermions.BdG()))) == "[h10, h01, p10, p01]"
 end

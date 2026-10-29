@@ -631,6 +631,7 @@ end
 
 @testitem "representation of different kinds of input" begin
     using LinearAlgebra, SparseArrays
+    using FermionicHilbertSpaces.FreeFermions
     @fermions f
     @majoranas γ
     @boson b

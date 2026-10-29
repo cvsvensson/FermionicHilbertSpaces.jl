@@ -471,7 +471,7 @@ Return a concrete representation of `op_or_state` in Hilbert space `space`. This
 
 Expressions that combine kets or bras with operators or with states of other spaces have no representation and throw an
 `ArgumentError`. Without the `space` argument, only expressions of symbolic states are accepted, and the space is taken from the states.
-The single-particle space `hilbert_space(f, labels, SingleParticle())` and the Bogoliubov-de Gennes space `hilbert_space(f, labels, BdG())`
+The single-particle space `hilbert_space(f, labels, FreeFermions.SingleParticle())` and the Bogoliubov-de Gennes space `hilbert_space(f, labels, FreeFermions.BdG())`
 represent quadratic fermionic operators only, and a number is represented by the zero matrix.
 
 With `Axes(Hout, Hin)`, `op` is represented as a map from `Hin` to `Hout`.
@@ -536,8 +536,8 @@ end
 Return the expectation value of the operator `op` in `state` on the space `H`. A vector `ψ` gives `ψ' * M * ψ` and a
 density matrix `ρ` gives `tr(ρ * M)`, where `M = representation(op, H)`. The state is assumed to be normalized.
 
-On `hilbert_space(f, labels, SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on
-`hilbert_space(f, labels, BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in
+On `hilbert_space(f, labels, FreeFermions.SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on
+`hilbert_space(f, labels, FreeFermions.BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in
 the order of the BdG space. There `op` must be quadratic, and its identity part is included.
 
 # Examples
@@ -917,44 +917,6 @@ end
         rand(length(inds))
     end
     @test collect(M_dist * v) ≈ M_ref * collect(v)
-end
-
-## 
-remove_identity(a::NCMul) = a
-remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict)
-identity_coefficient(op::NCAdd) = op.coeff
-identity_coefficient(op::NCMul) = isempty(op.factors) ? op.coeff : zero(op.coeff)
-identity_coefficient(op) = get_trivial_op_coeff(op)
-
-# The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
-_isscalar_operator(op) = op isa Union{Number,UniformScaling} || (op isa Union{NCMul,NCAdd} && NonCommutativeProducts.isscalar(op))
-_identity_free_zero(H, repr) = _zero_matrix(H, _eager_repr(repr, H), Int)
-function _eager_repr(repr, H)
-    _repr = _canonicalize_repr(repr)
-    _repr isa Union{EagerSparseRepr,EagerDenseRepr} || throw(ArgumentError("Only the :sparse and :dense representations are supported on $(typeof(H)). Got $repr."))
-    return _repr
-end
-# The matrix of a sum of two-fermion terms, where `entry(term, H)` gives the row, column and value of the one entry of each term
-function _quadratic_matrix(entry, op, H, repr)
-    accumulator = matrix_accumulator(op, H, _eager_repr(repr, H))
-    for term in NCterms(op)
-        outind, inind, amp = entry(term, H)
-        (iszero(outind) || iszero(inind)) && throw(ArgumentError("The operator `$term` contains a factor that is not part of the fermionic space `$H`."))
-        push_inds_amps!(accumulator, outind, inind, amp)
-    end
-    finalize!(accumulator, H)
-end
-
-# Whether every term of `op` is a product of two `FermionSym`s, with one creation and one annihilation
-# operator if `number_conserving`. Majoranas and other operators give `false`.
-_is_quadratic_fermion_operator(op, number_conserving) = false
-_is_quadratic_fermion_operator(op::NCMul, number_conserving) = _is_quadratic_fermion_term(op.factors, number_conserving)
-_is_quadratic_fermion_operator(op::NCAdd, number_conserving) = all(term -> _is_quadratic_fermion_term(term.factors, number_conserving), keys(op.dict))
-function _is_quadratic_fermion_term(factors, number_conserving)
-    length(factors) == 2 || return false
-    a, b = factors
-    (a isa FermionSym && b isa FermionSym) || return false
-    return !number_conserving || a.creation != b.creation
 end
 
 ## Symmetries
