@@ -1,5 +1,5 @@
 using FermionicHilbertSpaces
-using FermionicHilbertSpaces: BdGEigen
+using FermionicHilbertSpaces.FreeFermions
 using Plots
 using LinearAlgebra
 
