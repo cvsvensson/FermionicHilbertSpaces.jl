@@ -169,6 +169,7 @@ PrecompileTools.@setup_workload begin
         Hs = hilbert_space(s)
         H = tensor_product(H2, Hb, Hs)
         mat = representation(b'b + 1.0 * s[:x] * f[3], H)
+        gaussian_state(ComplexF64[1 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 1], H1, hilbert_space(f, 1:2, BdG()))
     end
 end
 
