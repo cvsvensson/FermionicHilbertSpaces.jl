@@ -10,7 +10,7 @@ julia> H = hilbert_space(f, 1:2);
 
 julia> ψ = [0, 1, 0, 0]; # f[1]' acting on the vacuum
 
-julia> correlation_matrix(ψ, H, hilbert_space(f, 1:2, BdG()))
+julia> FermionicHilbertSpaces.correlation_matrix(ψ, H, hilbert_space(f, 1:2, BdG()))
 4×4 Matrix{Int64}:
  1  0  0  0
  0  0  0  0
@@ -34,7 +34,7 @@ julia> using FermionicHilbertSpaces, LinearAlgebra; @fermions f;
 
 julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), :dense);
 
-julia> correlation_matrix(eigen(A, FermionicHilbertSpaces.BdGEigen())) ≈ [1 0; 0 0]
+julia> FermionicHilbertSpaces.correlation_matrix(eigen(A, FermionicHilbertSpaces.BdGEigen())) ≈ [1 0; 0 0]
 true
 ```
 """
@@ -54,7 +54,7 @@ julia> using FermionicHilbertSpaces, LinearAlgebra; @fermions f;
 
 julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), :dense);
 
-julia> ground_state_parity(eigen(A, FermionicHilbertSpaces.BdGEigen()))
+julia> FermionicHilbertSpaces.ground_state_parity(eigen(A, FermionicHilbertSpaces.BdGEigen()))
 -1
 ```
 """
@@ -69,6 +69,7 @@ end
 
 @testitem "BdG correlation matrix and parity" begin
     using LinearAlgebra
+    using FermionicHilbertSpaces: correlation_matrix, ground_state_parity
     @fermions f
     N = 3
     Hmb = hilbert_space(f, 1:N)

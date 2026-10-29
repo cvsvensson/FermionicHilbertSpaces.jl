@@ -94,11 +94,12 @@ expectation(ham, G, H)
 ```
 
 ## Correlation matrices and entanglement
-For the BdG ground state, the correlation matrix ``G`` of the previous section is `correlation_matrix(F)`, where `F` is the result of `eigen(A, BdGEigen())`, and `ground_state_parity(F)` is its fermionic parity. For a many-body state `ψ` on `H`, `correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`.
+For the BdG ground state, the correlation matrix ``G`` of the previous section is `FermionicHilbertSpaces.correlation_matrix(F)`, where `F` is the result of `eigen(A, BdGEigen())`, and `FermionicHilbertSpaces.ground_state_parity(F)` is its fermionic parity. For a many-body state `ψ` on `H`, `FermionicHilbertSpaces.correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`.
 
 The rows and columns of a subsystem of modes form the reduced correlation matrix. Its eigenvalues ``\lambda`` give the entanglement entropy ``S = -\sum \lambda \log \lambda`` of the subsystem, which equals the entropy of the reduced many-body density matrix:
 ```@example entanglement
 using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces: correlation_matrix
 @fermions f
 N = 4
 h = Hermitian(rand(ComplexF64, N, N))

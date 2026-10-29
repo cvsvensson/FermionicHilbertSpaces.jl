@@ -37,10 +37,9 @@ export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export SingleParticle, BdG, BdGEigen
-export correlation_matrix, ground_state_parity
 export symmetric_sector
 export open_system
-public particle_number, Axes, dissipator
+public particle_number, Axes, dissipator, correlation_matrix, ground_state_parity
 
 """
     HC
