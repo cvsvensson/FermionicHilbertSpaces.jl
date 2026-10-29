@@ -198,8 +198,6 @@ NonCommutativeProducts.adjoint_grade(a::StateGrade) = StateGrade(Dict{Any,Bicycl
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
 interpret_state(state, space::Union{TransposedSpace,AbstractSubspace}) = interpret_state(state, parent(space))
-# A string or character spells a state of a space whose states are `AbstractBasisState`s; on other spaces it is looked up as it is
-state_index(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace{<:AbstractBasisState}) =state_index(interpret_state(state, space), space)
 basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(_checked_state_index(state, space), space)
 function _checked_state_index(state, space)
     i = state_index(state, space)
@@ -439,13 +437,13 @@ symbolic kets or of symbolic bras. Kets give a column vector, and bras give the 
 The optional `repr` selects the format: `:sparse` (the default), `:dense`, or a format object
 (`EagerSparseRepr()`, `EagerDenseRepr()`).
 """
-function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
+function vector_representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
     ind = _checked_state_index(state, space)
     v = _zero_vector(space, repr)
     v[ind] = one(eltype(v))
     return v
 end
-function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerDenseRepr{T}; kwargs...) where {B,T}
+function vector_representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr::EagerDenseRepr{T}; kwargs...) where {B,T}
     ind = _checked_state_index(state, space)
     v = _zero_vector(space, repr)
     v[ind] = one(eltype(v))
@@ -532,11 +530,7 @@ function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr();
         return matrix_representation(op, space, repr; kwargs...)
     end
 end
-function representation(op::Union{AbstractString,AbstractChar}, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
-    state = interpret_state(op, space)
-    return vector_representation(state, space, repr; kwargs...)
-end
-function representation(state::B, space::AbstractHilbertSpace{B}, repr=EagerSparseRepr(); kwargs...) where B
+function representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr=EagerSparseRepr(); kwargs...) where B
     return vector_representation(state, space, repr; kwargs...)
 end
 
@@ -580,6 +574,27 @@ end
     vsec = representation(ssec, Hn1)
     @test vsec[1] == 1
     @test count(!iszero, vsec) == 1
+end
+
+@testitem "representation of basis states and state strings" begin
+    using FermionicHilbertSpaces: TransposedSpace
+    @fermions f
+    onehot(i, n) = [k == i for k in 1:n]
+    Hf = hilbert_space(f, 1:2)
+    # `FockNumber(1)` has type `FockNumber{Int}`, while `Hf` holds `FockNumber{UInt64}`
+    i = findfirst(==(FockNumber(1)), collect(basisstates(Hf)))
+    for H in (Hf, TransposedSpace(Hf))
+        @test representation(FockNumber(1), H) == onehot(i, 4)
+        @test representation(FockNumber(1), H, :dense) == onehot(i, 4)
+    end
+
+    HA = GenericHilbertSpace(:A, ["a", "b", "c"])
+    @test representation("c", HA) == onehot(3, 3)
+    @test representation("c", constrain_space(HA, ["b", "c"])) == onehot(2, 2)
+
+    @test representation("11", constrain_space(Hf, FockNumber.([0, 3]))) == onehot(2, 2)
+
+    @test_throws MethodError representation(BosonicState(0), Hf)
 end
 
 @testitem "vector_representation of symbolic kets and bras" begin

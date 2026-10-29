@@ -52,8 +52,9 @@ Base.@propagate_inbounds function basisstate(n::Integer, H::ProductSpace{B}) whe
     inds = Tuple(H.cartinds[n])
     ProductState(map(basisstate, inds, H.factors))
 end
-function state_index(state::AbstractBasisState, H::ProductSpace{B}) where B
-    inds = map(state_index, state.states, H.factors)
+function _state_index(state::ProductState, H::ProductSpace)
+    length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
+    inds = map(_state_index, state.states, H.factors)
     all(>(0), inds) || return 0
     H.lininds[CartesianIndex(inds)]
 end

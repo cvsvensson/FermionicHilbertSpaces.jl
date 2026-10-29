@@ -53,6 +53,7 @@ let rng = Xoshiro(7)
     g = SUITE["partial_trace"]["precomputed"]
     g["construct"] = @benchmarkable partial_trace($(H => Hsub); complement=$Hcomp)
     g["eager_matrix"] = @benchmarkable partial_trace($ρ, $(H => Hsub); complement=$Hcomp)
+    g["eager_pure_state"] = @benchmarkable partial_trace($ψ, $(H => Hsub); complement=$Hcomp)
     g["apply_matrix_inplace"] = @benchmarkable $pt($out_m, $ρ)
     g["apply_pure_state_inplace"] = @benchmarkable $pt($out_v, $ψ)
 
@@ -323,6 +324,7 @@ const EVALS = Dict(
     "complement/fermions" => 4,
     "embed/product space" => 4,
     "partial_trace_algorithms/Sparse space/Sparse/FullAlg" => 4,
+    "partial_trace/precomputed/eager_pure_state" => 4,
     "complement/product space" => 3,
     "partial_trace/product space/map" => 3,
     "reshape/mat_to_vec" => 3,
