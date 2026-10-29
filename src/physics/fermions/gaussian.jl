@@ -77,7 +77,7 @@ julia> using FermionicHilbertSpaces; @fermions f;
 
 julia> G = [1 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 1]; # f[1] occupied, f[2] empty
 
-julia> gaussian_state(G, hilbert_space(f, 1:2), hilbert_space(f, 1:2, BdG())) ≈ [0 0 0 0; 0 1 0 0; 0 0 0 0; 0 0 0 0]
+julia> FermionicHilbertSpaces.gaussian_state(G, hilbert_space(f, 1:2), hilbert_space(f, 1:2, BdG())) ≈ [0 0 0 0; 0 1 0 0; 0 0 0 0; 0 0 0 0]
 true
 ```
 """
@@ -131,6 +131,7 @@ end
 
 @testitem "Gaussian state from a correlation matrix" begin
     using LinearAlgebra
+    using FermionicHilbertSpaces: correlation_matrix, gaussian_state
     @fermions f
     N = 4
     Hmb = hilbert_space(f, 1:N)
