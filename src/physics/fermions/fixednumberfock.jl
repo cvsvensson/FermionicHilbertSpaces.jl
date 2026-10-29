@@ -128,7 +128,7 @@ end
     @test Ket("010", Hx) == Kets(Hx)[2]
     @test Ket(FockNumber(2), Hx) == Kets(Hx)[2]
     @test_throws ArgumentError Ket("110", Hx)
-    @spin s 1//2
+    @spin s 1 // 2
     Hf = hilbert_space(f, 1:2)
     Hp = tensor_product(Hf, hilbert_space(s); constraint = NumberConservation(1, [Hf]))
     @test Ket(basisstate(1, Hp), Hp) == Kets(Hp)[1]
