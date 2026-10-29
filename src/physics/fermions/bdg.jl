@@ -423,7 +423,7 @@ _nambu_creators(H::BdGHilbertSpace) = vcat(map(adjoint, modes(H)), modes(H))
 """
     quasiparticle(v, H)
 
-The quasiparticle creation operator `γ' = Σ_n (u[n] * f[n]' + w[n] * f[n])` for a vector `v = [u; w]` on `H = hilbert_space(f, labels, BdG())`, or `γ' = Σ_n v[n] * f[n]'` on `hilbert_space(f, labels, SingleParticle())`. If `v` is an eigenvector of `representation(op, H)` with eigenvalue `e`, then `op * γ' - γ' * op = 2e * γ'` on the BdG space and `e * γ'` on the single-particle space.
+The quasiparticle creation operator `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])` for a column `v` of BdG eigenvectors on a `BdG` space `H` with `N` modes, or `γ' = Σ_n v[n] * f[n]'` on a `SingleParticle` space.
 
 ```julia
 @fermions f
@@ -440,12 +440,12 @@ end
 """
     quadratic_operator(M, H)
 
-The symbolic quadratic operator `op` with `representation(op, H) ≈ M`, for a BdG matrix `M` (Hermitian `h`, antisymmetric `Δ`) on `hilbert_space(f, labels, BdG())` or any matrix `M` on `hilbert_space(f, labels, SingleParticle())`. On the BdG space, `op = Σ_ab M_ab Ψ_a^† Ψ_b` with `Ψ = (f[1], …, f[N], f[1]', …, f[N]')`, whose many-body representation is traceless; on the single-particle space, `op = Σ_ab M_ab f[a]' f[b]`.
+The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space or any matrix on a `SingleParticle` space. On a `BdG` space, `op` is traceless.
 
 ```julia
 @fermions f
-H = hilbert_space(f, 1:2, SingleParticle())
-quadratic_operator([0 1; 1 0], H) # f[1]' * f[2] + f[2]' * f[1]
+H = hilbert_space(f, 1:2, BdG())
+quadratic_operator(representation(f[1]' * f[1], H, :dense), H) # -0.5I + f†[1]*f[1]
 ```
 """
 function quadratic_operator(M, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
