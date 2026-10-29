@@ -149,8 +149,8 @@ supply_missing_constraint_info(constraint::AdditiveConstraint, space, spaces) = 
     particle_number(state)
 
 Return the number of particles in the basis state `state`: the number of occupied modes for
-fermions, the occupation for a boson, and the total over the factors of a product state. This
-is the quantity [`NumberConservation`](@ref) conserves.
+fermions, the occupation for a boson, and the total over the factors of a product state. It is not
+defined for spins. This is the quantity [`NumberConservation`](@ref) conserves.
 """
 function particle_number end
 

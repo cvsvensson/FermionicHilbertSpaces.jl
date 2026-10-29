@@ -47,13 +47,13 @@ tag_right(base) = add_tag(base, :right)
 
 """
     open_system(sym, args...; kwargs...)
-    open_system(H)
+    open_system(H; kwargs...)
 
 Set up the doubled space for density matrices of a system with Hilbert space `H`, or of
-`hilbert_space(sym, args...; kwargs...)`. Returns `(Hlr, Hl, Hr, left, right)`:
+`hilbert_space(sym, args...; kwargs...)`. For `H`, `kwargs` are passed to `tensor_product`. Returns `(Hlr, Hl, Hr, left, right)`:
 
 - `Hl` and `Hr` are copies of the system space tagged `:left` and `:right`. `Hr` is transposed,
-  so that `representation(A * B, Hr) == representation(B, Hr) * representation(A, Hr)`.
+  so that `representation(right(A * B), Hr) == representation(right(B), Hr) * representation(right(A), Hr)`.
 - `Hlr = tensor_product(Hl, Hr)` is the space of vectorized density matrices.
 - `left(op)` and `right(op)` map a symbolic operator of the system to the copy acting on `Hl` or
   `Hr`, so `left(A) * right(B)` represents `ρ -> A ρ B` and `-1im * (left(H) - right(H))` is
