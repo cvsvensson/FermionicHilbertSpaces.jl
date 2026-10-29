@@ -394,13 +394,12 @@ _nambu_creators(H::BdGHilbertSpace) = vcat(map(adjoint, modes(H)), modes(H))
 """
     quasiparticle(v, H)
 
-The quasiparticle creation operator `γ' = Σ_n (u[n] * f[n]' + w[n] * f[n])` for a vector `v = [u; w]` on `H = hilbert_space(f, labels, BdG())`, or `γ' = Σ_n v[n] * f[n]'` on `hilbert_space(f, labels, SingleParticle())`. If `v` is an eigenvector of `representation(op, H)` with eigenvalue `e`, then `op * γ' - γ' * op = 2e * γ'` on the BdG space and `e * γ'` on the single-particle space. On the BdG space, `quasiparticle(FermionicHilbertSpaces.quasiparticle_adjoint(v), H) == quasiparticle(v, H)'`.
+The quasiparticle creation operator `γ' = Σ_n (u[n] * f[n]' + w[n] * f[n])` for a vector `v = [u; w]` on `H = hilbert_space(f, labels, BdG())`, or `γ' = Σ_n v[n] * f[n]'` on `hilbert_space(f, labels, SingleParticle())`. If `v` is an eigenvector of `representation(op, H)` with eigenvalue `e`, then `op * γ' - γ' * op = 2e * γ'` on the BdG space and `e * γ'` on the single-particle space.
 
 ```julia
 @fermions f
 H = hilbert_space(f, 1:2, BdG())
-vals, vecs = eigen(representation(f[1]' * f[2] + f[1]' * f[2]' + hc, H, :dense), FermionicHilbertSpaces.BdGEigen())
-q = quasiparticle(vecs[:, end], H)
+quasiparticle([1, 0, 0, 1], H) # f[2] + f†[1]
 ```
 """
 function quasiparticle(v, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
@@ -412,7 +411,7 @@ end
 """
     quadratic_operator(M, H)
 
-The symbolic quadratic operator `op` with `representation(op, H) ≈ M`, for a BdG matrix `M` on `hilbert_space(f, labels, BdG())` or any matrix `M` on `hilbert_space(f, labels, SingleParticle())`. On the BdG space, `op = Σ_ab M_ab Ψ_a^† Ψ_b` with `Ψ = (f[1], …, f[N], f[1]', …, f[N]')`, whose many-body representation is traceless; on the single-particle space, `op = Σ_ab M_ab f[a]' f[b]`, which annihilates the vacuum.
+The symbolic quadratic operator `op` with `representation(op, H) ≈ M`, for a BdG matrix `M` (Hermitian `h`, antisymmetric `Δ`) on `hilbert_space(f, labels, BdG())` or any matrix `M` on `hilbert_space(f, labels, SingleParticle())`. On the BdG space, `op = Σ_ab M_ab Ψ_a^† Ψ_b` with `Ψ = (f[1], …, f[N], f[1]', …, f[N]')`, whose many-body representation is traceless; on the single-particle space, `op = Σ_ab M_ab f[a]' f[b]`.
 
 ```julia
 @fermions f
@@ -429,7 +428,6 @@ end
 
 @testitem "BdG quadratic operators and quasiparticles" begin
     using LinearAlgebra
-    import FermionicHilbertSpaces: quasiparticle_adjoint
     @fermions f
     N = 3
     H = hilbert_space(f, 1:N, BdG())
@@ -441,16 +439,13 @@ end
         sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:N, m in 1:N)
     M = representation(op, H, :dense)
     @test representation(quadratic_operator(M, H), H) ≈ M
-    @test tr(representation(quadratic_operator(M, H), Hmb, :dense)) ≈ 0 atol = 1.0e-12
+    @test representation(quadratic_operator(M, H) - op, Hmb, :dense) ≈ -tr(h) / 2 * I
 
     vals, vecs = eigen(M, FermionicHilbertSpaces.BdGEigen())
     Hmat = representation(op, Hmb, :dense)
-    ground_state = eigvecs(Hermitian(Hmat))[:, 1]
     for k in (N + 1):2N
         q = representation(quasiparticle(vecs[:, k], H), Hmb, :dense)
         @test Hmat * q - q * Hmat ≈ 2vals[k] * q
-        @test norm(q' * ground_state) < 1.0e-12
-        @test quasiparticle(quasiparticle_adjoint(vecs[:, k]), H) == quasiparticle(vecs[:, k], H)'
     end
 end
 

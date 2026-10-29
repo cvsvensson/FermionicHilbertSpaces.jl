@@ -78,7 +78,7 @@ The matrix returned by `representation` will depend on the ordering of operators
     ```
 
 ## From matrices and eigenvectors back to symbolic operators
-`quadratic_operator(M, H)` inverts `representation` on the `BdG` and `SingleParticle` spaces, and `quasiparticle(v, H)` turns an eigenvector into the symbolic operator that creates the corresponding quasiparticle. Both results are ordinary symbolic operators, so they can be multiplied, adjointed and represented on the many-body space:
+`quadratic_operator(M, H)` inverts `representation` on the `BdG` and `SingleParticle` spaces. On the `BdG` space it returns ``\sum_{ij} \Psi_i^\dagger M_{ij} \Psi_j`` with ``\Psi_n = c_n`` for ``n \leq N`` and ``\Psi_{n+N} = c_n^\dagger``, which is traceless and so differs from the original operator by the constant ``E + \tfrac{1}{2}\operatorname{tr} h``. `quasiparticle(v, H)` turns an eigenvector into the symbolic operator that creates the corresponding quasiparticle. Both results are ordinary symbolic operators, so they can be multiplied, adjointed and represented on the many-body space:
 ```@example bdg_quasiparticles
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions c
@@ -93,4 +93,4 @@ Hmat = representation(op, Hmb, :dense)
 Qmat = representation(q, Hmb, :dense)
 Hmat * Qmat - Qmat * Hmat ≈ 2 * vals[end] * Qmat
 ```
-For an eigenvector with positive eigenvalue `e`, `q` raises the many-body energy by `2e`, since the BdG matrix is half the Nambu hamiltonian, and its adjoint annihilates the ground state.
+For an eigenvector with eigenvalue `e`, `q` raises the many-body energy by `2e`, because each quasiparticle appears in ``\Psi^\dagger M \Psi`` both through itself and through its particle-hole partner with eigenvalue `-e`.
