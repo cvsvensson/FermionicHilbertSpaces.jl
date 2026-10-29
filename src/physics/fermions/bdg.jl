@@ -244,7 +244,7 @@ Algorithm for `eigen(A, BdGEigen())` on a Hermitian BdG matrix `A` with `N` mode
 
 ```julia
 H = hilbert_space(f, 1:2, BdG())
-vals, vecs = eigen(representation(f[1]' * f[2] + f[1]' * f[2]' + hc, H, :dense), BdGEigen()) # vals ≈ [-1, 0, 0, 1]
+vals, vecs = eigen(representation(f[1]' * f[2] + f[1]' * f[2]' + hc, H, :dense), FermionicHilbertSpaces.BdGEigen()) # vals ≈ [-1, 0, 0, 1]
 ```
 """
 struct BdGEigen{T <: Union{Nothing, Real}} <: AbstractBdGEigenAlg
@@ -330,6 +330,7 @@ end
 
 @testitem "BdG on Kitaev Sweet spot" begin
     using LinearAlgebra
+    using FermionicHilbertSpaces: BdGEigen
     @fermions f
     symham = f[1]' * f[2] + f[1]' * f[2]' + hc
     H = hilbert_space(f, 1:2, BdG())
@@ -364,6 +365,7 @@ end
 
 @testitem "BdGEigen quasiparticles" begin
     using LinearAlgebra
+    using FermionicHilbertSpaces: BdGEigen
     @fermions f
     function test_quasiparticles(op, N)
         F = eigen(representation(op, hilbert_space(f, 1:N, BdG())), BdGEigen())
@@ -403,4 +405,81 @@ end
     # Zero modes at a large energy scale
     test_bdg_eigen(1.0e8 * representation(f[1]' * f[2] + f[1]' * f[2]' + f[3]' * f[4] + f[3]' * f[4]' + hc, hilbert_space(f, 1:4, BdG()), :dense))
     @test_throws ArgumentError eigen([0 1; 0 0], BdGEigen())
+end
+
+# The operators Ψ_j^† that create the basis states of `H`, such that `representation(Σ_ab M_ab Ψ_a^† Ψ_b, H) == M`
+_nambu_creators(H::SingleParticleHilbertSpace) = map(adjoint, modes(H))
+_nambu_creators(H::BdGHilbertSpace) = vcat(map(adjoint, modes(H)), modes(H))
+
+"""
+    quasiparticle(v, H)
+
+The quasiparticle creation operator `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])` for a column `v` of BdG eigenvectors on a `BdG` space `H` with `N` modes, or `γ' = Σ_n v[n] * f[n]'` on a `SingleParticle` space.
+
+```julia
+@fermions f
+H = hilbert_space(f, 1:2, BdG())
+FermionicHilbertSpaces.quasiparticle([1, 0, 0, 1], H) # f[2] + f†[1]
+```
+"""
+function quasiparticle(v, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
+    creators = _nambu_creators(H)
+    length(v) == length(creators) || throw(DimensionMismatch("The vector has length $(length(v)), but the space has dimension $(length(creators))."))
+    return sum(c * x for (c, x) in zip(creators, v))
+end
+
+"""
+    symbolic_operator(M, H)
+
+The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space or any matrix on a `SingleParticle` space. On a `BdG` space, `op` is traceless.
+
+```julia
+@fermions f
+H = hilbert_space(f, 1:2, BdG())
+FermionicHilbertSpaces.symbolic_operator(representation(f[1]' * f[1], H, :dense), H) # -0.5I + f†[1]*f[1]
+```
+"""
+function symbolic_operator(M, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
+    creators = _nambu_creators(H)
+    size(M) == (length(creators), length(creators)) || throw(DimensionMismatch("The matrix has size $(size(M)), but the space has dimension $(length(creators))."))
+    terms = (M[a, b] * ca * cb' for (a, ca) in zip(axes(M, 1), creators), (b, cb) in zip(axes(M, 2), creators) if !iszero(M[a, b]))
+    return sum(terms; init = 0)
+end
+
+@testitem "BdG quadratic operators and quasiparticles" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: BdGEigen, quasiparticle, symbolic_operator
+    @fermions f
+    N = 3
+    H = hilbert_space(f, 1:N, BdG())
+    Hmb = hilbert_space(f, 1:N)
+    h = rand(ComplexF64, N, N) + hc
+    Δ = rand(ComplexF64, N, N)
+    Δ = Δ - transpose(Δ)
+    op = sum(f[n]' * h[n, m] * f[m] for n in 1:N, m in 1:N) +
+        sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:N, m in 1:N)
+    M = representation(op, H, :dense)
+    @test representation(symbolic_operator(M, H), H) ≈ M
+    @test representation(symbolic_operator(M, H) - op, Hmb, :dense) ≈ -tr(h) / 2 * I
+
+    vals, vecs = eigen(M, BdGEigen())
+    Hmat = representation(op, Hmb, :dense)
+    for k in (N + 1):2N
+        q = representation(quasiparticle(vecs[:, k], H), Hmb, :dense)
+        @test Hmat * q - q * Hmat ≈ 2vals[k] * q
+    end
+end
+
+@testitem "Single particle quadratic operators and quasiparticles" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: quasiparticle, symbolic_operator
+    @fermions f
+    H = hilbert_space(f, 1:3, SingleParticle())
+    h = rand(ComplexF64, 3, 3) + hc
+    op = symbolic_operator(h, H)
+    @test representation(op, H) ≈ h
+    Hmat = representation(op, hilbert_space(f, 1:3), :dense)
+    vals, vecs = eigen(Hermitian(h))
+    q = representation(quasiparticle(vecs[:, 1], H), hilbert_space(f, 1:3), :dense)
+    @test Hmat * q - q * Hmat ≈ vals[1] * q
 end
