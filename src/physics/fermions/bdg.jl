@@ -208,7 +208,7 @@ end
 BdGEigen() = BdGEigen(DEFAULT_PH_CUTOFF)
 
 function LinearAlgebra.eigen(A::AbstractMatrix, alg::BdGEigen; canon_alg=SVDCanon())
-    Eigen(enforce_ph_symmetry(eigen(A), canon_alg; cutoff=alg.cutoff)...)
+    return Eigen(enforce_ph_symmetry(eigen(A), canon_alg; cutoff = alg.cutoff)...)
 end
 
 
@@ -410,7 +410,7 @@ end
     @test F.vectors' * F.vectors ≈ I
     Hmb = hilbert_space(f, 1:N)
     Hm = representation(op, Hmb, :dense)
-    γ(k) = representation(sum(F.vectors[i, k] * f[i]' + F.vectors[N+i, k] * f[i] for i in 1:N), Hmb, :dense)
+    γ(k) = representation(sum(F.vectors[i, k] * f[i]' + F.vectors[N + i, k] * f[i] for i in 1:N), Hmb, :dense)
     for k in 1:2N
         @test Hm * γ(k) - γ(k) * Hm ≈ 2F.values[k] * γ(k)
         @test γ(2N + 1 - k) ≈ γ(k)'
