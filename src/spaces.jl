@@ -1,4 +1,12 @@
 ## Some types
+"""
+    AbstractBasisState
+
+Supertype of basis-state types such as `FockNumber`, `BosonicState` and `SpinState`.
+A space may use any type for its states, as in `GenericHilbertSpace(:A, [:a, :b])`; subtyping
+`AbstractBasisState` lets strings name the states (see [`interpret_state`](@ref)) and lets
+constrained spaces look up states of other types (they get index `0`).
+"""
 abstract type AbstractBasisState end
 abstract type AbstractFockState <: AbstractBasisState end
 abstract type AbstractHilbertSpace{S} end
@@ -12,23 +20,16 @@ const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace
 """
     Axes(H1, H2, ...)
 
-The Hilbert spaces of the axes of an array, one per axis and in axis order. For an operator
-from `Hin` to `Hout` this is `Axes(Hout, Hin)`: rows first, like `axes(m)`. A bare space `H`
-in place of an `Axes` means the same space on every axis, so for matrices `H` is the same as `Axes(H, H)`.
-
-A ket, bra or basis state has the single axis `Axes(H)`.
-
-`representation` and `matrix_representation` accept an `Axes`. `Axes` is public but not exported.
-The result of `reshape(m, Hout => (H1, H2), Hin => (K1, K2))` has axes `Axes(H1, H2, K1, K2)`.
+The Hilbert spaces of an array's axes, in axis order: `Axes(Hout, Hin)` for an operator from `Hin`
+to `Hout`, `Axes(H)` for a vector. A bare space `H` means `H` on every axis. Public, not exported.
 
 # Examples
 ```julia
 using FermionicHilbertSpaces: Axes
 @fermions f
-Hin =hilbert_space(f, 1:2, NumberConservation(2))
-Hout = hilbert_space(f, 1:2, NumberConservation(1))
-m = representation(f[1], Axes(Hout, Hin))
-size(m) == (dim(Hout), dim(Hin))
+H2 = hilbert_space(f, 1:2, NumberConservation(2))
+H1 = hilbert_space(f, 1:2, NumberConservation(1))
+representation(f[1], Axes(H1, H2)) # a dim(H1) × dim(H2) matrix
 ```
 """
 struct Axes{S<:Tuple{Vararg{AbstractHilbertSpace}}}
@@ -180,6 +181,15 @@ symbols have an `atomic_id`; composite spaces are named by `atom_ids`.
 atomic_id(f::AbstractSym) = symbolic_group(f) # generic fallback
 
 """
+    symbolic_group(op)
+
+Key that matches the symbolic operator `op` to the group of a Hilbert space it acts on:
+`symbolic_group(op) == group_id(group)`. A custom operator type adds a method that returns
+the label of its space, for example the `label` of a [`GenericHilbertSpace`](@ref).
+"""
+function symbolic_group end
+
+"""
     atom_ids(H)
 
 Names of the atoms of `H`, `map(atomic_id, atomic_factors(H))`. Since atoms are ordered
@@ -216,12 +226,30 @@ _internal_rep(state, space, ::Type{T}) where T = InternalRep{T}(internal_rep(sta
 _physical_rep(state::InternalRep, space_or_type) = physical_rep(state.data, space_or_type)
 Base.convert(::Type{B}, state::InternalRep{T}) where {B<:AbstractBasisState,T} = _physical_rep(state, B)
 physical_rep(state, space::AbstractHilbertSpace) = physical_rep(state, statetype(space))
-# The following should be overloaded for custom basis states
-internal_rep(state, space, ::Type{T}) where T = internal_rep(state, parent(space), T)
-# physical_rep(state, type::B<:AbstractBasisState)
+"""
+    internal_rep(state, space, ::Type{Int}) -> Int
+    physical_rep(n::Int, ::Type{B}) -> B
 
-# First dispatch on NC operators with precomputation_before_operator_application
-# then one can dispatch on abstract syms, spaces or statetypes
+Convert a basis state of type `B` to an integer and back, with
+`physical_rep(internal_rep(state, space, Int), B) == state`. When every group of a product
+space has these methods, operators on the product space act on the integers instead of on
+the states. Without them, the product space uses the states directly, which is slower.
+"""
+internal_rep(state, space, ::Type{T}) where T = internal_rep(state, parent(space), T)
+
+"""
+    apply_local_operator(op, state, space, precomp) -> (newstate, amplitude)
+
+Apply the symbolic operator `op` to the basis state `state` of `space`. Returns the new
+state and its amplitude; an amplitude of zero means that `op` annihilates `state`.
+`space` is the group that `op` acts on, so it can be used for dispatch. `precomp` is the
+value of [`_precomputation_before_operator_application`](@ref) for `op` and `space`.
+
+This is the method that connects a custom operator type to matrix representations, partial
+traces and the other operations on spaces.
+"""
+function apply_local_operator end
+
 function precomputation_before_operator_application(op::NCMul, space::AbstractHilbertSpace)
     map(op -> _precomputation_before_operator_application(op, space), op.factors)
 end
@@ -229,6 +257,14 @@ precomputation_before_operator_application(::NCAdd, ::AbstractHilbertSpace) = no
 function precomputation_before_operator_application(op::AbstractSym, space::AbstractHilbertSpace)
     _precomputation_before_operator_application(op, space)
 end
+"""
+    _precomputation_before_operator_application(op, space)
+
+Data that [`apply_local_operator`](@ref) receives as `precomp` when it applies `op` to the
+states of `space`. It is computed once per factor of each term, not once per state, so it is
+the place for work that depends only on the operator and the space, such as the position of
+a mode. The fallback returns `nothing`.
+"""
 _precomputation_before_operator_application(factors, space) = nothing
 
 abstract type AbstractStateMapper end

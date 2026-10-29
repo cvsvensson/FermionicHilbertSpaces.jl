@@ -42,6 +42,7 @@ makedocs(;
             "Non-interacting hilbert spaces" => "non_interacting.md",
             "Example: Free fermions" => "literate_output/free_fermions.md"],
         "Misc" => "misc.md",
+        "Extending and performance hooks" => "extending.md",
         "Functions" => "docstrings.md",
     ],
     plugins=[DocumenterCodeBlocks.CodeBlocks()],
