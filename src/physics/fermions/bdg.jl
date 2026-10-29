@@ -191,9 +191,9 @@ quasiparticle_adjoint_index(n, N) = 2N + 1 - n
 abstract type AbstractBdGEigenAlg end
 
 """
-    BdGEigen(cutoff=1e-12)
+    BdGEigen(cutoff = nothing)
 
-Algorithm for `eigen(A, BdGEigen())`, which diagonalizes a BdG matrix `A = representation(op, hilbert_space(f, labels, BdG()), :dense)` with `N` modes and returns an `Eigen` with eigenvalues sorted in ascending order and orthonormal eigenvectors. A column `[u; v]` with eigenvalue `e` gives the quasiparticle `γ' = Σᵢ u[i] * f[labels[i]]' + v[i] * f[labels[i]]`, which satisfies `op * γ' - γ' * op = 2e * γ'`. Columns `k` and `2N + 1 - k` are particle-hole partners: their eigenvalues are `e` and `-e` and their quasiparticles are adjoints of each other. `cutoff` is the tolerance used when enforcing this pairing.
+Algorithm for `eigen(A, BdGEigen())`, which diagonalizes a BdG matrix `A = representation(op, hilbert_space(f, labels, BdG()), :dense)` with `N` modes and returns an `Eigen` with eigenvalues sorted in ascending order and orthonormal eigenvectors. A column `[u; v]` with eigenvalue `e` gives the quasiparticle `γ' = Σᵢ u[i] * f[labels[i]]' + v[i] * f[labels[i]]`, which satisfies `op * γ' - γ' * op = 2e * γ'`. Columns `k` and `2N + 1 - k` are particle-hole partners: their eigenvalues are `e` and `-e` and their quasiparticles are adjoints of each other. Eigenvalues with `abs(e) <= cutoff * maximum(abs, values)` are treated as zero modes; the default `cutoff` is `2N * eps`, as for `rank`.
 
 ```julia
 @fermions f
@@ -202,33 +202,42 @@ op = f[1]' * f[2] + f[1]' * f[2]' + hc
 vals, vecs = eigen(representation(op, H, :dense), BdGEigen())
 ```
 """
-struct BdGEigen{T<:Number} <: AbstractBdGEigenAlg
+struct BdGEigen{T<:Union{Nothing, Real}} <: AbstractBdGEigenAlg
     cutoff::T
 end
-BdGEigen() = BdGEigen(DEFAULT_PH_CUTOFF)
+BdGEigen() = BdGEigen(nothing)
 
 function LinearAlgebra.eigen(A::AbstractMatrix, alg::BdGEigen)
+    rtol = sqrt(eps(real(float(eltype(A)))))
+    isapprox(A, A'; rtol) || throw(ArgumentError("The BdG matrix must be Hermitian."))
     F = eigen(Hermitian(Matrix(A)))
-    return Eigen(enforce_ph_symmetry(F.values, complex(F.vectors); alg.cutoff)...)
+    cutoff = something(alg.cutoff, size(A, 1) * eps(eltype(F.values)))
+    tol = cutoff * maximum(abs, F.values; init = zero(eltype(F.values)))
+    return Eigen(enforce_ph_symmetry(F.values, complex(F.vectors), tol)...)
 end
 
 # Within a degenerate eigenspace `eigen` returns an arbitrary basis, so the partner of a
 # negative-energy column is built as its particle-hole conjugate. That map is antiunitary and
-# takes the e-eigenspace onto the -e one, so the columns stay orthonormal.
-function enforce_ph_symmetry(es, ops; cutoff = DEFAULT_PH_CUTOFF)
+# takes the e-eigenspace onto the -e one. For a small splitting e the computed C v_k is only
+# orthogonal to v_k up to eps * norm(A) / e, so the columns are Löwdin orthonormalized. If
+# C V = V P with P the reversal permutation, then conj(V'V) = P V'V P, so the result stays paired.
+function enforce_ph_symmetry(es, ops, tol)
     N = div(length(es), 2)
     for k in 1:N
         k2 = quasiparticle_adjoint_index(k, N)
-        isapprox(es[k], -es[k2]; atol = cutoff, rtol = sqrt(eps(eltype(es)))) || @warn "The spectrum is not particle-hole symmetric: es[$k] = $(es[k]) and es[$k2] = $(es[k2])."
-        if es[k] < -cutoff
+        isapprox(es[k], -es[k2]; atol = tol, rtol = sqrt(eps(eltype(es)))) || @warn "The spectrum is not particle-hole symmetric: es[$k] = $(es[k]) and es[$k2] = $(es[k2])."
+        if es[k] < -tol
             ops[:, k2] = quasiparticle_adjoint(ops[:, k])
             es[k2] = -es[k]
         end
     end
-    m = count(>=(-cutoff), view(es, 1:N))
+    m = count(>=(-tol), view(es, 1:N))
     zero_modes = (N - m + 1):(N + m)
-    isempty(zero_modes) || (ops[:, zero_modes] = canonicalize_zero_modes(ops[:, zero_modes]))
-    return es, ops
+    if !isempty(zero_modes)
+        es[zero_modes] .= 0
+        ops[:, zero_modes] = canonicalize_zero_modes(ops[:, zero_modes])
+    end
+    return es, ops / sqrt(Hermitian(ops' * ops))
 end
 
 # The zero-energy eigenspace is particle-hole invariant, so the Takagi factorization of
@@ -273,8 +282,6 @@ end
     @test m ≈ U * S * transpose(U)
     @test (S .> 0) == I
 end
-
-const DEFAULT_PH_CUTOFF = 1e-12
 
 @testitem "BdG on Kitaev Sweet spot" begin
     using LinearAlgebra
@@ -331,4 +338,24 @@ end
     test_quasiparticles(0.3 * sum(f[i]' * f[i] for i in 1:4) + f[1]' * f[3] + f[2]' * f[4] + 0.7 * (f[1]' * f[2]' + f[3]' * f[4]') + hc, 4)
     # Two decoupled Kitaev chains at the sweet spot: four zero modes
     test_quasiparticles(f[1]' * f[2] + f[1]' * f[2]' + f[3]' * f[4] + f[3]' * f[4]' + hc, 4)
+
+    function test_bdg_eigen(A)
+        F = eigen(A, BdGEigen())
+        N = div(size(A, 1), 2)
+        @test issorted(F.values)
+        @test F.vectors' * F.vectors ≈ I
+        @test A * F.vectors ≈ F.vectors * Diagonal(F.values)
+        for k in 1:2N
+            @test F.values[2N + 1 - k] == -F.values[k]
+            @test F.vectors[:, 2N + 1 - k] ≈ FermionicHilbertSpaces.quasiparticle_adjoint(F.vectors[:, k])
+        end
+        return F
+    end
+    # Kitaev-type chain with a tiny but nonzero Majorana splitting
+    op = sum(f[i]' * f[i + 1] + 0.9 * f[i]' * f[i + 1]' + hc for i in 1:11) + 0.3 * sum(f[i]' * f[i] for i in 1:12)
+    vals = test_bdg_eigen(representation(op, hilbert_space(f, 1:12, BdG()), :dense)).values
+    @test 0 < vals[13] < 1.0e-6
+    # Zero modes at a large energy scale
+    test_bdg_eigen(1.0e8 * representation(f[1]' * f[2] + f[1]' * f[2]' + f[3]' * f[4] + f[3]' * f[4]' + hc, hilbert_space(f, 1:4, BdG()), :dense))
+    @test_throws ArgumentError eigen([0 1; 0 0], BdGEigen())
 end
