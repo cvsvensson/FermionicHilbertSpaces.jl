@@ -503,8 +503,9 @@ size(M) == (dim(H), dim(H))
 ```
 """
 function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
-    repr === :dense && return Matrix(matrix_representation(
-        op, space, :sparse; projection, chunking, kwargs...))
+    repr === :dense && return Matrix(matrix_representation(op, space, EagerSparseRepr(); projection, chunking, kwargs...))
+    # The barrier keeps inference from compiling every format a runtime Symbol could select
+    repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, space, _canonicalize_repr(repr); projection, chunking, kwargs...)
     repr = _canonicalize_repr(repr)
     if trivial_operator(op)
         return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
@@ -514,7 +515,7 @@ end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
     Hout == Hin && return matrix_representation(op, Hin, repr; projection, chunking, kwargs...)
-    repr === :dense && return Matrix(matrix_representation(op, ax, :sparse; projection, chunking, kwargs...))
+    repr === :dense && return Matrix(matrix_representation(op, ax, EagerSparseRepr(); projection, chunking, kwargs...))
     repr = _canonicalize_repr(repr)
     repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("Lazy and chunked representations with `Axes(Hout, Hin)` need `Hout == Hin`."))
     if trivial_operator(op)
