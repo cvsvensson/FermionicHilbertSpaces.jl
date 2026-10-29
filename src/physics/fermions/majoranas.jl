@@ -78,14 +78,14 @@ function Base.isless(a::MajoranaSym, b::MajoranaSym)
         a.basis.name < b.basis.name
     end
 end
+exchange_phase(a::MajoranaSym, b::MajoranaSym) = a.basis.group == b.basis.group ? -1 : 1
 function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym)
     if a == b
         1
     elseif a < b
         nothing
     elseif a > b
-        swap = Swap((-1)^(a.basis.group == b.basis.group))
-        return swap
+        return Swap(exchange_phase(a, b))
     else
         throw(ArgumentError("Cannot multiply `$a` and `$b`."))
     end

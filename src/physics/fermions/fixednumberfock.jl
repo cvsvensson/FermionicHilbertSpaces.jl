@@ -29,18 +29,18 @@ FockNumber{I}(f::FixedNumberFockState) where I = FockNumber{I}(focknbr_from_site
 FixedNumberFockState{N}(f::FixedNumberFockState{N}) where {N} = f
 FixedNumberFockState(f::FockNumber) = FixedNumberFockState{count_ones(f)}(f)
 function FixedNumberFockState{N}(f::FockNumber) where N
-    site = 1
-    count = 0
-    sites = Int[]
-    count_ones(f) == N || return FixedNumberFockState{N}(ntuple(i -> 0, N))
-    while count < N
-        if _bit(f, site)
-            count += 1
-            push!(sites, site)
-        end
-        site += 1
+    sites = ntuple(i -> 0, N)
+    count_ones(f) == N || return FixedNumberFockState{N}(sites)
+    bits = f.f
+    for k in 1:N
+        sites = Base.setindex(sites, trailing_zeros(bits) + 1, k)
+        bits &= bits - one(bits)
     end
-    FixedNumberFockState{N}(Tuple(sites))
+    return FixedNumberFockState{N}(sites)
+end
+function interpret_state(f::FockNumber, ::Type{FixedNumberFockState{N}}) where {N}
+    count_ones(f) == N || throw(ArgumentError("The Fock state $f has $(count_ones(f)) particles, expected $N."))
+    return FixedNumberFockState{N}(f)
 end
 
 
@@ -119,67 +119,68 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     @test representation(op, H) ≈ representation(op, Hf)
 end
 
+@testitem "Kets of a space of FixedNumberFockState" begin
+    import FermionicHilbertSpaces: FixedNumberFockState, vector_representation
+    @fermions f
+    Hx = hilbert_space(f, 1:3, FixedNumberFockState{1}.(basisstates(hilbert_space(f, 1:3, NumberConservation(1)))))
+    @test Ket(basisstate(2, Hx), Hx) == Kets(Hx)[2]
+    @test vector_representation(Ket(basisstate(2, Hx), Hx), Hx) == [0, 1, 0]
+    @test Ket("010", Hx) == Kets(Hx)[2]
+    @test Ket(FockNumber(2), Hx) == Kets(Hx)[2]
+    @test_throws ArgumentError Ket("110", Hx)
+    @spin s 1 // 2
+    Hf = hilbert_space(f, 1:2)
+    Hp = tensor_product(Hf, hilbert_space(s); constraint = NumberConservation(1, [Hf]))
+    @test Ket(basisstate(1, Hp), Hp) == Kets(Hp)[1]
+end
+
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{<:FixedNumberFockState})
     position = mode_position(op, space)
     position == 0 && throw(ArgumentError("The operator `$op` contains a factor that is not part of the fermionic space `$space`."))
     return position
 end
-function apply_local_operators(op::NCMul, f::FixedNumberFockState, H::AbstractHilbertSpace, sites; transpose)
+# The change in particle number is stored as a type parameter so that the state produced by a term has a concrete type.
+function precomputation_before_operator_application(op::NCMul{<:Any, <:FermionSym}, space::AbstractHilbertSpace{<:FixedNumberFockState})
+    sites = Tuple(map(factor -> _precomputation_before_operator_application(factor, space), op.factors))
+    return sites, Val(sum(factor -> factor.creation ? 1 : -1, op.factors; init = 0))
+end
+function apply_local_operators(op::NCMul{<:Any, <:FermionSym}, f::FixedNumberFockState{N}, H::AbstractHilbertSpace, (sites, _)::Tuple{Any, Val{Δ}}; transpose) where {N, Δ}
     if !transpose
-        daggers = Iterators.map(op -> op.creation, reverse(op.factors))
-        state, amp = togglefermions(Iterators.reverse(sites), daggers, f)
+        daggers = Iterators.map(op -> op.creation, Iterators.reverse(op.factors))
+        state, amp = togglefermions(reverse(sites), daggers, f, Val(N + Δ))
     else
         daggers = Iterators.map(op -> !op.creation, op.factors)
-        state, amp = togglefermions(sites, daggers, f)
+        state, amp = togglefermions(sites, daggers, f, Val(N - Δ))
     end
-    newamp = amp * op.coeff
-    iszero(newamp) && return f, newamp
-    return state, newamp
+    return state, amp * op.coeff
 end
-function togglefermions(sites, daggers, f::FixedNumberFockState)
-    # Check if operation results in vacuum or not,
-    # short circuiting if so to avoid allocating fsites
-    for site in sites
-        last_dagger = false
-        for s in f.sites
-            if s == site
-                last_dagger = true
-            end
-        end
-        for (s, dagger) in zip(sites, daggers)
-            if s == site
-                if dagger == last_dagger
-                    return f, false
-                end
-                last_dagger = dagger
-            end
-        end
-    end
+"""
+    togglefermions(sites, daggers, f::FixedNumberFockState, ::Val{M})
 
-    fsites = collect(f.sites) # Lots of allocations
-    fermionstatistics = 1
-    for (site, dagger) in zip(sites, daggers)
-        if dagger
-            if site in fsites
-                return f, false
-            end
-            fsites = push!(fsites, site)
-        else
-            if !(site in fsites)
-                return f, false
-            end
-            deleteat!(fsites, findfirst(isequal(site), fsites))
+Apply creation (`dagger == true`) and annihilation operators at `sites`, in order, to `f`. Returns the
+resulting state with `M` particles and the Jordan-Wigner sign, or a sign of `0` if an operator annihilates the state.
+"""
+function togglefermions(sites, daggers, f::FixedNumberFockState, ::Val{M}) where {M}
+    M < 0 && return f, 0
+    jw = false
+    for (j, (site, dagger)) in enumerate(zip(sites, daggers))
+        occupied = _bit(f, site)
+        below = count(<(site), f.sites)
+        for k in 1:(j - 1)
+            occupied ⊻= sites[k] == site
+            below += sites[k] < site
         end
-        sign = 1
-        for s in fsites
-            if s < site
-                sign *= -1
-            end
-        end
-        fermionstatistics *= sign
+        occupied == dagger && return FixedNumberFockState{M}(ntuple(i -> 0, Val(M))), 0
+        jw ⊻= isodd(below)
     end
-    sort!(fsites)
-    return FixedNumberFockState(Tuple(fsites)), fermionstatistics
+    # A mode is occupied at the end if it appears an odd number of times among the initial and toggled sites.
+    candidates = (f.sites..., sites...)
+    final = ntuple(Val(length(candidates))) do j
+        c = candidates[j]
+        isodd(count(==(c), candidates)) && findfirst(==(c), candidates) == j ? c : typemax(Int)
+    end
+    sorted = TupleTools.sort(final)
+    return FixedNumberFockState{M}(ntuple(i -> sorted[i], Val(M))), jw ? -1 : 1
 end
 Base.zero(::FixedNumberFockState) = FixedNumberFockState(())
 function concatenate((lastf, lastwidth)::Tuple{FixedNumberFockState,Int}, (f, width)::Tuple{FixedNumberFockState,Int})
@@ -194,6 +195,17 @@ end
 function permute(f::FixedNumberFockState, permutation::AbstractBitPermutation)
     p = Vector(permutation')
     return FixedNumberFockState(map(s -> p[s], f.sites))
+end
+
+@testitem "Number-changing operators on FixedNumberFockState spaces" begin
+    import FermionicHilbertSpaces: FixedNumberFockState, Axes
+    @fermions f
+    Hk(n) = hilbert_space(f, [4, 1, 3], NumberConservation(n))
+    Hx(n) = hilbert_space(f, [4, 1, 3], FixedNumberFockState{n}.(basisstates(Hk(n))))
+    op = f[3]' * f[1]' * f[1] + f[4]' * f[1] * f[1]'
+    for n in 0:1
+        @test representation(op, Axes(Hx(n + 1), Hx(n))) ≈ representation(op, Axes(Hk(n + 1), Hk(n)))
+    end
 end
 
 @testitem "Vector tensor product of fixed-number states with reordered modes" begin
