@@ -28,15 +28,17 @@ sum_over_terms(f, op) = mapreduce(((fs, c),) -> f(fs, c), +, NonCommutativeProdu
 state_normal_order(fs, contraction) = NonCommutativeProducts.with_autosort(() -> prod(x -> Unordered(x, contraction), fs; init = 1) * OrderEnd(), true)
 fluctuations(fs) = [f.x for f in fs if f isa Fluctuation]
 
-function wick_expectation(op, contraction)
+function wick_expectation(op, contraction, keep = Returns(true))
     return sum_over_terms(op) do fs, c
+        keep(fs) || return zero(c)
         length(fs) == 2 && return c * contraction(fs[1], fs[2])
         terms = NonCommutativeProducts.termpairs(state_normal_order(fs, contraction))
         return c * sum((d for (gs, d) in terms if isempty(fluctuations(gs))); init = 0)
     end
 end
-function _mean_field(op, contraction)
+function _mean_field(op, contraction, keep = Returns(true))
     return sum_over_terms(op) do fs, c
+        keep(fs) || return 0
         length(fs) <= 2 && return c * prod(fs; init = 1)
         return c * sum_over_terms(state_normal_order(fs, contraction)) do gs, d
             xs = fluctuations(gs)
@@ -59,17 +61,26 @@ function _contraction(G, H::SingleParticleHilbertSpace)
         return x.creation == y.creation ? zero(eltype(G)) : x.creation ? G[i, j] : (i == j) - G[j, i]
     end
 end
-# Odd terms vanish without any contraction being looked up, so the modes are checked separately.
-_check_modes(op, H) = (sum_over_terms((fs, _) -> (foreach(x -> _mode_position(x, H), fs); 0), op); op)
-expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}) = wick_expectation(_check_modes(op, H), _contraction(G, H))
+_acts_within(fs, ::SingleParticleHilbertSpace) = 2 * count(x -> x.creation, fs) == length(fs)
+_acts_within(fs, ::BdGHilbertSpace) = iseven(length(fs))
+# The modes are checked for every term, since not every term looks up all of its modes in `G`.
+function _in_space(fs, H, projection)
+    foreach(x -> _mode_position(x, H), fs)
+    _acts_within(fs, H) && return true
+    projection || throw(ArgumentError("The term `$(prod(fs))` does not act within the space `$H`. Pass `projection=true` to drop such terms."))
+    return false
+end
+function expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}; projection = false)
+    return zero(eltype(G)) + wick_expectation(op, _contraction(G, H), fs -> _in_space(fs, H, projection))
+end
 
 """
-    mean_field(op, G, H)
+    mean_field(op, G, H; projection = false)
 
 Return the mean-field operator of `op` in the Gaussian state with correlation matrix `G` on the single-particle or BdG
 space `H` (see [`expectation`](@ref)). Every product in `op` is replaced by its part of order at most two in the
 fluctuations `x - ⟨x⟩` (the Hartree, Fock and pairing terms), so the result is of degree at most two and has the
-same expectation value as `op` in the state.
+same expectation value as `op` in the state. `projection` is as in [`expectation`](@ref).
 
 ```julia
 @fermions f
@@ -77,7 +88,7 @@ H = hilbert_space(f, 1:2, SingleParticle())
 mean_field(f[1]' * f[1] * f[2]' * f[2], [0.5 0; 0 0.25], H) # 0.25 f[1]' f[1] + 0.5 f[2]' f[2] - 0.125
 ```
 """
-mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}) = _mean_field(_check_modes(op, H), _contraction(G, H))
+mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}; projection = false) = _mean_field(op, _contraction(G, H), fs -> _in_space(fs, H, projection))
 
 @testitem "Wick expectation values" begin
     using FermionicHilbertSpaces.FreeFermions
@@ -114,6 +125,14 @@ mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilber
         G0 = zeros(dim(H), dim(H))
         @test_throws ArgumentError expectation(op, G0, H)
         @test_throws ArgumentError mean_field(op, G0, H)
+    end
+    n = f[1]' * f[1]
+    for (H, outside) in ((hilbert_space(f, 1:N, SingleParticle()), f[1]' * f[2]'), (hilbert_space(f, 1:N, BdG()), f[1]' * f[2]' * f[3]))
+        G0 = zeros(dim(H), dim(H))
+        @test_throws ArgumentError expectation(outside + n, G0, H)
+        @test_throws ArgumentError FermionicHilbertSpaces.mean_field(outside + n, G0, H)
+        @test expectation(outside, G0, H; projection = true) === 0.0
+        @test FermionicHilbertSpaces.mean_field(outside + n, G0, H; projection = true) == n
     end
 end
 
