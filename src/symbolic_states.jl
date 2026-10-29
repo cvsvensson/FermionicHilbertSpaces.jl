@@ -335,8 +335,8 @@ NonCommutativeProducts.contraction_key(s::SymbolicState) = isket(s) ? (group_id(
 
 # An operator string acting on a product of kets is applied to the ket of each group it acts on, with one
 # precomputation per group for all terms of `b`, as in `matrix_representation`. Other products are sorted factor by factor.
-function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any,<:AbstractSym}, b::Union{NCAdd,NCMul})
-    sorted_product(c, b) = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any,NCMul,Union{NCAdd,NCMul}}, c, x, b)
+function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any, <:AbstractSym}, b::Union{NCAdd, NCMul})
+    sorted_product(c, b) = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any, NCMul, Union{NCAdd, NCMul}}, c, x, b)
     terms = NonCommutativeProducts.termpairs(b)
     isempty(terms) && return sorted_product(c, b)
     groupops = _group_operators(x, first(first(terms)))
