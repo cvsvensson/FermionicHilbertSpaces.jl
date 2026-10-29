@@ -354,11 +354,12 @@ end
 end
 
 @testitem "Number-conserving space with more than 1024 modes" begin
+    using LinearAlgebra
     @fermions f
     M = 1100
     ham = sum(f[n + 1]'f[n] + hc for n in 1:(M - 1))
     H = hilbert_space(f, 1:M, NumberConservation(1))
-    @test representation(ham, H) == representation(ham, hilbert_space(f, 1:M, SingleParticle()))
+    @test representation(ham, H) == diagm(1 => ones(M - 1), -1 => ones(M - 1))
 end
 
 @testitem "Spaces with more than 64 modes" begin
