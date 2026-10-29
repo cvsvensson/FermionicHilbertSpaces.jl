@@ -494,6 +494,7 @@ trivial_operator(op::NCAdd) = length(op.dict) == 0
 trivial_operator(op) = false
 get_trivial_op_coeff(op::NCMul) = op.coeff
 get_trivial_op_coeff(op::NCAdd) = op.coeff
+get_trivial_op_coeff(op::UniformScaling) = op.λ
 get_trivial_op_coeff(op) = op
 
 @testitem "Multi-space matrix representation" begin
@@ -603,6 +604,7 @@ end
 end
 
 @testitem "Operators between two spaces with Axes" begin
+    using LinearAlgebra
     @fermions f
     H = hilbert_space(f, 1:3)
     Hin = hilbert_space(f, 1:3, NumberConservation([1, 2]))
@@ -614,6 +616,7 @@ end
 
     @test_throws ArgumentError representation(f[2] + 3, Axes(Hout, Hin))
     @test representation(f[2] + 3, Axes(Hout, Hin); projection=true) == sliced(f[2] + 3)
+    @test representation(2I, Axes(Hout, Hin); projection=true) == sliced(2)
 
     @test_throws ArgumentError representation(f[1], Axes(hilbert_space(f, 1:2), Hin))
     @boson b
