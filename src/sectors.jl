@@ -26,6 +26,10 @@ sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
 function sector_space(space, states, sector_function, constraint)
     B = statetype(space)
     parent, members = unnest(space, states)
+    if members isa Vector{B} && !isempty(members) && allequal(sector_function, members)
+        qn = sector_function(first(members))
+        ismissing(qn) || return _sector_space(parent, OrderedDict(qn => members), constraint)
+    end
     _qntostates = groupby(sector_function, members, B)
     _sector_space(parent, _qntostates, constraint)
 end
@@ -66,7 +70,7 @@ function groupby(f::F, itr, ::Type{B}; sortkeys=:auto, sortvals=false) where {F,
 end
 
 function _sector_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}, constraint) where {Q,B}
-    ordered_states::Vector{B} = vcat(values(qn_to_states)...)
+    ordered_states::Vector{B} = length(qn_to_states) == 1 ? only(values(qn_to_states)) : vcat(values(qn_to_states)...)
     SectorHilbertSpace(space, ordered_states, qn_to_states, constraint)
 end
 
