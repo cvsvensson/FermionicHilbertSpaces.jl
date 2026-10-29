@@ -17,7 +17,7 @@ struct SectorHilbertSpace{B,P,Q,C,I} <: AbstractSubspace{B,P}
 end
 SectorHilbertSpace(parent, ordered_basis_states, qn_to_states, constraint, index) = SectorHilbertSpace{eltype(ordered_basis_states),typeof(parent),keytype(qn_to_states),typeof(constraint),typeof(index)}(parent, ordered_basis_states, qn_to_states, constraint, index)
 SectorHilbertSpace(::AbstractSubspace, ordered_basis_states, qn_to_states, constraint, index) = throw(nested_subspace_error())
-SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint; index=default_subspace_index, selected_by=constraint) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, build_subspace_index(index, selected_by, space, ordered_basis_states))
+SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint; index=default_subspace_index, selected_by=constraint) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, build_subspace_index(index, index_constraint(selected_by, space), space, ordered_basis_states))
 
 Base.parent(H::SectorHilbertSpace) = H.parent
 subspace_states(H::SectorHilbertSpace) = H.ordered_basis_states

@@ -58,7 +58,8 @@ The constructor checks the index on a few of `states`.
 `constraint` arrives in the form given by `index_constraint`. A product of constraints is a
 `ProductConstraint` of a tuple. A `NumberConservation` or `ParityConservation` lists, as its
 `spaces`, the atoms of `parent` it acts on. The constraints of the constrained factors of a
-tensor product are included, each acting on its factor. `NoSymmetry()` means that `states`
+tensor product are included, each acting on its factor, when each factor's constraint is
+known; a filter on a factor is not. `NoSymmetry()` means that `states`
 were listed explicitly or that nothing is known about them. The sectors of a sector space
 appear as the constraint itself; a quantum number is dispatchable only through its
 constraint type, `NumberConservation`, `ParityConservation`, or `SectorConstraint` through
@@ -182,13 +183,15 @@ end
     selected = Ref(0)
     keep(state) = isodd(state.f)
     label(state) = isodd(state.f)
-    function default_subspace_index(::Union{FilterConstraint{typeof(keep)},FilterConstraint{<:Any,<:Tuple{typeof(keep)}},SectorConstraint{<:FilterConstraint{typeof(label)}}}, parent, states)
+    function default_subspace_index(::Union{FilterConstraint{typeof(keep)},SectorConstraint{<:FilterConstraint{typeof(label)}},SectorConstraint{<:FilterConstraint{<:Any,<:Tuple{typeof(label)}}}}, parent, states)
         selected[] += 1
         LinearSearch(states)
     end
     Hlabel = constrain_space(H, SectorConstraint(label))
-    Hkeep = constrain_space(hilbert_space(f, 1:2), FilterConstraint(keep))
-    for build in (() -> constrain_space(H, FilterConstraint(keep)), () -> sector(true, Hlabel), () -> tensor_product(Hkeep, hilbert_space(f, 3:4)))
+    Hlabel12 = sector(true, constrain_space(hilbert_space(f, 1:2), SectorConstraint(label)))
+    for build in (() -> constrain_space(H, FilterConstraint(keep)), () -> sector(true, Hlabel),
+        () -> tensor_product(hilbert_space(f, 1:2), hilbert_space(f, 3:4); constraint=FilterConstraint(keep)),
+        () -> tensor_product(Hlabel12, hilbert_space(f, 3:4)))
         before = selected[]
         Hsub = build()
         @test selected[] > before

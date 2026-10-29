@@ -10,7 +10,7 @@ end
 function ConstrainedSpace(space, states; constraint=NoSymmetry(), index=default_subspace_index)
     parent, members = unnest(space, states)
     stored = _stored_states(members)
-    selected_by = constraint isa NoSymmetry ? constraint : coalesce(combine_constraints(own_constraint(space), constraint), NoSymmetry())
+    selected_by = constraint isa NoSymmetry ? constraint : index_constraint(coalesce(combine_constraints(own_constraint(space), constraint), NoSymmetry()), parent)
     ConstrainedSpace(parent, stored, selected_by, build_subspace_index(index, selected_by, parent, stored))
 end
 ConstrainedSpace(space::H, states::S, constraint, index) where {H,S} = ConstrainedSpace{eltype(states),H,S,typeof(constraint),typeof(index)}(space, states, constraint, index)
@@ -41,11 +41,12 @@ end
 """
     build_subspace_index(build, constraint, parent, states)
 
-`build(index_constraint(constraint, parent), parent, states)`, after checking that it gives the
-first, middle and last of `states` their positions. Throws an `ArgumentError` otherwise.
+`build(constraint, parent, states)`, after checking that it gives the first, middle and last of
+`states` their positions. Throws an `ArgumentError` otherwise. `constraint` is in the form
+given by `index_constraint`.
 """
 function build_subspace_index(build, constraint, parent, states)
-    index = build(index_constraint(constraint, parent), parent, states)
+    index = build(constraint, parent, states)
     n = length(states)
     for i in unique!([1, cld(n, 2), n])
         n == 0 && break
@@ -75,11 +76,11 @@ _product_parts(c::ProductConstraint) = c.constraints
 _product_parts(::NoSymmetry) = ()
 index_constraint(c::NumberConservation{<:Any,<:Any,Missing}, parent) = NumberConservation(c.total, parent_atoms(c.spaces, parent), missing)
 index_constraint(c::ParityConservation, parent) = ParityConservation(c.allowed_parities, parent_atoms(c.spaces, parent))
-parent_atoms(::Missing, parent) = collect(atomic_factors(parent))
+parent_atoms(::Missing, parent) = Tuple(atomic_factors(parent))
 function parent_atoms(spaces, parent)
     positions = [atom_position(atom, parent) for space in spaces for atom in (space isa AbstractHilbertSpace ? atomic_factors(space) : (space,))]
     any(iszero, positions) && return spaces
-    [atomic_factor(parent, p) for p in sort!(unique!(positions))]
+    Tuple(atomic_factor(parent, p) for p in sort!(unique!(positions)))
 end
 
 # What selected the states of a space, relative to its parent: `NoSymmetry()` for all of them, `missing` if unknown.
@@ -89,21 +90,7 @@ own_constraint(H::SectorHilbertSpace) = isnothing(H.constraint) ? missing : H.co
 combine_constraints(a, b) = (ismissing(a) || ismissing(b)) ? missing : a isa NoSymmetry ? b : b isa NoSymmetry ? a : a * b
 
 # What selected the states of the factor `H` of a product, acting on `H` only, or `missing` if unknown.
-factor_constraint(H) = bind_constraint(own_constraint(H), H)
-factor_constraint(H::SectorHilbertSpace) = isnothing(H.constraint) ? missing : localize_constraint(H.constraint, H)
-bind_constraint(c, H) = missing
-bind_constraint(c::NoSymmetry, H) = c
-bind_constraint(c::NumberConservation, H) = ismissing(c.spaces) ? NumberConservation(c.total, (H,), c.weights) : c
-bind_constraint(c::ParityConservation, H) = ismissing(c.spaces) ? ParityConservation(c.allowed_parities, (H,)) : c
-bind_constraint(c::AdditiveConstraint, H) = ismissing(c.spaces) ? missing : c
-bind_constraint(c::FilterConstraint, H) = ismissing(c.spaces) ? missing : c
-bind_constraint(c::FilterConstraint{<:Any,Missing,Missing}, H) = FilterConstraint(only, (c.reducer,), (H,))
-bind_constraint(c::SectorConstraint, H) = ismissing(c.filter.spaces) ? missing : c
-bind_constraint(c::SectorConstraint{<:FilterConstraint{<:Any,Missing,Missing}}, H) = SectorConstraint(only, (c.filter.reducer,), (H,))
-function bind_constraint(c::ProductConstraint, H)
-    parts = map(x -> bind_constraint(x, H), c.constraints)
-    any(ismissing, parts) ? missing : ProductConstraint(parts)
-end
+factor_constraint(H) = localize_constraint(own_constraint(H), H)
 combined_factor_constraint(spaces) = reduce(combine_constraints, map(factor_constraint, spaces); init=NoSymmetry())
 
 sector_constraint(c, qn) = c
@@ -347,20 +334,23 @@ end
 end
 
 """
-    localize_constraint(c, H::SectorHilbertSpace)
+    localize_constraint(c, H)
 
 Return a version of constraint `c` that is bound to `H` as its subspace, so that
 when `sector_function` is later called on a larger combined space it knows to extract
-the contribution from `H` only.  Already-localized (non-`Missing` subspace) or
-unsupported constraints are returned unchanged.
+the contribution from `H` only. Already-localized (non-`Missing` subspace) constraints are
+returned unchanged. A constraint that cannot be bound gives `missing`, or itself when `H` is a
+`SectorHilbertSpace`.
 """
-localize_constraint(c::AbstractConstraint, ::SectorHilbertSpace) = c
-function localize_constraint(c::NumberConservation{<:Any,Missing,W}, H::SectorHilbertSpace) where W
-    allowed = collect(keys(H.qn_to_states))
-    NumberConservation(allowed, H, c.weights)
-end
-function localize_constraint(c::ParityConservation{Missing}, H::SectorHilbertSpace)
-    ParityConservation(c.allowed_parities, H)
+localize_constraint(c, H) = H isa SectorHilbertSpace ? c : missing
+localize_constraint(c::NoSymmetry, H) = c
+localize_constraint(c::NumberConservation, H) = ismissing(c.spaces) ? NumberConservation(_local_values(c, H), H, c.weights) : c
+_local_values(c, H) = c.total
+_local_values(c, H::SectorHilbertSpace) = collect(keys(H.qn_to_states))
+localize_constraint(c::ParityConservation, H) = ismissing(c.spaces) ? ParityConservation(c.allowed_parities, H) : c
+function localize_constraint(c::ProductConstraint, H)
+    parts = map(sub -> localize_constraint(sub, H), c.constraints)
+    any(ismissing, parts) ? missing : ProductConstraint(parts)
 end
 function localize_constraint(c::ProductConstraint, H::SectorHilbertSpace)
     qns = collect(keys(H.qn_to_states))
@@ -373,12 +363,8 @@ end
 _localize_sub_constraint(c::NumberConservation{<:Any,<:Any,W}, allowed, H) where W = NumberConservation(allowed, H, c.weights)
 _localize_sub_constraint(c::ParityConservation, allowed, H) = ParityConservation(allowed, H)
 _localize_sub_constraint(c::AbstractConstraint, _allowed, _H) = c
-function localize_constraint(c::SectorConstraint{<:FilterConstraint{<:Any,Missing,Missing}}, H::SectorHilbertSpace)
-    # Bind the free-standing reducer to H as its single subspace.
-    # sector_function on the larger space will split the state, extract the H-substate,
-    # apply the original reducer to it, and return the label via `only`.
-    SectorConstraint(only, (c.filter.reducer,), (H,))
-end
+# The substate in `parent(H)` is that in `H`, and binding to the parent keeps `H` and its index out of the constraint's type.
+localize_constraint(c::SectorConstraint{<:FilterConstraint{<:Any,Missing,Missing}}, H) = SectorConstraint(only, (c.filter.reducer,), (H isa AbstractSubspace ? parent(H) : H,))
 
 """
     _combined_sector_constraint(spaces)
