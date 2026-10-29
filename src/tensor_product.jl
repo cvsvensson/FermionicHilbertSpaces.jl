@@ -44,9 +44,9 @@ function tensor_product(spaces; constraint=NoSymmetry())
         return sector_space(full_space, states, sector_function(constraint, full_space), constraint)
     elseif supports_filtering(constraint)
         filtered_states = collect(Iterators.filter(filter_function(constraint, full_space), states))
-        return ConstrainedSpace(full_space, filtered_states)
+        return ConstrainedSpace(full_space, filtered_states; constraint)
     else
-        return ConstrainedSpace(full_space, states)
+        return ConstrainedSpace(full_space, states; constraint)
     end
 end
 

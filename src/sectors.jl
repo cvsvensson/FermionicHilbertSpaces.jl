@@ -4,17 +4,17 @@
 Hilbert space whose basis is grouped into sectors labeled by quantum numbers.
 Use `quantumnumbers`, `sector`, and `indices` to access individual sectors.
 """
-struct SectorHilbertSpace{B,P,Q,C} <: AbstractSubspace{B,P}
+struct SectorHilbertSpace{B,P,Q,C,I} <: AbstractSubspace{B,P}
     parent::P
     ordered_basis_states::Vector{B}
     qn_to_states::OrderedDict{Q,Vector{B}}
     constraint::C
-    index::SubspaceIndex{B}
-    SectorHilbertSpace{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index) where {B,P,Q,C} = new{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index)
+    index::I
+    SectorHilbertSpace{B,P,Q,C,I}(parent, ordered_basis_states, qn_to_states, constraint, index) where {B,P,Q,C,I} = new{B,P,Q,C,I}(parent, ordered_basis_states, qn_to_states, constraint, index)
 end
-SectorHilbertSpace(parent, ordered_basis_states, qn_to_states, constraint, index) = SectorHilbertSpace{eltype(ordered_basis_states),typeof(parent),keytype(qn_to_states),typeof(constraint)}(parent, ordered_basis_states, qn_to_states, constraint, index)
+SectorHilbertSpace(parent, ordered_basis_states, qn_to_states, constraint, index) = SectorHilbertSpace{eltype(ordered_basis_states),typeof(parent),keytype(qn_to_states),typeof(constraint),typeof(index)}(parent, ordered_basis_states, qn_to_states, constraint, index)
 SectorHilbertSpace(::AbstractSubspace, ordered_basis_states, qn_to_states, constraint, index) = throw(nested_subspace_error())
-SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, SubspaceIndex(space, ordered_basis_states))
+SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, build_subspace_index(constraint, space, ordered_basis_states))
 
 Base.parent(H::SectorHilbertSpace) = H.parent
 subspace_states(H::SectorHilbertSpace) = H.ordered_basis_states

@@ -65,7 +65,15 @@ the index of a state, which avoids the default dictionary lookup.
 - [`AbstractSubspace`](@ref) is the supertype of spaces spanned by some basis states of a
   parent space. A subtype implements `parent`, `subspace_states`, `subspace_index` and
   `rewrap`, and gets tensor products, partial traces and matrix representations from its parent.
-  [`SubspaceIndex`](@ref) builds the index.
+  [`default_subspace_index`](@ref) builds the index.
+- [`default_subspace_index`](@ref)`(constraint, parent, states)` builds the lookup that
+  `state_index` uses on constrained and sector spaces. A method that dispatches on the type of
+  `constraint` only, not on `parent`, selects a custom index. It returns
+  `default_subspace_index(NoSymmetry(), parent, states)` when `states` don't fit it.
+- [`state_position`](@ref)`(index, state, parent)` is the one method a custom index
+  implements: the position of `state` in the subspace, or `0`. It may use `parent` only through
+  its basis states and `state_index`. Constructors check the index on the first, middle and
+  last state and throw an `ArgumentError` on a mismatch.
 
 To restrict a space of custom states, use [`SectorConstraint`](@ref) or
 [`FilterConstraint`](@ref). Their required argument is the reducer, which is called on each
