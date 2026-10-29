@@ -190,13 +190,25 @@ quasiparticle_adjoint_index(n, N) = 2N + 1 - n
 
 abstract type AbstractBdGEigenAlg end
 
+"""
+    BdGEigen(cutoff=1e-12)
+
+Algorithm for `eigen(A, BdGEigen())`, which diagonalizes a BdG matrix `A = representation(op, hilbert_space(f, labels, BdG()), :dense)` with `N` modes and returns an `Eigen` with eigenvalues sorted in ascending order and orthonormal eigenvectors. A column `[u; v]` with eigenvalue `e` gives the quasiparticle `γ' = Σᵢ u[i] * f[labels[i]]' + v[i] * f[labels[i]]`, which satisfies `op * γ' - γ' * op = 2e * γ'`. Columns `k` and `2N + 1 - k` are particle-hole partners: their eigenvalues are `e` and `-e` and their quasiparticles are adjoints of each other. `cutoff` is the tolerance used when enforcing this pairing.
+
+```julia
+@fermions f
+H = hilbert_space(f, 1:2, BdG())
+op = f[1]' * f[2] + f[1]' * f[2]' + hc
+vals, vecs = eigen(representation(op, H, :dense), BdGEigen())
+```
+"""
 struct BdGEigen{T<:Number} <: AbstractBdGEigenAlg
-    cutoff::T # tolerance for particle-hole symmetry
+    cutoff::T
 end
 BdGEigen() = BdGEigen(DEFAULT_PH_CUTOFF)
 
 function LinearAlgebra.eigen(A::AbstractMatrix, alg::BdGEigen; canon_alg=SVDCanon())
-    enforce_ph_symmetry(eigen(A), canon_alg; cutoff=alg.cutoff)
+    Eigen(enforce_ph_symmetry(eigen(A), canon_alg; cutoff=alg.cutoff)...)
 end
 
 
@@ -386,4 +398,21 @@ const DEFAULT_PH_CUTOFF = 1e-12
              sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:3, m in 1:3)
     vals, _ = eigen(representation(symham, H, :dense), BdGEigen())
     @test eigvals(Hermitian(representation(symham, Hmb, :dense))) ≈ mb_energies(vals[4:6], real(tr(h)))
+end
+
+@testitem "BdGEigen quasiparticles" begin
+    using LinearAlgebra
+    @fermions f
+    N = 3
+    op = sum(rand(ComplexF64) * f[i]' * f[j] + rand(ComplexF64) * f[i]' * f[j]' + hc for i in 1:N, j in 1:N)
+    F = eigen(representation(op, hilbert_space(f, 1:N, BdG()), :dense), BdGEigen())
+    @test issorted(F.values)
+    @test F.vectors' * F.vectors ≈ I
+    Hmb = hilbert_space(f, 1:N)
+    Hm = representation(op, Hmb, :dense)
+    γ(k) = representation(sum(F.vectors[i, k] * f[i]' + F.vectors[N+i, k] * f[i] for i in 1:N), Hmb, :dense)
+    for k in 1:2N
+        @test Hm * γ(k) - γ(k) * Hm ≈ 2F.values[k] * γ(k)
+        @test γ(2N + 1 - k) ≈ γ(k)'
+    end
 end
