@@ -533,6 +533,50 @@ function _checked_group_ids(op, space)
     all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic bases of the operator must match the atomic groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
     return space_groups
 end
+
+"""
+    expectation(op, state, H)
+
+Return the expectation value of the operator `op` in `state` on the space `H`. A vector `ψ` gives `ψ' * M * ψ` and a
+density matrix `ρ` gives `tr(ρ * M)`, where `M = representation(op, H)`. The state is assumed to be normalized.
+
+On `hilbert_space(f, labels, SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on
+`hilbert_space(f, labels, BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in
+the order of the BdG space. There `op` must be quadratic, and its identity part is included.
+
+# Examples
+```julia
+@fermions f
+H = hilbert_space(f, 1:2)
+ψ = representation("10", H)
+expectation(f[1]' * f[1] + 2, ψ, H) == 3
+```
+"""
+expectation(op, ψ::AbstractVector, H::AbstractHilbertSpace) = dot(ψ, representation(op, H), ψ)
+expectation(op, ρ::AbstractMatrix, H::AbstractHilbertSpace) = dot(ρ', representation(op, H))
+
+@testitem "Expectation values" begin
+    using LinearAlgebra, SparseArrays
+    @fermions f
+    H = hilbert_space(f, 1:4, NumberConservation(2))
+    op = f[1]' * f[2] * f[3]' * f[4] + 1im * f[2]' * f[3] + hc + 2
+    M = representation(op, H, :dense)
+    ψ = normalize(rand(ComplexF64, dim(H)))
+    @test expectation(op, ψ, H) ≈ ψ' * M * ψ
+    ρ = rand(ComplexF64, dim(H), dim(H))
+    @test expectation(op, ρ, H) ≈ tr(ρ * M)
+    ρs = sprand(ComplexF64, dim(H), dim(H), 0.3)
+    @test expectation(op, ρs, H) ≈ tr(ρs * M)
+end
+
+@testitem "Expectation values with symbolic coefficients" begin
+    using Symbolics
+    @variables t
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    ψ = representation("10", H)
+    @test isequal(Symbolics.simplify(expectation(t * f[1]' * f[1] + f[1]' * f[2] + 2, ψ, H)), t + 2)
+end
 _canonicalize_repr(t) = t
 _canonicalize_repr(::Type{<:AbstractArray{T}}) where T = EagerDenseRepr{T}()
 _canonicalize_repr(::Type{T}) where T<:SparseArrays.AbstractSparseVecOrMat = EagerSparseRepr{eltype(T)}()
@@ -882,6 +926,9 @@ end
 ## 
 remove_identity(a::NCMul) = a
 remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict)
+identity_coefficient(op::NCAdd) = op.coeff
+identity_coefficient(op::NCMul) = isempty(op.factors) ? op.coeff : zero(op.coeff)
+identity_coefficient(op) = get_trivial_op_coeff(op)
 
 # The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
 _isscalar_operator(op) = op isa Union{Number,UniformScaling} || (op isa Union{NCMul,NCAdd} && NonCommutativeProducts.isscalar(op))

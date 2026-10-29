@@ -57,6 +57,10 @@ HB = hilbert_space(c, labels[3:4])
 ρB = partial_trace(Ψ, H => HB)
 ρAB = tensor_product((ρA, ρB), (HA, HB) => H)
 ```
+`expectation(op, state, H)` gives the expectation value of an operator in a state vector or a density matrix:
+```@example intro
+expectation(ham, Ψ, H), expectation(ham, ρAB, H)
+```
 These patterns works for all spaces, subregions and constraints, with automatic handling of fermionic signs.
 
 ## Conserved quantum numbers

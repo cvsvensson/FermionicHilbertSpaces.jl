@@ -58,8 +58,16 @@ _state_index(state, H::BdGHilbertSpace) = _state_index(state, parent(H))
 representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
+    normal_order_to_bdg(_nambu_matrix(op, H, repr))
+end
+# The matrix `m` with `op == identity_coefficient(op) + Ψ' m Ψ`. Unlike the BdG matrix, it does not assume that `op` is hermitian.
+function _nambu_matrix(op, H, repr)
     _is_quadratic_fermion_operator(op, false) || throw(ArgumentError("Only quadratic fermionic operators can be represented on a BdG Hilbert space. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
-    normal_order_to_bdg(_quadratic_matrix(_bdg_entry, remove_identity(op), H, repr))
+    _quadratic_matrix(_bdg_entry, remove_identity(op), H, repr)
+end
+function expectation(op, G::AbstractMatrix, H::BdGHilbertSpace)
+    _isscalar_operator(op) && return identity_coefficient(op)
+    return identity_coefficient(op) + dot(transpose(G)', _nambu_matrix(op, H, EagerSparseRepr()))
 end
 function _bdg_entry(term, H)
     instate, outstate = _nambu_in_out(term, map(f -> mode_position(f, H), term.factors))
@@ -98,6 +106,23 @@ end
         sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:2, m in 1:2)
     bdg_ham2 = representation(op, H)
     @test bdg_ham ≈ bdg_ham2
+end
+
+@testitem "BdG expectation values" begin
+    using LinearAlgebra
+    @fermions f
+    N = 3
+    H = hilbert_space(f, 1:N, BdG())
+    Hfock = hilbert_space(f, 1:N)
+    ham = sum(rand(ComplexF64) * f[i]' * f[j] + rand(ComplexF64) * f[i]' * f[j]' + hc for i in 1:N, j in 1:N)
+    ρ = exp(-representation(ham, Hfock, :dense))
+    ρ /= tr(ρ)
+    Ψ = [[f[i] for i in 1:N]; [f[i]' for i in 1:N]]
+    G = [tr(ρ * representation(Ψ[i]' * Ψ[j], Hfock, :dense)) for i in 1:2N, j in 1:2N]
+    for op in (f[1]' * f[2], f[1] * f[2], f[1]' * f[2]', f[1] * f[2]', ham + 2)
+        @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
+    end
+    @test_throws ArgumentError expectation(f[1]' * f[2]' * f[3] * f[1], G, H)
 end
 
 @testitem "BdG representation formats" begin
