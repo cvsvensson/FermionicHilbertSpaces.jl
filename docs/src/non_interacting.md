@@ -100,6 +100,40 @@ mf = mean_field(U, G, H)
 expectation(mf, G, H) ≈ expectation(U, G, H)
 ```
 
+## Correlation matrices and entanglement
+For the BdG ground state, the correlation matrix ``G`` of the previous section is `FermionicHilbertSpaces.correlation_matrix(F)`, where `F` is the result of `eigen(A, BdGEigen())`, and `FermionicHilbertSpaces.ground_state_parity(F)` is its fermionic parity. For a many-body state `ψ` on `H`, `FermionicHilbertSpaces.correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`.
+
+The rows and columns of a subsystem of modes form the reduced correlation matrix. Its eigenvalues ``\lambda`` give the entanglement entropy ``S = -\sum \lambda \log \lambda`` of the subsystem, which equals the entropy of the reduced many-body density matrix:
+```@example entanglement
+using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces: correlation_matrix
+@fermions f
+N = 4
+h = Hermitian(rand(ComplexF64, N, N))
+Δ = rand(ComplexF64, N, N) |> m -> m - transpose(m)
+ham = sum(f[i]' * h[i, j] * f[j] + Δ[i, j] * f[i]' * f[j]' + hc for i in 1:N, j in 1:N)
+Hbdg = hilbert_space(f, 1:N, BdG())
+A = representation(ham, Hbdg, :dense)
+G = correlation_matrix(eigen(A, FermionicHilbertSpaces.BdGEigen()))
+sub = 1:2
+Gsub = G[[sub; sub .+ N], [sub; sub .+ N]]
+entropy(λ) = -sum(x -> x > 0 ? x * log(x) : zero(x), λ)
+S = entropy(eigvals(Hermitian(Gsub)))
+
+H = hilbert_space(f, 1:N)
+ψ = eigvecs(Hermitian(representation(ham, H, :dense)))[:, 1]
+ρsub = partial_trace(ψ * ψ', H => hilbert_space(f, sub))
+@assert S ≈ entropy(eigvals(Hermitian(ρsub)))
+@assert Gsub ≈ correlation_matrix(ψ, H, hilbert_space(f, sub, BdG()))
+@assert expectation(ham, G, Hbdg) ≈ expectation(ham, ψ, H)
+S
+```
+
+Conversely, `FermionicHilbertSpaces.gaussian_state(G, H, Hbdg)` builds the many-body density matrix on `H` of the Gaussian state with correlation matrix `G`. The reduced correlation matrix gives the reduced density matrix:
+```@example entanglement
+FermionicHilbertSpaces.gaussian_state(Gsub, hilbert_space(f, sub), hilbert_space(f, sub, BdG())) ≈ ρsub
+```
+
 ## From matrices and eigenvectors back to symbolic operators
 `symbolic_operator(M, H)` turns a matrix on a `BdG` or `SingleParticle` space back into a symbolic operator, and `quasiparticle(v, H)` turns an eigenvector into the operator that creates the corresponding quasiparticle. On the `BdG` space, `symbolic_operator` returns the traceless operator, which differs from the original one by a constant.
 ```@example bdg_quasiparticles

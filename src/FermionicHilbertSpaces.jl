@@ -8,7 +8,7 @@ products, partial traces and matrix representations that connect them.
 module FermionicHilbertSpaces
 
 using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Eigen, Hermitian,
-    Symmetric, UniformScaling, diag, diagind, dot,
+    Symmetric, UniformScaling, det, diag, diagind, dot,
     eigen, eigen!, eigvals, eigvecs, ishermitian, issymmetric,
     mul!, normalize, qr, rank, rmul!, schur, svdvals, tr, I
 using LowRankMatrices: LowRankMatrices, LowRankMatrix
@@ -130,6 +130,7 @@ include("physics/fermions/majoranas.jl")
 include("physics/fermions/fixednumberfock.jl")
 include("physics/fermions/bdg.jl")
 include("physics/fermions/wick.jl")
+include("physics/fermions/gaussian.jl")
 
 
 include("physics/bosons.jl")
