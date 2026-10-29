@@ -337,12 +337,12 @@ NonCommutativeProducts.contraction_key(s::SymbolicState) = isket(s) ? (group_id(
 # precomputation per group for all terms of `b`, as in `matrix_representation`. Other products are sorted factor by factor.
 function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any, <:AbstractSym}, b::Union{NCAdd, NCMul})
     sorted_product(c, b) = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any, NCMul, Union{NCAdd, NCMul}}, c, x, b)
-    terms = NonCommutativeProducts.termpairs(b)
-    isempty(terms) && return sorted_product(c, b)
-    groupops = _group_operators(x, first(first(terms)))
+    factors1 = _first_factors(b)
+    any(s -> s isa SymbolicState, factors1) || return sorted_product(c, b)
+    groupops = _group_operators(x, factors1)
     isnothing(groupops) && return sorted_product(c, b)
     precomps = [precomputation_before_operator_application(op, space) for (_, space, op) in groupops]
-    for (factors, coeff) in terms
+    for (factors, coeff) in NonCommutativeProducts.termpairs(b)
         if !all(((k, space, _),) -> _is_ket_in(factors, k, space), groupops)
             c = sorted_product(c, NCMul(coeff, factors))
             continue
@@ -359,7 +359,13 @@ function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any, <:AbstractSym}, b
     end
     return c
 end
-_is_ket_in(factors, k, space) = k <= length(factors) && factors[k] isa SymbolicState && isket(factors[k]) && _same_space_id(factors[k].space, space)
+_first_factors(b::NCMul) = b.factors
+_first_factors(b::NCAdd) = isempty(b.dict) ? () : first(keys(b.dict)).factors
+function _is_ket_in(factors, k, space)
+    k <= length(factors) || return false
+    s = factors[k]
+    return s isa SymbolicState && isket(s) && _same_space_id(s.space, space)
+end
 # Tuples `(k, space, op)`, where `op` is the product of the factors of `x` that act on the ket `factors[k]` in `space`,
 # or `nothing` if a factor of `x` acts on none of the kets
 function _group_operators(x::NCMul, factors)
@@ -368,7 +374,7 @@ function _group_operators(x::NCMul, factors)
         findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)
     end
     any(isnothing, inds) && return nothing
-    return [(k, factors[k].space, NCMul(one(x.coeff), x.factors[inds .== k])) for k in unique(inds)]
+    return [(k, factors[k].space, NCMul(one(x.coeff), ___concretize(x.factors[inds .== k], VecConcretizer()))) for k in unique(inds)]
 end
 
 
@@ -953,12 +959,15 @@ end
         @test norm(ψ) ≈ norm(v)
     end
     # Kets in a product of spaces are products of one ket per space
-    @spins S 1 // 2
-    H = hilbert_space(S, 1:3)
-    ψ = Ket(["↑", "↓", "↑"], H) + 2 * Ket(["↓", "↓", "↑"], H)
-    op = S[1][:+] * S[2][:-] + S[3][:x] + 0.5 * S[1][:z] * S[2][:z]
+    @fermions g
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(g, 1:2), hilbert_space(s))
+    ψ = Ket(("10", "01", "0"), H) + 2 * Ket(("11", "00", "1"), H)
+    op = f[1]' * g[2] * s[:+] + f[2]' * f[1] * g[1]' + hc + f[1]
     M = representation(op, H, :dense)
     @test Vector(representation(op * (op * ψ), H)) ≈ M * M * Vector(representation(ψ, H))
+    Hx = hilbert_space(f, 1:3, FermionicHilbertSpaces.FixedNumberFockState{1}.(basisstates(hilbert_space(f, 1:3, NumberConservation(1)))))
+    kx, ks = Kets(Hx), Kets(hilbert_space(s))
+    @test (f[2]' * f[1] + s[:z]) * (kx("100") * ks("1") + kx("010") * ks("0")) == kx("010") * ks("1") + kx("100") * ks("1")
     # Other products, such as operators on ketbras or on spaces without a ket, are sorted factor by factor
     Hf, Hs = hilbert_space(f, 1:2), hilbert_space(s)
     kf, ks = Kets(Hf), Kets(Hs)
