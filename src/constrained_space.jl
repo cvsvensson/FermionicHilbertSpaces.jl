@@ -85,7 +85,7 @@ const INDEX_TABLE_MAX_LENGTH = 2^28
     root_keyed_index(space, states)
 
 An `IndexTable` of the positions of `states` when it is small enough, otherwise a
-`RootIndexDict`, or `nothing` when `space` has no arithmetic `state_index`.
+`RootIndexDict`, or `nothing` when `space` has no arithmetic `state_index` with `Int` values.
 Throws an `ArgumentError` if a state appears more than once.
 """
 function root_keyed_index(space, states)
@@ -93,11 +93,13 @@ function root_keyed_index(space, states)
     B = statetype(space)
     (eltype(states) == B || all(state -> same_state_kind(state, B), states)) || return nothing
     d = dim(space)
-    if d isa Int && d <= min(INDEX_TABLE_RATIO * length(states), INDEX_TABLE_MAX_LENGTH)
+    # Wide integer keys measured slower than keying by state.
+    d isa Int || return nothing
+    if d <= min(INDEX_TABLE_RATIO * length(states), INDEX_TABLE_MAX_LENGTH)
         table = fill_positions!(zeros(Int32, d), space, states)
         return isnothing(table) ? nothing : IndexTable(table)
     end
-    positions = fill_positions!(sizehint!(Dict{typeof(d),Int}(), length(states)), space, states)
+    positions = fill_positions!(sizehint!(Dict{Int,Int}(), length(states)), space, states)
     return isnothing(positions) ? nothing : RootIndexDict(positions)
 end
 function fill_positions!(positions, space, states)
@@ -137,8 +139,8 @@ end
 A subspace index whose `positions[state_index(state, parent)]` is the position of `state`. It
 is keyed by the integer index rather than by the state because integers hash and compare faster.
 """
-struct RootIndexDict{K}
-    positions::Dict{K,Int}
+struct RootIndexDict
+    positions::Dict{Int,Int}
 end
 state_position(d::RootIndexDict, state, parent) = get(d.positions, state_index(state, parent), 0)
 state_position(d::Dict, state, parent) = get(d, state, 0)

@@ -38,7 +38,7 @@ function _state_index(state::FockNumber, H::FermionicSpace{FockNumber{I}}) where
     iszero(state.f >> nbr_of_modes(H)) ? T(state.f) + one(T) : zero(T)
 end
 # Below 63 modes, computing `dim(H)` does not throw. Its type is `fock_index_type(I)`, which is
-# `UInt128` or `BigInt` for wide `FockNumber`s; `index_table` builds a table only when it is an `Int`.
+# `UInt128` or `BigInt` for wide `FockNumber`s; `root_keyed_index` builds an index only when it is an `Int`.
 has_arithmetic_state_index(H::FermionicSpace{<:FockNumber}) = nbr_of_modes(H) < 63
 function dim(H::FermionicSpace{FockNumber{I}}) where I
     d = one(fock_index_type(I)) << nbr_of_modes(H)
