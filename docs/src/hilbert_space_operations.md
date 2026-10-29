@@ -138,9 +138,7 @@ using LinearAlgebra, SparseArrays
 symham = sum(f[n]'f[n] for n in 1:4)
 ground_states = stack(sectors(H)) do Hsec
     ham = representation(symham, Hsec, :dense)
-    v = zeros(dim(H))
-    v[indices(Hsec, H)] = eigvecs(ham)[:, 1]
-    v
+    embed(eigvecs(ham)[:, 1], Hsec => H)
 end
 # Let's project the full hamiltonian onto the ground states
 ground_states' * representation(symham, H) * ground_states 
@@ -149,6 +147,31 @@ ground_states' * representation(symham, H) * ground_states
 `indices` also accepts a sector Hilbert space instead of a quantum number, e.g.
 `indices(H1, H)`. Spaces without sector structure behave as a single sector:
 `quantumnumbers(H) == (nothing,)` and `indices(nothing, H) == 1:dim(H)`.
+
+### Operators between two spaces with `Axes`
+
+`representation(op, Axes(Hout, Hin))` returns the `dim(Hout) × dim(Hin)` matrix of `op`
+as a map from `Hin` to `Hout`. `Axes` lists the space of each axis of one array, rows
+first like `axes(m)`, and a bare space `H` means `Axes(H, H)`. This differs from the
+[Pair arguments](@ref pair_convention): `H => Hout` maps an array on `H` to an array on
+`Hout`, while `Axes` gives the spaces of a single array's axes. The two spaces must have
+the same modes, for example two particle-number sectors.
+
+An annihilation operator maps the 2-particle sector to the 1-particle sector. Its matrix
+elements between the 2-particle ground state and the 1-particle eigenstates are the
+weights in the Lehmann representation of the Green's function:
+
+```@example hilbert_space_ops
+H2 = hilbert_space(f, 1:4, NumberConservation(2))
+H1 = hilbert_space(f, 1:4, NumberConservation(1))
+symham = sum(f[n]' * f[n+1] + hc for n in 1:3) + sum(f[n]'f[n] * f[n+1]'f[n+1] for n in 1:3)
+E2, V2 = eigen(Hermitian(representation(symham, H2, :dense)))
+E1, V1 = eigen(Hermitian(representation(symham, H1, :dense)))
+c1 = representation(f[1], Axes(H1, H2))
+V1' * c1 * V2[:, 1]
+```
+
+The poles are at the energies `E2[1] .- E1`.
 
 ### Basic introspection
 
