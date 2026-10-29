@@ -22,12 +22,11 @@ hubbard(U) = hopping + U * sum(n(i, :↑) * n(i, :↓) for i in 1:L) - U / 2 * s
 Hbdg = hilbert_space(f, labels, BdG())
 ground_state_correlations(op, Hbdg) = correlation_matrix(eigen(representation(op, Hbdg, :dense), BdGEigen()))
 
-# Taking the new state directly can make the iteration oscillate, so we mix it with the previous one.
-function self_consistent(ham, G, Hbdg; mixing = 0.5, tol = 1.0e-8, maxiter = 1000)
+function self_consistent(ham, G, Hbdg; tol = 1.0e-8, maxiter = 1000)
     for _ in 1:maxiter
         Gnew = ground_state_correlations(mean_field(ham, G, Hbdg), Hbdg)
         norm(Gnew - G) < tol && return Gnew
-        G = mixing * Gnew + (1 - mixing) * G
+        G = Gnew
     end
     error("The mean-field iteration did not converge in $maxiter steps.")
 end
@@ -54,26 +53,29 @@ Gsc = self_consistent(hubbard(Uattr), ground_state_correlations(hopping + pairin
 # and the decoupled Hamiltonian has the same energy.
 E_mf = real(expectation(ham, G, Hbdg))
 @assert expectation(mean_field(ham, G, Hbdg), G, Hbdg) ≈ E_mf
-# Since the mean-field state is a variational state, its energy lies above the exact ground-state energy.
-H = hilbert_space(f, labels)
-E0 = eigmin(Hermitian(representation(ham, H, :dense)))
+# Since the mean-field state is a variational state, its energy lies above the exact ground-state energy. The exact
+# ground state is half filled with as many up as down electrons, so we diagonalize in that sector only.
+Hup = hilbert_space(f, [(i, :↑) for i in 1:L])
+Hdn = hilbert_space(f, [(i, :↓) for i in 1:L])
+Hsector = tensor_product(Hup, Hdn; constraint = NumberConservation(L ÷ 2, Hup) * NumberConservation(L ÷ 2, Hdn))
+E0 = eigmin(Hermitian(representation(ham, Hsector, :dense)))
 @assert E_mf > E0
 E_mf, E0
 
 # ## Phase diagram
 # Repeating this for a range of `U` maps out where each ordered phase exists. We sweep from strong coupling towards
 # `U = 0` and start each point from the solution at the previous one, so the iteration follows the ordered branch for as
-# long as it exists. Close to where the order vanishes the iteration slows down, so we allow more steps. Energies are
-# measured from the Fermi sea of the hopping, which is the mean-field solution without order.
-Hfixed = hilbert_space(f, labels, NumberConservation(L))
+# long as it exists. Energies are measured from the Fermi sea of the hopping, which is the mean-field solution without
+# order.
 G_fermi_sea = ground_state_correlations(hopping, Hbdg)
 function sweep(Us, seed, order_parameter)
     G = ground_state_correlations(hopping + seed, Hbdg)
     return map(Us) do U
-        G = self_consistent(hubbard(U), G, Hbdg; maxiter = 10_000)
-        E_sea = real(expectation(hubbard(U), G_fermi_sea, Hbdg))
-        E0 = eigmin(Hermitian(representation(hubbard(U), Hfixed, :dense)))
-        (order = order_parameter(G), E_mf = real(expectation(hubbard(U), G, Hbdg)) - E_sea, E0 = E0 - E_sea)
+        ham = hubbard(U)
+        G = self_consistent(ham, G, Hbdg)
+        E_sea = real(expectation(ham, G_fermi_sea, Hbdg))
+        E0 = eigmin(Hermitian(representation(ham, Hsector, :dense)))
+        (order = order_parameter(G), E_mf = real(expectation(ham, G, Hbdg)) - E_sea, E0 = E0 - E_sea)
     end
 end
 Us = 8:-0.25:0
