@@ -69,8 +69,8 @@ function Base.show(io::IO, x::BosonSym)
         print(io, "[", x.label, "]")
     end
 end
-Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && isequal(a.basis, b.basis)
-Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, h)))
+Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && isequal(a.basis, b.basis) && a.tags == b.tags
+Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, hash(a.tags, h))))
 # Normal ordering of a = b^m, c = b†^n: b^m b†^n = Σₖ k! C(m,k) C(n,k) b†^(n-k) b^(m-k)
 function _boson_normal_order(a::BosonSym, c::BosonSym)
     m, n = -a.exp, c.exp
