@@ -326,16 +326,17 @@ end
 function matrix_accumulator(::Type{T}, N::Int, (d1, d2), ::EagerDenseRepr) where T
     zeros(T, d1, d2)
 end
-function add_identity!!(m::Matrix{T}, coeff, space::AbstractHilbertSpace) where T
+function add_identity!!(m::Matrix{T}, coeff, space::AbstractHilbertSpace; _...) where T
     m .+= coeff * I(size(m, 1))
 end
-# The identity between two spaces with the same atoms is the overlap of their bases
-function add_identity!!(accumulator, coeff, ax::Axes)
-    rows, cols, _ = findnz(_overlap(ax))
-    foreach((i, j) -> push_inds_amps!(accumulator, i, j, coeff), rows, cols)
+function add_identity!!(accumulator, coeff, ax::Axes; projection)
+    Hout = _output_space(ax)
+    for (inind, state) in enumerate(basisstates(_input_space(ax)))
+        outind = state_index(state, Hout)
+        _skip_outside(outind, projection) || push_inds_amps!(accumulator, outind, inind, coeff)
+    end
     return accumulator
 end
-_overlap(ax::Axes) = first(basis_transformation(_input_space(ax), _output_space(ax)))
 function finalize!(m::Matrix, space)
     return m
 end
@@ -353,7 +354,7 @@ function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) wh
     for term in terms
         operator_indices_and_amplitudes!(accumulator, term, space; kwargs...)
     end
-    iszero(coeff) || add_identity!!(accumulator, coeff, space)
+    iszero(coeff) || add_identity!!(accumulator, coeff, space; kwargs...)
     return finalize!(accumulator, space)
 end
 
@@ -416,8 +417,9 @@ representation
 Return the matrix representation of symbolic operator `op` in Hilbert space `space`.
 
 With [`Axes`](@ref)`(Hout, Hin)`, return the `dim(Hout) × dim(Hin)` matrix of `op` as a map from `Hin` to `Hout`:
-its columns are the basis states of `Hin` and its rows those of `Hout`. `Hout` and `Hin` must have the same atoms in the
-same order, for example two sectors of the same modes. A number `c` gives `c` times the overlap of the two bases.
+its columns are the basis states of `Hin` and its rows those of `Hout`. `Hout` and `Hin` must have the same groups,
+for example two sectors of the same modes. A number `c` acts as `c` times the identity, so like any other operator
+it maps the states of `Hin` that are not in `Hout` outside `Hout`.
 Unless `Hout == Hin`, only the eager formats without chunking are supported.
 
 The optional `repr` selects the format, as in [`representation`](@ref): `:sparse` (the default), `:dense`, `:lazy`,
@@ -448,12 +450,17 @@ function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=
     Hout == Hin && return matrix_representation(op, Hin, repr; projection, chunking, kwargs...)
     repr === :dense && return Matrix(matrix_representation(op, ax, :sparse; projection, chunking, kwargs...))
     repr = _canonicalize_repr(repr)
-    repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("An operator between two different spaces has only an eager representation without chunking."))
-    trivial_operator(op) && return _convert_repr_eltype(get_trivial_op_coeff(op) * _overlap(ax), repr)
-    bases = _checked_group_ids(op, Hin)
-    op = op + 0
-    terms = [length(bases) > 1 ? partition_product(term, bases, groups(Hin)) : term for term in NCterms(op)]
-    return _accumulated_matrix(_repr_eltype(mat_eltype(op), repr), terms, op.coeff, ax, repr; projection, kwargs...)
+    repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("Lazy and chunked representations with `Axes(Hout, Hin)` need `Hout == Hin`."))
+    if trivial_operator(op)
+        coeff, terms = get_trivial_op_coeff(op), ()
+    else
+        bases = _checked_group_ids(op, Hin)
+        op = op + 0
+        coeff = op.coeff
+        terms = [length(bases) > 1 ? partition_product(term, bases, groups(Hin)) : term for term in NCterms(op)]
+    end
+    T = _repr_eltype(mapreduce(mat_eltype, promote_type, terms; init=typeof(coeff)), repr)
+    return _accumulated_matrix(T, terms, coeff, ax, repr; projection, kwargs...)
 end
 function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
@@ -605,12 +612,19 @@ end
     op = f[1]' * f[2] + hc + 2
     @test representation(op, Axes(H, H)) == representation(op, H)
 
-    @test representation(f[2] + 3, Axes(Hout, Hin)) == sliced(f[2] + 3)
-
-    @test_throws ArgumentError representation(f[1]' * f[2], Axes(Hout, Hin))
-    @test representation(f[1]' * f[2], Axes(Hout, Hin); projection=true) == sliced(f[1]' * f[2])
+    @test_throws ArgumentError representation(f[2] + 3, Axes(Hout, Hin))
+    @test representation(f[2] + 3, Axes(Hout, Hin); projection=true) == sliced(f[2] + 3)
 
     @test_throws ArgumentError representation(f[1], Axes(hilbert_space(f, 1:2), Hin))
+    @boson b
+    @test_throws ArgumentError representation(b', Axes(hilbert_space(b, 5), hilbert_space(b, 3)))
+
+    @majoranas γ
+    Hγb = tensor_product(hilbert_space(γ, 1:2), hilbert_space(b, 3))
+    states = collect(basisstates(Hγb))
+    Kout, Kin = constrain_space(Hγb, states[1:4]), constrain_space(Hγb, states[3:6])
+    op = γ[1] * γ[2] + b' * b
+    @test representation(op, Axes(Kout, Kin); projection=true) == representation(op, Hγb)[indices(Kout, Hγb), indices(Kin, Hγb)]
 
     ket = Ket(basisstate(1, Hout), Hout)
     bra = Ket(basisstate(2, Hin), Hin)'

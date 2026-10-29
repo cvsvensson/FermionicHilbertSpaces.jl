@@ -36,11 +36,12 @@ _input_space(H) = H
 _output_space(H) = H
 _input_space(ax::Axes) = last(ax.spaces)
 _output_space(ax::Axes) = first(ax.spaces)
-# Returns `(Hout, Hin)`. Their atoms must agree so that the states of one are directly states of the other.
+# Returns `(Hout, Hin)`. Operators act on the states of `Hin` within `Hin`'s groups, so `Hout` must have the same groups:
+# equal atoms are not enough, as a boson truncated at another number of states acts differently.
 function _operator_axes(ax::Axes)
     length(ax.spaces) == 2 || throw(ArgumentError("An operator has the two axes `Axes(Hout, Hin)`, got $(length(ax.spaces)) axes."))
     Hout, Hin = ax.spaces
-    atom_ids(Hout) == atom_ids(Hin) || throw(ArgumentError("The spaces of `Axes(Hout, Hin)` must have the same atoms in the same order, got $Hout and $Hin."))
+    groups(Hout) == groups(Hin) || throw(ArgumentError("The spaces of `Axes(Hout, Hin)` must have the same groups, for example two sectors of the same space, got $Hout and $Hin."))
     return Hout, Hin
 end
 

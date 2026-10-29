@@ -502,24 +502,18 @@ function representation(s::SymbolicState, space::AbstractHilbertSpace, repr=Eage
     end
     matrix_representation(s, space, repr; kwargs...)
 end
-matrix_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...) = _ketbra_matrix(s, space, repr; kwargs...)
-function matrix_representation(s::SymbolicState, ax::Axes, repr=EagerSparseRepr(); kwargs...)
-    Hout, Hin = _operator_axes(ax)
-    Hout == Hin && return matrix_representation(s, Hin, repr; kwargs...)
-    return _ketbra_matrix(s, ax, repr; kwargs...)
-end
-function _ketbra_matrix(s, space, repr; kwargs...)
+function matrix_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     isketbra(s) || throw(ArgumentError("`matrix_representation` is only defined for ketbra `SymbolicState` operators. Use `vector_representation(state, H)` for a ket or bra."))
-    Hout, Hin = _output_space(space), _input_space(space)
     # a ketbra on one factor of a product space acts as the identity on the other factors
-    _same_space_id(Hin, s.space) || return matrix_representation(1 * s, space, repr; kwargs...)
-    ket_vec = vector_representation(SymbolicState(Hout, s.ket, nothing), Hout, repr)
-    bra_vec = vector_representation(SymbolicState(Hin, nothing, s.bra), Hin, repr)
+    _same_space_id(space, s.space) || return matrix_representation(1 * s, space, repr; kwargs...)
+    ket_vec = vector_representation(SymbolicState(space, s.ket, nothing), space, repr)
+    bra_vec = vector_representation(SymbolicState(space, nothing, s.bra), space, repr)
     return ket_vec * bra_vec
 end
 
 
 function representation(op, space::Union{AbstractHilbertSpace,Axes}, repr=EagerSparseRepr(); kwargs...)
+    space isa Axes && _operator_axes(space)
     type = _operator_type(op)
     if type == :kets || type == :bras
         space isa Axes && throw(ArgumentError("Kets and bras are represented in a single space, as in `representation(state, H)`."))
