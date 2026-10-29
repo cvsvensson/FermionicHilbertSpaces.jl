@@ -801,24 +801,24 @@ end
 # place of s, each group adds BU * transpose(BV) to mout[Ks, Ks].
 function _full_partial_trace!(mout, m::LowRankMatrix, splits, H)
     # (K, J, s) for each state J that splits into (K, b), grouped by b in ranges[b] and sorted by K
-    nb = maximum(((K, b, _),) -> iszero(K) ? 0 : b, Iterators.flatten(splits); init=0)
+    nb = maximum(((K, b, _),) -> iszero(K) ? 0 : b, Iterators.flatten(splits); init = 0)
     ptr = zeros(Int, nb + 1)
     for ss in splits, (K, b, _) in ss
-        iszero(K) || (ptr[b+1] += 1)
+        iszero(K) || (ptr[b + 1] += 1)
     end
     ptr[1] = 1
     cumsum!(ptr, ptr)
     next = ptr[1:nb]
-    entries = Vector{Tuple{Int,Int,fieldtype(eltype(eltype(splits)), 3)}}(undef, ptr[end] - 1)
+    entries = Vector{Tuple{Int, Int, fieldtype(eltype(eltype(splits)), 3)}}(undef, ptr[end] - 1)
     for (J, ss) in pairs(splits), (K, b, s) in ss
         iszero(K) && continue
         entries[next[b]] = (K, J, s)
         next[b] += 1
     end
-    ranges = [ptr[b]:ptr[b+1]-1 for b in 1:nb]
-    foreach(r -> sort!(view(entries, r); by=first), ranges)
+    ranges = [ptr[b]:(ptr[b + 1] - 1) for b in 1:nb]
+    foreach(r -> sort!(view(entries, r); by = first), ranges)
     Kall = first.(entries)
-    groups = Dict{typeof(view(Kall, 1:0)),Vector{Int}}() # Ks => the complement states in the group
+    groups = Dict{typeof(view(Kall, 1:0)), Vector{Int}}() # Ks => the complement states in the group
     for (b, r) in pairs(ranges)
         isempty(r) || push!(get!(Vector{Int}, groups, view(Kall, r)), b)
     end
