@@ -38,7 +38,7 @@ export SectorConstraint, FilterConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export SingleParticle, BdG
 export symmetric_sector
-public Axes
+public Axes, open_system, dissipator
 
 """
     HC

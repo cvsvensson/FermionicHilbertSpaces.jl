@@ -66,8 +66,9 @@ ham_sym = ε * c[1]'c[1]
 L_in = √γ_in * c[1]'
 L_out = exp(rand() * 2pi * im) * √γ_out * c[1]
 
-# Let's define a helper for the dissipator superoperator and write down the Lindbladian
-dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
+# The Lindbladian combines the commutator with the Hamiltonian and, for each jump operator `L`,
+# the dissipator superoperator ρ ↦ LρL† - ½{L†L, ρ} given by `dissipator(L)`
+using FermionicHilbertSpaces: dissipator
 lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(L_in) + dissipator(L_out)
 # Let's get the matrix representation and check that it preserves trace 
 mat = representation(lindbladian, Hlr)

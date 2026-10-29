@@ -45,6 +45,25 @@ combine_into_group(group::MajoranaGroup, spaces::AbstractVector{<:TransposedSpac
 tag_left(base) = add_tag(base, :left)
 tag_right(base) = add_tag(base, :right)
 
+"""
+    open_system(base, args...; kwargs...)
+    open_system(H::AbstractHilbertSpace; kwargs...)
+
+Return `(Hlr, Hleft, Hright, left, right)` for the vectorized density matrix of a system: `Hlr`
+is the tensor product of a `:left` copy `Hleft` and a transposed `:right` copy `Hright` of the
+space `hilbert_space(base, args...; kwargs...)`, or of `H`. `left(op)` and `right(op)` tag a symbolic
+operator so it acts on `ρ` from the left or from the right, `representation(left(A) * right(B), Hlr)`
+being the superoperator `ρ ↦ AρB`. Public, not exported.
+
+# Examples
+```julia
+using FermionicHilbertSpaces: open_system
+@fermions c
+Hlr, Hl, Hr, left, right = open_system(c, 1:1)
+ham = c[1]' * c[1]
+representation(-1im * (left(ham) - right(ham)), Hlr) # the commutator ρ ↦ -i[ham, ρ]
+```
+"""
 function open_system(base, args...; kwargs...)
     left_basis = tag_left(base)
     right_basis = tag_right(base)
@@ -59,6 +78,22 @@ function open_system(H::AbstractHilbertSpace; kwargs...)
     Hlr = tensor_product(Hleft, Hright; kwargs...)
     return Hlr, Hleft, Hright, tag_left, tag_right
 end
+
+"""
+    dissipator(L)
+
+The symbolic Lindblad dissipator `ρ ↦ LρL† - ½{L†L, ρ}` for the jump operator `L`, acting on the
+vectorized density matrix of a space returned by [`open_system`](@ref). Public, not exported.
+
+# Examples
+```julia
+using FermionicHilbertSpaces: open_system, dissipator
+@fermions c
+Hlr, Hl, Hr, left, right = open_system(c, 1:1)
+representation(dissipator(c[1]), Hlr)
+```
+"""
+dissipator(L) = tag_left(L) * tag_right(L') - (tag_left(L' * L) + tag_right(L' * L)) / 2
 
 function add_tag(factor::AbstractSym, tag)
     basis = symbolic_basis(factor)
@@ -246,12 +281,11 @@ end
 
 @testitem "Lindblad steady state of a fermionic level" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: open_system
+    using FermionicHilbertSpaces: open_system, dissipator
 
     @fermions c
     γin, γout = 0.3, 0.7
     Hlr, Hl, Hr, left, right = open_system(c, 1:1)
-    dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
     ham = 1.0 * c[1]'c[1]
     lindbladian = -1im * (left(ham) - right(ham)) + dissipator(√γin * c[1]') + dissipator(√γout * c[1])
     mat = representation(lindbladian, Hlr, :dense)
