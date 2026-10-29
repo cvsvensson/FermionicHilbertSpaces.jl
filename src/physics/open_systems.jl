@@ -77,6 +77,22 @@ function open_system(H::AbstractHilbertSpace; kwargs...)
     return Hlr, Hleft, Hright, tag_left, tag_right
 end
 
+"""
+    dissipator(L)
+
+The symbolic Lindblad dissipator `ρ ↦ LρL† - ½{L†L, ρ}` for the jump operator `L`, acting on the
+vectorized density matrix of a space returned by [`open_system`](@ref). Public, not exported.
+
+# Examples
+```julia
+using FermionicHilbertSpaces: open_system, dissipator
+@fermions c
+Hlr, Hl, Hr, left, right = open_system(c, 1:1)
+representation(dissipator(c[1]), Hlr)
+```
+"""
+dissipator(L) = tag_left(L) * tag_right(L') - (tag_left(L' * L) + tag_right(L' * L)) / 2
+
 function add_tag(factor::AbstractSym, tag)
     basis = symbolic_basis(factor)
     new_basis = add_tag(basis, tag)
@@ -263,12 +279,11 @@ end
 
 @testitem "Lindblad steady state of a fermionic level" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: open_system
+    using FermionicHilbertSpaces: open_system, dissipator
 
     @fermions c
     γin, γout = 0.3, 0.7
     Hlr, Hl, Hr, left, right = open_system(c, 1:1)
-    dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
     ham = 1.0 * c[1]'c[1]
     lindbladian = -1im * (left(ham) - right(ham)) + dissipator(√γin * c[1]') + dissipator(√γout * c[1])
     mat = representation(lindbladian, Hlr, :dense)

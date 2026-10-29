@@ -52,6 +52,7 @@ reshape(v, Hlr => (Hl, Hr))
 # \langle n \rangle_\text{ss} = \frac{\gamma_\text{in}}{\gamma_\text{in} + \gamma_\text{out}}.
 # ```
 using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces: dissipator
 
 # Parameters
 ε = 1.0
@@ -65,8 +66,7 @@ ham_sym = ε * c[1]'c[1]
 L_in = √γ_in * c[1]'
 L_out = exp(rand() * 2pi * im) * √γ_out * c[1]
 
-# Let's define a helper for the dissipator superoperator and write down the Lindbladian
-dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
+# `dissipator(L)` is the superoperator ρ ↦ LρL† − ½{L†L, ρ}.
 lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(L_in) + dissipator(L_out)
 # Let's get the matrix representation and check that it preserves trace 
 mat = representation(lindbladian, Hlr)
