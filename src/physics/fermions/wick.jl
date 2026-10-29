@@ -49,7 +49,9 @@ function _contraction(G, H::SingleParticleHilbertSpace)
         return x.creation == y.creation ? zero(eltype(G)) : x.creation ? G[i, j] : (i == j) - G[j, i]
     end
 end
-expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}) = wick_expectation(op, _contraction(G, H))
+# Odd terms vanish without any contraction being looked up, so the modes are checked separately.
+_check_modes(op, H) = (foreach(((fs, _),) -> foreach(x -> _mode_position(x, H), fs), NonCommutativeProducts.termpairs(1 * op)); op)
+expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}) = wick_expectation(_check_modes(op, H), _contraction(G, H))
 
 """
     mean_field(op, G, H)
@@ -64,7 +66,7 @@ H = hilbert_space(f, 1:2, SingleParticle())
 mean_field(f[1]' * f[1] * f[2]' * f[2], [0.5 0; 0 0.25], H) # 0.25 f[1]' f[1] + 0.5 f[2]' f[2] - 0.125
 ```
 """
-mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}) = _mean_field(op, _contraction(G, H))
+mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}) = _mean_field(_check_modes(op, H), _contraction(G, H))
 
 @testitem "Wick expectation values" begin
     using LinearAlgebra
@@ -92,6 +94,12 @@ mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilber
     G = transpose(inv(I + exp(2β * representation(q, H, :dense))))
     for op in pairing_ops
         @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
+    end
+
+    for H in (hilbert_space(f, 1:N, SingleParticle()), hilbert_space(f, 1:N, BdG())), op in (f[99], f[1]' * f[1] + f[99])
+        G0 = zeros(dim(H), dim(H))
+        @test_throws ArgumentError expectation(op, G0, H)
+        @test_throws ArgumentError mean_field(op, G0, H)
     end
 end
 
