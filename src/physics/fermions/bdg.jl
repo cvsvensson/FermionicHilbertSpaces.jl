@@ -68,14 +68,10 @@ function matrix_representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); c
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
     return normal_order_to_bdg(_nambu_matrix(op, H, repr))
 end
-# The matrix `m` with `op == identity_coefficient(op) + Ψ' m Ψ`, of which the BdG matrix is the particle-hole symmetric part.
+# The matrix `m` with `op == c + Ψ' m Ψ` for a scalar `c`, of which the BdG matrix is the particle-hole symmetric part.
 function _nambu_matrix(op, H, repr)
     _is_quadratic_fermion_operator(op, false) || throw(ArgumentError("Only quadratic fermionic operators can be represented on a BdG Hilbert space. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
     return _quadratic_matrix(_bdg_entry, remove_identity(op), H, repr)
-end
-function expectation(op, G::AbstractMatrix, H::BdGHilbertSpace)
-    _isscalar_operator(op) && return identity_coefficient(op)
-    return identity_coefficient(op) + dot(transpose(G)', _nambu_matrix(op, H, EagerSparseRepr()))
 end
 function _bdg_entry(term, H)
     instate, outstate = _nambu_in_out(term, map(f -> mode_position(f, H), term.factors))
@@ -163,7 +159,6 @@ end
     for op in (f[1]' * f[2], f[1] * f[2], f[1]' * f[2]', f[1] * f[2]', ham + 2)
         @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
     end
-    @test_throws ArgumentError expectation(f[1]' * f[2]' * f[3] * f[1], G, H)
 end
 
 @testitem "BdG representation formats" begin
