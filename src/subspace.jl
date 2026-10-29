@@ -41,8 +41,10 @@ function state_position end
     default_subspace_index(constraint, parent, states)
 
 Build the index (see [`state_position`](@ref)) of the subspace of `parent` with basis `states`,
-in order. `constraint` is what selected `states`: the constraint given to `constrain_space` or
-`tensor_product`, restricted to the sector for `sector`, or `NoSymmetry()` for listed states.
+in order. `constraint` is the constraint that selected `states`: the one given to
+`hilbert_space`, `constrain_space`, `tensor_product` or `sector`, or for a `tensor_product` of
+sector spaces without a new constraint, the one built from the constraints of the factors. It is
+`NoSymmetry()` otherwise, for example for listed states and for `sector` without a constraint.
 The generic method returns a lookup table or a `Dict`, and throws an `ArgumentError` on
 repeated states.
 
@@ -145,16 +147,6 @@ end
     observed(Hsub) = (map(s -> state_index(s, Hsub), basisstates(H)), matrix_representation(op, Hsub; projection=true))
     generic(Hsub) = constrain_space(H, collect(basisstates(Hsub)))
 
-    states = collect(basisstates(H))[[9, 2, 12, 5, 3]]
-    by_keyword(constraint, parent, states) = LinearSearch(states)
-    for constraint in (states, NumberConservation(1:2))
-        Hsub = constrain_space(H, constraint; index=by_keyword)
-        @test observed(Hsub) == observed(generic(Hsub))
-        @test observed(sectors(Hsub; index=by_keyword)[end]) == observed(generic(sectors(Hsub)[end]))
-    end
-    wrong(constraint, parent, states) = LinearSearch(reverse(states))
-    @test_throws ArgumentError constrain_space(H, states; index=wrong)
-
     selected = Ref(0)
     keep(state) = isodd(state.f)
     label(state) = isodd(state.f)
@@ -162,14 +154,17 @@ end
         selected[] += 1
         LinearSearch(states)
     end
-    Hlabel = constrain_space(H, SectorConstraint(label))
-    for build in (() -> constrain_space(H, FilterConstraint(keep)), () -> sector(true, Hlabel),
+    for build in (() -> constrain_space(H, FilterConstraint(keep)), () -> constrain_space(H, SectorConstraint(label)),
         () -> tensor_product(hilbert_space(f, 1:2), hilbert_space(f, 3:4); constraint=FilterConstraint(keep)))
         before = selected[]
         Hsub = build()
         @test selected[] > before
         @test observed(Hsub) == observed(generic(Hsub))
     end
+
+    wrong(state) = iseven(state.f)
+    default_subspace_index(::FilterConstraint{typeof(wrong)}, parent, states) = LinearSearch(reverse(states))
+    @test_throws ArgumentError constrain_space(H, FilterConstraint(wrong))
 end
 
 @testitem "Subspaces reject duplicate states" begin
