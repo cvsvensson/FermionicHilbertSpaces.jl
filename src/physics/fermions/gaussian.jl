@@ -1,7 +1,7 @@
 """
     correlation_matrix(state, H, Hbdg::BdGHilbertSpace)
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on the many-body space `H`, where `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. A hermitian quadratic operator `op` without identity part, with `A = representation(op, Hbdg)` and `N` modes, has `⟨op⟩ = sum(A .* G) + tr(A[1:N, 1:N])`. A BdG space over a subset of the modes gives the reduced correlation matrix.
+The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on the many-body space `H`, where `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩` for a quadratic operator `op`. A BdG space over a subset of the modes gives the reduced correlation matrix.
 
 ```jldoctest
 julia> @fermions f;
@@ -21,10 +21,8 @@ julia> correlation_matrix(ψ, H, hilbert_space(f, 1:2, BdG()))
 function correlation_matrix(state, H, Hbdg::BdGHilbertSpace)
     c = modes(Hbdg)
     Ψ = [c; adjoint.(c)]
-    return [_expectation(state, representation(Ψi' * Ψj, H)) for Ψi in Ψ, Ψj in Ψ]
+    return [expectation(Ψi' * Ψj, state, H) for Ψi in Ψ, Ψj in Ψ]
 end
-_expectation(ψ::AbstractVector, op) = dot(ψ, op, ψ)
-_expectation(ρ::AbstractMatrix, op) = dot(ρ', op)
 
 """
     correlation_matrix(F::LinearAlgebra.Eigen)
@@ -87,8 +85,7 @@ end
         F = Eigen(vals, vecs)
         G = correlation_matrix(F)
         @test G ≈ correlation_matrix(ψ, Hmb, Hbdg) ≈ correlation_matrix(ψ * ψ', Hmb, Hbdg)
-        A = representation(ham, Hbdg, :dense)
-        @test sum(A .* G) + tr(A[1:N, 1:N]) ≈ dot(ψ, representation(ham, Hmb, :dense), ψ)
+        @test expectation(ham, G, Hbdg) ≈ expectation(ham, ψ, Hmb)
         @test ground_state_parity(F) == round(real(dot(ψ, parityoperator(Hmb), ψ)))
         ground_state_parity(F)
     end
