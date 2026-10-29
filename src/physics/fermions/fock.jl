@@ -1,6 +1,9 @@
 """
     FockNumber
-A type representing a Fock state as the bitstring of an integer.
+A type representing a Fock state as the bitstring of an integer. Bit `k - 1` (counting from the
+least significant bit) is the occupation of the `k`-th mode of the space, in the order of the labels
+given to `hilbert_space`. In an unconstrained space the basis state at index `i` is
+`FockNumber(i - 1)`.
 """
 struct FockNumber{I} <: AbstractFockState
     f::I

@@ -26,6 +26,8 @@ Create one or more Majorana species with the given names. Indexing into Majorana
 gives a concrete Majorana. Majoranas in one `@majoranas` block anticommute with each other,
 and commute with Majoranas in other `@majoranas` blocks.
 
+Majoranas are Hermitian and normalised to square to one: `γᵢγⱼ + γⱼγᵢ = 2δᵢⱼ`.
+
 # Examples:
 - `@majoranas a b` creates two species of Majoranas that anticommute:
     - `a[1] * a[1] == 1`
@@ -231,7 +233,7 @@ function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
     MajoranaHilbertSpace(majorana_position, Hf, y)
 end
-@deprecate majorana_hilbert_space(y, labels, args...; kwargs...) hilbert_space(y, labels, args...; kwargs...)
+@deprecate majorana_hilbert_space(y, labels, args...; kwargs...) hilbert_space(y, labels, args...; kwargs...) false
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
 

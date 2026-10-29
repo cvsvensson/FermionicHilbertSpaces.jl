@@ -27,18 +27,19 @@ using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, N
 
 export FockNumber, hc, basisstates, dim, state_index, basisstate
 export hilbert_space, subregion
-export parityoperator, numberoperator, matrix_representation, representation, vector_representation
+export parityoperator, numberoperator, matrix_representation, representation, vector_representation, expectation
 export Kets, Ket, ProductState, SpinState, BosonicState
 
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
 export @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
-export SectorConstraint, FilterConstraint, GenericHilbertSpace
+export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export SingleParticle, BdG, BdGEigen
 export symmetric_sector
-public Axes
+export open_system
+public particle_number, Axes
 
 """
     HC
