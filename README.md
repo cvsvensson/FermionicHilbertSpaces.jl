@@ -69,3 +69,5 @@ You might want to look elsewhere if you
 
 This package does not contain functions for things like calculating eigenstates and doing time evolution. The documentation has several examples of how to combine this package with other Julia packages to do this.
 
+## Related packages
+FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).
