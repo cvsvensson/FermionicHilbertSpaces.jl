@@ -71,8 +71,8 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     mapper_in=state_mapper(H, _pt_parts(Hsub, complement)),
     mapper_out=_partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in);
     phase_factors=true, skipmissing=false)
-    size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
-    size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
+    size(m) == (dim(H), dim(H)) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
+    size(mout) == (dim(Hout), dim(Hout)) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
     fill!(mout, zero(eltype(mout)))
     splits = _split_all_states(H, mapper_in)
     _foreach_partial_transpose_term(tensor_product_iterator(m, H), H, Hsub, Hout, splits, mapper_out; phase_factors, skipmissing) do J1, J2, K1, K2, v

@@ -53,7 +53,7 @@ end
 size_compatible(m, H) = size(m) == ntuple(_ -> dim(H), ndims(m))
 size_compatible(m, ax::Axes) = size(m) == map(dim, ax.spaces)
 size_compatible(m::UniformScaling, H) = true
-size_compatible(m::UniformScaling, ax::Axes) = length(ax.spaces) == 2
+size_compatible(m::UniformScaling, ax::Axes) = length(ax.spaces) == 2 && ax.spaces[1] == ax.spaces[2]
 kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, Hs))
 
 @testitem "Kron size compatibility and error handling" begin
@@ -549,11 +549,12 @@ change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwar
 function change_basis(m, Hfrom::Union{AbstractHilbertSpace,Axes}, Hto::Union{AbstractHilbertSpace,Axes}; skipmissing=false, kwargs...)
     n = m isa UniformScaling ? 2 : ndims(m)
     from, to = _per_axis(Hfrom, n), _per_axis(Hto, n)
-    size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, got $(summary(m))."))
+    size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, and a `UniformScaling` needs the same space on both axes, got $(summary(m))."))
     length(to.spaces) == n || throw(ArgumentError("The output needs one space per axis of `m`, got $(length(to.spaces)) spaces for $n axes."))
     U1 = basis_transformation(first(from.spaces), first(to.spaces))
     # a bare space gives every axis the same transformation, so it is computed once
-    transformations = map((Hf, Ht) -> Hf === first(from.spaces) && Ht === first(to.spaces) ? U1 : basis_transformation(Hf, Ht), from.spaces, to.spaces)
+    transformation(Hf, Ht) = Hf === first(from.spaces) && Ht === first(to.spaces) ? U1 : basis_transformation(Hf, Ht)
+    transformations = map(transformation, from.spaces, to.spaces)
     if !skipmissing
         for (axis, Hf, (_, dropped)) in zip(1:n, from.spaces, transformations)
             for j in dropped
@@ -960,7 +961,7 @@ function _canonicalize_pt_input(v::AbstractVector, H::AbstractHilbertSpace)
     end
 end
 _check_pt_input_size(m::AbstractMatrix, H::AbstractHilbertSpace) =
-    size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
+    size(m) == (dim(H), dim(H)) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
 function _canonicalize_pt_input(m::AbstractMatrix, H::AbstractHilbertSpace)
     _check_pt_input_size(m, H)
     return _vectorize_pt_density_matrix(m)
@@ -973,7 +974,7 @@ function _canonicalize_pt_output(v::AbstractVector, Hsub::AbstractHilbertSpace)
     return v
 end
 function _canonicalize_pt_output(m::AbstractMatrix, Hsub::AbstractHilbertSpace)
-    size_compatible(m, Hsub) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(m))"))
+    size(m) == (dim(Hsub), dim(Hsub)) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(m))"))
     return vec(m)
 end
 
@@ -1345,11 +1346,10 @@ end
     blk = change_basis(m, H => Axes(Hout, Hin); skipmissing=true)
     @test blk == m[rows, cols]
 
-    padded = zeros(dim(H), dim(H))
-    padded[rows, cols] = blk
-    @test change_basis(blk, Axes(Hout, Hin) => H) == padded
+    @test change_basis(change_basis(blk, Axes(Hout, Hin) => H), H => Axes(Hout, Hin)) == blk
 
     @test change_basis(2I, H => Axes(Hout, Hin); skipmissing=true) == 2I(dim(H))[rows, cols]
+    @test_throws ArgumentError change_basis(2I, Axes(Hout, Hin) => H)
     v = rand(dim(H))
     @test change_basis(v, H => Axes(Hout); skipmissing=true) == v[rows]
 end
