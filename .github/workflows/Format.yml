@@ -27,7 +27,8 @@ jobs:
       - name: Format lines changed by this PR
         run: |
           git fetch origin ${{ github.base_ref }}
-          git runic "$(git merge-base origin/${{ github.base_ref }} HEAD)"
+          # git-runic exits with 1 when it reformatted files; only 2 is an error.
+          git runic "$(git merge-base origin/${{ github.base_ref }} HEAD)" || [ $? -eq 1 ]
       - name: Push formatting commit, or fail with the diff for forks
         env:
           HEAD_REF: ${{ github.head_ref }}
