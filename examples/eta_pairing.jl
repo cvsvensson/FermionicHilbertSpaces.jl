@@ -2,10 +2,10 @@
 
 # Symbolic kets live in a Hilbert space without enumerating its basis, so they can be used where
 # the full space is far too large for vectors. Here we build exact eigenstates of a Hubbard chain with
-# `L = 100` spinful sites, a Hilbert space of dimension 4^100.
+# `L = 100` spinful sites, a Hilbert space of dimension 4^200.
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions c
-L = 100
+L = 200
 H = hilbert_space(c, [(j, s) for j in 1:L for s in (:↑, :↓)])
 dim(H)
 
@@ -36,5 +36,5 @@ for (k, ψ) in enumerate(ψs)
     println("n = $N: E = $E, basis states = $(length(ψ.dict)) = $(binomial(L, N)), residual = $residual")
 end
 
-# The residuals vanish exactly: the states form an equally spaced tower inside a space of 2^200 states.
+# The residuals vanish exactly: the states form an equally spaced tower inside a space of 2^400 states.
 # See C. N. Yang, Phys. Rev. Lett. 63, 2144 (1989) and Moudgalya, Regnault, Bernevig, arXiv:2004.13727.
