@@ -5,8 +5,8 @@ A space spanned by some of the basis states of `parent(H)::P`. A subtype impleme
 
 - `parent(H)`: the space that `H` is a subspace of. It is never an `AbstractSubspace`.
 - `subspace_states(H)`: the basis states of `H`, in order, each appearing once.
-- `subspace_index(H)`: `SubspaceIndex(parent(H), subspace_states(H))`, built once by the
-  constructor.
+- `subspace_index(H)`: a subspace index of `H` (see [`default_subspace_index`](@ref)), such
+  as `default_subspace_index(parent(H), subspace_states(H))`, built once by the constructor.
 - `rewrap(H, newparent)`: the space with the same states and index as `H` over `newparent`,
   which has the same basis states and `state_index` as `parent(H)`.
 
@@ -19,8 +19,8 @@ spaces store other states over a `FermionicSpace` parent: `hilbert_space(f, labe
 with `FixedNumberFockState`s, `BdG` spaces with `NambuState`s and `SingleParticle` spaces
 with `SingleParticleState`s.
 
-`SubspaceIndex` throws when its `parent` is an `AbstractSubspace`, so a constructor that
-builds the index as above keeps `parent(H)` from being a subspace. The package calls
+`default_subspace_index` throws when its `parent` is an `AbstractSubspace`, so a constructor
+that builds the index as above keeps `parent(H)` from being a subspace. The package calls
 `rewrap` only with `newparent` made from `parent(H)` by `add_tag`, `TransposedSpace` or a
 Majorana space, none of which is a subspace.
 
@@ -32,21 +32,32 @@ traces, `subregion` and `constrain_space` work on it.
 abstract type AbstractSubspace{B,P} <: AbstractHilbertSpace{B} end
 
 """
-    SubspaceIndex(parent, states)
+    default_subspace_index(parent, states)
 
-The position in `states` of each of `states`, which `state_index(state, H)` of a subspace
-`H` with these states over `parent` returns. Throws an `ArgumentError` if a state appears
-more than once, or if `parent` is an `AbstractSubspace`.
+The index of the subspace with `states` over `parent` that `constrain_space` builds unless
+given another. It is a table over `1:dim(parent)` when `parent` has an arithmetic
+`state_index` and is not much larger than `states`, and a `Dict` from state to position
+otherwise. Throws an `ArgumentError` if a state appears more than once, or if `parent` is an
+`AbstractSubspace`.
+
+A subspace index is any object `index` that implements
+
+    state_position(index, state, H)
+
+which returns the position of `state` in `subspace_states(H)`, or `0` if `state` is not one
+of them. Here `H` is the subspace that holds `index`, and `state` has the type of its states
+up to type parameters. A space keeps its index when `add_tag` or `TransposedSpace` replaces
+its parent by one with the same basis states and `state_index`, so `state_position` should
+depend on `H` only through such properties.
+
+A function `build(parent, states)` returning a subspace index is accepted as the `index`
+keyword of [`constrain_space`](@ref).
 """
-struct SubspaceIndex{B}
-    positions::Union{Vector{Int32},Dict{B,Int}}
-    SubspaceIndex{B}(positions) where {B} = new{B}(positions)
-end
-function SubspaceIndex(parent, states)
+function default_subspace_index(parent, states)
     table = index_table(parent, states)
-    SubspaceIndex{eltype(states)}(isnothing(table) ? position_dict(states) : table)
+    isnothing(table) ? position_dict(states) : table
 end
-SubspaceIndex(::AbstractSubspace, states) = throw(nested_subspace_error())
+default_subspace_index(::AbstractSubspace, states) = throw(nested_subspace_error())
 nested_subspace_error() = ArgumentError("The parent of a subspace cannot be a subspace.")
 
 # `space` and `states`, or, when `space` is a subspace, its parent and those of `states` in it.
@@ -60,7 +71,7 @@ Base.hash(H::AbstractSubspace, h::UInt) = hash(subspace_key(H), h)
 dim(H::AbstractSubspace) = length(subspace_states(H))
 basisstates(H::AbstractSubspace) = BasisStates(H, subspace_states(H))
 Base.@propagate_inbounds basisstate(n::Integer, H::AbstractSubspace) = subspace_states(H)[n]
-_state_index(state, H::AbstractSubspace) = state_position(subspace_index(H).positions, _check_state_kind(state, H), H)
+_state_index(state, H::AbstractSubspace) = state_position(subspace_index(H), _check_state_kind(state, H), H)
 isconstrained(H::AbstractSubspace) = true
 
 for f in (:atomic_factors, :groups, :factors, :atom_ids, :group_id, :partial_trace_phase_factor_eltype,
@@ -97,16 +108,16 @@ add_tag(H::AbstractSubspace, tag) = rewrap(H, add_tag(parent(H), tag))
 end
 
 @testitem "A subtype implementing only the AbstractSubspace primitives" begin
-    using FermionicHilbertSpaces: AbstractSubspace, SubspaceIndex
+    using FermionicHilbertSpaces: AbstractSubspace, default_subspace_index
     import FermionicHilbertSpaces: subspace_states, subspace_index, rewrap
-    struct EveryOtherState{B,P} <: AbstractSubspace{B,P}
+    struct EveryOtherState{B,P,I} <: AbstractSubspace{B,P}
         space::P
         states::Vector{B}
-        lookup::SubspaceIndex{B}
+        lookup::I
     end
     function EveryOtherState(space)
         states = collect(basisstates(space))[1:2:end]
-        EveryOtherState(space, states, SubspaceIndex(space, states))
+        EveryOtherState(space, states, default_subspace_index(space, states))
     end
     Base.parent(H::EveryOtherState) = H.space
     subspace_states(H::EveryOtherState) = H.states
@@ -120,6 +131,29 @@ end
     @test all(state_index(basisstate(i, Hsub), Hsub) == i for i in 1:dim(Hsub))
     op = f[2]' * f[3] + f[3]' * f[2] + 2 * f[2]' * f[2]
     @test matrix_representation(op, Hsub) == matrix_representation(op, H)[1:2:end, 1:2:end]
+end
+
+@testitem "A custom subspace index" begin
+    import FermionicHilbertSpaces: state_position
+    struct LinearSearch{V}
+        states::V
+    end
+    state_position(index::LinearSearch, state, H) = something(findfirst(isequal(state), index.states), 0)
+    linear_search(parent, states) = LinearSearch(states)
+
+    @fermions f
+    H = hilbert_space(f, 1:4)
+    op = sum(f[i]' * f[i+1] + hc for i in 1:3) + 2 * f[1]' * f[1]
+    states = collect(basisstates(H))[[9, 2, 12, 5, 3]]
+    for constraint in (states, NumberConservation(1:2))
+        Hdefault = constrain_space(H, constraint)
+        Hcustom = constrain_space(H, constraint; index=linear_search)
+        @test FermionicHilbertSpaces.subspace_index(Hcustom) isa LinearSearch
+        @test Hcustom == Hdefault
+        @test all(state_index(s, Hcustom) == state_index(s, Hdefault) for s in basisstates(H))
+        @test matrix_representation(op, Hcustom; projection=true) == matrix_representation(op, Hdefault; projection=true)
+        @test representation(op, Hcustom, :dense; projection=true) == representation(op, Hdefault, :dense; projection=true)
+    end
 end
 
 @testitem "Subspaces reject duplicate states" begin

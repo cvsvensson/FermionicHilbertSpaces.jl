@@ -4,17 +4,17 @@
 Hilbert space whose basis is grouped into sectors labeled by quantum numbers.
 Use `quantumnumbers`, `sector`, and `indices` to access individual sectors.
 """
-struct SectorHilbertSpace{B,P,Q,C} <: AbstractSubspace{B,P}
+struct SectorHilbertSpace{B,P,Q,C,I} <: AbstractSubspace{B,P}
     parent::P
     ordered_basis_states::Vector{B}
     qn_to_states::OrderedDict{Q,Vector{B}}
     constraint::C
-    index::SubspaceIndex{B}
-    SectorHilbertSpace{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index) where {B,P,Q,C} = new{B,P,Q,C}(parent, ordered_basis_states, qn_to_states, constraint, index)
+    index::I
+    SectorHilbertSpace{B,P,Q,C,I}(parent, ordered_basis_states, qn_to_states, constraint, index) where {B,P,Q,C,I} = new{B,P,Q,C,I}(parent, ordered_basis_states, qn_to_states, constraint, index)
 end
-SectorHilbertSpace(parent, ordered_basis_states, qn_to_states, constraint, index) = SectorHilbertSpace{eltype(ordered_basis_states),typeof(parent),keytype(qn_to_states),typeof(constraint)}(parent, ordered_basis_states, qn_to_states, constraint, index)
+SectorHilbertSpace(parent, ordered_basis_states, qn_to_states, constraint, index) = SectorHilbertSpace{eltype(ordered_basis_states),typeof(parent),keytype(qn_to_states),typeof(constraint),typeof(index)}(parent, ordered_basis_states, qn_to_states, constraint, index)
 SectorHilbertSpace(::AbstractSubspace, ordered_basis_states, qn_to_states, constraint, index) = throw(nested_subspace_error())
-SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, SubspaceIndex(space, ordered_basis_states))
+SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint; index=default_subspace_index) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, index(space, ordered_basis_states))
 
 Base.parent(H::SectorHilbertSpace) = H.parent
 subspace_states(H::SectorHilbertSpace) = H.ordered_basis_states
@@ -23,11 +23,11 @@ subspace_key(H::SectorHilbertSpace) = (parent(H), H.ordered_basis_states, H.qn_t
 rewrap(H::SectorHilbertSpace, parent) = SectorHilbertSpace(parent, H.ordered_basis_states, H.qn_to_states, H.constraint, H.index)
 
 sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
-function sector_space(space, states, sector_function, constraint)
+function sector_space(space, states, sector_function, constraint; index=default_subspace_index)
     B = statetype(space)
     parent, members = unnest(space, states)
     _qntostates = groupby(sector_function, members, B)
-    _sector_space(parent, _qntostates, constraint)
+    _sector_space(parent, _qntostates, constraint; index)
 end
 function _group(f::F, itr, ::Type{B}) where {F,B}
     K = nonmissingtype(Base.promote_op(f, eltype(itr)))
@@ -65,9 +65,9 @@ function groupby(f::F, itr, ::Type{B}; sortkeys=:auto, sortvals=false) where {F,
     return OrderedDict{K,Vector{B}}(k => d[k] for k in ks)
 end
 
-function _sector_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}, constraint) where {Q,B}
+function _sector_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}, constraint; index=default_subspace_index) where {Q,B}
     ordered_states::Vector{B} = vcat(values(qn_to_states)...)
-    SectorHilbertSpace(space, ordered_states, qn_to_states, constraint)
+    SectorHilbertSpace(space, ordered_states, qn_to_states, constraint; index)
 end
 
 

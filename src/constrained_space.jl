@@ -1,17 +1,16 @@
-
-struct ConstrainedSpace{B,H,S} <: AbstractSubspace{B,H}
+struct ConstrainedSpace{B,H,S,I} <: AbstractSubspace{B,H}
     parent::H
     states::S
-    index::SubspaceIndex{B}
-    ConstrainedSpace{B,H,S}(parent, states, index) where {B,H,S} = new{B,H,S}(parent, states, index)
+    index::I
+    ConstrainedSpace{B,H,S,I}(parent, states, index) where {B,H,S,I} = new{B,H,S,I}(parent, states, index)
 end
 
-function ConstrainedSpace(space, states)
+function ConstrainedSpace(space, states; index=default_subspace_index)
     parent, members = unnest(space, states)
     stored = _stored_states(members)
-    ConstrainedSpace(parent, stored, SubspaceIndex(parent, stored))
+    ConstrainedSpace(parent, stored, index(parent, stored))
 end
-ConstrainedSpace(space::H, states::S, index) where {H,S} = ConstrainedSpace{eltype(states),H,S}(space, states, index)
+ConstrainedSpace(space::H, states::S, index) where {H,S} = ConstrainedSpace{eltype(states),H,S,typeof(index)}(space, states, index)
 ConstrainedSpace(::AbstractSubspace, states, index) = throw(nested_subspace_error())
 
 Base.parent(H::ConstrainedSpace) = H.parent
@@ -20,17 +19,17 @@ subspace_index(H::ConstrainedSpace) = H.index
 rewrap(H::ConstrainedSpace, parent) = ConstrainedSpace(parent, H.states, H.index)
 
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
-constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}) = constrain_space(space, NoSymmetry(), states)
+constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}; index=default_subspace_index) = constrain_space(space, NoSymmetry(), states; index)
 
-constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, states)
-function constrain_space(space, constraint::AbstractConstraint, states=basisstates(space))
+constrain_space(space, ::NoSymmetry, states; index=default_subspace_index) = ConstrainedSpace(space, states; index)
+function constrain_space(space, constraint::AbstractConstraint, states=basisstates(space); index=default_subspace_index)
     if supports_sector_grouping(constraint)
         f = sector_function(constraint, space)
-        return sector_space(space, states, f, constraint)
+        return sector_space(space, states, f, constraint; index)
     elseif supports_filtering(constraint)
         f = filter_function(constraint, space)
         filtered_states = collect(Iterators.filter(f, states))
-        return ConstrainedSpace(space, filtered_states)
+        return ConstrainedSpace(space, filtered_states; index)
     else
         throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     end
