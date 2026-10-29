@@ -93,6 +93,7 @@ function cache_operator! end # for OhMyThreads extension
 ## Files
 include("spaces.jl")
 include("hilbert_space.jl")
+include("subspace.jl")
 include("sectors.jl")
 include("product_space.jl")
 
@@ -108,6 +109,7 @@ include("partial_transpose.jl")
 include("generate_constrained_states.jl")
 
 include("matrix_representation.jl")
+include("sparse_assembly.jl")
 include("lazy_matrix_representation.jl")
 
 include("physics/fermions/fock.jl")

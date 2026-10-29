@@ -197,8 +197,9 @@ NonCommutativeProducts.adjoint_grade(a::StateGrade) = StateGrade(Dict{Any,Bicycl
 
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
-interpret_state(state, space::Union{TransposedSpace,SectorHilbertSpace,ConstrainedSpace}) = interpret_state(state, parent(space))
-state_index(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = state_index(interpret_state(state, space), space)
+interpret_state(state, space::Union{TransposedSpace,AbstractSubspace}) = interpret_state(state, parent(space))
+# A string or character spells a state of a space whose states are `AbstractBasisState`s; on other spaces it is looked up as it is
+state_index(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace{<:AbstractBasisState}) =state_index(interpret_state(state, space), space)
 basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(_checked_state_index(state, space), space)
 function _checked_state_index(state, space)
     i = state_index(state, space)
@@ -493,7 +494,7 @@ function _vector_representation(op::NCAdd, space::AbstractHilbertSpace, repr, ki
         vec = _zero_vector(space, _repr, promote_type(_vector_eltype(_repr), valtype(op.dict)))
         return kind == :kets ? vec : transpose(vec)
     end
-    return sum(coeff * _vector_representation(term, space, repr, kind; kwargs...) for (term, coeff) in pairs(op.dict))
+    return _sum_tree([coeff * _vector_representation(term, space, repr, kind; kwargs...) for (term, coeff) in pairs(op.dict)], 10)
 end
 
 function representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)

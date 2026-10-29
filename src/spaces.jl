@@ -54,7 +54,9 @@ basisstate
     state_index(state, H)
 
 Return the index of the basis state `state` in the Hilbert space `H`, the inverse of
-`basisstate`. Returns `0` if `state` is not a state of `H`; no exception is thrown in that case.
+`basisstate`. Returns `0` if `state` has the state type of `H` but is not a basis state of `H`.
+Constrained spaces and sectors also return `0` for an `AbstractBasisState` of another type.
+Other arguments are not supported and may throw; an integer, for example, throws a `MethodError`.
 """
 state_index
 
@@ -68,9 +70,9 @@ hilbert_space
 
 ## Decomposition of spaces
 # Every space is a two-level tree: atoms, collected into groups, and a product space is the
-# ordinary tensor product of its groups. Wrapper spaces (ConstrainedSpace, SectorHilbertSpace,
-# TransposedSpace) forward all of the functions below to their parent (TransposedSpace also
-# wraps the results in TransposedSpace).
+# ordinary tensor product of its groups. Wrapper spaces (AbstractSubspace, TransposedSpace)
+# forward all of the functions below to their parent (TransposedSpace also wraps the results
+# in TransposedSpace).
 #
 # Identity of atoms is kept separate from their basis:
 # - Lookups only use names. `atomic_id` names an atom (or a symbol naming one) and ignores
@@ -353,7 +355,7 @@ end
     using LinearAlgebra
     using FermionicHilbertSpaces: atomic_factors, groups, factors, group_id, group_ids, atomic_id,
         atom_ids, atom_position, issubsystem, ispartition, complementary_subsystem, TransposedSpace, GenericHilbertSpace,
-        ConstrainedSpace, SectorHilbertSpace, ProductState
+        AbstractSubspace, ProductState
     @fermions f
     @fermions g
     @bosons b
@@ -377,7 +379,7 @@ end
         TransposedSpace(Hfb),
         tensor_product(GenericHilbertSpace(:A, [:a, :b]), GenericHilbertSpace(:B, [:c, :d, :e])),
     ]
-    unwrap(H) = H isa Union{ConstrainedSpace,SectorHilbertSpace} ? parent(H) : H
+    unwrap(H) = H isa AbstractSubspace ? parent(H) : H
     flat_atoms(spaces) = reduce(vcat, map(collect ∘ atomic_factors, spaces))
     for H in zoo
         atoms = collect(atomic_factors(H))

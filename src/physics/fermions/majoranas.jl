@@ -233,7 +233,7 @@ function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...
 end
 @deprecate majorana_hilbert_space(y, labels, args...; kwargs...) hilbert_space(y, labels, args...; kwargs...)
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
-MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = _wrap(MajoranaHilbertSpace(majoranaindices, parent(space), sym), space)
+MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
 
 function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
     parent_subregion = subregion(parent(Hsub), parent(H))
@@ -284,7 +284,11 @@ function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace
     if !transpose
         state, amp = togglemajoranas(Iterators.reverse(fpos), Iterators.reverse(daggers), f)
     else
-        state, amp = togglemajoranas(fpos, Iterators.map(!, daggers), f)
+        # Odd-position Majoranas are real symmetric matrices and even-position ones are
+        # imaginary antisymmetric, so the transpose reverses the product and flips the sign
+        # once per even-position factor.
+        state, amp = togglemajoranas(fpos, daggers, f)
+        isodd(count(daggers)) && (amp = -amp)
     end
     return state, amp * op.coeff
 end
