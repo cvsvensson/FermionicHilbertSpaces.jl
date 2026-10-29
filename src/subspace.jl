@@ -56,7 +56,7 @@ index, for example when they are not a whole sector in the expected order, retur
 default_subspace_index(constraint, parent, states) = generic_subspace_index(parent, states)
 function generic_subspace_index(parent, states)
     index = root_keyed_index(parent, states)
-    isnothing(index) ? position_dict(states) : index
+    return isnothing(index) ? position_dict(states) : index
 end
 generic_subspace_index(::AbstractSubspace, states) = throw(nested_subspace_error())
 nested_subspace_error() = ArgumentError("The parent of a subspace cannot be a subspace.")

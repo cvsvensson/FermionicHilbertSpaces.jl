@@ -93,7 +93,7 @@ function root_keyed_index(space, states)
         table = fill_positions!(zeros(Int32, d), space, states)
         return isnothing(table) ? nothing : IndexTable(table)
     end
-    positions = fill_positions!(sizehint!(Dict{Int,Int}(), length(states)), space, states)
+    positions = fill_positions!(sizehint!(Dict{Int, Int}(), length(states)), space, states)
     return isnothing(positions) ? nothing : RootIndexDict(positions)
 end
 function fill_positions!(positions, space, states)
@@ -134,7 +134,7 @@ A subspace index whose `positions[state_index(state, parent)]` is the position o
 is keyed by the integer index rather than by the state because integers hash and compare faster.
 """
 struct RootIndexDict
-    positions::Dict{Int,Int}
+    positions::Dict{Int, Int}
 end
 state_position(d::RootIndexDict, state, parent) = get(d.positions, state_index(state, parent), 0)
 state_position(d::Dict, state, parent) = get(d, state, 0)
