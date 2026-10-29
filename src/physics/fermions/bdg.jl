@@ -387,3 +387,82 @@ const DEFAULT_PH_CUTOFF = 1e-12
     vals, _ = eigen(representation(symham, H, :dense), BdGEigen())
     @test eigvals(Hermitian(representation(symham, Hmb, :dense))) ≈ mb_energies(vals[4:6], real(tr(h)))
 end
+# The operators Ψ_j^† that create the basis states of `H`, such that `representation(Σ_ab M_ab Ψ_a^† Ψ_b, H) == M`
+_nambu_creators(H::SingleParticleHilbertSpace) = map(adjoint, modes(H))
+_nambu_creators(H::BdGHilbertSpace) = vcat(map(adjoint, modes(H)), modes(H))
+
+"""
+    quasiparticle(v, H)
+
+The quasiparticle creation operator `γ' = Σ_n (u[n] * f[n]' + w[n] * f[n])` for a vector `v = [u; w]` on `H = hilbert_space(f, labels, BdG())`, or `γ' = Σ_n v[n] * f[n]'` on `hilbert_space(f, labels, SingleParticle())`. If `v` is an eigenvector of `representation(op, H)` with eigenvalue `e`, then `op * γ' - γ' * op = 2e * γ'` on the BdG space and `e * γ'` on the single-particle space. On the BdG space, `quasiparticle(FermionicHilbertSpaces.quasiparticle_adjoint(v), H) == quasiparticle(v, H)'`.
+
+```julia
+@fermions f
+H = hilbert_space(f, 1:2, BdG())
+vals, vecs = eigen(representation(f[1]' * f[2] + f[1]' * f[2]' + hc, H, :dense), FermionicHilbertSpaces.BdGEigen())
+q = quasiparticle(vecs[:, end], H)
+```
+"""
+function quasiparticle(v, H::Union{BdGHilbertSpace,SingleParticleHilbertSpace})
+    creators = _nambu_creators(H)
+    length(v) == length(creators) || throw(DimensionMismatch("The vector has length $(length(v)), but the space has dimension $(length(creators))."))
+    return sum(c * x for (c, x) in zip(creators, v))
+end
+
+"""
+    quadratic_operator(M, H)
+
+The symbolic quadratic operator `op` with `representation(op, H) ≈ M`, for a BdG matrix `M` on `hilbert_space(f, labels, BdG())` or any matrix `M` on `hilbert_space(f, labels, SingleParticle())`. On the BdG space, `op = Σ_ab M_ab Ψ_a^† Ψ_b` with `Ψ = (f[1], …, f[N], f[1]', …, f[N]')`, whose many-body representation is traceless; on the single-particle space, `op = Σ_ab M_ab f[a]' f[b]`, which annihilates the vacuum.
+
+```julia
+@fermions f
+H = hilbert_space(f, 1:2, SingleParticle())
+quadratic_operator([0 1; 1 0], H) # f[1]' * f[2] + f[2]' * f[1]
+```
+"""
+function quadratic_operator(M, H::Union{BdGHilbertSpace,SingleParticleHilbertSpace})
+    creators = _nambu_creators(H)
+    size(M) == (length(creators), length(creators)) || throw(DimensionMismatch("The matrix has size $(size(M)), but the space has dimension $(length(creators))."))
+    terms = (M[a, b] * ca * cb' for (a, ca) in zip(axes(M, 1), creators), (b, cb) in zip(axes(M, 2), creators) if !iszero(M[a, b]))
+    return sum(terms; init=0)
+end
+
+@testitem "BdG quadratic operators and quasiparticles" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: quasiparticle_adjoint
+    @fermions f
+    N = 3
+    H = hilbert_space(f, 1:N, BdG())
+    Hmb = hilbert_space(f, 1:N)
+    h = rand(ComplexF64, N, N) + hc
+    Δ = rand(ComplexF64, N, N)
+    Δ = Δ - transpose(Δ)
+    op = sum(f[n]' * h[n, m] * f[m] for n in 1:N, m in 1:N) +
+         sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:N, m in 1:N)
+    M = representation(op, H, :dense)
+    @test representation(quadratic_operator(M, H), H) ≈ M
+    @test tr(representation(quadratic_operator(M, H), Hmb, :dense)) ≈ 0 atol = 1e-12
+
+    vals, vecs = eigen(M, FermionicHilbertSpaces.BdGEigen())
+    Hmat = representation(op, Hmb, :dense)
+    ground_state = eigvecs(Hermitian(Hmat))[:, 1]
+    for k in N+1:2N
+        q = representation(quasiparticle(vecs[:, k], H), Hmb, :dense)
+        @test Hmat * q - q * Hmat ≈ 2vals[k] * q
+        @test norm(q' * ground_state) < 1e-12
+        @test quasiparticle(quasiparticle_adjoint(vecs[:, k]), H) == quasiparticle(vecs[:, k], H)'
+    end
+end
+
+@testitem "Single particle quadratic operators and quasiparticles" begin
+    using LinearAlgebra
+    @fermions f
+    H = hilbert_space(f, 1:3, SingleParticle())
+    h = rand(ComplexF64, 3, 3) + hc
+    op = quadratic_operator(h, H)
+    @test representation(op, H) ≈ h
+    Hmat = representation(op, hilbert_space(f, 1:3), :dense)
+    vals, vecs = eigen(Hermitian(h))
+    q = representation(quasiparticle(vecs[:, 1], H), hilbert_space(f, 1:3), :dense)
+    @test Hmat * q - q * Hmat ≈ vals[1] * q
+end

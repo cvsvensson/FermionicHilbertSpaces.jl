@@ -76,3 +76,21 @@ The matrix returned by `representation` will depend on the ordering of operators
     ⋅        -0.18844   -0.449635  -0.297613
     0.18844     ⋅        -0.297613  -0.169731 =#
     ```
+
+## From matrices and eigenvectors back to symbolic operators
+`quadratic_operator(M, H)` inverts `representation` on the `BdG` and `SingleParticle` spaces, and `quasiparticle(v, H)` turns an eigenvector into the symbolic operator that creates the corresponding quasiparticle. Both results are ordinary symbolic operators, so they can be multiplied, adjointed and represented on the many-body space:
+```@example bdg_quasiparticles
+using FermionicHilbertSpaces, LinearAlgebra
+@fermions c
+N = 2
+Hbdg = hilbert_space(c, 1:N, BdG())
+op = c[1]' * c[2] + c[1]' * c[2]' + hc
+M = representation(op, Hbdg, :dense)
+vals, vecs = eigen(M, FermionicHilbertSpaces.BdGEigen())
+q = quasiparticle(vecs[:, end], Hbdg)
+Hmb = hilbert_space(c, 1:N)
+Hmat = representation(op, Hmb, :dense)
+Qmat = representation(q, Hmb, :dense)
+Hmat * Qmat - Qmat * Hmat ≈ 2 * vals[end] * Qmat
+```
+For an eigenvector with positive eigenvalue `e`, `q` raises the many-body energy by `2e`, since the BdG matrix is half the Nambu hamiltonian, and its adjoint annihilates the ground state.
