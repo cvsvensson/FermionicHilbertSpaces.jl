@@ -1,4 +1,12 @@
 ## Some types
+"""
+    AbstractBasisState
+
+Supertype of basis-state types such as `FockNumber`, `BosonicState` and `SpinState`.
+A space may use any type for its states, as in `GenericHilbertSpace(:A, [:a, :b])`; subtyping
+`AbstractBasisState` lets strings name the states (see [`interpret_state`](@ref)) and lets
+constrained spaces look up states of other types (they get index `0`).
+"""
 abstract type AbstractBasisState end
 abstract type AbstractFockState <: AbstractBasisState end
 abstract type AbstractHilbertSpace{S} end
@@ -8,6 +16,38 @@ abstract type AbstractProductHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractGroupedHilbertSpace{B} <: AbstractProductHilbertSpace{B} end
 
 const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}
+
+"""
+    Axes(H1, H2, ...)
+
+The Hilbert spaces of an array's axes, in axis order: `Axes(Hout, Hin)` for an operator from `Hin`
+to `Hout`, `Axes(H)` for a vector. A bare space `H` means `H` on every axis. Public, not exported.
+
+# Examples
+```julia
+using FermionicHilbertSpaces: Axes
+@fermions f
+H2 = hilbert_space(f, 1:2, NumberConservation(2))
+H1 = hilbert_space(f, 1:2, NumberConservation(1))
+representation(f[1], Axes(H1, H2)) # a dim(H1) × dim(H2) matrix
+```
+"""
+struct Axes{S<:Tuple{Vararg{AbstractHilbertSpace}}}
+    spaces::S
+end
+Axes(spaces::AbstractHilbertSpace...) = Axes(spaces)
+_input_space(H) = H
+_output_space(H) = H
+_input_space(ax::Axes) = last(ax.spaces)
+_output_space(ax::Axes) = first(ax.spaces)
+# Returns `(Hout, Hin)`. Operators act on the states of `Hin` within `Hin`'s groups, so `Hout` must have the same groups:
+# equal atoms are not enough, as a boson truncated at another number of states acts differently.
+function _operator_axes(ax::Axes)
+    length(ax.spaces) == 2 || throw(ArgumentError("An operator has the two axes `Axes(Hout, Hin)`, got $(length(ax.spaces)) axes."))
+    Hout, Hin = ax.spaces
+    groups(Hout) == groups(Hin) || throw(ArgumentError("The spaces of `Axes(Hout, Hin)` must have the same groups, for example two sectors of the same space, got $Hout and $Hin."))
+    return Hout, Hin
+end
 
 """
 	basisstates(H)
@@ -54,11 +94,14 @@ basisstate
     state_index(state, H)
 
 Return the index of the basis state `state` in the Hilbert space `H`, the inverse of
-`basisstate`. Returns `0` if `state` has the state type of `H` but is not a basis state of `H`.
-Constrained spaces and sectors also return `0` for an `AbstractBasisState` of another type.
-Other arguments are not supported and may throw; an integer, for example, throws a `MethodError`.
+`basisstate`. A string or character that spells a state of `H` is accepted in place of the state.
+Returns `0` for a state of the same kind as the states of `H` (the same type up to type parameters)
+that is not in `H`, and throws a `MethodError` for a value of another kind.
+
+Spaces implement the lookup of a basis state as a method of `_state_index(state, H)`.
 """
-state_index
+state_index(state, H) = _state_index(state, H)
+state_index(state::Union{AbstractString,AbstractChar}, H) = _state_index(interpret_state(state, H), H)
 
 """
 	hilbert_space(args...)
@@ -138,6 +181,15 @@ symbols have an `atomic_id`; composite spaces are named by `atom_ids`.
 atomic_id(f::AbstractSym) = symbolic_group(f) # generic fallback
 
 """
+    symbolic_group(op)
+
+Key that matches the symbolic operator `op` to the group of a Hilbert space it acts on:
+`symbolic_group(op) == group_id(group)`. A custom operator type adds a method that returns
+the label of its space, for example the `label` of a [`GenericHilbertSpace`](@ref).
+"""
+function symbolic_group end
+
+"""
     atom_ids(H)
 
 Names of the atoms of `H`, `map(atomic_id, atomic_factors(H))`. Since atoms are ordered
@@ -174,12 +226,30 @@ _internal_rep(state, space, ::Type{T}) where T = InternalRep{T}(internal_rep(sta
 _physical_rep(state::InternalRep, space_or_type) = physical_rep(state.data, space_or_type)
 Base.convert(::Type{B}, state::InternalRep{T}) where {B<:AbstractBasisState,T} = _physical_rep(state, B)
 physical_rep(state, space::AbstractHilbertSpace) = physical_rep(state, statetype(space))
-# The following should be overloaded for custom basis states
-internal_rep(state, space, ::Type{T}) where T = internal_rep(state, parent(space), T)
-# physical_rep(state, type::B<:AbstractBasisState)
+"""
+    internal_rep(state, space, ::Type{Int}) -> Int
+    physical_rep(n::Int, ::Type{B}) -> B
 
-# First dispatch on NC operators with precomputation_before_operator_application
-# then one can dispatch on abstract syms, spaces or statetypes
+Convert a basis state of type `B` to an integer and back, with
+`physical_rep(internal_rep(state, space, Int), B) == state`. When every group of a product
+space has these methods, operators on the product space act on the integers instead of on
+the states. Without them, the product space uses the states directly, which is slower.
+"""
+internal_rep(state, space, ::Type{T}) where T = internal_rep(state, parent(space), T)
+
+"""
+    apply_local_operator(op, state, space, precomp) -> (newstate, amplitude)
+
+Apply the symbolic operator `op` to the basis state `state` of `space`. Returns the new
+state and its amplitude; an amplitude of zero means that `op` annihilates `state`.
+`space` is the group that `op` acts on, so it can be used for dispatch. `precomp` is the
+value of [`_precomputation_before_operator_application`](@ref) for `op` and `space`.
+
+This is the method that connects a custom operator type to matrix representations, partial
+traces and the other operations on spaces.
+"""
+function apply_local_operator end
+
 function precomputation_before_operator_application(op::NCMul, space::AbstractHilbertSpace)
     map(op -> _precomputation_before_operator_application(op, space), op.factors)
 end
@@ -187,6 +257,14 @@ precomputation_before_operator_application(::NCAdd, ::AbstractHilbertSpace) = no
 function precomputation_before_operator_application(op::AbstractSym, space::AbstractHilbertSpace)
     _precomputation_before_operator_application(op, space)
 end
+"""
+    _precomputation_before_operator_application(op, space)
+
+Data that [`apply_local_operator`](@ref) receives as `precomp` when it applies `op` to the
+states of `space`. It is computed once per factor of each term, not once per state, so it is
+the place for work that depends only on the operator and the space, such as the position of
+a mode. The fallback returns `nothing`.
+"""
 _precomputation_before_operator_application(factors, space) = nothing
 
 abstract type AbstractStateMapper end
@@ -831,6 +909,29 @@ end
         @test all(i -> state_index(basisstate(i, H), H) == i, 1:dim(H))
     end
     @test state_index(FermionicHilbertSpaces.BosonicState(3), Hb) == 0
+end
+
+@testitem "state_index of strings, transposed spaces and foreign kinds" begin
+    using FermionicHilbertSpaces: TransposedSpace
+    for states in (["a", "b", "c"], ['a', 'b', 'c'])
+        H = GenericHilbertSpace(:A, states)
+        Hc = constrain_space(H, states[[1, 3]])
+        @test [state_index(s, H) for s in states] == [1, 2, 3]
+        @test [state_index(s, Hc) for s in states] == [1, 0, 2]
+        @test [state_index(s, TransposedSpace(H)) for s in states] == [1, 2, 3]
+        @test basisstate(states[3], Hc) == states[3]
+    end
+    @fermions f
+    @spin s 1//2
+    Hf = hilbert_space(f, 1:2)
+    @test state_index(FockNumber(1), TransposedSpace(Hf)) == state_index(FockNumber(1), Hf)
+    H = GenericHilbertSpace(:A, ["a", "b"])
+    @test_throws MethodError state_index(1, H)
+    @test_throws MethodError state_index(BosonicState(0), Hf)
+    @test_throws MethodError state_index(BosonicState(0), constrain_space(H, ["a"]))
+    @test_throws MethodError state_index(BosonicState(0), hilbert_space(f, 1:2, NumberConservation(1)))
+    Hp = tensor_product(Hf, hilbert_space(s))
+    @test_throws MethodError state_index(ProductState((FockNumber(0),)), Hp)
 end
 
 @testitem "Basis states collection" begin

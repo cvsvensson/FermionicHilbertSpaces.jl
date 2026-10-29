@@ -1,17 +1,16 @@
-
-struct ConstrainedSpace{B,H,S} <: AbstractSubspace{B,H}
+struct ConstrainedSpace{B,H,S,I} <: AbstractSubspace{B,H}
     parent::H
     states::S
-    index::SubspaceIndex{B}
-    ConstrainedSpace{B,H,S}(parent, states, index) where {B,H,S} = new{B,H,S}(parent, states, index)
+    index::I
+    ConstrainedSpace{B,H,S,I}(parent, states, index) where {B,H,S,I} = new{B,H,S,I}(parent, states, index)
 end
 
-function ConstrainedSpace(space, states)
+function ConstrainedSpace(space, states; constraint=NoSymmetry())
     parent, members = unnest(space, states)
     stored = _stored_states(members)
-    ConstrainedSpace(parent, stored, SubspaceIndex(parent, stored))
+    ConstrainedSpace(parent, stored, build_subspace_index(constraint, parent, stored))
 end
-ConstrainedSpace(space::H, states::S, index) where {H,S} = ConstrainedSpace{eltype(states),H,S}(space, states, index)
+ConstrainedSpace(space::H, states::S, index) where {H,S} = ConstrainedSpace{eltype(states),H,S,typeof(index)}(space, states, index)
 ConstrainedSpace(::AbstractSubspace, states, index) = throw(nested_subspace_error())
 
 Base.parent(H::ConstrainedSpace) = H.parent
@@ -30,10 +29,28 @@ function constrain_space(space, constraint::AbstractConstraint, states=basisstat
     elseif supports_filtering(constraint)
         f = filter_function(constraint, space)
         filtered_states = collect(Iterators.filter(f, states))
-        return ConstrainedSpace(space, filtered_states)
+        return ConstrainedSpace(space, filtered_states; constraint)
     else
         throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     end
+end
+
+"""
+    build_subspace_index(constraint, parent, states)
+
+`default_subspace_index(constraint, parent, states)`, after checking that it gives the first,
+middle and last of `states` their positions. Throws an `ArgumentError` otherwise.
+"""
+function build_subspace_index(constraint, parent, states)
+    index = default_subspace_index(constraint, parent, states)
+    isempty(states) && return index
+    n = length(states)
+    for i in unique!([1, cld(n, 2), n])
+        state = states[firstindex(states)+i-1]
+        position = state_position(index, state, parent)
+        position == i || throw(ArgumentError("The subspace index $(typeof(index)) gives position $position to the state `$state` at position $i."))
+    end
+    return index
 end
 
 allowed_values(::NumberConservation{Missing,Missing,Missing}, space, mapper) = 0:maximum_particles(space)
@@ -59,26 +76,34 @@ const INDEX_TABLE_RATIO = 32 # maximum table entries per state
 const INDEX_TABLE_MAX_LENGTH = 2^28
 
 """
-    index_table(space, states)
+    root_keyed_index(space, states)
 
-Table mapping `state_index(state, space)` to the position of `state` in `states`,
-or `0` for states of `space` not in `states`, or `nothing` when no table is used.
+An `IndexTable` of the positions of `states` when it is small enough, otherwise a
+`RootIndexDict`, or `nothing` when `space` has no arithmetic `state_index` with `Int` values.
 Throws an `ArgumentError` if a state appears more than once.
 """
-function index_table(space, states)
+function root_keyed_index(space, states)
     has_arithmetic_state_index(space) || return nothing
     B = statetype(space)
     (eltype(states) == B || all(state -> same_state_kind(state, B), states)) || return nothing
     d = dim(space)
-    (d isa Int && d <= min(INDEX_TABLE_RATIO * length(states), INDEX_TABLE_MAX_LENGTH)) || return nothing
-    table = zeros(Int32, d)
+    # Wide integer keys measured slower than keying by state.
+    d isa Int || return nothing
+    if d <= min(INDEX_TABLE_RATIO * length(states), INDEX_TABLE_MAX_LENGTH)
+        table = fill_positions!(zeros(Int32, d), space, states)
+        return isnothing(table) ? nothing : IndexTable(table)
+    end
+    positions = fill_positions!(sizehint!(Dict{Int, Int}(), length(states)), space, states)
+    return isnothing(positions) ? nothing : RootIndexDict(positions)
+end
+function fill_positions!(positions, space, states)
     for (i, state) in enumerate(states)
         k = state_index(state, space)
         iszero(k) && return nothing
-        iszero(table[k]) || throw(_duplicate_state_error(state))
-        table[k] = i
+        iszero(get(positions, k, 0)) || throw(_duplicate_state_error(state))
+        positions[k] = i
     end
-    return table
+    return positions
 end
 # The position of each of `states`, which must appear once each.
 function position_dict(states)
@@ -89,15 +114,35 @@ function position_dict(states)
     return d
 end
 _duplicate_state_error(state) = ArgumentError("The state `$state` appears more than once.")
-state_position(d::Dict, state, H) = get(d, state, 0)
-function state_position(table::Vector{Int32}, state, H)
-    (state isa statetype(H) || same_state_kind(state, statetype(H))) || return 0
-    k = state_index(state, parent(H))
-    iszero(k) ? 0 : Int(table[k])
+"""
+    IndexTable(positions)
+
+A subspace index whose `positions[state_index(state, parent)]` is the position of `state`, or
+`0` for a state of `parent` outside the subspace.
+"""
+struct IndexTable
+    positions::Vector{Int32}
 end
+function state_position(table::IndexTable, state, parent)
+    k = state_index(state, parent)
+    iszero(k) ? 0 : Int(table.positions[k])
+end
+"""
+    RootIndexDict(positions)
+
+A subspace index whose `positions[state_index(state, parent)]` is the position of `state`. It
+is keyed by the integer index rather than by the state because integers hash and compare faster.
+"""
+struct RootIndexDict
+    positions::Dict{Int, Int}
+end
+state_position(d::RootIndexDict, state, parent) = get(d.positions, state_index(state, parent), 0)
+state_position(d::Dict, state, parent) = get(d, state, 0)
 # Whether `state` has the type `B` up to type parameters, so that `state_index` of a space with states of type `B` accepts it.
 same_state_kind(state, ::Type{B}) where {B} = _type_family(typeof(state)) === _type_family(B)
 _type_family(T) = (parentmodule(T), nameof(T))
+# Returns `state` if it is of the kind of the states of the subspace `H`, and throws a `MethodError` otherwise.
+_check_state_kind(state, H) = (state isa statetype(H) || same_state_kind(state, statetype(H))) ? state : throw(MethodError(state_index, (state, H)))
 same_state_kind(state::ProductState, ::Type{ProductState{S}}) where {S<:Tuple} = state.states isa Tuple && length(state.states) == fieldcount(S) && all(map(same_state_kind, state.states, fieldtypes(S)))
 
 @testitem "constrain_space" begin
@@ -244,7 +289,8 @@ end
     T = statetype(hilbert_space(f, 1:70))
     Hlarge = constrain_space(hilbert_space(f, 1:70), [T(0), T(1), T(UInt128(1) << 69)])
     Hint = hilbert_space(f, 1:4, [FockNumber(6), FockNumber(1), FockNumber(2)])
-    for H in (Hsector, Hconstrained, Hprod_sector, Hlarge, Hint, TransposedSpace(Hsector), add_tag(Hsector, :x), add_tag(Hconstrained, :x))
+    Hsparse = hilbert_space(f, 1:20, NumberConservation(1))
+    for H in (Hsector, Hconstrained, Hprod_sector, Hlarge, Hint, Hsparse, TransposedSpace(Hsector), add_tag(Hsector, :x), add_tag(Hconstrained, :x))
         @test all(state_index(basisstate(i, H), H) == i for i in 1:dim(H))
     end
     @test state_index(statetype(Hsector)(0), Hsector) == 0
@@ -252,13 +298,28 @@ end
     @test state_index(basisstate(2, Hprod), Hconstrained) == 0
     @test state_index(T(2), Hlarge) == 0
     @test state_index(FockNumber(3), Hint) == 0
+    @test state_index(statetype(Hsparse)(3), Hsparse) == 0
     @test state_index(statetype(hilbert_space(f, 1:4))(1), Hint) == 2
-    @test state_index(BosonicState(0), Hsector) == 0
-    @test state_index(FockNumber(0), Hconstrained) == 0
+    @test_throws MethodError state_index(BosonicState(0), Hsector)
+    @test_throws MethodError state_index(FockNumber(0), Hconstrained)
 
     Ha, Hb = hilbert_space(f, 1:3), hilbert_space(f, 4:6)
     Hsector2 = constrain_space(tensor_product(Ha, Hb), NumberConservation(1, [Ha]) * NumberConservation(2, [Hb]))
     @test Hsector2 == Hsector && hash(Hsector2) == hash(Hsector)
+end
+
+@testitem "Tensor product with a product of sectors keeps their constraints" begin
+    @fermions f
+    @boson b
+    Hb = hilbert_space(b, 3)
+    H2 = tensor_product(hilbert_space(f, 1:2, NumberConservation(1)), hilbert_space(f, 3:4, ParityConservation(-1)))
+    Hf1, Hf2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
+    H3 = tensor_product(Hf1, Hf2; constraint = NumberConservation(1, [Hf1]) * NumberConservation(1, [Hf2]))
+    for H in (H2, H3)
+        H4 = tensor_product(H, Hb)
+        @test dim(H4) == dim(H) * dim(Hb)
+        @test Set(quantumnumbers(H4)) == Set(quantumnumbers(H))
+    end
 end
 
 """
@@ -285,8 +346,8 @@ function localize_constraint(c::ProductConstraint, H::SectorHilbertSpace)
     end
     ProductConstraint(localized)
 end
-_localize_sub_constraint(c::NumberConservation{<:Any,<:Any,W}, allowed, H) where W = NumberConservation(allowed, H, c.weights)
-_localize_sub_constraint(c::ParityConservation, allowed, H) = ParityConservation(allowed, H)
+_localize_sub_constraint(c::NumberConservation{<:Any, Missing}, allowed, H) = NumberConservation(allowed, H, c.weights)
+_localize_sub_constraint(c::ParityConservation{Missing}, allowed, H) = ParityConservation(allowed, H)
 _localize_sub_constraint(c::AbstractConstraint, _allowed, _H) = c
 function localize_constraint(c::SectorConstraint{<:FilterConstraint{<:Any,Missing,Missing}}, H::SectorHilbertSpace)
     # Bind the free-standing reducer to H as its single subspace.

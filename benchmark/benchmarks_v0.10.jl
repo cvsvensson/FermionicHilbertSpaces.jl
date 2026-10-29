@@ -1,5 +1,6 @@
 using BenchmarkTools
 using FermionicHilbertSpaces
+using FermionicHilbertSpaces.FreeFermions
 using LinearAlgebra
 using SparseArrays
 using Random
@@ -53,6 +54,7 @@ let rng = Xoshiro(7)
     g = SUITE["partial_trace"]["precomputed"]
     g["construct"] = @benchmarkable partial_trace($(H => Hsub); complement=$Hcomp)
     g["eager_matrix"] = @benchmarkable partial_trace($ρ, $(H => Hsub); complement=$Hcomp)
+    g["eager_pure_state"] = @benchmarkable partial_trace($ψ, $(H => Hsub); complement=$Hcomp)
     g["apply_matrix_inplace"] = @benchmarkable $pt($out_m, $ρ)
     g["apply_pure_state_inplace"] = @benchmarkable $pt($out_v, $ψ)
 
@@ -98,6 +100,9 @@ end
 ## Partial trace algorithms
 # Each input is traced with the algorithm forced through `alg`. Which
 # algorithm `partial_trace` picks by default is checked in the tests.
+# FullAlg on a dense input is a tight loop over all pairs of basis states. Its
+# time depends on where the JIT places that loop in memory, so identical code
+# measures at a few distinct speeds, up to about 2× apart, between processes.
 let rng = Xoshiro(4)
     @fermions f
     algs = ("SubAlg" => FHS.SubsystemPartialTraceAlg(), "FullAlg" => FHS.FullPartialTraceAlg())
@@ -323,6 +328,7 @@ const EVALS = Dict(
     "complement/fermions" => 4,
     "embed/product space" => 4,
     "partial_trace_algorithms/Sparse space/Sparse/FullAlg" => 4,
+    "partial_trace/precomputed/eager_pure_state" => 4,
     "complement/product space" => 3,
     "partial_trace/product space/map" => 3,
     "reshape/mat_to_vec" => 3,

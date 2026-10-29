@@ -44,6 +44,7 @@ struct FilterConstraint{R,FS,H} <: AbstractConstraint
     maps::FS
     spaces::H
     function FilterConstraint(reducer::R, maps::FS, spaces::H) where {H,FS,R}
+        _check_maps_length(maps, spaces)
         new{R,FS,H}(reducer, maps, spaces)
     end
 end
@@ -72,6 +73,11 @@ function filter_function(constraint::FilterConstraint{<:Any,<:Function}, space::
         values = Iterators.map(f, subs)
         constraint.reducer(values)
     end
+end
+function _check_maps_length(maps, spaces)
+    (maps isa Function || ismissing(maps) || ismissing(spaces)) && return nothing
+    length(maps) == length(spaces) || throw(ArgumentError("Got $(length(maps)) maps for $(length(spaces)) spaces. Give one map per space, a single function to apply to every space, or pass `spaces` explicitly."))
+    return nothing
 end
 supply_missing_constraint_info(constraint::FilterConstraint{<:Any,<:Any,Missing}, space, spaces) = FilterConstraint(constraint.reducer, constraint.maps, spaces)
 supply_missing_constraint_info(constraint::FilterConstraint{<:Any,Missing,Missing}, space, spaces) = FilterConstraint(constraint.reducer, constraint.maps, missing) # if subspace functions are missing, the reducer acts directly on the full state
@@ -126,13 +132,17 @@ Constraint enforcing that the sum of per-subspace contributions lies in
 its map applied to the subspace's state. A single function in `maps` is applied
 to all spaces; a collection of maps supplies one function per subspace.
 
-The constraint is evaluated on the factors used during state generation. For a
-composite Hilbert space this means `atomic_factors(space)`.
+If `spaces` is missing, `tensor_product` uses the spaces it combines, and
+`constrain_space` treats the whole space as a single subspace.
 """
 struct AdditiveConstraint{T,H,F} <: AbstractConstraint
     allowed_values::T
     spaces::H
     maps::F
+    function AdditiveConstraint(allowed_values, spaces, maps)
+        _check_maps_length(maps, spaces)
+        new{typeof(allowed_values),typeof(spaces),typeof(maps)}(allowed_values, spaces, maps)
+    end
 end
 AdditiveConstraint(allowed_values; spaces=missing, maps=missing) = AdditiveConstraint(allowed_values, spaces, maps)
 AdditiveConstraint(allowed_values, maps) = AdditiveConstraint(allowed_values; maps)
@@ -144,6 +154,15 @@ supports_sector_grouping(::AdditiveConstraint) = true
 
 supply_missing_constraint_info(constraint::AdditiveConstraint{<:Any,Missing}, space, spaces) = AdditiveConstraint(constraint.allowed_values, spaces, constraint.maps)
 supply_missing_constraint_info(constraint::AdditiveConstraint, space, spaces) = constraint
+
+"""
+    particle_number(state)
+
+Return the number of particles in the basis state `state`: the number of occupied modes for
+fermions, the occupation for a boson, and the total over the factors of a product state. It is not
+defined for spins. This is the quantity [`NumberConservation`](@ref) conserves.
+"""
+function particle_number end
 
 """
     NumberConservation(total=missing; spaces=missing, weights=missing)
@@ -185,7 +204,8 @@ NumberConservation(space::AbstractHilbertSpace) = NumberConservation(missing; sp
     ParityConservation(space)
 
 Constraint enforcing allowed fermion parities, optionally on selected spaces.
-`parities` is a parity or a collection of parities, each `-1` or `1`. 
+`parities` is a parity or a collection of parities, each `1` (even) or `-1` (odd).
+Sectors are ordered by increasing quantum number, so the odd sector comes first.
 """
 struct ParityConservation{H} <: AbstractConstraint
     allowed_parities::Vector{Int}
@@ -267,6 +287,16 @@ end
 
 sectors(::AbstractConstraint) = nothing
 
+map_spaces(f, c) = c
+map_spaces(f, c::ProductConstraint) = ProductConstraint(map(ci -> map_spaces(f, ci), c.constraints))
+map_spaces(f, c::SectorConstraint) = SectorConstraint(map_spaces(f, c.filter))
+map_spaces(f, c::NumberConservation) = NumberConservation(c.total, _map_spaces(f, c.spaces), c.weights)
+map_spaces(f, c::ParityConservation) = ParityConservation(c.allowed_parities, _map_spaces(f, c.spaces))
+map_spaces(f, c::AdditiveConstraint) = AdditiveConstraint(c.allowed_values, _map_spaces(f, c.spaces), c.maps)
+map_spaces(f, c::FilterConstraint) = FilterConstraint(c.reducer, c.maps, _map_spaces(f, c.spaces))
+_map_spaces(f, spaces) = map(f, spaces)
+_map_spaces(f, ::Missing) = missing
+
 
 """
     constrain_space(space, constraint[, states])
@@ -317,4 +347,13 @@ end
 
     @test dim(Hconstrained) == 1
     @test all(particle_number(state) == 1 for state in basisstates(Hconstrained))
+end
+
+@testitem "Constraint maps must match spaces" begin
+    using FermionicHilbertSpaces: AdditiveConstraint, particle_number
+    @fermions f
+    Hs = [hilbert_space(f[i]) for i in 1:3]
+    @test_throws ArgumentError tensor_product(Hs...; constraint=AdditiveConstraint(1; maps=(particle_number, particle_number)))
+    @test_throws ArgumentError tensor_product(Hs...; constraint=FilterConstraint(all; maps=ntuple(_ -> isone ∘ particle_number, 4)))
+    @test_throws ArgumentError AdditiveConstraint(1; spaces=Hs[1:2], maps=(particle_number,))
 end

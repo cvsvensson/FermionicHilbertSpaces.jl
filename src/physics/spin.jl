@@ -54,8 +54,15 @@ end
 """
     @spin s
 
+    @spin s J
+
 Create a symbolic spin basis `s` for constructing spin operators such as
-`s[:z]`, `s[:+]`, and `s[:-]`.
+`s[:x]`, `s[:y]`, `s[:z]`, `s[:+]`, and `s[:-]`. The spin `J` can be given here or later to
+`hilbert_space`.
+
+The operators are spin operators, not Pauli matrices: `s[:z]` has eigenvalues `-J, …, J`, so
+for spin 1/2 `s[:x]` is `σˣ/2`, and `s[:±] = s[:x] ± i s[:y]`. The basis states of
+`hilbert_space(s, J)` are ordered by increasing `s[:z]` eigenvalue, starting at `-J`.
 """
 macro spin(x)
     Expr(:block, :($(esc(x)) = SymbolicSpinBasis($(Expr(:quote, x)))),
@@ -69,8 +76,11 @@ end
 """
     @spins s 
 
+    @spins s J
+
 Create a spin basis `s`. Index into it to get site-specific
-spin bases: `s[1][:z]` gives the z-operator on site 1.
+spin bases: `s[1][:z]` gives the z-operator on site 1. Operators and basis states follow the
+conventions of [`@spin`](@ref).
 """
 macro spins(name)
     return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)))), :($(esc(name))))
@@ -87,6 +97,10 @@ SpinState(m) = SpinState(HalfInteger(m))
 Base.:(==)(a::SpinState, b::SpinState) = a.m == b.m
 Base.isless(a::SpinState, b::SpinState) = a.m < b.m
 Base.hash(x::SpinState, h::UInt) = hash(twice(x.m), h)
+
+_no_spin_count() = throw(ArgumentError("Spins have no particle number or fermion parity, so `NumberConservation` and `ParityConservation` do not apply to spin spaces. To count spin excitations, use `FermionicHilbertSpaces.AdditiveConstraint` with a map such as `s -> s.m + J`."))
+particle_number(::SpinState) = _no_spin_count()
+parity(::SpinState) = _no_spin_count()
 
 internal_rep(state::SpinState, ::AbstractHilbertSpace, ::Type{Int}) = Int(twice(state.m))
 physical_rep(state::Int, ::Type{SpinState}) = SpinState(half(state))
@@ -111,7 +125,7 @@ SpinSpace(label, J) = SpinSpace(SymbolicSpinBasis(label, nothing, J), J)
 basisstates(H::SpinSpace) = BasisStates(H, H.basisstates)
 Base.@propagate_inbounds basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
 dim(H::SpinSpace) = length(H.basisstates)
-function state_index(s::SpinState, space::SpinSpace)
+function _state_index(s::SpinState, space::SpinSpace)
     t = twice(s.m) + twice(space.spin) # 2(m + J)
     i = (t >> 1) + one(t) # (checking i against dim rather than t against 4J avoids slow SLP vectorization in products of spins)
     (iseven(t) && 1 <= i <= dim(space)) ? i : zero(t)
@@ -430,7 +444,7 @@ NonCommutativeProducts.@commutative BosonSym SpinSym
 NonCommutativeProducts.@commutative MajoranaSym SpinSym
 
 """
-    apply_local_operator(op::SpinSym, state::SpinState) -> (newstate, amplitude)
+    apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace, precomp) -> (newstate, amplitude)
 
 Apply a single spin operator to a spin state. Returns (newstate, amplitude) where amplitude is 0 if the operation is not allowed, and a nonzero value otherwise.
 """
@@ -490,6 +504,14 @@ function _fast_spin_prefactor(J::HalfInteger, m::HalfInteger, sign::Int, exp::In
         x *= sqrt(J2 * (J2 + 2) - (m2 + dm * 2sign) * (m2 + _dm * 2sign)) * 0.5
     end
     return x
+end
+
+@testitem "Spin: no particle number or parity" begin
+    @spin S 1//2
+    @boson b
+    H = tensor_product(hilbert_space(S), hilbert_space(b, 3))
+    @test_throws ArgumentError constrain_space(H, NumberConservation(1))
+    @test_throws ArgumentError constrain_space(H, ParityConservation(1))
 end
 
 @testitem "SpinSym" begin

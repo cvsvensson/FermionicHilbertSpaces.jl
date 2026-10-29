@@ -100,7 +100,7 @@ map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(Hcons), sectors(Hcons)
 Constraints can be combined by multiplying them:
 ```@example constraints
 Hs = [hilbert_space(f,2k-1:2k) for k in 1:3]
-constraint = prod(NumberConservation(0:1, H) for H in Hs) * NumberConservation(2) # each mode can be occupied by at most one fermion, and the total number of fermions must be 2
+constraint = prod(NumberConservation(0:1, H) for H in Hs) * NumberConservation(2) # each pair of modes holds at most one fermion, and the total number of fermions is 2
 H = tensor_product(Hs; constraint)
 ```
 This constraint is a product of 4 constraints, and the quantum numbers of the resulting space keep track of the quantum numbers of each.
@@ -183,6 +183,25 @@ symham = hubbard_hamiltonian(f, N, 1, 0)
 ham_ndo = representation(symham, H_ndo; projection = true);
 ```
 
+### Tavis–Cummings model
+Consider ``N`` spin-1/2 emitters coupled to a single cavity mode,
+```math
+H = \omega a^\dagger a + \omega_0 \sum_i S^z_i + g \sum_i \left(a^\dagger S^-_i + a S^+_i\right).
+```
+It conserves the number of excitations, the boson number plus ``\sum_i (S^z_i + 1/2)``. Spins have no particle number, so the spin part of the excitation count is written explicitly with an `AdditiveConstraint`, using one map per factor space.
+```@example tavis_cummings
+using FermionicHilbertSpaces
+using FermionicHilbertSpaces: AdditiveConstraint, particle_number
+N = 3
+nmax = 4
+@spins S 1//2
+@boson a
+spaces = [hilbert_space(a, nmax + 1); [hilbert_space(S[i]) for i in 1:N]]
+excitations = AdditiveConstraint(0:nmax+N; spaces, maps = [particle_number; fill(s -> Int(s.m + 1//2), N)])
+H = tensor_product(spaces; constraint = excitations)
+```
+The space is split into one sector per excitation number, and the Hamiltonian is block diagonal in these sectors.
+
 ### Fractionalized hilbert space with BranchConstraint
 The ``t-J_z`` model is
 ```math
@@ -218,7 +237,6 @@ function valid_state(partials, depth::Int, spaces, expected_order)
     depth == length(spaces) && return exc_count == length(expected_order)
     return true
 end
-using FermionicHilbertSpaces: BranchConstraint
 spin_order_constraint(order) = BranchConstraint((p,d,s) -> valid_state(p,d,s,order))
 ```
 

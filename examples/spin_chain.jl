@@ -30,7 +30,7 @@ Hten = hilbert_space(S, 10)
 @spins S
 S[1][:+] # spin + operator on the site labeled 1
 
-# A hilbert space for this field is obtained by hilbert_space(S, labels, spin)
+# A Hilbert space for this field is obtained with `hilbert_space(S, labels, spin)`.
 
 # ## Basic example: Heisenberg chain
 # A spin-1/2 Heisenberg chain hamiltonian can then be constructed as
@@ -41,7 +41,6 @@ ham = sum(S[k][:]'S[k+1][:] for k in 1:(N-1))
 M = representation(ham, H)
 
 # We can exploit the fact that this hamiltonian conserves the total magnetization by
-using FermionicHilbertSpaces: AdditiveConstraint
 constraint = AdditiveConstraint(1; maps=s -> s.m)
 H = hilbert_space(S, 1:N, constraint)
 M = representation(ham, H)
@@ -72,7 +71,7 @@ H = hilbert_space(S, 1:N, J, constraint)
 # `AbstractAlgebra.jl` provides the character tables needed to build the corresponding
 # projectors: each integer partition `λ` of `N` labels an irrep with character `χ`, and
 # `symmetric_sector` accepts the permutations and their weights `(perms, weights) = (G, χ.(G))`
-# directly instead of the `:symmetric`/`:antisymmetric` shorthand.
+# directly instead of the `:symmetric`/`:antisymmetric` shorthand (see [`symmetric_sector`](@ref)).
 import AbstractAlgebra
 G = collect(AbstractAlgebra.SymmetricGroup(N))
 perms = Iterators.map(p -> p.d, G)

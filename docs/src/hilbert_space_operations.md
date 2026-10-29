@@ -132,15 +132,13 @@ H = hilbert_space(f, 1:4, NumberConservation())
 map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(H), sectors(H))
 ```
 
-This pattern is useful to calculate ground states in each sector and extend each vector to the full space
+This pattern is useful to calculate ground states in each sector and extend each vector to the full space with [`embed`](@ref)
 ```@example hilbert_space_ops
 using LinearAlgebra, SparseArrays
 symham = sum(f[n]'f[n] for n in 1:4)
 ground_states = stack(sectors(H)) do Hsec
     ham = representation(symham, Hsec, :dense)
-    v = zeros(dim(H))
-    v[indices(Hsec, H)] = eigvecs(ham)[:, 1]
-    v
+    embed(eigvecs(ham)[:, 1], Hsec => H)
 end
 # Let's project the full hamiltonian onto the ground states
 ground_states' * representation(symham, H) * ground_states 
@@ -149,6 +147,26 @@ ground_states' * representation(symham, H) * ground_states
 `indices` also accepts a sector Hilbert space instead of a quantum number, e.g.
 `indices(H1, H)`. Spaces without sector structure behave as a single sector:
 `quantumnumbers(H) == (nothing,)` and `indices(nothing, H) == 1:dim(H)`.
+
+### Operators between two spaces with `Axes`
+
+`representation(op, Axes(Hout, Hin))` returns the matrix of `op` as a map from `Hin` to
+`Hout`, with rows on `Hout` and columns on `Hin`, like `axes(m)`. A bare space `H` means the
+same space on every axis, and a ket or bra has the single axis `Axes(H)`. The two spaces must
+have the same groups, for example two particle-number sectors of the same modes. Unlike the
+[Pair arguments](@ref pair_convention), where `H => Hout` maps one array to another, `Axes`
+names the spaces of a single array. `Axes` is public but not exported.
+
+Annihilating a fermion maps the 2-particle states of four modes to the 1-particle states, so
+its matrix has a row for each of the 4 one-particle states and a column for each of the 6
+two-particle states:
+
+```@example hilbert_space_ops
+using FermionicHilbertSpaces: Axes
+H2 = hilbert_space(f, 1:4, NumberConservation(2))
+H1 = hilbert_space(f, 1:4, NumberConservation(1))
+representation(f[1], Axes(H1, H2))
+```
 
 ### Basic introspection
 
@@ -217,6 +235,15 @@ as `representation` does for an operator that does not preserve the constraint o
 
 The maps `partial_trace(H => Hsub)` and `embed(Hsub => H)` skip the same states, but do not
 check their input: they are the linear maps that the eager functions compute when nothing is dropped.
+
+### `expectation`: expectation values
+
+`expectation(op, state, H)` gives the expectation value of an operator in a normalized state vector or a density matrix on `H`.
+
+```@example hilbert_space_ops
+ψ = normalize(rand(dim(H)))
+expectation(f[2]' * f[4] + hc, ψ, H)
+```
 
 ### `partial_transpose`: transposing a subsystem
 

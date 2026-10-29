@@ -1,3 +1,9 @@
+"""
+    Kets(H)
+
+Callable that turns a label into a symbolic ket of `H`, as in `Kets(H)("10")`. The label is
+parsed by [`interpret_state`](@ref). `Kets(H)[i]` is the ket of `basisstate(i, H)`.
+"""
 struct Kets{B,H}
     space::H
     Kets(space::H) where H = new{statetype(space),H}(space)
@@ -195,11 +201,22 @@ function NonCommutativeProducts.mul_grade(a::StateGrade, b::StateGrade)
 end
 NonCommutativeProducts.adjoint_grade(a::StateGrade) = StateGrade(Dict{Any,Bicyclic}(k => Bicyclic(g.n, g.m) for (k, g) in a.grades))
 
+"""
+    interpret_state(input, space)
+    interpret_state(input, ::Type{B})
+
+Convert `input`, such as the string `"10"`, to a basis state of `space`, or to a state of
+type `B`. [`Kets`](@ref), `basisstate` and `state_index` call it for strings and characters.
+A custom basis-state type adds a method for the inputs it accepts; a state is returned as it is.
+"""
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
-interpret_state(state, space::Union{TransposedSpace,AbstractSubspace}) = interpret_state(state, parent(space))
-# A string or character spells a state of a space whose states are `AbstractBasisState`s; on other spaces it is looked up as it is
-state_index(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace{<:AbstractBasisState}) =state_index(interpret_state(state, space), space)
+function interpret_state(state, space::Union{TransposedSpace, AbstractSubspace})
+    B = statetype(space)
+    state isa B && return state
+    # A subspace may store its states in a different type than its parent, e.g. FixedNumberFockState
+    return interpret_state(interpret_state(state, parent(space)), B)
+end
 basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(_checked_state_index(state, space), space)
 function _checked_state_index(state, space)
     i = state_index(state, space)
@@ -207,6 +224,7 @@ function _checked_state_index(state, space)
     i
 end
 
+interpret_state(state::FockNumber, ::Type{B}) where {B <: FockNumber} = convert(B, state)
 function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{B}) where {I,B<:FockNumber{I}}
     all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only `'0'` and `'1'`, got `\"$input\"`."))
     bits = map(c -> c == '1', collect(input))
@@ -439,13 +457,13 @@ symbolic kets or of symbolic bras. Kets give a column vector, and bras give the 
 The optional `repr` selects the format: `:sparse` (the default), `:dense`, or a format object
 (`EagerSparseRepr()`, `EagerDenseRepr()`).
 """
-function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
+function vector_representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
     ind = _checked_state_index(state, space)
     v = _zero_vector(space, repr)
     v[ind] = one(eltype(v))
     return v
 end
-function vector_representation(state::B, space::AbstractHilbertSpace{B}, repr::EagerDenseRepr{T}; kwargs...) where {B,T}
+function vector_representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr::EagerDenseRepr{T}; kwargs...) where {B,T}
     ind = _checked_state_index(state, space)
     v = _zero_vector(space, repr)
     v[ind] = one(eltype(v))
@@ -454,8 +472,8 @@ end
 _vector_eltype(::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T === Missing ? Int : T
 _zero_vector(space, repr::EagerSparseRepr, T=_vector_eltype(repr)) = SparseArrays.spzeros(T, dim(space))
 _zero_vector(space, repr::EagerDenseRepr, T=_vector_eltype(repr)) = zeros(T, dim(space))
-_zero_matrix(space, ::EagerSparseRepr, T) = SparseArrays.spzeros(T, dim(space), dim(space))
-_zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(space), dim(space))
+_zero_matrix(space, ::EagerSparseRepr, T) = SparseArrays.spzeros(T, dim(_output_space(space)), dim(_input_space(space)))
+_zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(_output_space(space)), dim(_input_space(space)))
 function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     vector_representation(1 * s, space, repr; kwargs...)
 end
@@ -474,7 +492,9 @@ function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, ki
     vec = if length(group_ids) == 1
         op.coeff * vector_representation(basis_state(only(symstates)), space, repr)
     else
-        prodstate = ProductState(ntuple(n -> basis_state(symstates[perm[n]]), length(perm)))
+        # `symstates[i]` belongs to group `perm[i]`, so group n holds `symstates[iperm[n]]`
+        iperm = invperm(perm)
+        prodstate = ProductState(ntuple(n -> basis_state(symstates[iperm[n]]), length(perm)))
         op.coeff * vector_representation(prodstate, space, repr)
     end
     if kind == :kets
@@ -514,9 +534,11 @@ function matrix_representation(s::SymbolicState, space::AbstractHilbertSpace, re
 end
 
 
-function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
+function representation(op, space::Union{AbstractHilbertSpace,Axes}, repr=EagerSparseRepr(); kwargs...)
+    space isa Axes && _operator_axes(space)
     type = _operator_type(op)
     if type == :kets || type == :bras
+        space isa Axes && throw(ArgumentError("A ket or bra has one axis, as in `representation(state, Axes(H))` or `representation(state, H)`."))
         return _vector_representation(op, space, repr, type; kwargs...)
     elseif type == :ketbras
         _repr = _canonicalize_repr(repr)
@@ -530,12 +552,13 @@ function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr();
         return matrix_representation(op, space, repr; kwargs...)
     end
 end
-function representation(op::Union{AbstractString,AbstractChar}, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
-    state = interpret_state(op, space)
+function representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr=EagerSparseRepr(); kwargs...) where B
     return vector_representation(state, space, repr; kwargs...)
 end
-function representation(state::B, space::AbstractHilbertSpace{B}, repr=EagerSparseRepr(); kwargs...) where B
-    return vector_representation(state, space, repr; kwargs...)
+function representation(state, ax::Axes{<:Tuple{AbstractHilbertSpace}}, repr=EagerSparseRepr(); kwargs...)
+    state isa Union{AbstractBasisState,AbstractString,AbstractChar} || _operator_type(state) in (:kets, :bras) ||
+        throw(ArgumentError("An operator has the two axes `Axes(Hout, Hin)`, got one axis."))
+    return representation(state, only(ax.spaces), repr; kwargs...)
 end
 
 
@@ -580,6 +603,27 @@ end
     @test count(!iszero, vsec) == 1
 end
 
+@testitem "representation of basis states and state strings" begin
+    using FermionicHilbertSpaces: TransposedSpace
+    @fermions f
+    onehot(i, n) = [k == i for k in 1:n]
+    Hf = hilbert_space(f, 1:2)
+    # `FockNumber(1)` has type `FockNumber{Int}`, while `Hf` holds `FockNumber{UInt64}`
+    i = findfirst(==(FockNumber(1)), collect(basisstates(Hf)))
+    for H in (Hf, TransposedSpace(Hf))
+        @test representation(FockNumber(1), H) == onehot(i, 4)
+        @test representation(FockNumber(1), H, :dense) == onehot(i, 4)
+    end
+
+    HA = GenericHilbertSpace(:A, ["a", "b", "c"])
+    @test representation("c", HA) == onehot(3, 3)
+    @test representation("c", constrain_space(HA, ["b", "c"])) == onehot(2, 2)
+
+    @test representation("11", constrain_space(Hf, FockNumber.([0, 3]))) == onehot(2, 2)
+
+    @test_throws MethodError representation(BosonicState(0), Hf)
+end
+
 @testitem "vector_representation of symbolic kets and bras" begin
     @fermions f
     Hf = hilbert_space(f, 1:2)
@@ -593,6 +637,7 @@ end
 
 @testitem "representation of different kinds of input" begin
     using LinearAlgebra, SparseArrays
+    using FermionicHilbertSpaces.FreeFermions
     @fermions f
     @majoranas γ
     @boson b
@@ -977,6 +1022,15 @@ end
         ketbra = vb("0") * vs("↑") * vf("1") * (vb("0") * vs("↑") * vf("0"))'
         @test FermionicHilbertSpaces._operator_type(ketbra) == :ketbras
     end
+end
+
+@testitem "Vector of a ket on factors in non-sorted order" begin
+    using LinearAlgebra
+    @spins S 1 // 2
+    H1, H2, H3 = [hilbert_space(S[i]) for i in 1:3]
+    H = tensor_product(H3, H1, H2)
+    v = representation(Kets(H)("↑", "↓", "↓"), H, :dense)
+    @test [real(dot(v, representation(S[i][:z], H, :dense), v)) for i in 1:3] ≈ [-1 / 2, -1 / 2, 1 / 2]
 end
 
 @testitem "Grading of symbolic states" begin
