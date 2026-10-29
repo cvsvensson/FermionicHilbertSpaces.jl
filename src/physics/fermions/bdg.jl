@@ -403,7 +403,7 @@ vals, vecs = eigen(representation(f[1]' * f[2] + f[1]' * f[2]' + hc, H, :dense),
 q = quasiparticle(vecs[:, end], H)
 ```
 """
-function quasiparticle(v, H::Union{BdGHilbertSpace,SingleParticleHilbertSpace})
+function quasiparticle(v, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
     creators = _nambu_creators(H)
     length(v) == length(creators) || throw(DimensionMismatch("The vector has length $(length(v)), but the space has dimension $(length(creators))."))
     return sum(c * x for (c, x) in zip(creators, v))
@@ -420,11 +420,11 @@ H = hilbert_space(f, 1:2, SingleParticle())
 quadratic_operator([0 1; 1 0], H) # f[1]' * f[2] + f[2]' * f[1]
 ```
 """
-function quadratic_operator(M, H::Union{BdGHilbertSpace,SingleParticleHilbertSpace})
+function quadratic_operator(M, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
     creators = _nambu_creators(H)
     size(M) == (length(creators), length(creators)) || throw(DimensionMismatch("The matrix has size $(size(M)), but the space has dimension $(length(creators))."))
     terms = (M[a, b] * ca * cb' for (a, ca) in zip(axes(M, 1), creators), (b, cb) in zip(axes(M, 2), creators) if !iszero(M[a, b]))
-    return sum(terms; init=0)
+    return sum(terms; init = 0)
 end
 
 @testitem "BdG quadratic operators and quasiparticles" begin
@@ -438,18 +438,18 @@ end
     Δ = rand(ComplexF64, N, N)
     Δ = Δ - transpose(Δ)
     op = sum(f[n]' * h[n, m] * f[m] for n in 1:N, m in 1:N) +
-         sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:N, m in 1:N)
+        sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:N, m in 1:N)
     M = representation(op, H, :dense)
     @test representation(quadratic_operator(M, H), H) ≈ M
-    @test tr(representation(quadratic_operator(M, H), Hmb, :dense)) ≈ 0 atol = 1e-12
+    @test tr(representation(quadratic_operator(M, H), Hmb, :dense)) ≈ 0 atol = 1.0e-12
 
     vals, vecs = eigen(M, FermionicHilbertSpaces.BdGEigen())
     Hmat = representation(op, Hmb, :dense)
     ground_state = eigvecs(Hermitian(Hmat))[:, 1]
-    for k in N+1:2N
+    for k in (N + 1):2N
         q = representation(quasiparticle(vecs[:, k], H), Hmb, :dense)
         @test Hmat * q - q * Hmat ≈ 2vals[k] * q
-        @test norm(q' * ground_state) < 1e-12
+        @test norm(q' * ground_state) < 1.0e-12
         @test quasiparticle(quasiparticle_adjoint(vecs[:, k]), H) == quasiparticle(vecs[:, k], H)'
     end
 end
