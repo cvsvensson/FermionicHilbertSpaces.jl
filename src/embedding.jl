@@ -29,6 +29,8 @@ If `m` is a vector, `Hsub` and `H` must have the same modes, as for a sector `Hs
 result is `m` placed at the indices [`indices`](@ref)`(Hsub, H)` and zero elsewhere.
 
 ```jldoctest
+julia> using FermionicHilbertSpaces
+
 julia> @fermions f;
 
 julia> H = hilbert_space(f, 1:2, NumberConservation());
