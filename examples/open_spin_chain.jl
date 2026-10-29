@@ -41,10 +41,10 @@ max_norm_error = maximum(abs.(map(ψ -> norm(ψ) - 1.0, sol_closed.u)))
 println("Closed-system max norm error: ", max_norm_error)
 
 # Open-system dephasing with the package's left/right interface.
+using FermionicHilbertSpaces: dissipator
 Hopen, Hleft, Hright, left, right = open_system(S, 1:N)
 
 lindbladian_sym = -1im * (left(ham_sym) - right(ham_sym))
-dissipator(op) = left(op) * right(op) - 0.5 * (left(op)' * left(op) + right(op)' * right(op))
 for k in 1:N
     jump_op = 2 * sqrt(γ_deph[k]) * S[k][:z]
     global lindbladian_sym += dissipator(jump_op)
