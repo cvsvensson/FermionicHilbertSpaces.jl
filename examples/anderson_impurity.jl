@@ -13,13 +13,13 @@ using FermionicHilbertSpaces: Axes
 # Writing the interaction as `U(n↑ - 1/2)(n↓ - 1/2)` makes the model particle-hole symmetric.
 @fermions c
 L = 5
-ε = range(-1, 1; length=L)
+ε = range(-1, 1; length = L)
 V = 0.25
 n(i, σ) = c[i, σ]' * c[i, σ]
 spins = (:↑, :↓)
 siam(U) = U * (n(0, :↑) - 1 / 2) * (n(0, :↓) - 1 / 2) +
-          sum(ε[k] * n(k, σ) for k in 1:L, σ in spins) +
-          sum(V * c[0, σ]' * c[k, σ] + hc for k in 1:L, σ in spins)
+    sum(ε[k] * n(k, σ) for k in 1:L, σ in spins) +
+    sum(V * c[0, σ]' * c[k, σ] + hc for k in 1:L, σ in spins)
 
 # The numbers of spin-up and spin-down particles are conserved separately, so we split the
 # space into sectors labelled by `[N↑, N↓]`.
@@ -43,7 +43,7 @@ function lehmann(ham, H, q0)
     Em, Vm = eig(q0 - [1, 0])
     wp = abs2.(Vp' * (representation(c[0, :↑]', Axes(Hp, H0)) * ψ0))
     wm = abs2.(Vm' * (representation(c[0, :↑], Axes(Hm, H0)) * ψ0))
-    (; poles=[Ep .- E0; E0 .- Em], weights=[wp; wm])
+    return (; poles = [Ep .- E0; E0 .- Em], weights = [wp; wm])
 end
 G(z, (; poles, weights)) = sum(weights ./ (z .- poles))
 q0 = [L + 1, L + 1] .÷ 2
@@ -51,7 +51,7 @@ q0 = [L + 1, L + 1] .÷ 2
 # Without interaction, the impurity Green's function is known in closed form, and the Lehmann
 # sum reproduces it.
 G0(z) = 1 / (z - sum(V^2 ./ (z .- ε)))
-zs = range(-3, 3; length=101) .+ 0.1im
+zs = range(-3, 3; length = 101) .+ 0.1im
 G.(zs, Ref(lehmann(siam(0), H, q0))) ≈ G0.(zs)
 
 # For any interaction strength, the weights add up to one, as required by `{d↑, d↑†} = 1`.
@@ -62,14 +62,16 @@ sum(lehmann(siam(6), H, q0).weights) ≈ 1
 # the weight moves into two Hubbard peaks. They sit just outside `±U/2` (dashed lines) and
 # approach these lines as `U` grows, while the peak at zero energy shrinks. Each curve is shifted
 # up by one from the previous.
-ωs = range(-6, 6; length=1201)
+ωs = range(-6, 6; length = 1201)
 η = 0.15
-plt = plot(; xlabel="ω", ylabel="A(ω), shifted", yticks=false, legend=false, frame=:box, size=(500, 400),
-    title="Impurity spectral function")
+plt = plot(;
+    xlabel = "ω", ylabel = "A(ω), shifted", yticks = false, legend = false, frame = :box, size = (500, 400),
+    title = "Impurity spectral function"
+)
 for (i, U) in enumerate((0, 3, 6, 9))
     sol = lehmann(siam(U), H, q0)
-    plot!(plt, ωs, [i - 1 - imag(G(ω + im * η, sol)) / π for ω in ωs]; lw=2, color=i)
-    U > 0 && plot!(plt, [-U, -U, NaN, U, U] ./ 2, i .- [1, 0, NaN, 1, 0]; color=:gray, ls=:dash)
+    plot!(plt, ωs, [i - 1 - imag(G(ω + im * η, sol)) / π for ω in ωs]; lw = 2, color = i)
+    U > 0 && plot!(plt, [-U, -U, NaN, U, U] ./ 2, i .- [1, 0, NaN, 1, 0]; color = :gray, ls = :dash)
     annotate!(plt, -6, i - 0.75, text(" U = $U", 9, :left))
 end
 plt
