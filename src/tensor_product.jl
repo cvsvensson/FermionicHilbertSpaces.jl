@@ -25,9 +25,9 @@ end
 
 Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
 
-The factors keep the order given. In the basis order, the first factor varies fastest. Fermionic
-modes are ordered factor by factor, which fixes the Jordan-Wigner order and the bit layout of
-[`FockNumber`](@ref): the modes of the first factor occupy the lowest bits.
+Spaces of the same group, such as fermions of one `@fermions` basis, merge into one factor where
+the group first appears. The first factor varies fastest. Fermionic modes keep the order given,
+which fixes the Jordan-Wigner order and the bit layout of [`FockNumber`](@ref).
 """
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 function tensor_product(spaces; constraint=NoSymmetry())
