@@ -52,7 +52,7 @@ end
 # Whether `outind` lies outside the space and `projection` allows skipping it. Throws if it lies outside and `projection` is false.
 function _skip_outside(outind, projection)
     iszero(outind) || return false
-    projection || throw(ArgumentError("The operator maps outside of the provided space. Pass `projection=true` to ignore those states."))
+    projection || throw(ArgumentError("The operator maps states of the space to states outside it. `projection=true` drops those matrix elements. An operator that changes a conserved quantity needs a space that contains both the input and output states, such as one with several sectors or no constraint."))
     return true
 end
 
