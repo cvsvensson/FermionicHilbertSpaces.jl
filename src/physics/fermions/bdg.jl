@@ -287,8 +287,9 @@ end
 # Within a degenerate eigenspace `eigen` returns an arbitrary basis, so the partner of a
 # negative-energy column is built as its particle-hole conjugate. That map is antiunitary and
 # takes the e-eigenspace onto the -e one. For a small splitting e the computed C v_k is only
-# orthogonal to v_k up to eps * norm(A) / e, so the columns are Löwdin orthonormalized. If
-# C V = V P with P the reversal permutation, then conj(V'V) = P V'V P, so the result stays paired.
+# orthogonal to v_k up to eps * norm(A) / e, so the columns are Löwdin orthonormalized, i.e.
+# replaced by the polar factor of their SVD. If C V = V P with P the reversal permutation, then
+# conj(V'V) = P V'V P, so the result stays paired.
 function enforce_ph_symmetry(es, ops, tol)
     N = div(length(es), 2)
     for k in 1:N
@@ -305,7 +306,8 @@ function enforce_ph_symmetry(es, ops, tol)
         es[zero_modes] .= 0
         ops[:, zero_modes] = canonicalize_zero_modes(ops[:, zero_modes])
     end
-    return es, ops / sqrt(Hermitian(ops' * ops))
+    U, _, V = svd(ops)
+    return es, U * V'
 end
 
 # The zero-energy eigenspace is particle-hole invariant, so the Takagi factorization of
@@ -314,7 +316,7 @@ end
 function canonicalize_zero_modes(Z)
     n = div(size(Z, 1), 2)
     m = div(size(Z, 2), 2)
-    U, _ = symmetric_SVD(Symmetric(transpose(Z) * [0I I(n); I(n) 0I] * Z))
+    U, _ = symmetric_SVD(Symmetric(transpose(Z) * [Z[(n + 1):end, :]; Z[1:n, :]]))
     Y = Z * conj(U)
     Ya = Y[:, 1:m]
     Yb = reverse(Y[:, (m + 1):end]; dims = 2)
@@ -329,13 +331,10 @@ function symmetric_SVD(M)
         -real(M) imag(M);
         imag(M) real(M)
     ]
-    S = schur(Symmetric(block_matrix))
-    # Extract positive eigenvalues
-    pos_eigenval_positions = diag(S.T) .> 0
-    D = Diagonal(diag(S.T)[pos_eigenval_positions])
-    # Reconstruct complex unitary matrix
-    U = S.Z[(n+1):end, pos_eigenval_positions] + 1im * S.Z[1:n, pos_eigenval_positions]
-    return U, D
+    vals, Z = eigen(Symmetric(block_matrix))
+    pos = vals .> 0
+    U = Z[(n + 1):end, pos] + 1im * Z[1:n, pos]
+    return U, Diagonal(vals[pos])
 end
 
 @testitem "Takagi" begin
