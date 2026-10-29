@@ -415,7 +415,7 @@ end
 
 # The matrix of `sum(terms) + coeff * I` with element type `T`
 _terms_matrix(::Type{T}, terms, coeff, space, repr, ::NoChunking; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
-_terms_matrix(::Type{T}, terms, coeff, space::Axes, repr::EagerSparseRepr, ::NoChunking; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
+_terms_matrix(::Type{T}, terms, coeff, space::Axes, repr::EagerSparseRepr, ::NoChunking; kwargs...) where {T} = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 
 function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T
     accumulator = matrix_accumulator(T, length(terms), _matrix_size(space), repr)
@@ -426,7 +426,7 @@ function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) wh
     return finalize!(accumulator, space)
 end
 
-function _term_matrix_representation(op, H, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
+function _term_matrix_representation(op, H, repr::Union{EagerSparseRepr, EagerDenseRepr}, chunking; kwargs...)
     _accumulator = matrix_accumulator(op, H, repr)
     accumulator = operator_indices_and_amplitudes!(_accumulator, op, H; kwargs...)
     finalize!(accumulator, H)
