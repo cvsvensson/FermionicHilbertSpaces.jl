@@ -69,7 +69,7 @@ Hfixed = hilbert_space(f, labels, NumberConservation(L))
 G_fermi_sea = ground_state_correlations(hopping, Hbdg)
 function sweep(Us, seed, order_parameter)
     G = ground_state_correlations(hopping + seed, Hbdg)
-    map(Us) do U
+    return map(Us) do U
         G = self_consistent(hubbard(U), G, Hbdg; maxiter = 10_000)
         E_sea = real(expectation(hubbard(U), G_fermi_sea, Hbdg))
         E0 = eigmin(Hermitian(representation(hubbard(U), Hfixed, :dense)))
