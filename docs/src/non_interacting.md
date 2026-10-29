@@ -36,7 +36,7 @@ See [Free fermions on a 2D grid](@ref) for an example of how to use this.
 ## Non-interacting hamiltonians without number conservation
 A general non-interacting hermitian operator respecting super-selection can be written as
 ```math
-H = E\mathbf{1} + \sum_{ij} c_i^\dagger\, h_{ij}  c_j + \frac{1}{2}\left(\Delta_{ij} c_i^\dagger c_j^\dagger + \Delta^*_{ij} c_j c_i\right).
+H = E\mathbf{1} + \sum_{ij} \left(c_i^\dagger\, h_{ij}  c_j + \frac{1}{2}\left(\Delta_{ij} c_i^\dagger c_j^\dagger + \Delta^*_{ij} c_j c_i\right)\right),
 ```
 where ``h`` is hermitian, ``E`` is real and ``\Delta`` is antisymmetric. We can do something similar as above by doubling the single particle states with the Nambu states ``\Psi_n = c_n`` for ``n \leq N`` and ``\Psi_{n+N} = c_n^\dagger``, where ``N`` is the number of fermions. Then the hamiltonian can be written as
 ```math
@@ -66,17 +66,20 @@ M ≈ [h Δ; -conj(Δ) -conj(h)] / 2
 ```
 The matrix returned by `representation` on this space depends on the ordering of operators in the symbolic operator `op`, and `FermionicHilbertSpaces.normal_order_to_bdg` converts it to the particle-hole symmetric choice above.
 !!! tip "Use `BdG` instead"
-    By defining the hilbert space with `hilbert_space(c, 1:N, BdG())`, one automatically gets the Nambu states and `representation` will return a matrix of the form above without the need to manually convert it:
+    By defining the hilbert space with `hilbert_space(c, 1:N, BdG())`, one automatically gets the Nambu states and `representation` will return ``M`` without the need to manually convert it:
     ```julia
     Hbdg = hilbert_space(c, 1:N, BdG())
-    representation(op, Hbdg)
-    #= example output
-    4×4 SparseArrays.SparseMatrixCSC{Float64, Int64} with 12 stored entries:
-    0.449635   0.297613    ⋅         0.18844
-    0.297613   0.169731  -0.18844     ⋅
-    ⋅        -0.18844   -0.449635  -0.297613
-    0.18844     ⋅        -0.297613  -0.169731 =#
+    representation(op, Hbdg) ≈ M # true
     ```
+    The BdG space wraps the constrained space above, available through `parent`, and does not combine with tensor products or partial traces.
+
+### Quasiparticles
+`eigen(A, BdGEigen())` diagonalizes a BdG matrix while keeping the particle-hole pairing of its eigenvectors. The eigenvalues are sorted, so for `N` modes columns `k` and `2N + 1 - k` are partners with eigenvalues `e` and `-e` whose quasiparticles are adjoints of each other. A column `[u; v]` gives the quasiparticle ``\gamma^\dagger = \sum_i u_i c_i^\dagger + v_i c_i``, which raises the energy by ``2e``. The matrix must be Hermitian, and eigenvalues with `abs(e) <= cutoff * maximum(abs, vals)` are set to zero, with the default `cutoff = 2N * eps` as for `rank`.
+```@example bdg_particle_hilbert_space
+Hbdg = hilbert_space(c, 1:N, BdG())
+vals, vecs = eigen(representation(op, Hbdg, :dense), BdGEigen())
+vals
+```
 
 ## Expectation values
 On the single-particle and BdG spaces, `expectation(op, G, H)` takes the correlation matrix of the state: ``G_{ij} = \langle c_i^\dagger c_j \rangle`` on the single-particle space and ``G_{ij} = \langle \Psi_i^\dagger \Psi_j \rangle`` on the BdG space. The operator must be quadratic, and its identity part is included. For a thermal state of the single-particle hamiltonian `h`, ``G = (1 + e^{\beta h})^{-T}``:
