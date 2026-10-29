@@ -20,20 +20,21 @@ function tensor_product_no_constraints(spaces)
     return space
 end
 """
-    tensor_product(spaces...; constraint=NoSymmetry())
-    tensor_product(spaces; constraint=NoSymmetry())
+    tensor_product(spaces...; constraint=NoSymmetry(), index=default_subspace_index)
+    tensor_product(spaces; constraint=NoSymmetry(), index=default_subspace_index)
 
 Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
+A constrained result looks up states with an index built by `index`, as in [`constrain_space`](@ref).
 """
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
-function tensor_product(spaces; constraint=NoSymmetry())
+function tensor_product(spaces; constraint=NoSymmetry(), index=default_subspace_index)
     if length(spaces) == 1
-        return constrain_space(only(spaces), constraint)
+        return constrain_space(only(spaces), constraint; index)
     end
     full_space = tensor_product_no_constraints(spaces)
     if constraint == NoSymmetry()
         combined = _combined_sector_constraint(spaces)
-        !ismissing(combined) && return sector_space(full_space, basisstates(full_space), sector_function(combined, full_space), combined)
+        !ismissing(combined) && return sector_space(full_space, basisstates(full_space), sector_function(combined, full_space), combined; index)
         return full_space
     end
 
@@ -41,12 +42,12 @@ function tensor_product(spaces; constraint=NoSymmetry())
 
     states = supports_branch_pruning(constraint) ? generate_states(spaces, constraint, full_space) : basisstates(full_space)
     if supports_sector_grouping(constraint) && supports_filtering(constraint)
-        return sector_space(full_space, states, sector_function(constraint, full_space), constraint)
+        return sector_space(full_space, states, sector_function(constraint, full_space), constraint; index)
     elseif supports_filtering(constraint)
         filtered_states = collect(Iterators.filter(filter_function(constraint, full_space), states))
-        return ConstrainedSpace(full_space, filtered_states)
+        return ConstrainedSpace(full_space, filtered_states; constraint, index)
     else
-        return ConstrainedSpace(full_space, states)
+        return ConstrainedSpace(full_space, states; constraint, index)
     end
 end
 

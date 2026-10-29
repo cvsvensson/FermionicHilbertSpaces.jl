@@ -269,8 +269,8 @@ sectors(::AbstractConstraint) = nothing
 
 
 """
-    constrain_space(space, constraint[, states])
-    constrain_space(space, states)
+    constrain_space(space, constraint[, states]; index=default_subspace_index)
+    constrain_space(space, states; index=default_subspace_index)
 
 Build a constrained Hilbert space from `space`.
 
@@ -281,6 +281,11 @@ such as `NumberConservation`, return a space with sectors, with states ordered b
 
 With only `states`, return the subspace spanned by exactly those basis states, in the
 given order; this is equivalent to `constrain_space(space, NoSymmetry(), states)`.
+
+`index(constraint, parent, states)` builds the lookup that `state_index` uses on the result,
+where `states` are its basis states in order. The default, [`default_subspace_index`](@ref),
+dispatches on the type of the constraint; any object with a [`state_position`](@ref) method
+can be returned.
 """
 constrain_space
 
