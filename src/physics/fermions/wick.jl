@@ -1,7 +1,7 @@
 # Normal ordering relative to a Gaussian state with vanishing one-point function. `Unordered(x)` is a factor that is
 # not yet absorbed and `Fluctuation(x)` a factor of the product :…: that is normal ordered relative to the state, so
 # that x :y…: = λ :y x…: + ⟨xy⟩ :…:. Products end in `OrderEnd`, where the last unordered factor x becomes :x:.
-struct Unordered{X,C}
+struct Unordered{X, C}
     x::X
     contraction::C
 end
@@ -17,21 +17,21 @@ NonCommutativeProducts.mul_effect(a::Unordered, b::Fluctuation) = AddTerms((Swap
 NonCommutativeProducts.mul_effect(a::Unordered, ::OrderEnd) = Fluctuation(a.x) * OrderEnd()
 # :xx: = 0 for fermions and Majoranas alike
 NonCommutativeProducts.mul_effect(a::Fluctuation, b::Fluctuation) = a == b ? 0 : isless(b.x, a.x) ? Swap(exchange_phase(a.x, b.x)) : nothing
-NonCommutativeProducts.mul_effect(::Union{Unordered,Fluctuation,OrderEnd}, ::Union{Unordered,Fluctuation,OrderEnd}) = nothing
+NonCommutativeProducts.mul_effect(::Union{Unordered, Fluctuation, OrderEnd}, ::Union{Unordered, Fluctuation, OrderEnd}) = nothing
 
 # `op` as a sum of products of `Fluctuation`s, each followed by `OrderEnd`, with `contraction(x, y) = ⟨xy⟩`
-sum_over_terms(f, op) = mapreduce(((fs, c),) -> f(fs, c), +, NonCommutativeProducts.termpairs(1 * op); init=0)
-state_normal_order(op, contraction) = sum_over_terms((fs, c) -> c * prod(x -> Unordered(x, contraction), fs; init=1) * OrderEnd(), op)
+sum_over_terms(f, op) = mapreduce(((fs, c),) -> f(fs, c), +, NonCommutativeProducts.termpairs(1 * op); init = 0)
+state_normal_order(op, contraction) = sum_over_terms((fs, c) -> c * prod(x -> Unordered(x, contraction), fs; init = 1) * OrderEnd(), op)
 fluctuations(fs) = [f.x for f in fs if f isa Fluctuation]
 
 function wick_expectation(op, contraction)
     terms = NonCommutativeProducts.termpairs(state_normal_order(op, contraction))
-    return sum((c for (fs, c) in terms if isempty(fluctuations(fs))); init=0)
+    return sum((c for (fs, c) in terms if isempty(fluctuations(fs))); init = 0)
 end
 function _mean_field(op, contraction)
-    sum_over_terms(state_normal_order(op, contraction)) do fs, c
+    return sum_over_terms(state_normal_order(op, contraction)) do fs, c
         xs = fluctuations(fs)
-        length(xs) > 2 ? 0 : c * (prod(xs; init=1) - (length(xs) == 2 ? contraction(xs...) : 0))
+        length(xs) > 2 ? 0 : c * (prod(xs; init = 1) - (length(xs) == 2 ? contraction(xs...) : 0))
     end
 end
 
@@ -44,12 +44,12 @@ _nambu_index(x, H) = state_index(NambuState(_mode_position(x, H), !x.creation), 
 _contraction(G, H::BdGHilbertSpace) = (x, y) -> G[_nambu_index(x', H), _nambu_index(y, H)]
 function _contraction(G, H::SingleParticleHilbertSpace)
     index(x) = state_index(SingleParticleState(_mode_position(x, H)), H)
-    function (x, y)
+    return function (x, y)
         i, j = index(x), index(y)
         return x.creation == y.creation ? zero(eltype(G)) : x.creation ? G[i, j] : (i == j) - G[j, i]
     end
 end
-expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace,BdGHilbertSpace}) = wick_expectation(op, _contraction(G, H))
+expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}) = wick_expectation(op, _contraction(G, H))
 
 """
     mean_field(op, G, H)
@@ -64,7 +64,7 @@ H = hilbert_space(f, 1:2, SingleParticle())
 mean_field(f[1]' * f[1] * f[2]' * f[2], [0.5 0; 0 0.25], H) # 0.25 f[1]' f[1] + 0.5 f[2]' f[2] - 0.125
 ```
 """
-mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace,BdGHilbertSpace}) = _mean_field(op, _contraction(G, H))
+mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}) = _mean_field(op, _contraction(G, H))
 
 @testitem "Wick expectation values" begin
     using LinearAlgebra
@@ -131,7 +131,7 @@ end
     @variables U
     @fermions f
     H = hilbert_space(f, 1:2, SingleParticle())
-    G = [1//2 1//5; 1//5 1//4]
+    G = [1 // 2 1 // 5; 1 // 5 1 // 4]
     op = f[1]' * f[1] * f[2]' * f[2]
     mf = mean_field(U * op, G, H)
     @test isequal(Symbolics.simplify(expectation(mf, G, H) - U * expectation(op, G, H)), 0)
