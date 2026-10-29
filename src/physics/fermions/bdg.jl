@@ -202,7 +202,7 @@ op = f[1]' * f[2] + f[1]' * f[2]' + hc
 vals, vecs = eigen(representation(op, H, :dense), BdGEigen())
 ```
 """
-struct BdGEigen{T<:Union{Nothing, Real}} <: AbstractBdGEigenAlg
+struct BdGEigen{T <: Union{Nothing, Real}} <: AbstractBdGEigenAlg
     cutoff::T
 end
 BdGEigen() = BdGEigen(nothing)
