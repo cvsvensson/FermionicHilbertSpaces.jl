@@ -287,6 +287,16 @@ end
 
 sectors(::AbstractConstraint) = nothing
 
+map_spaces(f, c) = c
+map_spaces(f, c::ProductConstraint) = ProductConstraint(map(ci -> map_spaces(f, ci), c.constraints))
+map_spaces(f, c::SectorConstraint) = SectorConstraint(map_spaces(f, c.filter))
+map_spaces(f, c::NumberConservation) = NumberConservation(c.total, _map_spaces(f, c.spaces), c.weights)
+map_spaces(f, c::ParityConservation) = ParityConservation(c.allowed_parities, _map_spaces(f, c.spaces))
+map_spaces(f, c::AdditiveConstraint) = AdditiveConstraint(c.allowed_values, _map_spaces(f, c.spaces), c.maps)
+map_spaces(f, c::FilterConstraint) = FilterConstraint(c.reducer, c.maps, _map_spaces(f, c.spaces))
+_map_spaces(f, spaces) = map(f, spaces)
+_map_spaces(f, ::Missing) = missing
+
 
 """
     constrain_space(space, constraint[, states])

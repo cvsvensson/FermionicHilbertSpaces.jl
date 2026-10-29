@@ -36,19 +36,20 @@ See [Free fermions on a 2D grid](@ref) for an example of how to use this.
 ## Non-interacting hamiltonians without number conservation
 A general non-interacting hermitian operator respecting super-selection can be written as
 ```math
-H = E\mathbf{1} + \sum_{ij} c_i^\dagger\, h_{ij}  c_j + \frac{1}{2}\sum_{ij} \left(\Delta_{ij} c_i^\dagger c_j^\dagger + \Delta^\dagger_{ij} c_i c_j\right).
+H = E\mathbf{1} + \sum_{ij} \left(c_i^\dagger\, h_{ij}  c_j + \frac{1}{2}\left(\Delta_{ij} c_i^\dagger c_j^\dagger + \Delta^*_{ij} c_j c_i\right)\right),
 ```
 where ``h`` is hermitian, ``E`` is real and ``\Delta`` is antisymmetric. We can do something similar as above by doubling the single particle states with the Nambu states ``\Psi_n = c_n`` for ``n \leq N`` and ``\Psi_{n+N} = c_n^\dagger``, where ``N`` is the number of fermions. Then the hamiltonian can be written as
 ```math
-H = \left(E + \tfrac{1}{2}\operatorname{tr} h\right)\mathbf{1} + \sum_{ij} \Psi_i^\dagger\, \mathcal{H}_{ij} \Psi_j.
+H = E'\mathbf{1} + \sum_{ij} \Psi_i^\dagger\, M_{ij} \Psi_j.
 ```
-Since we introduced a redundancy by doubling the single particle states, ``\mathcal{H}`` is not unique. One common choice is to use the representation 
+Since we introduced a redundancy by doubling the single particle states, ``M`` is not unique. Requiring the particle-hole symmetry ``M = -\tau_x M^T \tau_x`` fixes it to
 ```math
-\mathcal{H} = \frac{1}{2}\begin{pmatrix}
-h & \Delta \\
-\Delta^\dagger & -h^*
-\end{pmatrix}
+M = \frac{1}{2}\begin{pmatrix}
+h & \Delta \
+-\Delta^* & -h^*
+\end{pmatrix}, \quad E' = E + \frac{1}{2}\mathrm{tr}\, h.
 ```
+The same symmetrization gives a unique ``M`` for any quadratic operator, also non-hermitian ones, and then ``[H, \Psi_i] = -2 (M\Psi)_i``.
 We can get this representation manually as follows:
 ```@example bdg_particle_hilbert_space
 using FermionicHilbertSpaces, LinearAlgebra
@@ -59,16 +60,16 @@ H = hilbert_space(c, 1:N, states)
 h = Hermitian(rand(N, N))
 Δ = rand(N, N) |> m -> m - transpose(m)
 E = rand()
-op = E * I + sum(c[i]' * h[i, j] * c[j] + (Δ[i, j] * c[i]' * c[j]' + Δ'[i, j] * c[i] * c[j]) / 2 for i in 1:N, j in 1:N)
-ℋ = representation(op - E * I, H) |> FermionicHilbertSpaces.normal_order_to_bdg
-ℋ ≈ [h Δ; Δ' -conj(h)] / 2
+op = E * I + sum(c[i]' * h[i, j] * c[j] + (Δ[i, j] * c[i]' * c[j]' + conj(Δ[i, j]) * c[j] * c[i]) / 2 for i in 1:N, j in 1:N)
+M = representation(op, H) |> FermionicHilbertSpaces.normal_order_to_bdg
+M ≈ [h Δ; -conj(Δ) -conj(h)] / 2
 ```
-The matrix returned by `representation` will depend on the ordering of operators in the symbolic operator `op`, and it includes the identity part of `op`. If `op` is normal ordered (which is the default) and has no identity part, one can use `FermionicHilbertSpaces.normal_order_to_bdg` to convert it to the choice above.
+The matrix returned by `representation` on this space depends on the ordering of operators in the symbolic operator `op`, and `FermionicHilbertSpaces.normal_order_to_bdg` converts it to the particle-hole symmetric choice above.
 !!! tip "Use `BdG` instead"
-    By defining the hilbert space with `hilbert_space(c, 1:N, BdG())`, one automatically gets the Nambu states and `representation` will return ``\mathcal{H}`` without the need to manually convert it or remove the identity part:
+    By defining the hilbert space with `hilbert_space(c, 1:N, BdG())`, one automatically gets the Nambu states and `representation` will return ``M`` without the need to manually convert it:
     ```julia
     Hbdg = hilbert_space(c, 1:N, BdG())
-    representation(op, Hbdg) ≈ ℋ # true
+    representation(op, Hbdg) ≈ M # true
     ```
 
 ### Quasiparticles

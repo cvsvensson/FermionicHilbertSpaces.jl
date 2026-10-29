@@ -24,7 +24,7 @@ add_tag(H::TransposedSpace, tag) = TransposedSpace(add_tag(H.parent, tag))
 groups(H::TransposedSpace) = map(TransposedSpace, groups(H.parent))
 factors(H::TransposedSpace) = map(TransposedSpace, factors(H.parent))
 TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, groups(H)))
-TransposedSpace(H::AbstractSubspace) = rewrap(H, TransposedSpace(parent(H)))
+TransposedSpace(H::AbstractSubspace) = map_parent(TransposedSpace, H)
 state_mapper(H::TransposedSpace, Hs) = state_mapper(H.parent, Hs)
 combine_states(states, H::TransposedSpace) = combine_states(states, H.parent)
 Base.parent(H::TransposedSpace) = H.parent
@@ -292,6 +292,24 @@ end
     P = Diagonal([(-1)^count_ones(i - 1) for i in 1:dim(H2)]) # parity in the Fock basis
     X = rand(ComplexF64, 4, 4)
     ρ = (X + X' + P * (X + X') * P) / 4
+    dρ = reshape(mat * reshape(ρ, (Hl, Hr) => Hlr), Hlr => (Hl, Hr))
+    @test dρ ≈ -1im * (Hm * ρ - ρ * Hm) + Lm * ρ * Lm' - 0.5 * (Lm'Lm * ρ + ρ * Lm'Lm)
+end
+
+@testitem "open_system of a tensor product with a sector" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: open_system
+    @fermions f
+    @bosons a
+    H = tensor_product(hilbert_space(f, 1:2, NumberConservation(1)), hilbert_space(a[1], 3))
+    Hlr, Hl, Hr, left, right = open_system(H)
+    dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
+    ham = 0.4 * (f[1]'f[2] + f[2]'f[1]) + a[1]'a[1] + 0.3 * (f[1]'f[1] - f[2]'f[2]) * (a[1] + a[1]')
+    L = 0.5 * a[1]
+    mat = representation(-1im * (left(ham) - right(ham)) + dissipator(L), Hlr)
+    Hm, Lm = representation(ham, H, :dense), representation(L, H, :dense)
+    X = rand(ComplexF64, dim(H), dim(H))
+    ρ = X + X'
     dρ = reshape(mat * reshape(ρ, (Hl, Hr) => Hlr), Hlr => (Hl, Hr))
     @test dρ ≈ -1im * (Hm * ρ - ρ * Hm) + Lm * ρ * Lm' - 0.5 * (Lm'Lm * ρ + ρ * Lm'Lm)
 end
