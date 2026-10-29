@@ -29,10 +29,12 @@ p = 3
 H2 = hilbert_space(c, 1:2)
 c1, c2 = representation(c[1], H2), representation(c[2], H2)
 σ = c1 * c2 ≈ ω * c2 * c1 ? 1 : -1
-(; σ,
-    nilpotent=iszero(c1^p),
-    onsite=all((c1')^m * c1^m + c1^(p - m) * (c1')^(p - m) ≈ I for m in 1:(p-1)),
-    exchange=c1 * c2 ≈ ω^σ * c2 * c1 && c1' * c2 ≈ ω^(-σ) * c2 * c1')
+(;
+    σ,
+    nilpotent = iszero(c1^p),
+    onsite = all((c1')^m * c1^m + c1^(p - m) * (c1')^(p - m) ≈ I for m in 1:(p - 1)),
+    exchange = c1 * c2 ≈ ω^σ * c2 * c1 && c1' * c2 ≈ ω^(-σ) * c2 * c1',
+)
 
 # Since $(c_j^\dagger)^k c_j^k$ projects onto $n_j \geq k$, the occupation is
 # $n_j = \sum_{k=1}^{p-1} (c_j^\dagger)^k c_j^k$, and the on-site charge $Z_j = \omega^{n_j}$ is
@@ -54,9 +56,9 @@ c1, c2 = representation(c[1], H2), representation(c[2], H2)
 # Each $\chi_a$ raises the charge by one, $Q \chi_a = \omega \chi_a Q$. The phase $\bar\zeta$
 # ensures $\chi_{2j}^p = 1$ also for even $p$; for $p = 2$ the $\chi_a$ are the usual Majoranas.
 ζ = cis(π * (p - 1) / p)
-Z(j) = I + sum((ω^k - ω^(k - 1)) * (c[j]')^k * c[j]^k for k in 1:(p-1))
+Z(j) = I + sum((ω^k - ω^(k - 1)) * (c[j]')^k * c[j]^k for k in 1:(p - 1))
 Zpow(j) = σ == 1 ? Z(j)' : Z(j) # Z_j^{-σ}
-χ(a) = isodd(a) ? c[(a+1)÷2]' + c[(a+1)÷2]^(p - 1) : conj(ζ) * χ(a - 1) * Zpow(a ÷ 2)
+χ(a) = isodd(a) ? c[(a + 1) ÷ 2]' + c[(a + 1) ÷ 2]^(p - 1) : conj(ζ) * χ(a - 1) * Zpow(a ÷ 2)
 χs = [representation(χ(a), H2) for a in 1:4]
 
 # ## The model
@@ -82,13 +84,13 @@ Zpow(j) = σ == 1 ? Z(j)' : Z(j) # Z_j^{-σ}
 #   the edge modes only exist within the ground space. This is why we build them from the
 #   ground states alone.
 parafermion_chain(J, h, N) =
-    -J * sum(ζ * χ(2j)' * χ(2j + 1) + hc for j in 1:(N-1)) -
-        h * sum(ζ * χ(2j - 1)' * χ(2j) + hc for j in 1:N)
+    -J * sum(ζ * χ(2j)' * χ(2j + 1) + hc for j in 1:(N - 1)) -
+    h * sum(ζ * χ(2j - 1)' * χ(2j) + hc for j in 1:N)
 
 ## Sanity check: the end parafermions commute with H at h = 0.
 Hsmall = hilbert_space(c, 1:3)
 H0 = representation(parafermion_chain(1.0, 0.0, 3), Hsmall)
-@assert all(norm(H0 * E - E * H0) < 1e-10 for E in (representation(χ(a), Hsmall) for a in (1, 6)))
+@assert all(norm(H0 * E - E * H0) < 1.0e-10 for E in (representation(χ(a), Hsmall) for a in (1, 6)))
 
 # ## Ground states
 # We split the Hilbert space into charge sectors and find the lowest state $|q\rangle$ in
@@ -100,13 +102,13 @@ Qop = prod(representation(Z(j), H) for j in 1:N)
 function ground_states(ham)
     states = map(quantumnumbers(H)) do qn
         Hsec = sector(qn, H)
-        vals, vecs = eigs(representation(ham, Hsec); nev=1, which=:SR)
+        vals, vecs = eigs(representation(ham, Hsec); nev = 1, which = :SR)
         ψ = zeros(ComplexF64, dim(H))
         ψ[indices(Hsec, H)] = vecs[:, 1]
         q = mod(round(Int, angle(dot(ψ, Qop, ψ)) * p / 2π), p)
-        (; q, energy=real(first(vals)), ψ)
+        (; q, energy = real(first(vals)), ψ)
     end
-    return sort!(states; by=s -> s.q)
+    return sort!(states; by = s -> s.q)
 end
 nothing #hide
 
@@ -162,10 +164,10 @@ nothing #hide
 # the Kitaev example, `LowRankMatrix` avoids forming dense $p^N \times p^N$ operators.
 trace_norm(A) = sum(svdvals(A))
 function boundary_modes(states)
-    ket(q) = states[mod(q, p)+1].ψ
+    ket(q) = states[mod(q, p) + 1].ψ
     reductions(a, b) = [partial_trace(LowRankMatrix(ket(a), conj(ket(b))), H => Hn) for Hn in Hmodes]
-    Rshift = [reductions(q + 1, q) for q in 0:(p-1)] # Rshift[q+1][n] = Rₙ(|q+1⟩⟨q|)
-    Rdiag = [reductions(q, q) for q in 0:(p-1)]      # Rdiag[q+1][n] = Rₙ(|q⟩⟨q|)
+    Rshift = [reductions(q + 1, q) for q in 0:(p - 1)] # Rshift[q+1][n] = Rₙ(|q+1⟩⟨q|)
+    Rdiag = [reductions(q, q) for q in 0:(p - 1)]      # Rdiag[q+1][n] = Rₙ(|q⟩⟨q|)
     reduced(n, coeffs, R) = sum(coeffs[k] * R[k][n] for k in 1:p)
     function most_localized(n)
         M = Hermitian([tr(Rshift[a][n]' * Rshift[b][n]) for a in 1:p, b in 1:p])
@@ -174,7 +176,7 @@ function boundary_modes(states)
     end
     cL, cR = most_localized(1), most_localized(N)
     profile(coeffs, R) = [trace_norm(reduced(n, coeffs, R)) / p for n in 1:N]
-    return (; cL, cR, ΓL=profile(cL, Rshift), ΓR=profile(cR, Rshift), Q=profile(ω .^ (0:(p-1)), Rdiag))
+    return (; cL, cR, ΓL = profile(cL, Rshift), ΓR = profile(cR, Rshift), Q = profile(ω .^ (0:(p - 1)), Rdiag))
 end
 nothing #hide
 
@@ -184,11 +186,11 @@ nothing #hide
 # $\operatorname{tr}(\Gamma_L \Gamma_R \Gamma_L^\dagger \Gamma_R^\dagger)/p$, which equals
 # $\omega^\sigma$ for ideal parafermion modes.
 shift = circshift(Matrix(I, p, p), (1, 0)) # Σ_q |q+1⟩⟨q| in the basis of ground states
-function analyze(h; J=1.0)
+function analyze(h; J = 1.0)
     states = ground_states(parafermion_chain(J, h, N))
     modes = boundary_modes(states)
     energies = [s.energy for s in states]
-    return (; h, splitting=maximum(energies) - minimum(energies), modes...)
+    return (; h, splitting = maximum(energies) - minimum(energies), modes...)
 end
 results = analyze.([0.0, 0.3])
 [(; r.h, r.splitting) for r in results]
@@ -197,11 +199,11 @@ results = analyze.([0.0, 0.3])
 # measurement distinguishes the ground states. As $h$ grows, the modes spread into the bulk
 # and $\|Q_n\|$ becomes finite, signalling that local perturbations split the ground states.
 function locality_panel(r)
-    kwargs = (; lw=3, marker=true, markerstrokewidth=2)
-    fig = plot(; xlabel="Site", title="h/J = $(r.h)", frame=:box, xticks=1:N, ylims=(-0.05, 1.1), legend=:top)
-    plot!(fig, 1:N, r.ΓL; label="‖(Γ_L)ₙ‖", kwargs...)
-    plot!(fig, 1:N, r.ΓR; label="‖(Γ_R)ₙ‖", kwargs...)
-    plot!(fig, 1:N, r.Q; label="‖Qₙ‖", linestyle=:dash, kwargs...)
+    kwargs = (; lw = 3, marker = true, markerstrokewidth = 2)
+    fig = plot(; xlabel = "Site", title = "h/J = $(r.h)", frame = :box, xticks = 1:N, ylims = (-0.05, 1.1), legend = :top)
+    plot!(fig, 1:N, r.ΓL; label = "‖(Γ_L)ₙ‖", kwargs...)
+    plot!(fig, 1:N, r.ΓR; label = "‖(Γ_R)ₙ‖", kwargs...)
+    plot!(fig, 1:N, r.Q; label = "‖Qₙ‖", linestyle = :dash, kwargs...)
     return fig
 end
-plot(locality_panel.(results)...; layout=(1, 2), size=(600, 250), margin=5Plots.mm)
+plot(locality_panel.(results)...; layout = (1, 2), size = (600, 250), margin = 5Plots.mm)

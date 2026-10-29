@@ -102,7 +102,7 @@ The result is the compression of the tensor product onto `H`. Unless `skipmissin
 `ArgumentError` if the tensor product of matrices maps a state of `H` outside `H` with nonzero amplitude,
 or if the tensor product of vectors has a nonzero amplitude outside `H`.
 """
-function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); phase_factors=true, kwargs...)
+function generalized_kron(ms, Hs, H::AbstractHilbertSpace = tensor_product(Hs); phase_factors = true, kwargs...)
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the dimensions of `Hs`, got sizes $(map(size, ms)) and dimensions $(map(dim, Hs))."))
     N = ndims(first(ms))
     extend_state = state_mapper(H, Hs)
@@ -120,11 +120,11 @@ generalized_kron(ms, Hs::Pair; kwargs...) = generalized_kron(ms, first(Hs), last
 
 uniform_to_sparse_type(::Type{UniformScaling{T}}) where {T} = SparseMatrixCSC{T,Int}
 uniform_to_sparse_type(::Type{T}) where {T} = T
-tensor_product_type_with_eltype(::Type{SparseMatrixCSC{S,I}}, ::Type{T}) where {S,I,T} = SparseMatrixCSC{T,I}
-tensor_product_type_with_eltype(::Type{SparseVector{S,I}}, ::Type{T}) where {S,I,T} = SparseVector{T,I}
-tensor_product_type_with_eltype(::Type{<:AbstractArray{S,N}}, ::Type{T}) where {S,N,T} = Array{T,N}
+tensor_product_type_with_eltype(::Type{SparseMatrixCSC{S, I}}, ::Type{T}) where {S, I, T} = SparseMatrixCSC{T, I}
+tensor_product_type_with_eltype(::Type{SparseVector{S, I}}, ::Type{T}) where {S, I, T} = SparseVector{T, I}
+tensor_product_type_with_eltype(::Type{<:AbstractArray{S, N}}, ::Type{T}) where {S, N, T} = Array{T, N}
 
-function allocate_tensor_product_result(ms, Hs, H, mapper; phase_factors=true)
+function allocate_tensor_product_result(ms, Hs, H, mapper; phase_factors = true)
     T = Base.promote_eltype(ms...)
     N = ndims(first(ms))
     local_states = map(H -> basisstate(1, H), Hs)
@@ -660,7 +660,7 @@ function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, :
     # factor σ of the pair (this state, the first such state), so that the phase factor of a pair is σ1 * conj(σ2).
     f0 = first(substates)
     fullstates0, amps0 = combine_states((f0, first(barstates)), mapper)
-    hits = Tuple{Int,Int,promote_type(eltype(amps0), partial_trace_phase_factor_eltype(H), partial_trace_phase_factor_eltype(Hsub))}[]
+    hits = Tuple{Int, Int, promote_type(eltype(amps0), partial_trace_phase_factor_eltype(H), partial_trace_phase_factor_eltype(Hsub))}[]
     for fbar in barstates
         empty!(hits)
         ref = nothing
