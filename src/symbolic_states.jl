@@ -211,12 +211,12 @@ A custom basis-state type adds a method for the inputs it accepts; a state is re
 """
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
-function interpret_state(state, space::Union{TransposedSpace,AbstractSubspace})
+function interpret_state(state, space::Union{TransposedSpace, AbstractSubspace})
     B = statetype(space)
     state isa B && return state
     # A subspace may store its states in a different type than its parent, e.g. FixedNumberFockState
     parsed = interpret_state(state, parent(space))
-    parsed isa B ? parsed : B(parsed)
+    return parsed isa B ? parsed : B(parsed)
 end
 basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(_checked_state_index(state, space), space)
 function _checked_state_index(state, space)
