@@ -86,14 +86,21 @@ function gaussian_state(G, H, Hbdg::BdGHilbertSpace)
     dim(H) == 2^N || throw(ArgumentError("The many-body space must have exactly the $N modes of the BdG space."))
     # transpose(G)[i, j] = ⟨Ψ_j' Ψ_i⟩, so ⟨γ' γ⟩ = v' * transpose(G) * v for γ' = quasiparticle(v, Hbdg)
     vals, vecs = eigen(transpose(G) - I / 2, BdGEigen())
-    all(λ -> abs(λ) <= 1 / 2 + sqrt(eps(real(eltype(vals)))), vals) ||
+    tol = sqrt(eps(real(eltype(vals))))
+    all(λ -> abs(λ) <= 1 / 2 + tol, vals) ||
         throw(ArgumentError("The occupations of G must lie in [0, 1]."))
-    return foldl(1:N; init = Matrix{eltype(vecs)}(I, dim(H), dim(H))) do ρ, k
-        creator = representation(quasiparticle(vecs[:, k], Hbdg), H)
-        n = vals[k] + 1 / 2
-        # creator * creator' + creator' * creator = I
-        ((1 - n) * I + (2n - 1) * creator * creator') * ρ
+    creators = [representation(quasiparticle(vecs[:, k], Hbdg), H) for k in 1:N]
+    # Annihilating every quasiparticle in a random vector leaves the vacuum, almost surely nonzero.
+    vacuum = normalize(foldl((ψ, c) -> c' * ψ, creators; init = randn(eltype(vecs), dim(H))))
+    # ρ = W * W', where the columns of W are the quasiparticle occupation states with nonzero
+    # probability, scaled by its square root. The cost scales with the rank of ρ.
+    W = reshape(vacuum, :, 1)
+    for (c, λ) in zip(creators, vals)
+        n = λ + 1 / 2
+        n < tol && continue
+        W = n > 1 - tol ? c * W : [sqrt(1 - n) * W sqrt(n) * (c * W)]
     end
+    return W * W'
 end
 
 @testitem "BdG correlation matrix and parity" begin
