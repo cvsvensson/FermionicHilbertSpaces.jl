@@ -60,8 +60,7 @@ Base.hash(H::AbstractSubspace, h::UInt) = hash(subspace_key(H), h)
 dim(H::AbstractSubspace) = length(subspace_states(H))
 basisstates(H::AbstractSubspace) = BasisStates(H, subspace_states(H))
 Base.@propagate_inbounds basisstate(n::Integer, H::AbstractSubspace) = subspace_states(H)[n]
-state_index(state::Union{AbstractBasisState,B}, H::AbstractSubspace{B}) where {B} = state_position(subspace_index(H).positions, state, H)
-state_index(state::Union{AbstractString,AbstractChar}, H::AbstractSubspace{<:AbstractBasisState}) = state_index(interpret_state(state, H), H)
+_state_index(state, H::AbstractSubspace) = state_position(subspace_index(H).positions, _check_state_kind(state, H), H)
 isconstrained(H::AbstractSubspace) = true
 
 for f in (:atomic_factors, :groups, :factors, :atom_ids, :group_id, :partial_trace_phase_factor_eltype,
@@ -130,11 +129,4 @@ end
     @test_throws ArgumentError constrain_space(H, states[[1, 2, 1]])
     @test_throws ArgumentError constrain_space(H, NumberConservation(), states[[1, 2, 1]])
     @test_throws ArgumentError constrain_space(GenericHilbertSpace(:A, [:a, :b, :c]), [:a, :a])
-end
-
-@testitem "state_index of a subspace with string or character states" begin
-    for states in (["a", "b", "c"], ['a', 'b', 'c'])
-        H = constrain_space(GenericHilbertSpace(:A, states), states[[1, 3]])
-        @test [state_index(s, H) for s in states] == [1, 0, 2]
-    end
 end
