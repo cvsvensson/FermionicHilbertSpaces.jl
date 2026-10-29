@@ -95,13 +95,13 @@ expectation(ham, G, H)
 ```
 
 ## From matrices and eigenvectors back to symbolic operators
-`quadratic_operator(M, H)` turns a matrix on a `BdG` or `SingleParticle` space back into a symbolic operator, and `quasiparticle(v, H)` turns an eigenvector into the operator that creates the corresponding quasiparticle. On the `BdG` space, `quadratic_operator` returns the traceless operator, which differs from the original one by a constant.
+`symbolic_operator(M, H)` turns a matrix on a `BdG` or `SingleParticle` space back into a symbolic operator, and `quasiparticle(v, H)` turns an eigenvector into the operator that creates the corresponding quasiparticle. On the `BdG` space, `symbolic_operator` returns the traceless operator, which differs from the original one by a constant.
 ```@example bdg_quasiparticles
 using FermionicHilbertSpaces, LinearAlgebra
-using FermionicHilbertSpaces: BdGEigen, quasiparticle, quadratic_operator
+using FermionicHilbertSpaces: BdGEigen, quasiparticle, symbolic_operator
 @fermions c
 H = hilbert_space(c, 1:2, BdG())
 M = representation(c[1]' * c[2] + c[1]' * c[2]' + hc, H, :dense)
 vals, vecs = eigen(M, BdGEigen())
-quadratic_operator(M, H), quasiparticle(vecs[:, end], H)
+symbolic_operator(M, H), quasiparticle(vecs[:, end], H)
 ```

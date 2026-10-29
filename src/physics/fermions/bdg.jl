@@ -434,17 +434,17 @@ function quasiparticle(v, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
 end
 
 """
-    quadratic_operator(M, H)
+    symbolic_operator(M, H)
 
 The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space or any matrix on a `SingleParticle` space. On a `BdG` space, `op` is traceless.
 
 ```julia
 @fermions f
 H = hilbert_space(f, 1:2, BdG())
-FermionicHilbertSpaces.quadratic_operator(representation(f[1]' * f[1], H, :dense), H) # -0.5I + f†[1]*f[1]
+FermionicHilbertSpaces.symbolic_operator(representation(f[1]' * f[1], H, :dense), H) # -0.5I + f†[1]*f[1]
 ```
 """
-function quadratic_operator(M, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
+function symbolic_operator(M, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
     creators = _nambu_creators(H)
     size(M) == (length(creators), length(creators)) || throw(DimensionMismatch("The matrix has size $(size(M)), but the space has dimension $(length(creators))."))
     terms = (M[a, b] * ca * cb' for (a, ca) in zip(axes(M, 1), creators), (b, cb) in zip(axes(M, 2), creators) if !iszero(M[a, b]))
@@ -453,7 +453,7 @@ end
 
 @testitem "BdG quadratic operators and quasiparticles" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: BdGEigen, quasiparticle, quadratic_operator
+    using FermionicHilbertSpaces: BdGEigen, quasiparticle, symbolic_operator
     @fermions f
     N = 3
     H = hilbert_space(f, 1:N, BdG())
@@ -464,8 +464,8 @@ end
     op = sum(f[n]' * h[n, m] * f[m] for n in 1:N, m in 1:N) +
         sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:N, m in 1:N)
     M = representation(op, H, :dense)
-    @test representation(quadratic_operator(M, H), H) ≈ M
-    @test representation(quadratic_operator(M, H) - op, Hmb, :dense) ≈ -tr(h) / 2 * I
+    @test representation(symbolic_operator(M, H), H) ≈ M
+    @test representation(symbolic_operator(M, H) - op, Hmb, :dense) ≈ -tr(h) / 2 * I
 
     vals, vecs = eigen(M, BdGEigen())
     Hmat = representation(op, Hmb, :dense)
@@ -477,11 +477,11 @@ end
 
 @testitem "Single particle quadratic operators and quasiparticles" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: quasiparticle, quadratic_operator
+    using FermionicHilbertSpaces: quasiparticle, symbolic_operator
     @fermions f
     H = hilbert_space(f, 1:3, SingleParticle())
     h = rand(ComplexF64, 3, 3) + hc
-    op = quadratic_operator(h, H)
+    op = symbolic_operator(h, H)
     @test representation(op, H) ≈ h
     Hmat = representation(op, hilbert_space(f, 1:3), :dense)
     vals, vecs = eigen(Hermitian(h))
