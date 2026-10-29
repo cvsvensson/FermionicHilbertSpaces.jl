@@ -501,7 +501,7 @@ end
     @fermions c
     N = 3
     Hopen, _, _, left, right = open_system(c, 1:N)
-    ham = sum((0.3n) * c[n]' * c[n] for n in 1:N) + sum(0.2im * c[n]' * c[n+1] + hc for n in 1:(N-1))
+    ham = sum((0.3n) * c[n]' * c[n] for n in 1:N) + sum(0.2im * c[n]' * c[n + 1] + hc for n in 1:(N - 1))
     liouvillian = -1im * (left(ham) - right(ham)) + sum(dissipator(sqrt(0.1n) * c[n]) for n in 1:N)
     @test lazy_matches(liouvillian + 0.5, Hopen)
     @test lazy_matches(left(ham) + 2, Hopen)
