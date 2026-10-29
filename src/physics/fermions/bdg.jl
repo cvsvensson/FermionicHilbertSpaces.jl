@@ -6,14 +6,12 @@ NambuState(i::Integer, hole::Bool) = NambuState(SingleParticleState(i), hole)
 Base.:(==)(n1::NambuState, n2::NambuState) = n1.state == n2.state && n1.hole == n2.hole
 Base.hash(n::NambuState, h::UInt) = hash(n.hole, hash(n.state, h))
 
+# Ψ' m Ψ == Ψ' m_ph Ψ + tr(m) / 2 by the anticommutation relations, since the vector of adjoints Ψ' equals τx Ψ, and
+# m_ph = -τx transpose(m_ph) τx is the unique particle-hole symmetric representative.
 function normal_order_to_bdg(m::AbstractMatrix)
-    n = size(m, 1)
-    h = m[1:(n÷2), 1:(n÷2)] / 2
-    δ = m[1:(n÷2), (n÷2+1):end]
-    δd = m[(n÷2+1):end, 1:(n÷2)]
-    Δ = (δ - transpose(δ) + (δd - transpose(δd))') / 4
-    [h Δ
-        -conj(Δ) -conj(h)]
+    n = size(m, 1) ÷ 2
+    swap = [(n+1):2n; 1:n]
+    return (m - permutedims(m)[swap, swap]) / 2
 end
 
 struct BdGHilbertSpace{H}
@@ -34,12 +32,16 @@ struct BdG end
 """
     hilbert_space(f::SymbolicFermionBasis, labels, ::BdG)
 
-The Nambu space with one particle state and one hole state for each of the modes `f[l]`, `l in labels`. The matrix representation of a quadratic operator is the Bogoliubov-de Gennes matrix
+The Nambu space with one particle state and one hole state for each of the modes `f[l]`, `l in labels`. With the Nambu vector `Ψ = [f[l] for l in labels; f[l]' for l in labels]`, the matrix representation of a quadratic operator `op` is the unique matrix `M` with the particle-hole symmetry `M == -τx * transpose(M) * τx`, where `τx = [0 I; I 0]`, such that
 
-    [H   Δ
-    -Δ* -H*]
+    op = E + sum(M[i, j] * Ψ[i]' * Ψ[j] for i in eachindex(Ψ), j in eachindex(Ψ))
 
-where `H` is hermitian and `Δ` is antisymmetric, without any contribution from the identity operator. Operators that are not quadratic in the fermions cannot be represented. The space wraps a constrained fermionic space, available through `parent`, and does not combine with tensor products or partial traces.
+for some scalar `E`. This holds for any quadratic operator, hermitian or not, and `op * Ψ[i] - Ψ[i] * op == -2 * (M * Ψ)[i]`. For `op = Σᵢⱼ h[i, j] f[i]' f[j] + (Δ[i, j] f[i]' f[j]' + h.c.) / 2` with hermitian `h` and antisymmetric `Δ`,
+
+    M = [h   Δ
+        -Δ* -h*] / 2
+
+Operators that are not quadratic in the fermions cannot be represented. The space wraps a constrained fermionic space, available through `parent`, and does not combine with tensor products or partial traces.
 """
 hilbert_space(f::SymbolicFermionBasis, labels, ::BdG) = BdGHilbertSpace(f, labels)
 @deprecate bdg_hilbert_space(f, labels) hilbert_space(f, labels, BdG())
@@ -98,6 +100,35 @@ end
         sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:2, m in 1:2)
     bdg_ham2 = representation(op, H)
     @test bdg_ham ≈ bdg_ham2
+end
+
+@testitem "BdG matrix of non-hermitian operators" begin
+    using LinearAlgebra
+    @fermions f
+    N = 3
+    H = hilbert_space(f, 1:N, BdG())
+    Ψ = [[f[i] for i in 1:N]; [f[i]' for i in 1:N]]
+    τx = [0I I(N); I(N) 0I]
+    c() = rand(-5:5) // 1 + rand(-5:5) // 1 * im
+    op = sum(c() * f[i]' * f[j] + c() * f[i]' * f[j]' + c() * f[i] * f[j] for i in 1:N, j in 1:N)
+    M = representation(op, H, :dense)
+    @test M == -τx * transpose(M) * τx
+    rest = op - sum(M[i, j] * Ψ[i]' * Ψ[j] for i in 1:2N, j in 1:2N)
+    @test FermionicHilbertSpaces.NonCommutativeProducts.isscalar(rest)
+end
+
+@testitem "BdG equation of motion" begin
+    @fermions f
+    N = 3
+    H = hilbert_space(f, 1:N, BdG())
+    Hfock = hilbert_space(f, 1:N)
+    Ψ = [[f[i] for i in 1:N]; [f[i]' for i in 1:N]]
+    op = sum(rand(ComplexF64) * f[i]' * f[j] + rand(ComplexF64) * f[i]' * f[j]' + rand(ComplexF64) * f[i] * f[j] for i in 1:N, j in 1:N)
+    M = representation(op, H, :dense)
+    rep(x) = representation(x, Hfock, :dense)
+    for k in 1:2N
+        @test rep(op * Ψ[k] - Ψ[k] * op) ≈ -2 * sum(M[k, j] * rep(Ψ[j]) for j in 1:2N)
+    end
 end
 
 @testitem "BdG representation formats" begin
