@@ -1,9 +1,31 @@
 abstract type AbstractFermionSym <: AbstractSym end
 
+"""
+    EagerDenseRepr{T}()
+    EagerDenseRepr()
+
+Format argument of [`representation`](@ref) that builds a dense `Matrix` with element type `T`.
+Without `T`, the element type follows from the operator, see [`mat_eltype`](@ref).
+"""
 struct EagerDenseRepr{T} end
+"""
+    EagerSparseRepr{T}()
+    EagerSparseRepr()
+
+Format argument of [`representation`](@ref) that builds a `SparseMatrixCSC` with element type `T`.
+This is the default format. Without `T`, the element type follows from the operator, see [`mat_eltype`](@ref).
+"""
 struct EagerSparseRepr{T} end
 EagerSparseRepr() = EagerSparseRepr{Missing}()
 EagerDenseRepr() = EagerDenseRepr{Missing}()
+"""
+    PartitionedSparseRepr(; backend, row_partition=nothing, col_partition=nothing, nparts=4)
+
+Format argument of [`representation`](@ref) that builds a distributed sparse matrix with
+PartitionedArrays.jl. `backend` is applied to the part indices, for example `DebugArray`
+or `distribute_with_mpi`. Without explicit partitions, rows and columns are split uniformly
+into `nparts` parts. Requires `using PartitionedArrays`.
+"""
 struct PartitionedSparseRepr{B,R,C}
     backend::B
     row_partition::R
@@ -14,16 +36,44 @@ end
 PartitionedSparseRepr(; backend=nothing, row_partition=nothing, col_partition=nothing, nparts::Int=4) =
     PartitionedSparseRepr{typeof(backend),typeof(row_partition),typeof(col_partition)}(backend, row_partition, col_partition, nparts)
 
+"""
+    LazyRepr(input=missing)
+
+Format argument of [`representation`](@ref) that gives a matrix-free `SciMLOperators`
+operator wrapping a [`LazyOperator`](@ref), the same as `:lazy`. `input` is the kind of
+vector the operator is prepared for: `:dense`, `:sparse`, or an array whose type and size
+are used. With `missing`, a dense vector is used for small spaces and a sparse one otherwise.
+"""
 struct LazyRepr{T}
     input::T
 end
 LazyRepr() = LazyRepr(missing)
 
 abstract type AbstractChunkingStrategy end
+"""
+    NoChunking()
+
+Chunking strategy for the `chunking` keyword of [`representation`](@ref) that builds the
+matrix, or applies a lazy operator, serially. This is the default.
+"""
 struct NoChunking <: AbstractChunkingStrategy end
+"""
+    TermChunking(scheduler)
+
+Chunking strategy for the `chunking` keyword of [`representation`](@ref) that runs in
+parallel with an OhMyThreads.jl `scheduler`. Lazy operators split the work by terms of the
+operator. Requires `using OhMyThreads`.
+"""
 struct TermChunking{S} <: AbstractChunkingStrategy
     scheduler::S
 end
+"""
+    StateChunking(scheduler)
+
+Chunking strategy for the `chunking` keyword of [`representation`](@ref) that runs in
+parallel with an OhMyThreads.jl `scheduler`. Lazy operators split the work by basis states.
+Requires `using OhMyThreads`.
+"""
 struct StateChunking{S} <: AbstractChunkingStrategy
     scheduler::S
 end
@@ -36,7 +86,15 @@ function mat_eltype(::NCMul{C,S,F}) where {C,S,F}
 end
 mat_eltype(::Type{NCMul{C,S,F}}) where {C,S,F} = promote_type(C, mat_eltype(S))
 mat_eltype(::S) where {S} = mat_eltype(S)
-mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors if a complex number is expected. Override it for specific types if needed.
+"""
+    mat_eltype(::Type{O})
+
+Element type of the matrix elements of a symbolic operator of type `O`. Matrix
+representations promote it with the coefficients of the expression. The fallback is
+`Float64`, so an operator type with complex matrix elements must add a method, for example
+`mat_eltype(::Type{<:MyOp}) = ComplexF64`.
+"""
+mat_eltype(::Type{S}) where {S} = Float64
 
 
 function operator_indices_and_amplitudes!(accumulator, op, space::AbstractHilbertSpace; kwargs...)
@@ -96,6 +154,15 @@ function _apply_local_operators(op, state, space, precomp)
     apply_local_operators(op, state, space, precomp; transpose=false)
 end
 
+"""
+    apply_local_operators(op::NCMul, state, space, precomps; transpose) -> (newstate, amplitude)
+
+Apply the product `op`, including its coefficient, to the basis state `state` of `space`.
+`precomps` holds one value per factor, from [`_precomputation_before_operator_application`](@ref).
+With `transpose=true`, apply the transpose of `op` instead. The generic method applies the factors one by one with
+[`apply_local_operator`](@ref). A method for products of one operator type can be faster,
+as for fermions, where the whole product acts on a Fock state with bit operations.
+"""
 function apply_local_operators(op::NCMul, state, space, precomps; transpose)
     # Accumulate in the element type of the matrix so that `amp` keeps one type through the loop.
     T = mat_eltype(op)
