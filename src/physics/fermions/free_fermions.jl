@@ -16,7 +16,7 @@ module FreeFermions
         hilbert_space, matrix_representation, mode_ordering, modes, representation
     using LinearAlgebra: LinearAlgebra, Diagonal, Eigen, Hermitian, Symmetric, UniformScaling, I,
         det, eigen, issymmetric, normalize, svd
-    using NonCommutativeProducts: NonCommutativeProducts, @nc, AddTerms, NCAdd, NCMul, NCterms, Swap
+    using NonCommutativeProducts: NonCommutativeProducts, NCAdd, NCMul, NCterms
 
     using TestItems: @testitem
 

@@ -1,48 +1,40 @@
-# Normal ordering relative to a Gaussian state with vanishing one-point function. `Unordered(x)` is a factor that is
-# not yet absorbed and `Fluctuation(x)` a factor of the product :…: that is normal ordered relative to the state, so
-# that x :y…: = λ :y x…: + ⟨xy⟩ :…:. Products end in `OrderEnd`, where the last unordered factor x becomes :x:.
-struct Unordered{X, C}
-    x::X
-    contraction::C
-end
-struct Fluctuation{X}
-    x::X
-end
-struct OrderEnd end
-@nc Unordered Fluctuation OrderEnd
-Base.:(==)(a::Fluctuation, b::Fluctuation) = a.x == b.x
-Base.hash(a::Fluctuation, h::UInt) = hash(a.x, hash(Fluctuation, h))
-
-NonCommutativeProducts.mul_effect(a::Unordered, b::Fluctuation) = AddTerms((Swap(exchange_phase(a.x, b.x)), a.contraction(a.x, b.x)))
-NonCommutativeProducts.mul_effect(a::Unordered, ::OrderEnd) = Fluctuation(a.x) * OrderEnd()
-# :xx: = 0 for fermions and Majoranas alike
-NonCommutativeProducts.mul_effect(a::Fluctuation, b::Fluctuation) = a == b ? 0 : isless(b.x, a.x) ? Swap(exchange_phase(a.x, b.x)) : nothing
-NonCommutativeProducts.mul_effect(::Union{Unordered, Fluctuation, OrderEnd}, ::Union{Unordered, Fluctuation, OrderEnd}) = nothing
-
-# Each term of `op` is expanded on its own, since the expansion of the whole sum is much larger than what is kept of it.
+# Each term of `op` is expanded on its own, so that the factors of every expansion have a single concrete type.
 # A sum is traversed through its dictionary, whose entries have a concrete type, unlike those of `termpairs`.
 sum_over_terms(f, op::NCAdd) = mapreduce(((k, c),) -> f(k.factors, c), +, op.dict; init = f((), op.coeff))
 sum_over_terms(f, op) = mapreduce(((fs, c),) -> f(fs, c), +, NonCommutativeProducts.termpairs(1 * op); init = 0)
-# The product of `fs` as a sum of products of `Fluctuation`s, each followed by `OrderEnd`, with `contraction(x, y) = ⟨xy⟩`.
-# The sorter applies the Wick rules, so it must run even when autosort is disabled.
-state_normal_order(fs, contraction) = NonCommutativeProducts.with_autosort(() -> prod(x -> Unordered(x, contraction), fs; init = 1) * OrderEnd(), true)
-fluctuations(fs) = [f.x for f in fs if f isa Fluctuation]
 
-function wick_expectation(op, contraction, keep = Returns(true))
+# Wick's theorem for a state with vanishing one-point function: c * prod(fs) is the sum over pairings of some factors
+# of the products of their contractions `contraction(x, y) = ⟨xy⟩` times the normal ordered product :free…: of the
+# others, with the phase of moving the pairs to the front. Returns the sum of `f(coeff, free)` over the terms with at
+# most `maxfree` uncontracted factors.
+function wick_sum(f, c, fs, contraction, maxfree, free = fs[1:0])
+    isempty(fs) && return f(c, free)
+    x, rest = fs[1], fs[2:end]
+    s = length(free) < maxfree ? wick_sum(f, c, rest, contraction, maxfree, [free; x]) : 0
+    for j in eachindex(rest)
+        y = rest[j]
+        λ = _phase(free, x) * _phase(free, y) * _phase(view(rest, 1:(j - 1)), y)
+        s += wick_sum(f, λ * c * contraction(x, y), deleteat!(copy(rest), j), contraction, maxfree, free)
+    end
+    return s
+end
+_phase(xs, y) = prod(x -> exchange_phase(x, y), xs; init = 1)
+
+# The coefficients are multiplied by `unit`, the element type of the correlation matrix, before the expansion, so that
+# operators with different coefficient types share its compiled code.
+function wick_expectation(op, contraction, keep = Returns(true), unit = 1)
     return sum_over_terms(op) do fs, c
         keep(fs) || return zero(c)
-        length(fs) == 2 && return c * contraction(fs[1], fs[2])
-        terms = NonCommutativeProducts.termpairs(state_normal_order(fs, contraction))
-        return c * sum((d for (gs, d) in terms if isempty(fluctuations(gs))); init = 0)
+        return wick_sum((d, _) -> d, c * unit, fs, contraction, 0)
     end
 end
-function _mean_field(op, contraction, keep = Returns(true))
+function _mean_field(op, contraction, keep = Returns(true), unit = 1)
     return sum_over_terms(op) do fs, c
         keep(fs) || return 0
+        c *= unit
         length(fs) <= 2 && return c * prod(fs; init = 1)
-        return c * sum_over_terms(state_normal_order(fs, contraction)) do gs, d
-            xs = fluctuations(gs)
-            length(xs) > 2 ? 0 : d * (prod(xs; init = 1) - (length(xs) == 2 ? contraction(xs...) : 0))
+        return wick_sum(c, fs, contraction, 2) do d, xs
+            length(xs) == 2 ? d * (xs[1] * xs[2] - contraction(xs[1], xs[2])) : d * prod(xs; init = 1)
         end
     end
 end
@@ -71,7 +63,7 @@ function _in_space(fs, H, projection)
     return false
 end
 function expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}; projection = false)
-    return zero(eltype(G)) + wick_expectation(op, _contraction(G, H), fs -> _in_space(fs, H, projection))
+    return zero(eltype(G)) + wick_expectation(op, _contraction(G, H), fs -> _in_space(fs, H, projection), one(eltype(G)))
 end
 
 """
@@ -88,7 +80,7 @@ H = hilbert_space(f, 1:2, SingleParticle())
 mean_field(f[1]' * f[1] * f[2]' * f[2], [0.5 0; 0 0.25], H) # 0.25 f[1]' f[1] + 0.5 f[2]' f[2] - 0.125
 ```
 """
-mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}; projection = false) = _mean_field(op, _contraction(G, H), fs -> _in_space(fs, H, projection))
+mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}; projection = false) = _mean_field(op, _contraction(G, H), fs -> _in_space(fs, H, projection), one(eltype(G)))
 
 @testitem "Wick expectation values" begin
     using FermionicHilbertSpaces.FreeFermions
