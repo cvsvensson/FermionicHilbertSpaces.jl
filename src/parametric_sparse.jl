@@ -19,16 +19,16 @@ update_coefficients!(A, ham(0.5, 3.0))
 A.matrix ≈ representation(ham(0.5, 3.0), H)
 ```
 """
-struct ParametricSparseMatrix{T,K,A}
-    matrix::SparseMatrixCSC{T,Int}
-    monomials::Dict{K,Int}
+struct ParametricSparseMatrix{T, K, A}
+    matrix::SparseMatrixCSC{T, Int}
+    monomials::Dict{K, Int}
     identity_index::Int
     contribution_ptr::Vector{Int}
     contribution_monomial::Vector{Int32}
     contribution_amp::Vector{A}
 end
 
-function ParametricSparseMatrix(_op, space::AbstractHilbertSpace; projection=false, T=mat_eltype(_op))
+function ParametricSparseMatrix(_op, space::AbstractHilbertSpace; projection = false, T = mat_eltype(_op))
     op = _as_ncadd(_op)
     bases = group_ids(space)
     all(in(bases), symbolic_groups(op)) || throw(ArgumentError("The symbolic bases of the operator must match the atomic groups of the provided space, got operator groups $(symbolic_groups(op)) and space groups $bases."))
@@ -69,10 +69,10 @@ function _union_pattern(T, rows, cols, d)
     rowval = Int[]
     ptr = Int[]
     for (j, k) in enumerate(perm)
-        if j == 1 || rows[k] != rows[perm[j-1]] || cols[k] != cols[perm[j-1]]
+        if j == 1 || rows[k] != rows[perm[j - 1]] || cols[k] != cols[perm[j - 1]]
             push!(rowval, rows[k])
             push!(ptr, j)
-            colptr[cols[k]+1] += 1
+            colptr[cols[k] + 1] += 1
         end
     end
     push!(ptr, length(perm) + 1)
@@ -86,7 +86,7 @@ end
 function _counting_sort(keys, d, order)
     next = zeros(Int, d + 1)
     next[1] = 1
-    foreach(k -> next[keys[k]+1] += 1, order)
+    foreach(k -> next[keys[k] + 1] += 1, order)
     cumsum!(next, next)
     sorted = Vector{Int}(undef, length(order))
     for k in order
@@ -109,7 +109,7 @@ This is a method of `SciMLOperators.update_coefficients!`, which is not exported
 qualified, or import it from `SciMLOperators`.
 """
 update_coefficients!(A::ParametricSparseMatrix, op) = update_coefficients!(A, _as_ncadd(op))
-function update_coefficients!(A::ParametricSparseMatrix{T}, op::NCAdd) where T
+function update_coefficients!(A::ParametricSparseMatrix{T}, op::NCAdd) where {T}
     coeffs = zeros(T, length(A.monomials) + !iszero(A.identity_index))
     for (m, c) in op.dict
         i = get(A.monomials, m, 0)
@@ -124,7 +124,7 @@ function update_coefficients!(A::ParametricSparseMatrix{T}, op::NCAdd) where T
     ptr, monomial, amp = A.contribution_ptr, A.contribution_monomial, A.contribution_amp
     for n in eachindex(nzval)
         v = zero(T)
-        for k in ptr[n]:ptr[n+1]-1
+        for k in ptr[n]:(ptr[n + 1] - 1)
             v += coeffs[monomial[k]] * amp[k]
         end
         nzval[n] = v
@@ -137,8 +137,8 @@ end
     import FermionicHilbertSpaces: update_coefficients!
     @fermions f
     H = hilbert_space(f, 1:4, NumberConservation(2))
-    ham(t, U, μ) = sum(t * f[n]' * f[n+1] + hc for n in 1:3) + U * f[1]' * f[1] * f[2]' * f[2] + μ * f[3]' * f[3] + 0.2
-    A = ParametricSparseMatrix(ham(1.0, 2.0, 0.5), H; T=ComplexF64)
+    ham(t, U, μ) = sum(t * f[n]' * f[n + 1] + hc for n in 1:3) + U * f[1]' * f[1] * f[2]' * f[2] + μ * f[3]' * f[3] + 0.2
+    A = ParametricSparseMatrix(ham(1.0, 2.0, 0.5), H; T = ComplexF64)
     @test A.matrix ≈ representation(ham(1.0, 2.0, 0.5), H)
     update_coefficients!(A, ham(0.3im, -1.0, 0.7))
     @test A.matrix ≈ representation(ham(0.3im, -1.0, 0.7), H)
