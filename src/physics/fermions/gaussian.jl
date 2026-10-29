@@ -4,7 +4,7 @@
 The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on the many-body space `H`, where `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩` for a quadratic operator `op`. A BdG space over a subset of the modes gives the reduced correlation matrix.
 
 ```jldoctest
-julia> @fermions f;
+julia> using FermionicHilbertSpaces; @fermions f;
 
 julia> H = hilbert_space(f, 1:2);
 
@@ -30,7 +30,7 @@ end
 The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground state, where `F` is the result of `eigen(A, BdGEigen())`, assuming no zero-energy modes. It equals `correlation_matrix(ψ, H, Hbdg)` for the many-body ground state `ψ`.
 
 ```jldoctest
-julia> using LinearAlgebra; @fermions f;
+julia> using FermionicHilbertSpaces, LinearAlgebra; @fermions f;
 
 julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), :dense);
 
@@ -50,7 +50,7 @@ end
 The fermionic parity, `1` or `-1`, of the BdG ground state, where `F` is the result of `eigen(A, BdGEigen())`, assuming no zero-energy modes. It equals the parity of the many-body ground state.
 
 ```jldoctest
-julia> using LinearAlgebra; @fermions f;
+julia> using FermionicHilbertSpaces, LinearAlgebra; @fermions f;
 
 julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), :dense);
 
