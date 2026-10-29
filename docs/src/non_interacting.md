@@ -93,10 +93,10 @@ h = representation(ham, H, :dense)
 G = transpose(inv(I + exp(10 * h)))
 expectation(ham, G, H)
 ```
-`mean_field(op, G, H)` replaces every product in `op` by its terms of order at most two in the fluctuations around the state, the Hartree, Fock and pairing terms. The result is of degree at most two, so for an even `op` it can be represented on `H`, and it has the same expectation value as `op`:
+`FermionicHilbertSpaces.mean_field(op, G, H)` replaces every product in `op` by its terms of order at most two in the fluctuations around the state, the Hartree, Fock and pairing terms. The result is of degree at most two, so for an even `op` it can be represented on `H`, and it has the same expectation value as `op`:
 ```@example expectation
 U = 2 * c[1]' * c[1] * c[2]' * c[2]
-mf = mean_field(U, G, H)
+mf = FermionicHilbertSpaces.mean_field(U, G, H)
 expectation(mf, G, H) ≈ expectation(U, G, H)
 ```
 
