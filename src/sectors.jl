@@ -14,7 +14,7 @@ struct SectorHilbertSpace{B,P,Q,C,I} <: AbstractSubspace{B,P}
 end
 SectorHilbertSpace(parent, ordered_basis_states, qn_to_states, constraint, index) = SectorHilbertSpace{eltype(ordered_basis_states),typeof(parent),keytype(qn_to_states),typeof(constraint),typeof(index)}(parent, ordered_basis_states, qn_to_states, constraint, index)
 SectorHilbertSpace(::AbstractSubspace, ordered_basis_states, qn_to_states, constraint, index) = throw(nested_subspace_error())
-SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint; selected_by=constraint) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, build_subspace_index(index_constraint(selected_by, space), space, ordered_basis_states))
+SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint; selected_by = constraint) = SectorHilbertSpace(space, ordered_basis_states, qn_to_states, constraint, build_subspace_index(index_constraint(selected_by, space), space, ordered_basis_states))
 
 Base.parent(H::SectorHilbertSpace) = H.parent
 subspace_states(H::SectorHilbertSpace) = H.ordered_basis_states
@@ -24,7 +24,7 @@ rewrap(H::SectorHilbertSpace, parent) = SectorHilbertSpace(parent, H.ordered_bas
 
 sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
 # `selected_by` is what selected `states`, which can be more than `constraint`, for example in a tensor product of constrained spaces.
-function sector_space(space, states, sector_function, constraint; selected_by=constraint)
+function sector_space(space, states, sector_function, constraint; selected_by = constraint)
     B = statetype(space)
     parent, members = unnest(space, states)
     selected_by = coalesce(combine_constraints(own_constraint(space), selected_by), NoSymmetry())
@@ -33,7 +33,7 @@ function sector_space(space, states, sector_function, constraint; selected_by=co
         ismissing(qn) || return _sector_space(parent, OrderedDict(qn => members), constraint; selected_by)
     end
     _qntostates = groupby(sector_function, members, B)
-    _sector_space(parent, _qntostates, constraint; selected_by)
+    return _sector_space(parent, _qntostates, constraint; selected_by)
 end
 function _group(f::F, itr, ::Type{B}) where {F,B}
     K = nonmissingtype(Base.promote_op(f, eltype(itr)))
@@ -71,9 +71,9 @@ function groupby(f::F, itr, ::Type{B}; sortkeys=:auto, sortvals=false) where {F,
     return OrderedDict{K,Vector{B}}(k => d[k] for k in ks)
 end
 
-function _sector_space(space, qn_to_states::OrderedDict{Q,<:AbstractVector{B}}, constraint; selected_by=constraint) where {Q,B}
+function _sector_space(space, qn_to_states::OrderedDict{Q, <:AbstractVector{B}}, constraint; selected_by = constraint) where {Q, B}
     ordered_states::Vector{B} = length(qn_to_states) == 1 ? only(values(qn_to_states)) : vcat(values(qn_to_states)...)
-    SectorHilbertSpace(space, ordered_states, qn_to_states, constraint; selected_by)
+    return SectorHilbertSpace(space, ordered_states, qn_to_states, constraint; selected_by)
 end
 
 

@@ -153,14 +153,15 @@ end
     selected = Ref(0)
     keep(state) = isodd(state.f)
     label(state) = isodd(state.f)
-    function default_subspace_index(::Union{FilterConstraint{typeof(keep)},SectorConstraint{<:FilterConstraint{typeof(label)}},SectorConstraint{<:FilterConstraint{<:Any,<:Tuple{typeof(label)}}}}, parent, states)
+    function default_subspace_index(::Union{FilterConstraint{typeof(keep)}, SectorConstraint{<:FilterConstraint{typeof(label)}}, SectorConstraint{<:FilterConstraint{<:Any, <:Tuple{typeof(label)}}}}, parent, states)
         selected[] += 1
         LinearSearch(states)
     end
     Hlabel12 = constrain_space(hilbert_space(f, 1:2), SectorConstraint(label))
     for build in (() -> constrain_space(H, FilterConstraint(keep)), () -> constrain_space(H, SectorConstraint(label)),
-        () -> tensor_product(hilbert_space(f, 1:2), hilbert_space(f, 3:4); constraint=FilterConstraint(keep)),
-        () -> tensor_product(Hlabel12, hilbert_space(f, 3:4)))
+            () -> tensor_product(hilbert_space(f, 1:2), hilbert_space(f, 3:4); constraint = FilterConstraint(keep)),
+            () -> tensor_product(Hlabel12, hilbert_space(f, 3:4)),
+        )
         before = selected[]
         Hsub = build()
         @test selected[] > before

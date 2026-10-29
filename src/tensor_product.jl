@@ -30,9 +30,9 @@ function tensor_product(spaces; constraint=NoSymmetry())
         combined = _combined_sector_constraint(spaces)
         if ismissing(combined)
             isnothing(factor_states) && return space
-            return ConstrainedSpace(space, factor_states; constraint=coalesce(factors, NoSymmetry()))
+            return ConstrainedSpace(space, factor_states; constraint = coalesce(factors, NoSymmetry()))
         end
-        return sector_space(space, states, sector_function(combined, space), combined; selected_by=coalesce(factors, NoSymmetry()))
+        return sector_space(space, states, sector_function(combined, space), combined; selected_by = coalesce(factors, NoSymmetry()))
     end
 
     constraint = supply_missing_constraint_info(constraint, space, spaces)
@@ -42,9 +42,9 @@ function tensor_product(spaces; constraint=NoSymmetry())
         return sector_space(space, states, sector_function(constraint, space), constraint; selected_by)
     elseif supports_filtering(constraint)
         filtered_states = collect(Iterators.filter(filter_function(constraint, space), states))
-        return ConstrainedSpace(space, filtered_states; constraint=selected_by)
+        return ConstrainedSpace(space, filtered_states; constraint = selected_by)
     else
-        return ConstrainedSpace(space, states; constraint=selected_by)
+        return ConstrainedSpace(space, states; constraint = selected_by)
     end
 end
 
