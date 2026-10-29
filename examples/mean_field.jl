@@ -3,7 +3,7 @@
 # looks for a state that reproduces itself. Here we solve the Hartree-Fock-Bogoliubov self-consistency of the Hubbard
 # model in the BdG space and compare the result with exact diagonalization.
 using FermionicHilbertSpaces, LinearAlgebra
-using FermionicHilbertSpaces: correlation_matrix, BdGEigen
+using FermionicHilbertSpaces.FreeFermions
 
 # ## The Hubbard ring
 # We take a ring of `L` sites with spin. At `μ = U/2` the model is particle-hole symmetric, so the ring is half filled.
