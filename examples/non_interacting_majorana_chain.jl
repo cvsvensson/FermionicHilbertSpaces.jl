@@ -48,8 +48,8 @@ display(p1)
 Vzs = [Vz_c * 0.5, Vz_c * 1.2]  # Trivial and topological
 densities = map(Vzs) do Vz
     symham = ham(c, N; μ, t, Δ, Vz, α)
-    vals, vecs = eigen(representation(symham, Hbdg, :dense), BdGEigen())
-    # With 2N modes, column 2N has the non-positive energy closest to zero. The first half of each column holds the c' coefficients and the second half the c coefficients.
+    _, vecs = eigen(representation(symham, Hbdg, :dense), BdGEigen())
+    # Column 2N has the non-positive energy closest to zero
     low_energy_mode = vecs[:, 2N]
     spin_avg = map(norm, Iterators.partition(low_energy_mode, 2))
     density = abs2.(spin_avg[1:N]) .+ abs2.(spin_avg[N+1:end])
