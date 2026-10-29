@@ -84,7 +84,7 @@ cdag[indices(3, Hmix), indices(2, Hmix)]
 ```
 
 ## Reduced density matrix and entropy
-`subregion(HA, Hsec)` keeps the states of `HA` that appear in `Hsec`. The state should have definite parity for the reduced density matrix to be physical.
+`subregion(HA, Hsec)` keeps the states of `HA` that appear in `Hsec`.
 ```@example cheat
 HA = hilbert_space(f, 1:2)
 ρA = partial_trace(ψ, Hsec => subregion(HA, Hsec))
