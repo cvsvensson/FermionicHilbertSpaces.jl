@@ -6,7 +6,7 @@ import Literate
 
 DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilbertSpaces); recursive=true)
 
-literate_files = ["examples/kitaev_chain.jl", "examples/free_fermions.jl", "examples/floquet_tutorial.jl", "examples/open_system_lindblad.jl", "examples/spin_chain.jl", "examples/bosons.jl", "examples/clock_operators.jl", "examples/translation_symmetry.jl"]
+literate_files = ["examples/kitaev_chain.jl", "examples/free_fermions.jl", "examples/floquet_tutorial.jl", "examples/open_system_lindblad.jl", "examples/spin_chain.jl", "examples/bosons.jl", "examples/clock_operators.jl", "examples/translation_symmetry.jl", "examples/mean_field.jl"]
 output_directory = "docs/src/literate_output"
 for file in literate_files
     Literate.markdown(file, output_directory; documenter=true, execute=false)
@@ -39,7 +39,8 @@ makedocs(;
         ],
         "Non-interacting systems" => [
             "Non-interacting hilbert spaces" => "non_interacting.md",
-            "Example: Free fermions" => "literate_output/free_fermions.md"],
+            "Example: Free fermions" => "literate_output/free_fermions.md",
+            "Example: Self-consistent mean-field theory" => "literate_output/mean_field.md"],
         "Misc" => "misc.md",
         "Extending and performance hooks" => "extending.md",
         "Functions" => "docstrings.md",
