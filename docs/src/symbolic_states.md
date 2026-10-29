@@ -26,6 +26,16 @@ vf("10")'
 
 Other space types parse their labels differently. Bosons use an occupation-number string, e.g. `vb("3")` for a boson space `vb = Kets(hilbert_space(b, 1))`. For a `ProductSpace`, pass one label per factor, either as separate arguments or as a tuple: `vfb("0", "2")` for a fermion factor and a boson factor combined with `tensor_product`.
 
+`Kets(H)` can also be indexed and iterated. `vf[i]` is the ket of the `i`-th basis state, in the order of `basisstates(H)` and of the vector and matrix representations:
+
+```@example states
+vf[2], vf[end]
+```
+
+```@example states
+foreach(println, vf)
+```
+
 ## Algebra
 
 Multiplying a bra and a ket gives their overlap (`0` if the states differ):
@@ -58,7 +68,7 @@ vf("10")' * f[2]
 
 ## Numeric vectors and matrices
 
-`representation` (or the more specific `vector_representation`/`representation`) turns a symbolic ket, bra or ketbra into a concrete vector or matrix on `H`:
+`representation(x, H)` turns a symbolic ket, bra or ketbra into a concrete vector or matrix on `H`. A ket gives a column vector, a bra a row vector and a ketbra a matrix. The explicit forms are `vector_representation` for kets and bras and `matrix_representation` for operators and ketbras:
 
 ```@example states
 representation(vf("10"), H)
@@ -69,6 +79,8 @@ representation(vf("10") * vf("01")', H)
 ```
 
 This also works for sums of kets/bras/ketbras with coefficients, and for the other representation types (`:sparse`, `:dense`, `:lazy`).
+
+If the expression is a single kind of state, `representation` can find the space itself, as in `representation(vf("10"))`. Operators carry no space, so they need the space argument. A ketbra on one factor of a `tensor_product` can be represented on the product space, where it acts as the identity on the other factors. Expressions that combine kets or bras with operators or with states of other spaces, such as `b * vf("10")`, have no representation and throw an `ArgumentError`. Apply the operators to the state first, or represent the parts separately.
 
 ## Product spaces and mixed operator/state expressions
 

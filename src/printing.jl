@@ -27,7 +27,7 @@ function Base.show(io::IO, pc::ParityConservation{H}) where {H}
     else
         lines = ["allowed_parities: $(_parity(pc.allowed_parities))"]
         !ismissing(pc.spaces) && push!(lines, "subspaces: $(length(pc.spaces))")
-        print(io, "ParityConservation(", join(lines, ""), ")")
+        print(io, "ParityConservation(", join(lines, ", "), ")")
     end
 end
 
@@ -38,7 +38,7 @@ function Base.show(io::IO, ac::AdditiveConstraint{T,H,F}) where {T,H,F}
         print(io, "AdditiveConstraint(", pre, "$nf function(s))")
     else
         lines = ["  allowed_values: " * (ismissing(ac.allowed_values) ? "missing" : sprint(show, ac.allowed_values)),
-            "  functions: $nf function(s)"]
+            "  maps: $nf function(s)"]
         !ismissing(ac.spaces) && push!(lines, "  subspaces: $(length(ac.spaces))")
         print(io, "AdditiveConstraint(\n", join(lines, "\n"), "\n)")
     end
@@ -53,7 +53,7 @@ function Base.show(io::IO, fc::FilterConstraint)
     else
         lines = filter(!isnothing, [
             ismissing(fc.spaces) ? nothing : "subspaces: $(length(fc.spaces))",
-            ismissing(fc.maps) ? nothing : "subspace_functions: $(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s), ",
+            ismissing(fc.maps) ? nothing : "maps: $(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s)",
             "reducer: $(fc.reducer)"])
         print(io, "FilterConstraint(", join(lines, ", "), ")")
     end
@@ -69,9 +69,9 @@ function Base.show(io::IO, bc::SectorConstraint)
     else
         lines = filter(!isnothing, [
             ismissing(fc.spaces) ? nothing : "subspaces: $(length(fc.spaces))",
-            ismissing(fc.maps) ? nothing : "subspace_functions: $(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s), ",
+            ismissing(fc.maps) ? nothing : "maps: $(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s)",
             "reducer: $(fc.reducer)"])
-        print(io, "SectorConstraint(", join(lines, ""), ")")
+        print(io, "SectorConstraint(", join(lines, ", "), ")")
     end
 end
 
@@ -142,48 +142,53 @@ end
 
 
 
-function Base.show(io::IO, H::SectorHilbertSpace)
+function Base.show(io::IO, H::AbstractSubspace)
+    name = nameof(typeof(H))
     if get(io, :compact, false)
-        print(io, "SectorHilbertSpace(")
-        show(IOContext(io, :compact => true), H.parent)
+        print(io, name, "(")
+        show(IOContext(io, :compact => true), parent(H))
         print(io, ", $(dim(H))-dim)")
     else
-        print(io, "$(dim(H))-dimensional SectorHilbertSpace\n")
+        print(io, "$(dim(H))-dimensional $name\n")
         print(io, "Parent: ")
-        show(IOContext(io, :compact => true), H.parent)
+        show(IOContext(io, :compact => true), parent(H))
+        show_details(io, H)
+    end
+end
+show_details(io, H) = nothing
 
-        qns = collect(keys(H.qn_to_states))
-        nsectors = length(qns)
+function show_details(io, H::SectorHilbertSpace)
+    qns = collect(keys(H.qn_to_states))
+    nsectors = length(qns)
 
-        if !isempty(qns)
-            max_printed_sectors = 5
-            edge_sectors = 1
+    if !isempty(qns)
+        max_printed_sectors = 5
+        edge_sectors = 1
 
-            if nsectors > max_printed_sectors
-                print(io, "\nSectors: $nsectors total [")
+        if nsectors > max_printed_sectors
+            print(io, "\nSectors: $nsectors total [")
 
-                for (i, qn) in enumerate(qns[1:edge_sectors])
-                    i > 1 && print(io, ", ")
-                    print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
-                end
-
-                print(io, ", ..., ")
-
-                for (i, qn) in enumerate(qns[end-edge_sectors+1:end])
-                    i > 1 && print(io, ", ")
-                    print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
-                end
-
-                print(io, "]")
-            else
-                print(io, "\nSectors: [")
-                for (i, qn) in enumerate(qns)
-                    i > 1 && print(io, ", ")
-                    print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
-                end
-                print(io, "]")
-
+            for (i, qn) in enumerate(qns[1:edge_sectors])
+                i > 1 && print(io, ", ")
+                print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
             end
+
+            print(io, ", ..., ")
+
+            for (i, qn) in enumerate(qns[end-edge_sectors+1:end])
+                i > 1 && print(io, ", ")
+                print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
+            end
+
+            print(io, "]")
+        else
+            print(io, "\nSectors: [")
+            for (i, qn) in enumerate(qns)
+                i > 1 && print(io, ", ")
+                print(io, qn, " (", length(H.qn_to_states[qn]), "-dim)")
+            end
+            print(io, "]")
+
         end
     end
 end
@@ -222,18 +227,6 @@ function Base.show(io::IO, c::FermionicSpace)
     end
 end
 
-function Base.show(io::IO, H::ConstrainedSpace)
-    if get(io, :compact, false)
-        print(io, "ConstrainedSpace(")
-        show(IOContext(io, :compact => true), parent(H))
-        print(io, ", $(dim(H))-dim)")
-    else
-        print(io, "$(dim(H))-dimensional ConstrainedSpace\n")
-        print(io, "Parent: ")
-        show(IOContext(io, :compact => true), parent(H))
-    end
-end
-
 function Base.show(io::IO, H::TransposedSpace)
     if get(io, :compact, false)
         show(io, parent(H))
@@ -265,9 +258,7 @@ function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
     end
 end
 
-function Base.show(io::IO, state::BosonicState)
-    print(io, "|", state.n, "⟩")
-end
+Base.show(io::IO, state::BosonicState) = print(io, "BosonicState(", state.n, ")")
 
 function Base.show(io::IO, H::SpinSpace)
     J = H.spin
@@ -280,29 +271,12 @@ function Base.show(io::IO, H::SpinSpace)
         print(io, "(", lbl, ")")
     end
 end
-function Base.show(io::IO, s::SpinState)
-    print(io, "|", s.m, "⟩")
-end
+Base.show(io::IO, s::SpinState) = print(io, "SpinState(", s.m, ")")
 
 Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace: ", m.sym); show(IOContext(io, :compact => true), m.parent))
 
 
-function Base.show(io::IO, f::FockNumber)
-    print(io, "|",)
-    digs = digits(Int, f.f, base=2)
-    n = min(5, length(digs))
-    join(io, digs[1:n], "")
-    if length(digs) > 5
-        print(io, "…")
-    end
-    print(io, "⟩")
-end
-function Base.show(io::IO, ::MIME"text/plain", f::FockNumber{T}) where T
-    get(io, :compact, false) && return show(io, f)
-    print(io, "|",)
-    join(io, digits(Int, f.f, base=2), "")
-    print(io, "⟩")
-end
+Base.show(io::IO, f::FockNumber) = print(io, "FockNumber(", f.f, ")")
 
 
 
@@ -320,12 +294,48 @@ function Base.show(io::IO, H::ProductSpace)
     end
 end
 function Base.show(io::IO, state::ProductState)
-    print(io, "")
-    for (n, substate) in enumerate(state.states)
-        n > 1 && print(io, "⨯")
-        show(IOContext(io, :compact => true), substate)
+    print(io, "ProductState((")
+    join(io, (sprint(show, s; context=io) for s in state.states), ", ")
+    length(state.states) == 1 && print(io, ",")
+    print(io, "))")
+end
+
+# A short label for a basis state of `space`. Fock states are labeled by one occupation digit per mode.
+_state_label(state, space) = _state_label_atomic(state, _unwrap_space(space))
+_unwrap_space(H::Union{TransposedSpace,AbstractSubspace}) = _unwrap_space(parent(H))
+_unwrap_space(H) = H
+const _FermionModeSpace = Union{FermionicSpace,MajoranaHilbertSpace}
+_state_label_atomic(f::FockNumber, H::_FermionModeSpace) = join(digits(Int, f.f; base=2, pad=nbr_of_modes(H)))
+_state_label_atomic(f::FixedNumberFockState, H::_FermionModeSpace) = _state_label_atomic(FockNumber(f), H)
+_state_label_atomic(s::NambuState, H::_FermionModeSpace) = (s.hole ? "h" : "p") * _state_label_atomic(s.state, H)
+_state_label_atomic(s::BosonicState, H) = string(s.n)
+_state_label_atomic(s::SpinState, H::SpinSpace) = H.spin == 1 // 2 ? (s.m > 0 ? "↑" : "↓") : string(s.m)
+_state_label_atomic(s::ProductState, H::ProductSpace) = "(" * join(map(_state_label, s.states, H.factors), ", ") * ")"
+_state_label_atomic(s, H) = sprint(print, s)
+
+function Base.show(io::IO, bs::BasisStates)
+    max_items = 20
+    n = length(bs)
+    print(io, "[")
+    if get(io, :limit, false) && n > max_items
+        join(io, (_state_label(bs[i], bs.space) for i in 1:max_items÷2), ", ")
+        print(io, "  …  ")
+        join(io, (_state_label(bs[i], bs.space) for i in n-max_items÷2+1:n), ", ")
+    else
+        join(io, (_state_label(s, bs.space) for s in bs), ", ")
     end
-    print(io, "")
+    print(io, "]")
+end
+function Base.show(io::IO, ::MIME"text/plain", bs::BasisStates)
+    max_rows = 8
+    n = length(bs)
+    print(io, n, "-element basis of ")
+    show(IOContext(io, :compact => true), bs.space)
+    print(io, ":")
+    rows = get(io, :limit, false) && n > max_rows ? vcat(1:max_rows÷2, 0, n-max_rows÷2+1:n) : 1:n
+    for i in rows
+        print(io, "\n ", iszero(i) ? "⋮" : _state_label(bs[i], bs.space))
+    end
 end
 
 
@@ -436,4 +446,43 @@ function Base.show(io::IO, op::ReshapeMap)
         end
         print(io, ")")
     end
+end
+
+@testitem "Basis state show" begin
+    @fermions f
+    @boson b
+    @spin s 1 // 2
+    H = hilbert_space(f, 1:4, NumberConservation(1))
+    @test repr(basisstates(H)) == "[1000, 0100, 0010, 0001]"
+    @test endswith(repr(MIME"text/plain"(), basisstates(H)), ":\n 1000\n 0100\n 0010\n 0001")
+    Hp = tensor_product(hilbert_space(f, 1:2), hilbert_space(b, 3))
+    @test occursin("(10, 2)", repr(basisstates(Hp)))
+    @test repr(basisstates(hilbert_space(s))) == "[↓, ↑]"
+    long = sprint(show, MIME"text/plain"(), basisstates(hilbert_space(f, 1:6)); context=:limit => true)
+    @test occursin("⋮", long) && countlines(IOBuffer(long)) == 10
+    @test repr(basisstate(2, H)) == "FockNumber(2)"
+    @test repr(basisstate(6, Hp)) == "ProductState((FockNumber(1), BosonicState(1)))"
+    @test repr(basisstate(2, hilbert_space(s))) == "SpinState(1/2)"
+    Hn = hilbert_space(f, 1:3, NumberConservation())
+    for space in (hilbert_space(f, 1:3), hilbert_space(b, 3), hilbert_space(s), Hp, H, sector(1, Hn))
+        bs = basisstates(space)
+        @test bs == collect(bs) == [basisstate(i, space) for i in 1:dim(space)]
+        @test length(bs) == dim(space)
+    end
+
+    Hg = FermionicHilbertSpaces.GenericHilbertSpace(:x, [FockNumber(0), FockNumber(3)])
+    @test repr(basisstates(Hg)) == "[FockNumber(0), FockNumber(3)]"
+    @test occursin("FockNumber(3)", repr(MIME"text/plain"(), basisstates(Hg)))
+    @majoranas γ
+    @test repr(basisstates(hilbert_space(γ, 1:4, ParityConservation(1)))) == "[00, 11]"
+
+    bs6 = basisstates(hilbert_space(f, 1:6))
+    @test repr(bs6) == "[" * join(map(n -> join(digits(n; base=2, pad=6)), 0:63), ", ") * "]"
+    limited = sprint(show, bs6; context=:limit => true)
+    @test startswith(limited, "[000000, 100000, ") && endswith(limited, ", 011111, 111111]")
+    @test count(", ", limited) == 18 && occursin("  …  ", limited)
+    @test sprint(show, basisstates(H); context=:limit => true) == "[1000, 0100, 0010, 0001]"
+
+    @test repr(basisstates(hilbert_space(f, 1:3, FermionicHilbertSpaces.SingleParticle()))) == "[100, 010, 001]"
+    @test repr(basisstates(hilbert_space(f, 1:2, FermionicHilbertSpaces.BdG()))) == "[h10, h01, p10, p01]"
 end

@@ -28,22 +28,23 @@ supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c
 supply_missing_constraint_info(constraint::ProductConstraint, space, spaces) = ProductConstraint(map(cons -> supply_missing_constraint_info(cons, space, spaces), constraint.constraints))
 
 """
-    FilterConstraint(reducer)
-    FilterConstraint(reducer, functions, spaces)
+    FilterConstraint(reducer; maps=missing, spaces=missing)
+    FilterConstraint(reducer, maps, spaces)
 
 Constraint that keeps complete basis states for which `reducer` returns `true`.
 
 With only `reducer`, the reducer is called directly as `reducer(state)`. When
-`functions` and `spaces` are provided, the state is split into the selected
-spaces, each function is applied to its corresponding subspace, and the
+`maps` and `spaces` are provided, the state is split into the selected
+spaces, each map is applied to its corresponding subspace, and the
 reducer is called on the resulting values. A single function is applied to all
-spaces; a collection of functions supplies one function per subspace.
+spaces; a collection of maps supplies one function per subspace.
 """
 struct FilterConstraint{R,FS,H} <: AbstractConstraint
     reducer::R
     maps::FS
     spaces::H
     function FilterConstraint(reducer::R, maps::FS, spaces::H) where {H,FS,R}
+        _check_maps_length(maps, spaces)
         new{R,FS,H}(reducer, maps, spaces)
     end
 end
@@ -73,13 +74,19 @@ function filter_function(constraint::FilterConstraint{<:Any,<:Function}, space::
         constraint.reducer(values)
     end
 end
+function _check_maps_length(maps, spaces)
+    (maps isa Function || ismissing(maps) || ismissing(spaces)) && return nothing
+    length(maps) == length(spaces) || throw(ArgumentError("Got $(length(maps)) maps for $(length(spaces)) spaces. Give one map per space, a single function to apply to every space, or pass `spaces` explicitly."))
+    return nothing
+end
 supply_missing_constraint_info(constraint::FilterConstraint{<:Any,<:Any,Missing}, space, spaces) = FilterConstraint(constraint.reducer, constraint.maps, spaces)
 supply_missing_constraint_info(constraint::FilterConstraint{<:Any,Missing,Missing}, space, spaces) = FilterConstraint(constraint.reducer, constraint.maps, missing) # if subspace functions are missing, the reducer acts directly on the full state
 supply_missing_constraint_info(constraint::FilterConstraint, space, spaces) = constraint
 
 
 """
-    SectorConstraint(reducer, maps=missing, spaces=missing)
+    SectorConstraint(reducer; maps=missing, spaces=missing)
+    SectorConstraint(reducer, maps, spaces)
 
 Constraint that groups complete basis states into sectors according to a
 custom rule. It has the same `reducer`, `maps`, and `spaces` interface
@@ -118,17 +125,24 @@ supply_missing_constraint_info(constraint::SectorConstraint, space, spaces) = su
 
 """
     AdditiveConstraint(allowed_values; spaces=missing, maps=missing)
+    AdditiveConstraint(allowed_values, maps)
 
-Constraint enforcing that the sum of user-specified per-subspace contributions lies
-in `allowed_values`.
+Constraint enforcing that the sum of per-subspace contributions lies in
+`allowed_values`. The contribution of each subspace in `spaces` is the value of
+its map applied to the subspace's state. A single function in `maps` is applied
+to all spaces; a collection of maps supplies one function per subspace.
 
-The constraint is evaluated on the factors used during state generation. For a
-composite Hilbert space this means `atomic_factors(space)`.
+If `spaces` is missing, `tensor_product` uses the spaces it combines, and
+`constrain_space` treats the whole space as a single subspace.
 """
 struct AdditiveConstraint{T,H,F} <: AbstractConstraint
     allowed_values::T
     spaces::H
     maps::F
+    function AdditiveConstraint(allowed_values, spaces, maps)
+        _check_maps_length(maps, spaces)
+        new{typeof(allowed_values),typeof(spaces),typeof(maps)}(allowed_values, spaces, maps)
+    end
 end
 AdditiveConstraint(allowed_values; spaces=missing, maps=missing) = AdditiveConstraint(allowed_values, spaces, maps)
 AdditiveConstraint(allowed_values, maps) = AdditiveConstraint(allowed_values; maps)
@@ -142,11 +156,15 @@ supply_missing_constraint_info(constraint::AdditiveConstraint{<:Any,Missing}, sp
 supply_missing_constraint_info(constraint::AdditiveConstraint, space, spaces) = constraint
 
 """
-    NumberConservation(allowed, spaces, weights)
-    NumberConservation(allowed=missing; spaces=missing, weights=missing)
+    NumberConservation(total=missing; spaces=missing, weights=missing)
+    NumberConservation(total, spaces; weights=missing)
+    NumberConservation(total, spaces, weights)
+    NumberConservation(space)
 
-Constraint enforcing conservation of a (possibly weighted) particle number.
-`total` can be a single value or collection of allowed values.
+Constraint enforcing conservation of a (possibly weighted) particle number, optionally on selected spaces.
+`total` can be a single value or collection of allowed values; `missing` allows any value.
+`spaces` restricts the count to the given subspaces (default: all of them). `weights` gives one
+weight per subspace in `spaces` (default: all `1`), and the conserved quantity is the weighted sum of their particle numbers.
 """
 struct NumberConservation{T,H,W} <: AbstractConstraint
     total::T
@@ -167,21 +185,24 @@ supports_filtering(::NumberConservation) = true
 supports_sector_grouping(::NumberConservation) = true
 supply_missing_constraint_info(constraint::NumberConservation{<:Any,Missing}, space, spaces) = NumberConservation(constraint.total, spaces, constraint.weights)
 supply_missing_constraint_info(constraint::NumberConservation, space, spaces) = constraint
-NumberConservation(allowed=missing; weights=missing, spaces=missing) = NumberConservation(allowed, spaces, weights)
-NumberConservation(allowed, spaces; weights=missing) = NumberConservation(allowed; spaces, weights)
+NumberConservation(total=missing; weights=missing, spaces=missing) = NumberConservation(total, spaces, weights)
+NumberConservation(total, spaces; weights=missing) = NumberConservation(total; spaces, weights)
 NumberConservation(space::AbstractHilbertSpace) = NumberConservation(missing; spaces=(space,), weights=missing)
 
 """
-    ParityConservation(parities=[-1, 1], spaces=missing)
+    ParityConservation(parities=[-1, 1]; spaces=missing)
+    ParityConservation(parities, spaces)
+    ParityConservation(space)
 
 Constraint enforcing allowed fermion parities, optionally on selected spaces.
+`parities` is a parity or a collection of parities, each `-1` or `1`. 
 """
 struct ParityConservation{H} <: AbstractConstraint
     allowed_parities::Vector{Int}
     spaces::H
     function ParityConservation(_allowed, _spaces)
         allowed = _normalize_constraint_values(_allowed)
-        allowed in Set([[-1, 1], [1], [-1]]) || throw(ArgumentError("Allowed parities must be a subset of [-1, 1]"))
+        allowed in Set([[-1, 1], [1], [-1]]) || throw(ArgumentError("The allowed parities must be a subset of `[-1, 1]`, got $allowed."))
         subspace = _normalize_constraint_subspace(_spaces)
         new{typeof(subspace)}(allowed, subspace)
     end
@@ -208,10 +229,15 @@ function sector_function(cons::C, space::AbstractHilbertSpace) where {C<:Union{<
 end
 function sector_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
     subspace_functions = map(cons -> sector_function(cons, space), constraint.constraints)
+    V = mapreduce(f -> nonmissingtype(Base.promote_op(f, statetype(space))), typejoin, subspace_functions; init=Union{})
     function sector(state)
-        sectors = map(f -> f(state), subspace_functions)
-        any(ismissing, sectors) && return missing
-        return sectors
+        sectors = Vector{V}(undef, length(subspace_functions))
+        for (i, f) in enumerate(subspace_functions)
+            label = f(state)
+            ismissing(label) && return missing
+            sectors[i] = label
+        end
+        return isconcretetype(V) ? sectors : map(identity, sectors) # narrow the element type
     end
 end
 function filter_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
@@ -242,7 +268,7 @@ function branch_constraint(constraint::ParityConservation, spaces)
 end
 
 function branch_constraint(constraint::NumberConservation{T,H,W}, spaces) where {T,H,W}
-    subspaces = H === Missing ? spaces : constraint.spaces
+    subspaces = H === Missing ? missing : constraint.spaces
     if W === Missing
         return additive_branch_constraint(constraint.total, particle_number, subspaces, spaces)
     end
@@ -253,11 +279,18 @@ sectors(::AbstractConstraint) = nothing
 
 
 """
-    constrain_space(space, constraint; kwargs...)
+    constrain_space(space, constraint[, states])
     constrain_space(space, states)
 
-Build a constrained Hilbert space from `space`, either by applying a constraint or
-by explicitly providing a list of allowed basis states.
+Build a constrained Hilbert space from `space`.
+
+With a `constraint`, keep the basis states of `space` that satisfy it. If `states` is
+given, only those states are candidates. Constraints that group states into sectors,
+such as `NumberConservation`, return a space with sectors, with states ordered by sector.
+`constrain_space(space, NoSymmetry())` returns `space` unchanged.
+
+With only `states`, return the subspace spanned by exactly those basis states, in the
+given order; this is equivalent to `constrain_space(space, NoSymmetry(), states)`.
 """
 constrain_space
 
@@ -267,6 +300,17 @@ constrain_space
     @fermions f
     H = hilbert_space(f, labels, qn)
     @test collect(quantumnumbers(H)) == [[n, (-1)^n] for n in 0:4]
+    @test all(q -> q isa Vector{Int}, quantumnumbers(H))
+    # Sector labels of mixed types
+    qn_mixed = NumberConservation() * FermionicHilbertSpaces.SectorConstraint(s -> isodd(s.f) ? :odd : :even)
+    H_mixed = hilbert_space(f, labels, qn_mixed)
+    @test dim(H_mixed) == 2^4
+    @test Set(quantumnumbers(H_mixed)) == Set(Any[n, s] for n in 0:4, s in (:odd, :even) if !(n == 0 && s == :odd) && !(n == 4 && s == :even))
+    # Integer and floating-point labels keep their own types
+    qn_numeric = NumberConservation() * FermionicHilbertSpaces.SectorConstraint(s -> isodd(s.f) ? 0.5 : 1.5)
+    q_numeric = collect(quantumnumbers(hilbert_space(f, 1:2, qn_numeric)))
+    @test [0, 1.5] in q_numeric
+    @test all(q -> q[1] isa Int && q[2] isa Float64, q_numeric)
     qn = prod(NumberConservation(missing, hilbert_space(f[l])) for l in labels)
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
@@ -274,7 +318,7 @@ constrain_space
 end
 
 @testitem "ProductConstraint filtering" begin
-    using FermionicHilbertSpaces: FilterConstraint, particle_number
+    using FermionicHilbertSpaces: particle_number
     @fermions f
     H = hilbert_space(f, 1:2)
     constraint = NumberConservation(1) * FilterConstraint(state -> state != basisstate(2, H))
@@ -283,4 +327,13 @@ end
 
     @test dim(Hconstrained) == 1
     @test all(particle_number(state) == 1 for state in basisstates(Hconstrained))
+end
+
+@testitem "Constraint maps must match spaces" begin
+    using FermionicHilbertSpaces: AdditiveConstraint, particle_number
+    @fermions f
+    Hs = [hilbert_space(f[i]) for i in 1:3]
+    @test_throws ArgumentError tensor_product(Hs...; constraint=AdditiveConstraint(1; maps=(particle_number, particle_number)))
+    @test_throws ArgumentError tensor_product(Hs...; constraint=FilterConstraint(all; maps=ntuple(_ -> isone ∘ particle_number, 4)))
+    @test_throws ArgumentError AdditiveConstraint(1; spaces=Hs[1:2], maps=(particle_number,))
 end

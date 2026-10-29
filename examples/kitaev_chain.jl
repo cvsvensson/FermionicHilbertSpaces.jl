@@ -4,6 +4,9 @@
 # We show how the Hamiltonian can be constructed symbolically or by using matrix representations of the fermionic operators,
 # and how to restrict the Hilbert space to a subspace of a given parity.
 # We solve for the ground states and characterize the locality of the many-body Majoranas.
+# Locality and robustness of many-body Majoranas are quantified in Ref. [^1].
+#
+# [^1]: W. Samuelson *et al.*, [PRX Quantum 7, 020341 (2026)](https://doi.org/10.1103/pw51-tnsz), [arXiv:2510.20538](https://arxiv.org/abs/2510.20538).
 
 # We start by importing the necessary packages.
 using FermionicHilbertSpaces
@@ -37,14 +40,12 @@ representation(hsym, H)
 
 # Now, let's diagonalize the system.
 # Since parity is conserved, we work in the even and odd parity sectors separately. 
-using FermionicHilbertSpaces: indices, sector, quantumnumbers
+using FermionicHilbertSpaces: sector, quantumnumbers
 (Eo, o), (Ee, e) = map(quantumnumbers(H)) do parity
     Hsec = sector(parity, H)
     ham = representation(hsym, Hsec)
     vals, vecs = eigs(ham; nev=1, which=:SR)
-    inds = indices(Hsec, H)
-    ground_state = zeros(eltype(vecs), dim(H))
-    ground_state[inds] = vecs[:, 1]
+    ground_state = embed(vecs[:, 1], Hsec => H)
     (; energy=first(vals), ground_state)
 end
 # The ground states are almost degenerate, as expected.

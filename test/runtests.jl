@@ -190,11 +190,8 @@ end
     Hconstrained = hilbert_space(f, 1:4, NumberConservation(2))
     Hsub_constrained = subregion(hilbert_space(f, 1:2), Hconstrained)
     msub_constrained = rand(ComplexF64, dim(Hsub_constrained), dim(Hsub_constrained))
-    emb_constrained = embed(Hsub_constrained => Hconstrained)
-    emb_constrained_skipmissing = embed(Hsub_constrained => Hconstrained; skipmissing=true)
-    memb = embed(msub_constrained, Hsub_constrained => Hconstrained; skipmissing=true)
-    @test emb_constrained(msub_constrained) ≈ memb # Unfortunately, this should ideally error (the hilbert spaces aren't compatible), but doesn't because the precomputed map goes through the partial trace and selects the algorithm that doesn't see the missing states.
-    @test emb_constrained_skipmissing(msub_constrained) ≈ memb
+    @test_throws ArgumentError embed(msub_constrained, Hsub_constrained => Hconstrained)
+    @test embed(Hsub_constrained => Hconstrained)(msub_constrained) ≈ embed(msub_constrained, Hsub_constrained => Hconstrained; skipmissing=true)
 
     # A whole-space partial trace must produce a basis-transformation map.
     Hsame = hilbert_space(f, 1:2, NoSymmetry())
@@ -205,6 +202,14 @@ end
     @test pt_same(msame) ≈ msame
     @test sparse(pt_same) == sparse(I(dim(Hsame)^2))
     @test pt_similar(msame) ≈ partial_trace(msame, Hsame => Hsimilar)
+
+    # Tracing onto the whole space returns the input, for matrices and states, constrained or not.
+    for H in (Hsame, Hconstrained)
+        m = rand(ComplexF64, dim(H), dim(H))
+        v = rand(ComplexF64, dim(H))
+        @test partial_trace(m, H => H) ≈ m
+        @test partial_trace(v, H => H) ≈ v * v'
+    end
 end
 
 @testitem "PartialTraceMap variants" begin
@@ -250,6 +255,30 @@ end
     @test_throws DimensionMismatch pt(zeros(ComplexF64, dsub^2 - 1), m)
 end
 
+@testitem "Default partial trace algorithm" begin
+    using SparseArrays
+    import FermionicHilbertSpaces: default_partial_trace_alg, complementary_subsystem,
+        FullPartialTraceAlg, SubsystemPartialTraceAlg
+    @fermions f
+
+    # A large subsystem of a number-conserving space: the full algorithm is chosen.
+    H = hilbert_space(f, 1:30, NumberConservation(2))
+    Hsub = subregion(hilbert_space(f, 1:10), H)
+    Hcomp = complementary_subsystem(H, Hsub)
+    @test default_partial_trace_alg(sprand(ComplexF64, dim(H), dim(H), 0.01), Hsub, H, Hcomp) isa FullPartialTraceAlg
+
+    # A small subsystem of an unconstrained space.
+    H = hilbert_space(f, 1:10)
+    d = dim(H)
+    Hsub = subregion(hilbert_space(f, 1:2), H)
+    Hcomp = complementary_subsystem(H, Hsub)
+    m = rand(ComplexF64, d, d)
+    @test default_partial_trace_alg(Hsub, H, Hcomp) isa SubsystemPartialTraceAlg
+    @test default_partial_trace_alg(m, Hsub, H, Hcomp) isa SubsystemPartialTraceAlg
+    @test default_partial_trace_alg(sprand(ComplexF64, d, d, 0.5), Hsub, H, Hcomp) isa SubsystemPartialTraceAlg
+    @test default_partial_trace_alg(sprand(ComplexF64, d, d, 4 / d), Hsub, H, Hcomp) isa FullPartialTraceAlg
+end
+
 @testitem "Identity in matrix_representation" begin
     using LinearAlgebra
     @fermions f
@@ -258,6 +287,23 @@ end
     @test representation(1, H) == I
     @test representation(I, H) == I
     @test representation(1 + f[1], H) == I + representation(f[1], H)
+end
+
+@testitem "Representation of products with interleaved groups" begin
+    using FermionicHilbertSpaces: NCMul
+    @fermions a
+    @fermions b
+    @fermions c
+    H = tensor_product(hilbert_space(a, 1:2), hilbert_space(b, 1:2), hilbert_space(c, 1:2))
+    # NCMul is used directly since `*` would normal order the factors. Operators on different groups commute.
+    for (op, parts) in (
+        (NCMul(2.0, [b[2], c[1]', a[1]', c[2], b[1]', a[2]]), (a[1]' * a[2], b[2] * b[1]', c[1]' * c[2])),
+        (NCMul(-1.5, [c[2]', a[1], c[1], a[2]']), (a[1] * a[2]', c[2]' * c[1])),
+    )
+        expected = op.coeff * prod(representation(part, H) for part in parts)
+        @test !iszero(expected)
+        @test representation(op, H) ≈ expected
+    end
 end
 
 @testitem "state_index for states which are convertible but not identical" begin
@@ -272,8 +318,10 @@ end
     # they are == but not ===
     @test state == sf0 
     @test state !== sf0
-    state_index(sf0, H) == 1
-    state_index(sf0, Hcons) == 1
+    @test state_index(sf0, H) == 1
+    @test state_index(sf0, Hcons) == 1
+    Hsector = tensor_product(Hcons, hilbert_space(f, 4:5, NumberConservation(1)))
+    @test all(state_index(FockNumber(Int(s.f)), Hsector) == i for (i, s) in enumerate(basisstates(Hsector)))
 
     @boson b
     Hb = hilbert_space(b, 1)

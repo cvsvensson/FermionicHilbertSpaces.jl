@@ -8,27 +8,38 @@ TransposedSpace(H::TransposedSpace) = parent(H)
 Base.:(==)(a::TransposedSpace, b::TransposedSpace) = a.parent == b.parent
 Base.hash(H::TransposedSpace, h::UInt) = hash(H.parent, h)
 basisstates(H::TransposedSpace) = basisstates(H.parent)
-basisstate(i::Integer, H::TransposedSpace) = basisstate(i, H.parent)
-state_index(state::B, H::TransposedSpace{B}) where B = state_index(state, H.parent)
+Base.@propagate_inbounds basisstate(i::Integer, H::TransposedSpace) = basisstate(i, H.parent)
+_state_index(state, H::TransposedSpace) = _state_index(state, H.parent)
+has_arithmetic_state_index(H::TransposedSpace) = has_arithmetic_state_index(H.parent)
 dim(H::TransposedSpace) = dim(H.parent)
 isconstrained(H::TransposedSpace) = isconstrained(H.parent)
 group_id(H::TransposedSpace) = group_id(H.parent)
 atomic_id(H::TransposedSpace) = atomic_id(H.parent)
+atom_ids(H::TransposedSpace) = atom_ids(H.parent)
+atom_position(x, H::TransposedSpace) = atom_position(x, H.parent)
+mode_ordering(H::TransposedSpace) = mode_ordering(H.parent)
 atomic_factors(H::TransposedSpace) = map(TransposedSpace, atomic_factors(H.parent)) # (H,)
+atomic_factor(H::TransposedSpace, i) = TransposedSpace(atomic_factor(H.parent, i))
 add_tag(H::TransposedSpace, tag) = TransposedSpace(add_tag(H.parent, tag))
 groups(H::TransposedSpace) = map(TransposedSpace, groups(H.parent))
 factors(H::TransposedSpace) = map(TransposedSpace, factors(H.parent))
-TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, factors(H)), map(TransposedSpace, H.atoms))
-TransposedSpace(H::ConstrainedSpace) = ConstrainedSpace(TransposedSpace(parent(H)), H.states, H.state_index)
-TransposedSpace(H::SectorHilbertSpace) = SectorHilbertSpace(TransposedSpace(parent(H)), H.ordered_basis_states, H.state_to_index, H.qn_to_states, H.constraint)
+TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, groups(H)))
+TransposedSpace(H::AbstractSubspace) = rewrap(H, TransposedSpace(parent(H)))
 state_mapper(H::TransposedSpace, Hs) = state_mapper(H.parent, Hs)
 combine_states(states, H::TransposedSpace) = combine_states(states, H.parent)
 Base.parent(H::TransposedSpace) = H.parent
+partial_trace_phase_factor(f1, f2, H::TransposedSpace) = partial_trace_phase_factor(f1, f2, parent(H))
+partial_trace_phase_factor_eltype(H::TransposedSpace) = partial_trace_phase_factor_eltype(parent(H))
+partial_transpose_phase_factor_eltype(H::TransposedSpace) = partial_transpose_phase_factor_eltype(parent(H))
+partial_transpose_phase_factor(f1, f2, H::TransposedSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
 
 function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSpace}
-    only(unique(map(group_id, spaces))) == group || throw(ArgumentError("All spaces must belong to the same group"))
+    only(unique(map(group_id, spaces))) == group || throw(ArgumentError("All spaces must belong to the group `$group`."))
     TransposedSpace(FermionicSpace(map(H -> H.parent, spaces), group))
 end
+
+combine_into_group(group::MajoranaGroup, spaces::AbstractVector{<:TransposedSpace}) =
+    TransposedSpace(combine_into_group(group, map(parent, spaces)))
 
 
 tag_left(base) = add_tag(base, :left)
@@ -52,7 +63,7 @@ end
 function add_tag(factor::AbstractSym, tag)
     basis = symbolic_basis(factor)
     new_basis = add_tag(basis, tag)
-    return change_basis(factor, new_basis)
+    return with_basis(factor, new_basis)
 end
 add_tag(expr, tag) = NonCommutativeProducts.ncmap(Base.Fix2(add_tag, tag), expr)
 
@@ -74,6 +85,17 @@ add_tag(expr, tag) = NonCommutativeProducts.ncmap(Base.Fix2(add_tag, tag), expr)
     @spin s 1 // 2
     Hs = hilbert_space(s)
     @test representation(s[:x], TransposedSpace(Hs)) == transpose(representation(s[:x], Hs))
+end
+
+@testitem "add_tag and TransposedSpace of a product sector" begin
+    using FermionicHilbertSpaces: add_tag, TransposedSpace
+    @fermions f
+    @bosons b
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(b[1], 3); constraint=NumberConservation(1))
+    op = 2f[1]' * f[2] + f[2]' * b[1] + b[1]' * b[1]
+    m = representation(op, H)
+    @test representation(op, TransposedSpace(H)) == transpose(m)
+    @test representation(add_tag(op, :t), add_tag(H, :t)) == m
 end
 
 @testitem "open_system symbolic left-right interface" begin
@@ -111,6 +133,31 @@ end
     Mexpected = representation((c_left[1]' * s_left[:z]) * (c_right[1]' * s_right[:z]) + (c_left[1]' * s_left[:z]), H)
     @test M ≈ Mexpected
     @test reshape(reshape(M, H => (Hleft, Hs, Hright)), (Hleft, Hs, Hright) => H) == M
+end
+
+@testitem "open_system commutator of a single boson" begin
+    using FermionicHilbertSpaces: open_system
+    @boson a
+    @bosons b
+    Ha, _, _, left, right = open_system(a, 3)
+    Hb, _, _, _, _ = open_system(b[1], 3)
+    @test left(a) != right(a)
+    @test representation(left(a' * a) - right(a' * a), Ha) == representation(left(b[1]' * b[1]) - right(b[1]' * b[1]), Hb)
+end
+
+@testitem "open_system on Majorana spaces" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: open_system
+
+    @majoranas γ
+    Hfull, Hleft, Hright, left, right = open_system(hilbert_space(γ, 1:4))
+    @test dim(Hfull) == 16
+
+    op = γ[1] * γ[2] + 0.5 * γ[3] * γ[4]
+    M = representation(left(op) * right(op) + left(op), Hfull)
+    @test size(M) == (16, 16)
+    Mexpected = representation((left(γ[1]) * left(γ[2]) + 0.5 * left(γ[3]) * left(γ[4])) * (right(γ[1]) * right(γ[2]) + 0.5 * right(γ[3]) * right(γ[4])) + left(op), Hfull)
+    @test M ≈ Mexpected
 end
 
 @testitem "Matrix representation of transposed spaces" begin
@@ -172,7 +219,7 @@ end
     @majoranas m
     Hm = hilbert_space(m, 1:4)
     Hm_t = TransposedSpace(Hm)
-    A = m[1] * m[2] + 0.5 * m[3] * m[4]
+    A = m[1] * m[2] + 0.5 * m[3] * m[4] + (1 + 2im) * m[2] + 3im * m[1] * m[3] - m[2] * m[3] * m[4]
     @test transpose(representation(A, Hm)) ≈ representation(A, Hm_t)
 end
 
@@ -197,14 +244,45 @@ end
     @test Mright ≈ kron(transpose(MA * MB), I(dim(H)))
 end
 
+@testitem "Lindblad steady state of a fermionic level" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: open_system
+
+    @fermions c
+    γin, γout = 0.3, 0.7
+    Hlr, Hl, Hr, left, right = open_system(c, 1:1)
+    dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
+    ham = 1.0 * c[1]'c[1]
+    lindbladian = -1im * (left(ham) - right(ham)) + dissipator(√γin * c[1]') + dissipator(√γout * c[1])
+    mat = representation(lindbladian, Hlr, :dense)
+    Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
+    @test norm(mat' * Ivec) < 1e-12
+
+    ρ = reshape(nullspace(mat)[:, 1], Hlr => (Hl, Hr))
+    ρ ./= tr(ρ)
+    @test ρ ≈ ρ'
+    @test all(≥(-1e-12), eigvals(Hermitian(ρ)))
+    @test tr(representation(c[1]'c[1], hilbert_space(c, 1:1)) * ρ) ≈ γin / (γin + γout)
+
+    # Two modes with hopping and an odd jump operator, against the matrix formula
+    # dρ/dt = -i[H,ρ] + LρL† - ½{L†L,ρ} on an even ρ
+    Hlr, Hl, Hr, left, right = open_system(c, 1:2)
+    ham = 0.4 * (c[1]'c[2] + c[2]'c[1]) + 0.3 * c[1]'c[1]
+    L = 0.5 * c[1] + 0.8 * c[2]'
+    mat = representation(-1im * (left(ham) - right(ham)) + dissipator(L), Hlr)
+    H2 = hilbert_space(c, 1:2)
+    Hm, Lm = representation(ham, H2, :dense), representation(L, H2, :dense)
+    P = Diagonal([(-1)^count_ones(i - 1) for i in 1:dim(H2)]) # parity in the Fock basis
+    X = rand(ComplexF64, 4, 4)
+    ρ = (X + X' + P * (X + X') * P) / 4
+    dρ = reshape(mat * reshape(ρ, (Hl, Hr) => Hlr), Hlr => (Hl, Hr))
+    @test dρ ≈ -1im * (Hm * ρ - ρ * Hm) + Lm * ρ * Lm' - 0.5 * (Lm'Lm * ρ + ρ * Lm'Lm)
+end
+
 function _apply_local_operators(op, state, space::TransposedSpace, precomp)
     newstate, amp = apply_local_operators(op, state, parent(space), precomp; transpose=true)
     return newstate, amp
 end
 
 maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))
-_find_position(f::TransposedSpace, H::FermionicSpace) = _find_position(parent(f), H)
-_find_position(op::AbstractSym, H::TransposedSpace) = _find_position(op, parent(H))
-function _wrap(space, ::TransposedSpace)
-    TransposedSpace(space)
-end
+rewrap(::TransposedSpace, space) = TransposedSpace(space)

@@ -4,11 +4,22 @@
 # generic Hilbert-space and matrix-representation machinery. It then uses the
 # global clock charge to diagonalise a Hamiltonian sector by sector and to
 # resolve the entanglement entropy of a subsystem.
+#
+# A new algebra with matrix representations needs:
+# 1. **Symbolic types** — structs subtyping `AbstractSym` that represent the operators
+# 2. **`@nc` declaration** — registers the types with the algebraic machinery
+# 3. **`mul_effect`** — the multiplication rules for products of the operators
+# 4. **Basis states** — structs subtyping `AbstractBasisState` that label the local basis
+# 5. **`apply_local_operator`** — how the operators act on the basis states
+# 6. **`mat_eltype`** — the element type of the matrix representations
+# 7. **`symbolic_group`** — links the operators to their Hilbert space factor
+#
+# A **`@commutative` declaration** is needed only when the operators should commute with
+# operators of other algebras. The [Floquet example](floquet_tutorial.md) shows one.
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
 import FermionicHilbertSpaces: AbstractBasisState, AbstractSym,
-    GenericHilbertSpace, apply_local_operator, mat_eltype,
-    symbolic_group, SectorConstraint
+    apply_local_operator, mat_eltype, symbolic_group
 import FermionicHilbertSpaces.NonCommutativeProducts: @nc, mul_effect
 
 # ## Defining the clock operators and states

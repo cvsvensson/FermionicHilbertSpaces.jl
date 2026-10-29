@@ -30,7 +30,7 @@ Hten = hilbert_space(S, 10)
 @spins S
 S[1][:+] # spin + operator on the site labeled 1
 
-# A hilbert space for this field is obtained by hilbert_space(S, labels, spin)
+# A Hilbert space for this field is obtained with `hilbert_space(S, labels, spin)`.
 
 # ## Basic example: Heisenberg chain
 # A spin-1/2 Heisenberg chain hamiltonian can then be constructed as
@@ -53,9 +53,10 @@ J = 1
 N = 4
 H = hilbert_space(S, 1:N, J)
 
-# Let's make a permutationally invariant hamiltonian  as
-# ham = sum(S[i][op] * S[mod1(i+1, N)][op] for i in 1:N for op in (:x, :y, :z))
-ham = sum(S[i][op] * S[j][op] for i in 1:N, j in 1:N, op in (:x, :y, :z))
+# Let's make a permutationally invariant hamiltonian. The all-to-all Heisenberg term $\sum_{i,j} \vec{S}_i\cdot\vec{S}_j$ is just $\vec{S}_\mathrm{tot}^2$, so on its own it would be a multiple of the identity in every total-spin block. For spin 1 we therefore add an all-to-all biquadratic term $K\sum_{i<j} (\vec{S}_i\cdot\vec{S}_j)^2$, which keeps the symmetries but is not a function of $\vec{S}_\mathrm{tot}^2$.
+K = 0.3
+ham = sum(S[i][op] * S[j][op] for i in 1:N, j in 1:N, op in (:x, :y, :z)) +
+    K * sum(sum(S[i][op] * S[j][op] for op in (:x, :y, :z))^2 for i in 1:N for j in (i+1):N)
 
 # This hamiltonian conserves the total magnetization, the total spin, and is invariant under any permutation of the sites. Let's exploit all these symmetries.
 # ### Fixing the total magnetization
@@ -71,7 +72,7 @@ H = hilbert_space(S, 1:N, J, constraint)
 # `AbstractAlgebra.jl` provides the character tables needed to build the corresponding
 # projectors: each integer partition `λ` of `N` labels an irrep with character `χ`, and
 # `symmetric_sector` accepts the permutations and their weights `(perms, weights) = (G, χ.(G))`
-# directly instead of the `:symmetric`/`:antisymmetric` shorthand.
+# directly instead of the `:symmetric`/`:antisymmetric` shorthand (see [`symmetric_sector`](@ref)).
 import AbstractAlgebra
 G = collect(AbstractAlgebra.SymmetricGroup(N))
 perms = Iterators.map(p -> p.d, G)
@@ -99,24 +100,49 @@ P = nullspace(Matrix(total_spin_mat - 2 * I))
 P' * M * P
 
 # ### Fully decomposed space
-# Let's find the ground state energies in each block of total spin, magnetization and permutation symmetry sector
+# Let's find the ground state energy in each block of total spin, magnetization and permutation symmetry sector. Each block's full spectrum is kept as well, and for every magnetization the blocks together must reproduce the spectrum of the whole sector.
 magnetizations = (-N*J):(N*J)
 energies = mapreduce(vcat, magnetizations) do m
     magcons = AdditiveConstraint(m; maps=s -> s.m)
     H = hilbert_space(S, 1:N, J, magcons)
     total_spin_mat = representation(total_spin_op, H)
     ham_mat = representation(ham, H)
-    mapreduce(vcat, partitions) do λ
+    blocks = mapreduce(vcat, partitions) do λ
         χ = AbstractAlgebra.character(λ)
         map!(Int ∘ χ, weights, G)
         p = symmetric_sector(H, factors(H), (perms, weights))
         block = Matrix(p'*total_spin_mat*p)
         Mblock = p'*ham_mat*p
-        total_spins = unique!(map(s -> round(Int, 4s)//4, eigvals(block)))
-        map(total_spins) do s
+        casimirs = unique!(map(s -> round(Int, 4s)//4, eigvals(block)))
+        map(casimirs) do s
             P = nullspace(block - s*I; atol=1e-1)
-            (λ, s, m) => first(eigvals(Hermitian(P' * Mblock * P)))
+            spectrum = eigvals(Hermitian(P' * Mblock * P))
+            S_tot = (sqrt(1 + 4s) - 1) / 2
+            (λ, S_tot, m) => (energy=first(spectrum), spectrum=spectrum)
         end
     end
+    block_spectra = sort(reduce(vcat, [b.second.spectrum for b in blocks]))
+    @assert block_spectra ≈ eigvals(Hermitian(Matrix(ham_mat)))
+    blocks
 end
-sort(energies; by=last)
+sort(energies; by=b -> b.second.energy)
+
+# ### Plotting the spectrum
+# Each block is a multiplet of total spin $S$, so its energy appears at every magnetization $m = -S, \dots, S$.
+# Coloring the levels by permutation sector `λ` shows that the energy depends on the $S_N$ irrep and not only on $S$.
+# The dashed curve $S(S+1)$ is the spectrum without the biquadratic term.
+using Plots
+irreps = unique(b.first[1] for b in energies)
+p1 = plot(xlabel="Magnetization m", ylabel="Energy", title="Levels by magnetization",
+    xlims=(-N * J - 0.7, N * J + 0.7), legend=false)
+p2 = plot(xlabel="Total spin S", title="Levels by total spin", legend=:topleft)
+plot!(p2, range(0, N * J, 100), S -> S * (S + 1); ls=:dash, c=:gray, label="S(S+1)")
+for (n, λ) in enumerate(irreps)
+    sector = filter(b -> b.first[1] == λ, energies)
+    ms = [b.first[3] for b in sector]
+    Ss = [b.first[2] for b in sector]
+    Es = [b.second.energy for b in sector]
+    scatter!(p1, ms, Es; marker=:hline, ms=14, msw=3, c=n, msc=n)
+    scatter!(p2, Ss, Es; ms=6, c=n, label="λ = $λ")
+end
+plot(p1, p2; layout=(1, 2), size=0.7 .* (1100, 420), frame=:box, margins=4Plots.mm)

@@ -49,10 +49,10 @@ Base.getindex(b::BosonField, is...) = BosonSym(is, b, -1)
 Base.adjoint(x::BosonSym) = BosonSym(x.label, x.basis, x.tags, -x.exp)
 Base.iszero(x::BosonSym) = false
 symbolic_basis(x::BosonSym{<:Any,<:BosonField}) = x.basis
-change_basis(x::BosonSym, newbasis) = BosonSym(x.label, newbasis, x.exp)
+with_basis(x::BosonSym, newbasis) = BosonSym(x.label, newbasis, x.exp)
 const BosonSymWithBasis = BosonSym{L,B,Nothing} where {L,B<:BosonField}
 const BosonSymWithoutBasis = BosonSym{L,Nothing,T} where {L,T<:Tags}
-add_tag(x::BosonSymWithBasis, tag) = change_basis(x, add_tag(x.basis, tag))
+add_tag(x::BosonSymWithBasis, tag) = with_basis(x, add_tag(x.basis, tag))
 add_tag(x::BosonSymWithoutBasis, tag) = BosonSym(x.label, add_tag(x.tags, tag), x.exp)
 tags(x::BosonSym) = x.tags
 function Base.show(io::IO, x::BosonSym)
@@ -69,22 +69,32 @@ function Base.show(io::IO, x::BosonSym)
         print(io, "[", x.label, "]")
     end
 end
-Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && isequal(a.basis, b.basis)
-Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, h)))
-_boson_name(s::BosonSym) = s.basis isa Nothing ? (s.label, tags(s)) : (s.basis.name, s.label, tags(s))
+Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && isequal(a.basis, b.basis) && a.tags == b.tags
+Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, hash(a.tags, h))))
+# Normal ordering of a = b^m, c = b†^n: b^m b†^n = Σₖ k! C(m,k) C(n,k) b†^(n-k) b^(m-k)
+function _boson_normal_order(a::BosonSym, c::BosonSym)
+    m, n = -a.exp, c.exp
+    terms = map(0:min(m, n)) do k
+        factors = typeof(a)[]
+        n > k && push!(factors, BosonSym(a.label, a.basis, tags(a), n - k))
+        m > k && push!(factors, BosonSym(a.label, a.basis, tags(a), k - m))
+        NCMul(factorial(k) * binomial(m, k) * binomial(n, k), factors)
+    end
+    return AddTerms(terms)
+end
 function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
-    if _boson_name(a) == _boson_name(b)
+    if symbolic_group(a) == symbolic_group(b)
         if sign(a.exp) == sign(b.exp)
             return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
         else
             if a.exp < 0 && b.exp > 0
-                return AddTerms((Swap(1), 1))
+                return _boson_normal_order(a, b)
             else
                 return nothing
             end
         end
     end
-    if _boson_name(a) > _boson_name(b)
+    if _group_isless(b, a)
         return Swap(1)
     else
         return nothing
@@ -112,6 +122,16 @@ NonCommutativeProducts.@commutative MajoranaSym BosonSym
     # Test canonical commutation relations
     @test b1 * b1' - b1' * b1 == 1
     @test b1' * b1 - b1 * b1' == -1
+
+    # Commutators involving powers: [b^m, b†] = m b^(m-1), [b, b†^n] = n b†^(n-1)
+    for k in 1:4
+        @test b1^k * b1' - b1' * b1^k == k * b1^(k - 1)
+        @test b1 * b1'^k - b1'^k * b1 == k * b1'^(k - 1)
+    end
+    @test b1^2 * b1'^2 == b1'^2 * b1^2 + 4 * b1' * b1 + 2
+    @test b1^3 * b1'^2 == b1'^2 * b1^3 + 6 * b1' * b1^2 + 6 * b1
+    @test (b1 * b1') * b1 == b1 * (b1' * b1)
+    @test (b1^2 * b1') * b1'^2 == b1^2 * (b1' * b1'^2)
 
     # Bosons at different sites commute
     @test b1 * b2 - b2 * b1 == 0
@@ -165,25 +185,27 @@ struct TruncatedBosonicHilbertSpace{L,B} <: AbstractAtomicHilbertSpace{BosonicSt
 end
 Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)
 Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.dimension, h))
-basisstates(H::TruncatedBosonicHilbertSpace) = TypedIterator{BosonicState}(Iterators.map(BosonicState, 0:(dim(H)-1)))
-function basisstate(n::Integer, H::TruncatedBosonicHilbertSpace)
-    if n < 1 || n > dim(H)
-        throw(ArgumentError("Basis state index $n is out of bounds for Hilbert space with dimension $(dim(H))"))
-    end
+basisstates(H::TruncatedBosonicHilbertSpace) = BasisStates(H, Iterators.map(BosonicState, 0:(dim(H)-1)))
+Base.@propagate_inbounds function basisstate(n::Integer, H::TruncatedBosonicHilbertSpace)
+    @boundscheck 1 <= n <= dim(H) || throw(BoundsError(H, n))
     BosonicState(n - 1)
 end
 dim(H::TruncatedBosonicHilbertSpace) = H.dimension
-function state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace)
-    if s.n < 0 || s.n >= dim(H)
-        throw(ArgumentError("State $s is not in the Hilbert space"))
-    end
-    s.n + 1
-end
+_state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace) = 0 <= s.n < dim(H) ? s.n + 1 : 0
+has_arithmetic_state_index(::TruncatedBosonicHilbertSpace) = true
 add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add_tag(H.sym, tag), H.dimension)
 
-hilbert_space(sym::BosonField, labels, dimension::Int, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], dimension), labels); constraint)
-hilbert_space(sym::BosonSym, dimension::Int) = TruncatedBosonicHilbertSpace(sym, dimension)
-hilbert_space(sym::BosonSym, dimension::Int, constraint::AbstractConstraint) = constrain_space(hilbert_space(sym, dimension), constraint)
+"""
+    hilbert_space(b::BosonSym, dimension[, constraint])
+    hilbert_space(b::BosonField, labels, dimension[, constraint])
+
+The truncated space of the bosonic mode `b`, with basis states `|0⟩, …, |dimension-1⟩`, so the
+maximal occupation is `dimension - 1`. With `labels`, the tensor product of one such space for
+each mode `b[l]`, `l in labels`. An optional `constraint` restricts the basis states.
+"""
+hilbert_space(sym::BosonField, labels, dimension::Integer, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], dimension), labels); constraint)
+hilbert_space(sym::BosonSym, dimension::Integer) = TruncatedBosonicHilbertSpace(sym, dimension)
+hilbert_space(sym::BosonSym, dimension::Integer, constraint::AbstractConstraint) = constrain_space(hilbert_space(sym, dimension), constraint)
 particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 maximum_particles(H::TruncatedBosonicHilbertSpace) = dim(H) - 1
@@ -212,8 +234,9 @@ function apply_local_operator(factor::BosonSym, state::BosonicState, space::Trun
     end
     return BosonicState(n), amplitude
 end
-symbolic_group(f::BosonSym{<:Any,B}) where B = (f.basis, f.label, f.tags)
-symbolic_group(f::BosonSym{<:Any,Nothing}) = (BosonSym, f.label, f.tags)
+# Group ids are `(name, label, tags)`. A boson without a basis has its own label as name and `()` as label.
+symbolic_group(f::BosonSym{<:Any,<:BosonField}) = (f.basis.name, f.label, f.basis.tags)
+symbolic_group(f::BosonSym{<:Any,Nothing}) = (f.label, (), f.tags)
 symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
 symbolic_basis(H::TruncatedBosonicHilbertSpace) = symbolic_group(H)
 atomic_id(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
@@ -229,6 +252,9 @@ mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
     @test basisstate(4, H) == BosonicState(3)
     @test state_index(BosonicState(0), H) == 1
     @test state_index(BosonicState(3), H) == 4
+    # states outside the truncation are not in H
+    @test state_index(BosonicState(4), H) == 0
+    @test state_index(BosonicState(-1), H) == 0
 end
 
 @testitem "Bosonic matrix representations" begin
@@ -253,6 +279,21 @@ end
     @test madag == a'
     @test representation(b, H) == ma
     @test madag * ma + 1im * I ≈ representation(b' * b + 1im, H)
+    # the truncation breaks [a, a†] = 1 only at the cutoff
+    @test ma * madag - madag * ma ≈ Diagonal([ones(d - 1); -(d - 1)])
+end
+
+@testitem "Bosonic triple products vs matrices" begin
+    @boson b
+    N = 10
+    H = hilbert_space(b, N)
+    ops = [b, b', b^2, b'^2]
+    mats = [representation(op, H) for op in ops]
+    low = 1:(N-2) # avoid truncation effects
+    for i in eachindex(ops), j in eachindex(ops), k in eachindex(ops)
+        sym = representation(ops[i] * ops[j] * ops[k], H)
+        @test sym[low, low] ≈ (mats[i]*mats[j]*mats[k])[low, low]
+    end
 end
 
 @testitem "Boson product spaces and number conservation" begin
@@ -263,7 +304,7 @@ end
         L, nmax, M = nr_of_modes, max_occ, total_particles
         (M < 0 || M > L * nmax) && return 0
         s = 0
-        for k in 0:fld(M, nmax + 1)
+        for k in 0:fld(M, nmax+1)
             s += (-1)^k * binomial(L, k) * binomial(M - k * (nmax + 1) + L - 1, L - 1)
         end
         return s
@@ -306,7 +347,7 @@ end
     expected = kron(reverse([fmat, smat, bmat])...)
     @test mop ≈ expected
 
-    @test_throws ArgumentError matrix_representation(s_expr, FermionicHilbertSpaces.SpinSpace{1 // 2}(:Not))
+    @test_throws ArgumentError representation(s_expr, FermionicHilbertSpaces.SpinSpace(:Not, 1 // 2))
 
     Hsb = tensor_product(Hs, Hb)
     @test partial_trace(1.0 * I(dim(Hsb)), Hsb => Hs) ≈ dim(Hb) * I(dim(Hs))
@@ -315,7 +356,7 @@ end
     trf = tr(fmat)
     trs = tr(smat)
     trb = tr(bmat)
-    partial_trace(mop, H => Hf; complement=Hsb) ≈ trb * trs * fmat
+    @test partial_trace(mop, H => Hf; complement=Hsb) ≈ trb * trs * fmat
     @test partial_trace(mop, H => Hf) ≈ trb * trs * fmat
     @test partial_trace(mop, H => Hs) ≈ trb * trf * smat
     @test partial_trace(mop, H => Hb) ≈ trs * trf * bmat
@@ -333,5 +374,33 @@ end
     @test Hf == subregion([f[1]], H)
     @test Hs == subregion([S], H)
     @test Hb == subregion([b], H)
+end
+
+@testitem "Reduced states are physical" begin
+    using LinearAlgebra
+
+    @fermions f
+    @spin S
+    @boson b
+    Hf = hilbert_space(f, 1:1)
+    Hs = hilbert_space(S, 1 // 2)
+    Hb = hilbert_space(b, 3)
+    H = tensor_product(Hf, Hs, Hb)
+    ψ = normalize(rand(ComplexF64, dim(H)))
+    ρ = ψ * ψ'
+    for Hsub in (Hf, Hs, Hb)
+        ρsub = partial_trace(ρ, H => Hsub)
+        @test ρsub ≈ ρsub'
+        @test tr(ρsub) ≈ 1
+        @test eigmin(Hermitian(ρsub)) >= -1e-12
+    end
+
+    # the singlet (|↑↓⟩ - |↓↑⟩)/√2 is maximally entangled
+    @spin S1 1 // 2
+    @spin S2 1 // 2
+    H1 = hilbert_space(S1)
+    H12 = tensor_product(H1, hilbert_space(S2))
+    singlet = [0, 1, -1, 0] / sqrt(2)
+    @test partial_trace(singlet * singlet', H12 => H1) ≈ I / 2
 end
 

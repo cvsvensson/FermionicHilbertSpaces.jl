@@ -25,7 +25,7 @@ Hlr, Hl, Hr, left, right = open_system(c, 1:1)
 # Hamiltonian is
 ham_sym = 1.0 * c[1]'c[1]
 # then the Liouvillian superoperator is
-L_sym = 1im * (left(ham_sym) - right(ham_sym))
+L_sym = -1im * (left(ham_sym) - right(ham_sym))
 # We can get a matrix representation of the Liouvillian on the full space `Hlr` with
 L_mat = representation(L_sym, Hlr)
 # A density matrix has two indices, correspinding to (Hl, Hr) and the vectorized form 
@@ -68,7 +68,7 @@ L_out = exp(rand() * 2pi * im) * √γ_out * c[1]
 
 # Let's define a helper for the dissipator superoperator and write down the Lindbladian
 dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
-lindbladian = 1im * (left(ham_sym) - right(ham_sym)) + dissipator(L_in) + dissipator(L_out)
+lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(L_in) + dissipator(L_out)
 # Let's get the matrix representation and check that it preserves trace 
 mat = representation(lindbladian, Hlr)
 Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
@@ -96,7 +96,7 @@ println("Steady-state occupation ⟨n⟩_ss = $n_ss  (analytic: $n_analytical)")
 # ```math
 # Q = n_l - n_r.
 # ```
-# is conserved. We can constrain to fixed `Q` sectors and get block matrices.
+# We can constrain to fixed `Q` sectors and get block matrices.
 # The Q=0 sector is the physically relevant one if we disallow coherences
 # between different particle number sectors.
 constraint = NumberConservation(-1:1, [Hl, Hr], [1, -1])

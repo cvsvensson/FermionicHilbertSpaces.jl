@@ -861,7 +861,7 @@ function dim(H::ParafermionicSpace)
 end
 
 function basisstates(H::ParafermionicSpace{F}) where F
-    TypedIterator{F}(Iterators.map(F, 0:(dim(H)-1)))
+    BasisStates(H, Iterators.map(F, 0:(dim(H)-1)))
 end
 
 function basisstate(ind::Integer, H::ParafermionicSpace{F}) where F
@@ -872,7 +872,7 @@ end
 # Always returns Int: an index above typemax(Int) can't index a matrix anyway.
 # No BigInt is created; comparing native integers with a BigInt goes straight
 # to GMP.
-function state_index(
+function _state_index(
     state::ParaFockNumber{P,S},
     H::ParafermionicSpace{<:ParaFockNumber{P,S}},
 ) where {P,S}
@@ -882,7 +882,7 @@ function state_index(
     Int(state.f) + 1
 end
 
-state_index(::ParaFockNumber, ::ParafermionicSpace) = throw(ArgumentError("Incompatible state"))
+_state_index(::ParaFockNumber, ::ParafermionicSpace) = throw(ArgumentError("Incompatible state"))
 
 atomic_factors(H::ParafermionicSpace) =
     [ParafermionicSpace([m], H.group, statetype(H)) for m in H.modes]

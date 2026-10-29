@@ -1,6 +1,6 @@
 
 combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
-combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("Don't know how to combine spaces $spaces with atomic group $group_id into a group"))
+combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("The group `$group_id` requires a single space, got $spaces."))
 struct ProductState{B} <: AbstractBasisState
     states::B
 end
@@ -13,24 +13,27 @@ Base.hash(s::ProductState, h::UInt) = hash(s.states, h)
 Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
 
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
-# ProductSpaces consists of a list of atomic spaces and factor spaces
+# ProductSpaces consists of a list of groups (stored as `factors`) and their atoms, in group-major order
 struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
     factors::C
     atoms::Vector{A}
-    atom_ordering::Dict{A,Int}
+    atom_index::Dict{Any,Int} # atomic_id => position in atoms. Only used for lookups, so not concretely typed
     fast_path::T
     lininds::LI
     cartinds::CI
-    function ProductSpace(factors::C, atoms::Vector{A}) where {C,A}
-        length(factors) == 0 && throw(ArgumentError("Product space must have at least one factor"))
+    function ProductSpace(factors::C) where {C}
+        length(factors) == 0 && throw(ArgumentError("A product space must have at least one factor."))
+        atoms = collect(Iterators.flatten(map(atomic_factors, factors)))
+        A = eltype(atoms)
         B = ProductState{Tuple{map(statetype, factors)...}}
-        atom_ordering = Dict{A,Int}(a => i for (i, a) in enumerate(atoms))
+        atom_index = Dict{Any,Int}(atomic_id(a) => i for (i, a) in enumerate(atoms))
+        length(atom_index) == length(atoms) || throw(ArgumentError("The atoms of a product space must be distinct, got duplicates in $(map(atomic_id, atoms))."))
         fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
         lininds = LinearIndices(map(dim, factors))
         cartinds = CartesianIndices(map(dim, factors))
         LI = typeof(lininds)
         CI = typeof(cartinds)
-        new{B,C,A,typeof(fast_path),LI,CI}(factors, atoms, atom_ordering, fast_path, lininds, cartinds)
+        new{B,C,A,typeof(fast_path),LI,CI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
     end
 end
 fast_path(space::ProductSpace) = space.fast_path
@@ -38,48 +41,33 @@ isconstrained(H::ProductSpace) = false
 Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1.factors == H2.factors && H1.atoms == H2.atoms
 Base.hash(H::ProductSpace, h::UInt) = hash(H.factors, hash(H.atoms, h))
 atomic_factors(H::ProductSpace) = H.atoms
+nbr_of_atoms(H::ProductSpace) = length(H.atoms)
 factors(H::ProductSpace) = H.factors
 groups(H::ProductSpace) = H.factors
-dim(H::ProductSpace) = prod(dim, factors(H); init=1)
-atomic_id(H::ProductSpace) = H.atom_ordering
-group_id(H::ProductSpace) = H.atom_ordering
+dim(H::ProductSpace) = prod(dim, groups(H); init=1)
+atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
-basisstates(H::ProductSpace{B}) where B = TypedIterator{B}(Iterators.map(s -> ProductState(s), Iterators.product(map(basisstates, H.factors)...)))
-function basisstate(n::Integer, H::ProductSpace{B}) where B
+basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(ProductState, Iterators.product(map(basisstates, H.factors)...)))
+Base.@propagate_inbounds function basisstate(n::Integer, H::ProductSpace{B}) where B
     inds = Tuple(H.cartinds[n])
     ProductState(map(basisstate, inds, H.factors))
 end
-function state_index(state::AbstractBasisState, H::ProductSpace{B}) where B
-    cartesian_index = CartesianIndex(Tuple(map(state_index, state.states, H.factors)))
-    H.lininds[cartesian_index]
+function _state_index(state::ProductState, H::ProductSpace)
+    length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
+    inds = map(_state_index, state.states, H.factors)
+    all(>(0), inds) || return 0
+    H.lininds[CartesianIndex(inds)]
 end
-_find_atom_position(Hsub::AbstractAtomicHilbertSpace, H::ProductSpace) = get(H.atom_ordering, Hsub, 0)
-function _find_position(Hsub, H::ProductSpace)
-    pos = findfirst(==(Hsub), H.factors)
-    isnothing(pos) && return 0
-    return pos
-end
+# `lininds` is exact only when the product of the factor dimensions fits in an `Int`
+has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && prod(big ∘ dim, H.factors) <= typemax(Int)
 
-
-maximum_particles(H::ProductSpace) = sum(maximum_particles, factors(H))
+maximum_particles(H::ProductSpace) = sum(maximum_particles, groups(H))
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
 parity(state::ProductState) = prod(parity, atomic_factors(state))
 
-function atomic_substate(n, f::ProductState, space::ProductSpace)
-    count = 0
-    for (k, s) in enumerate(factors(space))
-        add = length(atomic_factors(s))
-        if count < n <= count + add
-            return substate(n - count, substate(k, f))
-        end
-        count += add
-    end
-    throw(ArgumentError("Invalid substate index"))
-end
-
 
 @testitem "ProductSpace" begin
-    import FermionicHilbertSpaces: state_index, basisstate, state_mapper, ProductState, substate, complementary_subsystem, atomic_factors, split_state
+    import FermionicHilbertSpaces: state_index, basisstate, state_mapper, ProductState, substate, complementary_subsystem, atomic_factors, atomic_id, split_state
     @fermions a b
     @fermions c
     Ha = hilbert_space(a[1])
@@ -89,7 +77,7 @@ end
     @test length(H.factors) == 2
     @test length(H.atoms) == 3
     @test dim(H) == dim(Ha) * dim(Hb) * dim(Hc)
-    @test H.atom_ordering == Dict(Ha => 1, Hb => 2, Hc => 3)
+    @test H.atom_index == Dict(atomic_id(Ha) => 1, atomic_id(Hb) => 2, atomic_id(Hc) => 3)
     @test_throws ArgumentError tensor_product([Ha, Ha])
 
     Hab = H.factors[1]
@@ -102,11 +90,15 @@ end
     @test dim(H2) == dim(H) * dim(Hboson)
     @test length(H2.factors) == 3
 
-    @test collect(basisstates(H2)) == [ProductState((s_f.states..., s_b)) for s_f in basisstates(H), s_b in basisstates(Hboson)]
+    @test collect(basisstates(H2)) == vec([ProductState((s_f.states..., s_b)) for s_f in basisstates(H), s_b in basisstates(Hboson)])
     for (i, state) in enumerate(basisstates(H))
         @test state_index(state, H) == i
         @test basisstate(i, H) == state
     end
+    # a state that is missing in any factor is not in H
+    @test state_index(ProductState((FockNumber(0), FockNumber(0), FermionicHilbertSpaces.BosonicState(2))), H2) == 0
+    @test state_index(ProductState((FockNumber(4), FockNumber(0), FermionicHilbertSpaces.BosonicState(1))), H2) == 0
+    @test state_index(ProductState((FockNumber(3), FockNumber(1), FermionicHilbertSpaces.BosonicState(1))), H2) == dim(H2)
 
     mapper = state_mapper(H, (Ha, Hb))
     for state in basisstates(H)
@@ -255,6 +247,20 @@ end
 
 end
 
+@testitem "ProductSpaceMapper combines vectors of substates" begin
+    import FermionicHilbertSpaces: state_mapper, combine_states, basisstates
+    @fermions f
+    @spins S 1 // 2
+    Hs = [hilbert_space(S[n]) for n in 1:3]
+    H = tensor_product(hilbert_space(f, 1:2), Hs...)
+    targets = (hilbert_space(f, 1:2), Hs...)
+    mapper = state_mapper(H, targets)
+    for substates in Iterators.product(map(basisstates, targets)...)
+        @test combine_states(collect(Any, substates), mapper) == combine_states(substates, mapper)
+    end
+    @test_throws ArgumentError combine_states(Any[first(basisstates(Hs[1]))], mapper)
+end
+
 @testitem "Fermion ordering" begin
     import FermionicHilbertSpaces: state_mapper
     @fermions f
@@ -267,25 +273,14 @@ end
 unique_split(::Any) = false
 unique_combine(::Any) = false
 
-_find_position(target::AbstractAtomicHilbertSpace, parent::AbstractAtomicHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
-_find_position(target::AbstractGroupedHilbertSpace, parent::AbstractGroupedHilbertSpace) = atomic_id(target) == atomic_id(parent) ? 1 : 0
+partial_trace_phase_factor_eltype(space::ProductSpace) = promote_type((partial_trace_phase_factor_eltype(H) for H in groups(space))...)
+partial_transpose_phase_factor_eltype(space::ProductSpace) = promote_type((partial_transpose_phase_factor_eltype(H) for H in groups(space))...)
 
-partial_trace_phase_factor_eltype(space::ProductSpace) = promote_type((partial_trace_phase_factor_eltype(H) for H in factors(space))...)
 function partial_trace_phase_factor(state1, state2, space::ProductSpace)
-    # product of phase factors from each space and substate
-    pf = 1
-    for (s1, s2, group) in zip(state1.states, state2.states, space.factors)
-        pf *= partial_trace_phase_factor(s1, s2, group)
-    end
-    return pf
+    prod(map(partial_trace_phase_factor, state1.states, state2.states, space.factors); init=1)
 end
 function partial_transpose_phase_factor(state1, state2, space::ProductSpace)
-    # product of phase factors from each space and substate
-    pf = 1
-    for (s1, s2, group) in zip(state1.states, state2.states, space.factors)
-        pf *= partial_transpose_phase_factor(s1, s2, group)
-    end
-    return pf
+    prod(map(partial_transpose_phase_factor, state1.states, state2.states, space.factors); init=1)
 end
 
 struct ProductOperator{C,O,S}
@@ -297,7 +292,7 @@ struct ProductOperator{C,O,S}
     end
 end
 function ProductOperator(ops::O, spaces::S, inds::Vector{Int}) where {O,S}
-    length(ops) == length(spaces) || throw(ArgumentError("Length of ops and spaces must match"))
+    length(ops) == length(spaces) || throw(ArgumentError("`ops` and `spaces` must have the same length, got $(length(ops)) and $(length(spaces))."))
     C = promote_type(Iterators.map(mat_eltype, ops)...)
     ProductOperator{C}(ops, spaces, inds)
 end
@@ -308,7 +303,7 @@ function has_internal_rep(space::AbstractHilbertSpace, ::Type{T}) where {T}
     has_internal_rep(state, space, T)
 end
 function has_internal_rep(state::ProductState, space::ProductSpace, ::Type{T}) where {T}
-    all(Iterators.map((s, f) -> has_internal_rep(s, f, T), state.states, factors(space)))
+    all(Iterators.map((s, f) -> has_internal_rep(s, f, T), state.states, groups(space)))
 end
 
 function has_internal_rep(state, space, ::Type{T}) where {T}
@@ -337,13 +332,13 @@ function precomputation_before_operator_application(ops::ProductOperator, space:
     return map(precomputation_before_operator_application, ops.ops, ops.spaces)
 end
 
-internal_rep(state, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))
+internal_rep(state::ProductState, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))
 physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state, space)
 
 function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::ProductSpace, precomps) where B
     if !ismissing(fast_path(space))
         T = typeof(fast_path(space))
-        internal_reps = map((s, f) -> _internal_rep(s, f, T), state.states, factors(space))
+        internal_reps = map((s, f) -> _internal_rep(s, f, T), state.states, groups(space))
         newrep, amp = _apply_local_operators_fast(ops, internal_reps, space, precomps)
         return ProductState{B}(newrep), amp
     else
@@ -356,56 +351,24 @@ function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::Abst
     newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
     return _internal_rep(newstate, space, T), amp
 end
-function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::NTuple{N,InternalRep{T}}, space::ProductSpace, precomps) where {C,T,N}
-    # amp::C = one(C)
-    # newreps::NTuple{N,InternalRep{T}} = internal_reps
-    # n::Int = 0
-    # map(ops.ops, ops.spaces, precomps, ops.inds) do op, local_space, precomp, n
-    #     internal_rep::InternalRep{T} = internal_reps[n]
-    #     new_local_rep::InternalRep{T}, local_amp::C = _apply_local_operators(op, internal_rep, local_space, precomp)
-    #     amp *= local_amp
-    #     newreps = Base.setindex(newreps, new_local_rep, n)
-    #     return nothing
-    # end
-    amp, newreps = foldl(
-        zip(ops.inds, ops.ops, ops.spaces, precomps);
-        init=(one(C), internal_reps)
-    ) do (amp, newreps), (n, op, local_space, precomp)
-        ismissing(op) && return (amp, newreps)
-        new_local_rep::InternalRep{T}, local_amp::C =
-            _apply_local_operators(op, internal_reps[n], local_space, precomp)
-        return (amp * local_amp, Base.setindex(newreps, new_local_rep, n))
-    end
-    return newreps, amp
+function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::Tuple{InternalRep{T},Vararg{InternalRep{T}}}, space::ProductSpace, precomps) where {C,T}
+    return _apply_group_operators(one(C), internal_reps, internal_reps, ops.inds, 1, ops.ops, ops.spaces, precomps)
 end
 function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductState{B}, space::ProductSpace, precomps) where {C,B<:Tuple}
-    # amp::C = one(C)
-    # newstates::B = state.states
-    # n::Int = 0
-    # println(typeof(ops.ops), typeof(ops.spaces), typeof(precomps), typeof(ops.inds))
-    # for (op, local_space, precomp, n) in zip(ops.ops, ops.spaces, precomps, ops.inds)
-    #     # n += 1
-    #     ismissing(op) && return newstates
-    #     subst = state.states[n]
-    #     new_local_state, local_amp::C = _apply_local_operators(op, subst, local_space, precomp)
-    #     amp *= local_amp
-    #     newstates = Base.setindex(newstates, new_local_state, n)
-    # end
-
-    amp, newstates = foldl(
-        zip(ops.inds, ops.ops, ops.spaces, precomps);
-        init=(one(C), state.states)
-    ) do (amp, newstates), (n, op, local_space, precomp)
-        ismissing(op) && return (amp, newstates)
-        new_local_state, local_amp::C =
-            _apply_local_operators(op, state.states[n], local_space, precomp)
-        return (amp * local_amp, Base.setindex(newstates, new_local_state, n))
-    end
-
+    newstates, amp = _apply_group_operators(one(C), state.states, state.states, ops.inds, 1, ops.ops, ops.spaces, precomps)
     return ProductState{B}(newstates), amp
 end
+# Apply the k-th local operator to the substate `states[inds[k]]` and recurse over the remaining
+# operators. Recursing over the tuples `ops`, `spaces` and `precomps` keeps each call concretely typed.
+_apply_group_operators(amp, states, newstates, inds, k, ::Tuple{}, ::Tuple{}, ::Tuple{}) = (newstates, amp)
+function _apply_group_operators(amp::C, states, newstates, inds, k, ops::Tuple, spaces::Tuple, precomps::Tuple) where {C}
+    n = inds[k]
+    new_local_state, local_amp = _apply_local_operators(first(ops), states[n], first(spaces), first(precomps))
+    return _apply_group_operators(amp * convert(C, local_amp), states, Base.setindex(newstates, new_local_state, n),
+        inds, k + 1, Base.tail(ops), Base.tail(spaces), Base.tail(precomps))
+end
 
-add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors), map(a -> add_tag(a, tag), H.atoms))
+add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors))
 
 
 ##
@@ -522,66 +485,72 @@ function ProductSpaceMapper(source::ProductSpace, targets)
     targets = Tuple(targets)
     sfactors = factors(source)
 
-    # Atom bookkeeping: which factor owns each atom, and where inside it.
-    A = eltype(source.atoms)
-    atom_factor = Dict{A,Int}()
-    atom_pos = Dict{A,Int}()
+    # Atom bookkeeping, by name: which factor owns each atom, and where inside it.
+    # The targets' bases are not checked here, that is done by `match_atoms` in the callers.
+    atom_factor = Dict{Any,Int}()
     for (ci, f) in enumerate(sfactors)
-        for (k, a) in enumerate(atomic_factors(f))
-            atom_factor[a] = ci
-            atom_pos[a] = k
+        for a in atomic_factors(f)
+            atom_factor[atomic_id(a)] = ci
         end
     end
 
     # Validate: every target atom exists in the source, no duplicates.
-    seen = Set{A}()
+    seen = Set()
     for t in targets, a in atomic_factors(t)
-        haskey(atom_factor, a) || throw(ArgumentError("Atom $a not in source space"))
-        a ∈ seen && throw(ArgumentError("Atom $a duplicated across targets"))
-        push!(seen, a)
+        haskey(atom_factor, atomic_id(a)) || throw(ArgumentError("Each target atom must be an atom of the source space, got `$a` which is not."))
+        atomic_id(a) ∈ seen && throw(ArgumentError("Each atom may appear in only one target, got `$a` in several."))
+        push!(seen, atomic_id(a))
     end
 
     # Build the piece table: one piece per group of each target.
-    # Each group must lie inside a single source factor.
-    pieces = [
-        begin
-            owners = unique(atom_factor[a] for a in atomic_factors(g))
-            length(owners) == 1 ||
-                throw(ArgumentError("Target group $g spans several source factors; this is not supported"))
-            (factor=only(owners), target=ti, group_slot=si, space=g,
-                pos=minimum(atom_pos[a] for a in atomic_factors(g)))
-        end
-        for (ti, t) in enumerate(targets) for (si, g) in enumerate(groups(t))
-    ]
+    # Each group must lie inside a single source factor. The integer coordinates of the
+    # pieces are kept apart from their (heterogeneous) spaces, so that grouping and sorting
+    # them works on a concretely typed vector.
+    pieces = NamedTuple{(:factor, :target, :group_slot),NTuple{3,Int}}[]
+    piece_spaces = Any[]
+    piece_of = Dict{Tuple{Int,Int},Int}()  # (target, group_slot) -> piece
+    for (ti, t) in enumerate(targets), (si, g) in enumerate(groups(t))
+        ids = atom_ids(g)
+        owners = unique(atom_factor[id] for id in ids)
+        length(owners) == 1 ||
+            throw(ArgumentError("A target group must lie within a single source factor, got `$g` which spans several."))
+        push!(pieces, (factor=only(owners), target=ti, group_slot=si))
+        push!(piece_spaces, g)
+        piece_of[(ti, si)] = length(pieces)
+    end
 
     # Per-factor view: build leaves and factor routes.
-    # A factor's pieces are ordered by where their atoms sit inside the
-    # factor, which is also the order the inner leaf mapper produces them in.
+    # A factor's pieces stay in target and slot order (the sort is stable).
+    order = sortperm(pieces, by=p -> p.factor)
     leaves = Any[]
     factor_routes = Any[]
-    piece_slot = Dict{Tuple{Int,Int},Int}()  # (target, group_slot) -> slot within factor
+    piece_slot = zeros(Int, length(pieces))  # piece -> slot within its factor
+    k = 1
     for (ci, f) in enumerate(sfactors)
-        ps = sort([p for p in pieces if p.factor == ci], by=p -> p.pos)
+        first_piece = k
+        while k <= length(order) && pieces[order[k]].factor == ci
+            piece_slot[order[k]] = k - first_piece + 1
+            k += 1
+        end
+        ps = view(order, first_piece:k-1)
         if isempty(ps)
             push!(leaves, Uncovered())
             push!(factor_routes, ())
             continue
         end
-        for (k, p) in enumerate(ps)
-            piece_slot[(p.target, p.group_slot)] = k
-        end
-        inner = state_mapper(f, Tuple(p.space for p in ps))
-        leaf = (length(ps) == 1 && only(ps).space == f) ? Passthrough(inner) : Fractured(inner)
+        spaces = Tuple(piece_spaces[n] for n in ps)
+        inner = state_mapper(f, spaces)
+        leaf = (length(ps) == 1 && only(spaces) == f) ? Passthrough(inner) : Fractured(inner)
         push!(leaves, leaf)
-        push!(factor_routes, Tuple(PieceIndex(p.target, p.group_slot) for p in ps))
+        push!(factor_routes, Tuple(PieceIndex(pieces[n].target, pieces[n].group_slot) for n in ps))
     end
 
     # Per-target view: the inverse routing, one entry per group slot.
     target_routes = Tuple(
         Tuple(
             begin
-                p = only(q for q in pieces if q.target == ti && q.group_slot == si)
-                PieceIndex(p.factor, piece_slot[(ti, si)])
+                n = piece_of[(ti, si)]
+                PieceIndex(pieces[n].factor, piece_slot[n])
             end
             for si in eachindex(groups(t)))
         for (ti, t) in enumerate(targets))
@@ -612,6 +581,11 @@ function combine_states(substates::Tuple, sp::ProductSpaceMapper)
     return (ProductState(states),), (1,)
 end
 combine_states(substates, sp::ProductSpaceMapper) = combine_states(Tuple(substates), sp)
+# A vector of substates has one entry per target; the mapper type gives that number statically
+function combine_states(substates::AbstractVector, sp::ProductSpaceMapper{<:Any,<:Any,<:Any,<:NTuple{N,Any}}) where {N}
+    length(substates) == N || throw(ArgumentError("Expected $N substates, got $(length(substates))."))
+    combine_states(ntuple(i -> substates[firstindex(substates)+i-1], Val(N)), sp)
+end
 combine_states(states::Tuple, ::ProductSpace{ProductState{B}}) where B = (ProductState{B}(B(states)),), (1,)
 
 # ─── Phase factors ───────────────────────────────────────────────────────────

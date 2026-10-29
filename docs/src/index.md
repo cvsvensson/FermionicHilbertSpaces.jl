@@ -9,6 +9,7 @@ CurrentModule = FermionicHilbertSpaces
 
 Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`.
 
+
 ## Functionality
 
 The package helps with three general areas
@@ -22,7 +23,7 @@ More concretely, with links to documentation and examples:
 * [Conserved quantities and constraints](conservation.md)
 * Examples for extending with a custom algebra: [Floquet](literate_output/floquet_tutorial.md), [Clock operators](literate_output/clock_operators.md)
 * Symbolic operators can act on [symbolic states](symbolic_states.md), so one can completely avoid instantiating large matrices.
-* Dealing with [spatial symmetries](dihedral_symmetry.md) such as translations. 
+* Dealing with [spatial symmetries](literate_output/translation_symmetry.md) such as translations. 
 * [Open systems](literate_output/open_system_lindblad.md) are represented by a tensor product of two copies of the hilbert space. With `reshape` you can convert between vectorized and matrix representations.
 
 # Introduction
@@ -44,6 +45,7 @@ To get the matrix representation of this operator on the Hilbert space, do
 ```@example intro
 mat = representation(ham, H)
 ```
+`representation(x, H)` is the main entry point for turning a symbolic expression into numbers: it gives a matrix for an operator and a vector for a state (see [symbolic states](symbolic_states.md)). It chooses what to compute from the type of `x`. The explicit forms `matrix_representation(op, H)` for operators and `vector_representation(state, H)` for states are also available. An optional third argument selects the format, `:sparse` (the default), `:dense` or `:lazy`.
 
 ## Tensor product and partial trace
 You can take tensor products of Hilbert spaces and operators on them, as well as calculate partial traces in a way that is consistent with fermionic anticommutation relations, see [Fermions](fermions.md). In this example, we take the ground state of the hamiltonian above, calculate reduced density matrices and the uncorrelated state $\rho_A \otimes \rho_B$.
@@ -78,6 +80,9 @@ and we can split it into sectors with definite particle numbers with
 ```@example intro
 constrain_space(Hsub, NumberConservation())
 ```
+
+# Related packages
+FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).
 
 # References
 ```@raw html

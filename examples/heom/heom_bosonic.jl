@@ -10,19 +10,20 @@
 ##
 ## In the doubled-space representation the bosonic HEOM generator is
 ##
-##   M = i(H_l − H_r) ⊗ I_aux                              (coherent Liouvillian)
+##   M = −i(H_l − H_r) ⊗ I_aux                             (coherent Liouvillian)
 ##     + I_sys ⊗ W_aux                                       (hierarchy damping)
-##     − i Σ_l (V_l − V_r) ⊗ Aup(l)                        (upward coupling)
-##     − i Σ_l (ξ_l V_l − ξ_l* V_r) ⊗ Adown(l)            (downward coupling)
+##     − i Σ_l (V_l − V_r) ⊗ Adown(l)                      (coupling to the tier above)
+##     − i Σ_l (ξ_l V_l − ξ_l* V_r) ⊗ Aup(l)              (coupling to the tier below)
 ##
 ## where
-##   • Aup(l) |n⟩  = |n with nₗ → nₗ+1⟩   (amplitude 1,  zero if Σnₗ = m_max)
-##   • Adown(l) |n⟩ = nₗ × |n with nₗ → nₗ−1⟩
+##   • Aup(l) |n⟩   = (nₗ+1) × |n with nₗ → nₗ+1⟩   (zero if Σnₗ = m_max)
+##   • Adown(l) |n⟩ = |n with nₗ → nₗ−1⟩            (zero if nₗ = 0)
 ##   • W_aux |n⟩    = (−Σₗ χₗ nₗ) |n⟩
 ##
+## so that dρₙ/dt contains −i[V, ρ_{n+eₗ}] and −i nₗ (ξₗ V ρ_{n−eₗ} − ξₗ* ρ_{n−eₗ} V).
 ## The bosonic superoperators B_j and D_j are
-##   B_j[•] = [V_σb, •]_−          ↔  (V_l − V_r) ⊗ Aup(l)
-##   D_j[•] = ξ_j V_σb [•] − ξ_j* [•] V_σb  ↔  (ξ_l V_l − ξ_l* V_r) ⊗ Adown(l)
+##   B_j[•] = [V_σb, •]_−          ↔  (V_l − V_r) ⊗ Adown(l)
+##   D_j[•] = ξ_j V_σb [•] − ξ_j* [•] V_σb  ↔  (ξ_l V_l − ξ_l* V_r) ⊗ Aup(l)
 ##
 ## This file defines:
 ##   • HEOMBosonicBath       – bath parameters (N_exp, m_max, χ, ξ)
@@ -33,7 +34,7 @@
 ##   • Algebra rules, symbolic_group, apply_local_operators (all required interfaces)
 
 using FermionicHilbertSpaces, Test
-import FermionicHilbertSpaces: AbstractSym, GenericHilbertSpace, open_system, symbolic_group, apply_local_operator, add_tag,
+import FermionicHilbertSpaces: AbstractSym, open_system, symbolic_group, apply_local_operator, add_tag,
     @nc, NCMul, NonCommutativeProducts.mul_effect, NonCommutativeProducts.@commutative, mat_eltype
 
 """
@@ -75,16 +76,20 @@ Base.show(io::IO, b::HEOMBosonicBath) = print(io, "HEOMBosonicBath(id=", b.id, "
 
     :up
 Symbolic operator that raises the occupation of exponent-index `l` in the
-bosonic ADO multi-index by one. Acts as the identity if the total tier
-already equals `bath.m_max`.
+bosonic ADO multi-index by one, with amplitude equal to the new occupation.
+Gives zero if the total tier already equals `bath.m_max`.
 
-    Aup(l) |n₁,…,nₗ,…⟩ = |n₁,…,nₗ+1,…⟩   (zero if Σnₗ = m_max)
+    Aup(l) |n₁,…,nₗ,…⟩ = (nₗ+1) |n₁,…,nₗ+1,…⟩   (zero if Σnₗ = m_max)
 
     :down
 Symbolic operator that lowers the occupation of exponent-index `l` in the
-bosonic ADO multi-index by one, with amplitude equal to the current occupation.
+bosonic ADO multi-index by one.
 
-    Adown(l) |n₁,…,nₗ,…⟩ = nₗ |n₁,…,nₗ−1,…⟩
+    Adown(l) |n₁,…,nₗ,…⟩ = |n₁,…,nₗ−1,…⟩   (zero if nₗ = 0)
+
+Their adjoints move the other way with the amplitudes swapped: `Aup(l)'` lowers with
+amplitude nₗ and `Adown(l)'` raises with amplitude 1. The field `weighted` records
+whether the amplitude is the occupation (as for `Aup` and `Aup'`) or 1.
 
     :damping
 Symbolic diagonal operator representing the hierarchy damping.
@@ -94,27 +99,18 @@ struct HEOMBosonicOp{B<:HEOMBosonicBath} <: AbstractSym
     type::Symbol
     l::Int
     bath::B
+    weighted::Bool
 end
+HEOMBosonicOp(type, l, bath) = HEOMBosonicOp(type, l, bath, type == :up)
 
 function Base.show(io::IO, op::HEOMBosonicOp)
-    if op.type == :up
-        print(io, "Aup(", op.l, ")")
-    elseif op.type == :down
-        print(io, "Adown(", op.l, ")")
-    elseif op.type == :damping
-        print(io, "W_aux")
-    end
+    op.type == :damping && return print(io, "W_aux")
+    is_adjoint = (op.type == :up) != op.weighted
+    print(io, op.weighted ? "Aup(" : "Adown(", op.l, ")", is_adjoint ? "'" : "")
 end
-Base.adjoint(op::HEOMBosonicOp) = begin
-    if op.type == :up
-        HEOMBosonicOp(:down, op.l, op.bath)
-    elseif op.type == :down
-        HEOMBosonicOp(:up, op.l, op.bath)
-    elseif op.type == :damping
-        op   # W is Hermitian
-    else
-        throw(ArgumentError("Unknown HEOMBosonicOp type: ", op.type))
-    end
+function Base.adjoint(op::HEOMBosonicOp)
+    op.type == :damping && return op # W is real and diagonal
+    return HEOMBosonicOp(op.type == :up ? :down : :up, op.l, op.bath, op.weighted)
 end
 
 ## Algebra
@@ -154,13 +150,13 @@ Base.show(io::IO, s::HEOMBosonicAuxState) = print(io, "ADO", s.n)
         if sum(n) >= op.bath.m_max
             return state, zero(amp)
         end
-        return HEOMBosonicAuxState{N}(Base.setindex(n, n[op.l] + 1, op.l)), amp
+        return HEOMBosonicAuxState{N}(Base.setindex(n, n[op.l] + 1, op.l)), op.weighted ? amp * (n[op.l] + 1) : amp
     elseif op.type == :down
         nl = n[op.l]
         if iszero(nl)
             return state, zero(amp)
         end
-        return HEOMBosonicAuxState{N}(Base.setindex(n, nl - 1, op.l)), amp * nl
+        return HEOMBosonicAuxState{N}(Base.setindex(n, nl - 1, op.l)), op.weighted ? amp * nl : amp
     elseif op.type == :damping
         decay = -sum(op.bath.χ[l] * n[l] for l in eachindex(n))
         return HEOMBosonicAuxState{N}(n), amp * decay
@@ -207,9 +203,9 @@ end
 
 Build the symbolic bosonic HEOM generator
 
-    M = i(H_l - H_r) + W_aux
-        - i Σ_l (V_l - V_r) * Aup(l)
-        - i Σ_l (ξ_l V_l - ξ_l* V_r) * Adown(l)
+    M = -i(H_l - H_r) + W_aux
+        - i Σ_l (V_l - V_r) * Adown(l)
+        - i Σ_l (ξ_l V_l - ξ_l* V_r) * Aup(l)
 
 from symbolic system operators and bath parameters.
 
@@ -223,8 +219,8 @@ The convention follows arXiv 2306.07522 Eq. (16) for the purely bosonic case
 with the doubled-space (vectorised density-matrix) representation of Section II.1.
 """
 function heom_generator(ham, V, bath::HEOMBosonicBath)
-    # Coherent Liouvillian: i[H, ρ] → i(H_l - H_r) in doubled space
-    M = 1im * (add_tag(ham, :left) - add_tag(ham, :right))
+    # Coherent Liouvillian: -i[H, ρ] → -i(H_l - H_r) in doubled space
+    M = -1im * (add_tag(ham, :left) - add_tag(ham, :right))
     Vleft = add_tag(V, :left)
     Vright = add_tag(V, :right)
     # Hierarchy damping: −Σₗ χₗ nₗ (diagonal on auxiliary space)
@@ -232,11 +228,11 @@ function heom_generator(ham, V, bath::HEOMBosonicBath)
     Vdiff = Vleft - Vright
     for l in 1:bath.N_exp
         ξl = bath.ξ[l]
-        # Upward coupling: −i [V_s, ρ] ⊗ Aup(l) in doubled space
-        M = M - 1im * Vdiff * HEOMBosonicOp(:up, l, bath)
+        # Coupling to the tier above: −i [V_s, ρ_{n+e_l}]
+        M = M - 1im * Vdiff * HEOMBosonicOp(:down, l, bath)
 
-        # Downward coupling: −i (ξ_l V_s ρ − ξ_l* ρ V_s) ⊗ Adown(l)
-        M = M - 1im * (ξl * Vleft - conj(ξl) * Vright) * HEOMBosonicOp(:down, l, bath)
+        # Coupling to the tier below: −i n_l (ξ_l V_s ρ_{n-e_l} − ξ_l* ρ_{n-e_l} V_s)
+        M = M - 1im * (ξl * Vleft - conj(ξl) * Vright) * HEOMBosonicOp(:up, l, bath)
     end
     M
 end
@@ -252,7 +248,7 @@ end
     bath2 = HEOMBosonicBath(2, 1, [1.0, 2.0], [1.0, 1.0])
     H2 = heom_bosonic_aux_space(bath2)
     @test dim(H2) == 3
-    @test basisstates(H2)[1].n isa NTuple{2,Int}
+    @test first(basisstates(H2)).n isa NTuple{2,Int}
 
     # N_exp=2, m_max=2 → 1 + 2 + 3 = 6 states
     bath3 = HEOMBosonicBath(3, 2, [1.0, 2.0], [1.0, 1.0])
@@ -273,11 +269,15 @@ end
     Md = representation(Adown, H; projection=true)
     Mw = representation(W, H)
 
-    # Aup: |0⟩→|1⟩, |1⟩→|2⟩, |2⟩→0 (truncated)
-    @test Mu ≈ [0 0 0; 1 0 0; 0 1 0]
+    # Aup: |0⟩→|1⟩ (amp=1), |1⟩→|2⟩ (amp=2), |2⟩→0 (truncated)
+    @test Mu ≈ [0 0 0; 1 0 0; 0 2 0]
 
-    # Adown: |0⟩→0, |1⟩→|0⟩ (amp=1), |2⟩→|1⟩ (amp=2)
-    @test Md ≈ [0 1 0; 0 0 2; 0 0 0]
+    # Adown: |0⟩→0, |1⟩→|0⟩, |2⟩→|1⟩
+    @test Md ≈ [0 1 0; 0 0 1; 0 0 0]
+
+    @test representation(Aup', H; projection=true) ≈ Mu'
+    @test representation(Adown', H; projection=true) ≈ Md'
+    @test repr.((Aup, Aup', Adown, Adown')) == ("Aup(1)", "Aup(1)'", "Adown(1)", "Adown(1)'")
 
     # W: |n⟩ → -χ*n |n⟩  →  diagonal  [0, -2, -4]
     @test Mw ≈ diagm([0.0, -2.0, -4.0])

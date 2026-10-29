@@ -4,6 +4,7 @@
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/)
 [![Build Status](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl)
+[![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 
 This package provides tools for dealing with the symbolic and linear algebra often encountered in quantum mechanics. Fermions, bosons and spins are included, but most functionality is generic and easily extended. This includes:
 - **Symbolic operators:** Define operators algebraically and compute matrix representations on hilbert spaces.
@@ -68,3 +69,5 @@ You might want to look elsewhere if you
 
 This package does not contain functions for things like calculating eigenstates and doing time evolution. The documentation has several examples of how to combine this package with other Julia packages to do this.
 
+## Related packages
+FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).

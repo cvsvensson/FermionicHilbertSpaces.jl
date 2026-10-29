@@ -26,13 +26,11 @@ To embed a fermion into a larger space, it must be dressed with a parity operato
     ```
     where ``P`` is the parity operator on ``\mathcal{H}_X``. 
 
-We still have to define in what order ``A`` and ``B`` acts in the expression ``A \tilde{\otimes} B``. Two choices are reasonable: 
-1. decide based on the order we wrote them down, so that ``A \tilde{\otimes} B = - B \tilde{\otimes} A``. 
-2. decide based on the arbitrary fermionic mode ordering, in which case ``A \tilde{\otimes} B = B \tilde{\otimes} A``.
+There are two ways to combine ``A`` and ``B`` into an operator on ``\mathcal{H}``:
+1. `tensor_product((A, B), (HX, HXbar) => H)` is the ordered product of embeddings ``A \hat{\otimes} B = (A \tilde{\otimes} \mathbb 1)(\mathbb 1 \tilde{\otimes} B)``, the algebraic product of eq. (26) in [[1]](#fermion_information_article). The order of the arguments matters: swapping two odd operators flips the sign.
+2. `generalized_kron((A, B), (HX, HXbar) => H)` is the basis-wise fermionic tensor product ``A \tilde{\otimes} B`` of eqs. (14b) and (15) in [[1]](#fermion_information_article). It equals ``A \hat{\otimes} B`` when each subsystem consists of consecutive modes of ``\mathcal{H}`` passed in that order, and otherwise can differ, for example by a sign; see [`tensor_product` and `generalized_kron` on arrays](hilbert_space_operations.md#tensor_product-and-generalized_kron-on-arrays).
 
-In this package, the first choice is the canonical way and is used by `tensor_product`. This function uses the order in which the operators are passed to it explicitly such that `tensor_product((A, B), (HX, HXbar) => H)` corresponds to the ordered product of embeddings ``A \tilde{\otimes} \mathbb 1) (\mathbb 1 \tilde{\otimes} B)``. The second choice is available with `generalized_kron`.
-
-In this way, our function `tensor_product` is closely related to the `algebraic tensor product` of [[1]](#fermion_information_article).
+Use `tensor_product` for product states, for products of local observables, and for anything that should equal a product of embedded operators, such as `representation` of a product of symbolic operators.
 
 ### The fermionic partial trace
 The partial trace is most often used to calculate reduced density matrices. The fundamental property is that for an observable ``A`` on the subsystem ``X``, the expectation value of ``A`` in a state ``\rho`` on the full system is equal to the expectation value of ``A`` in the reduced state ``\rho_X = \text{Tr}_{\bar X}[\rho]``.
