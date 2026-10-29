@@ -78,7 +78,7 @@ The matrix returned by `representation` will depend on the ordering of operators
     ```
 
 ## Correlation matrices and entanglement
-The Nambu correlation matrix ``\Gamma_{ij} = \langle \Psi_j^\dagger \Psi_i \rangle`` of the BdG ground state is `correlation_matrix(vecs)`, where `vecs` are the eigenvectors from `eigen(A, BdGEigen())`, and `ground_state_parity(vecs)` is its fermionic parity. For a many-body state `ψ` on `H`, `correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`.
+With ``\Psi = (f; f^\dagger)`` listing the annihilation and then the creation operators of the modes of a BdG space, the Nambu correlation matrix is ``G_{ij} = \langle \Psi_i^\dagger \Psi_j angle``. For the BdG ground state it is `correlation_matrix(F)`, where `F` is the result of `eigen(A, BdGEigen())`, and `ground_state_parity(F)` is its fermionic parity. For a many-body state `ψ` on `H`, `correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`. A hermitian quadratic operator `op` without identity part, with `A = representation(op, Hbdg)` and `N` modes, has ``\langle op angle`` equal to `sum(A .* G) + tr(A[1:N, 1:N])`.
 
 The rows and columns of a subsystem of modes form the reduced correlation matrix. Its eigenvalues ``\lambda`` give the entanglement entropy ``S = -\sum \lambda \log \lambda`` of the subsystem, which equals the entropy of the reduced many-body density matrix:
 ```@example entanglement
@@ -88,17 +88,20 @@ N = 4
 h = Hermitian(rand(ComplexF64, N, N))
 Δ = rand(ComplexF64, N, N) |> m -> m - transpose(m)
 ham = sum(f[i]' * h[i, j] * f[j] + Δ[i, j] * f[i]' * f[j]' + hc for i in 1:N, j in 1:N)
-_, vecs = eigen(representation(ham, hilbert_space(f, 1:N, BdG()), :dense), FermionicHilbertSpaces.BdGEigen())
-Γ = correlation_matrix(vecs)
-A = 1:2
-ΓA = Γ[[A; A .+ N], [A; A .+ N]]
+Hbdg = hilbert_space(f, 1:N, BdG())
+A = representation(ham, Hbdg, :dense)
+vals, vecs = eigen(A, FermionicHilbertSpaces.BdGEigen())
+G = correlation_matrix(Eigen(vals, vecs))
+sub = 1:2
+Gsub = G[[sub; sub .+ N], [sub; sub .+ N]]
 entropy(λ) = -sum(x -> x > 0 ? x * log(x) : zero(x), λ)
-S = entropy(eigvals(Hermitian(ΓA)))
+S = entropy(eigvals(Hermitian(Gsub)))
 
 H = hilbert_space(f, 1:N)
 ψ = eigvecs(Hermitian(representation(ham, H, :dense)))[:, 1]
-ρA = partial_trace(ψ * ψ', H => hilbert_space(f, A))
-@assert S ≈ entropy(eigvals(Hermitian(ρA)))
-@assert ΓA ≈ correlation_matrix(ψ, H, hilbert_space(f, A, BdG()))
+ρsub = partial_trace(ψ * ψ', H => hilbert_space(f, sub))
+@assert S ≈ entropy(eigvals(Hermitian(ρsub)))
+@assert Gsub ≈ correlation_matrix(ψ, H, hilbert_space(f, sub, BdG()))
+@assert sum(A .* G) + tr(A[1:N, 1:N]) ≈ dot(ψ, representation(ham, H, :dense), ψ)
 S
 ```
