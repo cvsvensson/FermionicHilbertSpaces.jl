@@ -174,7 +174,8 @@ c1 = representation(f[1], Axes(H1, H2))
 V1' * c1 * V2[:, 1]
 ```
 
-The poles are at the energies `E2[1] .- E1`.
+The poles are at the energies `E2[1] .- E1`. The [Anderson impurity
+example](literate_output/anderson_impurity.md) uses this to compute a spectral function.
 
 ### Basic introspection
 
