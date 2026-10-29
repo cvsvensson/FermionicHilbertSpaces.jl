@@ -146,6 +146,15 @@ supply_missing_constraint_info(constraint::AdditiveConstraint{<:Any,Missing}, sp
 supply_missing_constraint_info(constraint::AdditiveConstraint, space, spaces) = constraint
 
 """
+    particle_number(state)
+
+Return the number of particles in the basis state `state`: the number of occupied modes for
+fermions, the occupation for a boson, and the total over the factors of a product state. This
+is the quantity [`NumberConservation`](@ref) conserves.
+"""
+function particle_number end
+
+"""
     NumberConservation(total=missing; spaces=missing, weights=missing)
     NumberConservation(total, spaces; weights=missing)
     NumberConservation(total, spaces, weights)
@@ -185,7 +194,8 @@ NumberConservation(space::AbstractHilbertSpace) = NumberConservation(missing; sp
     ParityConservation(space)
 
 Constraint enforcing allowed fermion parities, optionally on selected spaces.
-`parities` is a parity or a collection of parities, each `-1` or `1`. 
+`parities` is a parity or a collection of parities, each `1` (even) or `-1` (odd).
+Sectors are ordered by increasing quantum number, so the odd sector comes first.
 """
 struct ParityConservation{H} <: AbstractConstraint
     allowed_parities::Vector{Int}

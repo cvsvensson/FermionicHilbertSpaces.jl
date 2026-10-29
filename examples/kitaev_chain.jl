@@ -40,15 +40,11 @@ representation(hsym, H)
 
 # Now, let's diagonalize the system.
 # Since parity is conserved, we work in the even and odd parity sectors separately. 
-using FermionicHilbertSpaces: indices, sector, quantumnumbers
 (Eo, o), (Ee, e) = map(quantumnumbers(H)) do parity
     Hsec = sector(parity, H)
     ham = representation(hsym, Hsec)
     vals, vecs = eigs(ham; nev=1, which=:SR)
-    inds = indices(Hsec, H)
-    ground_state = zeros(eltype(vecs), dim(H))
-    ground_state[inds] = vecs[:, 1]
-    (; energy=first(vals), ground_state)
+    (; energy=first(vals), ground_state=embed(vecs[:, 1], Hsec => H))
 end
 # The ground states are almost degenerate, as expected.
 # Then, we can construct the ground state Majorana operators as

@@ -24,6 +24,10 @@ end
     tensor_product(spaces; constraint=NoSymmetry())
 
 Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
+
+The factors keep the order given. In the basis order, the first factor varies fastest. Fermionic
+modes are ordered factor by factor, which fixes the Jordan-Wigner order and the bit layout of
+[`FockNumber`](@ref): the modes of the first factor occupy the lowest bits.
 """
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 function tensor_product(spaces; constraint=NoSymmetry())
@@ -581,6 +585,11 @@ The trace drops the states of `H` whose part on `Hsub` is not in `Hsub`, or whos
 complement is not in `complement`. Unless `skipmissing=true`, throws an `ArgumentError` if `m`
 has a nonzero element in the row or column of such a state. The map `partial_trace(H => Hsub)`
 does not check its input.
+
+For fermions, the reduced density matrix is a physical state only when `m` has no coherence
+between even and odd fermion parity, as the parity superselection rule requires. The partial trace
+of a state with mixed parity is computed without warning, and its entropy need not match that of
+the complement.
 """
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
 

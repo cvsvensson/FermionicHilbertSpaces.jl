@@ -132,15 +132,13 @@ H = hilbert_space(f, 1:4, NumberConservation())
 map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(H), sectors(H))
 ```
 
-This pattern is useful to calculate ground states in each sector and extend each vector to the full space
+This pattern is useful to calculate ground states in each sector and extend each vector to the full space with [`embed`](@ref)
 ```@example hilbert_space_ops
 using LinearAlgebra, SparseArrays
 symham = sum(f[n]'f[n] for n in 1:4)
 ground_states = stack(sectors(H)) do Hsec
     ham = representation(symham, Hsec, :dense)
-    v = zeros(dim(H))
-    v[indices(Hsec, H)] = eigvecs(ham)[:, 1]
-    v
+    embed(eigvecs(ham)[:, 1], Hsec => H)
 end
 # Let's project the full hamiltonian onto the ground states
 ground_states' * representation(symham, H) * ground_states 

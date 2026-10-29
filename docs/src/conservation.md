@@ -218,7 +218,6 @@ function valid_state(partials, depth::Int, spaces, expected_order)
     depth == length(spaces) && return exc_count == length(expected_order)
     return true
 end
-using FermionicHilbertSpaces: BranchConstraint
 spin_order_constraint(order) = BranchConstraint((p,d,s) -> valid_state(p,d,s,order))
 ```
 
