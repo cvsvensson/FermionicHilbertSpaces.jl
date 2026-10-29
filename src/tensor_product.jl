@@ -51,7 +51,9 @@ function tensor_product(spaces; constraint=NoSymmetry())
 end
 
 size_compatible(m, H) = size(m) == ntuple(_ -> dim(H), ndims(m))
+size_compatible(m, ax::Axes) = size(m) == map(dim, ax.spaces)
 size_compatible(m::UniformScaling, H) = true
+size_compatible(m::UniformScaling, ax::Axes) = length(ax.spaces) == 2
 kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, Hs))
 
 @testitem "Kron size compatibility and error handling" begin
@@ -533,25 +535,43 @@ end
 Express `m` in the basis of `Hto`, where `Hfrom` and `Hto` have the same atoms but possibly
 different (or differently ordered) basis states. Unless `skipmissing=true`, throws an
 `ArgumentError` if `m` has nonzero elements involving states of `Hfrom` that are not in `Hto`.
+
+Either side can be an [`Axes`](@ref) with one space per axis of `m`; a bare space means that
+space on every axis. Across the pair the order is input => output, while inside each `Axes` it
+is rows first, `Axes(Hout, Hin)`. So `change_basis(m, H => Axes(Hout, Hin))` is the block of a
+matrix `m` on `H` with rows on `Hout` and columns on `Hin`, and `change_basis(blk, Axes(Hout, Hin) => H)`
+places that block in a matrix on `H` that is zero elsewhere. Each axis is checked against its own
+space: the rows of `m` against the states missing from the output row space, the columns against
+those missing from the output column space. Extracting a block from a matrix with elements outside
+the block therefore needs `skipmissing=true`.
 """
-change_basis(m, Hs::PairWithHilbertSpaces; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
-function change_basis(m, Hfrom::AbstractHilbertSpace, Hto::AbstractHilbertSpace; skipmissing=false, kwargs...)
-    U, dropped = basis_transformation(Hfrom, Hto)
+change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
+function change_basis(m, Hfrom::Union{AbstractHilbertSpace,Axes}, Hto::Union{AbstractHilbertSpace,Axes}; skipmissing=false, kwargs...)
+    n = m isa UniformScaling ? 2 : ndims(m)
+    from, to = _per_axis(Hfrom, n), _per_axis(Hto, n)
+    size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, got $(summary(m))."))
+    length(to.spaces) == n || throw(ArgumentError("The output needs one space per axis of `m`, got $(length(to.spaces)) spaces for $n axes."))
+    U1 = basis_transformation(first(from.spaces), first(to.spaces))
+    # a bare space gives every axis the same transformation, so it is computed once
+    transformations = map((Hf, Ht) -> Hf === first(from.spaces) && Ht === first(to.spaces) ? U1 : basis_transformation(Hf, Ht), from.spaces, to.spaces)
     if !skipmissing
-        for j in dropped
-            _has_support_on(m, j) && throw(ArgumentError("The state $(basisstate(j, Hfrom)) has nonzero weight but is not in the target Hilbert space. Pass `skipmissing=true` to drop it."))
+        for (axis, Hf, (_, dropped)) in zip(1:n, from.spaces, transformations)
+            for j in dropped
+                _has_support_on(m, axis, j) && throw(ArgumentError("The state $(basisstate(j, Hf)) has nonzero weight but is not in the target Hilbert space. Pass `skipmissing=true` to drop it."))
+            end
         end
     end
-    return _change_basis(m, U)
+    return _change_basis(m, map(first, transformations))
 end
-_change_basis(m::AbstractMatrix, U) = U * m * U'
-_change_basis(m::LowRankMatrix, U) = U * Matrix(m) * U'
-_change_basis(v::AbstractVector, U) = U * v
-_change_basis(m::UniformScaling, U) = m.λ * (U * U')
+_per_axis(H::AbstractHilbertSpace, n) = Axes(ntuple(_ -> H, n))
+_per_axis(ax::Axes, n) = ax
+_change_basis(m::AbstractMatrix, (Uout, Uin)) = Uout * m * Uin'
+_change_basis(m::LowRankMatrix, (Uout, Uin)) = Uout * Matrix(m) * Uin'
+_change_basis(v::AbstractVector, (U,)) = U * v
+_change_basis(m::UniformScaling, (Uout, Uin)) = m.λ * (Uout * Uin')
 
-_has_support_on(m::AbstractMatrix, j) = !iszero(view(m, j, :)) || !iszero(view(m, :, j))
-_has_support_on(v::AbstractVector, j) = !iszero(v[j])
-_has_support_on(m::UniformScaling, j) = !iszero(m.λ)
+_has_support_on(m, axis, j) = !iszero(selectdim(m, axis, j))
+_has_support_on(m::UniformScaling, axis, j) = !iszero(m.λ)
 
 function _checked_basis_transformation(Hfrom, Hto; skipmissing=false)
     U, dropped = basis_transformation(Hfrom, Hto)
@@ -706,7 +726,8 @@ end
 # Throw if `m` has weight on a state of `H` that the partial trace drops, as `change_basis` does
 function _check_covered(m, covered)
     all(covered) && return nothing
-    _has_support_on(m, findall(!, covered)) && throw(ArgumentError("`m` has nonzero weight on a state of `H` whose part on `Hsub` or on the complement is missing. Pass `skipmissing=true` to drop it."))
+    dropped = findall(!, covered)
+    (_has_support_on(m, 1, dropped) || _has_support_on(m, 2, dropped)) && throw(ArgumentError("`m` has nonzero weight on a state of `H` whose part on `Hsub` or on the complement is missing. Pass `skipmissing=true` to drop it."))
     return nothing
 end
 
@@ -939,7 +960,7 @@ function _canonicalize_pt_input(v::AbstractVector, H::AbstractHilbertSpace)
     end
 end
 _check_pt_input_size(m::AbstractMatrix, H::AbstractHilbertSpace) =
-    size(m) == (dim(H), dim(H)) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
+    size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
 function _canonicalize_pt_input(m::AbstractMatrix, H::AbstractHilbertSpace)
     _check_pt_input_size(m, H)
     return _vectorize_pt_density_matrix(m)
@@ -952,7 +973,7 @@ function _canonicalize_pt_output(v::AbstractVector, Hsub::AbstractHilbertSpace)
     return v
 end
 function _canonicalize_pt_output(m::AbstractMatrix, Hsub::AbstractHilbertSpace)
-    size(m) == (dim(Hsub), dim(Hsub)) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(m))"))
+    size_compatible(m, Hsub) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(m))"))
     return vec(m)
 end
 
@@ -1307,4 +1328,28 @@ end
     @test change_basis(mbf, Hbf => Hfb) ≈ mfb
     v = rand(dim(Hfb))
     @test change_basis(change_basis(v, Hfb => Hbf), Hbf => Hfb) == v
+end
+
+@testitem "change_basis with Axes" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: change_basis
+    using FermionicHilbertSpaces: Axes
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    Hout = hilbert_space(f, 1:3, NumberConservation(1))
+    Hin = hilbert_space(f, 1:3, NumberConservation([1, 2]))
+    rows, cols = indices(Hout, H), indices(Hin, H)
+    m = rand(dim(H), dim(H))
+
+    @test_throws ArgumentError change_basis(m, H => Axes(Hout, Hin))
+    blk = change_basis(m, H => Axes(Hout, Hin); skipmissing=true)
+    @test blk == m[rows, cols]
+
+    padded = zeros(dim(H), dim(H))
+    padded[rows, cols] = blk
+    @test change_basis(blk, Axes(Hout, Hin) => H) == padded
+
+    @test change_basis(2I, H => Axes(Hout, Hin); skipmissing=true) == 2I(dim(H))[rows, cols]
+    v = rand(dim(H))
+    @test change_basis(v, H => Axes(Hout); skipmissing=true) == v[rows]
 end
