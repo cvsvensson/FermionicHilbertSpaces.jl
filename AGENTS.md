@@ -4,7 +4,7 @@ Symbolic fermions, bosons and spins, Hilbert spaces with constraints such as con
 
 The core workflow is `@fermions f` → `hilbert_space(f, labels, constraint)` → `representation(op, H, :dense)` → LinearAlgebra.
 
-For task-by-task snippets (sector ground states, expectation values, moving vectors between a sector and the full space, operators between sectors, reduced density matrices, partial transpose, time evolution), read the cheat sheet: [docs/src/cheatsheet.md](docs/src/cheatsheet.md), also at https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/cheatsheet/.
+For task-by-task snippets (spinful and mixed spaces, sector ground states, product states, expectation values, moving vectors between a sector and the full space, operators between sectors, reduced density matrices, partial transpose, time evolution, large spaces), read the cheat sheet: [docs/src/cheatsheet.md](docs/src/cheatsheet.md), also at https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/cheatsheet/.
 
 Pitfalls:
 - Use `representation(op, H, :dense)` for a dense matrix, not `Matrix(representation(op, H))`.
