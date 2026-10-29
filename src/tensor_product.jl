@@ -956,7 +956,7 @@ function _canonicalize_pt_input(v::AbstractVector, H::AbstractHilbertSpace)
     end
 end
 _check_pt_input_size(m::AbstractMatrix, H::AbstractHilbertSpace) =
-    size(m) == (dim(H), dim(H)) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
+    size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
 function _canonicalize_pt_input(m::AbstractMatrix, H::AbstractHilbertSpace)
     _check_pt_input_size(m, H)
     return _vectorize_pt_density_matrix(m)
@@ -969,7 +969,7 @@ function _canonicalize_pt_output(v::AbstractVector, Hsub::AbstractHilbertSpace)
     return v
 end
 function _canonicalize_pt_output(m::AbstractMatrix, Hsub::AbstractHilbertSpace)
-    size(m) == (dim(Hsub), dim(Hsub)) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(m))"))
+    size_compatible(m, Hsub) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(m))"))
     return vec(m)
 end
 
