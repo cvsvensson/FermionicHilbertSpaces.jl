@@ -43,12 +43,12 @@ function plaquette_amplitude(Jx, Jy, Jz)
     ## Split the product as ⟨φp|G|φ⟩ with φ = VGV|ψ⟩, since V and G are Hermitian.
     φ, φp = V * G(V * ψ), V * G(V * ψp)
     ## Each holds a few thousand basis states, and the middle G is only needed on those they share.
-    sum(conj(c) * φ.dict[state] / (E0 - energy(state)) for (state, c) in φp.dict if haskey(φ.dict, state))
+    return sum(conj(c) * φ.dict[state] / (E0 - energy(state)) for (state, c) in φp.dict if haskey(φ.dict, state))
 end
 
 # The amplitude equals $-J_\mathrm{eff}$ for any couplings, since it is exactly the fourth-order term.
 map(((1.0, 1.0, 10.0), (0.3, 0.7, 2.0))) do (Jx, Jy, Jz)
-    (amplitude=real(plaquette_amplitude(Jx, Jy, Jz)), Jeff=Jx^2 * Jy^2 / (16Jz^3))
+    (amplitude = real(plaquette_amplitude(Jx, Jy, Jz)), Jeff = Jx^2 * Jy^2 / (16Jz^3))
 end
 
 # See A. Kitaev, Ann. Phys. **321**, 2 (2006), arXiv:cond-mat/0506438, for the derivation.

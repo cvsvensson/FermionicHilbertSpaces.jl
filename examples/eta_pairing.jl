@@ -13,8 +13,8 @@ dim(H)
 # written as a sum of local terms.
 t, U, μ = 1.0, 4.0, 0.5
 n(j, s) = c[j, s]' * c[j, s]
-ham = sum(-t * c[j, s]' * c[j+1, s] + hc for j in 1:L-1 for s in (:↑, :↓)) +
-      sum(U * n(j, :↑) * n(j, :↓) - μ * (n(j, :↑) + n(j, :↓)) for j in 1:L)
+ham = sum(-t * c[j, s]' * c[j + 1, s] + hc for j in 1:(L - 1) for s in (:↑, :↓)) +
+    sum(U * n(j, :↑) * n(j, :↓) - μ * (n(j, :↑) + n(j, :↓)) for j in 1:L)
 
 # The η-pairing operator creates a doubly occupied site with a staggered phase.
 # The phase makes η† commute with the hopping on a bipartite lattice, so the states

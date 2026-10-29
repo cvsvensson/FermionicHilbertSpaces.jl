@@ -12,20 +12,20 @@ import KrylovKit.VectorInterface: inner
 @fermions d c
 N = 81
 εd, U, V = -1.0, 3.0, 0.05
-εk = range(-1, 1, length=N)
+εk = range(-1, 1, length = N)
 kF = (N + 1) ÷ 2
 spins = [:↑, :↓]
 H = tensor_product(hilbert_space(d, spins), hilbert_space(c, [(k, σ) for k in 1:N for σ in spins]))
 H0 = sum(εd * d[σ]' * d[σ] for σ in spins) + U * d[:↑]' * d[:↑] * d[:↓]' * d[:↓] +
-     sum(εk[k] * c[k, σ]' * c[k, σ] for k in 1:N for σ in spins)
+    sum(εk[k] * c[k, σ]' * c[k, σ] for k in 1:N for σ in spins)
 Vhyb = sum(V * d[σ]' * c[k, σ] + hc for k in 1:N for σ in spins)
 
 # The low-energy states have one electron on the impurity, one electron at the Fermi level, and all levels below it filled.
 # We build them by acting with creation operators on the empty state.
 vacuum = Ket("0"^(2N + 2), H)
-fermi_sea = prod(c[k, σ]' for k in 1:kF-1 for σ in spins) * vacuum
+fermi_sea = prod(c[k, σ]' for k in 1:(kF - 1) for σ in spins) * vacuum
 low_energy = [d[σ]' * c[kF, τ]' * fermi_sea for σ in spins for τ in spins]
-E0 = εd + 2sum(εk[1:kF-1])
+E0 = εd + 2sum(εk[1:(kF - 1)])
 
 # The second-order effective Hamiltonian is ``H_\mathrm{eff} = P V (E_0 - H_0)^{-1} V P``.
 # `Vhyb` changes the impurity occupation, so `Vhyb * p` has no overlap with the low-energy states and the inverse is well defined.
@@ -44,7 +44,7 @@ Heff = effective_hamiltonian(low_energy, H0, Vhyb, E0)
 # ``J = 2V^2 \left(1/|\varepsilon_d| + 1/(\varepsilon_d + U)\right)``.
 λ = eigvals(Hermitian(Heff))
 J_SW = 2V^2 * (1 / abs(εd) + 1 / (εd + U))
-(splitting=λ[2] - λ[1], J_SW=J_SW)
+(splitting = λ[2] - λ[1], J_SW = J_SW)
 
 # The spin-flip matrix element between ``d_\uparrow^\dagger c_{k_F\downarrow}^\dagger`` and ``d_\downarrow^\dagger c_{k_F\uparrow}^\dagger`` is ``J/2``, as for ``J\,\mathbf{S}\cdot\mathbf{s}``.
 (Heff[2, 3], J_SW / 2)
