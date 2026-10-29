@@ -2,7 +2,7 @@
 
 # Symbolic kets live in a Hilbert space without enumerating its basis, so they can be used where
 # the full space is far too large for vectors. Here we build exact eigenstates of a Hubbard chain with
-# `L = 100` spinful sites, a Hilbert space of dimension 4^200.
+# `L = 200` spinful sites, a Hilbert space of dimension 4^200.
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions c
 L = 200
