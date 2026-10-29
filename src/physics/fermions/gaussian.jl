@@ -85,13 +85,15 @@ function gaussian_state(G, H, Hbdg::BdGHilbertSpace)
     N = length(modes(Hbdg))
     dim(H) == 2^N || throw(ArgumentError("The many-body space must have exactly the $N modes of the BdG space."))
     # transpose(G)[i, j] = ⟨Ψ_j' Ψ_i⟩, so ⟨γ' γ⟩ = v' * transpose(G) * v for γ' = quasiparticle(v, Hbdg)
-    occupations, vecs = eigen(transpose(G) - I / 2, BdGEigen())
-    factors = map(1:N) do k
-        creator = representation(quasiparticle(vecs[:, k], Hbdg), H, :dense)
-        n = occupations[k] + 1 / 2
-        n * creator * creator' + (1 - n) * creator' * creator
+    vals, vecs = eigen(transpose(G) - I / 2, BdGEigen())
+    all(λ -> abs(λ) <= 1 / 2 + sqrt(eps(real(eltype(vals)))), vals) ||
+        throw(ArgumentError("The occupations of G must lie in [0, 1]."))
+    return foldl(1:N; init = Matrix{eltype(vecs)}(I, dim(H), dim(H))) do ρ, k
+        creator = representation(quasiparticle(vecs[:, k], Hbdg), H)
+        n = vals[k] + 1 / 2
+        # creator * creator' + creator' * creator = I
+        ((1 - n) * I + (2n - 1) * creator * creator') * ρ
     end
-    return prod(factors)
 end
 
 @testitem "BdG correlation matrix and parity" begin
@@ -123,7 +125,6 @@ end
 
 @testitem "Gaussian state from a correlation matrix" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: BdGEigen
     @fermions f
     N = 4
     Hmb = hilbert_space(f, 1:N)
@@ -145,4 +146,5 @@ end
     ρ /= tr(ρ)
     Gthermal = correlation_matrix(ρ, Hmb, Hbdg)
     @test gaussian_state(Gthermal, Hmb, Hbdg) ≈ ρ
+    @test_throws ArgumentError gaussian_state(Diagonal([2; zeros(N - 1); -1; ones(N - 1)]), Hmb, Hbdg)
 end
