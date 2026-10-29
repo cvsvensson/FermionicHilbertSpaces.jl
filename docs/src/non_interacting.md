@@ -77,6 +77,18 @@ The matrix returned by `representation` will depend on the ordering of operators
     0.18844     ⋅        -0.297613  -0.169731 =#
     ```
 
+## Expectation values
+On the single-particle and BdG spaces, `expectation(op, G, H)` takes the correlation matrix of the state: ``G_{ij} = \langle c_i^\dagger c_j \rangle`` on the single-particle space and ``G_{ij} = \langle \Psi_i^\dagger \Psi_j \rangle`` on the BdG space. The operator must be quadratic, and its identity part is included. For a thermal state of the single-particle hamiltonian `h`, ``G = (1 + e^{\beta h})^{-T}``:
+```@example expectation
+using FermionicHilbertSpaces, LinearAlgebra
+@fermions c
+H = hilbert_space(c, 1:4, SingleParticle())
+ham = sum(c[n]' * c[n+1] + hc for n in 1:3) + 1
+h = representation(ham, H, :dense)
+G = transpose(inv(I + exp(10 * h)))
+expectation(ham, G, H)
+```
+
 ## From matrices and eigenvectors back to symbolic operators
 `quadratic_operator(M, H)` inverts `representation` on the `BdG` and `SingleParticle` spaces. On the `BdG` space it returns ``\sum_{ij} \Psi_i^\dagger M_{ij} \Psi_j`` with ``\Psi_n = c_n`` for ``n \leq N`` and ``\Psi_{n+N} = c_n^\dagger``, which is traceless and so differs from the original operator by the constant ``E + \tfrac{1}{2}\operatorname{tr} h``. `quasiparticle(v, H)` turns an eigenvector into the symbolic operator that creates the corresponding quasiparticle. Both results are ordinary symbolic operators, so they can be multiplied, adjointed and represented on the many-body space:
 ```@example bdg_quasiparticles
