@@ -19,7 +19,7 @@ Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
     default_fock_representation(N)
 
 The integer type for Fock states of `N` modes: `UInt64` below 63 modes, so that `2^N` fits in
-an `Int`, otherwise the smallest of `UInt128` to `UInt1024` with more than `N` bits, or `BigInt`.
+an `Int`, otherwise the smallest of `UInt128` to `UInt8192` with more than `N` bits, or `BigInt`.
 """
 function default_fock_representation(N)
     N < 63 && return UInt64
@@ -27,6 +27,9 @@ function default_fock_representation(N)
     N < 256 && return UInt256
     N < 512 && return UInt512
     N < 1024 && return UInt1024
+    N < 2048 && return UInt2048
+    N < 4096 && return UInt4096
+    N < 8192 && return UInt8192
     return BigInt
 end
 default_fock_representation(::Val{N}) where N = default_fock_representation(N)
@@ -342,12 +345,20 @@ end
 
 @testitem "fockstates handles large M without overflow or duplicates" begin
     import FermionicHilbertSpaces: fixed_particle_number_fockstates
-    for (M, n, T) in ((70, 3, UInt128), (1100, 1, BigInt))
+    for (M, n, T) in ((70, 3, UInt128), (1100, 1, FermionicHilbertSpaces.UInt2048), (8200, 1, BigInt))
         states = fixed_particle_number_fockstates(M, n)
         @test length(states) == binomial(M, n)
         @test allunique(states)
         @test all(f -> f isa FockNumber{T}, states)
     end
+end
+
+@testitem "Number-conserving space with more than 1024 modes" begin
+    @fermions f
+    M = 1100
+    ham = sum(f[n+1]'f[n] + hc for n in 1:M-1)
+    H = hilbert_space(f, 1:M, NumberConservation(1))
+    @test representation(ham, H) == representation(ham, hilbert_space(f, 1:M, SingleParticle()))
 end
 
 @testitem "Spaces with more than 64 modes" begin
