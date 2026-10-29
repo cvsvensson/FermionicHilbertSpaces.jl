@@ -545,7 +545,7 @@ function change_basis(m, Hfrom::AbstractHilbertSpace, Hto::AbstractHilbertSpace;
     return _change_basis(m, U)
 end
 _change_basis(m::AbstractMatrix, U) = U * m * U'
-_change_basis(m::LowRankMatrix, U) = LowRankMatrix(U * m.U, U * m.V)
+_change_basis(m::LowRankMatrix, U) = U * Matrix(m) * U'
 _change_basis(v::AbstractVector, U) = U * v
 _change_basis(m::UniformScaling, U) = m.λ * (U * U')
 
