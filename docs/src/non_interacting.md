@@ -149,3 +149,16 @@ M = representation(c[1]' * c[2] + c[1]' * c[2]' + hc, H, :dense)
 vals, vecs = eigen(M, BdGEigen())
 symbolic_operator(M, H), quasiparticle(vecs[:, end], H)
 ```
+
+## Majoranas
+`hilbert_space(γ, labels, SingleParticle())` is the analogous space for quadratic Majorana operators ``\frac{1}{2}\sum_{ij} R_{ij} \gamma_i \gamma_j``, where `representation` gives the antisymmetric matrix ``R``. For a hermitian operator, ``R = iA/2`` is hermitian, with ``A`` the real antisymmetric matrix in ``\frac{i}{4}\sum_{ij} A_{ij} \gamma_i \gamma_j``, and has the spectrum of the BdG matrix. With `F = eigen(Hermitian(R))`, `correlation_matrix(F)` is the ground-state correlation matrix ``G_{ij} = \langle \gamma_i \gamma_j \rangle / 2``, which `expectation` takes, and `ground_state_parity(F, H)` is the ground-state parity:
+```@example majoranas
+using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces.FreeFermions
+@majoranas γ
+H = hilbert_space(γ, 1:6, SingleParticle())
+ham = 1im / 2 * sum(γ[2k] * γ[2k + 1] for k in 1:2) + 0.1im * sum(γ[2k - 1] * γ[2k] for k in 1:3)
+F = eigen(Hermitian(representation(ham, H, :dense)))
+G = correlation_matrix(F)
+ground_state_parity(F, H), expectation(ham, G, H)
+```

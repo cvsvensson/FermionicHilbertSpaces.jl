@@ -3,12 +3,14 @@
 
 Hilbert spaces and tools for non-interacting fermions: the single-particle space
 `hilbert_space(f, labels, SingleParticle())`, the Bogoliubov-de Gennes space
-`hilbert_space(f, labels, BdG())`, their eigendecomposition and Gaussian states.
+`hilbert_space(f, labels, BdG())`, the Majorana space `hilbert_space(γ, labels, SingleParticle())`,
+their eigendecomposition and Gaussian states.
 """
 module FreeFermions
 
     using ..FermionicHilbertSpaces: FermionicHilbertSpaces, AbstractFockState, AbstractHilbertSpace,
-        EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, NoChunking, SymbolicFermionBasis,
+        EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, MajoranaSym, NoChunking, SymbolicFermionBasis,
+        SymbolicMajoranaBasis,
         _FermionModeSpace, _canonicalize_repr, _zero_matrix, exchange_phase, finalize!,
         matrix_accumulator, mode_position, push_inds_amps!, state_index
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,
@@ -17,6 +19,7 @@ module FreeFermions
     using LinearAlgebra: LinearAlgebra, Diagonal, Eigen, Hermitian, Symmetric, UniformScaling, I,
         det, eigen, issymmetric, normalize, svd
     using NonCommutativeProducts: NonCommutativeProducts, NCAdd, NCMul, NCterms
+    using OrderedCollections: OrderedDict
 
     using TestItems: @testitem
 
@@ -45,19 +48,16 @@ module FreeFermions
         return finalize!(accumulator, H)
     end
 
+    # Whether every term of `op` is a product of two factors `a` and `b` with `isvalid(a, b)`
+    _is_quadratic_operator(op, isvalid) = false
+    _is_quadratic_operator(op::NCMul, isvalid) = length(op.factors) == 2 && isvalid(op.factors...)
+    _is_quadratic_operator(op::NCAdd, isvalid) = all(term -> _is_quadratic_operator(term, isvalid), keys(op.dict))
     # Whether every term of `op` is a product of two `FermionSym`s, with one creation and one annihilation
-    # operator if `number_conserving`. Majoranas and other operators give `false`.
-    _is_quadratic_fermion_operator(op, number_conserving) = false
-    _is_quadratic_fermion_operator(op::NCMul, number_conserving) = _is_quadratic_fermion_term(op.factors, number_conserving)
-    _is_quadratic_fermion_operator(op::NCAdd, number_conserving) = all(term -> _is_quadratic_fermion_term(term.factors, number_conserving), keys(op.dict))
-    function _is_quadratic_fermion_term(factors, number_conserving)
-        length(factors) == 2 || return false
-        a, b = factors
-        (a isa FermionSym && b isa FermionSym) || return false
-        return !number_conserving || a.creation != b.creation
-    end
+    # operator if `number_conserving`
+    _is_quadratic_fermion_operator(op, number_conserving) = _is_quadratic_operator(op, (a, b) -> a isa FermionSym && b isa FermionSym && (!number_conserving || a.creation != b.creation))
 
     include("single_particle.jl")
+    include("free_majoranas.jl")
     include("bdg.jl")
     include("gaussian.jl")
     include("wick.jl")

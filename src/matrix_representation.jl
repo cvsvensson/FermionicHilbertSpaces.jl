@@ -539,9 +539,10 @@ density matrix `ρ` gives `tr(ρ * M)`, where `M = representation(op, H)`. The s
 
 On `hilbert_space(f, labels, FreeFermions.SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on
 `hilbert_space(f, labels, FreeFermions.BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in
-the order of the BdG space. The state is then the Gaussian state with that correlation matrix, and `op` of any degree
+the order of the BdG space. On the Majorana space `hilbert_space(γ, labels, FreeFermions.SingleParticle())` it is
+`G[i, j] = ⟨γ_i γ_j⟩ / 2`. The state is then the Gaussian state with that correlation matrix, and `op` of any degree
 is evaluated with Wick's theorem. Terms that do not conserve the particle number (single-particle space) or the parity
-(BdG space) throw an error, unless `projection=true`, which drops them.
+(BdG and Majorana spaces) throw an error, unless `projection=true`, which drops them.
 
 # Examples
 ```julia
