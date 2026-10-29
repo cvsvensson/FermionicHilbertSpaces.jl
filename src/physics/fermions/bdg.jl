@@ -58,12 +58,12 @@ _state_index(state, H::BdGHilbertSpace) = _state_index(state, parent(H))
 representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
-    normal_order_to_bdg(_nambu_matrix(op, H, repr))
+    return normal_order_to_bdg(_nambu_matrix(op, H, repr))
 end
 # The matrix `m` with `op == identity_coefficient(op) + Ψ' m Ψ`. Unlike the BdG matrix, it does not assume that `op` is hermitian.
 function _nambu_matrix(op, H, repr)
     _is_quadratic_fermion_operator(op, false) || throw(ArgumentError("Only quadratic fermionic operators can be represented on a BdG Hilbert space. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
-    _quadratic_matrix(_bdg_entry, remove_identity(op), H, repr)
+    return _quadratic_matrix(_bdg_entry, remove_identity(op), H, repr)
 end
 function expectation(op, G::AbstractMatrix, H::BdGHilbertSpace)
     _isscalar_operator(op) && return identity_coefficient(op)
