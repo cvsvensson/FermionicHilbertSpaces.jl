@@ -71,7 +71,7 @@ end
 """
     ground_state_parity(F::LinearAlgebra.Eigen, H)
 
-The fermionic parity of the ground state of a quadratic Majorana operator with matrix `R` on the Majorana space `H`, where `F = eigen(Hermitian(R))`, assuming no zero-energy modes.
+The fermionic parity of the ground state of a quadratic Majorana operator with matrix `R` on the Majorana space `H`, where `F = eigen(Hermitian(R))`, assuming no zero-energy modes. The parity refers to the fermions formed by consecutive pairs of `labels`, as in `hilbert_space(γ, labels)`; a different label order can flip the sign.
 """
 function ground_state_parity(F::Eigen, ::MajoranaSingleParticleHilbertSpace)
     N = div(size(F.vectors, 2), 2)

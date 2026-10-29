@@ -11,9 +11,10 @@ Base.show(io::IO, H::MajoranaSingleParticleHilbertSpace) = print(io, "MajoranaSi
 """
     hilbert_space(γ::SymbolicMajoranaBasis, labels, ::SingleParticle)
 
-The space of the Majoranas `γ[l]`, `l in labels`, for quadratic Majorana operators. `representation(op, H)` gives the antisymmetric matrix `R` with `op = Σᵢⱼ R[i, j] γ[i] γ[j] / 2` up to a constant. For hermitian `op`, `R` is hermitian with the spectrum of the BdG matrix of `op`, and Kitaev's real antisymmetric matrix `A` in `op = (i/4) Σᵢⱼ A[i, j] γ[i] γ[j]` is `-2im * R`.
+The space of the Majoranas `γ[l]`, `l in labels`, for quadratic Majorana operators. `representation(op, H)` gives the antisymmetric matrix `R` with `op = Σᵢⱼ R[i, j] γ[i] γ[j] / 2` up to a constant. For hermitian `op`, `R` is hermitian with the spectrum of the BdG matrix of `op`.
 
 ```julia
+@majoranas γ
 H = hilbert_space(γ, 1:2, SingleParticle())
 representation(1im * γ[1] * γ[2], H, :dense) # [0 1im; -1im 0]
 ```
