@@ -4,19 +4,35 @@ CurrentModule = FermionicHilbertSpaces
 
 # FermionicHilbertSpaces.jl
 
-[FermionicHilbertSpaces.jl](https://github.com/cvsvensson/FermionicHilbertSpaces.jl) turns symbolic fermion, boson and spin operators into matrices on Hilbert spaces, so you can define your own physics and never index vectors and matrices by hand. It started as a tool for tensor products and partial traces of fermions, which need care with signs[^1], and now also covers bosons, spins and algebras you define yourself.
+[FermionicHilbertSpaces.jl](https://github.com/cvsvensson/FermionicHilbertSpaces.jl) turns symbolic fermion, boson and spin operators into matrices on Hilbert spaces. The goal of this package is that you should be able to define your own physics and never have to think about indexing of vectors and matrices. The package was originally developed to handle tensor products and partial traces in fermionic systems (which needs special care
+[^1]), but now also includes bosons and spins and is easily extensible to other systems. 
 
-* Operators are written and simplified with ordinary algebra, e.g. `c[1]'c[2] + hc` ([Kitaev chain](literate_output/kitaev_chain.md)).
-* Their matrices can be built on any constrained space, not only the full Fock space ([mixed fermion-spin-boson](mixed_fermion_spin_boson.md)).
-* Constraints range from particle number and parity to any rule on the basis states ([constrained spaces](conservation.md)).
-* Tensor products, partial traces and embeddings take a pair of spaces, as in `partial_trace(ρ, H => Hsub)` ([space operations](hilbert_space_operations.md)).
-* Fermionic signs are handled automatically ([fermionic conventions](fermions.md)).
+Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`.
+
+
+## Functionality
+
+The package provides
+* **Algebra:** operators are written and simplified with ordinary algebra, e.g. `c[1]'c[2] + hc`.
+* **Constrained spaces:** matrices can be built on any constrained space, not only the full Fock space.
+* **Flexible constraints:** from particle number and parity to any rule on the basis states.
+* **Simple interface:** tensor products, partial traces and embeddings take a pair of spaces, as in `partial_trace(ρ, H => Hsub)`.
+* **Fermionic signs** are handled automatically.
 
 It is not a solver: combine it with LinearAlgebra, KrylovKit or ODE solvers for eigenstates and time evolution.
 
-## Getting started
+More concretely, with links to documentation and examples:
+* Fermions: [Theory on tensor products and partial traces](fermions.md). Example with [Kitaev chain](literate_output/kitaev_chain.md).
+* [Bosons tutorial](literate_output/bosons.md), [Spins tutorial](literate_output/spin_chain.md), [Mixed fermion-spin-boson systems](mixed_fermion_spin_boson.md)
+* [Conserved quantities and constraints](conservation.md)
+* Examples for extending with a custom algebra: [Floquet](literate_output/floquet_tutorial.md), [Clock operators](literate_output/clock_operators.md)
+* Symbolic operators can act on [symbolic states](symbolic_states.md), so one can completely avoid instantiating large matrices.
+* Dealing with [spatial symmetries](literate_output/translation_symmetry.md) such as translations. 
+* [Open systems](literate_output/open_system_lindblad.md) are represented by a tensor product of two copies of the hilbert space. With `reshape` you can convert between vectorized and matrix representations.
 
-Install with `using Pkg; Pkg.add("FermionicHilbertSpaces")`. Hopping between two sites conserves particle number, so we diagonalize in the one-particle sector, the subspace with exactly one particle. We then `embed` the ground state in the full space and trace out the second site:
+# Getting started
+
+Hopping between two sites conserves particle number, so we diagonalize in the one-particle sector, the subspace with exactly one particle. We then `embed` the ground state in the full space and trace out the second site:
 
 ```@example start
 using FermionicHilbertSpaces, LinearAlgebra
@@ -29,15 +45,7 @@ E = eigen(Hermitian(representation(ham, Hn, :dense)))
 partial_trace(ψ, H => hilbert_space(c, 1:1))
 ```
 
-## Where to go
-
-* **Tutorials** work through whole models, from the [interacting Kitaev chain](literate_output/kitaev_chain.md) via [bosons](literate_output/bosons.md), [spins](literate_output/spin_chain.md) and a [mixed fermion-spin-boson system](mixed_fermion_spin_boson.md) to [open systems](literate_output/open_system_lindblad.md) and [spatial symmetries](literate_output/translation_symmetry.md).
-* **Guides** explain one tool each: [constraints and quantum numbers](conservation.md), [operations on spaces and arrays](hilbert_space_operations.md), [symbolic states](symbolic_states.md) that avoid building large matrices, the [fermionic tensor product and partial trace](fermions.md), and [non-interacting systems](non_interacting.md).
-* **Performance** shows how to build matrices [in parallel](parallelization.md).
-* **Extending** shows how to [add your own operators and spaces](extending.md), with [clock operators](literate_output/clock_operators.md) and [Floquet](literate_output/floquet_tutorial.md) as examples.
-* **API reference** has [all docstrings](docstrings.md).
-
 ## Related packages
 FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).
 
-[^1]: Szalay, Szilárd, et al. "Fermionic systems for quantum information people." [J. Phys. A: Math. Theor. 54, 393001 (2021)](https://doi.org/10.1088/1751-8121/ac0646), [arXiv:2006.03087](https://arxiv.org/abs/2006.03087).
+[^1]: Szalay, Szilárd, et al. "Fermionic systems for quantum information people." [Journal of Physics A: Mathematical and Theoretical 54.39 (2021): 393001](https://doi.org/10.1088/1751-8121/ac0646), [arXiv:2006.03087](https://arxiv.org/abs/2006.03087)
