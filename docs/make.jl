@@ -8,7 +8,7 @@ DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilb
 
 literate_files = ["examples/kitaev_chain.jl", "examples/free_fermions.jl", "examples/floquet_tutorial.jl", "examples/open_system_lindblad.jl", "examples/spin_chain.jl", "examples/bosons.jl", "examples/clock_operators.jl", "examples/translation_symmetry.jl"]
 output_directory = "docs/src/literate_output"
-rm(output_directory; recursive=true, force=true)
+rm(output_directory; recursive = true, force = true)
 mkpath(output_directory)
 for file in literate_files
     Literate.markdown(file, output_directory; documenter=true, execute=false)
