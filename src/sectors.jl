@@ -46,18 +46,6 @@ function _group!(d, f::F, itr) where {F}
     end
     d
 end
-function groupby(f::F, itr; sortkeys=false, sortvals=false) where {F}
-    B = eltype(itr)
-    d = _group(f, itr, B)
-    _ks = identity.(keys(d))
-    K = eltype(_ks)
-    ks = sortkeys ? sort!(_ks) : _ks
-    newdict = OrderedDict(k => map(identity, d[k]) for k in ks)
-    if sortvals
-        foreach(sort!, values(newdict))
-    end
-    newdict
-end
 function groupby(f::F, itr, ::Type{B}; sortkeys=:auto, sortvals=false) where {F,B}
     d = _group(f, itr, B)
     _ks = identity.(keys(d))
