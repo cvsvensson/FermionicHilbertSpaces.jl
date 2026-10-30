@@ -14,7 +14,7 @@ using FermionicHilbertSpaces.FreeFermions
 N = 8
 @spins S 1 // 2
 Hspin = hilbert_space(S, 1:N)
-xx = sum(S[k][:x] * S[k+1][:x] + S[k][:y] * S[k+1][:y] for k in 1:(N-1))
+xx = sum(S[k][:x] * S[k + 1][:x] + S[k][:y] * S[k + 1][:y] for k in 1:(N - 1))
 Espin = eigvals(Hermitian(representation(xx, Hspin, :dense)))
 
 # ## The same model as fermions
@@ -22,14 +22,14 @@ Espin = eigvals(Hermitian(representation(xx, Hspin, :dense)))
 # The string cancels on an open chain, so the spectra agree exactly.
 @fermions c
 Hferm = hilbert_space(c, 1:N)
-hopping = sum((c[k]' * c[k+1] + hc) / 2 for k in 1:(N-1))
+hopping = sum((c[k]' * c[k + 1] + hc) / 2 for k in 1:(N - 1))
 Eferm = eigvals(Hermitian(representation(hopping, Hferm, :dense)))
 @assert Espin ≈ Eferm
 
 # ## Fixed magnetisation and fixed particle number
 # Spin up corresponds to an occupied site, so magnetisation `m` corresponds to `m + N/2` fermions.
 # Restricting both spaces to the half-filled sector gives the same spectrum again.
-Hspin_half = hilbert_space(S, 1:N, AdditiveConstraint(0; maps=s -> s.m))
+Hspin_half = hilbert_space(S, 1:N, AdditiveConstraint(0; maps = s -> s.m))
 Hferm_half = hilbert_space(c, 1:N, NumberConservation(N ÷ 2))
 E_half_spin = eigvals(Hermitian(representation(xx, Hspin_half, :dense)))
 E_half_ferm = eigvals(Hermitian(representation(hopping, Hferm_half, :dense)))
