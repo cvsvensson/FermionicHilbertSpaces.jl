@@ -3,21 +3,14 @@ CurrentModule = FermionicHilbertSpaces
 ```
 
 # API reference
+Exported names and names declared `public`. Free-fermion functions are on [Free fermions API](free_fermions_api.md).
+
 ```@index
+Pages = ["docstrings.md"]
 ```
 
-## Public API
-Exported names and names declared `public`.
 ```@autodocs
-Modules = [FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions]
+Modules = [FermionicHilbertSpaces]
 Public = true
 Private = false
-```
-
-## Internals
-Other documented names. They may change in a minor release.
-```@autodocs
-Modules = [FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions]
-Public = false
-Private = true
 ```

@@ -49,8 +49,12 @@ makedocs(;
             "Extending and performance hooks" => "extending.md",
             "Custom operators: Clock" => "literate_output/clock_operators.md",
             "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
+            "Internals" => "internals.md",
         ],
-        "API reference" => "docstrings.md",
+        "API reference" => [
+            "Public API" => "docstrings.md",
+            "Free fermions API" => "free_fermions_api.md",
+        ],
     ],
     plugins=[DocumenterCodeBlocks.CodeBlocks()],
 )
