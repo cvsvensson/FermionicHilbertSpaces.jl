@@ -130,6 +130,15 @@ let rng = Xoshiro(4)
     add_cases!(g["Full space"]["Dense"], rand(rng, ComplexF64, d, d), H, Hsub, ("SubAlg", "FullAlg"))
 end
 
+## Partial trace of a pure state on half of an unconstrained space
+let rng = Xoshiro(11)
+    @fermions f
+    H = hilbert_space(f, 1:16)
+    Hsub = hilbert_space(f, 1:8)
+    ψ = normalize(rand(rng, ComplexF64, dim(H)))
+    SUITE["partial_trace"]["pure_state_full_space"] = @benchmarkable partial_trace($ψ, $(H => Hsub))
+end
+
 ## Product spaces
 let rng = Xoshiro(5)
     @fermions f
@@ -262,6 +271,18 @@ let
         hilbert_space(f, [(i, :↓) for i in 1:N], NumberConservation(1)))
     no_double30 = prod(NumberConservation(0:1, [f[k, :↑], f[k, :↓]]) for k in 1:N)
     g["constrain_no_double_occupation_N30"] = @benchmarkable constrain_space($H30, $no_double30)
+
+    # Few states of a large parent, so the sector is indexed by a Dict.
+    L = representation(ham, H, :lazy)
+    x = randn(Xoshiro(12), ComplexF64, dim(H))
+    y = similar(x)
+    L_cached = FHS.SciMLOperators.cache_operator(L, x)
+    SUITE["matrix_application"]["lazy hubbard"]["mul!"] = @benchmarkable mul!($y, $L_cached, $x)
+
+    # The full space, large enough that the sparse matrix is built in many blocks of columns.
+    N = 8
+    Hfull = hilbert_space(f, [(i, σ) for i in 1:N for σ in (:↑, :↓)])
+    g["matrix_representation_full_space_N8"] = @benchmarkable matrix_representation($(hubbard(f, N, 1.0, 4.0)), $Hfull)
 end
 
 ## Bose-Hubbard chain
