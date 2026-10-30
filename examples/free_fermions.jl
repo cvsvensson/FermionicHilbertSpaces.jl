@@ -45,9 +45,9 @@ end
 pxmat = representation(px, H)
 pymat = representation(py, H);
 
-function vec_to_square_grid(v::AbstractVector{T}) where T
+function vec_to_square_grid(v::AbstractVector{T}) where {T}
     count = 0
-    vals = Vector{Union{T,Missing}}(undef, length(square_grid))
+    vals = Vector{Union{T, Missing}}(undef, length(square_grid))
     for (n, xy) in enumerate(square_grid)
         if ismissing(xy)
             vals[n] = missing

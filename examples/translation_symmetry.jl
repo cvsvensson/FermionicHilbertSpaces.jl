@@ -35,7 +35,7 @@ mags = quantumnumbers(space)
 H = J * sum(S[k][op] * S[mod1(k + 1, N)][op] for k in 1:N for op in (:x, :y, :z)) -
     h * sum(S[k][:z] for k in 1:N)
 
-perms = [[mod1(i + s, N) for i in 1:N] for s in 0:N-1]
+perms = [[mod1(i + s, N) for i in 1:N] for s in 0:(N - 1)]
 momenta = (-(N - 1) ÷ 2):(N ÷ 2)
 labels = ["k = $k" for k in momenta]
 weights = [[cis(2π * k * s / N) for s in 0:N-1] for k in momenta];
