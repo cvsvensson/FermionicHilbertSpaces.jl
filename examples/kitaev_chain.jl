@@ -1,13 +1,13 @@
 # # Interacting Kitaev chain
 
 # This tutorial builds an interacting Kitaev chain, finds its parity-sector ground states and
-# measures how localized its many-body Majoranas are. It assumes [Getting started](index.md).
+# measures how localized its many-body Majoranas are. It assumes [Getting started](../index.md).
 # Locality of many-body Majoranas is discussed in Ref. [^1].
 #
 # [^1]: W. Samuelson *et al.*, [PRX Quantum 7, 020341 (2026)](https://doi.org/10.1103/pw51-tnsz), [arXiv:2510.20538](https://arxiv.org/abs/2510.20538).
 
 using FermionicHilbertSpaces
-using Arpack, LinearAlgebra, Plots
+using Arpack, LinearAlgebra, LowRankMatrices, Plots
 
 # ## Hamiltonian
 # `hilbert_space(f, 1:N, ParityConservation())` restricts the space to states of definite total parity.
@@ -45,10 +45,10 @@ Eo - Ee
 # The ground-state pair defines two many-body Majorana operators, $\gamma = |o\rangle\langle e| + \mathrm{h.c.}$
 # and $\tilde\gamma = i|o\rangle\langle e| + \mathrm{h.c.}$, and the parity-difference operator $|o\rangle\langle o| - |e\rangle\langle e|$.
 # The norm of the reduction of each to a single site, `partial_trace(x, H => Hsite)`, shows where it is supported.
-oe = o * e'
-γ = oe + oe'
-γ̃ = 1im * oe + (1im * oe)'
-δρ = o * o' - e * e'
+# `LowRankMatrix` lets `partial_trace` avoid forming full-space matrices.
+γ = LowRankMatrix(o, conj(e)) + hc
+γ̃ = 1im * LowRankMatrix(o, conj(e)) + hc
+δρ = LowRankMatrix(o, conj(o)) - LowRankMatrix(e, conj(e))
 
 Hsites = [hilbert_space(f, i:i) for i in 1:N]
 locality(x) = [norm(svdvals(partial_trace(x, H => Hsite)), 1) for Hsite in Hsites]

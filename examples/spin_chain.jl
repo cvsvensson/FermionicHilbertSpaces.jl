@@ -1,7 +1,7 @@
 # # Spin chains
 
 # This tutorial builds spin operators and a Heisenberg chain, and restricts it to a magnetization
-# sector and a total-spin sector. It assumes [Getting started](index.md).
+# sector and a total-spin sector. It assumes [Getting started](../index.md).
 
 using FermionicHilbertSpaces
 using LinearAlgebra
@@ -12,10 +12,10 @@ using LinearAlgebra
 @spin T
 T[:x] * T[:y] - T[:y] * T[:x] == 1im * T[:z]
 
-# Giving a spin value `1//2` or `1` adds the corresponding normalization.
+# A spin value such as `1//2` or `1` adds the corresponding normalization.
 @spin Shalf 1//2
 @spin Sone 1
-Shalf[:x]^2 == 1//4
+Shalf[:x]^2 == 1//4 # true
 sum(op^2 for op in Sone[:]) == 2
 
 # For spin one half, expressions simplify to a unique form. For higher spins they do not,
@@ -38,7 +38,7 @@ Hm = hilbert_space(S, 1:N, AdditiveConstraint(0; maps=s -> s.m))
 representation(ham, Hm, :dense)
 
 # ## Advanced: total spin sectors
-# The total spin $J$ is fixed by the Casimir operator $ec S_\mathrm{tot}^2 = J(J+1)$. Projecting onto its
+# The total spin $J$ is fixed by the Casimir operator $vec S_\mathrm{tot}^2 = J(J+1)$. Projecting onto its
 # eigenspaces block-diagonalizes the Hamiltonian, and the blocks together reproduce its spectrum.
 Mham = representation(ham, Hm, :dense)
 Stot2 = sum(sum(S[k][op] for k in 1:N)^2 for op in (:x, :y, :z))
@@ -46,4 +46,4 @@ Mtot = representation(Stot2, Hm, :dense)
 blocks = map(J -> nullspace(Mtot - J * (J + 1) * I), 0:2)
 sort(reduce(vcat, [eigvals(Hermitian(P' * Mham * P)) for P in blocks])) ≈ eigvals(Hermitian(Mham))
 
-# Permutation symmetry of the sites gives further sectors, see [`symmetric_sector`](@ref).
+# For Hamiltonians symmetric under permuting sites, [`symmetric_sector`](@ref) projects onto permutation sectors; see [Spatial symmetries](translation_symmetry.md).

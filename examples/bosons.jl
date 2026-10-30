@@ -1,7 +1,7 @@
 # # Bosons
 
 # This tutorial builds bosonic Hilbert spaces and studies the Bose-Hubbard and a dipole-conserving model
-# using number conservation. It assumes [Getting started](index.md).
+# using number conservation. It assumes [Getting started](../index.md).
 
 # ## Bosonic algebra and Hilbert spaces
 # `@boson a` defines a single mode with creation operator `a'`, and `@bosons b` an indexed family of modes.
@@ -9,8 +9,8 @@
 using FermionicHilbertSpaces
 @boson a
 @bosons b
-a * a' - a' * a == 1
-b[1]' * b[2] == b[2] * b[1]'
+a * a' - a' * a == 1 # true
+b[1]' * b[2] == b[2] * b[1]' # true, modes on different sites commute
 (a' + a)^2 - a^2 - a'^2
 
 # Numerical calculations need a finite local dimension $d$ (basis $|0\rangle, \dots, |d-1\rangle$):
