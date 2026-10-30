@@ -28,4 +28,4 @@ Es = bound_energy.(Ks)
 plot(Eexact, 0, π; label = "exact", xlabel = "K", ylabel = "E", lw = 2, frame = :box, size = (500, 300))
 scatter!(Ks, Es; label = "eigsolve, L = $L")
 
-# [^1]: F. H. L. Essler et al., *The One-Dimensional Hubbard Model* (Cambridge, 2005).
+# [^1]: F. H. L. Essler, H. Frahm, F. Göhmann, A. Klümper and V. E. Korepin, *The One-Dimensional Hubbard Model* (Cambridge University Press, 2005).

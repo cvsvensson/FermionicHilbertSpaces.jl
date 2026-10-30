@@ -74,4 +74,4 @@ for row_parity in (iseven, isodd)
     @assert all(φ -> apply_hexagons(row, φ) == φ, test_states)
 end
 
-# [^1]: A. Kitaev, Ann. Phys. **321**, 2 (2006), arXiv:cond-mat/0506438.
+# [^1]: A. Kitaev, "Anyons in an exactly solved model and beyond", [Ann. Phys. **321**, 2 (2006)](https://doi.org/10.1016/j.aop.2005.10.005), [arXiv:cond-mat/0506438](https://arxiv.org/abs/cond-mat/0506438).

@@ -44,4 +44,4 @@ correlation(r) = dot(ψ, pair(1, 1 + r) * ψ) / dot(ψ, ψ)
 @assert all(r -> correlation(r) ≈ (-1)^r * 2(L - 2) / (L * (L - 1)), 1:(L - 1))
 correlation(L - 1)
 
-# [^1]: C. N. Yang, Phys. Rev. Lett. **63**, 2144 (1989).
+# [^1]: C. N. Yang, "η pairing and off-diagonal long-range order in a Hubbard model", [Phys. Rev. Lett. **63**, 2144 (1989)](https://doi.org/10.1103/PhysRevLett.63.2144).

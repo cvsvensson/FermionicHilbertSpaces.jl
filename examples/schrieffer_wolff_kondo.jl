@@ -51,5 +51,5 @@ J = 2V^2 * (1 / abs(εd) + 1 / (εd + U))
 # Fermi-level spins: the singlet lies ``J`` below the triplet.
 round.(real(Heff - tr(Heff) / 4 * I) / J; digits = 3)
 
-# [^1]: J. R. Schrieffer and P. A. Wolff, Phys. Rev. **149**, 491 (1966).
-# [^2]: S. Bravyi, D. P. DiVincenzo, and D. Loss, Ann. Phys. **326**, 2793 (2011), arXiv:1105.0675.
+# [^1]: J. R. Schrieffer and P. A. Wolff, "Relation between the Anderson and Kondo Hamiltonians", [Phys. Rev. **149**, 491 (1966)](https://doi.org/10.1103/PhysRev.149.491).
+# [^2]: S. Bravyi, D. P. DiVincenzo and D. Loss, "Schrieffer-Wolff transformation for quantum many-body systems", [Ann. Phys. **326**, 2793 (2011)](https://doi.org/10.1016/j.aop.2011.06.004), [arXiv:1105.0675](https://arxiv.org/abs/1105.0675).
