@@ -7,12 +7,11 @@
 # For $J_z \gg J_x, J_y$, the two spins on each z-link align, and fourth-order perturbation theory in
 # the x- and y-links gives the toric code $H_\mathrm{eff} = -J_\mathrm{eff} \sum_p W_p$, with
 # $J_\mathrm{eff} = J_x^2 J_y^2 / (16 J_z^3)$ and $W_p$ the product of the six link operators around hexagon $p$.
-# This tutorial computes $J_\mathrm{eff}$ by applying spin operators to symbolic kets on a torus too large to enumerate,
-# and checks it against this formula.
+# Symbolic kets let us compute $J_\mathrm{eff}$ by applying spin operators on a torus too large to enumerate,
+# and check it against this formula.
 using FermionicHilbertSpaces
 import FermionicHilbertSpaces.NonCommutativeProducts.VectorInterface: inner
 
-# ## Lattice
 # We draw the honeycomb as a brick wall on an `Lx × Ly` torus. Horizontal links alternate between
 # x and y, and a vertical z-link joins `(i, j)` and `(i, j + 1)` when `i + j` is even.
 Lx, Ly = 8, 8
@@ -30,7 +29,6 @@ hexagon(i, j) = hlink(i, j) * hlink(i + 1, j) * zlink(i + 2, j) * hlink(i + 1, j
 ψ = Ket(fill("↑", Lx * Ly), H)
 ψp = hexagon(3, 3) * ψ
 
-# ## Fourth-order amplitude
 # The matrix element of $H_\mathrm{eff}$ between the two states is $⟨ψ_p| V G V G V G V |ψ⟩$, where
 # $V$ holds the x- and y-links and $G = Q/(E_0 - H_0)$ is the resolvent of the z-links $H_0$ outside the aligned subspace.
 # Lower orders do not connect the two states.
@@ -48,8 +46,8 @@ function plaquette_amplitude(Jx, Jy, Jz)
 end
 
 # The amplitude equals $-J_\mathrm{eff}$ for any couplings, since it is exactly the fourth-order term.
-map(((1.0, 1.0, 10.0), (0.3, 0.7, 2.0))) do (Jx, Jy, Jz)
-    (amplitude = real(plaquette_amplitude(Jx, Jy, Jz)), Jeff = Jx^2 * Jy^2 / (16Jz^3))
+for (Jx, Jy, Jz) in ((1.0, 1.0, 10.0), (0.3, 0.7, 2.0))
+    @assert real(plaquette_amplitude(Jx, Jy, Jz)) ≈ -Jx^2 * Jy^2 / (16Jz^3)
 end
 
 # See A. Kitaev, Ann. Phys. **321**, 2 (2006), arXiv:cond-mat/0506438, for the derivation.

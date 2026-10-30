@@ -120,7 +120,7 @@ representation(projector, H)
 
 ## Linear algebra in large spaces
 
-Sums of symbolic kets store only their nonzero amplitudes, and operators act on them without a basis, so they can be used in Hilbert spaces far too large to enumerate. They support `norm` and `inner`, and KrylovKit accepts them as vectors with a symbolic operator as the linear map. The following tutorials use this:
+Sums of symbolic kets store only their nonzero amplitudes and operators act on them without a basis, so exact calculations are possible in spaces far too large to enumerate. They support `norm` and `inner`, and KrylovKit accepts them as vectors with a symbolic operator as the linear map. Tutorials:
 
 - [η-pairing in a Hubbard chain](literate_output/eta_pairing.md): exact eigenstates of a large Hubbard chain.
 - [Bound doublons with KrylovKit](literate_output/hubbard_bound_state.md): `eigsolve` on symbolic states.

@@ -1,37 +1,27 @@
 # # η-pairing in a large Hubbard chain
 
-# This tutorial applies a symbolic Hamiltonian to symbolic kets in a space too large for vectors, to build exact
-# eigenstates of a Hubbard chain.
+# Symbolic kets store only their nonzero amplitudes and operators act on them without a basis, so exact
+# calculations are possible in spaces far too large for vectors. Here we build a tower of exact eigenstates of a
+# 200-site Hubbard chain (a space of dimension 2⁴⁰⁰), the η-pairing states of
+# C. N. Yang, Phys. Rev. Lett. 63, 2144 (1989), and verify the eigenvalue equation directly.
 using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces.NonCommutativeProducts: terms
+
 @fermions c
 L = 200
 H = hilbert_space(c, [(j, s) for j in 1:L for s in (:↑, :↓)])
-log2(dim(H))
-
-# The Hubbard Hamiltonian is a sum of local terms. Its matrix cannot be built at this size.
 t, U, μ = 1.0, 4.0, 0.5
 n(j, s) = c[j, s]' * c[j, s]
 ham = sum(-t * c[j, s]' * c[j + 1, s] + hc for j in 1:(L - 1) for s in (:↑, :↓)) +
     sum(U * n(j, :↑) * n(j, :↓) - μ * (n(j, :↑) + n(j, :↓)) for j in 1:L)
 
-# The η-pairing operator creates a doubly occupied site with a staggered phase. The phase makes η† commute with
-# the hopping, so the states ψₙ = (η†)ⁿ|0⟩ are eigenstates with energy Eₙ = n(U - 2μ).
+# The η-pairing operator creates a doubly occupied site with a staggered phase, which makes η† commute with the
+# hopping. The states ψₙ = (η†)ⁿ|0⟩ are then eigenstates with energy n(U - 2μ), each a sum of `binomial(L, n)`
+# basis states.
 η = sum((-1)^j * c[j, :↑]' * c[j, :↓]' for j in 1:L)
-
-# Applying η† repeatedly to the vacuum gives ψₙ as a sparse sum over the `binomial(L, n)` ways of placing n doublons.
-ψs = [Ket("0"^(2L), H) + 0]
-for _ in 1:2
-    push!(ψs, η * ψs[end])
+ψ0 = Ket("0"^(2L), H) + 0
+ψs = accumulate((ψ, _) -> η * ψ, 1:2; init = ψ0)
+for (N, ψ) in enumerate([ψ0; ψs])
+    @assert length(collect(terms(ψ))) == binomial(L, N - 1)
+    @assert norm(ham * ψ - (N - 1) * (U - 2μ) * ψ) < 1e-10
 end
-
-# `ham` acts directly on each symbolic state. We check the residual of the eigenvalue equation and the number of
-# basis states in ψₙ.
-for (k, ψ) in enumerate(ψs)
-    N = k - 1
-    E = N * (U - 2μ)
-    residual = norm(ham * ψ - E * ψ)
-    println("n = $N: E = $E, basis states = $(length(ψ.dict)) = $(binomial(L, N)), residual = $residual")
-end
-
-# The residuals vanish exactly, so the states form an equally spaced tower of eigenstates.
-# See C. N. Yang, Phys. Rev. Lett. 63, 2144 (1989) and Moudgalya, Regnault, Bernevig, arXiv:2004.13727.
