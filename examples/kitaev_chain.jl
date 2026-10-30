@@ -1,17 +1,15 @@
 # # Interacting Kitaev chain
 
-# This tutorial builds an interacting Kitaev chain, finds its parity-sector ground states and
-# measures how localized its many-body Majoranas are.
-# Locality of many-body Majoranas is discussed in Ref. [^1].
+# An interacting Kitaev chain has two nearly degenerate ground states of opposite parity, which define
+# many-body Majorana operators. This tutorial builds the chain from a symbolic Hamiltonian, diagonalizes it
+# per parity sector with `ParityConservation`, and uses `partial_trace` on low-rank operators to show that
+# these Majoranas stay localized at the chain ends (see Ref. [^1]).
 #
 # [^1]: W. Samuelson *et al.*, [PRX Quantum 7, 020341 (2026)](https://doi.org/10.1103/pw51-tnsz), [arXiv:2510.20538](https://arxiv.org/abs/2510.20538).
 
 using FermionicHilbertSpaces
 using Arpack, LinearAlgebra, LowRankMatrices, Plots
 
-# ## Hamiltonian
-# `hilbert_space(f, 1:N, ParityConservation())` restricts the space to states of definite total parity.
-# The Hamiltonian is a symbolic expression in `f`; `hc` adds the Hermitian conjugate.
 @fermions f
 N = 12
 H = hilbert_space(f, 1:N, ParityConservation())
@@ -21,7 +19,7 @@ kitaev_chain(f, N, μ, t, Δ, U) = sum(t * f[i]' * f[i+1] + hc for i in 1:(N-1))
     sum(U * f[i]' * f[i] * f[i+1]' * f[i+1] for i in 1:(N-1)) +
     sum(μ[i] * f[i]' * f[i] for i in 1:N)
 
-# The parameters are close to the sweet spot with perfectly localized Majoranas.
+## Parameters close to the sweet spot with perfectly localized Majoranas
 U = 4.0
 t = 1.0
 δΔ = 0.4
@@ -30,23 +28,24 @@ t = 1.0
 μ[[1, N]] .= -U / 2 # edge chemical potentials
 hsym = kitaev_chain(f, N, μ, t, Δ, U)
 
-# ## Ground states in each parity sector
-# `representation` turns the symbolic Hamiltonian into a matrix. Since parity is conserved,
-# we diagonalize each parity sector separately and `embed` its ground state into the full space `H`.
+# `hilbert_space(f, 1:N, ParityConservation())` restricts the space to definite total parity, so we
+# diagonalize each parity sector separately. `representation` turns the symbolic Hamiltonian into a sparse matrix
+# on a `sector`, and `embed` maps its ground state back into the full space `H`. The two energies are nearly degenerate.
+
 function ground_state(parity)
     Hsec = sector(parity, H)
     vals, vecs = eigs(representation(hsym, Hsec); nev = 1, which = :SR)
     return (; energy = first(vals), state = embed(vecs[:, 1], Hsec => H))
 end;
 (Eo, o), (Ee, e) = map(ground_state, (-1, 1)); # odd and even parity
-# The two energies are nearly degenerate.
 Eo - Ee
 
-# ## Majorana locality
 # The ground-state pair defines two many-body Majorana operators, $\gamma = |o\rangle\langle e| + \mathrm{h.c.}$
-# and $\tilde\gamma = i|o\rangle\langle e| + \mathrm{h.c.}$, and the parity-difference operator $|o\rangle\langle o| - |e\rangle\langle e|$.
-# The norm of the reduction of each to a single site, `partial_trace(x, H => Hsite)`, shows where it is supported.
+# and $\tilde\gamma = i|o\rangle\langle e| + \mathrm{h.c.}$, and the parity-difference operator
+# $|o\rangle\langle o| - |e\rangle\langle e|$. The norm of the reduction of each to a single site,
+# `partial_trace(x, H => Hsite)`, shows where it is supported; the two Majoranas peak at opposite ends of the chain.
 # `LowRankMatrix` lets `partial_trace` avoid forming full-space matrices.
+
 γ = LowRankMatrix(o, conj(e)) + hc
 γ̃ = 1im * LowRankMatrix(o, conj(e)) + hc
 δρ = LowRankMatrix(o, conj(o)) - LowRankMatrix(e, conj(e))

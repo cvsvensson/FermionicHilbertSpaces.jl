@@ -69,12 +69,12 @@ L_out = exp(rand() * 2pi * im) * √γ_out * c[1]
 # `dissipator(L)` is the superoperator ρ ↦ LρL† − ½{L†L, ρ}.
 lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(L_in) + dissipator(L_out)
 # Let's get the matrix representation and check that it preserves trace 
-mat = representation(lindbladian, Hlr)
+mat = representation(lindbladian, Hlr, :dense)
 Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
 iszero(mat' * Ivec)
 # ### Solve for the steady state
 # The steady state is the eigenvector of `mat` with eigenvalue closest to zero.
-vals, vecs = eigen(Matrix(mat); sortby=abs)
+vals, vecs = eigen(mat; sortby = abs)
 v = vecs[:, 1]
 ρ = reshape(v, Hlr => (Hl, Hr))
 ρ ./= tr(ρ)
@@ -118,9 +118,9 @@ Hlr, Hl, Hr, left, right = open_system(Hsys)
 t, ω, g, κ = 0.5, 1.0, 0.3, 0.2
 ham_sym = t * (f[1]'f[2] + f[2]'f[1]) + ω * a[1]'a[1] + g * (f[1]'f[1] - f[2]'f[2]) * (a[1] + a[1]')
 lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(√κ * a[1])
-mat = representation(lindbladian, Hlr)
+mat = representation(lindbladian, Hlr, :dense)
 # The steady state is again the eigenvector with eigenvalue closest to zero
-vals, vecs = eigen(Matrix(mat); sortby = abs)
+vals, vecs = eigen(mat; sortby = abs)
 ρ = reshape(vecs[:, 1], Hlr => (Hl, Hr))
 ρ ./= tr(ρ)
 # and we can compute, e.g., the photon number in the steady state

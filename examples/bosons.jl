@@ -1,11 +1,10 @@
 # # Bosons
 
-# This tutorial builds bosonic Hilbert spaces and studies the Bose-Hubbard and a dipole-conserving model
-# using number conservation.
+# Bosonic modes are symbolic like fermions, but need a finite local dimension for numerics, which number
+# conservation keeps small. We use this to study the Bose-Hubbard model, where onsite repulsion suppresses
+# number fluctuations, and a dipole-conserving model, where a second weighted `NumberConservation` constrains the
+# dynamics and shapes the entanglement.
 
-# ## Bosonic algebra and Hilbert spaces
-# `@boson a` defines a single mode with creation operator `a'`, and `@bosons b` an indexed family of modes.
-# Expressions are simplified automatically.
 using FermionicHilbertSpaces
 @boson a
 @bosons b
@@ -13,22 +12,13 @@ a * a' - a' * a == 1 # true
 b[1]' * b[2] == b[2] * b[1]' # true, modes on different sites commute
 (a' + a)^2 - a^2 - a'^2
 
-# Numerical calculations need a finite local dimension $d$ (basis $|0\rangle, \dots, |d-1\rangle$):
-local_dim = 4
-Ha = hilbert_space(a, local_dim)
-labels = 1:8
-Hb = hilbert_space(b, labels, local_dim)
-
-
-# ## Example 1: Bose-Hubbard Hamiltonian
-#
-# We set up the Bose-Hubbard Hamiltonian with hopping $t$ and onsite repulsion $U$:
+# The Bose-Hubbard Hamiltonian has hopping $t$ and onsite repulsion $U$,
 # ```math
 # H = -t \sum_{i=1}^{N-1} (b_i^\dagger b_{i+1} + \mathrm{h.c.}) + \frac{U}{2} \sum_{i=1}^N n_i(n_i - 1),
 # \qquad n_i = b_i^\dagger b_i.
 # ```
-# `hc` adds the Hermitian conjugate. This conserves particle number, which reduces the Hilbert space dimension.
-# With 8 sites and 8 particles, a local dimension of 9 gives no truncation error.
+# and conserves particle number, which reduces the Hilbert space dimension. With 8 sites and 8 particles, a local
+# dimension of 9 gives no truncation error. We build the matrices once and reuse them in a sweep over $U$.
 N = 8
 M = 8
 local_dim = M + 1
@@ -58,7 +48,6 @@ function ground_state_analysis(U; t=1.0)
 end
 
 # Onsite repulsion suppresses particle fluctuations and hopping (left) and flattens the density profile (right).
-
 Us = range(0, 16; length=20)
 sweep = [ground_state_analysis(U) for U in Us];
 using Plots
@@ -69,8 +58,7 @@ p2 = plot(1:N, ground_state_analysis(0).density; label="U/t = 0", m=:circle, lw=
 plot!(p2, 1:N, ground_state_analysis(6).density; label="U/t = 6", m=:square, lw=2)
 plot(p1, p2; layout=(1, 2), size=(600, 300), frame=:box)
 
-# ## Example 2: Dipole-conserving boson model
-# A weighted `NumberConservation` handles a second conserved quantity, and constraints combine with `*`. The model
+# The dipole-conserving model conserves a second quantity, handled by a weighted `NumberConservation`; constraints combine with `*`. The model
 # ```math
 #  H = -J \sum_i (b_{i-1}^\dagger b_{i+1}^\dagger b_i b_i + h.c.)
 #      + U/2 \sum_i n_i(n_i-1) 
