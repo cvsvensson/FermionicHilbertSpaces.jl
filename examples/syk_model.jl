@@ -30,7 +30,7 @@ function gap_ratio(energies)
 end;
 
 # The statistics must be taken within one fermion-parity sector: over the full space the two
-# sectors are interleaved, and for ``M \equiv 2 mod 8`` the odd sector is an exact copy of the
+# sectors are interleaved, and for ``M \equiv 2 bmod 8`` the odd sector is an exact copy of the
 # even one, so every level is degenerate and the ratio is zero whatever the dynamics.
 # We therefore diagonalize the even sector for a few disorder samples, keeping one level of each
 # degenerate pair for GSE. The table lists the measured mean ratio next to the random-matrix
