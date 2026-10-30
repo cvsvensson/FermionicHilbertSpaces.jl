@@ -8,15 +8,8 @@
 # the package normalises Majoranas as ``γ^2 = 1``. Here we braid two Majoranas adiabatically in a tri-junction,
 # where a central Majorana ``γ_0`` couples to three outer ones,[^1] and check that the time evolution reproduces ``B_{32}``.
 #
-# The coupling ``Δ_i(t)`` between ``γ_0`` and ``γ_i`` is a smooth step. When only ``Δ_i`` is on, ``γ_0`` pairs with ``γ_i``
-# and the other two outer Majoranas are zero modes. Starting with ``Δ_1`` on, so that the zero modes sit at ``γ_2`` and ``γ_3``,
-# one period consists of three steps, in each of which the next coupling is switched on before the current one is switched off:
-#
-# 1. ``Δ_1 → Δ_2`` moves the zero mode at ``γ_2`` to ``γ_1``. The zero modes are now at ``γ_1`` and ``γ_3``.
-# 2. ``Δ_2 → Δ_3`` moves the zero mode at ``γ_3`` to ``γ_2``. The zero modes are now at ``γ_1`` and ``γ_2``.
-# 3. ``Δ_3 → Δ_1`` moves the zero mode at ``γ_1`` to ``γ_3``.
-#
-# The zero modes are back at ``γ_2`` and ``γ_3``, but exchanged: the one that started at ``γ_2`` went through ``γ_1`` to ``γ_3``.
+# The coupling ``Δ_i(t)`` between ``γ_0`` and ``γ_i`` is a smooth step; when only ``Δ_i`` is on, the other two outer Majoranas are zero modes.
+# Switching the couplings on and off in turn, ``Δ_1 → Δ_2 → Δ_3 → Δ_1``, moves the zero modes around the junction and exchanges those at ``γ_2`` and ``γ_3``, as the figure shows.
 #
 # ![Three steps of the exchange. In each step the solid coupling is on and the dashed one is switched on, then the solid one off. Coloured dots are the two zero modes; the arrow shows where one of them moves.](../assets/braiding_junction.svg)
 #
