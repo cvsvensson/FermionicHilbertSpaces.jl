@@ -44,7 +44,15 @@ atomic_factors(H::ProductSpace) = H.atoms
 nbr_of_atoms(H::ProductSpace) = length(H.atoms)
 factors(H::ProductSpace) = H.factors
 groups(H::ProductSpace) = H.factors
-dim(H::ProductSpace) = prod(dim, groups(H); init=1)
+function dim(H::ProductSpace)
+    dims = map(dim, groups(H))
+    try
+        return reduce(Base.checked_mul, dims; init=1)
+    catch err
+        err isa OverflowError || rethrow()
+        return prod(big, dims)
+    end
+end
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
 basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(ProductState, Iterators.product(map(basisstates, H.factors)...)))
@@ -615,4 +623,9 @@ function phase_factor_u(sp::ProductSpaceMapper)
         end
         return pf
     end
+end
+
+@testitem "dim of large product spaces" begin
+    @spins s 1//2
+    @test dim(hilbert_space(s, 1:64)) == big(2)^64
 end
