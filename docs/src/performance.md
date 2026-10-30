@@ -20,4 +20,4 @@ Building the Liouvillian of an open interacting Kitaev chain with loss: QuantumT
 
 One H·v product of the Fermi-Hubbard chain on the full sector N↑ = N↓ without storing the matrix: FHS's lazy operator is faster than QuSpin's at all sizes and faster than XDiag's below ~5000 states, XDiag is about 3x faster for large sectors, and the stored sparse matrix (the reference line, setup untimed) is faster than all of them, about 10x faster than FHS.
 
-See [Misc](misc.md) for multithreaded builds.
+See [Misc](parallelization.md) for multithreaded builds.
