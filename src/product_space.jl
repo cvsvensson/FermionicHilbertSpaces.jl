@@ -47,7 +47,7 @@ groups(H::ProductSpace) = H.factors
 function dim(H::ProductSpace)
     dims = map(dim, groups(H))
     try
-        return reduce(Base.checked_mul, dims; init=1)
+        return reduce(Base.checked_mul, dims; init = 1)
     catch err
         err isa OverflowError || rethrow()
         return prod(big, dims)
@@ -626,6 +626,6 @@ function phase_factor_u(sp::ProductSpaceMapper)
 end
 
 @testitem "dim of large product spaces" begin
-    @spins s 1//2
+    @spins s 1 // 2
     @test dim(hilbert_space(s, 1:64)) == big(2)^64
 end
