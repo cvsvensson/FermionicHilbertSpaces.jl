@@ -23,7 +23,7 @@ siam(U) = U * (n(0, :↑) - 1 / 2) * (n(0, :↓) - 1 / 2) +
 # space into sectors labelled by `[N↑, N↓]`.
 Hup = hilbert_space(c, [(i, :↑) for i in 0:L])
 Hdn = hilbert_space(c, [(i, :↓) for i in 0:L])
-H = constrain_space(tensor_product(Hup, Hdn), NumberConservation(Hup) * NumberConservation(Hdn))
+H = tensor_product(Hup, Hdn; constraint = NumberConservation(Hup) * NumberConservation(Hdn))
 
 # The half-filled ground state `|0⟩` lies in the sector `q0` with equally many spin-up and
 # spin-down particles. Creating a spin-up particle on the impurity leads to the sector with
