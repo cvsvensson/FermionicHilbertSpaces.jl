@@ -13,12 +13,10 @@
 #
 # ![Three steps of the exchange. In each step the solid coupling is on and the dashed one is switched on, then the solid one off. Coloured dots are the two zero modes; the arrow shows where one of them moves.](../assets/braiding_junction.svg)
 #
-# The Majoranas `γ[4]` and `γ[5]` are spectators that pair up with the two zero modes of the junction, so that the
-# ground space within one parity sector is two-dimensional. The Hamiltonian conserves parity, so it suffices to work in the even sector.
 using FermionicHilbertSpaces
 using LinearAlgebra, Plots
 @majoranas γ
-H = hilbert_space(γ, 0:5, ParityConservation(1))
+H = hilbert_space(γ, 0:3)
 hs = [representation(1im * γ[0] * γ[i], H, :dense) for i in 1:3]
 coupling(t, T, k) = (1 + tanh(k * cos(2π * t / T))) / 2
 couplings(t, T, k) = [coupling(t - (i - 1) * T / 3, T, k) for i in 1:3]
@@ -31,7 +29,7 @@ plot(ts, stack(couplings.(ts, T, k))'; label = ["Δ₁" "Δ₂" "Δ₃"], xlabel
 # which must be short compared with the switching time of the couplings, about `T/(2πk)`.
 # The ground states at ``t = 0`` and ``t = T`` coincide. Restricted to them, the evolution should equal the braid
 # operator up to the dynamical phase, which is the same for all ground states, while the opposite exchange
-# ``B_{23} = B_{32}^†`` should not match. Once the dynamical phase is removed, the evolution gives the two ground states
+# ``B_{23} = B_{32}^†`` should not match. The two zero modes have opposite parity, and the braid acts as a phase on each. Once the dynamical phase is removed, the evolution gives the two ground states
 # phases ``e^{±iπ/4}``, the eigenvalues of ``B_{32}``:
 dt = 1.0
 U = prod(exp(-1im * dt * hamiltonian(t, T, k)) for t in reverse((dt / 2):dt:T))
