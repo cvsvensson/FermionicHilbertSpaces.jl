@@ -32,8 +32,8 @@ xs = [linsolve(x -> E0 * x - H0 * x, Vhyb * p)[1] for p in low_energy]
 Heff = [inner(Vhyb * p, x) for p in low_energy, x in xs]
 λ = eigvals(Hermitian(Heff))
 J = 2V^2 * (1 / abs(εd) + 1 / (εd + U))
-@assert (λ[2] - λ[1]) ≈ J rtol = 1e-3
-@assert Heff[2, 3] ≈ J / 2 rtol = 1e-3
+@assert (λ[2] - λ[1]) ≈ J rtol = 1.0e-3
+@assert Heff[2, 3] ≈ J / 2 rtol = 1.0e-3
 (splitting = λ[2] - λ[1], J)
 
 # See also S. Bravyi, D. P. DiVincenzo, and D. Loss, Ann. Phys. 326, 2793 (2011), arXiv:1105.0675.

@@ -23,5 +23,5 @@ ham = sum(-t * c[j, s]' * c[j + 1, s] + hc for j in 1:(L - 1) for s in (:↑, :�
 ψs = accumulate((ψ, _) -> η * ψ, 1:2; init = ψ0)
 for (N, ψ) in enumerate([ψ0; ψs])
     @assert length(collect(terms(ψ))) == binomial(L, N - 1)
-    @assert norm(ham * ψ - (N - 1) * (U - 2μ) * ψ) < 1e-10
+    @assert norm(ham * ψ - (N - 1) * (U - 2μ) * ψ) < 1.0e-10
 end
