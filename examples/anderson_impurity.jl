@@ -1,14 +1,16 @@
 # # Anderson impurity
 
-# This tutorial shows how `representation(op, Axes(Hout, Hin))` gives creation and annihilation operators as
-# rectangular maps between particle-number sectors, and uses them for the Green's function of a single-impurity
-# Anderson model.
+# Creation and annihilation operators change the particle number, so they are rectangular maps between sectors, and
+# `representation(op, Axes(Hout, Hin))` returns exactly that map. This is what a Lehmann sum needs: we compute the
+# Green's function of a single-impurity Anderson model from the eigenstates of three neighbouring sectors, check it
+# against the exact non-interacting result, and watch the impurity level split into Hubbard peaks as the interaction grows.
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots
 import FermionicHilbertSpaces: Axes
 
-# The impurity is site `0`. It couples with strength `V` to `L` bath sites with energies `ε`.
-# Writing the interaction as `U(n↑ - 1/2)(n↓ - 1/2)` makes the model particle-hole symmetric.
+# The impurity is site `0`, coupled with strength `V` to `L` bath sites with energies `ε`. Writing the interaction as
+# `U(n↑ - 1/2)(n↓ - 1/2)` makes the model particle-hole symmetric. Spin-up and spin-down particle numbers are conserved
+# separately, so the space splits into sectors labelled by `[N↑, N↓]`.
 @fermions c
 L = 5
 ε = range(-1, 1; length = L)
@@ -19,8 +21,6 @@ siam(U) = U * (n(0, :↑) - 1 / 2) * (n(0, :↓) - 1 / 2) +
     sum(ε[k] * n(k, σ) for k in 1:L, σ in spins) +
     sum(V * c[0, σ]' * c[k, σ] + hc for k in 1:L, σ in spins)
 
-# Spin-up and spin-down particle numbers are conserved separately, so we split the
-# space into sectors labelled by `[N↑, N↓]`.
 Hup = hilbert_space(c, [(i, :↑) for i in 0:L])
 Hdn = hilbert_space(c, [(i, :↓) for i in 0:L])
 H = tensor_product(Hup, Hdn; constraint = NumberConservation(Hup) * NumberConservation(Hdn))
@@ -46,14 +46,12 @@ end
 G(z, (; poles, weights)) = sum(weights ./ (z .- poles))
 q0 = [L + 1, L + 1] .÷ 2
 
-# Without interaction, the impurity Green's function is known in closed form, and the Lehmann
-# sum reproduces it (`true` below).
+# Without interaction the impurity Green's function is known in closed form, and the Lehmann sum reproduces it. For any
+# interaction strength the weights add up to one, as required by `{d↑, d↑†} = 1`.
 G0(z) = 1 / (z - sum(V^2 ./ (z .- ε)))
 zs = range(-3, 3; length = 101) .+ 0.1im
-G.(zs, Ref(lehmann(siam(0), H, q0))) ≈ G0.(zs)
-
-# For any interaction strength, the weights add up to one, as required by `{d↑, d↑†} = 1`.
-sum(lehmann(siam(6), H, q0).weights) ≈ 1
+@assert G.(zs, Ref(lehmann(siam(0), H, q0))) ≈ G0.(zs)
+@assert sum(lehmann(siam(6), H, q0).weights) ≈ 1
 
 # The spectral function is `A(ω) = -Im G(ω + iη)/π`, here with a small broadening `η`. Without
 # interaction, the impurity level spreads over the bath energies around zero. With interaction,
