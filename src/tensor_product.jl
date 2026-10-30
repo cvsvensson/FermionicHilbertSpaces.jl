@@ -603,6 +603,15 @@ does not check its input.
 """
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
 
+"""
+    von_neumann_entropy(ρ)
+
+The von Neumann entropy `-tr(ρ log ρ)` of a density matrix `ρ`, such as the reduced state `partial_trace(ψ * ψ', H => Hsub)`.
+"""
+von_neumann_entropy(ρ) = -sum(_xlogx, eigvals(Hermitian(ρ)))
+# Clamps the round-off negative eigenvalues of a positive semidefinite matrix
+_xlogx(x) = x > 0 ? x * log(x) : zero(x)
+
 abstract type AbstractPartialTraceAlg end
 """
     SubsystemPartialTraceAlg()
@@ -1168,6 +1177,15 @@ end
     @test dim(Hvac) == 1
     @test partial_trace(ρ, Hproduct => Hvac) ≈ reshape([tr(ρ)], 1, 1)
     @test partial_trace(ρ, Hproduct => Hmode) ≈ ρ
+end
+
+@testitem "Entanglement entropy" begin
+    import FermionicHilbertSpaces: von_neumann_entropy
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    ψ = [0, 1, 1, 0] / sqrt(2)
+    @test von_neumann_entropy(partial_trace(ψ * ψ', H => hilbert_space(f, 1:1))) ≈ log(2)
+    @test von_neumann_entropy(ψ * ψ') ≈ 0 atol = 1.0e-12
 end
 
 @testitem "Partial trace with missing states" begin
