@@ -27,7 +27,7 @@
 
 # ## Defining the custom Floquet algebra
 
-# The required pieces are listed in [Extending and performance hooks](extending.md). Compared to the
+# The required pieces are listed in [Extending and performance hooks](../extending.md). Compared to the
 # [Clock operators](clock_operators.md), the Floquet operators also commute with operators of other
 # algebras through `@commutative`, and their `mul_effect` simplifies products.
 
