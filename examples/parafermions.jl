@@ -1,14 +1,12 @@
 # # Parafermion edge modes
 #
-# The $\mathbb{Z}_p$ parafermion chain generalizes the Kitaev chain: Majoranas become
-# parafermions and fermion parity becomes a $\mathbb{Z}_p$ charge. We introduce the
-# parafermion algebra, build the chain, and characterize its edge modes using only the
-# ground states, exactly as in the interacting Kitaev chain example.
+# This tutorial builds a $\mathbb{Z}_p$ parafermion chain and extracts its edge modes from the
+# ground states alone. It assumes the [interacting Kitaev chain](kitaev_chain.md) tutorial, which does the same
+# for $p = 2$. It uses `Arpack` for the ground states and `Plots` for the final figure.
 
 using FermionicHilbertSpaces
 import FermionicHilbertSpaces as FHS
-using FermionicHilbertSpaces: indices, sector, quantumnumbers
-using LinearAlgebra, LowRankMatrices
+using LinearAlgebra
 using Arpack, Plots
 
 # ## Parafermion algebra
@@ -22,7 +20,7 @@ using Arpack, Plots
 # c_i c_j = \omega^{\sigma} c_j c_i, \qquad c_i^\dagger c_j = \omega^{-\sigma} c_j c_i^\dagger,
 # ```
 # where $\sigma = \pm 1$ is fixed by the ordering convention. For $p = 2$ these are ordinary
-# fermions. Let's check the relations on two sites.
+# fermions. We check the relations numerically on two sites; every entry of the result should be `true`.
 p = 3
 ω = cis(2π / p)
 @parafermions p c
@@ -36,6 +34,7 @@ c1, c2 = representation(c[1], H2), representation(c[2], H2)
     exchange = c1 * c2 ≈ ω^σ * c2 * c1 && c1' * c2 ≈ ω^(-σ) * c2 * c1',
 )
 
+# The next block builds the on-site charge and the unitary parafermions $\chi_a$.
 # Since $(c_j^\dagger)^k c_j^k$ projects onto $n_j \geq k$, the occupation is
 # $n_j = \sum_{k=1}^{p-1} (c_j^\dagger)^k c_j^k$, and the on-site charge $Z_j = \omega^{n_j}$ is
 # ```math
@@ -62,7 +61,7 @@ Zpow(j) = σ == 1 ? Z(j)' : Z(j) # Z_j^{-σ}
 χs = [representation(χ(a), H2) for a in 1:4]
 
 # ## The model
-# We study the parafermion chain
+# The chain is
 # ```math
 # H = -J \sum_{j=1}^{N-1} \left(\zeta\, \chi_{2j}^\dagger \chi_{2j+1} + \mathrm{h.c.}\right)
 #     - h \sum_{j=1}^{N} \left(\zeta\, \chi_{2j-1}^\dagger \chi_{2j} + \mathrm{h.c.}\right).
@@ -87,28 +86,28 @@ parafermion_chain(J, h, N) =
     -J * sum(ζ * χ(2j)' * χ(2j + 1) + hc for j in 1:(N - 1)) -
     h * sum(ζ * χ(2j - 1)' * χ(2j) + hc for j in 1:N)
 
-## Sanity check: the end parafermions commute with H at h = 0.
+# Validation: at $h = 0$ the end parafermions $\chi_1$ and $\chi_{2N}$ commute with $H$.
 Hsmall = hilbert_space(c, 1:3)
 H0 = representation(parafermion_chain(1.0, 0.0, 3), Hsmall)
 @assert all(norm(H0 * E - E * H0) < 1.0e-10 for E in (representation(χ(a), Hsmall) for a in (1, 6)))
 
 # ## Ground states
-# We split the Hilbert space into charge sectors and find the lowest state $|q\rangle$ in
-# each, labelled by $Q|q\rangle = \omega^q |q\rangle$.
+# $H$ commutes with $Q$, so it is block diagonal in the charge $q = \sum_j n_j \bmod p$. We take the
+# lowest eigenstate $|q\rangle$ of each block with `eigs`, so that $Q|q\rangle = \omega^q |q\rangle$.
 N = 6
-H = constrain_space(hilbert_space(c, 1:N), FHS.SectorConstraint(FHS.parafermion_charge))
+H = hilbert_space(c, 1:N)
 Hmodes = [hilbert_space(c, j:j) for j in 1:N]
-Qop = prod(representation(Z(j), H) for j in 1:N)
+charges = FHS.parafermion_charge.(basisstates(H))
 function ground_states(ham)
-    states = map(quantumnumbers(H)) do qn
-        Hsec = sector(qn, H)
-        vals, vecs = eigs(representation(ham, Hsec); nev = 1, which = :SR)
+    Hmat = representation(ham, H)
+    states = map(0:(p - 1)) do q
+        idx = findall(==(q), charges)
+        vals, vecs = eigs(Hmat[idx, idx]; nev = 1, which = :SR)
         ψ = zeros(ComplexF64, dim(H))
-        ψ[indices(Hsec, H)] = vecs[:, 1]
-        q = mod(round(Int, angle(dot(ψ, Qop, ψ)) * p / 2π), p)
+        ψ[idx] = vecs[:, 1]
         (; q, energy = real(first(vals)), ψ)
     end
-    return sort!(states; by = s -> s.q)
+    return states
 end
 nothing #hide
 
@@ -160,12 +159,12 @@ nothing #hide
 #   \sqrt{\tfrac12 \textstyle\sum_{q<r} (\delta E_q - \delta E_r)^2}
 #   = \Big|\sum_q \omega^q \delta E_q\Big| \leq \|V\|\, \|R_n(Q_{\mathrm{gs}})\|_1 .
 #   ```
-# We plot trace norms divided by $p$, so a mode fully localized on site $n$ gives $1$. As in
-# the Kitaev example, `LowRankMatrix` avoids forming dense $p^N \times p^N$ operators.
+# We use trace norms divided by $p$, so a mode fully localized on site $n$ gives $1$.
+# `boundary_modes` returns the coefficients $c$ and the site profiles of $\Gamma_L$, $\Gamma_R$ and $Q_{\mathrm{gs}}$.
 trace_norm(A) = sum(svdvals(A))
 function boundary_modes(states)
     ket(q) = states[mod(q, p) + 1].ψ
-    reductions(a, b) = [partial_trace(LowRankMatrix(ket(a), conj(ket(b))), H => Hn) for Hn in Hmodes]
+    reductions(a, b) = [partial_trace(ket(a) * ket(b)', H => Hn) for Hn in Hmodes]
     Rshift = [reductions(q + 1, q) for q in 0:(p - 1)] # Rshift[q+1][n] = Rₙ(|q+1⟩⟨q|)
     Rdiag = [reductions(q, q) for q in 0:(p - 1)]      # Rdiag[q+1][n] = Rₙ(|q⟩⟨q|)
     reduced(n, coeffs, R) = sum(coeffs[k] * R[k][n] for k in 1:p)
@@ -181,11 +180,8 @@ end
 nothing #hide
 
 # ## Results
-# We analyze the chain at the exactly solvable point and at two values of $h$ in the
-# topological phase. Besides the ground-state splitting, we compute the group commutator
-# $\operatorname{tr}(\Gamma_L \Gamma_R \Gamma_L^\dagger \Gamma_R^\dagger)/p$, which equals
-# $\omega^\sigma$ for ideal parafermion modes.
-shift = circshift(Matrix(I, p, p), (1, 0)) # Σ_q |q+1⟩⟨q| in the basis of ground states
+# We analyze the chain at the exactly solvable point and at one value of $h$ in the
+# topological phase, and list the ground-state splitting.
 function analyze(h; J = 1.0)
     states = ground_states(parafermion_chain(J, h, N))
     modes = boundary_modes(states)
@@ -195,7 +191,15 @@ end
 results = analyze.([0.0, 0.3])
 [(; r.h, r.splitting) for r in results]
 
-# At $h = 0$ each mode sits on a single end site and $\|Q_n\|$ vanishes everywhere: no local
+# Validation: ideal modes satisfy $\Gamma_L \Gamma_R = \omega^\sigma \Gamma_R \Gamma_L$, like $\chi_1$ and
+# $\chi_{2N}$. In the ground-state basis $\Gamma$ is the cyclic shift times $\mathrm{diag}(c)$, so at $h = 0$
+# the group commutator $\operatorname{tr}(\Gamma_L \Gamma_R \Gamma_L^\dagger \Gamma_R^\dagger)/p$ must equal $\omega^\sigma$.
+shift = circshift(Matrix(I, p, p), (1, 0))
+Γ(coeffs) = shift * Diagonal(coeffs)
+r0 = first(results)
+@assert tr(Γ(r0.cL) * Γ(r0.cR) * Γ(r0.cL)' * Γ(r0.cR)') / p ≈ ω^σ
+
+# The figure shows the site profiles. At $h = 0$ each mode sits on a single end site and $\|Q_n\|$ vanishes everywhere: no local
 # measurement distinguishes the ground states. As $h$ grows, the modes spread into the bulk
 # and $\|Q_n\|$ becomes finite, signalling that local perturbations split the ground states.
 function locality_panel(r)
