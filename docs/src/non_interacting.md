@@ -40,7 +40,7 @@ vals
 ```
 
 ## Gaussian states
-On the single-particle and BdG spaces, `expectation(op, G, H)` takes the correlation matrix of the state: ``G_{ij} = \langle c_i^\dagger c_j \rangle`` on the single-particle space and ``G_{ij} = \langle \Psi_i^\dagger \Psi_j \rangle`` on the BdG space. The state is the Gaussian state with this correlation matrix, such as a thermal state of a quadratic hamiltonian, so operators of any degree are evaluated with Wick's theorem. `mean_field(op, G, H)` replaces every product in `op` by its terms of order at most two in the fluctuations around the state, the Hartree, Fock and pairing terms, which gives an operator with the same expectation value that can be represented on `H`. For a thermal state of the single-particle hamiltonian `h`, ``G = (1 + e^{\beta h})^{-T}``:
+On the single-particle and BdG spaces, `expectation(op, G, H)` takes the correlation matrix of the state: ``G_{ij} = \langle c_i^\dagger c_j \rangle`` on the single-particle space and ``G_{ij} = \langle \Psi_i^\dagger \Psi_j \rangle`` on the BdG space. The state is the Gaussian state with this correlation matrix, such as a thermal state of a quadratic hamiltonian, so operators of any degree are evaluated with Wick's theorem. `mean_field(op, G, H)` replaces every product in `op` by its terms of order at most two in the fluctuations around the state, the Hartree, Fock and pairing terms, which gives an operator with the same expectation value that, for an even `op`, can be represented on `H`. For a thermal state of the single-particle hamiltonian `h`, ``G = (1 + e^{\beta h})^{-T}``:
 ```@example free
 Hs = hilbert_space(c, 1:4, SingleParticle())
 ham = sum(c[n]' * c[n+1] + hc for n in 1:3) + 1
