@@ -84,11 +84,12 @@ n_analytical = γ_in / (γ_in + γ_out)
 println("Steady-state occupation ⟨n⟩_ss = $n_ss  (analytic: $n_analytical)")
 
 # ### Time evolution
-# Starting from the empty level, ``ho(t) = e^{\mathcal{L}t}ho_0`` in vectorized form.
+# Starting from the empty level, ``\rho(t) = e^{\mathcal{L}t}\rho_0`` in vectorized form. At long times the occupation approaches the steady-state value.
 ρ0 = reshape(I - n_mat, (Hl, Hr) => Hlr)
 Lmat = representation(lindbladian, Hlr, :dense)
 ρt(t) = reshape(exp(Lmat * t) * ρ0, Hlr => (Hl, Hr))
-@show tr(n_mat * ρt(0.0)) tr(n_mat * ρt(50.0))
+@assert tr(n_mat * ρt(0.0)) ≈ 0 atol = 1e-12
+@assert ρt(50.0) ≈ ρ
 
 # ### Use a conserved quantity for block structure
 

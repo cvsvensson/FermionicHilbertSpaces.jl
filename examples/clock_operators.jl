@@ -5,8 +5,8 @@
 # global clock charge to diagonalise a Hamiltonian sector by sector and to
 # resolve the entanglement entropy of a subsystem.
 #
-# The pieces a new algebra needs are listed in [Extending and performance hooks](extending.md).
-# `@commutative` is not needed here; the [Floquet example](floquet_tutorial.md) uses it.
+# The pieces a new algebra needs are listed in [Extending and performance hooks](../extending.md).
+# `@commutative` is needed only to mix with operators of other algebras; the [Floquet example](floquet_tutorial.md) uses it.
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
 import FermionicHilbertSpaces: AbstractBasisState, AbstractSym,

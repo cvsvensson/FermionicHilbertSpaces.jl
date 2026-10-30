@@ -1,7 +1,7 @@
 # # Floquet Systems
 
 # This example defines an operator algebra and matrix representations for the Floquet space of a
-# periodically driven system, and couples it to a spin 1 to compute the quasienergies of a driven three-level system.
+# periodically driven system, and couples it to a spin-1 to compute the quasienergies of a driven three-level system.
 
 # ## Background: Floquet theory 
 
@@ -158,13 +158,12 @@ representation(F, Hfloq; projection=true) # we need projection=true because we'v
 
 # Now Floquet operators will work together algebraically with the spin operators, and we can get matrix representations of such mixed operators. Let's do some physics.
 # ## Driven spin 1
-# We take a spin 1 as the physical system and couple it to the Floquet space to model a driven three-level system.  The full Hilbert space is a product of the spin and Floquet spaces, and the Hamiltonian is a symbolic expression mixing spin and Floquet operators. When making the full space, we use the SectorConstraint to organize the basis states in Floquet sectors, which will be convenient later.
+# We take a spin 1 as the physical system and couple it to the Floquet space to model a driven three-level system.  The full Hilbert space is a product of the spin and Floquet spaces, and the Hamiltonian is a symbolic expression mixing spin and Floquet operators.
 @spin σ
 Hspin = hilbert_space(σ, 1)
-floquet_sectors = SectorConstraint(only; maps=s -> s.mode, spaces=[Hfloq])
-H = tensor_product((Hspin, Hfloq); constraint=floquet_sectors)
+H = tensor_product((Hspin, Hfloq))
 
-# Floquet operators can be used together with spin operators to build the Floquet Hamiltonian (since we used @commutative to declare that they commute):
+# Floquet operators can be used together with spin operators to build the Floquet Hamiltonian, with an added anisotropy ``D\sigma_z^2`` (since we used @commutative to declare that they commute):
 
 ω = 1.0         # Drive frequency (energy unit)
 ε = 0.2 * ω     # Zeeman splitting: sets |+1⟩ and |-1⟩ baseline energies
@@ -186,7 +185,7 @@ mat0 = representation(floquet_ham(0), H, :dense; projection=true)
 A_values = range(0, 4 * ω, length=100)
 spectrum = reduce(hcat, [eigvals(Hermitian(representation(floquet_ham(A), H, :dense; projection=true))) for A in A_values])'
 
-# Each line is a quasienergy, shown modulo the central zone.
+# Each dot is a quasienergy, folded into the interval ``[-\omega/2, \omega/2)``.
 using Plots
 plot(A_values ./ ω, mod.(spectrum .+ ω / 2, ω) .- ω / 2; seriestype=:scatter, ms=1, legend=false,
     xlabel="Drive amplitude A/ω", ylabel="Quasienergy", frame=:box)
