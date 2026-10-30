@@ -1,8 +1,7 @@
 # # Entanglement and negativity
 #
 # This tutorial computes reduced density matrices, entanglement entropy and the logarithmic
-# negativity of fermionic states. It assumes the partial trace and partial transpose conventions
-# of [Fermionic tensor products and partial traces](../fermions.md).
+# negativity of fermionic states.
 #
 # We follow H. Shapourian and S. Ryu, "Entanglement negativity of fermions: monotonicity,
 # separability criterion, and classification of few-mode states",
