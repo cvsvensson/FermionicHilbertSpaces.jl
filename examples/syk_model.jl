@@ -27,7 +27,7 @@ end
 
 function gap_ratio(energies)
     s = diff(energies)
-    return mean(min(a, b) / max(a, b) for (a, b) in zip(s[1:(end-1)], s[2:end]))
+    return mean(min(a, b) / max(a, b) for (a, b) in zip(s[1:(end - 1)], s[2:end]))
 end;
 
 # For each ``M`` we diagonalize the even-parity sector for a few disorder samples. In the GSE case

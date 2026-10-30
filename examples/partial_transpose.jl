@@ -18,7 +18,7 @@ using LinearAlgebra, Arpack, Plots
 
 @fermions f
 kitaev(N, μ; t = 1.0, Δ = 1.0) = sum(-μ * f[i]' * f[i] for i in 1:N) +
-    sum(-t * f[i]' * f[i+1] + Δ * f[i] * f[i+1] + hc for i in 1:(N-1))
+    sum(-t * f[i]' * f[i + 1] + Δ * f[i] * f[i + 1] + hc for i in 1:(N - 1))
 
 function end_negativity(N, μ; phase_factors = true)
     H = hilbert_space(f, 1:N, ParityConservation())
