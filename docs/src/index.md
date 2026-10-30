@@ -43,7 +43,7 @@ expectation(c[1]'c[1], ψ, H)
 partial_trace(ψ, H => hilbert_space(c, 1:1))
 ```
 
-The [tutorials](literate_output/kitaev_chain.md) work through whole models, starting with the Interacting Kitaev chain. A cheat sheet of common operations is planned.
+The [tutorials](literate_output/kitaev_chain.md) work through whole models, starting with the Interacting Kitaev chain.
 
 ## Glossary
 
