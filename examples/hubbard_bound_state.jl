@@ -3,6 +3,7 @@
 # This tutorial uses KrylovKit's `eigsolve` with a symbolic Hamiltonian as the linear map and symbolic kets as vectors,
 # to find the bound pair (doublon) of two fermions on an attractive Hubbard ring. It assumes [Symbolic states](../symbolic_states.md).
 using FermionicHilbertSpaces, KrylovKit, Plots
+using FermionicHilbertSpaces.NonCommutativeProducts: terms
 
 @fermions c
 L = 16
@@ -27,7 +28,7 @@ function bound_state(K)
 end
 E0, ψ0 = bound_state(0.0)
 # The eigenvector is supported on a small fraction of the basis states of `H`.
-(; hilbert_dim = dim(H), support = length(ψ0.dict))
+(; hilbert_dim = dim(H), support = length(collect(terms(ψ0))))
 
 # On an infinite chain the bound state energy is `E(K) = -√(U² + 16t² cos²(K/2))`. On the ring `K = 2πm/L`, and the
 # deviation from this formula is a finite-size effect that decays exponentially with `L`.
