@@ -80,3 +80,18 @@ To restrict a space of custom states, use [`SectorConstraint`](@ref) or
 basis state. With `maps` and `spaces` together, it is called instead on the values that `maps`
 gives for the parts of the state in `spaces`. See
 [Constrained Hilbert spaces and conserved quantum numbers](conservation.md).
+
+## Basis-state groups and the state mapper protocol
+
+`FermionicHilbertSpaces.groups(H)` returns the spaces that line up with the slots of a basis state: `factors(H)` for a product space, and `(H,)` for any other space. See [Hilbert space and array operations](hilbert_space_operations.md).
+
+Internally, `tensor_product`, `reshape` and `partial_trace` all decompose and
+recombine basis states through a common mapper protocol:
+
+- `state_mapper(H, Hs)` returns a mapper object.
+- `split_state(state, mapper)` returns a tuple with one entry per target subsystem.
+- Each tuple entry is a weighted collection `((substate, weight), ...)`.
+- `combine_states(substates, mapper)` returns a weighted collection `((state,
+  weight), ...)`.
+
+Weighted collections can have any concrete type; treat them as iterables of `(state, weight)`.

@@ -1,6 +1,6 @@
 # FermionicHilbertSpaces.jl
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/)
 [![Build Status](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl)
@@ -11,9 +11,9 @@ This package provides tools for dealing with the symbolic and linear algebra oft
 - **Hilbert-space mappings:** Tensor products, partial traces, reshaping with fermionic signs handled automatically.
 - **Constrained spaces:** Flexible system to constrain hilbert spaces with conserved quantities such as particle number or custom constraints.
 
-The goal of this package is that you should be able to define your own physics and never have to think about indexing of vectors and matrices.
+It builds and manipulates operators and spaces; it is not a solver. The goal of this package is that you should be able to define your own physics and never have to think about indexing of vectors and matrices.
 
-Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`.
+Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`. See the [documentation](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/) for getting started, tutorials, guides and the API reference.
 
 
 ## Quick example
@@ -25,12 +25,11 @@ using FermionicHilbertSpaces, LinearAlgebra
 sym_ham = sum(rand() * f[n]'f[n] for n in 1:4) +
     sum(f[n+1]'f[n] + hc for n in 1:3)
 
-#Get a matrix representation of the hamiltonian on a hilbert space
+#Matrix representation of the hamiltonian on a hilbert space
 H = hilbert_space(f, 1:4)
-ham = representation(sym_ham, H)
 
 #Diagonalize to find the ground state
-Ψ = eigvecs(Matrix(ham))[:, 1]
+Ψ = eigvecs(Hermitian(representation(sym_ham, H, :dense)))[:, 1]
 
 #Define a subsystem and partial trace to find the reduced density matrix
 Hsub = hilbert_space(f, 1:2)
@@ -58,16 +57,16 @@ sum(-λ * log(λ) for λ in eigvals(ρsub))
 
 ## Who is this for?
 You may be interested if you
-- deal with fermions and want correct tensor products and partial traces. [More info.](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/fermions)
-- have complicated constraints on your Hilbert space. See examples [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/conservation).
-- want to define your own physics and never think about indexing. Examples:  [Clock operators](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/literate_output/clock_operators), [Floquet](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/literate_output/floquet_tutorial/)
+- deal with fermions and want correct tensor products and partial traces. [More info.](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/fermions/)
+- have complicated constraints on your Hilbert space. See examples [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/conservation/).
+- want to define your own physics and never think about indexing. Examples:  [Clock operators](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/clock_operators/), [Floquet](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/floquet_tutorial/)
 
 You might want to look elsewhere if you
 - have large hilbert spaces that need methods like tensor networks.
 - deal with qubits.
-- deal with non-interacting systems (though there is some functionality for free fermions, see [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/non_interacting/) and [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/literate_output/free_fermions/)).
+- deal with non-interacting systems (though there is some functionality for free fermions, see [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/non_interacting/) and [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/free_fermions/)).
 
-This package does not contain functions for things like calculating eigenstates and doing time evolution. The documentation has several examples of how to combine this package with other Julia packages to do this.
+The documentation has examples of combining this package with other Julia packages for eigenstates and time evolution.
 
 ## Related packages
 FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).

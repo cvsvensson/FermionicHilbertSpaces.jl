@@ -83,8 +83,8 @@ Hsub = subregion([f[k] for k in 1:2], H)
 
 In many cases one needs the complementary subsystem as well. It is available with `complementary_subsystem(H, Hsub)` (but unexported), which returns the subregion of `H` that is complementary to `Hsub`.
 ```@example hilbert_space_ops
-FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
-basisstates(Hsub)
+Hcomp = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
+basisstates(Hcomp)
 ```
 The complement is used when performing partial trace or embed, and it can be a useful optimization to precompute it and pass it explicitly in some cases.
 
@@ -108,8 +108,6 @@ factors(Hf)
 FermionicHilbertSpaces.atomic_factors(Hfb)
 ```
 The atoms are always ordered group by group, so `tensor_product(f1, b1, f2)` and `tensor_product(f1, f2, b1)` give the same space. Only the order within a fermionic group matters.
-
-Internally, `FermionicHilbertSpaces.groups(H)` returns the spaces that line up with the slots of a basis state: for a product space these are the same as `factors(H)`, while any other space is a single group, `groups(H) == (H,)`.
 
 When you pass symbols or spaces to `subregion`, they are looked up by name only, so `subregion([b[1]], H)` returns the bosonic mode as it appears in `H`, whatever its truncation. `partial_trace(m, H => Hsub)` and `embed` also look up atoms by name, so an `Hsub` built with a different truncation loses states: `partial_trace` throws an error if they carry nonzero weight, unless `skipmissing=true`, and `embed` gives zero on the states of `H` whose part on `Hsub` is lost. Use `subregion` to get an `Hsub` whose basis matches `H`.
 
@@ -178,7 +176,7 @@ package to build the operations above:
 - `basisstate(ind, H)` / `state_index(state, H)` — convert between a basis state and
   its integer index (`state_index` returns `0` if the state is not in `H`).
 
-See the [Functions](docstrings.md) page for full docstrings.
+See the [API reference](docstrings.md) page for full docstrings.
 
 ## Operations on arrays
 
@@ -455,19 +453,3 @@ This returns a callable reshape map which precomputes some data so that it can b
 applied to multiple arrays efficiently.
 
 For worked examples, see [Open systems](literate_output/open_system_lindblad.md).
-
-### The state mapper interface (internals)
-
-Internally, `tensor_product`, `reshape` and `partial_trace` all decompose and
-recombine basis states through a common mapper protocol:
-
-- `state_mapper(H, Hs)` returns a mapper object.
-- `split_state(state, mapper)` returns a tuple with one entry per target subsystem.
-- Each tuple entry is a weighted collection `((substate, weight), ...)`.
-- `combine_states(substates, mapper)` returns a weighted collection `((state,
-  weight), ...)`.
-
-This package does not require a single concrete container type for weighted
-collections; callers should treat them as iterable collections of `(state,
-weight)` outcomes. This protocol is only relevant if you are implementing a new
-kind of Hilbert space.

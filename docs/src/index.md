@@ -4,82 +4,53 @@ CurrentModule = FermionicHilbertSpaces
 
 # FermionicHilbertSpaces.jl
 
-[FermionicHilbertSpaces.jl](https://github.com/cvsvensson/FermionicHilbertSpaces.jl) is a Julia package that provides tools for dealing with the symbolic and linear algebra often encountered in quantum mechanics. The goal of this package is that you should be able to define your own physics and never have to think about indexing of vectors and matrices. The package was originally developed to handle tensor products and partial traces in fermionic systems (which needs special care
-[[1]](#fermion_information_article)), but now also includes bosons and spins and is easily extensible to other systems. 
+[FermionicHilbertSpaces.jl](https://github.com/cvsvensson/FermionicHilbertSpaces.jl) turns symbolic fermion, boson and spin operators into matrices on Hilbert spaces, so you never index vectors and matrices by hand.
 
-Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`.
+It does:
+* Symbolic operators with automatic simplification by their commutation relations.
+* Hilbert spaces that track basis states and ordering: product spaces, subregions, and constraints such as particle number or parity.
+* Sparse, dense and lazy matrix representations, tensor products, partial traces and embeddings with correct fermionic signs, and open-system superoperators.
 
+It does not solve anything: there are no eigensolvers, time evolution or tensor-network methods. Combine it with LinearAlgebra, KrylovKit, ODE solvers and similar packages.
 
-## Functionality
+## Getting started
 
-The package helps with three general areas
-* **Symbolic operators:** Fermions, bosons and spins are included and can be used algebraically to build expressions. Their commutation relations are automatically applied to simplify the expression. 
-* **Hilbert spaces:** Hilbert space objects keep track of basis states and their ordering, so you never need to think about indexing. Spaces can be combined into product spaces, split into subregions, and constrained with conservation laws.
-* **Matrices:** The symbolic operators can be turned into matrix representations on the Hilbert spaces. The Hilbert spaces can then help with tensor products, partial traces and reshapings.
+Install with `using Pkg; Pkg.add("FermionicHilbertSpaces")`. Two spinless fermion sites with hopping and an on-site energy:
 
-More concretely, with links to documentation and examples:
-* Fermions: [Theory on tensor products and partial traces](fermions.md). Example with [Kitaev chain](literate_output/kitaev_chain.md).
-* [Bosons tutorial](literate_output/bosons.md), [Spins tutorial](literate_output/spin_chain.md), [Mixed fermion-spin-boson systems](mixed_fermion_spin_boson.md)
-* [Conserved quantities and constraints](conservation.md)
-* Examples for extending with a custom algebra: [Floquet](literate_output/floquet_tutorial.md), [Clock operators](literate_output/clock_operators.md)
-* Symbolic operators can act on [symbolic states](symbolic_states.md), so one can completely avoid instantiating large matrices.
-* Dealing with [spatial symmetries](literate_output/translation_symmetry.md) such as translations. 
-* [Open systems](literate_output/open_system_lindblad.md) are represented by a tensor product of two copies of the hilbert space. With `reshape` you can convert between vectorized and matrix representations.
-
-# Introduction
-
-The following example demonstrates how to define a fermionic Hilbert space and construct a simple Hamiltonian.
-```@example intro
+```@example start
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions c
-labels = [(i, σ) for i in 1:2 for σ in (:↑,:↓)]
-H = hilbert_space(c, labels) 
+Hs = hilbert_space(c, 1:2)
+H = c[1]'c[2] + hc + 0.5 * c[1]'c[1]
+M = representation(H, Hs, :dense)
 ```
-We now have a Hilbert space representing 2N fermions. To construct operators on this space we first call `@fermions c` which makes `c` represent symbolic fermions. Indexing into `c` returns an operator representing an annihilation operator e.g. `c[1,:↑]`. The creation operator is given by the adjoint `c[1,:↑]'`. These can be multiplied and added together and is automatically sorted into a unique normal order. Here is a simple Hamiltonian with hopping and Coulomb interaction.
-```@example intro
-hopping = c[1,:↑]'c[2,:↑] + c[1,:↓]'c[2,:↓] + hc 
-coulomb = sum(c[n,:↑]'c[n,:↑]c[n,:↓]'c[n,:↓] for n in 1:2)
-ham = hopping + coulomb
+The basis states label the rows and columns of `M`:
+```@example start
+basisstates(Hs)
 ```
-To get the matrix representation of this operator on the Hilbert space, do
-```@example intro
-mat = representation(ham, H)
+The Hamiltonian conserves particle number, so we can restrict to one particle. The sector has its own, smaller basis, and `embed` maps its eigenvectors back to the full space:
+```@example start
+Hn = hilbert_space(c, 1:2, NumberConservation(1))
+E = eigen(Hermitian(representation(H, Hn, :dense)))
+basisstates(Hn)
 ```
-`representation(x, H)` is the main entry point for turning a symbolic expression into numbers: it gives a matrix for an operator and a vector for a state (see [symbolic states](symbolic_states.md)). It chooses what to compute from the type of `x`. The explicit forms `matrix_representation(op, H)` for operators and `vector_representation(state, H)` for states are also available. An optional third argument selects the format, `:sparse` (the default), `:dense` or `:lazy`.
+```@example start
+ψ = embed(E.vectors[:, 1], Hn => Hs)
+expectation(c[1]'c[1], ψ, Hs)
+```
 
-## Tensor product and partial trace
-You can take tensor products of Hilbert spaces and operators on them, as well as calculate partial traces in a way that is consistent with fermionic anticommutation relations, see [Fermions](fermions.md). In this example, we take the ground state of the hamiltonian above, calculate reduced density matrices and the uncorrelated state $\rho_A \otimes \rho_B$.
-```@example intro
-Ψ = eigvecs(Matrix(mat))[:, 1] 
-HA = hilbert_space(c, labels[1:2])
-HB = hilbert_space(c, labels[3:4]) 
-ρA = partial_trace(Ψ, H => HA)
-ρB = partial_trace(Ψ, H => HB)
-ρAB = tensor_product((ρA, ρB), (HA, HB) => H)
-```
-These patterns works for all spaces, subregions and constraints, with automatic handling of fermionic signs.
+The Cheat sheet page lists the common operations. The tutorials work through whole models, starting with the Interacting Kitaev chain.
 
-## Conserved quantum numbers
-Hilbert spaces can be constrained with custom constraints, see [Conserved quantites](conservation.md), which is useful when dealing with conservation laws. Particle number conservation is built into the package. Defining
-```@example intro
-H = hilbert_space(c, labels, NumberConservation())
-```
-gives a hilbert space which consists of 5 sectors with different numbers of particles. The matrix representation of the hamiltonian is block diagonal in this basis. We can get the representation of the hamiltonian in a specific sector, e.g. the 3-particle sector
-```@example intro
-representation(ham, sector(3, H))
-```
-We can restrict the sectors from the outset, which is useful if the full space is too large. For example, let's take the 0, 1 and 2 particle sectors of a 100-mode system
-```@example intro
-H = hilbert_space(c, 1:100, NumberConservation([0,1,2]))
-```
-The function `subregion` gives a hilbert space for a subregion, including only those states which are substates of the full space
-```@example intro
-Hsub = subregion([c[k] for k in 1:2:100], H)
-```
-and we can split it into sectors with definite particle numbers with
-```@example intro
-constrain_space(Hsub, NumberConservation())
-```
+## Glossary
+
+* **Sector:** the subspace of a constrained space with fixed quantum numbers, for example a fixed particle number.
+* **Quantum number:** the value of a conserved quantity, such as particle number or parity, that labels a sector.
+* **Constraint:** a rule that restricts a space to some basis states, for example [`NumberConservation`](@ref); see [Constrained spaces](conservation.md).
+* **Subregion:** the part of a space that lives on a subset of the modes; see [`subregion`](@ref).
+* **Factors / atomic factors:** the spaces a product space is built from; `factors` splits one level and `atomic_factors` down to single modes.
+* **Symbolic operator vs representation:** an operator like `c[1]'c[2]` is an algebraic expression without a basis; `representation(op, H)` gives its matrix on the space `H`.
+* **BdG:** the Bogoliubov-de Gennes space, where a quadratic Hamiltonian acts on particle and hole components; see [Non-interacting systems](non_interacting.md).
+* **Parity (superselection):** physical fermionic states have definite fermion parity; [`ParityConservation`](@ref) restricts a space to one parity sector.
 
 # Related packages
 FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).
