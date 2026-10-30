@@ -1,7 +1,7 @@
 # # Bound doublons in the Hubbard ring
 
 # This tutorial uses KrylovKit's `eigsolve` with a symbolic Hamiltonian as the linear map and symbolic kets as vectors,
-# to find the bound pair (doublon) of two fermions on an attractive Hubbard ring. It assumes [Symbolic states](../symbolic_states.md).
+# to find the bound pair (doublon) of two fermions on an attractive Hubbard ring.
 using FermionicHilbertSpaces, KrylovKit, Plots
 using FermionicHilbertSpaces.NonCommutativeProducts: terms
 

@@ -8,7 +8,7 @@
 # the x- and y-links gives the toric code $H_\mathrm{eff} = -J_\mathrm{eff} \sum_p W_p$, with
 # $J_\mathrm{eff} = J_x^2 J_y^2 / (16 J_z^3)$ and $W_p$ the product of the six link operators around hexagon $p$.
 # This tutorial computes $J_\mathrm{eff}$ by applying spin operators to symbolic kets on a torus too large to enumerate,
-# and checks it against this formula. It assumes [Symbolic states](../symbolic_states.md).
+# and checks it against this formula.
 using FermionicHilbertSpaces
 import FermionicHilbertSpaces.NonCommutativeProducts.VectorInterface: inner
 

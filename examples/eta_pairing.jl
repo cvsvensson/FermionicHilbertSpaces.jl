@@ -1,7 +1,7 @@
 # # η-pairing in a large Hubbard chain
 
 # This tutorial applies a symbolic Hamiltonian to symbolic kets in a space too large for vectors, to build exact
-# eigenstates of a Hubbard chain. It assumes [Symbolic states](../symbolic_states.md).
+# eigenstates of a Hubbard chain.
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions c
 L = 200

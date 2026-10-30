@@ -2,7 +2,7 @@
 
 # This tutorial uses KrylovKit's `linsolve` on symbolic kets to compute the second-order effective Hamiltonian of
 # an Anderson impurity coupled to a bath, and checks it against the Schrieffer–Wolff Kondo coupling
-# ``J\,\mathbf{S}\cdot\mathbf{s}``. It assumes [Symbolic states](../symbolic_states.md).
+# ``J\,\mathbf{S}\cdot\mathbf{s}``.
 using FermionicHilbertSpaces, KrylovKit, LinearAlgebra
 import KrylovKit.VectorInterface: inner
 
