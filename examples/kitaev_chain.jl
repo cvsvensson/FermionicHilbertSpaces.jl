@@ -36,7 +36,7 @@ hsym = kitaev_chain(f, N, μ, t, Δ, U)
 function ground_state(parity)
     Hsec = sector(parity, H)
     vals, vecs = eigs(representation(hsym, Hsec); nev = 1, which = :SR)
-    (; energy = first(vals), state = embed(vecs[:, 1], Hsec => H))
+    return (; energy = first(vals), state = embed(vecs[:, 1], Hsec => H))
 end;
 (Eo, o), (Ee, e) = map(ground_state, (-1, 1)); # odd and even parity
 # The two energies are nearly degenerate.
