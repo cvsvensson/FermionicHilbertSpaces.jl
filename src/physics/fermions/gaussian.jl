@@ -1,7 +1,7 @@
 """
     correlation_matrix(state, H, Hbdg::BdGHilbertSpace)
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on the many-body space `H`, where `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩`. A BdG space over a subset of the modes gives the reduced correlation matrix.
+The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on the many-body space `H`, where `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩`. A BdG space over a subset of the modes gives the reduced correlation matrix. On a Majorana space `hilbert_space(γ, labels, SingleParticle())`, `Ψ = γ / √2`, so `G[i, j] = ⟨γ_i γ_j⟩ / 2`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions; @fermions f;
@@ -18,9 +18,8 @@ julia> correlation_matrix(ψ, H, hilbert_space(f, 1:2, BdG()))
  0  0  0  1
 ```
 """
-function correlation_matrix(state, H, Hbdg::BdGHilbertSpace)
-    c = modes(Hbdg)
-    Ψ = [c; adjoint.(c)]
+function correlation_matrix(state, H, Hfree::Union{BdGHilbertSpace, MajoranaSingleParticleHilbertSpace})
+    Ψ = adjoint.(_nambu_creators(Hfree))
     return [expectation(Ψi' * Ψj, state, H) for Ψi in Ψ, Ψj in Ψ]
 end
 
@@ -46,7 +45,7 @@ von_neumann_entropy(G, ::BdGHilbertSpace) = von_neumann_entropy(G)
 """
     correlation_matrix(F::LinearAlgebra.Eigen)
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground state, where `F` is the result of `eigen(A, BdGEigen())`, assuming no zero-energy modes. It equals `correlation_matrix(ψ, H, Hbdg)` for the many-body ground state `ψ`.
+The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground state, where `F` is the result of `eigen(A, BdGEigen())`, assuming no zero-energy modes. It equals `correlation_matrix(ψ, H, Hbdg)` for the many-body ground state `ψ`. For the matrix `R` of a Majorana operator, `F = eigen(Hermitian(R))` gives `G[i, j] = ⟨γ_i γ_j⟩ / 2`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions, LinearAlgebra; @fermions f;
@@ -79,11 +78,27 @@ julia> ground_state_parity(eigen(A, BdGEigen()))
 """
 function ground_state_parity(F::Eigen)
     N = div(size(F.vectors, 2), 2)
-    d = det(F.vectors[:, [2N:-1:(N + 1); 1:N]])
+    return _parity(det(F.vectors[:, [2N:-1:(N + 1); 1:N]]))
+end
+function _parity(d)
     p = sign(real(d))
     isapprox(d, p; atol = sqrt(eps(real(float(one(d)))))) ||
         throw(ArgumentError("The eigenvectors do not pair particles and holes exactly; their determinant is $d."))
     return Int(p)
+end
+
+"""
+    ground_state_parity(F::LinearAlgebra.Eigen, H)
+
+The fermionic parity of the ground state of a quadratic Majorana operator with matrix `R` on the Majorana space `H`, where `F = eigen(Hermitian(R))`, assuming no zero-energy modes. Fermions are formed from consecutive pairs of `labels`.
+"""
+function ground_state_parity(F::Eigen, ::MajoranaSingleParticleHilbertSpace)
+    N = div(size(F.vectors, 2), 2)
+    # The quasiparticle of a negative-energy column u = (x + iy) / √2 annihilates the ground state, so the Majoranas
+    # γ_x = x ⋅ γ and γ_y = y ⋅ γ have i γ_x γ_y = -1 there. The columns x, y form an orthogonal W, and the product of
+    # these pair parities is det(W) times the parity.
+    W = sqrt(2) * stack(Iterators.flatten((real(u), imag(u)) for u in eachcol(F.vectors[:, 1:N])))
+    return _parity((-1)^N * det(W))
 end
 
 """
@@ -146,6 +161,34 @@ end
     @test parities[1] == 1 && parities[3] == -1
     F = eigen(representation(quadratic, Hbdg, :dense), BdGEigen())
     @test_throws ArgumentError ground_state_parity(Eigen(F.values, 2 * F.vectors))
+end
+
+@testitem "Majorana ground state" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces.FreeFermions
+    @majoranas γ
+    N = 3
+    Hmb = hilbert_space(γ, 1:2N)
+    H = hilbert_space(γ, 1:2N, SingleParticle())
+    A = randn(2N, 2N)
+    quadratic = 1im / 4 * sum((A[i, j] - A[j, i]) * γ[i] * γ[j] for i in 1:2N, j in 1:2N)
+    quartic = γ[1] * γ[2] * γ[3] * γ[6] + 2 * γ[2] * γ[4] * γ[5] * γ[1] * γ[3] * γ[6]
+    parities = map([-20, 20]) do μ
+        ham = quadratic + 1im * μ / 2 * sum(γ[2k - 1] * γ[2k] for k in 1:N)
+        vals, vecs = eigen(Hermitian(representation(ham, Hmb, :dense)))
+        ψ = vecs[:, 1]
+        F = eigen(Hermitian(representation(ham, H, :dense)))
+        @test vals[1] ≈ sum(filter(<(0), F.values))
+        G = correlation_matrix(F)
+        @test G ≈ correlation_matrix(ψ, Hmb, H) ≈ [expectation(γ[i] * γ[j], ψ, Hmb) / 2 for i in 1:2N, j in 1:2N]
+        @test expectation(quartic, G, H) ≈ expectation(quartic, ψ, Hmb)
+        @test expectation(mean_field(quartic, G, H), G, H) ≈ expectation(quartic, G, H)
+        @test ground_state_parity(F, H) == round(real(dot(ψ, parityoperator(Hmb), ψ)))
+        ground_state_parity(F, H)
+    end
+    @test parities == [1, -1]
+    F = eigen(Hermitian(representation(quadratic, H, :dense)))
+    @test_throws ArgumentError ground_state_parity(Eigen(F.values, 2 * F.vectors), H)
 end
 
 @testitem "Gaussian state from a correlation matrix" begin
