@@ -44,7 +44,7 @@ function interpret_state(f::FockNumber, ::Type{FixedNumberFockState{N}}) where {
 end
 
 
-physical_rep(state::T, ::Type{FixedNumberFockState{N}}) where {T,N} = FixedNumberFockState{N}(physical_rep(state, FockNumber{T}))
+physical_rep(state::T, ::Type{FixedNumberFockState{N}}) where {T, N} = FixedNumberFockState{N}(physical_rep(state, FockNumber{T}))
 internal_rep(state::FixedNumberFockState, space::FermionicSpace, ::Type{T}) where T = internal_rep(FockNumber(state), space, T)
 
 
