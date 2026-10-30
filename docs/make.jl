@@ -12,6 +12,30 @@ for file in literate_files
     Literate.markdown(file, output_directory; documenter=true, execute=false)
 end
 
+pages = [
+    "Home" => "index.md",
+    "Fermionic tensor products and partial traces" => "fermions.md",
+    "Constrained Hilbert spaces and conserved quantum numbers" => "conservation.md",
+    "Hilbert space and array operations" => "hilbert_space_operations.md",
+    "Tutorials and examples" => [
+        "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
+        "Bosons" => "literate_output/bosons.md",
+        "Spins" => "literate_output/spin_chain.md",
+        "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md",
+        "Open systems" => "literate_output/open_system_lindblad.md",
+        "Symbolic states" => "symbolic_states.md",
+        "Custom operators: Clock" => "literate_output/clock_operators.md",
+        "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
+        "Spatial symmetries" => "literate_output/translation_symmetry.md",
+    ],
+    "Non-interacting systems" => [
+        "Non-interacting hilbert spaces" => "non_interacting.md",
+        "Example: Free fermions" => "literate_output/free_fermions.md"],
+    "Misc" => "misc.md",
+    "Extending and performance hooks" => "extending.md",
+    "Functions" => "docstrings.md",
+]
+
 makedocs(;
     modules = [FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions],
     authors="Viktor Svensson, William Samuelson",
@@ -22,31 +46,12 @@ makedocs(;
         assets=String[],
         size_threshold = 400 * 2^10,
     ),
-    pages=[
-        "Home" => "index.md",
-        "Fermionic tensor products and partial traces" => "fermions.md",
-        "Constrained Hilbert spaces and conserved quantum numbers" => "conservation.md",
-        "Hilbert space and array operations" => "hilbert_space_operations.md",
-        "Tutorials and examples" => [
-            "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
-            "Bosons" => "literate_output/bosons.md",
-            "Spins" => "literate_output/spin_chain.md",
-            "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md",
-            "Open systems" => "literate_output/open_system_lindblad.md",
-            "Symbolic states" => "symbolic_states.md",
-            "Custom operators: Clock" => "literate_output/clock_operators.md",
-            "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
-            "Spatial symmetries" => "literate_output/translation_symmetry.md",
-        ],
-        "Non-interacting systems" => [
-            "Non-interacting hilbert spaces" => "non_interacting.md",
-            "Example: Free fermions" => "literate_output/free_fermions.md"],
-        "Misc" => "misc.md",
-        "Extending and performance hooks" => "extending.md",
-        "Functions" => "docstrings.md",
-    ],
+    pages,
     plugins=[DocumenterCodeBlocks.CodeBlocks()],
 )
+
+include(joinpath(@__DIR__, "llms.jl"))
+write_llms(pages)
 
 deploydocs(;
     repo="github.com/cvsvensson/FermionicHilbertSpaces.jl",
