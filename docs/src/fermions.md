@@ -4,19 +4,12 @@ CurrentModule = FermionicHilbertSpaces
 
 # Fermionic tensor products, partial traces, and partial transpose
 
-This page explains the mathematics behind the fermionic tensor product, partial trace, and partial transpose, and the conventions this package uses to implement them. See [[1]](#fermion_information_article) for the tensor-product and partial-trace formalism, and [[2]](#fermionic_partial_time_reversal) for the fermionic partial transpose; here we sketch the ideas needed to understand why these operations differ from `kron`, a naive partial trace, and the ordinary partial transpose.
+Fermionic operators anticommute, so the tensor product, partial trace and partial transpose of fermionic systems differ from `kron`, the naive partial trace and the ordinary partial transpose. This page explains why and which conventions the package uses, following [[1]](#fermion_information_article) for the tensor product and partial trace and [[2]](#fermionic_partial_time_reversal) for the partial transpose.
 
-### The CAR algebra
-Fermionic creation and annihilation operators ``c_i^\dagger, c_i`` satisfy the canonical anticommutation relations (CAR)
-```math
-\{c_i, c_j^\dagger\} = \delta_{ij}, \quad \{c_i, c_j\} = 0, \quad \{c_i^\dagger, c_j^\dagger\} = 0.
-```
-The Fock space is spanned by occupation number states ``\ket{n_1,\ldots,n_N}`` built by acting with ``c_i^\dagger`` on the vacuum, and is represented in this package as bitstrings of an integer.
+## The fermionic tensor product
+Creation and annihilation operators satisfy the canonical anticommutation relations ``\{c_i, c_j^\dagger\} = \delta_{ij}``, ``\{c_i, c_j\} = 0``. The Fock space is spanned by occupation number states ``\ket{n_1,\ldots,n_N}`` built by acting with ``c_i^\dagger`` on the vacuum, and is represented as bitstrings of an integer.
 
-### The fermionic tensor product
-Suppose we split the modes into two groups ``X`` and ``\bar X``, with Hilbert spaces ``\mathcal{H}_X`` and ``\mathcal{H}_{\bar X}``, and we want to embed local operators ``A`` on ``\mathcal{H}_X`` and ``B`` on ``\mathcal{H}_{\bar X}`` into the joint space ``\mathcal{H} = \mathcal{H}_X \otimes \mathcal{H}_{\bar X}``. The naive choice ``A \otimes \mathbb 1`` and ``\mathbb 1 \otimes B`` always *commutes*, ``(A \otimes \mathbb 1)(\mathbb 1 \otimes B) = (\mathbb 1 \otimes B)(A \otimes \mathbb 1)``, regardless of what ``A`` and ``B`` are. This is inconsistent with the CAR relations whenever ``A`` and ``B``are fermionic.
-
-To embed a fermion into a larger space, it must be dressed with a parity operator counting the fermions occupying the modes it is moved past, known as a Jordan-Wigner (JW) string. We refer to the tensor product that includes this JW string as a *fermionic tensor product* and denote it by ``\tilde{\otimes}``. We define the embedding of ``A`` into the joint space as ``E_{\mathcal{H}_X \rightarrow \mathcal{H}}[A] = A \tilde{\otimes} \mathbb 1`` and the code for it is `embed(A, HX => H)`.
+Split the modes into two groups ``X`` and ``\bar X`` with Hilbert spaces ``\mathcal{H}_X`` and ``\mathcal{H}_{\bar X}``, and embed local operators ``A`` and ``B`` into ``\mathcal{H} = \mathcal{H}_X \otimes \mathcal{H}_{\bar X}``. The naive choice ``A \otimes \mathbb 1`` and ``\mathbb 1 \otimes B`` always *commutes*, which is inconsistent with the CAR whenever ``A`` and ``B`` are fermionic. A fermion embedded into a larger space must be dressed with a parity operator counting the fermions in the modes it is moved past, a Jordan-Wigner (JW) string. The tensor product that includes this string is the *fermionic tensor product* ``\tilde{\otimes}``, and the embedding ``E_{\mathcal{H}_X \rightarrow \mathcal{H}}[A] = A \tilde{\otimes} \mathbb 1`` is `embed(A, HX => H)`.
 
 !!! note 
     The tensor product depends on the arbitrary ordering of the fermionic modes. **In the special case** where the modes of ``X`` are all to the left of the modes in ``\bar X``, we have the relations 
@@ -32,22 +25,23 @@ There are two ways to combine ``A`` and ``B`` into an operator on ``\mathcal{H}`
 
 Use `tensor_product` for product states, for products of local observables, and for anything that should equal a product of embedded operators, such as `representation` of a product of symbolic operators.
 
-### The fermionic partial trace
+## The partial trace and partial transpose
+
 The partial trace is most often used to calculate reduced density matrices. The fundamental property is that for an observable ``A`` on the subsystem ``X``, the expectation value of ``A`` in a state ``\rho`` on the full system is equal to the expectation value of ``A`` in the reduced state ``\rho_X = \text{Tr}_{\bar X}[\rho]``.
 A more mathematical description is that the partial trace is the adjoint of the embedding: With ``(A|B) = \text{Tr}[A^\dagger B]`` the Hilbert-Schmidt inner product, we have
 ```math
 (E_{\mathcal{H}_X \rightarrow \mathcal{H}}[A] | \rho) = (A | Tr_{\mathcal{H} \rightarrow \mathcal{H}_X}[\rho]).
 ```
-Since the embedding aquires fermionic phases depending on the mode ordering, so does the partial trace. This is handled automatically by the package when using `partial_trace(A, H => HX)`.
+Since the embedding acquires fermionic phases depending on the mode ordering, so does the partial trace. This is handled automatically by `partial_trace(A, H => HX)`.
 
-### The fermionic partial transpose
+
 For bosonic and spin systems, `partial_transpose` is the ordinary matrix transpose on the selected subsystem. For fermions, the ordinary partial transpose does not capture the fermionic structure of the operator algebra. Following [[2]](#fermionic_partial_time_reversal), the package instead implements the fermionic partial transpose, also called partial time reversal.
 
 In the fermionic operator basis, this operation swaps the bra and ket labels on the selected subsystem and multiplies by a phase determined by the fermionic operator content there. Thus it is not, in general, the ordinary matrix transpose in the occupation-number basis. The convention is independent of the ordering of the fermionic modes. Set `phase_factors=false` in `partial_transpose` to disable these phases and obtain the ordinary subsystem transpose.
 
 Unlike the ordinary partial transpose, the fermionic result is not generally Hermitian. If ``p_A`` is the fermion-parity operator on the transposed subsystem, it obeys ``(\rho^{R_A})^\dagger = p_A \rho^{R_A} p_A``. 
 
-# References
+## References
 ```@raw html
 <a name="fermion_information_article"></a>
 ```
