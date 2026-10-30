@@ -1,7 +1,7 @@
 # # Parafermion edge modes
 #
 # This tutorial builds a $\mathbb{Z}_p$ parafermion chain and extracts its edge modes from the
-# ground states alone. It assumes the [interacting Kitaev chain](kitaev_chain.md) tutorial, which does the same
+# ground states alone. The [interacting Kitaev chain](kitaev_chain.md) tutorial does the same
 # for $p = 2$. It uses `Arpack` for the ground states and `Plots` for the final figure.
 
 using FermionicHilbertSpaces
