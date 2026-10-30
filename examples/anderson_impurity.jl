@@ -2,7 +2,7 @@
 
 # This tutorial shows how `representation(op, Axes(Hout, Hin))` gives creation and annihilation operators as
 # rectangular maps between particle-number sectors, and uses them for the Green's function of a single-impurity
-# Anderson model. It assumes [constrained Hilbert spaces](../conservation.md) and sectors.
+# Anderson model.
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots
 import FermionicHilbertSpaces: Axes
