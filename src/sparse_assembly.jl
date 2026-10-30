@@ -15,7 +15,7 @@ _extrapolated_length(len, done, todo) = len + ceil(Int, len / done * todo * 3 / 
 function _reserve_remaining!(accumulator, capacity, k, N, extra)
     len = length(first(accumulator))
     len + cld(len, k) + extra <= capacity && return capacity
-    capacity = _extrapolated_length(len, k, N - k) + extra
+    capacity = max(capacity, _extrapolated_length(len, k, N - k) + extra)
     foreach(v -> sizehint!(v, capacity; shrink=false), accumulator)
     return capacity
 end
