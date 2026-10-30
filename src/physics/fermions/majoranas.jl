@@ -22,7 +22,7 @@ abstract type AbstractMajoranaSym <: AbstractFermionSym end
 """
     @majoranas a b ...
 
-Create one or more Majorana species with the given names. Indexing into Majorana species
+Create one or more Majorana species with the given names. Returns the species, or a tuple of them if several names are given. Indexing into Majorana species
 gives a concrete Majorana. Majoranas in one `@majoranas` block anticommute with each other,
 and commute with Majoranas in other `@majoranas` blocks.
 
@@ -43,6 +43,7 @@ macro majoranas(xs...)
     defs = map(xs) do x
         :($(esc(x)) = SymbolicMajoranaBasis($(Expr(:quote, x)), $group))
     end
+    length(defs) == 1 && return only(defs)
     Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
 end
@@ -93,6 +94,14 @@ end
 
 mat_eltype(::Type{S}) where {S<:AbstractMajoranaSym} = Complex{Int}
 @nc MajoranaSym
+
+@testitem "@majoranas return value" begin
+    γ = @majoranas γ
+    @test γ isa FermionicHilbertSpaces.SymbolicMajoranaBasis
+    @test repr(γ) == "SymbolicMajoranaBasis(γ)"
+    a, b = @majoranas a b
+    @test a[1] * b[1] == -b[1] * a[1]
+end
 
 @testitem "MajoranaSym" begin
     @majoranas γ f
