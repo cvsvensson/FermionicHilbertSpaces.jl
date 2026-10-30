@@ -49,5 +49,5 @@ end
 # collapses to zero, which says nothing about chaos.
 gap_ratio(eigvals(Hermitian(representation(syk_hamiltonian(18), hilbert_space(γ, 1:18), :dense))))
 
-# [^1]: Y.-Z. You, A. W. W. Ludwig and C. Xu, [Phys. Rev. B 95, 115150 (2017)](https://doi.org/10.1103/PhysRevB.95.115150).
-# [^2]: Y. Y. Atas, E. Bogomolny, O. Giraud and G. Roux, [Phys. Rev. Lett. 110, 084101 (2013)](https://doi.org/10.1103/PhysRevLett.110.084101).
+# [^1]: Y.-Z. You, A. W. W. Ludwig and C. Xu, "Sachdev-Ye-Kitaev model and thermalization on the boundary of many-body localized fermionic symmetry protected topological states", [Phys. Rev. B 95, 115150 (2017)](https://doi.org/10.1103/PhysRevB.95.115150), [arXiv:1602.06964](https://arxiv.org/abs/1602.06964).
+# [^2]: Y. Y. Atas, E. Bogomolny, O. Giraud and G. Roux, "Distribution of the ratio of consecutive level spacings in random matrix ensembles", [Phys. Rev. Lett. 110, 084101 (2013)](https://doi.org/10.1103/PhysRevLett.110.084101), [arXiv:1212.5611](https://arxiv.org/abs/1212.5611).

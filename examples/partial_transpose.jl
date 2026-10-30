@@ -44,4 +44,4 @@ end
 plot!(μs, [end_negativity(8, μ; phase_factors = false) for μ in μs]; label = "bosonic, N = 8", lw = 2, ls = :dash)
 hline!([log(2) / 2]; label = "log √2", color = :gray, ls = :dot)
 
-# [^1]: H. Shapourian, K. Shiozaki and S. Ryu, [Phys. Rev. Lett. 118, 216402 (2017)](https://doi.org/10.1103/PhysRevLett.118.216402).
+# [^1]: H. Shapourian, K. Shiozaki and S. Ryu, "Partial time-reversal transformation and entanglement negativity in fermionic systems", [Phys. Rev. B 95, 165101 (2017)](https://doi.org/10.1103/PhysRevB.95.165101), [arXiv:1611.07536](https://arxiv.org/abs/1611.07536).
