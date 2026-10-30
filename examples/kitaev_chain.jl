@@ -33,11 +33,12 @@ hsym = kitaev_chain(f, N, μ, t, Δ, U)
 # ## Ground states in each parity sector
 # `representation` turns the symbolic Hamiltonian into a matrix. Since parity is conserved,
 # we diagonalize each parity sector separately and `embed` its ground state into the full space `H`.
-(Eo, o), (Ee, e) = map(quantumnumbers(H)) do parity
+function ground_state(parity)
     Hsec = sector(parity, H)
     vals, vecs = eigs(representation(hsym, Hsec); nev = 1, which = :SR)
-    (; energy = first(vals), ground_state = embed(vecs[:, 1], Hsec => H))
+    (; energy = first(vals), state = embed(vecs[:, 1], Hsec => H))
 end;
+(Eo, o), (Ee, e) = map(ground_state, (-1, 1)); # odd and even parity
 # The two energies are nearly degenerate.
 Eo - Ee
 
