@@ -1,3 +1,9 @@
+"""
+    Kets(H)
+
+Callable that turns a label into a symbolic ket of `H`, as in `Kets(H)("10")`. The label is
+parsed by [`interpret_state`](@ref). `Kets(H)[i]` is the ket of `basisstate(i, H)`.
+"""
 struct Kets{B,H}
     space::H
     Kets(space::H) where H = new{statetype(space),H}(space)
@@ -195,9 +201,22 @@ function NonCommutativeProducts.mul_grade(a::StateGrade, b::StateGrade)
 end
 NonCommutativeProducts.adjoint_grade(a::StateGrade) = StateGrade(Dict{Any,Bicyclic}(k => Bicyclic(g.n, g.m) for (k, g) in a.grades))
 
+"""
+    interpret_state(input, space)
+    interpret_state(input, ::Type{B})
+
+Convert `input`, such as the string `"10"`, to a basis state of `space`, or to a state of
+type `B`. [`Kets`](@ref), `basisstate` and `state_index` call it for strings and characters.
+A custom basis-state type adds a method for the inputs it accepts; a state is returned as it is.
+"""
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
-interpret_state(state, space::Union{TransposedSpace,AbstractSubspace}) = interpret_state(state, parent(space))
+function interpret_state(state, space::Union{TransposedSpace, AbstractSubspace})
+    B = statetype(space)
+    state isa B && return state
+    # A subspace may store its states in a different type than its parent, e.g. FixedNumberFockState
+    return interpret_state(interpret_state(state, parent(space)), B)
+end
 basisstate(state::Union{<:AbstractString,<:AbstractChar}, space::AbstractHilbertSpace) = basisstate(_checked_state_index(state, space), space)
 function _checked_state_index(state, space)
     i = state_index(state, space)
@@ -205,6 +224,7 @@ function _checked_state_index(state, space)
     i
 end
 
+interpret_state(state::FockNumber, ::Type{B}) where {B <: FockNumber} = convert(B, state)
 function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{B}) where {I,B<:FockNumber{I}}
     all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only `'0'` and `'1'`, got `\"$input\"`."))
     bits = map(c -> c == '1', collect(input))
@@ -313,35 +333,54 @@ end
 # forms the products of terms with equal keys. Bras and ketbras have no key and are paired with every term.
 NonCommutativeProducts.contraction_key(s::SymbolicState) = isket(s) ? (group_id(s.space), s.ket) : nothing
 
-# An operator string acting on a sum of kets in one space is applied to each basis state with one precomputation, as
-# in `matrix_representation`. Other products are sorted factor by factor.
-function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any,<:AbstractSym}, b::NCAdd{<:Any,<:NCMul{<:Any,<:SymbolicState}})
-    space = _ket_sum_space(b)
-    if isnothing(space) || !all(op -> !(op isa SymbolicState) && symbolic_group(op) == group_id(space), x.factors)
-        return invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any,NCMul,NCAdd}, c, x, b)
-    end
-    precomp = precomputation_before_operator_application(x, space)
+# An operator string acting on a product of kets is applied to the ket of each group it acts on, with one
+# precomputation per group for all terms of `b`, as in `matrix_representation`. Other products are sorted factor by factor.
+function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any, <:AbstractSym}, b::Union{NCAdd, NCMul})
+    factors1 = _first_factors(b)
+    any(s -> s isa SymbolicState, factors1) || return _sorted_product(c, x, b)
+    groupops = _group_operators(x, factors1)
+    isnothing(groupops) && return _sorted_product(c, x, b)
+    precomps = [precomputation_before_operator_application(op, ket.space) for (_, ket, op) in groupops]
+    return _apply_group_operators!!(c, x, b, groupops, precomps)
+end
+_sorted_product(c, x, b) = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any, NCMul, Union{NCAdd, NCMul}}, c, x, b)
+# Function barrier: the types of `groupops` and `precomps` depend on the kets in `b`
+function _apply_group_operators!!(c, x, b, groupops, precomps)
     for (factors, coeff) in NonCommutativeProducts.termpairs(b)
-        newket, amp = _apply_local_operators(x, only(factors).ket, space, precomp)
-        iszero(amp) && continue
-        c = add!!(c, NCMul(amp * coeff, [SymbolicState(space, newket, nothing)]))
+        if !all(((k, ket, _),) -> _is_like_ket(factors, k, ket), groupops)
+            c = _sorted_product(c, x, NCMul(coeff, factors))
+            continue
+        end
+        newfactors = copy(factors)
+        amp = x.coeff * coeff
+        for ((k, ket1, op), precomp) in zip(groupops, precomps)
+            ket = factors[k]::typeof(ket1)
+            newket, a = _apply_local_operators(op, ket.ket, ket.space, precomp)
+            amp *= a
+            iszero(amp) && break
+            newfactors[k] = SymbolicState(ket.space, newket, nothing)
+        end
+        iszero(amp) || (c = add!!(c, NCMul(amp, newfactors)))
     end
     return c
 end
-# The space of the sum `b` if each of its terms is a single ket in that space, and `nothing` otherwise
-function _ket_sum_space(b::NCAdd)
-    space = nothing
-    for (factors, _) in NonCommutativeProducts.termpairs(b)
-        length(factors) == 1 || return nothing
-        s = only(factors)
-        (s isa SymbolicState && isket(s)) || return nothing
-        if isnothing(space)
-            space = s.space
-        elseif !_same_space_id(space, s.space)
-            return nothing
-        end
+_first_factors(b::NCMul) = b.factors
+_first_factors(b::NCAdd) = isempty(b.dict) ? () : first(keys(b.dict)).factors
+# Whether `factors[k]` is a ket of the same type and space as `ket`, which makes the loop above type stable
+function _is_like_ket(factors, k, ket)
+    k <= length(factors) || return false
+    s = factors[k]
+    return s isa typeof(ket) && _same_space_id(s.space, ket.space)
+end
+# Tuples `(k, factors[k], op)`, where `op` is the product of the factors of `x` that act on the ket `factors[k]`,
+# or `nothing` if a factor of `x` acts on none of the kets
+function _group_operators(x::NCMul, factors)
+    inds = map(x.factors) do op
+        op isa SymbolicState && return nothing
+        findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)
     end
-    return space
+    any(isnothing, inds) && return nothing
+    return [(k, factors[k], NCMul(one(x.coeff), ___concretize(x.factors[inds .== k], VecConcretizer()))) for k in unique(inds)]
 end
 
 
@@ -452,8 +491,8 @@ end
 _vector_eltype(::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T === Missing ? Int : T
 _zero_vector(space, repr::EagerSparseRepr, T=_vector_eltype(repr)) = SparseArrays.spzeros(T, dim(space))
 _zero_vector(space, repr::EagerDenseRepr, T=_vector_eltype(repr)) = zeros(T, dim(space))
-_zero_matrix(space, ::EagerSparseRepr, T) = SparseArrays.spzeros(T, dim(space), dim(space))
-_zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(space), dim(space))
+_zero_matrix(space, ::EagerSparseRepr, T) = SparseArrays.spzeros(T, dim(_output_space(space)), dim(_input_space(space)))
+_zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(_output_space(space)), dim(_input_space(space)))
 function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     vector_representation(1 * s, space, repr; kwargs...)
 end
@@ -472,7 +511,9 @@ function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, ki
     vec = if length(group_ids) == 1
         op.coeff * vector_representation(basis_state(only(symstates)), space, repr)
     else
-        prodstate = ProductState(ntuple(n -> basis_state(symstates[perm[n]]), length(perm)))
+        # `symstates[i]` belongs to group `perm[i]`, so group n holds `symstates[iperm[n]]`
+        iperm = invperm(perm)
+        prodstate = ProductState(ntuple(n -> basis_state(symstates[iperm[n]]), length(perm)))
         op.coeff * vector_representation(prodstate, space, repr)
     end
     if kind == :kets
@@ -512,9 +553,11 @@ function matrix_representation(s::SymbolicState, space::AbstractHilbertSpace, re
 end
 
 
-function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
+function representation(op, space::Union{AbstractHilbertSpace,Axes}, repr=EagerSparseRepr(); kwargs...)
+    space isa Axes && _operator_axes(space)
     type = _operator_type(op)
     if type == :kets || type == :bras
+        space isa Axes && throw(ArgumentError("A ket or bra has one axis, as in `representation(state, Axes(H))` or `representation(state, H)`."))
         return _vector_representation(op, space, repr, type; kwargs...)
     elseif type == :ketbras
         _repr = _canonicalize_repr(repr)
@@ -530,6 +573,11 @@ function representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr();
 end
 function representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr=EagerSparseRepr(); kwargs...) where B
     return vector_representation(state, space, repr; kwargs...)
+end
+function representation(state, ax::Axes{<:Tuple{AbstractHilbertSpace}}, repr=EagerSparseRepr(); kwargs...)
+    state isa Union{AbstractBasisState,AbstractString,AbstractChar} || _operator_type(state) in (:kets, :bras) ||
+        throw(ArgumentError("An operator has the two axes `Axes(Hout, Hin)`, got one axis."))
+    return representation(state, only(ax.spaces), repr; kwargs...)
 end
 
 
@@ -608,6 +656,7 @@ end
 
 @testitem "representation of different kinds of input" begin
     using LinearAlgebra, SparseArrays
+    using FermionicHilbertSpaces.FreeFermions
     @fermions f
     @majoranas γ
     @boson b
@@ -915,7 +964,17 @@ end
         @test inner(φ, op * ψ) ≈ dot(w, M * v)
         @test norm(ψ) ≈ norm(v)
     end
-    # Products that are not an operator string on a sum of kets in one space are sorted factor by factor
+    # Kets in a product of spaces are products of one ket per space
+    @fermions g
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(g, 1:2), hilbert_space(s))
+    ψ = Ket(("10", "01", "0"), H) + 2 * Ket(("11", "00", "1"), H)
+    op = f[1]' * g[2] * s[:+] + f[2]' * f[1] * g[1]' + hc + f[1]
+    M = representation(op, H, :dense)
+    @test Vector(representation(op * (op * ψ), H)) ≈ M * M * Vector(representation(ψ, H))
+    Hx = hilbert_space(f, 1:3, FermionicHilbertSpaces.FixedNumberFockState{1}.(basisstates(hilbert_space(f, 1:3, NumberConservation(1)))))
+    kx, ks = Kets(Hx), Kets(hilbert_space(s))
+    @test (f[2]' * f[1] + s[:z]) * (kx("100") * ks("1") + kx("010") * ks("0")) == kx("010") * ks("1") + kx("100") * ks("1")
+    # Other products, such as operators on ketbras or on spaces without a ket, are sorted factor by factor
     Hf, Hs = hilbert_space(f, 1:2), hilbert_space(s)
     kf, ks = Kets(Hf), Kets(Hs)
     @test (f[1]' + s[:+]) * (kf("00") + kf("01")) == kf("10") + kf("11") + s[:+] * (kf("00") + kf("01"))
@@ -992,6 +1051,15 @@ end
         ketbra = vb("0") * vs("↑") * vf("1") * (vb("0") * vs("↑") * vf("0"))'
         @test FermionicHilbertSpaces._operator_type(ketbra) == :ketbras
     end
+end
+
+@testitem "Vector of a ket on factors in non-sorted order" begin
+    using LinearAlgebra
+    @spins S 1 // 2
+    H1, H2, H3 = [hilbert_space(S[i]) for i in 1:3]
+    H = tensor_product(H3, H1, H2)
+    v = representation(Kets(H)("↑", "↓", "↓"), H, :dense)
+    @test [real(dot(v, representation(S[i][:z], H, :dense), v)) for i in 1:3] ≈ [-1 / 2, -1 / 2, 1 / 2]
 end
 
 @testitem "Grading of symbolic states" begin

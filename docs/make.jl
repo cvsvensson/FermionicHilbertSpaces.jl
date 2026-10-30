@@ -13,13 +13,14 @@ for file in literate_files
 end
 
 makedocs(;
-    modules=[FermionicHilbertSpaces],
+    modules = [FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions],
     authors="Viktor Svensson, William Samuelson",
     sitename="FermionicHilbertSpaces.jl",
     format=Documenter.HTML(;
         canonical="https://cvsvensson.github.io/FermionicHilbertSpaces.jl",
         edit_link="main",
         assets=String[],
+        size_threshold = 400 * 2^10,
     ),
     pages=[
         "Home" => "index.md",
@@ -42,6 +43,7 @@ makedocs(;
             "Non-interacting hilbert spaces" => "non_interacting.md",
             "Example: Free fermions" => "literate_output/free_fermions.md"],
         "Misc" => "misc.md",
+        "Extending and performance hooks" => "extending.md",
         "Functions" => "docstrings.md",
     ],
     plugins=[DocumenterCodeBlocks.CodeBlocks()],

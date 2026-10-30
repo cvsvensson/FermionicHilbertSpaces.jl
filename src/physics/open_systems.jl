@@ -24,7 +24,7 @@ add_tag(H::TransposedSpace, tag) = TransposedSpace(add_tag(H.parent, tag))
 groups(H::TransposedSpace) = map(TransposedSpace, groups(H.parent))
 factors(H::TransposedSpace) = map(TransposedSpace, factors(H.parent))
 TransposedSpace(H::ProductSpace) = ProductSpace(map(TransposedSpace, groups(H)))
-TransposedSpace(H::AbstractSubspace) = rewrap(H, TransposedSpace(parent(H)))
+TransposedSpace(H::AbstractSubspace) = map_parent(TransposedSpace, H)
 state_mapper(H::TransposedSpace, Hs) = state_mapper(H.parent, Hs)
 combine_states(states, H::TransposedSpace) = combine_states(states, H.parent)
 Base.parent(H::TransposedSpace) = H.parent
@@ -45,6 +45,23 @@ combine_into_group(group::MajoranaGroup, spaces::AbstractVector{<:TransposedSpac
 tag_left(base) = add_tag(base, :left)
 tag_right(base) = add_tag(base, :right)
 
+"""
+    open_system(sym, args...; kwargs...)
+    open_system(H; kwargs...)
+
+Set up the doubled space for density matrices of a system with Hilbert space `H`, or of
+`hilbert_space(sym, args...; kwargs...)`. For `H`, `kwargs` are passed to `tensor_product`. Returns `(Hlr, Hl, Hr, left, right)`:
+
+- `Hl` and `Hr` are copies of the system space tagged `:left` and `:right`. `Hr` is transposed,
+  so that `representation(right(A * B), Hr) == representation(right(B), Hr) * representation(right(A), Hr)`.
+- `Hlr = tensor_product(Hl, Hr)` is the space of vectorized density matrices.
+- `left(op)` and `right(op)` map a symbolic operator of the system to the copy acting on `Hl` or
+  `Hr`, so `left(A) * right(B)` represents `ρ -> A ρ B` and `-1im * (left(H) - right(H))` is
+  the Liouvillian of a Hamiltonian `H`.
+
+Use `reshape(ρ, (Hl, Hr) => Hlr)` and `reshape(v, Hlr => (Hl, Hr))` to convert between density
+matrices and vectors.
+"""
 function open_system(base, args...; kwargs...)
     left_basis = tag_left(base)
     right_basis = tag_right(base)
@@ -59,6 +76,22 @@ function open_system(H::AbstractHilbertSpace; kwargs...)
     Hlr = tensor_product(Hleft, Hright; kwargs...)
     return Hlr, Hleft, Hright, tag_left, tag_right
 end
+
+"""
+    dissipator(L)
+
+The symbolic Lindblad dissipator `ρ ↦ LρL† - ½{L†L, ρ}` for the jump operator `L`, acting on the
+vectorized density matrix of a space returned by [`open_system`](@ref). Public, not exported.
+
+# Examples
+```julia
+using FermionicHilbertSpaces: open_system, dissipator
+@fermions c
+Hlr, Hl, Hr, left, right = open_system(c, 1:1)
+representation(dissipator(c[1]), Hlr)
+```
+"""
+dissipator(L) = tag_left(L) * tag_right(L') - (tag_left(L' * L) + tag_right(L' * L)) / 2
 
 function add_tag(factor::AbstractSym, tag)
     basis = symbolic_basis(factor)
@@ -246,12 +279,11 @@ end
 
 @testitem "Lindblad steady state of a fermionic level" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: open_system
+    using FermionicHilbertSpaces: open_system, dissipator
 
     @fermions c
     γin, γout = 0.3, 0.7
     Hlr, Hl, Hr, left, right = open_system(c, 1:1)
-    dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
     ham = 1.0 * c[1]'c[1]
     lindbladian = -1im * (left(ham) - right(ham)) + dissipator(√γin * c[1]') + dissipator(√γout * c[1])
     mat = representation(lindbladian, Hlr, :dense)
@@ -275,6 +307,24 @@ end
     P = Diagonal([(-1)^count_ones(i - 1) for i in 1:dim(H2)]) # parity in the Fock basis
     X = rand(ComplexF64, 4, 4)
     ρ = (X + X' + P * (X + X') * P) / 4
+    dρ = reshape(mat * reshape(ρ, (Hl, Hr) => Hlr), Hlr => (Hl, Hr))
+    @test dρ ≈ -1im * (Hm * ρ - ρ * Hm) + Lm * ρ * Lm' - 0.5 * (Lm'Lm * ρ + ρ * Lm'Lm)
+end
+
+@testitem "open_system of a tensor product with a sector" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: open_system
+    @fermions f
+    @bosons a
+    H = tensor_product(hilbert_space(f, 1:2, NumberConservation(1)), hilbert_space(a[1], 3))
+    Hlr, Hl, Hr, left, right = open_system(H)
+    dissipator(L) = left(L) * right(L') - 0.5 * (left(L'L) + right(L'L))
+    ham = 0.4 * (f[1]'f[2] + f[2]'f[1]) + a[1]'a[1] + 0.3 * (f[1]'f[1] - f[2]'f[2]) * (a[1] + a[1]')
+    L = 0.5 * a[1]
+    mat = representation(-1im * (left(ham) - right(ham)) + dissipator(L), Hlr)
+    Hm, Lm = representation(ham, H, :dense), representation(L, H, :dense)
+    X = rand(ComplexF64, dim(H), dim(H))
+    ρ = X + X'
     dρ = reshape(mat * reshape(ρ, (Hl, Hr) => Hlr), Hlr => (Hl, Hr))
     @test dρ ≈ -1im * (Hm * ρ - ρ * Hm) + Lm * ρ * Lm' - 0.5 * (Lm'Lm * ρ + ρ * Lm'Lm)
 end

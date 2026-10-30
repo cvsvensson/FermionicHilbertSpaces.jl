@@ -1,9 +1,31 @@
 abstract type AbstractFermionSym <: AbstractSym end
 
+"""
+    EagerDenseRepr{T}()
+    EagerDenseRepr()
+
+Format argument of [`representation`](@ref) that builds a dense `Matrix` with element type `T`.
+Without `T`, the element type follows from the operator, see [`mat_eltype`](@ref).
+"""
 struct EagerDenseRepr{T} end
+"""
+    EagerSparseRepr{T}()
+    EagerSparseRepr()
+
+Format argument of [`representation`](@ref) that builds a `SparseMatrixCSC` with element type `T`.
+This is the default format. Without `T`, the element type follows from the operator, see [`mat_eltype`](@ref).
+"""
 struct EagerSparseRepr{T} end
 EagerSparseRepr() = EagerSparseRepr{Missing}()
 EagerDenseRepr() = EagerDenseRepr{Missing}()
+"""
+    PartitionedSparseRepr(; backend, row_partition=nothing, col_partition=nothing, nparts=4)
+
+Format argument of [`representation`](@ref) that builds a distributed sparse matrix with
+PartitionedArrays.jl. `backend` is applied to the part indices, for example `DebugArray`
+or `distribute_with_mpi`. Without explicit partitions, rows and columns are split uniformly
+into `nparts` parts. Requires `using PartitionedArrays`.
+"""
 struct PartitionedSparseRepr{B,R,C}
     backend::B
     row_partition::R
@@ -14,16 +36,44 @@ end
 PartitionedSparseRepr(; backend=nothing, row_partition=nothing, col_partition=nothing, nparts::Int=4) =
     PartitionedSparseRepr{typeof(backend),typeof(row_partition),typeof(col_partition)}(backend, row_partition, col_partition, nparts)
 
+"""
+    LazyRepr(input=missing)
+
+Format argument of [`representation`](@ref) that gives a matrix-free `SciMLOperators`
+operator wrapping a [`LazyOperator`](@ref), the same as `:lazy`. `input` is the kind of
+vector the operator is prepared for: `:dense`, `:sparse`, or an array whose type and size
+are used. With `missing`, a dense vector is used for small spaces and a sparse one otherwise.
+"""
 struct LazyRepr{T}
     input::T
 end
 LazyRepr() = LazyRepr(missing)
 
 abstract type AbstractChunkingStrategy end
+"""
+    NoChunking()
+
+Chunking strategy for the `chunking` keyword of [`representation`](@ref) that builds the
+matrix, or applies a lazy operator, serially. This is the default.
+"""
 struct NoChunking <: AbstractChunkingStrategy end
+"""
+    TermChunking(scheduler)
+
+Chunking strategy for the `chunking` keyword of [`representation`](@ref) that runs in
+parallel with an OhMyThreads.jl `scheduler`. Lazy operators split the work by terms of the
+operator. Requires `using OhMyThreads`.
+"""
 struct TermChunking{S} <: AbstractChunkingStrategy
     scheduler::S
 end
+"""
+    StateChunking(scheduler)
+
+Chunking strategy for the `chunking` keyword of [`representation`](@ref) that runs in
+parallel with an OhMyThreads.jl `scheduler`. Lazy operators split the work by basis states.
+Requires `using OhMyThreads`.
+"""
 struct StateChunking{S} <: AbstractChunkingStrategy
     scheduler::S
 end
@@ -36,11 +86,19 @@ function mat_eltype(::NCMul{C,S,F}) where {C,S,F}
 end
 mat_eltype(::Type{NCMul{C,S,F}}) where {C,S,F} = promote_type(C, mat_eltype(S))
 mat_eltype(::S) where {S} = mat_eltype(S)
-mat_eltype(::Type{S}) where {S} = Float64 #Default fallback. Could give errors if a complex number is expected. Override it for specific types if needed.
+"""
+    mat_eltype(::Type{O})
+
+Element type of the matrix elements of a symbolic operator of type `O`. Matrix
+representations promote it with the coefficients of the expression. The fallback is
+`Float64`, so an operator type with complex matrix elements must add a method, for example
+`mat_eltype(::Type{<:MyOp}) = ComplexF64`.
+"""
+mat_eltype(::Type{S}) where {S} = Float64
 
 
-function operator_indices_and_amplitudes!(accumulator, op, space::AbstractHilbertSpace; kwargs...)
-    precomp = precomputation_before_operator_application(op, space)
+function operator_indices_and_amplitudes!(accumulator, op, space; kwargs...)
+    precomp = precomputation_before_operator_application(op, _input_space(space))
     return operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp; kwargs...)
 end
 
@@ -56,11 +114,12 @@ function _skip_outside(outind, projection)
     return true
 end
 
-function operator_indices_and_amplitudes_generic!(accumulator, op, space::AbstractHilbertSpace, precomp; projection)
-    for (inind, state) in enumerate(basisstates(space))
-        newstate, amp = _apply_local_operators(op, state, space, precomp)
+function operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp; projection)
+    Hin, Hout = _input_space(space), _output_space(space)
+    for (inind, state) in enumerate(basisstates(Hin))
+        newstate, amp = _apply_local_operators(op, state, Hin, precomp)
         if !iszero(amp)
-            outind = state_index(newstate, space)
+            outind = state_index(newstate, Hout)
             if !_skip_outside(outind, projection)
                 push_inds_amps!(accumulator, outind, inind, amp)
             end
@@ -96,6 +155,15 @@ function _apply_local_operators(op, state, space, precomp)
     apply_local_operators(op, state, space, precomp; transpose=false)
 end
 
+"""
+    apply_local_operators(op::NCMul, state, space, precomps; transpose) -> (newstate, amplitude)
+
+Apply the product `op`, including its coefficient, to the basis state `state` of `space`.
+`precomps` holds one value per factor, from [`_precomputation_before_operator_application`](@ref).
+With `transpose=true`, apply the transpose of `op` instead. The generic method applies the factors one by one with
+[`apply_local_operator`](@ref). A method for products of one operator type can be faster,
+as for fermions, where the whole product acts on a Fock state with bit operations.
+"""
 function apply_local_operators(op::NCMul, state, space, precomps; transpose)
     # Accumulate in the element type of the matrix so that `amp` keeps one type through the loop.
     T = mat_eltype(op)
@@ -120,7 +188,11 @@ struct TupleConcretizer end
 struct VecConcretizer end
 struct NoConcretizer end
 ___concretize(factors, ::TupleConcretizer) = Tuple(factors)
-___concretize(factors::AbstractVector, ::VecConcretizer) = map(identity, factors)
+# `map(identity, factors)` joins the element types one by one, which is slow, and products usually have one factor type
+function ___concretize(factors::AbstractVector, ::VecConcretizer)
+    T = isempty(factors) ? eltype(factors) : typeof(first(factors))
+    return all(f -> f isa T, factors) ? Vector{T}(factors) : map(identity, factors)
+end
 ___concretize(factors::Tuple, ::VecConcretizer) = collect(factors)
 ___concretize(factors, ::NoConcretizer) = factors
 __concretize(x::NCMul, concr) = NCMul(x.coeff, ___concretize(x.factors, concr))
@@ -266,15 +338,14 @@ end
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the element type of `Eye`, as on a ProductSpace.
 function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; tree_split=10, kwargs...)
-    spaces = groups(space)
+    spaces = groups(_input_space(space))
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
     Tterms = _repr_eltype(mapreduce(mat_eltype, promote_type, prodops), repr)
-    identity_matrix = _matrix_representation(missing, bases, space, repr, NoChunking())
-    T = _repr_eltype(promote_type(Tterms, Base.promote_op(*, typeof(op.coeff), eltype(identity_matrix))), repr)
+    T = _repr_eltype(promote_type(Tterms, Base.promote_op(*, typeof(op.coeff), eltype(Eye(0)))), repr)
     Tterms == T && return _terms_matrix(Tterms, prodops, op.coeff, space, repr, chunking; kwargs...)
     summed = _terms_matrix(Tterms, prodops, zero(op.coeff), space, repr, chunking; kwargs...)
     iszero(op.coeff) && return convert(AbstractMatrix{T}, summed)
-    return summed + op.coeff * identity_matrix
+    return summed + _terms_matrix(T, (), op.coeff, space, repr, NoChunking(); kwargs...)
 end
 
 function _matrix_representation(op, bases, space, repr, chunking; kwargs...) #Assume op is a single symbolic operator
@@ -282,8 +353,9 @@ function _matrix_representation(op, bases, space, repr, chunking; kwargs...) #As
 end
 
 
-matrix_accumulator(op::ProductOperator, space, repr) = matrix_accumulator(_repr_eltype(mat_eltype(op), repr), 1, (dim(space), dim(space)), repr)
-matrix_accumulator(op, space, repr) = matrix_accumulator(_repr_eltype(mat_eltype(op), repr), length(NCterms(op)), (dim(space), dim(space)), repr)
+matrix_accumulator(op::ProductOperator, space, repr) = matrix_accumulator(_repr_eltype(mat_eltype(op), repr), 1, _matrix_size(space), repr)
+matrix_accumulator(op, space, repr) = matrix_accumulator(_repr_eltype(mat_eltype(op), repr), length(NCterms(op)), _matrix_size(space), repr)
+_matrix_size(space) = (dim(_output_space(space)), dim(_input_space(space)))
 
 # The element type given in the format (e.g. `EagerSparseRepr{ComplexF64}()`) takes precedence over the operator's
 _repr_eltype(default, ::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T === Missing ? default : T
@@ -310,10 +382,7 @@ function add_identity!!((outinds, ininds, amps), coeff, space, cols=1:dim(space)
     append!(ininds, cols .- col_offset)
     append!(amps, Fill(coeff, length(cols)))
 end
-function finalize!((outinds, ininds, amps), space)
-    N = dim(space)
-    finalize!((outinds, ininds, amps), N, N)
-end
+finalize!(accumulator, space) = finalize!(accumulator, dim(_output_space(space)), dim(_input_space(space)))
 function finalize!((outinds, ininds, amps), N, M)
     L = length(outinds)
     isconcretetype(eltype(amps)) && return _trimmed!(SparseArrays.sparse!(outinds, ininds, amps, N, M), L)
@@ -328,8 +397,16 @@ end
 function matrix_accumulator(::Type{T}, N::Int, (d1, d2), ::EagerDenseRepr) where T
     zeros(T, d1, d2)
 end
-function add_identity!!(m::Matrix{T}, coeff, space) where T
+function add_identity!!(m::Matrix{T}, coeff, space::AbstractHilbertSpace; _...) where T
     m .+= coeff * I(size(m, 1))
+end
+function add_identity!!(accumulator, coeff, ax::Axes; projection)
+    Hout = _output_space(ax)
+    for (inind, state) in enumerate(basisstates(_input_space(ax)))
+        outind = state_index(state, Hout)
+        _skip_outside(outind, projection) || push_inds_amps!(accumulator, outind, inind, coeff)
+    end
+    return accumulator
 end
 function finalize!(m::Matrix, space)
     return m
@@ -342,17 +419,18 @@ end
 
 # The matrix of `sum(terms) + coeff * I` with element type `T`
 _terms_matrix(::Type{T}, terms, coeff, space, repr, ::NoChunking; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
+_terms_matrix(::Type{T}, terms, coeff, space::Axes, repr::EagerSparseRepr, ::NoChunking; kwargs...) where {T} = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 
 function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T
-    accumulator = matrix_accumulator(T, length(terms), (dim(space), dim(space)), repr)
+    accumulator = matrix_accumulator(T, length(terms), _matrix_size(space), repr)
     for term in terms
         operator_indices_and_amplitudes!(accumulator, term, space; kwargs...)
     end
-    iszero(coeff) || add_identity!!(accumulator, coeff, space)
+    iszero(coeff) || add_identity!!(accumulator, coeff, space; kwargs...)
     return finalize!(accumulator, space)
 end
 
-function _term_matrix_representation(op, H::AbstractHilbertSpace, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
+function _term_matrix_representation(op, H, repr::Union{EagerSparseRepr, EagerDenseRepr}, chunking; kwargs...)
     _accumulator = matrix_accumulator(op, H, repr)
     accumulator = operator_indices_and_amplitudes!(_accumulator, op, H; kwargs...)
     finalize!(accumulator, H)
@@ -382,6 +460,7 @@ end
 
 """
     representation(op_or_state, space::AbstractHilbertSpace, [repr]; kwargs...)
+    representation(op, Axes(Hout, Hin), [repr]; kwargs...)
     representation(state_expression; kwargs...)
 
 Return a concrete representation of `op_or_state` in Hilbert space `space`. This is the main entry point, which calls
@@ -396,20 +475,27 @@ Return a concrete representation of `op_or_state` in Hilbert space `space`. This
 
 Expressions that combine kets or bras with operators or with states of other spaces have no representation and throw an
 `ArgumentError`. Without the `space` argument, only expressions of symbolic states are accepted, and the space is taken from the states.
-The single-particle space `hilbert_space(f, labels, SingleParticle())` and the Bogoliubov-de Gennes space `hilbert_space(f, labels, BdG())`
+The single-particle space `hilbert_space(f, labels, FreeFermions.SingleParticle())` and the Bogoliubov-de Gennes space `hilbert_space(f, labels, FreeFermions.BdG())`
 represent quadratic fermionic operators only, and a number is represented by the zero matrix.
+
+With `Axes(Hout, Hin)`, `op` is represented as a map from `Hin` to `Hout`.
 """
 representation
 
 """
     matrix_representation(op, space::AbstractHilbertSpace, [repr]; kwargs...)
+    matrix_representation(op, Axes(Hout, Hin), [repr]; kwargs...)
 
 Return the matrix representation of symbolic operator `op` in Hilbert space `space`.
+
+With [`Axes`](@ref)`(Hout, Hin)`, return the `dim(Hout) × dim(Hin)` matrix of `op` from `Hin` to `Hout`. The two
+spaces must have the same groups, for example two sectors of the same modes. Two different spaces support only eager
+formats without chunking.
 
 The optional `repr` selects the format, as in [`representation`](@ref): `:sparse` (the default), `:dense`, `:lazy`,
 or a format object (`EagerSparseRepr()`, `EagerDenseRepr()`, `LazyRepr()`). A numeric element type also works as `repr`: `ComplexF64` gives a sparse matrix with that element type, and `Matrix{Float64}` gives a dense matrix with that element type.
 
-Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space. Projection drops matrix elements to states outside the space, so an operator that changes a conserved quantity gives zero on a single sector; use a space that contains both sectors instead. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
+Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space (outside `Hout` with `Axes`). Projection drops matrix elements to states outside the space, so an operator that changes a conserved quantity gives zero on a single sector; use `Axes(Hout, Hin)` with the two sectors instead. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
 
 # Examples
 ```julia
@@ -421,16 +507,78 @@ size(M) == (dim(H), dim(H))
 ```
 """
 function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
-    repr === :dense && return Matrix(matrix_representation(
-        op, space, :sparse; projection, chunking, kwargs...))
+    repr === :dense && return Matrix(matrix_representation(op, space, EagerSparseRepr(); projection, chunking, kwargs...))
+    # The barrier keeps inference from compiling every format a runtime Symbol could select
+    repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, space, _canonicalize_repr(repr); projection, chunking, kwargs...)
     repr = _canonicalize_repr(repr)
     if trivial_operator(op)
         return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
     end
+    return _matrix_representation(op, _checked_group_ids(op, space), space, repr, chunking; projection, kwargs...)
+end
+function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
+    Hout, Hin = _operator_axes(ax)
+    Hout == Hin && return matrix_representation(op, Hin, repr; projection, chunking, kwargs...)
+    repr === :dense && return Matrix(matrix_representation(op, ax, EagerSparseRepr(); projection, chunking, kwargs...))
+    repr = _canonicalize_repr(repr)
+    repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("Lazy and chunked representations with `Axes(Hout, Hin)` need `Hout == Hin`."))
+    if trivial_operator(op)
+        coeff = get_trivial_op_coeff(op)
+        return _accumulated_matrix(_repr_eltype(typeof(coeff), repr), (), coeff, ax, repr; projection)
+    end
+    return _matrix_representation(op, _checked_group_ids(op, Hin), ax, repr, chunking; projection, kwargs...)
+end
+function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
     space_groups = group_ids(space)
     all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic bases of the operator must match the atomic groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
-    return _matrix_representation(op, space_groups, space, repr, chunking; projection, kwargs...)
+    return space_groups
+end
+
+"""
+    expectation(op, state, H)
+
+Return the expectation value of the operator `op` in `state` on the space `H`. A vector `ψ` gives `ψ' * M * ψ` and a
+density matrix `ρ` gives `tr(ρ * M)`, where `M = representation(op, H)`. The state is assumed to be normalized.
+
+On `hilbert_space(f, labels, FreeFermions.SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on
+`hilbert_space(f, labels, FreeFermions.BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in
+the order of the BdG space. The state is then the Gaussian state with that correlation matrix, and `op` of any degree
+is evaluated with Wick's theorem. Terms that do not conserve the particle number (single-particle space) or the parity
+(BdG space) throw an error, unless `projection=true`, which drops them.
+
+# Examples
+```julia
+@fermions f
+H = hilbert_space(f, 1:2)
+ψ = representation("10", H)
+expectation(f[1]' * f[1] + 2, ψ, H) == 3
+```
+"""
+expectation(op, ψ::AbstractVector, H::AbstractHilbertSpace) = dot(ψ, representation(op, H), ψ)
+expectation(op, ρ::AbstractMatrix, H::AbstractHilbertSpace) = dot(ρ', representation(op, H))
+
+@testitem "Expectation values" begin
+    using LinearAlgebra, SparseArrays
+    @fermions f
+    H = hilbert_space(f, 1:4, NumberConservation(2))
+    op = f[1]' * f[2] * f[3]' * f[4] + 1im * f[2]' * f[3] + hc + 2
+    M = representation(op, H, :dense)
+    ψ = normalize(rand(ComplexF64, dim(H)))
+    @test expectation(op, ψ, H) ≈ ψ' * M * ψ
+    ρ = rand(ComplexF64, dim(H), dim(H))
+    @test expectation(op, ρ, H) ≈ tr(ρ * M)
+    ρs = sprand(ComplexF64, dim(H), dim(H), 0.3)
+    @test expectation(op, ρs, H) ≈ tr(ρs * M)
+end
+
+@testitem "Expectation values with symbolic coefficients" begin
+    using Symbolics
+    @variables t
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    ψ = representation("10", H)
+    @test isequal(Symbolics.simplify(expectation(t * f[1]' * f[1] + f[1]' * f[2] + 2, ψ, H)), t + 2)
 end
 _canonicalize_repr(t) = t
 _canonicalize_repr(::Type{<:AbstractArray{T}}) where T = EagerDenseRepr{T}()
@@ -458,6 +606,7 @@ trivial_operator(op::NCAdd) = length(op.dict) == 0
 trivial_operator(op) = false
 get_trivial_op_coeff(op::NCMul) = op.coeff
 get_trivial_op_coeff(op::NCAdd) = op.coeff
+get_trivial_op_coeff(op::UniformScaling) = op.λ
 get_trivial_op_coeff(op) = op
 
 @testitem "Multi-space matrix representation" begin
@@ -564,6 +713,43 @@ end
         @test eltype(M) == T
         @test M ≈ matrix_representation(op, H)
     end
+end
+
+@testitem "Operators between two spaces with Axes" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: Axes
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    Hin = hilbert_space(f, 1:3, NumberConservation([1, 2]))
+    Hout = hilbert_space(f, 1:3, NumberConservation([0, 1]))
+    sliced(op) = representation(op, H)[indices(Hout, H), indices(Hin, H)]
+
+    op = f[1]' * f[2] + hc + 2
+    @test representation(op, Axes(H, H)) == representation(op, H)
+
+    @test_throws ArgumentError representation(f[2] + 3, Axes(Hout, Hin))
+    @test representation(f[2] + 3, Axes(Hout, Hin); projection=true) == sliced(f[2] + 3)
+    @test representation(2I, Axes(Hout, Hin); projection=true) == sliced(2)
+
+    @test_throws ArgumentError representation(f[1], Axes(hilbert_space(f, 1:2), Hin))
+    @boson b
+    @test_throws ArgumentError representation(b', Axes(hilbert_space(b, 5), hilbert_space(b, 3)))
+
+    @majoranas γ
+    Hγb = tensor_product(hilbert_space(γ, 1:2), hilbert_space(b, 3))
+    states = collect(basisstates(Hγb))
+    Kout, Kin = constrain_space(Hγb, states[1:4]), constrain_space(Hγb, states[3:6])
+    op = γ[1] * γ[2] + b' * b
+    @test representation(op, Axes(Kout, Kin); projection=true) == representation(op, Hγb)[indices(Kout, Hγb), indices(Kin, Hγb)]
+
+    ket = Ket(basisstate(1, Hout), Hout)
+    bra = Ket(basisstate(2, Hin), Hin)'
+    @test representation(ket * bra, Axes(Hout, Hin)) == vector_representation(ket, Hout) * vector_representation(bra, Hin)
+
+    @test representation(ket, Axes(Hout)) == representation(ket, Hout)
+    @test representation("010", Axes(H)) == representation("010", H)
+    @test_throws ArgumentError representation(f[1], Axes(H))
+    @test_throws ArgumentError representation(ket, Axes(Hout, Hout))
 end
 
 @testitem "Product-space term matrices padded by identities" begin
@@ -738,41 +924,6 @@ end
         rand(length(inds))
     end
     @test collect(M_dist * v) ≈ M_ref * collect(v)
-end
-
-## 
-remove_identity(a::NCMul) = a
-remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict)
-
-# The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
-_isscalar_operator(op) = op isa Union{Number,UniformScaling} || (op isa Union{NCMul,NCAdd} && NonCommutativeProducts.isscalar(op))
-_identity_free_zero(H, repr) = _zero_matrix(H, _eager_repr(repr, H), Int)
-function _eager_repr(repr, H)
-    _repr = _canonicalize_repr(repr)
-    _repr isa Union{EagerSparseRepr,EagerDenseRepr} || throw(ArgumentError("Only the :sparse and :dense representations are supported on $(typeof(H)). Got $repr."))
-    return _repr
-end
-# The matrix of a sum of two-fermion terms, where `entry(term, H)` gives the row, column and value of the one entry of each term
-function _quadratic_matrix(entry, op, H, repr)
-    accumulator = matrix_accumulator(op, H, _eager_repr(repr, H))
-    for term in NCterms(op)
-        outind, inind, amp = entry(term, H)
-        (iszero(outind) || iszero(inind)) && throw(ArgumentError("The operator `$term` contains a factor that is not part of the fermionic space `$H`."))
-        push_inds_amps!(accumulator, outind, inind, amp)
-    end
-    finalize!(accumulator, H)
-end
-
-# Whether every term of `op` is a product of two `FermionSym`s, with one creation and one annihilation
-# operator if `number_conserving`. Majoranas and other operators give `false`.
-_is_quadratic_fermion_operator(op, number_conserving) = false
-_is_quadratic_fermion_operator(op::NCMul, number_conserving) = _is_quadratic_fermion_term(op.factors, number_conserving)
-_is_quadratic_fermion_operator(op::NCAdd, number_conserving) = all(term -> _is_quadratic_fermion_term(term.factors, number_conserving), keys(op.dict))
-function _is_quadratic_fermion_term(factors, number_conserving)
-    length(factors) == 2 || return false
-    a, b = factors
-    (a isa FermionSym && b isa FermionSym) || return false
-    return !number_conserving || a.creation != b.creation
 end
 
 ## Symmetries
