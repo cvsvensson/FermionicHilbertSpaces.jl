@@ -51,4 +51,4 @@ phase = tr(Uground * Bground') / 2
 @assert abs(tr(Uground * Bground)) / 2 < 0.1
 angle.(eigvals(Uground / phase)) / π
 
-# [^1]: B. van Heck, A. R. Akhmerov, F. Hassler, M. Burrello and C. W. J. Beenakker, New J. Phys. **14**, 035019 (2012).
+# [^1]: J. Alicea, Y. Oreg, G. Refael, F. von Oppen and M. P. A. Fisher, "Non-Abelian statistics and topological quantum information processing in 1D wire networks", [Nat. Phys. 7, 412 (2011)](https://doi.org/10.1038/nphys1915), [arXiv:1006.4395](https://arxiv.org/abs/1006.4395).
