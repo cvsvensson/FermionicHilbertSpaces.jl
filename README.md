@@ -1,6 +1,6 @@
 # FermionicHilbertSpaces.jl
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/)
 [![Build Status](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl)
@@ -25,7 +25,7 @@ using FermionicHilbertSpaces, LinearAlgebra
 sym_ham = sum(rand() * f[n]'f[n] for n in 1:4) +
     sum(f[n+1]'f[n] + hc for n in 1:3)
 
-#Matrix representation of the hamiltonian on a hilbert space
+#Hilbert space of the four modes
 H = hilbert_space(f, 1:4)
 
 #Diagonalize to find the ground state

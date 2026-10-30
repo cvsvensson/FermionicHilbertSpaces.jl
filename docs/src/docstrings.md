@@ -7,7 +7,7 @@ CurrentModule = FermionicHilbertSpaces
 ```
 
 ## Public API
-Exported names.
+Exported names and names declared `public`.
 ```@autodocs
 Modules = [FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions]
 Public = true
@@ -15,7 +15,7 @@ Private = false
 ```
 
 ## Internals
-Names that are not exported, including those declared `public`.
+Other documented names. They may change in a minor release.
 ```@autodocs
 Modules = [FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions]
 Public = false
