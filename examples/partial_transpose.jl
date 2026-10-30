@@ -2,11 +2,13 @@
 #
 # This tutorial computes reduced density matrices, entanglement entropy and the logarithmic
 # negativity of fermionic states. It assumes the partial trace and partial transpose conventions
-# of [Fermionic tensor products and partial traces](fermions.md). States must have definite
-# parity, or be mixtures of parity eigenstates (superselection).
+# of [Fermionic tensor products and partial traces](fermions.md).
 #
-# We follow Fig. 1 of Shapourian and Ryu, [arXiv:1804.08637](https://arxiv.org/abs/1804.08637):
-# two modes, with mode 1 in subsystem `A` and mode 2 in `B`.
+# We follow H. Shapourian and S. Ryu, "Entanglement negativity of fermions: monotonicity,
+# separability criterion, and classification of few-mode states",
+# [Phys. Rev. A 99, 022310 (2019)](https://doi.org/10.1103/PhysRevA.99.022310),
+# [arXiv:1804.08637](https://arxiv.org/abs/1804.08637): two modes, with mode 1 in subsystem `A`
+# and mode 2 in `B`.
 using FermionicHilbertSpaces
 import FermionicHilbertSpaces: logarithmic_negativity
 using LinearAlgebra
@@ -26,7 +28,9 @@ entropy(ρA) ≈ log(2)
 
 # ## Logarithmic negativity
 # `logarithmic_negativity(ρ, H, HA)` uses the fermionic partial transpose. For a pure state
-# it equals the Rényi-1/2 entropy, here again ``\log 2``.
+# it equals the Rényi-1/2 entropy, here again ``\log 2``. It is an entanglement measure only for
+# states that commute with the total parity (fermionic superselection); the function does not
+# check this.
 logarithmic_negativity(ρ, H, HA) ≈ log(2)
 
 # ## Fermionic versus bosonic partial transpose
@@ -38,11 +42,11 @@ werner(p) = (1 - p) / 4 * I + p * ρ
 E_fermion(p) = logarithmic_negativity(werner(p), H, HA)
 E_boson(p) = logarithmic_negativity(werner(p), H, HA; phase_factors=false)
 
-# Both agree with the closed forms, Eqs. (84) and (83) of the reference.
+# Both agree with the closed forms for the two-mode Werner state in Shapourian and Ryu (2019).
 E_fermion_exact(p) = log((1 + p) / 2 + sqrt(5p^2 - 2p + 1) / 2)
 E_boson_exact(p) = log(3(1 + p) / 4 + abs(1 - 3p) / 4)
 ps = range(0, 1, length=21)
-maximum(abs, E_fermion.(ps) .- E_fermion_exact.(ps)), maximum(abs, E_boson.(ps) .- E_boson_exact.(ps))
+E_fermion.(ps) ≈ E_fermion_exact.(ps), E_boson.(ps) ≈ E_boson_exact.(ps)
 
 # The fermionic negativity is nonzero for every `p > 0`, while the bosonic one vanishes
 # for `p ≤ 1/3`.
