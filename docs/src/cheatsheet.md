@@ -13,7 +13,7 @@ H = hilbert_space(f, 1:N, NumberConservation())
 ```
 
 ## Spinful fermions
-Labels can be any values, such as tuples. Conserve each spin species separately with a product of constraints; sectors are then labelled by vectors such as `[1, 1]`, not tuples.
+Conserve each species separately with a product of constraints; sectors are labelled by vectors such as `[1, 1]`.
 ```@example cheat
 @fermions c
 Hup = hilbert_space(c, [(i, :↑) for i in 1:2])
@@ -47,7 +47,7 @@ vals, vecs = eigen(Hermitian(representation(ham, Hsec, :dense)))
 
 ## Expectation value
 ```@example cheat
-dot(ψ, representation(f[1]'f[1], Hsec), ψ)
+expectation(f[1]'f[1], ψ, Hsec)
 ```
 
 ## Sector vector in the full space
@@ -76,15 +76,13 @@ quantumnumbers(hilbert_space(f, 1:N, ParityConservation()))
 ```
 
 ## Operators between sectors
-Build a space with both sectors, represent the operator with `projection=true` (dropping terms that leave the space), and slice with `indices`. Here `f[1]'` from two to three particles:
+Rows are on `Hout` and columns on `Hin`. Here `f[1]'` from two to three particles:
 ```@example cheat
-Hmix = hilbert_space(f, 1:N, NumberConservation([2, 3]))
-cdag = representation(f[1]', Hmix; projection=true)
-cdag[indices(3, Hmix), indices(2, Hmix)]
+import FermionicHilbertSpaces: Axes
+representation(f[1]', Axes(sector(3, H), Hsec))
 ```
 
 ## Reduced density matrix and entropy
-`subregion(HA, Hsec)` keeps the states of `HA` that appear in `Hsec`.
 ```@example cheat
 HA = hilbert_space(f, 1:2)
 ρA = partial_trace(ψ, Hsec => subregion(HA, Hsec))
@@ -98,7 +96,7 @@ partial_transpose(ρ, H, HA)
 ```
 
 ## Basis states and product states
-`basisstates` lists the basis in the order of the vector and matrix representations. `Kets` parses a label into a state; on a product space, pass one label per factor.
+`basisstates` lists the basis in the order of the representations; `Kets` parses a label into a state.
 ```@example cheat
 basisstates(Hsec)
 ```
@@ -110,13 +108,21 @@ representation(Kets(Hsec)("1100"), Hsec)
 ```
 
 ## Time evolution
-The package does not evolve states, but a few lines of LinearAlgebra do. `exp` needs a matrix, not a symbolic operator.
+The package does not evolve states; use the eigendecomposition or an ODE solver.
 ```@example cheat
 ψ0 = representation(Kets(Hsec)("1100"), Hsec)
 ψt(t) = vecs * (cis.(-vals * t) .* (vecs' * ψ0))
 ψt(1.0) ≈ exp(-im * representation(ham, Hsec, :dense)) * ψ0
 ```
-For Lindblad evolution, see [Open systems](literate_output/open_system_lindblad.md).
+
+## Open system
+`open_system` doubles the space for vectorized density matrices. See [Open systems](literate_output/open_system_lindblad.md).
+```@example cheat
+import FermionicHilbertSpaces: dissipator
+Hlr, Hl, Hr, left, right = open_system(f, 1:2)
+L = -1im * (left(f[1]'f[2] + hc) - right(f[1]'f[2] + hc)) + dissipator(0.1 * f[1])
+representation(L, Hlr)
+```
 
 ## Large spaces
 `:lazy` gives a matrix-free operator for iterative eigensolvers such as Arpack or KrylovKit.
@@ -131,4 +137,3 @@ eigs(hbig; nev=1, which=:SR)[1]
 - Use `representation(op, H, :dense)` for a dense matrix, not `Matrix(representation(op, H))`.
 - Use `embed` and `indices` rather than padding vectors or filtering indices by hand.
 - An operator that maps states out of the space errors unless `projection=true`, which drops those terms.
-- `partial_trace(x, H => Hsub)` maps to a smaller space and `embed(x, Hsub => H)` back to the larger one.
