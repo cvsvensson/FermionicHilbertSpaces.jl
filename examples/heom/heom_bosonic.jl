@@ -34,7 +34,7 @@
 ##   • Algebra rules, symbolic_group, apply_local_operators (all required interfaces)
 
 using FermionicHilbertSpaces, Test
-import FermionicHilbertSpaces: AbstractSym, open_system, symbolic_group, apply_local_operator, add_tag,
+import FermionicHilbertSpaces: AbstractSym, symbolic_group, apply_local_operator, add_tag,
     @nc, NCMul, NonCommutativeProducts.mul_effect, NonCommutativeProducts.@commutative, mat_eltype
 
 """
