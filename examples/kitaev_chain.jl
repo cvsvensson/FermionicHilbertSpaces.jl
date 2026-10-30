@@ -35,8 +35,8 @@ hsym = kitaev_chain(f, N, μ, t, Δ, U)
 # we diagonalize each parity sector separately and `embed` its ground state into the full space `H`.
 (Eo, o), (Ee, e) = map(quantumnumbers(H)) do parity
     Hsec = sector(parity, H)
-    vals, vecs = eigs(representation(hsym, Hsec); nev=1, which=:SR)
-    (; energy=first(vals), ground_state=embed(vecs[:, 1], Hsec => H))
+    vals, vecs = eigs(representation(hsym, Hsec); nev = 1, which = :SR)
+    (; energy = first(vals), ground_state = embed(vecs[:, 1], Hsec => H))
 end;
 # The two energies are nearly degenerate.
 Eo - Ee
@@ -55,7 +55,8 @@ locality(x) = [norm(svdvals(partial_trace(x, H => Hsite)), 1) for Hsite in Hsite
 
 kwargs = (; lw=4, legendfontsize=15, marker=true, markerstrokewidth=2)
 plot(xlabel="Site", title="Majorana locality measures"; frame=:box, size=(500, 300),
-    xticks=1:3:N, ylims=(-0.1, 2.1), legendposition=:top, labelfontsize=15)
-plot!(1:N, locality(γ); label="‖γₙ‖", kwargs...)
-plot!(1:N, locality(γ̃); label="‖γ̃ₙ‖", kwargs...)
-plot!(1:N, locality(δρ); label="‖(iγγ̃)ₙ‖", kwargs...)
+    xticks = 1:3:N, ylims = (-0.1, 2.1), legendposition = :top, labelfontsize = 15
+)
+plot!(1:N, locality(γ); label = "‖γₙ‖", kwargs...)
+plot!(1:N, locality(γ̃); label = "‖γ̃ₙ‖", kwargs...)
+plot!(1:N, locality(δρ); label = "‖(iγγ̃)ₙ‖", kwargs...)

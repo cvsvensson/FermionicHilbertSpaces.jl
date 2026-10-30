@@ -26,7 +26,7 @@ representation(Sone[:x]^3, hilbert_space(Sone), :dense) ≈ representation(Sone[
 # ## Heisenberg chain
 # `@spins S` declares a field of spins, with `S[k][:x]` the operator on site `k`.
 # `hilbert_space(S, labels)` builds the space of the sites in `labels`.
-@spins S 1//2
+@spins S 1 // 2
 N = 4
 H = hilbert_space(S, 1:N)
 ham = sum(S[k][:]'S[k+1][:] for k in 1:(N-1))
@@ -34,7 +34,7 @@ representation(ham, H, :dense)
 
 # The chain conserves the total magnetization. An `AdditiveConstraint` restricts the space to
 # states where the sum over sites of `s.m` is fixed:
-Hm = hilbert_space(S, 1:N, AdditiveConstraint(0; maps=s -> s.m))
+Hm = hilbert_space(S, 1:N, AdditiveConstraint(0; maps = s -> s.m))
 representation(ham, Hm, :dense)
 
 # ## Advanced: total spin sectors
