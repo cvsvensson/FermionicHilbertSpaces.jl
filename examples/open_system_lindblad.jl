@@ -57,7 +57,7 @@ n = representation(left(c[1]'c[1]), Hl)
 constraint = NumberConservation(-1:1, [Hl, Hr], [1, -1])
 Hcons = tensor_product((Hl, Hr); constraint)
 L0 = representation(lindbladian, sector(0, Hcons), :dense)
-@assert any(abs(λ) < 1e-12 for λ in eigvals(L0))
+@assert any(abs(λ) < 1.0e-12 for λ in eigvals(L0))
 
 # `open_system` also accepts a Hilbert space directly. Here one electron is shared between
 # two dots that couple to a lossy cavity mode truncated to four photon levels,

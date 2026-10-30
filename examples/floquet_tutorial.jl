@@ -125,7 +125,7 @@ F = FloquetLadder(floquet_basis)       # raising operator F
 Nf = FloquetNumber(1, floquet_basis)    # photon number N
 n_max = 5       # keep Floquet modes n = −n_max … n_max
 Hfloq = GenericHilbertSpace(floquet_basis, FloquetState.((-n_max):n_max))
-F_mat = representation(F, Hfloq; projection=true) # we need projection=true because we've truncated the Floquet space
+F_mat = representation(F, Hfloq; projection = true) # we need projection=true because we've truncated the Floquet space
 
 # ## Driven spin 1
 
@@ -203,7 +203,8 @@ plot!(p2, A_values ./ ω, spin_pol[:, central_zone]; lw=2, color=[1 2 3], ls=:so
 plot!(p2, A_values ./ ω, floquet_num[:, central_zone]; lw=2, color=[1 2 3], ls=:dot, label=false)
 plot!(p2, Float64[], Float64[]; lw=3, color=:black, ls=:solid,
     label="Spin polarization")
-plot!(p2, Float64[], Float64[]; lw=3, color=:black, ls=:dot,
+plot!(
+    p2, Float64[], Float64[]; lw = 3, color = :black, ls = :dot,
     label="Photon number")
 
 p3 = plot(xlabel="Drive amplitude  A/ω", title="Spin-Floquet entanglement",
