@@ -14,13 +14,12 @@ Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
 
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
 # ProductSpaces consists of a list of groups (stored as `factors`) and their atoms, in group-major order
-struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
+struct ProductSpace{B,C,A,T,D} <: AbstractProductHilbertSpace{B}
     factors::C
     atoms::Vector{A}
     atom_index::Dict{Any,Int} # atomic_id => position in atoms. Only used for lookups, so not concretely typed
     fast_path::T
-    lininds::LI
-    cartinds::CI
+    dims::D # factor dimensions, all `Int` when their product fits in an `Int` and `BigInt` otherwise
     function ProductSpace(factors::C) where {C}
         length(factors) == 0 && throw(ArgumentError("A product space must have at least one factor."))
         atoms = collect(Iterators.flatten(map(atomic_factors, factors)))
@@ -29,11 +28,10 @@ struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
         atom_index = Dict{Any,Int}(atomic_id(a) => i for (i, a) in enumerate(atoms))
         length(atom_index) == length(atoms) || throw(ArgumentError("The atoms of a product space must be distinct, got duplicates in $(map(atomic_id, atoms))."))
         fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
-        lininds = LinearIndices(map(dim, factors))
-        cartinds = CartesianIndices(map(dim, factors))
-        LI = typeof(lininds)
-        CI = typeof(cartinds)
-        new{B,C,A,typeof(fast_path),LI,CI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
+        factor_dims = map(dim, factors)
+        I = prod(big, factor_dims) <= typemax(Int) ? Int : BigInt
+        dims = map(I, factor_dims)
+        new{B,C,A,typeof(fast_path),typeof(dims)}(factors, atoms, atom_index, fast_path, dims)
     end
 end
 fast_path(space::ProductSpace) = space.fast_path
@@ -44,30 +42,29 @@ atomic_factors(H::ProductSpace) = H.atoms
 nbr_of_atoms(H::ProductSpace) = length(H.atoms)
 factors(H::ProductSpace) = H.factors
 groups(H::ProductSpace) = H.factors
-function dim(H::ProductSpace)
-    dims = map(dim, groups(H))
-    try
-        return reduce(Base.checked_mul, dims; init = 1)
-    catch err
-        err isa OverflowError || rethrow()
-        return prod(big, dims)
-    end
-end
+dim(H::ProductSpace) = prod(H.dims)
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
 basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(ProductState, Iterators.product(map(basisstates, H.factors)...)))
-Base.@propagate_inbounds function basisstate(n::Integer, H::ProductSpace{B}) where B
-    inds = Tuple(H.cartinds[n])
-    ProductState(map(basisstate, inds, H.factors))
+Base.@propagate_inbounds function basisstate(n::Integer, H::ProductSpace)
+    @boundscheck 1 <= n <= dim(H) || throw(BoundsError(H, n))
+    ProductState(map(basisstate, _cartesian_index(n - 1, H.dims), H.factors))
+end
+# Column-major mixed-radix digits of the zero-based index `r`, as one-based indices
+_cartesian_index(r, ::Tuple{Any}) = (r + 1,)
+@inline function _cartesian_index(r, dims::Tuple)
+    q = div(r, first(dims))
+    return (r - q * first(dims) + 1, _cartesian_index(q, Base.tail(dims))...)
 end
 function _state_index(state::ProductState, H::ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
     inds = map(_state_index, state.states, H.factors)
-    all(>(0), inds) || return 0
-    H.lininds[CartesianIndex(inds)]
+    all(>(0), inds) || return zero(eltype(H.dims))
+    return _linear_index(inds, H.dims) + 1
 end
-# `lininds` is exact only when the product of the factor dimensions fits in an `Int`
-has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && prod(big ∘ dim, H.factors) <= typemax(Int)
+_linear_index(::Tuple{}, ::Tuple{}) = false
+_linear_index(inds, dims) = (first(inds) - 1) + first(dims) * _linear_index(Base.tail(inds), Base.tail(dims))
+has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && dim(H) isa Int
 
 maximum_particles(H::ProductSpace) = sum(maximum_particles, groups(H))
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
@@ -625,7 +622,17 @@ function phase_factor_u(sp::ProductSpaceMapper)
     end
 end
 
-@testitem "dim of large product spaces" begin
-    @spins s 1 // 2
-    @test dim(hilbert_space(s, 1:64)) == big(2)^64
+@testitem "Product spaces with dimensions wider than Int" begin
+    import FermionicHilbertSpaces: state_index, basisstate, ProductState
+    @spins s 5 // 2
+    @fermions f
+    Hs = hilbert_space(s[1])
+    Hf = hilbert_space(f, 1:70)
+    H = tensor_product(Hf, Hs)
+    @test dim(H) == 6 * big(2)^70
+    k, m = big(2)^70 - 3, 6
+    state = ProductState((basisstate(k, Hf), basisstate(m, Hs)))
+    n = k + (m - 1) * big(2)^70
+    @test state_index(state, H) == n
+    @test basisstate(n, H) == state
 end
