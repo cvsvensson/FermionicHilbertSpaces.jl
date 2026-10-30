@@ -26,12 +26,12 @@ couplings(t, T, k) = [coupling(t - (i - 1) * T / 3, T, k) for i in 1:3]
 hamiltonian(t, T, k) = Hermitian(sum(couplings(t, T, k) .* hs))
 T, k = 1000, 20
 ts = range(0, T, 300)
-plot(ts, stack(couplings.(ts, T, k))'; label=["Δ₁" "Δ₂" "Δ₃"], xlabel="t", legend=:outerright, frame=:box, size=(450, 250), lw=2)
+plot(ts, stack(couplings.(ts, T, k))'; label = ["Δ₁" "Δ₂" "Δ₃"], xlabel = "t", legend = :outerright, frame = :box, size = (450, 250), lw = 2)
 
 # For a slow protocol, the Schrödinger evolution can be approximated by a product of exponentials of the Hamiltonian
 # at the midpoints of short time steps.
 dt = 1.0
-U = foldl((U, t) -> exp(-1im * dt * hamiltonian(t, T, k)) * U, dt/2:dt:T; init=Matrix{ComplexF64}(I, dim(H), dim(H)))
+U = foldl((U, t) -> exp(-1im * dt * hamiltonian(t, T, k)) * U, (dt / 2):dt:T; init = Matrix{ComplexF64}(I, dim(H), dim(H)))
 
 # The ground states at ``t = 0`` and ``t = T`` coincide. Restricted to them, the evolution should equal the braid
 # operator up to the dynamical phase, which is the same for all ground states.
