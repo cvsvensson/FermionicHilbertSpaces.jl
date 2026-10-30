@@ -23,7 +23,7 @@ siam(U) = U * (n(0, :↑) - 1 / 2) * (n(0, :↓) - 1 / 2) +
 
 Hup = hilbert_space(c, [(i, :↑) for i in 0:L])
 Hdn = hilbert_space(c, [(i, :↓) for i in 0:L])
-H = tensor_product(Hup, Hdn; constraint = NumberConservation(Hup) * NumberConservation(Hdn))
+H = tensor_product(Hup, Hdn; constraint = NumberConservation(Hup) * NumberConservation(Hdn));
 
 
 # Creating or annihilating a spin-up impurity particle on the ground state `|0⟩` leads
@@ -42,7 +42,7 @@ function lehmann(ham, H, q0)
     wm = abs2.(Vm' * (representation(c[0, :↑], Axes(Hm, H0)) * ψ0))
     return (; poles = [Ep .- E0; E0 .- Em], weights = [wp; wm])
 end
-G(z, (; poles, weights)) = sum(weights ./ (z .- poles))
+G(z, (; poles, weights)) = sum(weights ./ (z .- poles));
 
 # Without interaction the impurity Green's function is known in closed form, and the Lehmann sum reproduces it.
 G0(z) = 1 / (z - sum(V^2 ./ (z .- ε)))
