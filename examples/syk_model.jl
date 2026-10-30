@@ -29,8 +29,12 @@ function gap_ratio(energies)
     return mean(min(a, b) / max(a, b) for (a, b) in zip(s[1:(end - 1)], s[2:end]))
 end;
 
-# For each ``M`` we diagonalize the even-parity sector for a few disorder samples. In the GSE case
-# we keep one level of each degenerate pair. The reference values are from Atas *et al.*[^2]
+# The statistics must be taken within one fermion-parity sector: over the full space the two
+# sectors are interleaved, and for ``M \equiv 2 mod 8`` the odd sector is an exact copy of the
+# even one, so every level is degenerate and the ratio is zero whatever the dynamics.
+# We therefore diagonalize the even sector for a few disorder samples, keeping one level of each
+# degenerate pair for GSE. The table lists the measured mean ratio next to the random-matrix
+# value of the expected class (Atas *et al.*[^2]); they should agree.
 Random.seed!(1)
 cases = [(M = 16, class = "GOE", ref = 0.5307), (M = 18, class = "GUE", ref = 0.5996), (M = 20, class = "GSE", ref = 0.6744)]
 results = map(cases) do (; M, class, ref)
@@ -39,15 +43,10 @@ results = map(cases) do (; M, class, ref)
         E = eigvals(Hermitian(representation(syk_hamiltonian(M), Heven, :dense)))
         gap_ratio(class == "GSE" ? E[1:2:end] : E)
     end
-    (; M, class, r, ref)
+    (majoranas = M, expected_class = class, measured_ratio = round(r; digits = 3), random_matrix_ratio = ref)
 end
-@assert all(abs(c.r - c.ref) < 0.02 for c in results)
-[(c.M, c.class, round(c.r; digits = 3), c.ref) for c in results]
-
-# Without the parity restriction the levels of the two sectors are interleaved. For ``M = 18`` the
-# odd sector is an exact copy of the even one, so every level is degenerate and the ratio
-# collapses to zero, which says nothing about chaos.
-gap_ratio(eigvals(Hermitian(representation(syk_hamiltonian(18), hilbert_space(γ, 1:18), :dense))))
+@assert all(abs(c.measured_ratio - c.random_matrix_ratio) < 0.02 for c in results)
+results
 
 # [^1]: Y.-Z. You, A. W. W. Ludwig and C. Xu, "Sachdev-Ye-Kitaev model and thermalization on the boundary of many-body localized fermionic symmetry protected topological states", [Phys. Rev. B 95, 115150 (2017)](https://doi.org/10.1103/PhysRevB.95.115150), [arXiv:1602.06964](https://arxiv.org/abs/1602.06964).
 # [^2]: Y. Y. Atas, E. Bogomolny, O. Giraud and G. Roux, "Distribution of the ratio of consecutive level spacings in random matrix ensembles", [Phys. Rev. Lett. 110, 084101 (2013)](https://doi.org/10.1103/PhysRevLett.110.084101), [arXiv:1212.5611](https://arxiv.org/abs/1212.5611).
