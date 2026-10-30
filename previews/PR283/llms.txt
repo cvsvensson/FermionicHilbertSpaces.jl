@@ -1,0 +1,24 @@
+# FermionicHilbertSpaces.jl
+
+> Julia package for fermionic, bosonic and spin Hilbert spaces with constraints and symmetry sectors, and their sparse, dense or lazy operator matrices.
+
+## Docs
+
+- [Home](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/)
+- [Fermionic tensor products and partial traces](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/fermions/)
+- [Constrained Hilbert spaces and conserved quantum numbers](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/conservation/)
+- [Hilbert space and array operations](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/hilbert_space_operations/)
+- [Interacting Kitaev chain](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/kitaev_chain/)
+- [Bosons](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/bosons/)
+- [Spins](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/spin_chain/)
+- [Mixed fermion-spin-boson system](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/mixed_fermion_spin_boson/)
+- [Open systems](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/open_system_lindblad/)
+- [Symbolic states](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/symbolic_states/)
+- [Custom operators: Clock](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/clock_operators/)
+- [Custom operators: Floquet](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/floquet_tutorial/)
+- [Spatial symmetries](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/translation_symmetry/)
+- [Non-interacting hilbert spaces](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/non_interacting/)
+- [Example: Free fermions](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/free_fermions/)
+- [Misc](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/misc/)
+- [Extending and performance hooks](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/extending/)
+- [Functions](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/docstrings/)
