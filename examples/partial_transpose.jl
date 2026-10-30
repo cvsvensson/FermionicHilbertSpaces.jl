@@ -1,52 +1,46 @@
 # # Entanglement and negativity
 #
-# This tutorial computes reduced density matrices, entanglement entropy and the logarithmic
-# negativity of fermionic states.
+# In its topological phase the Kitaev chain hosts a Majorana zero mode at each end, and together
+# they form one fermion shared by the two ends. This page shows that this long-range entanglement
+# is detected by the fermionic logarithmic negativity between the first and last site, and missed
+# by the ordinary partial transpose. On the package side it shows how to reduce a many-body ground
+# state to a non-contiguous subsystem with `partial_trace` and compute its negativity with
+# `logarithmic_negativity`, which applies the fermionic partial transpose with the correct signs.
+# The result is from H. Shapourian, K. Shiozaki and S. Ryu,
+# [Phys. Rev. Lett. 118, 216402 (2017)](https://doi.org/10.1103/PhysRevLett.118.216402).
 #
-# We follow H. Shapourian and S. Ryu, "Entanglement negativity of fermions: monotonicity,
-# separability criterion, and classification of few-mode states",
-# [Phys. Rev. A 99, 022310 (2019)](https://doi.org/10.1103/PhysRevA.99.022310),
-# [arXiv:1804.08637](https://arxiv.org/abs/1804.08637): two modes, with mode 1 in subsystem `A`
-# and mode 2 in `B`.
+# We take the even-parity ground state of a chain of `N` sites, reduce it to the two end sites,
+# and compute the negativity between them. With `phase_factors = false` the same function uses
+# the ordinary matrix transpose on site 1 instead, as if the modes were qubits.
 using FermionicHilbertSpaces
 import FermionicHilbertSpaces: logarithmic_negativity
-using LinearAlgebra
+using LinearAlgebra, Arpack, Plots
 
 @fermions f
-H = hilbert_space(f, 1:2)
-HA = hilbert_space(f, [1])
+kitaev(N, μ; t = 1.0, Δ = 1.0) = sum(-μ * f[i]' * f[i] for i in 1:N) +
+    sum(-t * f[i]' * f[i+1] + Δ * f[i] * f[i+1] + hc for i in 1:(N-1))
 
-# ## Reduced state and entropy
-# The singlet ``(f_1^\dagger - f_2^\dagger)|0\rangle/\sqrt2`` is a pure state with odd parity.
-# Its reduced density matrix on `A` is maximally mixed, so the entropy is ``\log 2``.
-ψ = representation(Ket("01", H) - Ket("10", H)) / √2
-ρ = ψ * ψ'
-ρA = partial_trace(ρ, H => HA)
-entropy(ρ) = -sum(λ * log(λ) for λ in eigvals(Hermitian(ρ)) if λ > 1.0e-12)
-entropy(ρA) ≈ log(2)
+function end_negativity(N, μ; phase_factors = true)
+    H = hilbert_space(f, 1:N, ParityConservation())
+    Heven = sector(1, H)
+    _, vecs = eigs(representation(kitaev(N, μ), Heven); nev = 1, which = :SR)
+    ψ = embed(vecs[:, 1], Heven => H)
+    Hends = hilbert_space(f, [1, N])
+    ρ = partial_trace(ψ * ψ', H => Hends)
+    return logarithmic_negativity(ρ, Hends, hilbert_space(f, [1]); phase_factors)
+end;
 
-# ## Logarithmic negativity
-# `logarithmic_negativity(ρ, H, HA)` uses the fermionic partial transpose. For a pure state
-# it equals the Rényi-1/2 entropy, here again ``\log 2``. It is an entanglement measure only for
-# states that commute with the total parity (fermionic superselection); the function does not
-# check this.
-logarithmic_negativity(ρ, H, HA) ≈ log(2)
-
-# ## Fermionic versus bosonic partial transpose
-# The two-mode Werner state mixes the singlet with the identity.
-werner(p) = (1 - p) / 4 * I + p * ρ
-
-# With `phase_factors=false` the partial transpose is the ordinary matrix transpose on `A`,
-# which gives a different negativity.
-E_fermion(p) = logarithmic_negativity(werner(p), H, HA)
-E_boson(p) = logarithmic_negativity(werner(p), H, HA; phase_factors = false)
-
-# Both agree with the closed forms for the two-mode Werner state in Shapourian and Ryu (2019).
-E_fermion_exact(p) = log((1 + p) / 2 + sqrt(5p^2 - 2p + 1) / 2)
-E_boson_exact(p) = log(3(1 + p) / 4 + abs(1 - 3p) / 4)
-ps = range(0, 1, length = 21)
-E_fermion.(ps) ≈ E_fermion_exact.(ps), E_boson.(ps) ≈ E_boson_exact.(ps)
-
-# The fermionic negativity is nonzero for every `p > 0`, while the bosonic one vanishes
-# for `p ≤ 1/3`.
-E_fermion(0.2), E_boson(0.2)
+# At the sweet spot ``\mu = 0``, ``t = \Delta`` the end modes are exactly decoupled from the bulk,
+# and the fermionic negativity is ``\log\sqrt2`` for every chain length. Away from it the end modes
+# spread into the bulk and less of them sits on the end sites, so the negativity decreases. For the
+# longer chains it does not depend on how far apart the ends are and vanishes beyond the transition
+# at ``\mu = 2t``; in the short chain the ends also couple through the bulk, which leaves a tail.
+# The bosonic negativity is zero throughout: viewed as qubits, the two ends are not entangled.
+@assert end_negativity(8, 0.0) ≈ log(2) / 2
+μs = range(0, 4, length = 41)
+plot(xlabel = "μ / t", ylabel = "negativity between the end sites", frame = :box)
+for N in (4, 8, 12)
+    plot!(μs, [end_negativity(N, μ) for μ in μs]; label = "fermionic, N = $N", lw = 2)
+end
+plot!(μs, [end_negativity(8, μ; phase_factors = false) for μ in μs]; label = "bosonic, N = 8", lw = 2, ls = :dash)
+hline!([log(2) / 2]; label = "log √2", color = :gray, ls = :dot)
