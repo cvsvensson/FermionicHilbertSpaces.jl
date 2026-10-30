@@ -14,7 +14,7 @@ Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
 
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
 # ProductSpaces consists of a list of groups (stored as `factors`) and their atoms, in group-major order
-struct ProductSpace{B,C,A,T,D} <: AbstractProductHilbertSpace{B}
+struct ProductSpace{B, C, A, T, D} <: AbstractProductHilbertSpace{B}
     factors::C
     atoms::Vector{A}
     atom_index::Dict{Any,Int} # atomic_id => position in atoms. Only used for lookups, so not concretely typed
@@ -31,7 +31,7 @@ struct ProductSpace{B,C,A,T,D} <: AbstractProductHilbertSpace{B}
         factor_dims = map(dim, factors)
         I = prod(big, factor_dims) <= typemax(Int) ? Int : BigInt
         dims = map(I, factor_dims)
-        new{B,C,A,typeof(fast_path),typeof(dims)}(factors, atoms, atom_index, fast_path, dims)
+        return new{B, C, A, typeof(fast_path), typeof(dims)}(factors, atoms, atom_index, fast_path, dims)
     end
 end
 fast_path(space::ProductSpace) = space.fast_path
@@ -48,7 +48,7 @@ atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(ProductState, Iterators.product(map(basisstates, H.factors)...)))
 Base.@propagate_inbounds function basisstate(n::Integer, H::ProductSpace)
     @boundscheck 1 <= n <= dim(H) || throw(BoundsError(H, n))
-    ProductState(map(basisstate, _cartesian_index(n - 1, H.dims), H.factors))
+    return ProductState(map(basisstate, _cartesian_index(n - 1, H.dims), H.factors))
 end
 # Column-major mixed-radix digits of the zero-based index `r`, as one-based indices
 _cartesian_index(r, ::Tuple{Any}) = (r + 1,)
