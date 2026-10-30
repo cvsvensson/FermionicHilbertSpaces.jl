@@ -15,7 +15,7 @@ T[:x] * T[:y] - T[:y] * T[:x] == 1im * T[:z]
 # A spin value such as `1//2` or `1` adds the corresponding normalization.
 @spin Shalf 1//2
 @spin Sone 1
-Shalf[:x]^2 == 1//4 # true
+Shalf[:x]^2 == 1 // 4 # true
 sum(op^2 for op in Sone[:]) == 2
 
 # For spin one half, expressions simplify to a unique form. For higher spins they do not,
