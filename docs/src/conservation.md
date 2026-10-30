@@ -201,4 +201,4 @@ Hsub_full = hilbert_space(f, [(i, s) for i in 1:div(N,2) for s in (:↑,:↓)])
 Hsub_frac = subregion(Hsub_full, Hfrac)
 ```
 
-[^1]: [arXiv:1910.06341](https://arxiv.org/abs/1910.06341)
+[^1]: T. Rakovszky, P. Sala, R. Verresen, M. Knap and F. Pollmann, "Statistical localization: from strong fragmentation to strong edge modes", [Phys. Rev. B 101, 125126 (2020)](https://doi.org/10.1103/PhysRevB.101.125126), [arXiv:1910.06341](https://arxiv.org/abs/1910.06341).
