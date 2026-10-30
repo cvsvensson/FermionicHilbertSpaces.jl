@@ -1,7 +1,7 @@
 # # Bosons
 
 # This tutorial builds bosonic Hilbert spaces and studies the Bose-Hubbard and a dipole-conserving model
-# using number conservation. It assumes [Getting started](../index.md).
+# using number conservation.
 
 # ## Bosonic algebra and Hilbert spaces
 # `@boson a` defines a single mode with creation operator `a'`, and `@bosons b` an indexed family of modes.

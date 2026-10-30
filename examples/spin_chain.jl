@@ -1,7 +1,7 @@
 # # Spin chains
 
 # This tutorial builds spin operators and a Heisenberg chain, and restricts it to a magnetization
-# sector and a total-spin sector. It assumes [Getting started](../index.md).
+# sector and a total-spin sector.
 
 using FermionicHilbertSpaces
 using LinearAlgebra

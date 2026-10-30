@@ -1,7 +1,7 @@
 # # Interacting Kitaev chain
 
 # This tutorial builds an interacting Kitaev chain, finds its parity-sector ground states and
-# measures how localized its many-body Majoranas are. It assumes [Getting started](../index.md).
+# measures how localized its many-body Majoranas are.
 # Locality of many-body Majoranas is discussed in Ref. [^1].
 #
 # [^1]: W. Samuelson *et al.*, [PRX Quantum 7, 020341 (2026)](https://doi.org/10.1103/pw51-tnsz), [arXiv:2510.20538](https://arxiv.org/abs/2510.20538).
