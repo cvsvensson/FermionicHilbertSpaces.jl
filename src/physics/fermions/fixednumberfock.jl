@@ -44,7 +44,7 @@ function interpret_state(f::FockNumber, ::Type{FixedNumberFockState{N}}) where {
 end
 
 
-physical_rep(state::T, ::Type{FixedNumberFockState{N}}) where {T,N} = FixedNumberFockState{N}(physical_rep(state, FockNumber))
+physical_rep(state::T, ::Type{FixedNumberFockState{N}}) where {T, N} = FixedNumberFockState{N}(physical_rep(state, FockNumber{T}))
 internal_rep(state::FixedNumberFockState, space::FermionicSpace, ::Type{T}) where T = internal_rep(FockNumber(state), space, T)
 
 
@@ -132,6 +132,10 @@ end
     Hf = hilbert_space(f, 1:2)
     Hp = tensor_product(Hf, hilbert_space(s); constraint = NumberConservation(1, [Hf]))
     @test Ket(basisstate(1, Hp), Hp) == Kets(Hp)[1]
+
+    Hc = hilbert_space(f, 1:3, NumberConservation(1))
+    op = f[2]'f[1] + f[1]'f[2] + s[:z]
+    @test representation(op, tensor_product(Hx, hilbert_space(s)), :dense) == representation(op, tensor_product(Hc, hilbert_space(s)), :dense)
 end
 
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{<:FixedNumberFockState})
