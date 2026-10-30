@@ -6,13 +6,20 @@
 # ```
 # which maps ``γ_j → B_{ij} γ_j B_{ij}^† = γ_i`` and ``γ_i → -γ_j``. The second form uses ``(γ_i γ_j)^2 = -1``, which holds because
 # the package normalises Majoranas as ``γ^2 = 1``. Here we braid two Majoranas adiabatically in a tri-junction,
-# where a central Majorana ``γ_0`` couples to three outer ones, and check that the time evolution reproduces ``B_{32}``.
+# where a central Majorana ``γ_0`` couples to three outer ones,[^1] and check that the time evolution reproduces ``B_{32}``.
 #
-# ![Tri-junction with central Majorana γ₀ and outer Majoranas γ₁, γ₂, γ₃. Arrows show the three steps of the exchange.](../assets/braiding_junction.svg)
+# The coupling ``Δ_i(t)`` between ``γ_0`` and ``γ_i`` is a smooth step. When only ``Δ_i`` is on, ``γ_0`` pairs with ``γ_i``
+# and the other two outer Majoranas are zero modes. Starting with ``Δ_1`` on, so that the zero modes sit at ``γ_2`` and ``γ_3``,
+# one period consists of three steps, in each of which the next coupling is switched on before the current one is switched off:
 #
-# The couplings ``Δ_i(t)`` between ``γ_0`` and ``γ_i`` are smooth steps, switched on and off in turn so that at least one
-# is always on. While ``γ_0`` couples to ``γ_1`` only, ``γ_2`` and ``γ_3`` are zero modes. Over one period a zero mode
-# moves from ``γ_2`` to ``γ_1``, then from ``γ_3`` to ``γ_2`` and finally from ``γ_1`` to ``γ_3``, which exchanges ``γ_2`` and ``γ_3``.
+# 1. ``Δ_1 → Δ_2`` moves the zero mode at ``γ_2`` to ``γ_1``. The zero modes are now at ``γ_1`` and ``γ_3``.
+# 2. ``Δ_2 → Δ_3`` moves the zero mode at ``γ_3`` to ``γ_2``. The zero modes are now at ``γ_1`` and ``γ_2``.
+# 3. ``Δ_3 → Δ_1`` moves the zero mode at ``γ_1`` to ``γ_3``.
+#
+# The zero modes are back at ``γ_2`` and ``γ_3``, but exchanged: the one that started at ``γ_2`` went through ``γ_1`` to ``γ_3``.
+#
+# ![Three steps of the exchange. In each step the solid coupling is on and the dashed one is switched on, then the solid one off. Coloured dots are the two zero modes; the arrow shows where one of them moves.](../assets/braiding_junction.svg)
+#
 # The Majoranas `γ[4]` and `γ[5]` are spectators that pair up with the two zero modes of the junction, so that the
 # ground space within one parity sector is two-dimensional. The Hamiltonian conserves parity, so it suffices to work in the even sector.
 using FermionicHilbertSpaces
@@ -43,3 +50,5 @@ phase = tr(Uground * Bground') / 2
 @assert Uground ≈ phase * Bground
 @assert abs(tr(Uground * Bground)) / 2 < 0.1
 angle.(eigvals(Uground / phase)) / π
+
+# [^1]: B. van Heck, A. R. Akhmerov, F. Hassler, M. Burrello and C. W. J. Beenakker, New J. Phys. **14**, 035019 (2012).
