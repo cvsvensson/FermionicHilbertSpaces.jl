@@ -5,6 +5,7 @@
 # The `open_system` helper function sets up this structure:
 using FermionicHilbertSpaces
 using LinearAlgebra
+import FermionicHilbertSpaces: dissipator
 @fermions c
 Hlr, Hl, Hr, left, right = open_system(c, 1:1)
 # This generates two versions of hilbert_space(c, 1:1), tagged as `:left` and `:right`. 
@@ -27,7 +28,7 @@ ham_sym = 1.0 * c[1]'c[1]
 L_sym = -1im * (left(ham_sym) - right(ham_sym))
 # We can get a matrix representation of the Liouvillian on the full space `Hlr` with
 L_mat = representation(L_sym, Hlr)
-# A density matrix has two indices, correspinding to (Hl, Hr) and the vectorized form 
+# A density matrix has two indices, corresponding to (Hl, Hr) and the vectorized form 
 # has one index corresponding to Hlr. To translate between these, use `reshape`.
 # E.g. to vectorize the identity operator we can do
 Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
@@ -51,30 +52,24 @@ reshape(v, Hlr => (Hl, Hr))
 # ```math
 # \langle n \rangle_\text{ss} = \frac{\gamma_\text{in}}{\gamma_\text{in} + \gamma_\text{out}}.
 # ```
-using FermionicHilbertSpaces, LinearAlgebra
-using FermionicHilbertSpaces: dissipator
-
 # Parameters
 ε = 1.0
 γ_in = 0.3
 γ_out = 0.7
 
 # ### Build the Hilbert space and matrices
-@fermions c
-Hlr, Hl, Hr, left, right = open_system(c, 1:1)
 ham_sym = ε * c[1]'c[1]
 L_in = √γ_in * c[1]'
-L_out = exp(rand() * 2pi * im) * √γ_out * c[1]
+L_out = √γ_out * c[1]
 
 # `dissipator(L)` is the superoperator ρ ↦ LρL† − ½{L†L, ρ}.
 lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(L_in) + dissipator(L_out)
 # Let's get the matrix representation and check that it preserves trace 
 mat = representation(lindbladian, Hlr)
-Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
 iszero(mat' * Ivec)
 # ### Solve for the steady state
 # The steady state is the eigenvector of `mat` with eigenvalue closest to zero.
-vals, vecs = eigen(Matrix(mat); sortby=abs)
+vals, vecs = eigen(representation(lindbladian, Hlr, :dense); sortby=abs)
 v = vecs[:, 1]
 ρ = reshape(v, Hlr => (Hl, Hr))
 ρ ./= tr(ρ)
@@ -87,6 +82,13 @@ n_matlr = representation(left(c[1]'c[1]), Hlr)
 n_ss = Ivec' * n_matlr * v / (Ivec' * v)
 n_analytical = γ_in / (γ_in + γ_out)
 println("Steady-state occupation ⟨n⟩_ss = $n_ss  (analytic: $n_analytical)")
+
+# ### Time evolution
+# Starting from the empty level, ``ho(t) = e^{\mathcal{L}t}ho_0`` in vectorized form.
+ρ0 = reshape(I - n_mat, (Hl, Hr) => Hlr)
+Lmat = representation(lindbladian, Hlr, :dense)
+ρt(t) = reshape(exp(Lmat * t) * ρ0, Hlr => (Hl, Hr))
+@show tr(n_mat * ρt(0.0)) tr(n_mat * ρt(50.0))
 
 # ### Use a conserved quantity for block structure
 
@@ -120,7 +122,7 @@ ham_sym = t * (f[1]'f[2] + f[2]'f[1]) + ω * a[1]'a[1] + g * (f[1]'f[1] - f[2]'f
 lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(√κ * a[1])
 mat = representation(lindbladian, Hlr)
 # The steady state is again the eigenvector with eigenvalue closest to zero
-vals, vecs = eigen(Matrix(mat); sortby = abs)
+vals, vecs = eigen(representation(lindbladian, Hlr, :dense); sortby = abs)
 ρ = reshape(vecs[:, 1], Hlr => (Hl, Hr))
 ρ ./= tr(ρ)
 # and we can compute, e.g., the photon number in the steady state
