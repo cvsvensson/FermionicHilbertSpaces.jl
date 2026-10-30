@@ -104,10 +104,22 @@ state_index(state, H) = _state_index(state, H)
 state_index(state::Union{AbstractString,AbstractChar}, H) = _state_index(interpret_state(state, H), H)
 
 """
-	hilbert_space(args...)
+    hilbert_space(f, labels, [constraint])
+    hilbert_space(b, labels, dimension, [constraint])
+    hilbert_space(s, labels, [J], [constraint])
 
-Construct a Hilbert space from symbolic degrees of freedom and labels, optionally
-with additional arguments such as constraints.
+Construct the Hilbert space of the fermions `f`, bosons `b` (truncated at `dimension`) or spins `s`
+(spin `J`) with the given `labels`, optionally restricted by a constraint such as
+`NumberConservation(2)`.
+
+```jldoctest
+julia> using FermionicHilbertSpaces
+
+julia> @fermions f;
+
+julia> dim(hilbert_space(f, 1:4, NumberConservation(2)))
+6
+```
 """
 hilbert_space
 
@@ -334,14 +346,15 @@ as in `H`. If any element of `Hs` is a space, the modes must keep their order wi
 group of `H` (e.g. the Jordan-Wigner order of fermions), otherwise an `ArgumentError` is thrown.
 
 # Examples
-```julia
-@fermions f
-H1 = hilbert_space(f, 1:1)
-H2 = hilbert_space(f, 2:2)
-H3 = hilbert_space(f, 3:3)
-H = tensor_product((H1, H2, H3))
-Hsub = subregion((H1, H3), H)
-Hsub == subregion([f[3], f[1]], H)
+```jldoctest
+julia> using FermionicHilbertSpaces
+
+julia> @fermions f;
+
+julia> H = hilbert_space(f, 1:3);
+
+julia> subregion([f[3], f[1]], H) == hilbert_space(f, [1, 3])
+true
 ```
 """
 function subregion(Hs, H::AbstractHilbertSpace)

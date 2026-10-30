@@ -3,6 +3,17 @@
 
 Callable that turns a label into a symbolic ket of `H`, as in `Kets(H)("10")`. The label is
 parsed by [`interpret_state`](@ref). `Kets(H)[i]` is the ket of `basisstate(i, H)`.
+
+```jldoctest
+julia> using FermionicHilbertSpaces
+
+julia> @fermions f;
+
+julia> k = Kets(hilbert_space(f, 1:2));
+
+julia> k[2] == k("10")
+true
+```
 """
 struct Kets{B,H}
     space::H

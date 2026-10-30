@@ -27,6 +27,17 @@ Construct the composite Hilbert space from the spaces in `spaces`, with optional
 
 Spaces of the same group, such as fermions of one `@fermions` basis, merge into one factor where
 the group first appears. The first factor varies fastest.
+
+```jldoctest
+julia> using FermionicHilbertSpaces
+
+julia> @fermions f;
+
+julia> H = tensor_product(hilbert_space(f, 1:1), hilbert_space(f, 2:2));
+
+julia> state_index("10", H)
+2
+```
 """
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 function tensor_product(spaces; constraint=NoSymmetry())
@@ -600,6 +611,19 @@ The trace drops the states of `H` whose part on `Hsub` is not in `Hsub`, or whos
 complement is not in `complement`. Unless `skipmissing=true`, throws an `ArgumentError` if `m`
 has a nonzero element in the row or column of such a state. The map `partial_trace(H => Hsub)`
 does not check its input.
+
+```jldoctest
+julia> using FermionicHilbertSpaces
+
+julia> @fermions f;
+
+julia> H = hilbert_space(f, 1:2); Hsub = hilbert_space(f, 1:1);
+
+julia> n1 = representation(f[1]' * f[1], H, :dense);
+
+julia> partial_trace(n1, H => Hsub) == [0 0; 0 2]
+true
+```
 """
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
 

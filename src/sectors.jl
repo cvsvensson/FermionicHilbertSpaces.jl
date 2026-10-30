@@ -81,6 +81,17 @@ Return the sector of `H` corresponding to quantum number `qn`, for example a par
 number for `NumberConservation` or `1` (even) / `-1` (odd) for `ParityConservation`.
 For `qn === nothing`, this returns `H` for non-sector spaces.
 Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
+
+```jldoctest
+julia> using FermionicHilbertSpaces
+
+julia> @fermions f;
+
+julia> H = hilbert_space(f, 1:3, ParityConservation());
+
+julia> dim(sector(-1, H))
+4
+```
 """
 sector(qn, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
 sector(::Nothing, H::AbstractHilbertSpace, constraint=NoSymmetry()) = constrain_space(H, constraint)
@@ -124,6 +135,15 @@ end
 Return the basis-state indices in `H` belonging to a given sector, specified
 either by a sector Hilbert space `Hsub` or by a quantum number `qn`.
 Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
+
+```jldoctest
+julia> using FermionicHilbertSpaces
+
+julia> @fermions f;
+
+julia> indices(1, hilbert_space(f, 1:2, NumberConservation()))
+2:3
+```
 """
 indices(qn, H) = qn_indices(qn, H)
 indices(qn::AbstractHilbertSpace, H::AbstractHilbertSpace) = space_indices(qn, H)
