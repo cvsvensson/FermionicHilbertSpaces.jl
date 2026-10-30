@@ -9,7 +9,7 @@
 # The result is from H. Shapourian, K. Shiozaki and S. Ryu,
 # [Phys. Rev. Lett. 118, 216402 (2017)](https://doi.org/10.1103/PhysRevLett.118.216402).
 #
-# We take the even-parity ground state of a chain of `N` sites, reduce it to the two end sites,
+# We take the even-parity ground state (a parity eigenstate, so its reduced state on the non-contiguous ends is well defined) of a chain of `N` sites, reduce it to the two end sites,
 # and compute the negativity between them. With `phase_factors = false` the same function uses
 # the ordinary matrix transpose on site 1 instead, as if the modes were qubits.
 using FermionicHilbertSpaces
@@ -33,7 +33,7 @@ end;
 # At the sweet spot ``\mu = 0``, ``t = \Delta`` the end modes are exactly decoupled from the bulk,
 # and the fermionic negativity is ``\log\sqrt2`` for every chain length. Away from it the end modes
 # spread into the bulk and less of them sits on the end sites, so the negativity decreases. For the
-# longer chains it does not depend on how far apart the ends are and vanishes beyond the transition
+# longer chains, deep in either phase, it does not depend on how far apart the ends are and vanishes beyond the transition
 # at ``\mu = 2t``; in the short chain the ends also couple through the bulk, which leaves a tail.
 # The bosonic negativity is zero throughout: viewed as qubits, the two ends are not entangled.
 @assert end_negativity(8, 0.0) ≈ log(2) / 2

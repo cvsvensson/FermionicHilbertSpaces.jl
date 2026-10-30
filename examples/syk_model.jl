@@ -44,7 +44,7 @@ results = map(cases) do (; M, class, ref)
     (; M, class, r, ref)
 end
 @assert all(abs(c.r - c.ref) < 0.02 for c in results)
-results
+[(c.M, c.class, round(c.r; digits = 3), c.ref) for c in results]
 
 # Without the parity restriction the levels of the two sectors are interleaved. For ``M = 18`` the
 # odd sector is an exact copy of the even one, so every level is degenerate and the ratio
