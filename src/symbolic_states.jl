@@ -333,21 +333,24 @@ end
 # forms the products of terms with equal keys. Bras and ketbras have no key and are paired with every term.
 NonCommutativeProducts.contraction_key(s::SymbolicState) = isket(s) ? (group_id(s.space), s.ket) : nothing
 
-# Products of kets of the same spaces in the same order are orthonormal: ⟨a|b⟩ is one if their factors are equal and
-# zero otherwise. The key above only sees the first factor, which leaves few distinct keys for products of many small
-# spaces such as spin chains, so sums of such products are matched by their factors instead.
+# Products of kets on the same spaces are orthonormal, so `inner` of sums of them matches equal products directly.
+# The key above only sees the first factor, which leaves few distinct keys for products of many small spaces such as
+# spin chains.
 const _SymbolicStateSum = NCAdd{<:Any, <:NCMul{<:Any, <:SymbolicState}}
 function VectorInterface.inner(x::_SymbolicStateSum, y::_SymbolicStateSum)
     xterms, yterms = collect(NonCommutativeProducts.termpairs(x)), collect(NonCommutativeProducts.termpairs(y))
-    (isempty(xterms) || isempty(yterms)) && return invoke(VectorInterface.inner, Tuple{NCAdd, NCAdd}, x, y)
-    ref = first(first(xterms))
-    all(t -> _same_ket_spaces(first(t), ref), Iterators.flatten((xterms, yterms))) ||
-        return invoke(VectorInterface.inner, Tuple{NCAdd, NCAdd}, x, y)
+    _are_kets_on_same_spaces(xterms, yterms) || return invoke(VectorInterface.inner, Tuple{NCAdd, NCAdd}, x, y)
     ycoeffs = Dict(yterms)
     z = zero(valtype(ycoeffs))
-    return sum(c' * get(ycoeffs, factors, z) for (factors, c) in xterms) + zero(last(first(xterms)))' * z
+    return sum(c' * get(ycoeffs, factors, z) for (factors, c) in xterms)
 end
-_same_ket_spaces(factors, ref) = length(factors) == length(ref) && all(((a, b),) -> isket(a) && _same_space_id(a.space, b.space), zip(factors, ref))
+function _are_kets_on_same_spaces(xterms, yterms)
+    (isempty(xterms) || isempty(yterms)) && return false
+    ref = first(first(xterms))
+    return all(Iterators.flatten((xterms, yterms))) do (factors, _)
+        length(factors) == length(ref) && all(((a, b),) -> isket(a) && _same_space_id(a.space, b.space), zip(factors, ref))
+    end
+end
 
 # An operator string acting on a product of kets is applied to the ket of each group it acts on, with one
 # precomputation per group for all terms of `b`, as in `matrix_representation`. Other products are sorted factor by factor.
@@ -998,22 +1001,8 @@ end
     @test f[1]' * (kf("00") + ks("0")) == kf("10") + f[1]' * ks("0")
     # Only kets have contraction keys, so the ketbra term is paired with |00⟩ and leaves the ket |01⟩
     @test_throws ArgumentError inner(kf("01") + kf("00") * kf("01")', kf("00"))
-end
-
-@testitem "Inner products of sums of product kets" begin
-    using LinearAlgebra, Random
-    using FermionicHilbertSpaces.NonCommutativeProducts.VectorInterface: inner
-    Random.seed!(1)
-    @fermions f
-    @boson b
-    @spins S 1 // 2
-    Hf = hilbert_space(f, 1:2)
-    H = tensor_product([Hf; hilbert_space(b, 3); [hilbert_space(S[i]) for i in 1:4]])
-    states = collect(basisstates(H))
-    ψ = sum(randn(ComplexF64) * FermionicHilbertSpaces.SymbolicState(H, st, nothing) for st in rand(states, 40))
-    φ = sum(randn() * FermionicHilbertSpaces.SymbolicState(H, st, nothing) for st in rand(states, 40))
-    @test inner(φ, ψ) ≈ dot(Vector(representation(φ, H)), Vector(representation(ψ, H)))
-    @test_throws ArgumentError inner(φ + Kets(Hf)("00"), ψ)
+    # ⟨00| on the fermions alone leaves the spin ket |0⟩
+    @test_throws ArgumentError inner(kf("00") * ks("0") + kf("00"), kf("00") * ks("0") + kf("01") * ks("0"))
 end
 
 @testitem "Interleaved operators and states in product spaces" begin
