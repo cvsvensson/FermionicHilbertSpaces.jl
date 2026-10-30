@@ -40,12 +40,13 @@ function _mean_field(op, contraction, keep = Returns(true), unit = 1)
 end
 
 function _mode_position(x, H)
-    position = x isa FermionSym ? mode_position(x, H) : 0
-    iszero(position) && throw(ArgumentError("The operator `$x` is not a fermion of the space `$H`."))
+    position = x isa Union{FermionSym, MajoranaSym} ? mode_position(x, H) : 0
+    iszero(position) && throw(ArgumentError("The operator `$x` is not a mode of the space `$H`."))
     return position
 end
 _nambu_index(x, H) = state_index(NambuState(_mode_position(x, H), !x.creation), H)
 _contraction(G, H::BdGHilbertSpace) = (x, y) -> G[_nambu_index(x', H), _nambu_index(y, H)]
+_contraction(G, H::MajoranaSingleParticleHilbertSpace) = (x, y) -> 2 * G[_mode_position(x, H), _mode_position(y, H)]
 function _contraction(G, H::SingleParticleHilbertSpace)
     index(x) = state_index(SingleParticleState(_mode_position(x, H)), H)
     return function (x, y)
@@ -54,7 +55,7 @@ function _contraction(G, H::SingleParticleHilbertSpace)
     end
 end
 _acts_within(fs, ::SingleParticleHilbertSpace) = 2 * count(x -> x.creation, fs) == length(fs)
-_acts_within(fs, ::BdGHilbertSpace) = iseven(length(fs))
+_acts_within(fs, ::Union{BdGHilbertSpace, MajoranaSingleParticleHilbertSpace}) = iseven(length(fs))
 # The modes are checked for every term, since not every term looks up all of its modes in `G`.
 function _in_space(fs, H, projection)
     foreach(x -> _mode_position(x, H), fs)
@@ -62,7 +63,7 @@ function _in_space(fs, H, projection)
     projection || throw(ArgumentError("The term `$(prod(fs))` does not act within the space `$H`. Pass `projection=true` to drop such terms."))
     return false
 end
-function expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}; projection = false)
+function expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace, MajoranaSingleParticleHilbertSpace}; projection = false)
     return zero(eltype(G)) + wick_expectation(op, _contraction(G, H), fs -> _in_space(fs, H, projection), one(eltype(G)))
 end
 
@@ -80,7 +81,7 @@ H = hilbert_space(f, 1:2, SingleParticle())
 mean_field(f[1]' * f[1] * f[2]' * f[2], [0.5 0; 0 0.25], H) # 0.25 f[1]' f[1] + 0.5 f[2]' f[2] - 0.125
 ```
 """
-mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace}; projection = false) = _mean_field(op, _contraction(G, H), fs -> _in_space(fs, H, projection), one(eltype(G)))
+mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace, MajoranaSingleParticleHilbertSpace}; projection = false) = _mean_field(op, _contraction(G, H), fs -> _in_space(fs, H, projection), one(eltype(G)))
 
 @testitem "Wick expectation values" begin
     using FermionicHilbertSpaces.FreeFermions

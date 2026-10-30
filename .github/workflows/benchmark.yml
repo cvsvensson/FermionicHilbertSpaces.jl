@@ -12,41 +12,32 @@ jobs:
       - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
           julia-version: '1'
+          job-summary: 'true' # the full tables go into the comment below, folded
 
-      - name: List performance regressions
+      # The report script comes from the default branch, not from the PR.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: base-checkout
+          sparse-checkout: benchmark
+          persist-credentials: false
+
+      - name: Summarize the benchmarks
         shell: bash
         env:
           GITHUB_TOKEN: ""
           BASE_REV: ${{ github.event.repository.default_branch }}
           HEAD_REV: ${{ github.event.pull_request.head.sha }}
         run: |
-          julia -e '
-            using AirspeedVelocity: load_results
-            const MAX_RATIO = 1.5 # largest PR/base ratio of the median time or of the memory not reported
-            # The dense FullAlg partial traces are a tight loop whose speed depends on where the JIT
-            # places it in memory, which varies between processes: identical code measures up to ~2× apart.
-            const NOISY, NOISY_RATIO = r"^partial_trace_algorithms/.*/Dense/FullAlg$", 2.5
-            max_ratio(name, label) = label == "time" && occursin(NOISY, name) ? NOISY_RATIO : MAX_RATIO
-            base, head = ENV["BASE_REV"], ENV["HEAD_REV"]
-            pkg = String(only(m[1] for m in eachmatch(r"^name\s*=\s*\"(.*)\"$"m, read("Project.toml", String))))
-            results = load_results(pkg, [base, head]; input_dir="results")
-            regressions = String[]
-            for (name, new) in results[head]
-                (name == "time_to_load" || !haskey(results[base], name)) && continue
-                old = results[base][name]
-                for (key, label) in (("median", "time"), ("memory", "memory"))
-                    ratio = new[key] / max(old[key], 1)
-                    ratio > max_ratio(name, label) && push!(regressions, "| `$name` | $label | × $(round(ratio, digits=2)) |")
-                end
-            end
-            open("regressions.md", "w") do io
-                isempty(regressions) && return
-                println(io, "### ⚠️ Performance regressions\n\nBenchmarks more than × $MAX_RATIO slower or larger than on `$base` (× $NOISY_RATIO for the time of dense FullAlg partial traces):\n")
-                println(io, "| benchmark | | PR / $base |\n|---|---|---|")
-                foreach(r -> println(io, r), regressions)
-            end'
+          {
+            julia base-checkout/benchmark/ci_report.jl "$BASE_REV" "$HEAD_REV"
+            echo "<details><summary>All benchmarks</summary>"
+            echo ""
+            tail -n +3 body.md
+            echo "</details>"
+          } > report.md
 
-      - name: Comment on performance regressions
+      - name: Comment on the PR
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -56,13 +47,7 @@ jobs:
           marker='<!-- performance-regressions -->'
           existing=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
             --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | tail -n 1)
-          if [[ -s regressions.md ]]; then
-            body="$marker"$'\n'"$(cat regressions.md)"
-          elif [[ -n "$existing" ]]; then
-            body="$marker"$'\n'"No performance regressions in the latest benchmark run."
-          else
-            exit 0
-          fi
+          body="$marker"$'\n'"$(cat report.md)"
           if [[ -n "$existing" ]]; then
             gh api --method PATCH "repos/$REPO/issues/comments/$existing" -f body="$body" > /dev/null
           else

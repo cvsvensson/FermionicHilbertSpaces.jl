@@ -125,7 +125,7 @@ F = FloquetLadder(floquet_basis)       # raising operator F
 Nf = FloquetNumber(1, floquet_basis)    # photon number N
 n_max = 5       # keep Floquet modes n = −n_max … n_max
 Hfloq = GenericHilbertSpace(floquet_basis, FloquetState.((-n_max):n_max))
-representation(F, Hfloq; projection=true) # we need projection=true because we've truncated the Floquet space
+F_mat = representation(F, Hfloq; projection=true) # we need projection=true because we've truncated the Floquet space
 
 # ## Driven spin 1
 
@@ -142,7 +142,6 @@ H = tensor_product((Hspin, Hfloq); constraint=floquet_sectors)
 D = 0.3 * ω     # Single-ion anisotropy (D * Sz^2): activates the |0⟩ state
 floquet_ham(A) = ε * σ[:z] + D * σ[:z]^2 + ω * Nf +
     (A / 2 * σ[:x] * F + hc)
-floquet_ham(2)
 
 # ## Quasienergy spectrum vs drive amplitude
 
