@@ -221,6 +221,8 @@ function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr, chu
     spaces = groups(space)
     length(spaces) == 1 && return _term_matrix_representation(op, only(spaces), repr, chunking; kwargs...)
     prodop = partition_product(op, bases, spaces)
+    # The Kronecker product of the group matrices has `Int` sizes, which overflow for wider spaces.
+    dim(space) isa Int || return _term_matrix_representation(prodop, space, repr, chunking; kwargs...)
     matrices = map(enumerate(spaces)) do (n, local_space)
         m = findfirst(==(n), prodop.inds)
         local_op = !isnothing(m) ? prodop.ops[m] : missing

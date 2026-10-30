@@ -299,6 +299,8 @@ end
 # scalar coefficient goes into the first of these. Terms acting on several groups are
 # represented one by one, as in the generic method.
 function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::LazyRepr, chunking; kwargs...)
+    # SciMLOperators' Kronecker products have `Int` sizes, which overflow for wider spaces.
+    dim(space) isa Int || return @invoke __matrix_representation(op::NCAdd, bases, space::Any, repr::LazyRepr, chunking; kwargs...)
     spaces = groups(space)
     local_terms = [eltype(op.dict)[] for _ in spaces]
     mats = []

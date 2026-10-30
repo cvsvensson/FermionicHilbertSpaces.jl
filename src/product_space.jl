@@ -635,4 +635,6 @@ end
     n = k + (m - 1) * big(2)^70
     @test state_index(state, H) == n
     @test basisstate(n, H) == state
+    op = f[1]' * f[70] + hc + f[1]' * f[1] * s[1][:z]
+    @test size(representation(op, H, :lazy)) == (dim(H), dim(H))
 end
