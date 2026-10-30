@@ -20,7 +20,7 @@ Shalf[:x]^2 == 1 // 4
 
 @spins S 1 // 2
 N = 4
-ham = sum(S[k][:]'S[k+1][:] for k in 1:(N-1))
+ham = sum(S[k][:]'S[k + 1][:] for k in 1:(N - 1))
 Hm = hilbert_space(S, 1:N, AdditiveConstraint(0; maps = s -> s.m))
 Mham = representation(ham, Hm, :dense);
 
