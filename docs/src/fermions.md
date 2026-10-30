@@ -56,4 +56,4 @@ Unlike the ordinary partial transpose, the fermionic result is not generally Her
 ```@raw html
 <a name="fermionic_partial_time_reversal"></a>
 ```
-[2] H. Shapourian, K. Shiozaki, and S. Ryu, "Partial time-reversal transformation and entanglement negativity in fermionic systems," [Phys. Rev. B 95, 165101 (2017)](https://doi.org/10.1103/PhysRevB.95.165101).
+[2] H. Shapourian, K. Shiozaki, and S. Ryu, "Partial time-reversal transformation and entanglement negativity in fermionic systems," [Phys. Rev. B 95, 165101 (2017)](https://doi.org/10.1103/PhysRevB.95.165101), [arXiv:1611.07536](https://arxiv.org/abs/1611.07536).
