@@ -94,8 +94,8 @@ end
 # For example, the nullspace of $\vec{S}^2 - S(S+1)$ with $S=1$ gives the total-spin-1
 # sector.
 total_spin_op = sum(sum(S[k][op] for k in 1:N)^2 for op in (:x, :y, :z))
-total_spin_mat = representation(total_spin_op, H)
-P = nullspace(Matrix(total_spin_mat - 2 * I))
+total_spin_mat = representation(total_spin_op, H, :dense)
+P = nullspace(total_spin_mat - 2 * I)
 P' * M * P
 
 # ### Fully decomposed space
