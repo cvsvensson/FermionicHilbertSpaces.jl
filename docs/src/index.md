@@ -6,36 +6,34 @@ CurrentModule = FermionicHilbertSpaces
 
 [FermionicHilbertSpaces.jl](https://github.com/cvsvensson/FermionicHilbertSpaces.jl) turns symbolic fermion, boson and spin operators into matrices on Hilbert spaces, so you never index vectors and matrices by hand.
 
-It does:
-* Symbolic fermion, Majorana, boson and spin operators, simplified by their commutation relations, and custom operator algebras.
-* Hilbert spaces that track basis states and ordering: product spaces, subregions, and constraints such as particle number or parity.
-* Sparse, dense and lazy matrix representations; tensor products, partial traces, partial transposes and embeddings with correct fermionic signs; open-system superoperators.
-* Symbolic states that operators act on without building matrices, and single-particle/BdG spaces for free fermions.
+* Operators are written and simplified with ordinary algebra, e.g. `c[1]'c[2] + hc` ([Kitaev chain](literate_output/kitaev_chain.md)).
+* Their matrices can be built on any constrained space, not only the full Fock space ([mixed fermion-spin-boson](mixed_fermion_spin_boson.md)).
+* Constraints range from particle number and parity to any rule on the basis states ([constrained spaces](conservation.md)).
+* Tensor products, partial traces and embeddings take a pair of spaces, as in `partial_trace(ρ, H => Hsub)` ([space operations](hilbert_space_operations.md)).
+* Fermionic signs are handled automatically ([fermionic conventions](fermions.md)).
 
-It is not a solver: it has no time evolution, iterative eigensolvers or tensor-network methods. Combine it with LinearAlgebra, KrylovKit, ODE solvers and similar packages.
+It is not a solver: combine it with LinearAlgebra, KrylovKit or ODE solvers for eigenstates and time evolution.
 
 ## Getting started
 
-Install with `using Pkg; Pkg.add("FermionicHilbertSpaces")`. Two spinless fermion sites with hopping and an on-site energy; the third argument of `representation` picks the format (`:sparse` by default, `:dense` or `:lazy`). The Hamiltonian conserves particle number, so we restrict to one particle, diagonalize in that smaller sector, and `embed` the ground state back into the full space to compute observables and a reduced state:
+Install with `using Pkg; Pkg.add("FermionicHilbertSpaces")`. Hopping between two sites conserves particle number, so we diagonalize in the one-particle sector, `embed` the ground state in the full space and trace out the second site:
 
 ```@example start
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions c
 H = hilbert_space(c, 1:2)
-ham = c[1]'c[2] + hc + 0.5 * c[1]'c[1]
 Hn = hilbert_space(c, 1:2, NumberConservation(1))
+ham = c[1]'c[2] + hc + 0.5 * c[1]'c[1]
 E = eigen(Hermitian(representation(ham, Hn, :dense)))
 ψ = embed(E.vectors[:, 1], Hn => H)
-expectation(c[1]'c[1], ψ, H)
 partial_trace(ψ, H => hilbert_space(c, 1:1))
 ```
 
-The [tutorials](literate_output/kitaev_chain.md) work through whole models, starting with the Interacting Kitaev chain. The guides cover [constraints and quantum numbers](conservation.md), [space operations](hilbert_space_operations.md) and [fermionic conventions](fermions.md).
+The [tutorials](literate_output/kitaev_chain.md) work through whole models, starting with the Interacting Kitaev chain.
 
 ## Glossary
 
 * **Sector:** the subspace with fixed values of conserved quantities (quantum numbers), such as particle number or parity.
-* **Constraint:** a rule that restricts a space to some basis states, for example [`NumberConservation`](@ref); see [Constrained spaces](conservation.md).
 * **Subregion:** the part of a space that lives on a subset of the modes; see [`subregion`](@ref).
 * **Factors:** the spaces a product space is built from; [`factors`](@ref) returns them.
 * **Symbolic operator vs representation:** an operator like `c[1]'c[2]` is an algebraic expression without a basis; `representation(op, H)` gives its matrix on the space `H`.

@@ -6,12 +6,14 @@
 [![Coverage](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl)
 [![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 
-This package provides tools for dealing with the symbolic and linear algebra often encountered in quantum mechanics. Fermions, bosons and spins are included, but most functionality is generic and easily extended. This includes:
-- **Symbolic operators:** Define operators algebraically and compute matrix representations on hilbert spaces.
-- **Hilbert-space mappings:** Tensor products, partial traces, reshaping with fermionic signs handled automatically.
-- **Constrained spaces:** Flexible system to constrain hilbert spaces with conserved quantities such as particle number or custom constraints.
+FermionicHilbertSpaces.jl turns symbolic fermion, boson and spin operators into matrices on Hilbert spaces, so you never index vectors and matrices by hand.
+- Operators are written and simplified with ordinary algebra, e.g. `c[1]'c[2] + hc`.
+- Their matrices can be built on any constrained space, not only the full Fock space.
+- Constraints range from particle number and parity to any rule on the basis states ([constrained spaces](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/conservation/)).
+- Tensor products, partial traces and embeddings take a pair of spaces, as in `partial_trace(ρ, H => Hsub)`.
+- Fermionic signs are handled automatically ([fermionic conventions](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/fermions/)).
 
-It builds and manipulates operators and spaces; it is not a solver. The goal of this package is that you should be able to define your own physics and never have to think about indexing of vectors and matrices.
+It is not a solver: combine it with LinearAlgebra, KrylovKit or ODE solvers for eigenstates and time evolution.
 
 Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`. See the [documentation](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/) for getting started, tutorials, guides and the API reference.
 
