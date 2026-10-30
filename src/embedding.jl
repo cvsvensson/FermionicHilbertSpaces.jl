@@ -19,8 +19,8 @@ end
 Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 
-The result is the compression `P (m ⊗ I) P` onto `H`, so that `tr(embed(A) * ρ) ==
-tr(A * partial_trace(ρ))` for `ρ` on `H`. Unless `skipmissing=true`, throws an `ArgumentError`
+The result is the compression `P (m ⊗ I) P` onto `H`, so that `tr(embed(A, Hsub => H) * ρ) ==
+tr(A * partial_trace(ρ, H => Hsub))` for `ρ` on `H`. Unless `skipmissing=true`, throws an `ArgumentError`
 if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of `m` for states of
 `Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not
 in `Hsub` get zero.
