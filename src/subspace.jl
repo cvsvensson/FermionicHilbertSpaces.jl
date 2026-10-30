@@ -17,8 +17,8 @@ parent by `show`.
 
 The states are meant to be basis states of `parent(H)`, but this is not checked. Some
 spaces store other states over a `FermionicSpace` parent: `hilbert_space(f, labels, states)`
-with `FixedNumberFockState`s, `BdG` spaces with `NambuState`s and `SingleParticle` spaces
-with `SingleParticleState`s.
+with `FixedNumberFockState`s, `FreeFermions.BdG` spaces with `FreeFermions.NambuState`s and `FreeFermions.SingleParticle` spaces
+with `FreeFermions.SingleParticleState`s.
 
 A subtype gets `dim`, `basisstates`, `basisstate`, `state_index`, `==`, `hash`, `show`,
 `add_tag` and `TransposedSpace`. The functions that describe its modes and apply operators
@@ -55,8 +55,8 @@ index, for example when they are not a whole sector in the expected order, retur
 """
 default_subspace_index(constraint, parent, states) = generic_subspace_index(parent, states)
 function generic_subspace_index(parent, states)
-    table = index_table(parent, states)
-    isnothing(table) ? position_dict(states) : table
+    index = root_keyed_index(parent, states)
+    return isnothing(index) ? position_dict(states) : index
 end
 generic_subspace_index(::AbstractSubspace, states) = throw(nested_subspace_error())
 nested_subspace_error() = ArgumentError("The parent of a subspace cannot be a subspace.")
@@ -76,7 +76,8 @@ _state_index(state, H::AbstractSubspace) = state_position(subspace_index(H), _ch
 isconstrained(H::AbstractSubspace) = true
 
 for f in (:atomic_factors, :groups, :factors, :atom_ids, :group_id, :partial_trace_phase_factor_eltype,
-    :partial_transpose_phase_factor_eltype, :fast_path, :mode_ordering)
+        :partial_transpose_phase_factor_eltype, :fast_path, :mode_ordering, :modes,
+    )
     @eval $f(H::AbstractSubspace) = $f(parent(H))
 end
 atomic_factor(H::AbstractSubspace, i) = atomic_factor(parent(H), i)
@@ -87,7 +88,9 @@ partial_transpose_phase_factor(s1, s2, H::AbstractSubspace) = partial_transpose_
 state_mapper(H::AbstractSubspace, Hs) = state_mapper(parent(H), Hs)
 _apply_local_operators(ops, state::AbstractBasisState, H::AbstractSubspace, precomp) = _apply_local_operators(ops, state, parent(H), precomp)
 
-add_tag(H::AbstractSubspace, tag) = rewrap(H, add_tag(parent(H), tag))
+# The subspace `H` with `f` applied to its parent and to the spaces its constraint refers to; `f` must commute with taking factors, as tagging and transposing do.
+map_parent(f, H::AbstractSubspace) = rewrap(H, f(parent(H)))
+add_tag(H::AbstractSubspace, tag) = map_parent(Base.Fix2(add_tag, tag), H)
 
 @testitem "Nested subspaces equal the directly constructed ones" begin
     using FermionicHilbertSpaces: fermionnumber

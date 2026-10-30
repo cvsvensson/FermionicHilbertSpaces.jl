@@ -132,7 +132,7 @@ H = hilbert_space(f, 1:4, NumberConservation())
 map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(H), sectors(H))
 ```
 
-This pattern is useful to calculate ground states in each sector and extend each vector to the full space
+This pattern is useful to calculate ground states in each sector and extend each vector to the full space with [`embed`](@ref)
 ```@example hilbert_space_ops
 using LinearAlgebra, SparseArrays
 symham = sum(f[n]'f[n] for n in 1:4)
@@ -238,6 +238,15 @@ as `representation` does for an operator that does not preserve the constraint o
 
 The maps `partial_trace(H => Hsub)` and `embed(Hsub => H)` skip the same states, but do not
 check their input: they are the linear maps that the eager functions compute when nothing is dropped.
+
+### `expectation`: expectation values
+
+`expectation(op, state, H)` gives the expectation value of an operator in a normalized state vector or a density matrix on `H`.
+
+```@example hilbert_space_ops
+ψ = normalize(rand(dim(H)))
+expectation(f[2]' * f[4] + hc, ψ, H)
+```
 
 ### `partial_transpose`: transposing a subsystem
 

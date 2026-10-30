@@ -6,8 +6,6 @@ FixedNumberFockState(sites::NTuple{N,Int}) where N = FixedNumberFockState{N}(Tup
 Base.:(==)(f1::FixedNumberFockState, f2::FixedNumberFockState) = f1.sites == f2.sites
 Base.hash(f::FixedNumberFockState, h::UInt) = hash(f.sites, h)
 
-const SingleParticleState = FixedNumberFockState{1}
-SingleParticleState(site::Int) = FixedNumberFockState((site,))
 function jwstring_left_bool(site, f::FixedNumberFockState)
     sign = false
     for s in f.sites
@@ -31,22 +29,22 @@ FockNumber{I}(f::FixedNumberFockState) where I = FockNumber{I}(focknbr_from_site
 FixedNumberFockState{N}(f::FixedNumberFockState{N}) where {N} = f
 FixedNumberFockState(f::FockNumber) = FixedNumberFockState{count_ones(f)}(f)
 function FixedNumberFockState{N}(f::FockNumber) where N
-    site = 1
-    count = 0
-    sites = Int[]
-    count_ones(f) == N || return FixedNumberFockState{N}(ntuple(i -> 0, N))
-    while count < N
-        if _bit(f, site)
-            count += 1
-            push!(sites, site)
-        end
-        site += 1
+    sites = ntuple(i -> 0, N)
+    count_ones(f) == N || return FixedNumberFockState{N}(sites)
+    bits = f.f
+    for k in 1:N
+        sites = Base.setindex(sites, trailing_zeros(bits) + 1, k)
+        bits &= bits - one(bits)
     end
-    FixedNumberFockState{N}(Tuple(sites))
+    return FixedNumberFockState{N}(sites)
+end
+function interpret_state(f::FockNumber, ::Type{FixedNumberFockState{N}}) where {N}
+    count_ones(f) == N || throw(ArgumentError("The Fock state $f has $(count_ones(f)) particles, expected $N."))
+    return FixedNumberFockState{N}(f)
 end
 
 
-physical_rep(state::T, ::Type{FixedNumberFockState{N}}) where {T,N} = FixedNumberFockState{N}(physical_rep(state, FockNumber))
+physical_rep(state::T, ::Type{FixedNumberFockState{N}}) where {T, N} = FixedNumberFockState{N}(physical_rep(state, FockNumber{T}))
 internal_rep(state::FixedNumberFockState, space::FermionicSpace, ::Type{T}) where T = internal_rep(FockNumber(state), space, T)
 
 
@@ -69,7 +67,8 @@ end
 Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.sites
 
 @testitem "FixedNumberFockState" begin
-    import FermionicHilbertSpaces: jwstring_left, jwstring_right, FixedNumberFockState, FockNumber, SingleParticleState, _bit, substate, state_mapper, combine_states
+    import FermionicHilbertSpaces: jwstring_left, jwstring_right, FixedNumberFockState, FockNumber, _bit, substate, state_mapper, combine_states
+    using FermionicHilbertSpaces.FreeFermions: SingleParticleState
     @fermions a
     f = FixedNumberFockState((1, 3, 5))
     f2 = FockNumber(f)
@@ -107,7 +106,7 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     end
 
     h = a[1]' * a[2] + 1im * a[1]' * a[2]' + hc
-    H = hilbert_space(a, 1:2, FermionicHilbertSpaces.SingleParticleState.(1:3))
+    H = hilbert_space(a, 1:2, SingleParticleState.(1:3))
     @test_throws ArgumentError representation(h, H)
     @test_throws ArgumentError representation(h, H)
 
@@ -120,67 +119,72 @@ Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.site
     @test representation(op, H) ≈ representation(op, Hf)
 end
 
+@testitem "Kets of a space of FixedNumberFockState" begin
+    import FermionicHilbertSpaces: FixedNumberFockState, vector_representation
+    @fermions f
+    Hx = hilbert_space(f, 1:3, FixedNumberFockState{1}.(basisstates(hilbert_space(f, 1:3, NumberConservation(1)))))
+    @test Ket(basisstate(2, Hx), Hx) == Kets(Hx)[2]
+    @test vector_representation(Ket(basisstate(2, Hx), Hx), Hx) == [0, 1, 0]
+    @test Ket("010", Hx) == Kets(Hx)[2]
+    @test Ket(FockNumber(2), Hx) == Kets(Hx)[2]
+    @test_throws ArgumentError Ket("110", Hx)
+    @spin s 1 // 2
+    Hf = hilbert_space(f, 1:2)
+    Hp = tensor_product(Hf, hilbert_space(s); constraint = NumberConservation(1, [Hf]))
+    @test Ket(basisstate(1, Hp), Hp) == Kets(Hp)[1]
+
+    Hc = hilbert_space(f, 1:3, NumberConservation(1))
+    op = f[2]'f[1] + f[1]'f[2] + s[:z]
+    @test representation(op, tensor_product(Hx, hilbert_space(s)), :dense) == representation(op, tensor_product(Hc, hilbert_space(s)), :dense)
+end
+
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{<:FixedNumberFockState})
     position = mode_position(op, space)
     position == 0 && throw(ArgumentError("The operator `$op` contains a factor that is not part of the fermionic space `$space`."))
     return position
 end
-function apply_local_operators(op::NCMul, f::FixedNumberFockState, H::AbstractHilbertSpace, sites; transpose)
+# The change in particle number is stored as a type parameter so that the state produced by a term has a concrete type.
+function precomputation_before_operator_application(op::NCMul{<:Any, <:FermionSym}, space::AbstractHilbertSpace{<:FixedNumberFockState})
+    sites = Tuple(map(factor -> _precomputation_before_operator_application(factor, space), op.factors))
+    return sites, Val(sum(factor -> factor.creation ? 1 : -1, op.factors; init = 0))
+end
+function apply_local_operators(op::NCMul{<:Any, <:FermionSym}, f::FixedNumberFockState{N}, H::AbstractHilbertSpace, (sites, _)::Tuple{Any, Val{Δ}}; transpose) where {N, Δ}
     if !transpose
-        daggers = Iterators.map(op -> op.creation, reverse(op.factors))
-        state, amp = togglefermions(Iterators.reverse(sites), daggers, f)
+        daggers = Iterators.map(op -> op.creation, Iterators.reverse(op.factors))
+        state, amp = togglefermions(reverse(sites), daggers, f, Val(N + Δ))
     else
         daggers = Iterators.map(op -> !op.creation, op.factors)
-        state, amp = togglefermions(sites, daggers, f)
+        state, amp = togglefermions(sites, daggers, f, Val(N - Δ))
     end
-    newamp = amp * op.coeff
-    iszero(newamp) && return f, newamp
-    return state, newamp
+    return state, amp * op.coeff
 end
-function togglefermions(sites, daggers, f::FixedNumberFockState)
-    # Check if operation results in vacuum or not,
-    # short circuiting if so to avoid allocating fsites
-    for site in sites
-        last_dagger = false
-        for s in f.sites
-            if s == site
-                last_dagger = true
-            end
-        end
-        for (s, dagger) in zip(sites, daggers)
-            if s == site
-                if dagger == last_dagger
-                    return f, false
-                end
-                last_dagger = dagger
-            end
-        end
-    end
+"""
+    togglefermions(sites, daggers, f::FixedNumberFockState, ::Val{M})
 
-    fsites = collect(f.sites) # Lots of allocations
-    fermionstatistics = 1
-    for (site, dagger) in zip(sites, daggers)
-        if dagger
-            if site in fsites
-                return f, false
-            end
-            fsites = push!(fsites, site)
-        else
-            if !(site in fsites)
-                return f, false
-            end
-            deleteat!(fsites, findfirst(isequal(site), fsites))
+Apply creation (`dagger == true`) and annihilation operators at `sites`, in order, to `f`. Returns the
+resulting state with `M` particles and the Jordan-Wigner sign, or a sign of `0` if an operator annihilates the state.
+"""
+function togglefermions(sites, daggers, f::FixedNumberFockState, ::Val{M}) where {M}
+    M < 0 && return f, 0
+    jw = false
+    for (j, (site, dagger)) in enumerate(zip(sites, daggers))
+        occupied = _bit(f, site)
+        below = count(<(site), f.sites)
+        for k in 1:(j - 1)
+            occupied ⊻= sites[k] == site
+            below += sites[k] < site
         end
-        sign = 1
-        for s in fsites
-            if s < site
-                sign *= -1
-            end
-        end
-        fermionstatistics *= sign
+        occupied == dagger && return FixedNumberFockState{M}(ntuple(i -> 0, Val(M))), 0
+        jw ⊻= isodd(below)
     end
-    sort!(fsites)
-    return FixedNumberFockState(Tuple(fsites)), fermionstatistics
+    # A mode is occupied at the end if it appears an odd number of times among the initial and toggled sites.
+    candidates = (f.sites..., sites...)
+    final = ntuple(Val(length(candidates))) do j
+        c = candidates[j]
+        isodd(count(==(c), candidates)) && findfirst(==(c), candidates) == j ? c : typemax(Int)
+    end
+    sorted = TupleTools.sort(final)
+    return FixedNumberFockState{M}(ntuple(i -> sorted[i], Val(M))), jw ? -1 : 1
 end
 Base.zero(::FixedNumberFockState) = FixedNumberFockState(())
 function concatenate((lastf, lastwidth)::Tuple{FixedNumberFockState,Int}, (f, width)::Tuple{FixedNumberFockState,Int})
@@ -197,38 +201,16 @@ function permute(f::FixedNumberFockState, permutation::AbstractBitPermutation)
     return FixedNumberFockState(map(s -> p[s], f.sites))
 end
 
-struct SingleParticleHilbertSpace{H}
-    parent::H
-    function SingleParticleHilbertSpace(f::SymbolicFermionBasis, labels)
-        states = [SingleParticleState(i) for (i, label) in enumerate(labels)]
-        H = hilbert_space(f, labels, states)
-        return new{typeof(H)}(H)
+@testitem "Number-changing operators on FixedNumberFockState spaces" begin
+    import FermionicHilbertSpaces: FixedNumberFockState, Axes
+    @fermions f
+    Hk(n) = hilbert_space(f, [4, 1, 3], NumberConservation(n))
+    Hx(n) = hilbert_space(f, [4, 1, 3], FixedNumberFockState{n}.(basisstates(Hk(n))))
+    op = f[3]' * f[1]' * f[1] + f[4]' * f[1] * f[1]'
+    for n in 0:1
+        @test representation(op, Axes(Hx(n + 1), Hx(n))) ≈ representation(op, Axes(Hk(n + 1), Hk(n)))
     end
 end
-dim(h::SingleParticleHilbertSpace) = dim(h.parent)
-Base.parent(h::SingleParticleHilbertSpace) = h.parent
-Base.keys(h::SingleParticleHilbertSpace) = keys(h.parent)
-mode_ordering(h::SingleParticleHilbertSpace) = mode_ordering(h.parent)
-modes(h::SingleParticleHilbertSpace) = modes(h.parent)
-basisstates(h::SingleParticleHilbertSpace) = basisstates(h.parent)
-Base.:(==)(a::SingleParticleHilbertSpace, b::SingleParticleHilbertSpace) = a === b || a.parent == b.parent
-Base.hash(x::SingleParticleHilbertSpace, h::UInt) = hash(x.parent, h)
-"""
-    SingleParticle()
-
-Marker passed as the last argument of `hilbert_space(f, labels, SingleParticle())` to select the single-particle space of non-interacting fermions with number conservation.
-"""
-struct SingleParticle end
-
-"""
-    hilbert_space(f::SymbolicFermionBasis, labels, ::SingleParticle)
-
-The space spanned by the states ``c_n^\\dagger |0\\rangle`` for the modes `f[l]`, `l in labels`, suitable for non-interacting systems with fermion number conservation. The matrix representation of a quadratic operator is the single-particle matrix, without any contribution from the identity operator. The space wraps a constrained fermionic space, available through `parent`, and does not combine with tensor products or partial traces.
-"""
-hilbert_space(f::SymbolicFermionBasis, labels, ::SingleParticle) = SingleParticleHilbertSpace(f, labels)
-@deprecate single_particle_hilbert_space(f, labels) hilbert_space(f, labels, SingleParticle())
-Base.@propagate_inbounds basisstate(ind::Integer, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
-_state_index(state, H::SingleParticleHilbertSpace) = _state_index(state, parent(H))
 
 @testitem "Vector tensor product of fixed-number states with reordered modes" begin
     import FermionicHilbertSpaces: FixedNumberFockState
@@ -242,41 +224,6 @@ _state_index(state, H::SingleParticleHilbertSpace) = _state_index(state, parent(
     v = tensor_product(([1.0, 2.0], [1.0]), (H1, H2), H)
     vfix = tensor_product(([1.0, 2.0], [1.0]), (H1fix, H2fix), Hfix)
     @test vfix ≈ v
-end
-
-@testitem "Single particle hilbert space" begin
-    using LinearAlgebra
-    @fermions f
-    H = hilbert_space(f, 1:2, SingleParticle())
-    opmul = f[1]' * f[2]
-    @test representation(opmul, H) ≈ representation(opmul, parent(H))
-    opadd = opmul + hc
-    ham = representation(opadd, H)
-    @test ham ≈ representation(opadd, parent(H))
-    @test representation(opadd + I, H) == representation(opadd, H)
-    @test representation(opadd + I, H) == representation(opadd + I, parent(H)) - I
-end
-
-@testitem "Single particle space representation formats" begin
-    @fermions f
-    H = hilbert_space(f, 1:3, SingleParticle())
-    op = sum(rand(ComplexF64) * f[i]' * f[j] for i in 1:3, j in 1:3)
-    M = representation(op, H)
-    D = representation(op, H, :dense)
-    @test D isa Matrix && D == M
-    @test representation(op, H, ComplexF64) == M
-    @test_throws ArgumentError representation(op, H, :lazy)
-end
-
-@testitem "Deprecated special space constructors" begin
-    @fermions f
-    @majoranas γ
-    Hsp = @test_deprecated single_particle_hilbert_space(f, 1:2)
-    Hbdg = @test_deprecated bdg_hilbert_space(f, 1:2)
-    Hmaj = @test_deprecated majorana_hilbert_space(γ, 1:4, ParityConservation(1))
-    @test Hsp == hilbert_space(f, 1:2, SingleParticle())
-    @test Hbdg == hilbert_space(f, 1:2, BdG())
-    @test Hmaj == hilbert_space(γ, 1:4, ParityConservation(1))
 end
 
 @testitem "Partial trace consistency: FockNumber vs FixedNumberFockState" begin
@@ -331,19 +278,6 @@ function phase_factor_h(f1::FixedNumberFockState, f2::FixedNumberFockState, part
     phase_factor_h(FockNumber(f1), FockNumber(f2), partition, masks)
 end
 phase_factor_u(partition, masks, state::FixedNumberFockState) = phase_factor_u(partition, masks, FockNumber(state))
-
-representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
-function matrix_representation(op, H::SingleParticleHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
-    _isscalar_operator(op) && return _identity_free_zero(H, repr)
-    _is_quadratic_fermion_operator(op, true) || throw(ArgumentError("Only quadratic, number conserving fermionic operators can be represented on a SingleParticleHilbertSpace. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
-    _quadratic_matrix(_single_particle_entry, remove_identity(op), H, repr)
-end
-function _single_particle_entry(term, H)
-    a, b = term.factors
-    outind = state_index(SingleParticleState(mode_position(a, H)), H)
-    inind = state_index(SingleParticleState(mode_position(b, H)), H)
-    return outind, inind, (-1)^b.creation * term.coeff
-end
 
 
 function nextfockstate_with_same_number(f::FockNumber{T}) where T

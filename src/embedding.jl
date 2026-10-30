@@ -9,6 +9,7 @@ function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
         end
         return change_basis(m, Hsub, H; skipmissing=true, kwargs...)
     end
+    m isa AbstractVector && throw(ArgumentError("A state vector can only be embedded into a space with the same modes, such as from a sector into its parent space. A state on a subsystem does not fix the state of the rest; use `tensor_product` of states or `embed` a density matrix instead."))
     return generalized_kron((m, I), (Hsub, complement), H; skipmissing, kwargs...)
 end
 
@@ -23,6 +24,24 @@ tr(A * partial_trace(ρ))` for `ρ` on `H`. Unless `skipmissing=true`, throws an
 if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of `m` for states of
 `Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not
 in `Hsub` get zero.
+
+If `m` is a vector, `Hsub` and `H` must have the same modes, as for a sector `Hsub` of `H`. The
+result is `m` placed at the indices [`indices`](@ref)`(Hsub, H)` and zero elsewhere.
+
+```jldoctest
+julia> using FermionicHilbertSpaces
+
+julia> @fermions f;
+
+julia> H = hilbert_space(f, 1:2, NumberConservation());
+
+julia> embed([1, 2], sector(1, H) => H)
+4-element Vector{Int64}:
+ 0
+ 1
+ 2
+ 0
+```
 """
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
@@ -140,6 +159,17 @@ embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwar
     A = rand(ComplexF64, dim(Hsub), dim(Hsub))
     ρ = rand(ComplexF64, dim(H), dim(H))
     @test tr(embed(A, Hsub => H; skipmissing=true) * ρ) ≈ tr(A * partial_trace(ρ, H => Hsub))
+end
+
+@testitem "Embedding a sector vector" begin
+    using LinearAlgebra
+    @fermions f
+    H = hilbert_space(f, 1:4, ParityConservation())
+    Hsec = sector(-1, H)
+    v = rand(ComplexF64, dim(Hsec))
+    w = embed(v, Hsec => H)
+    @test w[indices(Hsec, H)] == v && norm(w) ≈ norm(v)
+    @test_throws ArgumentError embed(rand(4), hilbert_space(f, 1:2) => H)
 end
 
 @testitem "Partial trace, embed" begin
