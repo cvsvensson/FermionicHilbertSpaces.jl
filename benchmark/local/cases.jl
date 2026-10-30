@@ -21,24 +21,24 @@ bdg_chain(c, N) = sum(0.1n * c[n]' * c[n] for n in 1:N) + sum(c[n]' * c[n + 1] +
 const FIRSTCALL = Dict(
     "bdg eigen" => function ()
         @fermions f
-        eigen(representation(bdg_chain(f, 4), hilbert_space(f, 1:4, BdG()), :dense), BdGEigen())
+        return eigen(representation(bdg_chain(f, 4), hilbert_space(f, 1:4, BdG()), :dense), BdGEigen())
     end,
     "dense bdg" => function ()
         @fermions f
-        representation(bdg_chain(f, 4), hilbert_space(f, 1:4, BdG()), :dense)
+        return representation(bdg_chain(f, 4), hilbert_space(f, 1:4, BdG()), :dense)
     end,
     "dense sector" => function ()
         @fermions f
-        representation(chain(f, 4), hilbert_space(f, 1:4, NumberConservation(2)), :dense)
+        return representation(chain(f, 4), hilbert_space(f, 1:4, NumberConservation(2)), :dense)
     end,
     "tensor_product constraint" => function ()
         @fermions f
-        tensor_product(hilbert_space(f, 1:2), hilbert_space(f, 3:4); constraint = NumberConservation(1) * ParityConservation())
+        return tensor_product(hilbert_space(f, 1:2), hilbert_space(f, 3:4); constraint = NumberConservation(1) * ParityConservation())
     end,
     "mean_field" => function ()
         @fermions f
         H, G = hilbert_space(f, 1:4, BdG()), Matrix(0.5I, 8, 8)
-        mean_field(chain(f, 4), G, H), expectation(chain(f, 4), G, H)
+        return mean_field(chain(f, 4), G, H), expectation(chain(f, 4), G, H)
     end,
 )
 
@@ -92,8 +92,10 @@ function runtime_cases(full)
         ψ = normalize(rand(rng, ComplexF64, dim(H)))
         () -> partial_trace(ψ, H => subregion(hilbert_space(f, 1:k), H))
     end
-    lazy_mul(H, N) = (L = representation(chain(f, N), H, :lazy); x = randn(rng, ComplexF64, dim(H)); y = similar(x);
-        Lc = FHS.SciMLOperators.cache_operator(L, x); () -> mul!(y, Lc, x))
+    lazy_mul(H, N) = (
+        L = representation(chain(f, N), H, :lazy); x = randn(rng, ComplexF64, dim(H)); y = similar(x);
+        Lc = FHS.SciMLOperators.cache_operator(L, x); () -> mul!(y, Lc, x)
+    )
     case!(N -> lazy_mul(hilbert_space(f, 1:N), N), "lazy mul! full space", (14, 16), (16, 18))
     case!(N -> lazy_mul(hilbert_space(f, 1:N, NumberConservation(N ÷ 2)), N), "lazy mul! half filling", (16,), (20,))
     case!("bdg eigen", (300,), (800,)) do N
