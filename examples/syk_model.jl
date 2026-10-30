@@ -3,8 +3,7 @@
 # The SYK model of ``M`` Majoranas with random all-to-all four-body couplings is chaotic, and its
 # level statistics follow random-matrix theory. Which ensemble depends on ``M \bmod 8``: within one
 # fermion-parity sector it is GOE for ``M \equiv 0``, GUE for ``M \equiv 2, 6`` and GSE for
-# ``M \equiv 4``, where every level is doubly degenerate
-# (Y.-Z. You, A. W. W. Ludwig and C. Xu, [Phys. Rev. B 95, 115150 (2017)](https://doi.org/10.1103/PhysRevB.95.115150)).
+# ``M \equiv 4``, where every level is doubly degenerate.[^1]
 # This page reproduces the three classes from the mean ratio of adjacent level spacings. On the
 # package side it shows how to build a dense random Majorana Hamiltonian symbolically and restrict
 # it to a parity sector, which is where the statistics must be taken.
@@ -31,8 +30,7 @@ function gap_ratio(energies)
 end;
 
 # For each ``M`` we diagonalize the even-parity sector for a few disorder samples. In the GSE case
-# we keep one level of each degenerate pair. The reference values are from Atas *et al.*,
-# [Phys. Rev. Lett. 110, 084101 (2013)](https://doi.org/10.1103/PhysRevLett.110.084101).
+# we keep one level of each degenerate pair. The reference values are from Atas *et al.*[^2]
 Random.seed!(1)
 cases = [(M = 16, class = "GOE", ref = 0.5307), (M = 18, class = "GUE", ref = 0.5996), (M = 20, class = "GSE", ref = 0.6744)]
 results = map(cases) do (; M, class, ref)
@@ -50,3 +48,6 @@ end
 # odd sector is an exact copy of the even one, so every level is degenerate and the ratio
 # collapses to zero, which says nothing about chaos.
 gap_ratio(eigvals(Hermitian(representation(syk_hamiltonian(18), hilbert_space(γ, 1:18), :dense))))
+
+# [^1]: Y.-Z. You, A. W. W. Ludwig and C. Xu, [Phys. Rev. B 95, 115150 (2017)](https://doi.org/10.1103/PhysRevB.95.115150).
+# [^2]: Y. Y. Atas, E. Bogomolny, O. Giraud and G. Roux, [Phys. Rev. Lett. 110, 084101 (2013)](https://doi.org/10.1103/PhysRevLett.110.084101).
