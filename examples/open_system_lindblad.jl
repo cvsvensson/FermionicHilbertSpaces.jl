@@ -74,7 +74,7 @@ Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
 iszero(mat' * Ivec)
 # ### Solve for the steady state
 # The steady state is the eigenvector of `mat` with eigenvalue closest to zero.
-vals, vecs = eigen(mat; sortby=abs)
+vals, vecs = eigen(mat; sortby = abs)
 v = vecs[:, 1]
 ρ = reshape(v, Hlr => (Hl, Hr))
 ρ ./= tr(ρ)
