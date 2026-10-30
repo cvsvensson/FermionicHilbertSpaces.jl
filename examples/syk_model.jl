@@ -9,7 +9,7 @@ using LinearAlgebra, Random, Statistics
 
 # The Hamiltonian is ``H = \sqrt{6}\,J/(4M^{3/2}) \sum_{i<j<k<l} J_{ijkl}\gamma_i\gamma_j\gamma_k\gamma_l``
 # with Gaussian ``J_{ijkl}``. `add!!` accumulates the terms in place.
-function syk_hamiltonian(g, M; J=1.0)
+function syk_hamiltonian(g, M; J = 1.0)
     prefactor = sqrt(6) * J / (4 * M^(3 / 2))
     ham = 0
     for i in 1:M-3, j in i+1:M-2, k in j+1:M-1, l in k+1:M
@@ -30,7 +30,7 @@ energies = eigvals(ham);
 # is independent of the level density.
 function adjacent_gap_ratio(energies)
     s = diff(energies)
-    mean(min(a, b) / max(a, b) for (a, b) in zip(s[1:end-1], s[2:end]))
+    return mean(min(a, b) / max(a, b) for (a, b) in zip(s[1:(end - 1)], s[2:end]))
 end
 adjacent_gap_ratio(energies)
 

@@ -23,7 +23,7 @@ HA = hilbert_space(f, [1])
 ψ = representation(Ket("01", H) - Ket("10", H)) / √2
 ρ = ψ * ψ'
 ρA = partial_trace(ρ, H => HA)
-entropy(ρ) = -sum(λ * log(λ) for λ in eigvals(Hermitian(ρ)) if λ > 1e-12)
+entropy(ρ) = -sum(λ * log(λ) for λ in eigvals(Hermitian(ρ)) if λ > 1.0e-12)
 entropy(ρA) ≈ log(2)
 
 # ## Logarithmic negativity
@@ -40,12 +40,12 @@ werner(p) = (1 - p) / 4 * I + p * ρ
 # With `phase_factors=false` the partial transpose is the ordinary matrix transpose on `A`,
 # which gives a different negativity.
 E_fermion(p) = logarithmic_negativity(werner(p), H, HA)
-E_boson(p) = logarithmic_negativity(werner(p), H, HA; phase_factors=false)
+E_boson(p) = logarithmic_negativity(werner(p), H, HA; phase_factors = false)
 
 # Both agree with the closed forms for the two-mode Werner state in Shapourian and Ryu (2019).
 E_fermion_exact(p) = log((1 + p) / 2 + sqrt(5p^2 - 2p + 1) / 2)
 E_boson_exact(p) = log(3(1 + p) / 4 + abs(1 - 3p) / 4)
-ps = range(0, 1, length=21)
+ps = range(0, 1, length = 21)
 E_fermion.(ps) ≈ E_fermion_exact.(ps), E_boson.(ps) ≈ E_boson_exact.(ps)
 
 # The fermionic negativity is nonzero for every `p > 0`, while the bosonic one vanishes
