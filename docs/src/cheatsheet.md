@@ -21,9 +21,14 @@ Hdn = hilbert_space(c, [(i, :↓) for i in 1:2])
 Hσ = tensor_product(Hup, Hdn; constraint = NumberConservation(Hup) * NumberConservation(Hdn))
 sector([1, 1], Hσ)
 ```
+A subregion given as a space must list its modes in the order of the parent space. Here the modes of site 1:
+```@example cheat
+HA1 = hilbert_space(c, [(1, :↑), (1, :↓)])
+subregion(HA1, Hσ)
+```
 
 ## Bosons, spins and mixed spaces
-The second argument of `hilbert_space` is the number of levels for a boson and the spin for a spin. `tensor_product` combines any spaces.
+The second argument of `hilbert_space` is the number of levels for a boson and the sites for a spin; the spin value is set in the macro. `tensor_product` combines any spaces.
 ```@example cheat
 @boson b
 @spins S 1//2
@@ -32,6 +37,17 @@ HS = hilbert_space(S, 1:2)
 Hm = tensor_product(Hup, Hb, HS)
 representation(b'b * S[1][:z] + c[1, :↑]' * b + hc, Hm)
 ```
+
+## Free fermions
+A quadratic Hamiltonian on a `SingleParticle()` space is its single-particle matrix `h`, whose negative eigenvalues sum to the ground-state energy. `BdG()` includes pairing; see [Non-interacting hamiltonians](non_interacting.md).
+```@example cheat
+using FermionicHilbertSpaces.FreeFermions
+h = Hermitian(rand(N, N))
+Hs = hilbert_space(f, 1:N, SingleParticle())
+ε = eigvals(Hermitian(representation(sum(f[i]' * h[i, j] * f[j] for i in 1:N, j in 1:N), Hs, :dense)))
+sum(filter(<(0), ε))
+```
+With pairing, on `hilbert_space(f, 1:N, BdG())` the energy is `tr(h)/2 - sum(filter(>(0), ε))` for the eigenvalues `ε` of the BdG matrix.
 
 ## Ground state of a sector
 ```@example cheat
@@ -101,7 +117,7 @@ partial_transpose(ρ, H, HA)
 ```
 
 ## Basis states and product states
-`basisstates` lists the basis in the order of the representations; `Kets` parses a label into a state.
+`basisstates` lists the basis in the order of the representations; `Ket(label, H)` parses a label into a state.
 ```@example cheat
 basisstates(Hsec)
 ```
@@ -109,13 +125,13 @@ basisstates(Hsec)
 state_index("1100", Hsec)
 ```
 ```@example cheat
-representation(Kets(Hsec)("1100"), Hsec)
+representation(Ket("1100", Hsec), Hsec)
 ```
 
 ## Time evolution
 Evolve with the eigendecomposition of a sector, or pass the sparse `representation` to an ODE solver.
 ```@example cheat
-ψ0 = representation(Kets(Hsec)("1100"), Hsec)
+ψ0 = representation(Ket("1100", Hsec), Hsec)
 ψt(t) = vecs * (cis.(-vals * t) .* (vecs' * ψ0))
 ψt(1.0) ≈ exp(-im * representation(ham, Hsec, :dense)) * ψ0
 ```
@@ -130,7 +146,7 @@ representation(L, Hlr)
 ```
 
 ## Large spaces
-`:lazy` gives a matrix-free operator for iterative eigensolvers such as Arpack or KrylovKit, which must be installed separately.
+`:lazy` gives a matrix-free operator for iterative eigensolvers such as Arpack or KrylovKit, which must be installed separately (the example needs `using Arpack`).
 ```@example cheat
 using Arpack
 Hbig = hilbert_space(f, 1:12, NumberConservation(6))
