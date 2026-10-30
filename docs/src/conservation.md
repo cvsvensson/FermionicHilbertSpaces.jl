@@ -13,7 +13,7 @@ Heven = constrain_space(hilbert_space(f, 1:4), ParityConservation(1))
 H = hilbert_space(f, 1:4, NumberConservation())
 ```
 
-`quantumnumbers` lists the sector labels, `sector` returns one sector as a space of its own, and `indices` gives the positions of its states in the basis of the parent space. An operator that conserves the quantity can be represented directly on a sector, and `embed` places a state on the sector into the full space:
+The sector labels of a space are its quantum numbers. A sector is a space of its own, and an operator that conserves the quantity can be represented directly on it. `embed` places a state on a sector back into the full space, where `indices` locates the sector's states:
 ```@example constraints
 quantumnumbers(H)
 H2 = sector(2, H)
@@ -23,7 +23,7 @@ hopping = sum(f[k]'f[k+1] + hc for k in 1:3)
 indices(2, H)
 ```
 
-Given to `hilbert_space` or `tensor_product`, `NumberConservation`, `ParityConservation`, `AdditiveConstraint` and `BranchConstraint` discard states while they are generated, so the full space is never built. `constrain_space` instead filters the states of an existing space.
+Passing a constraint while building a space prunes states as they are generated, so the full space is never built; only `FilterConstraint` and `SectorConstraint` test the full space afterwards. `constrain_space` always filters a space that already exists.
 
 ## Available constraints
 
