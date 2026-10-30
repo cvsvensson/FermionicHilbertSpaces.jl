@@ -1,17 +1,19 @@
 # # Bosons
 
-# ## Bosonic algebra and hilbert spaces
-#
-# A single bosonic mode is defined with `@boson`. Adjoint `'` acts as the
-# creation operator, satisfying $[a, a^\dagger] = 1$.
+# This tutorial builds bosonic Hilbert spaces and studies the Bose-Hubbard and a dipole-conserving model
+# using number conservation. It assumes [Getting started](index.md).
+
+# ## Bosonic algebra and Hilbert spaces
+# `@boson a` defines a single mode with creation operator `a'`, and `@bosons b` an indexed family of modes.
+# Expressions are simplified automatically.
 using FermionicHilbertSpaces
 @boson a
-a * a' - a' * a == 1 # true
-@bosons b # defines an indexed array of modes. Modes on different sites commute.
-b[1]' * b[2] == b[2] * b[1]' # true
-(a' + a)^2 - a^2 - a'^2 # expressions are automatically simplified
+@bosons b
+a * a' - a' * a == 1
+b[1]' * b[2] == b[2] * b[1]'
+(a' + a)^2 - a^2 - a'^2
 
-# Numerical calculations require a finite local dimension $d$ (basis $|0\rangle, \dots, |d-1\rangle$). To define a truncated bosonic hilbert space for a mode or a field write
+# Numerical calculations need a finite local dimension $d$ (basis $|0\rangle, \dots, |d-1\rangle$):
 local_dim = 4
 Ha = hilbert_space(a, local_dim)
 labels = 1:8
@@ -25,20 +27,19 @@ Hb = hilbert_space(b, labels, local_dim)
 # H = -t \sum_{i=1}^{N-1} (b_i^\dagger b_{i+1} + \mathrm{h.c.}) + \frac{U}{2} \sum_{i=1}^N n_i(n_i - 1),
 # \qquad n_i = b_i^\dagger b_i.
 # ```
-# `hc` adds the Hermitian conjugate. This is number conserving, which we can exploit to reduce the Hilbert space dimension. Let's say we have 8 sites, and 8 particles. With a local dimension of 9, we will have no truncation error
+# `hc` adds the Hermitian conjugate. This conserves particle number, which reduces the Hilbert space dimension.
+# With 8 sites and 8 particles, a local dimension of 9 gives no truncation error.
 N = 8
 M = 8
 local_dim = M + 1
 Hfull = hilbert_space(b, 1:N, local_dim)
 H = hilbert_space(b, 1:N, local_dim, NumberConservation(M))
-dim(Hfull), dim(H)  # 43,046,721 -> 6435-dimensional
-# Note that one could also have used `constrain_space(Hfull, NumberConservation(M))` but this requires iterating over all states and is usually slower.
+dim(Hfull), dim(H)
 
-# Let's generate the matrix representations once to reuse in sweeps, and define the ground state calculation
+# We build the matrices once and reuse them in a sweep over $U$.
 n = [b[i]' * b[i] for i in 1:N]
 hop_sym = sum(b[i]' * b[i+1] + hc for i in 1:(N-1))
 int_sym = sum(n[i] * (n[i] - 1) for i in 1:N)
-#Precompute matrix representations
 K = representation(hop_sym, H)
 D = representation(int_sym, H)
 n_ops = [representation(n[i], H) for i in 1:N]
@@ -56,8 +57,7 @@ function ground_state_analysis(U; t=1.0)
     return (; density, variance, hopping)
 end
 
-# As $U/t$ grows, onsite repulsion suppresses particle fluctuations and hopping.
-# The right panel shows how the open-boundary density profile flattens to 1 particle per site.
+# Onsite repulsion suppresses particle fluctuations and hopping (left) and flattens the density profile (right).
 
 Us = range(0, 16; length=20)
 sweep = [ground_state_analysis(U) for U in Us];
@@ -70,12 +70,12 @@ plot!(p2, 1:N, ground_state_analysis(6).density; label="U/t = 6", m=:square, lw=
 plot(p1, p2; layout=(1, 2), size=(600, 300), frame=:box)
 
 # ## Example 2: Dipole-conserving boson model
-# This demonstrates how to handle a more complicated conservation law. The model
+# A weighted `NumberConservation` handles a second conserved quantity, and constraints combine with `*`. The model
 # ```math
 #  H = -J \sum_i (b_{i-1}^\dagger b_{i+1}^\dagger b_i b_i + h.c.)
 #      + U/2 \sum_i n_i(n_i-1) 
 # ```
-# Conserves the particle number $N = \sum n_i$ and the dipole moment $D = \sum i n_i$.
+# conserves the particle number $N = \sum n_i$ and the dipole moment $D = \sum i n_i$.
 
 @bosons b
 function hamiltonian(b, N; J, U)
@@ -85,7 +85,7 @@ end
 N = 6
 M = 6
 local_dim = M + 1   # Large enough to avoid truncation error
-Dtot = sum(1:N)     # dipole of the uniform state |1,1,1,1,1,1>
+Dtot = sum(1:N)     # dipole of the uniform state
 
 number_cons = NumberConservation(M)
 dipole_cons = NumberConservation(Dtot; weights=1:N)
@@ -93,9 +93,9 @@ dipole_cons = NumberConservation(Dtot; weights=1:N)
 Hfull = hilbert_space(b, 1:N, local_dim)
 HN = hilbert_space(b, 1:N, local_dim, number_cons)                # only N fixed
 HND = hilbert_space(b, 1:N, local_dim, number_cons * dipole_cons) # N and D fixed
-println("dim full = ", dim(Hfull), " | dim($M particles) = ", dim(HN), " | dim($M particles, $Dtot dipole) = ", dim(HND))
+dim(Hfull), dim(HN), dim(HND)
 
-# Let's calculate half-system entropy for the ground state in this sector, sweeping over the ratio $U/J$. We define a partial trace map to the first half of the system, and then calculate the entropy of the reduced density matrix.
+# The half-system entanglement entropy of the ground state follows from a partial trace map onto the first half of the chain.
 ptmap = partial_trace(HND => subregion([b[i] for i in 1:div(N, 2)], HND))
 Us = range(0, 5, 50)
 entropies = map(Us) do U
