@@ -179,13 +179,15 @@ floquet_ham(2)
 using LinearAlgebra
 spin_energies = [ε * m + D * m^2 for m in -1:1]
 bare = sort(vec([e + ω * n for e in spin_energies, n in (-n_max):n_max]))
-mat0 = representation(floquet_ham(0), H, :dense; projection=true)
+mat0 = representation(floquet_ham(0), H, :dense; projection = true)
 @assert eigvals(Hermitian(mat0)) ≈ bare
 
 A_values = range(0, 4 * ω, length=100)
-spectrum = reduce(hcat, [eigvals(Hermitian(representation(floquet_ham(A), H, :dense; projection=true))) for A in A_values])'
+spectrum = reduce(hcat, [eigvals(Hermitian(representation(floquet_ham(A), H, :dense; projection = true))) for A in A_values])'
 
 # Each dot is a quasienergy, folded into the interval ``[-\omega/2, \omega/2)``.
 using Plots
-plot(A_values ./ ω, mod.(spectrum .+ ω / 2, ω) .- ω / 2; seriestype=:scatter, ms=1, legend=false,
-    xlabel="Drive amplitude A/ω", ylabel="Quasienergy", frame=:box)
+plot(
+    A_values ./ ω, mod.(spectrum .+ ω / 2, ω) .- ω / 2; seriestype = :scatter, ms = 1, legend = false,
+    xlabel = "Drive amplitude A/ω", ylabel = "Quasienergy", frame = :box
+)

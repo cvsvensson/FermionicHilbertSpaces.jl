@@ -28,7 +28,7 @@ ham_sym = 1.0 * c[1]'c[1]
 L_sym = -1im * (left(ham_sym) - right(ham_sym))
 # We can get a matrix representation of the Liouvillian on the full space `Hlr` with
 L_mat = representation(L_sym, Hlr)
-# A density matrix has two indices, corresponding to (Hl, Hr) and the vectorized form 
+# A density matrix has two indices, corresponding to (Hl, Hr) and the vectorized form
 # has one index corresponding to Hlr. To translate between these, use `reshape`.
 # E.g. to vectorize the identity operator we can do
 Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
@@ -69,7 +69,7 @@ mat = representation(lindbladian, Hlr)
 iszero(mat' * Ivec)
 # ### Solve for the steady state
 # The steady state is the eigenvector of `mat` with eigenvalue closest to zero.
-vals, vecs = eigen(representation(lindbladian, Hlr, :dense); sortby=abs)
+vals, vecs = eigen(representation(lindbladian, Hlr, :dense); sortby = abs)
 v = vecs[:, 1]
 ρ = reshape(v, Hlr => (Hl, Hr))
 ρ ./= tr(ρ)
@@ -88,7 +88,7 @@ println("Steady-state occupation ⟨n⟩_ss = $n_ss  (analytic: $n_analytical)")
 ρ0 = reshape(I - n_mat, (Hl, Hr) => Hlr)
 Lmat = representation(lindbladian, Hlr, :dense)
 ρt(t) = reshape(exp(Lmat * t) * ρ0, Hlr => (Hl, Hr))
-@assert tr(n_mat * ρt(0.0)) ≈ 0 atol = 1e-12
+@assert tr(n_mat * ρt(0.0)) ≈ 0 atol = 1.0e-12
 @assert ρt(50.0) ≈ ρ
 
 # ### Use a conserved quantity for block structure
