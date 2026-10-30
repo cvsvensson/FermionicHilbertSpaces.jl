@@ -25,10 +25,7 @@ H = hilbert_space(c, 1:2)
 ham = c[1]'c[2] + hc + 0.5 * c[1]'c[1]
 M = representation(ham, H, :dense)
 ```
-The third argument picks the format: `:sparse` (the default), `:dense` or `:lazy`. The basis states label the rows and columns of `M`:
-```@example start
-basisstates(H)
-```
+The third argument picks the format: `:sparse` (the default), `:dense` or `:lazy`.
 The Hamiltonian conserves particle number, so we can restrict to one particle. The sector has its own, smaller basis, and `embed` maps its eigenvectors back to the full space:
 ```@example start
 Hn = hilbert_space(c, 1:2, NumberConservation(1))
