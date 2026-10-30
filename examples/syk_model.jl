@@ -1,5 +1,7 @@
 # # Sachdev-Ye-Kitaev model
 #
+# It assumes [Getting started](../index.md).
+#
 # We build the SYK model of ``M`` Majoranas with random all-to-all four-body couplings,
 # diagonalize it in one parity sector, and use the level-spacing ratio to detect chaos.
 # `@majoranas` creates operators with ``\gamma_i^2 = 1``, ``\{\gamma_i, \gamma_j\} = 2\delta_{ij}``.
