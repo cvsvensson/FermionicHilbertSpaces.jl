@@ -43,14 +43,14 @@ expectation(c[1]'c[1], ψ, H)
 partial_trace(ψ, H => hilbert_space(c, 1:1))
 ```
 
-The [tutorials](literate_output/kitaev_chain.md) work through whole models, starting with the Interacting Kitaev chain.
+The [tutorials](literate_output/kitaev_chain.md) work through whole models, starting with the Interacting Kitaev chain. The guides cover [constraints and quantum numbers](conservation.md), [space operations](hilbert_space_operations.md) and [fermionic conventions](fermions.md).
 
 ## Glossary
 
 * **Sector:** the subspace with fixed values of conserved quantities (quantum numbers), such as particle number or parity.
 * **Constraint:** a rule that restricts a space to some basis states, for example [`NumberConservation`](@ref); see [Constrained spaces](conservation.md).
 * **Subregion:** the part of a space that lives on a subset of the modes; see [`subregion`](@ref).
-* **Factors / atomic factors:** the spaces a product space is built from; [`factors`](@ref) splits one level and `FermionicHilbertSpaces.atomic_factors` splits down to single modes.
+* **Factors:** the spaces a product space is built from; [`factors`](@ref) returns them.
 * **Symbolic operator vs representation:** an operator like `c[1]'c[2]` is an algebraic expression without a basis; `representation(op, H)` gives its matrix on the space `H`.
 * **BdG:** the Bogoliubov-de Gennes space, where a quadratic Hamiltonian acts on particle and hole components; see [Non-interacting systems](non_interacting.md).
 * **Parity (superselection):** physical fermionic states have definite fermion parity; [`ParityConservation`](@ref) restricts a space to one parity sector.
