@@ -55,12 +55,12 @@ Base.adjoint(F::FloquetLadder) = FloquetLadder(-F.shift, F.basis)
 Base.adjoint(N::FloquetNumber) = N          # N is Hermitian
 Base.show(io::IO, F::FloquetLadder) = print(io, "F^", F.shift)
 Base.show(io::IO, N::FloquetNumber) = print(io, "N^", N.power)
-const Floquets = Union{FloquetLadder,FloquetNumber}
+const Floquets = Union{FloquetLadder,FloquetNumber};
 
 # Declaring them with `@nc` makes them non-commutative symbols, and `@commutative` makes them commute with every other `AbstractSym`, such as spin operators:
 
 @nc FloquetLadder FloquetNumber
-@commutative Floquets AbstractSym
+@commutative Floquets AbstractSym;
 
 # Products are simplified by `mul_effect`. We sort Floquet operators from different modes by their 'id', and for operators of the same mode
 # we will put number operators before ladder operators.
@@ -69,20 +69,20 @@ function mul_effect(a::Floquets, b::Floquets)
     a.basis.id > b.basis.id && return b * a   # different subsystem: sort by id
     a.basis.id < b.basis.id && return nothing   # already in order
     return floquet_mul(a, b)                    # same subsystem: apply algebra
-end
+end;
 
 # ``F^j \cdot F^k = F^{j+k}``.  Special case ``j+k=0``: ``F \cdot F^\dagger = \mathbf{1}``.
 function floquet_mul(a::FloquetLadder, b::FloquetLadder)
     total_shift = a.shift + b.shift
     total_shift == 0 && return 1
     return FloquetLadder(total_shift, a.basis)
-end
+end;
 
 # ``N^p \cdot N^q = N^{p+q}``.  Special case ``p=q=0``: ``N^0 = \mathbf{1}``.
 function floquet_mul(a::FloquetNumber, b::FloquetNumber)
     a.power == b.power == 0 && return 1
     return FloquetNumber(a.power + b.power, a.basis)
-end
+end;
 
 # ``F^k \cdot N = N \cdot F^k - k\,F^k``, from ``[N, F^k] = k\,F^k`` rearranged as
 # ``F^k N = N F^k - k F^k``.
@@ -96,10 +96,10 @@ function floquet_mul(a::FloquetLadder, b::FloquetNumber)
         return term1 + term2
     end
     throw(ArgumentError("Should not reach here"))
-end
+end;
 
 # ``N \cdot F^k`` is already in normal order (``N`` sorts before ``F``).
-floquet_mul(::FloquetNumber, ::FloquetLadder) = nothing
+floquet_mul(::FloquetNumber, ::FloquetLadder) = nothing;
 
 # To get matrices we need basis states and a rule for how operators act on them. The basis states are
 using FermionicHilbertSpaces: AbstractBasisState
@@ -109,15 +109,15 @@ end
 # and the action of each operator is defined through `apply_local_operator(op, state, space, precomp)`, which returns the new state and an amplitude.
 import FermionicHilbertSpaces: apply_local_operator
 # ``F^k`` shifts the Floquet index by ``k``.
-apply_local_operator(op::FloquetLadder, state::FloquetState, space, precomp) = FloquetState(state.mode + op.shift), 1
+apply_local_operator(op::FloquetLadder, state::FloquetState, space, precomp) = FloquetState(state.mode + op.shift), 1;
 
 # ``N^p`` multiplies the amplitude by ``n^p``, where ``n`` is the current mode index.
-apply_local_operator(op::FloquetNumber, state::FloquetState, space, precomp) = state, state.mode^op.power
+apply_local_operator(op::FloquetNumber, state::FloquetState, space, precomp) = state, state.mode^op.power;
 
 # Finally, `symbolic_group` matches operators to Hilbert spaces: each Floquet operator belongs to its `FloquetBasis`, which also labels the Hilbert space.
 import FermionicHilbertSpaces: symbolic_group
 symbolic_group(f::Floquets) = f.basis
-symbolic_group(b::FloquetBasis) = b
+symbolic_group(b::FloquetBasis) = b;
 
 # With this we can build the Floquet Hilbert space and the matrix of an operator on it.
 floquet_basis = FloquetBasis(0)
@@ -125,7 +125,7 @@ F = FloquetLadder(floquet_basis)       # raising operator F
 Nf = FloquetNumber(1, floquet_basis)    # photon number N
 n_max = 5       # keep Floquet modes n = −n_max … n_max
 Hfloq = GenericHilbertSpace(floquet_basis, FloquetState.((-n_max):n_max))
-F_mat = representation(F, Hfloq; projection = true) # we need projection=true because we've truncated the Floquet space
+F_mat = representation(F, Hfloq; projection = true); # we need projection=true because we've truncated the Floquet space
 
 # ## Driven spin 1
 
@@ -141,7 +141,7 @@ H = tensor_product((Hspin, Hfloq); constraint=floquet_sectors)
 ε = 0.2 * ω     # Zeeman splitting: sets |+1⟩ and |-1⟩ baseline energies
 D = 0.3 * ω     # Single-ion anisotropy (D * Sz^2): activates the |0⟩ state
 floquet_ham(A) = ε * σ[:z] + D * σ[:z]^2 + ω * Nf +
-    (A / 2 * σ[:x] * F + hc)
+    (A / 2 * σ[:x] * F + hc);
 
 # ## Quasienergy spectrum vs drive amplitude
 
