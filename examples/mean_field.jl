@@ -1,6 +1,6 @@
 # # Self-consistent mean-field theory
 # This tutorial solves the Hartree-Fock-Bogoliubov self-consistency of the Hubbard model in the BdG space and compares
-# the result with exact diagonalization. It assumes the [non-interacting systems](non_interacting.md) page.
+# the result with exact diagonalization. It assumes the [non-interacting systems](../non_interacting.md) page.
 using FermionicHilbertSpaces, LinearAlgebra
 using FermionicHilbertSpaces.FreeFermions
 
