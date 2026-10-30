@@ -7,6 +7,12 @@
 #
 # [^1]: W. Samuelson *et al.*, [PRX Quantum 7, 020341 (2026)](https://doi.org/10.1103/pw51-tnsz), [arXiv:2510.20538](https://arxiv.org/abs/2510.20538).
 
+# ## Hamiltonian and parity sectors
+
+# `@fermions f` declares fermionic modes `f[i]`, and `hilbert_space(f, 1:N, ParityConservation())` builds the
+# space of `N` modes split into sectors of even and odd total parity. The Hamiltonian is written symbolically,
+# with `hc` adding the Hermitian conjugate of each term.
+
 using FermionicHilbertSpaces
 using Arpack, LinearAlgebra, LowRankMatrices, Plots
 
@@ -26,11 +32,13 @@ t = 1.0
 Δ = t + U / 2 - δΔ # detuned from the sweet spot
 μ = fill(-U, N)
 μ[[1, N]] .= -U / 2 # edge chemical potentials
-hsym = kitaev_chain(f, N, μ, t, Δ, U)
+hsym = kitaev_chain(f, N, μ, t, Δ, U);
 
-# `hilbert_space(f, 1:N, ParityConservation())` restricts the space to definite total parity, so we
-# diagonalize each parity sector separately. `representation` turns the symbolic Hamiltonian into a sparse matrix
-# on a `sector`, and `embed` maps its ground state back into the full space `H`. The two energies are nearly degenerate.
+# ## Ground states
+
+# The Hamiltonian conserves parity, so we diagonalize each parity sector separately. `representation` turns the
+# symbolic Hamiltonian into a sparse matrix on a `sector`, and `embed` maps its ground state back into the full
+# space `H`. The two energies are nearly degenerate.
 
 function ground_state(parity)
     Hsec = sector(parity, H)
@@ -39,6 +47,8 @@ function ground_state(parity)
 end;
 (Eo, o), (Ee, e) = map(ground_state, (-1, 1)); # odd and even parity
 Eo - Ee
+
+# ## Locality of the Majoranas
 
 # The ground-state pair defines two many-body Majorana operators, $\gamma = |o\rangle\langle e| + \mathrm{h.c.}$
 # and $\tilde\gamma = i|o\rangle\langle e| + \mathrm{h.c.}$, and the parity-difference operator

@@ -5,20 +5,29 @@
 # number fluctuations, and a dipole-conserving model, where a second weighted `NumberConservation` constrains the
 # dynamics and shapes the entanglement.
 
+# ## Bosonic operators and spaces
+
+# `@boson a` declares one mode and `@bosons b` a field of modes `b[i]`; the adjoint `'` is the creation operator.
+# Expressions are simplified using $[a, a^\dagger] = 1$, and modes on different sites commute. A Hilbert space
+# needs a local dimension $d$, keeping the occupations $0, \dots, d-1$ of each mode: `hilbert_space(a, d)` for one
+# mode and `hilbert_space(b, labels, d)` for a field, optionally followed by a constraint.
+
 using FermionicHilbertSpaces
 @boson a
 @bosons b
-a * a' - a' * a == 1 # true
-b[1]' * b[2] == b[2] * b[1]' # true, modes on different sites commute
+a * a' - a' * a == 1
+b[1]' * b[2] == b[2] * b[1]'
 (a' + a)^2 - a^2 - a'^2
+
+# ## Bose-Hubbard model
 
 # The Bose-Hubbard Hamiltonian has hopping $t$ and onsite repulsion $U$,
 # ```math
 # H = -t \sum_{i=1}^{N-1} (b_i^\dagger b_{i+1} + \mathrm{h.c.}) + \frac{U}{2} \sum_{i=1}^N n_i(n_i - 1),
 # \qquad n_i = b_i^\dagger b_i.
 # ```
-# and conserves particle number, which reduces the Hilbert space dimension. With 8 sites and 8 particles, a local
-# dimension of 9 gives no truncation error. We build the matrices once and reuse them in a sweep over $U$.
+# and conserves particle number, which reduces the Hilbert space dimension. A local dimension of one more than the
+# particle number gives no truncation error.
 N = 8
 M = 8
 local_dim = M + 1
@@ -58,7 +67,9 @@ p2 = plot(1:N, ground_state_analysis(0).density; label="U/t = 0", m=:circle, lw=
 plot!(p2, 1:N, ground_state_analysis(6).density; label="U/t = 6", m=:square, lw=2)
 plot(p1, p2; layout=(1, 2), size=(600, 300), frame=:box)
 
-# The dipole-conserving model conserves a second quantity, handled by a weighted `NumberConservation`; constraints combine with `*`. The model
+# ## Dipole-conserving model
+
+# A second conserved quantity is handled by a weighted `NumberConservation`, and constraints combine with `*`. The model
 # ```math
 #  H = -J \sum_i (b_{i-1}^\dagger b_{i+1}^\dagger b_i b_i + h.c.)
 #      + U/2 \sum_i n_i(n_i-1) 
