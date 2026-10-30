@@ -29,9 +29,7 @@ Spaces of the same group, such as fermions of one `@fermions` basis, merge into 
 the group first appears. The first factor varies fastest.
 
 ```jldoctest
-julia> using FermionicHilbertSpaces
-
-julia> @fermions f;
+julia> using FermionicHilbertSpaces; @fermions f;
 
 julia> H = tensor_product(hilbert_space(f, 1:1), hilbert_space(f, 2:2));
 
@@ -613,15 +611,11 @@ has a nonzero element in the row or column of such a state. The map `partial_tra
 does not check its input.
 
 ```jldoctest
-julia> using FermionicHilbertSpaces
-
-julia> @fermions f;
+julia> using FermionicHilbertSpaces; @fermions f;
 
 julia> H = hilbert_space(f, 1:2); Hsub = hilbert_space(f, 1:1);
 
-julia> n1 = representation(f[1]' * f[1], H, :dense);
-
-julia> partial_trace(n1, H => Hsub) == [0 0; 0 2]
+julia> partial_trace(representation(f[1]' * f[1], H, :dense), H => Hsub) == [0 0; 0 2]
 true
 ```
 """

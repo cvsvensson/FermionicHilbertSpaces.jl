@@ -83,13 +83,9 @@ For `qn === nothing`, this returns `H` for non-sector spaces.
 Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
 
 ```jldoctest
-julia> using FermionicHilbertSpaces
+julia> using FermionicHilbertSpaces; @fermions f;
 
-julia> @fermions f;
-
-julia> H = hilbert_space(f, 1:3, ParityConservation());
-
-julia> dim(sector(-1, H))
+julia> dim(sector(-1, hilbert_space(f, 1:3, ParityConservation())))
 4
 ```
 """
@@ -137,9 +133,7 @@ either by a sector Hilbert space `Hsub` or by a quantum number `qn`.
 Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
 
 ```jldoctest
-julia> using FermionicHilbertSpaces
-
-julia> @fermions f;
+julia> using FermionicHilbertSpaces; @fermions f;
 
 julia> indices(1, hilbert_space(f, 1:2, NumberConservation()))
 2:3

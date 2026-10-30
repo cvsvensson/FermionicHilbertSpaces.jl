@@ -481,9 +481,7 @@ represent quadratic fermionic operators only, and a number is represented by the
 With `Axes(Hout, Hin)`, `op` is represented as a map from `Hin` to `Hout`.
 
 ```jldoctest
-julia> using FermionicHilbertSpaces
-
-julia> @fermions f;
+julia> using FermionicHilbertSpaces; @fermions f;
 
 julia> representation(f[1]' * f[1], hilbert_space(f, 1:1), :dense)
 2×2 Matrix{Int64}:

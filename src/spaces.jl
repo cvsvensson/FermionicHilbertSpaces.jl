@@ -109,16 +109,13 @@ state_index(state::Union{AbstractString,AbstractChar}, H) = _state_index(interpr
     hilbert_space(s, labels, [J], [constraint])
 
 Construct the Hilbert space of the fermions `f`, bosons `b` (truncated at `dimension`) or spins `s`
-(spin `J`) with the given `labels`, optionally restricted by a constraint such as
-`NumberConservation(2)`.
+(spin `J`) with the given `labels`, optionally restricted by a constraint, e.g. `NumberConservation(2)`.
 
 ```jldoctest
-julia> using FermionicHilbertSpaces
+julia> using FermionicHilbertSpaces; @fermions f; @bosons b; @spins s;
 
-julia> @fermions f;
-
-julia> dim(hilbert_space(f, 1:4, NumberConservation(2)))
-6
+julia> dim.((hilbert_space(f, 1:2, NumberConservation(1)), hilbert_space(b, 1:2, 3), hilbert_space(s, 1:2, 1//2)))
+(2, 9, 4)
 ```
 """
 hilbert_space
@@ -347,9 +344,7 @@ group of `H` (e.g. the Jordan-Wigner order of fermions), otherwise an `ArgumentE
 
 # Examples
 ```jldoctest
-julia> using FermionicHilbertSpaces
-
-julia> @fermions f;
+julia> using FermionicHilbertSpaces; @fermions f;
 
 julia> H = hilbert_space(f, 1:3);
 
