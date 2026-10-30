@@ -31,31 +31,50 @@ function self_consistent(ham, G, Hbdg; tol = 1.0e-8, maxiter = 1000)
 end
 
 # The iteration keeps every symmetry of the initial state, so a symmetry-broken solution needs a seed that breaks it.
-# For repulsive `U` we start from the ground state of the hopping in a staggered magnetic field. The seed field is gone
-# from the mean-field Hamiltonian, but the moments alternate from site to site and stay large.
+# For repulsive `U` we start from the ground state of the hopping in a staggered magnetic field, and for attractive `U`
+# from uniform on-site pairing. The seed is not part of the mean-field Hamiltonian, so what remains is the spontaneous
+# order. The mean-field state is Gaussian, so the energy of the interacting Hamiltonian in it follows from Wick's
+# theorem, and the decoupled Hamiltonian has the same energy.
 staggered = sum((-1)^i * (n(i, :↑) - n(i, :↓)) for i in 1:L)
-ham = hubbard(6)
-G = self_consistent(ham, ground_state_correlations(hopping + staggered, Hbdg), Hbdg)
-[real(expectation((n(i, :↑) - n(i, :↓)) / 2, G, Hbdg)) for i in 1:L]
-
-
-# For attractive interactions we seed with uniform on-site pairing instead. The solution has a uniform gap
-# `Δ = U⟨c↓c↑⟩`.
-Uattr = -4
 pairing = sum(f[i, :↑]' * f[i, :↓]' + hc for i in 1:L)
-Gsc = self_consistent(hubbard(Uattr), ground_state_correlations(hopping + pairing, Hbdg), Hbdg)
-[real(Uattr * expectation(f[i, :↓] * f[i, :↑], Gsc, Hbdg)) for i in 1:L]
+G = self_consistent(hubbard(6), ground_state_correlations(hopping + staggered, Hbdg), Hbdg)
+@assert expectation(mean_field(hubbard(6), G, Hbdg), G, Hbdg) ≈ expectation(hubbard(6), G, Hbdg)
 
-
-# The mean-field state is Gaussian, so the energy of the interacting Hamiltonian in it follows from Wick's theorem, and
-# the decoupled Hamiltonian has the same energy. A variational energy lies above the exact ground-state energy, which
-# we get by diagonalizing the half-filled sector with equally many up and down electrons. The difference is the
-# correlation energy that mean field misses.
-E_mf = real(expectation(ham, G, Hbdg))
-@assert expectation(mean_field(ham, G, Hbdg), G, Hbdg) ≈ E_mf
+# A variational energy lies above the exact ground-state energy, which we get by diagonalizing the half-filled sector
+# with equally many up and down electrons. We sweep `U` from strong coupling towards zero, starting each point from the
+# previous solution so that the iteration follows the ordered branch for as long as it exists, and compare with exact
+# diagonalization. Energies are measured from the Fermi sea of the hopping, the mean-field solution without order.
 Hup = hilbert_space(f, [(i, :↑) for i in 1:L])
 Hdn = hilbert_space(f, [(i, :↓) for i in 1:L])
 Hsector = tensor_product(Hup, Hdn; constraint = NumberConservation(L ÷ 2, Hup) * NumberConservation(L ÷ 2, Hdn))
-E0 = eigmin(Hermitian(representation(ham, Hsector, :dense)))
-@assert E_mf > E0
-E_mf, E0
+G_fermi_sea = ground_state_correlations(hopping, Hbdg)
+function sweep(Us, seed, order_parameter)
+    G = ground_state_correlations(hopping + seed, Hbdg)
+    return map(Us) do U
+        ham = hubbard(U)
+        G = self_consistent(ham, G, Hbdg)
+        E_sea = real(expectation(ham, G_fermi_sea, Hbdg))
+        E_exact = eigmin(Hermitian(representation(ham, Hsector, :dense)))
+        E_mf = real(expectation(ham, G, Hbdg))
+        @assert E_mf > E_exact
+        (order = order_parameter(G), E_mf = E_mf - E_sea, E_exact = E_exact - E_sea)
+    end
+end
+Us = 8:-0.5:0
+afm = sweep(Us, staggered, G -> abs(real(expectation(staggered, G, Hbdg))) / 2L)
+sc = sweep(-Us, pairing, G -> abs(expectation(f[1, :↓] * f[1, :↑], G, Hbdg)));
+
+using Plots
+Uall, both = [-Us; reverse(Us)], [sc; reverse(afm)]
+p1 = plot(-Us, getfield.(sc, :order); label = "pairing |⟨c↓c↑⟩|", ylabel = "order parameter", legend = :top)
+plot!(p1, Us, getfield.(afm, :order); label = "staggered moment")
+p2 = plot(Uall, getfield.(both, :E_mf); label = "mean field", ylabel = "E − E(Fermi sea)", legend = :bottom)
+plot!(p2, Uall, getfield.(both, :E_exact); label = "exact")
+plot(p1, p2; layout = (1, 2), xlabel = "U", lw = 2, size = 0.7 .* (1100, 420), frame = :box, margins = 4Plots.mm)
+
+# Each order appears only beyond a threshold coupling and then grows towards saturation. The two sides are mirror
+# images: at half filling, a particle-hole transformation of the down spins maps the repulsive ring onto the attractive
+# one and turns the staggered moment into the pairing amplitude. The threshold is a finite-size effect, since the ring
+# has a gap at the Fermi level that the interaction must overcome before ordering lowers the energy. Mean field stays
+# above the exact energy everywhere, as a variational state must, misses the energy gain at weak coupling, and captures
+# most of it at strong coupling.
