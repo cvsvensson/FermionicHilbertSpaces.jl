@@ -83,15 +83,4 @@ basis state. With `maps` and `spaces` together, it is called instead on the valu
 gives for the parts of the state in `spaces`. See
 [Constrained Hilbert spaces and conserved quantum numbers](conservation.md).
 
-## State mapper protocol
-
-Internally, `tensor_product`, `reshape` and `partial_trace` all decompose and
-recombine basis states through a common mapper protocol:
-
-- [`state_mapper`](@ref)`(H, Hs) returns a mapper object.
-- [`split_state`](@ref)`(state, mapper) returns a tuple with one entry per target subsystem.
-- Each tuple entry is a weighted collection `((substate, weight), ...)`.
-- [`combine_states`](@ref)`(substates, mapper) returns a weighted collection `((state,
-  weight), ...)`.
-
-Weighted collections can have any concrete type; treat them as iterables of `(state, weight)`.
+Internally, `tensor_product`, `reshape` and `partial_trace` decompose and recombine basis states through a common mapper protocol. [`state_mapper`](@ref)`(H, Hs)` returns a mapper object, [`split_state`](@ref)`(state, mapper)` returns a tuple with one weighted collection `((substate, weight), ...)` per target subsystem, and [`combine_states`](@ref)`(substates, mapper)` returns a weighted collection `((state, weight), ...)`. Weighted collections can have any concrete type; treat them as iterables of `(state, weight)`.

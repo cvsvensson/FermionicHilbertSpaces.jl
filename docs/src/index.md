@@ -16,27 +16,17 @@ It is not a solver: it has no time evolution, iterative eigensolvers or tensor-n
 
 ## Getting started
 
-Install with `using Pkg; Pkg.add("FermionicHilbertSpaces")`. Two spinless fermion sites with hopping and an on-site energy:
+Install with `using Pkg; Pkg.add("FermionicHilbertSpaces")`. Two spinless fermion sites with hopping and an on-site energy; the third argument of `representation` picks the format (`:sparse` by default, `:dense` or `:lazy`). The Hamiltonian conserves particle number, so we restrict to one particle, diagonalize in that smaller sector, and `embed` the ground state back into the full space to compute observables and a reduced state:
 
 ```@example start
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions c
 H = hilbert_space(c, 1:2)
 ham = c[1]'c[2] + hc + 0.5 * c[1]'c[1]
-M = representation(ham, H, :dense)
-```
-The third argument picks the format: `:sparse` (the default), `:dense` or `:lazy`.
-The Hamiltonian conserves particle number, so we can restrict to one particle. The sector has its own, smaller basis, and `embed` maps its eigenvectors back to the full space:
-```@example start
 Hn = hilbert_space(c, 1:2, NumberConservation(1))
 E = eigen(Hermitian(representation(ham, Hn, :dense)))
-basisstates(Hn)
-```
-```@example start
 ψ = embed(E.vectors[:, 1], Hn => H)
 expectation(c[1]'c[1], ψ, H)
-```
-```@example start
 partial_trace(ψ, H => hilbert_space(c, 1:1))
 ```
 

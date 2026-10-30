@@ -4,12 +4,7 @@ CurrentModule = FermionicHilbertSpaces
 
 # Hilbert space and array operations
 
-This page documents the operations used to build composite Hilbert spaces out of
-smaller ones, to inspect their structure, and to move arrays (vectors, matrices,
-density matrices) between a space and its subsystems. See [Fermionic tensor products,
-partial traces](fermions.md) for the mathematical background
-and phase-factor conventions behind `tensor_product`, `embed`, `partial_trace`, and
-`partial_transpose`; this page focuses on syntax and usage.
+This page shows how to build composite Hilbert spaces out of smaller ones, inspect their structure, and move arrays (vectors, matrices, density matrices) between a space and its subsystems. See [Fermionic tensor products, partial traces](fermions.md) for the conventions and phase factors behind `tensor_product`, `embed`, `partial_trace` and `partial_transpose`.
 
 ## [Pair arguments](@id pair_convention)
 
@@ -31,296 +26,90 @@ Called without the array, the same pair returns a callable operation, for exampl
 
 ## Composing and querying Hilbert spaces
 
-### Building composite spaces with `tensor_product`
-
-```julia
-tensor_product(spaces...; constraint=NoSymmetry())
-tensor_product(spaces; constraint=NoSymmetry())
-```
-
-Constructs the composite Hilbert space spanned by `spaces`.
+`tensor_product(spaces...; constraint=NoSymmetry())` builds the composite space spanned by `spaces`; an optional `constraint` restricts it to some basis states or groups them into sectors, see [Constrained Hilbert spaces and conserved quantum numbers](conservation.md). `subregion(Hs, H)` returns the part of `H` spanned by the spaces (or symbolic operators) in `Hs`; when `H` is constrained, the subregion only contains the compatible states, and the modes of the result are ordered as in `H`. The unexported `complementary_subsystem(H, Hsub)` returns the complementary subregion. It is used internally by `partial_trace` and `embed`, and precomputing it and passing it as `complement` can save time.
 
 ```@example hilbert_space_ops
-using FermionicHilbertSpaces
+using FermionicHilbertSpaces, LinearAlgebra
+import FermionicHilbertSpaces: complementary_subsystem, atomic_factors
 @fermions f
+@boson b
 H1 = hilbert_space(f, 1:2)
 H2 = hilbert_space(f, 3:4)
-H = tensor_product(H1, H2)
-```
+tensor_product(H1, H2; constraint=NumberConservation(1));
 
-An optional `constraint` restricts the resulting space to a subset of basis
-states, or groups it into sectors — see [Constrained Hilbert spaces and conserved
-quantum numbers](conservation.md) for the available constraint types.
-
-```@example hilbert_space_ops
-Hn = tensor_product(H1, H2; constraint=NumberConservation(1))
-```
-
-### Extracting subsystems with `subregion`
-
-```julia
-subregion(Hs, H::AbstractHilbertSpace)
-```
-
-Returns the subsystem of `H` spanned by the factor spaces (or symbolic operators)
-in `Hs`. When `H` has a restricted set of basis states (e.g. from a constraint),
-the returned subregion only contains the fock states that are compatible with
-that restriction.
-
-```@example hilbert_space_ops
 H = hilbert_space(f, 1:4, NumberConservation(1))
-Hsub = subregion(hilbert_space(f, 1:2), H)
-basisstates(Hsub)
-```
-
-Here the total particle number is fixed to 1, so the subregion on modes `1:2` has
-exactly three compatible states: `(1,0)`, `(0,1)`, and `(0,0)`.
-
-In some cases `subregion` can also be called with symbolic operators instead of Hilbert spaces. Their order does not matter: the modes of the result are ordered as in `H`.
-```@example hilbert_space_ops
 Hsub = subregion([f[k] for k in 1:2], H)
+basisstates(Hsub)  # the three states of modes 1:2 compatible with one particle in total
 ```
 
-In many cases one needs the complementary subsystem as well. It is available with `complementary_subsystem(H, Hsub)` (but unexported), which returns the subregion of `H` that is complementary to `Hsub`.
-```@example hilbert_space_ops
-Hcomp = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
-basisstates(Hcomp)
-```
-The complement is used when performing partial trace or embed, and it can be a useful optimization to precompute it and pass it explicitly in some cases.
+`factors(H)` splits a product space one level, so spaces that are grouped together stay intact (as of v0.10 only fermions group together), while `atomic_factors` splits all the way down to single modes. Atoms are ordered group by group, so `tensor_product(f1, b1, f2)` and `tensor_product(f1, f2, b1)` give the same space; only the order within a fermionic group matters.
 
-### Decomposing a space into factors
-
-`factors(H)` returns the composite spaces that make up a product space 
 ```@example hilbert_space_ops
-@boson b 
 Hf = hilbert_space(f, 1:2, NumberConservation(1))
-Hb = hilbert_space(b, 5)
-Hfb = tensor_product(Hf, Hb)
-factors(Hfb)
-```
-Note that the fermionic space was kept intact! However, calling factors in the fermionic space directly will return the individual mode spaces
-```@example hilbert_space_ops
-factors(Hf)
+Hfb = tensor_product(Hf, hilbert_space(b, 5))
+length.((factors(Hfb), factors(Hf), atomic_factors(Hfb)))
 ```
 
-`factors` splits the space one level, so spaces grouped together will be preserved (as of v0.10, only Fermions group together). To split it all the way down to the individual mode spaces, use 
-```@example hilbert_space_ops
-FermionicHilbertSpaces.atomic_factors(Hfb)
-```
-The atoms are always ordered group by group, so `tensor_product(f1, b1, f2)` and `tensor_product(f1, f2, b1)` give the same space. Only the order within a fermionic group matters.
+Symbols and spaces passed to `subregion` are looked up by name only, so `subregion([b[1]], H)` returns the bosonic mode as it appears in `H`, whatever its truncation. `partial_trace(m, H => Hsub)` and `embed` also look up atoms by name, so an `Hsub` built with a different truncation loses states: `partial_trace` throws an error if they carry nonzero weight (unless `skipmissing=true`), and `embed` gives zero on the states of `H` whose part on `Hsub` is lost. Use `subregion` to get an `Hsub` whose basis matches `H`.
 
-When you pass symbols or spaces to `subregion`, they are looked up by name only, so `subregion([b[1]], H)` returns the bosonic mode as it appears in `H`, whatever its truncation. `partial_trace(m, H => Hsub)` and `embed` also look up atoms by name, so an `Hsub` built with a different truncation loses states: `partial_trace` throws an error if they carry nonzero weight, unless `skipmissing=true`, and `embed` gives zero on the states of `H` whose part on `Hsub` is lost. Use `subregion` to get an `Hsub` whose basis matches `H`.
-
-### Sectors and quantum numbers
-
-When a space is built with a constraint that groups states into sectors (such as
-`NumberConservation`), the result is a `SectorHilbertSpace`. Its sector structure
-can be inspected and navigated with:
-
-```julia
-quantumnumbers(H)       # the quantum-number label of each sector
-sectors(H)              # the sectors themselves, as Hilbert spaces
-sector(qn, H)           # the sector corresponding to a given quantum number
-indices(qn_or_Hsub, H)  # basis-state indices of a sector, in H's ordering
-```
+A space built with a grouping constraint such as `NumberConservation()` is a `SectorHilbertSpace`. `quantumnumbers(H)` lists the quantum-number labels, `sectors(H)` the sectors as Hilbert spaces, `sector(qn, H)` one of them, and `indices(qn_or_Hsub, H)` the basis-state indices of a sector in the ordering of `H`. A space without sector structure behaves as a single sector: `quantumnumbers(H) == (nothing,)` and `indices(nothing, H) == 1:dim(H)`. A typical use is to find the ground state in each sector and `embed` it into the full space:
 
 ```@example hilbert_space_ops
-@fermions f
 H = hilbert_space(f, 1:4, NumberConservation())
-map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(H), sectors(H))
-```
-
-This pattern is useful to calculate ground states in each sector and extend each vector to the full space with [`embed`](@ref)
-```@example hilbert_space_ops
-using LinearAlgebra, SparseArrays
 symham = sum(f[n]'f[n] for n in 1:4)
 ground_states = stack(sectors(H)) do Hsec
-    ham = representation(symham, Hsec, :dense)
-    embed(eigvecs(ham)[:, 1], Hsec => H)
+    embed(eigvecs(representation(symham, Hsec, :dense))[:, 1], Hsec => H)
 end
-# Let's project the full hamiltonian onto the ground states
-ground_states' * representation(symham, H) * ground_states 
+ground_states' * representation(symham, H) * ground_states  # the full Hamiltonian projected onto the ground states
 ```
 
-`indices` also accepts a sector Hilbert space instead of a quantum number, e.g.
-`indices(H1, H)`. Spaces without sector structure behave as a single sector:
-`quantumnumbers(H) == (nothing,)` and `indices(nothing, H) == 1:dim(H)`.
-
-### Operators between two spaces with `Axes`
-
-`representation(op, Axes(Hout, Hin))` returns the matrix of `op` as a map from `Hin` to
-`Hout`, with rows on `Hout` and columns on `Hin`, like `axes(m)`. A bare space `H` means the
-same space on every axis, and a ket or bra has the single axis `Axes(H)`. The two spaces must
-have the same groups, for example two particle-number sectors of the same modes. Unlike the
-[Pair arguments](@ref pair_convention), where `H => Hout` maps one array to another, `Axes`
-names the spaces of a single array. `Axes` is public but not exported.
-
-Annihilating a fermion maps the 2-particle states of four modes to the 1-particle states, so
-its matrix has a row for each of the 4 one-particle states and a column for each of the 6
-two-particle states:
+`representation(op, Axes(Hout, Hin))` returns the matrix of `op` as a map from `Hin` to `Hout`, with rows on `Hout` and columns on `Hin`, like `axes(m)`. A bare space `H` means the same space on every axis, and a ket or bra has the single axis `Axes(H)`. The two spaces must have the same groups, for example two particle-number sectors of the same modes. Unlike the [Pair arguments](@ref pair_convention), where `H => Hout` maps one array to another, `Axes` names the spaces of a single array, and it is public but not exported. Annihilating a fermion maps the two-particle states of four modes to the one-particle states:
 
 ```@example hilbert_space_ops
 using FermionicHilbertSpaces: Axes
 H2 = hilbert_space(f, 1:4, NumberConservation(2))
 H1 = hilbert_space(f, 1:4, NumberConservation(1))
-representation(f[1], Axes(H1, H2))
+size(representation(f[1], Axes(H1, H2)))
 ```
 
-### Basic introspection
-
-The lowest-level accessors work on any Hilbert space and are used throughout the
-package to build the operations above:
-
-- `dim(H)` — the Hilbert-space dimension (number of basis states).
-- `basisstates(H)` — an iterable of the basis states, in matrix-representation order.
-- `basisstate(ind, H)` / `state_index(state, H)` — convert between a basis state and
-  its integer index (`state_index` returns `0` if the state is not in `H`).
-
-See the [API reference](docstrings.md) page for full docstrings.
+The lowest-level accessors are `dim(H)`, `basisstates(H)` (in matrix-representation order), and `basisstate(ind, H)` / `state_index(state, H)`, which convert between a basis state and its integer index (`state_index` returns `0` if the state is not in `H`). See the [API reference](docstrings.md) for full docstrings.
 
 ## Operations on arrays
 
-The functions below move vectors and matrices between a Hilbert space and its
-subsystems. They respect fermionic anticommutation: embedding and tracing out
-operators include the Jordan-Wigner phase factors implied by the mode ordering,
-and `partial_transpose` uses the fermionic partial-time-reversal convention,
-unless disabled with `phase_factors=false`.
+These functions respect fermionic anticommutation: embedding and tracing out include the Jordan-Wigner phase factors implied by the mode ordering, and `partial_transpose` uses the fermionic partial-time-reversal convention, unless disabled with `phase_factors=false`.
 
-### `embed`: putting a subsystem operator into a larger space
-
-```julia
-embed(m, Hsub => H; complement=complementary_subsystem(H, Hsub), kwargs...)
-```
-
-Embeds a matrix `m` acting on `Hsub` into the larger space `H`.
+`embed(m, Hsub => H)` puts a matrix on `Hsub` into the larger space `H`, `partial_trace(m, H => Hsub)` reduces a matrix on `H` (or a state vector, which is first converted to a density matrix) to `Hsub`, and `expectation(op, state, H)` gives the expectation value of an operator in a normalized state vector or density matrix on `H`.
 
 ```@example hilbert_space_ops
-@fermions f
 H = hilbert_space(f, 1:4)
 Hsub = hilbert_space(f, [2, 4])
 m = representation(f[2]' * f[4], Hsub)
 M = embed(m, Hsub => H)
+partial_trace(M, H => Hsub) ≈ m
 ```
 
-### `partial_trace`: reducing to a subsystem
+Two algorithms are available for the partial trace, `SubsystemPartialTraceAlg` and `FullPartialTraceAlg`; by default the cheaper one is picked based on the sizes of `Hsub`, `H` and the complement, and the `alg` keyword forces one. Both give the same result and throw in the same cases. When a state of `H` has no counterpart in `Hsub`, as for a truncated subsystem, the trace drops that state: by default `partial_trace` throws an `ArgumentError` if `m` has a nonzero element in its row or column, and `skipmissing=true` drops them silently. Combinations of a subsystem state and a complement state that are not in `H` drop nothing from `m`. Likewise `embed` returns the compression of `m ⊗ I` onto `H`, the adjoint of the partial trace, and by default throws if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude, as `representation` does for an operator that does not preserve the constraint of `H`.
 
-```julia
-partial_trace(m, H => Hsub; complement=complementary_subsystem(H, Hsub), kwargs...)
-```
-
-Computes the partial trace of `m` (a matrix on `H`, or a state vector which is
-first converted to a density matrix) down to `Hsub`. This is the adjoint
-operation of `embed`.
+`partial_transpose(m, H, Hsub)` transposes the subsystem `Hsub` of an operator `m` on `H`; a pure state vector or vectorized density matrix is accepted too. For fermions this is the fermionic partial transpose (partial time reversal), for bosons and spins the ordinary one. It need not preserve particle-number or parity constraints: if a transposed state is missing from `Hout`, an `ArgumentError` is thrown, so pass a larger output space such as the unconstrained space on the same modes as `partial_transpose(m, H => Hout, Hsub)`, or use `skipmissing=true` to drop those terms. The unexported `logarithmic_negativity(rho, H, Hsub)` computes the logarithm of the trace norm of the partial transpose from its singular values, since the fermionic result is not generally Hermitian.
 
 ```@example hilbert_space_ops
-Msub = partial_trace(M, H => Hsub)
-```
-
-Two algorithms are available, `SubsystemPartialTraceAlg` and
-`FullPartialTraceAlg`; by default `partial_trace` picks whichever is cheaper based
-on the sizes of `Hsub`, `H`, and the complementary subsystem, but you can force
-one with the `alg` keyword. Both give the same result and throw in the same cases.
-
-When a state of `H` has no counterpart in `Hsub`, as for a truncated subsystem, the trace
-drops that state. By default `partial_trace` then throws an `ArgumentError` if `m` has a
-nonzero element in its row or column; `skipmissing=true` drops them silently.
-Combinations of a subsystem state and a complement state that are not in `H` drop nothing
-from `m`.
-
-`embed(m, Hsub => H)` returns the compression of `m ⊗ I` onto `H`, the adjoint of the partial
-trace. By default it throws if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude,
-as `representation` does for an operator that does not preserve the constraint of `H`.
-
-The maps `partial_trace(H => Hsub)` and `embed(Hsub => H)` skip the same states, but do not
-check their input: they are the linear maps that the eager functions compute when nothing is dropped.
-
-### `expectation`: expectation values
-
-`expectation(op, state, H)` gives the expectation value of an operator in a normalized state vector or a density matrix on `H`.
-
-```@example hilbert_space_ops
-ψ = normalize(rand(dim(H)))
-expectation(f[2]' * f[4] + hc, ψ, H)
-```
-
-### `partial_transpose`: transposing a subsystem
-
-```julia
-partial_transpose(m, H, Hsub;
-  complement=complementary_subsystem(H, Hsub), phase_factors=true, skipmissing=false)
-partial_transpose(m, H => Hout, Hsub; kwargs...)  # result on Hout
-partial_transpose(H => Hout, Hsub; kwargs...)   # callable map
-```
-
-Transposes the subsystem `Hsub` of an operator `m` on `H`. A pure state vector is
-also accepted and treated as its density matrix, as is a vectorized density
-matrix. For fermions, the default operation is the fermionic partial
-transpose, also known as partial time reversal. For bosons and spins it is the ordinary partial transpose.
-
-```@example hilbert_space_ops
-using LinearAlgebra
-@fermions f
 H = hilbert_space(f, 1:2)
 Hsub = hilbert_space(f, [1])
 state = representation((f[1]' + f[2]') * Ket("0", H)) / √2
 rho_pt = partial_transpose(state, H, Hsub)
-negativity = (sum(svdvals(rho_pt)) - 1)/2 
-negativity > 0 # PPT criteria for entanglement
+negativity = (sum(svdvals(rho_pt)) - 1) / 2
+negativity > 0  # the PPT criterion detects the entanglement
 ```
 
-The partial transpose need not preserve particle-number or parity constraints.
-If a transposed state is missing from `Hout`, the default behavior is to throw an
-`ArgumentError`. Pass a larger output space, such as the unconstrained space on the
-same modes, as `H => Hout`; `skipmissing=true` instead drops terms whose output states
-are absent. Set `phase_factors=false` to disable the fermionic phase factors and
-compute the ordinary subsystem transpose.
-
-`logarithmic_negativity(rho, H, Hsub; kwargs...)` computes the logarithm of the
-trace norm of the partial transpose, using singular values (the fermionic result
-is not generally Hermitian). This function is not exported.
-
-### `tensor_product` and `generalized_kron` on arrays
-
-```julia
-tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
-tensor_product(ms, Hs => H; kwargs...)
-```
-
-Computes the *ordered* product of the fermionic embeddings of the matrices or
-vectors in `ms`, each living on the corresponding space in `Hs`, into `H`. The
-order of `ms` is significant: `tensor_product((A, B), (HA, HB) => H)` corresponds
-to `embed(A, HA=>H) * embed(B, HB=>H)`, so swapping `A` and `B` picks up a minus
-sign whenever both are fermionic and odd.
+`tensor_product(ms, Hs => H)` computes the *ordered* product of the fermionic embeddings of the matrices or vectors in `ms`, each living on the corresponding space in `Hs`. The order of `ms` matters: `tensor_product((A, B), (HA, HB) => H)` equals `embed(A, HA=>H) * embed(B, HB=>H)`, so swapping `A` and `B` gives a minus sign when both are fermionic and odd. For vectors it builds a product state from its factors, which is only well defined for fermions if each state has definite fermion parity; with `ms[k] = ψₖ|0⟩` the result is `ψ₁ψ₂⋯|0⟩`. `generalized_kron(ms, Hs => H)` returns the same product state for vectors, but for matrices it computes the fermionic tensor product of [Fermionic tensor products](fermions.md), which does not depend on the order of `ms`. It equals `tensor_product` when each space in `Hs` covers consecutive modes of `H` and `Hs` is listed in that order; on other partitions it is not a product of embeddings, and `generalized_kron` of density matrices need not be a density matrix. Use `tensor_product` for product states, local observables, and anything that should equal a product of embedded operators.
 
 ```@example hilbert_space_ops
-@fermions f
 H1 = hilbert_space(f, 1:1)
 H2 = hilbert_space(f, 2:3)
 H = tensor_product(H1, H2)
-f1 = representation(f[1], H1) 
-f2 = representation(f[2], H2)
-f12 = tensor_product((f1, f2), (H1, H2) => H)
-```
-It can be used for vectors as well to build a product state from its factors,
-but note that this is only well-defined for fermions if each state respects 
-super-selection: it must not be a superposition of states with different fermion parity.
-If each `ms[k] = ψₖ|0⟩` with `ψₖ` an operator on the modes of `Hs[k]`, the result is
-`ψ₁ψ₂⋯|0⟩`. Swapping two odd states flips the sign.
-```@example hilbert_space_ops
-v1 = representation("0", H1)
-v2 = representation("10", H2)
-v12 = tensor_product((v1, v2), (H1, H2) => H)
-```
+f12 = tensor_product((representation(f[1], H1), representation(f[2], H2)), (H1, H2) => H)
+v12 = tensor_product((representation("0", H1), representation("10", H2)), (H1, H2) => H);
 
-`generalized_kron(ms, Hs, H=tensor_product(Hs); kwargs...)` returns the
-same product state as `tensor_product` for vectors. For matrices it computes the fermionic tensor
-product instead (see [Fermionic tensor products](fermions.md)), which does not depend
-on the order of `ms`. It equals `tensor_product` when each space in `Hs` covers
-consecutive modes of `H` and `Hs` is listed in that order. On other partitions it is
-not a product of embeddings, and `generalized_kron` of density matrices need not be a
-density matrix:
-
-```@example hilbert_space_ops
 H = hilbert_space(f, 1:4)
 H13 = hilbert_space(f, [1, 3])
 H24 = hilbert_space(f, [2, 4])
@@ -330,126 +119,20 @@ AB = representation(f[1]' * f[3] * f[2]' * f[4], H)
 tensor_product((A, B), (H13, H24) => H) ≈ AB, generalized_kron((A, B), (H13, H24) => H) ≈ -AB
 ```
 
-Use `tensor_product` for product states, local observables, and anything that
-should equal a product of embedded operators. Both functions also accept the
-curried form `tensor_product(Hs => H)` / `generalized_kron(Hs => H)`, returning a
-callable that can be applied to different collections of `ms`.
+Called with only spaces, `partial_trace(H => Hsub)`, `embed(Hsub => H)`, `partial_transpose(H, Hsub)` and `tensor_product(Hs => H)` / `generalized_kron(Hs => H)` return callable operation objects. They are applied as `op(m)` or in place as `op(out, m)`, `sparse(op)` gives the superoperator as a sparse matrix, and they pay off when the same operation is applied many times. The maps `partial_trace(H => Hsub)` and `embed(Hsub => H)` skip the same states as the eager functions but do not check their input: they are the linear maps the eager functions compute when nothing is dropped.
 
-### Callable maps and sparse conversion
+`reshape(t, mappings...; repeat=false, skipmissing=false)` splits or combines the axes of `t` according to Hilbert-space mappings, applied left to right, each consuming the next consecutive group of input axes. The forms are `H => (H1, H2, ...)` (split one axis), `(H1, H2, ...) => H` (combine consecutive axes), `(H1, H2, ...) => (K1, K2, ...)` (repartition) and `H => H` (keep). With one mapping per axis group, `reshape(A, H1 => (H1a, H1b), (H2a, H2b) => H2, H3 => H3)` splits the first axis, combines the next two and keeps the last. A single mapping is expanded automatically: it is applied once if it consumes all axes of `t`, and to both halves if `t` has twice as many axes as it consumes, which suits square operator matrices (`reshape(m, H => (H1, H2))`); for asymmetric operators write `reshape(m, Hout => (H1, H2), Hin => (K1, K2))`, and `repeat=true` applies one mapping to every consecutive compatible axis group. Given only mappings, `reshape(H => (H1, H2))` returns a callable that precomputes data for repeated use. A component of the array on a basis state missing in the output space makes `reshape` throw an `ArgumentError`, unless `skipmissing=true`. The most common use is converting density matrices between vectorized and matrix form:
 
-`partial_trace(H => Hsub; kwargs...)`, `embed(Hsub => H; kwargs...)`, and
-`partial_transpose(H, Hsub; kwargs...)` (or `partial_transpose(H => Hout, Hsub; kwargs...)`), called with only spaces, return callable
-operation objects instead of immediately acting on an array:
-
-```@example hilbert_space_ops
-@fermions f
-H = hilbert_space(f, 1:4)
-Hsub = hilbert_space(f, [2, 4])
-emb = embed(Hsub => H)
-pt = partial_trace(H => Hsub)
-ptt = partial_transpose(H, Hsub)
-```
-
-These objects can be applied directly, `op(m)` or in-place `op(out, m)`. Use
-`sparse(op)` to obtain superoperator as a sparse matrix. Callable
-maps are useful when the same operation is applied many times.
-
-### `reshape`: splitting and combining array axes
-
-```julia
-reshape(t::AbstractArray, mappings...; repeat=false, skipmissing=false)
-```
-
-Reshapes the array `t` by splitting or combining its axes according to
-Hilbert-space mappings. Mappings are applied left-to-right, and each mapping
-consumes the next consecutive group of input axes.
-
-Supported mapping forms:
-
-- `H => (H1, H2, ...)`: split one axis into several
-- `(H1, H2, ...) => H`: combine several consecutive axes into one
-- `(H1, H2, ...) => (K1, K2, ...)`: repartition several axes into several
-- `H => H`: keep one axis unchanged
-
-The most common usage of this functionality is probably to convert density matrices
-between vectorized and matrix forms
 ```@example hilbert_space_ops
 @fermions fl
 @fermions fr
 Hl = hilbert_space(fl, 1:1)
 Hr = hilbert_space(fr, 1:1)
 Hlr = tensor_product(Hl, Hr)
-vlr = representation("00", Hlr) + 2*representation("10", Hlr)
+vlr = representation("00", Hlr) + 2 * representation("10", Hlr)
 rho = reshape(vlr, Hlr => (Hl, Hr))
-```
-
-This works with constraints as well
-```@example hilbert_space_ops
 Hlrconstrained = constrain_space(Hlr, NumberConservation([0, 1]))
-reshape(rho, (Hl, Hr) => Hlrconstrained)
+reshape(rho, (Hl, Hr) => Hlrconstrained);
 ```
-If the array has a nonzero component on a basis state that is missing in the
-output space, `reshape` throws an `ArgumentError`. Pass `skipmissing=true` to
-drop such components instead.
-
-#### Multiple mappings
-
-Provide one mapping per axis group:
-
-```julia
-reshape(A, H1 => (H1a, H1b), (H2a, H2b) => H2, H3 => H3)
-```
-
-This splits the first axis, combines the next two, and keeps the last unchanged.
-
-#### Single-mapping shorthand
-
-If exactly one mapping is provided, it is expanded automatically:
-
-- If it consumes all axes of `t`, it is applied once.
-- If `t` has twice as many axes as the mapping consumes, the mapping is applied to
-  the first half and again to the second half.
-
-This is convenient for square operator matrices:
-
-```julia
-reshape(v, H => (H1, H2))
-reshape(m, H => (H1, H2))
-reshape(T, (H1, H2) => H)
-```
-
-For asymmetric operators, specify both sides explicitly:
-
-```julia
-reshape(m, Hout => (H1, H2), Hin => (K1, K2))
-```
-
-#### Repeating one mapping
-
-With `repeat=true`, one mapping is applied to every consecutive compatible axis
-group:
-
-```julia
-reshape(A, H => (H1, H2); repeat=true)
-```
-
-#### Pair syntax and curried form
-
-Mappings use `Pair` syntax and can be passed directly:
-
-```julia
-reshape(m, H => (H1, H2))
-reshape(T, (H1, H2) => H)
-```
-
-`reshape` also accepts mappings first and returns a callable object:
-
-```julia
-to_tensor = reshape(H => (H1, H2))
-to_matrix = reshape((H1, H2) => H)
-```
-
-This returns a callable reshape map which precomputes some data so that it can be
-applied to multiple arrays efficiently.
 
 For worked examples, see [Open systems](literate_output/open_system_lindblad.md).
