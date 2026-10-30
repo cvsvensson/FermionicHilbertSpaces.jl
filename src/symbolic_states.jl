@@ -336,24 +336,29 @@ NonCommutativeProducts.contraction_key(s::SymbolicState) = isket(s) ? (group_id(
 # An operator string acting on a product of kets is applied to the ket of each group it acts on, with one
 # precomputation per group for all terms of `b`, as in `matrix_representation`. Other products are sorted factor by factor.
 function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any, <:AbstractSym}, b::Union{NCAdd, NCMul})
-    sorted_product(c, b) = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any, NCMul, Union{NCAdd, NCMul}}, c, x, b)
     factors1 = _first_factors(b)
-    any(s -> s isa SymbolicState, factors1) || return sorted_product(c, b)
+    any(s -> s isa SymbolicState, factors1) || return _sorted_product(c, x, b)
     groupops = _group_operators(x, factors1)
-    isnothing(groupops) && return sorted_product(c, b)
-    precomps = [precomputation_before_operator_application(op, space) for (_, space, op) in groupops]
+    isnothing(groupops) && return _sorted_product(c, x, b)
+    precomps = [precomputation_before_operator_application(op, ket.space) for (_, ket, op) in groupops]
+    return _apply_group_operators!!(c, x, b, groupops, precomps)
+end
+_sorted_product(c, x, b) = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any, NCMul, Union{NCAdd, NCMul}}, c, x, b)
+# Function barrier: the types of `groupops` and `precomps` depend on the kets in `b`
+function _apply_group_operators!!(c, x, b, groupops, precomps)
     for (factors, coeff) in NonCommutativeProducts.termpairs(b)
-        if !all(((k, space, _),) -> _is_ket_in(factors, k, space), groupops)
-            c = sorted_product(c, NCMul(coeff, factors))
+        if !all(((k, ket, _),) -> _is_like_ket(factors, k, ket), groupops)
+            c = _sorted_product(c, x, NCMul(coeff, factors))
             continue
         end
         newfactors = copy(factors)
         amp = x.coeff * coeff
-        for ((k, space, op), precomp) in zip(groupops, precomps)
-            newket, a = _apply_local_operators(op, factors[k].ket, space, precomp)
+        for ((k, ket1, op), precomp) in zip(groupops, precomps)
+            ket = factors[k]::typeof(ket1)
+            newket, a = _apply_local_operators(op, ket.ket, ket.space, precomp)
             amp *= a
             iszero(amp) && break
-            newfactors[k] = SymbolicState(space, newket, nothing)
+            newfactors[k] = SymbolicState(ket.space, newket, nothing)
         end
         iszero(amp) || (c = add!!(c, NCMul(amp, newfactors)))
     end
@@ -361,12 +366,13 @@ function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any, <:AbstractSym}, b
 end
 _first_factors(b::NCMul) = b.factors
 _first_factors(b::NCAdd) = isempty(b.dict) ? () : first(keys(b.dict)).factors
-function _is_ket_in(factors, k, space)
+# Whether `factors[k]` is a ket of the same type and space as `ket`, which makes the loop above type stable
+function _is_like_ket(factors, k, ket)
     k <= length(factors) || return false
     s = factors[k]
-    return s isa SymbolicState && isket(s) && _same_space_id(s.space, space)
+    return s isa typeof(ket) && _same_space_id(s.space, ket.space)
 end
-# Tuples `(k, space, op)`, where `op` is the product of the factors of `x` that act on the ket `factors[k]` in `space`,
+# Tuples `(k, factors[k], op)`, where `op` is the product of the factors of `x` that act on the ket `factors[k]`,
 # or `nothing` if a factor of `x` acts on none of the kets
 function _group_operators(x::NCMul, factors)
     inds = map(x.factors) do op
@@ -374,7 +380,7 @@ function _group_operators(x::NCMul, factors)
         findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)
     end
     any(isnothing, inds) && return nothing
-    return [(k, factors[k].space, NCMul(one(x.coeff), ___concretize(x.factors[inds .== k], VecConcretizer()))) for k in unique(inds)]
+    return [(k, factors[k], NCMul(one(x.coeff), ___concretize(x.factors[inds .== k], VecConcretizer()))) for k in unique(inds)]
 end
 
 

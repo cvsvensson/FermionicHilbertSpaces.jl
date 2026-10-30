@@ -188,7 +188,11 @@ struct TupleConcretizer end
 struct VecConcretizer end
 struct NoConcretizer end
 ___concretize(factors, ::TupleConcretizer) = Tuple(factors)
-___concretize(factors::AbstractVector, ::VecConcretizer) = map(identity, factors)
+# `map(identity, factors)` joins the element types one by one, which is slow, and products usually have one factor type
+function ___concretize(factors::AbstractVector, ::VecConcretizer)
+    T = isempty(factors) ? eltype(factors) : typeof(first(factors))
+    return all(f -> f isa T, factors) ? Vector{T}(factors) : map(identity, factors)
+end
 ___concretize(factors::Tuple, ::VecConcretizer) = collect(factors)
 ___concretize(factors, ::NoConcretizer) = factors
 __concretize(x::NCMul, concr) = NCMul(x.coeff, ___concretize(x.factors, concr))
