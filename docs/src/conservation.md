@@ -191,7 +191,7 @@ H = \omega a^\dagger a + \omega_0 \sum_i S^z_i + g \sum_i \left(a^\dagger S^-_i 
 It conserves the number of excitations, the boson number plus ``\sum_i (S^z_i + 1/2)``. Spins have no particle number, so the spin part of the excitation count is written explicitly with an `AdditiveConstraint`, using one map per factor space.
 ```@example tavis_cummings
 using FermionicHilbertSpaces
-using FermionicHilbertSpaces: AdditiveConstraint, particle_number
+using FermionicHilbertSpaces: particle_number
 N = 3
 nmax = 4
 @spins S 1//2
