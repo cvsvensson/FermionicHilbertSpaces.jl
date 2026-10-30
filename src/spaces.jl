@@ -112,10 +112,16 @@ Construct the Hilbert space of the fermions `f`, bosons `b` (truncated at `dimen
 (spin `J`) with the given `labels`, optionally restricted by a constraint, e.g. `NumberConservation(2)`.
 
 ```jldoctest
-julia> using FermionicHilbertSpaces; @fermions f; @bosons b; @spins s;
+julia> @fermions f; @bosons b; @spins s 1//2;
 
-julia> dim.((hilbert_space(f, 1:2, NumberConservation(1)), hilbert_space(b, 1:2, 3), hilbert_space(s, 1:2, 1//2)))
-(2, 9, 4)
+julia> dim(hilbert_space(f, 1:3, NumberConservation(1)))
+3
+
+julia> dim(hilbert_space(b, 1:2, 3))
+9
+
+julia> dim(hilbert_space(s, 1:2))
+4
 ```
 """
 hilbert_space

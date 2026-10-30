@@ -615,7 +615,7 @@ julia> using FermionicHilbertSpaces; @fermions f;
 
 julia> H = hilbert_space(f, 1:2); Hsub = hilbert_space(f, 1:1);
 
-julia> partial_trace(representation(f[1]' * f[1], H, :dense), H => Hsub) == [0 0; 0 2]
+julia> partial_trace(representation(f[1]' * f[1], H), H => Hsub) == [0 0; 0 2]
 true
 ```
 """
