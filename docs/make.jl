@@ -37,7 +37,7 @@ makedocs(;
             "Custom operators: Clock" => "literate_output/clock_operators.md",
             "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
             "Spatial symmetries" => "literate_output/translation_symmetry.md",
-            "Anderson impurity Green's function" => "literate_output/anderson_impurity.md",
+            "Anderson impurity" => "literate_output/anderson_impurity.md",
         ],
         "Non-interacting systems" => [
             "Non-interacting hilbert spaces" => "non_interacting.md",

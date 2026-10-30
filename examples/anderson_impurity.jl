@@ -1,13 +1,11 @@
-# # Anderson impurity: Green's function between sectors
+# # Anderson impurity
 
-# We compute the impurity spectral function of a single-impurity Anderson model by exact
-# diagonalization. The Green's function connects the ground state with states that have one
-# particle more or one particle fewer, so it needs the creation and annihilation operators as
-# maps between particle-number sectors. `representation(op, Axes(Hout, Hin))` gives these
-# rectangular matrices directly.
+# This tutorial shows how `representation(op, Axes(Hout, Hin))` gives creation and annihilation operators as
+# rectangular maps between particle-number sectors, and uses them for the Green's function of a single-impurity
+# Anderson model. It assumes [constrained Hilbert spaces](conservation.md) and sectors.
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots
-using FermionicHilbertSpaces: Axes
+import FermionicHilbertSpaces: Axes
 
 # The impurity is site `0`. It couples with strength `V` to `L` bath sites with energies `ε`.
 # Writing the interaction as `U(n↑ - 1/2)(n↓ - 1/2)` makes the model particle-hole symmetric.
@@ -21,7 +19,7 @@ siam(U) = U * (n(0, :↑) - 1 / 2) * (n(0, :↓) - 1 / 2) +
     sum(ε[k] * n(k, σ) for k in 1:L, σ in spins) +
     sum(V * c[0, σ]' * c[k, σ] + hc for k in 1:L, σ in spins)
 
-# The numbers of spin-up and spin-down particles are conserved separately, so we split the
+# Spin-up and spin-down particle numbers are conserved separately, so we split the
 # space into sectors labelled by `[N↑, N↓]`.
 Hup = hilbert_space(c, [(i, :↑) for i in 0:L])
 Hdn = hilbert_space(c, [(i, :↓) for i in 0:L])
@@ -49,7 +47,7 @@ G(z, (; poles, weights)) = sum(weights ./ (z .- poles))
 q0 = [L + 1, L + 1] .÷ 2
 
 # Without interaction, the impurity Green's function is known in closed form, and the Lehmann
-# sum reproduces it.
+# sum reproduces it (`true` below).
 G0(z) = 1 / (z - sum(V^2 ./ (z .- ε)))
 zs = range(-3, 3; length = 101) .+ 0.1im
 G.(zs, Ref(lehmann(siam(0), H, q0))) ≈ G0.(zs)
