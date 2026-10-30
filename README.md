@@ -7,11 +7,10 @@
 [![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 
 FermionicHilbertSpaces.jl turns symbolic fermion, boson and spin operators into matrices on Hilbert spaces, so you never index vectors and matrices by hand.
-- Operators are written and simplified with ordinary algebra, e.g. `c[1]'c[2] + hc`.
-- Their matrices can be built on any constrained space, not only the full Fock space.
-- Constraints range from particle number and parity to any rule on the basis states ([constrained spaces](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/conservation/)).
-- Tensor products, partial traces and embeddings take a pair of spaces, as in `partial_trace(ρ, H => Hsub)`.
-- Fermionic signs are handled automatically ([fermionic conventions](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/fermions/)).
+- **Operator algebra:** operators are written and simplified with ordinary algebra, e.g. `c[1]'c[2] + hc`.
+- **Constrained spaces:** matrices can be built on spaces restricted by particle number, parity or any rule on the basis states ([constrained spaces](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/conservation/)).
+- **Subsystems with fermionic signs:** tensor products, partial traces and embeddings take a pair of spaces, as in `partial_trace(ρ, H => Hsub)`, and handle fermionic signs automatically ([fermionic conventions](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/fermions/)).
+- **Extensible:** custom operator algebras and spaces can be added ([extending](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/extending/)).
 
 It is not a solver: combine it with LinearAlgebra, KrylovKit or ODE solvers for eigenstates and time evolution.
 
