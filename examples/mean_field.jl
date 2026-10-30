@@ -14,12 +14,12 @@ spins = (:↑, :↓)
 labels = [(i, σ) for i in 1:L for σ in spins]
 n(i, σ) = f[i, σ]' * f[i, σ]
 hopping = sum(-f[i, σ]' * f[mod1(i + 1, L), σ] + hc for i in 1:L, σ in spins)
-hubbard(U) = hopping + U * sum(n(i, :↑) * n(i, :↓) for i in 1:L) - U / 2 * sum(n(i, σ) for i in 1:L, σ in spins)
+hubbard(U) = hopping + U * sum(n(i, :↑) * n(i, :↓) for i in 1:L) - U / 2 * sum(n(i, σ) for i in 1:L, σ in spins);
 
 # The decoupled Hamiltonian contains the Hartree, Fock and pairing terms and is quadratic, so its BdG ground state gives
 # the next `G`.
 Hbdg = hilbert_space(f, labels, BdG())
-ground_state_correlations(op, Hbdg) = correlation_matrix(eigen(representation(op, Hbdg, :dense), BdGEigen()))
+ground_state_correlations(op, Hbdg) = correlation_matrix(eigen(representation(op, Hbdg, :dense), BdGEigen()));
 
 function self_consistent(ham, G, Hbdg; tol = 1.0e-8, maxiter = 1000)
     for _ in 1:maxiter
@@ -28,7 +28,7 @@ function self_consistent(ham, G, Hbdg; tol = 1.0e-8, maxiter = 1000)
         G = Gnew
     end
     error("The mean-field iteration did not converge in $maxiter steps.")
-end
+end;
 
 # The iteration keeps every symmetry of the initial state, so a symmetry-broken solution needs a seed that breaks it.
 # For repulsive `U` we start from the ground state of the hopping in a staggered magnetic field, and for attractive `U`
@@ -59,7 +59,7 @@ function sweep(Us, seed, order_parameter)
         @assert E_mf > E_exact
         (order = order_parameter(G), E_mf = E_mf - E_sea, E_exact = E_exact - E_sea)
     end
-end
+end;
 Us = 8:-0.5:0
 afm = sweep(Us, staggered, G -> abs(real(expectation(staggered, G, Hbdg))) / 2L)
 sc = sweep(-Us, pairing, G -> abs(expectation(f[1, :↓] * f[1, :↑], G, Hbdg)));
