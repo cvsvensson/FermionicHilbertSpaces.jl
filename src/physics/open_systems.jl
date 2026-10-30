@@ -63,12 +63,14 @@ Use `reshape(ρ, (Hl, Hr) => Hlr)` and `reshape(v, Hlr => (Hl, Hr))` to convert 
 matrices and vectors.
 
 ```jldoctest
-julia> using FermionicHilbertSpaces; @fermions f;
+julia> using FermionicHilbertSpaces; using FermionicHilbertSpaces: dissipator; using LinearAlgebra; @fermions f;
 
 julia> Hlr, Hl, Hr, left, right = open_system(f, 1:1);
 
-julia> ρ = representation(left(f[1]' * f[1]), Hl, :dense); size(reshape(ρ, (Hl, Hr) => Hlr))
-(4,)
+julia> L = representation(-1im * (left(f[1]'f[1]) - right(f[1]'f[1])) + dissipator(√2 * f[1]), Hlr, :dense);
+
+julia> size(L), minimum(abs, eigvals(L)) < 1e-12
+((4, 4), true)
 ```
 """
 function open_system(base, args...; kwargs...)
