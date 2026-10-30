@@ -30,8 +30,6 @@ struct ClockState{D} <: AbstractBasisState # A clock state with dimension D.
     ClockState{D}(n) where D = new{D}(mod(n, D))
 end
 ## Action on local basis states.
-## The last two arguments, `space` and `precomp`, are required by the interface but not used here.
-## `space` can be used to dispatch on the type of hilbert space, while `precomp` can be used to pass precomputed data to the operator application for optimization purposes.
 function apply_local_operator(op::ClockOp{:X}, state::ClockState{D}, space, precomp) where D
     newstate = ClockState{D}(state.n + (op.adjoint ? -1 : 1))
     amp = 1

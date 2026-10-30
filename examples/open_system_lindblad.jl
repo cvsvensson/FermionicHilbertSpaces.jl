@@ -1,4 +1,6 @@
 # # Open Quantum Systems 
+# It assumes [Hilbert space operations](../hilbert_space_operations.md) for `reshape`.
+
 # In FermionicHilbertSpaces, open systems can be represented as a tensor product
 # of a "left" and "right" copy of the system Hilbert space. The right copy is 
 # time-reversed, so that right-actions correspond to transposed matrices.
@@ -76,7 +78,7 @@ v = vecs[:, 1]
 
 # Extract occupation ⟨n⟩ = Tr(c†c · ρ_ss) on the physical (left) space.
 n_mat = representation(left(c[1]'c[1]), Hl)
-n_ss = tr(n_mat * ρ)
+n_ss = expectation(left(c[1]'c[1]), ρ, Hl)
 # or equivalently in the vectorized space
 n_matlr = representation(left(c[1]'c[1]), Hlr)
 n_ss = Ivec' * n_matlr * v / (Ivec' * v)

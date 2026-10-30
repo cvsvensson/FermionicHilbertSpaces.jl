@@ -61,9 +61,6 @@ const Floquets = Union{FloquetLadder,FloquetNumber}
 
 # ### `@nc` declaration
 
-# Registering types with `@nc` enables symbolic algebra operations (`+`, `*`)
-# on these types and marks their multiplication as noncommutative.
-
 @nc FloquetLadder FloquetNumber
 
 # ### `@commutative` declarations
@@ -74,12 +71,6 @@ const Floquets = Union{FloquetLadder,FloquetNumber}
 
 # ### Multiplication rules via `mul_effect`
 
-# `mul_effect(a, b)` is called when two adjacent factors `a·b` appear in a symbolic
-# product and determines how the pair should be rewritten:
-# - `nothing`               → already in canonical order; keep as-is (you need this to avoid an infinite loop)
-# - `Swap(c)`               → reorder as `c·b·a` (exchange with coefficient `c`)
-# - `AddTerms((Swap(c), r, ...))`→ reorder and add: `a·b = c·b·a + r + ...` 
-#
 # We will sort Floquet operators from different modes by their 'id', and for operators of the same mode
 # we will put number operators before ladder operators.
 
@@ -121,10 +112,6 @@ floquet_mul(::FloquetNumber, ::FloquetLadder) = nothing
 
 # ### `apply_local_operator`
 
-# This is the bridge between symbolic operators and matrix elements.
-# Given an `NCMul` of Floquet factors and a single basis state, it returns
-# the resulting state(s) and amplitude(s).
-#
 # Let's make a type for the Floquet basis states 
 using FermionicHilbertSpaces: AbstractBasisState
 struct FloquetState <: AbstractBasisState
@@ -159,8 +146,8 @@ representation(F, Hfloq; projection=true) # we need projection=true because we'v
 # Now Floquet operators will work together algebraically with the spin operators, and we can get matrix representations of such mixed operators. Let's do some physics.
 # ## Driven spin 1
 # We take a spin 1 as the physical system and couple it to the Floquet space to model a driven three-level system.  The full Hilbert space is a product of the spin and Floquet spaces, and the Hamiltonian is a symbolic expression mixing spin and Floquet operators.
-@spin σ
-Hspin = hilbert_space(σ, 1)
+@spin σ 1
+Hspin = hilbert_space(σ)
 H = tensor_product((Hspin, Hfloq))
 
 # Floquet operators can be used together with spin operators to build the Floquet Hamiltonian, with an added anisotropy ``D\sigma_z^2`` (since we used @commutative to declare that they commute):
