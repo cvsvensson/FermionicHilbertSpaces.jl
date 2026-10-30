@@ -12,8 +12,8 @@ module FreeFermions
         _FermionModeSpace, _canonicalize_repr, _zero_matrix, exchange_phase, finalize!,
         matrix_accumulator, mode_position, push_inds_amps!, state_index
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,
-        _state_label_atomic, apply_local_operators, basisstate, basisstates, dim, expectation,
-        hilbert_space, matrix_representation, mode_ordering, modes, representation
+        _state_label_atomic, apply_local_operators, basisstate, basisstates, dim, von_neumann_entropy, expectation,
+        hilbert_space, matrix_representation, mode_ordering, modes, partial_trace, representation
     using LinearAlgebra: LinearAlgebra, Diagonal, Eigen, Hermitian, Symmetric, UniformScaling, I,
         det, eigen, issymmetric, normalize, svd
     using NonCommutativeProducts: NonCommutativeProducts, NCAdd, NCMul, NCterms
@@ -55,6 +55,12 @@ module FreeFermions
         a, b = factors
         (a isa FermionSym && b isa FermionSym) || return false
         return !number_conserving || a.creation != b.creation
+    end
+
+    function _mode_positions(H, Hsub)
+        positions = [mode_position(m, H) for m in modes(Hsub)]
+        any(iszero, positions) && throw(ArgumentError("The modes of $Hsub are not a subset of the modes of $H."))
+        return positions
     end
 
     include("single_particle.jl")
