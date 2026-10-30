@@ -37,11 +37,11 @@ makedocs(;
             "Custom operators: Clock" => "literate_output/clock_operators.md",
             "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
             "Spatial symmetries" => "literate_output/translation_symmetry.md",
+            "Mean-field" => "literate_output/mean_field.md",
         ],
         "Non-interacting systems" => [
             "Non-interacting hilbert spaces" => "non_interacting.md",
             "Example: Free fermions" => "literate_output/free_fermions.md",
-            "Example: Self-consistent mean-field theory" => "literate_output/mean_field.md",
         ],
         "Misc" => "misc.md",
         "Extending and performance hooks" => "extending.md",

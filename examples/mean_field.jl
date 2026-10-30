@@ -1,7 +1,6 @@
 # # Self-consistent mean-field theory
-# Mean-field theory replaces an interacting Hamiltonian by a quadratic one whose couplings depend on the state, and then
-# looks for a state that reproduces itself. Here we solve the Hartree-Fock-Bogoliubov self-consistency of the Hubbard
-# model in the BdG space and compare the result with exact diagonalization.
+# This tutorial solves the Hartree-Fock-Bogoliubov self-consistency of the Hubbard model in the BdG space and compares
+# the result with exact diagonalization. It assumes the [non-interacting systems](non_interacting.md) page.
 using FermionicHilbertSpaces, LinearAlgebra
 using FermionicHilbertSpaces.FreeFermions
 
@@ -53,46 +52,13 @@ Gsc = self_consistent(hubbard(Uattr), ground_state_correlations(hopping + pairin
 # and the decoupled Hamiltonian has the same energy.
 E_mf = real(expectation(ham, G, Hbdg))
 @assert expectation(mean_field(ham, G, Hbdg), G, Hbdg) ≈ E_mf
-# Since the mean-field state is a variational state, its energy lies above the exact ground-state energy. The exact
-# ground state is half filled with as many up as down electrons, so we diagonalize in that sector only.
+# A variational energy lies above the exact ground-state energy. The exact ground state is half filled with equally
+# many up and down electrons, so we diagonalize in that sector only.
 Hup = hilbert_space(f, [(i, :↑) for i in 1:L])
 Hdn = hilbert_space(f, [(i, :↓) for i in 1:L])
 Hsector = tensor_product(Hup, Hdn; constraint = NumberConservation(L ÷ 2, Hup) * NumberConservation(L ÷ 2, Hdn))
 E0 = eigmin(Hermitian(representation(ham, Hsector, :dense)))
 @assert E_mf > E0
 E_mf, E0
-
-# ## Phase diagram
-# Repeating this for a range of `U` maps out where each ordered phase exists. We sweep from strong coupling towards
-# `U = 0` and start each point from the solution at the previous one, so the iteration follows the ordered branch for as
-# long as it exists. Energies are measured from the Fermi sea of the hopping, which is the mean-field solution without
-# order.
-G_fermi_sea = ground_state_correlations(hopping, Hbdg)
-function sweep(Us, seed, order_parameter)
-    G = ground_state_correlations(hopping + seed, Hbdg)
-    return map(Us) do U
-        ham = hubbard(U)
-        G = self_consistent(ham, G, Hbdg)
-        E_sea = real(expectation(ham, G_fermi_sea, Hbdg))
-        E0 = eigmin(Hermitian(representation(ham, Hsector, :dense)))
-        (order = order_parameter(G), E_mf = real(expectation(ham, G, Hbdg)) - E_sea, E0 = E0 - E_sea)
-    end
-end
-Us = 8:-0.25:0
-afm = sweep(Us, staggered, G -> abs(real(expectation(staggered, G, Hbdg))) / 2L)
-sc = sweep(-Us, pairing, G -> abs(expectation(f[1, :↓] * f[1, :↑], G, Hbdg)))
-
-using Plots
-Uall, both = [-Us; reverse(Us)], [sc; reverse(afm)]
-p1 = plot(-Us, getfield.(sc, :order); label = "pairing |⟨c↓c↑⟩|", ylabel = "order parameter", legend = :top)
-plot!(p1, Us, getfield.(afm, :order); label = "staggered moment")
-p2 = plot(Uall, getfield.(both, :E_mf); label = "mean field", ylabel = "E − E(Fermi sea)", legend = :bottom)
-plot!(p2, Uall, getfield.(both, :E0); label = "exact")
-plot(p1, p2; layout = (1, 2), xlabel = "U", lw = 2, size = 0.7 .* (1100, 420), frame = :box, margins = 4Plots.mm)
-# Each order appears only beyond a threshold coupling and then grows towards saturation. The two sides are mirror
-# images: at half filling, a particle-hole transformation of the down spins maps the repulsive ring onto the attractive
-# one and turns the staggered moment into the pairing amplitude. The threshold is a finite-size effect. The ring has a
-# gap at the Fermi level, which the interaction must overcome before ordering lowers the energy, so below it the
-# mean-field state is just the Fermi sea. The exact ground state, which on a finite ring breaks no symmetry, gains energy
-# from correlations at any `U`. Mean field stays above it everywhere, as a variational state must, misses the whole
-# energy gain at weak coupling, and captures most of it at strong coupling.
+# The mean-field state is above the exact ground state, as a variational state must be. The difference is the correlation
+# energy that mean field misses.
