@@ -1,34 +1,49 @@
-# Fig. 1 of Shapourian & Ryu, arXiv:1804.08637 (PRB 98, 075102):
-# logarithmic negativity of the two-mode Werner state with the
-# fermionic vs. the bosonic partial transpose.
-
+# # Entanglement and negativity
+#
+# This tutorial computes reduced density matrices, entanglement entropy and the logarithmic
+# negativity of fermionic states. It assumes the partial trace and partial transpose conventions
+# of [Fermionic tensor products and partial traces](fermions.md). States must have definite
+# parity, or be mixtures of parity eigenstates (superselection).
+#
+# We follow Fig. 1 of Shapourian and Ryu, [arXiv:1804.08637](https://arxiv.org/abs/1804.08637):
+# two modes, with mode 1 in subsystem `A` and mode 2 in `B`.
 using FermionicHilbertSpaces
-using LinearAlgebra, Plots
+import FermionicHilbertSpaces: logarithmic_negativity
+using LinearAlgebra
 
 @fermions f
-H = hilbert_space(f, 1:2)     # mode 1 ∈ A, mode 2 ∈ B
+H = hilbert_space(f, 1:2)
 HA = hilbert_space(f, [1])
 
-# Singlet |Ψs⟩ = (f₁† − f₂†)|0⟩/√2, Eq. (80)
-ψs = representation(Ket("01", H) - Ket("10", H)) / √2
+# ## Reduced state and entropy
+# The singlet ``(f_1^\dagger - f_2^\dagger)|0\rangle/\sqrt2`` is a pure state with odd parity.
+# Its reduced density matrix on `A` is maximally mixed, so the entropy is ``\log 2``.
+ψ = representation(Ket("01", H) - Ket("10", H)) / √2
+ρ = ψ * ψ'
+ρA = partial_trace(ρ, H => HA)
+entropy(ρ) = -sum(λ * log(λ) for λ in eigvals(Hermitian(ρ)) if λ > 1e-12)
+entropy(ρA) ≈ log(2)
 
-werner(p) = (1 - p)/4 * I + p * (ψs * ψs')           # Eq. (82)
+# ## Logarithmic negativity
+# `logarithmic_negativity(ρ, H, HA)` uses the fermionic partial transpose. For a pure state
+# it equals the Rényi-1/2 entropy, here again ``\log 2``.
+logarithmic_negativity(ρ, H, HA) ≈ log(2)
 
-RA = partial_transpose(H, HA)                        # fermionic R_A
-TA = partial_transpose(H, HA; phase_factors=false) # ordinary T_A
-logneg(ρ) = log(sum(svdvals(Matrix(ρ))))             # Eq. (31)
+# ## Fermionic versus bosonic partial transpose
+# The two-mode Werner state mixes the singlet with the identity.
+werner(p) = (1 - p) / 4 * I + p * ρ
 
-E_fermion(p) = logneg(RA(werner(p)))
-E_boson(p) = logneg(TA(werner(p)))
+# With `phase_factors=false` the partial transpose is the ordinary matrix transpose on `A`,
+# which gives a different negativity.
+E_fermion(p) = logarithmic_negativity(werner(p), H, HA)
+E_boson(p) = logarithmic_negativity(werner(p), H, HA; phase_factors=false)
 
-E_fermion_exact(p) = log((1 + p)/2 + sqrt(5p^2 - 2p + 1)/2)  # Eq. (84)
-E_boson_exact(p) = log(3(1 + p)/4 + abs(1 - 3p)/4)         # Eq. (83)
+# Both agree with the closed forms, Eqs. (84) and (83) of the reference.
+E_fermion_exact(p) = log((1 + p) / 2 + sqrt(5p^2 - 2p + 1) / 2)
+E_boson_exact(p) = log(3(1 + p) / 4 + abs(1 - 3p) / 4)
+ps = range(0, 1, length=21)
+maximum(abs, E_fermion.(ps) .- E_fermion_exact.(ps)), maximum(abs, E_boson.(ps) .- E_boson_exact.(ps))
 
-ps = range(0, 1, length=201)
-fig = plot(ps, E_fermion.(ps) ./ log(2); label="Fermionic", lw=4,
-    xlabel="p", ylabel="E / log 2", title="Two-mode Werner state negativity",
-    xlims=(0, 1), ylims=(0, 1.02), frame=:box, legend=:topleft, size=(500, 250))
-plot!(fig, ps, E_boson.(ps) ./ log(2); label="Bosonic", lw=4)
-plot!(fig, ps, E_fermion_exact.(ps) ./ log(2); label="Eq. (84)", ls=:dot, color=:black, lw=3)
-plot!(fig, ps, E_boson_exact.(ps) ./ log(2); label="Eq. (83)", ls=:dash, color=:black, lw=2)
-display(fig)
+# The fermionic negativity is nonzero for every `p > 0`, while the bosonic one vanishes
+# for `p ≤ 1/3`.
+E_fermion(0.2), E_boson(0.2)

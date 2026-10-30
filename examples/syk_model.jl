@@ -1,14 +1,15 @@
-# # SYK Model Tutorial
-
-# In this example, we study the Sachdev-Ye-Kitaev (SYK) model for Majorana fermions.
-# We build a random all-to-all 4-body Hamiltonian, diagonalize it in one parity sector,
-# and compute simple diagnostics of chaotic behavior and entanglement.
+# # Sachdev-Ye-Kitaev model
+#
+# We build the SYK model of ``M`` Majoranas with random all-to-all four-body couplings,
+# diagonalize it in one parity sector, and use the level-spacing ratio to detect chaos.
+# `@majoranas` creates operators with ``\gamma_i^2 = 1``, ``\{\gamma_i, \gamma_j\} = 2\delta_{ij}``.
 using FermionicHilbertSpaces
-using FermionicHilbertSpaces.NonCommutativeProducts: add!!
+import FermionicHilbertSpaces: add!!
 using LinearAlgebra, Random, Statistics
 
+# The Hamiltonian is ``H = \sqrt{6}\,J/M^{3/2} \sum_{i<j<k<l} J_{ijkl}\gamma_i\gamma_j\gamma_k\gamma_l``
+# with Gaussian ``J_{ijkl}``. `add!!` accumulates the terms in place.
 function syk_hamiltonian(g, M; J=1.0)
-    iseven(M) || throw(ArgumentError("M must be even"))
     prefactor = sqrt(6) * J / M^(3 / 2)
     ham = 0
     for i in 1:M-3, j in i+1:M-2, k in j+1:M-1, l in k+1:M
@@ -17,32 +18,23 @@ function syk_hamiltonian(g, M; J=1.0)
     return ham
 end
 
-function adjacent_gap_ratio(energies)
-    spacings = diff(energies)
-    rs = [min(s1, s2) / max(s1, s2) for (s1, s2) in zip(spacings[1:end-1], spacings[2:end]) if max(s1, s2) > 1e-12]
-    mean(rs)
-end
-
-function entanglement_entropy(psi, Hsub, H)
-    rho = partial_trace(psi * psi', H => Hsub)
-    vals = filter(>(1e-12), eigvals(Hermitian(Matrix(rho))))
-    -sum(vals .* log.(vals))
-end
-
-M = 8 * 2
+# Fix the seed and restrict to the even-parity sector.
+M = 16
 @majoranas g
-
 H = hilbert_space(g, 1:M, ParityConservation(1))
 Random.seed!(11)
-symham = syk_hamiltonian(g, M)
-ham = Hermitian(representation(symham, H, :dense))
-vals_even, vecs_even = eigen(ham)
+ham = Hermitian(representation(syk_hamiltonian(g, M), H, :dense))
+energies = eigvals(ham);
 
-##
-Hleft = subregion(hilbert_space(g, 1:M÷2), H)
+# The mean ratio ``\min(s_n, s_{n+1}) / \max(s_n, s_{n+1})`` of adjacent level spacings
+# is independent of the level density. We drop exactly degenerate pairs.
+function adjacent_gap_ratio(energies)
+    s = diff(energies)
+    mean(min(a, b) / max(a, b) for (a, b) in zip(s[1:end-1], s[2:end]) if max(a, b) > 1e-12)
+end
+adjacent_gap_ratio(energies)
 
-println("SYK model with M = $M Majoranas")
-println("Hilbert-space dimension (even sector): $(dim(H))")
-println("Ground-state energy (even): $(vals_even[1])")
-println("Mean adjacent gap ratio: $(adjacent_gap_ratio(vals_even))") #should be roughly 0.53
-println("Half-system entanglement entropy: $(entanglement_entropy(vecs_even[:,1], Hleft, H))") # should be close to 0.33841M/2
+# For ``M`` a multiple of 8 the even sector is in the GOE class, with reference value
+# ``\approx 0.5307``. Other ``M`` mod 8 give GUE (``\approx 0.5996``) or GSE (``\approx 0.6744``).
+# A single sample fluctuates around it; averaging over seeds converges.
+mean(adjacent_gap_ratio(eigvals(Hermitian(representation(syk_hamiltonian(g, M), H, :dense)))) for _ in 1:10)
