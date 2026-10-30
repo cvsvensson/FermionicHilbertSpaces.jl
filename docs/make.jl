@@ -37,12 +37,12 @@ makedocs(;
             "Custom operators: Clock" => "literate_output/clock_operators.md",
             "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
             "Spatial symmetries" => "literate_output/translation_symmetry.md",
-        ],
-        "Symbolic states in large spaces" => [
-            "η-pairing in a Hubbard chain" => "literate_output/eta_pairing.md",
-            "Bound doublons with KrylovKit" => "literate_output/hubbard_bound_state.md",
-            "Schrieffer–Wolff and the Kondo coupling" => "literate_output/schrieffer_wolff_kondo.md",
-            "Toric code from the Kitaev honeycomb" => "literate_output/kitaev_honeycomb_toric_code.md",
+            "Advanced: symbolic states" => [
+                "η-pairing in a Hubbard chain" => "literate_output/eta_pairing.md",
+                "Bound doublons with KrylovKit" => "literate_output/hubbard_bound_state.md",
+                "Schrieffer–Wolff and the Kondo coupling" => "literate_output/schrieffer_wolff_kondo.md",
+                "Toric code from the Kitaev honeycomb" => "literate_output/kitaev_honeycomb_toric_code.md",
+            ],
         ],
         "Non-interacting systems" => [
             "Non-interacting hilbert spaces" => "non_interacting.md",

@@ -7,9 +7,10 @@
 # For $J_z \gg J_x, J_y$, the two spins on each z-link align, and fourth-order perturbation theory in
 # the x- and y-links gives the toric code $H_\mathrm{eff} = -J_\mathrm{eff} \sum_p W_p$, with
 # $J_\mathrm{eff} = J_x^2 J_y^2 / (16 J_z^3)$ and $W_p$ the product of the six link operators around hexagon $p$.
-# We compute $J_\mathrm{eff}$ with symbolic states on a torus of 64 spins, without ever building the $2^{64}$-dimensional basis.
+# This tutorial computes $J_\mathrm{eff}$ by applying spin operators to symbolic kets on a torus too large to enumerate,
+# and checks it against this formula. It assumes [Symbolic states](../symbolic_states.md).
 using FermionicHilbertSpaces
-using KrylovKit.VectorInterface: inner
+import FermionicHilbertSpaces.NonCommutativeProducts.VectorInterface: inner
 
 # ## Lattice
 # We draw the honeycomb as a brick wall on an `Lx × Ly` torus. Horizontal links alternate between
@@ -25,14 +26,14 @@ zlink(i, j) = K(:z, site(i, j), site(i, j + 1))
 # The plaquette operator of the hexagon with lower left corner `(i, j)`, for `i + j` even, multiplies the links around it.
 hexagon(i, j) = hlink(i, j) * hlink(i + 1, j) * zlink(i + 2, j) * hlink(i + 1, j + 1) * hlink(i, j + 1) * zlink(i, j)
 
-# Start in the state with all spins up, which has all dimers aligned, and flip one plaquette.
+# The all-up state has every z-link aligned. Applying a plaquette operator gives a second aligned state.
 ψ = Ket(fill("↑", Lx * Ly), H)
 ψp = hexagon(3, 3) * ψ
 
 # ## Fourth-order amplitude
 # The matrix element of $H_\mathrm{eff}$ between the two states is $⟨ψ_p| V G V G V G V |ψ⟩$, where
 # $V$ holds the x- and y-links and $G = Q/(E_0 - H_0)$ is the resolvent of the z-links $H_0$ outside the aligned subspace.
-# Lower orders do not connect the two states, so this is the full fourth-order term.
+# Lower orders do not connect the two states.
 # $H_0$ is diagonal in the $σ^z$ basis, so $G$ divides each basis state in a ket by its energy denominator.
 function plaquette_amplitude(Jx, Jy, Jz)
     H0 = -Jz * sum(zlink(i, j) for i in 1:Lx, j in 1:Ly if iseven(i + j))
@@ -42,7 +43,7 @@ function plaquette_amplitude(Jx, Jy, Jz)
     G(φ) = sum(c / (E0 - energy(state)) * state for (state, c) in φ.dict if !(energy(state) ≈ E0))
     ## Split the product as ⟨φp|G|φ⟩ with φ = VGV|ψ⟩, since V and G are Hermitian.
     φ, φp = V * G(V * ψ), V * G(V * ψp)
-    ## Each holds a few thousand basis states, and the middle G is only needed on those they share.
+    ## The middle G is only needed on the basis states that φ and φp share.
     return sum(conj(c) * φ.dict[state] / (E0 - energy(state)) for (state, c) in φp.dict if haskey(φ.dict, state))
 end
 
