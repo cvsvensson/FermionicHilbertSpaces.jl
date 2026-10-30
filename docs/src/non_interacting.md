@@ -107,7 +107,7 @@ expectation(mf, G, H) ≈ expectation(U, G, H)
 ## Correlation matrices and entanglement
 For the BdG ground state, the correlation matrix ``G`` of the previous section is `correlation_matrix(F)`, where `F` is the result of `eigen(A, BdGEigen())`, and `ground_state_parity(F)` is its fermionic parity. For a many-body state `ψ` on `H`, `correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`.
 
-The reduced correlation matrix of a subsystem of modes is `partial_trace(G, Hbdg => Hsub)`, where `Hsub` is a BdG space over those modes. Its entropy `von_neumann_entropy(Gsub, Hsub)`, ``S = -\sum \lambda \log \lambda`` over its eigenvalues ``\lambda``, equals the entropy of the reduced many-body density matrix:
+The correlation matrix of a subset of the modes is `partial_trace(G, Hbdg => Hsub)` with `Hsub` a BdG space over those modes, and `von_neumann_entropy(Gsub, Hsub)` is the entanglement entropy of that subsystem. The example checks both against the many-body ground state:
 ```@example entanglement
 using FermionicHilbertSpaces, LinearAlgebra
 using FermionicHilbertSpaces.FreeFermions
@@ -134,7 +134,7 @@ H = hilbert_space(f, 1:N)
 S
 ```
 
-Conversely, `gaussian_state(G, H, Hbdg)` builds the many-body density matrix on `H` of the Gaussian state with correlation matrix `G`. The reduced correlation matrix gives the reduced density matrix:
+`gaussian_state(G, H, Hbdg)` goes the other way, building the many-body density matrix with correlation matrix `G`. Applied to `Gsub` it gives the reduced density matrix:
 ```@example entanglement
 gaussian_state(Gsub, hilbert_space(f, sub), Hsub) ≈ ρsub
 ```
