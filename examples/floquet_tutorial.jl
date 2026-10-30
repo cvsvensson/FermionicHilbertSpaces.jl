@@ -55,7 +55,7 @@ Base.adjoint(F::FloquetLadder) = FloquetLadder(-F.shift, F.basis)
 Base.adjoint(N::FloquetNumber) = N          # N is Hermitian
 Base.show(io::IO, F::FloquetLadder) = print(io, "F^", F.shift)
 Base.show(io::IO, N::FloquetNumber) = print(io, "N^", N.power)
-const Floquets = Union{FloquetLadder,FloquetNumber};
+const Floquets = Union{FloquetLadder, FloquetNumber};
 
 # Declaring them with `@nc` makes them non-commutative symbols, and `@commutative` makes them commute with every other `AbstractSym`, such as spin operators:
 
