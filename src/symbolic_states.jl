@@ -336,13 +336,13 @@ NonCommutativeProducts.contraction_key(s::SymbolicState) = isket(s) ? (group_id(
 # Products of kets of the same spaces in the same order are orthonormal: ⟨a|b⟩ is one if their factors are equal and
 # zero otherwise. The key above only sees the first factor, which leaves few distinct keys for products of many small
 # spaces such as spin chains, so sums of such products are matched by their factors instead.
-const _SymbolicStateSum = NCAdd{<:Any,<:NCMul{<:Any,<:SymbolicState}}
+const _SymbolicStateSum = NCAdd{<:Any, <:NCMul{<:Any, <:SymbolicState}}
 function VectorInterface.inner(x::_SymbolicStateSum, y::_SymbolicStateSum)
     xterms, yterms = collect(NonCommutativeProducts.termpairs(x)), collect(NonCommutativeProducts.termpairs(y))
-    (isempty(xterms) || isempty(yterms)) && return invoke(VectorInterface.inner, Tuple{NCAdd,NCAdd}, x, y)
+    (isempty(xterms) || isempty(yterms)) && return invoke(VectorInterface.inner, Tuple{NCAdd, NCAdd}, x, y)
     ref = first(first(xterms))
     all(t -> _same_ket_spaces(first(t), ref), Iterators.flatten((xterms, yterms))) ||
-        return invoke(VectorInterface.inner, Tuple{NCAdd,NCAdd}, x, y)
+        return invoke(VectorInterface.inner, Tuple{NCAdd, NCAdd}, x, y)
     ycoeffs = Dict(yterms)
     z = zero(valtype(ycoeffs))
     return sum(c' * get(ycoeffs, factors, z) for (factors, c) in xterms) + zero(last(first(xterms)))' * z
@@ -1006,7 +1006,7 @@ end
     Random.seed!(1)
     @fermions f
     @boson b
-    @spins S 1//2
+    @spins S 1 // 2
     Hf = hilbert_space(f, 1:2)
     H = tensor_product([Hf; hilbert_space(b, 3); [hilbert_space(S[i]) for i in 1:4]])
     states = collect(basisstates(H))
