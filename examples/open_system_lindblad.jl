@@ -1,5 +1,4 @@
 # # Open Quantum Systems 
-# It assumes [Hilbert space operations](../hilbert_space_operations.md) for `reshape`.
 
 # In FermionicHilbertSpaces, open systems can be represented as a tensor product
 # of a "left" and "right" copy of the system Hilbert space. The right copy is 
