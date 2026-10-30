@@ -27,7 +27,7 @@ Given to `hilbert_space` or `tensor_product`, `NumberConservation`, `ParityConse
 
 ## Available constraints
 
-### NumberConservation
+#### NumberConservation
 Conserves the particle number, or a weighted sum of the particle numbers of selected spaces. The allowed total is one value or a collection; leaving it out keeps all sectors.
 ```@example constraints
 @boson b
@@ -37,13 +37,13 @@ Hb = hilbert_space(b, 10)
 tensor_product(Hf, Hb; constraint = NumberConservation(0:1, [Hf, Hb], [1, -1]))
 ```
 
-### ParityConservation
+#### ParityConservation
 Conserves fermion parity, `1` for even and `-1` for odd states; without arguments it keeps both sectors.
 ```@example constraints
 quantumnumbers(hilbert_space(f, 1:4, ParityConservation()))
 ```
 
-### Products of constraints
+#### Products of constraints
 Multiplying constraints imposes all of them, and the quantum number of a sector has one entry per factor. Here each pair of modes holds at most one fermion, and there are two fermions in total:
 ```@example constraints
 pairs = [hilbert_space(f, 2k-1:2k) for k in 1:3]
@@ -51,7 +51,7 @@ pair_constraint = prod(NumberConservation(0:1, Hk) for Hk in pairs) * NumberCons
 tensor_product(pairs; constraint = pair_constraint)
 ```
 
-### AdditiveConstraint
+#### AdditiveConstraint
 Conserves a sum of contributions from the factors of a tensor product, given by `maps` applied to the state of each factor. This covers additive quantum numbers that are not particle numbers, such as the magnetization of spins:
 ```@example constraints
 @spins S 1//2
@@ -60,7 +60,7 @@ Hmag = tensor_product(spins; constraint = AdditiveConstraint(-2:2; maps = s -> s
 quantumnumbers(Hmag)
 ```
 
-### FilterConstraint
+#### FilterConstraint
 Keeps the states for which a function returns `true`. With `maps` and `spaces`, the function receives the value of each map on the state of its space. Here the particle numbers of two bosonic modes must be sorted:
 ```@example constraints
 import FermionicHilbertSpaces: particle_number
@@ -70,7 +70,7 @@ sorted = FilterConstraint(issorted; maps = particle_number, spaces = factors(Hbb
 basisstates(constrain_space(Hbb, sorted))
 ```
 
-### SectorConstraint
+#### SectorConstraint
 Like `FilterConstraint`, but the function returns a sector label, or `missing` to discard the state. Here the two modes must hold different numbers of bosons, and the sectors are labelled by the total:
 ```@example constraints
 distinct = SectorConstraint(n -> allunique(n) ? sum(n) : missing;
@@ -79,7 +79,7 @@ Hdistinct = constrain_space(Hbb, distinct)
 map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(Hdistinct), sectors(Hdistinct))
 ```
 
-### BranchConstraint
+#### BranchConstraint
 Builds the states one factor at a time and calls `f(partial_state, depth, spaces)` after each factor is assigned. Returning `false` discards every state that starts this way, so a sector much smaller than the full space is found without enumerating it. Here no two neighbouring modes are both occupied:
 ```@example constraints
 no_neighbours = BranchConstraint((p, depth, spaces) -> depth == 1 || count_ones(p[depth]) + count_ones(p[depth-1]) < 2)
@@ -88,7 +88,7 @@ dim(hilbert_space(f, 1:20, no_neighbours))
 
 ## Examples
 
-### Spinful fermions
+#### Spinful fermions
 The package does not special-case spinful fermions: spin is an extra label. If the numbers of spin up and spin down fermions are separately conserved, the product of their number conservations divides the space into sectors labelled by both numbers:
 ```@example spin
 using FermionicHilbertSpaces
@@ -105,7 +105,7 @@ constraint = NumberConservation(2, Hup) * NumberConservation(0, Hdn)
 tensor_product(Hup, Hdn; constraint)
 ```
 
-### Hubbard model
+#### Hubbard model
 The Hubbard model
 ```math
 H = -t \sum_{i,\sigma} (c_{i,\sigma}^\dagger c_{i+1,\sigma} + \mathrm{h.c}) + U \sum_i n_{i,↑} n_{i,↓}
@@ -128,7 +128,7 @@ ham = representation(hubbard_hamiltonian(f, N, 1.0, 4.0), H);
 size(ham)
 ```
 
-#### No double occupation
+##### No double occupation
 For strong interactions, double occupation can be forbidden by allowing at most one fermion on each site. The hamiltonian maps some states of this subspace outside it, and `projection = true` drops those terms:
 ```@example hubbard
 local_modes(k) = [f[k, :↑], f[k, :↓]]
@@ -138,7 +138,7 @@ ham_ndo = representation(hubbard_hamiltonian(f, N, 1, 0), H_ndo; projection = tr
 size(ham_ndo)
 ```
 
-### Tavis–Cummings model
+#### Tavis–Cummings model
 ``N`` spin-1/2 emitters coupled to a cavity mode,
 ```math
 H = \omega a^\dagger a + \omega_0 \sum_i S^z_i + g \sum_i \left(a^\dagger S^-_i + a S^+_i\right),
@@ -157,7 +157,7 @@ H = tensor_product(spaces; constraint = excitations)
 ```
 The Hamiltonian is block diagonal in these sectors, one per excitation number.
 
-### Fractionalized Hilbert space of the t-Jz model
+#### Fractionalized Hilbert space of the t-Jz model
 The ``t-J_z`` model
 ```math
 H = -t \sum_{i,\sigma} (c_{i,\sigma}^\dagger c_{i+1,\sigma} + \mathrm{h.c}) + J_z \sum_{i} S^z_i S^z_{i+1},
