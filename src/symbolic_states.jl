@@ -17,6 +17,19 @@ struct Kets{B,H}
     space::H
     Kets(space::H) where H = new{statetype(space),H}(space)
 end
+"""
+    Ket(label, H)
+
+The symbolic ket of `H` with the given `label`, such as the bitstring `"10"`. See [`Kets`](@ref)
+for the multi-state form.
+
+```jldoctest
+julia> @fermions f;
+
+julia> Ket("10", hilbert_space(f, 1:2))
+|10⟩
+```
+"""
 Ket(label, H) = Kets(H)(label)
 # The basis kets of the space, in the order of `basisstates`
 Base.length(k::Kets) = dim(k.space)
