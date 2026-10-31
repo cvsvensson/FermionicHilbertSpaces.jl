@@ -54,8 +54,24 @@ makedocs(;
     plugins=[DocumenterCodeBlocks.CodeBlocks()],
 )
 
-include(joinpath(@__DIR__, "llms.jl"))
-write_llms(pages)
+# llms.txt (https://llmstxt.org/) is served next to the pages, so relative links resolve per docs version.
+optional = ["Misc", "Extending and performance hooks", "Functions"]
+sections = [
+    "Docs" => filter(p -> p.second isa String && p.first ∉ optional, pages),
+    [p for p in pages if p.second isa Vector]...,
+    "Optional" => filter(p -> p.first ∈ optional, pages),
+]
+link((title, file)) = "- [$title]($(file == "index.md" ? "./" : replace(file, r"\.md$" => "/")))"
+section((name, ps)) = "## $name\n\n" * join(link.(ps), "\n")
+write(joinpath(@__DIR__, "build", "llms.txt"), """
+    # FermionicHilbertSpaces.jl
+
+    > Julia package for fermionic, bosonic and spin Hilbert spaces with constraints and symmetry sectors, and their sparse, dense or lazy operator matrices.
+
+    Typical workflow: define symbols with `@fermions`/`@bosons`/`@spins`, build a space with `hilbert_space` (optionally with a constraint such as `NumberConservation`), get matrices with `representation(op, H)`, and reduce with `partial_trace`. Pass `:dense` to `representation` only when a dense matrix is needed.
+
+    $(join(section.(sections), "\n\n"))
+    """)
 
 deploydocs(;
     repo="github.com/cvsvensson/FermionicHilbertSpaces.jl",
