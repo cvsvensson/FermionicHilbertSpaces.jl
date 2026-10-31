@@ -1,7 +1,7 @@
 """
     correlation_matrix(state, H, Hbdg::BdGHilbertSpace)
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on the many-body space `H`, where `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩`. A BdG space over a subset of the modes gives the reduced correlation matrix. On a Majorana space `hilbert_space(γ, labels, SingleParticle())`, `Ψ = γ / √2`, so `G[i, j] = ⟨γ_i γ_j⟩ / 2`.
+The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on the many-body space `H`, where `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩`. A BdG space over a subset of the modes gives the reduced correlation matrix. On a Majorana space `hilbert_space(γ, labels, SingleParticle())`, `Ψ = γ / √2`, so `G[i, j] = ⟨γ_i γ_j⟩ / 2`. On a number-conserving space `hilbert_space(f, labels, SingleParticle())`, `Ψ = f`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions; @fermions f;
@@ -18,7 +18,7 @@ julia> correlation_matrix(ψ, H, hilbert_space(f, 1:2, BdG()))
  0  0  0  1
 ```
 """
-function correlation_matrix(state, H, Hfree::Union{BdGHilbertSpace, MajoranaSingleParticleHilbertSpace})
+function correlation_matrix(state, H, Hfree::Union{SingleParticleHilbertSpace, BdGHilbertSpace, MajoranaSingleParticleHilbertSpace})
     Ψ = adjoint.(_nambu_creators(Hfree))
     return [expectation(Ψi' * Ψj, state, H) for Ψi in Ψ, Ψj in Ψ]
 end
@@ -43,9 +43,9 @@ The von Neumann entropy of the Gaussian state with Nambu correlation matrix `G` 
 von_neumann_entropy(G, ::BdGHilbertSpace) = von_neumann_entropy(G)
 
 """
-    correlation_matrix(F::LinearAlgebra.Eigen)
+    correlation_matrix(F::LinearAlgebra.Eigen; β = Inf)
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground state, where `F` is the result of `eigen(A, BdGEigen())`, assuming no zero-energy modes. It equals `correlation_matrix(ψ, H, Hbdg)` for the many-body ground state `ψ`. For the matrix `R` of a Majorana operator, `F = eigen(Hermitian(R))` gives `G[i, j] = ⟨γ_i γ_j⟩ / 2`.
+The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground state, where `F` is the result of `eigen(A, BdGEigen())`; the default `β = Inf` assumes no zero-energy modes. It equals `correlation_matrix(ψ, H, Hbdg)` for the many-body ground state `ψ`. A finite `β` gives the thermal state `exp(-β * H) / Z` of the many-body Hamiltonian `H` that `A` represents. For the matrix `R` of a Majorana operator, `F = eigen(Hermitian(R))` gives `G[i, j] = ⟨γ_i γ_j⟩ / 2`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions, LinearAlgebra; @fermions f;
@@ -56,10 +56,15 @@ julia> correlation_matrix(eigen(A, BdGEigen())) ≈ [1 0; 0 0]
 true
 ```
 """
-function correlation_matrix(F::Eigen)
+function correlation_matrix(F::Eigen; β = Inf)
     N = div(size(F.vectors, 2), 2)
-    U = F.vectors[:, 1:N]
-    return conj(U) * transpose(U)
+    if isinf(β)
+        U = F.vectors[:, 1:N]
+        return conj(U) * transpose(U)
+    end
+    # The BdG matrix carries a factor 1/2, so the quasiparticle energies are 2 * F.values.
+    n = inv.(exp.(2β .* F.values) .+ 1)
+    return conj(F.vectors) * Diagonal(n) * transpose(F.vectors)
 end
 
 """
@@ -161,6 +166,37 @@ end
     @test parities[1] == 1 && parities[3] == -1
     F = eigen(representation(quadratic, Hbdg, :dense), BdGEigen())
     @test_throws ArgumentError ground_state_parity(Eigen(F.values, 2 * F.vectors))
+end
+
+@testitem "Thermal BdG correlation matrix" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces.FreeFermions
+    @fermions f
+    N = 3
+    Hmb = hilbert_space(f, 1:N)
+    Hbdg = hilbert_space(f, 1:N, BdG())
+    h = rand(ComplexF64, N, N) + hc
+    Δ = rand(ComplexF64, N, N)
+    Δ = Δ - transpose(Δ)
+    ham = sum(f[n]' * h[n, m] * f[m] + Δ[n, m] * f[n]' * f[m]' + hc for n in 1:N, m in 1:N) - sum(f[n]' * f[n] for n in 1:N)
+    ρ = exp(-0.7 * representation(ham, Hmb, :dense))
+    ρ /= tr(ρ)
+    F = eigen(representation(ham, Hbdg, :dense), BdGEigen())
+    @test correlation_matrix(F; β = 0.7) ≈ correlation_matrix(ρ, Hmb, Hbdg)
+    @test correlation_matrix(F; β = 1.0e6) ≈ correlation_matrix(F)
+end
+
+@testitem "Single particle correlation matrix" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces.FreeFermions
+    @fermions f
+    N = 3
+    Hmb = hilbert_space(f, 1:N)
+    Hsp = hilbert_space(f, 1:N, SingleParticle())
+    ham = sum(rand(ComplexF64) * f[i]' * f[j] + hc for i in 1:N, j in 1:N)
+    ψ = eigvecs(Hermitian(representation(ham, Hmb, :dense)))[:, 3]
+    op = f[1]' * f[2] + 2 * f[3] * f[1]' + 1
+    @test expectation(op, correlation_matrix(ψ, Hmb, Hsp), Hsp) ≈ expectation(op, ψ, Hmb)
 end
 
 @testitem "Majorana ground state" begin
