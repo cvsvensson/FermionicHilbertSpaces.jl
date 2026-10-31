@@ -339,20 +339,20 @@ end
 # Every benchmark samples for one second. Fixing `evals` makes `tune!`
 # unnecessary. Benchmarks that take less than about 200 µs per evaluation run
 # several evaluations per sample, so that the sample is long compared with
-# timer and scheduling noise; the rest run one.
+# timer, scheduling and garbage-collection noise; the rest run one.
 const EVALS = Dict(
     "tensor_product/spaces" => 25,
     "partial_trace/product space/apply_precomputed" => 64,
     "reshape/precomputed/apply_inplace" => 16,
     "reshape/precomputed/construct" => 10,
     "partial_trace_algorithms/Full space/Dense/SubAlg" => 6,
-    "complement/fermions" => 4,
+    "complement/fermions" => 32,
     "embed/product space" => 4,
     "partial_trace_algorithms/Sparse space/Sparse/FullAlg" => 4,
     "partial_trace/precomputed/eager_pure_state" => 4,
     "complement/product space" => 3,
     "partial_trace/product space/map" => 3,
-    "reshape/mat_to_vec" => 3,
+    "reshape/mat_to_vec" => 24,
     "partial_trace/precomputed/apply_pure_state_inplace" => 3,
     "hilbert_space" => 2,
     "symbolic/sum" => 2,
