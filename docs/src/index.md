@@ -11,10 +11,10 @@ Install the package from the Julia package manager with `Pkg.add("FermionicHilbe
 
 ## Functionality
 
-* **Operator algebra:** operators are written and simplified with ordinary algebra, e.g. `c[1]'c[2] + hc`.
-* **Constrained spaces:** matrices can be built on spaces restricted by particle number, parity or any rule on the basis states.
-* **Subsystems with fermionic signs:** tensor products, partial traces and embeddings take a pair of spaces, as in `partial_trace(ρ, H => Hsub)`, and handle fermionic signs automatically.
-* **Extensible:** custom operator algebras and spaces can be added, see [Extending](extending.md).
+* **Symbolic operators:** fermions, bosons and spins are combined algebraically, e.g. `f[1]'f[2] + hc`, and simplified with their commutation relations. `representation` turns them into matrices on any Hilbert space.
+* **Hilbert spaces:** spaces keep track of their basis states and ordering, so you never index by hand. They can be restricted by particle number, parity or any rule on the basis states.
+* **Tensor products and partial traces:** spaces combine and split, as in `partial_trace(ρ, H => Hsub)`, with fermionic signs handled automatically.
+* **Extensible:** custom operators and spaces can be added, see [Extending](extending.md).
 
 It is not a solver: combine it with LinearAlgebra, KrylovKit or ODE solvers for eigenstates and time evolution.
 
