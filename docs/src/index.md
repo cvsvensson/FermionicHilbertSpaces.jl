@@ -8,6 +8,8 @@ CurrentModule = FermionicHilbertSpaces
 
 Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`.
 
+The [cheat sheet](cheatsheet.md) lists common tasks and the functions that do them.
+
 
 ## Functionality
 

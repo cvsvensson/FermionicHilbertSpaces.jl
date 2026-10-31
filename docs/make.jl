@@ -29,6 +29,7 @@ end
 
 pages = [
     "Home" => "index.md",
+    "Cheat sheet" => "cheatsheet.md",
     "Tutorials" => [
         "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
         "Bosons" => "literate_output/bosons.md",
