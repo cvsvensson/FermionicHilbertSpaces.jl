@@ -981,7 +981,8 @@ end
     Random.seed!(1)
     @fermions f
     @spin s 1
-    for (H, op) in ((hilbert_space(f, 1:4), 0.5 + f[2]' * f[1] + hc + 2.0 * f[3]' * f[3] * f[4]' * f[4] - f[4]),
+    for (H, op) in (
+            (hilbert_space(f, 1:4), 0.5 + f[2]' * f[1] + hc + 2.0 * f[3]' * f[3] * f[4]' * f[4] - f[4]),
         (tensor_product(hilbert_space(f, 1:2), hilbert_space(s)), f[1]' * s[:+] + f[2] + hc))
         states = collect(basisstates(H))
         ψ = sum(randn() * FermionicHilbertSpaces.SymbolicState(H, st, nothing) for st in states)
