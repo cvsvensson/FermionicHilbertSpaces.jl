@@ -48,7 +48,10 @@ pages = [
         "Non-interacting hilbert spaces" => "non_interacting.md",
         "Example: Free fermions" => "literate_output/free_fermions.md",
     ],
-    "Misc" => "misc.md",
+    "Performance" => [
+        "Benchmarks" => "performance.md",
+        "Misc" => "misc.md",
+    ],
     "Extending and performance hooks" => "extending.md",
     "Functions" => "docstrings.md",
 ]
@@ -68,7 +71,7 @@ makedocs(;
 )
 
 # llms.txt (https://llmstxt.org/) is served next to the pages, so relative links resolve per docs version.
-optional = ["Misc", "Extending and performance hooks", "Functions"]
+optional = ["Extending and performance hooks", "Functions"]
 sections = [
     "Docs" => filter(p -> p.second isa String && p.first ∉ optional, pages),
     [p for p in pages if p.second isa Vector]...,
