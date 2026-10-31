@@ -2,26 +2,37 @@
 
 > Julia package for fermionic, bosonic and spin Hilbert spaces with constraints and symmetry sectors, and their sparse, dense or lazy operator matrices.
 
+Typical workflow: define symbols with `@fermions`/`@bosons`/`@spins`, build a space with `hilbert_space` (optionally with a constraint such as `NumberConservation`), get matrices with `representation(op, H)`, and reduce with `partial_trace`. Pass `:dense` to `representation` only when a dense matrix is needed.
+
 ## Docs
 
-- [Home](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/)
-- [Fermionic tensor products and partial traces](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/fermions/)
-- [Constrained Hilbert spaces and conserved quantum numbers](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/conservation/)
-- [Hilbert space and array operations](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/hilbert_space_operations/)
-- [Interacting Kitaev chain](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/kitaev_chain/)
-- [Bosons](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/bosons/)
-- [Spins](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/spin_chain/)
-- [Mixed fermion-spin-boson system](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/mixed_fermion_spin_boson/)
-- [Open systems](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/open_system_lindblad/)
-- [Entanglement and negativity](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/partial_transpose/)
-- [SYK model](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/syk_model/)
-- [Braiding Majorana zero modes](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/braiding/)
-- [Symbolic states](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/symbolic_states/)
-- [Custom operators: Clock](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/clock_operators/)
-- [Custom operators: Floquet](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/floquet_tutorial/)
-- [Spatial symmetries](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/translation_symmetry/)
-- [Non-interacting hilbert spaces](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/non_interacting/)
-- [Example: Free fermions](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/free_fermions/)
-- [Misc](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/misc/)
-- [Extending and performance hooks](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/extending/)
-- [Functions](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/docstrings/)
+- [Home](./)
+- [Fermionic tensor products and partial traces](fermions/)
+- [Constrained Hilbert spaces and conserved quantum numbers](conservation/)
+- [Hilbert space and array operations](hilbert_space_operations/)
+
+## Tutorials and examples
+
+- [Interacting Kitaev chain](literate_output/kitaev_chain/)
+- [Bosons](literate_output/bosons/)
+- [Spins](literate_output/spin_chain/)
+- [Mixed fermion-spin-boson system](mixed_fermion_spin_boson/)
+- [Open systems](literate_output/open_system_lindblad/)
+- [Entanglement and negativity](literate_output/partial_transpose/)
+- [SYK model](literate_output/syk_model/)
+- [Braiding Majorana zero modes](literate_output/braiding/)
+- [Symbolic states](symbolic_states/)
+- [Custom operators: Clock](literate_output/clock_operators/)
+- [Custom operators: Floquet](literate_output/floquet_tutorial/)
+- [Spatial symmetries](literate_output/translation_symmetry/)
+
+## Non-interacting systems
+
+- [Non-interacting hilbert spaces](non_interacting/)
+- [Example: Free fermions](literate_output/free_fermions/)
+
+## Optional
+
+- [Misc](misc/)
+- [Extending and performance hooks](extending/)
+- [Functions](docstrings/)
