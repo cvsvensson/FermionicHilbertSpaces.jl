@@ -1,7 +1,9 @@
 """
     correlation_matrix(state, H, Hbdg::BdGHilbertSpace)
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on the many-body space `H`, where `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩`. A BdG space over a subset of the modes gives the reduced correlation matrix. On a Majorana space `hilbert_space(γ, labels, SingleParticle())`, `Ψ = γ / √2`, so `G[i, j] = ⟨γ_i γ_j⟩ / 2`.
+The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on `H`.
+
+Here `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩`. A BdG space over a subset of the modes gives the reduced correlation matrix. On a Majorana space `hilbert_space(γ, labels, SingleParticle())`, `Ψ = γ / √2`, so `G[i, j] = ⟨γ_i γ_j⟩ / 2`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions; @fermions f;

@@ -28,7 +28,7 @@ To embed a fermion into a larger space, it must be dressed with a parity operato
 
 There are two ways to combine ``A`` and ``B`` into an operator on ``\mathcal{H}``:
 1. `tensor_product((A, B), (HX, HXbar) => H)` is the ordered product of embeddings ``A \hat{\otimes} B = (A \tilde{\otimes} \mathbb 1)(\mathbb 1 \tilde{\otimes} B)``, the algebraic product of eq. (26) in [[1]](#fermion_information_article). The order of the arguments matters: swapping two odd operators flips the sign.
-2. `generalized_kron((A, B), (HX, HXbar) => H)` is the basis-wise fermionic tensor product ``A \tilde{\otimes} B`` of eqs. (14b) and (15) in [[1]](#fermion_information_article). It equals ``A \hat{\otimes} B`` when each subsystem consists of consecutive modes of ``\mathcal{H}`` passed in that order, and otherwise can differ, for example by a sign; see [`tensor_product` and `generalized_kron` on arrays](hilbert_space_operations.md#tensor_product-and-generalized_kron-on-arrays).
+2. `generalized_kron((A, B), (HX, HXbar) => H)` is the basis-wise fermionic tensor product ``A \tilde{\otimes} B`` of eqs. (14b) and (15) in [[1]](#fermion_information_article). It equals ``A \hat{\otimes} B`` when each subsystem consists of consecutive modes of ``\mathcal{H}`` passed in that order, and otherwise can differ, for example by a sign; see [tensor products of arrays](@ref tensor_product_arrays).
 
 Use `tensor_product` for product states, for products of local observables, and for anything that should equal a product of embedded operators, such as `representation` of a product of symbolic operators.
 
@@ -56,4 +56,4 @@ Unlike the ordinary partial transpose, the fermionic result is not generally Her
 ```@raw html
 <a name="fermionic_partial_time_reversal"></a>
 ```
-[2] H. Shapourian, K. Shiozaki, and S. Ryu, "Partial time-reversal transformation and entanglement negativity in fermionic systems," [Phys. Rev. B 95, 165101 (2017)](https://doi.org/10.1103/PhysRevB.95.165101).
+[2] H. Shapourian, K. Shiozaki, and S. Ryu, "Partial time-reversal transformation and entanglement negativity in fermionic systems," [Phys. Rev. B 95, 165101 (2017)](https://doi.org/10.1103/PhysRevB.95.165101), [arXiv:1611.07536](https://arxiv.org/abs/1611.07536).

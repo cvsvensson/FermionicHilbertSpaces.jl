@@ -46,6 +46,8 @@ For speed:
 
 ## Custom basis states and spaces
 
+`FermionicHilbertSpaces.groups(H)` returns the spaces that line up with the slots of a basis state: `factors(H)` for a product space, and `(H,)` for any other space. See [Hilbert space and array operations](hilbert_space_operations.md).
+
 The simplest custom space is a [`GenericHilbertSpace`](@ref)`(label, states)`, which works with
 any type of state. Its optional third argument `state_index` can be a function that computes
 the index of a state, which avoids the default dictionary lookup.
@@ -80,3 +82,5 @@ To restrict a space of custom states, use [`SectorConstraint`](@ref) or
 basis state. With `maps` and `spaces` together, it is called instead on the values that `maps`
 gives for the parts of the state in `spaces`. See
 [Constrained Hilbert spaces and conserved quantum numbers](conservation.md).
+
+Internally, `tensor_product`, `reshape` and `partial_trace` decompose and recombine basis states through a common mapper protocol. [`state_mapper`](@ref)`(H, Hs)` returns a mapper object, [`split_state`](@ref)`(state, mapper)` returns a tuple with one weighted collection `((substate, weight), ...)` per target subsystem, and [`combine_states`](@ref)`(substates, mapper)` returns a weighted collection `((state, weight), ...)`. Weighted collections can have any concrete type; treat them as iterables of `(state, weight)`.

@@ -1,9 +1,9 @@
 """
     removefermion(digitposition, f::FockNumber)
 
-Return (newfocknbr, fermionstatistics) where `newfocknbr` is the state obtained by 
-removing a fermion at `digitposition` from `f` and `fermionstatistics` is the phase 
-from the Jordan-Wigner string, or 0 if the operation is not allowed.
+Remove a fermion at `digitposition` from `f`.
+
+Returns the new state and the Jordan-Wigner sign, or a sign of 0 if the site is empty.
 """
 function removefermion(digitposition, f::FockNumber)
     cdag = focknbr_from_site_index(digitposition)
@@ -38,10 +38,10 @@ end
 """
     togglefermions(digitpositions, daggers, f::FockNumber)
 
-Return (newfocknbr, fermionstatistics) where `newfocknbr` is the state obtained by 
-toggling fermions at `digitpositions` with `daggers` in the Fock state `f`, and 
-`fermionstatistics` is the phase from the Jordan-Wigner string. If the operation puts 
-two fermions one the same site, the resulting state is undefined.
+Apply creation (`dagger == true`) and annihilation operators at `digitpositions` to `f`.
+
+Returns the new state and the Jordan-Wigner sign, or a sign of 0 if an operator annihilates the
+state.
 """
 function togglefermions(digitpositions, daggers, focknbr::FockNumber{I}) where I
     newfocknbr = focknbr
