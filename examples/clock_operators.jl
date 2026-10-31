@@ -5,17 +5,7 @@
 # global clock charge to diagonalise a Hamiltonian sector by sector and to
 # resolve the entanglement entropy of a subsystem.
 #
-# A new algebra with matrix representations needs:
-# 1. **Symbolic types** — structs subtyping `AbstractSym` that represent the operators
-# 2. **`@nc` declaration** — registers the types with the algebraic machinery
-# 3. **`mul_effect`** — the multiplication rules for products of the operators
-# 4. **Basis states** — structs subtyping `AbstractBasisState` that label the local basis
-# 5. **`apply_local_operator`** — how the operators act on the basis states
-# 6. **`mat_eltype`** — the element type of the matrix representations
-# 7. **`symbolic_group`** — links the operators to their Hilbert space factor
-#
-# A **`@commutative` declaration** is needed only when the operators should commute with
-# operators of other algebras. The [Floquet example](floquet_tutorial.md) shows one.
+# The pieces a new algebra needs are listed in [Extending and performance hooks](../extending.md).
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
 import FermionicHilbertSpaces: AbstractBasisState, AbstractSym,
@@ -39,8 +29,6 @@ struct ClockState{D} <: AbstractBasisState # A clock state with dimension D.
     ClockState{D}(n) where D = new{D}(mod(n, D))
 end
 ## Action on local basis states.
-## The last two arguments, `space` and `precomp`, are required by the interface but not used here.
-## `space` can be used to dispatch on the type of hilbert space, while `precomp` can be used to pass precomputed data to the operator application for optimization purposes.
 function apply_local_operator(op::ClockOp{:X}, state::ClockState{D}, space, precomp) where D
     newstate = ClockState{D}(state.n + (op.adjoint ? -1 : 1))
     amp = 1
@@ -55,7 +43,6 @@ mat_eltype(::Type{<:ClockOp}) = ComplexF64
 ## Associate operators with Hilbert-space factors.
 symbolic_group(op::ClockOp) = op.site
 
-# This is enough to get most of the functionality of this package.
 # ## Using it in practice: Hamiltonian and conservation laws
 # Let's take the case D = 3 for 6 sites. We define a hamiltonian which conserves the particle number modulo D, and calculate the symmetry resolved entanglement entropy in the ground state.
 D = 3
@@ -99,7 +86,7 @@ Hgs = sector(0, Hzd)
 hs = range(0.05, 2.5; length=30)
 ptmap = partial_trace(Hgs => Hhalf)
 r = map(hs) do h
-    hmat = representation(clock_hamiltonian(1.0, h), Hgs, :dense)
+    hmat = representation(clock_hamiltonian(1.0, h), Hgs)
     vals, vecs = eigs(Hermitian(hmat), nev=1, which=:SR)
     ρhalf = ptmap(vecs[:, 1])
     symmetry_resolved_entropy(ρhalf, Hhalf, D)
