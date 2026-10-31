@@ -1,128 +1,85 @@
-# # Open Quantum Systems 
-# In FermionicHilbertSpaces, open systems can be represented as a tensor product
-# of a "left" and "right" copy of the system Hilbert space. The right copy is 
-# time-reversed, so that right-actions correspond to transposed matrices.
-# The `open_system` helper function sets up this structure:
+# # Open Quantum Systems
+
+# This page shows how to turn a Lindblad master equation into an ordinary matrix problem.
+# The density matrix is vectorized on a doubled Hilbert space, so that the Liouvillian
+# is a matrix we can diagonalize, exponentiate or restrict to symmetry sectors.
+
+# ## The open-system construction
+
+# `open_system` builds the doubled space as a tensor product of a "left" and a "right"
+# copy of the system space. The right copy is time-reversed: it gives transposed matrix
+# representations, `representation(A*B, Hr) == representation(B, Hr) * representation(A, Hr)`,
+# which is what a term like ``A\rho B C`` needs, since ``B`` acts on ``\rho`` before ``C``.
+# The functions `left` and `right` map expressions in the original basis to the two copies,
+# and `reshape` converts between a vectorized state on `Hlr` and a matrix on `(Hl, Hr)`.
+# The Liouvillian of a Hamiltonian ``H`` and jump operators ``L_k`` is ``-i(H_l - H_r)`` plus
+# `dissipator(L_k)` for each jump operator, where `dissipator(L)` is the superoperator
+# ``\rho \mapsto L\rho L^\dagger - \tfrac12\{L^\dagger L, \rho\}``.
+# The steady state is the eigenvector with eigenvalue closest to zero.
+
 using FermionicHilbertSpaces
 using LinearAlgebra
-@fermions c
-Hlr, Hl, Hr, left, right = open_system(c, 1:1)
-# This generates two versions of hilbert_space(c, 1:1), tagged as `:left` and `:right`. 
-# `Hr` is a transposed space which automatically gives transposed matrix representations
-# satisfying `representation(A*B, Hr) == representation(B, Hr) * representation(A, Hr)`,
-# i.e. `A` acts on `Hr` before `B` does. This choice is natural when working with density matrices as
-# in an expression like
-# ```math
-# A \rho B C,
-# ```
-# B acts before C, while A commutes with both.
+import FermionicHilbertSpaces: dissipator
 
-# The left and right spaces each have a symbolic basis associated to them, which are tagged 
-# copies of the original `c` basis. The `left` and `right` functions map symbolic expressions 
-# in the original basis to the respective copy, so that we can write an operator in the 
-# original basis and then map it to the left/right space as needed. For example, if the
-# Hamiltonian is
-ham_sym = 1.0 * c[1]'c[1]
-# then the Liouvillian superoperator is
-L_sym = -1im * (left(ham_sym) - right(ham_sym))
-# We can get a matrix representation of the Liouvillian on the full space `Hlr` with
-L_mat = representation(L_sym, Hlr)
-# A density matrix has two indices, correspinding to (Hl, Hr) and the vectorized form 
-# has one index corresponding to Hlr. To translate between these, use `reshape`.
-# E.g. to vectorize the identity operator we can do
-Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
-# The Liouvillian preserves trace which is equivalent to the condition that the 
-# adjoint annihilates the identity matrix:
-iszero(L_mat' * Ivec)
-# Reshaping a vector in `Hlr` to a matrix in `(Hl, Hr)`:
-v = rand(dim(Hlr))
-reshape(v, Hlr => (Hl, Hr))
+# ## Example 1: a single level with gain and loss
 
-# ## Example: Lindblad 
-
-# We study a **single fermionic level** at energy ``\varepsilon`` coupled to a
-# Markovian reservoir, with incoherent gain/loss rates:
+# A fermionic level with energy ``\varepsilon`` is filled and emptied at rates ``\gamma_\text{in}``
+# and ``\gamma_\text{out}``,
 # ```math
 # H = \varepsilon\, c^\dagger c, \qquad
 # L_\text{in} = \sqrt{\gamma_\text{in}}\, c^\dagger, \qquad
-# L_\text{out} = \sqrt{\gamma_\text{out}}\, c.
+# L_\text{out} = \sqrt{\gamma_\text{out}}\, c,
 # ```
-# The analytical steady-state occupation is
-# ```math
-# \langle n \rangle_\text{ss} = \frac{\gamma_\text{in}}{\gamma_\text{in} + \gamma_\text{out}}.
-# ```
-using FermionicHilbertSpaces, LinearAlgebra
-using FermionicHilbertSpaces: dissipator
-
-# Parameters
-ε = 1.0
-γ_in = 0.3
-γ_out = 0.7
-
-# ### Build the Hilbert space and matrices
+# so the steady-state occupation is ``\gamma_\text{in}/(\gamma_\text{in} + \gamma_\text{out})``.
+# We check that the steady state reproduces it and that, starting from the empty level,
+# ``e^{\mathcal{L}t}\rho_0`` relaxes to it.
 @fermions c
 Hlr, Hl, Hr, left, right = open_system(c, 1:1)
-ham_sym = ε * c[1]'c[1]
-L_in = √γ_in * c[1]'
-L_out = exp(rand() * 2pi * im) * √γ_out * c[1]
 
-# `dissipator(L)` is the superoperator ρ ↦ LρL† − ½{L†L, ρ}.
-lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(L_in) + dissipator(L_out)
-# Let's get the matrix representation and check that it preserves trace 
-mat = representation(lindbladian, Hlr, :dense)
+ε, γ_in, γ_out = 1.0, 0.3, 0.7
+ham = ε * c[1]'c[1]
+lindbladian = -1im * (left(ham) - right(ham)) + dissipator(√γ_in * c[1]') + dissipator(√γ_out * c[1])
+L = representation(lindbladian, Hlr, :dense)   # eigen and exp need a dense matrix
+
 Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
-iszero(mat' * Ivec)
-# ### Solve for the steady state
-# The steady state is the eigenvector of `mat` with eigenvalue closest to zero.
-vals, vecs = eigen(mat; sortby = abs)
-v = vecs[:, 1]
-ρ = reshape(v, Hlr => (Hl, Hr))
+@assert iszero(L' * Ivec)                      # the Liouvillian preserves the trace
+
+vals, vecs = eigen(L; sortby = abs)
+ρ = reshape(vecs[:, 1], Hlr => (Hl, Hr))
 ρ ./= tr(ρ)
+n = representation(left(c[1]'c[1]), Hl)
+@assert tr(n * ρ) ≈ γ_in / (γ_in + γ_out)
 
-# Extract occupation ⟨n⟩ = Tr(c†c · ρ_ss) on the physical (left) space.
-n_mat = representation(left(c[1]'c[1]), Hl)
-n_ss = tr(n_mat * ρ)
-# or equivalently in the vectorized space
-n_matlr = representation(left(c[1]'c[1]), Hlr)
-n_ss = Ivec' * n_matlr * v / (Ivec' * v)
-n_analytical = γ_in / (γ_in + γ_out)
-println("Steady-state occupation ⟨n⟩_ss = $n_ss  (analytic: $n_analytical)")
+ρ0 = reshape(I - n, (Hl, Hr) => Hlr)          # empty level
+ρt(t) = reshape(exp(L * t) * ρ0, Hlr => (Hl, Hr))
+@assert tr(n * ρt(0.0)) ≈ 0 atol = 1.0e-12
+@assert ρt(50.0) ≈ ρ
 
-# ### Use a conserved quantity for block structure
-
-# For this model, while there are particles jumping in and out of the system,
-# the difference in particle number between the left and right space is conserved.
-# ```math
-# Q = n_l - n_r.
-# ```
-# We can constrain to fixed `Q` sectors and get block matrices.
-# The Q=0 sector is the physically relevant one if we disallow coherences
-# between different particle number sectors.
+# The difference in particle number between the left and right copies, ``Q = n_l - n_r``,
+# is conserved by this Liouvillian. A constraint on it block-diagonalizes the matrix, and the
+# ``Q=0`` block, which holds the populations, contains the steady state.
 constraint = NumberConservation(-1:1, [Hl, Hr], [1, -1])
 Hcons = tensor_product((Hl, Hr); constraint)
-mat_cons = representation(lindbladian, Hcons)
+L0 = representation(lindbladian, sector(0, Hcons), :dense)
+@assert any(abs(λ) < 1.0e-12 for λ in eigvals(L0))
 
-# ## Example: Double dot coupled to a cavity
+# ## Example 2: two dots coupled to a lossy cavity
 
-# `open_system` also accepts a Hilbert space directly, for example a tensor product of
-# a number-conserving fermion sector and a boson. Here one electron is shared between
-# two dots and couples to a lossy cavity mode, truncated to 4 photon levels:
+# `open_system` also accepts a Hilbert space directly. Here one electron is shared between
+# two dots that couple to a cavity mode truncated to four photon levels,
 # ```math
 # H = t\,(f_1^\dagger f_2 + f_2^\dagger f_1) + \omega\, a^\dagger a + g\,(n_1 - n_2)(a + a^\dagger), \qquad
 # L = \sqrt{\kappa}\, a.
 # ```
+# The steady-state photon number follows from the same recipe.
 @fermions f
 @bosons a
 Hsys = tensor_product(hilbert_space(f, 1:2, NumberConservation(1)), hilbert_space(a[1], 4))
 Hlr, Hl, Hr, left, right = open_system(Hsys)
 t, ω, g, κ = 0.5, 1.0, 0.3, 0.2
-ham_sym = t * (f[1]'f[2] + f[2]'f[1]) + ω * a[1]'a[1] + g * (f[1]'f[1] - f[2]'f[2]) * (a[1] + a[1]')
-lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(√κ * a[1])
-mat = representation(lindbladian, Hlr, :dense)
-# The steady state is again the eigenvector with eigenvalue closest to zero
-vals, vecs = eigen(mat; sortby = abs)
+ham = t * (f[1]'f[2] + f[2]'f[1]) + ω * a[1]'a[1] + g * (f[1]'f[1] - f[2]'f[2]) * (a[1] + a[1]')
+lindbladian = -1im * (left(ham) - right(ham)) + dissipator(√κ * a[1])
+vals, vecs = eigen(representation(lindbladian, Hlr, :dense); sortby = abs)
 ρ = reshape(vecs[:, 1], Hlr => (Hl, Hr))
 ρ ./= tr(ρ)
-# and we can compute, e.g., the photon number in the steady state
-n_photon = representation(left(a[1]'a[1]), Hl)
-tr(n_photon * ρ)
+real(tr(representation(left(a[1]'a[1]), Hl) * ρ))
