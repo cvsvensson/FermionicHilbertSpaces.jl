@@ -1,8 +1,5 @@
-
-
-# Combines `spaces` into one space without applying any new constraint.
-# Constraints already present on the input spaces are carried over.
-function tensor_product_no_constraints(spaces)
+# The unconstrained product of `spaces`, and its states when some of `spaces` are constrained, or `nothing`.
+function product_space_and_states(spaces)
     atoms = collect(Iterators.flatten(Iterators.map(atomic_factors, spaces)))
     factors = map(unique(map(group_id, atoms))) do id
         combine_into_group(id, map(identity, filter(a -> group_id(a) == id, atoms)))
@@ -12,12 +9,8 @@ function tensor_product_no_constraints(spaces)
     else
         ProductSpace(Tuple(factors))
     end
-    if any(isconstrained, spaces)
-        mapper = state_mapper(space, spaces)
-        states = _find_combined_states(space, spaces, mapper)
-        return ConstrainedSpace(space, states)
-    end
-    return space
+    any(isconstrained, spaces) || return space, nothing
+    return space, _find_combined_states(space, spaces, state_mapper(space, spaces))
 end
 """
     tensor_product(spaces...; constraint=NoSymmetry())
@@ -42,23 +35,24 @@ function tensor_product(spaces; constraint=NoSymmetry())
     if length(spaces) == 1
         return constrain_space(only(spaces), constraint)
     end
-    full_space = tensor_product_no_constraints(spaces)
+    space, factor_states = product_space_and_states(spaces)
+    states = isnothing(factor_states) ? basisstates(space) : factor_states
     if constraint == NoSymmetry()
         combined = _combined_sector_constraint(spaces)
-        !ismissing(combined) && return sector_space(full_space, basisstates(full_space), sector_function(combined, full_space), combined)
-        return full_space
+        !ismissing(combined) && return sector_space(space, states, sector_function(combined, space), combined)
+        return isnothing(factor_states) ? space : ConstrainedSpace(space, factor_states)
     end
 
-    constraint = supply_missing_constraint_info(constraint, full_space, spaces)
+    constraint = supply_missing_constraint_info(constraint, space, spaces)
 
-    states = supports_branch_pruning(constraint) ? generate_states(spaces, constraint, full_space) : basisstates(full_space)
+    states = supports_branch_pruning(constraint) ? generate_states(spaces, constraint, space) : states
     if supports_sector_grouping(constraint) && supports_filtering(constraint)
-        return sector_space(full_space, states, sector_function(constraint, full_space), constraint)
+        return sector_space(space, states, sector_function(constraint, space), constraint)
     elseif supports_filtering(constraint)
-        filtered_states = collect(Iterators.filter(filter_function(constraint, full_space), states))
-        return ConstrainedSpace(full_space, filtered_states; constraint)
+        filtered_states = collect(Iterators.filter(filter_function(constraint, space), states))
+        return ConstrainedSpace(space, filtered_states; constraint)
     else
-        return ConstrainedSpace(full_space, states; constraint)
+        return ConstrainedSpace(space, states; constraint)
     end
 end
 
