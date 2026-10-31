@@ -61,6 +61,19 @@ Set up the doubled space for density matrices of a system with Hilbert space `H`
 
 Use `reshape(ρ, (Hl, Hr) => Hlr)` and `reshape(v, Hlr => (Hl, Hr))` to convert between density
 matrices and vectors.
+
+```jldoctest
+julia> using FermionicHilbertSpaces: dissipator; @fermions f;
+
+julia> Hlr, Hl, Hr, left, right = open_system(f, 1:1);
+
+julia> n = f[1]' * f[1];
+
+julia> L = representation(-1im * (left(n) - right(n)) + dissipator(f[1]), Hlr);
+
+julia> size(L)
+(4, 4)
+```
 """
 function open_system(base, args...; kwargs...)
     left_basis = tag_left(base)

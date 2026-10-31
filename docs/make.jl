@@ -6,7 +6,7 @@ import Literate
 
 DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilbertSpaces); recursive=true)
 
-literate_files = ["examples/kitaev_chain.jl", "examples/free_fermions.jl", "examples/floquet_tutorial.jl", "examples/open_system_lindblad.jl", "examples/spin_chain.jl", "examples/bosons.jl", "examples/clock_operators.jl", "examples/translation_symmetry.jl"]
+literate_files = ["examples/kitaev_chain.jl", "examples/free_fermions.jl", "examples/floquet_tutorial.jl", "examples/open_system_lindblad.jl", "examples/spin_chain.jl", "examples/bosons.jl", "examples/clock_operators.jl", "examples/translation_symmetry.jl", "examples/braiding.jl"]
 output_directory = "docs/src/literate_output"
 rm(output_directory; recursive = true, force = true)
 mkpath(output_directory)
@@ -32,6 +32,7 @@ makedocs(;
             "Spins" => "literate_output/spin_chain.md",
             "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md",
             "Open systems" => "literate_output/open_system_lindblad.md",
+            "Braiding Majorana zero modes" => "literate_output/braiding.md",
             "Spatial symmetries" => "literate_output/translation_symmetry.md",
         ],
         "Guides" => [

@@ -479,6 +479,13 @@ The single-particle space `hilbert_space(f, labels, FreeFermions.SingleParticle(
 represent quadratic fermionic operators only, and a number is represented by the zero matrix.
 
 With `Axes(Hout, Hin)`, `op` is represented as a map from `Hin` to `Hout`.
+
+```jldoctest
+julia> @fermions f;
+
+julia> representation(f[1]' * f[1], hilbert_space(f, 1:1)) == [0 0; 0 1]
+true
+```
 """
 representation
 
