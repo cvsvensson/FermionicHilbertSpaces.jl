@@ -92,9 +92,9 @@ write(
 for attempt in 1:3
     try
         deploydocs(;
-            repo="github.com/cvsvensson/FermionicHilbertSpaces.jl",
-            devbranch="main",
-            push_preview=true
+            repo = "github.com/cvsvensson/FermionicHilbertSpaces.jl",
+            devbranch = "main",
+            push_preview = true
         )
         break
     catch
