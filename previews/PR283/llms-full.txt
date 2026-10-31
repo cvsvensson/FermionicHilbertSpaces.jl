@@ -339,7 +339,7 @@ H = \omega a^\dagger a + \omega_0 \sum_i S^z_i + g \sum_i \left(a^\dagger S^-_i 
 It conserves the number of excitations, the boson number plus ``\sum_i (S^z_i + 1/2)``. Spins have no particle number, so the spin part of the excitation count is written explicitly with an `AdditiveConstraint`, using one map per factor space.
 ```julia
 using FermionicHilbertSpaces
-using FermionicHilbertSpaces: AdditiveConstraint, particle_number
+using FermionicHilbertSpaces: particle_number
 N = 3
 nmax = 4
 @spins S 1//2
@@ -889,105 +889,84 @@ kind of Hilbert space.
 # Interacting Kitaev chain
 
 
-# Interacting Kitaev Chain Tutorial
+# Interacting Kitaev chain
 
-In this example, we study the interacting Kitaev chain.
-We show how the Hamiltonian can be constructed symbolically or by using matrix representations of the fermionic operators,
-and how to restrict the Hilbert space to a subspace of a given parity.
-We solve for the ground states and characterize the locality of the many-body Majoranas.
-Locality and robustness of many-body Majoranas are quantified in Ref. [^1].
+An interacting Kitaev chain has two nearly degenerate ground states of opposite parity, which define
+many-body Majorana operators. This tutorial builds the chain from a symbolic Hamiltonian, diagonalizes it
+per parity sector with `ParityConservation`, and uses `partial_trace` on low-rank operators to show that
+these Majoranas stay localized at the chain ends (see Ref. [^1]).
 
 [^1]: W. Samuelson *et al.*, [PRX Quantum 7, 020341 (2026)](https://doi.org/10.1103/pw51-tnsz), [arXiv:2510.20538](https://arxiv.org/abs/2510.20538).
 
-We start by importing the necessary packages.
+## Hamiltonian and parity sectors
+
+`@fermions f` declares fermionic modes `f[i]`, and `hilbert_space(f, 1:N, ParityConservation())` builds the
+space of `N` modes split into sectors of even and odd total parity. The Hamiltonian is written symbolically,
+with `hc` adding the Hermitian conjugate of each term.
 
 ````julia
 using FermionicHilbertSpaces
-using Arpack, LinearAlgebra, Plots
-````
+using Arpack, LinearAlgebra, LowRankMatrices, Plots
 
-We define symbolic fermions using the `@fermions` macro, and a
-Hilbert space with `N` sites and parity conservation.
-
-````julia
 @fermions f
 N = 12
 H = hilbert_space(f, 1:N, ParityConservation())
-````
 
-Let's define the interacting Kitaev chain Hamiltonian.
-It is a function of the fermions `f` and parameters `N`, `μ`, `t`, `Δ`, and `U`,
-representing the number of sites, chemical potential, hopping amplitude, pairing amplitude, and interaction strength, respectively.
-Note the use of the Hermitian conjugate `hc`, which simplifies the expression for the Hamiltonian.
-
-````julia
 kitaev_chain(f, N, μ, t, Δ, U) = sum(t * f[i]' * f[i+1] + hc for i in 1:(N-1)) +
     sum(Δ * f[i] * f[i+1] + hc for i in 1:(N-1)) +
     sum(U * f[i]' * f[i] * f[i+1]' * f[i+1] for i in 1:(N-1)) +
     sum(μ[i] * f[i]' * f[i] for i in 1:N)
-````
 
-Define parameters close to the sweet spot with perfectly localized Majoranas, and get the symbolic Hamiltonian.
-
-````julia
+# Parameters close to the sweet spot with perfectly localized Majoranas
 U = 4.0
 t = 1.0
 δΔ = 0.4
-Δ = t + U / 2 - δΔ # slightly detuned from the sweet spot
-μ = fill(-U / 2, N) # edge chemical potential
-μ[2:(N-1)] .= -U # bulk chemical potential
-hsym = kitaev_chain(f, N, μ, t, Δ, U)
-````
-
-To convert the symbolic Hamiltonian to a matrix representation, use the `representation` function.
-
-````julia
-representation(hsym, H)
-````
-
-Now, let's diagonalize the system.
-Since parity is conserved, we work in the even and odd parity sectors separately.
-
-````julia
-(Eo, o), (Ee, e) = map(quantumnumbers(H)) do parity
-    Hsec = sector(parity, H)
-    ham = representation(hsym, Hsec)
-    vals, vecs = eigs(ham; nev=1, which=:SR)
-    (; energy = first(vals), ground_state = embed(vecs[:, 1], Hsec => H))
-end
-````
-
-The ground states are almost degenerate, as expected.
-Then, we can construct the ground state Majorana operators as
-`γ = o * e' + hc` and
-`γ̃ = 1im * o * e' + hc`
-but that takes a lot of memory for large systems. We can use LowRankMatrices.jl to avoid this
-
-````julia
-using LowRankMatrices
-γ = LowRankMatrix(o, conj(e)) + hc
-γ̃ = 1im * LowRankMatrix(o, conj(e)) + hc
-δρ = LowRankMatrix(o, conj(o)) - LowRankMatrix(e, conj(e));
+Δ = t + U / 2 - δΔ # detuned from the sweet spot
+μ = fill(-U, N)
+μ[[1, N]] .= -U / 2 # edge chemical potentials
+hsym = kitaev_chain(f, N, μ, t, Δ, U);
 nothing #hide
 ````
 
-Now we can compute the reduction of the Majorana operators to each mode, and plot the results to visualize the localization of the Majorana modes.
+## Ground states
+
+The Hamiltonian conserves parity, so we diagonalize each parity sector separately. `representation` turns the
+symbolic Hamiltonian into a sparse matrix on a `sector`, and `embed` maps its ground state back into the full
+space `H`. The two energies are nearly degenerate.
 
 ````julia
-Hmodes = [hilbert_space(f, i:i) for i in 1:N]
-γR = [partial_trace(γ, H => Hmode) for Hmode in Hmodes];
-γ̃R = [partial_trace(γ̃, H => Hmode) for Hmode in Hmodes];
-δρR = [partial_trace(δρ, H => Hmode) for Hmode in Hmodes];
-γ_reductions = [norm(svdvals(γ), 1) for γ in γR]
-γ̃_reductions = [norm(svdvals(γ̃), 1) for γ̃ in γ̃R]
-LD = [norm(svdvals(δρ), 1) for δρ in δρR]
+function ground_state(parity)
+    Hsec = sector(parity, H)
+    vals, vecs = eigs(representation(hsym, Hsec); nev = 1, which = :SR)
+    return (; energy = first(vals), state = embed(vecs[:, 1], Hsec => H))
+end;
+(Eo, o), (Ee, e) = map(ground_state, (-1, 1)); # odd and even parity
+Eo - Ee
+````
+
+## Locality of the Majoranas
+
+The ground-state pair defines two many-body Majorana operators, $\gamma = |o\rangle\langle e| + \mathrm{h.c.}$
+and $\tilde\gamma = i|o\rangle\langle e| + \mathrm{h.c.}$, and the parity-difference operator
+$|o\rangle\langle o| - |e\rangle\langle e|$. The norm of the reduction of each to a single site,
+`partial_trace(x, H => Hsite)`, shows where it is supported; the two Majoranas peak at opposite ends of the chain.
+`LowRankMatrix` lets `partial_trace` avoid forming full-space matrices.
+
+````julia
+γ = LowRankMatrix(o, conj(e)) + hc
+γ̃ = 1im * LowRankMatrix(o, conj(e)) + hc
+δρ = LowRankMatrix(o, conj(o)) - LowRankMatrix(e, conj(e))
+
+Hsites = [hilbert_space(f, i:i) for i in 1:N]
+locality(x) = [norm(svdvals(partial_trace(x, H => Hsite)), 1) for Hsite in Hsites]
 
 kwargs = (; lw=4, legendfontsize=15, marker=true, markerstrokewidth=2)
 plot(xlabel="Site", title="Majorana locality measures"; frame=:box, size=(500, 300),
-    xticks=1:3:N, yscale=:identity, ylims=(-0.1, 2.1), legendposition=:top, labelfontsize=15)
-plot!(1:N, γ_reductions; label="‖γₙ‖", kwargs...)
-plot!(1:N, γ̃_reductions; label="‖γ̃ₙ‖", kwargs...)
-plot!(1:N, LD; label="‖(iγγ̃)ₙ‖", kwargs...)
+    xticks = 1:3:N, ylims = (-0.1, 2.1), legendposition = :top, labelfontsize = 15
+)
+plot!(1:N, locality(γ); label = "‖γₙ‖", kwargs...)
+plot!(1:N, locality(γ̃); label = "‖γ̃ₙ‖", kwargs...)
+plot!(1:N, locality(δρ); label = "‖(iγγ̃)ₙ‖", kwargs...)
 ````
 
 ---
@@ -1001,37 +980,36 @@ plot!(1:N, LD; label="‖(iγγ̃)ₙ‖", kwargs...)
 
 # Bosons
 
-## Bosonic algebra and hilbert spaces
+Bosonic modes are symbolic like fermions, but need a finite local dimension for numerics, which number
+conservation keeps small. We use this to study the Bose-Hubbard model, where onsite repulsion suppresses
+number fluctuations, and a dipole-conserving model, where a second weighted `NumberConservation` constrains the
+dynamics and shapes the entanglement.
 
-A single bosonic mode is defined with `@boson`. Adjoint `'` acts as the
-creation operator, satisfying $[a, a^\dagger] = 1$.
+## Bosonic operators and spaces
+
+`@boson a` declares one mode and `@bosons b` a field of modes `b[i]`; the adjoint `'` is the creation operator.
+Expressions are simplified using $[a, a^\dagger] = 1$, and modes on different sites commute. A Hilbert space
+needs a local dimension $d$, keeping the occupations $0, \dots, d-1$ of each mode: `hilbert_space(a, d)` for one
+mode and `hilbert_space(b, labels, d)` for a field, optionally followed by a constraint.
 
 ````julia
 using FermionicHilbertSpaces
 @boson a
-a * a' - a' * a == 1 # true
-@bosons b # defines an indexed array of modes. Modes on different sites commute.
-b[1]' * b[2] == b[2] * b[1]' # true
-(a' + a)^2 - a^2 - a'^2 # expressions are automatically simplified
+@bosons b
+a * a' - a' * a == 1
+b[1]' * b[2] == b[2] * b[1]'
+(a' + a)^2 - a^2 - a'^2
 ````
 
-Numerical calculations require a finite local dimension $d$ (basis $|0\rangle, \dots, |d-1\rangle$). To define a truncated bosonic hilbert space for a mode or a field write
+## Bose-Hubbard model
 
-````julia
-local_dim = 4
-Ha = hilbert_space(a, local_dim)
-labels = 1:8
-Hb = hilbert_space(b, labels, local_dim)
-````
-
-## Example 1: Bose-Hubbard Hamiltonian
-
-We set up the Bose-Hubbard Hamiltonian with hopping $t$ and onsite repulsion $U$:
+The Bose-Hubbard Hamiltonian has hopping $t$ and onsite repulsion $U$,
 ```math
 H = -t \sum_{i=1}^{N-1} (b_i^\dagger b_{i+1} + \mathrm{h.c.}) + \frac{U}{2} \sum_{i=1}^N n_i(n_i - 1),
 \qquad n_i = b_i^\dagger b_i.
 ```
-`hc` adds the Hermitian conjugate. This is number conserving, which we can exploit to reduce the Hilbert space dimension. Let's say we have 8 sites, and 8 particles. With a local dimension of 9, we will have no truncation error
+and conserves particle number, which reduces the Hilbert space dimension. A local dimension of one more than the
+particle number gives no truncation error.
 
 ````julia
 N = 8
@@ -1039,18 +1017,15 @@ M = 8
 local_dim = M + 1
 Hfull = hilbert_space(b, 1:N, local_dim)
 H = hilbert_space(b, 1:N, local_dim, NumberConservation(M))
-dim(Hfull), dim(H)  # 43,046,721 -> 6435-dimensional
+dim(Hfull), dim(H)
 ````
 
-Note that one could also have used `constrain_space(Hfull, NumberConservation(M))` but this requires iterating over all states and is usually slower.
-
-Let's generate the matrix representations once to reuse in sweeps, and define the ground state calculation
+We build the matrices once and reuse them in a sweep over $U$.
 
 ````julia
 n = [b[i]' * b[i] for i in 1:N]
 hop_sym = sum(b[i]' * b[i+1] + hc for i in 1:(N-1))
 int_sym = sum(n[i] * (n[i] - 1) for i in 1:N)
-#Precompute matrix representations
 K = representation(hop_sym, H)
 D = representation(int_sym, H)
 n_ops = [representation(n[i], H) for i in 1:N]
@@ -1069,8 +1044,7 @@ function ground_state_analysis(U; t=1.0)
 end
 ````
 
-As $U/t$ grows, onsite repulsion suppresses particle fluctuations and hopping.
-The right panel shows how the open-boundary density profile flattens to 1 particle per site.
+Onsite repulsion suppresses particle fluctuations and hopping (left) and flattens the density profile (right).
 
 ````julia
 Us = range(0, 16; length=20)
@@ -1084,13 +1058,14 @@ plot!(p2, 1:N, ground_state_analysis(6).density; label="U/t = 6", m=:square, lw=
 plot(p1, p2; layout=(1, 2), size=(600, 300), frame=:box)
 ````
 
-## Example 2: Dipole-conserving boson model
-This demonstrates how to handle a more complicated conservation law. The model
+## Dipole-conserving model
+
+A second conserved quantity is handled by a weighted `NumberConservation`, and constraints combine with `*`. The model
 ```math
  H = -J \sum_i (b_{i-1}^\dagger b_{i+1}^\dagger b_i b_i + h.c.)
      + U/2 \sum_i n_i(n_i-1)
 ```
-Conserves the particle number $N = \sum n_i$ and the dipole moment $D = \sum i n_i$.
+conserves the particle number $N = \sum n_i$ and the dipole moment $D = \sum i n_i$.
 
 ````julia
 @bosons b
@@ -1101,7 +1076,7 @@ end
 N = 6
 M = 6
 local_dim = M + 1   # Large enough to avoid truncation error
-Dtot = sum(1:N)     # dipole of the uniform state |1,1,1,1,1,1>
+Dtot = sum(1:N)     # dipole of the uniform state
 
 number_cons = NumberConservation(M)
 dipole_cons = NumberConservation(Dtot; weights=1:N)
@@ -1109,10 +1084,10 @@ dipole_cons = NumberConservation(Dtot; weights=1:N)
 Hfull = hilbert_space(b, 1:N, local_dim)
 HN = hilbert_space(b, 1:N, local_dim, number_cons)                # only N fixed
 HND = hilbert_space(b, 1:N, local_dim, number_cons * dipole_cons) # N and D fixed
-println("dim full = ", dim(Hfull), " | dim($M particles) = ", dim(HN), " | dim($M particles, $Dtot dipole) = ", dim(HND))
+dim(Hfull), dim(HN), dim(HND)
 ````
 
-Let's calculate half-system entropy for the ground state in this sector, sweeping over the ratio $U/J$. We define a partial trace map to the first half of the system, and then calculate the entropy of the reduced density matrix.
+The half-system entanglement entropy of the ground state follows from a partial trace map onto the first half of the chain.
 
 ````julia
 ptmap = partial_trace(HND => subregion([b[i] for i in 1:div(N, 2)], HND))
@@ -1134,196 +1109,73 @@ plot(Us, entropies; xlabel="U/J", ylabel="Half-system entropy", legend=false, yl
 # Spins
 
 
-# Spin chains
+# Spins
 
-In this example, we build Heisenberg spin chains and show how to exploit conserved
-quantities and permutation symmetry (invariance under exchanging sites) to
-block-diagonalize the Hamiltonian.
+This page shows how to declare spin operators, what conventions they follow, and how to build spin Hilbert spaces.
+A Heisenberg chain then shows how magnetization and total-spin sectors block-diagonalize a spin Hamiltonian,
+and that its ground state is a singlet.
+
+## Spin operators and spaces
+
+`@spin T` declares one spin. Indexing it with `:x`, `:y`, `:z` gives the spin components, `:+` and `:-` the
+ladder operators $S^\pm = S^x \pm i S^y$, and `T[:]` the vector of components. These are spin operators, not
+Pauli matrices: they satisfy $[S^x, S^y] = i S^z$, and $S^z$ has eigenvalues $-J, \dots, J$.
 
 ````julia
 using FermionicHilbertSpaces
 using LinearAlgebra
+
+@spin T
+T[:x] * T[:y] - T[:y] * T[:x] == 1im * T[:z]
 ````
 
-## Spin algebra
-Declare a spin mode and index into to get symbolic spin operators
+The spin value $J$ fixes the local dimension $2J+1$. It can be given when declaring the spin, which lets
+expressions simplify with relations that hold only for that $J$, such as $\vec S^2 = J(J+1)$. Without it, only the
+commutation relations hold, so a single symbolic Hamiltonian can be reused for any $J$, which is then passed to
+`hilbert_space`. The basis states are ordered by increasing $S^z$ eigenvalue.
 
 ````julia
-@spin S
-S[:x] * S[:y] - S[:y] * S[:x] == 1im * S[:z]; #true
+@spin Shalf 1 // 2
+sum(s^2 for s in Shalf[:]) == 3 // 4
+representation(T[:z], hilbert_space(T, 1))
+````
+
+`@spins S` declares a field of spins, where `S[k]` is the spin on site `k`, and `hilbert_space(S, labels)` builds
+the space of the sites in `labels` (with `J` as a third argument if the field has no spin value).
+Constraints act on the basis states of each site through their $S^z$ eigenvalue `s.m`; for example,
+`AdditiveConstraint(M; maps = s -> s.m)` keeps the states with total $S^z$ equal to `M`.
+
+## Heisenberg chain
+
+The spin-1/2 Heisenberg chain $H = \sum_k \vec S_k \cdot \vec S_{k+1}$ commutes with the total magnetization
+$S^z_\mathrm{tot} = \sum_k S^z_k$, so we can restrict to the sector where it vanishes.
+
+````julia
+@spins S 1 // 2
+N = 4
+ham = sum(S[k][:]'S[k + 1][:] for k in 1:(N - 1))
+Sz = sum(S[k][:z] for k in 1:N)
+@assert ham * Sz - Sz * ham == 0
+Hm = hilbert_space(S, 1:N, AdditiveConstraint(0; maps = s -> s.m))
+Mham = representation(ham, Hm, :dense);
 nothing #hide
 ````
 
-Allowed operator arguments are the spin components `:x`, `:y`, `:z` and the ladder operators `:+`, `:-`, and identity :I. There are operator aliases, so e.g. `S[1] == S[:x] == S[:X]`. The spin basis defined here has no fixed spin value. We can define an operator with a specific total spin which has more algebraic structure.
+The chain also conserves the total spin, fixed by the Casimir operator $\vec S_\mathrm{tot}^2 = J(J+1)$.
+Projecting onto its eigenspaces block-diagonalizes the Hamiltonian, and the blocks together reproduce its spectrum.
+The lowest energy of each block, printed below, is smallest for $J=0$. Dense matrices are used because
+`nullspace` and `eigvals` need them.
 
 ````julia
-@spin Shalf 1//2
-@spin Sone 1
-Shalf[:x]^2 == 1//4
-sum(s^2 for s in Sone[:]) == 2
+Stot2 = sum(sum(S[k][op] for k in 1:N)^2 for op in (:x, :y, :z))
+Mtot = representation(Stot2, Hm, :dense)
+blocks = map(J -> nullspace(Mtot - J * (J + 1) * I), 0:2)
+spectra = [eigvals(Hermitian(P' * Mham * P)) for P in blocks]
+@assert sort(reduce(vcat, spectra)) ≈ eigvals(Hermitian(Mham))
+minimum.(spectra)
 ````
 
-where `Sone[:]` gives a vector of the spin operators `[Sone[:x], Sone[:y], Sone[:z]]`.
-
-For spin half, expressions are simplified to a unique expression, but for higher spins this is not necessarily the case. One should be careful when comparing different algebraic expressions.
-
-Spin hilbert spaces can be constructed by
-
-````julia
-Hhalf = hilbert_space(Shalf)
-Hone = hilbert_space(Sone)
-Hten = hilbert_space(S, 10)
-````
-
-When dealing with multiple spins it is convenient to define a spin field which gives spin basis when indexing
-
-````julia
-@spins S
-S[1][:+] # spin + operator on the site labeled 1
-````
-
-A Hilbert space for this field is obtained with `hilbert_space(S, labels, spin)`.
-
-## Basic example: Heisenberg chain
-A spin-1/2 Heisenberg chain hamiltonian can then be constructed as
-
-````julia
-N = 4
-@spins S 1 // 2
-H = hilbert_space(S, 1:N)
-ham = sum(S[k][:]'S[k+1][:] for k in 1:(N-1))
-M = representation(ham, H)
-````
-
-We can exploit the fact that this hamiltonian conserves the total magnetization by
-
-````julia
-constraint = AdditiveConstraint(1; maps=s -> s.m)
-H = hilbert_space(S, 1:N, constraint)
-M = representation(ham, H)
-````
-
-## Advanced example: Conserving total spin, permutation symmetry
-We are not restricted to spin-1/2, but can use any spin `J`. On the symbolic level, we can also omit the spin value, and supply it later when we build the Hilbert space.
-
-````julia
-@spins S
-J = 1
-N = 4
-H = hilbert_space(S, 1:N, J)
-````
-
-Let's make a permutationally invariant hamiltonian. The all-to-all Heisenberg term $\sum_{i,j} \vec{S}_i\cdot\vec{S}_j$ is just $\vec{S}_\mathrm{tot}^2$, so on its own it would be a multiple of the identity in every total-spin block. For spin 1 we therefore add an all-to-all biquadratic term $K\sum_{i<j} (\vec{S}_i\cdot\vec{S}_j)^2$, which keeps the symmetries but is not a function of $\vec{S}_\mathrm{tot}^2$.
-
-````julia
-K = 0.3
-ham = sum(S[i][op] * S[j][op] for i in 1:N, j in 1:N, op in (:x, :y, :z)) +
-    K * sum(sum(S[i][op] * S[j][op] for op in (:x, :y, :z))^2 for i in 1:N for j in (i+1):N)
-````
-
-This hamiltonian conserves the total magnetization, the total spin, and is invariant under any permutation of the sites. Let's exploit all these symmetries.
-### Fixing the total magnetization
-
-`AdditiveConstraint` restricts the Hilbert space to states where the sum of a
-per-site quantity, here the magnetization `s.m`, equals a fixed value.
-
-````julia
-constraint = AdditiveConstraint(1; maps=s -> s.m)
-H = hilbert_space(S, 1:N, J, constraint)
-````
-
-### Full decomposition into irreducible representations
-More generally, every irreducible representation of $S_N$ gives a symmetry sector.
-`AbstractAlgebra.jl` provides the character tables needed to build the corresponding
-projectors: each integer partition `λ` of `N` labels an irrep with character `χ`, and
-`symmetric_sector` accepts the permutations and their weights `(perms, weights) = (G, χ.(G))`
-directly instead of the `:symmetric`/`:antisymmetric` shorthand (see [`symmetric_sector`]).
-
-````julia
-import AbstractAlgebra
-G = collect(AbstractAlgebra.SymmetricGroup(N))
-perms = Iterators.map(p -> p.d, G)
-weights = Vector{Int}(undef, length(perms))
-partitions = AbstractAlgebra.Generic.partitions(N)
-projectors = map(partitions) do λ
-    χ = AbstractAlgebra.character(λ)
-    map!(Int ∘ χ, weights, G)
-    symmetric_sector(H, factors(H), (perms, weights))
-end
-M = representation(ham, H)
-map(partitions, projectors) do λ, p
-    λ => size(p' * M * p)
-end
-````
-
-Each projector block-diagonalizes `M` into the corresponding symmetry sector.
-
-### Total spin Casimir
-
-We can also project onto a fixed total spin using the Casimir operator $\vec{S}^2$.
-For example, the nullspace of $\vec{S}^2 - S(S+1)$ with $S=1$ gives the total-spin-1
-sector.
-
-````julia
-total_spin_op = sum(sum(S[k][op] for k in 1:N)^2 for op in (:x, :y, :z))
-total_spin_mat = representation(total_spin_op, H)
-P = nullspace(Matrix(total_spin_mat - 2 * I))
-P' * M * P
-````
-
-### Fully decomposed space
-Let's find the ground state energy in each block of total spin, magnetization and permutation symmetry sector. Each block's full spectrum is kept as well, and for every magnetization the blocks together must reproduce the spectrum of the whole sector.
-
-````julia
-magnetizations = (-N*J):(N*J)
-energies = mapreduce(vcat, magnetizations) do m
-    magcons = AdditiveConstraint(m; maps=s -> s.m)
-    H = hilbert_space(S, 1:N, J, magcons)
-    total_spin_mat = representation(total_spin_op, H)
-    ham_mat = representation(ham, H)
-    blocks = mapreduce(vcat, partitions) do λ
-        χ = AbstractAlgebra.character(λ)
-        map!(Int ∘ χ, weights, G)
-        p = symmetric_sector(H, factors(H), (perms, weights))
-        block = Matrix(p'*total_spin_mat*p)
-        Mblock = p'*ham_mat*p
-        casimirs = unique!(map(s -> round(Int, 4s)//4, eigvals(block)))
-        map(casimirs) do s
-            P = nullspace(block - s*I; atol=1e-1)
-            spectrum = eigvals(Hermitian(P' * Mblock * P))
-            S_tot = (sqrt(1 + 4s) - 1) / 2
-            (λ, S_tot, m) => (energy=first(spectrum), spectrum=spectrum)
-        end
-    end
-    block_spectra = sort(reduce(vcat, [b.second.spectrum for b in blocks]))
-    @assert block_spectra ≈ eigvals(Hermitian(Matrix(ham_mat)))
-    blocks
-end
-sort(energies; by=b -> b.second.energy)
-````
-
-### Plotting the spectrum
-Each block is a multiplet of total spin $S$, so its energy appears at every magnetization $m = -S, \dots, S$.
-Coloring the levels by permutation sector `λ` shows that the energy depends on the $S_N$ irrep and not only on $S$.
-The dashed curve $S(S+1)$ is the spectrum without the biquadratic term.
-
-````julia
-using Plots
-irreps = unique(b.first[1] for b in energies)
-p1 = plot(xlabel="Magnetization m", ylabel="Energy", title="Levels by magnetization",
-    xlims=(-N * J - 0.7, N * J + 0.7), legend=false)
-p2 = plot(xlabel="Total spin S", title="Levels by total spin", legend=:topleft)
-plot!(p2, range(0, N * J, 100), S -> S * (S + 1); ls=:dash, c=:gray, label="S(S+1)")
-for (n, λ) in enumerate(irreps)
-    sector = filter(b -> b.first[1] == λ, energies)
-    ms = [b.first[3] for b in sector]
-    Ss = [b.first[2] for b in sector]
-    Es = [b.second.energy for b in sector]
-    scatter!(p1, ms, Es; marker=:hline, ms=14, msw=3, c=n, msc=n)
-    scatter!(p2, Ss, Es; ms=6, c=n, label="λ = $λ")
-end
-plot(p1, p2; layout=(1, 2), size=0.7 .* (1100, 420), frame=:box, margins=4Plots.mm)
-````
+For Hamiltonians symmetric under permuting sites, [`symmetric_sector`] projects onto permutation sectors; see [Spatial symmetries](translation_symmetry.md).
 
 ---
 
@@ -1521,7 +1373,7 @@ lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(L_in) + dissi
 Let's get the matrix representation and check that it preserves trace
 
 ````julia
-mat = representation(lindbladian, Hlr)
+mat = representation(lindbladian, Hlr, :dense)
 Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
 iszero(mat' * Ivec)
 ````
@@ -1530,7 +1382,7 @@ iszero(mat' * Ivec)
 The steady state is the eigenvector of `mat` with eigenvalue closest to zero.
 
 ````julia
-vals, vecs = eigen(Matrix(mat); sortby=abs)
+vals, vecs = eigen(mat; sortby = abs)
 v = vecs[:, 1]
 ρ = reshape(v, Hlr => (Hl, Hr))
 ρ ./= tr(ρ)
@@ -1587,13 +1439,13 @@ Hlr, Hl, Hr, left, right = open_system(Hsys)
 t, ω, g, κ = 0.5, 1.0, 0.3, 0.2
 ham_sym = t * (f[1]'f[2] + f[2]'f[1]) + ω * a[1]'a[1] + g * (f[1]'f[1] - f[2]'f[2]) * (a[1] + a[1]')
 lindbladian = -1im * (left(ham_sym) - right(ham_sym)) + dissipator(√κ * a[1])
-mat = representation(lindbladian, Hlr)
+mat = representation(lindbladian, Hlr, :dense)
 ````
 
 The steady state is again the eigenvector with eigenvalue closest to zero
 
 ````julia
-vals, vecs = eigen(Matrix(mat); sortby = abs)
+vals, vecs = eigen(mat; sortby = abs)
 ρ = reshape(vecs[:, 1], Hlr => (Hl, Hr))
 ρ ./= tr(ρ)
 ````
@@ -1604,6 +1456,66 @@ and we can compute, e.g., the photon number in the steady state
 n_photon = representation(left(a[1]'a[1]), Hl)
 tr(n_photon * ρ)
 ````
+
+---
+
+*This page was generated using [Literate.jl](https://github.com/fredrikekre/Literate.jl).*
+
+
+
+# Braiding Majorana zero modes
+
+
+# Braiding Majorana zero modes
+
+Exchanging two Majorana zero modes ``γ_i`` and ``γ_j`` acts on the degenerate ground states with the unitary
+```math
+B_{ij} = \exp\left(\frac{π}{4} γ_i γ_j\right) = \frac{1 + γ_i γ_j}{\sqrt{2}},
+```
+which maps ``γ_j → B_{ij} γ_j B_{ij}^† = γ_i`` and ``γ_i → -γ_j``. The second form uses ``(γ_i γ_j)^2 = -1``, which holds because
+the package normalises Majoranas as ``γ^2 = 1``. Here we braid two Majoranas adiabatically in a tri-junction,
+where a central Majorana ``γ_0`` couples to three outer ones,[^1] and check that the time evolution reproduces ``B_{32}``.
+
+The coupling ``Δ_i(t)`` between ``γ_0`` and ``γ_i`` is a smooth step; when only ``Δ_i`` is on, the other two outer Majoranas are zero modes.
+Switching the couplings on and off in turn, ``Δ_1 → Δ_2 → Δ_3 → Δ_1``, moves the zero modes around the junction and exchanges those at ``γ_2`` and ``γ_3``, as the figure shows.
+
+![Three steps of the exchange. In each step the solid coupling is on and the dashed one is switched on, then the solid one off. Coloured dots are the two zero modes; the arrow shows where one of them moves.](../assets/braiding_junction.svg)
+
+````julia
+using FermionicHilbertSpaces
+using LinearAlgebra, Plots
+@majoranas γ
+H = hilbert_space(γ, 0:3)
+hs = [representation(1im * γ[0] * γ[i], H, :dense) for i in 1:3]
+coupling(t, T, k) = (1 + tanh(k * cos(2π * t / T))) / 2
+couplings(t, T, k) = [coupling(t - (i - 1) * T / 3, T, k) for i in 1:3]
+hamiltonian(t, T, k) = Hermitian(sum(couplings(t, T, k) .* hs))
+T, k = 1000, 20
+ts = range(0, T, 300)
+plot(ts, stack(couplings.(ts, T, k))'; label = ["Δ₁" "Δ₂" "Δ₃"], xlabel = "t", legend = :outerright, frame = :box, size = (450, 250), lw = 2)
+````
+
+We approximate the evolution by a product of exponentials of the Hamiltonian at the midpoints of time steps `dt`,
+which must be short compared with the switching time of the couplings, about `T/(2πk)`.
+The ground states at ``t = 0`` and ``t = T`` coincide. Restricted to them, the evolution should equal the braid
+operator up to the dynamical phase, which is the same for all ground states, while the opposite exchange
+``B_{23} = B_{32}^†`` should not match. The two zero modes have opposite parity, and the braid acts as a phase on each. Once the dynamical phase is removed, the evolution gives the two ground states
+phases ``e^{±iπ/4}``, the eigenvalues of ``B_{32}``:
+
+````julia
+dt = 1.0
+U = prod(exp(-1im * dt * hamiltonian(t, T, k)) for t in reverse((dt / 2):dt:T))
+V = eigvecs(hamiltonian(0, T, k))[:, 1:2]
+B = representation((1 + γ[3] * γ[2]) / sqrt(2), H, :dense)
+Uground = V' * U * V
+Bground = V' * B * V
+phase = tr(Uground * Bground') / 2
+@assert Uground ≈ phase * Bground
+@assert abs(tr(Uground * Bground)) / 2 < 0.1
+angle.(eigvals(Uground / phase)) / π
+````
+
+[^1]: J. Alicea, Y. Oreg, G. Refael, F. von Oppen and M. P. A. Fisher, "Non-Abelian statistics and topological quantum information processing in 1D wire networks", [Nat. Phys. 7, 412 (2011)](https://doi.org/10.1038/nphys1915), [arXiv:1006.4395](https://arxiv.org/abs/1006.4395).
 
 ---
 
@@ -2414,10 +2326,11 @@ expectation(mf, G, H) ≈ expectation(U, G, H)
 ## Correlation matrices and entanglement
 For the BdG ground state, the correlation matrix ``G`` of the previous section is `correlation_matrix(F)`, where `F` is the result of `eigen(A, BdGEigen())`, and `ground_state_parity(F)` is its fermionic parity. For a many-body state `ψ` on `H`, `correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`.
 
-The rows and columns of a subsystem of modes form the reduced correlation matrix. Its eigenvalues ``\lambda`` give the entanglement entropy ``S = -\sum \lambda \log \lambda`` of the subsystem, which equals the entropy of the reduced many-body density matrix:
+The correlation matrix of a subset of the modes is `partial_trace(G, Hbdg => Hsub)` with `Hsub` a BdG space over those modes, and `von_neumann_entropy(Gsub, Hsub)` is the entanglement entropy of that subsystem. The example checks both against the many-body ground state:
 ```julia
 using FermionicHilbertSpaces, LinearAlgebra
 using FermionicHilbertSpaces.FreeFermions
+import FermionicHilbertSpaces: von_neumann_entropy
 @fermions f
 N = 4
 h = Hermitian(rand(ComplexF64, N, N))
@@ -2427,22 +2340,22 @@ Hbdg = hilbert_space(f, 1:N, BdG())
 A = representation(ham, Hbdg, :dense)
 G = correlation_matrix(eigen(A, BdGEigen()))
 sub = 1:2
-Gsub = G[[sub; sub .+ N], [sub; sub .+ N]]
-entropy(λ) = -sum(x -> x > 0 ? x * log(x) : zero(x), λ)
-S = entropy(eigvals(Hermitian(Gsub)))
+Hsub = hilbert_space(f, sub, BdG())
+Gsub = partial_trace(G, Hbdg => Hsub)
+S = von_neumann_entropy(Gsub, Hsub)
 
 H = hilbert_space(f, 1:N)
 ψ = eigvecs(Hermitian(representation(ham, H, :dense)))[:, 1]
 ρsub = partial_trace(ψ * ψ', H => hilbert_space(f, sub))
-@assert S ≈ entropy(eigvals(Hermitian(ρsub)))
-@assert Gsub ≈ correlation_matrix(ψ, H, hilbert_space(f, sub, BdG()))
+@assert S ≈ von_neumann_entropy(ρsub)
+@assert Gsub ≈ correlation_matrix(ψ, H, Hsub)
 @assert expectation(ham, G, Hbdg) ≈ expectation(ham, ψ, H)
 S
 ```
 
-Conversely, `gaussian_state(G, H, Hbdg)` builds the many-body density matrix on `H` of the Gaussian state with correlation matrix `G`. The reduced correlation matrix gives the reduced density matrix:
+`gaussian_state(G, H, Hbdg)` goes the other way, building the many-body density matrix with correlation matrix `G`. Applied to `Gsub` it gives the reduced density matrix:
 ```julia
-gaussian_state(Gsub, hilbert_space(f, sub), hilbert_space(f, sub, BdG())) ≈ ρsub
+gaussian_state(Gsub, hilbert_space(f, sub), Hsub) ≈ ρsub
 ```
 
 ## From matrices and eigenvectors back to symbolic operators
@@ -2455,6 +2368,19 @@ H = hilbert_space(c, 1:2, BdG())
 M = representation(c[1]' * c[2] + c[1]' * c[2]' + hc, H, :dense)
 vals, vecs = eigen(M, BdGEigen())
 symbolic_operator(M, H), quasiparticle(vecs[:, end], H)
+```
+
+## Majoranas
+Quadratic Majorana operators get the same treatment with `hilbert_space(γ, labels, SingleParticle())`, where `representation` gives the antisymmetric matrix of the operator. Below, `correlation_matrix(F)` is the ground-state matrix ``G_{ij} = \langle \gamma_i \gamma_j angle / 2`` that `expectation` takes, and `ground_state_parity(F, H)` is the ground-state parity:
+```julia
+using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces.FreeFermions
+@majoranas γ
+H = hilbert_space(γ, 1:6, SingleParticle())
+ham = 1im / 2 * sum(γ[2k] * γ[2k + 1] for k in 1:2) + 0.1im * sum(γ[2k - 1] * γ[2k] for k in 1:3)
+F = eigen(Hermitian(representation(ham, H, :dense)))
+G = correlation_matrix(F)
+ground_state_parity(F, H), expectation(ham, G, H)
 ```
 
 
@@ -2907,7 +2833,7 @@ A type representing a Fock state as the bitstring of an integer. Bit `k - 1` (co
 FreeFermions
 ```
 
-Hilbert spaces and tools for non-interacting fermions: the single-particle space `hilbert_space(f, labels, SingleParticle())`, the Bogoliubov-de Gennes space `hilbert_space(f, labels, BdG())`, their eigendecomposition and Gaussian states.
+Hilbert spaces and tools for non-interacting fermions: the single-particle space `hilbert_space(f, labels, SingleParticle())`, the Bogoliubov-de Gennes space `hilbert_space(f, labels, BdG())`, the Majorana space `hilbert_space(γ, labels, SingleParticle())`, their eigendecomposition and Gaussian states.
 
 
 ## `GenericHilbertSpace`
@@ -2924,14 +2850,17 @@ Atomic Hilbert space whose basis states are given explicitly by `basisstates`, i
 
 ## `Ket`
 
-No documentation found for public binding `FermionicHilbertSpaces.Ket`.
-
-`FermionicHilbertSpaces.Ket` is a `Function`.
-
+```julia
+Ket(label, H)
 ```
-# 1 method for generic function "Ket" from FermionicHilbertSpaces:
- [1] Ket(label, H)
-     @ ~/work/FermionicHilbertSpaces.jl/FermionicHilbertSpaces.jl/src/symbolic_states.jl:11
+
+The symbolic ket of `H` with the given `label`, such as the bitstring `"10"`. See [`Kets`] for the multi-state form.
+
+```jldoctest
+julia> @fermions f;
+
+julia> Ket("10", hilbert_space(f, 1:2))
+|10⟩
 ```
 
 
@@ -2942,6 +2871,15 @@ Kets(H)
 ```
 
 Callable that turns a label into a symbolic ket of `H`, as in `Kets(H)("10")`. The label is parsed by [`interpret_state`]. `Kets(H)[i]` is the ket of `basisstate(i, H)`.
+
+```jldoctest
+julia> using FermionicHilbertSpaces; @fermions f;
+
+julia> k = Kets(hilbert_space(f, 1:2));
+
+julia> k[2] == k("10")
+true
+```
 
 
 ## `NoSymmetry`
@@ -3089,7 +3027,7 @@ No documentation found for public binding `FermionicHilbertSpaces.bdg_hilbert_sp
 ```
 # 1 method for generic function "bdg_hilbert_space" from FermionicHilbertSpaces:
  [1] bdg_hilbert_space(f, labels)
-     @ ~/work/FermionicHilbertSpaces.jl/FermionicHilbertSpaces.jl/src/physics/fermions/free_fermions.jl:68
+     @ ~/work/FermionicHilbertSpaces.jl/FermionicHilbertSpaces.jl/src/physics/fermions/free_fermions.jl:74
 ```
 
 
@@ -3142,7 +3080,7 @@ embed(m, Hsub => H; complement=complementary_subsystem(H, Hsub), kwargs...)
 
 Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces. `Hsub => H` reads input => output; see [Pair arguments].
 
-The result is the compression `P (m ⊗ I) P` onto `H`, so that `tr(embed(A) * ρ) == tr(A * partial_trace(ρ))` for `ρ` on `H`. Unless `skipmissing=true`, throws an `ArgumentError` if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of `m` for states of `Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not in `Hsub` get zero.
+The result is the compression `P (m ⊗ I) P` onto `H`, so that `tr(embed(A, Hsub => H) * ρ) == tr(A * partial_trace(ρ, H => Hsub))` for `ρ` on `H`. Unless `skipmissing=true`, throws an `ArgumentError` if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of `m` for states of `Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not in `Hsub` get zero.
 
 If `m` is a vector, `Hsub` and `H` must have the same modes, as for a sector `Hsub` of `H`. The result is `m` placed at the indices [`indices`]`(Hsub, H)` and zero elsewhere.
 
@@ -3178,7 +3116,7 @@ expectation(op, state, H)
 
 Return the expectation value of the operator `op` in `state` on the space `H`. A vector `ψ` gives `ψ' * M * ψ` and a density matrix `ρ` gives `tr(ρ * M)`, where `M = representation(op, H)`. The state is assumed to be normalized.
 
-On `hilbert_space(f, labels, FreeFermions.SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on `hilbert_space(f, labels, FreeFermions.BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in the order of the BdG space. The state is then the Gaussian state with that correlation matrix, and `op` of any degree is evaluated with Wick's theorem. Terms that do not conserve the particle number (single-particle space) or the parity (BdG space) throw an error, unless `projection=true`, which drops them.
+On `hilbert_space(f, labels, FreeFermions.SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on `hilbert_space(f, labels, FreeFermions.BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in the order of the BdG space. On the Majorana space `hilbert_space(γ, labels, FreeFermions.SingleParticle())` it is `G[i, j] = ⟨γ_i γ_j⟩ / 2`. The state is then the Gaussian state with that correlation matrix, and `op` of any degree is evaluated with Wick's theorem. Terms that do not conserve the particle number (single-particle space) or the parity (BdG and Majorana spaces) throw an error, unless `projection=true`, which drops them.
 
 # Examples
 
@@ -3232,6 +3170,18 @@ hilbert_space(f::SymbolicFermionBasis, labels, ::SingleParticle)
 The space spanned by the states $c_n^\dagger |0\rangle$ for the modes `f[l]`, `l in labels`, suitable for non-interacting systems with fermion number conservation. The matrix representation of a quadratic operator is the single-particle matrix, without any contribution from the identity operator. The space wraps a constrained fermionic space, available through `parent`, and does not combine with tensor products or partial traces.
 
 ```julia
+hilbert_space(γ::SymbolicMajoranaBasis, labels, ::SingleParticle)
+```
+
+The space of the Majoranas `γ[l]`, `l in labels`, for quadratic Majorana operators. `representation(op, H)` is the antisymmetric matrix `R` with `op = Σᵢⱼ R[i, j] γ[i] γ[j] / 2` up to a constant.
+
+```julia
+@majoranas γ
+H = hilbert_space(γ, 1:2, SingleParticle())
+representation(1im * γ[1] * γ[2], H, :dense) # [0 1im; -1im 0]
+```
+
+```julia
 hilbert_space(f::SymbolicFermionBasis, labels, ::BdG)
 ```
 
@@ -3243,10 +3193,25 @@ representation(f[1]' * f[1], H, :dense) # diagm([1, 0, -1, 0]) / 2
 ```
 
 ```julia
-hilbert_space(args...)
+hilbert_space(f, labels, [constraint])
+hilbert_space(b, labels, dimension, [constraint])
+hilbert_space(s, labels, [J], [constraint])
 ```
 
-Construct a Hilbert space from symbolic degrees of freedom and labels, optionally with additional arguments such as constraints.
+Construct the Hilbert space of the fermions `f`, bosons `b` (truncated at `dimension`) or spins `s` (spin `J`) with the given `labels`, optionally restricted by a constraint, e.g. `NumberConservation(2)`.
+
+```jldoctest
+julia> @fermions f; @bosons b; @spins s 1//2;
+
+julia> dim(hilbert_space(f, 1:3, NumberConservation(1)))
+3
+
+julia> dim(hilbert_space(b, 1:2, 3))
+9
+
+julia> dim(hilbert_space(s, 1:2))
+4
+```
 
 ```julia
 hilbert_space(b::BosonSym, dimension[, constraint])
@@ -3264,6 +3229,13 @@ indices(qn, H)
 ```
 
 Return the basis-state indices in `H` belonging to a given sector, specified either by a sector Hilbert space `Hsub` or by a quantum number `qn`. Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
+
+```jldoctest
+julia> using FermionicHilbertSpaces; @fermions f;
+
+julia> indices(1, hilbert_space(f, 1:2, NumberConservation()))
+2:3
+```
 
 
 ## `matrix_representation`
@@ -3316,6 +3288,19 @@ Set up the doubled space for density matrices of a system with Hilbert space `H`
 
 Use `reshape(ρ, (Hl, Hr) => Hlr)` and `reshape(v, Hlr => (Hl, Hr))` to convert between density matrices and vectors.
 
+```jldoctest
+julia> using FermionicHilbertSpaces: dissipator; @fermions f;
+
+julia> Hlr, Hl, Hr, left, right = open_system(f, 1:1);
+
+julia> n = f[1]' * f[1];
+
+julia> L = representation(-1im * (left(n) - right(n)) + dissipator(f[1]), Hlr);
+
+julia> size(L)
+(4, 4)
+```
+
 
 ## `parityoperator`
 
@@ -3329,6 +3314,18 @@ Return the fermionic parity operator `(-1)^N` for the Hilbert space `H`: `1` on 
 ## `partial_trace`
 
 ```julia
+partial_trace(G, Hsp => Hsub::SingleParticleHilbertSpace)
+```
+
+The correlation matrix `G[i, j] = ⟨c_i' c_j⟩` of the modes of `Hsub` in its order, from the one on `Hsp`. `Hsub` must be a single-particle space over a subset of the modes of `Hsp`.
+
+```julia
+partial_trace(G, Hbdg => Hsub::BdGHilbertSpace)
+```
+
+The Nambu correlation matrix of the modes of `Hsub` in its order, from the correlation matrix `G` on `Hbdg`. `Hsub` must be a BdG space over a subset of the modes of `Hbdg`, such as `hilbert_space(f, sub, BdG())`.
+
+```julia
 partial_trace(m, H => Hsub; complement=complementary_subsystem(H, Hsub))
 partial_trace(H => Hsub; kwargs...)  # -> PartialTraceMap
 ```
@@ -3336,6 +3333,15 @@ partial_trace(H => Hsub; kwargs...)  # -> PartialTraceMap
 Compute the partial trace of `m` from `H` to `Hsub`. Fermionic phase factors are included if both `H` and `Hsub` are Fermionic, unless specified otherwise in `kwargs`. `H => Hsub` reads input => output; see [Pair arguments].
 
 The trace drops the states of `H` whose part on `Hsub` is not in `Hsub`, or whose part on the complement is not in `complement`. Unless `skipmissing=true`, throws an `ArgumentError` if `m` has a nonzero element in the row or column of such a state. The map `partial_trace(H => Hsub)` does not check its input.
+
+```jldoctest
+julia> using FermionicHilbertSpaces; @fermions f;
+
+julia> H = hilbert_space(f, 1:2); Hsub = hilbert_space(f, 1:1);
+
+julia> partial_trace(representation(f[1]' * f[1], H), H => Hsub) == [0 0; 0 2]
+true
+```
 
 
 ## `partial_transpose`
@@ -3393,6 +3399,13 @@ Expressions that combine kets or bras with operators or with states of other spa
 
 With `Axes(Hout, Hin)`, `op` is represented as a map from `Hin` to `Hout`.
 
+```jldoctest
+julia> @fermions f;
+
+julia> representation(f[1]' * f[1], hilbert_space(f, 1:1)) == [0 0; 0 1]
+true
+```
+
 
 ## `sector`
 
@@ -3401,6 +3414,13 @@ sector(qn, H)
 ```
 
 Return the sector of `H` corresponding to quantum number `qn`, for example a particle number for `NumberConservation` or `1` (even) / `-1` (odd) for `ParityConservation`. For `qn === nothing`, this returns `H` for non-sector spaces. Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
+
+```jldoctest
+julia> using FermionicHilbertSpaces; @fermions f;
+
+julia> dim(sector(-1, hilbert_space(f, 1:3, ParityConservation())))
+4
+```
 
 
 ## `sectors`
@@ -3421,7 +3441,7 @@ No documentation found for public binding `FermionicHilbertSpaces.single_particl
 ```
 # 1 method for generic function "single_particle_hilbert_space" from FermionicHilbertSpaces:
  [1] single_particle_hilbert_space(f, labels)
-     @ ~/work/FermionicHilbertSpaces.jl/FermionicHilbertSpaces.jl/src/physics/fermions/free_fermions.jl:67
+     @ ~/work/FermionicHilbertSpaces.jl/FermionicHilbertSpaces.jl/src/physics/fermions/free_fermions.jl:73
 ```
 
 
@@ -3448,14 +3468,13 @@ If `Hs` contains only symbolic operators, their order does not matter: the modes
 
 # Examples
 
-```julia
-@fermions f
-H1 = hilbert_space(f, 1:1)
-H2 = hilbert_space(f, 2:2)
-H3 = hilbert_space(f, 3:3)
-H = tensor_product((H1, H2, H3))
-Hsub = subregion((H1, H3), H)
-Hsub == subregion([f[3], f[1]], H)
+```jldoctest
+julia> using FermionicHilbertSpaces; @fermions f;
+
+julia> H = hilbert_space(f, 1:3);
+
+julia> subregion([f[3], f[1]], H) == hilbert_space(f, [1, 3])
+true
 ```
 
 
@@ -3492,6 +3511,15 @@ tensor_product(spaces; constraint=NoSymmetry())
 Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
 
 Spaces of the same group, such as fermions of one `@fermions` basis, merge into one factor where the group first appears. The first factor varies fastest.
+
+```jldoctest
+julia> using FermionicHilbertSpaces; @fermions f;
+
+julia> H = tensor_product(hilbert_space(f, 1:1), hilbert_space(f, 2:2));
+
+julia> state_index("10", H)
+2
+```
 
 ```julia
 tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
@@ -3596,7 +3624,7 @@ FermionicHilbertSpaces.FixedNumberFockState{N} <: FermionicHilbertSpaces.Abstrac
 correlation_matrix(state, H, Hbdg::BdGHilbertSpace)
 ```
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on the many-body space `H`, where `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩`. A BdG space over a subset of the modes gives the reduced correlation matrix.
+The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on the many-body space `H`, where `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩`. A BdG space over a subset of the modes gives the reduced correlation matrix. On a Majorana space `hilbert_space(γ, labels, SingleParticle())`, `Ψ = γ / √2`, so `G[i, j] = ⟨γ_i γ_j⟩ / 2`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions; @fermions f;
@@ -3617,7 +3645,7 @@ julia> correlation_matrix(ψ, H, hilbert_space(f, 1:2, BdG()))
 correlation_matrix(F::LinearAlgebra.Eigen)
 ```
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground state, where `F` is the result of `eigen(A, BdGEigen())`, assuming no zero-energy modes. It equals `correlation_matrix(ψ, H, Hbdg)` for the many-body ground state `ψ`.
+The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground state, where `F` is the result of `eigen(A, BdGEigen())`, assuming no zero-energy modes. It equals `correlation_matrix(ψ, H, Hbdg)` for the many-body ground state `ψ`. For the matrix `R` of a Majorana operator, `F = eigen(Hermitian(R))` gives `G[i, j] = ⟨γ_i γ_j⟩ / 2`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions, LinearAlgebra; @fermions f;
@@ -3664,6 +3692,12 @@ julia> ground_state_parity(eigen(A, BdGEigen()))
 -1
 ```
 
+```julia
+ground_state_parity(F::LinearAlgebra.Eigen, H)
+```
+
+The fermionic parity of the ground state of a quadratic Majorana operator with matrix `R` on the Majorana space `H`, where `F = eigen(Hermitian(R))`, assuming no zero-energy modes. Fermions are formed from consecutive pairs of `labels`.
+
 
 ## `mean_field`
 
@@ -3686,7 +3720,7 @@ mean_field(f[1]' * f[1] * f[2]' * f[2], [0.5 0; 0 0.25], H) # 0.25 f[1]' f[1] + 
 quasiparticle(v, H)
 ```
 
-The quasiparticle creation operator `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])` for a column `v` of BdG eigenvectors on a `BdG` space `H` with `N` modes, or `γ' = Σ_n v[n] * f[n]'` on a `SingleParticle` space.
+The quasiparticle creation operator `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])` for a column `v` of BdG eigenvectors on a `BdG` space `H` with `N` modes, or `γ' = Σ_n v[n] * f[n]'` on a `SingleParticle` space, or `Σ_n v[n] * γ[n] / √2` on a Majorana space.
 
 ```julia
 @fermions f
@@ -3701,7 +3735,7 @@ quasiparticle([1, 0, 0, 1], H) # f[2] + f†[1]
 symbolic_operator(M, H)
 ```
 
-The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space or any matrix on a `SingleParticle` space. On a `BdG` space, `op` is traceless.
+The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space, an antisymmetric matrix on a Majorana space, or any matrix on a `SingleParticle` space. On a `BdG` or Majorana space, `op` is traceless.
 
 ```julia
 @fermions f
