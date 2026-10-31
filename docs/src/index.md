@@ -20,7 +20,7 @@ It is not a solver: combine it with LinearAlgebra, KrylovKit or ODE solvers for 
 
 ## Getting started
 
-What is the ground-state energy of a half-filled chain of interacting spinless fermions, and how entangled are its two halves? The Hamiltonian conserves particle number, so we diagonalize in the half-filled sector only and trace out the right half:
+We find the ground state of a half-filled chain of interacting spinless fermions and how entangled its two halves are. The Hamiltonian conserves particle number, so we diagonalize only in the half-filled sector and then trace out the right half:
 
 ```@example start
 using FermionicHilbertSpaces, LinearAlgebra
