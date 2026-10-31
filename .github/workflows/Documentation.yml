@@ -36,4 +36,5 @@ jobs:
         run: |
           using Documenter: DocMeta, doctest
           using FermionicHilbertSpaces
+          DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilbertSpaces); recursive=true)
           doctest(FermionicHilbertSpaces)
