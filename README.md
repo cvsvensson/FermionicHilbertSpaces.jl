@@ -42,7 +42,6 @@ entanglement_entropy = sum(-λ * log(λ) for λ in eigvals(ρsub))
 0.44395495955661934
 ````
 
-`representation` returns a sparse matrix by default; a third argument such as `:dense` selects the format, see the [docs](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/docstrings/).
 
 This hamiltonian conserves the number of fermions, which we can exploit. Let's specialize to the 3-particle sector and compute the entanglement entropy of the ground state in that sector.
 
