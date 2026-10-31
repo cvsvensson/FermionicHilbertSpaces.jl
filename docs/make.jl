@@ -55,7 +55,8 @@ pages = [
         "Extending and performance hooks" => "extending.md",
         "Custom operators: Clock" => "literate_output/clock_operators.md",
         "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
-        "Internals" => "internals.md",
+        "Internal functions" => "internals.md",
+        "Internal types" => "internal_types.md",
     ],
     "API reference" => [
         "Public API" => "docstrings.md",
