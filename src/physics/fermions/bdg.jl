@@ -65,17 +65,14 @@ _state_index(state, H::BdGHilbertSpace) = _state_index(state, parent(H))
 
 representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking=chunking, kwargs...)
 function matrix_representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
+    repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, H, _canonicalize_repr(repr); chunking, kwargs...)
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
     return normal_order_to_bdg(_nambu_matrix(op, H, repr))
 end
-# The matrix `m` with `op == identity_coefficient(op) + Ψ' m Ψ`, of which the BdG matrix is the particle-hole symmetric part.
+# The matrix `m` with `op == c + Ψ' m Ψ` for a scalar `c`, of which the BdG matrix is the particle-hole symmetric part.
 function _nambu_matrix(op, H, repr)
     _is_quadratic_fermion_operator(op, false) || throw(ArgumentError("Only quadratic fermionic operators can be represented on a BdG Hilbert space. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
     return _quadratic_matrix(_bdg_entry, remove_identity(op), H, repr)
-end
-function expectation(op, G::AbstractMatrix, H::BdGHilbertSpace)
-    _isscalar_operator(op) && return identity_coefficient(op)
-    return identity_coefficient(op) + dot(transpose(G)', _nambu_matrix(op, H, EagerSparseRepr()))
 end
 function _bdg_entry(term, H)
     instate, outstate = _nambu_in_out(term, map(f -> mode_position(f, H), term.factors))
@@ -163,7 +160,6 @@ end
     for op in (f[1]' * f[2], f[1] * f[2], f[1]' * f[2]', f[1] * f[2]', ham + 2)
         @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
     end
-    @test_throws ArgumentError expectation(f[1]' * f[2]' * f[3] * f[1], G, H)
 end
 
 @testitem "BdG representation formats" begin
@@ -287,8 +283,9 @@ end
 # Within a degenerate eigenspace `eigen` returns an arbitrary basis, so the partner of a
 # negative-energy column is built as its particle-hole conjugate. That map is antiunitary and
 # takes the e-eigenspace onto the -e one. For a small splitting e the computed C v_k is only
-# orthogonal to v_k up to eps * norm(A) / e, so the columns are Löwdin orthonormalized. If
-# C V = V P with P the reversal permutation, then conj(V'V) = P V'V P, so the result stays paired.
+# orthogonal to v_k up to eps * norm(A) / e, so the columns are Löwdin orthonormalized, i.e.
+# replaced by the polar factor of their SVD. If C V = V P with P the reversal permutation, then
+# conj(V'V) = P V'V P, so the result stays paired.
 function enforce_ph_symmetry(es, ops, tol)
     N = div(length(es), 2)
     for k in 1:N
@@ -305,7 +302,8 @@ function enforce_ph_symmetry(es, ops, tol)
         es[zero_modes] .= 0
         ops[:, zero_modes] = canonicalize_zero_modes(ops[:, zero_modes])
     end
-    return es, ops / sqrt(Hermitian(ops' * ops))
+    U, _, V = svd(ops)
+    return es, U * V'
 end
 
 # The zero-energy eigenspace is particle-hole invariant, so the Takagi factorization of
@@ -314,7 +312,7 @@ end
 function canonicalize_zero_modes(Z)
     n = div(size(Z, 1), 2)
     m = div(size(Z, 2), 2)
-    U, _ = symmetric_SVD(Symmetric(transpose(Z) * [0I I(n); I(n) 0I] * Z))
+    U, _ = symmetric_SVD(Symmetric(transpose(Z) * [Z[(n + 1):end, :]; Z[1:n, :]]))
     Y = Z * conj(U)
     Ya = Y[:, 1:m]
     Yb = reverse(Y[:, (m + 1):end]; dims = 2)
@@ -329,13 +327,10 @@ function symmetric_SVD(M)
         -real(M) imag(M);
         imag(M) real(M)
     ]
-    S = schur(Symmetric(block_matrix))
-    # Extract positive eigenvalues
-    pos_eigenval_positions = diag(S.T) .> 0
-    D = Diagonal(diag(S.T)[pos_eigenval_positions])
-    # Reconstruct complex unitary matrix
-    U = S.Z[(n+1):end, pos_eigenval_positions] + 1im * S.Z[1:n, pos_eigenval_positions]
-    return U, D
+    vals, Z = eigen(Symmetric(block_matrix))
+    pos = vals .> 0
+    U = Z[(n + 1):end, pos] + 1im * Z[1:n, pos]
+    return U, Diagonal(vals[pos])
 end
 
 @testitem "Takagi" begin
@@ -433,11 +428,12 @@ end
 # The operators Ψ_j^† that create the basis states of `H`, such that `representation(Σ_ab M_ab Ψ_a^† Ψ_b, H) == M`
 _nambu_creators(H::SingleParticleHilbertSpace) = map(adjoint, modes(H))
 _nambu_creators(H::BdGHilbertSpace) = vcat(map(adjoint, modes(H)), modes(H))
+_nambu_creators(H::MajoranaSingleParticleHilbertSpace) = [γ / sqrt(2) for γ in modes(H)]
 
 """
     quasiparticle(v, H)
 
-The quasiparticle creation operator `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])` for a column `v` of BdG eigenvectors on a `BdG` space `H` with `N` modes, or `γ' = Σ_n v[n] * f[n]'` on a `SingleParticle` space.
+The quasiparticle creation operator `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])` for a column `v` of BdG eigenvectors on a `BdG` space `H` with `N` modes, or `γ' = Σ_n v[n] * f[n]'` on a `SingleParticle` space, or `Σ_n v[n] * γ[n] / √2` on a Majorana space.
 
 ```julia
 @fermions f
@@ -445,7 +441,7 @@ H = hilbert_space(f, 1:2, BdG())
 quasiparticle([1, 0, 0, 1], H) # f[2] + f†[1]
 ```
 """
-function quasiparticle(v, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
+function quasiparticle(v, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace, MajoranaSingleParticleHilbertSpace})
     creators = _nambu_creators(H)
     length(v) == length(creators) || throw(DimensionMismatch("The vector has length $(length(v)), but the space has dimension $(length(creators))."))
     return sum(c * x for (c, x) in zip(creators, v))
@@ -454,7 +450,7 @@ end
 """
     symbolic_operator(M, H)
 
-The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space or any matrix on a `SingleParticle` space. On a `BdG` space, `op` is traceless.
+The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space, an antisymmetric matrix on a Majorana space, or any matrix on a `SingleParticle` space. On a `BdG` or Majorana space, `op` is traceless.
 
 ```julia
 @fermions f
@@ -462,7 +458,7 @@ H = hilbert_space(f, 1:2, BdG())
 symbolic_operator(representation(f[1]' * f[1], H, :dense), H) # -0.5I + f†[1]*f[1]
 ```
 """
-function symbolic_operator(M, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace})
+function symbolic_operator(M, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace, MajoranaSingleParticleHilbertSpace})
     creators = _nambu_creators(H)
     size(M) == (length(creators), length(creators)) || throw(DimensionMismatch("The matrix has size $(size(M)), but the space has dimension $(length(creators))."))
     terms = (M[a, b] * ca * cb' for (a, ca) in zip(axes(M, 1), creators), (b, cb) in zip(axes(M, 2), creators) if !iszero(M[a, b]))

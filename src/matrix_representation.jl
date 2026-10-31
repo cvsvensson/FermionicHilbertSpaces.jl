@@ -188,7 +188,11 @@ struct TupleConcretizer end
 struct VecConcretizer end
 struct NoConcretizer end
 ___concretize(factors, ::TupleConcretizer) = Tuple(factors)
-___concretize(factors::AbstractVector, ::VecConcretizer) = map(identity, factors)
+# `map(identity, factors)` joins the element types one by one, which is slow, and products usually have one factor type
+function ___concretize(factors::AbstractVector, ::VecConcretizer)
+    T = isempty(factors) ? eltype(factors) : typeof(first(factors))
+    return all(f -> f isa T, factors) ? Vector{T}(factors) : map(identity, factors)
+end
 ___concretize(factors::Tuple, ::VecConcretizer) = collect(factors)
 ___concretize(factors, ::NoConcretizer) = factors
 __concretize(x::NCMul, concr) = NCMul(x.coeff, ___concretize(x.factors, concr))
@@ -475,6 +479,13 @@ The single-particle space `hilbert_space(f, labels, FreeFermions.SingleParticle(
 represent quadratic fermionic operators only, and a number is represented by the zero matrix.
 
 With `Axes(Hout, Hin)`, `op` is represented as a map from `Hin` to `Hout`.
+
+```jldoctest
+julia> @fermions f;
+
+julia> representation(f[1]' * f[1], hilbert_space(f, 1:1)) == [0 0; 0 1]
+true
+```
 """
 representation
 
@@ -503,8 +514,9 @@ size(M) == (dim(H), dim(H))
 ```
 """
 function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
-    repr === :dense && return Matrix(matrix_representation(
-        op, space, :sparse; projection, chunking, kwargs...))
+    repr === :dense && return Matrix(matrix_representation(op, space, EagerSparseRepr(); projection, chunking, kwargs...))
+    # The barrier keeps inference from compiling every format a runtime Symbol could select
+    repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, space, _canonicalize_repr(repr); projection, chunking, kwargs...)
     repr = _canonicalize_repr(repr)
     if trivial_operator(op)
         return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
@@ -514,7 +526,7 @@ end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
     Hout == Hin && return matrix_representation(op, Hin, repr; projection, chunking, kwargs...)
-    repr === :dense && return Matrix(matrix_representation(op, ax, :sparse; projection, chunking, kwargs...))
+    repr === :dense && return Matrix(matrix_representation(op, ax, EagerSparseRepr(); projection, chunking, kwargs...))
     repr = _canonicalize_repr(repr)
     repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("Lazy and chunked representations with `Axes(Hout, Hin)` need `Hout == Hin`."))
     if trivial_operator(op)
@@ -538,7 +550,10 @@ density matrix `ρ` gives `tr(ρ * M)`, where `M = representation(op, H)`. The s
 
 On `hilbert_space(f, labels, FreeFermions.SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on
 `hilbert_space(f, labels, FreeFermions.BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in
-the order of the BdG space. There `op` must be quadratic, and its identity part is included.
+the order of the BdG space. On the Majorana space `hilbert_space(γ, labels, FreeFermions.SingleParticle())` it is
+`G[i, j] = ⟨γ_i γ_j⟩ / 2`. The state is then the Gaussian state with that correlation matrix, and `op` of any degree
+is evaluated with Wick's theorem. Terms that do not conserve the particle number (single-particle space) or the parity
+(BdG and Majorana spaces) throw an error, unless `projection=true`, which drops them.
 
 # Examples
 ```julia

@@ -3,30 +3,31 @@
 
 Hilbert spaces and tools for non-interacting fermions: the single-particle space
 `hilbert_space(f, labels, SingleParticle())`, the Bogoliubov-de Gennes space
-`hilbert_space(f, labels, BdG())`, their eigendecomposition and Gaussian states.
+`hilbert_space(f, labels, BdG())`, the Majorana space `hilbert_space(γ, labels, SingleParticle())`,
+their eigendecomposition and Gaussian states.
 """
 module FreeFermions
 
     using ..FermionicHilbertSpaces: FermionicHilbertSpaces, AbstractFockState, AbstractHilbertSpace,
-        EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, NoChunking, SymbolicFermionBasis,
-        _FermionModeSpace, _canonicalize_repr, _zero_matrix, finalize!, get_trivial_op_coeff,
+        EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, MajoranaSym, NoChunking, SymbolicFermionBasis,
+        SymbolicMajoranaBasis,
+        _FermionModeSpace, _canonicalize_repr, _zero_matrix, exchange_phase, finalize!,
         matrix_accumulator, mode_position, push_inds_amps!, state_index
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,
-        _state_label_atomic, apply_local_operators, basisstate, basisstates, dim, expectation,
-        hilbert_space, matrix_representation, mode_ordering, modes, representation
+        _state_label_atomic, apply_local_operators, basisstate, basisstates, dim, von_neumann_entropy, expectation,
+        hilbert_space, matrix_representation, mode_ordering, modes, partial_trace, representation
     using LinearAlgebra: LinearAlgebra, Diagonal, Eigen, Hermitian, Symmetric, UniformScaling, I,
-        det, diag, dot, eigen, issymmetric, normalize, schur
+        det, eigen, issymmetric, normalize, svd
     using NonCommutativeProducts: NonCommutativeProducts, NCAdd, NCMul, NCterms
+    using OrderedCollections: OrderedDict
+
     using TestItems: @testitem
 
     export SingleParticle, BdG, BdGEigen, NambuState, SingleParticleState, quasiparticle, symbolic_operator,
-        correlation_matrix, ground_state_parity, gaussian_state
+        correlation_matrix, ground_state_parity, gaussian_state, mean_field
 
     remove_identity(a::NCMul) = a
     remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict)
-    identity_coefficient(op::NCAdd) = op.coeff
-    identity_coefficient(op::NCMul) = isempty(op.factors) ? op.coeff : zero(op.coeff)
-    identity_coefficient(op) = get_trivial_op_coeff(op)
 
     # The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
     _isscalar_operator(op) = op isa Union{Number, UniformScaling} || (op isa Union{NCMul, NCAdd} && NonCommutativeProducts.isscalar(op))
@@ -47,21 +48,25 @@ module FreeFermions
         return finalize!(accumulator, H)
     end
 
+    # Whether every term of `op` is a product of two factors `a` and `b` with `isvalid(a, b)`
+    _is_quadratic_operator(op, isvalid) = false
+    _is_quadratic_operator(op::NCMul, isvalid) = length(op.factors) == 2 && isvalid(op.factors...)
+    _is_quadratic_operator(op::NCAdd, isvalid) = all(term -> _is_quadratic_operator(term, isvalid), keys(op.dict))
     # Whether every term of `op` is a product of two `FermionSym`s, with one creation and one annihilation
-    # operator if `number_conserving`. Majoranas and other operators give `false`.
-    _is_quadratic_fermion_operator(op, number_conserving) = false
-    _is_quadratic_fermion_operator(op::NCMul, number_conserving) = _is_quadratic_fermion_term(op.factors, number_conserving)
-    _is_quadratic_fermion_operator(op::NCAdd, number_conserving) = all(term -> _is_quadratic_fermion_term(term.factors, number_conserving), keys(op.dict))
-    function _is_quadratic_fermion_term(factors, number_conserving)
-        length(factors) == 2 || return false
-        a, b = factors
-        (a isa FermionSym && b isa FermionSym) || return false
-        return !number_conserving || a.creation != b.creation
+    # operator if `number_conserving`
+    _is_quadratic_fermion_operator(op, number_conserving) = _is_quadratic_operator(op, (a, b) -> a isa FermionSym && b isa FermionSym && (!number_conserving || a.creation != b.creation))
+
+    function _mode_positions(H, Hsub)
+        positions = [mode_position(m, H) for m in modes(Hsub)]
+        any(iszero, positions) && throw(ArgumentError("The modes of $Hsub are not a subset of the modes of $H."))
+        return positions
     end
 
     include("single_particle.jl")
+    include("free_majoranas.jl")
     include("bdg.jl")
     include("gaussian.jl")
+    include("wick.jl")
 
 end
 

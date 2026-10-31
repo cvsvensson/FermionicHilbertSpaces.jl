@@ -86,7 +86,7 @@ vals
 ```
 
 ## Expectation values
-On the single-particle and BdG spaces, `expectation(op, G, H)` takes the correlation matrix of the state: ``G_{ij} = \langle c_i^\dagger c_j \rangle`` on the single-particle space and ``G_{ij} = \langle \Psi_i^\dagger \Psi_j \rangle`` on the BdG space. The operator must be quadratic, and its identity part is included. For a thermal state of the single-particle hamiltonian `h`, ``G = (1 + e^{\beta h})^{-T}``:
+On the single-particle and BdG spaces, `expectation(op, G, H)` takes the correlation matrix of the state: ``G_{ij} = \langle c_i^\dagger c_j \rangle`` on the single-particle space and ``G_{ij} = \langle \Psi_i^\dagger \Psi_j \rangle`` on the BdG space. The state is the Gaussian state with this correlation matrix, such as a thermal state of a quadratic hamiltonian, so operators of any degree are evaluated with Wick's theorem. For a thermal state of the single-particle hamiltonian `h`, ``G = (1 + e^{\beta h})^{-T}``:
 ```@example expectation
 using FermionicHilbertSpaces, LinearAlgebra
 using FermionicHilbertSpaces.FreeFermions
@@ -97,14 +97,21 @@ h = representation(ham, H, :dense)
 G = transpose(inv(I + exp(10 * h)))
 expectation(ham, G, H)
 ```
+`mean_field(op, G, H)` replaces every product in `op` by its terms of order at most two in the fluctuations around the state, the Hartree, Fock and pairing terms. The result is of degree at most two, so for an even `op` it can be represented on `H`, and it has the same expectation value as `op`:
+```@example expectation
+U = 2 * c[1]' * c[1] * c[2]' * c[2]
+mf = mean_field(U, G, H)
+expectation(mf, G, H) ≈ expectation(U, G, H)
+```
 
 ## Correlation matrices and entanglement
 For the BdG ground state, the correlation matrix ``G`` of the previous section is `correlation_matrix(F)`, where `F` is the result of `eigen(A, BdGEigen())`, and `ground_state_parity(F)` is its fermionic parity. For a many-body state `ψ` on `H`, `correlation_matrix(ψ, H, Hbdg)` gives the same matrix for the modes of `Hbdg`.
 
-The rows and columns of a subsystem of modes form the reduced correlation matrix. Its eigenvalues ``\lambda`` give the entanglement entropy ``S = -\sum \lambda \log \lambda`` of the subsystem, which equals the entropy of the reduced many-body density matrix:
+The correlation matrix of a subset of the modes is `partial_trace(G, Hbdg => Hsub)` with `Hsub` a BdG space over those modes, and `von_neumann_entropy(Gsub, Hsub)` is the entanglement entropy of that subsystem. The example checks both against the many-body ground state:
 ```@example entanglement
 using FermionicHilbertSpaces, LinearAlgebra
 using FermionicHilbertSpaces.FreeFermions
+import FermionicHilbertSpaces: von_neumann_entropy
 @fermions f
 N = 4
 h = Hermitian(rand(ComplexF64, N, N))
@@ -114,22 +121,22 @@ Hbdg = hilbert_space(f, 1:N, BdG())
 A = representation(ham, Hbdg, :dense)
 G = correlation_matrix(eigen(A, BdGEigen()))
 sub = 1:2
-Gsub = G[[sub; sub .+ N], [sub; sub .+ N]]
-entropy(λ) = -sum(x -> x > 0 ? x * log(x) : zero(x), λ)
-S = entropy(eigvals(Hermitian(Gsub)))
+Hsub = hilbert_space(f, sub, BdG())
+Gsub = partial_trace(G, Hbdg => Hsub)
+S = von_neumann_entropy(Gsub, Hsub)
 
 H = hilbert_space(f, 1:N)
 ψ = eigvecs(Hermitian(representation(ham, H, :dense)))[:, 1]
 ρsub = partial_trace(ψ * ψ', H => hilbert_space(f, sub))
-@assert S ≈ entropy(eigvals(Hermitian(ρsub)))
-@assert Gsub ≈ correlation_matrix(ψ, H, hilbert_space(f, sub, BdG()))
+@assert S ≈ von_neumann_entropy(ρsub)
+@assert Gsub ≈ correlation_matrix(ψ, H, Hsub)
 @assert expectation(ham, G, Hbdg) ≈ expectation(ham, ψ, H)
 S
 ```
 
-Conversely, `gaussian_state(G, H, Hbdg)` builds the many-body density matrix on `H` of the Gaussian state with correlation matrix `G`. The reduced correlation matrix gives the reduced density matrix:
+`gaussian_state(G, H, Hbdg)` goes the other way, building the many-body density matrix with correlation matrix `G`. Applied to `Gsub` it gives the reduced density matrix:
 ```@example entanglement
-gaussian_state(Gsub, hilbert_space(f, sub), hilbert_space(f, sub, BdG())) ≈ ρsub
+gaussian_state(Gsub, hilbert_space(f, sub), Hsub) ≈ ρsub
 ```
 
 ## From matrices and eigenvectors back to symbolic operators
@@ -142,4 +149,17 @@ H = hilbert_space(c, 1:2, BdG())
 M = representation(c[1]' * c[2] + c[1]' * c[2]' + hc, H, :dense)
 vals, vecs = eigen(M, BdGEigen())
 symbolic_operator(M, H), quasiparticle(vecs[:, end], H)
+```
+
+## Majoranas
+Quadratic Majorana operators get the same treatment with `hilbert_space(γ, labels, SingleParticle())`, where `representation` gives the antisymmetric matrix of the operator. Below, `correlation_matrix(F)` is the ground-state matrix ``G_{ij} = \langle \gamma_i \gamma_j angle / 2`` that `expectation` takes, and `ground_state_parity(F, H)` is the ground-state parity:
+```@example majoranas
+using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces.FreeFermions
+@majoranas γ
+H = hilbert_space(γ, 1:6, SingleParticle())
+ham = 1im / 2 * sum(γ[2k] * γ[2k + 1] for k in 1:2) + 0.1im * sum(γ[2k - 1] * γ[2k] for k in 1:3)
+F = eigen(Hermitian(representation(ham, H, :dense)))
+G = correlation_matrix(F)
+ground_state_parity(F, H), expectation(ham, G, H)
 ```

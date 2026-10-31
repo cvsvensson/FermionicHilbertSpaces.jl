@@ -17,7 +17,11 @@ import SciMLOperators: update_coefficients!
 using FillArrays: Zeros, Fill, Eye
 using OrderedCollections: OrderedDict
 using BitPermutations: BitPermutations, AbstractBitPermutation, BitPermutation, bitpermute
-using BitIntegers: UInt256, UInt512, UInt1024
+using BitIntegers: UInt256, UInt512, UInt1024, @define_integers
+# Widest first, so that `widen` of each type finds the next wider one.
+@define_integers 8192
+@define_integers 4096
+@define_integers 2048
 using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice, ishalfinteger
 using SparseArrays: SparseArrays, AbstractSparseMatrix, SparseVector, findnz,
     nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
