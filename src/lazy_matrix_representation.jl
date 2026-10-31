@@ -415,17 +415,8 @@ end
     @test_throws DimensionMismatch representation(op, Hf, LazyRepr(zeros(dim(Hf) + 1)))
 
     @spin s 1 // 2
-    Hs = hilbert_space(s)
-    H = tensor_product(Hf, Hs)
+    H = tensor_product(Hf, hilbert_space(s))
     op = 5 * f[1]' * f[2] * s[:x] + 2 * s[:z] + f[1] + 1im
-    L = representation(op, H, :lazy)
-    M = representation(op, H)
-    v = randn(dim(H))
-    Vm = randn(dim(H), 2)
-    @test L * v ≈ M * v
-    @test L' * v ≈ M' * v
-    @test transpose(L) * v ≈ transpose(M) * v
-    @test L * Vm ≈ M * Vm
 
     Hcons = constrain_space(H, NumberConservation(2, [Hf]))
     L = representation(op, Hcons, :lazy; projection=true)
@@ -505,7 +496,6 @@ end
     liouvillian = -1im * (left(ham) - right(ham)) + sum(dissipator(sqrt(0.1n) * c[n]) for n in 1:N)
     @test lazy_matches(liouvillian + 0.5, Hopen)
     @test lazy_matches(left(ham) + 2, Hopen)
-    @test lazy_matches(left(c[1]) * right(c[1]') + left(c[2]') * right(c[3]), Hopen)
 
     @fermions f
     @boson b

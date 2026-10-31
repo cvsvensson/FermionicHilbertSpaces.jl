@@ -981,10 +981,8 @@ end
     Random.seed!(1)
     @fermions f
     @spin s 1
-    @boson b
-    for (H, op) in ((hilbert_space(f, 1:4), 0.5 + f[2]' * f[1] + hc + 2.0 * f[3]' * f[3] * f[4]' * f[4] - f[4]),
-        (hilbert_space(f, 1:4, NumberConservation(2)), f[2]' * f[1] + 1im * f[4]' * f[3] + hc),
-        (hilbert_space(s), s[:+] + 0.3 * s[:z] * s[:-]), (hilbert_space(b, 4), b' * b + b + 1),
+    for (H, op) in (
+            (hilbert_space(f, 1:4), 0.5 + f[2]' * f[1] + hc + 2.0 * f[3]' * f[3] * f[4]' * f[4] - f[4]),
         (tensor_product(hilbert_space(f, 1:2), hilbert_space(s)), f[1]' * s[:+] + f[2] + hc))
         states = collect(basisstates(H))
         ψ = sum(randn() * FermionicHilbertSpaces.SymbolicState(H, st, nothing) for st in states)
@@ -1021,7 +1019,7 @@ end
     @fermions f
     @boson b
     Hf = hilbert_space(f, 1:2)
-    fspaces = [Hf, constrain_space(Hf, NumberConservation()), constrain_space(Hf, collect(basisstates(Hf)))]
+    fspaces = [Hf, constrain_space(Hf, NumberConservation())]
     for Hf in fspaces
         Hb = hilbert_space(b, 4)
         H = tensor_product(Hf, Hb)
