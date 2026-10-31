@@ -6,7 +6,20 @@ import Literate
 
 DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilbertSpaces); recursive=true)
 
-literate_files = ["examples/kitaev_chain.jl", "examples/free_fermions.jl", "examples/floquet_tutorial.jl", "examples/open_system_lindblad.jl", "examples/spin_chain.jl", "examples/bosons.jl", "examples/clock_operators.jl", "examples/translation_symmetry.jl", "examples/braiding.jl", "examples/partial_transpose.jl", "examples/syk_model.jl"]
+# One entry per line, sorted, so PRs adding examples rarely conflict.
+literate_files = [
+    "examples/bosons.jl",
+    "examples/braiding.jl",
+    "examples/clock_operators.jl",
+    "examples/floquet_tutorial.jl",
+    "examples/free_fermions.jl",
+    "examples/kitaev_chain.jl",
+    "examples/open_system_lindblad.jl",
+    "examples/partial_transpose.jl",
+    "examples/spin_chain.jl",
+    "examples/syk_model.jl",
+    "examples/translation_symmetry.jl",
+]
 output_directory = "docs/src/literate_output"
 for file in literate_files
     Literate.markdown(file, output_directory; documenter=true, execute=false)
