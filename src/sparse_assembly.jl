@@ -15,7 +15,7 @@ _extrapolated_length(len, done, todo) = len + ceil(Int, len / done * todo * 3 / 
 function _reserve_remaining!(accumulator, capacity, k, N, extra)
     len = length(first(accumulator))
     len + cld(len, k) + extra <= capacity && return capacity
-    capacity = _extrapolated_length(len, k, N - k) + extra
+    capacity = max(capacity, _extrapolated_length(len, k, N - k) + extra)
     foreach(v -> sizehint!(v, capacity; shrink=false), accumulator)
     return capacity
 end
@@ -88,8 +88,8 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
         total = length(rowval) + n
         if total > capacity
             capacity = _extrapolated_length(total, c0 + nb, M - c0 - nb)
-            sizehint!(rowval, capacity)
-            sizehint!(nzval, capacity)
+            rowval = _with_capacity(rowval, capacity)
+            nzval = _with_capacity(nzval, capacity)
         end
         append!(rowval, view(sortedrows, 1:n))
         append!(nzval, view(sortedamps, 1:n))
@@ -97,6 +97,10 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
     foreach(v -> sizehint!(v, length(v)), (rowval, nzval))
     return SparseMatrixCSC(N, M, colptr, rowval, nzval)
 end
+
+# A copy of `v` with room for exactly `capacity` entries. `sizehint!` would round a growing capacity up, and the
+# final trim would then copy the vectors once more.
+_with_capacity(v, capacity) = resize!(copyto!(similar(v, capacity), v), length(v))
 
 # Writes the entries start:stop of `rows` and `amps` after entry n, sorted by row and with the entries of equal rows
 # summed in their order. Returns the new number of written entries.
