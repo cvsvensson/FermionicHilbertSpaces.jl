@@ -362,7 +362,7 @@ function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any, <:AbstractSym}, b
     any(s -> s isa SymbolicState, factors1) || return _sorted_product(c, x, b)
     groupops = _group_operators(x, factors1)
     isnothing(groupops) && return _sorted_product(c, x, b)
-    precomps = [precomputation_before_operator_application(op, ket.space) for (_, ket, op) in groupops]
+    precomps = map(((_, ket, op),) -> precomputation_before_operator_application(op, ket.space), groupops)
     return _apply_group_operators!!(c, x, b, groupops, precomps)
 end
 _sorted_product(c, x, b) = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any, NCMul, Union{NCAdd, NCMul}}, c, x, b)
@@ -373,16 +373,18 @@ function _apply_group_operators!!(c, x, b, groupops, precomps)
             c = _sorted_product(c, x, NCMul(coeff, factors))
             continue
         end
-        newfactors = copy(factors)
-        amp = x.coeff * coeff
-        for ((k, ket1, op), precomp) in zip(groupops, precomps)
+        newkets = map(groupops, precomps) do (k, ket1, op), precomp
             ket = factors[k]::typeof(ket1)
-            newket, a = _apply_local_operators(op, ket.ket, ket.space, precomp)
-            amp *= a
-            iszero(amp) && break
-            newfactors[k] = SymbolicState(ket.space, newket, nothing)
+            _apply_local_operators(op, ket.ket, ket.space, precomp)
         end
-        iszero(amp) || (c = add!!(c, NCMul(amp, newfactors)))
+        amp = x.coeff * coeff * prod(last, newkets; init = true)
+        # Copy the factors only for terms of `b` that `x` does not annihilate
+        iszero(amp) && continue
+        newfactors = copy(factors)
+        for ((k, _, _), (newket, _)) in zip(groupops, newkets)
+            newfactors[k] = SymbolicState(factors[k].space, newket, nothing)
+        end
+        c = add!!(c, NCMul(amp, newfactors))
     end
     return c
 end
@@ -395,15 +397,23 @@ function _is_like_ket(factors, k, ket)
     return s isa typeof(ket) && _same_space_id(s.space, ket.space)
 end
 # Tuples `(k, factors[k], op)`, where `op` is the product of the factors of `x` that act on the ket `factors[k]`,
-# or `nothing` if a factor of `x` acts on none of the kets
+# or `nothing` if a factor of `x` acts on none of the kets. `mul_terms!!` calls this once per term of an operator sum,
+# so the common case of all factors acting on one ket returns a single tuple that reuses `x.factors` when its
+# element type is concrete.
 function _group_operators(x::NCMul, factors)
-    inds = map(x.factors) do op
-        op isa SymbolicState && return nothing
-        findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)
+    if !isempty(x.factors)
+        k = _ket_index(first(x.factors), factors)
+        if !isnothing(k) && all(op -> _acts_on_ket(op, factors[k]), x.factors)
+            ops = isconcretetype(eltype(x.factors)) ? x.factors : ___concretize(x.factors, VecConcretizer())
+            return ((k, factors[k], NCMul(one(x.coeff), ops)),)
+        end
     end
+    inds = map(op -> _ket_index(op, factors), x.factors)
     any(isnothing, inds) && return nothing
     return [(k, factors[k], NCMul(one(x.coeff), ___concretize(x.factors[inds .== k], VecConcretizer()))) for k in unique(inds)]
 end
+_ket_index(op, factors) = findfirst(s -> _acts_on_ket(op, s), factors)
+_acts_on_ket(op, s) = !(op isa SymbolicState) && s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space)
 
 
 representation(s::SymbolicState; kwargs...) = representation(s, s.space; kwargs...)
