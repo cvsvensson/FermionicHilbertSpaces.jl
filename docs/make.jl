@@ -63,7 +63,8 @@ sections = [
 ]
 link((title, file)) = "- [$title]($(file == "index.md" ? "./" : replace(file, r"\.md$" => "/")))"
 section((name, ps)) = "## $name\n\n" * join(link.(ps), "\n")
-write(joinpath(@__DIR__, "build", "llms.txt"), """
+write(
+    joinpath(@__DIR__, "build", "llms.txt"), """
     # FermionicHilbertSpaces.jl
 
     > Julia package for fermionic, bosonic and spin Hilbert spaces with constraints and symmetry sectors, and their sparse, dense or lazy operator matrices.
@@ -71,7 +72,8 @@ write(joinpath(@__DIR__, "build", "llms.txt"), """
     Typical workflow: define symbols with `@fermions`/`@bosons`/`@spins`, build a space with `hilbert_space` (optionally with a constraint such as `NumberConservation`), get matrices with `representation(op, H)`, and reduce with `partial_trace`. Pass `:dense` to `representation` only when a dense matrix is needed.
 
     $(join(section.(sections), "\n\n"))
-    """)
+    """
+)
 
 deploydocs(;
     repo="github.com/cvsvensson/FermionicHilbertSpaces.jl",
