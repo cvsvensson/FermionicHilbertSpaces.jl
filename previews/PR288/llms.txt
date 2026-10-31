@@ -1,0 +1,44 @@
+# FermionicHilbertSpaces.jl
+
+> Julia package for fermionic, bosonic and spin Hilbert spaces with constraints and symmetry sectors, and their sparse, dense or lazy operator matrices.
+
+Typical workflow: define symbols with `@fermions`/`@bosons`/`@spins`, build a space with `hilbert_space` (optionally with a constraint such as `NumberConservation`), get matrices with `representation(op, H)`, and reduce with `partial_trace`. Pass `:dense` to `representation` only when a dense matrix is needed.
+
+## Docs
+
+- [Home](./)
+
+## Tutorials
+
+- [Interacting Kitaev chain](literate_output/kitaev_chain/)
+- [Bosons](literate_output/bosons/)
+- [Spins](literate_output/spin_chain/)
+- [Mixed fermion-spin-boson system](mixed_fermion_spin_boson/)
+- [Open systems](literate_output/open_system_lindblad/)
+- [Entanglement and negativity](literate_output/partial_transpose/)
+- [SYK model](literate_output/syk_model/)
+- [Braiding Majorana zero modes](literate_output/braiding/)
+- [Spatial symmetries](literate_output/translation_symmetry/)
+
+## Guides
+
+- [Constrained spaces and quantum numbers](conservation/)
+- [Hilbert space operations](hilbert_space_operations/)
+- [Symbolic states](symbolic_states/)
+- [Fermionic tensor products and partial traces](fermions/)
+- [Non-interacting systems](non_interacting/)
+- [Example: Free fermions](literate_output/free_fermions/)
+
+## Performance
+
+- [Parallelization](parallelization/)
+
+## Optional
+
+- [Extending and performance hooks](extending/)
+- [Custom operators: Clock](literate_output/clock_operators/)
+- [Custom operators: Floquet](literate_output/floquet_tutorial/)
+- [Internal functions](internals/)
+- [Internal types](internal_types/)
+- [Public API](docstrings/)
+- [Free fermions API](free_fermions_api/)
