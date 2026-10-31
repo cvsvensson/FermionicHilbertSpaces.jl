@@ -1,91 +1,45 @@
-# This example demonstrates how to combine symbolic Majoranas with symbolic parameters to create a symbolic matrix representation
-# We compile that matrix to a fast function for repeated use.
-# We use it to calculate the time evolution of a Majorana braiding protocol
+# # Braiding Majorana zero modes
+
+# Exchanging two Majorana zero modes ``γ_i`` and ``γ_j`` acts on the degenerate ground states with the unitary
+# ```math
+# B_{ij} = \exp\left(\frac{π}{4} γ_i γ_j\right) = \frac{1 + γ_i γ_j}{\sqrt{2}},
+# ```
+# which maps ``γ_j → B_{ij} γ_j B_{ij}^† = γ_i`` and ``γ_i → -γ_j``. The second form uses ``(γ_i γ_j)^2 = -1``, which holds because
+# the package normalises Majoranas as ``γ^2 = 1``. Here we braid two Majoranas adiabatically in a tri-junction,
+# where a central Majorana ``γ_0`` couples to three outer ones,[^1] and check that the time evolution reproduces ``B_{32}``.
+#
+# The coupling ``Δ_i(t)`` between ``γ_0`` and ``γ_i`` is a smooth step; when only ``Δ_i`` is on, the other two outer Majoranas are zero modes.
+# Switching the couplings on and off in turn, ``Δ_1 → Δ_2 → Δ_3 → Δ_1``, moves the zero modes around the junction and exchanges those at ``γ_2`` and ``γ_3``, as the figure shows.
+#
+# ![Three steps of the exchange. In each step the solid coupling is on and the dashed one is switched on, then the solid one off. Coloured dots are the two zero modes; the arrow shows where one of them moves.](../assets/braiding_junction.svg)
+#
 using FermionicHilbertSpaces
-using Symbolics, LinearAlgebra, Plots, OrdinaryDiffEqTsit5
-
+using LinearAlgebra, Plots
 @majoranas γ
-H = hilbert_space(γ, [0, 1, 2, 3, 22, 33], ParityConservation())
-@variables Δ[1:3]::Real
-symbolic_ham = sum(1im * Δ[i] * γ[0] * γ[i] for i in 1:3)
-ham = representation(symbolic_ham, H, :dense)
-construct_ham, construct_ham! = build_function(ham, Δ, expression=Val{false})
-exchange_gate = representation(sqrt(1 / 2) * (I + γ[3] * γ[2]), H)
-##
-smooth_step(x, k) = 1 / 2 + tanh(k * x) / 2
-# Give the value of the three deltas at time t in the three point majorana braiding protocol
-function braiding_deltas(t, T, Δmax, Δmin, k)
-    Δ1 = Δtrajectory(t, T, Δmax, Δmin, k)
-    Δ2 = Δtrajectory(t - T / 3, T, Δmax * 0.85, Δmin, k)
-    Δ3 = Δtrajectory(t - 2T / 3, T, Δmax * 0.7, Δmin, k)
-    return Δ1, Δ2, Δ3
-end
-function Δtrajectory(t, T, Δmax, Δmin, k)
-    dΔ = Δmax - Δmin
-    Δmin + dΔ * smooth_step(cos(2pi * t / T), k)
-end
+H = hilbert_space(γ, 0:3)
+hs = [representation(1im * γ[0] * γ[i], H, :dense) for i in 1:3]
+coupling(t, T, k) = (1 + tanh(k * cos(2π * t / T))) / 2
+couplings(t, T, k) = [coupling(t - (i - 1) * T / 3, T, k) for i in 1:3]
+hamiltonian(t, T, k) = Hermitian(sum(couplings(t, T, k) .* hs))
+T, k = 1000, 20
+ts = range(0, T, 300)
+plot(ts, stack(couplings.(ts, T, k))'; label = ["Δ₁" "Δ₂" "Δ₃"], xlabel = "t", legend = :outerright, frame = :box, size = (450, 250), lw = 2)
 
-##
-function hamiltonian((T, Δmax, Δmin, k), t)
-    Δs = braiding_deltas(t, T, Δmax, Δmin, k)
-    ham = zeros(ComplexF64, 8, 8)
-    construct_ham!(ham, Δs)
-end
-function drho!(du, u, p, t)
-    ham = hamiltonian(p, t)
-    mul!(du, ham, u, 1im, 0)
-    return du
-end
-##
-u0 = eigvecs(representation(1.0im * γ[2] * γ[22] + 1.0im * γ[0] * γ[1], H, :dense) + parityoperator(H))[:, 1]
+# We approximate the evolution by a product of exponentials of the Hamiltonian at the midpoints of time steps `dt`,
+# which must be short compared with the switching time of the couplings, about `T/(2πk)`.
+# The ground states at ``t = 0`` and ``t = T`` coincide. Restricted to them, the evolution should equal the braid
+# operator up to the dynamical phase, which is the same for all ground states, while the opposite exchange
+# ``B_{23} = B_{32}^†`` should not match. The two zero modes have opposite parity, and the braid acts as a phase on each. Once the dynamical phase is removed, the evolution gives the two ground states
+# phases ``e^{±iπ/4}``, the eigenvalues of ``B_{32}``:
+dt = 1.0
+U = prod(exp(-1im * dt * hamiltonian(t, T, k)) for t in reverse((dt / 2):dt:T))
+V = eigvecs(hamiltonian(0, T, k))[:, 1:2]
+B = representation((1 + γ[3] * γ[2]) / sqrt(2), H, :dense)
+Uground = V' * U * V
+Bground = V' * B * V
+phase = tr(Uground * Bground') / 2
+@assert Uground ≈ phase * Bground
+@assert abs(tr(Uground * Bground)) / 2 < 0.1
+angle.(eigvals(Uground / phase)) / π
 
-T = 1000
-k = 20
-Δmax = 1
-Δmin = 0
-p = (T, Δmax, Δmin, k)
-tspan = (0.0, 2T)
-
-prob = ODEProblem(drho!, u0, tspan, p)
-ts = range(0, tspan[2], 500)
-deltas = stack([braiding_deltas(t, p...) for t in ts])'
-plot(ts, deltas, label=["Δ1" "Δ2" "Δ3"], xlabel="t")
-## Plot spectrum
-spectrum = stack([eigvals(hamiltonian(p, t)) for t in ts])'
-plot(ts, spectrum, title="Energies")
-## Solve the ODE and check the norm
-@time sol = solve(prob, Tsit5(), reltol=1e-8)
-@assert all(isapprox(1; atol=1e-3) ∘ norm ∘ sol, ts)
-@assert isapprox(abs(dot(sol(2T), exchange_gate^2, u0)), 1, atol=1e-2)
-@assert isapprox(abs(dot(sol(T), exchange_gate, u0)), 1, atol=1e-2)
-## Measure the parities
-measurements = [representation(1.0im * γ[i] * γ[j], H) for (i, j) in [(2, 22), (3, 33)]]
-plot(ts, [real(sol(t)'m * sol(t)) for m in measurements, t in ts]', xlabel="t", label=["P2" "P3"], frame=:box, size=(400, 250), lw=2)
-
-## Calculate the Non-abelian berry pase with the Kato method
-function ground_state_projector(t, p)
-    ham = hamiltonian(p, t)
-    vecs = eigvecs(ham)
-    ground_states = vecs[:, 1:4]
-    return ground_states * ground_states'
-end
-
-function kato_ode!(du, u, p, t)
-    P1 = ground_state_projector(t, p)
-    T = p[1]
-    dt = T / 1e4
-    P2 = ground_state_projector(t + dt, p)
-    A = ((P2 - P1) * P1 - P1 * (P2 - P1)) / dt
-    mul!(du, A, u)
-end
-##
-U0 = Matrix{ComplexF64}(I, 8, 8)
-kato_prob = ODEProblem(kato_ode!, U0, tspan, p)
-ts = range(0, tspan[2], 100)
-## Solve the ODE and check the norm
-@time kato_sol = solve(kato_prob, Tsit5(); saveat=[0, T, 2T], reltol=1e-10, abstol=1e-10);
-kato_sol(2T)' * kato_sol(2T) ≈ I
-N = dot(exchange_gate, exchange_gate) 
-1 ≈ dot(kato_sol(2T), exchange_gate^2) / N
-1 ≈ dot(kato_sol(T), exchange_gate) / N
-
+# [^1]: J. Alicea, Y. Oreg, G. Refael, F. von Oppen and M. P. A. Fisher, "Non-Abelian statistics and topological quantum information processing in 1D wire networks", [Nat. Phys. 7, 412 (2011)](https://doi.org/10.1038/nphys1915), [arXiv:1006.4395](https://arxiv.org/abs/1006.4395).
