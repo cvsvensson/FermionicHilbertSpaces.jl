@@ -71,3 +71,4 @@ The documentation has examples of combining this package with other Julia packag
 
 ## Related packages
 FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).
+
