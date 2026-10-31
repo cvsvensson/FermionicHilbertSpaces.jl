@@ -41,7 +41,6 @@ Hsub = hilbert_space(f, 1:2)
 ρsub = partial_trace(Ψ, H => Hsub)
 entanglement_entropy = sum(-λ * log(λ) for λ in eigvals(ρsub))
 
-# `representation` returns a sparse matrix by default; a third argument such as `:dense` selects the format, see the [docs](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/docstrings/).
 
 # This hamiltonian conserves the number of fermions, which we can exploit. Let's specialize to the 3-particle sector and compute the entanglement entropy of the ground state in that sector. 
 Hcons = hilbert_space(f, 1:4, NumberConservation(3))
