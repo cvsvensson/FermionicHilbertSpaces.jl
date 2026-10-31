@@ -42,6 +42,7 @@ entanglement_entropy = sum(-λ * log(λ) for λ in eigvals(ρsub))
 0.44395495955661934
 ````
 
+
 This hamiltonian conserves the number of fermions, which we can exploit. Let's specialize to the 3-particle sector and compute the entanglement entropy of the ground state in that sector.
 
 ````julia
@@ -71,3 +72,4 @@ This package does not contain functions for things like calculating eigenstates 
 
 ## Related packages
 FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).
+
