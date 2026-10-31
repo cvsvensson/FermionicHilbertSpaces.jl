@@ -6,6 +6,7 @@
 # [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/)
 # [![Build Status](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/actions/workflows/CI.yml?query=branch%3Amain)
 # [![Coverage](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl)
+# [![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 
 
 # This package provides tools for dealing with the symbolic and linear algebra often encountered in quantum mechanics. Fermions, bosons and spins are included, but most functionality is generic and easily extended. This includes:
@@ -40,6 +41,8 @@ Hsub = hilbert_space(f, 1:2)
 ρsub = partial_trace(Ψ, H => Hsub)
 entanglement_entropy = sum(-λ * log(λ) for λ in eigvals(ρsub))
 
+# `representation` returns a sparse matrix by default; a third argument such as `:dense` selects the format, see the [docs](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/docstrings/).
+
 # This hamiltonian conserves the number of fermions, which we can exploit. Let's specialize to the 3-particle sector and compute the entanglement entropy of the ground state in that sector. 
 Hcons = hilbert_space(f, 1:4, NumberConservation(3))
 Hsubcons = subregion(Hsub, Hcons) # Include only substates consistent with Hcons 
@@ -59,3 +62,6 @@ sum(-λ * log(λ) for λ in eigvals(ρsub))
 # - deal with non-interacting systems (though there is some functionality for free fermions, see [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/non_interacting/) and [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/literate_output/free_fermions/)).
 
 # This package does not contain functions for things like calculating eigenstates and doing time evolution. The documentation has several examples of how to combine this package with other Julia packages to do this.
+
+# ## Related packages
+# FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).

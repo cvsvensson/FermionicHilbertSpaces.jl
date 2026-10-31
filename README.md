@@ -73,3 +73,4 @@ This package does not contain functions for things like calculating eigenstates 
 
 ## Related packages
 FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).
+
