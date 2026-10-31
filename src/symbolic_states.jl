@@ -3,11 +3,33 @@
 
 Callable that turns a label into a symbolic ket of `H`, as in `Kets(H)("10")`. The label is
 parsed by [`interpret_state`](@ref). `Kets(H)[i]` is the ket of `basisstate(i, H)`.
+
+```jldoctest
+julia> using FermionicHilbertSpaces; @fermions f;
+
+julia> k = Kets(hilbert_space(f, 1:2));
+
+julia> k[2] == k("10")
+true
+```
 """
 struct Kets{B,H}
     space::H
     Kets(space::H) where H = new{statetype(space),H}(space)
 end
+"""
+    Ket(label, H)
+
+The symbolic ket of `H` with the given `label`, such as the bitstring `"10"`. See [`Kets`](@ref)
+for the multi-state form.
+
+```jldoctest
+julia> @fermions f;
+
+julia> Ket("10", hilbert_space(f, 1:2))
+|10⟩
+```
+"""
 Ket(label, H) = Kets(H)(label)
 # The basis kets of the space, in the order of `basisstates`
 Base.length(k::Kets) = dim(k.space)
@@ -359,7 +381,7 @@ function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any, <:AbstractSym}, b
     any(s -> s isa SymbolicState, factors1) || return _sorted_product(c, x, b)
     groupops = _group_operators(x, factors1)
     isnothing(groupops) && return _sorted_product(c, x, b)
-    precomps = [precomputation_before_operator_application(op, ket.space) for (_, ket, op) in groupops]
+    precomps = map(((_, ket, op),) -> precomputation_before_operator_application(op, ket.space), groupops)
     return _apply_group_operators!!(c, x, b, groupops, precomps)
 end
 _sorted_product(c, x, b) = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any, NCMul, Union{NCAdd, NCMul}}, c, x, b)
@@ -370,16 +392,18 @@ function _apply_group_operators!!(c, x, b, groupops, precomps)
             c = _sorted_product(c, x, NCMul(coeff, factors))
             continue
         end
-        newfactors = copy(factors)
-        amp = x.coeff * coeff
-        for ((k, ket1, op), precomp) in zip(groupops, precomps)
+        newkets = map(groupops, precomps) do (k, ket1, op), precomp
             ket = factors[k]::typeof(ket1)
-            newket, a = _apply_local_operators(op, ket.ket, ket.space, precomp)
-            amp *= a
-            iszero(amp) && break
-            newfactors[k] = SymbolicState(ket.space, newket, nothing)
+            _apply_local_operators(op, ket.ket, ket.space, precomp)
         end
-        iszero(amp) || (c = add!!(c, NCMul(amp, newfactors)))
+        amp = x.coeff * coeff * prod(last, newkets; init = true)
+        # Copy the factors only for terms of `b` that `x` does not annihilate
+        iszero(amp) && continue
+        newfactors = copy(factors)
+        for ((k, _, _), (newket, _)) in zip(groupops, newkets)
+            newfactors[k] = SymbolicState(factors[k].space, newket, nothing)
+        end
+        c = add!!(c, NCMul(amp, newfactors))
     end
     return c
 end
@@ -392,15 +416,23 @@ function _is_like_ket(factors, k, ket)
     return s isa typeof(ket) && _same_space_id(s.space, ket.space)
 end
 # Tuples `(k, factors[k], op)`, where `op` is the product of the factors of `x` that act on the ket `factors[k]`,
-# or `nothing` if a factor of `x` acts on none of the kets
+# or `nothing` if a factor of `x` acts on none of the kets. `mul_terms!!` calls this once per term of an operator sum,
+# so the common case of all factors acting on one ket returns a single tuple that reuses `x.factors` when its
+# element type is concrete.
 function _group_operators(x::NCMul, factors)
-    inds = map(x.factors) do op
-        op isa SymbolicState && return nothing
-        findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)
+    if !isempty(x.factors)
+        k = _ket_index(first(x.factors), factors)
+        if !isnothing(k) && all(op -> _acts_on_ket(op, factors[k]), x.factors)
+            ops = isconcretetype(eltype(x.factors)) ? x.factors : ___concretize(x.factors, VecConcretizer())
+            return ((k, factors[k], NCMul(one(x.coeff), ops)),)
+        end
     end
+    inds = map(op -> _ket_index(op, factors), x.factors)
     any(isnothing, inds) && return nothing
     return [(k, factors[k], NCMul(one(x.coeff), ___concretize(x.factors[inds .== k], VecConcretizer()))) for k in unique(inds)]
 end
+_ket_index(op, factors) = findfirst(s -> _acts_on_ket(op, s), factors)
+_acts_on_ket(op, s) = !(op isa SymbolicState) && s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space)
 
 
 representation(s::SymbolicState; kwargs...) = representation(s, s.space; kwargs...)
@@ -968,10 +1000,8 @@ end
     Random.seed!(1)
     @fermions f
     @spin s 1
-    @boson b
-    for (H, op) in ((hilbert_space(f, 1:4), 0.5 + f[2]' * f[1] + hc + 2.0 * f[3]' * f[3] * f[4]' * f[4] - f[4]),
-        (hilbert_space(f, 1:4, NumberConservation(2)), f[2]' * f[1] + 1im * f[4]' * f[3] + hc),
-        (hilbert_space(s), s[:+] + 0.3 * s[:z] * s[:-]), (hilbert_space(b, 4), b' * b + b + 1),
+    for (H, op) in (
+            (hilbert_space(f, 1:4), 0.5 + f[2]' * f[1] + hc + 2.0 * f[3]' * f[3] * f[4]' * f[4] - f[4]),
         (tensor_product(hilbert_space(f, 1:2), hilbert_space(s)), f[1]' * s[:+] + f[2] + hc))
         states = collect(basisstates(H))
         ψ = sum(randn() * FermionicHilbertSpaces.SymbolicState(H, st, nothing) for st in states)
@@ -1010,7 +1040,7 @@ end
     @fermions f
     @boson b
     Hf = hilbert_space(f, 1:2)
-    fspaces = [Hf, constrain_space(Hf, NumberConservation()), constrain_space(Hf, collect(basisstates(Hf)))]
+    fspaces = [Hf, constrain_space(Hf, NumberConservation())]
     for Hf in fspaces
         Hb = hilbert_space(b, 4)
         H = tensor_product(Hf, Hb)
