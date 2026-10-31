@@ -1,5 +1,6 @@
 using BenchmarkTools
 using FermionicHilbertSpaces
+using FermionicHilbertSpaces.FreeFermions
 using LinearAlgebra
 using SparseArrays
 using Random
@@ -99,6 +100,9 @@ end
 ## Partial trace algorithms
 # Each input is traced with the algorithm forced through `alg`. Which
 # algorithm `partial_trace` picks by default is checked in the tests.
+# FullAlg on a dense input is a tight loop over all pairs of basis states. Its
+# time depends on where the JIT places that loop in memory, so identical code
+# measures at a few distinct speeds, up to about 2× apart, between processes.
 let rng = Xoshiro(4)
     @fermions f
     algs = ("SubAlg" => FHS.SubsystemPartialTraceAlg(), "FullAlg" => FHS.FullPartialTraceAlg())
@@ -124,6 +128,15 @@ let rng = Xoshiro(4)
     Hsub = subregion(hilbert_space(f, 1:2), H)
     d = dim(H)
     add_cases!(g["Full space"]["Dense"], rand(rng, ComplexF64, d, d), H, Hsub, ("SubAlg", "FullAlg"))
+end
+
+## Partial trace of a pure state on half of an unconstrained space
+let rng = Xoshiro(11)
+    @fermions f
+    H = hilbert_space(f, 1:16)
+    Hsub = hilbert_space(f, 1:8)
+    ψ = normalize(rand(rng, ComplexF64, dim(H)))
+    SUITE["partial_trace"]["pure_state_full_space"] = @benchmarkable partial_trace($ψ, $(H => Hsub))
 end
 
 ## Product spaces
@@ -258,6 +271,18 @@ let
         hilbert_space(f, [(i, :↓) for i in 1:N], NumberConservation(1)))
     no_double30 = prod(NumberConservation(0:1, [f[k, :↑], f[k, :↓]]) for k in 1:N)
     g["constrain_no_double_occupation_N30"] = @benchmarkable constrain_space($H30, $no_double30)
+
+    # Few states of a large parent, so the sector is indexed by a Dict.
+    L = representation(ham, H, :lazy)
+    x = randn(Xoshiro(12), ComplexF64, dim(H))
+    y = similar(x)
+    L_cached = FHS.SciMLOperators.cache_operator(L, x)
+    SUITE["matrix_application"]["lazy hubbard"]["mul!"] = @benchmarkable mul!($y, $L_cached, $x)
+
+    # The full space, large enough that the sparse matrix is built in many blocks of columns.
+    N = 8
+    Hfull = hilbert_space(f, [(i, σ) for i in 1:N for σ in (:↑, :↓)])
+    g["matrix_representation_full_space_N8"] = @benchmarkable matrix_representation($(hubbard(f, N, 1.0, 4.0)), $Hfull)
 end
 
 ## Bose-Hubbard chain
@@ -314,20 +339,20 @@ end
 # Every benchmark samples for one second. Fixing `evals` makes `tune!`
 # unnecessary. Benchmarks that take less than about 200 µs per evaluation run
 # several evaluations per sample, so that the sample is long compared with
-# timer and scheduling noise; the rest run one.
+# timer, scheduling and garbage-collection noise; the rest run one.
 const EVALS = Dict(
     "tensor_product/spaces" => 25,
     "partial_trace/product space/apply_precomputed" => 64,
     "reshape/precomputed/apply_inplace" => 16,
     "reshape/precomputed/construct" => 10,
     "partial_trace_algorithms/Full space/Dense/SubAlg" => 6,
-    "complement/fermions" => 4,
+    "complement/fermions" => 32,
     "embed/product space" => 4,
     "partial_trace_algorithms/Sparse space/Sparse/FullAlg" => 4,
     "partial_trace/precomputed/eager_pure_state" => 4,
     "complement/product space" => 3,
     "partial_trace/product space/map" => 3,
-    "reshape/mat_to_vec" => 3,
+    "reshape/mat_to_vec" => 24,
     "partial_trace/precomputed/apply_pure_state_inplace" => 3,
     "hilbert_space" => 2,
     "symbolic/sum" => 2,

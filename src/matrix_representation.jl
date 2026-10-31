@@ -188,7 +188,11 @@ struct TupleConcretizer end
 struct VecConcretizer end
 struct NoConcretizer end
 ___concretize(factors, ::TupleConcretizer) = Tuple(factors)
-___concretize(factors::AbstractVector, ::VecConcretizer) = map(identity, factors)
+# `map(identity, factors)` joins the element types one by one, which is slow, and products usually have one factor type
+function ___concretize(factors::AbstractVector, ::VecConcretizer)
+    T = isempty(factors) ? eltype(factors) : typeof(first(factors))
+    return all(f -> f isa T, factors) ? Vector{T}(factors) : map(identity, factors)
+end
 ___concretize(factors::Tuple, ::VecConcretizer) = collect(factors)
 ___concretize(factors, ::NoConcretizer) = factors
 __concretize(x::NCMul, concr) = NCMul(x.coeff, ___concretize(x.factors, concr))
@@ -471,10 +475,17 @@ Return a concrete representation of `op_or_state` in Hilbert space `space`. This
 
 Expressions that combine kets or bras with operators or with states of other spaces have no representation and throw an
 `ArgumentError`. Without the `space` argument, only expressions of symbolic states are accepted, and the space is taken from the states.
-The single-particle space `hilbert_space(f, labels, SingleParticle())` and the Bogoliubov-de Gennes space `hilbert_space(f, labels, BdG())`
+The single-particle space `hilbert_space(f, labels, FreeFermions.SingleParticle())` and the Bogoliubov-de Gennes space `hilbert_space(f, labels, FreeFermions.BdG())`
 represent quadratic fermionic operators only, and a number is represented by the zero matrix.
 
 With `Axes(Hout, Hin)`, `op` is represented as a map from `Hin` to `Hout`.
+
+```jldoctest
+julia> @fermions f;
+
+julia> representation(f[1]' * f[1], hilbert_space(f, 1:1)) == [0 0; 0 1]
+true
+```
 """
 representation
 
@@ -503,8 +514,9 @@ size(M) == (dim(H), dim(H))
 ```
 """
 function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
-    repr === :dense && return Matrix(matrix_representation(
-        op, space, :sparse; projection, chunking, kwargs...))
+    repr === :dense && return Matrix(matrix_representation(op, space, EagerSparseRepr(); projection, chunking, kwargs...))
+    # The barrier keeps inference from compiling every format a runtime Symbol could select
+    repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, space, _canonicalize_repr(repr); projection, chunking, kwargs...)
     repr = _canonicalize_repr(repr)
     if trivial_operator(op)
         return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
@@ -514,7 +526,7 @@ end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
     Hout == Hin && return matrix_representation(op, Hin, repr; projection, chunking, kwargs...)
-    repr === :dense && return Matrix(matrix_representation(op, ax, :sparse; projection, chunking, kwargs...))
+    repr === :dense && return Matrix(matrix_representation(op, ax, EagerSparseRepr(); projection, chunking, kwargs...))
     repr = _canonicalize_repr(repr)
     repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("Lazy and chunked representations with `Axes(Hout, Hin)` need `Hout == Hin`."))
     if trivial_operator(op)
@@ -528,6 +540,53 @@ function _checked_group_ids(op, space)
     space_groups = group_ids(space)
     all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic bases of the operator must match the atomic groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
     return space_groups
+end
+
+"""
+    expectation(op, state, H)
+
+Return the expectation value of the operator `op` in `state` on the space `H`. A vector `ψ` gives `ψ' * M * ψ` and a
+density matrix `ρ` gives `tr(ρ * M)`, where `M = representation(op, H)`. The state is assumed to be normalized.
+
+On `hilbert_space(f, labels, FreeFermions.SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on
+`hilbert_space(f, labels, FreeFermions.BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in
+the order of the BdG space. On the Majorana space `hilbert_space(γ, labels, FreeFermions.SingleParticle())` it is
+`G[i, j] = ⟨γ_i γ_j⟩ / 2`. The state is then the Gaussian state with that correlation matrix, and `op` of any degree
+is evaluated with Wick's theorem. Terms that do not conserve the particle number (single-particle space) or the parity
+(BdG and Majorana spaces) throw an error, unless `projection=true`, which drops them.
+
+# Examples
+```julia
+@fermions f
+H = hilbert_space(f, 1:2)
+ψ = representation("10", H)
+expectation(f[1]' * f[1] + 2, ψ, H) == 3
+```
+"""
+expectation(op, ψ::AbstractVector, H::AbstractHilbertSpace) = dot(ψ, representation(op, H), ψ)
+expectation(op, ρ::AbstractMatrix, H::AbstractHilbertSpace) = dot(ρ', representation(op, H))
+
+@testitem "Expectation values" begin
+    using LinearAlgebra, SparseArrays
+    @fermions f
+    H = hilbert_space(f, 1:4, NumberConservation(2))
+    op = f[1]' * f[2] * f[3]' * f[4] + 1im * f[2]' * f[3] + hc + 2
+    M = representation(op, H, :dense)
+    ψ = normalize(rand(ComplexF64, dim(H)))
+    @test expectation(op, ψ, H) ≈ ψ' * M * ψ
+    ρ = rand(ComplexF64, dim(H), dim(H))
+    @test expectation(op, ρ, H) ≈ tr(ρ * M)
+    ρs = sprand(ComplexF64, dim(H), dim(H), 0.3)
+    @test expectation(op, ρs, H) ≈ tr(ρs * M)
+end
+
+@testitem "Expectation values with symbolic coefficients" begin
+    using Symbolics
+    @variables t
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    ψ = representation("10", H)
+    @test isequal(Symbolics.simplify(expectation(t * f[1]' * f[1] + f[1]' * f[2] + 2, ψ, H)), t + 2)
 end
 _canonicalize_repr(t) = t
 _canonicalize_repr(::Type{<:AbstractArray{T}}) where T = EagerDenseRepr{T}()
@@ -873,41 +932,6 @@ end
         rand(length(inds))
     end
     @test collect(M_dist * v) ≈ M_ref * collect(v)
-end
-
-## 
-remove_identity(a::NCMul) = a
-remove_identity(a::NCAdd) = NCAdd(zero(a.coeff), a.dict)
-
-# The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
-_isscalar_operator(op) = op isa Union{Number,UniformScaling} || (op isa Union{NCMul,NCAdd} && NonCommutativeProducts.isscalar(op))
-_identity_free_zero(H, repr) = _zero_matrix(H, _eager_repr(repr, H), Int)
-function _eager_repr(repr, H)
-    _repr = _canonicalize_repr(repr)
-    _repr isa Union{EagerSparseRepr,EagerDenseRepr} || throw(ArgumentError("Only the :sparse and :dense representations are supported on $(typeof(H)). Got $repr."))
-    return _repr
-end
-# The matrix of a sum of two-fermion terms, where `entry(term, H)` gives the row, column and value of the one entry of each term
-function _quadratic_matrix(entry, op, H, repr)
-    accumulator = matrix_accumulator(op, H, _eager_repr(repr, H))
-    for term in NCterms(op)
-        outind, inind, amp = entry(term, H)
-        (iszero(outind) || iszero(inind)) && throw(ArgumentError("The operator `$term` contains a factor that is not part of the fermionic space `$H`."))
-        push_inds_amps!(accumulator, outind, inind, amp)
-    end
-    finalize!(accumulator, H)
-end
-
-# Whether every term of `op` is a product of two `FermionSym`s, with one creation and one annihilation
-# operator if `number_conserving`. Majoranas and other operators give `false`.
-_is_quadratic_fermion_operator(op, number_conserving) = false
-_is_quadratic_fermion_operator(op::NCMul, number_conserving) = _is_quadratic_fermion_term(op.factors, number_conserving)
-_is_quadratic_fermion_operator(op::NCAdd, number_conserving) = all(term -> _is_quadratic_fermion_term(term.factors, number_conserving), keys(op.dict))
-function _is_quadratic_fermion_term(factors, number_conserving)
-    length(factors) == 2 || return false
-    a, b = factors
-    (a isa FermionSym && b isa FermionSym) || return false
-    return !number_conserving || a.creation != b.creation
 end
 
 ## Symmetries

@@ -78,14 +78,14 @@ function Base.isless(a::MajoranaSym, b::MajoranaSym)
         a.basis.name < b.basis.name
     end
 end
+exchange_phase(a::MajoranaSym, b::MajoranaSym) = a.basis.group == b.basis.group ? -1 : 1
 function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym)
     if a == b
         1
     elseif a < b
         nothing
     elseif a > b
-        swap = Swap((-1)^(a.basis.group == b.basis.group))
-        return swap
+        return Swap(exchange_phase(a, b))
     else
         throw(ArgumentError("Cannot multiply `$a` and `$b`."))
     end
@@ -234,6 +234,11 @@ function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...
     MajoranaHilbertSpace(majorana_position, Hf, y)
 end
 @deprecate majorana_hilbert_space(y, labels, args...; kwargs...) hilbert_space(y, labels, args...; kwargs...) false
+@testitem "Deprecated majorana_hilbert_space" begin
+    @majoranas γ
+    Hmaj = @test_deprecated FermionicHilbertSpaces.majorana_hilbert_space(γ, 1:4, ParityConservation(1))
+    @test Hmaj == hilbert_space(γ, 1:4, ParityConservation(1))
+end
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
 

@@ -7,16 +7,20 @@ products, partial traces and matrix representations that connect them.
 """
 module FermionicHilbertSpaces
 
-using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Eigen, Hermitian,
-    Symmetric, UniformScaling, cholesky, diag, diagind, dot,
-    eigen, eigen!, eigvals, eigvecs, ishermitian, issymmetric,
-    mul!, normalize, qr, rank, rmul!, schur, svdvals, tr, I
+using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Hermitian,
+    UniformScaling, diag, diagind, dot,
+    eigen!, eigvals, eigvecs, ishermitian,
+    mul!, normalize, qr, rank, rmul!, svdvals, tr, I
 using LowRankMatrices: LowRankMatrices, LowRankMatrix
 import SciMLOperators
 using FillArrays: Zeros, Fill, Eye
 using OrderedCollections: OrderedDict
 using BitPermutations: BitPermutations, AbstractBitPermutation, BitPermutation, bitpermute
-using BitIntegers: UInt256, UInt512, UInt1024
+using BitIntegers: UInt256, UInt512, UInt1024, @define_integers
+# Widest first, so that `widen` of each type finds the next wider one.
+@define_integers 8192
+@define_integers 4096
+@define_integers 2048
 using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice, ishalfinteger
 using SparseArrays: SparseArrays, AbstractSparseMatrix, SparseVector, findnz,
     nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
@@ -27,7 +31,7 @@ using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, N
 
 export FockNumber, hc, basisstates, dim, state_index, basisstate
 export hilbert_space, subregion
-export parityoperator, numberoperator, matrix_representation, representation, vector_representation
+export parityoperator, numberoperator, matrix_representation, representation, vector_representation, expectation
 export Kets, Ket, ProductState, SpinState, BosonicState
 
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
@@ -36,10 +40,9 @@ export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
-export SingleParticle, BdG
 export symmetric_sector
 export open_system
-public particle_number, Axes
+public particle_number, Axes, dissipator, FreeFermions
 
 """
     HC
@@ -128,7 +131,6 @@ include("physics/fermions/fermions.jl")
 include("physics/fermions/operators.jl")
 include("physics/fermions/majoranas.jl")
 include("physics/fermions/fixednumberfock.jl")
-include("physics/fermions/bdg.jl")
 
 
 include("physics/bosons.jl")
@@ -137,6 +139,7 @@ include("physics/open_systems.jl")
 include("symbolic_states.jl")
 
 include("printing.jl")
+include("physics/fermions/free_fermions.jl")
 
 function __init__()
     NonCommutativeProducts.enable_autosort!()

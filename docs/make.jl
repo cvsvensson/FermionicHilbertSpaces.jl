@@ -6,20 +6,21 @@ import Literate
 
 DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilbertSpaces); recursive=true)
 
-literate_files = ["examples/kitaev_chain.jl", "examples/free_fermions.jl", "examples/floquet_tutorial.jl", "examples/open_system_lindblad.jl", "examples/spin_chain.jl", "examples/bosons.jl", "examples/clock_operators.jl", "examples/translation_symmetry.jl"]
+literate_files = ["examples/kitaev_chain.jl", "examples/free_fermions.jl", "examples/floquet_tutorial.jl", "examples/open_system_lindblad.jl", "examples/spin_chain.jl", "examples/bosons.jl", "examples/clock_operators.jl", "examples/translation_symmetry.jl", "examples/braiding.jl"]
 output_directory = "docs/src/literate_output"
 for file in literate_files
     Literate.markdown(file, output_directory; documenter=true, execute=false)
 end
 
 makedocs(;
-    modules=[FermionicHilbertSpaces],
+    modules = [FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions],
     authors="Viktor Svensson, William Samuelson",
     sitename="FermionicHilbertSpaces.jl",
     format=Documenter.HTML(;
         canonical="https://cvsvensson.github.io/FermionicHilbertSpaces.jl",
         edit_link="main",
         assets=String[],
+        size_threshold = 400 * 2^10,
     ),
     pages=[
         "Home" => "index.md",
@@ -32,6 +33,7 @@ makedocs(;
             "Spins" => "literate_output/spin_chain.md",
             "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md",
             "Open systems" => "literate_output/open_system_lindblad.md",
+            "Braiding Majorana zero modes" => "literate_output/braiding.md",
             "Symbolic states" => "symbolic_states.md",
             "Custom operators: Clock" => "literate_output/clock_operators.md",
             "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",

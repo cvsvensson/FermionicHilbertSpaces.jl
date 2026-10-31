@@ -1,9 +1,9 @@
 # The unconstrained product of `spaces`, and its states when some of `spaces` are constrained, or `nothing`.
 function product_space_and_states(spaces)
-    atoms = Iterators.flatten(Iterators.map(atomic_factors, spaces))
-    groups = groupby(group_id, atoms; sortkeys=false, sortvals=false)
-
-    factors = map((id, atoms) -> combine_into_group(id, atoms), keys(groups), values(groups))
+    atoms = collect(Iterators.flatten(Iterators.map(atomic_factors, spaces)))
+    factors = map(unique(map(group_id, atoms))) do id
+        combine_into_group(id, map(identity, filter(a -> group_id(a) == id, atoms)))
+    end
     space = if length(factors) == 1
         only(factors)
     else
@@ -20,6 +20,15 @@ Construct the composite Hilbert space from the spaces in `spaces`, with optional
 
 Spaces of the same group, such as fermions of one `@fermions` basis, merge into one factor where
 the group first appears. The first factor varies fastest.
+
+```jldoctest
+julia> using FermionicHilbertSpaces; @fermions f;
+
+julia> H = tensor_product(hilbert_space(f, 1:1), hilbert_space(f, 2:2));
+
+julia> state_index("10", H)
+2
+```
 """
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 function tensor_product(spaces; constraint=NoSymmetry())
@@ -52,7 +61,9 @@ function tensor_product(spaces; constraint=NoSymmetry())
 end
 
 size_compatible(m, H) = size(m) == ntuple(_ -> dim(H), ndims(m))
+size_compatible(m, ax::Axes) = size(m) == map(dim, ax.spaces)
 size_compatible(m::UniformScaling, H) = true
+size_compatible(m::UniformScaling, ax::Axes) = length(ax.spaces) == 2 && ax.spaces[1] == ax.spaces[2]
 kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, Hs))
 
 @testitem "Kron size compatibility and error handling" begin
@@ -534,25 +545,39 @@ end
 Express `m` in the basis of `Hto`, where `Hfrom` and `Hto` have the same atoms but possibly
 different (or differently ordered) basis states. Unless `skipmissing=true`, throws an
 `ArgumentError` if `m` has nonzero elements involving states of `Hfrom` that are not in `Hto`.
+
+Either side can be an [`Axes`](@ref), one space per axis of `m`: `change_basis(m, H => Axes(Hout, Hin))`
+extracts the block of `m` with rows on `Hout` and columns on `Hin`, and `change_basis(blk, Axes(Hout, Hin) => H)`
+places it in a matrix on `H` that is zero elsewhere.
 """
-change_basis(m, Hs::PairWithHilbertSpaces; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
-function change_basis(m, Hfrom::AbstractHilbertSpace, Hto::AbstractHilbertSpace; skipmissing=false, kwargs...)
-    U, dropped = basis_transformation(Hfrom, Hto)
+change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
+function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; skipmissing = false, kwargs...)
+    n = m isa UniformScaling ? 2 : ndims(m)
+    from, to = _per_axis(Hfrom, n), _per_axis(Hto, n)
+    size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, and a `UniformScaling` needs the same space on both axes, got $(summary(m))."))
+    length(to.spaces) == n || throw(ArgumentError("The output needs one space per axis of `m`, got $(length(to.spaces)) spaces for $n axes."))
+    U1 = basis_transformation(first(from.spaces), first(to.spaces))
+    # a bare space gives every axis the same transformation, so it is computed once
+    transformation(Hf, Ht) = Hf === first(from.spaces) && Ht === first(to.spaces) ? U1 : basis_transformation(Hf, Ht)
+    transformations = map(transformation, from.spaces, to.spaces)
     if !skipmissing
-        for j in dropped
-            _has_support_on(m, j) && throw(ArgumentError("The state $(basisstate(j, Hfrom)) has nonzero weight but is not in the target Hilbert space. Pass `skipmissing=true` to drop it."))
+        for (axis, Hf, (_, dropped)) in zip(1:n, from.spaces, transformations)
+            for j in dropped
+                _has_support_on(m, axis, j) && throw(ArgumentError("The state $(basisstate(j, Hf)) has nonzero weight but is not in the target Hilbert space. Pass `skipmissing=true` to drop it."))
+            end
         end
     end
-    return _change_basis(m, U)
+    return _change_basis(m, map(first, transformations))
 end
-_change_basis(m::AbstractMatrix, U) = U * m * U'
-_change_basis(m::LowRankMatrix, U) = U * Matrix(m) * U'
-_change_basis(v::AbstractVector, U) = U * v
-_change_basis(m::UniformScaling, U) = m.λ * (U * U')
+_per_axis(H::AbstractHilbertSpace, n) = Axes(ntuple(_ -> H, n))
+_per_axis(ax::Axes, n) = ax
+_change_basis(m::AbstractMatrix, (Uout, Uin)) = Uout * m * Uin'
+_change_basis(m::LowRankMatrix, (Uout, Uin)) = Uout * Matrix(m) * Uin'
+_change_basis(v::AbstractVector, (U,)) = U * v
+_change_basis(m::UniformScaling, (Uout, Uin)) = m.λ * (Uout * Uin')
 
-_has_support_on(m::AbstractMatrix, j) = !iszero(view(m, j, :)) || !iszero(view(m, :, j))
-_has_support_on(v::AbstractVector, j) = !iszero(v[j])
-_has_support_on(m::UniformScaling, j) = !iszero(m.λ)
+_has_support_on(m, axis, j) = !iszero(selectdim(m, axis, j))
+_has_support_on(m::UniformScaling, axis, j) = !iszero(m.λ)
 
 function _checked_basis_transformation(Hfrom, Hto; skipmissing=false)
     U, dropped = basis_transformation(Hfrom, Hto)
@@ -582,8 +607,26 @@ The trace drops the states of `H` whose part on `Hsub` is not in `Hsub`, or whos
 complement is not in `complement`. Unless `skipmissing=true`, throws an `ArgumentError` if `m`
 has a nonzero element in the row or column of such a state. The map `partial_trace(H => Hsub)`
 does not check its input.
+
+```jldoctest
+julia> using FermionicHilbertSpaces; @fermions f;
+
+julia> H = hilbert_space(f, 1:2); Hsub = hilbert_space(f, 1:1);
+
+julia> partial_trace(representation(f[1]' * f[1], H), H => Hsub) == [0 0; 0 2]
+true
+```
 """
 partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
+
+"""
+    von_neumann_entropy(ρ)
+
+The von Neumann entropy `-tr(ρ log ρ)` of a density matrix `ρ`, such as the reduced state `partial_trace(ψ * ψ', H => Hsub)`.
+"""
+von_neumann_entropy(ρ) = -sum(_xlogx, eigvals(Hermitian(ρ)))
+# Clamps the round-off negative eigenvalues of a positive semidefinite matrix
+_xlogx(x) = x > 0 ? x * log(x) : zero(x)
 
 abstract type AbstractPartialTraceAlg end
 """
@@ -724,7 +767,8 @@ end
 # Throw if `m` has weight on a state of `H` that the partial trace drops, as `change_basis` does
 function _check_covered(m, covered)
     all(covered) && return nothing
-    _has_support_on(m, findall(!, covered)) && throw(ArgumentError("`m` has nonzero weight on a state of `H` whose part on `Hsub` or on the complement is missing. Pass `skipmissing=true` to drop it."))
+    dropped = findall(!, covered)
+    (_has_support_on(m, 1, dropped) || _has_support_on(m, 2, dropped)) && throw(ArgumentError("`m` has nonzero weight on a state of `H` whose part on `Hsub` or on the complement is missing. Pass `skipmissing=true` to drop it."))
     return nothing
 end
 
@@ -781,22 +825,35 @@ end
 # (Ks[k], the i-th complement state of the group) with weight s, and BV likewise with conj(s) in
 # place of s, each group adds BU * transpose(BV) to mout[Ks, Ks].
 function _full_partial_trace!(mout, m::LowRankMatrix, splits, H)
-    # (K, J, s) for each state J that splits into (K, b), per complement state b
-    byb = Dict{Int,Vector{Tuple{Int,Int,fieldtype(eltype(eltype(splits)), 3)}}}()
-    for (J, ss) in pairs(splits), (K, b, s) in ss
-        iszero(K) || push!(get!(() -> valtype(byb)(), byb, b), (K, J, s))
+    # (K, J, s) for each state J that splits into (K, b), grouped by b in ranges[b] and sorted by K
+    nb = maximum(((K, b, _),) -> iszero(K) ? 0 : b, Iterators.flatten(splits); init = 0)
+    ptr = zeros(Int, nb + 1)
+    for ss in splits, (K, b, _) in ss
+        iszero(K) || (ptr[b + 1] += 1)
     end
-    groups = Dict{Vector{Int},Vector{valtype(byb)}}() # Ks => the entries of each b in the group
-    for es in values(byb)
-        sort!(es; by=first)
-        push!(get!(() -> valtype(byb)[], groups, first.(es)), es)
+    ptr[1] = 1
+    cumsum!(ptr, ptr)
+    next = ptr[1:nb]
+    entries = Vector{Tuple{Int, Int, fieldtype(eltype(eltype(splits)), 3)}}(undef, ptr[end] - 1)
+    for (J, ss) in pairs(splits), (K, b, s) in ss
+        iszero(K) && continue
+        entries[next[b]] = (K, J, s)
+        next[b] += 1
+    end
+    ranges = [ptr[b]:(ptr[b + 1] - 1) for b in 1:nb]
+    foreach(r -> sort!(view(entries, r); by = first), ranges)
+    Kall = first.(entries)
+    groups = Dict{typeof(view(Kall, 1:0)), Vector{Int}}() # Ks => the complement states in the group
+    for (b, r) in pairs(ranges)
+        isempty(r) || push!(get!(Vector{Int}, groups, view(Kall, r)), b)
     end
     (; U, V) = m
     T = promote_type(eltype(U), eltype(V), partial_trace_phase_factor_eltype(H))
-    for (Ks, ess) in groups
-        BU = Array{T}(undef, length(Ks), length(ess), size(U, 2))
+    for (Ks, bs) in groups
+        BU = Array{T}(undef, length(Ks), length(bs), size(U, 2))
         BV = similar(BU)
-        for r in axes(BU, 3), (i, es) in pairs(ess), (k, (_, J, s)) in pairs(es)
+        for r in axes(BU, 3), (i, b) in pairs(bs), (k, p) in pairs(ranges[b])
+            (_, J, s) = entries[p]
             BU[k, i, r] = s * U[J, r]
             BV[k, i, r] = conj(s) * V[J, r]
         end
@@ -1138,6 +1195,15 @@ end
     @test partial_trace(ρ, Hproduct => Hmode) ≈ ρ
 end
 
+@testitem "Entanglement entropy" begin
+    import FermionicHilbertSpaces: von_neumann_entropy
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    ψ = [0, 1, 1, 0] / sqrt(2)
+    @test von_neumann_entropy(partial_trace(ψ * ψ', H => hilbert_space(f, 1:1))) ≈ log(2)
+    @test von_neumann_entropy(ψ * ψ') ≈ 0 atol = 1.0e-12
+end
+
 @testitem "Partial trace with missing states" begin
     using LinearAlgebra
     @fermions a
@@ -1325,4 +1391,27 @@ end
     @test change_basis(mbf, Hbf => Hfb) ≈ mfb
     v = rand(dim(Hfb))
     @test change_basis(change_basis(v, Hfb => Hbf), Hbf => Hfb) == v
+end
+
+@testitem "change_basis with Axes" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: change_basis
+    using FermionicHilbertSpaces: Axes
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    Hout = hilbert_space(f, 1:3, NumberConservation(1))
+    Hin = hilbert_space(f, 1:3, NumberConservation([1, 2]))
+    rows, cols = indices(Hout, H), indices(Hin, H)
+    m = rand(dim(H), dim(H))
+
+    @test_throws ArgumentError change_basis(m, H => Axes(Hout, Hin))
+    blk = change_basis(m, H => Axes(Hout, Hin); skipmissing = true)
+    @test blk == m[rows, cols]
+
+    @test change_basis(change_basis(blk, Axes(Hout, Hin) => H), H => Axes(Hout, Hin)) == blk
+
+    @test change_basis(2I, H => Axes(Hout, Hin); skipmissing = true) == 2I(dim(H))[rows, cols]
+    @test_throws ArgumentError change_basis(2I, Axes(Hout, Hin) => H)
+    v = rand(dim(H))
+    @test change_basis(v, H => Axes(Hout); skipmissing = true) == v[rows]
 end

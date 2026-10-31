@@ -1,6 +1,7 @@
 # # Free fermions on a 2D grid
 # For free fermions, one can work in the single particle picture to get a better scaling with the size of the system. FermionicHilbertSpaces.jl contains some features to help with this.
 using FermionicHilbertSpaces
+using FermionicHilbertSpaces.FreeFermions
 using Plots, LinearAlgebra
 import FermionicHilbertSpaces: add!! # Import add!! for efficient Hamiltonian construction
 using Arpack # For sparse eigenvalue decomposition
