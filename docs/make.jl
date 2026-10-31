@@ -14,6 +14,7 @@ literate_files = [
     "examples/floquet_tutorial.jl",
     "examples/free_fermions.jl",
     "examples/kitaev_chain.jl",
+    "examples/mean_field.jl",
     "examples/open_system_lindblad.jl",
     "examples/partial_transpose.jl",
     "examples/spin_chain.jl",
@@ -43,6 +44,7 @@ pages = [
         "Custom operators: Clock" => "literate_output/clock_operators.md",
         "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
         "Spatial symmetries" => "literate_output/translation_symmetry.md",
+        "Mean-field" => "literate_output/mean_field.md",
     ],
     "Non-interacting systems" => [
         "Non-interacting hilbert spaces" => "non_interacting.md",
