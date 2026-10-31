@@ -168,6 +168,9 @@ H1 = hilbert_space(f, 1:4, NumberConservation(1))
 representation(f[1], Axes(H1, H2))
 ```
 
+The [Anderson impurity example](literate_output/anderson_impurity.md) uses such matrices to
+compute a spectral function.
+
 ### Basic introspection
 
 The lowest-level accessors work on any Hilbert space and are used throughout the

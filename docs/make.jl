@@ -8,6 +8,7 @@ DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilb
 
 # One entry per line, sorted, so PRs adding examples rarely conflict.
 literate_files = [
+    "examples/anderson_impurity.jl",
     "examples/bosons.jl",
     "examples/braiding.jl",
     "examples/clock_operators.jl",
@@ -43,6 +44,7 @@ pages = [
         "Custom operators: Clock" => "literate_output/clock_operators.md",
         "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
         "Spatial symmetries" => "literate_output/translation_symmetry.md",
+        "Anderson impurity" => "literate_output/anderson_impurity.md",
     ],
     "Non-interacting systems" => [
         "Non-interacting hilbert spaces" => "non_interacting.md",
