@@ -13,6 +13,8 @@
 - [Spins](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/spin_chain/)
 - [Mixed fermion-spin-boson system](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/mixed_fermion_spin_boson/)
 - [Open systems](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/open_system_lindblad/)
+- [Entanglement and negativity](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/partial_transpose/)
+- [SYK model](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/syk_model/)
 - [Braiding Majorana zero modes](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/braiding/)
 - [Symbolic states](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/symbolic_states/)
 - [Custom operators: Clock](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/clock_operators/)
