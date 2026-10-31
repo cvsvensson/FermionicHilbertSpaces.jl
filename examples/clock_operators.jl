@@ -99,7 +99,7 @@ Hgs = sector(0, Hzd)
 hs = range(0.05, 2.5; length=30)
 ptmap = partial_trace(Hgs => Hhalf)
 r = map(hs) do h
-    hmat = representation(clock_hamiltonian(1.0, h), Hgs, :dense)
+    hmat = representation(clock_hamiltonian(1.0, h), Hgs)
     vals, vecs = eigs(Hermitian(hmat), nev=1, which=:SR)
     ρhalf = ptmap(vecs[:, 1])
     symmetry_resolved_entropy(ρhalf, Hhalf, D)
