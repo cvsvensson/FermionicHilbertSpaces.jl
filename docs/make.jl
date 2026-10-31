@@ -25,6 +25,34 @@ for file in literate_files
     Literate.markdown(file, output_directory; documenter=true, execute=false)
 end
 
+pages = [
+    "Home" => "index.md",
+    "Fermionic tensor products and partial traces" => "fermions.md",
+    "Constrained Hilbert spaces and conserved quantum numbers" => "conservation.md",
+    "Hilbert space and array operations" => "hilbert_space_operations.md",
+    "Tutorials and examples" => [
+        "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
+        "Bosons" => "literate_output/bosons.md",
+        "Spins" => "literate_output/spin_chain.md",
+        "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md",
+        "Open systems" => "literate_output/open_system_lindblad.md",
+        "Entanglement and negativity" => "literate_output/partial_transpose.md",
+        "SYK model" => "literate_output/syk_model.md",
+        "Braiding Majorana zero modes" => "literate_output/braiding.md",
+        "Symbolic states" => "symbolic_states.md",
+        "Custom operators: Clock" => "literate_output/clock_operators.md",
+        "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
+        "Spatial symmetries" => "literate_output/translation_symmetry.md",
+    ],
+    "Non-interacting systems" => [
+        "Non-interacting hilbert spaces" => "non_interacting.md",
+        "Example: Free fermions" => "literate_output/free_fermions.md",
+    ],
+    "Misc" => "misc.md",
+    "Extending and performance hooks" => "extending.md",
+    "Functions" => "docstrings.md",
+]
+
 makedocs(;
     modules = [FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions],
     authors="Viktor Svensson, William Samuelson",
@@ -35,33 +63,29 @@ makedocs(;
         assets=String[],
         size_threshold = 400 * 2^10,
     ),
-    pages=[
-        "Home" => "index.md",
-        "Fermionic tensor products and partial traces" => "fermions.md",
-        "Constrained Hilbert spaces and conserved quantum numbers" => "conservation.md",
-        "Hilbert space and array operations" => "hilbert_space_operations.md",
-        "Tutorials and examples" => [
-            "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
-            "Bosons" => "literate_output/bosons.md",
-            "Spins" => "literate_output/spin_chain.md",
-            "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md",
-            "Open systems" => "literate_output/open_system_lindblad.md",
-            "Entanglement and negativity" => "literate_output/partial_transpose.md",
-            "SYK model" => "literate_output/syk_model.md",
-            "Braiding Majorana zero modes" => "literate_output/braiding.md",
-            "Symbolic states" => "symbolic_states.md",
-            "Custom operators: Clock" => "literate_output/clock_operators.md",
-            "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
-            "Spatial symmetries" => "literate_output/translation_symmetry.md",
-        ],
-        "Non-interacting systems" => [
-            "Non-interacting hilbert spaces" => "non_interacting.md",
-            "Example: Free fermions" => "literate_output/free_fermions.md"],
-        "Misc" => "misc.md",
-        "Extending and performance hooks" => "extending.md",
-        "Functions" => "docstrings.md",
-    ],
+    pages,
     plugins=[DocumenterCodeBlocks.CodeBlocks()],
+)
+
+# llms.txt (https://llmstxt.org/) is served next to the pages, so relative links resolve per docs version.
+optional = ["Misc", "Extending and performance hooks", "Functions"]
+sections = [
+    "Docs" => filter(p -> p.second isa String && p.first ∉ optional, pages),
+    [p for p in pages if p.second isa Vector]...,
+    "Optional" => filter(p -> p.first ∈ optional, pages),
+]
+link((title, file)) = "- [$title]($(file == "index.md" ? "./" : replace(file, r"\.md$" => "/")))"
+section((name, ps)) = "## $name\n\n" * join(link.(ps), "\n")
+write(
+    joinpath(@__DIR__, "build", "llms.txt"), """
+    # FermionicHilbertSpaces.jl
+
+    > Julia package for fermionic, bosonic and spin Hilbert spaces with constraints and symmetry sectors, and their sparse, dense or lazy operator matrices.
+
+    Typical workflow: define symbols with `@fermions`/`@bosons`/`@spins`, build a space with `hilbert_space` (optionally with a constraint such as `NumberConservation`), get matrices with `representation(op, H)`, and reduce with `partial_trace`. Pass `:dense` to `representation` only when a dense matrix is needed.
+
+    $(join(section.(sections), "\n\n"))
+    """
 )
 
 deploydocs(;
