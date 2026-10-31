@@ -88,8 +88,17 @@ write(
     """
 )
 
-deploydocs(;
-    repo="github.com/cvsvensson/FermionicHilbertSpaces.jl",
-    devbranch="main",
-    push_preview=true
-)
+# Concurrent PR previews race to push gh-pages; each retry re-fetches it.
+for attempt in 1:3
+    try
+        deploydocs(;
+            repo = "github.com/cvsvensson/FermionicHilbertSpaces.jl",
+            devbranch = "main",
+            push_preview = true
+        )
+        break
+    catch
+        attempt == 3 && rethrow()
+        sleep(15 * attempt)
+    end
+end
