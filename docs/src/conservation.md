@@ -1,197 +1,152 @@
 # Constrained Hilbert spaces and conserved quantum numbers
-The basis states of a Hilbert space can be restricted to a subset of states and organized into sectors with different quantum numbers. 
+Conservation laws let you work in a small part of an exponentially large Hilbert space. This page shows how a constraint selects basis states and groups them into sectors of fixed quantum numbers, lists the available constraints, and ends with worked examples where the full space would be far too large to build.
 
-You can apply a constraint either when constructing a space,
-`hilbert_space(f, labels, constraint)`,
-when doing tensor products
-`tensor_product((H1, H2, ...); constraint)`,
-or afterwards with
-`constrain_space(H, constraint)`.
-
-We define two common types of constraints for conserved quantum numbers:
-- **NumberConservation** — Conserves a (possibly weighted) particle number
-- **ParityConservation** — Conserves parity
-
-As well as some types to help with constructing custom constraints:
-- **FilterConstraint** — Flexible filtering using a boolean test on states (iterates over all states)
-- **SectorConstraint** — Groups states into sectors using a custom rule (iterates over all states)
-- **AdditiveConstraint** — Generalization of number conservation, which can be used for more complicated additive quantum numbers (can be used by iterating over all states, or by branch pruning)
-- **BranchConstraint** — Efficient generation of states using branch pruning
-
-One can also combine constraints by taking products.
-
-### NumberConservation and ParityConservation
-- `NumberConservation(total=missing; spaces=missing, weights=missing)`:
-    Conserves a (possibly weighted) particle number.
-    - `total` can be a single integer or a collection of allowed values.
-    - `spaces` can restrict the count to selected spaces (or modes).
-    - `weights` lets each selected subspace contribute with a different integer weight.
-    Examples: `NumberConservation()`, `NumberConservation(2)`, `NumberConservation(0:1, Hup)`, `NumberConservation(-1:1, [Hl, Hr], [1, -1])`.
-
-```@example constraints 
-using FermionicHilbertSpaces
+## Constraints and sectors
+A constraint selects basis states of a space. Constraints for conserved quantities also group the selected states into sectors, one for each value of the quantum number. A constraint is given when building a space, either to `hilbert_space` or as the `constraint` keyword of `tensor_product`, and `constrain_space` applies one to an existing space:
+```@example constraints
+using FermionicHilbertSpaces, LinearAlgebra
 @fermions f
-Hf = hilbert_space(f, 1:3, NumberConservation(2)) # Single sector with 2 particles
+Hleft = hilbert_space(f, 1:2)
+Hright = hilbert_space(f, 3:4)
+Hone = tensor_product(Hleft, Hright; constraint = NumberConservation(1))
+Heven = constrain_space(hilbert_space(f, 1:4), ParityConservation(1))
+H = hilbert_space(f, 1:4, NumberConservation())
 ```
 
-```@example constraints 
+The sector labels of a space are its quantum numbers. A sector is a space of its own, and an operator that conserves the quantity can be represented directly on it. `embed` places a state on a sector back into the full space, where `indices` locates the sector's states:
+```@example constraints
+quantumnumbers(H)
+H2 = sector(2, H)
+hopping = sum(f[k]'f[k+1] + hc for k in 1:3)
+ψ = eigvecs(Hermitian(representation(hopping, H2, :dense)))[:, 1]
+@assert embed(ψ, H2 => H)[indices(2, H)] ≈ ψ
+indices(2, H)
+```
+
+Passing a constraint while building a space prunes states as they are generated, so the full space is never built; only `FilterConstraint` and `SectorConstraint` test the full space afterwards. `constrain_space` always filters a space that already exists.
+
+## Available constraints
+
+#### NumberConservation
+Conserves the particle number, or a weighted sum of the particle numbers of selected spaces. The allowed total is one value or a collection; leaving it out keeps all sectors.
+```@example constraints
 @boson b
+Hf = hilbert_space(f, 1:3)
 Hb = hilbert_space(b, 10)
-H = tensor_product(Hf, Hb; constraint = NumberConservation(0:1, [Hf,Hb], [1,-1])) # the number of fermions in Hf minus the number of bosons in Hb must be 0 or 1
-basisstates(H)
-```
-- `ParityConservation(parities=[-1, 1], spaces=missing)`:
-    Conserves fermionic parity.
-    - Allowed parities are `-1` (odd) and `1` (even).
-    - `ParityConservation()` keeps both sectors (odd first, then even).
-    - `ParityConservation([1])` or `ParityConservation(1)` keeps only even parity.
-    - `spaces` lets you enforce parity on a specific part of a tensor-product space.
-
-```@example constraints 
-constrain_space(H, ParityConservation(1, [Hb])) # keep only even parity of the bosonic part
+# fermions in Hf minus bosons in Hb is 0 or 1
+tensor_product(Hf, Hb; constraint = NumberConservation(0:1, [Hf, Hb], [1, -1]))
 ```
 
-A sector of fixed fermion number can be combined with unconstrained bosons:
+#### ParityConservation
+Conserves fermion parity, `1` for even and `-1` for odd states; without arguments it keeps both sectors.
 ```@example constraints
-@fermions c
-@bosons b
-Hc = hilbert_space(c, 1:3, NumberConservation(1))
-Hb = hilbert_space(b, 1:3, 4) # each mode has the levels |0⟩…|3⟩
-H = tensor_product(Hc, Hb)
+quantumnumbers(hilbert_space(f, 1:4, ParityConservation()))
 ```
-Alternatively, the constraint can be given to the tensor product, with `spaces` selecting the fermionic factor. This gives the same basis states, in a different order.
+
+#### Products of constraints
+Multiplying constraints imposes all of them, and the quantum number of a sector has one entry per factor. Here each pair of modes holds at most one fermion, and there are two fermions in total:
 ```@example constraints
-Hc_full = hilbert_space(c, 1:3)
-tensor_product(Hc_full, Hb; constraint = NumberConservation(1, [Hc_full]))
+pairs = [hilbert_space(f, 2k-1:2k) for k in 1:3]
+pair_constraint = prod(NumberConservation(0:1, Hk) for Hk in pairs) * NumberConservation(2)
+tensor_product(pairs; constraint = pair_constraint)
 ```
 
-### FilterConstraint and SectorConstraint
-- `FilterConstraint(...)`:
-    A flexible filtering constraint.
-    - `FilterConstraint(reducer)` applies `reducer(state)` and keeps states where it returns `true`.
-    - `FilterConstraint(reducer; spaces, maps)` first applies the `maps` to the states in each subspace of `spaces`, then passes them to the `reducer` function. `maps` can be a list of function or a single function to be applied to all subspaces. The `reducer` should return `true` for states that are kept, and `false` for states that are discarded.
-    Use this for custom selection rules that are easiest to express as a boolean test on complete states.
-
-- `SectorConstraint(...)`:
-    Like `FilterConstraint`, but for grouping states into sectors.
-    - The reducer should return a sector label/key (or `missing` to discard a state).
-    - States with the same returned key are collected into the same sector.
-    Use this when you want an explicit block structure from a custom rule.
-
-Let's use a `FilterConstraint` to keep only states where the particle numbers are sorted in ascending order. We can use `particle_number` to get the particle number of each subspace, and then check if they are sorted.
+#### AdditiveConstraint
+Conserves a sum of contributions from the factors of a tensor product, given by `maps` applied to the state of each factor. This covers additive quantum numbers that are not particle numbers, such as the magnetization of spins:
 ```@example constraints
-@bosons b
-H = hilbert_space(b, 1:2, 3)
-using FermionicHilbertSpaces: particle_number
-constraint = FilterConstraint(issorted; maps = particle_number, spaces = factors(H))
-basisstates(constrain_space(H, constraint)) 
+@spins S 1//2
+spins = [hilbert_space(S[k]) for k in 1:4]
+Hmag = tensor_product(spins; constraint = AdditiveConstraint(-2:2; maps = s -> s.m))
+quantumnumbers(Hmag)
 ```
 
-With `SectorConstraint`, we can filter and group states into sectors at the same time. For example, let's keep only states where the particle numbers are all different, and group them into sectors by the total particle numbers.
+#### FilterConstraint
+Keeps the states for which a function returns `true`. With `maps` and `spaces`, the function receives the value of each map on the state of its space. Here the particle numbers of two bosonic modes must be sorted:
 ```@example constraints
-constraint = SectorConstraint(numbers -> allunique(numbers) ? sum(numbers) : missing;
-    maps=particle_number, spaces=factors(H))
-Hcons = constrain_space(H, constraint)
-map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(Hcons), sectors(Hcons))
+import FermionicHilbertSpaces: particle_number
+@bosons d
+Hbb = hilbert_space(d, 1:2, 3)
+sorted = FilterConstraint(issorted; maps = particle_number, spaces = factors(Hbb))
+basisstates(constrain_space(Hbb, sorted))
 ```
 
-### Product constraints
-
-Constraints can be combined by multiplying them:
+#### SectorConstraint
+Like `FilterConstraint`, but the function returns a sector label, or `missing` to discard the state. Here the two modes must hold different numbers of bosons, and the sectors are labelled by the total:
 ```@example constraints
-Hs = [hilbert_space(f,2k-1:2k) for k in 1:3]
-constraint = prod(NumberConservation(0:1, H) for H in Hs) * NumberConservation(2) # each pair of modes holds at most one fermion, and the total number of fermions is 2
-H = tensor_product(Hs; constraint)
+distinct = SectorConstraint(n -> allunique(n) ? sum(n) : missing;
+    maps = particle_number, spaces = factors(Hbb))
+Hdistinct = constrain_space(Hbb, distinct)
+map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(Hdistinct), sectors(Hdistinct))
 ```
-This constraint is a product of 4 constraints, and the quantum numbers of the resulting space keep track of the quantum numbers of each.
 
-### BranchConstraint
-- `BranchConstraint(f)`:
-    For efficient constrained generation using branch pruning.
-    - `f(partial_state, depth, spaces) -> Bool` is evaluated during state construction.
-    - Returning `false` prunes the branch immediately.
-    When branches can be pruned early, this avoids the exponentially large full Hilbert space.
-
+#### BranchConstraint
+Builds the states one factor at a time and calls `f(partial_state, depth, spaces)` after each factor is assigned. Returning `false` discards every state that starts this way, so a sector much smaller than the full space is found without enumerating it. Here no two neighbouring modes are both occupied:
+```@example constraints
+no_neighbours = BranchConstraint((p, depth, spaces) -> depth == 1 || count_ones(p[depth]) + count_ones(p[depth-1]) < 2)
+dim(hilbert_space(f, 1:20, no_neighbours))
+```
 
 ## Examples
 
-### Spinful fermions
-This package does not special case spinful fermions, but one can treat spin just as an extra label. Suppose that the number of spin up and spin down fermions are separately conserved. Let's define a Hilbert space for 4 spin up and 4 spin down fermions, and then divide it into sectors of different numbers of spin up and spin down fermions.
+#### Spinful fermions
+The package does not special-case spinful fermions: spin is an extra label. If the numbers of spin up and spin down fermions are separately conserved, the product of their number conservations divides the space into sectors labelled by both numbers:
 ```@example spin
 using FermionicHilbertSpaces
 @fermions f
 Hup = hilbert_space(f, [(i, :↑) for i in 1:4])
 Hdn = hilbert_space(f, [(i, :↓) for i in 1:4])
 H = tensor_product(Hup, Hdn)
-Hsectors = constrain_space(H, NumberConservation(Hup)*NumberConservation(Hdn))
+Hsectors = constrain_space(H, NumberConservation(Hup) * NumberConservation(Hdn))
 ```
-This space has 25 different sectors. To pick out the sector with 2 fermions with spin up and 0 fermions with spin down, one can extract it from the hilbert space defined above using `sector` as
+The sector with two spin up and no spin down fermions can be picked out of this space, or built directly, which is cheaper. Building it in the tensor product is cheaper still, since it never enumerates the full space:
 ```@example spin
-sector([2,0], Hsectors)
+constraint = NumberConservation(2, Hup) * NumberConservation(0, Hdn)
+@assert basisstates(sector([2, 0], Hsectors)) == basisstates(constrain_space(H, constraint))
+tensor_product(Hup, Hdn; constraint)
 ```
-or more efficiently by only constructing that specific sector in the first place
-```@example spin
-constraint = NumberConservation(2, Hup)*NumberConservation(0, Hdn)
-constrain_space(H, constraint)
-```
-or even more efficiently by doing it at the time of constructing the tensor product with `tensor_product(Hup, Hdn; constraint)`.
 
-### Hubbard model
-For N fermions, the full hilbert space is exponentially large in N. However, due to conservation laws, we may be interested in only a small subspace. If you use a quantum number which consists of only products of number conservations, this package attempts to find the subspaces without enumerating the full hilbert space.
-
-As an example, consider the Hubbard model on N sites 
+#### Hubbard model
+The Hubbard model
 ```math
-H = -t \sum_{i,\sigma} (c_{i,\sigma}^\dagger c_{i+1,\sigma} + \mathrm{h.c}) + U \sum_i n_{i,↑} n_{i,↓}.
+H = -t \sum_{i,\sigma} (c_{i,\sigma}^\dagger c_{i+1,\sigma} + \mathrm{h.c}) + U \sum_i n_{i,↑} n_{i,↓}
 ```
-which conserves the number of spin up and spin down fermions separately. Let's define a function to get the hamiltonian with symbolic fermions 
+conserves the number of spin up and spin down fermions separately. On 20 sites the full space has dimension ``4^{20} \approx 10^{12}``, but the sector with two spin up fermions and one spin down fermion is small, and is generated directly:
 ```@example hubbard
 using FermionicHilbertSpaces
 function hubbard_hamiltonian(c, N, t, U)
     spins = (:↑,:↓)
-    sum(-t * c[i,σ]' * c[i+1,σ] + hc for σ in spins for i in 1:N-1) + 
+    sum(-t * c[i,σ]' * c[i+1,σ] + hc for σ in spins for i in 1:N-1) +
     sum(U * c[i,:↑]'c[i,:↑] * c[i,:↓]'c[i,:↓] for i in 1:N)
 end
-```
-Let's find the matrix representation of the hamiltonian in the sector with `N_up` spin up fermions and `N_down` spin down fermions. To find this subspace we do
-```@example hubbard
+
 @fermions f
 N = 20
-Nup = 2
-Ndn = 1
-Hup = hilbert_space(f, [(i, :↑) for i in 1:N], NumberConservation(Nup))
-Hdn = hilbert_space(f, [(i, :↓) for i in 1:N], NumberConservation(Ndn))
+Hup = hilbert_space(f, [(i, :↑) for i in 1:N], NumberConservation(2))
+Hdn = hilbert_space(f, [(i, :↓) for i in 1:N], NumberConservation(1))
 H = tensor_product(Hup, Hdn)
-```
-The full hilbert space is of size `4^20 ≈ 10^12`, but the sector with 2 spin up and 1 spin down fermion is only of size `3800` and is generated without constructing the full hilbert space. We can get the matrix representation of the hamiltonian in this sector as
-```@example hubbard
-symham = hubbard_hamiltonian(f, N, 1.0, 4.0)
-ham = representation(symham, H)
+ham = representation(hubbard_hamiltonian(f, N, 1.0, 4.0), H);
+size(ham)
 ```
 
-#### No double occupation
-When the onsite Coulomb interaction is very strong, there is a large energy penalty for double occupation of a site. In that case, we can restrict the Hilbert space to not allow double occupation of any site. Consider the site `k`, which has two labels `(k, :↑)` and `(k, :↓)`. We can use `NumberConservation(0:1, [f[(k, :↑)], f[(k, :↓)]])`. To impose this for all sites, we take the product over all sites.
+##### No double occupation
+For strong interactions, double occupation can be forbidden by allowing at most one fermion on each site. The hamiltonian maps some states of this subspace outside it, and `projection = true` drops those terms:
 ```@example hubbard
 local_modes(k) = [f[k, :↑], f[k, :↓]]
 no_double_occ = prod(NumberConservation(0:1, local_modes(k)) for k in 1:N)
 H_ndo = constrain_space(H, no_double_occ)
-```
-This quantum number is a product of number conservations, so the sector is constructed without enumerating the full Hilbert space.
-
-The matrix representation of the hamiltonian in this sector can be constructed as before, but now we need to specify `projection = true` as the symbolic hamiltonian maps states in the subspace to states outside the subspace. The keyword `projection = true` says to ignore those terms.
-```@example hubbard
-symham = hubbard_hamiltonian(f, N, 1, 0)
-ham_ndo = representation(symham, H_ndo; projection = true);
+ham_ndo = representation(hubbard_hamiltonian(f, N, 1, 0), H_ndo; projection = true);
+size(ham_ndo)
 ```
 
-### Tavis–Cummings model
-Consider ``N`` spin-1/2 emitters coupled to a single cavity mode,
+#### Tavis–Cummings model
+``N`` spin-1/2 emitters coupled to a cavity mode,
 ```math
-H = \omega a^\dagger a + \omega_0 \sum_i S^z_i + g \sum_i \left(a^\dagger S^-_i + a S^+_i\right).
+H = \omega a^\dagger a + \omega_0 \sum_i S^z_i + g \sum_i \left(a^\dagger S^-_i + a S^+_i\right),
 ```
-It conserves the number of excitations, the boson number plus ``\sum_i (S^z_i + 1/2)``. Spins have no particle number, so the spin part of the excitation count is written explicitly with an `AdditiveConstraint`, using one map per factor space.
+conserve the number of excitations, the boson number plus ``\sum_i (S^z_i + 1/2)``. Spins have no particle number, so an `AdditiveConstraint` counts their excitations with one map per factor:
 ```@example tavis_cummings
 using FermionicHilbertSpaces
-using FermionicHilbertSpaces: particle_number
+import FermionicHilbertSpaces: particle_number
 N = 3
 nmax = 4
 @spins S 1//2
@@ -200,66 +155,50 @@ spaces = [hilbert_space(a, nmax + 1); [hilbert_space(S[i]) for i in 1:N]]
 excitations = AdditiveConstraint(0:nmax+N; spaces, maps = [particle_number; fill(s -> Int(s.m + 1//2), N)])
 H = tensor_product(spaces; constraint = excitations)
 ```
-The space is split into one sector per excitation number, and the Hamiltonian is block diagonal in these sectors.
+The Hamiltonian is block diagonal in these sectors, one per excitation number.
 
-### Fractionalized hilbert space with BranchConstraint
-The ``t-J_z`` model is
+#### Fractionalized Hilbert space of the t-Jz model
+The ``t-J_z`` model
 ```math
 H = -t \sum_{i,\sigma} (c_{i,\sigma}^\dagger c_{i+1,\sigma} + \mathrm{h.c}) + J_z \sum_{i} S^z_i S^z_{i+1},
 ```
-where ``S^z_i = n_{i,↑} - n_{i,↓}`` and double occupation is forbidden. This model features a fractionalized hilbert space where the Hilbert space splits into exponentially many dynamically disconnected sectors, see [[1910.06341]](https://arxiv.org/abs/1910.06341). We implement the hamiltonian as
+with ``S^z_i = n_{i,↑} - n_{i,↓}`` and no double occupation, has a Hilbert space that splits into exponentially many dynamically disconnected sectors[^1]. Each sector is labelled by a spin pattern such as ↑↑↓↑↓: its states have the spins of the occupied sites in exactly that order, with holes in between. A `BranchConstraint` builds one such sector without the full space:
 ```@example hubbard
-function tjz(c, N,t,Jz)
+function tjz(c, N, t, Jz)
     spins = (:↑,:↓)
     Sz(i) = c[i,:↑]'c[i,:↑] - c[i,:↓]'c[i,:↓]
     -t*sum(c[i,σ]'c[i+1,σ] + hc for σ in spins for i in 1:N-1) + Jz*sum(Sz(i)Sz(i+1) for i in 1:N-1)
 end
-```
-To construct the hilbert space in a specific sector, we need to go beyond simple particle number constraints. Each sector is defined by a spin ordering, e.g. `[:↑, :↑, :↓, :↑, :↓]`. Each state in this sector has three spin up electrons occupied, two spin down electrons occupied, and they come in that specific order with possible holes between them. 
 
-This package can help construct these small sectors while avoiding the exponentially large hilbert space, by 
-```@example hubbard
-function valid_state(partials, depth::Int, spaces, expected_order)
-    # partials is a list of 2N focknumbers, but only the ones up to 'depth' are assigned.
-    # spaces is a list of 2N fermionic modes
+# partials holds the fock numbers of the 2N modes, of which the first `depth` are assigned
+function valid_state(partials, depth, spaces, expected_order)
     exc_count = 0
     prev_site = 0
     for n in 1:depth
         if count_ones(partials[n]) == 1
             exc_count += 1
             site, spin = only(spaces[n].modes).label
-            exc_count > length(expected_order) && return false # too many excitations
-            site == prev_site && return false # two excitations on the same site (this uses the fact that we ordered the spaces by site)
+            exc_count > length(expected_order) && return false
+            site == prev_site && return false # the spaces are ordered by site
             prev_site = site
-            expected_order[exc_count] == spin || return false # check if the spin of the excitation matches the expected order
+            expected_order[exc_count] == spin || return false
         end
     end
     depth == length(spaces) && return exc_count == length(expected_order)
     return true
 end
-spin_order_constraint(order) = BranchConstraint((p,d,s) -> valid_state(p,d,s,order))
-```
+spin_order_constraint(order) = BranchConstraint((p, d, s) -> valid_state(p, d, s, order))
 
-```@example hubbard
 N = 16
 labels = [(i, s) for i in 1:N for s in (:↑,:↓)]
-Hfull = hilbert_space(f,  labels)
-```
-This space is too large to deal with directly, but we can constrain it to the sector with spin order `[:↑, :↑, :↓, :↑, :↓]` as
-```@example hubbard
 Hfrac = hilbert_space(f, labels, spin_order_constraint([:↑, :↑, :↓, :↑, :↓]))
+ham = representation(tjz(f, N, 1, 1/4), Hfrac; projection = true);
+dim(Hfrac)
 ```
-which has only dimension 4368. We can then construct the hamiltonian in this sector by
+The full space of these modes has dimension ``2^{32}``. `subregion` gives the space of the left half compatible with the constraint, which is what `partial_trace(ρ, Hfrac => Hsub_frac)` needs:
 ```@example hubbard
-symham = tjz(f, N, 1, 1/4)
-ham = representation(symham, Hfrac; projection = true);
-```
-We can use `subregion` to find the hilbert space of a subsystem, taking into account the constraint. The full hilbert space of the left half of the system is
-```@example hubbard
-Hsub_full = hilbert_space(f,  [(i, s) for i in 1:div(N,2) for s in (:↑,:↓)])
-```
-but taking into account the constraint, we have
-```@example hubbard
+Hsub_full = hilbert_space(f, [(i, s) for i in 1:div(N,2) for s in (:↑,:↓)])
 Hsub_frac = subregion(Hsub_full, Hfrac)
 ```
-and now one can do partial traces `partial_trace(mat, Hfrac => Hsub_frac)`.
+
+[^1]: T. Rakovszky, P. Sala, R. Verresen, M. Knap and F. Pollmann, "Statistical localization: from strong fragmentation to strong edge modes", [Phys. Rev. B 101, 125126 (2020)](https://doi.org/10.1103/PhysRevB.101.125126), [arXiv:1910.06341](https://arxiv.org/abs/1910.06341).

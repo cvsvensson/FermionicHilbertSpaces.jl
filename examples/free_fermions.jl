@@ -1,5 +1,5 @@
 # # Free fermions on a 2D grid
-# For free fermions, one can work in the single particle picture to get a better scaling with the size of the system. FermionicHilbertSpaces.jl contains some features to help with this.
+# For free fermions the single-particle picture scales with the number of sites instead of exponentially: on a disc of thousands of sites, `SingleParticle()` turns a quadratic hamiltonian into a sparse matrix whose lowest eigenstates are found with Arpack. This example builds such a hamiltonian with a spiral potential, and plots the density and the angular momentum density of its lowest states.
 using FermionicHilbertSpaces
 using FermionicHilbertSpaces.FreeFermions
 using Plots, LinearAlgebra
@@ -15,7 +15,7 @@ square_grid = [indomain(xy) ? xy : missing for xy in Iterators.product(xs, ys)]
 disc = collect(skipmissing(square_grid))
 shifts = [(1, 0), (0, 1), (-1, 0), (0, -1)]
 neighbours(Nx, Ny) = ((Nx + dx, Ny + dy) for (dx, dy) in shifts if indomain((Nx + dx, Ny + dy)))
-H = hilbert_space(f, disc, SingleParticle())
+H = hilbert_space(f, disc, SingleParticle());
 # For plotting heatmaps later, we need a function to map a vector over the disc to a matrix on the 2d grid
 function vec_to_square_grid(v::AbstractVector{T}) where T
     count = 0
@@ -48,7 +48,7 @@ for xy in disc
     end
 end
 # And get a matrix representation of it on the single particle hilbert space
-mat = representation(ham, H)
+mat = representation(ham, H);
 
 # ## Compute eigenstates and momentum operators and plot results
 # Compute a few eigenvalues/eigenvectors (lowest energy states)
