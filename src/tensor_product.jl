@@ -1,8 +1,5 @@
-
-
-# Combines `spaces` into one space without applying any new constraint.
-# Constraints already present on the input spaces are carried over.
-function tensor_product_no_constraints(spaces)
+# The unconstrained product of `spaces`, and its states when some of `spaces` are constrained, or `nothing`.
+function product_space_and_states(spaces)
     atoms = collect(Iterators.flatten(Iterators.map(atomic_factors, spaces)))
     factors = map(unique(map(group_id, atoms))) do id
         combine_into_group(id, map(identity, filter(a -> group_id(a) == id, atoms)))
@@ -12,12 +9,8 @@ function tensor_product_no_constraints(spaces)
     else
         ProductSpace(Tuple(factors))
     end
-    if any(isconstrained, spaces)
-        mapper = state_mapper(space, spaces)
-        states = _find_combined_states(space, spaces, mapper)
-        return ConstrainedSpace(space, states)
-    end
-    return space
+    any(isconstrained, spaces) || return space, nothing
+    return space, _find_combined_states(space, spaces, state_mapper(space, spaces))
 end
 """
     tensor_product(spaces...; constraint=NoSymmetry())
@@ -42,23 +35,24 @@ function tensor_product(spaces; constraint=NoSymmetry())
     if length(spaces) == 1
         return constrain_space(only(spaces), constraint)
     end
-    full_space = tensor_product_no_constraints(spaces)
+    space, factor_states = product_space_and_states(spaces)
+    states = isnothing(factor_states) ? basisstates(space) : factor_states
     if constraint == NoSymmetry()
         combined = _combined_sector_constraint(spaces)
-        !ismissing(combined) && return sector_space(full_space, basisstates(full_space), sector_function(combined, full_space), combined)
-        return full_space
+        !ismissing(combined) && return sector_space(space, states, sector_function(combined, space), combined)
+        return isnothing(factor_states) ? space : ConstrainedSpace(space, factor_states)
     end
 
-    constraint = supply_missing_constraint_info(constraint, full_space, spaces)
+    constraint = supply_missing_constraint_info(constraint, space, spaces)
 
-    states = supports_branch_pruning(constraint) ? generate_states(spaces, constraint, full_space) : basisstates(full_space)
+    states = supports_branch_pruning(constraint) ? generate_states(spaces, constraint, space) : states
     if supports_sector_grouping(constraint) && supports_filtering(constraint)
-        return sector_space(full_space, states, sector_function(constraint, full_space), constraint)
+        return sector_space(space, states, sector_function(constraint, space), constraint)
     elseif supports_filtering(constraint)
-        filtered_states = collect(Iterators.filter(filter_function(constraint, full_space), states))
-        return ConstrainedSpace(full_space, filtered_states; constraint)
+        filtered_states = collect(Iterators.filter(filter_function(constraint, space), states))
+        return ConstrainedSpace(space, filtered_states; constraint)
     else
-        return ConstrainedSpace(full_space, states; constraint)
+        return ConstrainedSpace(space, states; constraint)
     end
 end
 
@@ -511,9 +505,11 @@ end
 """
     basis_transformation(Hfrom, Hto)
 
-Return `(U, dropped)`, where `U` is the sparse `dim(Hto) × dim(Hfrom)` matrix with
-`U[i, j] = 1` if basis state `j` of `Hfrom` is basis state `i` of `Hto`, and `dropped` are the
-indices of the states of `Hfrom` that do not exist in `Hto`. States of `Hto` that do not exist
+Return `(U, dropped)`, the basis change `U` from `Hfrom` to `Hto` and the dropped states.
+
+`U` is the sparse `dim(Hto) × dim(Hfrom)` matrix with `U[i, j] = 1` if basis state `j` of
+`Hfrom` is basis state `i` of `Hto`, and `dropped` are the indices of the states of `Hfrom`
+that do not exist in `Hto`. States of `Hto` that do not exist
 in `Hfrom` give zero rows. `Hfrom` and `Hto` must have the same atoms (see `match_same_atoms`),
 but their groups may come in different orders.
 """
@@ -969,15 +965,6 @@ function _superop_mul_matrix!(y::AbstractVector, S::LinearAlgebra.Transpose{<:An
     return y
 end
 
-"""
-    partial_trace(H => Hsub; kwargs...)
-
-Create a callable partial-trace operation from `H` to `Hsub`.
-
-The operation can be applied directly as `op(m)` and can be converted to a sparse
-matrix map with `sparse(op)`. It skips the states of `H` that [`partial_trace`](@ref) drops and,
-unlike `partial_trace`, does not check its input.
-"""
 struct PartialTraceMap{H,HS,C,K,M}
     H::H
     Hsub::HS
@@ -1090,6 +1077,15 @@ function (op::PartialTraceMap)(out, in::AbstractVector)
 end
 SparseArrays.sparse(op::PartialTraceMap) = op.map
 
+"""
+    partial_trace(H => Hsub; kwargs...)
+
+Create a callable partial-trace operation from `H` to `Hsub`.
+
+The operation can be applied directly as `op(m)` and can be converted to a sparse
+matrix map with `sparse(op)`. It skips the states of `H` that [`partial_trace`](@ref) drops and,
+unlike `partial_trace`, does not check its input.
+"""
 partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = PartialTraceMap(first(Hs), last(Hs); kwargs...)
 function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
     partial_trace_map(H, Hsub, complement, alg; kwargs...)
