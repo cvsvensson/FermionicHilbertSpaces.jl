@@ -8,11 +8,8 @@ Typical workflow: define symbols with `@fermions`/`@bosons`/`@spins`, build a sp
 
 - [Home](./)
 - [Cheat sheet](cheatsheet/)
-- [Fermionic tensor products and partial traces](fermions/)
-- [Constrained Hilbert spaces and conserved quantum numbers](conservation/)
-- [Hilbert space and array operations](hilbert_space_operations/)
 
-## Tutorials and examples
+## Tutorials
 
 - [Interacting Kitaev chain](literate_output/kitaev_chain/)
 - [Bosons](literate_output/bosons/)
@@ -22,18 +19,27 @@ Typical workflow: define symbols with `@fermions`/`@bosons`/`@spins`, build a sp
 - [Entanglement and negativity](literate_output/partial_transpose/)
 - [SYK model](literate_output/syk_model/)
 - [Braiding Majorana zero modes](literate_output/braiding/)
-- [Symbolic states](symbolic_states/)
-- [Custom operators: Clock](literate_output/clock_operators/)
-- [Custom operators: Floquet](literate_output/floquet_tutorial/)
 - [Spatial symmetries](literate_output/translation_symmetry/)
 
-## Non-interacting systems
+## Guides
 
-- [Non-interacting hilbert spaces](non_interacting/)
+- [Constrained spaces and quantum numbers](conservation/)
+- [Hilbert space operations](hilbert_space_operations/)
+- [Symbolic states](symbolic_states/)
+- [Fermionic tensor products and partial traces](fermions/)
+- [Non-interacting systems](non_interacting/)
 - [Example: Free fermions](literate_output/free_fermions/)
+
+## Performance
+
+- [Parallelization](parallelization/)
 
 ## Optional
 
-- [Misc](misc/)
 - [Extending and performance hooks](extending/)
-- [Functions](docstrings/)
+- [Custom operators: Clock](literate_output/clock_operators/)
+- [Custom operators: Floquet](literate_output/floquet_tutorial/)
+- [Internal functions](internals/)
+- [Internal types](internal_types/)
+- [Public API](docstrings/)
+- [Free fermions API](free_fermions_api/)
