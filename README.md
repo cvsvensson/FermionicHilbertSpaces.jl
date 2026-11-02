@@ -6,14 +6,15 @@
 [![Coverage](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl)
 [![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 
-This package provides tools for dealing with the symbolic and linear algebra often encountered in quantum mechanics. Fermions, bosons and spins are included, but most functionality is generic and easily extended. This includes:
-- **Symbolic operators:** Define operators algebraically and compute matrix representations on hilbert spaces.
-- **Hilbert-space mappings:** Tensor products, partial traces, reshaping with fermionic signs handled automatically.
-- **Constrained spaces:** Flexible system to constrain hilbert spaces with conserved quantities such as particle number or custom constraints.
+FermionicHilbertSpaces.jl turns symbolic fermion, boson and spin operators into matrices on Hilbert spaces, so you never index vectors and matrices by hand.
+- **Symbolic operators:** fermions, bosons and spins are combined algebraically, e.g. `f[1]'f[2] + hc`, and simplified with their commutation relations. `representation` turns them into matrices on any Hilbert space.
+- **Hilbert spaces:** spaces keep track of their basis states and ordering, so you never index by hand. They can be restricted by particle number, parity or any rule on the basis states ([constrained spaces](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/conservation/)).
+- **Tensor products and partial traces:** spaces combine and split, as in `partial_trace(ρ, H => Hsub)`, with fermionic signs handled automatically ([fermionic conventions](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/fermions/)).
+- **Extensible:** custom operators and spaces can be added, see [Extending](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/extending/).
 
-The goal of this package is that you should be able to define your own physics and never have to think about indexing of vectors and matrices.
+It is not a solver: combine it with LinearAlgebra, KrylovKit or ODE solvers for eigenstates and time evolution.
 
-Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`.
+Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`. See the [documentation](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/) for getting started, tutorials, guides and the API reference.
 
 
 ## Quick example
@@ -25,12 +26,11 @@ using FermionicHilbertSpaces, LinearAlgebra
 sym_ham = sum(rand() * f[n]'f[n] for n in 1:4) +
     sum(f[n+1]'f[n] + hc for n in 1:3)
 
-#Get a matrix representation of the hamiltonian on a hilbert space
+#Hilbert space of the four modes
 H = hilbert_space(f, 1:4)
-ham = representation(sym_ham, H)
 
 #Diagonalize to find the ground state
-Ψ = eigvecs(Matrix(ham))[:, 1]
+Ψ = eigvecs(Hermitian(representation(sym_ham, H, :dense)))[:, 1]
 
 #Define a subsystem and partial trace to find the reduced density matrix
 Hsub = hilbert_space(f, 1:2)
@@ -42,6 +42,7 @@ entanglement_entropy = sum(-λ * log(λ) for λ in eigvals(ρsub))
 0.44395495955661934
 ````
 
+`representation` returns a sparse matrix by default; a third argument such as `:dense` selects the format, see the [docs](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/docstrings/).
 
 This hamiltonian conserves the number of fermions, which we can exploit. Let's specialize to the 3-particle sector and compute the entanglement entropy of the ground state in that sector.
 
@@ -59,16 +60,16 @@ sum(-λ * log(λ) for λ in eigvals(ρsub))
 
 ## Who is this for?
 You may be interested if you
-- deal with fermions and want correct tensor products and partial traces. [More info.](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/fermions)
-- have complicated constraints on your Hilbert space. See examples [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/conservation).
-- want to define your own physics and never think about indexing. Examples:  [Clock operators](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/literate_output/clock_operators), [Floquet](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/literate_output/floquet_tutorial/)
+- deal with fermions and want correct tensor products and partial traces. [More info.](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/fermions/)
+- have complicated constraints on your Hilbert space. See examples [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/conservation/).
+- want to define your own physics and never think about indexing. Examples:  [Clock operators](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/clock_operators/), [Floquet](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/floquet_tutorial/)
 
 You might want to look elsewhere if you
 - have large hilbert spaces that need methods like tensor networks.
 - deal with qubits.
-- deal with non-interacting systems (though there is some functionality for free fermions, see [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/non_interacting/) and [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/stable/literate_output/free_fermions/)).
+- deal with non-interacting systems (though there is some functionality for free fermions, see [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/non_interacting/) and [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/free_fermions/)).
 
-This package does not contain functions for things like calculating eigenstates and doing time evolution. The documentation has several examples of how to combine this package with other Julia packages to do this.
+The documentation has examples of combining this package with other Julia packages for eigenstates and time evolution.
 
 ## Related packages
 FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).

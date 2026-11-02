@@ -439,9 +439,6 @@ function NonCommutativeProducts.mul_effect(a::S, b::S) where S<:SpinSym
 end
 
 @nc SpinSym
-NonCommutativeProducts.@commutative FermionSym SpinSym
-NonCommutativeProducts.@commutative BosonSym SpinSym
-NonCommutativeProducts.@commutative MajoranaSym SpinSym
 
 """
     apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace, precomp) -> (newstate, amplitude)

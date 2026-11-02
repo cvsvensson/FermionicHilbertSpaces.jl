@@ -177,6 +177,12 @@ symbolic_group(s::SymbolicState) = group_id(s.space)
 group_id(s::SymbolicState) = group_id(s.space)
 
 @nc SymbolicState AbstractSym
+# Operators of different kinds on different groups commute and are ordered by `_group_isless`, as every other pair of
+# factors on different groups is. One order for all pairs keeps sorted products unique.
+function NonCommutativeProducts.mul_effect(a::AbstractSym, b::AbstractSym)
+    symbolic_group(a) == symbolic_group(b) && throw(ArgumentError("Products of `$a` and `$b` on the same group are not defined"))
+    return _group_isless(b, a) ? Swap(1) : nothing
+end
 
 ## Grading
 # Each space carries a grade k^m b^n in the bicyclic monoid, where a ket has (m, n) = (1, 0) and a bra (0, 1).
@@ -1076,6 +1082,18 @@ end
         ketbra = vb("0") * vs("↑") * vf("1") * (vb("0") * vs("↑") * vf("0"))'
         @test FermionicHilbertSpaces._operator_type(ketbra) == :ketbras
     end
+end
+
+@testitem "Products of operators and kets on several groups sort to one form" begin
+    using Combinatorics
+    @boson b1
+    @boson b2
+    @spin s 1 // 2
+    k1 = Ket("1", hilbert_space(b1, 3))
+    k2 = Ket("1", hilbert_space(b2, 3))
+    forms = [prod(p) for p in permutations([b2, s[:z], k1, b2])]
+    @test all(x -> iszero(x - first(forms)), forms)
+    @test iszero(b2 * s[:z] * k1 * k2 - s[:z] * k1 * (b2 * k2))
 end
 
 @testitem "Vector of a ket on factors in non-sorted order" begin

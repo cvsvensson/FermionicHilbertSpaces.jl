@@ -1,5 +1,5 @@
 # Non-interacting hamiltonians
-The functionality on this page lives in the submodule `FermionicHilbertSpaces.FreeFermions`, loaded with `using FermionicHilbertSpaces.FreeFermions`.
+A quadratic fermionic hamiltonian on ``N`` modes is described by an ``N \times N`` (or ``2N \times 2N``) matrix instead of a ``2^N``-dimensional one. This page shows how to get these matrices from symbolic operators, turn them into quasiparticles, and use them for expectation values, entanglement and Majorana problems. The functionality lives in the submodule `FermionicHilbertSpaces.FreeFermions`, loaded with `using FermionicHilbertSpaces.FreeFermions`.
 
 ## Number conserving non-interacting hamiltonians
 A quadratic fermionic hamiltonian with number conservation can be written as 
@@ -152,7 +152,7 @@ symbolic_operator(M, H), quasiparticle(vecs[:, end], H)
 ```
 
 ## Majoranas
-Quadratic Majorana operators get the same treatment with `hilbert_space(γ, labels, SingleParticle())`, where `representation` gives the antisymmetric matrix of the operator. Below, `correlation_matrix(F)` is the ground-state matrix ``G_{ij} = \langle \gamma_i \gamma_j angle / 2`` that `expectation` takes, and `ground_state_parity(F, H)` is the ground-state parity:
+Quadratic Majorana operators get the same treatment with `hilbert_space(γ, labels, SingleParticle())`, where `representation` gives the antisymmetric matrix of the operator. Below, `correlation_matrix(F)` is the ground-state matrix ``G_{ij} = \langle \gamma_i \gamma_j \rangle / 2`` that `expectation` takes, and `ground_state_parity(F, H)` is the ground-state parity:
 ```@example majoranas
 using FermionicHilbertSpaces, LinearAlgebra
 using FermionicHilbertSpaces.FreeFermions

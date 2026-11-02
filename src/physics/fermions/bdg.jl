@@ -433,7 +433,9 @@ _nambu_creators(H::MajoranaSingleParticleHilbertSpace) = [γ / sqrt(2) for γ in
 """
     quasiparticle(v, H)
 
-The quasiparticle creation operator `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])` for a column `v` of BdG eigenvectors on a `BdG` space `H` with `N` modes, or `γ' = Σ_n v[n] * f[n]'` on a `SingleParticle` space, or `Σ_n v[n] * γ[n] / √2` on a Majorana space.
+The quasiparticle creation operator for the single-particle vector `v` on `H`.
+
+On a `BdG` space with `N` modes it is `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])`, on a `SingleParticle` space `γ' = Σ_n v[n] * f[n]'`, and on a Majorana space `Σ_n v[n] * γ[n] / √2`.
 
 ```julia
 @fermions f
