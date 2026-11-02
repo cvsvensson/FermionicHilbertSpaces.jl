@@ -102,8 +102,6 @@ function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
 end
 
 @nc BosonSym
-NonCommutativeProducts.@commutative FermionSym BosonSym
-NonCommutativeProducts.@commutative MajoranaSym BosonSym
 
 @testitem "BosonSym" begin
     using Symbolics
