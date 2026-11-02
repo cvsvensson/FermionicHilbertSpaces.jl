@@ -403,13 +403,18 @@ function _is_like_ket(factors, k, ket)
     return s isa typeof(ket) && _same_space_id(s.space, ket.space)
 end
 # Tuples `(k, factors[k], op)`, one per segment `op` of the sorted product `x`, where `factors[k]` is the ket that `op`
-# acts on, or `nothing` unless each segment acts on a different ket.
+# acts on, or `nothing` unless each segment acts on a different ket. `mul_terms!!` calls this once per term of an
+# operator sum, so the common case of a single segment returns a 1-tuple, which keeps the precomputations inferable.
 function _group_operators(x::NCMul, factors)
     isempty(x.factors) && return nothing
-    ops = NonCommutativeProducts.split_by_group(NCMul(one(x.coeff), x.factors))
-    inds = map(op -> _ket_index(first(op.factors), factors), ops)
+    parts = NonCommutativeProducts.split_by_group(NCMul(one(x.coeff), x.factors))
+    if length(parts) == 1
+        k = _ket_index(first(x.factors), factors)
+        return isnothing(k) ? nothing : ((k, factors[k], last(only(parts))),)
+    end
+    inds = map(((_, op),) -> _ket_index(first(op.factors), factors), parts)
     (any(isnothing, inds) || !allunique(inds)) && return nothing
-    return map((k, op) -> (k, factors[k], op), inds, ops)
+    return map((k, (_, op)) -> (k, factors[k], op), inds, parts)
 end
 _ket_index(::SymbolicState, factors) = nothing
 _ket_index(op, factors) = findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)
@@ -1094,6 +1099,9 @@ end
     forms = [prod(p) for p in permutations([b2, s[:z], k1, b2])]
     @test all(x -> iszero(x - first(forms)), forms)
     @test iszero(b2 * s[:z] * k1 * k2 - s[:z] * k1 * (b2 * k2))
+    H = tensor_product(hilbert_space(b1, 3), hilbert_space(s))
+    P1 = k1 * k1'
+    @test representation(s[:z] * b1' * P1, H) == representation(b1' * s[:z] * P1, H) == representation(b1' * P1 * s[:z], H)
 end
 
 @testitem "Vector of a ket on factors in non-sorted order" begin

@@ -199,11 +199,12 @@ Split the sorted product `op` into a `ProductOperator` with one `NCMul` per basi
 """
 function partition_product(op::NCMul, bases, spaces)
     parts = NonCommutativeProducts.split_by_group(op)
-    group_inds = [_basis_index(symbolic_group(first(part.factors)), bases) for part in parts]
+    group_inds = map(((_, part),) -> _basis_index(symbolic_group(first(part.factors)), bases), parts)
     any(iszero, group_inds) && throw(ArgumentError("Not all factors of the operator belong to a basis of the provided space."))
     allunique(group_inds) || throw(ArgumentError("The factors of each basis must be adjacent in `$op`. Sort it first."))
     perm = sortperm(group_inds)
-    return ProductOperator(Tuple(parts[perm]), spaces[group_inds[perm]], group_inds[perm])
+    ops = ntuple(k -> last(parts[perm[k]]), length(perm))
+    return ProductOperator(ops, spaces[group_inds[perm]], group_inds[perm])
 end
 _basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
 
