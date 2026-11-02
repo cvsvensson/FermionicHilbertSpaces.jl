@@ -328,12 +328,12 @@ end
 # their sum is still small. Joining larger ranges can make the summed matrices much larger than the terms.
 function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
     spaces = groups(space)
-    by_span = Dict{UnitRange{Int},Vector{Any}}()
+    by_span = Dict{UnitRange{Int}, Vector{Any}}()
     for term in NCterms(op)
         prodop = partition_product(term, bases, spaces)
         push!(get!(() -> [], by_span, minimum(prodop.inds):maximum(prodop.inds)), prodop)
     end
-    for n in eachindex(spaces), span in (n:n+1, n-1:n)
+    for n in eachindex(spaces), span in (n:(n + 1), (n - 1):n)
         if haskey(by_span, n:n) && haskey(by_span, span)
             append!(by_span[span], pop!(by_span, n:n))
         end
@@ -354,8 +354,8 @@ end
 _identity(d, ::EagerSparseRepr) = sparse(I(d))
 _identity(d, ::EagerDenseRepr) = Matrix{Bool}(I, d, d)
 function _embed_span(core, span, spaces, repr)
-    r = prod(n -> dim(spaces[n]), 1:first(span)-1; init=1)
-    l = prod(n -> dim(spaces[n]), last(span)+1:length(spaces); init=1)
+    r = prod(n -> dim(spaces[n]), 1:(first(span) - 1); init = 1)
+    l = prod(n -> dim(spaces[n]), (last(span) + 1):length(spaces); init = 1)
     l == r == 1 && return core
     return _embed(core, l, r, repr)
 end
