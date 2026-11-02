@@ -505,9 +505,11 @@ end
 """
     basis_transformation(Hfrom, Hto)
 
-Return `(U, dropped)`, where `U` is the sparse `dim(Hto) × dim(Hfrom)` matrix with
-`U[i, j] = 1` if basis state `j` of `Hfrom` is basis state `i` of `Hto`, and `dropped` are the
-indices of the states of `Hfrom` that do not exist in `Hto`. States of `Hto` that do not exist
+Return `(U, dropped)`, the basis change `U` from `Hfrom` to `Hto` and the dropped states.
+
+`U` is the sparse `dim(Hto) × dim(Hfrom)` matrix with `U[i, j] = 1` if basis state `j` of
+`Hfrom` is basis state `i` of `Hto`, and `dropped` are the indices of the states of `Hfrom`
+that do not exist in `Hto`. States of `Hto` that do not exist
 in `Hfrom` give zero rows. `Hfrom` and `Hto` must have the same atoms (see `match_same_atoms`),
 but their groups may come in different orders.
 """
@@ -963,15 +965,6 @@ function _superop_mul_matrix!(y::AbstractVector, S::LinearAlgebra.Transpose{<:An
     return y
 end
 
-"""
-    partial_trace(H => Hsub; kwargs...)
-
-Create a callable partial-trace operation from `H` to `Hsub`.
-
-The operation can be applied directly as `op(m)` and can be converted to a sparse
-matrix map with `sparse(op)`. It skips the states of `H` that [`partial_trace`](@ref) drops and,
-unlike `partial_trace`, does not check its input.
-"""
 struct PartialTraceMap{H,HS,C,K,M}
     H::H
     Hsub::HS
@@ -1084,6 +1077,15 @@ function (op::PartialTraceMap)(out, in::AbstractVector)
 end
 SparseArrays.sparse(op::PartialTraceMap) = op.map
 
+"""
+    partial_trace(H => Hsub; kwargs...)
+
+Create a callable partial-trace operation from `H` to `Hsub`.
+
+The operation can be applied directly as `op(m)` and can be converted to a sparse
+matrix map with `sparse(op)`. It skips the states of `H` that [`partial_trace`](@ref) drops and,
+unlike `partial_trace`, does not check its input.
+"""
 partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = PartialTraceMap(first(Hs), last(Hs); kwargs...)
 function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
     partial_trace_map(H, Hsub, complement, alg; kwargs...)
