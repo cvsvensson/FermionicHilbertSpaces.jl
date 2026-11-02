@@ -23,8 +23,9 @@ Algebra, from [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommu
 - `mul_effect(a::MyOp, b::MyOp)` gives the rule for the product `a * b`: `nothing` keeps it,
   `Swap(c)` rewrites it as `c * b * a`, and `AddTerms((Swap(c), r, ...))` adds further terms.
   This is required; without it, products such as `X * X` throw a `MethodError`.
-- `@commutative MyOp AbstractSym` declares that `MyOp` commutes with all other operators.
-  This is required for products with the operators of the package.
+- Operators on different groups commute, ordered by group, so no rule is needed for products
+  of `MyOp` with the operators of the package. Products of different operator types on the
+  same group throw an `ArgumentError` unless they have their own `mul_effect`.
 
 Connection to Hilbert spaces:
 
