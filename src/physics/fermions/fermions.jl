@@ -89,6 +89,7 @@ Jordan-Wigner order of fermions), or `0` if `H` has no such mode.
 mode_position(f::FermionSym, H) = get(mode_ordering(H), _normalize_sym(f), 0)
 
 function combine_into_group(group::FermionicGroup, fermions)
+    any(H -> H isa MajoranaHilbertSpace, fermions) && return _combine_majorana_spaces(group, fermions)
     if all(f -> group_id(f) == group, fermions)
         return FermionicSpace(fermions, group)
     else

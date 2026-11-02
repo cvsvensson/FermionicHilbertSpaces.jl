@@ -7,8 +7,10 @@ symbolic_group(g::MajoranaGroup) = g
 Base.isless(g1::MajoranaGroup, g2::MajoranaGroup) = isless(g1.group, g2.group)
 add_tag(g::MajoranaGroup, tag) = MajoranaGroup(add_tag(g.group, tag))
 tags(g::MajoranaGroup) = g.group
+_fermionic_group(g::MajoranaGroup) = g.group
+_fermionic_group(g::FermionicGroup) = g
 
-struct SymbolicMajoranaBasis{T<:MajoranaGroup}
+struct SymbolicMajoranaBasis{T<:Union{MajoranaGroup,FermionicGroup}}
     name::Symbol
     group::T
 end
@@ -79,7 +81,6 @@ function Base.isless(a::MajoranaSym, b::MajoranaSym)
         a.basis.name < b.basis.name
     end
 end
-exchange_phase(a::MajoranaSym, b::MajoranaSym) = a.basis.group == b.basis.group ? -1 : 1
 function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym)
     if a == b
         1
@@ -91,8 +92,10 @@ function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym)
         throw(ArgumentError("Cannot multiply `$a` and `$b`."))
     end
 end
+# Fermions and Majoranas of one group are distinct modes, and the fermions sort first.
+NonCommutativeProducts.mul_effect(a::FermionSym, b::MajoranaSym) = symbolic_group(a) != symbolic_group(b) && _group_isless(b, a) ? Swap(1) : nothing
+NonCommutativeProducts.mul_effect(a::MajoranaSym, b::FermionSym) = symbolic_group(a) == symbolic_group(b) || _group_isless(b, a) ? Swap(exchange_phase(a, b)) : nothing
 
-mat_eltype(::Type{S}) where {S<:AbstractMajoranaSym} = Complex{Int}
 @nc MajoranaSym
 
 @testitem "@majoranas return value" begin
@@ -191,32 +194,45 @@ function atomic_id(H::MajoranaHilbertSpace)
     length(H.majoranaindices) == 2 || throw(ArgumentError("Only Majorana spaces with exactly two Majoranas have an atomic_id, use atom_ids for $H"))
     Tuple(keys(H.majoranaindices))
 end
-# Fast versions of the generic definitions, without building the atoms. The Majoranas of the
-# k:th pair sit at positions 2k-1 and 2k.
+# The Majoranas at positions 2p-1 and 2p act on mode p of the parent. The other modes of the parent are fermions
+# of the group, and are atoms of their own.
 function atom_ids(H::MajoranaHilbertSpace)
-    γs = collect(keys(H.majoranaindices))
-    [(γs[2k-1], γs[2k]) for k in 1:length(γs)÷2]
+    γs = _majoranas_by_position(H)
+    [isnothing(γs[2k-1]) ? H.parent.modes[k] : (γs[2k-1], γs[2k]) for k in 1:nbr_of_modes(H.parent)]
 end
 function atom_position(x, H::MajoranaHilbertSpace)
     id = atomic_id(x)
-    id isa Tuple{Any,Any} || return 0 # only pairs name atoms
-    p = get(H.majoranaindices, id[1], 0)
-    isodd(p) && get(H.majoranaindices, id[2], 0) == p + 1 ? (p + 1) ÷ 2 : 0
+    if id isa Tuple{Any,Any}
+        p = get(H.majoranaindices, id[1], 0)
+        return isodd(p) && get(H.majoranaindices, id[2], 0) == p + 1 ? (p + 1) ÷ 2 : 0
+    end
+    p = atom_position(x, H.parent)
+    return p > 0 && 2p - 1 ∉ values(H.majoranaindices) ? p : 0
+end
+function _majoranas_by_position(H::MajoranaHilbertSpace)
+    γs = Vector{Union{Nothing,keytype(H.majoranaindices)}}(nothing, 2nbr_of_modes(H.parent))
+    for (γ, n) in H.majoranaindices
+        γs[n] = γ
+    end
+    return γs
 end
 
-function combine_into_group(group::MajoranaGroup, spaces)
-    fermionic_space = combine_into_group(group.group, map(parent, spaces))
-    D = typeof(first(spaces).majoranaindices)
-    majoranaindices = D()
-    count = 1
-    for space in spaces
-        l1, p1 = first(space.majoranaindices)
-        l2, p2 = last(space.majoranaindices)
-        majoranaindices[l1] = count
-        majoranaindices[l2] = count + 1
-        count += 2
+combine_into_group(group::MajoranaGroup, spaces) = _combine_majorana_spaces(group, spaces)
+# `spaces` are Majorana and fermionic spaces of one group, combined in the order given
+function _combine_majorana_spaces(group, spaces)
+    fermionic_space = FermionicSpace(map(H -> H isa MajoranaHilbertSpace ? parent(H) : H, spaces), _fermionic_group(group))
+    γspaces = filter(H -> H isa MajoranaHilbertSpace, spaces)
+    majoranaindices = empty(first(γspaces).majoranaindices)
+    offset = 0
+    for H in spaces
+        if H isa MajoranaHilbertSpace
+            for (γ, n) in H.majoranaindices
+                majoranaindices[γ] = n + 2offset
+            end
+        end
+        offset += nbr_of_modes(H)
     end
-    MajoranaHilbertSpace(majoranaindices, fermionic_space, first(spaces).sym)
+    MajoranaHilbertSpace(majoranaindices, fermionic_space, first(γspaces).sym)
 end
 
 function combine_states(states, ::MajoranaHilbertSpace)
@@ -237,7 +253,7 @@ symbolic_basis(H::MajoranaHilbertSpace) = H.sym
 function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even to define a Hilbert space, got $(length(labels))."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
-    f = SymbolicFermionBasis(y.name, tags(y).group)
+    f = SymbolicFermionBasis(y.name, _fermionic_group(tags(y)))
     Hf = hilbert_space(f, pairs, args...; kwargs...)
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
     MajoranaHilbertSpace(majorana_position, Hf, y)
@@ -287,6 +303,8 @@ end
 
 _state_index(state, H::MajoranaHilbertSpace) = _state_index(state, H.parent)
 mode_position(f::MajoranaSym, H) = get(mode_ordering(H), f, 0)
+mode_position(f::FermionSym, H::MajoranaHilbertSpace) = mode_position(f, H.parent)
+mode_position(f::FermionSym, H::AbstractSubspace) = mode_position(f, parent(H))
 
 function _precomputation_before_operator_application(op::MajoranaSym, space::AbstractHilbertSpace{<:FockNumber})
     majoranaposition = mode_position(op, space)
@@ -294,7 +312,8 @@ function _precomputation_before_operator_application(op::MajoranaSym, space::Abs
     dagger = iseven(majoranaposition)
     return fermionposition, dagger
 end
-function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace, precomp; transpose)
+apply_local_operator(op::MajoranaSym, f::FockNumber, H, (fpos, dagger)) = togglemajoranas((fpos,), (dagger,), f)
+function apply_local_operators(op::NCMul{<:Any,<:MajoranaSym}, f::FockNumber, H::MajoranaHilbertSpace, precomp; transpose)
     fpos = Iterators.map(first, precomp)
     daggers = Iterators.map(last, precomp)
     if !transpose
@@ -310,18 +329,48 @@ function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace
 end
 
 function atomic_factors(H::MajoranaHilbertSpace)
-    γs = collect(keys(H.majoranaindices))
+    γs = _majoranas_by_position(H)
     map(i -> _majorana_atomic_factor(H, i, γs), 1:nbr_of_modes(H.parent))
 end
-atomic_factor(H::MajoranaHilbertSpace, i) = _majorana_atomic_factor(H, i, collect(keys(H.majoranaindices)))
+atomic_factor(H::MajoranaHilbertSpace, i) = _majorana_atomic_factor(H, i, _majoranas_by_position(H))
 # The i:th atom is the i:th fermionic atom of the parent, with the Majoranas at positions 2i-1
-# and 2i. The Majoranas are taken from the space's own keys, not rebuilt from `H.sym`, since a
+# and 2i if there are any. The Majoranas are taken from the space's own keys, not rebuilt from `H.sym`, since a
 # space can hold Majoranas with several names from one `@majoranas` block.
 function _majorana_atomic_factor(H::MajoranaHilbertSpace, i, γs)
     atom = atomic_factor(H.parent, i)
     γ1, γ2 = γs[2i-1], γs[2i]
+    isnothing(γ1) && return atom
     MajoranaHilbertSpace(OrderedDict(γ1 => 1, γ2 => 2), atom, symbolic_basis(γ1))
 end
+@testitem "Fermions and Majoranas in one group" begin
+    using Combinatorics
+    using FermionicHilbertSpaces: state_index
+    @fermions f γ::Majorana
+    @fermions c
+    @majoranas η
+    @test iszero(f[1] * γ[1] + γ[1] * f[1])
+    @test iszero(f[1]' * γ[1] + γ[1] * f[1]')
+    @test iszero(c[1] * γ[1] - γ[1] * c[1])
+    @test iszero(f[1] * η[1] - η[1] * f[1])
+    w = [γ[2], f[1]', f[2], γ[1]]
+    @test all(p -> prod(w[p]) == levicivita(p) * prod(w), permutations(1:4))
+    @test_throws ArgumentError macroexpand(@__MODULE__, :(@fermions a b::Boson))
+
+    # γ[1] and γ[2] act like g[3] + g[3]' and 1im * (g[3] - g[3]') on a third mode
+    @fermions g
+    Hf, Hγ = hilbert_space(f, 1:2), hilbert_space(γ, 1:2)
+    H, Href = tensor_product(Hf, Hγ), hilbert_space(g, 1:3)
+    ops = [f[1], f[2]', γ[1], γ[2]]
+    refs = [g[1], g[2]', g[3] + g[3]', 1im * (g[3] - g[3]')]
+    for i in eachindex(ops), j in eachindex(ops)
+        @test representation(ops[i] * ops[j] + 2ops[j], H) == representation(refs[i] * refs[j] + 2refs[j], Href)
+    end
+    Hp = tensor_product(Hf, Hγ; constraint=ParityConservation(1))
+    inds = [state_index(s, H) for s in basisstates(Hp)]
+    op = f[1]' * γ[2] + γ[1] * f[2]
+    @test representation(op, Hp) == representation(op, H)[inds, inds]
+end
+
 @testitem "Majorana matrix representations" begin
     using LinearAlgebra
     @majoranas γ

@@ -33,18 +33,30 @@ and commute with fermions in other `@fermions` blocks.
 - `@fermions a; @fermions b` creates two species of fermions that commute with each other:
     - `a[1]' * a[1] + a[1] * a[1]' == 1`
     - `a[1] * b[1] - b[1] * a[1] == 0`
+- `@fermions a γ::Majorana` makes `γ` a Majorana species in the group of `a`, a distinct set of modes:
+    - `a[1] * γ[1] + γ[1] * a[1] == 0`
 
 See also [`@majoranas`](@ref).
 """
 macro fermions(xs...)
-    group = FermionicGroup(Tags((xs,)))
-    defs = map(xs) do x
-        :($(esc(x)) = SymbolicFermionBasis($(Expr(:quote, x)), $group))
+    names = map(_species_name, xs)
+    group = FermionicGroup(Tags((names,)))
+    defs = map(xs, names) do x, name
+        basis = _is_majorana_species(x) ? SymbolicMajoranaBasis : SymbolicFermionBasis
+        :($(esc(name)) = $basis($(Expr(:quote, name)), $group))
     end
     fermions = Expr(:block, defs...,
-        :(tuple($(map(x -> esc(x), xs)...))))
+        :(tuple($(map(esc, names)...))))
     length(defs) == 1 && return only(defs)
     return fermions
+end
+_species_name(x::Symbol) = x
+_species_name(x::Expr) = (_is_majorana_species(x); x.args[1])
+_is_majorana_species(::Symbol) = false
+function _is_majorana_species(x::Expr)
+    Meta.isexpr(x, :(::), 2) && x.args[2] == :Majorana && x.args[1] isa Symbol ||
+        throw(ArgumentError("Expected a name or `name::Majorana` in `@fermions`, got `$x`."))
+    return true
 end
 Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.tags == b.tags
 Base.getindex(f::SymbolicFermionBasis, is...) = FermionSym(false, is, f)
@@ -88,7 +100,7 @@ Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis,
 hilbert_space(f::FermionSym) = FermionicSpace([_normalize_sym(f)], symbolic_group(f))
 
 # The sign λ in a * b = λ * b * a + scalar
-exchange_phase(a::FermionSym, b::FermionSym) = tags(a.basis) == tags(b.basis) ? -1 : 1
+exchange_phase(a::AbstractFermionSym, b::AbstractFermionSym) = symbolic_group(a) == symbolic_group(b) ? -1 : 1
 function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     if a == b
         0
@@ -106,7 +118,8 @@ function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     end
 end
 
-mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
+mat_eltype(::Type{<:FermionSym}) = Int
+mat_eltype(::Type{<:AbstractFermionSym}) = Complex{Int}
 
 @nc FermionSym
 
