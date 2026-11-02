@@ -396,24 +396,19 @@ function _is_like_ket(factors, k, ket)
     s = factors[k]
     return s isa typeof(ket) && _same_space_id(s.space, ket.space)
 end
-# Tuples `(k, factors[k], op)`, where `op` is the product of the factors of `x` that act on the ket `factors[k]`,
-# or `nothing` if a factor of `x` acts on none of the kets. `mul_terms!!` calls this once per term of an operator sum,
-# so the common case of all factors acting on one ket returns a single tuple that reuses `x.factors` when its
-# element type is concrete.
+# Tuples `(k, factors[k], op)`, one per segment `op` of the sorted product `x`, where `factors[k]` is the ket that `op`
+# acts on, or `nothing` unless each segment acts on a different ket.
 function _group_operators(x::NCMul, factors)
-    if !isempty(x.factors)
-        k = _ket_index(first(x.factors), factors)
-        if !isnothing(k) && all(op -> _acts_on_ket(op, factors[k]), x.factors)
-            ops = isconcretetype(eltype(x.factors)) ? x.factors : ___concretize(x.factors, VecConcretizer())
-            return ((k, factors[k], NCMul(one(x.coeff), ops)),)
-        end
-    end
-    inds = map(op -> _ket_index(op, factors), x.factors)
-    any(isnothing, inds) && return nothing
-    return [(k, factors[k], NCMul(one(x.coeff), ___concretize(x.factors[inds .== k], VecConcretizer()))) for k in unique(inds)]
+    isempty(x.factors) && return nothing
+    ops = NonCommutativeProducts.split_by_group(NCMul(one(x.coeff), x.factors))
+    inds = map(op -> _ket_index(first(op.factors), factors), ops)
+    (any(isnothing, inds) || !allunique(inds)) && return nothing
+    return map((k, op) -> (k, factors[k], op), inds, ops)
 end
-_ket_index(op, factors) = findfirst(s -> _acts_on_ket(op, s), factors)
-_acts_on_ket(op, s) = !(op isa SymbolicState) && s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space)
+_ket_index(::SymbolicState, factors) = nothing
+_ket_index(op, factors) = findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)
+# Operators and states of one group are separate segments, so that a segment of operators acts on a ket
+NonCommutativeProducts.atom_group(s::SymbolicState) = (group_id(s.space), :state)
 
 
 representation(s::SymbolicState; kwargs...) = representation(s, s.space; kwargs...)

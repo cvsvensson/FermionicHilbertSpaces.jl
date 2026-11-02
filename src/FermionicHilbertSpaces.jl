@@ -65,6 +65,7 @@ operator type subtypes it, registers itself with `NonCommutativeProducts.@nc` an
 [`apply_local_operator`](@ref) and [`symbolic_group`](@ref).
 """
 abstract type AbstractSym end
+NonCommutativeProducts.atom_group(op::AbstractSym) = symbolic_group(op)
 
 # Factors from different groups are ordered by the type name of the group id, then by `isless`.
 # The type name depends only on the code, so the order is the same in every session and on every platform.

@@ -568,7 +568,7 @@ end
     vcons = randn(ComplexF64, dim(Hcons))
     Mcons = representation(op_prod, Hcons; projection=true)
     Mv = Mcons * vcons
-    for concretizer in [FermionicHilbertSpaces.NoConcretizer(), FermionicHilbertSpaces.TupleConcretizer(), FermionicHilbertSpaces.VecConcretizer()]
+    for concretizer in [FermionicHilbertSpaces.NoConcretizer(), FermionicHilbertSpaces.TupleConcretizer()]
         Lcons = representation(op_prod, Hcons, :lazy; projection=true, chunking=NoChunking(), concretizer)
         Ltcons = representation(op_prod, Hcons, :lazy; projection=true, chunking=TermChunking(scheduler), concretizer)
         Lscons = representation(op_prod, Hcons, :lazy; projection=true, chunking=StateChunking(scheduler), concretizer)
