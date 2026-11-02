@@ -46,7 +46,8 @@ macro fermions(xs...)
         :($(esc(name)) = $basis($(Expr(:quote, name)), $group))
     end
     fermions = Expr(:block, defs...,
-        :(tuple($(map(esc, names)...))))
+        :(tuple($(map(esc, names)...)))
+    )
     length(defs) == 1 && return only(defs)
     return fermions
 end

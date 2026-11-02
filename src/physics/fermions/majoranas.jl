@@ -10,7 +10,7 @@ tags(g::MajoranaGroup) = g.group
 _fermionic_group(g::MajoranaGroup) = g.group
 _fermionic_group(g::FermionicGroup) = g
 
-struct SymbolicMajoranaBasis{T<:Union{MajoranaGroup,FermionicGroup}}
+struct SymbolicMajoranaBasis{T <: Union{MajoranaGroup, FermionicGroup}}
     name::Symbol
     group::T
 end
@@ -198,11 +198,11 @@ end
 # of the group, and are atoms of their own.
 function atom_ids(H::MajoranaHilbertSpace)
     γs = _majoranas_by_position(H)
-    [isnothing(γs[2k-1]) ? H.parent.modes[k] : (γs[2k-1], γs[2k]) for k in 1:nbr_of_modes(H.parent)]
+    return [isnothing(γs[2k - 1]) ? H.parent.modes[k] : (γs[2k - 1], γs[2k]) for k in 1:nbr_of_modes(H.parent)]
 end
 function atom_position(x, H::MajoranaHilbertSpace)
     id = atomic_id(x)
-    if id isa Tuple{Any,Any}
+    if id isa Tuple{Any, Any}
         p = get(H.majoranaindices, id[1], 0)
         return isodd(p) && get(H.majoranaindices, id[2], 0) == p + 1 ? (p + 1) ÷ 2 : 0
     end
@@ -210,7 +210,7 @@ function atom_position(x, H::MajoranaHilbertSpace)
     return p > 0 && 2p - 1 ∉ values(H.majoranaindices) ? p : 0
 end
 function _majoranas_by_position(H::MajoranaHilbertSpace)
-    γs = Vector{Union{Nothing,keytype(H.majoranaindices)}}(nothing, 2nbr_of_modes(H.parent))
+    γs = Vector{Union{Nothing, keytype(H.majoranaindices)}}(nothing, 2nbr_of_modes(H.parent))
     for (γ, n) in H.majoranaindices
         γs[n] = γ
     end
@@ -232,7 +232,7 @@ function _combine_majorana_spaces(group, spaces)
         end
         offset += nbr_of_modes(H)
     end
-    MajoranaHilbertSpace(majoranaindices, fermionic_space, first(γspaces).sym)
+    return MajoranaHilbertSpace(majoranaindices, fermionic_space, first(γspaces).sym)
 end
 
 function combine_states(states, ::MajoranaHilbertSpace)
@@ -313,7 +313,7 @@ function _precomputation_before_operator_application(op::MajoranaSym, space::Abs
     return fermionposition, dagger
 end
 apply_local_operator(op::MajoranaSym, f::FockNumber, H, (fpos, dagger)) = togglemajoranas((fpos,), (dagger,), f)
-function apply_local_operators(op::NCMul{<:Any,<:MajoranaSym}, f::FockNumber, H::MajoranaHilbertSpace, precomp; transpose)
+function apply_local_operators(op::NCMul{<:Any, <:MajoranaSym}, f::FockNumber, H::MajoranaHilbertSpace, precomp; transpose)
     fpos = Iterators.map(first, precomp)
     daggers = Iterators.map(last, precomp)
     if !transpose
@@ -365,7 +365,7 @@ end
     for i in eachindex(ops), j in eachindex(ops)
         @test representation(ops[i] * ops[j] + 2ops[j], H) == representation(refs[i] * refs[j] + 2refs[j], Href)
     end
-    Hp = tensor_product(Hf, Hγ; constraint=ParityConservation(1))
+    Hp = tensor_product(Hf, Hγ; constraint = ParityConservation(1))
     inds = [state_index(s, H) for s in basisstates(Hp)]
     op = f[1]' * γ[2] + γ[1] * f[2]
     @test representation(op, Hp) == representation(op, H)[inds, inds]
