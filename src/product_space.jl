@@ -53,11 +53,10 @@ groups(H::ProductSpace) = H.factors
 dim(H::ProductSpace) = prod(dim, groups(H); init=1)
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
-basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(ProductState, Iterators.product(map(basisstates, H.factors)...)))
-Base.@propagate_inbounds function basisstate(n::Integer, H::ProductSpace{B}) where B
-    inds = Tuple(H.cartinds[n])
-    ProductState(map(basisstate, inds, H.factors))
-end
+# Iterates `cartinds` rather than `Iterators.product`, whose iteration allocates per state from 12 factors on
+basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(I -> _product_basisstate(I, H), H.cartinds))
+Base.@propagate_inbounds basisstate(n::Integer, H::ProductSpace) = _product_basisstate(H.cartinds[n], H)
+Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::ProductSpace) = ProductState(map(basisstate, Tuple(I), H.factors))
 function _state_index(state::ProductState, H::ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
     inds = map(_state_index, state.states, H.factors)
