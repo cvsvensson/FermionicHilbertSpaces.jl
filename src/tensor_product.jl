@@ -31,6 +31,7 @@ julia> state_index("10", H)
 ```
 """
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
+tensor_product(H::AbstractHilbertSpace; kwargs...) = tensor_product((H,); kwargs...)
 function tensor_product(spaces; constraint=NoSymmetry())
     if length(spaces) == 1
         return constrain_space(only(spaces), constraint)
