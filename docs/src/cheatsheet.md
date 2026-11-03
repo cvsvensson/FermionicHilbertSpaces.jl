@@ -3,7 +3,7 @@
 Common tasks and the functions that do them. Snippets build on the variables of earlier ones; run them in order. Results are mostly suppressed with `;`, so run a line to see its output.
 
 ## Spaces
-`@fermions f` defines symbolic fermions, `hilbert_space(f, labels, constraint)` a space, and `representation(op, H)` the sparse matrix of an operator (add `:dense` when you need a dense one, `:lazy` for a matrix-free one). Products of constraints conserve each species separately, and `tensor_product` combines any spaces, including bosons (levels given as the number) and spins (value set in the macro).
+`@fermions f` defines symbolic fermions, `hilbert_space(f, labels, constraint)` a space, and `representation(op, H)` the sparse matrix of an operator (add `:dense` when you need a dense one, a type such as `Matrix{ComplexF64}` to also fix the element type, `:lazy` for a matrix-free one). Products of constraints conserve each species separately, and `tensor_product` combines any spaces, including bosons (levels given as the number) and spins (value set in the macro).
 ```@example cheat
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions f

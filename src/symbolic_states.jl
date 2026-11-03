@@ -459,6 +459,8 @@ _operator_type(op) = throw(ArgumentError("Cannot represent an object of type $(t
 #   :operator               there are no kets and bras: operators, scalars, and ketbras combined with operators,
 #   :mixed                  kets or bras are combined with other states or operators, which has no representation.
 function _operator_type(op::Union{NCMul,NCAdd,AbstractSym})
+    kind = _static_operator_type(typeof(op))
+    isnothing(kind) || return kind
     _iszero_ncadd(op) && return _zero_operator_type(op)
     hasket = false
     hasbra = false
@@ -488,6 +490,12 @@ function _operator_type(op::Union{NCMul,NCAdd,AbstractSym})
         return :mixed
     end
 end
+# The kind that the factor type alone shows, or `nothing`. Inference can see this kind.
+_static_operator_type(::Type{S}) where {S<:AbstractSym} = isconcretetype(S) && !(S <: SymbolicState) ? :operator : nothing
+_static_operator_type(::Type{<:SymbolicState{K,B}}) where {K,B} = B === Nothing ? (K === Nothing ? nothing : :kets) : (K === Nothing ? :bras : nothing)
+_static_operator_type(::Type{<:NCMul{<:Any,S}}) where {S} = _static_operator_type(S)
+_static_operator_type(::Type{<:NCAdd{<:Any,M}}) where {M} = _static_operator_type(M)
+_static_operator_type(::Type) = nothing
 _iszero_ncadd(op) = op isa NCAdd && iszero(op.coeff) && isempty(op.dict)
 # A zero has no factors left to inspect, so classify it by its grades instead
 function _zero_operator_type(op)
@@ -544,7 +552,7 @@ function vector_representation(op::Union{NCMul,NCAdd}, space::AbstractHilbertSpa
     _vector_representation(op, space, repr, _operator_type(op); kwargs...)
 end
 # `kind` is `:kets` or `:bras`, as computed by `_operator_type`
-function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, kind; kwargs...)
+Base.@constprop :aggressive function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, kind; kwargs...)
     symstates = op.factors
     perm = map(symstates) do state
         i = findfirst(g -> _same_space_id(g, state.space), groups(space))

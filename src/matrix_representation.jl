@@ -316,7 +316,7 @@ end
 
 function _matrix_representation(op::NCMul, bases, space, repr, chunking; kwargs...)
     if isempty(op.factors)
-        return op.coeff * I(dim(space))
+        return _convert_repr_eltype(op.coeff * I(dim(space)), repr)
     else
         newop = length(bases) > 1 ? partition_product(op, bases, groups(space)) : op
         return _term_matrix_representation(newop, space, repr, chunking; kwargs...)
@@ -476,6 +476,9 @@ Return a concrete representation of `op_or_state` in Hilbert space `space`. This
 - For symbolic operators and numbers, returns a sparse matrix by default. The optional `repr` selects the format:
   `:dense` gives a dense matrix, and `:lazy` (or `LazyRepr()`) gives a matrix-free
   `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`. A number `c` gives `c` times the identity.
+- `repr` can also be an array type, which selects dense or sparse and, if it has one, the element type, as in
+  `representation(op, H, Matrix{ComplexF64})`, or a number type such as `Float64`, which gives a sparse result of that element type.
+  With a type, inference finds the result type for operators of a single species and for single kets and bras.
 - For `AbstractBasisState` and strings such as `"10"`, returns a one-hot sparse column vector.
 - For `SymbolicState` kets and bras, and sums of them, returns the corresponding column or row vector.
 - For ketbras, and operators that contain ketbras, returns a matrix.
@@ -524,11 +527,10 @@ function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparse
     repr === :dense && return Matrix(matrix_representation(op, space, EagerSparseRepr(); projection, chunking, kwargs...))
     # The barrier keeps inference from compiling every format a runtime Symbol could select
     repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, space, _canonicalize_repr(repr); projection, chunking, kwargs...)
-    repr = _canonicalize_repr(repr)
     if trivial_operator(op)
         return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
     end
-    return _matrix_representation(op, _checked_group_ids(op, space), space, repr, chunking; projection, kwargs...)
+    return _matrix_representation(op, _checked_group_ids(op, space), space, _canonicalize_repr(repr), chunking; projection, kwargs...)
 end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
@@ -595,10 +597,13 @@ end
     ψ = representation("10", H)
     @test isequal(Symbolics.simplify(expectation(t * f[1]' * f[1] + f[1]' * f[2] + 2, ψ, H)), t + 2)
 end
-_canonicalize_repr(t) = t
+_canonicalize_repr(repr::Union{EagerSparseRepr,EagerDenseRepr,LazyRepr,PartitionedSparseRepr}) = repr
+_canonicalize_repr(::Type{<:AbstractArray}) = EagerDenseRepr()
 _canonicalize_repr(::Type{<:AbstractArray{T}}) where T = EagerDenseRepr{T}()
-_canonicalize_repr(::Type{T}) where T<:SparseArrays.AbstractSparseVecOrMat = EagerSparseRepr{eltype(T)}()
+_canonicalize_repr(::Type{<:SparseArrays.AbstractSparseArray}) = EagerSparseRepr()
+_canonicalize_repr(::Type{<:SparseArrays.AbstractSparseArray{T}}) where T = EagerSparseRepr{T}()
 _canonicalize_repr(::Type{T}) where T<:Number = EagerSparseRepr{T}()
+_canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:sparse`, `:dense`, `:lazy`, an array type such as `Matrix` or `SparseMatrixCSC{ComplexF64}`, or a number type."))
 function _canonicalize_repr(s::Symbol)
     s == :sparse && return EagerSparseRepr()
     s == :dense && return EagerDenseRepr()
@@ -609,11 +614,14 @@ end
 
 group_ids(space::AbstractHilbertSpace) = map(group_id, groups(space))
 
-# A format without an element type keeps the structured identity; a typed format gives a matrix of that element type
-_convert_repr_eltype(M, ::Union{EagerSparseRepr{Missing},EagerDenseRepr{Missing}}) = M
+# The default sparse format keeps the structured identity; the other formats give the matrix type they name
+_convert_repr_eltype(M, ::EagerSparseRepr{Missing}) = M
+_convert_repr_eltype(M, ::EagerDenseRepr{Missing}) = Matrix(M)
 _convert_repr_eltype(M, ::EagerSparseRepr{T}) where T = SparseArrays.sparse(T.(M))
 _convert_repr_eltype(M, ::EagerDenseRepr{T}) where T = Matrix{T}(M)
-_convert_repr_eltype(M, _) = M
+_convert_repr_eltype(M, ::Union{LazyRepr,PartitionedSparseRepr}) = M
+_convert_repr_eltype(M, repr) = _convert_repr_eltype(M, _canonicalize_repr(repr))
+_convert_repr_eltype(M, ::Type{A}) where {A<:SparseArrays.AbstractSparseArray} = SparseArrays.sparse(_convert_repr_eltype(M, _canonicalize_repr(A)))
 
 trivial_operator(op::Union{UniformScaling,Number}) = true
 trivial_operator(op::NCMul) = length(op.factors) == 0
@@ -839,6 +847,30 @@ end
     direct_dense = representation(op, Hf, FermionicHilbertSpaces.EagerDenseRepr())
     @test direct_dense isa Matrix
     @test direct_dense == Md_single
+end
+
+@testitem "Array types as representation formats" begin
+    using SparseArrays
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    op = f[1]' * f[2] + hc
+    ket = representation("10", H, :dense)
+    formats = ((Matrix, Matrix{Int}, Vector{Int}), (Matrix{ComplexF64}, Matrix{ComplexF64}, Vector{ComplexF64}),
+        (SparseMatrixCSC, SparseMatrixCSC{Int,Int}, SparseVector{Int,Int}), (SparseMatrixCSC{Float64}, SparseMatrixCSC{Float64,Int}, SparseVector{Float64,Int}),
+        (Float32, SparseMatrixCSC{Float32,Int}, SparseVector{Float32,Int}))
+    for (format, MT, VT) in formats
+        @test (@inferred representation(op, H, format)) isa MT
+        @test representation(op, H, format) == representation(op, H, :dense)
+        @test representation(2, H, format) isa MT
+        @test representation(2, H, format) == 2 * representation(1, H, :dense)
+        @test (@inferred representation(Ket(basisstate(2, H), H), H, format)) isa VT
+        @test representation("10", H, format) == ket
+    end
+    for format in ("dense", nothing, Any)
+        @test_throws ArgumentError representation(op, H, format)
+        @test_throws ArgumentError representation(2, H, format)
+        @test_throws ArgumentError representation("10", H, format)
+    end
 end
 
 @testitem "Scheduler extension correctness" begin
