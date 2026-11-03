@@ -238,6 +238,7 @@ type `B`. [`Kets`](@ref), `basisstate` and `state_index` call it for strings and
 A custom basis-state type adds a method for the inputs it accepts; a state is returned as it is.
 """
 interpret_state(state::B, ::Type{B}) where B = state
+interpret_state(state::AbstractBasisState, ::Type{B}) where B = state isa B ? state : throw(ArgumentError("The state `$state` cannot be converted to a state of type `$B`."))
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
 function interpret_state(state, space::Union{TransposedSpace, AbstractSubspace})
     B = statetype(space)
@@ -268,6 +269,7 @@ function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{Boson
     BosonicState(n)
 end
 
+interpret_state(state::ProductState, space::ProductSpace) = interpret_state(state.states, space)
 function interpret_state(input, space::ProductSpace{B}) where B
     length(input) == length(groups(space)) || throw(ArgumentError("Product-state input must have length $(length(groups(space))), got $(length(input))"))
     return B(map(interpret_state, input, groups(space)))
@@ -555,7 +557,7 @@ function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, ki
         iperm = invperm(perm)
         ProductState(ntuple(n -> basis_state(symstates[iperm[n]]), length(perm)))
     end
-    is_state_kind_of(state, space) || throw(ArgumentError("The symbolic state `$op` is a state of another space than `$space`."))
+    state = is_state_kind_of(state, space) ? state : interpret_state(state, space)
     vec = op.coeff * vector_representation(state, space, repr)
     if kind == :kets
         return vec
@@ -809,8 +811,9 @@ end
         @test iszero(representation(f[1]' * f[1] - f[1]' * f[1] + 2, Hsp))
         @test_throws ArgumentError representation(f[1], Hsp)
         @test_throws ArgumentError representation(b' * b, Hsp)
-        @test_throws ArgumentError representation(Ket("10", Hf), Hsp)
-        @test_throws ArgumentError representation(Kets(Hsp)[1], Hf)
+        @test representation(Ket("10", Hf), Hsp) == representation(Ket("10", Hsp), Hsp)
+        @test representation(Kets(Hsp)[1], Hf) == representation(Ket("10", Hf), Hf)
+        @test_throws ArgumentError representation(Ket("11", Hf), Hsp)
 
         hbdg = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
         Hbdg = hilbert_space(f, 1:2, BdG())
