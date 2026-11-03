@@ -95,6 +95,8 @@ end
 
 The symbolic Lindblad dissipator `ρ ↦ LρL† - ½{L†L, ρ}` for the jump operator `L`, acting on the
 vectorized density matrix of a space returned by [`open_system`](@ref). Public, not exported.
+`L†L` is kept as an unsorted product, so on truncated bosons it is represented by the same truncated
+matrices as `LρL†` and the dissipator stays trace preserving.
 
 # Examples
 ```julia
@@ -104,7 +106,13 @@ Hlr, Hl, Hr, left, right = open_system(c, 1:1)
 representation(dissipator(c[1]), Hlr)
 ```
 """
-dissipator(L) = tag_left(L) * tag_right(L') - (tag_left(L' * L) + tag_right(L' * L)) / 2
+function dissipator(L)
+    anticommutator = NonCommutativeProducts.with_autosort(false) do
+        LdL = L' * L
+        tag_left(LdL) + tag_right(LdL)
+    end
+    return tag_left(L) * tag_right(L') - anticommutator / 2
+end
 
 function add_tag(factor::AbstractSym, tag)
     basis = symbolic_basis(factor)
@@ -322,6 +330,25 @@ end
     ρ = (X + X' + P * (X + X') * P) / 4
     dρ = reshape(mat * reshape(ρ, (Hl, Hr) => Hlr), Hlr => (Hl, Hr))
     @test dρ ≈ -1im * (Hm * ρ - ρ * Hm) + Lm * ρ * Lm' - 0.5 * (Lm'Lm * ρ + ρ * Lm'Lm)
+end
+
+@testitem "Lindblad steady state of a truncated boson" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: open_system, dissipator
+    @boson b
+    @fermions c
+    Hlr, Hl, Hr, left, right = open_system(tensor_product(hilbert_space(b, 3), hilbert_space(c, 1:1)))
+    Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
+    for L in (b', b' + c[1], c[1] * b' + b)
+        @test norm(representation(dissipator(L), Hlr, :dense)' * Ivec) < 1e-12
+    end
+
+    nth = 0.5
+    Hlr, Hl, Hr, left, right = open_system(b, 3)
+    mat = representation(dissipator(√(nth + 1) * b) + dissipator(√nth * b'), Hlr, :dense)
+    ρ = reshape(nullspace(mat)[:, 1], Hlr => (Hl, Hr))
+    ρ ./= tr(ρ)
+    @test diag(ρ) ≈ [(nth / (nth + 1))^n for n in 0:2] / sum((nth / (nth + 1))^n for n in 0:2)
 end
 
 @testitem "open_system of a tensor product with a sector" begin
