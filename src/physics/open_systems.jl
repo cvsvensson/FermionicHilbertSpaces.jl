@@ -340,7 +340,7 @@ end
     Hlr, Hl, Hr, left, right = open_system(tensor_product(hilbert_space(b, 3), hilbert_space(c, 1:1)))
     Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
     for L in (b', b' + c[1], c[1] * b' + b)
-        @test norm(representation(dissipator(L), Hlr, :dense)' * Ivec) < 1e-12
+        @test norm(representation(dissipator(L), Hlr, :dense)' * Ivec) < 1.0e-12
     end
 
     nth = 0.5
