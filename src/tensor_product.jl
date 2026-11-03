@@ -773,9 +773,11 @@ end
 _check_no_alias(mout, m) = Base.mightalias(mout, m) && throw(ArgumentError("output matrix must not be aliased with input matrix"))
 
 # The kernels index `complement` by the states that `mapper` splits off `H`, so a complement
-# that misses atoms of `H` would silently drop them.
+# that misses atoms of `H` would silently drop them. The atoms are looked up by name, as
+# `ispartition(Hs, H)` builds a space per atom, which costs as much as a small partial trace.
 function _partial_trace_mapper(H, Hsub, complement)
-    ispartition((Hsub, complement), H) || throw(ArgumentError("`complement` must contain exactly the atoms of `H` that are not in `Hsub`, got `$complement`."))
+    positions = map(Hs -> Iterators.map(a -> atom_position(a, H), _fock_atoms(Hs)), (Hsub, complement))
+    ispartition(positions, nbr_of_atoms(H)) || throw(ArgumentError("`complement` must contain exactly the atoms of `H` that are not in `Hsub`, got `$complement`."))
     return state_mapper(H, (Hsub, complement))
 end
 
