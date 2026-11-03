@@ -808,7 +808,7 @@ end
         @test iszero(representation(f[1]' * f[1] - f[1]' * f[1] + 2, Hsp))
         @test_throws ArgumentError representation(f[1], Hsp)
         @test_throws ArgumentError representation(b' * b, Hsp)
-        @test_throws ArgumentError representation(Ket("10", Hf), Hsp)
+        @test_throws MethodError representation(Ket("10", Hf), Hsp)
 
         hbdg = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
         Hbdg = hilbert_space(f, 1:2, BdG())
@@ -818,7 +818,7 @@ end
         @test iszero(representation(I, Hbdg))
         @test_throws ArgumentError representation(f[1], Hbdg)
         @test_throws ArgumentError representation(b' * b, Hbdg)
-        @test_throws ArgumentError representation(Ket("10", Hf), Hbdg)
+        @test_throws MethodError representation(Ket("10", Hf), Hbdg)
     end
 end
 
