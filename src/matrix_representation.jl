@@ -278,13 +278,13 @@ function _kron_identities(A, l, r, ::Type{T}) where {T}
 end
 # Bool keeps the element type of the factors it is multiplied with
 function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; kwargs...)
-    Eye{_repr_eltype(Bool, repr)}(dim(space))
+    return Eye{_repr_eltype(Bool, repr)}(dim(space))
 end
 function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::LazyRepr, chunking; kwargs...)
     SciMLOperators.IdentityOperator(dim(space))
 end
 function _matrix_representation(op::Missing, bases, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; kwargs...)
-    Eye{_repr_eltype(Bool, repr)}(dim(space))
+    return Eye{_repr_eltype(Bool, repr)}(dim(space))
 end
 function _matrix_representation(op::Missing, bases, space::AbstractHilbertSpace, repr::LazyRepr, chunking; kwargs...)
     SciMLOperators.IdentityOperator(dim(space))
