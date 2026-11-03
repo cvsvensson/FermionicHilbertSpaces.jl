@@ -81,7 +81,7 @@ parity-conserving space works for parity-preserving operators. With
 returns a callable `ReshapeMap` that precomputes the transitions, and can be
 applied as `op(t)` or in place as `op(out, t)`.
 """
-function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat=false, projection=false)
+function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false)
     mappings = (mapping, rest...)
     mappings = if repeat
         _repeat_mapping(t, mappings)
@@ -121,7 +121,7 @@ function (op::ReshapeMap)(t::AbstractArray)
     Hsouts = map(p -> p.Hsout, pre)
     blocks = map(p -> p.blocks, pre)
     _validate_from_spaces(t, Hsins, Hsouts)
-    _reshape(t, blocks, Hsouts; op.projection)
+    return _reshape(t, blocks, Hsouts; op.projection)
 end
 
 function (op::ReshapeMap)(out::AbstractArray, t::AbstractArray)
@@ -140,13 +140,13 @@ function (op::ReshapeMap)(out::AbstractArray, t::AbstractArray)
     Hsouts = map(p -> p.Hsout, pre)
     blocks = map(p -> p.blocks, pre)
     _validate_from_spaces(t, Hsins, Hsouts)
-    _reshape!(out, t, blocks, Hsouts; op.projection)
+    return _reshape!(out, t, blocks, Hsouts; op.projection)
 end
 
-function Base.reshape(mapping::_SpaceMapping, rest::_SpaceMapping...; repeat=false, projection=false)
+function Base.reshape(mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false)
     mappings_t = (mapping, rest...)
     precomputed = Tuple(map(_precompute_mapping, mappings_t))
-    ReshapeMap(mappings_t, repeat, projection, precomputed)
+    return ReshapeMap(mappings_t, repeat, projection, precomputed)
 end
 
 function _resolve_mappings(t::AbstractArray, mappings; repeat=false)
@@ -356,13 +356,13 @@ function _check_dropped_group(t3, lin, dropped)
     end
 end
 
-function _reshape(t::AbstractArray, blocks, Hsouts; projection=false)
+function _reshape(t::AbstractArray, blocks, Hsouts; projection = false)
     projection || _check_dropped(t, blocks)
     tout = zeros(eltype(t), map(dim, _flatten(Hsouts))...)
     return _reshape_kernel!(tout, t, blocks, Hsouts)
 end
 
-function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts; projection=false)
+function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts; projection = false)
     Hsout_all = _flatten(Hsouts)
     size(tout) == map(dim, Hsout_all) || throw(DimensionMismatch("The output array has size $(size(tout)), but expected $(map(dim, Hsout_all))"))
     projection || _check_dropped(t, blocks)
@@ -628,7 +628,7 @@ end
     Mf = rand(ComplexF64, dim(Hfull), dim(Hfull))
     Mft = PermutedDimsArray(permutedims(Mf), (2, 1))
     @test_throws ArgumentError reshape(Mft, Hfull => (Hae, Hb))
-    @test reshape(Mft, Hfull => (Hae, Hb); projection=true) == reshape(Mf, Hfull => (Hae, Hb); projection=true)
+    @test reshape(Mft, Hfull => (Hae, Hb); projection = true) == reshape(Mf, Hfull => (Hae, Hb); projection = true)
 end
 
 @testitem "Reshape missing states" begin
@@ -647,13 +647,13 @@ end
 
     @test_throws ArgumentError reshape(v, H => (Hae, Hb))
     @test_throws ArgumentError reshape(m, H => (Hae, Hb))
-    vs = reshape(v, H => (Hae, Hb); projection=true)
+    vs = reshape(v, H => (Hae, Hb); projection = true)
     @test size(vs) == (2, 4)
     @test norm(vs) < norm(v)
     # Agrees with going through the full subsystem and projecting explicitly
     vfull = reshape(v, H => (Ha, Hb))
     @test vs ≈ vfull[even, :]
-    ms = reshape(m, H => (Hae, Hb); projection=true)
+    ms = reshape(m, H => (Hae, Hb); projection = true)
     @test size(ms) == (2, 4, 2, 4)
 
     # Entries that vanish on the missing states are fine
@@ -665,13 +665,13 @@ end
     rmap = reshape(H => (Hae, Hb))
     @test_throws ArgumentError rmap(m)
     @test_throws ArgumentError rmap(zeros(ComplexF64, 2, 4, 2, 4), m)
-    rmap_skip = reshape(H => (Hae, Hb); projection=true)
+    rmap_skip = reshape(H => (Hae, Hb); projection = true)
     @test rmap_skip(m) == ms
     @test rmap_skip(zeros(ComplexF64, 2, 4, 2, 4), m) == ms
 
     # Many-to-many with missing states
     @test_throws ArgumentError reshape(vfull, (Ha, Hb) => (Hb, Hae))
-    @test reshape(vfull, (Ha, Hb) => (Hb, Hae); projection=true) ≈ transpose(vs)
+    @test reshape(vfull, (Ha, Hb) => (Hb, Hae); projection = true) ≈ transpose(vs)
     @test reshape(veven, (Ha, Hb) => (Hb, Hae)) ≈ transpose(vs)
 
     # Combining unconstrained spaces into an even-parity space
@@ -689,8 +689,8 @@ end
     @test_throws ArgumentError reshape(G, (H1, H2) => He)
     @test_throws ArgumentError reshape((H1, H2) => He)(G)
     @test_throws ArgumentError reshape((H1, H2) => He)(similar(ρ), G)
-    @test reshape(G, (H1, H2) => He; projection=true) ≈
-          reshape((H1, H2) => He; projection=true)(G)
+    @test reshape(G, (H1, H2) => He; projection = true) ≈
+        reshape((H1, H2) => He; projection = true)(G)
 end
 
 @testitem "Reshape missing states: truncated bosons" begin
@@ -710,13 +710,13 @@ end
 
     @test_throws ArgumentError reshape(v, H => (Hb2, Hf))
     @test_throws ArgumentError reshape(m, H => (Hb2, Hf))
-    vs = reshape(v, H => (Hb2, Hf); projection=true)
+    vs = reshape(v, H => (Hb2, Hf); projection = true)
     @test size(vs) == (2, 4)
     @test norm(vs) < norm(v)
     # Agrees with going through the full space and truncating explicitly
     v3 = reshape(v, H => (Hb3, Hf))
     @test vs ≈ v3[1:2, :]
-    ms = reshape(m, H => (Hb2, Hf); projection=true)
+    ms = reshape(m, H => (Hb2, Hf); projection = true)
     @test size(ms) == (2, 4, 2, 4)
 
     # Entries that vanish on the missing states are fine
@@ -733,13 +733,13 @@ end
     rmap = reshape(H => (Hb2, Hf))
     @test_throws ArgumentError rmap(m)
     @test_throws ArgumentError rmap(zeros(ComplexF64, 2, 4, 2, 4), m)
-    rmap_skip = reshape(H => (Hb2, Hf); projection=true)
+    rmap_skip = reshape(H => (Hb2, Hf); projection = true)
     @test rmap_skip(m) == ms
     @test rmap_skip(zeros(ComplexF64, 2, 4, 2, 4), m) == ms
     @test reshape(H => (Hb4, Hf))(v) == v4
 
     # Many-to-many with missing states
     @test_throws ArgumentError reshape(v3, (Hb3, Hf) => (Hf, Hb2))
-    @test reshape(v3, (Hb3, Hf) => (Hf, Hb2); projection=true) ≈ transpose(vs)
+    @test reshape(v3, (Hb3, Hf) => (Hf, Hb2); projection = true) ≈ transpose(vs)
     @test reshape(v3, (Hb3, Hf) => (Hf, Hb4)) ≈ transpose(v4)
 end

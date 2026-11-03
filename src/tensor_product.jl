@@ -156,7 +156,8 @@ local matrix. Terms whose column state is not in `H` are skipped. When `projecti
 nonzero term from a state of `H` to a state that is not in `H` throws `ArgumentError`.
 """
 function _foreach_kron_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state;
-    phase_factors=true, projection=false)
+        phase_factors = true, projection = false
+    )
     pfh = phase_factors ? kron_phase_factor(extend_state) : (f1, f2) -> 1
     for I in inds
         I1 = map(i -> i[1], I)
@@ -182,7 +183,7 @@ function _foreach_kron_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbertSp
     return nothing
 end
 
-function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true, projection=false) where T
+function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool = true, projection = false) where {T}
     fill!(mout, zero(T))
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     _foreach_kron_term(inds, ms, Hs, H, extend_state; phase_factors, projection) do K1, K2, v
@@ -191,7 +192,7 @@ function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H:
     return mout
 end
 
-function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true, projection=false) where T
+function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool = true, projection = false) where {T}
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     Is, Js, Vs = Int[], Int[], T[]
     sizehint!(Is, length(inds))
@@ -214,7 +215,8 @@ phase factor. When `projection=false`, a nonzero term on a state that is not in 
 `ArgumentError`.
 """
 function _foreach_kron_vec_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state;
-    phase_factors=true, projection=false)
+        phase_factors = true, projection = false
+    )
     mapper = state_mapper(H, Hs)
     pfu = phase_factors ? phase_factor_u(mapper) : state -> 1
     for I in inds
@@ -234,7 +236,7 @@ function _foreach_kron_vec_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbe
     return nothing
 end
 
-function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors=true, projection=false)
+function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors = true, projection = false)
     fill!(mout, zero(eltype(mout)))
     inds = CartesianIndices(Tuple(map(length ∘ basisstates, Hs)))
     _foreach_kron_vec_term(inds, ms, Hs, H, extend_state; phase_factors, projection) do K, v
@@ -343,7 +345,7 @@ function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilb
     throw(ArgumentError("The elements of `ms` must be either all square matrices, all column vectors or all row vectors, got sizes $(map(size, ms))."))
 end
 # Apply the factors right to left to each basis state of H. Only the final states are looked up in H.
-function ordered_product(ms, Hs, H; phase_factors=true, projection=false)
+function ordered_product(ms, Hs, H; phase_factors = true, projection = false)
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the dimensions of `Hs`, got sizes $(map(size, ms)) and dimensions $(map(dim, Hs))."))
     factors = map(ms, Hs) do m, Hk
         complement = complementary_subsystem(H, Hk)
@@ -577,19 +579,19 @@ _change_basis(m::UniformScaling, (Uout, Uin)) = m.λ * (Uout * Uin')
 _has_support_on(m, axis, j) = !iszero(selectdim(m, axis, j))
 _has_support_on(m::UniformScaling, axis, j) = !iszero(m.λ)
 
-function _checked_basis_transformation(Hfrom, Hto; projection=false)
+function _checked_basis_transformation(Hfrom, Hto; projection = false)
     U, dropped = basis_transformation(Hfrom, Hto)
     if !projection && !isempty(dropped)
         throw(ArgumentError("The state $(basisstate(first(dropped), Hfrom)) is not in the target Hilbert space. Pass `projection=true` to drop such states."))
     end
     return U
 end
-function basis_transformation_map(Hfrom, Hto; projection=false, kwargs...)
+function basis_transformation_map(Hfrom, Hto; projection = false, kwargs...)
     U = _checked_basis_transformation(Hfrom, Hto; projection)
     kron(conj(U), U)
 end
 # transpose(basis_transformation_map(Hfrom, Hto)), whose column pointer runs over dim(Hto)^2 instead of dim(Hfrom)^2 columns
-function transposed_basis_transformation_map(Hfrom, Hto; projection=false, kwargs...)
+function transposed_basis_transformation_map(Hfrom, Hto; projection = false, kwargs...)
     U = _checked_basis_transformation(Hfrom, Hto; projection)
     kron(sparse(U'), sparse(transpose(U)))
 end
@@ -789,7 +791,7 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
 end
 partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
 
-function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); projection=false, phase_factors=true)
+function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper = state_mapper(H, (Hsub, complement)); projection = false, phase_factors = true)
     fill!(mout, zero(eltype(mout)))
     covered = if alg isa FullPartialTraceAlg
         splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
@@ -974,7 +976,7 @@ struct PartialTraceMap{H,HS,C,K,M}
 end
 
 # The map checks nothing, so `projection` has no effect.
-function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), projection=false, kwargs...)
+function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = complementary_subsystem(H, Hsub), alg = default_partial_trace_alg(Hsub, H, complement), projection = false, kwargs...)
     map = partial_trace_map(H, Hsub, complement, alg; kwargs...)
     PartialTraceMap(H, Hsub, complement, kwargs, map)
 end
@@ -1092,7 +1094,7 @@ function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub),
 end
 
 # The map skips missing states.
-partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = transpose(transposed_basis_transformation_map(H, Hsub; projection=true, kwargs...))
+partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = transpose(transposed_basis_transformation_map(H, Hsub; projection = true, kwargs...))
 function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement::AbstractHilbertSpace, alg::AbstractPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); phase_factors=true)
     indK = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
@@ -1237,7 +1239,7 @@ end
         @test_throws ArgumentError partial_trace(m12full, H => H1; alg)
         # the trace drops nothing from combinations of Hsub and Hcomp that are not in H, but msub ⊗ I maps states of H there
         @test partial_trace(m12full, H => Hsub; complement=Hcomp, alg) ≈ partial_trace(m12full, H => Hsub; alg=alg1)
-        @test embed(Hsub => H; complement=Hcomp, alg)(msub) ≈ embed(msub, Hsub => H; complement=Hcomp, projection=true)
+        @test embed(Hsub => H; complement = Hcomp, alg)(msub) ≈ embed(msub, Hsub => H; complement = Hcomp, projection = true)
         # H2 lacks the parts on modes 3:4 with zero or two particles
         @test_throws ArgumentError partial_trace(m12full, H => Hsub; complement=H2, alg)
     end
@@ -1264,7 +1266,7 @@ end
     # a subsystem, and a space with the same atoms (a basis transformation)
     for (H, Hsub) in ((Hcons, subregion(Hfull, Hcons)), (Hfull, hilbert_space(f, 1:2, ParityConservation())))
         pt = partial_trace(H => Hsub)
-        emb = embed(Hsub => H; projection=true)
+        emb = embed(Hsub => H; projection = true)
         m = sprand(ComplexF64, dim(H), dim(H), 0.3)
         msub = sprand(ComplexF64, dim(Hsub), dim(Hsub), 0.5)
         @test pt(m) ≈ partial_trace(Matrix(m), H => Hsub)
@@ -1272,7 +1274,7 @@ end
             @test partial_trace(m, H => Hsub; alg) ≈ partial_trace(Matrix(m), H => Hsub)
         end
         @test pt(zeros(ComplexF64, dim(Hsub), dim(Hsub)), m) ≈ partial_trace(Matrix(m), H => Hsub)
-        @test emb(msub) ≈ embed(Matrix(msub), Hsub => H; projection=true)
+        @test emb(msub) ≈ embed(Matrix(msub), Hsub => H; projection = true)
         @test_throws DimensionMismatch pt(sprand(dim(H) + 1, dim(H) + 1, 0.5))
     end
 end
@@ -1316,7 +1318,7 @@ end
 
         for alg in (FullPartialTraceAlg(), SubsystemPartialTraceAlg())
             @test_throws ArgumentError partial_trace(Mbig, Hbig => Hsmall; alg)
-            @test size(partial_trace(Mbig, Hbig => Hsmall; alg, projection=true)) == (dsmall, dsmall)
+            @test size(partial_trace(Mbig, Hbig => Hsmall; alg, projection = true)) == (dsmall, dsmall)
             @test embed(Hsmall => Hbig; alg)(Msmall) ≈ embed(Msmall, Hsmall => Hbig)
         end
         @test size(embed(Msmall, Hsmall => Hbig)) == (dim(Hbig), dim(Hbig))
@@ -1337,9 +1339,9 @@ end
             inds = indices(Hsmall, Hbig)[:]
             Mbigrestricted = zeros(eltype(Mbig), dim(Hbig), dim(Hbig))
             Mbigrestricted[inds, inds] = Mbig[inds, inds]
-            ptM = partial_trace(Mbigrestricted, Hbig => Hsmall, alg=FullPartialTraceAlg(), projection=false)
+            ptM = partial_trace(Mbigrestricted, Hbig => Hsmall, alg = FullPartialTraceAlg(), projection = false)
             @test ptM == Mbigrestricted[inds, inds]
-            @test partial_trace(Mbigrestricted, Hbig => Hsmall, alg=SubsystemPartialTraceAlg(), projection=false) == ptM
+            @test partial_trace(Mbigrestricted, Hbig => Hsmall, alg = SubsystemPartialTraceAlg(), projection = false) == ptM
 
             @test embed(Mbigrestricted, Hbig => Hsmall) ≈ Mbigrestricted[inds, inds]
             @test_throws ArgumentError embed(Mbig, Hbig => Hsmall) # drops states, so errors

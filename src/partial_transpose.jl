@@ -24,7 +24,7 @@ Kernel shared by the direct and the sparse-map implementation. For every index p
 swap the transposed parts, `|a1 b1⟩⟨a2 b2| ↦ |a2 b1⟩⟨a1 b2|`, recombine into `Hout` and call
 `op(J1, J2, K1, K2, v)` with the full coefficient `v`.
 """
-function _foreach_partial_transpose_term(op, inds, H, Hsub, Hout, splits, mapper_out; phase_factors=true, projection=false)
+function _foreach_partial_transpose_term(op, inds, H, Hsub, Hout, splits, mapper_out; phase_factors = true, projection = false)
     for I in inds
         J1, J2 = I[1], I[2]
         f1 = basisstate(J1, H)
@@ -70,7 +70,8 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     complement, Hout::AbstractHilbertSpace,
     mapper_in=state_mapper(H, _pt_parts(Hsub, complement)),
     mapper_out=_partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in);
-    phase_factors=true, projection=false)
+        phase_factors = true, projection = false
+    )
     size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
     size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
     fill!(mout, zero(eltype(mout)))
@@ -120,17 +121,19 @@ partial_transpose(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub:
     PartialTransposeMap(first(Hs), Hsub, last(Hs); kwargs...)
 
 function _partial_transpose(m::AbstractMatrix, H, Hsub, Hout;
-    complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false)
+        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false
+    )
     mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
     mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
     T = promote_type(eltype(m), partial_transpose_phase_factor_eltype(H))
     mout = zeros(T, dim(Hout), dim(Hout))
-    partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection)
+    return partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection)
 end
 
 # Pure state: direct kernel, no superoperator, and no ψψ† either (iterate nonzero pairs).
 function _partial_transpose(ψ::AbstractVector, H, Hsub, Hout;
-    complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false)
+        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false
+    )
     if length(ψ) == dim(H)
         mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
         mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
@@ -157,7 +160,8 @@ _partial_transpose(λ::UniformScaling, H, Hsub, Hout; kwargs...) =
 function partial_transpose_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, Hout::AbstractHilbertSpace,
     mapper_in=state_mapper(H, _pt_parts(Hsub, complement)),
     mapper_out=_partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in);
-    phase_factors=true, projection=false)
+        phase_factors = true, projection = false
+    )
     T = partial_transpose_phase_factor_eltype(H)
     splits = _split_all_states(H, mapper_in)
     indK = LinearIndices((1:dim(Hout), 1:dim(Hout)))

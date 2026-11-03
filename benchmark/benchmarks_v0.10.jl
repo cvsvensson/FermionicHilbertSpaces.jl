@@ -59,11 +59,11 @@ let rng = Xoshiro(7)
     g["apply_pure_state_inplace"] = @benchmarkable $pt($out_v, $ψ)
 
     msub = rand(rng, ComplexF64, dim(Hsub), dim(Hsub))
-    emb = embed(Hsub => H; complement=Hcomp, projection=true)
+    emb = embed(Hsub => H; complement = Hcomp, projection = true)
     out = zeros(ComplexF64, dim(H), dim(H))
     g = SUITE["embed"]["precomputed"]
-    g["construct"] = @benchmarkable embed($(Hsub => H); complement=$Hcomp, projection=true)
-    g["eager"] = @benchmarkable embed($msub, $(Hsub => H); complement=$Hcomp, projection=true)
+    g["construct"] = @benchmarkable embed($(Hsub => H); complement = $Hcomp, projection = true)
+    g["eager"] = @benchmarkable embed($msub, $(Hsub => H); complement = $Hcomp, projection = true)
     g["apply_inplace"] = @benchmarkable $emb($out, $msub)
 end
 
