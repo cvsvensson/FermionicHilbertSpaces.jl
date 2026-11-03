@@ -73,6 +73,7 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     phase_factors=true, skipmissing=false)
     size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
     size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
+    _check_no_alias(mout, m)
     fill!(mout, zero(eltype(mout)))
     splits = _split_all_states(H, mapper_in)
     _foreach_partial_transpose_term(tensor_product_iterator(m, H), H, Hsub, Hout, splits, mapper_out; phase_factors, skipmissing) do J1, J2, K1, K2, v
@@ -320,6 +321,7 @@ end
     HA2 = hilbert_space(f, [1, 3])
     @test partial_transpose!(mout2, m2, Hfull, HA2) ≈ partial_transpose(m2, Hfull, HA2)
     @test partial_transpose!(mout2, m2, Hfull, HA2; phase_factors=false) ≈ partial_transpose(m2, Hfull, HA2; phase_factors=false)
+    @test_throws ArgumentError partial_transpose!(m2, m2, Hfull, HA2)
 end
 
 @testitem "Partial transpose: output space only as a Pair" begin
