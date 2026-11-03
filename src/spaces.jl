@@ -344,9 +344,8 @@ kron_phase_factor(::AtomicStateMapper) = (f1, f2) -> 1
 Return the subsystem of `H` spanned by the factors `Hs`, given as a space, a symbolic
 operator, or a list/tuple of spaces or symbolic operators (e.g. `[f[1], b[2]]`).
 
-If `Hs` contains only symbolic operators, their order does not matter: the modes are ordered
-as in `H`. If any element of `Hs` is a space, the modes must keep their order within each
-group of `H` (e.g. the Jordan-Wigner order of fermions), otherwise an `ArgumentError` is thrown.
+If `Hs` contains only symbolic operators, the modes are ordered as in `H`. Otherwise they are
+ordered as in `Hs`.
 
 # Examples
 ```jldoctest
@@ -386,7 +385,7 @@ end
     Hsub = subregion([f[1], b[2]], H)
     @test Hsub == tensor_product(Hfsub, Hbsub)
     @test subregion([b[2], f[1]], H) == subregion([f[1], b[2]], H)
-    @test_throws ArgumentError subregion(hilbert_space(f, [2, 1]), H)
+    @test subregion(hilbert_space(f, [2, 1]), H) == hilbert_space(f, [2, 1])
     @test_throws ArgumentError subregion([f[4]], H)
     @test subregion(Hf, H) == Hf
     @test subregion(Hb, H) == Hb
@@ -581,14 +580,12 @@ end
     @test hash(A) == hash(B)
     @test collect(atomic_factors(A)) == [Hf1, Hf2, Hb]
 
-    # ordering within a fermionic group is checked regardless of wrappers
+    # atoms are matched in any order, regardless of wrappers
     Hf = hilbert_space(f, 1:3)
     for H in (Hf, hilbert_space(f, 1:3, NumberConservation(1)), constrain_space(Hf, collect(basisstates(Hf))[1:4]), tensor_product(Hf, Hb))
-        @test issubsystem(hilbert_space(f, [1, 3]), H)
-        @test !issubsystem(hilbert_space(f, [3, 1]), H)
+        @test issubsystem(hilbert_space(f, [3, 1]), H)
         @test !issubsystem(hilbert_space(f, [4]), H)
     end
-    # but not between groups
     @test issubsystem(tensor_product(Hb, Hf1), tensor_product(Hf, Hb))
 
     # Majorana spaces recognise their own atoms
@@ -667,31 +664,32 @@ end
 
 Return the positions of the atoms of `Hsub` among `atomic_factors(H)`, after checking that
 `Hsub` is a subsystem of `H`. Each atom of `Hsub` is looked up by name (`atom_position`) and
-must then
-- occur in `H`, and only once in `Hsub`,
-- keep the relative order it has in `H` among the atoms of its group (e.g. the
-  Jordan-Wigner order of fermions). The order between groups does not matter.
+must occur in `H`, and only once in `Hsub`. With `ordered=true`, the atoms must also keep
+the relative order they have in `H` among the atoms of their group (e.g. the Jordan-Wigner
+order of fermions).
 
 Throws an `ArgumentError` describing the first violation.
 """
-function match_atoms(Hsub, H::AbstractHilbertSpace)
-    positions, problem = _match_atoms(Hsub, H)
+function match_atoms(Hsub, H::AbstractHilbertSpace; ordered=false)
+    positions, problem = _match_atoms(Hsub, H; ordered)
     isnothing(problem) || throw(ArgumentError(_match_atoms_message(problem, Hsub, H)))
     return positions
 end
 
 # Positions of the atoms of Hsub in H, and why Hsub is not a subsystem of H (or nothing).
 # The reason is a tuple (kind, data...), only formatted by `match_atoms` when it throws.
-function _match_atoms(Hsub, H)
+function _match_atoms(Hsub, H; ordered=false)
     sub_atoms = collect(atomic_factors(Hsub))
     positions = map(a -> atom_position(a, H), sub_atoms)
     for (a, pos) in zip(sub_atoms, positions)
         iszero(pos) && return positions, (:missing, a)
     end
     allunique(positions) || return positions, (:duplicate,)
-    sub_groups = map(group_id, sub_atoms)
-    for id in unique(sub_groups)
-        issorted(positions[findall(==(id), sub_groups)]) || return positions, (:order,)
+    if ordered
+        sub_groups = map(group_id, sub_atoms)
+        for id in unique(sub_groups)
+            issorted(positions[findall(==(id), sub_groups)]) || return positions, (:order,)
+        end
     end
     return positions, nothing
 end
@@ -703,13 +701,13 @@ function _match_atoms_message(problem, Hsub, H)
 end
 
 """
-    match_same_atoms(H1, H2)
+    match_same_atoms(H1, H2; ordered=false)
 
-Check that `H1` and `H2` have the same atoms, in the same order within each group (see
-`match_atoms`). The order between groups may differ. Throws an `ArgumentError` otherwise.
+Check that `H1` and `H2` have the same atoms (see `match_atoms`, which also explains
+`ordered`). Throws an `ArgumentError` otherwise.
 """
-function match_same_atoms(H1, H2)
-    match_atoms(H1, H2)
+function match_same_atoms(H1, H2; ordered=false)
+    match_atoms(H1, H2; ordered)
     nbr_of_atoms(H1) == nbr_of_atoms(H2) || throw(ArgumentError("`H1` and `H2` must have the same atoms, but `$H2` has atoms that are not in `$H1`."))
     return nothing
 end

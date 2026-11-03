@@ -207,7 +207,7 @@ end
 
     G = correlation_matrix(eigen(representation(ham, Hbdg, :dense), BdGEigen()))
     ψ = eigvecs(Hermitian(representation(ham, Hmb, :dense)))[:, 1]
-    for sub in ([1, 3], 1:N)
+    for sub in ([1, 3], [4, 1], 1:N)
         Hsub = hilbert_space(f, sub)
         Gsub = G[[sub; sub .+ N], [sub; sub .+ N]]
         @test gaussian_state(Gsub, Hsub, hilbert_space(f, sub, BdG())) ≈ partial_trace(ψ * ψ', Hmb => Hsub)

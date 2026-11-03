@@ -261,13 +261,27 @@ end
     @test_throws ArgumentError combine_states(Any[first(basisstates(Hs[1]))], mapper)
 end
 
-@testitem "Fermion ordering" begin
-    import FermionicHilbertSpaces: state_mapper
+@testitem "Reordered fermionic modes" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: change_basis, FullPartialTraceAlg, SubsystemPartialTraceAlg
     @fermions f
+    @spin s
+    rep(op, H) = representation(op, H, :dense)
     H = hilbert_space(f, 1:3)
-    @test_throws ArgumentError state_mapper(H, hilbert_space(f, [2, 1]))
-    @test_throws ArgumentError state_mapper(H, hilbert_space(f, [3, 1]))
-    @test_throws ArgumentError state_mapper(H, hilbert_space(f, [3, 2]))
+    op = f[1]' * f[3] + f[2]' * f[3]' * f[1] + f[2]
+    for Hr in (hilbert_space(f, [3, 1, 2]), tensor_product(hilbert_space(f, [1, 3]), hilbert_space(f, [2])))
+        @test change_basis(rep(op, H), H => Hr) ≈ rep(op, Hr)
+    end
+
+    Hsub, Hsorted = hilbert_space(f, [3, 1]), hilbert_space(f, [1, 3])
+    o = f[3]' * f[1] + f[1]' * f[3]' * f[3] * f[1]
+    for H in (hilbert_space(f, 1:4), hilbert_space(f, 1:4, ParityConservation()), tensor_product(hilbert_space(f, 1:4), hilbert_space(s, 1 // 2)))
+        @test embed(rep(o, Hsub), Hsub => H) ≈ rep(o, H)
+        ρ = rand(ComplexF64, dim(H), dim(H))
+        for alg in (FullPartialTraceAlg(), SubsystemPartialTraceAlg())
+            @test partial_trace(ρ, H => Hsub; alg) ≈ change_basis(partial_trace(ρ, H => Hsorted; alg), Hsorted => Hsub)
+        end
+    end
 end
 
 unique_split(::Any) = false
@@ -432,16 +446,16 @@ struct Fractured{M}
     mapper::M
 end
 
-# Split one source factor's state into its tuple of pieces.
-split_pieces(::Uncovered, state) = ()
-split_pieces(::Passthrough, state) = (state,)
-split_pieces(leaf::Fractured, state) = only(first(split_state(state, leaf.mapper)))
+# Split one source factor's state into its tuple of pieces, and the weight of the split.
+split_pieces(::Uncovered, state) = (), 1
+split_pieces(::Passthrough, state) = (state,), 1
+split_pieces(leaf::Fractured, state) = map(only, split_state(state, leaf.mapper))
 
-# Reassemble one source factor's state from its gathered pieces.
+# Reassemble one source factor's state from its gathered pieces, with its weight.
 combine_pieces(::Uncovered, pieces) =
     throw(ArgumentError("Cannot reconstruct the full state: the targets do not cover every source factor"))
-combine_pieces(::Passthrough, pieces) = only(pieces)
-combine_pieces(leaf::Fractured, pieces) = only(first(combine_states(pieces, leaf.mapper)))
+combine_pieces(::Passthrough, pieces) = only(pieces), 1
+combine_pieces(leaf::Fractured, pieces) = map(only, combine_states(pieces, leaf.mapper))
 
 # The pieces of a target's state are its substates (one piece per group).
 substate_pieces(state::ProductState) = state.states
@@ -562,23 +576,24 @@ end
 
 function split_state(state::ProductState, sp::ProductSpaceMapper)
     # 1. Fracture each source factor into its pieces.
-    pieces = map(split_pieces, sp.leaves, state.states)
+    splits = map(split_pieces, sp.leaves, state.states)
+    pieces = map(first, splits)
     # 2. Assemble each target from its pieces.
     outstates = map(sp.target_routes, sp.target_spaces) do route, tspace
         gathered = map(ref -> getpiece(pieces, ref), route)
         only(first(combine_states(gathered, tspace)))
     end
-    return (outstates,), (1,)
+    return (outstates,), (prod(map(last, splits)),)
 end
 
 function combine_states(substates::Tuple, sp::ProductSpaceMapper)
     # 1. Take each target's state apart into its pieces (one per group).
     tpieces = map(substate_pieces, substates)
     # 2. Assemble each source factor from its pieces.
-    states = map(sp.leaves, sp.factor_routes) do leaf, route
+    combined = map(sp.leaves, sp.factor_routes) do leaf, route
         combine_pieces(leaf, map(ref -> getpiece(tpieces, ref), route))
     end
-    return (ProductState(states),), (1,)
+    return (ProductState(map(first, combined)),), (prod(map(last, combined)),)
 end
 combine_states(substates, sp::ProductSpaceMapper) = combine_states(Tuple(substates), sp)
 # A vector of substates has one entry per target; the mapper type gives that number statically

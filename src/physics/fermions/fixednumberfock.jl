@@ -61,7 +61,7 @@ function substate(siteindices, f::FixedNumberFockState)
 end
 function split_state(f::FixedNumberFockState, fm::FockMapper{N}) where N
     state = map(pos -> substate(pos, f), fm.fermionpositions)
-    (state,), (1,)
+    (state,), (reordering_sign(state, fm),)
 end
 
 Base.isless(a::FixedNumberFockState, b::FixedNumberFockState) = a.sites < b.sites
