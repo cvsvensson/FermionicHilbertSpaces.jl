@@ -353,6 +353,16 @@ end
     end
 end
 
+@testitem "Empty number sectors" begin
+    @fermions f
+    @test dim(hilbert_space(f, 1:2, NumberConservation(-1))) == 0
+    H = hilbert_space(f, 1:3, NumberConservation(5))
+    @test size(representation(f[1], H, :sparse)) == (0, 0)
+    @test size(representation(f[1], H, :dense)) == (0, 0)
+    @test size(representation(f[1], H; projection=true)) == (0, 0)
+    @test size(representation(f[1], H, :lazy)) == (0, 0)
+end
+
 @testitem "Number-conserving space with more than 1024 modes" begin
     using LinearAlgebra
     @fermions f
