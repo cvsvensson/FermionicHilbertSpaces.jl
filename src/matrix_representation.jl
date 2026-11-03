@@ -597,11 +597,11 @@ end
     ψ = representation("10", H)
     @test isequal(Symbolics.simplify(expectation(t * f[1]' * f[1] + f[1]' * f[2] + 2, ψ, H)), t + 2)
 end
-_canonicalize_repr(repr::Union{EagerSparseRepr,EagerDenseRepr,LazyRepr,PartitionedSparseRepr}) = repr
+_canonicalize_repr(repr::Union{EagerSparseRepr, EagerDenseRepr, LazyRepr, PartitionedSparseRepr}) = repr
 _canonicalize_repr(::Type{<:AbstractArray}) = EagerDenseRepr()
 _canonicalize_repr(::Type{<:AbstractArray{T}}) where T = EagerDenseRepr{T}()
 _canonicalize_repr(::Type{<:SparseArrays.AbstractSparseArray}) = EagerSparseRepr()
-_canonicalize_repr(::Type{<:SparseArrays.AbstractSparseArray{T}}) where T = EagerSparseRepr{T}()
+_canonicalize_repr(::Type{<:SparseArrays.AbstractSparseArray{T}}) where {T} = EagerSparseRepr{T}()
 _canonicalize_repr(::Type{T}) where T<:Number = EagerSparseRepr{T}()
 _canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:sparse`, `:dense`, `:lazy`, an array type such as `Matrix` or `SparseMatrixCSC{ComplexF64}`, or a number type."))
 function _canonicalize_repr(s::Symbol)
@@ -619,9 +619,9 @@ _convert_repr_eltype(M, ::EagerSparseRepr{Missing}) = M
 _convert_repr_eltype(M, ::EagerDenseRepr{Missing}) = Matrix(M)
 _convert_repr_eltype(M, ::EagerSparseRepr{T}) where T = SparseArrays.sparse(T.(M))
 _convert_repr_eltype(M, ::EagerDenseRepr{T}) where T = Matrix{T}(M)
-_convert_repr_eltype(M, ::Union{LazyRepr,PartitionedSparseRepr}) = M
+_convert_repr_eltype(M, ::Union{LazyRepr, PartitionedSparseRepr}) = M
 _convert_repr_eltype(M, repr) = _convert_repr_eltype(M, _canonicalize_repr(repr))
-_convert_repr_eltype(M, ::Type{A}) where {A<:SparseArrays.AbstractSparseArray} = SparseArrays.sparse(_convert_repr_eltype(M, _canonicalize_repr(A)))
+_convert_repr_eltype(M, ::Type{A}) where {A <: SparseArrays.AbstractSparseArray} = SparseArrays.sparse(_convert_repr_eltype(M, _canonicalize_repr(A)))
 
 trivial_operator(op::Union{UniformScaling,Number}) = true
 trivial_operator(op::NCMul) = length(op.factors) == 0
@@ -855,9 +855,11 @@ end
     H = hilbert_space(f, 1:2)
     op = f[1]' * f[2] + hc
     ket = representation("10", H, :dense)
-    formats = ((Matrix, Matrix{Int}, Vector{Int}), (Matrix{ComplexF64}, Matrix{ComplexF64}, Vector{ComplexF64}),
-        (SparseMatrixCSC, SparseMatrixCSC{Int,Int}, SparseVector{Int,Int}), (SparseMatrixCSC{Float64}, SparseMatrixCSC{Float64,Int}, SparseVector{Float64,Int}),
-        (Float32, SparseMatrixCSC{Float32,Int}, SparseVector{Float32,Int}))
+    formats = (
+        (Matrix, Matrix{Int}, Vector{Int}), (Matrix{ComplexF64}, Matrix{ComplexF64}, Vector{ComplexF64}),
+        (SparseMatrixCSC, SparseMatrixCSC{Int, Int}, SparseVector{Int, Int}), (SparseMatrixCSC{Float64}, SparseMatrixCSC{Float64, Int}, SparseVector{Float64, Int}),
+        (Float32, SparseMatrixCSC{Float32, Int}, SparseVector{Float32, Int}),
+    )
     for (format, MT, VT) in formats
         @test (@inferred representation(op, H, format)) isa MT
         @test representation(op, H, format) == representation(op, H, :dense)

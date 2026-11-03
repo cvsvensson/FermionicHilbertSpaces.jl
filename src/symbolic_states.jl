@@ -491,10 +491,10 @@ function _operator_type(op::Union{NCMul,NCAdd,AbstractSym})
     end
 end
 # The kind that the factor type alone shows, or `nothing`. Inference can see this kind.
-_static_operator_type(::Type{S}) where {S<:AbstractSym} = isconcretetype(S) && !(S <: SymbolicState) ? :operator : nothing
-_static_operator_type(::Type{<:SymbolicState{K,B}}) where {K,B} = B === Nothing ? (K === Nothing ? nothing : :kets) : (K === Nothing ? :bras : nothing)
-_static_operator_type(::Type{<:NCMul{<:Any,S}}) where {S} = _static_operator_type(S)
-_static_operator_type(::Type{<:NCAdd{<:Any,M}}) where {M} = _static_operator_type(M)
+_static_operator_type(::Type{S}) where {S <: AbstractSym} = isconcretetype(S) && !(S <: SymbolicState) ? :operator : nothing
+_static_operator_type(::Type{<:SymbolicState{K, B}}) where {K, B} = B === Nothing ? (K === Nothing ? nothing : :kets) : (K === Nothing ? :bras : nothing)
+_static_operator_type(::Type{<:NCMul{<:Any, S}}) where {S} = _static_operator_type(S)
+_static_operator_type(::Type{<:NCAdd{<:Any, M}}) where {M} = _static_operator_type(M)
 _static_operator_type(::Type) = nothing
 _iszero_ncadd(op) = op isa NCAdd && iszero(op.coeff) && isempty(op.dict)
 # A zero has no factors left to inspect, so classify it by its grades instead
