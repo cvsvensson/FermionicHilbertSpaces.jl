@@ -1,6 +1,12 @@
 
 combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
 combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("The group `$group_id` requires a single space, got $spaces."))
+"""
+    ProductState(states::Tuple)
+
+A basis state of a tensor product space, holding one basis state per factor, e.g.
+`ProductState((SpinState(1//2), BosonicState(0)))`.
+"""
 struct ProductState{B} <: AbstractBasisState
     states::B
 end

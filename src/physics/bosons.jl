@@ -20,6 +20,11 @@ macro bosons(name)
         :($(esc(name))))
 end
 
+"""
+    BosonField
+
+A family of bosonic modes, created by [`@bosons`](@ref). `b[i]` is the annihilation operator of mode `i`.
+"""
 struct BosonField{T<:Tags}
     name::Symbol
     tags::T
@@ -162,6 +167,11 @@ end
     @test (b1 * b2) * b1' == b1 * (b2 * b1')
 end
 
+"""
+    BosonicState(n)
+
+The basis state with `n` bosons in a single mode, as returned by `basisstates` of a bosonic space.
+"""
 struct BosonicState <: AbstractBasisState
     n::Int
 end

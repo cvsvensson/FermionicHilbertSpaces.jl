@@ -1,3 +1,8 @@
+"""
+    NambuState(i, hole::Bool)
+
+A basis state of the [`BdG`](@ref) space: the hole (`hole = true`) or particle component of the mode at position `i`.
+"""
 struct NambuState <: AbstractFockState
     state::SingleParticleState
     hole::Bool
