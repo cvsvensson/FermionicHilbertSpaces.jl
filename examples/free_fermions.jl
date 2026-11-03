@@ -38,15 +38,9 @@ function potential(xy)
     5 * cos(2 * (θ - 2 * r))^2 * exp(r)
 end
 hopping(xy1, xy2) = N
-# Since we are dealing with many fermions, symbolic sums may take a long time. To get better performance, we will use the function `add!!` to update the symbolic hamiltonian in place. For this, it is important to initialize the Hamiltonian with the correct type. We do this by making a simple hamiltonian and then call `zero` to get an empty hamiltonian of a matching type.
-ham = zero(1.0 * f[0, 0] * f[1, 1] + 1.0)
-# Now we can build the hamiltonian
-for xy in disc
-    add!!(ham, potential(xy) * f[xy]' * f[xy])
-    for nbr in neighbours(xy...)
-        add!!(ham, hopping(nbr, xy) * f[nbr]' * f[xy])
-    end
-end
+# The hamiltonian has thousands of terms. `sum` would copy the partial sum at every step, so we accumulate the terms in place with `add!!`, starting from `0`.
+site_terms(xy) = potential(xy) * f[xy]' * f[xy] + sum(hopping(nbr, xy) * f[nbr]' * f[xy] for nbr in neighbours(xy...))
+ham = foldl(add!!, (site_terms(xy) for xy in disc); init=0)
 # And get a matrix representation of it on the single particle hilbert space
 mat = representation(ham, H);
 
@@ -54,12 +48,9 @@ mat = representation(ham, H);
 # Compute a few eigenvalues/eigenvectors (lowest energy states)
 vals, vecs = eigs(mat; nev=3^2, which=:SR, v0=map(x -> eltype(mat)(first(x)), disc)[:]);
 # Calculate momentum operators px, py and define a function to calculate angular momentum density
-px = zero(1im * ham)
-py = zero(px)
-for xy in disc
-    xy .+ (1, 0) in disc && add!!(px, 1im * f[xy.+(1, 0)]' * f[xy] + hc)
-    xy .+ (0, 1) in disc && add!!(py, 1im * f[xy.+(0, 1)]' * f[xy] + hc)
-end
+momentum(shift) = foldl(add!!, (1im * f[xy.+shift]' * f[xy] + hc for xy in disc if xy .+ shift in disc); init=0)
+px = momentum((1, 0))
+py = momentum((0, 1))
 pxmat = representation(px, H)
 pymat = representation(py, H);
 function angular_momentum(v)
