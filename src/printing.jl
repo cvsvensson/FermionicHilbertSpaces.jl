@@ -256,6 +256,7 @@ Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace:
 
 
 Base.show(io::IO, f::FockNumber) = print(io, "FockNumber(", f.f, ")")
+Base.show(io::IO, f::FixedNumberFockState) = print(io, "FixedNumberFockState(", f.sites, ")")
 
 
 
@@ -463,4 +464,7 @@ end
 
     @test repr(basisstates(hilbert_space(f, 1:3, FermionicHilbertSpaces.FreeFermions.SingleParticle()))) == "[100, 010, 001]"
     @test repr(basisstates(hilbert_space(f, 1:2, FermionicHilbertSpaces.FreeFermions.BdG()))) == "[h10, h01, p10, p01]"
+    @test repr(FermionicHilbertSpaces.FixedNumberFockState((3, 1))) == "FixedNumberFockState((1, 3))"
+    @test repr(FermionicHilbertSpaces.FreeFermions.SingleParticleState(2)) == "SingleParticleState(2)"
+    @test repr(FermionicHilbertSpaces.FreeFermions.NambuState(2, true)) == "NambuState(2, true)"
 end
