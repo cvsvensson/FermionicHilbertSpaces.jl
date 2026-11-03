@@ -38,14 +38,17 @@ foreach(println, vf)
 
 ## Algebra
 
-Multiplying a bra and a ket gives their overlap (`0` if the states differ):
+Multiplying a bra and a ket contracts them. The product stays a symbolic expression, here a multiple of the identity:
 
 ```@example states
 vf("10")' * vf("10")
 ```
 
+`dot` from `LinearAlgebra` gives overlaps and matrix elements as numbers, and throws if the bra and ket don't contract to a scalar:
+
 ```@example states
-vf("10")' * vf("11")
+using LinearAlgebra
+dot(vf("10"), vf("11")), dot(vf("11"), f[2]', vf("10"))
 ```
 
 Multiplying a ket and a bra instead gives an operator (an outer product, or "ketbra"):
@@ -106,13 +109,13 @@ f[1]' * vf("10") * b' * vb("2") == f[1]' * b' * vfb("10", "2")
 Put together, here is a two-site fermion example that builds a ket, computes an overlap, and constructs a projector onto that state:
 
 ```@example simple
-using FermionicHilbertSpaces
+using FermionicHilbertSpaces, LinearAlgebra
 @fermions f
 H = hilbert_space(f, 1:2)
 vf = Kets(H)
 
 ket = vf("10")
-overlap = ket' * ket        # 1, since the state is normalized
+overlap = dot(ket, ket)     # 1, since the state is normalized
 
 projector = ket * ket'      # a rank-1 projector operator
 representation(projector, H)
