@@ -57,8 +57,8 @@ vals, vecs = eigs(mat; nev=3^2, which=:SR, v0=map(x -> eltype(mat)(first(x)), di
 px = zero(1im * ham)
 py = zero(px)
 for xy in disc
-    xy .+ (1, 0) in disc && (global px = add!!(px, 1im * f[xy.+(1, 0)]' * f[xy] + hc))
-    xy .+ (0, 1) in disc && (global py = add!!(py, 1im * f[xy.+(0, 1)]' * f[xy] + hc))
+    xy .+ (1, 0) in disc && (global px = add!!(px, 1im * f[xy .+ (1, 0)]' * f[xy] + hc))
+    xy .+ (0, 1) in disc && (global py = add!!(py, 1im * f[xy .+ (0, 1)]' * f[xy] + hc))
 end
 pxmat = representation(px, H)
 pymat = representation(py, H);
