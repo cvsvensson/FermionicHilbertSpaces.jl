@@ -1130,9 +1130,9 @@ end
     end
     struct NoRuleOp <: AbstractSym end
     @nc PauliX PauliZ NoRuleOp
-    symbolic_group(op::Union{PauliX,PauliZ}) = (op.site, :pauli)
+    symbolic_group(op::Union{PauliX, PauliZ}) = (op.site, :pauli)
     symbolic_group(::NoRuleOp) = 0
-    same_group_mul_effect(::T, ::T) where {T<:Union{PauliX,PauliZ}} = 1
+    same_group_mul_effect(::T, ::T) where {T <: Union{PauliX, PauliZ}} = 1
     same_group_mul_effect(::PauliZ, ::PauliX) = Swap(-1)
     same_group_mul_effect(::PauliX, ::PauliZ) = nothing
     X, Z = PauliX, PauliZ

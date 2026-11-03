@@ -73,7 +73,7 @@ abstract type AbstractSym end
 _group_isless(a, b) = _order_isless(symbolic_group(a), symbolic_group(b))
 function _order_isless(a, b)
     na, nb = nameof(typeof(a)), nameof(typeof(b))
-    na == nb ? isless(a, b) : isless(na, nb)
+    return na == nb ? isless(a, b) : isless(na, nb)
 end
 _order_isless(::Tuple{}, ::Tuple{}) = false
 _order_isless(::Tuple{}, ::Tuple) = true
