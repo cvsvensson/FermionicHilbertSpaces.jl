@@ -268,14 +268,14 @@ function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{Boson
     BosonicState(n)
 end
 
-function interpret_state(input::Union{AbstractString,AbstractChar}, H::Union{FermionicSpace,MajoranaHilbertSpace})
+function interpret_state(input::Union{AbstractString, AbstractChar}, H::Union{FermionicSpace, MajoranaHilbertSpace})
     length(input) == nbr_of_modes(H) || throw(ArgumentError("A Fock string must have one character per mode ($(nbr_of_modes(H))), got `\"$input\"`."))
-    interpret_state(input, statetype(H))
+    return interpret_state(input, statetype(H))
 end
-function interpret_state(input::Union{AbstractString,AbstractChar}, H::TruncatedBosonicHilbertSpace)
+function interpret_state(input::Union{AbstractString, AbstractChar}, H::TruncatedBosonicHilbertSpace)
     state = interpret_state(input, BosonicState)
     0 <= state.n < dim(H) || throw(ArgumentError("The occupation $(state.n) is outside the cutoff of a space of dimension $(dim(H))."))
-    state
+    return state
 end
 
 function interpret_state(input, space::ProductSpace{B}) where B
