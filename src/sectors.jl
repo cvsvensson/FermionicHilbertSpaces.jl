@@ -93,7 +93,7 @@ julia> dim(sector(-1, hilbert_space(f, 1:3, ParityConservation())))
 sector(qn, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
 sector(::Nothing, H::AbstractHilbertSpace, constraint=NoSymmetry()) = constrain_space(H, constraint)
 sector(qn::Nothing, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
-sector(qn::Tuple, H::SectorHilbertSpace{<:Any,<:Any,<:AbstractVector}, constraint=NoSymmetry()) = sector(collect(qn), H, constraint)
+sector(qn::Tuple, H::SectorHilbertSpace{<:Any, <:Any, <:AbstractVector}, constraint = NoSymmetry()) = sector(collect(qn), H, constraint)
 
 function _sector_states(qn, H::SectorHilbertSpace)
     states = get(H.qn_to_states, qn, nothing)
@@ -153,7 +153,7 @@ function qn_indices(qn, H::SectorHilbertSpace)
     end_index = dims[qn_index]
     start_index:end_index
 end
-qn_indices(qn::Tuple, H::SectorHilbertSpace{<:Any,<:Any,<:AbstractVector}) = qn_indices(collect(qn), H)
+qn_indices(qn::Tuple, H::SectorHilbertSpace{<:Any, <:Any, <:AbstractVector}) = qn_indices(collect(qn), H)
 indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
 
 @testitem "SectorHilbertSpace sectors" begin
