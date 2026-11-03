@@ -81,7 +81,7 @@ end
 # The buffers come in as the argument `chnl`, not from the untyped field `L.cache`, so the loops are type stable.
 function _apply_term_chunks!(y, x, L, α, chnl::Channel)
     lk = ReentrantLock()
-    tforeach(_term_chunk_data(L.precomp, L.chunking); scheduler=L.chunking.scheduler) do local_terms
+    tforeach(_term_chunk_data(L.precomp, L.chunking); scheduler = L.chunking.scheduler) do local_terms
         local_mat = take!(chnl)
         fill!(local_mat, zero(eltype(local_mat)))
         for (term, coeff, precomp) in local_terms
@@ -136,7 +136,7 @@ end
 # The output states of a chunk are scattered over all of `y`, so the buffers are full length.
 function _apply_terms!(y, x, space, terms, α, conjugate, projection, chunking::StateChunking, chnl::Channel)
     lk = ReentrantLock()
-    tforeach(_state_chunk_data(space, chunking); scheduler=chunking.scheduler) do cols
+    tforeach(_state_chunk_data(space, chunking); scheduler = chunking.scheduler) do cols
         local_mat = take!(chnl)
         fill!(local_mat, zero(eltype(local_mat)))
         for (term, coeff, precomp) in terms
