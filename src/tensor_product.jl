@@ -313,6 +313,24 @@ end
     @test_throws ArgumentError generalized_kron((v1, v2), (H1, H2) => H)
 end
 
+@testitem "generalized_kron of more than two factors on mixed spaces" begin
+    rep(op, H) = representation(op, H, :dense)
+    @fermions f
+    @spins S 1 // 2
+    @boson b
+    HS = hilbert_space(S, 1:2)
+    Hb = hilbert_space(b, 2)
+    ms = (rand(2, 2), rand(2, 2), rand(2, 2))
+    Hs = (factors(HS)..., Hb)
+    @test generalized_kron(ms, Hs => tensor_product(HS, Hb)) ≈ tensor_product(ms, Hs => tensor_product(HS, Hb))
+
+    # the local factors are multiplied in the mode order of H
+    spaces = (hilbert_space(f, [1, 4]), hilbert_space(f, [2, 5]), hilbert_space(f, 3:3), hilbert_space(S[1]), Hb)
+    ops = (f[1]' * f[4], f[2]' * f[5], f[3], S[1][:x], b')
+    H = tensor_product(hilbert_space(f, 1:5), hilbert_space(S[1]), Hb)
+    @test generalized_kron(map(rep, ops, spaces), spaces => H) ≈ rep(f[1]' * f[2]' * f[3] * f[4] * f[5] * S[1][:x] * b', H)
+end
+
 """
     tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
     tensor_product(ms, Hs => H; kwargs...)

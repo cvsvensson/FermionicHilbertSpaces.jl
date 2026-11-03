@@ -594,8 +594,6 @@ leaf_phase_factor(::Uncovered) = (s1, s2) -> 1
 leaf_phase_factor(leaf::Union{Passthrough,Fractured}) = kron_phase_factor(leaf.mapper)
 
 function kron_phase_factor(sp::ProductSpaceMapper)
-    length(sp.target_spaces) == 2 ||
-        throw(ArgumentError("Phase factors currently only implemented for binary splits"))
     phase_fns = map(leaf_phase_factor, sp.leaves)
     function phase_factor(fullstate1, fullstate2)
         prod(map((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))
