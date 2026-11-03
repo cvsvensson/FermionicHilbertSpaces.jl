@@ -40,7 +40,7 @@ end
 hopping(xy1, xy2) = N
 # The hamiltonian has thousands of terms. `sum` would copy the partial sum at every step, so we accumulate the terms in place with `add!!`, starting from `0`.
 site_terms(xy) = potential(xy) * f[xy]' * f[xy] + sum(hopping(nbr, xy) * f[nbr]' * f[xy] for nbr in neighbours(xy...))
-ham = foldl(add!!, (site_terms(xy) for xy in disc); init=0)
+ham = foldl(add!!, (site_terms(xy) for xy in disc); init = 0)
 # And get a matrix representation of it on the single particle hilbert space
 mat = representation(ham, H);
 
@@ -48,7 +48,7 @@ mat = representation(ham, H);
 # Compute a few eigenvalues/eigenvectors (lowest energy states)
 vals, vecs = eigs(mat; nev=3^2, which=:SR, v0=map(x -> eltype(mat)(first(x)), disc)[:]);
 # Calculate momentum operators px, py and define a function to calculate angular momentum density
-momentum(shift) = foldl(add!!, (1im * f[xy.+shift]' * f[xy] + hc for xy in disc if xy .+ shift in disc); init=0)
+momentum(shift) = foldl(add!!, (1im * f[xy .+ shift]' * f[xy] + hc for xy in disc if xy .+ shift in disc); init = 0)
 px = momentum((1, 0))
 py = momentum((0, 1))
 pxmat = representation(px, H)
