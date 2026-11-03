@@ -259,8 +259,8 @@ end
     @test ρsub_fock ≈ ρsub_fixed
 
     msub = rand(dim(Hsub_fock), dim(Hsub_fock))
-    m_fock = embed(msub, Hsub_fock => H_fock; skipmissing=true)
-    m_fixed = embed(msub, Hsub_fixed => H_fixed; skipmissing=true)
+    m_fock = embed(msub, Hsub_fock => H_fock; projection=true)
+    m_fixed = embed(msub, Hsub_fixed => H_fixed; projection=true)
     @test m_fock ≈ m_fixed
 
     Hcomp_fixed = FermionicHilbertSpaces.complementary_subsystem(H_fixed, Hsub_fixed)

@@ -186,12 +186,12 @@ end
     @test rmap_repeat(out_r_repeat, A3) === out_r_repeat
     @test out_r_repeat ≈ reshape(A3, H12 => (H1, H2); repeat=true)
 
-    # Eager and precomputed embedding must use the same skipmissing default.
+    # Eager and precomputed embedding must use the same projection default.
     Hconstrained = hilbert_space(f, 1:4, NumberConservation(2))
     Hsub_constrained = subregion(hilbert_space(f, 1:2), Hconstrained)
     msub_constrained = rand(ComplexF64, dim(Hsub_constrained), dim(Hsub_constrained))
     @test_throws ArgumentError embed(msub_constrained, Hsub_constrained => Hconstrained)
-    @test embed(Hsub_constrained => Hconstrained)(msub_constrained) ≈ embed(msub_constrained, Hsub_constrained => Hconstrained; skipmissing=true)
+    @test embed(Hsub_constrained => Hconstrained)(msub_constrained) ≈ embed(msub_constrained, Hsub_constrained => Hconstrained; projection=true)
 
     # A whole-space partial trace must produce a basis-transformation map.
     Hsame = hilbert_space(f, 1:2, NoSymmetry())

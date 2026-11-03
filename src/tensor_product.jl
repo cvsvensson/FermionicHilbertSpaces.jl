@@ -106,7 +106,7 @@ Use `tensor_product` for product states, local observables, and anything that sh
 `generalized_kron(ms, Hs => H)` is also accepted, and `generalized_kron(Hs => H)` returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 
-The result is the compression of the tensor product onto `H`. Unless `skipmissing=true`, throws an
+The result is the compression of the tensor product onto `H`. Unless `projection=true`, throws an
 `ArgumentError` if the tensor product of matrices maps a state of `H` outside `H` with nonzero amplitude,
 or if the tensor product of vectors has a nonzero amplitude outside `H`.
 """
@@ -147,16 +147,16 @@ tensor_product_iterator(m::AbstractArray, ::AbstractHilbertSpace) = CartesianInd
 tensor_product_iterator(::UniformScaling, H::AbstractHilbertSpace) = diagind(I(length(basisstates(H))), IndexCartesian())
 
 """
-    _foreach_kron_term(op, inds, ms, Hs, H, extend_state; phase_factors, skipmissing)
+    _foreach_kron_term(op, inds, ms, Hs, H, extend_state; phase_factors, projection)
 
 Kernel shared by the dense and sparse generalized matrix kron. Calls `op(K1, K2, v)` for each
 output matrix element in `H`, where `v` is the product of the selected input elements, the
 recombination weights and the phase factor. `inds` supplies one row/column index pair per
-local matrix. Terms whose column state is not in `H` are skipped. When `skipmissing=false`, a
+local matrix. Terms whose column state is not in `H` are skipped. When `projection=false`, a
 nonzero term from a state of `H` to a state that is not in `H` throws `ArgumentError`.
 """
 function _foreach_kron_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state;
-    phase_factors=true, skipmissing=false)
+    phase_factors=true, projection=false)
     pfh = phase_factors ? kron_phase_factor(extend_state) : (f1, f2) -> 1
     for I in inds
         I1 = map(i -> i[1], I)
@@ -172,8 +172,8 @@ function _foreach_kron_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbertSp
             for (fullstate1, w1) in zip(fullstates1, amps1)
                 K1 = state_index(fullstate1, H)
                 if iszero(K1)
-                    (skipmissing || iszero(v)) && continue
-                    throw(ArgumentError("The state `$fullstate2` is mapped to `$fullstate1`, which is not in the full Hilbert space. Pass `skipmissing=true` to drop such terms."))
+                    (projection || iszero(v)) && continue
+                    throw(ArgumentError("The state `$fullstate2` is mapped to `$fullstate1`, which is not in the full Hilbert space. Pass `projection=true` to drop such terms."))
                 end
                 op(K1, K2, w1 * w2 * v * pfh(fullstate1, fullstate2))
             end
@@ -182,22 +182,22 @@ function _foreach_kron_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbertSp
     return nothing
 end
 
-function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true, skipmissing=false) where T
+function generalized_kron_mat!(mout::AbstractMatrix{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true, projection=false) where T
     fill!(mout, zero(T))
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
-    _foreach_kron_term(inds, ms, Hs, H, extend_state; phase_factors, skipmissing) do K1, K2, v
+    _foreach_kron_term(inds, ms, Hs, H, extend_state; phase_factors, projection) do K1, K2, v
         mout[K1, K2] += v
     end
     return mout
 end
 
-function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true, skipmissing=false) where T
+function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors::Bool=true, projection=false) where T
     inds = Base.product(map(tensor_product_iterator, ms, Hs)...)
     Is, Js, Vs = Int[], Int[], T[]
     sizehint!(Is, length(inds))
     sizehint!(Js, length(inds))
     sizehint!(Vs, length(inds))
-    _foreach_kron_term(inds, ms, Hs, H, extend_state; phase_factors, skipmissing) do K1, K2, v
+    _foreach_kron_term(inds, ms, Hs, H, extend_state; phase_factors, projection) do K1, K2, v
         push!(Is, K1)
         push!(Js, K2)
         push!(Vs, v)
@@ -206,15 +206,15 @@ function generalized_kron_mat!(mout::SparseMatrixCSC{T}, ms::Tuple, Hs::Tuple, H
 end
 
 """
-    _foreach_kron_vec_term(op, inds, ms, Hs, H, extend_state; phase_factors, skipmissing)
+    _foreach_kron_vec_term(op, inds, ms, Hs, H, extend_state; phase_factors, projection)
 
 Kernel for the generalized vector kron. Calls `op(K, v)` for each output vector entry in `H`,
 where `v` is the product of the selected input entries, the recombination weight and the
-phase factor. When `skipmissing=false`, a nonzero term on a state that is not in `H` throws
+phase factor. When `projection=false`, a nonzero term on a state that is not in `H` throws
 `ArgumentError`.
 """
 function _foreach_kron_vec_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state;
-    phase_factors=true, skipmissing=false)
+    phase_factors=true, projection=false)
     mapper = state_mapper(H, Hs)
     pfu = phase_factors ? phase_factor_u(mapper) : state -> 1
     for I in inds
@@ -225,7 +225,7 @@ function _foreach_kron_vec_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbe
         for (fullfock, w) in zip(states, amps)
             K = state_index(fullfock, H)
             if iszero(K)
-                (skipmissing || iszero(v)) && continue
+                (projection || iszero(v)) && continue
                 throw(ArgumentError("The state `$fullfock` is not in the full Hilbert space."))
             end
             op(K, w * v * pfu(fullfock))
@@ -234,10 +234,10 @@ function _foreach_kron_vec_term(op, inds, ms::Tuple, Hs::Tuple, H::AbstractHilbe
     return nothing
 end
 
-function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors=true, skipmissing=false)
+function generalized_kron_vec!(mout, ms::Tuple, Hs::Tuple, H::AbstractHilbertSpace, extend_state; phase_factors=true, projection=false)
     fill!(mout, zero(eltype(mout)))
     inds = CartesianIndices(Tuple(map(length ∘ basisstates, Hs)))
-    _foreach_kron_vec_term(inds, ms, Hs, H, extend_state; phase_factors, skipmissing) do K, v
+    _foreach_kron_vec_term(inds, ms, Hs, H, extend_state; phase_factors, projection) do K, v
         mout[K] += v
     end
     return mout
@@ -321,7 +321,7 @@ end
 Compute the ordered product of the fermionic embeddings of the matrices `ms` in the spaces `Hs` into the space `H`.
 If `H` is unconstrained, `tensor_product((A, B), (HA, HB) => H) == embed(A, HA => H) * embed(B, HB => H)`.
 If `H` is constrained, the result is the ordered product on the unconstrained space restricted to `H`, as `representation`
-of the corresponding symbolic product. Terms that take a state of `H` outside `H` throw an `ArgumentError` unless `skipmissing=true`,
+of the corresponding symbolic product. Terms that take a state of `H` outside `H` throw an `ArgumentError` unless `projection=true`,
 which drops them. A matrix on a constrained space in `Hs` acts as zero on states outside that space.
 For vectors, the result is the product state: if each `ms[k] = ψₖ|0⟩` with `ψₖ` an operator on the modes of `Hs[k]`,
 the result is `ψ₁ψ₂⋯|0⟩`. Swapping two odd states flips the sign.
@@ -343,7 +343,7 @@ function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilb
     throw(ArgumentError("The elements of `ms` must be either all square matrices, all column vectors or all row vectors, got sizes $(map(size, ms))."))
 end
 # Apply the factors right to left to each basis state of H. Only the final states are looked up in H.
-function ordered_product(ms, Hs, H; phase_factors=true, skipmissing=false)
+function ordered_product(ms, Hs, H; phase_factors=true, projection=false)
     kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the dimensions of `Hs`, got sizes $(map(size, ms)) and dimensions $(map(dim, Hs))."))
     factors = map(ms, Hs) do m, Hk
         complement = complementary_subsystem(H, Hk)
@@ -351,16 +351,16 @@ function ordered_product(ms, Hs, H; phase_factors=true, skipmissing=false)
         phase = phase_factors && !isnothing(complement) ? kron_phase_factor(mapper) : (f1, f2) -> 1
         (sparse(m isa UniformScaling ? m(dim(Hk)) : m), Hk, mapper, phase)
     end
-    return _ordered_product(factors, H, promote_type(Int, Base.promote_eltype(ms...)), skipmissing)
+    return _ordered_product(factors, H, promote_type(Int, Base.promote_eltype(ms...)), projection)
 end
-function _ordered_product(factors, H, ::Type{T}, skipmissing) where {T}
+function _ordered_product(factors, H, ::Type{T}, projection) where {T}
     Is, Js, Vs = Int[], Int[], T[]
     for (K2, state) in enumerate(basisstates(H))
         _apply_factors(factors, state, 1) do fullstate, v
             K1 = state_index(fullstate, H)
             if iszero(K1)
-                (skipmissing || iszero(v)) && return
-                throw(ArgumentError("The product takes a state of the Hilbert space to `$fullstate`, which is not in it. Pass `skipmissing=true` to drop such terms."))
+                (projection || iszero(v)) && return
+                throw(ArgumentError("The product takes a state of the Hilbert space to `$fullstate`, which is not in it. Pass `projection=true` to drop such terms."))
             end
             push!(Is, K1)
             push!(Js, K2)
@@ -537,11 +537,11 @@ function _basis_transformation(Hfrom, Hto, mapper)
 end
 
 """
-    change_basis(m, Hfrom => Hto; skipmissing=false)
-    change_basis(m, Hfrom, Hto; skipmissing=false)
+    change_basis(m, Hfrom => Hto; projection=false)
+    change_basis(m, Hfrom, Hto; projection=false)
 
 Express `m` in the basis of `Hto`, where `Hfrom` and `Hto` have the same atoms but possibly
-different (or differently ordered) basis states. Unless `skipmissing=true`, throws an
+different (or differently ordered) basis states. Unless `projection=true`, throws an
 `ArgumentError` if `m` has nonzero elements involving states of `Hfrom` that are not in `Hto`.
 
 Either side can be an [`Axes`](@ref), one space per axis of `m`: `change_basis(m, H => Axes(Hout, Hin))`
@@ -549,7 +549,7 @@ extracts the block of `m` with rows on `Hout` and columns on `Hin`, and `change_
 places it in a matrix on `H` that is zero elsewhere.
 """
 change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
-function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; skipmissing = false, kwargs...)
+function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, kwargs...)
     n = m isa UniformScaling ? 2 : ndims(m)
     from, to = _per_axis(Hfrom, n), _per_axis(Hto, n)
     size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, and a `UniformScaling` needs the same space on both axes, got $(summary(m))."))
@@ -558,10 +558,10 @@ function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{Ab
     # a bare space gives every axis the same transformation, so it is computed once
     transformation(Hf, Ht) = Hf === first(from.spaces) && Ht === first(to.spaces) ? U1 : basis_transformation(Hf, Ht)
     transformations = map(transformation, from.spaces, to.spaces)
-    if !skipmissing
+    if !projection
         for (axis, Hf, (_, dropped)) in zip(1:n, from.spaces, transformations)
             for j in dropped
-                _has_support_on(m, axis, j) && throw(ArgumentError("The state $(basisstate(j, Hf)) has nonzero weight but is not in the target Hilbert space. Pass `skipmissing=true` to drop it."))
+                _has_support_on(m, axis, j) && throw(ArgumentError("The state $(basisstate(j, Hf)) has nonzero weight but is not in the target Hilbert space. Pass `projection=true` to drop it."))
             end
         end
     end
@@ -577,20 +577,20 @@ _change_basis(m::UniformScaling, (Uout, Uin)) = m.λ * (Uout * Uin')
 _has_support_on(m, axis, j) = !iszero(selectdim(m, axis, j))
 _has_support_on(m::UniformScaling, axis, j) = !iszero(m.λ)
 
-function _checked_basis_transformation(Hfrom, Hto; skipmissing=false)
+function _checked_basis_transformation(Hfrom, Hto; projection=false)
     U, dropped = basis_transformation(Hfrom, Hto)
-    if !skipmissing && !isempty(dropped)
-        throw(ArgumentError("The state $(basisstate(first(dropped), Hfrom)) is not in the target Hilbert space. Pass `skipmissing=true` to drop such states."))
+    if !projection && !isempty(dropped)
+        throw(ArgumentError("The state $(basisstate(first(dropped), Hfrom)) is not in the target Hilbert space. Pass `projection=true` to drop such states."))
     end
     return U
 end
-function basis_transformation_map(Hfrom, Hto; skipmissing=false, kwargs...)
-    U = _checked_basis_transformation(Hfrom, Hto; skipmissing)
+function basis_transformation_map(Hfrom, Hto; projection=false, kwargs...)
+    U = _checked_basis_transformation(Hfrom, Hto; projection)
     kron(conj(U), U)
 end
 # transpose(basis_transformation_map(Hfrom, Hto)), whose column pointer runs over dim(Hto)^2 instead of dim(Hfrom)^2 columns
-function transposed_basis_transformation_map(Hfrom, Hto; skipmissing=false, kwargs...)
-    U = _checked_basis_transformation(Hfrom, Hto; skipmissing)
+function transposed_basis_transformation_map(Hfrom, Hto; projection=false, kwargs...)
+    U = _checked_basis_transformation(Hfrom, Hto; projection)
     kron(sparse(U'), sparse(transpose(U)))
 end
 
@@ -602,7 +602,7 @@ Compute the partial trace of `m` from `H` to `Hsub`. Fermionic phase factors are
 `H => Hsub` reads input => output; see [Pair arguments](@ref pair_convention).
 
 The trace drops the states of `H` whose part on `Hsub` is not in `Hsub`, or whose part on the
-complement is not in `complement`. Unless `skipmissing=true`, throws an `ArgumentError` if `m`
+complement is not in `complement`. Unless `projection=true`, throws an `ArgumentError` if `m`
 has a nonzero element in the row or column of such a state. The map `partial_trace(H => Hsub)`
 does not check its input.
 
@@ -766,12 +766,12 @@ end
 function _check_covered(m, covered)
     all(covered) && return nothing
     dropped = findall(!, covered)
-    (_has_support_on(m, 1, dropped) || _has_support_on(m, 2, dropped)) && throw(ArgumentError("`m` has nonzero weight on a state of `H` whose part on `Hsub` or on the complement is missing. Pass `skipmissing=true` to drop it."))
+    (_has_support_on(m, 1, dropped) || _has_support_on(m, 2, dropped)) && throw(ArgumentError("`m` has nonzero weight on a state of `H` whose part on `Hsub` or on the complement is missing. Pass `projection=true` to drop it."))
     return nothing
 end
 
 """
-    partial_trace!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), alg, phase_factors=true, skipmissing=false)
+    partial_trace!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), alg, phase_factors=true, projection=false)
     partial_trace!(mout, m, H => Hsub; kwargs...)
 
 In-place partial trace of `m` (an operator on `H` or a pure state) from `H` to `Hsub`, written
@@ -789,7 +789,7 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
 end
 partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
 
-function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); skipmissing=false, phase_factors=true)
+function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); projection=false, phase_factors=true)
     fill!(mout, zero(eltype(mout)))
     covered = if alg isa FullPartialTraceAlg
         splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
@@ -798,7 +798,7 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
     else
         _subsystem_partial_trace!(mout, m, H, Hsub, complement, mapper, phase_factors)
     end
-    skipmissing || _check_covered(m, covered)
+    projection || _check_covered(m, covered)
     return mout
 end
 # Returns which states of `H` the trace keeps: each of them appears as some J1
@@ -973,8 +973,8 @@ struct PartialTraceMap{H,HS,C,K,M}
     map::M
 end
 
-# The map checks nothing, so `skipmissing` has no effect.
-function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
+# The map checks nothing, so `projection` has no effect.
+function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), projection=false, kwargs...)
     map = partial_trace_map(H, Hsub, complement, alg; kwargs...)
     PartialTraceMap(H, Hsub, complement, kwargs, map)
 end
@@ -1092,7 +1092,7 @@ function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub),
 end
 
 # The map skips missing states.
-partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = transpose(transposed_basis_transformation_map(H, Hsub; skipmissing=true, kwargs...))
+partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = transpose(transposed_basis_transformation_map(H, Hsub; projection=true, kwargs...))
 function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement::AbstractHilbertSpace, alg::AbstractPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); phase_factors=true)
     indK = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
@@ -1237,7 +1237,7 @@ end
         @test_throws ArgumentError partial_trace(m12full, H => H1; alg)
         # the trace drops nothing from combinations of Hsub and Hcomp that are not in H, but msub ⊗ I maps states of H there
         @test partial_trace(m12full, H => Hsub; complement=Hcomp, alg) ≈ partial_trace(m12full, H => Hsub; alg=alg1)
-        @test embed(Hsub => H; complement=Hcomp, alg)(msub) ≈ embed(msub, Hsub => H; complement=Hcomp, skipmissing=true)
+        @test embed(Hsub => H; complement=Hcomp, alg)(msub) ≈ embed(msub, Hsub => H; complement=Hcomp, projection=true)
         # H2 lacks the parts on modes 3:4 with zero or two particles
         @test_throws ArgumentError partial_trace(m12full, H => Hsub; complement=H2, alg)
     end
@@ -1264,7 +1264,7 @@ end
     # a subsystem, and a space with the same atoms (a basis transformation)
     for (H, Hsub) in ((Hcons, subregion(Hfull, Hcons)), (Hfull, hilbert_space(f, 1:2, ParityConservation())))
         pt = partial_trace(H => Hsub)
-        emb = embed(Hsub => H; skipmissing=true)
+        emb = embed(Hsub => H; projection=true)
         m = sprand(ComplexF64, dim(H), dim(H), 0.3)
         msub = sprand(ComplexF64, dim(Hsub), dim(Hsub), 0.5)
         @test pt(m) ≈ partial_trace(Matrix(m), H => Hsub)
@@ -1272,7 +1272,7 @@ end
             @test partial_trace(m, H => Hsub; alg) ≈ partial_trace(Matrix(m), H => Hsub)
         end
         @test pt(zeros(ComplexF64, dim(Hsub), dim(Hsub)), m) ≈ partial_trace(Matrix(m), H => Hsub)
-        @test emb(msub) ≈ embed(Matrix(msub), Hsub => H; skipmissing=true)
+        @test emb(msub) ≈ embed(Matrix(msub), Hsub => H; projection=true)
         @test_throws DimensionMismatch pt(sprand(dim(H) + 1, dim(H) + 1, 0.5))
     end
 end
@@ -1316,7 +1316,7 @@ end
 
         for alg in (FullPartialTraceAlg(), SubsystemPartialTraceAlg())
             @test_throws ArgumentError partial_trace(Mbig, Hbig => Hsmall; alg)
-            @test size(partial_trace(Mbig, Hbig => Hsmall; alg, skipmissing=true)) == (dsmall, dsmall)
+            @test size(partial_trace(Mbig, Hbig => Hsmall; alg, projection=true)) == (dsmall, dsmall)
             @test embed(Hsmall => Hbig; alg)(Msmall) ≈ embed(Msmall, Hsmall => Hbig)
         end
         @test size(embed(Msmall, Hsmall => Hbig)) == (dim(Hbig), dim(Hbig))
@@ -1337,9 +1337,9 @@ end
             inds = indices(Hsmall, Hbig)[:]
             Mbigrestricted = zeros(eltype(Mbig), dim(Hbig), dim(Hbig))
             Mbigrestricted[inds, inds] = Mbig[inds, inds]
-            ptM = partial_trace(Mbigrestricted, Hbig => Hsmall, alg=FullPartialTraceAlg(), skipmissing=false)
+            ptM = partial_trace(Mbigrestricted, Hbig => Hsmall, alg=FullPartialTraceAlg(), projection=false)
             @test ptM == Mbigrestricted[inds, inds]
-            @test partial_trace(Mbigrestricted, Hbig => Hsmall, alg=SubsystemPartialTraceAlg(), skipmissing=false) == ptM
+            @test partial_trace(Mbigrestricted, Hbig => Hsmall, alg=SubsystemPartialTraceAlg(), projection=false) == ptM
 
             @test embed(Mbigrestricted, Hbig => Hsmall) ≈ Mbigrestricted[inds, inds]
             @test_throws ArgumentError embed(Mbig, Hbig => Hsmall) # drops states, so errors
@@ -1403,13 +1403,13 @@ end
     m = rand(dim(H), dim(H))
 
     @test_throws ArgumentError change_basis(m, H => Axes(Hout, Hin))
-    blk = change_basis(m, H => Axes(Hout, Hin); skipmissing = true)
+    blk = change_basis(m, H => Axes(Hout, Hin); projection = true)
     @test blk == m[rows, cols]
 
     @test change_basis(change_basis(blk, Axes(Hout, Hin) => H), H => Axes(Hout, Hin)) == blk
 
-    @test change_basis(2I, H => Axes(Hout, Hin); skipmissing = true) == 2I(dim(H))[rows, cols]
+    @test change_basis(2I, H => Axes(Hout, Hin); projection = true) == 2I(dim(H))[rows, cols]
     @test_throws ArgumentError change_basis(2I, Axes(Hout, Hin) => H)
     v = rand(dim(H))
-    @test change_basis(v, H => Axes(Hout); skipmissing = true) == v[rows]
+    @test change_basis(v, H => Axes(Hout); projection = true) == v[rows]
 end
