@@ -359,7 +359,7 @@ end
     H = hilbert_space(f, 1:3, NumberConservation(5))
     @test size(representation(f[1], H, :sparse)) == (0, 0)
     @test size(representation(f[1], H, :dense)) == (0, 0)
-    @test size(representation(f[1], H; projection=true)) == (0, 0)
+    @test size(representation(f[1], H; projection = true)) == (0, 0)
     @test size(representation(f[1], H, :lazy)) == (0, 0)
 end
 
