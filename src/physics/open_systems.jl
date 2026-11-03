@@ -342,10 +342,38 @@ end
     @test dρ ≈ -1im * (Hm * ρ - ρ * Hm) + Lm * ρ * Lm' - 0.5 * (Lm'Lm * ρ + ρ * Lm'Lm)
 end
 
+@testitem "Transposed constrained spaces" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: TransposedSpace, open_system
+    @fermions c
+    v = rand(4)
+    for H in (hilbert_space(c, 1:3, NumberConservation(0:1)), hilbert_space(c, 1:3, ParityConservation(1)))
+        for op in (c[1]' * c[2] + 0.5 * c[3]' * c[1], c[1]' * c[1] * c[2]' * c[3] + 2I)
+            M = representation(op, H, :dense)
+            @test representation(op, TransposedSpace(H), :dense) ≈ transpose(M)
+            @test transpose(representation(op, H, :lazy)) * v ≈ transpose(M) * v
+        end
+    end
+    H = hilbert_space(c, 1:3, NumberConservation(0:1))
+    @test representation(c[1], TransposedSpace(H), :dense) ≈ transpose(representation(c[1], H, :dense))
+
+    Hlr, Hl, Hr, left, right = open_system(H)
+    X = rand(dim(H), dim(H))
+    S = representation(left(c[2]) * right(c[1]), Hlr)
+    @test reshape(S * reshape(X, (Hl, Hr) => Hlr), Hlr => (Hl, Hr)) ≈ representation(c[2], H, :dense) * X * representation(c[1], H, :dense)
+    @test_throws ArgumentError representation(left(c[1]') * right(c[1]), Hlr)
+end
+
 function _apply_local_operators(op, state, space::TransposedSpace, precomp)
     newstate, amp = apply_local_operators(op, state, parent(space), precomp; transpose=true)
     return newstate, amp
 end
+# `newstate` with its parts on transposed groups replaced by those of `state`
+_keep_transposed_parts(newstate, state, ::TransposedSpace) = state
+_keep_transposed_parts(newstate, state, H::AbstractSubspace) = _keep_transposed_parts(newstate, state, parent(H))
+_keep_transposed_parts(newstate::ProductState{B}, state::ProductState, H::ProductSpace) where {B} =
+    ProductState{B}(map(_keep_transposed_parts, newstate.states, state.states, groups(H)))
+_keep_transposed_parts(newstate, state, H) = newstate
 
 maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))
 rewrap(::TransposedSpace, space) = TransposedSpace(space)
