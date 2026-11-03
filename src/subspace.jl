@@ -147,7 +147,7 @@ end
     @fermions f
     H = hilbert_space(f, 1:4)
     op = sum(f[i]' * f[i+1] + hc for i in 1:3) + 2 * f[1]' * f[1]
-    observed(Hsub) = (map(s -> state_index(s, Hsub), basisstates(H)), representation(op, Hsub; projection=true))
+    observed(Hsub) = (map(s -> state_index(s, Hsub), basisstates(H)), representation(op, Hsub; projection = true))
     generic(Hsub) = constrain_space(H, collect(basisstates(Hsub)))
 
     selected = Ref(0)

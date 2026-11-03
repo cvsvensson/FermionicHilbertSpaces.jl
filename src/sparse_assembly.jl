@@ -146,8 +146,8 @@ end
 
     # f[1]' and f[1] map some states out of the space
     @test_throws ArgumentError representation(f[1]' + f[1] + 1, H)
-    @test representation(f[1]' + f[1] + 1, H; projection=true) ==
-          representation(f[1]', H; projection=true) + representation(f[1], H; projection=true) + I
+    @test representation(f[1]' + f[1] + 1, H; projection = true) ==
+        representation(f[1]', H; projection = true) + representation(f[1], H; projection = true) + I
 
     # A space without states
     @test size(representation(f[1]' * f[2] + 1, constrain_space(hilbert_space(f, 1:2), NumberConservation(5)))) == (0, 0)
@@ -158,7 +158,7 @@ end
     Hc = tensor_product(hilbert_space(f, 1:10), hilbert_space(b, 7); constraint=NumberConservation(1:15))
     inds = [state_index(state, Hprod) for state in basisstates(Hc)]
     op = sum(f[i]' * f[i+1] + hc for i in 1:9) + sum(f[i]' * b + hc for i in 1:10) + 2 * b' * b + f[1]' + hc + 0.5im
-    M = representation(op, Hc; projection=true)
+    M = representation(op, Hc; projection = true)
     @test M isa SparseMatrixCSC{ComplexF64}
     @test M == representation(op, Hprod)[inds, inds]
 end
