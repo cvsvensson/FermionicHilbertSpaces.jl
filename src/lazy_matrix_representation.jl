@@ -139,10 +139,10 @@ function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, 
     for (n, state) in enumerate(basisstates(space))
         xn = x[n] * coeff
         iszero(xn) && continue
-        state, _amp = _apply_local_operators(term, state, space, precomp)
+        newstate, _amp = _apply_local_operators(term, state, space, precomp)
         if !iszero(_amp)
-            outind = state_index(state, space)
-            if !_skip_outside(outind, projection)
+            outind = state_index(newstate, space)
+            if !_skip_outside(outind, projection, newstate, state, space)
                 amp = (conjugate ? conj(_amp) : _amp)
                 y[outind] += amp * xn
             end
@@ -163,7 +163,7 @@ function _foreach_term_entry(f, x::SparseArrays.AbstractSparseVector, space, ter
         newstate, _amp = _apply_local_operators(term, state, space, precomp)
         iszero(_amp) && continue
         outind = state_index(newstate, space)
-        _skip_outside(outind, projection) && continue
+        _skip_outside(outind, projection, newstate, state, space) && continue
         f(outind, (conjugate ? conj(_amp) : _amp) * coeff * xn)
     end
 end
@@ -175,7 +175,7 @@ function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, 
         if !iszero(_amp)
             outind = state_index(newstate, space)
             amp = (conjugate ? conj(_amp) : _amp) * coeff
-            if !_skip_outside(outind, projection)
+            if !_skip_outside(outind, projection, newstate, state, space)
                 @views y[outind, :] .+= amp .* x[n, :]
             end
         end
@@ -195,7 +195,7 @@ function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC,
             if !iszero(_amp)
                 outind = state_index(newstate, space)
                 amp = (conjugate ? conj(_amp) : _amp) * coeff
-                if !_skip_outside(outind, projection)
+                if !_skip_outside(outind, projection, newstate, state, space)
                     y[outind, col] += amp * xn
                 end
             end

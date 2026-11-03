@@ -113,6 +113,10 @@ function _skip_outside(outind, projection)
     projection || throw(ArgumentError("The operator maps basis states of this space to states outside it. Pass `projection=true` to drop those matrix elements (correct when the operator should act within this subspace), or use a space that also contains the output states (e.g. one including the neighbouring sectors)."))
     return true
 end
+# On a transposed group, `newstate` holds the transposed action: an output outside the space is an element
+# ⟨state|op|t⟩ with t outside the space, which is not part of the matrix. Only the other groups can leave the space.
+_skip_outside(outind, projection, newstate, state, space) =
+    _skip_outside(outind, projection || iszero(outind) && !iszero(state_index(_keep_transposed_parts(newstate, state, space), space)))
 
 function operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp; projection)
     Hin, Hout = _input_space(space), _output_space(space)
@@ -120,7 +124,7 @@ function operator_indices_and_amplitudes_generic!(accumulator, op, space, precom
         newstate, amp = _apply_local_operators(op, state, Hin, precomp)
         if !iszero(amp)
             outind = state_index(newstate, Hout)
-            if !_skip_outside(outind, projection)
+            if !_skip_outside(outind, projection, newstate, state, Hout)
                 push_inds_amps!(accumulator, outind, inind, amp)
             end
         end
@@ -133,7 +137,7 @@ function chunked_operator_indices_and_amplitudes_generic!(accumulator, op, space
         newstate, amp = _apply_local_operators(op, state, space, precomp)
         if !iszero(amp)
             outind = state_index(newstate, space)
-            if !_skip_outside(outind, projection)
+            if !_skip_outside(outind, projection, newstate, state, space)
                 push_inds_amps!(accumulator, outind, inind - col_offset, amp)
             end
         end
