@@ -277,6 +277,15 @@ function get_input(rep::LazyRepr{Symbol}, H)
     rep.input == :sparse && return _sparse_input(H)
 end
 
+# On product spaces the lazy operator contains `TensorProductOperator`s, whose `mul!` needs
+# buffers. They hold intermediate results, so they are dense also when the input is sparse.
+_cache_lazy(M, H, rep) = M
+function _cache_lazy(M::SciMLOperators.AbstractSciMLOperator, H, rep::LazyRepr)
+    SciMLOperators.iscached(M) && return M
+    T = promote_type(eltype(M), mat_eltype(H))
+    return SciMLOperators.cache_operator(M, Vector{T}(undef, dim(H)))
+end
+
 function _term_matrix_representation(op::Union{NCMul,ProductOperator}, H::AbstractHilbertSpace, rep::LazyRepr, chunking; kwargs...)
     scimloperator(LazyOperator(op, H, chunking; kwargs...), get_input(rep, H))
 end
@@ -509,6 +518,21 @@ end
     # terms of one group with factors of different concrete types, and a complex coefficient
     H2 = tensor_product(hilbert_space(f, [1, :a]), hilbert_space(b, 3))
     @test lazy_matches(1im * f[1]' * f[:a] + hc + 0.5im * f[1]' * f[1] + b' * b, H2)
+end
+
+@testitem "lazy mul! on product spaces" begin
+    using LinearAlgebra
+    @spins S 1 // 2
+    H = hilbert_space(S, 1:3)
+    for op in (S[1][:z] * S[2][:z] + S[2][:z] * S[3][:z] + 0.5im * S[1][:x], S[1][:z] * S[3][:x])
+        L = representation(op, H, :lazy)
+        M = representation(op, H)
+        v = randn(dim(H))
+        w = randn(eltype(M), dim(H))
+        @test mul!(similar(w), L, v) ≈ M * v
+        @test mul!(copy(w), L, v, 0.3, -0.7) ≈ 0.3 * (M * v) - 0.7 * w
+        @test mul!(similar(w), L', v) ≈ M' * v
+    end
 end
 
 @testitem "lazy matrix_representation chunking" begin

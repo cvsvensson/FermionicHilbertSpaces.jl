@@ -521,7 +521,7 @@ function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparse
     if trivial_operator(op)
         return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
     end
-    return _matrix_representation(op, _checked_group_ids(op, space), space, repr, chunking; projection, kwargs...)
+    return _cache_lazy(_matrix_representation(op, _checked_group_ids(op, space), space, repr, chunking; projection, kwargs...), space, repr)
 end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
