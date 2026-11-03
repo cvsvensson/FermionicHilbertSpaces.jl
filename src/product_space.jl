@@ -559,8 +559,10 @@ function _product_space_mapper(sfactors, tgroups, @nospecialize(targets))
                 n = piece_of[(ti, si)]
                 PieceIndex(pieces[n].factor, piece_slot[n])
             end
-            for si in eachindex(gs))
-        for (ti, gs) in enumerate(tgroups))
+                for si in eachindex(gs)
+        )
+            for (ti, gs) in enumerate(tgroups)
+    )
 
     ProductSpaceMapper(Tuple(leaves), Tuple(factor_routes), target_routes, targets)
 end
