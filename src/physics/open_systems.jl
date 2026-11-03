@@ -98,6 +98,7 @@ vectorized density matrix of a space returned by [`open_system`](@ref). Public, 
 
 # Examples
 ```julia
+using FermionicHilbertSpaces
 using FermionicHilbertSpaces: open_system, dissipator
 @fermions c
 Hlr, Hl, Hr, left, right = open_system(c, 1:1)

@@ -265,7 +265,7 @@ function Base.show(io::IO, H::ProductSpace)
     else
         print(io, "$(dim(H))-dimensional ProductSpace: ")
         dims = map(dim, H.factors)
-        println(io, "", join(dims, "×"), ")")
+        println(io, join(dims, "×"))
         for (i, c) in enumerate(H.factors)
             i > 1 && print(io, " ⨯ ")
             show(IOContext(io, :compact => true), c)

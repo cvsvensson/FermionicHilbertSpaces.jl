@@ -27,8 +27,7 @@ end
 """
     numberoperator(H)
 
-Return the number operator for the Hilbert space `H`. For parafermions this is the total
-occupation `Σ_j n_j`, with `n_j ∈ 0:P-1`.
+Return the number operator `Σ_j n_j` for the Hilbert space `H`.
 """
 function numberoperator(H::AbstractHilbertSpace{<:AbstractFockState})
     sparse_operator(Int, f -> (f, particle_number(f)), H)
