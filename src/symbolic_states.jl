@@ -177,12 +177,22 @@ symbolic_group(s::SymbolicState) = group_id(s.space)
 group_id(s::SymbolicState) = group_id(s.space)
 
 @nc SymbolicState AbstractSym
-# Operators of different kinds on different groups commute and are ordered by `_group_isless`, as every other pair of
-# factors on different groups is. One order for all pairs keeps sorted products unique.
+# Operators on different groups commute and are ordered by `_group_isless`, as every other pair of factors on
+# different groups is. One order for all pairs keeps sorted products unique.
 function NonCommutativeProducts.mul_effect(a::AbstractSym, b::AbstractSym)
-    symbolic_group(a) == symbolic_group(b) && throw(ArgumentError("Products of `$a` and `$b` on the same group are not defined"))
+    symbolic_group(a) == symbolic_group(b) && return same_group_mul_effect(a, b)
     return _group_isless(b, a) ? Swap(1) : nothing
 end
+
+"""
+    same_group_mul_effect(a, b)
+
+Rule for the product `a * b` of two operators on the same group, returned as for
+`NonCommutativeProducts.mul_effect`; the default throws an `ArgumentError`. Products on different
+groups commute and are ordered by group, so a custom operator defines this instead of `mul_effect`:
+`same_group_mul_effect(::MyOp, ::MyOp) = nothing` keeps products on one group as they are.
+"""
+same_group_mul_effect(a, b) = throw(ArgumentError("Products of `$a` and `$b` on the same group are not defined"))
 
 ## Grading
 # Each space carries a grade k^m b^n in the bicyclic monoid, where a ket has (m, n) = (1, 0) and a bra (0, 1).
@@ -1106,6 +1116,28 @@ end
     forms = [prod(p) for p in permutations([b2, s[:z], k1, b2])]
     @test all(x -> iszero(x - first(forms)), forms)
     @test iszero(b2 * s[:z] * k1 * k2 - s[:z] * k1 * (b2 * k2))
+end
+
+@testitem "Custom operators with same_group_mul_effect" begin
+    using Combinatorics
+    import FermionicHilbertSpaces: AbstractSym, symbolic_group, same_group_mul_effect
+    import FermionicHilbertSpaces.NonCommutativeProducts: @nc
+    struct Z2Op <: AbstractSym
+        site::Int
+    end
+    struct NoRuleOp <: AbstractSym end
+    @nc Z2Op NoRuleOp
+    symbolic_group(op::Z2Op) = op.site
+    symbolic_group(::NoRuleOp) = 0
+    same_group_mul_effect(::Z2Op, ::Z2Op) = 1
+
+    @fermions f
+    @boson b
+    @spin s 1 // 2
+    @test Z2Op(1) * Z2Op(1) == 1
+    forms = [prod(p) for p in permutations([Z2Op(2), Z2Op(1), f[1], b, s[:z]])]
+    @test all(x -> iszero(x - first(forms)), forms)
+    @test_throws ArgumentError NoRuleOp() * NoRuleOp()
 end
 
 @testitem "Vector of a ket on factors in non-sorted order" begin

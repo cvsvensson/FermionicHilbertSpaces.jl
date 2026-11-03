@@ -20,12 +20,13 @@ A new kind of symbolic operator is a subtype of [`AbstractSym`](@ref). The tutor
 Algebra, from [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl):
 
 - `@nc MyOp` makes `+` and `*` build symbolic sums and products of `MyOp`.
-- `mul_effect(a::MyOp, b::MyOp)` gives the rule for the product `a * b`: `nothing` keeps it,
-  `Swap(c)` rewrites it as `c * b * a`, and `AddTerms((Swap(c), r, ...))` adds further terms.
-  This is required; without it, products such as `X * X` throw a `MethodError`.
-- Operators on different groups commute, ordered by group, so no rule is needed for products
-  of `MyOp` with the operators of the package. Products of different operator types on the
-  same group throw an `ArgumentError` unless they have their own `mul_effect`.
+- [`same_group_mul_effect`](@ref)`(a::MyOp, b::MyOp)` gives the rule for the product `a * b` of
+  operators on the same group: `nothing` keeps it, `Swap(c)` rewrites it as `c * b * a`, and
+  `AddTerms((Swap(c), r, ...))` adds further terms. Without it, such products throw an
+  `ArgumentError`. A method for two different types gives the rule for products of those types
+  on the same group.
+- Operators on different groups commute and are ordered by group, so no rule is needed for them.
+  Groups of the same type are ordered by `isless`, which needs a method if the type has none.
 
 Connection to Hilbert spaces:
 
