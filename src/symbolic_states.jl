@@ -268,6 +268,16 @@ function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{Boson
     BosonicState(n)
 end
 
+function interpret_state(input::Union{AbstractString,AbstractChar}, H::Union{FermionicSpace,MajoranaHilbertSpace})
+    length(input) == nbr_of_modes(H) || throw(ArgumentError("A Fock string must have one character per mode ($(nbr_of_modes(H))), got `\"$input\"`."))
+    interpret_state(input, statetype(H))
+end
+function interpret_state(input::Union{AbstractString,AbstractChar}, H::TruncatedBosonicHilbertSpace)
+    state = interpret_state(input, BosonicState)
+    0 <= state.n < dim(H) || throw(ArgumentError("The occupation $(state.n) is outside the cutoff of a space of dimension $(dim(H))."))
+    state
+end
+
 function interpret_state(input, space::ProductSpace{B}) where B
     length(input) == length(groups(space)) || throw(ArgumentError("Product-state input must have length $(length(groups(space))), got $(length(input))"))
     return B(map(interpret_state, input, groups(space)))
@@ -826,6 +836,23 @@ end
     @test_throws ArgumentError basisstate("12", H)
 end
 
+@testitem "State strings must match the space" begin
+    @fermions f
+    @boson b
+    H = hilbert_space(f, 1:3)
+    Hc = hilbert_space(f, 1:4, NumberConservation(2))
+    for s in ("", "1", "11", "1000")
+        @test_throws ArgumentError Ket(s, H)
+        @test_throws ArgumentError state_index(s, H)
+        @test_throws ArgumentError representation(s, H)
+    end
+    @test_throws ArgumentError state_index("11000", Hc)
+    @test state_index("1000", Hc) == 0
+    Hb = hilbert_space(b, 4)
+    @test_throws ArgumentError Kets(Hb)("4")
+    @test state_index("3", Hb) == 4
+end
+
 @testitem "Symbolic ket and bra algebra" begin
     using LinearAlgebra
 
@@ -837,8 +864,8 @@ end
     @test vf("10")' * vf("10") == 1
     @test vf("10")' * vf("11") == 0
     @test iszero(f[1] * vf("00"))
-    @test_throws ArgumentError f[1] * vf("0")'
-    @test_throws ArgumentError vf("0") * f[1]
+    @test_throws ArgumentError f[1] * vf("00")'
+    @test_throws ArgumentError vf("00") * f[1]
 
     Mouter = representation(vf("10") * vf("10")', Hf)
     @test Mouter[state_index(vf("10").ket, Hf), state_index(vf("10").ket, Hf)] == 1
@@ -893,15 +920,15 @@ end
     H = tensor_product(Hf, Hb)
     vfb = Kets(H)
     sb = vb("2")
-    sf = vf("0")
+    sf = vf("00")
     rep = representation(sb * sf, H)
     @test rep ≈ tensor_product((representation(sf), representation(sb)), (Hf, Hb) => H)
     @test size(rep) == (dim(H),)
-    @test sb * sf == vfb("0", "2")
-    @test sb * sf * (sb * sf)' == vfb("0", "2") * vfb("0", "2")'
+    @test sb * sf == vfb("00", "2")
+    @test sb * sf * (sb * sf)' == vfb("00", "2") * vfb("00", "2")'
 
     sb = 0.5 * vb("1")' + 1im * vb("4")' + 2 * vb("2")'
-    sf = vf("0")' + 10 * vf("1")'
+    sf = vf("00")' + 10 * vf("10")'
     rep = representation(sb * sf, H)
     @test rep ≈ tensor_product((representation(sf, Hf), representation(sb, Hb)), (Hf, Hb) => H)
     @test size(rep) == (1, dim(H))
@@ -909,13 +936,13 @@ end
 
     Hcons = tensor_product(Hf, Hb; constraint=ParityConservation())
     sb = vb("1")
-    sf = vf("0")
+    sf = vf("00")
     rep = representation(sb * sf, Hcons)
     @test rep ≈ tensor_product((representation(sf), representation(sb)), (Hf, Hb) => Hcons)
     @test size(rep) == (dim(Hcons),)
 
     sb = 0.5 * vb("1")' + 1im * vb("4")' + 2 * vb("2")'
-    sf = vf("0")' + 10 * vf("1")'
+    sf = vf("00")' + 10 * vf("10")'
     rep = representation(sb * sf, Hcons)
     @test rep ≈ tensor_product((representation(sf, Hf), representation(sb, Hb)), (Hf, Hb) => Hcons)
     @test size(rep) == (1, dim(Hcons))
@@ -933,7 +960,7 @@ end
 
     H = tensor_product(Hf, TransposedSpace(Hb))
     opb = vb("1")vb("0")' + vb("1")vb("4")'
-    opf = vf("0")vf("1")' + 2 * vf("1")vf("0")'
+    opf = vf("00")vf("10")' + 2 * vf("10")vf("00")'
     op = opb * opf
     @test representation(op, H) == representation(opb, H) * representation(opf, H) == representation(opb, H) * representation(opf, H)
 
@@ -1035,56 +1062,56 @@ end
 
         # Test: op_f * vf_ket * op_b * vb_ket should reorder to op_f * op_b * vf_ket * vb_ket
         # Mixed order: operator_f, state_f, operator_b, state_b
-        mixed = f[1]' * vf("0") * b' * vb("2")
-        @test mixed == b' * f[1]' * vf("0") * vb("2")
-        @test mixed == b' * f[1]' * vb("2") * vf("0")
-        @test mixed == f[1]' * b' * vf("0") * vb("2")
-        @test mixed == f[1]' * b' * vfb("0", "2")
+        mixed = f[1]' * vf("00") * b' * vb("2")
+        @test mixed == b' * f[1]' * vf("00") * vb("2")
+        @test mixed == b' * f[1]' * vb("2") * vf("00")
+        @test mixed == f[1]' * b' * vf("00") * vb("2")
+        @test mixed == f[1]' * b' * vfb("00", "2")
 
         # Test with adjoint (bra)
-        mixed = vb("2")'vf("0")' * f[1] * b'
-        @test mixed == vf("0")' * vb("2")' * f[1] * b'
-        @test mixed == vf("0")' * f[1] * vb("2")' * b'
-        @test mixed == vb("2")' * vf("0")' * f[1] * b'
-        @test mixed == vfb("0", "2")' * f[1] * b'
+        mixed = vb("2")'vf("00")' * f[1] * b'
+        @test mixed == vf("00")' * vb("2")' * f[1] * b'
+        @test mixed == vf("00")' * f[1] * vb("2")' * b'
+        @test mixed == vb("2")' * vf("00")' * f[1] * b'
+        @test mixed == vfb("00", "2")' * f[1] * b'
 
-        num = vb("2")'vf("0")' * f[1] * b' * vb("1")vf("1")
+        num = vb("2")'vf("00")' * f[1] * b' * vb("1")vf("10")
         @test iszero(num - sqrt(2))
-        @test num == vb("2")'vf("0")' * f[1] * b' * vf("1")vb("1")
-        @test num == vb("2")'vf("0")' * b' * f[1] * vf("1")vb("1")
-        @test num == vf("0")'vb("2")' * b' * f[1] * vf("1")vb("1")
-        @test num == vf("0")' * f[1] * vb("2")' * b' * vb("1")vf("1")
-        @test num == vf("0")' * f[1] * vb("2")' * vf("1") * b' * vb("1")
-        @test num == vfb("0", "2")' * f[1] * b' * vfb("1", "1")
+        @test num == vb("2")'vf("00")' * f[1] * b' * vf("10")vb("1")
+        @test num == vb("2")'vf("00")' * b' * f[1] * vf("10")vb("1")
+        @test num == vf("00")'vb("2")' * b' * f[1] * vf("10")vb("1")
+        @test num == vf("00")' * f[1] * vb("2")' * b' * vb("1")vf("10")
+        @test num == vf("00")' * f[1] * vb("2")' * vf("10") * b' * vb("1")
+        @test num == vfb("00", "2")' * f[1] * b' * vfb("10", "1")
 
-        opf = vf("1")vf("0")'
+        opf = vf("10")vf("00")'
         opb = vb("0")vb("1")'
         mixed = opf * opb * f[1] * b'
-        @test opf * opb == vfb("1", "0") * vfb("0", "1")'
+        @test opf * opb == vfb("10", "0") * vfb("00", "1")'
         @test mixed == opf * f[1] * opb * b'
         @test mixed == opb * opf * b' * f[1]
-        @test mixed * vf("1") == vb("0")vb("0")' * vf("1")
-        @test mixed * vb("0") == vf("1")vf("1")' * vb("0")
+        @test mixed * vf("10") == vb("0")vb("0")' * vf("10")
+        @test mixed * vb("0") == vf("10")vf("10")' * vb("0")
         @test FermionicHilbertSpaces._operator_type(mixed) == :ketbras
 
         @spin s 1 // 2
         Hs = hilbert_space(s)
         vs = Kets(Hs)
         vfbs = Kets(tensor_product(Hf, Hs, Hb))
-        @test vb("0") * vs("↑") * vf("1") == vfbs("1", "↑", "0")
+        @test vb("0") * vs("↑") * vf("10") == vfbs("10", "↑", "0")
 
-        @test iszero((vb("0") * vs("↑") * vf("0"))' * vb("0") * vs("↑") * vf("0") - 1)
+        @test iszero((vb("0") * vs("↑") * vf("00"))' * vb("0") * vs("↑") * vf("00") - 1)
         long_op = s[:x] * f[1] * b * (1 + s[:y]) * (1 + f[2]') * (1 + s[:z]) * b' + hc
-        ket = long_op * vb("0") * vs("↑") * vf("1")
+        ket = long_op * vb("0") * vs("↑") * vf("10")
         @test FermionicHilbertSpaces._operator_type(ket) == :kets
-        bra = (vb("0") * vs("↑") * vf("0"))' * long_op
+        bra = (vb("0") * vs("↑") * vf("00"))' * long_op
         @test FermionicHilbertSpaces._operator_type(bra) == :bras
 
-        num = (vb("0") * vs("↑") * vf("0"))' * long_op * vb("0") * vs("↑") * vf("1")
+        num = (vb("0") * vs("↑") * vf("00"))' * long_op * vb("0") * vs("↑") * vf("10")
         @test FermionicHilbertSpaces.NonCommutativeProducts.isscalar(num)
-        @test num == vfbs("0", "↑", "0")' * long_op * vfbs("1", "↑", "0")
+        @test num == vfbs("00", "↑", "0")' * long_op * vfbs("10", "↑", "0")
 
-        ketbra = vb("0") * vs("↑") * vf("1") * (vb("0") * vs("↑") * vf("0"))'
+        ketbra = vb("0") * vs("↑") * vf("10") * (vb("0") * vs("↑") * vf("00"))'
         @test FermionicHilbertSpaces._operator_type(ketbra) == :ketbras
     end
 end

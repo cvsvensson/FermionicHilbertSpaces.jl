@@ -84,7 +84,7 @@ tr(embed(A, Hsub => H) * ρ) ≈ tr(A * partial_trace(ρ, H => Hsub))
 
 ```@example hilbert_space_ops
 H = hilbert_space(f, 1:2)
-state = representation((f[1]' + f[2]') * Ket("0", H)) / √2
+state = representation((f[1]' + f[2]') * Ket("00", H)) / √2
 rho_pt = partial_transpose(state, H, hilbert_space(f, [1]))
 (sum(svdvals(rho_pt)) - 1) / 2
 ```

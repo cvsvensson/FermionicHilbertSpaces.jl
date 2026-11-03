@@ -439,7 +439,7 @@ end
     "Keep the blocks of `ρ` that commute with the diagonal charge operator `Q`."
     charge_project(ρ, Q) = (q=Vector(diag(Q)); ρ .* isapprox.(q, permutedims(q)))
     rand_unitary(fam, rng, H) = exp(10im * Matrix(fam.rand_state(rng, H)))   # physical
-    bell(fam, H, a, b) = Vector(representation((fam.basis[a]' + fam.basis[b]') * Ket("0", H))) / √2
+    bell(fam, H, a, b) = Vector(representation((fam.basis[a]' + fam.basis[b]') * Ket("0"^nbr_of_modes(H), H))) / √2
     eye(H) = Matrix{ComplexF64}(I, dim(H), dim(H))
 
     """
