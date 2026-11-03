@@ -542,11 +542,13 @@ end
 # `kind` is `:kets` or `:bras`, as computed by `_operator_type`
 function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, kind; kwargs...)
     symstates = op.factors
-    group_ids = map(state -> group_id(state.space), symstates)
-    perm = map(id -> findfirst(==(id) ∘ group_id, groups(space)), group_ids)
-    all(!isnothing, perm) || throw(ArgumentError("Spaces of symbolic states in NCMul do not match the factor spaces of the provided ProductSpace"))
+    perm = map(symstates) do state
+        i = findfirst(g -> _same_space_id(g, state.space), groups(space))
+        isnothing(i) && throw(ArgumentError("The space `$(state.space)` of the symbolic state `$state` is not `$space` or one of its factors."))
+        i
+    end
     basis_state(symstate::SymbolicState) = kind == :kets ? symstate.ket : symstate.bra
-    vec = if length(group_ids) == 1
+    vec = if length(symstates) == 1
         op.coeff * vector_representation(basis_state(only(symstates)), space, repr)
     else
         # `symstates[i]` belongs to group `perm[i]`, so group n holds `symstates[iperm[n]]`
@@ -783,6 +785,11 @@ end
         @test_throws ArgumentError representation(vf("10") * vb("1")', H)
         @test_throws ArgumentError representation(vb("1"), H)
         @test_throws ArgumentError representation(vf("10") + 1, Hf)
+        # kets of other modes of the same group
+        H3 = hilbert_space(f, 1:3)
+        @test_throws ArgumentError representation(vf("10") + Ket("100", H3), Hf)
+        @test_throws ArgumentError representation(vf("10")' + Ket("110", H3)', Hf)
+        @test_throws ArgumentError representation(Ket("100", H3) * vb("1"), H)
     end
 
     @testset "basis states, strings and unsupported input" begin
