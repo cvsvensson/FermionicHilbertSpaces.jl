@@ -523,9 +523,9 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
 end
 
 partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_trace(vec_to_density_matrix(v), H, Hsub; kwargs...)
-function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
+function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg=default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
-    isnothing(complement) && return change_basis(m, H, Hsub; kwargs...)
+    isnothing(complement) && return Base.inferencebarrier(change_basis)(m, H, Hsub; kwargs...)
     mout = zeros(promote_type(eltype(m), partial_trace_phase_factor_eltype(H)), dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
