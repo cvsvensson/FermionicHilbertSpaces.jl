@@ -1317,7 +1317,7 @@ end
         mleak = copy(m)
         mleak[i, j] = 1
         @test_throws ArgumentError FermionicHilbertSpaces.change_basis(mleak, Hfull => Hsec)
-        @test FermionicHilbertSpaces.change_basis(mleak, Hfull => Hsec; skipmissing=true) == m[2:3, 2:3]
+        @test FermionicHilbertSpaces.change_basis(mleak, Hfull => Hsec; skipmissing = true) == m[2:3, 2:3]
     end
     @test_throws ArgumentError FermionicHilbertSpaces.change_basis(sparsevec([4], [1.0], 4), Hfull => Hsec)
 end
