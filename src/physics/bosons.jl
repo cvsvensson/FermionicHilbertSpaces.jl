@@ -78,7 +78,9 @@ function _boson_normal_order(a::BosonSym, c::BosonSym)
         factors = typeof(a)[]
         n > k && push!(factors, BosonSym(a.label, a.basis, tags(a), n - k))
         m > k && push!(factors, BosonSym(a.label, a.basis, tags(a), k - m))
-        NCMul(factorial(k) * binomial(m, k) * binomial(n, k), factors)
+        # Widening to BigInt on overflow would make mul_effect's return type a union too wide to split,
+        # which slows down every boson product, so overflow throws instead.
+        NCMul(Base.Checked.checked_mul(factorial(k), binomial(m, k), binomial(n, k)), factors)
     end
     return AddTerms(terms)
 end
@@ -292,6 +294,15 @@ end
         sym = representation(ops[i] * ops[j] * ops[k], H)
         @test sym[low, low] ≈ (mats[i]*mats[j]*mats[k])[low, low]
     end
+end
+
+@testitem "Bosonic normal ordering of large powers" begin
+    @boson b
+    H = hilbert_space(b, 25)
+    low = 1:5 # states that b'^18 keeps below the cutoff
+    ref = representation(b, H, :dense)^18 * representation(b', H, :dense)^18
+    @test representation(b^18 * b'^18, H, :dense)[low, low] ≈ ref[low, low]
+    @test_throws OverflowError b^19 * b'^19
 end
 
 @testitem "Boson product spaces and number conservation" begin
