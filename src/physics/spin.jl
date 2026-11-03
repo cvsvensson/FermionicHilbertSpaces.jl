@@ -156,6 +156,7 @@ Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
 
 function interpret_state(input::AbstractString, H::SpinSpace{T}) where {T}
     Jhalf = H.spin
+    input in ("up", "↑", "down", "↓") && Jhalf != 1 // 2 && throw(ArgumentError("The spin state `\"$input\"` is only defined for `J` = 1/2, got `J` = $Jhalf. Give `m` as a half-integer instead."))
     if input in ("up", "↑")
         return SpinState(Jhalf)
     elseif input in ("down", "↓")
