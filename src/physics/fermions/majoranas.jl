@@ -242,12 +242,6 @@ function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
     MajoranaHilbertSpace(majorana_position, Hf, y)
 end
-@deprecate majorana_hilbert_space(y, labels, args...; kwargs...) hilbert_space(y, labels, args...; kwargs...) false
-@testitem "Deprecated majorana_hilbert_space" begin
-    @majoranas γ
-    Hmaj = @test_deprecated FermionicHilbertSpaces.majorana_hilbert_space(γ, 1:4, ParityConservation(1))
-    @test Hmaj == hilbert_space(γ, 1:4, ParityConservation(1))
-end
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
 
