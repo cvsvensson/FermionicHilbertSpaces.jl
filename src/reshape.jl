@@ -247,7 +247,7 @@ function _partition_mapper(H, Hs)
 end
 
 function _mapper(Hsin, Hsout)
-    if length(Hsin) == 1 && Hsin == Hsout            # identity
+    return if length(Hsin) == 1 && Hsin == Hsout            # identity
         nothing
     elseif length(Hsin) == 1                         # split, possibly into one space
         _partition_mapper(only(Hsin), Hsout)
