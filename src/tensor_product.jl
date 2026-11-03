@@ -354,7 +354,7 @@ function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilb
     throw(ArgumentError("The elements of `ms` must be either all square matrices, all column vectors or all row vectors, got sizes $(map(size, ms))."))
 end
 # Apply the factors right to left to each basis state of H. Only the final states are looked up in H.
-function ordered_product(ms, Hs, H; phase_factors=true, skipmissing=false)
+function ordered_product(ms, Hs, H; phase_factors = true, skipmissing = false)
     factors = map(ms, Hs) do m, Hk
         complement = complementary_subsystem(H, Hk)
         mapper = state_mapper(H, isnothing(complement) ? (Hk,) : (Hk, complement))

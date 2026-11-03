@@ -248,7 +248,7 @@ end
 
 function _partition_mapper(H, Hs)
     ispartition(Hs, H) || throw(ArgumentError("The spaces $Hs must split $H into subsystems that contain each of its atoms exactly once."))
-    state_mapper(H, Hs)
+    return state_mapper(H, Hs)
 end
 
 function _mapper(Hsin, Hsout)
