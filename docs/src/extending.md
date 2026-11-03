@@ -23,10 +23,11 @@ Algebra, from [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommu
 - [`same_group_mul_effect`](@ref)`(a::MyOp, b::MyOp)` gives the rule for the product `a * b` of
   operators on the same group: `nothing` keeps it, `Swap(c)` rewrites it as `c * b * a`, and
   `AddTerms((Swap(c), r, ...))` adds further terms. Without it, such products throw an
-  `ArgumentError`. A method for two different types gives the rule for products of those types
-  on the same group.
+  `ArgumentError`. Products of two different types on the same group need a method for each
+  argument order, one of which returns a `Swap` so that the sorted form is unique.
 - Operators on different groups commute and are ordered by group, so no rule is needed for them.
-  Groups of the same type are ordered by `isless`, which needs a method if the type has none.
+  Groups whose types have the same name are compared with `isless`, which must be a strict total
+  order consistent with `==`; otherwise sorted forms are not unique.
 
 Connection to Hilbert spaces:
 

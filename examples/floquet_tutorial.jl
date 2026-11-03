@@ -89,7 +89,6 @@ function same_group_mul_effect(a::FloquetLadder, b::FloquetNumber)
         term2 = -a.shift * a * N_remaining                    # -k * F^k * N^(p-1)
         return term1 + term2
     end
-    throw(ArgumentError("Should not reach here"))
 end;
 
 # ``N \cdot F^k`` is already in normal order (``N`` sorts before ``F``).
@@ -112,7 +111,7 @@ apply_local_operator(op::FloquetNumber, state::FloquetState, space, precomp) = s
 import FermionicHilbertSpaces: symbolic_group
 symbolic_group(f::Floquets) = f.basis
 symbolic_group(b::FloquetBasis) = b
-Base.isless(a::FloquetBasis, b::FloquetBasis) = isless(a.id, b.id); # sorts operators on different modes
+Base.isless(a::FloquetBasis, b::FloquetBasis) = isless(a.id, b.id); # orders operators of several Floquet modes
 
 # With this we can build the Floquet Hilbert space and the matrix of an operator on it.
 floquet_basis = FloquetBasis(0)

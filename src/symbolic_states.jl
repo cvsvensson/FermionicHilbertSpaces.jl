@@ -1119,24 +1119,31 @@ end
 end
 
 @testitem "Custom operators with same_group_mul_effect" begin
-    using Combinatorics
     import FermionicHilbertSpaces: AbstractSym, symbolic_group, same_group_mul_effect
-    import FermionicHilbertSpaces.NonCommutativeProducts: @nc
-    struct Z2Op <: AbstractSym
+    import FermionicHilbertSpaces.NonCommutativeProducts: @nc, Swap
+    # Pauli X and Z on each site: XX = ZZ = 1 and ZX = -XZ.
+    struct PauliX <: AbstractSym
+        site::Int
+    end
+    struct PauliZ <: AbstractSym
         site::Int
     end
     struct NoRuleOp <: AbstractSym end
-    @nc Z2Op NoRuleOp
-    symbolic_group(op::Z2Op) = op.site
+    @nc PauliX PauliZ NoRuleOp
+    symbolic_group(op::Union{PauliX,PauliZ}) = (op.site, :pauli)
     symbolic_group(::NoRuleOp) = 0
-    same_group_mul_effect(::Z2Op, ::Z2Op) = 1
+    same_group_mul_effect(::T, ::T) where {T<:Union{PauliX,PauliZ}} = 1
+    same_group_mul_effect(::PauliZ, ::PauliX) = Swap(-1)
+    same_group_mul_effect(::PauliX, ::PauliZ) = nothing
+    X, Z = PauliX, PauliZ
 
-    @fermions f
+    @test iszero(Z(1) * X(1) * Z(1) + X(1))
+    @test iszero(Z(1) * X(1) * X(2) + X(2) * X(1) * Z(1))
     @boson b
-    @spin s 1 // 2
-    @test Z2Op(1) * Z2Op(1) == 1
-    forms = [prod(p) for p in permutations([Z2Op(2), Z2Op(1), f[1], b, s[:z]])]
-    @test all(x -> iszero(x - first(forms)), forms)
+    b0 = b
+    @bosons b
+    @test Z(1) * b0 == b0 * Z(1)
+    @test b0 * b[1] == b[1] * b0
     @test_throws ArgumentError NoRuleOp() * NoRuleOp()
 end
 
