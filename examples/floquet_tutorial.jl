@@ -159,7 +159,7 @@ Nf_mat = representation(Nf, H)
 ptmap = partial_trace(H => Hspin)  # map to trace out Floquet space
 prev_vecs = nothing
 for (i, A) in enumerate(A_values)
-    mat = representation(floquet_ham(A), H, Matrix; projection=true)
+    mat = representation(floquet_ham(A), H, Matrix; projection = true)
     vals, vecs = eigen!(Hermitian(mat))
 
     #track states by overlaps to avoid discontinuities
