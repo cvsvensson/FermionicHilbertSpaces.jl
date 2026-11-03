@@ -238,7 +238,7 @@ type `B`. [`Kets`](@ref), `basisstate` and `state_index` call it for strings and
 A custom basis-state type adds a method for the inputs it accepts; a state is returned as it is.
 """
 interpret_state(state::B, ::Type{B}) where B = state
-interpret_state(state::AbstractBasisState, ::Type{B}) where B = state isa B ? state : throw(ArgumentError("The state `$state` cannot be converted to a state of type `$B`."))
+interpret_state(state::AbstractBasisState, ::Type{B}) where {B} = state isa B ? state : throw(ArgumentError("The state `$state` cannot be converted to a state of type `$B`."))
 interpret_state(state, space::AbstractHilbertSpace) = interpret_state(state, statetype(space))
 function interpret_state(state, space::Union{TransposedSpace, AbstractSubspace})
     B = statetype(space)

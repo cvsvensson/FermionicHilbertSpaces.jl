@@ -42,7 +42,7 @@ function interpret_state(f::FockNumber, ::Type{FixedNumberFockState{N}}) where {
     count_ones(f) == N || throw(ArgumentError("The Fock state $f has $(count_ones(f)) particles, expected $N."))
     return FixedNumberFockState{N}(f)
 end
-interpret_state(f::FixedNumberFockState, ::Type{B}) where {B<:FockNumber} = convert(B, FockNumber(f))
+interpret_state(f::FixedNumberFockState, ::Type{B}) where {B <: FockNumber} = convert(B, FockNumber(f))
 
 
 physical_rep(state::T, ::Type{FixedNumberFockState{N}}) where {T, N} = FixedNumberFockState{N}(physical_rep(state, FockNumber{T}))
