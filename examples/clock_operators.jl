@@ -44,7 +44,7 @@ mat_eltype(::Type{<:ClockOp}) = ComplexF64
 symbolic_group(op::ClockOp) = op.site
 
 # ## Using it in practice: Hamiltonian and conservation laws
-# Let's take the case D = 3 for 6 sites. We define a hamiltonian which conserves the particle number modulo D, and calculate the symmetry resolved entanglement entropy in the ground state.
+# Let's take the case D = 3 for 6 sites. We define a hamiltonian which conserves the clock charge, the sum of the local clock values modulo D, and calculate the symmetry resolved entanglement entropy in the ground state.
 D = 3
 L = 6
 states = [ClockState{D}(n) for n in 0:(D-1)]
