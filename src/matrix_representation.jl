@@ -389,6 +389,8 @@ end
 finalize!(accumulator, space) = finalize!(accumulator, dim(_output_space(space)), dim(_input_space(space)))
 function finalize!((outinds, ininds, amps), N, M)
     L = length(outinds)
+    # `sparse!` throws a BoundsError for zero rows
+    iszero(N) && return spzeros(eltype(amps), N, M)
     isconcretetype(eltype(amps)) && return _trimmed!(SparseArrays.sparse!(outinds, ininds, amps, N, M), L)
     return _trimmed!(SparseArrays.sparse!(outinds, ininds, identity.(amps), N, M), L)
 end
