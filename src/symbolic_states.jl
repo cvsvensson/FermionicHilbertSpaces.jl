@@ -537,7 +537,7 @@ end
 function vector_representation(op, space, repr; kwargs...)
     _repr = _canonicalize_repr(repr)
     _repr isa LazyRepr && throw(ArgumentError("Kets and bras support `:sparse` and `:dense` representations. `:lazy` is only for operators and ketbras."))
-    vector_representation(op, space, _repr; kwargs...)
+    return vector_representation(op, space, _repr; kwargs...)
 end
 
 function vector_representation(op::Union{NCMul,NCAdd}, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
