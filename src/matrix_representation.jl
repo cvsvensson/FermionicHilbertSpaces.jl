@@ -280,14 +280,15 @@ function _kron_identities(A, l, r, ::Type{T}) where {T}
     end
     return SparseMatrixCSC(l * m * r, l * n * r, colptr, rowval, nzval)
 end
+# Bool keeps the element type of the factors it is multiplied with
 function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; kwargs...)
-    Eye(dim(space))
+    return Eye{_repr_eltype(Bool, repr)}(dim(space))
 end
 function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::LazyRepr, chunking; kwargs...)
     SciMLOperators.IdentityOperator(dim(space))
 end
 function _matrix_representation(op::Missing, bases, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; kwargs...)
-    Eye(dim(space))
+    return Eye{_repr_eltype(Bool, repr)}(dim(space))
 end
 function _matrix_representation(op::Missing, bases, space::AbstractHilbertSpace, repr::LazyRepr, chunking; kwargs...)
     SciMLOperators.IdentityOperator(dim(space))
@@ -333,19 +334,19 @@ function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Un
 end
 # `summed + coeff * I`, with the element type of `summed` promoted with that of `coeff * I` also when `coeff` is zero
 function _add_identity_term(summed, coeff, bases, space, repr)
-    identity_term = coeff * _matrix_representation(missing, bases, space, repr, NoChunking())
+    identity_term = convert(_repr_eltype(typeof(coeff), repr), coeff) * _matrix_representation(missing, bases, space, repr, NoChunking())
     iszero(coeff) || return summed + identity_term
     T = promote_type(eltype(summed), eltype(identity_term))
     return convert(AbstractMatrix{T}, summed)
 end
 # On spaces with a basis-state loop (for example a constrained space over a ProductSpace), `_terms_matrix` builds the sum of all terms.
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
-# promoted with the element type of `Eye`, as on a ProductSpace.
+# promoted with the type of `coeff`.
 function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; tree_split=10, kwargs...)
     spaces = groups(_input_space(space))
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
     Tterms = _repr_eltype(mapreduce(mat_eltype, promote_type, prodops), repr)
-    T = _repr_eltype(promote_type(Tterms, Base.promote_op(*, typeof(op.coeff), eltype(Eye(0)))), repr)
+    T = _repr_eltype(promote_type(Tterms, typeof(op.coeff)), repr)
     Tterms == T && return _terms_matrix(Tterms, prodops, op.coeff, space, repr, chunking; kwargs...)
     summed = _terms_matrix(Tterms, prodops, zero(op.coeff), space, repr, chunking; kwargs...)
     iszero(op.coeff) && return convert(AbstractMatrix{T}, summed)
@@ -708,7 +709,7 @@ end
         @test typeof(Mc) == typeof(M)
         @test Mc ≈ M[inds, inds]
     end
-    # Integer terms keep their element type; the identity term promotes it with Float64.
+    # Integer terms and an integer identity term keep their element type.
     op_int = 2 * f[1]' * f[2] * b[1]' + hc
     @test typeof(representation(op_int, Hc; projection=true)) == typeof(representation(op_int, H))
     @test typeof(representation(op_int + 1, Hc; projection=true)) == typeof(representation(op_int + 1, H))
@@ -727,6 +728,20 @@ end
         @test eltype(M) == T
         @test M ≈ matrix_representation(op, H)
     end
+end
+
+@testitem "Requested element type on a product space" begin
+    using FermionicHilbertSpaces: EagerSparseRepr, EagerDenseRepr
+    @fermions f
+    @spin s 1 // 2
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(s))
+    reprs = ((Float32, Float32), (Matrix{ComplexF32}, ComplexF32), (EagerSparseRepr{Float32}(), Float32), (EagerDenseRepr{ComplexF32}(), ComplexF32))
+    for op in (f[1]' * f[2], s[:z] + 1.0, 2.0 * f[1]' * f[2] * s[:z]), (repr, T) in reprs
+        M = representation(op, H, repr)
+        @test eltype(M) == T
+        @test M == representation(op, H, :dense)
+    end
+    @test eltype(representation(f[1]' * f[2] + 1, H)) == Int
 end
 
 @testitem "Operators between two spaces with Axes" begin
