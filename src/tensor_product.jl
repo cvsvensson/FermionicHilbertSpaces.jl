@@ -600,6 +600,7 @@ end
 
 Compute the partial trace of `m` from `H` to `Hsub`. Fermionic phase factors are included if both `H` and `Hsub` are Fermionic, unless specified otherwise in `kwargs`.
 `H => Hsub` reads input => output; see [Pair arguments](@ref pair_convention).
+A vector `m` is treated as a pure state `ψ`, and the result is the reduced density matrix of `ψψ†`.
 
 The trace drops the states of `H` whose part on `Hsub` is not in `Hsub`, or whose part on the
 complement is not in `complement`. Unless `skipmissing=true`, throws an `ArgumentError` if `m`
