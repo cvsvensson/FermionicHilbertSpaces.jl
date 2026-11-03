@@ -1,5 +1,6 @@
 function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), skipmissing=false, kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
+    size_compatible(m, Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(Hsub)), got $(size(m))."))
     if isnothing(complement)
         m isa AbstractVector && return change_basis(m, Hsub, H; skipmissing, kwargs...)
         if !(skipmissing || m isa UniformScaling)

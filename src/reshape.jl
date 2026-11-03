@@ -242,15 +242,20 @@ function _build_many_to_many_mapper(Hsin, Hsout)
                              Original error: $(sprint(showerror, err))"))
     end
     combine_mapper = state_mapper(Hmid, Hsin)
-    split_mapper = state_mapper(Hmid, Hsout)
+    split_mapper = _partition_mapper(Hmid, Hsout)
     return _ComposedMapper(combine_mapper, split_mapper)
+end
+
+function _partition_mapper(H, Hs)
+    ispartition(Hs, H) || throw(ArgumentError("The spaces $Hs must split $H into subsystems that contain each of its atoms exactly once."))
+    return state_mapper(H, Hs)
 end
 
 function _mapper(Hsin, Hsout)
     if length(Hsin) == 1 && length(Hsout) > 1        # split
-        state_mapper(only(Hsin), Hsout)
+        _partition_mapper(only(Hsin), Hsout)
     elseif length(Hsin) > 1 && length(Hsout) == 1    # combine
-        state_mapper(only(Hsout), Hsin)
+        _partition_mapper(only(Hsout), Hsin)
     elseif length(Hsin) > 1 && length(Hsout) > 1     # many-to-many
         _build_many_to_many_mapper(Hsin, Hsout)
     else                                             # identity
@@ -629,6 +634,19 @@ end
     Mft = PermutedDimsArray(permutedims(Mf), (2, 1))
     @test_throws ArgumentError reshape(Mft, Hfull => (Hae, Hb))
     @test reshape(Mft, Hfull => (Hae, Hb); skipmissing=true) == reshape(Mf, Hfull => (Hae, Hb); skipmissing=true)
+end
+
+@testitem "Reshape requires a partition" begin
+    @fermions f
+    H = hilbert_space(f, 1:4)
+    H12, H23, H34 = hilbert_space(f, 1:2), hilbert_space(f, 2:3), hilbert_space(f, 3:4)
+    v = rand(dim(H))
+    for Hs in ((H12, H23), (H12, H12), (H12, hilbert_space(f, 3:3)))
+        @test_throws ArgumentError reshape(v, H => Hs)
+        @test_throws ArgumentError reshape(H => Hs)(v)
+        @test_throws ArgumentError reshape(rand(map(dim, Hs)...), Hs => H)
+        @test_throws ArgumentError reshape(reshape(v, H => (H12, H34)), (H12, H34) => Hs)
+    end
 end
 
 @testitem "Reshape missing states" begin

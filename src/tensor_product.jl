@@ -60,7 +60,8 @@ size_compatible(m, H) = size(m) == ntuple(_ -> dim(H), ndims(m))
 size_compatible(m, ax::Axes) = size(m) == map(dim, ax.spaces)
 size_compatible(m::UniformScaling, H) = true
 size_compatible(m::UniformScaling, ax::Axes) = length(ax.spaces) == 2 && ax.spaces[1] == ax.spaces[2]
-kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, Hs))
+kron_sizes_compatible(ms, Hs) = length(ms) == length(Hs) && all(size_compatible(m, H) for (m, H) in zip(ms, Hs))
+check_kron_sizes(ms, Hs) = kron_sizes_compatible(ms, Hs) || throw(ArgumentError("`ms` must have one array per space in `Hs`, with sizes matching their dimensions, got sizes $(map(m -> m isa UniformScaling ? m : size(m), ms)) and dimensions $(map(dim, Hs))."))
 
 @testitem "Kron size compatibility and error handling" begin
     using LinearAlgebra, Random
@@ -87,6 +88,15 @@ kron_sizes_compatible(ms, Hs) = all(size_compatible(m, H) for (m, H) in zip(ms, 
     Hfull = hilbert_space(a, 1:4)
     c = representation(a[1], H1)
     @test_throws ArgumentError generalized_kron((c,), (H1,) => Hfull)
+
+    H123 = tensor_product(Hs)
+    for ms_wrong in (ms[1:2], [ms; [m1]]), op in (tensor_product, generalized_kron)
+        @test_throws ArgumentError op(ms_wrong, Hs => H123)
+        @test_throws ArgumentError op(Hs => H123)(ms_wrong...)
+    end
+    @test_throws ArgumentError tensor_product(vs[1:2], Hs => H123)
+    @test_throws ArgumentError embed(rand(3, 3), H1 => H123)
+    @test_throws ArgumentError tensor_product((rand(3, 3), m2, m3), Hs => H123)
 end
 
 """
@@ -111,7 +121,7 @@ The result is the compression of the tensor product onto `H`. Unless `skipmissin
 or if the tensor product of vectors has a nonzero amplitude outside `H`.
 """
 function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kwargs...)
-    kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the dimensions of `Hs`, got sizes $(map(size, ms)) and dimensions $(map(dim, Hs))."))
+    check_kron_sizes(ms, Hs)
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs, H)
     extend_state = state_mapper(H, Hs)
@@ -349,6 +359,7 @@ the result is `ψ₁ψ₂⋯|0⟩`. Swapping two odd states flips the sign.
 function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     if all(_issquare, ms)
+        check_kron_sizes(ms, Hs)
         # on an unconstrained space, the product of embeddings is the same and faster for dense factors
         isconstrained(H) || return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
         return ordered_product(Tuple(ms), Tuple(Hs), H; kwargs...)
@@ -361,8 +372,7 @@ function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilb
     throw(ArgumentError("The elements of `ms` must be either all square matrices, all column vectors or all row vectors, got sizes $(map(size, ms))."))
 end
 # Apply the factors right to left to each basis state of H. Only the final states are looked up in H.
-function ordered_product(ms, Hs, H; phase_factors=true, skipmissing=false)
-    kron_sizes_compatible(ms, Hs) || throw(ArgumentError("The sizes of `ms` must match the dimensions of `Hs`, got sizes $(map(size, ms)) and dimensions $(map(dim, Hs))."))
+function ordered_product(ms, Hs, H; phase_factors = true, skipmissing = false)
     factors = map(ms, Hs) do m, Hk
         complement = complementary_subsystem(H, Hk)
         mapper = state_mapper(H, isnothing(complement) ? (Hk,) : (Hk, complement))
