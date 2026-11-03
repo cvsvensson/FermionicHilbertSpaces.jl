@@ -486,10 +486,12 @@ state_mapper(source::ProductSpace, targets) = ProductSpaceMapper(source, targets
 
 # ─── Construction (cold path: clarity over speed) ────────────────────────────
 
-function ProductSpaceMapper(source::ProductSpace, targets)
-    targets = Tuple(targets)
-    sfactors = factors(source)
+# The work is done on vectors of factors and groups, so that the compiled code depends on
+# their types but not on their number: chains of any length share it.
+ProductSpaceMapper(@nospecialize(source::ProductSpace), @nospecialize(targets)) =
+    _product_space_mapper(collect(factors(source)), [collect(groups(t)) for t in targets], Tuple(targets))
 
+function _product_space_mapper(sfactors, tgroups, @nospecialize(targets))
     # Atom bookkeeping, by name: which factor owns each atom, and where inside it.
     # The targets' bases are not checked here, that is done by `match_atoms` in the callers.
     atom_factor = Dict{Any,Int}()
@@ -501,7 +503,7 @@ function ProductSpaceMapper(source::ProductSpace, targets)
 
     # Validate: every target atom exists in the source, no duplicates.
     seen = Set()
-    for t in targets, a in atomic_factors(t)
+    for gs in tgroups, g in gs, a in atomic_factors(g)
         haskey(atom_factor, atomic_id(a)) || throw(ArgumentError("Each target atom must be an atom of the source space, got `$a` which is not."))
         atomic_id(a) ∈ seen && throw(ArgumentError("Each atom may appear in only one target, got `$a` in several."))
         push!(seen, atomic_id(a))
@@ -514,7 +516,7 @@ function ProductSpaceMapper(source::ProductSpace, targets)
     pieces = NamedTuple{(:factor, :target, :group_slot),NTuple{3,Int}}[]
     piece_spaces = Any[]
     piece_of = Dict{Tuple{Int,Int},Int}()  # (target, group_slot) -> piece
-    for (ti, t) in enumerate(targets), (si, g) in enumerate(groups(t))
+    for (ti, gs) in enumerate(tgroups), (si, g) in enumerate(gs)
         ids = atom_ids(g)
         owners = unique(atom_factor[id] for id in ids)
         length(owners) == 1 ||
@@ -557,8 +559,8 @@ function ProductSpaceMapper(source::ProductSpace, targets)
                 n = piece_of[(ti, si)]
                 PieceIndex(pieces[n].factor, piece_slot[n])
             end
-            for si in eachindex(groups(t)))
-        for (ti, t) in enumerate(targets))
+            for si in eachindex(gs))
+        for (ti, gs) in enumerate(tgroups))
 
     ProductSpaceMapper(Tuple(leaves), Tuple(factor_routes), target_routes, targets)
 end
