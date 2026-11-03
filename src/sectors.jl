@@ -116,7 +116,7 @@ space_indices(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = space_indic
 function space_indices_generic(Hsub, H)
     # fallback for when the sector space isn't exactly in the sectors list (e.g. due to constraints)
     # reordered fermionic modes would also change signs, which indices cannot express
-    match_same_atoms(Hsub, H; ordered=true)
+    match_same_atoms(Hsub, H; ordered = true)
     map(basisstates(Hsub)) do state
         ind = state_index(state, H)
         if iszero(ind)

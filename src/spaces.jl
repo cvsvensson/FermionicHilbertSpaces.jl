@@ -670,7 +670,7 @@ order of fermions).
 
 Throws an `ArgumentError` describing the first violation.
 """
-function match_atoms(Hsub, H::AbstractHilbertSpace; ordered=false)
+function match_atoms(Hsub, H::AbstractHilbertSpace; ordered = false)
     positions, problem = _match_atoms(Hsub, H; ordered)
     isnothing(problem) || throw(ArgumentError(_match_atoms_message(problem, Hsub, H)))
     return positions
@@ -678,7 +678,7 @@ end
 
 # Positions of the atoms of Hsub in H, and why Hsub is not a subsystem of H (or nothing).
 # The reason is a tuple (kind, data...), only formatted by `match_atoms` when it throws.
-function _match_atoms(Hsub, H; ordered=false)
+function _match_atoms(Hsub, H; ordered = false)
     sub_atoms = collect(atomic_factors(Hsub))
     positions = map(a -> atom_position(a, H), sub_atoms)
     for (a, pos) in zip(sub_atoms, positions)
@@ -706,7 +706,7 @@ end
 Check that `H1` and `H2` have the same atoms (see `match_atoms`, which also explains
 `ordered`). Throws an `ArgumentError` otherwise.
 """
-function match_same_atoms(H1, H2; ordered=false)
+function match_same_atoms(H1, H2; ordered = false)
     match_atoms(H1, H2; ordered)
     nbr_of_atoms(H1) == nbr_of_atoms(H2) || throw(ArgumentError("`H1` and `H2` must have the same atoms, but `$H2` has atoms that are not in `$H1`."))
     return nothing

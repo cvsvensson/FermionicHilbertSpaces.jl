@@ -92,7 +92,7 @@ jwstring_right_bool(site, focknbr::FockNumber) = isodd(count_ones(focknbr.f >> s
 jwstring_left_bool(site, focknbr::FockNumber) = isodd(count_ones(focknbr.f) - count_ones(focknbr.f >> (site - 1)))
 
 
-struct FockMapper{N,P1,W,P2,M,R} <: AbstractStateMapper
+struct FockMapper{N, P1, W, P2, M, R} <: AbstractStateMapper
     fermionpositions::P1
     widths::W
     permutation::P2
@@ -118,7 +118,7 @@ function FockMapper(fermionpositions::P, N) where P
     P2 = typeof(permutation)
     M = typeof(masks)
     R = typeof(reorderings)
-    FockMapper{N,P1,W,P2,M,R}(fermionpositions, widths, permutation, masks, reorderings, isfullpartition)
+    return FockMapper{N, P1, W, P2, M, R}(fermionpositions, widths, permutation, masks, reorderings, isfullpartition)
 end
 
 # A subsystem whose modes are ordered differently than in the full space. Its basis states
@@ -131,17 +131,17 @@ end
 function ModeReordering(positions)
     issorted(positions) && return nothing
     T = default_fock_representation(length(positions))
-    inversions = [mapreduce(i -> T(positions[i] > p) << (i - 1), |, 1:j-1; init=zero(T)) for (j, p) in enumerate(positions)]
+    inversions = [mapreduce(i -> T(positions[i] > p) << (i - 1), |, 1:(j - 1); init = zero(T)) for (j, p) in enumerate(positions)]
     return ModeReordering(invperm(sortperm(collect(positions))), inversions)
 end
 
 # bits in the order of the full space -> bits in the order of the subsystem
 _to_subsystem_order(f, ::Nothing) = f
-_to_subsystem_order(f::FockNumber{T}, r::ModeReordering) where T =
-    FockNumber{T}(mapreduce(j -> T(_bit(f, r.ranks[j])) << (j - 1), |, eachindex(r.ranks); init=zero(T)))
+_to_subsystem_order(f::FockNumber{T}, r::ModeReordering) where {T} =
+    FockNumber{T}(mapreduce(j -> T(_bit(f, r.ranks[j])) << (j - 1), |, eachindex(r.ranks); init = zero(T)))
 _to_full_order(f, ::Nothing) = f
-_to_full_order(f::FockNumber{T}, r::ModeReordering) where T =
-    FockNumber{T}(mapreduce(j -> T(_bit(f, j)) << (r.ranks[j] - 1), |, eachindex(r.ranks); init=zero(T)))
+_to_full_order(f::FockNumber{T}, r::ModeReordering) where {T} =
+    FockNumber{T}(mapreduce(j -> T(_bit(f, j)) << (r.ranks[j] - 1), |, eachindex(r.ranks); init = zero(T)))
 # `f` in the order of the subsystem
 reordering_sign(f, ::Nothing) = 1
 function reordering_sign(f, r::ModeReordering)
@@ -162,7 +162,7 @@ end
 
 function split_state(f::FockNumber, fm::FockMapper{N}) where N
     state = map((mask, r) -> _to_subsystem_order(substate(mask, f), r), fm.masks, fm.reorderings)
-    (state,), (reordering_sign(state, fm),)
+    return (state,), (reordering_sign(state, fm),)
 end
 
 function substate(mask::FockNumber{T1}, f::FockNumber{T2}) where {T1,T2}
@@ -177,7 +177,7 @@ end
 function combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:AbstractBitPermutation}) where {N}
     _require_full_partition(fm)
     state = concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))})
-    (state,), (reordering_sign(fs, fm),)
+    return (state,), (reordering_sign(fs, fm),)
 end
 function combine_states(f, fm::FockMapper{N}) where N
     _require_full_partition(fm)
@@ -186,7 +186,7 @@ function combine_states(f, fm::FockMapper{N}) where N
     for (fock, mask, r) in zip(f, fm.masks, fm.reorderings)
         result |= BitPermutations.pdep(IT(_to_full_order(fock, r).f), IT(mask.f))
     end
-    (FockNumber{IT}(result),), (reordering_sign(f, fm),)
+    return (FockNumber{IT}(result),), (reordering_sign(f, fm),)
 end
 function catenate_fock_states(fock_states, spaces, ::Type{T}) where T
     num = zero(T)
