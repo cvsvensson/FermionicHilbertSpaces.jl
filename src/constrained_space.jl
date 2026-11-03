@@ -22,7 +22,7 @@ constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
 constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}) = constrain_space(space, NoSymmetry(), states)
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, _states_of(space, states))
-function constrain_space(space, constraint::AbstractConstraint, labels=basisstates(space))
+function constrain_space(space, constraint::AbstractConstraint, labels = basisstates(space))
     states = _states_of(space, labels)
     if supports_sector_grouping(constraint)
         f = sector_function(constraint, space)
@@ -39,7 +39,7 @@ end
 # so that a space whose states are strings is not parsed. States outside a subspace are dropped by `unnest`.
 _states_of(space, states::BasisStates) = states
 function _states_of(space, labels)
-    map(labels) do label
+    return map(labels) do label
         state = label isa statetype(space) ? label : interpret_state(label, space)
         space isa AbstractSubspace || !iszero(state_index(state, space)) || throw(ArgumentError("The state `$label` is not a basis state of the space."))
         state
