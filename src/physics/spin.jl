@@ -2,6 +2,11 @@ _check_spin(J) = (J isa Real && ishalfinteger(J) && J >= 0) ? J : throw(Argument
 _to_halfint(::Nothing) = nothing
 _to_halfint(spin) = HalfInt(_check_spin(spin))
 
+"""
+    SpinField
+
+A family of spins, created by [`@spins`](@ref). `s[i]` is the spin on site `i`, e.g. `s[i][:z]`.
+"""
 struct SpinField{I}
     name::Symbol
     spin::Union{Nothing,HalfInt}
@@ -90,6 +95,11 @@ macro spins(name, spin)
 end
 
 
+"""
+    SpinState(m)
+
+The basis state of a single spin with `s[:z]` eigenvalue `m`, e.g. `SpinState(-1//2)`.
+"""
 struct SpinState{T<:Integer} <: AbstractBasisState
     m::Half{T}
 end
