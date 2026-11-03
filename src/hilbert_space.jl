@@ -20,7 +20,7 @@ end
 GenericHilbertSpace(label, basisstates, args...) = GenericHilbertSpace{eltype(basisstates)}(label, basisstates, args...)
 function GenericHilbertSpace{B}(label, basisstates) where B
     states = _convert_basisstates(B, basisstates)
-    GenericHilbertSpace{B}(label, states, position_dict(states))
+    return GenericHilbertSpace{B}(label, states, position_dict(states))
 end
 function GenericHilbertSpace{B}(label, basisstates, state_index) where B
     states = _convert_basisstates(B, basisstates)
@@ -101,9 +101,9 @@ end
     @test_throws ArgumentError hilbert_space(γ, [1, 2, 2, 3])
     @test dim(hilbert_space(γ, [1, 2, 3, 4])) == 4
     @fermions f
-    @test_throws ArgumentError hilbert_space(f, 1:2, NumberConservation(1; weights=[1, 2, 3]))
-    @test_throws ArgumentError hilbert_space(f, 1:2, NumberConservation(1; weights=[1]))
-    @test dim(hilbert_space(f, 1:2, NumberConservation(2; weights=[1, 2]))) == 1
+    @test_throws ArgumentError hilbert_space(f, 1:2, NumberConservation(1; weights = [1, 2, 3]))
+    @test_throws ArgumentError hilbert_space(f, 1:2, NumberConservation(1; weights = [1]))
+    @test dim(hilbert_space(f, 1:2, NumberConservation(2; weights = [1, 2]))) == 1
     @test_throws ArgumentError hilbert_space(f, [f[1]])
     using FermionicHilbertSpaces: Kets
     @spin s

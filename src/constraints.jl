@@ -74,7 +74,7 @@ function filter_function(constraint::FilterConstraint{<:Any,<:Function}, space::
         constraint.reducer(values)
     end
 end
-function _check_maps_length(maps, spaces, name="maps")
+function _check_maps_length(maps, spaces, name = "maps")
     (maps isa Function || ismissing(maps) || ismissing(spaces)) && return nothing
     length(maps) == length(spaces) || throw(ArgumentError("Got $(length(maps)) $name for $(length(spaces)) spaces. Give one per space, or pass `spaces` explicitly."))
     return nothing
