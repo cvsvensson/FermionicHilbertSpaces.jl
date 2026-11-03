@@ -548,14 +548,15 @@ function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, ki
         i
     end
     basis_state(symstate::SymbolicState) = kind == :kets ? symstate.ket : symstate.bra
-    vec = if length(symstates) == 1
-        op.coeff * vector_representation(basis_state(only(symstates)), space, repr)
+    state = if length(symstates) == 1
+        basis_state(only(symstates))
     else
         # `symstates[i]` belongs to group `perm[i]`, so group n holds `symstates[iperm[n]]`
         iperm = invperm(perm)
-        prodstate = ProductState(ntuple(n -> basis_state(symstates[iperm[n]]), length(perm)))
-        op.coeff * vector_representation(prodstate, space, repr)
+        ProductState(ntuple(n -> basis_state(symstates[iperm[n]]), length(perm)))
     end
+    is_state_kind_of(state, space) || throw(ArgumentError("The symbolic state `$op` is a state of another space than `$space`."))
+    vec = op.coeff * vector_representation(state, space, repr)
     if kind == :kets
         return vec
     elseif kind == :bras
@@ -808,7 +809,8 @@ end
         @test iszero(representation(f[1]' * f[1] - f[1]' * f[1] + 2, Hsp))
         @test_throws ArgumentError representation(f[1], Hsp)
         @test_throws ArgumentError representation(b' * b, Hsp)
-        @test_throws MethodError representation(Ket("10", Hf), Hsp)
+        @test_throws ArgumentError representation(Ket("10", Hf), Hsp)
+        @test_throws ArgumentError representation(Kets(Hsp)[1], Hf)
 
         hbdg = f[1]' * f[2] + 1im * f[1]' * f[2]' + hc
         Hbdg = hilbert_space(f, 1:2, BdG())
@@ -818,7 +820,7 @@ end
         @test iszero(representation(I, Hbdg))
         @test_throws ArgumentError representation(f[1], Hbdg)
         @test_throws ArgumentError representation(b' * b, Hbdg)
-        @test_throws MethodError representation(Ket("10", Hf), Hbdg)
+        @test_throws ArgumentError representation(Ket("10", Hf), Hbdg)
     end
 end
 
