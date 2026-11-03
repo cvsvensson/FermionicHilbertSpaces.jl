@@ -1004,7 +1004,7 @@ end
         M = representation(op, H, :dense)
         @test Vector(representation(op * ψ, H)) ≈ M * v
         @test inner(φ, ψ) ≈ dot(w, v)
-        @test inner(φ, op * ψ) ≈ dot(w, M * v)
+        @test dot(φ, op, ψ) ≈ dot(w, M, v)
         @test norm(ψ) ≈ norm(v)
     end
     # Kets in a product of spaces are products of one ket per space
