@@ -30,7 +30,7 @@ using FermionicHilbertSpaces, LinearAlgebra
 N, V = 6, 2.0
 ham = sum(c[n+1]'c[n] + hc + V * c[n]'c[n] * c[n+1]'c[n+1] for n in 1:N-1)
 H = hilbert_space(c, 1:N, NumberConservation(N ÷ 2))
-E, vecs = eigen(Hermitian(representation(ham, H, :dense)))
+E, vecs = eigen(Hermitian(representation(ham, H, Matrix)))
 ρ = partial_trace(vecs[:, 1], H => hilbert_space(c, 1:N÷2))
 S = -sum(λ * log(λ) for λ in eigvals(Hermitian(ρ)) if λ > 0)
 E[1], S

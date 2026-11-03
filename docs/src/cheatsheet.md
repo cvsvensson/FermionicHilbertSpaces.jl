@@ -3,7 +3,7 @@
 Common tasks and the functions that do them. Snippets build on the variables of earlier ones; run them in order. Results are mostly suppressed with `;`, so run a line to see its output.
 
 ## Spaces
-`@fermions f` defines symbolic fermions, `hilbert_space(f, labels, constraint)` a space, and `representation(op, H)` the sparse matrix of an operator (add `:dense` when you need a dense one, a type such as `Matrix{ComplexF64}` to also fix the element type, `:lazy` for a matrix-free one). Products of constraints conserve each species separately, and `tensor_product` combines any spaces, including bosons (levels given as the number) and spins (value set in the macro).
+`@fermions f` defines symbolic fermions, `hilbert_space(f, labels, constraint)` a space, and `representation(op, H)` the sparse matrix of an operator (add `Matrix` when you need a dense one, `Matrix{ComplexF64}` to also fix the element type, `:lazy` for a matrix-free one). Products of constraints conserve each species separately, and `tensor_product` combines any spaces, including bosons (levels given as the number) and spins (value set in the macro).
 ```@example cheat
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions f
@@ -29,7 +29,7 @@ A quadratic Hamiltonian on a `SingleParticle()` space is its single-particle mat
 using FermionicHilbertSpaces.FreeFermions
 h = Hermitian(rand(N, N))
 Hs = hilbert_space(f, 1:N, SingleParticle())
-ε = eigvals(Hermitian(representation(sum(f[i]' * h[i, j] * f[j] for i in 1:N, j in 1:N), Hs, :dense)))
+ε = eigvals(Hermitian(representation(sum(f[i]' * h[i, j] * f[j] for i in 1:N, j in 1:N), Hs, Matrix)))
 sum(filter(<(0), ε))
 ```
 
@@ -38,7 +38,7 @@ sum(filter(<(0), ε))
 ```@example cheat
 import FermionicHilbertSpaces: Axes
 Hsec = sector(2, H)
-vals, vecs = eigen(Hermitian(representation(ham, Hsec, :dense)))
+vals, vecs = eigen(Hermitian(representation(ham, Hsec, Matrix)))
 ψ = vecs[:, 1]
 dims = [(q, dim(Hq)) for (q, Hq) in zip(quantumnumbers(H), sectors(H))];
 expectation(f[1]'f[1], ψ, Hsec)
@@ -68,7 +68,7 @@ basisstates(Hsec);
 state_index("1100", Hsec);
 ψ0 = representation(Ket("1100", Hsec), Hsec)
 ψt(t) = vecs * (cis.(-vals * t) .* (vecs' * ψ0))
-@assert ψt(1.0) ≈ exp(-im * representation(ham, Hsec, :dense)) * ψ0
+@assert ψt(1.0) ≈ exp(-im * representation(ham, Hsec, Matrix)) * ψ0
 ```
 
 ## Open systems

@@ -519,8 +519,7 @@ _grade_type(g) = :mixed
 
 Return the vector of `state` in `space`. `state` is a basis state, a symbolic ket or bra, or a product or sum of
 symbolic kets or of symbolic bras. Kets give a column vector, and bras give the transpose of one.
-The optional `repr` selects the format: `:sparse` (the default), `:dense`, or a format object
-(`EagerSparseRepr()`, `EagerDenseRepr()`).
+The optional `repr` selects the format as in [`representation`](@ref), except `:lazy`; for example `Vector` gives a dense vector.
 """
 function vector_representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
     ind = _checked_state_index(state, space)

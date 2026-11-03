@@ -4,7 +4,7 @@ abstract type AbstractFermionSym <: AbstractSym end
     EagerDenseRepr{T}()
     EagerDenseRepr()
 
-Format argument of [`representation`](@ref) that builds a dense `Matrix` with element type `T`.
+Internal format, selected by `Matrix{T}` in [`representation`](@ref), that builds a dense `Matrix` with element type `T`.
 Without `T`, the element type follows from the operator, see [`mat_eltype`](@ref).
 """
 struct EagerDenseRepr{T} end
@@ -12,7 +12,7 @@ struct EagerDenseRepr{T} end
     EagerSparseRepr{T}()
     EagerSparseRepr()
 
-Format argument of [`representation`](@ref) that builds a `SparseMatrixCSC` with element type `T`.
+Internal format, selected by `SparseMatrixCSC{T}` in [`representation`](@ref), that builds a `SparseMatrixCSC` with element type `T`.
 This is the default format. Without `T`, the element type follows from the operator, see [`mat_eltype`](@ref).
 """
 struct EagerSparseRepr{T} end
@@ -39,8 +39,8 @@ PartitionedSparseRepr(; backend=nothing, row_partition=nothing, col_partition=no
 """
     LazyRepr(input=missing)
 
-Format argument of [`representation`](@ref) that gives a matrix-free `SciMLOperators`
-operator wrapping a [`LazyOperator`](@ref), the same as `:lazy`. `input` is the kind of
+Internal format, selected by `:lazy` in [`representation`](@ref), that gives a matrix-free `SciMLOperators`
+operator wrapping a [`LazyOperator`](@ref). `input` is the kind of
 vector the operator is prepared for: `:dense`, `:sparse`, or an array whose type and size
 are used. With `missing`, a dense vector is used for small spaces and a sparse one otherwise.
 """
@@ -474,10 +474,10 @@ Return a concrete representation of `op_or_state` in Hilbert space `space`. This
 [`matrix_representation`](@ref) for operators and [`vector_representation`](@ref) for states.
 
 - For symbolic operators and numbers, returns a sparse matrix by default. The optional `repr` selects the format:
-  `:dense` gives a dense matrix, and `:lazy` (or `LazyRepr()`) gives a matrix-free
-  `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`. A number `c` gives `c` times the identity.
-- `repr` can also be an array type, which selects dense or sparse and, if it has one, the element type, as in
-  `representation(op, H, Matrix{ComplexF64})`, or a number type such as `Float64`, which gives a sparse result of that element type.
+  an array type such as `Matrix` or `SparseMatrixCSC`, with an optional element type as in `Matrix{ComplexF64}`,
+  or a number type such as `Float64` for a sparse result of that element type. `:lazy` gives a matrix-free
+  `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`, and `:dense` and `:sparse` also work.
+  A number `c` gives `c` times the identity.
   With a type, inference finds the result type for operators of a single species and for single kets and bras.
 - For `AbstractBasisState` and strings such as `"10"`, returns a one-hot sparse column vector.
 - For `SymbolicState` kets and bras, and sums of them, returns the corresponding column or row vector.
@@ -509,8 +509,7 @@ With [`Axes`](@ref)`(Hout, Hin)`, return the `dim(Hout) × dim(Hin)` matrix of `
 spaces must have the same groups, for example two sectors of the same modes. Two different spaces support only eager
 formats without chunking.
 
-The optional `repr` selects the format, as in [`representation`](@ref): `:sparse` (the default), `:dense`, `:lazy`,
-or a format object (`EagerSparseRepr()`, `EagerDenseRepr()`, `LazyRepr()`). A numeric element type also works as `repr`: `ComplexF64` gives a sparse matrix with that element type, and `Matrix{Float64}` gives a dense matrix with that element type.
+The optional `repr` selects the format, as in [`representation`](@ref).
 
 Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space (outside `Hout` with `Axes`). Projection drops matrix elements to states outside the space, so an operator that changes a conserved quantity gives zero on a single sector; use `Axes(Hout, Hin)` with the two sectors instead. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
 
