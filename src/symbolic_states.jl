@@ -534,7 +534,11 @@ _zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(_output_space(space)), d
 function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     vector_representation(1 * s, space, repr; kwargs...)
 end
-vector_representation(op, space, repr; kwargs...) = vector_representation(op, space, _canonicalize_repr(repr); kwargs...)
+function vector_representation(op, space, repr; kwargs...)
+    _repr = _canonicalize_repr(repr)
+    _repr isa LazyRepr && throw(ArgumentError("Kets and bras support `:sparse` and `:dense` representations. `:lazy` is only for operators and ketbras."))
+    vector_representation(op, space, _repr; kwargs...)
+end
 
 function vector_representation(op::Union{NCMul,NCAdd}, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     _vector_representation(op, space, repr, _operator_type(op); kwargs...)
@@ -690,6 +694,9 @@ end
     @test v == representation(ket, Hf)
     @test vector_representation(ket', Hf) == transpose(v)
     @test vector_representation(1 * vf("10"), Hf, :dense) isa Vector
+    @test_throws ArgumentError vector_representation(ket, Hf, :lazy)
+    @test_throws ArgumentError representation(vf("10")', Hf, :lazy)
+    @test_throws ArgumentError representation("10", Hf, :lazy)
 end
 
 @testitem "representation of different kinds of input" begin
