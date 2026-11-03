@@ -95,8 +95,8 @@ end
 
 The symbolic Lindblad dissipator `ρ ↦ LρL† - ½{L†L, ρ}` for the jump operator `L`, acting on the
 vectorized density matrix of a space returned by [`open_system`](@ref). Public, not exported.
-`L†L` is kept as an unsorted product, so on truncated bosons it is represented by the same truncated
-matrices as `LρL†` and the dissipator stays trace preserving.
+On truncated bosons, `L†L` is represented as the product of the truncated matrices of `L†` and `L`, as
+in `LρL†`, so the dissipator stays trace preserving. Its bosonic factors print in parentheses, e.g. `(b*b†)`.
 
 # Examples
 ```julia
@@ -107,11 +107,46 @@ representation(dissipator(c[1]), Hlr)
 ```
 """
 function dissipator(L)
-    anticommutator = NonCommutativeProducts.with_autosort(false) do
-        LdL = L' * L
-        tag_left(LdL) + tag_right(LdL)
+    unsorted = NonCommutativeProducts.with_autosort(() -> L' * L + 0, false)
+    LdL = sum(_order_bosons, NonCommutativeProducts.NCterms(unsorted); init = NonCommutativeProducts.additive_coeff(unsorted))
+    return tag_left(L) * tag_right(L') - (tag_left(LdL) + tag_right(LdL)) / 2
+end
+
+# A product of operators on one bosonic mode that sorting leaves as it is. It is represented by the product of the
+# truncated matrices of its factors, which for `b * b'` differs from the normal-ordered `b' * b + 1` at the cutoff.
+struct OrderedBosonProduct{B <: BosonSym} <: AbstractSym
+    factors::Vector{B}
+end
+Base.adjoint(x::OrderedBosonProduct) = OrderedBosonProduct(reverse!(map(adjoint, x.factors)))
+Base.:(==)(a::OrderedBosonProduct, b::OrderedBosonProduct) = a.factors == b.factors
+Base.hash(x::OrderedBosonProduct, h::UInt) = hash(x.factors, hash(OrderedBosonProduct, h))
+Base.iszero(::OrderedBosonProduct) = false
+Base.show(io::IO, x::OrderedBosonProduct) = (print(io, "("); join(io, x.factors, "*"); print(io, ")"))
+symbolic_group(x::OrderedBosonProduct) = symbolic_group(first(x.factors))
+add_tag(x::OrderedBosonProduct, tag) = OrderedBosonProduct(map(f -> add_tag(f, tag), x.factors))
+mat_eltype(::Type{<:OrderedBosonProduct}) = Float64
+function apply_local_operator(x::OrderedBosonProduct, state, space, precomp)
+    amp = 1.0
+    for factor in Iterators.reverse(x.factors)
+        state, _amp = apply_local_operator(factor, state, space, precomp)
+        iszero(_amp) && return state, zero(amp)
+        amp *= _amp
     end
-    return tag_left(L) * tag_right(L') - anticommutator / 2
+    return state, amp
+end
+_ordered_mul_effect(a, b) = symbolic_group(a) != symbolic_group(b) && _group_isless(b, a) ? Swap(1) : nothing
+NonCommutativeProducts.mul_effect(a::OrderedBosonProduct, b::AbstractSym) = _ordered_mul_effect(a, b)
+NonCommutativeProducts.mul_effect(a::AbstractSym, b::OrderedBosonProduct) = _ordered_mul_effect(a, b)
+NonCommutativeProducts.mul_effect(a::OrderedBosonProduct, b::OrderedBosonProduct) = _ordered_mul_effect(a, b)
+
+# `term` with the factors of each bosonic mode, which commute with all other factors, moved to the end. They are
+# wrapped in an OrderedBosonProduct unless they are normal ordered, since then sorting is exact on a truncated mode.
+function _order_bosons(term)
+    bosons = [f for f in term.factors if f isa BosonSym]
+    others = filter(f -> !(f isa BosonSym), term.factors)
+    modes = [filter(f -> symbolic_group(f) == g, bosons) for g in unique(map(symbolic_group, bosons))]
+    ordered = map(fs -> issorted(fs; by = f -> f.exp < 0) ? prod(fs) : OrderedBosonProduct(fs), modes)
+    return prod(others; init = NonCommutativeProducts.prefactor(term)) * prod(ordered; init = 1)
 end
 
 function add_tag(factor::AbstractSym, tag)
@@ -339,8 +374,11 @@ end
     @fermions c
     Hlr, Hl, Hr, left, right = open_system(tensor_product(hilbert_space(b, 3), hilbert_space(c, 1:1)))
     Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
+    comm = -1im * (left(b'b) - right(b'b))
     for L in (b', b' + c[1], c[1] * b' + b)
-        @test norm(representation(dissipator(L), Hlr, :dense)' * Ivec) < 1.0e-12
+        @test norm(representation(2 * dissipator(L) + comm, Hlr, :dense)' * Ivec) < 1.0e-12
+        # the Heisenberg-picture generator is unital
+        @test norm(representation(dissipator(L)', Hlr, :dense) * Ivec) < 1.0e-12
     end
 
     nth = 0.5
