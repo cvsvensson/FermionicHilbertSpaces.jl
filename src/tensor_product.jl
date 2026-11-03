@@ -799,7 +799,7 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
 end
 partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
 
-function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper=_partial_trace_mapper(H, Hsub, complement); skipmissing=false, phase_factors=true)
+function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper = _partial_trace_mapper(H, Hsub, complement); skipmissing = false, phase_factors = true)
     fill!(mout, zero(eltype(mout)))
     covered = if alg isa FullPartialTraceAlg
         splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
@@ -1103,7 +1103,7 @@ end
 
 # The map skips missing states.
 partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = transpose(transposed_basis_transformation_map(H, Hsub; skipmissing=true, kwargs...))
-function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement::AbstractHilbertSpace, alg::AbstractPartialTraceAlg, mapper=_partial_trace_mapper(H, Hsub, complement); phase_factors=true)
+function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement::AbstractHilbertSpace, alg::AbstractPartialTraceAlg, mapper = _partial_trace_mapper(H, Hsub, complement); phase_factors = true)
     indK = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
     T = partial_trace_phase_factor_eltype(H)
@@ -1251,8 +1251,8 @@ end
         # H2 lacks the parts on modes 3:4 with zero or two particles
         @test_throws ArgumentError partial_trace(m12full, H => Hsub; complement=H2, alg)
         # misses mode 4
-        @test_throws ArgumentError partial_trace(m12full, H => Hsub; complement=hilbert_space(a, 3:3), alg)
-        @test_throws ArgumentError partial_trace(H => Hsub; complement=hilbert_space(a, 3:3), alg)
+        @test_throws ArgumentError partial_trace(m12full, H => Hsub; complement = hilbert_space(a, 3:3), alg)
+        @test_throws ArgumentError partial_trace(H => Hsub; complement = hilbert_space(a, 3:3), alg)
     end
     @test_throws ArgumentError embed(msub, Hsub => H; complement=Hcomp)
 
