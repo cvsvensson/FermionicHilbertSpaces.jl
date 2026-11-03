@@ -36,13 +36,27 @@ function partial_trace(G, (H, Hsub)::Pair{<:BdGHilbertSpace, <:BdGHilbertSpace})
     return G[inds, inds]
 end
 
+function _check_correlation_matrix(G, H)
+    _check_size(G, H)
+    rtol = sqrt(eps(real(float(eltype(G)))))
+    isapprox(G, G'; rtol) && (H isa SingleParticleHilbertSpace || is_ph_symmetric(G - I / 2; rtol)) ||
+        throw(ArgumentError("A correlation matrix must be Hermitian, and on a BdG space satisfy G + τx * transpose(G) * τx = I."))
+    return G
+end
+function _occupations(G, H)
+    n = eigvals(Hermitian(_check_correlation_matrix(G, H)))
+    tol = sqrt(eps(eltype(n)))
+    all(x -> -tol <= x <= 1 + tol, n) || throw(ArgumentError("The eigenvalues of a correlation matrix must lie in [0, 1]."))
+    return n
+end
+
 # The eigenvalues of G are n and 1 - n for each quasiparticle with occupation n, whose entropy is -n log n - (1 - n) log(1 - n).
 """
     von_neumann_entropy(G, Hbdg::BdGHilbertSpace)
 
 The von Neumann entropy of the Gaussian state with Nambu correlation matrix `G` on `Hbdg`, equal to the entropy of `gaussian_state(G, H, Hbdg)` for a many-body space `H`.
 """
-von_neumann_entropy(G, ::BdGHilbertSpace) = von_neumann_entropy(G)
+von_neumann_entropy(G, H::BdGHilbertSpace) = -sum(_xlogx, _occupations(G, H))
 
 """
     correlation_matrix(F::LinearAlgebra.Eigen)
@@ -61,8 +75,13 @@ true
 function correlation_matrix(F::Eigen)
     N = div(size(F.vectors, 2), 2)
     U = F.vectors[:, 1:N]
-    return conj(U) * transpose(U)
+    G = conj(U) * transpose(U)
+    # G + transpose(G) == I for Majoranas and G + τx * transpose(G) * τx == I for Nambu spinors fail when `eigen`
+    # returns zero-energy eigenvectors that are not particle-hole partners.
+    G + transpose(G) ≈ I || is_ph_symmetric(G - I / 2) || throw(ArgumentError(_unpaired_error))
+    return G
 end
+const _unpaired_error = "The eigenvectors are not particle-hole partners, as happens for unpaired zero-energy modes."
 
 """
     ground_state_parity(F::LinearAlgebra.Eigen)
@@ -100,6 +119,7 @@ function ground_state_parity(F::Eigen, ::MajoranaSingleParticleHilbertSpace)
     # γ_x = x ⋅ γ and γ_y = y ⋅ γ have i γ_x γ_y = -1 there. The columns x, y form an orthogonal W, and the product of
     # these pair parities is det(W) times the parity.
     W = sqrt(2) * stack(Iterators.flatten((real(u), imag(u)) for u in eachcol(F.vectors[:, 1:N])))
+    W' * W ≈ I || throw(ArgumentError(_unpaired_error))
     return _parity((-1)^N * det(W))
 end
 
@@ -120,6 +140,7 @@ true
 function gaussian_state(G, H, Hbdg::BdGHilbertSpace)
     N = length(modes(Hbdg))
     dim(H) == 2^N || throw(ArgumentError("The many-body space must have exactly the $N modes of the BdG space."))
+    _check_correlation_matrix(G, Hbdg)
     # transpose(G)[i, j] = ⟨Ψ_j' Ψ_i⟩, so ⟨γ' γ⟩ = v' * transpose(G) * v for γ' = quasiparticle(v, Hbdg)
     vals, vecs = eigen(transpose(G) - I / 2, BdGEigen())
     tol = sqrt(eps(real(eltype(vals))))
@@ -191,6 +212,11 @@ end
     @test parities == [1, -1]
     F = eigen(Hermitian(representation(quadratic, H, :dense)))
     @test_throws ArgumentError ground_state_parity(Eigen(F.values, 2 * F.vectors), H)
+    # Two zero modes, γ[1] and γ[4], whose eigenvectors `eigen` does not pair
+    Hzero = hilbert_space(γ, 1:4, SingleParticle())
+    F = eigen(Hermitian(representation(1im * γ[2] * γ[3], Hzero, :dense)))
+    @test_throws ArgumentError ground_state_parity(F, Hzero)
+    @test_throws ArgumentError correlation_matrix(F)
 end
 
 @testitem "Gaussian state from a correlation matrix" begin
@@ -218,6 +244,7 @@ end
     Gthermal = correlation_matrix(ρ, Hmb, Hbdg)
     @test gaussian_state(Gthermal, Hmb, Hbdg) ≈ ρ
     @test_throws ArgumentError gaussian_state(Diagonal([2; zeros(N - 1); -1; ones(N - 1)]), Hmb, Hbdg)
+    @test_throws ArgumentError gaussian_state(Matrix(1.0I, 2N, 2N), Hmb, Hbdg)
 end
 
 @testitem "Reduced BdG correlation matrix and entropy" begin
@@ -241,6 +268,7 @@ end
         Gsub = partial_trace(correlation_matrix(state, Hmb, Hbdg), Hbdg => Hsub)
         @test Gsub ≈ correlation_matrix(state, Hmb, Hsub)
         @test von_neumann_entropy(Gsub, Hsub) ≈ von_neumann_entropy(partial_trace(state, Hmb => hilbert_space(f, sort(sub))))
+        @test_throws ArgumentError von_neumann_entropy(2Gsub, Hsub)
     end
     @test_throws ArgumentError partial_trace(rand(2N, 2N), Hbdg => hilbert_space(f, [1, 5], BdG()))
 end
