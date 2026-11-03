@@ -39,7 +39,7 @@ H = hilbert_space(f, 1:4)
 #Define a subsystem and partial trace to find the reduced density matrix
 Hsub = hilbert_space(f, 1:2)
 ρsub = partial_trace(Ψ, H => Hsub)
-entanglement_entropy = sum(-λ * log(λ) for λ in eigvals(ρsub))
+entanglement_entropy = sum(-λ * log(λ) for λ in eigvals(Hermitian(ρsub)) if λ > 0)
 
 # `representation` returns a sparse matrix by default; a third argument such as `:dense` selects the format, see the [docs](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/docstrings/).
 
@@ -48,7 +48,7 @@ Hcons = hilbert_space(f, 1:4, NumberConservation(3))
 Hsubcons = subregion(Hsub, Hcons) # Include only substates consistent with Hcons 
 Ψcons = eigvecs(representation(sym_ham, Hcons, :dense))[:, 1]
 ρsub = partial_trace(Ψcons, Hcons => Hsubcons)
-sum(-λ * log(λ) for λ in eigvals(ρsub))
+sum(-λ * log(λ) for λ in eigvals(Hermitian(ρsub)) if λ > 0)
 
 # ## Who is this for?
 # You may be interested if you
