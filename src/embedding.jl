@@ -1,4 +1,4 @@
-function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=Base.inferencebarrier(complementary_subsystem(H, Hsub)), skipmissing=false, kwargs...)
+function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), skipmissing = false, kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
     size_compatible(m, Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(Hsub)), got $(size(m))."))
     if isnothing(complement)
@@ -55,7 +55,7 @@ struct EmbedMap{HS,H,C,K,M}
 end
 
 # The map is the compression onto `H` and checks nothing, so `skipmissing` has no effect.
-function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
+function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(Hsub, H, complement), skipmissing = false, kwargs...)
     map = if isnothing(complement)
         basis_transformation_map(Hsub, H; skipmissing=true, kwargs...)
     else
