@@ -140,17 +140,17 @@ end
     # Diagonal terms and the identity add up in the same entries
     terms = [[(1 + 0.5im) * f[i]' * f[j] for i in 1:N for j in i+1:N]; [f[i]' * f[i] for i in 1:N]]
     op = sum(terms) + 1.5
-    M = matrix_representation(op, H)
-    entries = map(findnz, [matrix_representation(term, H) for term in terms])
+    M = representation(op, H)
+    entries = map(findnz, [representation(term, H) for term in terms])
     @test M == sparse((reduce(vcat, getindex.(entries, k)) for k in 1:3)..., dim(H), dim(H)) + 1.5I
 
     # f[1]' and f[1] map some states out of the space
-    @test_throws ArgumentError matrix_representation(f[1]' + f[1] + 1, H)
-    @test matrix_representation(f[1]' + f[1] + 1, H; projection=true) ==
-          matrix_representation(f[1]', H; projection=true) + matrix_representation(f[1], H; projection=true) + I
+    @test_throws ArgumentError representation(f[1]' + f[1] + 1, H)
+    @test representation(f[1]' + f[1] + 1, H; projection=true) ==
+          representation(f[1]', H; projection=true) + representation(f[1], H; projection=true) + I
 
     # A space without states
-    @test size(matrix_representation(f[1]' * f[2] + 1, constrain_space(hilbert_space(f, 1:2), NumberConservation(5)))) == (0, 0)
+    @test size(representation(f[1]' * f[2] + 1, constrain_space(hilbert_space(f, 1:2), NumberConservation(5)))) == (0, 0)
 
     # A constrained space with several groups, and an identity coefficient that widens the element type
     @boson b
@@ -158,7 +158,7 @@ end
     Hc = tensor_product(hilbert_space(f, 1:10), hilbert_space(b, 7); constraint=NumberConservation(1:15))
     inds = [state_index(state, Hprod) for state in basisstates(Hc)]
     op = sum(f[i]' * f[i+1] + hc for i in 1:9) + sum(f[i]' * b + hc for i in 1:10) + 2 * b' * b + f[1]' + hc + 0.5im
-    M = matrix_representation(op, Hc; projection=true)
+    M = representation(op, Hc; projection=true)
     @test M isa SparseMatrixCSC{ComplexF64}
-    @test M == matrix_representation(op, Hprod)[inds, inds]
+    @test M == representation(op, Hprod)[inds, inds]
 end
