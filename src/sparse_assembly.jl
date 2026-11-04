@@ -1,6 +1,6 @@
 const SPARSE_BLOCK_SIZE = 4096
 
-function _terms_matrix(::Type{T}, terms, coeff, space, ::EagerSparseRepr, ::NoChunking; kwargs...) where T
+function _terms_matrix(::Type{T}, terms, coeff, space, ::EagerSparseRepr, ::NoChunking; kwargs...) where {T}
     m = _blocked_sparse_matrix(T, _precomputed_terms(terms, space), coeff, space; kwargs...)
     return _narrowed(_trimmed!(m, nnz(m)))
 end

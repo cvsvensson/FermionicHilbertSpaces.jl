@@ -249,7 +249,7 @@ function _hcat_threaded(mats, scheduler)
         m = mats[k]
         copyto!(rowval, entry_offsets[k] + 1, rowvals(m), 1, nnzs[k])
         copyto!(nzval, entry_offsets[k] + 1, nonzeros(m), 1, nnzs[k])
-        colptr[col_offsets[k] .+ (2:ncols[k]+1)] .= view(SparseArrays.getcolptr(m), 2:ncols[k]+1) .+ entry_offsets[k]
+        colptr[col_offsets[k] .+ (2:(ncols[k] + 1))] .= view(SparseArrays.getcolptr(m), 2:(ncols[k] + 1)) .+ entry_offsets[k]
     end
     return SparseArrays.SparseMatrixCSC(size(first(mats), 1), last(col_offsets), colptr, rowval, nzval)
 end
