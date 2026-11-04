@@ -363,7 +363,7 @@ function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilb
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     if all(_issquare, ms)
         check_kron_sizes(ms, Hs)
-        # on an unconstrained space, the product of embeddings is the same and faster for dense factors
+        # on an unconstrained space, the product of embeddings is used
         isconstrained(H) || return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
         return ordered_product(Tuple(ms), Tuple(Hs), H; kwargs...)
     elseif all(_isket, ms)
@@ -667,8 +667,7 @@ abstract type AbstractPartialTraceAlg end
 
 Partial-trace algorithm that combines every basis state of the subsystem with every basis state
 of the complement. It is an option for the `alg` keyword of [`partial_trace`](@ref) and of the
-maps `partial_trace(H => Hsub)` and `embed(Hsub => H)`. It is faster when the subsystem and
-its complement have few states compared to the full space.
+maps `partial_trace(H => Hsub)` and `embed(Hsub => H)`.
 """
 struct SubsystemPartialTraceAlg <: AbstractPartialTraceAlg end
 """
@@ -676,9 +675,7 @@ struct SubsystemPartialTraceAlg <: AbstractPartialTraceAlg end
 
 Partial-trace algorithm that visits pairs of basis states of the full space, or the stored
 elements of a sparse input. It is an option for the `alg` keyword of [`partial_trace`](@ref)
-and of the maps `partial_trace(H => Hsub)` and `embed(Hsub => H)`. It is faster for sparse
-inputs and for constrained spaces with few states compared to the subsystem and its
-complement combined.
+and of the maps `partial_trace(H => Hsub)` and `embed(Hsub => H)`.
 """
 struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
 
@@ -824,7 +821,7 @@ In-place partial trace of `m` (an operator on `H` or a pure state) from `H` to `
 to `mout`, which must have size `(dim(Hsub), dim(Hsub))`. See [`partial_trace`](@ref).
 
 `alg` is `SubsystemPartialTraceAlg()` or `FullPartialTraceAlg()`, chosen from the dimensions
-and sparsity of `m` by default; both give the same result and throw in the same cases.
+and sparsity of `m` by default.
 """
 partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_trace!(mout, vec_to_density_matrix(v), H, Hsub; kwargs...)
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(m, Hsub, H, complement), kwargs...)

@@ -209,8 +209,7 @@ function _apply_superop_on_pure_state!(w::AbstractVector, mat::SparseMatrixCSC, 
     colptr = SparseArrays.getcolptr(mat)
     rows = rowvals(mat)
     vals = nonzeros(mat)
-    # Most columns are empty for partial trace/transpose maps, so the empty-column check is the hot path.
-    # Reading colptr directly is ~40% faster than nzrange here, and @inbounds is safe after the size checks above.
+    # @inbounds is safe after the size checks above.
     @inbounds for c in axes(mat, 2)
         ptr_start, ptr_stop = colptr[c], colptr[c+1] - 1
         ptr_start > ptr_stop && continue
