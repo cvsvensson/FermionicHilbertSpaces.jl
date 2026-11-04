@@ -74,16 +74,20 @@ operator type subtypes it, registers itself with `NonCommutativeProducts.@nc` an
 """
 abstract type AbstractSym end
 
-# Factors from different groups are ordered by the type name of the group id, then by `isless`.
-# The type name depends only on the code, so the order is the same in every session.
-# Tuple groups share the type name `Tuple` but may hold elements `isless` can't compare, so they are compared
-# element by element with the same rule.
-_group_isless(a, b) = _order_isless(symbolic_group(a), symbolic_group(b))
+# The order of labels, tags and groups. Values are ranked by kind, and those of one kind are compared with `isless`.
+# Kinds depend only on the code, so the order is the same in every session.
+# Numbers and strings of different types are one kind, so that they are ordered consistently with `==`, as `1 == 1.0`.
+# Tuples are one kind and are compared element by element, as `isless` may not compare their elements.
+_order_kind(x) = nameof(typeof(x))
+_order_kind(::Real) = :Real
+_order_kind(::AbstractString) = :AbstractString
+_order_kind(::Tuple) = :Tuple
 function _order_isless(a, b)
-    na, nb = nameof(typeof(a)), nameof(typeof(b))
-    return na == nb ? isless(a, b) : isless(na, nb)
+    ka, kb = _order_kind(a), _order_kind(b)
+    ka == kb || return isless(ka, kb)
+    return !isequal(a, b) && isless(a, b)
 end
-_order_isless(a::Real, b::Real) = isless(a, b) # `1 == 1.0`, so numbers can't be ordered by type name
+_group_isless(a, b) = _order_isless(symbolic_group(a), symbolic_group(b))
 _order_isless(::Tuple{}, ::Tuple{}) = false
 _order_isless(::Tuple{}, ::Tuple) = true
 _order_isless(::Tuple, ::Tuple{}) = false
@@ -97,14 +101,14 @@ end
 # The tags that identify a group of symbolic operators. `tags` is `nothing` or a tuple. For `@fermions` and
 # `@majoranas` the first element is the tuple of names given to the macro, so the names determine the group.
 # Elements appended by `add_tag` are symbols such as `:left` and `:right`.
-# Tags are ordered by `isless` of their tag tuples. For groups created by the macros this is the lexicographic order
+# Tags are ordered by `_order_isless` of their tag tuples. For groups created by the macros this is the lexicographic order
 # of the macro's names, e.g. the operators of `@fermions a` sort before those of `@fermions b`.
 struct Tags{T}
     tags::T
 end
 Base.hash(id::Tags, h::UInt) = hash(id.tags, h)
 Base.:(==)(a::Tags, b::Tags) = a.tags == b.tags
-Base.isless(a::Tags, b::Tags) = isless(tagset(a), tagset(b))
+Base.isless(a::Tags, b::Tags) = _order_isless(tagset(a), tagset(b))
 tagset(id::Tags) = id.tags
 tagset(::Tags{Nothing}) = ()
 tagset(x) = tagset(tags(x))
