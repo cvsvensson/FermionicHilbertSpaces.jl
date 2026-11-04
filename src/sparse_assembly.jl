@@ -70,7 +70,7 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
     M = length(incols)
     offset = first(incols) - 1
     # The blocks shrink with the share of the columns of the space in `incols`, so that the chunks of a chunked build
-    # together hold no more buffered entries than the serial build
+    # together buffer about as many entries as the serial build
     B = max(1, cld(SPARSE_BLOCK_SIZE * M, max(N, 1)))
     if 0 < M <= B
         ijv = _collect_ijv(T, precomps, coeff, space, incols, offset; kwargs...)
