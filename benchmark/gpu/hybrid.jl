@@ -101,4 +101,6 @@ function run_case((; name, op, H, kwargs))
     ON_CPU || CUDA.reclaim()
 end
 
-foreach(run_case, cases("--large" in ARGS))
+if abspath(PROGRAM_FILE) == @__FILE__
+    foreach(run_case, cases("--large" in ARGS))
+end

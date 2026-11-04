@@ -34,9 +34,11 @@ end
 threaded() = FHS.StateChunking(StaticScheduler(; nchunks = Threads.nthreads()))
 
 # Format whose result is the (I, J, V) entries of the matrix, from the state loop that FHS uses for sparse matrices.
-# Duplicate entries are not summed.
-struct IJVFormat end
+# Duplicate entries are not summed. `IJVFormat{T}()` fixes the element type, as `Matrix{T}` does.
+struct IJVFormat{T} end
+IJVFormat() = IJVFormat{Missing}()
 FHS._canonicalize_repr(repr::IJVFormat) = repr
+FHS._repr_eltype(default, ::IJVFormat{T}) where {T} = T === Missing ? default : T
 function FHS._terms_matrix(::Type{T}, terms, coeff, space, ::IJVFormat, chunking; kwargs...) where {T}
     precomps = FHS._precomputed_terms(terms, space)
     collect_cols(cols) = FHS._collect_ijv(T, precomps, coeff, space, cols, 0; kwargs...)
@@ -44,7 +46,7 @@ function FHS._terms_matrix(::Type{T}, terms, coeff, space, ::IJVFormat, chunking
     parts = tmap(collect_cols, index_chunks(1:dim(space); n = Threads.nthreads()); scheduler = chunking.scheduler)
     return ntuple(k -> reduce(vcat, getindex.(parts, k)), 3)
 end
-host_ijv(op, H; kwargs...) = representation(op, H, IJVFormat(); kwargs...)
+host_ijv(op, H, T = Missing; kwargs...) = representation(op, H, IJVFormat{T}(); kwargs...)
 
 # The large cases take seconds per run, so only a few runs
 besttime(f) = @belapsed $f() samples = 5 evals = 1 seconds = 30
