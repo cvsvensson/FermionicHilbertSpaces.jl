@@ -1427,9 +1427,11 @@ end
     @bosons b
     Hcons = hilbert_space(f, 1:6, NumberConservation(3))
     Hprod = tensor_product(hilbert_space(f, 1:3), hilbert_space(s[1], 1 // 1), hilbert_space(b[1], 3))
-    for (H, Hsub) in ((hilbert_space(f, 1:5), hilbert_space(f, [2, 4])),
-        (Hcons, subregion(hilbert_space(f, [1, 4]), Hcons)),
-        (Hprod, tensor_product(hilbert_space(f, 2:2), hilbert_space(b[1], 3))))
+    for (H, Hsub) in (
+            (hilbert_space(f, 1:5), hilbert_space(f, [2, 4])),
+            (Hcons, subregion(hilbert_space(f, [1, 4]), Hcons)),
+            (Hprod, tensor_product(hilbert_space(f, 2:2), hilbert_space(b[1], 3))),
+        )
         ρ = rand(ComplexF64, dim(H), dim(H))
         ψ = rand(ComplexF64, dim(H))
         @test partial_trace(ρ, H => Hsub; alg) ≈ partial_trace(ρ, H => Hsub)
