@@ -658,11 +658,7 @@ _convert_repr_eltype(M, ::EagerDenseRepr{Missing}) = Matrix(M)
 _convert_repr_eltype(M, ::EagerSparseRepr{T}) where T = SparseArrays.sparse(T.(M))
 _convert_repr_eltype(M, ::EagerDenseRepr{T}) where T = Matrix{T}(M)
 _convert_repr_eltype(M, ::Union{LazyRepr, PartitionedSparseRepr}) = M
-function _convert_repr_eltype(M, repr)
-    format = _canonicalize_repr(repr)
-    format === repr && throw(ArgumentError("The format `$(repr)` does not support multiples of the identity."))
-    return _convert_repr_eltype(M, format)
-end
+_convert_repr_eltype(M, repr::Type) = _convert_repr_eltype(M, _canonicalize_repr(repr))
 _convert_repr_eltype(M, ::Type{A}) where {A <: SparseArrays.AbstractSparseArray} = SparseArrays.sparse(_convert_repr_eltype(M, _canonicalize_repr(A)))
 
 # A concrete element type fixes the matrix type, also where inference cannot follow the assembly
@@ -948,7 +944,7 @@ end
     struct BareFormat end
     _canonicalize_repr(repr::BareFormat) = repr
     @fermions f
-    @test_throws ArgumentError representation(2, hilbert_space(f, 1:2), BareFormat())
+    @test_throws MethodError representation(2, hilbert_space(f, 1:2), BareFormat())
 end
 
 @testitem "Scheduler extension correctness" begin
