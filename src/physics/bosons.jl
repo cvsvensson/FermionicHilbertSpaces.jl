@@ -169,14 +169,14 @@ Base.hash(x::BosonicState, h::UInt) = hash(x.n, h)
 internal_rep(state::BosonicState, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.n)
 physical_rep(state::T, ::Type{BosonicState}) where T<:Integer = BosonicState(Int(state))
 
-struct TruncatedBosonicHilbertSpace{L,B} <: AbstractAtomicHilbertSpace{BosonicState}
-    sym::BosonSym{L,B}
+struct TruncatedBosonicHilbertSpace{L, B, T} <: AbstractAtomicHilbertSpace{BosonicState}
+    sym::BosonSym{L, B, T}
     dimension::Int
-    function TruncatedBosonicHilbertSpace(sym::BosonSym{L,B}, dimension::Integer) where {L,B}
+    function TruncatedBosonicHilbertSpace(sym::BosonSym{L, B, T}, dimension::Integer) where {L, B, T}
         if dimension < 1
             throw(ArgumentError("Bosonic Hilbert space dimension must be positive, got $dimension"))
         end
-        new{L,B}(sym, Int(dimension))
+        return new{L, B, T}(sym, Int(dimension))
     end
 end
 Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)

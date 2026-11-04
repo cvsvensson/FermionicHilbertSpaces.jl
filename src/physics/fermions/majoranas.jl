@@ -74,7 +74,7 @@ function Base.isless(a::MajoranaSym, b::MajoranaSym)
     if a.basis.group !== b.basis.group
         a.basis.group < b.basis.group
     elseif a.basis.name == b.basis.name
-        a.label < b.label
+        _order_isless(a.label, b.label)
     else
         a.basis.name < b.basis.name
     end
