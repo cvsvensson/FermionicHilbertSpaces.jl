@@ -169,21 +169,21 @@ Base.hash(x::BosonicState, h::UInt) = hash(x.n, h)
 internal_rep(state::BosonicState, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.n)
 physical_rep(state::T, ::Type{BosonicState}) where T<:Integer = BosonicState(Int(state))
 
-struct TruncatedBosonicHilbertSpace{L,B} <: AbstractAtomicHilbertSpace{BosonicState}
-    sym::BosonSym{L,B}
+struct TruncatedBosonicHilbertSpace{L,B,T} <: AbstractAtomicHilbertSpace{BosonicState}
+    sym::BosonSym{L,B,T}
     dimension::Int
-    function TruncatedBosonicHilbertSpace(sym::BosonSym{L,B}, dimension::Integer) where {L,B}
+    function TruncatedBosonicHilbertSpace(sym::BosonSym{L,B,T}, dimension::Integer) where {L,B,T}
         if dimension < 1
             throw(ArgumentError("Bosonic Hilbert space dimension must be positive, got $dimension"))
         end
-        new{L,B}(sym, Int(dimension))
+        new{L,B,T}(sym, Int(dimension))
     end
 end
 Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)
 Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.dimension, h))
 basisstates(H::TruncatedBosonicHilbertSpace) = BasisStates(H, Iterators.map(BosonicState, 0:(dim(H)-1)))
 Base.@propagate_inbounds function basisstate(n::Integer, H::TruncatedBosonicHilbertSpace)
-    @boundscheck 1 <= n <= dim(H) || throw(BoundsError(H, n))
+    @boundscheck 1 <= n <= dim(H) || Base.throw_boundserror(H, n)
     BosonicState(n - 1)
 end
 dim(H::TruncatedBosonicHilbertSpace) = H.dimension

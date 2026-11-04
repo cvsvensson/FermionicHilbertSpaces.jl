@@ -20,17 +20,17 @@ Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
 
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
 # ProductSpaces consists of a list of groups (stored as `factors`) and their atoms, in group-major order
-struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
+# `atoms` and `atom_index` are type parameters so that a device copy can drop them.
+struct ProductSpace{B,C,AS,T,LI,CI,AI} <: AbstractProductHilbertSpace{B}
     factors::C
-    atoms::Vector{A}
-    atom_index::Dict{Any,Int} # atomic_id => position in atoms. Only used for lookups, so not concretely typed
+    atoms::AS
+    atom_index::AI # atomic_id => position in atoms. Only used for lookups, so a Dict{Any,Int}
     fast_path::T
     lininds::LI
     cartinds::CI
     function ProductSpace(factors::C) where {C}
         length(factors) == 0 && throw(ArgumentError("A product space must have at least one factor."))
         atoms = collect(Iterators.flatten(map(atomic_factors, factors)))
-        A = eltype(atoms)
         B = ProductState{Tuple{map(statetype, factors)...}}
         atom_index = Dict{Any,Int}(atomic_id(a) => i for (i, a) in enumerate(atoms))
         length(atom_index) == length(atoms) || throw(ArgumentError("The atoms of a product space must be distinct, got duplicates in $(map(atomic_id, atoms))."))
@@ -39,8 +39,10 @@ struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
         cartinds = CartesianIndices(map(dim, factors))
         LI = typeof(lininds)
         CI = typeof(cartinds)
-        new{B,C,A,typeof(fast_path),LI,CI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
+        new{B,C,typeof(atoms),typeof(fast_path),LI,CI,typeof(atom_index)}(factors, atoms, atom_index, fast_path, lininds, cartinds)
     end
+    ProductSpace{B,C,AS,T,LI,CI,AI}(factors, atoms, atom_index, fast_path, lininds, cartinds) where {B,C,AS,T,LI,CI,AI} =
+        new{B,C,AS,T,LI,CI,AI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
 end
 fast_path(space::ProductSpace) = space.fast_path
 isconstrained(H::ProductSpace) = false
@@ -302,12 +304,12 @@ function partial_transpose_phase_factor(state1, state2, space::ProductSpace)
     prod(map(partial_transpose_phase_factor, state1.states, state2.states, space.factors); init=1)
 end
 
-struct ProductOperator{C,O,S}
+struct ProductOperator{C,O,S,I}
     ops::O
     spaces::S
-    inds::Vector{Int} # indices of active spaces in full space
-    function ProductOperator{C}(ops::O, spaces::S, inds::Vector{Int}) where {C,O,S}
-        new{C,O,S}(ops, spaces, inds)
+    inds::I # indices of active spaces in full space, a Vector{Int} except in device copies
+    function ProductOperator{C}(ops::O, spaces::S, inds::I) where {C,O,S,I}
+        new{C,O,S,I}(ops, spaces, inds)
     end
 end
 function ProductOperator(ops::O, spaces::S, inds::Vector{Int}) where {O,S}

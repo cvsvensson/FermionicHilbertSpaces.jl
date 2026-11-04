@@ -1,14 +1,16 @@
 
-struct FermionicSpace{F,L,FG<:FermionicGroup} <: AbstractGroupedHilbertSpace{F}
-    modes::Vector{L}
-    mode_ordering::OrderedDict{L,Int}
+# `modes` and `mode_ordering` are type parameters so that a device copy can replace them by what the kernels read.
+struct FermionicSpace{F,L,FG<:FermionicGroup,M,O} <: AbstractGroupedHilbertSpace{F}
+    modes::M
+    mode_ordering::O
     group::FG
     function FermionicSpace(_modes::AbstractVector{L}, group::FG, ::Type{F}=FockNumber{default_fock_representation(length(_modes))}) where {F,L<:FermionSym,FG<:FermionicGroup}
         modes = map(_normalize_sym, _modes)
         mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("The modes of a fermionic group must be distinct, got $modes."))
-        new{F,L,FG}(modes, mode_ordering, group)
+        new{F,L,FG,Vector{L},OrderedDict{L,Int}}(modes, mode_ordering, group)
     end
+    FermionicSpace{F,L,FG,M,O}(modes, mode_ordering, group) where {F,L,FG,M,O} = new{F,L,FG,M,O}(modes, mode_ordering, group)
 end
 function FermionicSpace(factors::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F,L<:FermionicSpace}
     all(c -> group_id(c) == group, factors) || throw(ArgumentError("All factors must belong to the group `$group`."))
@@ -30,7 +32,7 @@ Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.
 Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
 basisstates(H::FermionicSpace{FockNumber{I}}) where I = BasisStates(H, Iterators.map(FockNumber{I}, UnitRange{I}(0, dim(H) - 1)))
 Base.@propagate_inbounds function basisstate(ind::Integer, H::FermionicSpace{F}) where F
-    @boundscheck (ind >= 1 && iszero((ind - 1) >> nbr_of_modes(H))) || throw(BoundsError(H, ind))
+    @boundscheck (ind >= 1 && iszero((ind - 1) >> nbr_of_modes(H))) || Base.throw_boundserror(H, ind)
     (F ∘ FockNumber)(ind - 1)
 end
 function _state_index(state::FockNumber, H::FermionicSpace{FockNumber{I}}) where I

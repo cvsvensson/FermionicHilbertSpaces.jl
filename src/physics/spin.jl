@@ -123,22 +123,21 @@ function physical_rep(state::Int, ::Type{SpinState{T}}) where {T<:Integer}
 end
 struct SpinSpace{T<:Integer,S} <: AbstractAtomicHilbertSpace{SpinState{T}}
     spin::Half{T}
-    basisstates::Vector{SpinState{T}}
     sym::S
-    state_index::Dict{SpinState{T},Int}
 end
 function SpinSpace(sym::S, J) where {S<:SymbolicSpinBasis}
     Jhalf = HalfInteger(_check_spin(J))
-    states = spin_basisstates(Jhalf)
     T = typeof(twice(Jhalf))
-    state_index = Dict(s => i for (i, s) in enumerate(states))
-    SpinSpace{T,S}(Jhalf, states, sym, state_index)
+    SpinSpace{T,S}(Jhalf, sym)
 end
 SpinSpace(sym::S) where {S<:SymbolicSpinBasis} = (sym.spin isa Nothing ? throw(ArgumentError("$sym has no spin value. Pass J to hilbert_space, e.g. `hilbert_space(s, 1//2)` or `hilbert_space(s, labels, 1//2)`, or set it when creating the basis with `@spin s 1//2` or `@spins s 1//2`.")) : SpinSpace(sym, sym.spin))
 SpinSpace(label, J) = SpinSpace(SymbolicSpinBasis(label, nothing, J), J)
-basisstates(H::SpinSpace) = BasisStates(H, H.basisstates)
-Base.@propagate_inbounds basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
-dim(H::SpinSpace) = length(H.basisstates)
+basisstates(H::SpinSpace) = BasisStates(H, Iterators.map(n -> basisstate(n, H), 1:dim(H)))
+Base.@propagate_inbounds function basisstate(n::Integer, H::SpinSpace{T}) where T
+    @boundscheck 1 <= n <= dim(H) || Base.throw_boundserror(H, n)
+    SpinState{T}(n - 1 - H.spin)
+end
+dim(H::SpinSpace) = Int(twice(H.spin)) + 1
 function _state_index(s::SpinState, space::SpinSpace)
     t = twice(s.m) + twice(space.spin) # 2(m + J)
     i = (t >> 1) + one(t) # (checking i against dim rather than t against 4J avoids slow SLP vectorization in products of spins)
@@ -149,7 +148,7 @@ has_arithmetic_state_index(::SpinSpace) = true
 atomic_id(H::SpinSpace) = symbolic_group(H.sym)
 function add_tag(H::SpinSpace{T,S}, tag) where {T,S}
     newsym = add_tag(H.sym, tag)
-    SpinSpace{T,typeof(newsym)}(H.spin, H.basisstates, newsym, H.state_index)
+    SpinSpace{T,typeof(newsym)}(H.spin, newsym)
 end
 _check_spin_unset(sym) = sym.spin isa Nothing || throw(ArgumentError("The spin value was already given in the $(sym isa SpinField ? "spin field" : "symbolic basis"), so `J` must be omitted."))
 hilbert_space(sym::SymbolicSpinBasis) = SpinSpace(sym)
@@ -165,8 +164,8 @@ function hilbert_space(sym::SpinField, labels, J, constraint::AbstractConstraint
     _check_spin_unset(sym)
     tensor_product(map(l -> hilbert_space(sym[l], J), _field_labels(labels)); constraint)
 end
-Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
-Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
+Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.spin == b.spin)
+Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.spin, h))
 
 function interpret_state(input::AbstractString, H::SpinSpace{T}) where {T}
     Jhalf = H.spin
@@ -197,7 +196,7 @@ function operators(H::SpinSpace)
     Splus = spzeros(Float64, dim(H), dim(H))
     Sminus = spzeros(Float64, dim(H), dim(H))
     Sz = spzeros(Float64, dim(H), dim(H))
-    for state in H.basisstates
+    for state in basisstates(H)
         m = state.m
         i = state_index(state, H)
         if m < Jhalf
@@ -282,15 +281,18 @@ end
 
 end
 
-struct SpinSym{B} <: AbstractSym
-    op::Symbol
+# `op` is a Symbol, except in device copies of a SpinSym, which cannot hold one and store a Char from `_spin_op_char`.
+struct SpinSym{B,O} <: AbstractSym
+    op::O
     basis::B
     exponent::Int
     function SpinSym{B}(op, basis::B, exponent) where {B}
         #bypass any checks for internal use when we know the input is valid
-        return new{B}(op, basis, exponent)
+        return new{B,typeof(op)}(op, basis, exponent)
     end
 end
+_spin_op_char(op::Symbol) = op === :z ? 'z' : op === :+ ? '+' : '-'
+_spin_op_char(op::Char) = op
 function SpinSym(op, basis::B, exponent::Integer=1) where {B}
     exponent < 0 && throw(ArgumentError("The spin operator `exponent` must be nonnegative, got $exponent."))
     exponent == 0 && return 1 // 1
@@ -461,25 +463,25 @@ function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace, p
     T = Float64
     amplitude = one(T)
 
-    if op.op == :z
+    # The constructor of SpinSym only stores :z, :+ and :-
+    kind = _spin_op_char(op.op)
+    if kind == 'z'
         m = newstate.m
         # S_z |m⟩ = m |m⟩
         amplitude = T(_fast_spin_z_exponent(m, op.exponent))
         return (state, amplitude)
-    elseif op.op == :+
+    elseif kind == '+'
         # S_+ |m⟩ = √(J(J+1) - m(m+1)) |m+1⟩
         m + op.exponent > J && return (state, zero(T))
         amplitude = T(_fast_spin_prefactor(J, m, +1, op.exponent))
         newstate = SpinState(m + op.exponent)
         return (newstate, amplitude)
-    elseif op.op == :-
+    else
         m - op.exponent < -J && return (state, zero(T))
         # S_- |m⟩ = √(J(J+1) - m(m-1)) |m-1⟩
         amplitude = T(_fast_spin_prefactor(J, m, -1, op.exponent))
         newstate = SpinState(m - op.exponent)
         return (newstate, amplitude)
-    else
-        throw(ArgumentError("Invalid spin operator symbol, got `$(op.op)`."))
     end
 end
 
