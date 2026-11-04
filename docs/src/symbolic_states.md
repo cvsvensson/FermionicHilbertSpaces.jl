@@ -38,14 +38,17 @@ foreach(println, vf)
 
 ## Algebra
 
-Multiplying a bra and a ket gives their overlap (`0` if the states differ):
+Multiplying a bra and a ket contracts them. The product stays a symbolic expression, here a multiple of the identity:
 
 ```@example states
 vf("10")' * vf("10")
 ```
 
+`dot` from `LinearAlgebra` gives overlaps and matrix elements as numbers, and throws if the bra and ket don't contract to a scalar:
+
 ```@example states
-vf("10")' * vf("11")
+using LinearAlgebra
+dot(vf("10"), vf("11")), dot(vf("11"), f[2]', vf("10"))
 ```
 
 Multiplying a ket and a bra instead gives an operator (an outer product, or "ketbra"):
@@ -78,7 +81,7 @@ representation(vf("10"), H)
 representation(vf("10") * vf("01")', H)
 ```
 
-This also works for sums of kets/bras/ketbras with coefficients, and for the other representation types (`:sparse`, `:dense`, `:lazy`).
+This also works for sums of kets/bras/ketbras with coefficients. Kets and bras can be represented as `:sparse` or `:dense`, and ketbras also as `:lazy`.
 
 If the expression is a single kind of state, `representation` can find the space itself, as in `representation(vf("10"))`. Operators carry no space, so they need the space argument. A ketbra on one factor of a `tensor_product` can be represented on the product space, where it acts as the identity on the other factors. Expressions that combine kets or bras with operators or with states of other spaces, such as `b * vf("10")`, have no representation and throw an `ArgumentError`. Apply the operators to the state first, or represent the parts separately.
 
@@ -106,13 +109,13 @@ f[1]' * vf("10") * b' * vb("2") == f[1]' * b' * vfb("10", "2")
 Put together, here is a two-site fermion example that builds a ket, computes an overlap, and constructs a projector onto that state:
 
 ```@example simple
-using FermionicHilbertSpaces
+using FermionicHilbertSpaces, LinearAlgebra
 @fermions f
 H = hilbert_space(f, 1:2)
 vf = Kets(H)
 
 ket = vf("10")
-overlap = ket' * ket        # 1, since the state is normalized
+overlap = dot(ket, ket)     # 1, since the state is normalized
 
 projector = ket * ket'      # a rank-1 projector operator
 representation(projector, H)

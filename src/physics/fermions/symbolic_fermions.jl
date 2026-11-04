@@ -24,6 +24,7 @@ add_tag(x::SymbolicFermionBasis, tag) = SymbolicFermionBasis(x.name, add_tag(x.t
 Create one or more fermion species with the given names. Indexing into fermions species
 gives a concrete fermion. Fermions in one `@fermions` block anticommute with each other, 
 and commute with fermions in other `@fermions` blocks.
+`a[l]` is the annihilation operator of the mode labelled `l`, `a[l]'` its creation operator, and `a[i, σ]` is the mode labelled `(i, σ)`.
 
 # Examples:
 - `@fermions a b` creates two species of fermions that anticommute:
@@ -54,6 +55,7 @@ struct FermionSym{L,B} <: AbstractFermionSym
     label::L
     basis::B
 end
+Base.getindex(::SymbolicFermionBasis, i::FermionSym) = throw(ArgumentError("Modes are indexed by labels, not by operators, got `$i`."))
 Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.label, x.basis)
 Base.iszero(x::FermionSym) = false
 symbolic_group(h::FermionSym) = symbolic_group(h.basis)
