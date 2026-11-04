@@ -1,6 +1,12 @@
 
 combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
 combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("The group `$group_id` requires a single space, got $spaces."))
+"""
+    ProductState(states::Tuple)
+
+A basis state of a tensor product space, holding one basis state per factor, e.g.
+`ProductState((SpinState(1//2), BosonicState(0)))`.
+"""
 struct ProductState{B} <: AbstractBasisState
     states::B
 end
@@ -47,11 +53,10 @@ groups(H::ProductSpace) = H.factors
 dim(H::ProductSpace) = prod(dim, groups(H); init=1)
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
-basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(ProductState, Iterators.product(map(basisstates, H.factors)...)))
-Base.@propagate_inbounds function basisstate(n::Integer, H::ProductSpace{B}) where B
-    inds = Tuple(H.cartinds[n])
-    ProductState(map(basisstate, inds, H.factors))
-end
+# Iterates `cartinds` rather than `Iterators.product`, whose iteration allocates per state from 12 factors on
+basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(I -> _product_basisstate(I, H), H.cartinds))
+Base.@propagate_inbounds basisstate(n::Integer, H::ProductSpace) = _product_basisstate(H.cartinds[n], H)
+Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::ProductSpace) = ProductState(map(basisstate, Tuple(I), H.factors))
 function _state_index(state::ProductState, H::ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
     inds = map(_state_index, state.states, H.factors)
@@ -594,8 +599,6 @@ leaf_phase_factor(::Uncovered) = (s1, s2) -> 1
 leaf_phase_factor(leaf::Union{Passthrough,Fractured}) = kron_phase_factor(leaf.mapper)
 
 function kron_phase_factor(sp::ProductSpaceMapper)
-    length(sp.target_spaces) == 2 ||
-        throw(ArgumentError("Phase factors currently only implemented for binary splits"))
     phase_fns = map(leaf_phase_factor, sp.leaves)
     function phase_factor(fullstate1, fullstate2)
         prod(map((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))

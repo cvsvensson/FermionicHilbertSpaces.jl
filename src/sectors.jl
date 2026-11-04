@@ -80,6 +80,7 @@ quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 Return the sector of `H` corresponding to quantum number `qn`, for example a particle
 number for `NumberConservation` or `1` (even) / `-1` (odd) for `ParityConservation`.
 For `qn === nothing`, this returns `H` for non-sector spaces.
+The quantum number of a product of constraints is a vector, which can also be given as a tuple: `sector((1, -1), H)`.
 Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
 
 ```jldoctest
@@ -92,6 +93,7 @@ julia> dim(sector(-1, hilbert_space(f, 1:3, ParityConservation())))
 sector(qn, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
 sector(::Nothing, H::AbstractHilbertSpace, constraint=NoSymmetry()) = constrain_space(H, constraint)
 sector(qn::Nothing, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
+sector(qn::Tuple, H::SectorHilbertSpace{<:Any, <:Any, <:AbstractVector}, constraint = NoSymmetry()) = sector(collect(qn), H, constraint)
 
 function _sector_states(qn, H::SectorHilbertSpace)
     states = get(H.qn_to_states, qn, nothing)
@@ -129,7 +131,7 @@ end
     indices(qn, H)
 
 Return the basis-state indices in `H` belonging to a given sector, specified
-either by a sector Hilbert space `Hsub` or by a quantum number `qn`.
+either by a sector Hilbert space `Hsub` or by a quantum number `qn`, given as for [`sector`](@ref).
 Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
 
 ```jldoctest
@@ -151,6 +153,7 @@ function qn_indices(qn, H::SectorHilbertSpace)
     end_index = dims[qn_index]
     start_index:end_index
 end
+qn_indices(qn::Tuple, H::SectorHilbertSpace{<:Any, <:Any, <:AbstractVector}) = qn_indices(collect(qn), H)
 indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
 
 @testitem "SectorHilbertSpace sectors" begin
@@ -177,6 +180,9 @@ indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
     @test Hprod isa SectorHilbertSpace
     qns = quantumnumbers(Hprod)
     @test all(qn -> dim(sector(qn, Hprod)) > 0, qns)
+    @test sector((2, 1), Hprod) == sector([2, 1], Hprod)
+    @test indices((2, 1), Hprod) == indices([2, 1], Hprod)
+    @test_throws ArgumentError sector((2, -1), Hprod)
 
     ## test fermions on sector spaces
     import FermionicHilbertSpaces: fermions

@@ -28,14 +28,14 @@
 # ## The Floquet algebra
 
 # The required pieces are listed in [Extending and performance hooks](../extending.md). Compared to the
-# [Clock operators](clock_operators.md), the Floquet operators also commute with operators of other
-# algebras through `@commutative`, and their `mul_effect` simplifies products.
+# [Clock operators](clock_operators.md), the Floquet operators are combined with spin operators, and their `mul_effect`
+# simplifies products.
 
 # We load the package and import the pieces we need to overload.
 using FermionicHilbertSpaces
 using FermionicHilbertSpaces: AbstractSym
 import FermionicHilbertSpaces.NonCommutativeProducts:
-    @nc, NCMul, @commutative, mul_effect
+    @nc, NCMul, mul_effect
 
 # `FloquetBasis` represents a Floquet degree of freedom (having an `id` allows multiple Floquet modes).
 # `FloquetLadder` represents ``F^k`` and `FloquetNumber` represents ``N^p``.
@@ -57,10 +57,10 @@ Base.show(io::IO, F::FloquetLadder) = print(io, "F^", F.shift)
 Base.show(io::IO, N::FloquetNumber) = print(io, "N^", N.power)
 const Floquets = Union{FloquetLadder, FloquetNumber};
 
-# Declaring them with `@nc` makes them non-commutative symbols, and `@commutative` makes them commute with every other `AbstractSym`, such as spin operators:
+# Declaring them with `@nc` makes them non-commutative symbols. As subtypes of `AbstractSym`, they commute with
+# operators on other groups, such as spin operators:
 
 @nc FloquetLadder FloquetNumber
-@commutative Floquets AbstractSym;
 
 # Products are simplified by `mul_effect`. We sort Floquet operators from different modes by their 'id', and for operators of the same mode
 # we will put number operators before ladder operators.
@@ -135,7 +135,7 @@ Hspin = hilbert_space(σ)
 floquet_sectors = SectorConstraint(only; maps=s -> s.mode, spaces=[Hfloq])
 H = tensor_product((Hspin, Hfloq); constraint=floquet_sectors)
 
-# Floquet operators can be used together with spin operators to build the Floquet Hamiltonian, with an added anisotropy ``D\sigma_z^2`` (since we used @commutative to declare that they commute):
+# Floquet operators can be used together with spin operators to build the Floquet Hamiltonian, with an added anisotropy ``D\sigma_z^2``:
 
 ω = 1.0         # Drive frequency (energy unit)
 ε = 0.2 * ω     # Zeeman splitting: sets |+1⟩ and |-1⟩ baseline energies

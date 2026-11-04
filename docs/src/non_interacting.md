@@ -1,5 +1,5 @@
-# Non-interacting hamiltonians
-The functionality on this page lives in the submodule `FermionicHilbertSpaces.FreeFermions`, loaded with `using FermionicHilbertSpaces.FreeFermions`.
+# Non-interacting systems
+A quadratic fermionic hamiltonian on ``N`` modes is described by an ``N \times N`` (or ``2N \times 2N``) matrix instead of a ``2^N``-dimensional one. This page shows how to get these matrices from symbolic operators, turn them into quasiparticles, and use them for expectation values, entanglement and Majorana problems. The functionality lives in the submodule `FermionicHilbertSpaces.FreeFermions`, loaded with `using FermionicHilbertSpaces.FreeFermions`.
 
 ## Number conserving non-interacting hamiltonians
 A quadratic fermionic hamiltonian with number conservation can be written as 
@@ -40,14 +40,14 @@ A general non-interacting hermitian operator respecting super-selection can be w
 ```math
 H = E\mathbf{1} + \sum_{ij} \left(c_i^\dagger\, h_{ij}  c_j + \frac{1}{2}\left(\Delta_{ij} c_i^\dagger c_j^\dagger + \Delta^*_{ij} c_j c_i\right)\right),
 ```
-where ``h`` is hermitian, ``E`` is real and ``\Delta`` is antisymmetric. We can do something similar as above by doubling the single particle states with the Nambu states ``\Psi_n = c_n`` for ``n \leq N`` and ``\Psi_{n+N} = c_n^\dagger``, where ``N`` is the number of fermions. Then the hamiltonian can be written as
+where ``h`` is hermitian, ``E`` is real and ``\Delta`` is antisymmetric. We can do something similar as above by doubling the single particle states with the Nambu states ``\Psi_n = c_n`` for ``n \leq N`` and ``\Psi_{n+N} = c_n^\dagger``, where ``N`` is the number of modes. Then the hamiltonian can be written as
 ```math
 H = E'\mathbf{1} + \sum_{ij} \Psi_i^\dagger\, M_{ij} \Psi_j.
 ```
 Since we introduced a redundancy by doubling the single particle states, ``M`` is not unique. Requiring the particle-hole symmetry ``M = -\tau_x M^T \tau_x`` fixes it to
 ```math
 M = \frac{1}{2}\begin{pmatrix}
-h & \Delta \
+h & \Delta \\
 -\Delta^* & -h^*
 \end{pmatrix}, \quad E' = E + \frac{1}{2}\mathrm{tr}\, h.
 ```
@@ -152,7 +152,7 @@ symbolic_operator(M, H), quasiparticle(vecs[:, end], H)
 ```
 
 ## Majoranas
-Quadratic Majorana operators get the same treatment with `hilbert_space(γ, labels, SingleParticle())`, where `representation` gives the antisymmetric matrix of the operator. Below, `correlation_matrix(F)` is the ground-state matrix ``G_{ij} = \langle \gamma_i \gamma_j angle / 2`` that `expectation` takes, and `ground_state_parity(F, H)` is the ground-state parity:
+Quadratic Majorana operators get the same treatment with `hilbert_space(γ, labels, SingleParticle())`, where `representation` gives the antisymmetric matrix of the operator. Below, `correlation_matrix(F)` is the ground-state matrix ``G_{ij} = \langle \gamma_i \gamma_j \rangle / 2`` that `expectation` takes, and `ground_state_parity(F, H)` is the ground-state parity:
 ```@example majoranas
 using FermionicHilbertSpaces, LinearAlgebra
 using FermionicHilbertSpaces.FreeFermions
