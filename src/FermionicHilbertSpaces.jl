@@ -43,7 +43,15 @@ export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint,
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export symmetric_sector
 export open_system
-public particle_number, Axes, dissipator, FreeFermions, matrix_representation, vector_representation
+public particle_number, Axes, dissipator, FreeFermions, add!!, matrix_representation, vector_representation
+
+"""
+    add!!(a, b)
+
+Return `a + b`, reusing the storage of `a` when possible, so use the returned value. `foldl(add!!, terms; init=0)` sums
+many operators in time linear in their number, where `sum` takes quadratic time.
+"""
+add!!
 
 """
     HC
