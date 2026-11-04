@@ -139,7 +139,7 @@ The result is the compression of the tensor product onto `H`. Unless `projection
 `ArgumentError` if the tensor product of matrices maps a state of `H` outside `H` with nonzero amplitude,
 or if the tensor product of vectors has a nonzero amplitude outside `H`.
 """
-function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); alg = GenericKronAlg(), kwargs...)
+function generalized_kron(ms, Hs, H::AbstractHilbertSpace = tensor_product(Hs); alg = GenericKronAlg(), kwargs...)
     check_kron_sizes(ms, Hs)
     _check_kron_alg(alg)
     N = ndims(first(ms))
@@ -406,7 +406,7 @@ the result is `ψ₁ψ₂⋯|0⟩`. Swapping two odd states flips the sign.
 `kwargs` can be passed a bool `phase_factors` and `alg`, as for [`generalized_kron`](@ref). The last form returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
-function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; alg = GenericKronAlg(), kwargs...)
+function tensor_product(ms::Union{<:AbstractVector, <:Tuple}, Hs, H::AbstractHilbertSpace; alg = GenericKronAlg(), kwargs...)
     _check_kron_alg(alg)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     if all(_issquare, ms)
