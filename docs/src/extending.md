@@ -61,7 +61,7 @@ the index of a state, which avoids the default dictionary lookup.
   for [`Kets`](@ref), `basisstate` and `state_index`.
 - [`internal_rep`](@ref)`(state, space, Int)` and `physical_rep(n, ::Type{MyState})` convert
   states to integers and back. When all groups of a product space have them, operators on the
-  product space act on integers, which is faster.
+  product space act on integers.
 - [`has_arithmetic_state_index`](@ref)`(H)` returns `true` for a space type whose
   [`state_index`](@ref) is computed from the state alone. Constrained spaces over such a
   space then find states with a table instead of a dictionary. The table relies on

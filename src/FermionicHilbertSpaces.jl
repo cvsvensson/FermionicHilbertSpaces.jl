@@ -160,16 +160,10 @@ include("symbolic_states.jl")
 include("printing.jl")
 include("physics/fermions/free_fermions.jl")
 
-function __init__()
-    NonCommutativeProducts.enable_autosort!()
-end
-
-
 import PrecompileTools
 
 PrecompileTools.@setup_workload begin
     m = rand(4, 4)
-    NonCommutativeProducts.enable_autosort!()
     PrecompileTools.@compile_workload begin
         @fermions f
         sprint(show, f[1])

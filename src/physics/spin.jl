@@ -71,7 +71,7 @@ for spin 1/2 `s[:x]` is `σˣ/2`, and `s[:±] = s[:x] ± i s[:y]`. The basis sta
 
 For `J ≥ 1`, `==` and `iszero` on symbolic expressions compare their stored form, which is not
 unique, so equal operators can compare unequal: `iszero(s[:z]*s[:+]^2 - s[:+]^2)` is `false` for
-`J = 1`. Matrix representations are exact.
+`J = 1`.
 """
 macro spin(x)
     Expr(:block, :($(esc(x)) = SymbolicSpinBasis($(Expr(:quote, x)))),

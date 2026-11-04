@@ -18,7 +18,7 @@ The sector labels of a space are its quantum numbers. A sector is a space of its
 quantumnumbers(H)
 H2 = sector(2, H)
 hopping = sum(f[k]'f[k+1] + hc for k in 1:3)
-ψ = eigvecs(Hermitian(representation(hopping, H2, :dense)))[:, 1]
+ψ = eigvecs(Hermitian(representation(hopping, H2, Matrix)))[:, 1]
 @assert embed(ψ, H2 => H)[indices(2, H)] ≈ ψ
 indices(2, H)
 ```
