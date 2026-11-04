@@ -22,7 +22,7 @@ using BitIntegers: UInt256, UInt512, UInt1024, @define_integers
 @define_integers 4096
 @define_integers 2048
 using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice, ishalfinteger
-using SparseArrays: SparseArrays, AbstractSparseMatrix, SparseVector, findnz,
+using SparseArrays: SparseArrays, AbstractSparseArray, AbstractSparseMatrix, SparseVector, findnz,
     nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
 using TestItems: TestItems, @testitem, @testmodule
 import TupleTools
@@ -31,7 +31,7 @@ using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, N
 
 export FockNumber, hc, basisstates, dim, state_index, basisstate
 export hilbert_space, subregion
-export parityoperator, numberoperator, matrix_representation, representation, vector_representation, expectation
+export parityoperator, numberoperator, representation, expectation
 export Kets, Ket, ProductState, SpinState, BosonicState
 
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
@@ -42,7 +42,7 @@ export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint,
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export symmetric_sector
 export open_system
-public particle_number, Axes, dissipator, FreeFermions, add!!
+public particle_number, Axes, dissipator, FreeFermions, add!!, matrix_representation, vector_representation
 
 """
     add!!(a, b)

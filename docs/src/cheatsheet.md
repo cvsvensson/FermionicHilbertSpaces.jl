@@ -87,7 +87,7 @@ representation(L, Hlr);
 ```
 
 ## Large spaces
-`:lazy` gives a matrix-free operator for iterative eigensolvers such as Arpack or KrylovKit, which must be installed separately (the example needs `using Arpack`).
+`:lazy` gives a matrix-free operator for iterative eigensolvers such as Arpack or KrylovKit, which must be installed separately (the example needs `using Arpack`). It saves memory, but each product is slower than with a sparse matrix, so it pays off when the sparse matrix does not fit in memory or only a few products are needed.
 ```@example cheat
 using Arpack
 Hbig = hilbert_space(f, 1:12, NumberConservation(6))

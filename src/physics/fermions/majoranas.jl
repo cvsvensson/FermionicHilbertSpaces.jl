@@ -240,6 +240,7 @@ function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...
     f = SymbolicFermionBasis(y.name, tags(y).group)
     Hf = hilbert_space(f, pairs, args...; kwargs...)
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
+    length(majorana_position) == length(labels) || throw(ArgumentError("The Majoranas of a Hilbert space must be distinct, got $labels."))
     MajoranaHilbertSpace(majorana_position, Hf, y)
 end
 @deprecate majorana_hilbert_space(y, labels, args...; kwargs...) hilbert_space(y, labels, args...; kwargs...) false

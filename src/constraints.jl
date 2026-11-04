@@ -74,9 +74,9 @@ function filter_function(constraint::FilterConstraint{<:Any,<:Function}, space::
         constraint.reducer(values)
     end
 end
-function _check_maps_length(maps, spaces)
+function _check_maps_length(maps, spaces, name = "maps")
     (maps isa Function || ismissing(maps) || ismissing(spaces)) && return nothing
-    length(maps) == length(spaces) || throw(ArgumentError("Got $(length(maps)) maps for $(length(spaces)) spaces. Give one map per space, a single function to apply to every space, or pass `spaces` explicitly."))
+    length(maps) == length(spaces) || throw(ArgumentError("Got $(length(maps)) $name for $(length(spaces)) spaces. Give one per space, or pass `spaces` explicitly."))
     return nothing
 end
 supply_missing_constraint_info(constraint::FilterConstraint{<:Any,<:Any,Missing}, space, spaces) = FilterConstraint(constraint.reducer, constraint.maps, spaces)
@@ -183,6 +183,7 @@ struct NumberConservation{T,H,W} <: AbstractConstraint
         total = _normalize_constraint_values(_total)
         subspace = _normalize_constraint_subspace(_spaces)
         weights = _normalize_constraint_values(_weights)
+        _check_maps_length(weights, subspace, "weights")
         new{typeof(total),typeof(subspace),typeof(weights)}(total, subspace, weights)
     end
 end
