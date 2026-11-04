@@ -25,6 +25,7 @@ to `Hout`, `Axes(H)` for a vector. A bare space `H` means `H` on every axis. Pub
 
 # Examples
 ```julia
+using FermionicHilbertSpaces
 using FermionicHilbertSpaces: Axes
 @fermions f
 H2 = hilbert_space(f, 1:2, NumberConservation(2))

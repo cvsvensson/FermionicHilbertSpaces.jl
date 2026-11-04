@@ -1,6 +1,12 @@
 
 combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
 combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("The group `$group_id` requires a single space, got $spaces."))
+"""
+    ProductState(states::Tuple)
+
+A basis state of a tensor product space, holding one basis state per factor, e.g.
+`ProductState((SpinState(1//2), BosonicState(0)))`.
+"""
 struct ProductState{B} <: AbstractBasisState
     states::B
 end
@@ -47,11 +53,10 @@ groups(H::ProductSpace) = H.factors
 dim(H::ProductSpace) = prod(dim, groups(H); init=1)
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
-basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(ProductState, Iterators.product(map(basisstates, H.factors)...)))
-Base.@propagate_inbounds function basisstate(n::Integer, H::ProductSpace{B}) where B
-    inds = Tuple(H.cartinds[n])
-    ProductState(map(basisstate, inds, H.factors))
-end
+# Iterates `cartinds` rather than `Iterators.product`, whose iteration allocates per state from 12 factors on
+basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(I -> _product_basisstate(I, H), H.cartinds))
+Base.@propagate_inbounds basisstate(n::Integer, H::ProductSpace) = _product_basisstate(H.cartinds[n], H)
+Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::ProductSpace) = ProductState(map(basisstate, Tuple(I), H.factors))
 function _state_index(state::ProductState, H::ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
     inds = map(_state_index, state.states, H.factors)
@@ -240,10 +245,10 @@ parity(state::ProductState) = prod(parity, atomic_factors(state))
     @test partial_trace(m, Hprod => H2) ≈ partial_trace(partial_trace(m, Hprod => H1), H1 => H2)
 
 
-    @test representation(a[1] + 1, Hprod; projection=true) == embed(representation(a[1], Ha), Ha => Hprod; skipmissing=true) + I
-    @test representation(c[1], Hprod; projection=true) == embed(representation(c[1], Hc), Hc => Hprod; skipmissing=true)
+    @test representation(a[1] + 1, Hprod; projection = true) == embed(representation(a[1], Ha), Ha => Hprod; projection = true) + I
+    @test representation(c[1], Hprod; projection = true) == embed(representation(c[1], Hc), Hc => Hprod; projection = true)
 
-    @test representation(a[1]' * b[1], Hprod) == embed(representation(a[1]' * b[1], Hab), Hab => Hprod; skipmissing=true)
+    @test representation(a[1]' * b[1], Hprod) == embed(representation(a[1]' * b[1], Hab), Hab => Hprod; projection = true)
 
 end
 
@@ -259,6 +264,20 @@ end
         @test combine_states(collect(Any, substates), mapper) == combine_states(substates, mapper)
     end
     @test_throws ArgumentError combine_states(Any[first(basisstates(Hs[1]))], mapper)
+end
+
+@testitem "split_state and combine_states infer on a fermion, boson and spin product" begin
+    import FermionicHilbertSpaces: state_mapper, split_state, combine_states
+    @fermions f
+    @boson b
+    @spin s 1 // 2
+    Hb, Hs = hilbert_space(b, 3), hilbert_space(s)
+    H = tensor_product(hilbert_space(f, 1:3), Hb, Hs)
+    mapper = state_mapper(H, (hilbert_space(f, [1, 3]), tensor_product(hilbert_space(f, 2:2), Hs), Hb))
+    for state in basisstates(H)
+        substates = only(first(@inferred split_state(state, mapper)))
+        @test only(first(@inferred combine_states(substates, mapper))) == state
+    end
 end
 
 @testitem "Fermion ordering" begin
@@ -394,10 +413,9 @@ add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors
 #
 # Type stability: all routing indices live in the *type domain* via
 # `PieceIndex{block,slot}`. Indexing a heterogeneous tuple with these
-# compile-time constants infers concretely, so the hot path is type stable
-# and allocation free even for heterogeneous states. Construction, by
-# contrast, is deliberately plain and dynamic (Dicts, Vectors, sorting) —
-# it runs once, so clarity wins there.
+# compile-time constants infers concretely, so the hot path is type stable.
+# Construction, by contrast, is deliberately plain and dynamic (Dicts,
+# Vectors, sorting) — it runs once, so clarity wins there.
 ###############################################################################
 
 # ─── Compile-time routing index ──────────────────────────────────────────────
@@ -594,8 +612,6 @@ leaf_phase_factor(::Uncovered) = (s1, s2) -> 1
 leaf_phase_factor(leaf::Union{Passthrough,Fractured}) = kron_phase_factor(leaf.mapper)
 
 function kron_phase_factor(sp::ProductSpaceMapper)
-    length(sp.target_spaces) == 2 ||
-        throw(ArgumentError("Phase factors currently only implemented for binary splits"))
     phase_fns = map(leaf_phase_factor, sp.leaves)
     function phase_factor(fullstate1, fullstate2)
         prod(map((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))

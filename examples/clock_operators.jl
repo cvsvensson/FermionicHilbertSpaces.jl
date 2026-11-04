@@ -10,7 +10,7 @@
 using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
 import FermionicHilbertSpaces: AbstractBasisState, AbstractSym,
     apply_local_operator, mat_eltype, symbolic_group
-import FermionicHilbertSpaces.NonCommutativeProducts: @nc, mul_effect
+import FermionicHilbertSpaces.NonCommutativeProducts: @nc
 
 # ## Defining the clock operators and states
 # The clock operators are defined on a local Hilbert space of dimension ``D``, with basis states ``|n\rangle`` for ``n = 0, 1, ..., D-1``. The operator ``X`` shifts the local clock value, ``X |n\rangle = |n + 1\rangle``, and ``Z`` measures the local clock value: ``Z |n\rangle = \exp(2π i n / D) |n\rangle``.
@@ -22,8 +22,7 @@ Base.adjoint(op::ClockOp{T}) where T = ClockOp{T}(op.site, !op.adjoint)
 X(i) = ClockOp{:X}(i, false)
 Z(i) = ClockOp{:Z}(i, false)
 @nc ClockOp
-## We define mul_effect to return nothing, so that no symbolic simplification is performed when multiplying clock operators.
-mul_effect(::ClockOp, ::ClockOp) = nothing
+## Products on the same site are kept as they are. Operators on different sites commute and are sorted by site.
 struct ClockState{D} <: AbstractBasisState # A clock state with dimension D.
     n::Int
     ClockState{D}(n) where D = new{D}(mod(n, D))
@@ -44,7 +43,7 @@ mat_eltype(::Type{<:ClockOp}) = ComplexF64
 symbolic_group(op::ClockOp) = op.site
 
 # ## Using it in practice: Hamiltonian and conservation laws
-# Let's take the case D = 3 for 6 sites. We define a hamiltonian which conserves the particle number modulo D, and calculate the symmetry resolved entanglement entropy in the ground state.
+# Let's take the case D = 3 for 6 sites. We define a hamiltonian which conserves the clock charge, the sum of the local clock values modulo D, and calculate the symmetry resolved entanglement entropy in the ground state.
 D = 3
 L = 6
 states = [ClockState{D}(n) for n in 0:(D-1)]

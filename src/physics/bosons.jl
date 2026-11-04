@@ -20,6 +20,11 @@ macro bosons(name)
         :($(esc(name))))
 end
 
+"""
+    BosonField
+
+A family of bosonic modes, created by [`@bosons`](@ref). `b[i]` is the annihilation operator of mode `i`.
+"""
 struct BosonField{T<:Tags}
     name::Symbol
     tags::T
@@ -78,32 +83,18 @@ function _boson_normal_order(a::BosonSym, c::BosonSym)
         factors = typeof(a)[]
         n > k && push!(factors, BosonSym(a.label, a.basis, tags(a), n - k))
         m > k && push!(factors, BosonSym(a.label, a.basis, tags(a), k - m))
-        NCMul(factorial(k) * binomial(m, k) * binomial(n, k), factors)
+        # Widening to BigInt on overflow would make mul_effect's return type a union too wide to split,
+        # which slows down every boson product, so overflow throws instead.
+        NCMul(Base.Checked.checked_mul(factorial(k), binomial(m, k), binomial(n, k)), factors)
     end
     return AddTerms(terms)
 end
-function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
-    if symbolic_group(a) == symbolic_group(b)
-        if sign(a.exp) == sign(b.exp)
-            return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
-        else
-            if a.exp < 0 && b.exp > 0
-                return _boson_normal_order(a, b)
-            else
-                return nothing
-            end
-        end
-    end
-    if _group_isless(b, a)
-        return Swap(1)
-    else
-        return nothing
-    end
+function local_mul_effect(a::BosonSym, b::BosonSym)
+    sign(a.exp) == sign(b.exp) && return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
+    return a.exp < 0 && b.exp > 0 ? _boson_normal_order(a, b) : nothing
 end
 
 @nc BosonSym
-NonCommutativeProducts.@commutative FermionSym BosonSym
-NonCommutativeProducts.@commutative MajoranaSym BosonSym
 
 @testitem "BosonSym" begin
     using Symbolics
@@ -164,6 +155,11 @@ NonCommutativeProducts.@commutative MajoranaSym BosonSym
     @test (b1 * b2) * b1' == b1 * (b2 * b1')
 end
 
+"""
+    BosonicState(n)
+
+The basis state with `n` bosons in a single mode, as returned by `basisstates` of a bosonic space.
+"""
 struct BosonicState <: AbstractBasisState
     n::Int
 end
@@ -173,14 +169,14 @@ Base.hash(x::BosonicState, h::UInt) = hash(x.n, h)
 internal_rep(state::BosonicState, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.n)
 physical_rep(state::T, ::Type{BosonicState}) where T<:Integer = BosonicState(Int(state))
 
-struct TruncatedBosonicHilbertSpace{L,B} <: AbstractAtomicHilbertSpace{BosonicState}
-    sym::BosonSym{L,B}
+struct TruncatedBosonicHilbertSpace{L, B, T} <: AbstractAtomicHilbertSpace{BosonicState}
+    sym::BosonSym{L, B, T}
     dimension::Int
-    function TruncatedBosonicHilbertSpace(sym::BosonSym{L,B}, dimension::Integer) where {L,B}
+    function TruncatedBosonicHilbertSpace(sym::BosonSym{L, B, T}, dimension::Integer) where {L, B, T}
         if dimension < 1
             throw(ArgumentError("Bosonic Hilbert space dimension must be positive, got $dimension"))
         end
-        new{L,B}(sym, Int(dimension))
+        return new{L, B, T}(sym, Int(dimension))
     end
 end
 Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)
@@ -202,6 +198,10 @@ add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add
 The truncated space of the bosonic mode `b`, with basis states `|0⟩, …, |dimension-1⟩`, so the
 maximal occupation is `dimension - 1`. With `labels`, the tensor product of one such space for
 each mode `b[l]`, `l in labels`. An optional `constraint` restricts the basis states.
+
+Operator terms that would raise the occupation above the cutoff are dropped without error,
+while leaving a constrained space throws unless `projection=true`. Products are normal ordered
+before truncation, so `b * b'` is represented as `b'b + 1`.
 """
 hilbert_space(sym::BosonField, labels, dimension::Integer, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], dimension), labels); constraint)
 hilbert_space(sym::BosonSym, dimension::Integer) = TruncatedBosonicHilbertSpace(sym, dimension)
@@ -294,6 +294,15 @@ end
         sym = representation(ops[i] * ops[j] * ops[k], H)
         @test sym[low, low] ≈ (mats[i]*mats[j]*mats[k])[low, low]
     end
+end
+
+@testitem "Bosonic normal ordering of large powers" begin
+    @boson b
+    H = hilbert_space(b, 25)
+    low = 1:5 # states that b'^18 keeps below the cutoff
+    ref = representation(b, H, :dense)^18 * representation(b', H, :dense)^18
+    @test representation(b^18 * b'^18, H, :dense)[low, low] ≈ ref[low, low]
+    @test_throws OverflowError b^19 * b'^19
 end
 
 @testitem "Boson product spaces and number conservation" begin
