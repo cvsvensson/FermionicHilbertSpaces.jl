@@ -27,7 +27,7 @@ Hdn = hilbert_space(c, [(i, :↓) for i in 0:L])
 H = tensor_product(Hup, Hdn; constraint = NumberConservation(Hup) * NumberConservation(Hdn));
 
 
-# Creating or annihilating a spin-up impurity particle on the ground state `|0⟩` leads
+# Creating or annihilating a spin-up impurity particle (`d_↑ = c[0, :↑]`) on the ground state `|0⟩` leads
 # to the neighbouring sectors, and the Green's function is a sum of poles over their eigenstates `|m⟩`,
 # ```math
 # G(z) = \sum_m \frac{|⟨m|d^†_↑|0⟩|^2}{z - (E_m - E_0)} + \sum_m \frac{|⟨m|d_↑|0⟩|^2}{z + (E_m - E_0)}.
@@ -56,14 +56,15 @@ sol0 = lehmann(siam(0), H, q0)
 ωs = t * range(-6, 6; length = 1201)
 η = 0.15t
 plt = plot(;
-    xlabel = "ω/t", ylabel = "A(ω), shifted", yticks = false, legend = false, frame = :box, size = (500, 400),
+    xlabel = "ω/t", ylabel = "t A(ω), shifted", yticks = false, legend = false, frame = :box, size = (500, 400),
     title = "Impurity spectral function"
 )
-for (i, U) in enumerate(t .* (0, 3, 6, 9))
+for (i, u) in enumerate((0, 3, 6, 9))
+    U = u * t
     sol = lehmann(siam(U), H, q0)
-    plot!(plt, ωs ./ t, [i - 1 - imag(G(ω + im * η, sol)) / π for ω in ωs]; lw = 2, color = i)
-    U > 0 && plot!(plt, [-U, -U, NaN, U, U] ./ 2t, i .- [1, 0, NaN, 1, 0]; color = :gray, ls = :dash)
-    annotate!(plt, -6, i - 0.75, text(" U/t = $(U / t)", 9, :left))
+    plot!(plt, ωs ./ t, [i - 1 - t * imag(G(ω + im * η, sol)) / π for ω in ωs]; lw = 2, color = i)
+    u > 0 && plot!(plt, [-u, -u, NaN, u, u] ./ 2, i .- [1, 0, NaN, 1, 0]; color = :gray, ls = :dash)
+    annotate!(plt, -6, i - 0.75, text(" U/t = $u", 9, :left))
 end
 plt
 
