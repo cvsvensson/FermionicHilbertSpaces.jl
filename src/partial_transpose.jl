@@ -77,7 +77,7 @@ fermionic space, with output space `H` and `Hsub` and its complement covering al
 struct FactorizedPartialTransposeAlg <: AbstractPartialTransposeAlg end
 
 """
-    partial_transpose!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false)
+    partial_transpose!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false, alg=GenericPartialTransposeAlg())
     partial_transpose!(mout, m, H => Hout, Hsub; kwargs...)
 
 In-place partial transpose of `m` (operator on `H`) on the subsystem `Hsub`, written to `mout`
@@ -114,7 +114,11 @@ Partial transpose on the modes `A` of the full Fock space of `N` modes, as a `pe
 """
 function _fock_partial_transpose!(mout, m, N, A; phase_factors = true)
     dims, perm = _fock_partial_transpose_permutation(N, A)
-    phase_factors || return (permutedims!(reshape(mout, dims), reshape(m, dims), perm); mout)
+    if !phase_factors
+        # Broadcasting gives a dense copy of wrapped arrays (adjoints, views), so permutedims! does not scalar-index.
+        permutedims!(reshape(mout, dims), reshape(identity.(m), dims), perm)
+        return mout
+    end
     # The phase of |ν⟩⟨ν′| ↦ |μ⟩⟨μ′| is i^{p_A(ν) ⊻ p_A(ν′)} a(ν) a(ν′) a(μ) a(μ′), where p_A is
     # the parity of A and a(f) = (-1)^{#{i ∈ A, j ∉ A, i < j : f_i = f_j = 1}}.
     maskA = sum(i -> 1 << (i - 1), A; init = 0)
@@ -128,7 +132,8 @@ function _fock_partial_transpose!(mout, m, N, A; phase_factors = true)
 end
 _to_device(m, v::AbstractVector) = copyto!(similar(m, eltype(v), length(v)), v)
 
-# Each run of consecutive modes on the same side of the cut becomes one dimension of size 2^length.
+# Merging runs of consecutive modes on the same side of the cut keeps the number of dimensions
+# small, so permutedims! does not loop over many size-2 dimensions.
 function _fock_partial_transpose_permutation(N, A)
     runs = Int[]
     inA = Bool[]
@@ -204,7 +209,7 @@ function _partial_transpose(ψ::AbstractVector, H, Hsub, Hout;
         complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = GenericPartialTransposeAlg()
     )
     if length(ψ) == dim(H)
-        alg isa FactorizedPartialTransposeAlg && throw(ArgumentError("FactorizedPartialTransposeAlg does not take pure states; pass `ψ * ψ'`."))
+        alg isa FactorizedPartialTransposeAlg && return _partial_transpose(ψ * ψ', H, Hsub, Hout; complement, phase_factors, projection, alg)
         mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
         mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
         T = promote_type(eltype(ψ), partial_transpose_phase_factor_eltype(H))
@@ -429,12 +434,14 @@ end
     using FermionicHilbertSpaces: FactorizedPartialTransposeAlg
     @fermions f
     H = hilbert_space(f, 1:5)
-    m = rand(ComplexF64, dim(H), dim(H))
+    m = rand(dim(H), dim(H))
     alg = FactorizedPartialTransposeAlg()
     for A in ([1, 2], [2, 4, 5], [3], 1:5), phase_factors in (true, false)
         HA = hilbert_space(f, A)
         @test partial_transpose(m, H, HA; phase_factors, alg) ≈ partial_transpose(m, H, HA; phase_factors)
     end
+    ψ = rand(ComplexF64, dim(H))
+    @test partial_transpose(ψ, H, hilbert_space(f, [2, 4]); alg) ≈ partial_transpose(ψ, H, hilbert_space(f, [2, 4]))
     Hc = hilbert_space(f, 1:4, NumberConservation(2))
     @test_throws ArgumentError partial_transpose(rand(dim(Hc), dim(Hc)), Hc => hilbert_space(f, 1:4), hilbert_space(f, 1:2); alg)
 end
