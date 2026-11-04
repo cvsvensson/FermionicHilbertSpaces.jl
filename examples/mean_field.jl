@@ -56,7 +56,7 @@ function sweep(Us, seed, order_parameter)
         E_sea = real(expectation(ham, G_fermi_sea, Hbdg))
         E_exact = eigmin(Hermitian(representation(ham, Hsector, Matrix)))
         E_mf = real(expectation(ham, G, Hbdg))
-        @assert E_mf > E_exact
+        @assert E_mf > E_exact || E_mf ≈ E_exact
         (order = order_parameter(G), E_mf = E_mf - E_sea, E_exact = E_exact - E_sea)
     end
 end;
