@@ -1,11 +1,15 @@
 # Native device assembly: notes
 
-Status: untested. Nothing here has been run yet, on any backend.
+Status: all six stages pass on the KernelAbstractions 0.10 CPU backend and on JLArrays. Not yet run on a GPU.
 
-Run with `julia --project=benchmark/gpu/native` and `include("benchmark/gpu/native/runall.jl")`. The default backend is
-JLArrays; `ENV["FHS_GPU_BACKEND"] = "cpu"` selects the KernelAbstractions CPU backend, and `using CUDA` before the
-include selects CUDA (add CUDA to the environment first). Each stage script compares the dense and the CSC device
-matrices with `representation(op, H, Matrix{T})`.
+Run with `julia --project=benchmark/gpu/native` and `include("benchmark/gpu/native/runall.jl")`. The backend is CUDA
+or JLArrays if `using CUDA` or `using JLArrays` ran before the include, and the KernelAbstractions CPU backend
+otherwise. JLArrays 0.4 requires KernelAbstractions 0.9, so it needs its own environment; CUDA 6 and the CPU backend
+use 0.10. Each stage script compares the dense and the CSC device matrices with `representation(op, H, Matrix{T})`.
+
+The KernelAbstractions 0.10 CPU backend runs kernels through OpenCL (PoCL) and compiles them with GPUCompiler, so it
+rejects non-isbits arguments, dynamic dispatch and runtime allocation as a GPU backend would. JLArrays runs the
+kernels as plain Julia and mainly checks the array and `Adapt` plumbing of a GPUArrays backend.
 
 ## The generic pattern
 
@@ -79,12 +83,9 @@ says which fields to keep. They would move to an FHS Adapt extension. No algebra
   columns would need to be assembled in chunks.
 - Boson and spin amplitudes are computed in `Float64`, so Metal would fail.
 
-## Likely first failures
+## Not covered by the CPU checks
 
-- Exceptions compiled into device code: `_skip_outside`'s `ArgumentError`, and `throw_boundserror` with a space
-  argument on backends other than CUDA.
-- `_check_state_kind` for a term that changes the state type (`FixedNumberFockState` with another particle number)
-  relies on `parentmodule` and `nameof` of types folding to constants.
-- Inference of the recursion over term groups and of the product fast path inside a kernel, which must be free of
-  dynamic dispatch.
-- `adapt(JLBackend(), ::Array)` and KA kernels on JLArrays, which depend on the JLArrays version.
+- CUDA itself: the exceptions compiled into device code (`_skip_outside`'s `ArgumentError`, `throw_boundserror`)
+  and the kernel launch configuration. The CPU backend compiles them, so they are expected to work.
+- Performance. On the CPU backend, `device_csc` for a 16-mode number-conserving hopping model with interactions takes
+  about as long as `representation` on the host.

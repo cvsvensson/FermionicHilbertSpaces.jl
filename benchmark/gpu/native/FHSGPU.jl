@@ -219,7 +219,6 @@ function prepare(op, H, backend, ::Type{T}) where {T}
 end
 function run_columns!(sink, p, backend; projection)
     column_kernel!(backend)(sink, p.Hdev, p.groups, p.coeff, projection; ndrange=p.n)
-    KA.synchronize(backend)
     return sink
 end
 
@@ -247,7 +246,6 @@ function device_csc(op, H, backend, ::Type{T}=Float64; projection=false) where {
     run_columns!(SlotSink(rows, vals, 0), p, backend; projection)
     counts = KA.zeros(backend, Int32, n)
     compact_kernel!(backend)(counts, rows, vals; ndrange=n)
-    KA.synchronize(backend)
     # The prefix sum moves `n` integers through the host, little next to the `nslots × n` slots.
     host_colptr = vcat(Int32(1), Int32(1) .+ cumsum(Array(counts)))
     nnz = Int(host_colptr[end]) - 1
@@ -255,7 +253,6 @@ function device_csc(op, H, backend, ::Type{T}=Float64; projection=false) where {
     rowval = KA.allocate(backend, Int32, nnz)
     nzval = KA.allocate(backend, T, nnz)
     gather_kernel!(backend)(rowval, nzval, colptr, rows, vals; ndrange=n)
-    KA.synchronize(backend)
     return (; colptr, rowval, nzval, m=n, n)
 end
 

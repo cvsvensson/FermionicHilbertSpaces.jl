@@ -1,18 +1,12 @@
-# Loaded by the stage scripts. The backend is CUDA if `using CUDA` ran before, the KernelAbstractions CPU backend
-# if ENV["FHS_GPU_BACKEND"] == "cpu", and JLArrays otherwise.
+# Loaded by the stage scripts. The backend is CUDA or JLArrays if `using CUDA` or `using JLArrays` ran before, and
+# the KernelAbstractions CPU backend otherwise.
 using FermionicHilbertSpaces, SparseArrays, LinearAlgebra, Test
 using KernelAbstractions: KernelAbstractions
 include(joinpath(@__DIR__, "FHSGPU.jl"))
 using .FHSGPU: device_matrix, device_csc
 
-if isdefined(Main, :CUDA)
-    const backend = Main.CUDA.CUDABackend()
-elseif get(ENV, "FHS_GPU_BACKEND", "") == "cpu"
-    const backend = KernelAbstractions.CPU()
-else
-    using JLArrays
-    const backend = JLArrays.JLBackend()
-end
+const backend = isdefined(Main, :CUDA) ? Main.CUDA.CUDABackend() :
+                isdefined(Main, :JLArrays) ? Main.JLArrays.JLBackend() : KernelAbstractions.CPU()
 
 host_csc(S) = SparseMatrixCSC(S.m, S.n, Int.(Array(S.colptr)), Int.(Array(S.rowval)), Array(S.nzval))
 
