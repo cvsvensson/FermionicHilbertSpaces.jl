@@ -3,6 +3,7 @@ function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
     size_compatible(m, Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(Hsub)), got $(size(m))."))
     !isnothing(complement) && m isa AbstractVector && throw(ArgumentError("A state vector can only be embedded into a space with the same modes, such as from a sector into its parent space. A state on a subsystem does not fix the state of the rest; use `tensor_product` of states or `embed` a density matrix instead."))
     alg isa GatherPartialTraceAlg && return _embed_by_gather(m, Hsub, H, complement; projection, kwargs...)
+    isnothing(alg) || throw(ArgumentError("`embed` supports only `alg = GatherPartialTraceAlg()`, got $alg."))
     if isnothing(complement)
         m isa AbstractVector && return change_basis(m, Hsub, H; projection, kwargs...)
         if !(projection || m isa UniformScaling)
@@ -51,10 +52,7 @@ embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); k
 
 function _embed_by_gather(m::AbstractVecOrMat, Hsub, H, complement; projection = false, phase_factors = true)
     if isnothing(complement)
-        U, _ = basis_transformation(Hsub, H)
-        src = zeros(Int, dim(H))
-        Is, Js, _ = findnz(U)
-        src[Is] = Js
+        src = first(basis_transformation(Hsub, H)) * (1:dim(Hsub))
         splits = [((K, 1, 1),) for K in src]
     else
         splits = _full_partial_trace_splits(H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement), phase_factors)
@@ -63,6 +61,7 @@ function _embed_by_gather(m::AbstractVecOrMat, Hsub, H, complement; projection =
     projection || _check_embed_into(m, present)
     return _gather_embed(m, P, B, S)
 end
+_embed_by_gather(::UniformScaling, args...; kwargs...) = throw(ArgumentError("`UniformScaling` is not supported with `alg = GatherPartialTraceAlg()`."))
 
 # `P[J, r]`, `B[J, r]` and `S[J, r]` are the indices in `Hsub` and the complement, and the weight,
 # of the r-th split of the J-th state of `H`, padded with index 1 and weight 0.
@@ -89,6 +88,7 @@ end
 _embed_outside(::AbstractMatrix, present) = (.!present) * transpose(present) .> 0
 _embed_outside(::AbstractVector, present) = vec(.!present)
 function _check_embed_into(m, present)
+    all(present) && return nothing
     any(_adapt_like(m, Array(_embed_outside(m, present))) .& .!iszero.(m)) &&
         throw(ArgumentError("`m` maps a state of `H` outside `H` with nonzero amplitude. Pass `projection=true` to drop such terms."))
     return nothing
@@ -251,6 +251,7 @@ end
     Hf, Hc = hilbert_space(f, 1:2), hilbert_space(f, 1:2, NumberConservation(0:1))
     @test_throws ArgumentError embed(rand(4, 4), Hf => Hc; alg)
     @test_throws ArgumentError embed(rand(4), Hf => Hc; alg)
+    @test_throws ArgumentError embed(rand(4, 4), Hf => hilbert_space(f, 1:3); alg = :other)
 end
 
 @testitem "Embedding a sector vector" begin
