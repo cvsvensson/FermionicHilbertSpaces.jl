@@ -35,12 +35,12 @@ function constrain_space(space, constraint::AbstractConstraint, labels = basisst
         throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     end
 end
-# Labels become states as in `Ket` and `state_index`, but a value of the state type is kept as is,
+# Labels become states as in `Ket` and `state_index`, but a basis state or a value of the state type is kept as is,
 # so that a space whose states are strings is not parsed. States outside a subspace are dropped by `unnest`.
 _states_of(space, states::BasisStates) = states
 function _states_of(space, labels)
     return map(labels) do label
-        state = label isa statetype(space) ? label : interpret_state(label, space)
+        state = label isa Union{statetype(space), AbstractBasisState} ? label : interpret_state(label, space)
         space isa AbstractSubspace || !iszero(state_index(state, space)) || throw(ArgumentError("The state `$label` is not a basis state of the space."))
         state
     end
