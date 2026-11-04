@@ -369,17 +369,11 @@ function _add_identity_term(summed, coeff, bases, space, repr)
 end
 # On spaces with a basis-state loop (for example a constrained space over a ProductSpace) and for formats with no method of its own,
 # `_terms_matrix` builds the sum of all terms.
-# The terms are summed in the element type of their matrices, and the identity term is added in that element type
-# promoted with the type of `coeff`.
 function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split = 10, kwargs...)
     spaces = groups(_input_space(space))
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
-    Tterms = _repr_eltype(mapreduce(mat_eltype, promote_type, prodops), repr)
-    T = _repr_eltype(promote_type(Tterms, typeof(op.coeff)), repr)
-    Tterms == T && return _terms_matrix(Tterms, prodops, op.coeff, space, repr, chunking; kwargs...)
-    summed = _terms_matrix(Tterms, prodops, zero(op.coeff), space, repr, chunking; kwargs...)
-    iszero(op.coeff) && return convert(AbstractMatrix{T}, summed)
-    return summed + _terms_matrix(T, (), op.coeff, space, repr, NoChunking(); kwargs...)
+    T = _repr_eltype(promote_type(mapreduce(mat_eltype, promote_type, prodops), typeof(op.coeff)), repr)
+    return _terms_matrix(T, prodops, op.coeff, space, repr, chunking; kwargs...)
 end
 
 function _matrix_representation(op, bases, space, repr, chunking; kwargs...) #Assume op is a single symbolic operator
@@ -1076,6 +1070,14 @@ end
         rand(length(inds))
     end
     @test collect(M_dist * v) ≈ M_ref * collect(v)
+
+    @boson b
+    Hp = tensor_product(H, hilbert_space(b, 2))
+    for opp in (op * b' + hc, f[1])
+        Mp = representation(opp, Hp, rep)
+        w = pvector(inds -> rand(ComplexF64, length(inds)), Mp.col_partition)
+        @test collect(Mp * w) ≈ representation(opp, Hp) * collect(w)
+    end
 end
 
 ## Symmetries
