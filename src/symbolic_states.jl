@@ -380,8 +380,12 @@ function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any, <:AbstractSym}, b
     groupops = _group_operators(x, factors1)
     isnothing(groupops) && return _sorted_product(c, x, b)
     precomps = map(((_, ket, op),) -> precomputation_before_operator_application(op, ket.space), groupops)
-    return _apply_group_operators!!(c, x, b, groupops, precomps)
+    return _apply_group_operators!!(_with_factor_type(c, factors1), x, b, groupops, precomps)
 end
+# An empty sum takes the factor type of the kets. Otherwise its keys, typed by the operator and the kets together, have
+# an abstract factor type, which makes every key hash through dynamic dispatch and be copied into a new vector.
+_with_factor_type(c::NCAdd{C}, ::AbstractVector{T}) where {C, T} = iszero(c) ? convert(NCAdd{C, NCMul{Int, T, Vector{T}}}, c) : c
+_with_factor_type(c, _) = c
 _sorted_product(c, x, b) = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any, NCMul, Union{NCAdd, NCMul}}, c, x, b)
 # Function barrier: the types of `groupops` and `precomps` depend on the kets in `b`
 function _apply_group_operators!!(c, x, b, groupops, precomps)
