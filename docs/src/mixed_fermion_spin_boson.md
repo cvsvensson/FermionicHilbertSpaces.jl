@@ -46,7 +46,7 @@ s = [sx, sy, sz]
 ham = ω*a'*a + Δf*sz + ΔS*S[:z] + J*s'*S[:] +
     g * (a'*f[:↓]'*f[:↑] + a*f[:↑]'*f[:↓])
 
-ψ = eigvecs(Hermitian(representation(ham, H, :dense)))[:, 1]
+ψ = eigvecs(Hermitian(representation(ham, H, Matrix)))[:, 1]
 ```
 
 Now compute the reduced density matrices and the mutual information between different subsystem pairs.

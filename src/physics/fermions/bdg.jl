@@ -55,7 +55,7 @@ The space of Nambu states `[f[l] for l in labels; f[l]' for l in labels]`. `repr
 
 ```julia
 H = hilbert_space(f, 1:2, BdG())
-representation(f[1]' * f[1], H, :dense) # diagm([1, 0, -1, 0]) / 2
+representation(f[1]' * f[1], H, Matrix) # diagm([1, 0, -1, 0]) / 2
 ```
 """
 hilbert_space(f::SymbolicFermionBasis, labels, ::BdG) = BdGHilbertSpace(f, labels)
@@ -271,7 +271,7 @@ Algorithm for `eigen(A, BdGEigen())` on a Hermitian BdG matrix `A` with `N` mode
 
 ```julia
 H = hilbert_space(f, 1:2, BdG())
-vals, vecs = eigen(representation(f[1]' * f[2] + f[1]' * f[2]' + hc, H, :dense), BdGEigen()) # vals ≈ [-1, 0, 0, 1]
+vals, vecs = eigen(representation(f[1]' * f[2] + f[1]' * f[2]' + hc, H, Matrix), BdGEigen()) # vals ≈ [-1, 0, 0, 1]
 ```
 """
 struct BdGEigen{T <: Union{Nothing, Real}} <: AbstractBdGEigenAlg
@@ -462,12 +462,12 @@ end
 """
     symbolic_operator(M, H)
 
-The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space, an antisymmetric matrix on a Majorana space, or any matrix on a `SingleParticle` space. On a `BdG` or Majorana space, `op` is traceless.
+The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space, an antisymmetric matrix on a Majorana space, or any matrix on a `SingleParticle` space.
 
 ```julia
 @fermions f
 H = hilbert_space(f, 1:2, BdG())
-symbolic_operator(representation(f[1]' * f[1], H, :dense), H) # -0.5I + f†[1]*f[1]
+symbolic_operator(representation(f[1]' * f[1], H, Matrix), H) # -0.5I + f†[1]*f[1]
 ```
 """
 function symbolic_operator(M, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace, MajoranaSingleParticleHilbertSpace})

@@ -30,7 +30,7 @@ sym_ham = sum(rand() * f[n]'f[n] for n in 1:4) +
 H = hilbert_space(f, 1:4)
 
 #Diagonalize to find the ground state
-Ψ = eigvecs(Hermitian(representation(sym_ham, H, :dense)))[:, 1]
+Ψ = eigvecs(Hermitian(representation(sym_ham, H, Matrix)))[:, 1]
 
 #Define a subsystem and partial trace to find the reduced density matrix
 Hsub = hilbert_space(f, 1:2)
@@ -42,14 +42,14 @@ entanglement_entropy = sum(-λ * log(λ) for λ in eigvals(Hermitian(ρsub)) if 
 0.44395495955661934
 ````
 
-`representation` returns a sparse matrix by default; a third argument such as `:dense` selects the format, see the [docs](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/docstrings/).
+`representation` returns a sparse matrix by default; a third argument such as `Matrix` selects the format, see the [docs](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/docstrings/).
 
 This hamiltonian conserves the number of fermions, which we can exploit. Let's specialize to the 3-particle sector and compute the entanglement entropy of the ground state in that sector.
 
 ````julia
 Hcons = hilbert_space(f, 1:4, NumberConservation(3))
 Hsubcons = subregion(Hsub, Hcons) # Include only substates consistent with Hcons
-Ψcons = eigvecs(representation(sym_ham, Hcons, :dense))[:, 1]
+Ψcons = eigvecs(representation(sym_ham, Hcons, Matrix))[:, 1]
 ρsub = partial_trace(Ψcons, Hcons => Hsubcons)
 sum(-λ * log(λ) for λ in eigvals(Hermitian(ρsub)) if λ > 0)
 ````

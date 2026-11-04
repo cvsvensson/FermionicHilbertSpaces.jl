@@ -1,5 +1,4 @@
-# Each term of `op` is expanded on its own, so that the factors of every expansion have a single concrete type.
-# A sum is traversed through its dictionary, whose entries have a concrete type, unlike those of `termpairs`.
+# Each term of `op` is expanded on its own. A sum is traversed through its dictionary rather than `termpairs`.
 sum_over_terms(f, op::NCAdd) = mapreduce(((k, c),) -> f(k.factors, c), +, op.dict; init = f((), op.coeff))
 sum_over_terms(f, op) = mapreduce(((fs, c),) -> f(fs, c), +, NonCommutativeProducts.termpairs(1 * op); init = 0)
 

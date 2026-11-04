@@ -81,7 +81,7 @@ The matrix returned by `representation` on this space depends on the ordering of
 `eigen(A, BdGEigen())` diagonalizes a BdG matrix while keeping the particle-hole pairing of its eigenvectors. The eigenvalues are sorted, so for `N` modes columns `k` and `2N + 1 - k` are partners with eigenvalues `e` and `-e` whose quasiparticles are adjoints of each other. A column `[u; v]` gives the quasiparticle ``\gamma^\dagger = \sum_i u_i c_i^\dagger + v_i c_i``, which raises the energy by ``2e``. The matrix must be Hermitian and particle-hole symmetric, and eigenvalues with `abs(e) <= cutoff * maximum(abs, vals)` are set to zero, with the default `cutoff = 2N * eps` as for `rank`.
 ```@example bdg_particle_hilbert_space
 Hbdg = hilbert_space(c, 1:N, BdG())
-vals, vecs = eigen(representation(op, Hbdg, :dense), BdGEigen())
+vals, vecs = eigen(representation(op, Hbdg, Matrix), BdGEigen())
 vals
 ```
 
@@ -93,7 +93,7 @@ using FermionicHilbertSpaces.FreeFermions
 @fermions c
 H = hilbert_space(c, 1:4, SingleParticle())
 ham = sum(c[n]' * c[n+1] + hc for n in 1:3) + 1
-h = representation(ham, H, :dense)
+h = representation(ham, H, Matrix)
 G = transpose(inv(I + exp(10 * h)))
 expectation(ham, G, H)
 ```
@@ -118,7 +118,7 @@ h = Hermitian(rand(ComplexF64, N, N))
 Δ = rand(ComplexF64, N, N) |> m -> m - transpose(m)
 ham = sum(f[i]' * h[i, j] * f[j] + Δ[i, j] * f[i]' * f[j]' + hc for i in 1:N, j in 1:N)
 Hbdg = hilbert_space(f, 1:N, BdG())
-A = representation(ham, Hbdg, :dense)
+A = representation(ham, Hbdg, Matrix)
 G = correlation_matrix(eigen(A, BdGEigen()))
 sub = 1:2
 Hsub = hilbert_space(f, sub, BdG())
@@ -126,7 +126,7 @@ Gsub = partial_trace(G, Hbdg => Hsub)
 S = von_neumann_entropy(Gsub, Hsub)
 
 H = hilbert_space(f, 1:N)
-ψ = eigvecs(Hermitian(representation(ham, H, :dense)))[:, 1]
+ψ = eigvecs(Hermitian(representation(ham, H, Matrix)))[:, 1]
 ρsub = partial_trace(ψ * ψ', H => hilbert_space(f, sub))
 @assert S ≈ von_neumann_entropy(ρsub)
 @assert Gsub ≈ correlation_matrix(ψ, H, Hsub)
@@ -146,7 +146,7 @@ using FermionicHilbertSpaces, LinearAlgebra
 using FermionicHilbertSpaces.FreeFermions
 @fermions c
 H = hilbert_space(c, 1:2, BdG())
-M = representation(c[1]' * c[2] + c[1]' * c[2]' + hc, H, :dense)
+M = representation(c[1]' * c[2] + c[1]' * c[2]' + hc, H, Matrix)
 vals, vecs = eigen(M, BdGEigen())
 symbolic_operator(M, H), quasiparticle(vecs[:, end], H)
 ```
@@ -159,7 +159,7 @@ using FermionicHilbertSpaces.FreeFermions
 @majoranas γ
 H = hilbert_space(γ, 1:6, SingleParticle())
 ham = 1im / 2 * sum(γ[2k] * γ[2k + 1] for k in 1:2) + 0.1im * sum(γ[2k - 1] * γ[2k] for k in 1:3)
-F = eigen(Hermitian(representation(ham, H, :dense)))
+F = eigen(Hermitian(representation(ham, H, Matrix)))
 G = correlation_matrix(F)
 ground_state_parity(F, H), expectation(ham, G, H)
 ```
