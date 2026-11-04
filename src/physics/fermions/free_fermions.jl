@@ -11,13 +11,13 @@ module FreeFermions
     using ..FermionicHilbertSpaces: FermionicHilbertSpaces, AbstractFockState, AbstractHilbertSpace,
         EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, MajoranaSym, NoChunking, SymbolicFermionBasis,
         SymbolicMajoranaBasis,
-        _FermionModeSpace, _canonicalize_repr, _zero_matrix, exchange_phase, finalize!,
+    _FermionModeSpace, _canonicalize_repr, _matrix_format, _repr_eltype, _xlogx, _zero_matrix, exchange_phase, finalize!,
         matrix_accumulator, mode_position, push_inds_amps!, state_index
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,
         _state_label_atomic, apply_local_operators, basisstate, basisstates, dim, von_neumann_entropy, expectation,
         hilbert_space, matrix_representation, mode_ordering, modes, partial_trace, representation
     using LinearAlgebra: LinearAlgebra, Diagonal, Eigen, Hermitian, Symmetric, UniformScaling, I,
-        det, eigen, issymmetric, normalize, svd
+    det, eigen, eigvals, issymmetric, normalize, svd
     using NonCommutativeProducts: NonCommutativeProducts, NCAdd, NCMul, NCterms
     using OrderedCollections: OrderedDict
 
@@ -31,9 +31,12 @@ module FreeFermions
 
     # The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
     _isscalar_operator(op) = op isa Union{Number, UniformScaling} || (op isa Union{NCMul, NCAdd} && NonCommutativeProducts.isscalar(op))
-    _identity_free_zero(H, repr) = _zero_matrix(H, _eager_repr(repr, H), Int)
+function _identity_free_zero(H, repr)
+    _repr = _eager_repr(repr, H)
+    return _zero_matrix(H, _repr, _repr_eltype(Int, _repr))
+end
     function _eager_repr(repr, H)
-        _repr = _canonicalize_repr(repr)
+    _repr = _matrix_format(repr)
         _repr isa Union{EagerSparseRepr, EagerDenseRepr} || throw(ArgumentError("Only the :sparse and :dense representations are supported on $(typeof(H)). Got $repr."))
         return _repr
     end
@@ -56,6 +59,9 @@ module FreeFermions
     # operator if `number_conserving`
     _is_quadratic_fermion_operator(op, number_conserving) = _is_quadratic_operator(op, (a, b) -> a isa FermionSym && b isa FermionSym && (!number_conserving || a.creation != b.creation))
 
+_check_size(G, H) = size(G) == (dim(H), dim(H)) ||
+    throw(DimensionMismatch("The correlation matrix has size $(size(G)), but the space has dimension $(dim(H))."))
+
     function _mode_positions(H, Hsub)
         positions = [mode_position(m, H) for m in modes(Hsub)]
         any(iszero, positions) && throw(ArgumentError("The modes of $Hsub are not a subset of the modes of $H."))
@@ -68,16 +74,4 @@ module FreeFermions
     include("gaussian.jl")
     include("wick.jl")
 
-end
-
-@deprecate single_particle_hilbert_space(f, labels) hilbert_space(f, labels, FermionicHilbertSpaces.FreeFermions.SingleParticle())
-@deprecate bdg_hilbert_space(f, labels) hilbert_space(f, labels, FermionicHilbertSpaces.FreeFermions.BdG())
-
-@testitem "Deprecated special space constructors" begin
-    using FermionicHilbertSpaces.FreeFermions
-    @fermions f
-    Hsp = @test_deprecated single_particle_hilbert_space(f, 1:2)
-    Hbdg = @test_deprecated bdg_hilbert_space(f, 1:2)
-    @test Hsp == hilbert_space(f, 1:2, SingleParticle())
-    @test Hbdg == hilbert_space(f, 1:2, BdG())
 end

@@ -33,6 +33,14 @@ function _collect_block!(block, capacity, precomps, coeff, space, incols, offset
     return capacity
 end
 
+# The entries `(rows, cols, amps)` of the columns `incols` of the matrix, with duplicate entries not summed
+function _collect_ijv(::Type{T}, precomps, coeff, space, incols, offset; kwargs...) where {T}
+    capacity = _sparse_length_guess(length(precomps), length(incols))
+    ijv = sparse_matrix_accumulator(T, (capacity, capacity))
+    _collect_block!(ijv, capacity, precomps, coeff, space, incols, offset; kwargs...)
+    return ijv
+end
+
 # Builds the columns `incols` of the matrix one block of columns at a time: the entries of a block are collected
 # term by term, then sorted into columns, with duplicate entries summed in the order of the terms.
 # A nonempty range of columns that fits in one block is built by `sparse!` from that block.
@@ -42,12 +50,12 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
     M = length(incols)
     offset = first(incols) - 1
     B = SPARSE_BLOCK_SIZE
+    if 0 < M <= B
+        ijv = _collect_ijv(T, precomps, coeff, space, incols, offset; kwargs...)
+        return _trimmed!(SparseArrays.sparse!(ijv..., N, M), length(first(ijv)))
+    end
     blockcapacity = _sparse_length_guess(length(precomps), min(B, M))
     block = (rows, cols, amps) = sparse_matrix_accumulator(T, (blockcapacity, blockcapacity))
-    if 0 < M <= B
-        _collect_block!(block, blockcapacity, precomps, coeff, space, incols, offset; kwargs...)
-        return _trimmed!(SparseArrays.sparse!(rows, cols, amps, N, M), length(rows))
-    end
     colptr = Vector{Int}(undef, M + 1)
     colptr[1] = 1
     rowval = Int[]
@@ -140,17 +148,17 @@ end
     # Diagonal terms and the identity add up in the same entries
     terms = [[(1 + 0.5im) * f[i]' * f[j] for i in 1:N for j in i+1:N]; [f[i]' * f[i] for i in 1:N]]
     op = sum(terms) + 1.5
-    M = matrix_representation(op, H)
-    entries = map(findnz, [matrix_representation(term, H) for term in terms])
+    M = representation(op, H)
+    entries = map(findnz, [representation(term, H) for term in terms])
     @test M == sparse((reduce(vcat, getindex.(entries, k)) for k in 1:3)..., dim(H), dim(H)) + 1.5I
 
     # f[1]' and f[1] map some states out of the space
-    @test_throws ArgumentError matrix_representation(f[1]' + f[1] + 1, H)
-    @test matrix_representation(f[1]' + f[1] + 1, H; projection=true) ==
-          matrix_representation(f[1]', H; projection=true) + matrix_representation(f[1], H; projection=true) + I
+    @test_throws ArgumentError representation(f[1]' + f[1] + 1, H)
+    @test representation(f[1]' + f[1] + 1, H; projection = true) ==
+        representation(f[1]', H; projection = true) + representation(f[1], H; projection = true) + I
 
     # A space without states
-    @test size(matrix_representation(f[1]' * f[2] + 1, constrain_space(hilbert_space(f, 1:2), NumberConservation(5)))) == (0, 0)
+    @test size(representation(f[1]' * f[2] + 1, constrain_space(hilbert_space(f, 1:2), NumberConservation(5)))) == (0, 0)
 
     # A constrained space with several groups, and an identity coefficient that widens the element type
     @boson b
@@ -158,7 +166,7 @@ end
     Hc = tensor_product(hilbert_space(f, 1:10), hilbert_space(b, 7); constraint=NumberConservation(1:15))
     inds = [state_index(state, Hprod) for state in basisstates(Hc)]
     op = sum(f[i]' * f[i+1] + hc for i in 1:9) + sum(f[i]' * b + hc for i in 1:10) + 2 * b' * b + f[1]' + hc + 0.5im
-    M = matrix_representation(op, Hc; projection=true)
+    M = representation(op, Hc; projection = true)
     @test M isa SparseMatrixCSC{ComplexF64}
-    @test M == matrix_representation(op, Hprod)[inds, inds]
+    @test M == representation(op, Hprod)[inds, inds]
 end

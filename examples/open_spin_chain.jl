@@ -26,7 +26,7 @@ ham_sym = -sum(h[k] * S[k][:z] for k in 1:N) -
     sum(2J[k] .* S[k][:] .* S[k+1][:])
 end
 
-ham_mat = representation(ham_sym, H, :dense)
+ham_mat = representation(ham_sym, H)
 Sz_mats = [representation(-2 * S[k][:z], H) for k in 1:N]
 
 state = "↑" * repeat("↓", N - 1)

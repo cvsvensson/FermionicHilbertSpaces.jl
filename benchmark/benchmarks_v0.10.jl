@@ -1,5 +1,6 @@
 using BenchmarkTools
 using FermionicHilbertSpaces
+using FermionicHilbertSpaces: matrix_representation
 using FermionicHilbertSpaces.FreeFermions
 using LinearAlgebra
 using SparseArrays
@@ -59,11 +60,11 @@ let rng = Xoshiro(7)
     g["apply_pure_state_inplace"] = @benchmarkable $pt($out_v, $ψ)
 
     msub = rand(rng, ComplexF64, dim(Hsub), dim(Hsub))
-    emb = embed(Hsub => H; complement=Hcomp, skipmissing=true)
+    emb = embed(Hsub => H; complement = Hcomp, projection = true)
     out = zeros(ComplexF64, dim(H), dim(H))
     g = SUITE["embed"]["precomputed"]
-    g["construct"] = @benchmarkable embed($(Hsub => H); complement=$Hcomp, skipmissing=true)
-    g["eager"] = @benchmarkable embed($msub, $(Hsub => H); complement=$Hcomp, skipmissing=true)
+    g["construct"] = @benchmarkable embed($(Hsub => H); complement = $Hcomp, projection = true)
+    g["eager"] = @benchmarkable embed($msub, $(Hsub => H); complement = $Hcomp, projection = true)
     g["apply_inplace"] = @benchmarkable $emb($out, $msub)
 end
 
@@ -330,9 +331,9 @@ let
     H = tensor_product(hilbert_space(f, 1:2), hilbert_space(c, 1:6))
     kets = Kets(H)
     pert = sum(0.1 * f[1]' * c[n] + hc for n in 1:6)
-    Q = I - sum(b * b' for b in kets.(["0", "10", "11", "01"]))
+    Q = I - sum(b * b' for b in kets.(["00", "10", "11", "01"] .* "0"^6))
     Hq = Q * (f[1]' * f[2] + hc + 10.0 * sum(c[n]'c[n] for n in 1:6) + pert) * Q
-    ψ = Q * pert * kets("10")
+    ψ = Q * pert * kets("10" * "0"^6)
     SUITE["symbolic_states"]["projected_op_on_state"] = @benchmarkable $Hq * ($Hq * ($Hq * $ψ))
 end
 

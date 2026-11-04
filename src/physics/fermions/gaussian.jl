@@ -1,7 +1,9 @@
 """
     correlation_matrix(state, H, Hbdg::BdGHilbertSpace)
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on the many-body space `H`, where `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩`. A BdG space over a subset of the modes gives the reduced correlation matrix. On a Majorana space `hilbert_space(γ, labels, SingleParticle())`, `Ψ = γ / √2`, so `G[i, j] = ⟨γ_i γ_j⟩ / 2`. On a number-conserving space `hilbert_space(f, labels, SingleParticle())`, `Ψ = f`.
+The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on `H`.
+
+Here `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩`. A BdG space over a subset of the modes gives the reduced correlation matrix. On a Majorana space `hilbert_space(γ, labels, SingleParticle())`, `Ψ = γ / √2`, so `G[i, j] = ⟨γ_i γ_j⟩ / 2`. On a number-conserving space `hilbert_space(f, labels, SingleParticle())`, `Ψ = f`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions; @fermions f;
@@ -34,13 +36,27 @@ function partial_trace(G, (H, Hsub)::Pair{<:BdGHilbertSpace, <:BdGHilbertSpace})
     return G[inds, inds]
 end
 
+function _check_correlation_matrix(G, H)
+    _check_size(G, H)
+    rtol = sqrt(eps(real(float(eltype(G)))))
+    isapprox(G, G'; rtol) && (H isa SingleParticleHilbertSpace || is_ph_symmetric(G - I / 2; rtol)) ||
+        throw(ArgumentError("A correlation matrix must be Hermitian, and on a BdG space satisfy G + τx * transpose(G) * τx = I."))
+    return G
+end
+function _occupations(G, H)
+    n = eigvals(Hermitian(_check_correlation_matrix(G, H)))
+    tol = sqrt(eps(eltype(n)))
+    all(x -> -tol <= x <= 1 + tol, n) || throw(ArgumentError("The eigenvalues of a correlation matrix must lie in [0, 1]."))
+    return n
+end
+
 # The eigenvalues of G are n and 1 - n for each quasiparticle with occupation n, whose entropy is -n log n - (1 - n) log(1 - n).
 """
     von_neumann_entropy(G, Hbdg::BdGHilbertSpace)
 
 The von Neumann entropy of the Gaussian state with Nambu correlation matrix `G` on `Hbdg`, equal to the entropy of `gaussian_state(G, H, Hbdg)` for a many-body space `H`.
 """
-von_neumann_entropy(G, ::BdGHilbertSpace) = von_neumann_entropy(G)
+von_neumann_entropy(G, H::BdGHilbertSpace) = -sum(_xlogx, _occupations(G, H))
 
 """
     correlation_matrix(F::LinearAlgebra.Eigen; β = Inf)
@@ -50,7 +66,7 @@ The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground stat
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions, LinearAlgebra; @fermions f;
 
-julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), :dense);
+julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), Matrix);
 
 julia> correlation_matrix(eigen(A, BdGEigen())) ≈ [1 0; 0 0]
 true
@@ -60,12 +76,17 @@ function correlation_matrix(F::Eigen; β = Inf)
     N = div(size(F.vectors, 2), 2)
     if isinf(β)
         U = F.vectors[:, 1:N]
-        return conj(U) * transpose(U)
+        G = conj(U) * transpose(U)
+        # G + transpose(G) == I for Majoranas and G + τx * transpose(G) * τx == I for Nambu spinors fail when `eigen`
+        # returns zero-energy eigenvectors that are not particle-hole partners.
+        G + transpose(G) ≈ I || is_ph_symmetric(G - I / 2) || throw(ArgumentError(_unpaired_error))
+        return G
     end
     # The BdG matrix carries a factor 1/2, so the quasiparticle energies are 2 * F.values.
     n = inv.(exp.(2β .* F.values) .+ 1)
     return conj(F.vectors) * Diagonal(n) * transpose(F.vectors)
 end
+const _unpaired_error = "The eigenvectors are not particle-hole partners, as happens for unpaired zero-energy modes."
 
 """
     ground_state_parity(F::LinearAlgebra.Eigen)
@@ -75,7 +96,7 @@ The fermionic parity, `1` or `-1`, of the BdG ground state, where `F` is the res
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions, LinearAlgebra; @fermions f;
 
-julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), :dense);
+julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), Matrix);
 
 julia> ground_state_parity(eigen(A, BdGEigen()))
 -1
@@ -103,6 +124,7 @@ function ground_state_parity(F::Eigen, ::MajoranaSingleParticleHilbertSpace)
     # γ_x = x ⋅ γ and γ_y = y ⋅ γ have i γ_x γ_y = -1 there. The columns x, y form an orthogonal W, and the product of
     # these pair parities is det(W) times the parity.
     W = sqrt(2) * stack(Iterators.flatten((real(u), imag(u)) for u in eachcol(F.vectors[:, 1:N])))
+    W' * W ≈ I || throw(ArgumentError(_unpaired_error))
     return _parity((-1)^N * det(W))
 end
 
@@ -123,6 +145,7 @@ true
 function gaussian_state(G, H, Hbdg::BdGHilbertSpace)
     N = length(modes(Hbdg))
     dim(H) == 2^N || throw(ArgumentError("The many-body space must have exactly the $N modes of the BdG space."))
+    _check_correlation_matrix(G, Hbdg)
     # transpose(G)[i, j] = ⟨Ψ_j' Ψ_i⟩, so ⟨γ' γ⟩ = v' * transpose(G) * v for γ' = quasiparticle(v, Hbdg)
     vals, vecs = eigen(transpose(G) - I / 2, BdGEigen())
     tol = sqrt(eps(real(eltype(vals))))
@@ -179,9 +202,9 @@ end
     Δ = rand(ComplexF64, N, N)
     Δ = Δ - transpose(Δ)
     ham = sum(f[n]' * h[n, m] * f[m] + Δ[n, m] * f[n]' * f[m]' + hc for n in 1:N, m in 1:N) - sum(f[n]' * f[n] for n in 1:N)
-    ρ = exp(-0.7 * representation(ham, Hmb, :dense))
+    ρ = exp(-0.7 * representation(ham, Hmb, Matrix))
     ρ /= tr(ρ)
-    F = eigen(representation(ham, Hbdg, :dense), BdGEigen())
+    F = eigen(representation(ham, Hbdg, Matrix), BdGEigen())
     @test correlation_matrix(F; β = 0.7) ≈ correlation_matrix(ρ, Hmb, Hbdg)
     @test correlation_matrix(F; β = 1.0e6) ≈ correlation_matrix(F)
 end
@@ -194,7 +217,7 @@ end
     Hmb = hilbert_space(f, 1:N)
     Hsp = hilbert_space(f, 1:N, SingleParticle())
     ham = sum(rand(ComplexF64) * f[i]' * f[j] + hc for i in 1:N, j in 1:N)
-    ψ = eigvecs(Hermitian(representation(ham, Hmb, :dense)))[:, 3]
+    ψ = eigvecs(Hermitian(representation(ham, Hmb, Matrix)))[:, 3]
     op = f[1]' * f[2] + 2 * f[3] * f[1]' + 1
     @test expectation(op, correlation_matrix(ψ, Hmb, Hsp), Hsp) ≈ expectation(op, ψ, Hmb)
 end
@@ -225,6 +248,11 @@ end
     @test parities == [1, -1]
     F = eigen(Hermitian(representation(quadratic, H, :dense)))
     @test_throws ArgumentError ground_state_parity(Eigen(F.values, 2 * F.vectors), H)
+    # Two zero modes, γ[1] and γ[4], whose eigenvectors `eigen` does not pair
+    Hzero = hilbert_space(γ, 1:4, SingleParticle())
+    F = eigen(Hermitian(representation(1im * γ[2] * γ[3], Hzero, :dense)))
+    @test_throws ArgumentError ground_state_parity(F, Hzero)
+    @test_throws ArgumentError correlation_matrix(F)
 end
 
 @testitem "Gaussian state from a correlation matrix" begin
@@ -252,6 +280,7 @@ end
     Gthermal = correlation_matrix(ρ, Hmb, Hbdg)
     @test gaussian_state(Gthermal, Hmb, Hbdg) ≈ ρ
     @test_throws ArgumentError gaussian_state(Diagonal([2; zeros(N - 1); -1; ones(N - 1)]), Hmb, Hbdg)
+    @test_throws ArgumentError gaussian_state(Matrix(1.0I, 2N, 2N), Hmb, Hbdg)
 end
 
 @testitem "Reduced BdG correlation matrix and entropy" begin
@@ -275,6 +304,7 @@ end
         Gsub = partial_trace(correlation_matrix(state, Hmb, Hbdg), Hbdg => Hsub)
         @test Gsub ≈ correlation_matrix(state, Hmb, Hsub)
         @test von_neumann_entropy(Gsub, Hsub) ≈ von_neumann_entropy(partial_trace(state, Hmb => hilbert_space(f, sort(sub))))
+        @test_throws ArgumentError von_neumann_entropy(2Gsub, Hsub)
     end
     @test_throws ArgumentError partial_trace(rand(2N, 2N), Hbdg => hilbert_space(f, [1, 5], BdG()))
 end
