@@ -52,7 +52,7 @@ The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground stat
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions, LinearAlgebra; @fermions f;
 
-julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), :dense);
+julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), Matrix);
 
 julia> correlation_matrix(eigen(A, BdGEigen())) ≈ [1 0; 0 0]
 true
@@ -72,7 +72,7 @@ The fermionic parity, `1` or `-1`, of the BdG ground state, where `F` is the res
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions, LinearAlgebra; @fermions f;
 
-julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), :dense);
+julia> A = representation(-f[1]' * f[1], hilbert_space(f, 1:1, BdG()), Matrix);
 
 julia> ground_state_parity(eigen(A, BdGEigen()))
 -1

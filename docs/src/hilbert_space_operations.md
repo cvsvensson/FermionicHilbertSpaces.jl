@@ -42,7 +42,7 @@ A space built with a grouping constraint such as `NumberConservation()` is split
 H = hilbert_space(f, 1:4, NumberConservation())
 symham = sum(f[n]'f[n] for n in 1:4)
 ground_states = stack(sectors(H)) do Hsec
-    embed(eigvecs(representation(symham, Hsec, :dense))[:, 1], Hsec => H)
+    embed(eigvecs(representation(symham, Hsec, Matrix))[:, 1], Hsec => H)
 end
 ground_states' * representation(symham, H) * ground_states
 ```
