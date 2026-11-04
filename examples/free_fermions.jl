@@ -42,9 +42,9 @@ hopping(xy1, xy2) = N
 ham = zero(1.0 * f[0, 0] * f[1, 1] + 1.0)
 # Now we can build the hamiltonian
 for xy in disc
-    add!!(ham, potential(xy) * f[xy]' * f[xy])
+    global ham = add!!(ham, potential(xy) * f[xy]' * f[xy])
     for nbr in neighbours(xy...)
-        add!!(ham, hopping(nbr, xy) * f[nbr]' * f[xy])
+        global ham = add!!(ham, hopping(nbr, xy) * f[nbr]' * f[xy])
     end
 end
 # And get a matrix representation of it on the single particle hilbert space
@@ -57,8 +57,8 @@ vals, vecs = eigs(mat; nev=3^2, which=:SR, v0=map(x -> eltype(mat)(first(x)), di
 px = zero(1im * ham)
 py = zero(px)
 for xy in disc
-    xy .+ (1, 0) in disc && add!!(px, 1im * f[xy.+(1, 0)]' * f[xy] + hc)
-    xy .+ (0, 1) in disc && add!!(py, 1im * f[xy.+(0, 1)]' * f[xy] + hc)
+    xy .+ (1, 0) in disc && (global px = add!!(px, 1im * f[xy .+ (1, 0)]' * f[xy] + hc))
+    xy .+ (0, 1) in disc && (global py = add!!(py, 1im * f[xy .+ (0, 1)]' * f[xy] + hc))
 end
 pxmat = representation(px, H)
 pymat = representation(py, H);
