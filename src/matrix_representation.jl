@@ -936,6 +936,14 @@ end
     @test representation(2, Hbdg, Matrix{ComplexF64}) isa Matrix{ComplexF64}
 end
 
+@testitem "Format without a method for the identity" begin
+    import FermionicHilbertSpaces: _canonicalize_repr
+    struct BareFormat end
+    _canonicalize_repr(repr::BareFormat) = repr
+    @fermions f
+    @test_throws MethodError representation(2, hilbert_space(f, 1:2), BareFormat())
+end
+
 @testitem "Format that builds sums of terms with _terms_matrix" begin
     import FermionicHilbertSpaces: _canonicalize_repr, _terms_matrix, EagerSparseRepr
     struct TermsFormat end
@@ -950,14 +958,6 @@ end
     @test representation(op, H, TermsFormat()) == representation(op, H)
     opf = f[1]' * f[2] + hc + 2
     @test representation(opf, Hf, TermsFormat()) == representation(opf, Hf)
-end
-
-@testitem "Format without a method for the identity" begin
-    import FermionicHilbertSpaces: _canonicalize_repr
-    struct BareFormat end
-    _canonicalize_repr(repr::BareFormat) = repr
-    @fermions f
-    @test_throws MethodError representation(2, hilbert_space(f, 1:2), BareFormat())
 end
 
 @testitem "Scheduler extension correctness" begin
