@@ -323,16 +323,9 @@ end
 # Terms acting on the same range of groups are summed on those groups, and each sum is one `EmbeddedMatrix` term of
 # the matrix, so it is embedded with identities once instead of once per term. Terms on a single group join those on
 # it and a neighbour, if any, since their sum is still small. Joining larger ranges can make the summed matrices much
-# larger than the terms.
+# larger than the terms. Terms acting on all groups stay separate terms, as summing them would build full-size matrices.
 function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}, chunking; tree_split = 10, kwargs...)
-    sums = _span_sums(op, bases, groups(space), repr, chunking; tree_split, kwargs...)
-    if length(sums) == 1 && only(sums).l == only(sums).r == 1
-        return _add_identity_term(only(sums).core, op.coeff, bases, space, repr)
-    end
-    terms = [EmbeddedMatrix(convert(SparseMatrixCSC, s.core), s.l, s.r) for s in sums]
-    return _sum_terms_matrix(terms, op.coeff, space, repr, chunking; kwargs...)
-end
-function _span_sums(op, bases, spaces, repr, chunking; tree_split, kwargs...)
+    spaces = groups(space)
     by_span = Dict{UnitRange{Int}, Vector{Any}}()
     for term in NCterms(op)
         prodop = partition_product(term, bases, spaces)
@@ -343,15 +336,14 @@ function _span_sums(op, bases, spaces, repr, chunking; tree_split, kwargs...)
             append!(by_span[span], pop!(by_span, n:n))
         end
     end
-    return map(collect(by_span)) do (span, prodops)
-        core = _summed_span_matrices(prodops, span, spaces, repr, chunking; tree_split, kwargs...)
+    terms = mapreduce(vcat, collect(by_span); init = []) do (span, prodops)
+        span == eachindex(spaces) && return prodops
+        core = _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)
         r = prod(n -> dim(spaces[n]), 1:(first(span) - 1); init = 1)
-        l = prod(n -> dim(spaces[n]), (last(span) + 1):length(spaces); init = 1)
-        (; core, l, r)
+        return [EmbeddedMatrix(convert(SparseMatrixCSC, core), r)]
     end
+    return _sum_terms_matrix(terms, op.coeff, space, repr, chunking; kwargs...)
 end
-_summed_span_matrices(prodops, span, spaces, repr, ::NoChunking; tree_split, kwargs...) =
-    _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)
 function _span_matrix(prodop, span, spaces, repr; kwargs...)
     matrices = map(span) do n
         m = findfirst(==(n), prodop.inds)
@@ -359,17 +351,9 @@ function _span_matrix(prodop, span, spaces, repr; kwargs...)
     end
     return _kron_groups(matrices, prodop.inds .- (first(span) - 1), repr)
 end
-# `summed + coeff * I`, with the element type of `summed` promoted with that of `coeff * I` also when `coeff` is zero
-function _add_identity_term(summed, coeff, bases, space, repr)
-    identity_term = convert(_repr_eltype(typeof(coeff), repr), coeff) * _matrix_representation(missing, bases, space, repr, NoChunking())
-    iszero(coeff) || return summed + identity_term
-    T = promote_type(eltype(summed), eltype(identity_term))
-    return convert(AbstractMatrix{T}, summed)
-end
-# The term kron(I(l), core, I(r)) of a sum, with entries collected from the stored entries of `core`
+# The term kron(I, core, I(r)) of a sum
 struct EmbeddedMatrix{M}
     core::M
-    l::Int
     r::Int
 end
 mat_eltype(::Type{EmbeddedMatrix{M}}) where {M} = eltype(M)
@@ -1046,6 +1030,13 @@ end
     M_states_prod_dense = representation(op_prod, Hprod, EagerDenseRepr(); chunking=StateChunking(scheduler))
     @test M_terms_prod_dense == M_serial_prod
     @test M_states_prod_dense == M_serial_prod
+
+    # Terms on single groups, the middle one padded by identities on both sides
+    @boson b
+    H3 = tensor_product(Hf, Hs, hilbert_space(b, 3))
+    op3 = f[1]' * f[2] + hc + 2 * s[:z] + b' * b + 1im
+    @test representation(op3, H3; chunking=StateChunking(scheduler)) == representation(op3, H3)
+    @test representation(op3, H3, EagerDenseRepr(); chunking=TermChunking(scheduler)) == representation(op3, H3)
 
     # Constrained single space
     Hc = constrain_space(Hf, NumberConservation(1:2))

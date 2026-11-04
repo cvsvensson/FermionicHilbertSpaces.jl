@@ -7,7 +7,7 @@ using NonCommutativeProducts: NCAdd, NCMul
 import SciMLOperators: cache_operator
 
 import OhMyThreads: Schedulers.chunking_args, Consecutive
-import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, _summed_span_matrices, _span_matrix, _terms_matrix, _precomputed_terms, _blocked_sparse_matrix, _narrowed, matrix_accumulator, add_identity!!, NoChunking, chunked_operator_indices_and_amplitudes_generic!, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, basisstate, state_index, _skip_outside, dim, _lazy_output_prototype, cache_operator!, _lazy_terms
+import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, _terms_matrix, _precomputed_terms, _blocked_sparse_matrix, _narrowed, matrix_accumulator, add_identity!!, NoChunking, chunked_operator_indices_and_amplitudes_generic!, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, basisstate, state_index, _skip_outside, dim, _lazy_output_prototype, cache_operator!, _lazy_terms
 
 function _reduce_add!(y, partials)
     isempty(partials) && return y
@@ -247,26 +247,6 @@ function _terms_matrix(::Type{T}, terms, coeff, space, repr::EagerDenseRepr, chu
     end
     iszero(coeff) || add_identity!!(m, coeff, space)
     return m
-end
-
-function _summed_span_matrices(prodops, span, spaces, repr, chunking::ThreadedChunking; tree_split, kwargs...)
-    matrices = tmap(p -> _span_matrix(p, span, spaces, repr; kwargs...), prodops; scheduler = chunking.scheduler)
-    return _sum_tree_threaded(matrices, tree_split, chunking.scheduler)
-end
-
-function _sum_tree_threaded(matrices, k, scheduler)
-    n = length(matrices)
-    n == 0 && throw(ArgumentError("Cannot sum an empty collection of matrices."))
-    n == 1 && return only(matrices)
-    n <= k && return map(+, matrices...)
-
-    chunk_size = cld(n, k)
-    chunks = collect(Iterators.partition(matrices, chunk_size))
-
-    partials = tmap(chunks; scheduler) do chunk
-        _sum_tree_threaded(collect(chunk), k, scheduler)
-    end
-    return map(+, partials...)
 end
 
 end
