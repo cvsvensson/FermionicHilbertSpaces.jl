@@ -1031,7 +1031,7 @@ end
     @spins S 1 // 2
     Hchain = hilbert_space(S, 1:12)
     op_chain = sum(0.3 * S[k][:x] * S[k + 1][:x] + S[k][:z] * S[k + 1][:z] for k in 1:11) + sum(0.1k * S[k][:z] for k in 1:12)
-    @test representation(op_chain, Hchain; chunking=StateChunking(scheduler)) == representation(op_chain, Hchain)
+    @test representation(op_chain, Hchain; chunking = StateChunking(scheduler)) == representation(op_chain, Hchain)
 
     # Constrained single space
     Hc = constrain_space(Hf, NumberConservation(1:2))
