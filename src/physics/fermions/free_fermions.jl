@@ -69,15 +69,3 @@ module FreeFermions
     include("wick.jl")
 
 end
-
-@deprecate single_particle_hilbert_space(f, labels) hilbert_space(f, labels, FermionicHilbertSpaces.FreeFermions.SingleParticle())
-@deprecate bdg_hilbert_space(f, labels) hilbert_space(f, labels, FermionicHilbertSpaces.FreeFermions.BdG())
-
-@testitem "Deprecated special space constructors" begin
-    using FermionicHilbertSpaces.FreeFermions
-    @fermions f
-    Hsp = @test_deprecated single_particle_hilbert_space(f, 1:2)
-    Hbdg = @test_deprecated bdg_hilbert_space(f, 1:2)
-    @test Hsp == hilbert_space(f, 1:2, SingleParticle())
-    @test Hbdg == hilbert_space(f, 1:2, BdG())
-end
