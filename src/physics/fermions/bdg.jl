@@ -83,8 +83,10 @@ end
 function _bdg_entries(term, H)
     instate, outstate = _nambu_in_out(term, map(f -> mode_position(f, H), term.factors))
     partner(s) = NambuState(s.state, !s.hole)
-    return ((state_index(outstate, H), state_index(instate, H), term.coeff),
-        (state_index(partner(instate), H), state_index(partner(outstate), H), -term.coeff))
+    return (
+        (state_index(outstate, H), state_index(instate, H), term.coeff),
+        (state_index(partner(instate), H), state_index(partner(outstate), H), -term.coeff),
+    )
 end
 
 # The term c_a^(d1) c_b^(d2), with `a` and `b` at `positions`, maps the Nambu state (b, !d2) to (a, d1)
