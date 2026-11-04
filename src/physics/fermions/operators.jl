@@ -60,7 +60,7 @@ function togglefermions(digitpositions, daggers, focknbr::FockNumber{I}) where I
     return newfocknbr, fermionstatistics
 end
 
-function togglemajoranas(digitpositions, daggers, focknbr::FockNumber{I}) where I
+function togglemajoranas(digitpositions, daggers, focknbr::FockNumber{I}) where {I}
     newfocknbr = zero(focknbr)
     allowed = true
     fermionstatistics = 1
