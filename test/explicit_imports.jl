@@ -6,16 +6,15 @@
     internal_names = Tuple(filter(n -> !Base.ispublic(FermionicHilbertSpaces, n),
         names(FermionicHilbertSpaces; all=true)))
     nonpublic_imports = (internal_names...,
-        # NonCommutativeProducts declares no public API.
-        Symbol("@nc"), :Swap, :NCAdd, :NCMul, :NCterms, :AddTerms, :add!!,
+        # Not public in NonCommutativeProducts.
+        :NCterms,
         # OhMyThreads scheduler internals.
         :Consecutive, :chunking_args,
     )
     nonpublic_qualified = (
         # NonCommutativeProducts interface functions that this package extends or calls.
         :grade, :grades, :grading, :mul_grade, :adjoint_grade,
-        :mul_effect, :isscalar, :ncmap, :ncmapreduce, :enable_autosort!,
-        :contraction_key, :mul_terms!!, :termpairs,
+        :isscalar, :contraction_key, :mul_terms!!, :termpairs,
         # Base internals.
         :promote_op, :promote_eltype, :setindex, :product, :isiterable,
         :show_delim_array, :HasEltype, :broadcasted, :inferencebarrier,
