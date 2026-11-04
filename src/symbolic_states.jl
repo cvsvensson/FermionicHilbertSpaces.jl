@@ -1166,6 +1166,7 @@ end
     @bosons b
     @test Z(1) * b0 == b0 * Z(1)
     @test b0 * b[1] == b[1] * b0
+    @test b[1] * b[0] == b[1.0] * b[0]
     @test NoRuleOp(1) * NoRuleOp(2) != NoRuleOp(2) * NoRuleOp(1)
 end
 

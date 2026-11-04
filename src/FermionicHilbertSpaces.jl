@@ -75,7 +75,7 @@ operator type subtypes it, registers itself with `NonCommutativeProducts.@nc` an
 abstract type AbstractSym end
 
 # Factors from different groups are ordered by the type name of the group id, then by `isless`.
-# The type name depends only on the code, so the order is the same in every session and on every platform.
+# The type name depends only on the code, so the order is the same in every session.
 # Tuple groups share the type name `Tuple` but may hold elements `isless` can't compare, so they are compared
 # element by element with the same rule.
 _group_isless(a, b) = _order_isless(symbolic_group(a), symbolic_group(b))
@@ -83,13 +83,14 @@ function _order_isless(a, b)
     na, nb = nameof(typeof(a)), nameof(typeof(b))
     return na == nb ? isless(a, b) : isless(na, nb)
 end
+_order_isless(a::Real, b::Real) = isless(a, b) # `1 == 1.0`, so numbers can't be ordered by type name
 _order_isless(::Tuple{}, ::Tuple{}) = false
 _order_isless(::Tuple{}, ::Tuple) = true
 _order_isless(::Tuple, ::Tuple{}) = false
 function _order_isless(a::Tuple, b::Tuple)
     x, y = first(a), first(b)
     _order_isless(x, y) && return true
-    nameof(typeof(x)) == nameof(typeof(y)) && isequal(x, y) || return false
+    _order_isless(y, x) && return false
     return _order_isless(Base.tail(a), Base.tail(b))
 end
 

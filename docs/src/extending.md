@@ -21,13 +21,16 @@ Algebra, from [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommu
 
 - `@nc MyOp` makes `+` and `*` build symbolic sums and products of `MyOp`.
 - [`local_mul_effect`](@ref)`(a::MyOp, b::MyOp)` gives the rule for the product `a * b` of
-  operators on the same group: `nothing` keeps it, `Swap(c)` rewrites it as `c * b * a`, and
-  `AddTerms((Swap(c), r, ...))` adds further terms. Without a rule, products stay as written, so
-  operators that are equal in your algebra can compare unequal. For two different types on the
-  same group, return a `Swap` for one argument order so that the sorted form is unique.
+  operators on the same group: `nothing` keeps it, `Swap(c)` rewrites it as `c * b * a`,
+  `AddTerms((Swap(c), r, ...))` adds further terms, and a number, operator or sum replaces it.
+  Without a rule, products stay as written, so operators that are equal in your algebra can
+  compare unequal. For two different types on the same group, rewrite one argument order in
+  terms of the other.
 - Operators on different groups commute and are ordered by group, so no rule is needed for them.
-  Groups whose types have the same name are compared with `isless`, which must be a strict total
-  order consistent with `==`; otherwise sorted forms are not unique.
+  Numbers are compared by value and other groups by type name, then with `isless`; tuple groups
+  are compared element by element with the same rule. Groups whose types share a name need an
+  `isless` that is a strict total order consistent with `==`; without one, `*` throws a
+  `MethodError`.
 
 Connection to Hilbert spaces:
 

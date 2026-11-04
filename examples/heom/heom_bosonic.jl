@@ -31,11 +31,11 @@
 ##   • HEOMBosonicAuxState   – basis state (occupation tuple n)
 ##   • heom_bosonic_aux_space – builds the auxiliary GenericHilbertSpace
 ##   • heom_generator        – builds the full symbolic HEOM generator
-##   • Algebra rules, symbolic_group, apply_local_operators (all required interfaces)
+##   • symbolic_group, apply_local_operators (all required interfaces)
 
 using FermionicHilbertSpaces, Test
 import FermionicHilbertSpaces: AbstractSym, symbolic_group, apply_local_operator, add_tag,
-    @nc, NCMul, mat_eltype
+    @nc, mat_eltype
 
 """
     HEOMBosonicBath(id, m_max, χ, ξ)
@@ -114,7 +114,7 @@ function Base.adjoint(op::HEOMBosonicOp)
     return HEOMBosonicOp(op.type == :up ? :down : :up, op.l, op.bath, op.weighted)
 end
 
-## Algebra
+## Products on one bath stay as written. Operators on different baths commute and are sorted by bath.
 
 @nc HEOMBosonicOp
 
