@@ -658,7 +658,11 @@ _convert_repr_eltype(M, ::EagerDenseRepr{Missing}) = Matrix(M)
 _convert_repr_eltype(M, ::EagerSparseRepr{T}) where T = SparseArrays.sparse(T.(M))
 _convert_repr_eltype(M, ::EagerDenseRepr{T}) where T = Matrix{T}(M)
 _convert_repr_eltype(M, ::Union{LazyRepr, PartitionedSparseRepr}) = M
-_convert_repr_eltype(M, repr) = _convert_repr_eltype(M, _canonicalize_repr(repr))
+function _convert_repr_eltype(M, repr)
+    format = _canonicalize_repr(repr)
+    format === repr && throw(ArgumentError("The format `$(repr)` does not support multiples of the identity."))
+    return _convert_repr_eltype(M, format)
+end
 _convert_repr_eltype(M, ::Type{A}) where {A <: SparseArrays.AbstractSparseArray} = SparseArrays.sparse(_convert_repr_eltype(M, _canonicalize_repr(A)))
 
 # A concrete element type fixes the matrix type, also where inference cannot follow the assembly
@@ -937,6 +941,14 @@ end
     @test_throws InexactError representation(1im * k, H, Vector{Float64})
     Hbdg = hilbert_space(f, 1:2, FermionicHilbertSpaces.FreeFermions.BdG())
     @test representation(2, Hbdg, Matrix{ComplexF64}) isa Matrix{ComplexF64}
+end
+
+@testitem "Format without a method for the identity" begin
+    import FermionicHilbertSpaces: _canonicalize_repr
+    struct BareFormat end
+    _canonicalize_repr(repr::BareFormat) = repr
+    @fermions f
+    @test_throws ArgumentError representation(2, hilbert_space(f, 1:2), BareFormat())
 end
 
 @testitem "Scheduler extension correctness" begin
