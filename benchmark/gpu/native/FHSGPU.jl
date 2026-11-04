@@ -102,10 +102,10 @@ Base.getindex(::NoStorage, i::Int...) = throw(ArgumentError("The arrays of a ter
 struct DropArrays end
 Adapt.adapt_storage(::DropArrays, a::DenseArray) = NoStorage{eltype(a),ndims(a)}(size(a))
 
-function check_isbits(x, what)
+function check_isbits(x, what...)
     y = adapt(DropArrays(), x)
     isbits(y) && return y
-    throw(ArgumentError("$what has no device version: $(_nonbits_path(y, "")) is not isbits. Its type needs an `Adapt.adapt_structure` method that keeps only isbits data and arrays."))
+    throw(ArgumentError(string(what..., " has no device version: $(_nonbits_path(y, "")) is not isbits. Its type needs an `Adapt.adapt_structure` method that keeps only isbits data and arrays.")))
 end
 function _nonbits_path(x, path)
     for name in fieldnames(typeof(x))
@@ -231,7 +231,7 @@ function prepare(terms, coeff, H, backend)
     check_isbits(Hdev, "The space")
     prepared = map(collect(terms)) do term
         t = FHS.__concretize(term, FHS.TupleConcretizer())
-        check_isbits((t, FHS.precomputation_before_operator_application(t, H)), "The term $term")
+        check_isbits((t, FHS.precomputation_before_operator_application(t, H)), "The term ", term)
     end
     bytype = Dict{DataType,Vector{Any}}()
     foreach(t -> push!(get!(() -> [], bytype, typeof(t)), t), prepared)
