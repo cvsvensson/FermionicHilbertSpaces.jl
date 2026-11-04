@@ -22,7 +22,7 @@ reshape(t, H => (H1, H2))                # t has one axis on H, result has axes 
 
 ### Tensor products and subregions
 
-`tensor_product(H1, H2; constraint)` builds the composite space, optionally restricted by a [constraint](conservation.md), and `factors(H)` returns the spaces it is built from. `subregion(Hs, H)` returns the part of `H` on the modes `Hs`; on a constrained `H` it contains only the compatible states:
+`tensor_product(H1, H2; constraint)` builds the composite space, optionally restricted by a [constraint](conservation.md), and [`factors`](@ref)`(H)` splits a space one level down: a product space into its groups, and a fermionic space, also one with several species, into its single modes. `subregion(Hs, H)` returns the part of `H` on the modes `Hs`; on a constrained `H` it contains only the compatible states:
 
 ```@example hilbert_space_ops
 using FermionicHilbertSpaces, LinearAlgebra
@@ -107,7 +107,7 @@ Use `tensor_product` for product states, local observables and anything that sho
 
 ### Reusable operations
 
-Called with only spaces, `partial_trace(H => Hsub)`, `embed(Hsub => H)`, `partial_transpose(H, Hsub)` and `tensor_product(Hs => H)` return an operation that is applied as `op(m)`, or in place as `op(out, m)`. `sparse(op)` gives it as a sparse superoperator. This pays off when the same operation is applied many times.
+Called with only spaces, `partial_trace(H => Hsub)`, `embed(Hsub => H)` and `partial_transpose(H, Hsub)` return an operation that is applied as `op(m)`, or in place as `op(out, m)`. `sparse(op)` gives it as a sparse superoperator. This pays off when the same operation is applied many times.
 
 ### Reshaping
 
