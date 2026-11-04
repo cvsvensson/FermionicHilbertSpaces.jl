@@ -74,6 +74,7 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     )
     size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
     size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
+    _check_no_alias(mout, m)
     fill!(mout, zero(eltype(mout)))
     splits = _split_all_states(H, mapper_in)
     _foreach_partial_transpose_term(tensor_product_iterator(m, H), H, Hsub, Hout, splits, mapper_out; phase_factors, projection) do J1, J2, K1, K2, v
@@ -208,8 +209,7 @@ function _apply_superop_on_pure_state!(w::AbstractVector, mat::SparseMatrixCSC, 
     colptr = SparseArrays.getcolptr(mat)
     rows = rowvals(mat)
     vals = nonzeros(mat)
-    # Most columns are empty for partial trace/transpose maps, so the empty-column check is the hot path.
-    # Reading colptr directly is ~40% faster than nzrange here, and @inbounds is safe after the size checks above.
+    # @inbounds is safe after the size checks above.
     @inbounds for c in axes(mat, 2)
         ptr_start, ptr_stop = colptr[c], colptr[c+1] - 1
         ptr_start > ptr_stop && continue
@@ -324,6 +324,7 @@ end
     HA2 = hilbert_space(f, [1, 3])
     @test partial_transpose!(mout2, m2, Hfull, HA2) ≈ partial_transpose(m2, Hfull, HA2)
     @test partial_transpose!(mout2, m2, Hfull, HA2; phase_factors=false) ≈ partial_transpose(m2, Hfull, HA2; phase_factors=false)
+    @test_throws ArgumentError partial_transpose!(m2, m2, Hfull, HA2)
 end
 
 @testitem "Partial transpose: output space only as a Pair" begin

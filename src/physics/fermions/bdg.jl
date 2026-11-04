@@ -458,7 +458,7 @@ end
 """
     symbolic_operator(M, H)
 
-The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space, an antisymmetric matrix on a Majorana space, or any matrix on a `SingleParticle` space. On a `BdG` or Majorana space, `op` is traceless.
+The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space, an antisymmetric matrix on a Majorana space, or any matrix on a `SingleParticle` space.
 
 ```julia
 @fermions f

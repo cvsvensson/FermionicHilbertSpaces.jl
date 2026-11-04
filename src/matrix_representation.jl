@@ -325,10 +325,44 @@ function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs.
     end
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
 end
+# Terms acting on the same range of groups are summed on those groups, and the sum is embedded with identities on the
+# other groups once instead of once per term. Terms on a single group join those on it and a neighbour, if any, since
+# their sum is still small. Joining larger ranges can make the summed matrices much larger than the terms.
 function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
-    matrices = (_matrix_representation(term, bases, space, repr, NoChunking(); kwargs...) for term in NCterms(op))
-    return _add_identity_term(_sum_matrices(matrices, repr; tree_split=tree_split), op.coeff, bases, space, repr)
+    spaces = groups(space)
+    by_span = Dict{UnitRange{Int}, Vector{Any}}()
+    for term in NCterms(op)
+        prodop = partition_product(term, bases, spaces)
+        push!(get!(() -> [], by_span, minimum(prodop.inds):maximum(prodop.inds)), prodop)
+    end
+    for n in eachindex(spaces), span in (n:(n + 1), (n - 1):n)
+        if haskey(by_span, n:n) && haskey(by_span, span)
+            append!(by_span[span], pop!(by_span, n:n))
+        end
+    end
+    matrices = map(collect(by_span)) do (span, prodops)
+        core = _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)
+        _embed_span(core, span, spaces, repr)
+    end
+    return _add_identity_term(_sum_matrices(matrices, repr; tree_split), op.coeff, bases, space, repr)
 end
+function _span_matrix(prodop, span, spaces, repr; kwargs...)
+    matrices = map(span) do n
+        m = findfirst(==(n), prodop.inds)
+        isnothing(m) ? _identity(dim(spaces[n]), repr) : _term_matrix_representation(prodop.ops[m], spaces[n], repr, NoChunking(); kwargs...)
+    end
+    return foldl(kron, Iterators.reverse(matrices))
+end
+_identity(d, ::EagerSparseRepr) = sparse(I(d))
+_identity(d, ::EagerDenseRepr) = Matrix{Bool}(I, d, d)
+function _embed_span(core, span, spaces, repr)
+    r = prod(n -> dim(spaces[n]), 1:(first(span) - 1); init = 1)
+    l = prod(n -> dim(spaces[n]), (last(span) + 1):length(spaces); init = 1)
+    l == r == 1 && return core
+    return _embed(core, l, r, repr)
+end
+_embed(core, l, r, ::EagerSparseRepr) = _kron_identities(convert(SparseMatrixCSC, core), l, r, eltype(core))
+_embed(core, l, r, ::EagerDenseRepr) = kron(Matrix{Bool}(I, l, l), core, Matrix{Bool}(I, r, r))
 # `summed + coeff * I`, with the element type of `summed` promoted with that of `coeff * I` also when `coeff` is zero
 function _add_identity_term(summed, coeff, bases, space, repr)
     identity_term = convert(_repr_eltype(typeof(coeff), repr), coeff) * _matrix_representation(missing, bases, space, repr, NoChunking())
