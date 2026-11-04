@@ -59,19 +59,16 @@ says which fields to keep. They would move to an FHS Adapt extension. No algebra
 - `FermionicSpace`, `ProductSpace`, `ProductOperator`, `IndexTable`: fields that held a concrete `Vector`, `Dict` or
   `OrderedDict` are type parameters, so a device copy can replace them. `FermionicSpace` and `ProductSpace` get an
   inner constructor that takes the fields as they are.
-- `TruncatedBosonicHilbertSpace`: the field `sym::BosonSym{L,B}` was not concretely typed, so the struct could not be
-  isbits. It now has the third type parameter of `BosonSym`.
-- `SpinSpace`: the unused `state_index` Dict and the `basisstates` Vector are removed; `basisstate` and `dim` are
-  arithmetic, as `state_index` already was.
 - `SpinSym`: `op` is a type parameter, and `apply_local_operator` compares `_spin_op_char(op.op)`, so a device copy can
   store a `Char`. Its unreachable `throw` with an interpolated string is removed, because device code cannot build
   strings.
 - `basisstate` of fermion, boson and spin spaces calls `Base.throw_boundserror`, which GPU backends override, instead of
   `throw(BoundsError(H, i))`, which boxes the space.
 
-- `chunked_operator_indices_and_amplitudes_generic!`, `_apply_group_operators` and `_apply_local_operators_fast` are
-  `@inline`; `_apply_group_operators` reads and writes homogeneous tuples with `ifelse`, and `_state_index` of a
-  product calls `all(map(f, inds))`. See Performance.
+On main: `TruncatedBosonicHilbertSpace` has the concrete `sym` field and `SpinSpace` computes `basisstate` and `dim`
+arithmetically. In #361: `chunked_operator_indices_and_amplitudes_generic!`, `_apply_group_operators` and
+`_apply_local_operators_fast` are `@inline`; `_apply_group_operators` reads and writes homogeneous tuples with
+`ifelse`, and `_state_index` of a product calls `all(map(f, inds))`. See Performance.
 
 ## Per stage
 
