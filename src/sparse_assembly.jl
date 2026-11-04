@@ -33,6 +33,15 @@ function _collect_block!(block, capacity, precomps, coeff, space, incols, offset
     return capacity
 end
 
+# The entries `(rows, cols, amps)` of the columns `incols` of the matrix, stored at the column indices
+# `incols .- offset`, with duplicate entries not summed
+function _collect_ijv(::Type{T}, precomps, coeff, space, incols, offset; kwargs...) where T
+    capacity = _sparse_length_guess(length(precomps), length(incols))
+    ijv = sparse_matrix_accumulator(T, (capacity, capacity))
+    _collect_block!(ijv, capacity, precomps, coeff, space, incols, offset; kwargs...)
+    return ijv
+end
+
 # Builds the columns `incols` of the matrix one block of columns at a time: the entries of a block are collected
 # term by term, then sorted into columns, with duplicate entries summed in the order of the terms.
 # A nonempty range of columns that fits in one block is built by `sparse!` from that block.
@@ -42,12 +51,12 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
     M = length(incols)
     offset = first(incols) - 1
     B = SPARSE_BLOCK_SIZE
+    if 0 < M <= B
+        ijv = _collect_ijv(T, precomps, coeff, space, incols, offset; kwargs...)
+        return _trimmed!(SparseArrays.sparse!(ijv..., N, M), length(first(ijv)))
+    end
     blockcapacity = _sparse_length_guess(length(precomps), min(B, M))
     block = (rows, cols, amps) = sparse_matrix_accumulator(T, (blockcapacity, blockcapacity))
-    if 0 < M <= B
-        _collect_block!(block, blockcapacity, precomps, coeff, space, incols, offset; kwargs...)
-        return _trimmed!(SparseArrays.sparse!(rows, cols, amps, N, M), length(rows))
-    end
     colptr = Vector{Int}(undef, M + 1)
     colptr[1] = 1
     rowval = Int[]

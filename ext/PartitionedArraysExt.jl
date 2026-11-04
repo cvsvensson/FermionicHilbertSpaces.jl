@@ -2,7 +2,7 @@ module PartitionedArraysExt
 
 import PartitionedArrays: own_to_global, psparse, uniform_partition
 using NonCommutativeProducts: NCAdd, NCMul, NCterms
-import FermionicHilbertSpaces: PartitionedSparseRepr, _matrix_representation_single_space, _term_matrix_representation, dim, mat_eltype, sparse_matrix_accumulator, chunked_operator_indices_and_amplitudes!, push_inds_amps!
+import FermionicHilbertSpaces: PartitionedSparseRepr, _matrix_representation_single_space, _term_matrix_representation, _collect_ijv, _precomputed_terms, dim, mat_eltype
 
 function _resolve_ranks(repr::PartitionedSparseRepr)
     repr.nparts > 0 || throw(ArgumentError("`nparts` must be positive, got $(repr.nparts)."))
@@ -28,18 +28,9 @@ end
 
 function _coo_from_chunked_terms(terms, space, col_partition; projection, identity_coeff=0)
     T = isempty(terms) ? typeof(identity_coeff) : mat_eltype(first(terms))
+    precomps = _precomputed_terms(terms, space)
     coo = map(col_partition) do local_cols
-        cols = own_to_global(local_cols)
-        accum = sparse_matrix_accumulator(T, (dim(space), length(cols)))
-        for term in terms
-            chunked_operator_indices_and_amplitudes!(accum, term, space, cols, 0; projection)
-        end
-        if !iszero(identity_coeff)
-            for inind in cols
-                push_inds_amps!(accum, inind, inind, identity_coeff)
-            end
-        end
-        accum
+        _collect_ijv(T, precomps, identity_coeff, space, own_to_global(local_cols), 0; projection)
     end
 
     return map(t -> t[1], coo), map(t -> t[2], coo), map(t -> t[3], coo)
