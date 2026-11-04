@@ -11,7 +11,7 @@ module FreeFermions
     using ..FermionicHilbertSpaces: FermionicHilbertSpaces, AbstractFockState, AbstractHilbertSpace,
         EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, MajoranaSym, NoChunking, SymbolicFermionBasis,
         SymbolicMajoranaBasis,
-        _FermionModeSpace, _canonicalize_repr, _operator_type, _zero_matrix, exchange_phase, finalize!,
+        _FermionModeSpace, _canonicalize_repr, _matrix_format, _operator_type, _repr_eltype, _zero_matrix, exchange_phase, finalize!,
         matrix_accumulator, mode_position, push_inds_amps!, state_index
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,
         _state_label_atomic, _unwrap_space, apply_local_operators, atom_ids, basisstate, basisstates, dim, von_neumann_entropy, expectation,
@@ -32,9 +32,12 @@ module FreeFermions
 
     # The single-particle and BdG spaces represent an operator without its identity part, so a scalar is represented by zero
     _isscalar_operator(op) = op isa Union{Number, UniformScaling} || (op isa Union{NCMul, NCAdd} && NonCommutativeProducts.isscalar(op))
-    _identity_free_zero(H, repr) = _zero_matrix(H, _eager_repr(repr, H), Int)
+function _identity_free_zero(H, repr)
+    _repr = _eager_repr(repr, H)
+    return _zero_matrix(H, _repr, _repr_eltype(Int, _repr))
+end
     function _eager_repr(repr, H)
-        _repr = _canonicalize_repr(repr)
+    _repr = _matrix_format(repr)
         _repr isa Union{EagerSparseRepr, EagerDenseRepr} || throw(ArgumentError("Only the :sparse and :dense representations are supported on $(typeof(H)). Got $repr."))
         return _repr
     end

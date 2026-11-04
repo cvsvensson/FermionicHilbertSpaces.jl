@@ -42,7 +42,7 @@ struct SingleParticle end
 """
     hilbert_space(f::SymbolicFermionBasis, labels, ::SingleParticle)
 
-The space spanned by the states ``c_n^\\dagger |0\\rangle`` for the modes `f[l]`, `l in labels`, suitable for non-interacting systems with fermion number conservation. The matrix representation of a quadratic operator is the single-particle matrix, without any contribution from the identity operator. The space wraps a constrained fermionic space, available through `parent`, and does not combine with tensor products or partial traces.
+The space spanned by the states ``c_n^\\dagger |0\\rangle`` for the modes `f[l]`, `l in labels`, suitable for non-interacting systems with fermion number conservation. The matrix representation of a quadratic operator is the single-particle matrix, without any contribution from the identity operator.
 """
 hilbert_space(f::SymbolicFermionBasis, labels, ::SingleParticle) = SingleParticleHilbertSpace(f, labels)
 Base.@propagate_inbounds basisstate(ind::Integer, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
