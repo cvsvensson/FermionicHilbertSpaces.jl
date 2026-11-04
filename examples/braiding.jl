@@ -29,7 +29,7 @@ plot(ts, stack(couplings.(ts, T, k))'; label = ["Δ₁" "Δ₂" "Δ₃"], xlabel
 # which must be short compared with the switching time of the couplings, about `T/(2πk)`.
 # The ground states at ``t = 0`` and ``t = T`` coincide. Restricted to them, the evolution should equal the braid
 # operator up to the dynamical phase, which is the same for all ground states, while the opposite exchange
-# ``B_{23} = B_{32}^†`` should not match. The two zero modes have opposite parity, and the braid acts as a phase on each. Once the dynamical phase is removed, the evolution gives the two ground states
+# ``B_{23} = B_{32}^†`` should not match. The two ground states have opposite parity, and the braid acts as a phase on each. Once the dynamical phase is removed, the evolution gives the two ground states
 # phases ``e^{±iπ/4}``, the eigenvalues of ``B_{32}``:
 dt = 1.0
 U = prod(exp(-1im * dt * hamiltonian(t, T, k)) for t in reverse((dt / 2):dt:T))

@@ -511,6 +511,7 @@ _grade_type(g) = :mixed
 
 Return the vector of `state` in `space`. `state` is a basis state, a symbolic ket or bra, or a product or sum of
 symbolic kets or of symbolic bras. Kets give a column vector, and bras give the transpose of one.
+This is the state-specific form of [`representation`](@ref).
 The optional `repr` selects the format: `:sparse` (the default), `:dense`, or a format object
 (`EagerSparseRepr()`, `EagerDenseRepr()`).
 """
@@ -534,7 +535,11 @@ _zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(_output_space(space)), d
 function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     vector_representation(1 * s, space, repr; kwargs...)
 end
-vector_representation(op, space, repr; kwargs...) = vector_representation(op, space, _canonicalize_repr(repr); kwargs...)
+function vector_representation(op, space, repr; kwargs...)
+    _repr = _canonicalize_repr(repr)
+    _repr isa LazyRepr && throw(ArgumentError("Kets and bras support `:sparse` and `:dense` representations. `:lazy` is only for operators and ketbras."))
+    return vector_representation(op, space, _repr; kwargs...)
+end
 
 function vector_representation(op::Union{NCMul,NCAdd}, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     _vector_representation(op, space, repr, _operator_type(op); kwargs...)
@@ -542,11 +547,13 @@ end
 # `kind` is `:kets` or `:bras`, as computed by `_operator_type`
 function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, kind; kwargs...)
     symstates = op.factors
-    group_ids = map(state -> group_id(state.space), symstates)
-    perm = map(id -> findfirst(==(id) ∘ group_id, groups(space)), group_ids)
-    all(!isnothing, perm) || throw(ArgumentError("Spaces of symbolic states in NCMul do not match the factor spaces of the provided ProductSpace"))
+    perm = map(symstates) do state
+        i = findfirst(g -> _same_space_id(g, state.space), groups(space))
+        isnothing(i) && throw(ArgumentError("The space `$(state.space)` of the symbolic state `$state` is not `$space` or one of its factors."))
+        i
+    end
     basis_state(symstate::SymbolicState) = kind == :kets ? symstate.ket : symstate.bra
-    vec = if length(group_ids) == 1
+    vec = if length(symstates) == 1
         op.coeff * vector_representation(basis_state(only(symstates)), space, repr)
     else
         # `symstates[i]` belongs to group `perm[i]`, so group n holds `symstates[iperm[n]]`
@@ -621,6 +628,7 @@ end
 
 @testitem "Unified representation API" begin
     using SparseArrays, LinearAlgebra
+    using FermionicHilbertSpaces: matrix_representation
     @fermions f
     @boson b
 
@@ -682,6 +690,7 @@ end
 end
 
 @testitem "vector_representation of symbolic kets and bras" begin
+    using FermionicHilbertSpaces: vector_representation
     @fermions f
     Hf = hilbert_space(f, 1:2)
     vf = Kets(Hf)
@@ -690,11 +699,15 @@ end
     @test v == representation(ket, Hf)
     @test vector_representation(ket', Hf) == transpose(v)
     @test vector_representation(1 * vf("10"), Hf, :dense) isa Vector
+    @test_throws ArgumentError vector_representation(ket, Hf, :lazy)
+    @test_throws ArgumentError representation(vf("10")', Hf, :lazy)
+    @test_throws ArgumentError representation("10", Hf, :lazy)
 end
 
 @testitem "representation of different kinds of input" begin
     using LinearAlgebra, SparseArrays
     using FermionicHilbertSpaces.FreeFermions
+    using FermionicHilbertSpaces: matrix_representation
     @fermions f
     @majoranas γ
     @boson b
@@ -783,6 +796,11 @@ end
         @test_throws ArgumentError representation(vf("10") * vb("1")', H)
         @test_throws ArgumentError representation(vb("1"), H)
         @test_throws ArgumentError representation(vf("10") + 1, Hf)
+        # kets of other modes of the same group
+        H3 = hilbert_space(f, 1:3)
+        @test_throws ArgumentError representation(vf("10") + Ket("100", H3), Hf)
+        @test_throws ArgumentError representation(vf("10")' + Ket("110", H3)', Hf)
+        @test_throws ArgumentError representation(Ket("100", H3) * vb("1"), H)
     end
 
     @testset "basis states, strings and unsupported input" begin
@@ -997,7 +1015,7 @@ end
         M = representation(op, H, :dense)
         @test Vector(representation(op * ψ, H)) ≈ M * v
         @test inner(φ, ψ) ≈ dot(w, v)
-        @test inner(φ, op * ψ) ≈ dot(w, M * v)
+        @test dot(φ, op, ψ) ≈ dot(w, M, v)
         @test norm(ψ) ≈ norm(v)
     end
     # Kets in a product of spaces are products of one ket per space

@@ -139,10 +139,10 @@ function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, 
     for (n, state) in enumerate(basisstates(space))
         xn = x[n] * coeff
         iszero(xn) && continue
-        state, _amp = _apply_local_operators(term, state, space, precomp)
+        newstate, _amp = _apply_local_operators(term, state, space, precomp)
         if !iszero(_amp)
-            outind = state_index(state, space)
-            if !_skip_outside(outind, projection)
+            outind = state_index(newstate, space)
+            if !_skip_outside(outind, projection, newstate, state, space)
                 amp = (conjugate ? conj(_amp) : _amp)
                 y[outind] += amp * xn
             end
@@ -163,7 +163,7 @@ function _foreach_term_entry(f, x::SparseArrays.AbstractSparseVector, space, ter
         newstate, _amp = _apply_local_operators(term, state, space, precomp)
         iszero(_amp) && continue
         outind = state_index(newstate, space)
-        _skip_outside(outind, projection) && continue
+        _skip_outside(outind, projection, newstate, state, space) && continue
         f(outind, (conjugate ? conj(_amp) : _amp) * coeff * xn)
     end
 end
@@ -175,7 +175,7 @@ function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, 
         if !iszero(_amp)
             outind = state_index(newstate, space)
             amp = (conjugate ? conj(_amp) : _amp) * coeff
-            if !_skip_outside(outind, projection)
+            if !_skip_outside(outind, projection, newstate, state, space)
                 @views y[outind, :] .+= amp .* x[n, :]
             end
         end
@@ -195,7 +195,7 @@ function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC,
             if !iszero(_amp)
                 outind = state_index(newstate, space)
                 amp = (conjugate ? conj(_amp) : _amp) * coeff
-                if !_skip_outside(outind, projection)
+                if !_skip_outside(outind, projection, newstate, state, space)
                     y[outind, col] += amp * xn
                 end
             end
@@ -275,6 +275,15 @@ end
 function get_input(rep::LazyRepr{Symbol}, H)
     rep.input == :dense && return Vector{mat_eltype(H)}(undef, dim(H))
     rep.input == :sparse && return _sparse_input(H)
+end
+
+# On product spaces the lazy operator contains `TensorProductOperator`s, whose `mul!` needs
+# buffers. They hold intermediate results, so they are dense also when the input is sparse.
+_cache_lazy(M, H, rep) = M
+function _cache_lazy(M::SciMLOperators.AbstractSciMLOperator, H, rep::LazyRepr)
+    SciMLOperators.iscached(M) && return M
+    T = promote_type(eltype(M), mat_eltype(H))
+    return SciMLOperators.cache_operator(M, Vector{T}(undef, dim(H)))
 end
 
 function _term_matrix_representation(op::Union{NCMul,ProductOperator}, H::AbstractHilbertSpace, rep::LazyRepr, chunking; kwargs...)
@@ -509,6 +518,21 @@ end
     # terms of one group with factors of different concrete types, and a complex coefficient
     H2 = tensor_product(hilbert_space(f, [1, :a]), hilbert_space(b, 3))
     @test lazy_matches(1im * f[1]' * f[:a] + hc + 0.5im * f[1]' * f[1] + b' * b, H2)
+end
+
+@testitem "lazy mul! on product spaces" begin
+    using LinearAlgebra
+    @spins S 1 // 2
+    H = hilbert_space(S, 1:3)
+    for op in (S[1][:z] * S[2][:z] + S[2][:z] * S[3][:z] + 0.5im * S[1][:x], S[1][:z] * S[3][:x])
+        L = representation(op, H, :lazy)
+        M = representation(op, H)
+        v = randn(dim(H))
+        w = randn(eltype(M), dim(H))
+        @test mul!(similar(w), L, v) ≈ M * v
+        @test mul!(copy(w), L, v, 0.3, -0.7) ≈ 0.3 * (M * v) - 0.7 * w
+        @test mul!(similar(w), L', v) ≈ M' * v
+    end
 end
 
 @testitem "lazy matrix_representation chunking" begin
