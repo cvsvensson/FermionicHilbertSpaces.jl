@@ -20,11 +20,11 @@ A new kind of symbolic operator is a subtype of [`AbstractSym`](@ref). The tutor
 Algebra, from [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl):
 
 - `@nc MyOp` makes `+` and `*` build symbolic sums and products of `MyOp`.
-- [`same_group_mul_effect`](@ref)`(a::MyOp, b::MyOp)` gives the rule for the product `a * b` of
+- [`local_mul_effect`](@ref)`(a::MyOp, b::MyOp)` gives the rule for the product `a * b` of
   operators on the same group: `nothing` keeps it, `Swap(c)` rewrites it as `c * b * a`, and
-  `AddTerms((Swap(c), r, ...))` adds further terms. Without it, such products throw an
-  `ArgumentError`. Products of two different types on the same group need a method for each
-  argument order, one of which returns a `Swap` so that the sorted form is unique.
+  `AddTerms((Swap(c), r, ...))` adds further terms. Without a rule, products stay as written, so
+  operators that are equal in your algebra can compare unequal. For two different types on the
+  same group, return a `Swap` for one argument order so that the sorted form is unique.
 - Operators on different groups commute and are ordered by group, so no rule is needed for them.
   Groups whose types have the same name are compared with `isless`, which must be a strict total
   order consistent with `==`; otherwise sorted forms are not unique.

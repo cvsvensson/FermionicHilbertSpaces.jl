@@ -35,7 +35,7 @@
 
 using FermionicHilbertSpaces, Test
 import FermionicHilbertSpaces: AbstractSym, symbolic_group, apply_local_operator, add_tag,
-    @nc, NCMul, same_group_mul_effect, mat_eltype
+    @nc, NCMul, mat_eltype
 
 """
     HEOMBosonicBath(id, m_max, χ, ξ)
@@ -117,8 +117,6 @@ end
 ## Algebra
 
 @nc HEOMBosonicOp
-
-same_group_mul_effect(::HEOMBosonicOp, ::HEOMBosonicOp) = nothing
 
 ## State and space
 """

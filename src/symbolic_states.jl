@@ -180,19 +180,19 @@ group_id(s::SymbolicState) = group_id(s.space)
 # Operators on different groups commute and are ordered by `_group_isless`, as every other pair of factors on
 # different groups is. One order for all pairs keeps sorted products unique.
 function NonCommutativeProducts.mul_effect(a::AbstractSym, b::AbstractSym)
-    symbolic_group(a) == symbolic_group(b) && return same_group_mul_effect(a, b)
+    symbolic_group(a) == symbolic_group(b) && return local_mul_effect(a, b)
     return _group_isless(b, a) ? Swap(1) : nothing
 end
 
 """
-    same_group_mul_effect(a, b)
+    local_mul_effect(a, b)
 
 Rule for the product `a * b` of two operators on the same group, returned as for
-`NonCommutativeProducts.mul_effect`; the default throws an `ArgumentError`. Products on different
-groups commute and are ordered by group, so a custom operator defines this instead of `mul_effect`:
-`same_group_mul_effect(::MyOp, ::MyOp) = nothing` keeps products on one group as they are.
+`NonCommutativeProducts.mul_effect`; the default `nothing` keeps the product as written. Products on
+different groups commute and are ordered by group, so a custom operator defines this instead of
+`mul_effect`.
 """
-same_group_mul_effect(a, b) = throw(ArgumentError("Products of `$a` and `$b` on the same group are not defined"))
+local_mul_effect(a, b) = nothing
 
 ## Grading
 # Each space carries a grade k^m b^n in the bicyclic monoid, where a ket has (m, n) = (1, 0) and a bra (0, 1).
@@ -1129,8 +1129,8 @@ end
     @test iszero(b2 * s[:z] * k1 * k2 - s[:z] * k1 * (b2 * k2))
 end
 
-@testitem "Custom operators with same_group_mul_effect" begin
-    import FermionicHilbertSpaces: AbstractSym, symbolic_group, same_group_mul_effect
+@testitem "Custom operators with local_mul_effect" begin
+    import FermionicHilbertSpaces: AbstractSym, symbolic_group, local_mul_effect
     import FermionicHilbertSpaces.NonCommutativeProducts: @nc, Swap
     # Pauli X and Z on each site: XX = ZZ = 1 and ZX = -XZ.
     struct PauliX <: AbstractSym
@@ -1139,13 +1139,14 @@ end
     struct PauliZ <: AbstractSym
         site::Int
     end
-    struct NoRuleOp <: AbstractSym end
+    struct NoRuleOp <: AbstractSym
+        id::Int
+    end
     @nc PauliX PauliZ NoRuleOp
     symbolic_group(op::Union{PauliX, PauliZ}) = (op.site, :pauli)
     symbolic_group(::NoRuleOp) = 0
-    same_group_mul_effect(::T, ::T) where {T <: Union{PauliX, PauliZ}} = 1
-    same_group_mul_effect(::PauliZ, ::PauliX) = Swap(-1)
-    same_group_mul_effect(::PauliX, ::PauliZ) = nothing
+    local_mul_effect(::T, ::T) where {T <: Union{PauliX, PauliZ}} = 1
+    local_mul_effect(::PauliZ, ::PauliX) = Swap(-1)
     X, Z = PauliX, PauliZ
 
     @test iszero(Z(1) * X(1) * Z(1) + X(1))
@@ -1155,7 +1156,7 @@ end
     @bosons b
     @test Z(1) * b0 == b0 * Z(1)
     @test b0 * b[1] == b[1] * b0
-    @test_throws ArgumentError NoRuleOp() * NoRuleOp()
+    @test NoRuleOp(1) * NoRuleOp(2) != NoRuleOp(2) * NoRuleOp(1)
 end
 
 @testitem "Vector of a ket on factors in non-sorted order" begin

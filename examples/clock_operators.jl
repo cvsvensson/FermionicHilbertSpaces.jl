@@ -9,7 +9,7 @@
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
 import FermionicHilbertSpaces: AbstractBasisState, AbstractSym,
-    apply_local_operator, mat_eltype, same_group_mul_effect, symbolic_group
+    apply_local_operator, mat_eltype, symbolic_group
 import FermionicHilbertSpaces.NonCommutativeProducts: @nc
 
 # ## Defining the clock operators and states
@@ -23,7 +23,6 @@ X(i) = ClockOp{:X}(i, false)
 Z(i) = ClockOp{:Z}(i, false)
 @nc ClockOp
 ## Products on the same site are kept as they are. Operators on different sites commute and are sorted by site.
-same_group_mul_effect(::ClockOp, ::ClockOp) = nothing
 struct ClockState{D} <: AbstractBasisState # A clock state with dimension D.
     n::Int
     ClockState{D}(n) where D = new{D}(mod(n, D))

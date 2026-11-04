@@ -89,7 +89,7 @@ function _boson_normal_order(a::BosonSym, c::BosonSym)
     end
     return AddTerms(terms)
 end
-function same_group_mul_effect(a::BosonSym, b::BosonSym)
+function local_mul_effect(a::BosonSym, b::BosonSym)
     sign(a.exp) == sign(b.exp) && return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
     return a.exp < 0 && b.exp > 0 ? _boson_normal_order(a, b) : nothing
 end

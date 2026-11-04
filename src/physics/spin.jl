@@ -376,7 +376,7 @@ end
 
 _factor_or_empty(x) = isone(x) ? Any[] : [x]
 
-function same_group_mul_effect(a::S, b::S) where {S <: SpinSym}
+function local_mul_effect(a::S, b::S) where {S <: SpinSym}
     if a.op == b.op && a.op in (:+, :-, :z)
         exponent = a.exponent + b.exponent
         if a.op in _spin_z_aliases
