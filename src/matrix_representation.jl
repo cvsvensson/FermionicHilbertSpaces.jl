@@ -371,8 +371,8 @@ function _add_identity_term(summed, coeff, bases, space, repr)
     T = promote_type(eltype(summed), eltype(identity_term))
     return convert(AbstractMatrix{T}, summed)
 end
-# On spaces with a basis-state loop (for example a constrained space over a ProductSpace), and on any space for a format
-# without a method of its own, `_terms_matrix` builds the sum of all terms.
+# On spaces with a basis-state loop (for example a constrained space over a ProductSpace) and for formats with no method of its own,
+# `_terms_matrix` builds the sum of all terms.
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the type of `coeff`.
 function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split = 10, kwargs...)
