@@ -245,10 +245,10 @@ parity(state::ProductState) = prod(parity, atomic_factors(state))
     @test partial_trace(m, Hprod => H2) ≈ partial_trace(partial_trace(m, Hprod => H1), H1 => H2)
 
 
-    @test representation(a[1] + 1, Hprod; projection=true) == embed(representation(a[1], Ha), Ha => Hprod; skipmissing=true) + I
-    @test representation(c[1], Hprod; projection=true) == embed(representation(c[1], Hc), Hc => Hprod; skipmissing=true)
+    @test representation(a[1] + 1, Hprod; projection = true) == embed(representation(a[1], Ha), Ha => Hprod; projection = true) + I
+    @test representation(c[1], Hprod; projection = true) == embed(representation(c[1], Hc), Hc => Hprod; projection = true)
 
-    @test representation(a[1]' * b[1], Hprod) == embed(representation(a[1]' * b[1], Hab), Hab => Hprod; skipmissing=true)
+    @test representation(a[1]' * b[1], Hprod) == embed(representation(a[1]' * b[1], Hab), Hab => Hprod; projection = true)
 
 end
 
