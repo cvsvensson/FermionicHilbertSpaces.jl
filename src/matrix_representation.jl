@@ -478,10 +478,12 @@ Return a concrete representation of `op_or_state` in Hilbert space `space`. This
   or a number type such as `Float64` for a sparse result of that element type. `:lazy` gives a matrix-free
   `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`, and `:dense` and `:sparse` also work.
   A number `c` gives `c` times the identity.
-  With a type, inference finds the result type for operators of a single species and for single kets and bras.
 - For `AbstractBasisState` and strings such as `"10"`, returns a one-hot sparse column vector.
-- For `SymbolicState` kets and bras, and sums of them, returns the corresponding column or row vector.
+- For `SymbolicState` kets and bras, and sums of them, returns the corresponding column or row vector. Their array types
+  are `Vector` and `SparseVector`. `Array` gives a dense result for both states and operators.
 - For ketbras, and operators that contain ketbras, returns a matrix.
+
+Coefficients are converted to a format's element type, so a complex coefficient with element type `Float64` throws an `InexactError`.
 
 Expressions that combine kets or bras with operators or with states of other spaces have no representation and throw an
 `ArgumentError`. Without the `space` argument, only expressions of symbolic states are accepted, and the space is taken from the states.
@@ -526,23 +528,23 @@ function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparse
     repr === :dense && return Matrix(matrix_representation(op, space, EagerSparseRepr(); projection, chunking, kwargs...))
     # The barrier keeps inference from compiling every format a runtime Symbol could select
     repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, space, _canonicalize_repr(repr); projection, chunking, kwargs...)
+    format = _matrix_format(repr)
     if trivial_operator(op)
         return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
     end
-    repr = _canonicalize_repr(repr)
-    return _cache_lazy(_matrix_representation(op, _checked_group_ids(op, space), space, repr, chunking; projection, kwargs...), space, repr)
+    return _with_format_eltype(_cache_lazy(_matrix_representation(op, _checked_group_ids(op, space), space, format, chunking; projection, kwargs...), space, format), format)
 end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
     Hout == Hin && return matrix_representation(op, Hin, repr; projection, chunking, kwargs...)
     repr === :dense && return Matrix(matrix_representation(op, ax, EagerSparseRepr(); projection, chunking, kwargs...))
-    repr = _canonicalize_repr(repr)
+    repr = _matrix_format(repr)
     repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("Lazy and chunked representations with `Axes(Hout, Hin)` need `Hout == Hin`."))
     if trivial_operator(op)
         coeff = get_trivial_op_coeff(op)
         return _accumulated_matrix(_repr_eltype(typeof(coeff), repr), (), coeff, ax, repr; projection)
     end
-    return _matrix_representation(op, _checked_group_ids(op, Hin), ax, repr, chunking; projection, kwargs...)
+    return _with_format_eltype(_matrix_representation(op, _checked_group_ids(op, Hin), ax, repr, chunking; projection, kwargs...), repr)
 end
 function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
@@ -598,12 +600,16 @@ end
     @test isequal(Symbolics.simplify(expectation(t * f[1]' * f[1] + f[1]' * f[2] + 2, ψ, H)), t + 2)
 end
 _canonicalize_repr(repr::Union{EagerSparseRepr, EagerDenseRepr, LazyRepr, PartitionedSparseRepr}) = repr
-_canonicalize_repr(::Type{<:AbstractArray}) = EagerDenseRepr()
-_canonicalize_repr(::Type{<:AbstractArray{T}}) where T = EagerDenseRepr{T}()
-_canonicalize_repr(::Type{<:SparseArrays.AbstractSparseArray}) = EagerSparseRepr()
-_canonicalize_repr(::Type{<:SparseArrays.AbstractSparseArray{T}}) where {T} = EagerSparseRepr{T}()
+_canonicalize_repr(::Union{Type{Array}, Type{Matrix}, Type{Vector}}) = EagerDenseRepr()
+_canonicalize_repr(::Union{Type{Array{T}}, Type{Matrix{T}}, Type{Vector{T}}}) where {T} = EagerDenseRepr{T}()
+_canonicalize_repr(::Union{Type{SparseArrays.SparseMatrixCSC}, Type{SparseArrays.SparseVector}}) = EagerSparseRepr()
+_canonicalize_repr(::Union{Type{SparseArrays.SparseMatrixCSC{T}}, Type{SparseArrays.SparseMatrixCSC{T, Int}}, Type{SparseArrays.SparseVector{T}}, Type{SparseArrays.SparseVector{T, Int}}}) where {T} = EagerSparseRepr{T}()
 _canonicalize_repr(::Type{T}) where T<:Number = EagerSparseRepr{T}()
-_canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:sparse`, `:dense`, `:lazy`, an array type such as `Matrix` or `SparseMatrixCSC{ComplexF64}`, or a number type."))
+_canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:sparse`, `:dense`, `:lazy`, a number type, or `Array`, `Matrix`, `Vector`, `SparseMatrixCSC` or `SparseVector`, optionally with an element type."))
+_matrix_format(repr) = _canonicalize_repr(repr)
+_matrix_format(repr::Type{<:Union{Vector, SparseArrays.SparseVector}}) = throw(ArgumentError("`$(repr)` is a vector format, but this representation is a matrix. Use `Matrix`, `SparseMatrixCSC` or `Array`."))
+_vector_format(repr) = _canonicalize_repr(repr)
+_vector_format(repr::Type{<:Union{Matrix, SparseArrays.SparseMatrixCSC}}) = throw(ArgumentError("`$(repr)` is a matrix format, but kets and bras give vectors. Use `Vector`, `SparseVector` or `Array`."))
 function _canonicalize_repr(s::Symbol)
     s == :sparse && return EagerSparseRepr()
     s == :dense && return EagerDenseRepr()
@@ -622,6 +628,11 @@ _convert_repr_eltype(M, ::EagerDenseRepr{T}) where T = Matrix{T}(M)
 _convert_repr_eltype(M, ::Union{LazyRepr, PartitionedSparseRepr}) = M
 _convert_repr_eltype(M, repr) = _convert_repr_eltype(M, _canonicalize_repr(repr))
 _convert_repr_eltype(M, ::Type{A}) where {A <: SparseArrays.AbstractSparseArray} = SparseArrays.sparse(_convert_repr_eltype(M, _canonicalize_repr(A)))
+
+# A concrete element type fixes the matrix type, also where inference cannot follow the assembly
+_with_format_eltype(M, ::Any) = M
+_with_format_eltype(M, ::EagerDenseRepr{T}) where {T <: Number} = isconcretetype(T) ? convert(Matrix{T}, M)::Matrix{T} : M
+_with_format_eltype(M, ::EagerSparseRepr{T}) where {T <: Number} = isconcretetype(T) ? convert(SparseArrays.SparseMatrixCSC{T, Int}, M)::SparseArrays.SparseMatrixCSC{T, Int} : M
 
 trivial_operator(op::Union{UniformScaling,Number}) = true
 trivial_operator(op::NCMul) = length(op.factors) == 0
@@ -850,29 +861,50 @@ end
 end
 
 @testitem "Array types as representation formats" begin
-    using SparseArrays
+    using SparseArrays, LinearAlgebra
     @fermions f
     H = hilbert_space(f, 1:2)
     op = f[1]' * f[2] + hc
+    k = Ket(basisstate(2, H), H)
     ket = representation("10", H, :dense)
     formats = (
-        (Matrix, Matrix{Int}, Vector{Int}), (Matrix{ComplexF64}, Matrix{ComplexF64}, Vector{ComplexF64}),
-        (SparseMatrixCSC, SparseMatrixCSC{Int, Int}, SparseVector{Int, Int}), (SparseMatrixCSC{Float64}, SparseMatrixCSC{Float64, Int}, SparseVector{Float64, Int}),
-        (Float32, SparseMatrixCSC{Float32, Int}, SparseVector{Float32, Int}),
+        (Matrix, Vector, Matrix{Int}, Vector{Int}), (Array, Array, Matrix{Int}, Vector{Int}),
+        (Matrix{ComplexF64}, Vector{ComplexF64}, Matrix{ComplexF64}, Vector{ComplexF64}),
+        (SparseMatrixCSC, SparseVector, SparseMatrixCSC{Int, Int}, SparseVector{Int, Int}),
+        (SparseMatrixCSC{Float64}, SparseVector{Float64}, SparseMatrixCSC{Float64, Int}, SparseVector{Float64, Int}),
+        (Float32, Float32, SparseMatrixCSC{Float32, Int}, SparseVector{Float32, Int}),
     )
-    for (format, MT, VT) in formats
-        @test (@inferred representation(op, H, format)) isa MT
-        @test representation(op, H, format) == representation(op, H, :dense)
-        @test representation(2, H, format) isa MT
-        @test representation(2, H, format) == 2 * representation(1, H, :dense)
-        @test (@inferred representation(Ket(basisstate(2, H), H), H, format)) isa VT
-        @test representation("10", H, format) == ket
+    for (mformat, vformat, MT, VT) in formats
+        @test (@inferred representation(op, H, mformat)) isa MT
+        @test representation(op, H, mformat) == representation(op, H, :dense)
+        @test representation(2, H, mformat) isa MT
+        @test representation(2, H, mformat) == 2 * representation(1, H, :dense)
+        @test representation(k * k', H, mformat) == representation(k * k', H, :dense)
+        @test (@inferred representation(k, H, vformat)) isa VT
+        @test representation("10", H, vformat) == ket
     end
-    for format in ("dense", nothing, Any)
+    for format in ("dense", nothing, Any, Diagonal, Hermitian, Array{Float64, 3}, SparseMatrixCSC{Float64, Int32})
         @test_throws ArgumentError representation(op, H, format)
         @test_throws ArgumentError representation(2, H, format)
         @test_throws ArgumentError representation("10", H, format)
     end
+    for format in (Vector, SparseVector{Float64})
+        @test_throws ArgumentError representation(op, H, format)
+        @test_throws ArgumentError representation(2, H, format)
+        @test_throws ArgumentError representation(k * k', H, format)
+    end
+    for format in (Matrix, SparseMatrixCSC{Float64})
+        @test_throws ArgumentError representation(k, H, format)
+        @test_throws ArgumentError representation("10", H, format)
+    end
+    for format in (Vector{Float32}, SparseVector{Float32})
+        @test representation(1.5 * k, H, format) isa format
+        @test representation(1.5 * (k + Ket(basisstate(1, H), H)), H, format) isa format
+        @test representation(1.5 * k - 1.5 * k, H, format) isa format
+    end
+    @test_throws InexactError representation(1im * k, H, Vector{Float64})
+    Hbdg = hilbert_space(f, 1:2, FermionicHilbertSpaces.FreeFermions.BdG())
+    @test representation(2, Hbdg, Matrix{ComplexF64}) isa Matrix{ComplexF64}
 end
 
 @testitem "Scheduler extension correctness" begin
