@@ -11,5 +11,7 @@
     check(f[2]' * f[4] * f[5], H)
     check(f[3], H)
     check(2, H)
-    @test_throws ArgumentError device_matrix(1im * f[1], H, backend, Float64)
+    @test Array(representation(op, H, DeviceDenseRepr(backend))) ≈ representation(op, H, Matrix)
+    @test host_csc(representation(f[1]' * f[2], H, DeviceCSCRepr(backend))) == representation(f[1]' * f[2], H)
+    @test_throws ArgumentError representation(1im * f[1], H, DeviceDenseRepr{Float64}(backend))
 end

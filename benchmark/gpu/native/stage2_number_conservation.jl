@@ -12,5 +12,5 @@
     check(hop(12) + 0.1 * f[1]' * f[12], H)
     # Leaving the space
     check(f[1], H; projection=true)
-    @test_throws Exception device_matrix(f[1], H, backend, Float64)
+    @test_throws Exception representation(f[1], H, DeviceDenseRepr(backend))
 end

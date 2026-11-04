@@ -11,7 +11,8 @@ using Adapt: Adapt, adapt
 using KernelAbstractions: KernelAbstractions as KA, @kernel, @index
 using FermionicHilbertSpaces
 const FHS = FermionicHilbertSpaces
-using FermionicHilbertSpaces: NCMul, NCAdd, NCterms, AbstractSubspace
+using FermionicHilbertSpaces: NCMul, AbstractSubspace
+using SparseArrays: SparseMatrixCSC
 
 ## Device copies of operators
 
@@ -185,62 +186,67 @@ end
     end
 end
 
+## Formats for `representation`
+
+"""
+    DeviceDenseRepr(backend), DeviceDenseRepr{T}(backend)
+    DeviceCSCRepr(backend), DeviceCSCRepr{T}(backend)
+
+Formats for `representation` that assemble the matrix on the KernelAbstractions `backend`: a dense device matrix,
+or the CSC arrays `(; colptr, rowval, nzval, m, n)` with sorted rows. `T` fixes the element type, as in `Matrix{T}`.
+"""
+struct DeviceDenseRepr{T,B}
+    backend::B
+end
+struct DeviceCSCRepr{T,B}
+    backend::B
+end
+DeviceDenseRepr{T}(backend) where {T} = DeviceDenseRepr{T,typeof(backend)}(backend)
+DeviceCSCRepr{T}(backend) where {T} = DeviceCSCRepr{T,typeof(backend)}(backend)
+DeviceDenseRepr(backend) = DeviceDenseRepr{Missing}(backend)
+DeviceCSCRepr(backend) = DeviceCSCRepr{Missing}(backend)
+const DeviceRepr{T} = Union{DeviceDenseRepr{T},DeviceCSCRepr{T}}
+
+FHS._canonicalize_repr(r::DeviceRepr) = r
+FHS._repr_eltype(default, ::DeviceRepr{T}) where {T} = T === Missing ? default : T
+function FHS._terms_matrix(::Type{T}, terms, coeff, H, r::DeviceRepr, ::FHS.NoChunking; projection=false, _...) where {T}
+    T <: Real && !(mapreduce(FHS.mat_eltype, promote_type, terms; init=Bool) <: Real) &&
+        throw(ArgumentError("The element type $T cannot hold the matrix elements of the operator."))
+    return assemble(r, prepare(terms, convert(T, coeff), H, r.backend), T; projection)
+end
+# FHS builds single terms and multiples of the identity without `_terms_matrix`.
+FHS._term_matrix_representation(op, H, r::DeviceRepr, chunking; kwargs...) =
+    FHS._terms_matrix(FHS._repr_eltype(FHS.mat_eltype(op), r), (op,), false, H, r, chunking; kwargs...)
+FHS._convert_repr_eltype(M, r::DeviceRepr) = to_device(SparseMatrixCSC{FHS._repr_eltype(eltype(M), r),Int32}(M), r)
+to_device(S, r::DeviceDenseRepr) = adapt(r.backend, Matrix(S))
+to_device(S, r::DeviceCSCRepr) =
+    (; colptr=adapt(r.backend, S.colptr), rowval=adapt(r.backend, S.rowval), nzval=adapt(r.backend, S.nzval), m=S.m, n=S.n)
+
 ## Host side
 
-# The terms of `op` as on the CPU: products split by group on spaces with several groups, with tuple factors and
-# their precomputation. Terms of equal type share one device vector.
-function device_terms(op, H, backend)
-    terms, coeff = op isa Number ? ((), op) : op isa NCAdd ? (collect(NCterms(op)), op.coeff) :
-                   op isa NCMul ? ((op,), 0) : ((NCMul(1, [op]),), 0)
-    bases = isempty(terms) ? () : FHS._checked_group_ids(op, H)
-    prepared = map(terms) do term
-        t = length(bases) > 1 ? FHS.partition_product(term, bases, FHS.groups(H)) : term
-        t = FHS.__concretize(t, FHS.TupleConcretizer())
+# The terms as FHS passes them, with tuple factors and their precomputation. Terms of equal type share one device
+# vector.
+function prepare(terms, coeff, H, backend)
+    Hdev = adapt(backend, H)
+    check_isbits(Hdev, "The space")
+    prepared = map(collect(terms)) do term
+        t = FHS.__concretize(term, FHS.TupleConcretizer())
         check_isbits((t, FHS.precomputation_before_operator_application(t, H)), "The term $term")
     end
     bytype = Dict{DataType,Vector{Any}}()
     foreach(t -> push!(get!(() -> [], bytype, typeof(t)), t), prepared)
     groups = Tuple(adapt(backend, collect(T, ts)) for (T, ts) in bytype)
-    return groups, coeff, length(prepared)
-end
-
-function _check_eltype(op, ::Type{T}) where {T}
-    T <: Real && !(FHS.mat_eltype(op) <: Real) &&
-        throw(ArgumentError("The element type $T cannot hold the matrix elements of the operator, of type $(FHS.mat_eltype(op))."))
-end
-
-# Everything a column kernel needs, on `backend`, and the number of slots per column.
-function prepare(op, H, backend, ::Type{T}) where {T}
-    _check_eltype(op, T)
-    Hdev = adapt(backend, H)
-    check_isbits(Hdev, "The space")
-    groups, coeff, nterms = device_terms(op, H, backend)
-    return (; Hdev, groups, coeff=convert(T, coeff), nslots=nterms + !iszero(coeff), n=Int(FHS.dim(H)))
+    return (; Hdev, groups, coeff, nslots=length(prepared) + !iszero(coeff), n=Int(FHS.dim(H)))
 end
 function run_columns!(sink, p, backend; projection)
     column_kernel!(backend)(sink, p.Hdev, p.groups, p.coeff, projection; ndrange=p.n)
     return sink
 end
 
-"""
-    device_matrix(op, H, backend, T=Float64; projection=false)
-
-The dense matrix of `op` on `H` with element type `T`, assembled on the KernelAbstractions `backend`.
-"""
-function device_matrix(op, H, backend, ::Type{T}=Float64; projection=false) where {T}
-    p = prepare(op, H, backend, T)
-    return run_columns!(DenseSink(KA.zeros(backend, T, p.n, p.n)), p, backend; projection).M
-end
-
-"""
-    device_csc(op, H, backend, T=Float64; projection=false) -> (; colptr, rowval, nzval, m, n)
-
-The CSC arrays of the sparse matrix of `op` on `H` with element type `T`, assembled on `backend`, with sorted rows
-and summed duplicates.
-"""
-function device_csc(op, H, backend, ::Type{T}=Float64; projection=false) where {T}
-    p = prepare(op, H, backend, T)
-    n = p.n
+assemble(r::DeviceDenseRepr, p, T; projection) =
+    run_columns!(DenseSink(KA.zeros(r.backend, T, p.n, p.n)), p, r.backend; projection).M
+function assemble(r::DeviceCSCRepr, p, T; projection)
+    backend, n = r.backend, p.n
     rows = KA.zeros(backend, Int32, p.nslots, n)
     vals = KA.zeros(backend, T, p.nslots, n)
     run_columns!(SlotSink(rows, vals, 0), p, backend; projection)
