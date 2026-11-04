@@ -22,9 +22,12 @@ Algebra, from [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommu
 - `@nc MyOp` makes `+` and `*` build symbolic sums and products of `MyOp`.
 - `mul_effect(a::MyOp, b::MyOp)` gives the rule for the product `a * b`: `nothing` keeps it,
   `Swap(c)` rewrites it as `c * b * a`, and `AddTerms((Swap(c), r, ...))` adds further terms.
-  This is required; without it, products such as `X * X` throw a `MethodError`.
-- `@commutative MyOp AbstractSym` declares that `MyOp` commutes with all other operators.
-  This is required for products with the operators of the package.
+  This is required; without it, products such as `X * X` throw an `ArgumentError`.
+- Operators on different groups commute, ordered by group, so no rule is needed for products
+  of `MyOp` with the operators of the package. Products of different operator types on the
+  same group throw an `ArgumentError` unless they have their own `mul_effect`.
+- Operators of the same type on different groups are ordered only by their `mul_effect`, which
+  should return `Swap(1)` when they are out of order; otherwise equal products can compare unequal.
 
 Connection to Hilbert spaces:
 
@@ -83,4 +86,4 @@ basis state. With `maps` and `spaces` together, it is called instead on the valu
 gives for the parts of the state in `spaces`. See
 [Constrained Hilbert spaces and conserved quantum numbers](conservation.md).
 
-Internally, `tensor_product`, `reshape` and `partial_trace` decompose and recombine basis states through a common mapper protocol. [`state_mapper`](@ref)`(H, Hs)` returns a mapper object, [`split_state`](@ref)`(state, mapper)` returns a tuple with one weighted collection `((substate, weight), ...)` per target subsystem, and [`combine_states`](@ref)`(substates, mapper)` returns a weighted collection `((state, weight), ...)`. Weighted collections can have any concrete type; treat them as iterables of `(state, weight)`.
+Internally, `tensor_product`, `reshape` and `partial_trace` decompose and recombine basis states through a common mapper protocol. [`state_mapper`](@ref)`(H, Hs)` returns a mapper object, [`split_state`](@ref)`(state, mapper)` returns a pair `(outcomes, weights)`, where each outcome is a tuple with one substate per target subsystem, and [`combine_states`](@ref)`(substates, mapper)` returns a pair `(states, weights)`. The collections can have any concrete type; treat them as iterables.

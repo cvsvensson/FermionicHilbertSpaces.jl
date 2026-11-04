@@ -35,7 +35,7 @@
 
 using FermionicHilbertSpaces, Test
 import FermionicHilbertSpaces: AbstractSym, symbolic_group, apply_local_operator, add_tag,
-    @nc, NCMul, NonCommutativeProducts.mul_effect, NonCommutativeProducts.@commutative, mat_eltype
+    @nc, NCMul, NonCommutativeProducts.mul_effect, mat_eltype
 
 """
     HEOMBosonicBath(id, m_max, χ, ξ)
@@ -116,7 +116,6 @@ end
 ## Algebra
 
 @nc HEOMBosonicOp
-@commutative AbstractSym HEOMBosonicOp # commute with all other operators, HEOMBosonicOps is sorted last
 
 # For operators from different baths: sort by bath id
 # otherwise don't do anything
