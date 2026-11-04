@@ -261,8 +261,10 @@ end
 
     # The sorted form doesn't depend on the starting order
     l1, l2, l3 = 2, "a", UInt8(1)
-    @test allequal(b[x] * b[y] * b[z] for (x, y, z) in
-        ((l1, l2, l3), (l1, l3, l2), (l2, l1, l3), (l2, l3, l1), (l3, l1, l2), (l3, l2, l1)))
+    @test allequal(
+        b[x] * b[y] * b[z] for (x, y, z) in
+            ((l1, l2, l3), (l1, l3, l2), (l2, l1, l3), (l2, l3, l1), (l3, l1, l2), (l3, l2, l1))
+    )
     @test b[1] * b[0] == b[1.0] * b[0]
     @test b["a"] * b[:x] == b[SubString("a")] * b[:x]
 end
