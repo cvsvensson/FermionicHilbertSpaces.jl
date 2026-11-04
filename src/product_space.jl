@@ -382,6 +382,7 @@ end
 @inline _apply_group_operators(amp, states, newstates, inds, k, ::Tuple{}, ::Tuple{}, ::Tuple{}) = (newstates, amp)
 @inline function _apply_group_operators(amp::C, states, newstates, inds, k, ops::Tuple, spaces::Tuple, precomps::Tuple) where {C}
     n = inds[k]
+    n in eachindex(states) || throw(BoundsError(states, n))
     new_local_state, local_amp = _apply_local_operators(first(ops), _tuple_getindex(states, n), first(spaces), first(precomps))
     return _apply_group_operators(
         amp * convert(C, local_amp), states, _tuple_setindex(newstates, new_local_state, n),
