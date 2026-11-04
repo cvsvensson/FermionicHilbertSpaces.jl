@@ -10,9 +10,10 @@ using FermionicHilbertSpaces.FreeFermions
 # The Hubbard ring is half filled at `μ = U/2`.
 @fermions f
 L = 6
+t = 1
 spins = (:↑, :↓)
 n(i, σ) = f[i, σ]' * f[i, σ]
-hopping = sum(-f[i, σ]' * f[mod1(i + 1, L), σ] + hc for i in 1:L, σ in spins)
+hopping = sum(-t * f[i, σ]' * f[mod1(i + 1, L), σ] + hc for i in 1:L, σ in spins)
 hubbard(U) = hopping + U * sum(n(i, :↑) * n(i, :↓) for i in 1:L) - U / 2 * sum(n(i, σ) for i in 1:L, σ in spins);
 
 # Each step takes the BdG ground state of the decoupled Hamiltonian as the next `G`.
@@ -47,13 +48,13 @@ function sweep(Us, seed)
         (; E_mf, E_exact)
     end
 end;
-Us = 8:-0.5:0
+Us = t .* (8:-0.5:0)
 results = [sweep(-Us, pairing); reverse(sweep(Us, staggered))];
 
 using Plots
 Uall = [-Us; reverse(Us)]
-plot(Uall, getfield.(results, :E_mf); label = "mean field", xlabel = "U", ylabel = "E − E(Fermi sea)", lw = 2, frame = :box)
-plot!(Uall, getfield.(results, :E_exact); label = "exact", lw = 2)
+plot(Uall ./ t, getfield.(results, :E_mf) ./ t; label = "mean field", xlabel = "U/t", ylabel = "(E − E(Fermi sea))/t", lw = 2, frame = :box)
+plot!(Uall ./ t, getfield.(results, :E_exact) ./ t; label = "exact", lw = 2)
 
 # Mean field finds a superconductor for attractive and a magnet for repulsive `U`, but only beyond a threshold. For weak
 # coupling the best Gaussian state is the Fermi sea, and the mean-field energy stays at zero. The exact energy is lower
