@@ -6,6 +6,7 @@
 # A case that throws, e.g. because the ref lacks the API, is left out.
 t0 = time_ns()
 using FermionicHilbertSpaces
+using FermionicHilbertSpaces: matrix_representation
 const LOAD_TIME = (time_ns() - t0) / 1.0e9
 using FermionicHilbertSpaces.FreeFermions, LinearAlgebra, SparseArrays, Random
 using OhMyThreads: StaticScheduler

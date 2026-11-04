@@ -1,5 +1,6 @@
 using BenchmarkTools
 using FermionicHilbertSpaces
+using FermionicHilbertSpaces: matrix_representation
 using FermionicHilbertSpaces.FreeFermions
 using LinearAlgebra
 using SparseArrays
