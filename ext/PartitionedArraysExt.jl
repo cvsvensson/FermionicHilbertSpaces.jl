@@ -25,7 +25,7 @@ function _resolve_partitions(repr::PartitionedSparseRepr, n::Int)
     return row_partition, col_partition
 end
 
-function _terms_matrix(::Type{T}, terms, coeff, space, repr::PartitionedSparseRepr, chunking; projection=false, kwargs...) where {T}
+function _terms_matrix(::Type{T}, terms, coeff, space, repr::PartitionedSparseRepr, chunking; projection = false, kwargs...) where {T}
     row_partition, col_partition = _resolve_partitions(repr, dim(space))
     precomps = _precomputed_terms(terms, space)
     I, J, V = tuple_of_arrays(map(cols -> _collect_ijv(T, precomps, coeff, space, own_to_global(cols), 0; projection), col_partition))
