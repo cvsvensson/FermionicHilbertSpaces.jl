@@ -56,7 +56,7 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
     B = SPARSE_BLOCK_SIZE
     if 0 < M <= B
         ijv = _collect_ijv(T, precomps, coeff, space, incols, offset; kwargs...)
-        return _trimmed!(SparseArrays.sparse!(ijv..., N, M), length(first(ijv)))
+        return SparseArrays.sparse!(ijv..., N, M)
     end
     blockcapacity = _sparse_length_guess(length(precomps), min(B, M))
     block = (rows, cols, amps) = sparse_matrix_accumulator(T, (blockcapacity, blockcapacity))

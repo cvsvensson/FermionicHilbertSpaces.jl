@@ -230,28 +230,10 @@ end
 # Each chunk of columns is built as its own sparse matrix by the serial blocked build, and the chunks are concatenated.
 function _terms_matrix(::Type{T}, terms, coeff, space, ::EagerSparseRepr, chunking::ThreadedChunking; kwargs...) where T
     precomps = _precomputed_terms(terms, space)
-    scheduler = chunking.scheduler
-    mats = tmap(_state_chunk_data(space, chunking); scheduler) do cols
+    mats = tmap(_state_chunk_data(space, chunking); scheduler=chunking.scheduler) do cols
         _blocked_sparse_matrix(T, precomps, coeff, space, cols; kwargs...)
     end
-    return _narrowed(_hcat_threaded(mats, scheduler))
-end
-function _hcat_threaded(mats, scheduler)
-    nnzs = map(SparseArrays.nnz, mats)
-    ncols = map(m -> size(m, 2), mats)
-    entry_offsets = cumsum([0; nnzs])
-    col_offsets = cumsum([0; ncols])
-    colptr = Vector{Int}(undef, last(col_offsets) + 1)
-    colptr[1] = 1
-    rowval = Vector{Int}(undef, last(entry_offsets))
-    nzval = Vector{eltype(first(mats))}(undef, last(entry_offsets))
-    tforeach(eachindex(mats); scheduler) do k
-        m = mats[k]
-        copyto!(rowval, entry_offsets[k] + 1, rowvals(m), 1, nnzs[k])
-        copyto!(nzval, entry_offsets[k] + 1, nonzeros(m), 1, nnzs[k])
-        colptr[col_offsets[k] .+ (2:(ncols[k] + 1))] .= view(SparseArrays.getcolptr(m), 2:(ncols[k] + 1)) .+ entry_offsets[k]
-    end
-    return SparseArrays.SparseMatrixCSC(size(first(mats), 1), last(col_offsets), colptr, rowval, nzval)
+    return _narrowed(hcat(mats...))
 end
 
 # Each task writes the columns of its chunk of the shared matrix.
