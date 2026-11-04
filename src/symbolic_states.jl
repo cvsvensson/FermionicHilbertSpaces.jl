@@ -513,6 +513,7 @@ _grade_type(g) = :mixed
 
 Return the vector of `state` in `space`. `state` is a basis state, a symbolic ket or bra, or a product or sum of
 symbolic kets or of symbolic bras. Kets give a column vector, and bras give the transpose of one.
+This is the state-specific form of [`representation`](@ref).
 The optional `repr` selects the format: `:sparse` (the default), `:dense`, or a format object
 (`EagerSparseRepr()`, `EagerDenseRepr()`).
 """
@@ -536,7 +537,11 @@ _zero_matrix(space, ::EagerDenseRepr, T) = zeros(T, dim(_output_space(space)), d
 function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     vector_representation(1 * s, space, repr; kwargs...)
 end
-vector_representation(op, space, repr; kwargs...) = vector_representation(op, space, _canonicalize_repr(repr); kwargs...)
+function vector_representation(op, space, repr; kwargs...)
+    _repr = _canonicalize_repr(repr)
+    _repr isa LazyRepr && throw(ArgumentError("Kets and bras support `:sparse` and `:dense` representations. `:lazy` is only for operators and ketbras."))
+    return vector_representation(op, space, _repr; kwargs...)
+end
 
 function vector_representation(op::Union{NCMul,NCAdd}, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     _vector_representation(op, space, repr, _operator_type(op); kwargs...)
@@ -626,6 +631,7 @@ end
 
 @testitem "Unified representation API" begin
     using SparseArrays, LinearAlgebra
+    using FermionicHilbertSpaces: matrix_representation
     @fermions f
     @boson b
 
@@ -687,6 +693,7 @@ end
 end
 
 @testitem "vector_representation of symbolic kets and bras" begin
+    using FermionicHilbertSpaces: vector_representation
     @fermions f
     Hf = hilbert_space(f, 1:2)
     vf = Kets(Hf)
@@ -695,11 +702,15 @@ end
     @test v == representation(ket, Hf)
     @test vector_representation(ket', Hf) == transpose(v)
     @test vector_representation(1 * vf("10"), Hf, :dense) isa Vector
+    @test_throws ArgumentError vector_representation(ket, Hf, :lazy)
+    @test_throws ArgumentError representation(vf("10")', Hf, :lazy)
+    @test_throws ArgumentError representation("10", Hf, :lazy)
 end
 
 @testitem "representation of different kinds of input" begin
     using LinearAlgebra, SparseArrays
     using FermionicHilbertSpaces.FreeFermions
+    using FermionicHilbertSpaces: matrix_representation
     @fermions f
     @majoranas γ
     @boson b
