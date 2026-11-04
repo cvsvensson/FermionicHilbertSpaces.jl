@@ -14,6 +14,7 @@ literate_files = [
     "examples/floquet_tutorial.jl",
     "examples/free_fermions.jl",
     "examples/kitaev_chain.jl",
+    "examples/non_interacting_majorana_chain.jl",
     "examples/open_system_lindblad.jl",
     "examples/partial_transpose.jl",
     "examples/spin_chain.jl",
@@ -48,6 +49,7 @@ pages = [
         "Fermionic tensor products, partial traces, and partial transpose" => "fermions.md",
         "Non-interacting systems" => "non_interacting.md",
         "Example: Free fermions" => "literate_output/free_fermions.md",
+        "Example: Majorana nanowire" => "literate_output/non_interacting_majorana_chain.md",
     ],
     "Performance" => [
         "Parallelization" => "parallelization.md",
