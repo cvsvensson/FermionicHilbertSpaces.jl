@@ -39,8 +39,8 @@ end
 
 # The pair correlation of ``ψ_2``, here from site 1 to every other site, is the same at all distances.
 pair(i, j) = c[i, :↑]' * c[i, :↓]' * c[j, :↓] * c[j, :↑]
-ψ = ψs[2]
-correlation(r) = dot(ψ, pair(1, 1 + r) * ψ) / dot(ψ, ψ)
+ψ = normalize(ψs[2])
+correlation(r) = dot(ψ, pair(1, 1 + r), ψ)
 @assert all(r -> correlation(r) ≈ (-1)^r * 2(L - 2) / (L * (L - 1)), 1:(L - 1))
 correlation(L - 1)
 

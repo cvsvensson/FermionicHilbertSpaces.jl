@@ -49,7 +49,8 @@ function plaquette_amplitude(Jx, Jy, Jz)
     V = -sum((iseven(i + j) ? Jx : Jy) * hlink(i, j) for i in 1:Lx, j in 1:Ly)
     E0 = -Jz * length(corners)
     energy(term) = real(coefficient(H0 * term) / coefficient(term))
-    G(φ) = sum(term / (E0 - energy(term)) for term in terms(φ) if !(energy(term) ≈ E0))
+    resolvent(term) = (E = energy(term); E ≈ E0 ? 0 : term / (E0 - E))
+    G(φ) = sum(resolvent, terms(φ))
     ## Split the product as ⟨φp|G|φ⟩ with φ = VGV|ψ⟩, since V and G are Hermitian.
     φ, φp = V * G(V * ψ), V * G(V * ψp)
     ## The middle G is only needed on the basis states that φ and φp share.
@@ -67,11 +68,10 @@ end
 # product of Pauli operators that maps the all-up state and each state with one z-link flipped to itself acts as the
 # identity there. These are the only relations[^1], so the ground space is four-dimensional: the topological
 # degeneracy of the toric code on a torus.
-apply_hexagons(cs, φ) = foldl((φ, (i, j)) -> hexagon(i, j) * φ, cs; init = φ)
 test_states = [ψ; [K(:x, site(i, j), site(i, j + 1)) * ψ for (i, j) in corners]]
 for row_parity in (iseven, isodd)
-    row = filter(c -> row_parity(c[2]), corners)
-    @assert all(φ -> apply_hexagons(row, φ) == φ, test_states)
+    row = [hexagon(i, j) for (i, j) in corners if row_parity(j)]
+    @assert all(φ -> foldl((φ, W) -> W * φ, row; init = φ) == φ, test_states)
 end
 
 # [^1]: A. Kitaev, "Anyons in an exactly solved model and beyond", [Ann. Phys. **321**, 2 (2006)](https://doi.org/10.1016/j.aop.2005.10.005), [arXiv:cond-mat/0506438](https://arxiv.org/abs/cond-mat/0506438).

@@ -39,7 +39,7 @@ E0 = εd + 2sum(εk[1:(kF - 1)])
 
 # For each low-energy state ``p`` we solve ``(E_0 - H_0) x = V|p⟩`` and take overlaps with ``V|p'⟩``. The result is
 # compared with a second-order formula, so a loose solver tolerance is enough.
-xs = [linsolve(x -> E0 * x - H0 * x, Vhyb * p; rtol = 1.0e-6)[1] for p in low_energy]
+xs = [linsolve(E0 - H0, Vhyb * p; rtol = 1.0e-6)[1] for p in low_energy]
 Heff = [dot(Vhyb * p, x) for p in low_energy, x in xs]
 λ = eigvals(Hermitian(Heff))
 J = 2V^2 * (1 / abs(εd) + 1 / (εd + U))
