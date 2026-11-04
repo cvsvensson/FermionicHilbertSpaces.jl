@@ -9,6 +9,7 @@ module FHSGPU
 
 using Adapt: Adapt, adapt
 using KernelAbstractions: KernelAbstractions as KA, @kernel, @index
+using AcceleratedKernels: AcceleratedKernels as AK
 using FermionicHilbertSpaces
 const FHS = FermionicHilbertSpaces
 using FermionicHilbertSpaces: NCMul, AbstractSubspace
@@ -131,7 +132,8 @@ Adapt.adapt_structure(to, s::SlotSink) = SlotSink(adapt(to, s.rows), adapt(to, s
 at_slot(s::DenseSink, slot) = s
 at_slot(s::SlotSink, slot) = SlotSink(s.rows, s.vals, slot)
 FHS.push_inds_amps!(s::DenseSink, outind, inind, amp) = (s.M[outind, inind] += amp; nothing)
-FHS.push_inds_amps!(s::SlotSink, outind, inind, amp) = (s.rows[s.slot, inind] = outind; s.vals[s.slot, inind] = amp; nothing)
+# Slot `s` of column `j` is at `[j, s]`, so neighbouring threads write neighbouring addresses.
+FHS.push_inds_amps!(s::SlotSink, outind, inind, amp) = (s.rows[inind, s.slot] = outind; s.vals[inind, s.slot] = amp; nothing)
 
 @kernel function column_kernel!(sink, space, termgroups, coeff, projection)
     j = @index(Global)
@@ -140,8 +142,10 @@ FHS.push_inds_amps!(s::SlotSink, outind, inind, amp) = (s.rows[s.slot, inind] = 
     end
     _apply_terms!(sink, space, termgroups, j, Int(!iszero(coeff)), projection)
 end
-_apply_terms!(sink, space, ::Tuple{}, j, slot, projection) = nothing
-function _apply_terms!(sink, space, termgroups::Tuple, j, slot, projection)
+# Inlined, like the FHS loop it calls: a call that is not inlined passes the terms through local memory and
+# needs many more registers.
+@inline _apply_terms!(sink, space, ::Tuple{}, j, slot, projection) = nothing
+@inline function _apply_terms!(sink, space, termgroups::Tuple, j, slot, projection)
     terms = first(termgroups)
     for t in eachindex(terms)
         op, precomp = terms[t]
@@ -150,40 +154,48 @@ function _apply_terms!(sink, space, termgroups::Tuple, j, slot, projection)
     _apply_terms!(sink, space, Base.tail(termgroups), j, slot + length(terms), projection)
 end
 
-# Sorts the entries of column `j` by row and sums duplicates, in place at the top of the column.
-@kernel function compact_kernel!(counts, rows, vals)
+# Sorts the entries of column `j` by row and sums duplicates, in place at the start of the column. The count goes
+# to `colptr[j + 1]`.
+@kernel function compact_kernel!(colptr, rows, vals)
     j = @index(Global)
     c = 0
-    for s in axes(rows, 1)
-        r = rows[s, j]
+    for s in axes(rows, 2)
+        r = rows[j, s]
         iszero(r) && continue
-        v = vals[s, j]
+        v = vals[j, s]
         p = c
-        while p > 0 && rows[p, j] > r
+        while p > 0 && rows[j, p] > r
             p -= 1
         end
-        if p > 0 && rows[p, j] == r
-            vals[p, j] += v
+        if p > 0 && rows[j, p] == r
+            vals[j, p] += v
         else
             for q in c:-1:(p + 1)
-                rows[q + 1, j] = rows[q, j]
-                vals[q + 1, j] = vals[q, j]
+                rows[j, q + 1] = rows[j, q]
+                vals[j, q + 1] = vals[j, q]
             end
-            rows[p + 1, j] = r
-            vals[p + 1, j] = v
+            rows[j, p + 1] = r
+            vals[j, p + 1] = v
             c += 1
         end
     end
-    counts[j] = c
+    colptr[j + 1] = c
 end
 
+# One thread per stored entry, so that the writes are coalesced.
 @kernel function gather_kernel!(rowval, nzval, colptr, rows, vals)
-    j = @index(Global)
-    start = colptr[j] - 1
-    for s in 1:(colptr[j + 1] - colptr[j])
-        rowval[start + s] = rows[s, j]
-        nzval[start + s] = vals[s, j]
+    k = @index(Global)
+    lo, hi = 1, length(colptr) - 1
+    while lo < hi
+        mid = (lo + hi + 1) >>> 1
+        if colptr[mid] <= k
+            lo = mid
+        else
+            hi = mid - 1
+        end
     end
+    rowval[k] = rows[lo, k - colptr[lo] + 1]
+    nzval[k] = vals[lo, k - colptr[lo] + 1]
 end
 
 ## Formats for `representation`
@@ -247,18 +259,18 @@ assemble(r::DeviceDenseRepr, p, T; projection) =
     run_columns!(DenseSink(KA.zeros(r.backend, T, p.n, p.n)), p, r.backend; projection).M
 function assemble(r::DeviceCSCRepr, p, T; projection)
     backend, n = r.backend, p.n
-    rows = KA.zeros(backend, Int32, p.nslots, n)
-    vals = KA.zeros(backend, T, p.nslots, n)
+    # A zero row marks an empty slot; values are read only where the row is set.
+    rows = KA.zeros(backend, Int32, n, p.nslots)
+    vals = KA.allocate(backend, T, n, p.nslots)
     run_columns!(SlotSink(rows, vals, 0), p, backend; projection)
-    counts = KA.zeros(backend, Int32, n)
-    compact_kernel!(backend)(counts, rows, vals; ndrange=n)
-    # The prefix sum moves `n` integers through the host, little next to the `nslots × n` slots.
-    host_colptr = vcat(Int32(1), Int32(1) .+ cumsum(Array(counts)))
-    nnz = Int(host_colptr[end]) - 1
-    colptr = adapt(backend, host_colptr)
+    colptr = KA.zeros(backend, Int32, n + 1)
+    compact_kernel!(backend)(colptr, rows, vals; ndrange=n)
+    fill!(view(colptr, 1:1), 1)
+    AK.accumulate!(+, colptr; init=zero(Int32))
+    nnz = Int(only(Array(view(colptr, (n + 1):(n + 1))))) - 1
     rowval = KA.allocate(backend, Int32, nnz)
     nzval = KA.allocate(backend, T, nnz)
-    gather_kernel!(backend)(rowval, nzval, colptr, rows, vals; ndrange=n)
+    nnz > 0 && gather_kernel!(backend)(rowval, nzval, colptr, rows, vals; ndrange=nnz)
     return (; colptr, rowval, nzval, m=n, n)
 end
 

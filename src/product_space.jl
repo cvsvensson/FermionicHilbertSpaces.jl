@@ -62,7 +62,7 @@ Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::ProductSpace)
 function _state_index(state::ProductState, H::ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
     inds = map(_state_index, state.states, H.factors)
-    all(>(0), inds) || return 0
+    all(map(>(0), inds)) || return 0
     H.lininds[CartesianIndex(inds)]
 end
 # `lininds` is exact only when the product of the factor dimensions fits in an `Int`
@@ -372,7 +372,7 @@ function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::Abst
     newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
     return _internal_rep(newstate, space, T), amp
 end
-function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::Tuple{InternalRep{T},Vararg{InternalRep{T}}}, space::ProductSpace, precomps) where {C,T}
+@inline function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::Tuple{InternalRep{T},Vararg{InternalRep{T}}}, space::ProductSpace, precomps) where {C,T}
     return _apply_group_operators(one(C), internal_reps, internal_reps, ops.inds, 1, ops.ops, ops.spaces, precomps)
 end
 function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductState{B}, space::ProductSpace, precomps) where {C,B<:Tuple}
@@ -381,13 +381,20 @@ function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductStat
 end
 # Apply the k-th local operator to the substate `states[inds[k]]` and recurse over the remaining
 # operators. Recursing over the tuples `ops`, `spaces` and `precomps` keeps each call concretely typed.
-_apply_group_operators(amp, states, newstates, inds, k, ::Tuple{}, ::Tuple{}, ::Tuple{}) = (newstates, amp)
-function _apply_group_operators(amp::C, states, newstates, inds, k, ops::Tuple, spaces::Tuple, precomps::Tuple) where {C}
+@inline _apply_group_operators(amp, states, newstates, inds, k, ::Tuple{}, ::Tuple{}, ::Tuple{}) = (newstates, amp)
+@inline function _apply_group_operators(amp::C, states, newstates, inds, k, ops::Tuple, spaces::Tuple, precomps::Tuple) where {C}
     n = inds[k]
-    new_local_state, local_amp = _apply_local_operators(first(ops), states[n], first(spaces), first(precomps))
-    return _apply_group_operators(amp * convert(C, local_amp), states, Base.setindex(newstates, new_local_state, n),
+    new_local_state, local_amp = _apply_local_operators(first(ops), _tuple_getindex(states, n), first(spaces), first(precomps))
+    return _apply_group_operators(amp * convert(C, local_amp), states, _tuple_setindex(newstates, new_local_state, n),
         inds, k + 1, Base.tail(ops), Base.tail(spaces), Base.tail(precomps))
 end
+# Indexing a tuple at a run-time position puts it in memory, which on a GPU is slow local memory. Selecting with
+# `ifelse` keeps a tuple of one type in registers.
+_tuple_getindex(t, n) = t[n]
+_tuple_getindex(t::Tuple{T}, n) where {T} = first(t)
+_tuple_getindex(t::Tuple{T,T,Vararg{T}}, n) where {T} = ifelse(n == 1, first(t), _tuple_getindex(Base.tail(t), n - 1))
+_tuple_setindex(t, x, n) = Base.setindex(t, x, n)
+_tuple_setindex(t::NTuple{N,T}, x::T, n) where {N,T} = ntuple(i -> ifelse(i == n, x, t[i]), Val(N))
 
 add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors))
 

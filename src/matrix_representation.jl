@@ -126,7 +126,8 @@ function operator_indices_and_amplitudes_generic!(accumulator, op, space, precom
     end
     return accumulator
 end
-function chunked_operator_indices_and_amplitudes_generic!(accumulator, op, space::AbstractHilbertSpace, precomp, input_inds, col_offset; projection)
+# Inlined so that a GPU kernel calling it keeps the loop in registers instead of passing arguments through local memory.
+@inline function chunked_operator_indices_and_amplitudes_generic!(accumulator, op, space::AbstractHilbertSpace, precomp, input_inds, col_offset; projection)
     for inind in input_inds
         state = basisstate(inind, space)
         newstate, amp = _apply_local_operators(op, state, space, precomp)
