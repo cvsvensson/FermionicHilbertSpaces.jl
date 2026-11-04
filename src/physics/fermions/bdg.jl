@@ -281,16 +281,15 @@ struct BdGEigen{T <: Union{Nothing, Real}} <: AbstractBdGEigenAlg
 end
 BdGEigen() = BdGEigen(nothing)
 
-# Working on a complex `Matrix`, and comparing it with `copy(M')` rather than the lazy adjoint, lets all inputs share
-# one compiled path.
+# Converting to a `Matrix` and comparing with `copy(M')` rather than the lazy adjoint lets all array types share one compiled path.
 function LinearAlgebra.eigen(A::AbstractMatrix, alg::BdGEigen)
-    M = Matrix{complex(float(eltype(A)))}(A)
+    M = Matrix{float(eltype(A))}(A)
     rtol = sqrt(eps(real(eltype(M))))
     isapprox(M, copy(M'); rtol) && is_ph_symmetric(M; rtol) || throw(ArgumentError("BdGEigen requires a Hermitian, particle-hole symmetric BdG matrix, the representation of a hermitian operator."))
     F = eigen(Hermitian(M))
     cutoff = something(alg.cutoff, size(A, 1) * eps(eltype(F.values)))
     tol = cutoff * maximum(abs, F.values; init = zero(eltype(F.values)))
-    return Eigen(enforce_ph_symmetry(F.values, F.vectors, tol)...)
+    return Eigen(enforce_ph_symmetry(F.values, complex(F.vectors), tol)...)
 end
 
 # Within a degenerate eigenspace `eigen` returns an arbitrary basis, so the partner of a

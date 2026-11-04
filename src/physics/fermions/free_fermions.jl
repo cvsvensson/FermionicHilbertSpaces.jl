@@ -40,10 +40,10 @@ end
         _repr isa Union{EagerSparseRepr, EagerDenseRepr} || throw(ArgumentError("Only the :sparse and :dense representations are supported on $(typeof(H)). Got $repr."))
         return _repr
     end
-# The matrix of a sum of two-fermion terms, where `entries(term, H)` gives a tuple of the (row, column, value) entries of each term
-function _quadratic_matrix(entries, op, H, repr)
+    # The matrix of a sum of two-fermion terms, where `entries(term, H)` gives a tuple of the (row, column, value) entries of each term
+    function _quadratic_matrix(entries, op, H, repr)
         accumulator = matrix_accumulator(op, H, _eager_repr(repr, H))
-    for term in NCterms(op), (outind, inind, amp) in entries(term, H)
+        for term in NCterms(op), (outind, inind, amp) in entries(term, H)
             (iszero(outind) || iszero(inind)) && throw(ArgumentError("The operator `$term` contains a factor that is not part of the fermionic space `$H`."))
             push_inds_amps!(accumulator, outind, inind, amp)
         end
