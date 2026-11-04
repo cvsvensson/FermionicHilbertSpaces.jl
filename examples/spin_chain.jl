@@ -41,7 +41,7 @@ ham = sum(S[k][:]'S[k + 1][:] for k in 1:(N - 1))
 Sz = sum(S[k][:z] for k in 1:N)
 @assert ham * Sz - Sz * ham == 0
 Hm = hilbert_space(S, 1:N, AdditiveConstraint(0; maps = s -> s.m))
-Mham = representation(ham, Hm, :dense);
+Mham = representation(ham, Hm, Matrix);
 
 # The chain also conserves the total spin, fixed by the Casimir operator $\vec S_\mathrm{tot}^2 = J(J+1)$.
 # Projecting onto its eigenspaces block-diagonalizes the Hamiltonian, and the blocks together reproduce its spectrum.
@@ -49,7 +49,7 @@ Mham = representation(ham, Hm, :dense);
 # `nullspace` and `eigvals` need them.
 
 Stot2 = sum(sum(S[k][op] for k in 1:N)^2 for op in (:x, :y, :z))
-Mtot = representation(Stot2, Hm, :dense)
+Mtot = representation(Stot2, Hm, Matrix)
 blocks = map(J -> nullspace(Mtot - J * (J + 1) * I), 0:2)
 spectra = [eigvals(Hermitian(P' * Mham * P)) for P in blocks]
 @assert sort(reduce(vcat, spectra)) ≈ eigvals(Hermitian(Mham))

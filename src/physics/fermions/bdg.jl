@@ -1,3 +1,8 @@
+"""
+    NambuState(i, hole::Bool)
+
+A basis state of the [`BdG`](@ref) space: the hole (`hole = true`) or particle component of the mode at position `i`.
+"""
 struct NambuState <: AbstractFockState
     state::SingleParticleState
     hole::Bool
@@ -5,15 +10,18 @@ end
 NambuState(i::Integer, hole::Bool) = NambuState(SingleParticleState(i), hole)
 Base.:(==)(n1::NambuState, n2::NambuState) = n1.state == n2.state && n1.hole == n2.hole
 Base.hash(n::NambuState, h::UInt) = hash(n.hole, hash(n.state, h))
+Base.show(io::IO, n::NambuState) = print(io, "NambuState(", only(n.state.sites), ", ", n.hole, ")")
 _state_label_atomic(s::NambuState, H::_FermionModeSpace) = (s.hole ? "h" : "p") * _state_label_atomic(s.state, H)
 
 # Ψ' m Ψ == Ψ' m_ph Ψ + tr(m) / 2 by the anticommutation relations, since the vector of adjoints Ψ' equals τx Ψ, and
 # m_ph = -τx transpose(m_ph) τx is the unique particle-hole symmetric representative.
-function normal_order_to_bdg(m::AbstractMatrix)
+normal_order_to_bdg(m::AbstractMatrix) = (m + ph_conjugate(m)) / 2
+function ph_conjugate(m)
     n = size(m, 1) ÷ 2
     swap = [(n + 1):2n; 1:n]
-    return (m - permutedims(m)[swap, swap]) / 2
+    return -permutedims(m)[swap, swap]
 end
+is_ph_symmetric(m; kwargs...) = iseven(size(m, 1)) && isapprox(m, ph_conjugate(m); kwargs...)
 
 struct BdGHilbertSpace{H}
     parent::H
@@ -47,7 +55,7 @@ The space of Nambu states `[f[l] for l in labels; f[l]' for l in labels]`. `repr
 
 ```julia
 H = hilbert_space(f, 1:2, BdG())
-representation(f[1]' * f[1], H, :dense) # diagm([1, 0, -1, 0]) / 2
+representation(f[1]' * f[1], H, Matrix) # diagm([1, 0, -1, 0]) / 2
 ```
 """
 hilbert_space(f::SymbolicFermionBasis, labels, ::BdG) = BdGHilbertSpace(f, labels)
@@ -263,7 +271,7 @@ Algorithm for `eigen(A, BdGEigen())` on a Hermitian BdG matrix `A` with `N` mode
 
 ```julia
 H = hilbert_space(f, 1:2, BdG())
-vals, vecs = eigen(representation(f[1]' * f[2] + f[1]' * f[2]' + hc, H, :dense), BdGEigen()) # vals ≈ [-1, 0, 0, 1]
+vals, vecs = eigen(representation(f[1]' * f[2] + f[1]' * f[2]' + hc, H, Matrix), BdGEigen()) # vals ≈ [-1, 0, 0, 1]
 ```
 """
 struct BdGEigen{T <: Union{Nothing, Real}} <: AbstractBdGEigenAlg
@@ -273,7 +281,7 @@ BdGEigen() = BdGEigen(nothing)
 
 function LinearAlgebra.eigen(A::AbstractMatrix, alg::BdGEigen)
     rtol = sqrt(eps(real(float(eltype(A)))))
-    isapprox(A, A'; rtol) || throw(ArgumentError("BdGEigen requires a Hermitian BdG matrix, the representation of a hermitian operator."))
+    isapprox(A, A'; rtol) && is_ph_symmetric(A; rtol) || throw(ArgumentError("BdGEigen requires a Hermitian, particle-hole symmetric BdG matrix, the representation of a hermitian operator."))
     F = eigen(Hermitian(Matrix(A)))
     cutoff = something(alg.cutoff, size(A, 1) * eps(eltype(F.values)))
     tol = cutoff * maximum(abs, F.values; init = zero(eltype(F.values)))
@@ -423,6 +431,8 @@ end
     # Zero modes at a large energy scale
     test_bdg_eigen(1.0e8 * representation(f[1]' * f[2] + f[1]' * f[2]' + f[3]' * f[4] + f[3]' * f[4]' + hc, hilbert_space(f, 1:4, BdG()), :dense))
     @test_throws ArgumentError eigen([0 1; 0 0], BdGEigen())
+    @test_throws ArgumentError eigen([1.0 0; 0 2], BdGEigen())
+    @test_throws ArgumentError eigen(Matrix(1.0I, 3, 3), BdGEigen())
 end
 
 # The operators Ψ_j^† that create the basis states of `H`, such that `representation(Σ_ab M_ab Ψ_a^† Ψ_b, H) == M`
@@ -433,7 +443,9 @@ _nambu_creators(H::MajoranaSingleParticleHilbertSpace) = [γ / sqrt(2) for γ in
 """
     quasiparticle(v, H)
 
-The quasiparticle creation operator `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])` for a column `v` of BdG eigenvectors on a `BdG` space `H` with `N` modes, or `γ' = Σ_n v[n] * f[n]'` on a `SingleParticle` space, or `Σ_n v[n] * γ[n] / √2` on a Majorana space.
+The quasiparticle creation operator for the single-particle vector `v` on `H`.
+
+On a `BdG` space with `N` modes it is `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])`, on a `SingleParticle` space `γ' = Σ_n v[n] * f[n]'`, and on a Majorana space `Σ_n v[n] * γ[n] / √2`.
 
 ```julia
 @fermions f
@@ -450,12 +462,12 @@ end
 """
     symbolic_operator(M, H)
 
-The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space, an antisymmetric matrix on a Majorana space, or any matrix on a `SingleParticle` space. On a `BdG` or Majorana space, `op` is traceless.
+The symbolic operator `op` with `representation(op, H) == M`, for a BdG matrix `M` on a `BdG` space, an antisymmetric matrix on a Majorana space, or any matrix on a `SingleParticle` space.
 
 ```julia
 @fermions f
 H = hilbert_space(f, 1:2, BdG())
-symbolic_operator(representation(f[1]' * f[1], H, :dense), H) # -0.5I + f†[1]*f[1]
+symbolic_operator(representation(f[1]' * f[1], H, Matrix), H) # -0.5I + f†[1]*f[1]
 ```
 """
 function symbolic_operator(M, H::Union{BdGHilbertSpace, SingleParticleHilbertSpace, MajoranaSingleParticleHilbertSpace})

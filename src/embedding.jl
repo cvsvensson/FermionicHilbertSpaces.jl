@@ -1,16 +1,17 @@
-function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), skipmissing=false, kwargs...)
+function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
+    size_compatible(m, Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(Hsub)), got $(size(m))."))
     if isnothing(complement)
-        m isa AbstractVector && return change_basis(m, Hsub, H; skipmissing, kwargs...)
-        if !(skipmissing || m isa UniformScaling)
+        m isa AbstractVector && return change_basis(m, Hsub, H; projection, kwargs...)
+        if !(projection || m isa UniformScaling)
             dropped = last(basis_transformation(Hsub, H))
             iszero(m[dropped, setdiff(axes(m, 2), dropped)]) ||
-                throw(ArgumentError("`m` maps a state of `H` outside `H` with nonzero amplitude. Pass `skipmissing=true` to drop such terms."))
+                throw(ArgumentError("`m` maps a state of `H` outside `H` with nonzero amplitude. Pass `projection=true` to drop such terms."))
         end
-        return change_basis(m, Hsub, H; skipmissing=true, kwargs...)
+        return change_basis(m, Hsub, H; projection = true, kwargs...)
     end
     m isa AbstractVector && throw(ArgumentError("A state vector can only be embedded into a space with the same modes, such as from a sector into its parent space. A state on a subsystem does not fix the state of the rest; use `tensor_product` of states or `embed` a density matrix instead."))
-    return generalized_kron((m, I), (Hsub, complement), H; skipmissing, kwargs...)
+    return generalized_kron((m, I), (Hsub, complement), H; projection, kwargs...)
 end
 
 """
@@ -20,7 +21,7 @@ Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fe
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 
 The result is the compression `P (m ⊗ I) P` onto `H`, so that `tr(embed(A, Hsub => H) * ρ) ==
-tr(A * partial_trace(ρ, H => Hsub))` for `ρ` on `H`. Unless `skipmissing=true`, throws an `ArgumentError`
+tr(A * partial_trace(ρ, H => Hsub))` for `ρ` on `H`. Unless `projection=true`, throws an `ArgumentError`
 if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of `m` for states of
 `Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not
 in `Hsub` get zero.
@@ -53,10 +54,10 @@ struct EmbedMap{HS,H,C,K,M}
     map::M
 end
 
-# The map is the compression onto `H` and checks nothing, so `skipmissing` has no effect.
-function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
+# The map is the compression onto `H` and checks nothing, so `projection` has no effect.
+function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(Hsub, H, complement), projection = false, kwargs...)
     map = if isnothing(complement)
-        basis_transformation_map(Hsub, H; skipmissing=true, kwargs...)
+        basis_transformation_map(Hsub, H; projection = true, kwargs...)
     else
         _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, kwargs...))
     end
@@ -147,7 +148,7 @@ embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwar
     m = representation(f[1]', Hsub; projection=true)
     @test_throws ArgumentError embed(m, Hsub => H)
     compression = representation(f[1]', H; projection=true)
-    @test embed(m, Hsub => H; skipmissing=true) ≈ compression
+    @test embed(m, Hsub => H; projection = true) ≈ compression
     @test emb(m) ≈ compression # the map is the compression and does not check
     # with the same atoms: |00⟩⟨11| maps no state of the space with at most one particle outside it, |11⟩⟨00| does
     Hf, Hc = hilbert_space(f, 1:2), hilbert_space(f, 1:2, NumberConservation(0:1))
@@ -158,7 +159,7 @@ embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwar
     # embed is the adjoint of partial_trace
     A = rand(ComplexF64, dim(Hsub), dim(Hsub))
     ρ = rand(ComplexF64, dim(H), dim(H))
-    @test tr(embed(A, Hsub => H; skipmissing=true) * ρ) ≈ tr(A * partial_trace(ρ, H => Hsub))
+    @test tr(embed(A, Hsub => H; projection = true) * ρ) ≈ tr(A * partial_trace(ρ, H => Hsub))
 end
 
 @testitem "Embedding a sector vector" begin
