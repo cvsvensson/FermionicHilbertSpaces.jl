@@ -324,7 +324,7 @@ end
 # other groups once instead of once per term. Terms on a single group join those on it and a neighbour, if any, since
 # their sum is still small. Joining larger ranges can make the summed matrices much larger than the terms.
 # With a threaded chunking, the matrices of the terms, of the spans and their sums are built in parallel.
-function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; tree_split=10, kwargs...)
+function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}, chunking; tree_split = 10, kwargs...)
     spaces = groups(space)
     by_span = Dict{UnitRange{Int}, Vector{Any}}()
     for term in NCterms(op)
@@ -1153,7 +1153,7 @@ end
 # `map`, run in parallel by the OhMyThreads extension for threaded chunkings
 _map(f, xs, ::NoChunking) = map(f, xs)
 
-function _sum_tree(matrices, k, chunking=NoChunking())
+function _sum_tree(matrices, k, chunking = NoChunking())
     n = length(matrices)
     n == 0 && throw(ArgumentError("Cannot sum an empty collection of matrices."))
     n == 1 && return only(matrices)
