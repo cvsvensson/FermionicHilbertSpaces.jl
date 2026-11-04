@@ -16,7 +16,7 @@ The space of the Majoranas `γ[l]`, `l in labels`, for quadratic Majorana operat
 ```julia
 @majoranas γ
 H = hilbert_space(γ, 1:2, SingleParticle())
-representation(1im * γ[1] * γ[2], H, :dense) # [0 1im; -1im 0]
+representation(1im * γ[1] * γ[2], H, Matrix) # [0 1im; -1im 0]
 ```
 """
 function hilbert_space(γ::SymbolicMajoranaBasis, labels::AbstractVector, ::SingleParticle)

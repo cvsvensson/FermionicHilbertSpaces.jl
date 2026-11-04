@@ -39,7 +39,7 @@ Hlr, Hl, Hr, left, right = open_system(c, 1:1)
 ε, γ_in, γ_out = 1.0, 0.3, 0.7
 ham = ε * c[1]'c[1]
 lindbladian = -1im * (left(ham) - right(ham)) + dissipator(√γ_in * c[1]') + dissipator(√γ_out * c[1])
-L = representation(lindbladian, Hlr, :dense)   # eigen and exp need a dense matrix
+L = representation(lindbladian, Hlr, Matrix)   # eigen and exp need a dense matrix
 
 Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
 @assert iszero(L' * Ivec)                      # the Liouvillian preserves the trace
@@ -60,7 +60,7 @@ n = representation(left(c[1]'c[1]), Hl)
 # ``Q=0`` block, which holds the populations, contains the steady state.
 constraint = NumberConservation(-1:1, [Hl, Hr], [1, -1])
 Hcons = tensor_product((Hl, Hr); constraint)
-L0 = representation(lindbladian, sector(0, Hcons), :dense)
+L0 = representation(lindbladian, sector(0, Hcons), Matrix)
 @assert any(abs(λ) < 1.0e-12 for λ in eigvals(L0))
 
 # ## Example 2: two dots coupled to a lossy cavity
@@ -79,7 +79,7 @@ Hlr, Hl, Hr, left, right = open_system(Hsys)
 t, ω, g, κ = 0.5, 1.0, 0.3, 0.2
 ham = t * (f[1]'f[2] + f[2]'f[1]) + ω * a[1]'a[1] + g * (f[1]'f[1] - f[2]'f[2]) * (a[1] + a[1]')
 lindbladian = -1im * (left(ham) - right(ham)) + dissipator(√κ * a[1])
-vals, vecs = eigen(representation(lindbladian, Hlr, :dense); sortby = abs)
+vals, vecs = eigen(representation(lindbladian, Hlr, Matrix); sortby = abs)
 ρ = reshape(vecs[:, 1], Hlr => (Hl, Hr))
 ρ ./= tr(ρ)
 real(tr(representation(left(a[1]'a[1]), Hl) * ρ))

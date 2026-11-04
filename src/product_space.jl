@@ -266,6 +266,20 @@ end
     @test_throws ArgumentError combine_states(Any[first(basisstates(Hs[1]))], mapper)
 end
 
+@testitem "split_state and combine_states infer on a fermion, boson and spin product" begin
+    import FermionicHilbertSpaces: state_mapper, split_state, combine_states
+    @fermions f
+    @boson b
+    @spin s 1 // 2
+    Hb, Hs = hilbert_space(b, 3), hilbert_space(s)
+    H = tensor_product(hilbert_space(f, 1:3), Hb, Hs)
+    mapper = state_mapper(H, (hilbert_space(f, [1, 3]), tensor_product(hilbert_space(f, 2:2), Hs), Hb))
+    for state in basisstates(H)
+        substates = only(first(@inferred split_state(state, mapper)))
+        @test only(first(@inferred combine_states(substates, mapper))) == state
+    end
+end
+
 @testitem "Reordered fermionic modes" begin
     using LinearAlgebra
     import FermionicHilbertSpaces: change_basis, FullPartialTraceAlg, SubsystemPartialTraceAlg
@@ -413,10 +427,9 @@ add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors
 #
 # Type stability: all routing indices live in the *type domain* via
 # `PieceIndex{block,slot}`. Indexing a heterogeneous tuple with these
-# compile-time constants infers concretely, so the hot path is type stable
-# and allocation free even for heterogeneous states. Construction, by
-# contrast, is deliberately plain and dynamic (Dicts, Vectors, sorting) —
-# it runs once, so clarity wins there.
+# compile-time constants infers concretely, so the hot path is type stable.
+# Construction, by contrast, is deliberately plain and dynamic (Dicts,
+# Vectors, sorting) — it runs once, so clarity wins there.
 ###############################################################################
 
 # ─── Compile-time routing index ──────────────────────────────────────────────

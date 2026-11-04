@@ -17,7 +17,7 @@ using FermionicHilbertSpaces
 using LinearAlgebra, Plots
 @majoranas γ
 H = hilbert_space(γ, 0:3)
-hs = [representation(1im * γ[0] * γ[i], H, :dense) for i in 1:3]
+hs = [representation(1im * γ[0] * γ[i], H, Matrix) for i in 1:3]
 coupling(t, T, k) = (1 + tanh(k * cos(2π * t / T))) / 2
 couplings(t, T, k) = [coupling(t - (i - 1) * T / 3, T, k) for i in 1:3]
 hamiltonian(t, T, k) = Hermitian(sum(couplings(t, T, k) .* hs))

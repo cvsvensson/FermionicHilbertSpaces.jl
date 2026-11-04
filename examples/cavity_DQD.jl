@@ -29,7 +29,7 @@ fix_params = (; ωr, t, α, U, B, g)
 
 function cavity_dqd_eigensystem(; ωr, δϵ, t, α, U, B, g)
     Hsym = h_cavity_dqd(; ωr, δϵ, t, α, U, B, g)
-    M = representation(Hsym, H, :dense)
+    M = representation(Hsym, H, Matrix)
     vals, vecs = eigen(Hermitian(M))
     return vals, vecs
 end
