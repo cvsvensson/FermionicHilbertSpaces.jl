@@ -19,28 +19,29 @@ Base.hash(s::ProductState, h::UInt) = hash(s.states, h)
 Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
 
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
-# ProductSpaces consists of a list of groups (stored as `factors`) and their atoms, in group-major order
-struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
+# ProductSpaces consists of a list of groups (stored as `factors`) and their atoms, in group-major order.
+# `AS` and `AI` are `Vector{A}` and `Dict{Any,Int}`, except in the copies for GPU kernels, which drop them.
+struct ProductSpace{B, C, A, T, LI, CI, AS, AI} <: AbstractProductHilbertSpace{B}
     factors::C
-    atoms::Vector{A}
-    atom_index::Dict{Any,Int} # atomic_id => position in atoms. Only used for lookups, so not concretely typed
+    atoms::AS
+    atom_index::AI # atomic_id => position in atoms. Only used for lookups, so not concretely typed
     fast_path::T
     lininds::LI
     cartinds::CI
-    function ProductSpace(factors::C) where {C}
-        length(factors) == 0 && throw(ArgumentError("A product space must have at least one factor."))
-        atoms = collect(Iterators.flatten(map(atomic_factors, factors)))
-        A = eltype(atoms)
-        B = ProductState{Tuple{map(statetype, factors)...}}
-        atom_index = Dict{Any,Int}(atomic_id(a) => i for (i, a) in enumerate(atoms))
-        length(atom_index) == length(atoms) || throw(ArgumentError("The atoms of a product space must be distinct, got duplicates in $(map(atomic_id, atoms))."))
-        fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
-        lininds = LinearIndices(map(dim, factors))
-        cartinds = CartesianIndices(map(dim, factors))
-        LI = typeof(lininds)
-        CI = typeof(cartinds)
-        new{B,C,A,typeof(fast_path),LI,CI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
-    end
+    ProductSpace{B, C, A, T, LI, CI, AS, AI}(factors, atoms, atom_index, fast_path, lininds, cartinds) where {B, C, A, T, LI, CI, AS, AI} =
+        new{B, C, A, T, LI, CI, AS, AI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
+end
+function ProductSpace(factors::C) where {C}
+    length(factors) == 0 && throw(ArgumentError("A product space must have at least one factor."))
+    atoms = collect(Iterators.flatten(map(atomic_factors, factors)))
+    A = eltype(atoms)
+    B = ProductState{Tuple{map(statetype, factors)...}}
+    atom_index = Dict{Any, Int}(atomic_id(a) => i for (i, a) in enumerate(atoms))
+    length(atom_index) == length(atoms) || throw(ArgumentError("The atoms of a product space must be distinct, got duplicates in $(map(atomic_id, atoms))."))
+    fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
+    lininds = LinearIndices(map(dim, factors))
+    cartinds = CartesianIndices(map(dim, factors))
+    return ProductSpace{B, C, A, typeof(fast_path), typeof(lininds), typeof(cartinds), Vector{A}, Dict{Any, Int}}(factors, atoms, atom_index, fast_path, lininds, cartinds)
 end
 fast_path(space::ProductSpace) = space.fast_path
 isconstrained(H::ProductSpace) = false
@@ -302,14 +303,13 @@ function partial_transpose_phase_factor(state1, state2, space::ProductSpace)
     prod(map(partial_transpose_phase_factor, state1.states, state2.states, space.factors); init=1)
 end
 
-struct ProductOperator{C,O,S}
+struct ProductOperator{C, O, S, I}
     ops::O
     spaces::S
-    inds::Vector{Int} # indices of active spaces in full space
-    function ProductOperator{C}(ops::O, spaces::S, inds::Vector{Int}) where {C,O,S}
-        new{C,O,S}(ops, spaces, inds)
-    end
+    inds::I # indices of active spaces in full space, a `Vector{Int}` except in the copies for GPU kernels
+    ProductOperator{C, O, S, I}(ops, spaces, inds) where {C, O, S, I} = new{C, O, S, I}(ops, spaces, inds)
 end
+ProductOperator{C}(ops, spaces, inds) where {C} = ProductOperator{C, typeof(ops), typeof(spaces), typeof(inds)}(ops, spaces, inds)
 function ProductOperator(ops::O, spaces::S, inds::Vector{Int}) where {O,S}
     length(ops) == length(spaces) || throw(ArgumentError("`ops` and `spaces` must have the same length, got $(length(ops)) and $(length(spaces))."))
     C = promote_type(Iterators.map(mat_eltype, ops)...)
