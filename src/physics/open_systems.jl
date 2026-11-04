@@ -139,8 +139,6 @@ _ordered_mul_effect(a, b) = symbolic_group(a) != symbolic_group(b) && _group_isl
 NonCommutativeProducts.mul_effect(a::OrderedBosonProduct, b::AbstractSym) = _ordered_mul_effect(a, b)
 NonCommutativeProducts.mul_effect(a::AbstractSym, b::OrderedBosonProduct) = _ordered_mul_effect(a, b)
 NonCommutativeProducts.mul_effect(a::OrderedBosonProduct, b::OrderedBosonProduct) = _ordered_mul_effect(a, b)
-NonCommutativeProducts.mul_effect(a::OrderedBosonProduct, b::SymbolicState) = invoke(NonCommutativeProducts.mul_effect, Tuple{AbstractSym, SymbolicState}, a, b)
-NonCommutativeProducts.mul_effect(a::SymbolicState, b::OrderedBosonProduct) = invoke(NonCommutativeProducts.mul_effect, Tuple{SymbolicState, AbstractSym}, a, b)
 
 # `term` with the factors of each bosonic mode, which commute with all other factors, moved to the end. They are
 # wrapped in an OrderedBosonProduct unless they are normal ordered, since then sorting is exact on a truncated mode.

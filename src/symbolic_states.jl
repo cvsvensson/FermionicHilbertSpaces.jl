@@ -357,6 +357,9 @@ function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
     return _scaled_state(amp, SymbolicState(s.space, s.ket, newbra))
 end
 
+NonCommutativeProducts.mul_effect(a::OrderedBosonProduct, b::SymbolicState) = invoke(NonCommutativeProducts.mul_effect, Tuple{AbstractSym, SymbolicState}, a, b)
+NonCommutativeProducts.mul_effect(a::SymbolicState, b::OrderedBosonProduct) = invoke(NonCommutativeProducts.mul_effect, Tuple{SymbolicState, AbstractSym}, a, b)
+
 # Kets are basis vectors: ⟨a|b⟩ is zero unless a and b are the same basis state of the same group, so `inner` only
 # forms the products of terms with equal keys. Bras and ketbras have no key and are paired with every term.
 NonCommutativeProducts.contraction_key(s::SymbolicState) = isket(s) ? (group_id(s.space), s.ket) : nothing
