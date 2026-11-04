@@ -102,11 +102,6 @@ function operator_indices_and_amplitudes!(accumulator, op, space; kwargs...)
     return operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp; kwargs...)
 end
 
-function chunked_operator_indices_and_amplitudes!(accumulator, op, space::AbstractHilbertSpace, input_inds, col_offset; kwargs...)
-    precomp = precomputation_before_operator_application(op, space)
-    return chunked_operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp, input_inds, col_offset; kwargs...)
-end
-
 # Whether `outind` lies outside the space and `projection` allows skipping it. Throws if it lies outside and `projection` is false.
 function _skip_outside(outind, projection)
     iszero(outind) || return false
