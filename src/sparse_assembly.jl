@@ -2,7 +2,9 @@ const SPARSE_BLOCK_SIZE = 4096
 
 function _terms_matrix(::Type{T}, terms, coeff, space, ::EagerSparseRepr, ::NoChunking; kwargs...) where {T}
     m = _blocked_sparse_matrix(T, _precomputed_terms(terms, space), coeff, space; kwargs...)
-    return _narrowed(_trimmed!(m, nnz(m)))
+    # The chunks of a chunked build are copied by `hcat`, so only the whole matrix releases the room left by the blocks
+    dim(space) > SPARSE_BLOCK_SIZE && foreach(v -> sizehint!(v, length(v)), (rowvals(m), nonzeros(m)))
+    return _narrowed(m)
 end
 
 # `m` with its element type narrowed to that of its stored entries when `eltype(m)` is abstract
@@ -46,8 +48,8 @@ end
 
 # Builds the columns `incols` of the matrix one block of columns at a time: the entries of a block are collected
 # term by term, then sorted into columns, with duplicate entries summed in the order of the terms.
-# A nonempty range of columns that fits in one block is built by `sparse!` from that block. The vectors of the
-# matrix can have room for more entries.
+# A nonempty range of columns that fits in one block is built by `sparse!` from that block. A matrix of more than
+# one block can have room for more entries in its vectors.
 # `precomps` holds pairs `(term, precomp)` from `_precomputed_terms`.
 function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(space); kwargs...) where T
     N = dim(space)
@@ -56,7 +58,7 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
     B = SPARSE_BLOCK_SIZE
     if 0 < M <= B
         ijv = _collect_ijv(T, precomps, coeff, space, incols, offset; kwargs...)
-        return SparseArrays.sparse!(ijv..., N, M)
+        return _trimmed!(SparseArrays.sparse!(ijv..., N, M), length(first(ijv)))
     end
     blockcapacity = _sparse_length_guess(length(precomps), min(B, M))
     block = (rows, cols, amps) = sparse_matrix_accumulator(T, (blockcapacity, blockcapacity))
