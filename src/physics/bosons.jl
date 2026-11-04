@@ -89,23 +89,9 @@ function _boson_normal_order(a::BosonSym, c::BosonSym)
     end
     return AddTerms(terms)
 end
-function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
-    if symbolic_group(a) == symbolic_group(b)
-        if sign(a.exp) == sign(b.exp)
-            return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
-        else
-            if a.exp < 0 && b.exp > 0
-                return _boson_normal_order(a, b)
-            else
-                return nothing
-            end
-        end
-    end
-    if _group_isless(b, a)
-        return Swap(1)
-    else
-        return nothing
-    end
+function local_mul_effect(a::BosonSym, b::BosonSym)
+    sign(a.exp) == sign(b.exp) && return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
+    return a.exp < 0 && b.exp > 0 ? _boson_normal_order(a, b) : nothing
 end
 
 @nc BosonSym

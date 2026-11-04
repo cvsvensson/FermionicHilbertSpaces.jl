@@ -376,15 +376,9 @@ end
 
 _factor_or_empty(x) = isone(x) ? Any[] : [x]
 
-function NonCommutativeProducts.mul_effect(a::S, b::S) where S<:SpinSym
-    if a.basis > b.basis
-        return Swap(1)
-    end
-    if a.basis < b.basis
-        return nothing
-    end
-    a.basis == b.basis || throw(ArgumentError("The symbolic bases must be comparable for multiplication, got `$(a.basis)` and `$(b.basis)`."))
-
+# Equal bases can have different types, such as labels `1` and `Int32(1)`.
+local_mul_effect(a::SpinSym, b::SpinSym) = local_mul_effect(a, with_basis(b, a.basis))
+function local_mul_effect(a::S, b::S) where {S <: SpinSym}
     if a.op == b.op && a.op in (:+, :-, :z)
         exponent = a.exponent + b.exponent
         if a.op in _spin_z_aliases
@@ -617,6 +611,9 @@ end
     # Test spin-1/2 identity: Sx^2 + Sy^2 + Sz^2 = 3/4 * I, and Colon operator
     @test Shalf[:]' * Shalf[:] == 3 / 4 * Shalf[:I]
 
+    # Equal bases of different types
+    @spins s 1 // 2
+    @test s[1][:z] * s[Int32(1)][:z] == s[1][:z]^2
 end
 
 @testitem "Spin matrix reps" begin

@@ -31,11 +31,11 @@
 ##   • HEOMBosonicAuxState   – basis state (occupation tuple n)
 ##   • heom_bosonic_aux_space – builds the auxiliary GenericHilbertSpace
 ##   • heom_generator        – builds the full symbolic HEOM generator
-##   • Algebra rules, symbolic_group, apply_local_operators (all required interfaces)
+##   • symbolic_group, apply_local_operators (all required interfaces)
 
 using FermionicHilbertSpaces, Test
 import FermionicHilbertSpaces: AbstractSym, symbolic_group, apply_local_operator, add_tag,
-    @nc, NCMul, NonCommutativeProducts.mul_effect, mat_eltype
+    @nc, mat_eltype
 
 """
     HEOMBosonicBath(id, m_max, χ, ξ)
@@ -67,6 +67,7 @@ struct HEOMBosonicBath{L,V1,V2}
 end
 Base.:(==)(a::HEOMBosonicBath, b::HEOMBosonicBath) = a.id == b.id
 Base.hash(a::HEOMBosonicBath, h::UInt) = hash(a.id, h)
+Base.isless(a::HEOMBosonicBath, b::HEOMBosonicBath) = isless(a.id, b.id)
 Base.show(io::IO, b::HEOMBosonicBath) = print(io, "HEOMBosonicBath(id=", b.id, ", N_exp=", b.N_exp, ", m_max=", b.m_max, ")")
 
 ## Symbolic operators
@@ -113,17 +114,9 @@ function Base.adjoint(op::HEOMBosonicOp)
     return HEOMBosonicOp(op.type == :up ? :down : :up, op.l, op.bath, op.weighted)
 end
 
-## Algebra
+## Products on one bath stay as written. Operators on different baths commute and are sorted by bath.
 
 @nc HEOMBosonicOp
-
-# For operators from different baths: sort by bath id
-# otherwise don't do anything
-_heom_bath_id(op::HEOMBosonicOp) = op.bath.id
-function mul_effect(a::HEOMBosonicOp, b::HEOMBosonicOp)
-    _heom_bath_id(a) > _heom_bath_id(b) && return Swap(1)   # different baths: sort by id
-    return nothing                                            # same bath or already ordered
-end
 
 ## State and space
 """
