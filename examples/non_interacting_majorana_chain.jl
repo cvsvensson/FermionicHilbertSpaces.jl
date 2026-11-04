@@ -35,7 +35,7 @@ Hbdg = hilbert_space(c, [(n, s) for n in 1:N for s in (:↑, :↓)], BdG())
 Vzs = range(0.0, Vz_c2 * 1.2, length=40)
 energies = stack(Vzs) do Vz
     symham = ham(c, N; μ, t, Δ, Vz, α)
-    vals, _ = eigen(representation(symham, Hbdg, :dense), BdGEigen())
+    vals, _ = eigen(representation(symham, Hbdg, Matrix), BdGEigen())
     vals
 end
 
@@ -49,7 +49,7 @@ display(p1)
 Vzs = [Vz_c * 0.5, Vz_c * 1.2]  # Trivial and topological
 densities = map(Vzs) do Vz
     symham = ham(c, N; μ, t, Δ, Vz, α)
-    _, vecs = eigen(representation(symham, Hbdg, :dense), BdGEigen())
+    _, vecs = eigen(representation(symham, Hbdg, Matrix), BdGEigen())
     # Column 2N has the non-positive energy closest to zero
     low_energy_mode = vecs[:, 2N]
     spin_avg = map(norm, Iterators.partition(low_energy_mode, 2))
