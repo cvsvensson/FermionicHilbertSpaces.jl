@@ -549,7 +549,7 @@ function vector_representation(op, space, repr; kwargs...)
 end
 
 function vector_representation(op::Union{NCMul,NCAdd}, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
-    _vector_representation(op, space, _vector_format(repr), _operator_type(op); kwargs...)
+    return _vector_representation(op, space, _vector_format(repr), _operator_type(op); kwargs...)
 end
 # `kind` is `:kets` or `:bras`, as computed by `_operator_type`
 Base.@constprop :aggressive function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, kind; kwargs...)
