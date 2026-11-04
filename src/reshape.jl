@@ -356,8 +356,8 @@ function _check_dropped_group(t3, lin, dropped, has_support_on)
     has_support_on(t3, 2, [lin[Iin...] for Iin in dropped]) && throw(
         ArgumentError(
             "Reshape would lose amplitude: the array has nonzero entries on basis states \
-         that are missing in the output spaces. Pass `projection=true` to drop them \
-         silently."
+             that are missing in the output spaces. Pass `projection=true` to drop them \
+             silently."
         )
     )
     return nothing
@@ -404,11 +404,12 @@ end
 # Block k gathers along broadcast dimensions 2k-1 (its output index) and 2k (the transitions
 # into that output index), and its weights multiply those of the other blocks.
 function _gather_reshape(t, blocks, Hsouts; projection = false)
+    Base.has_offset_axes(t) && throw(ArgumentError("GatherPartialTraceAlg requires an array with one-based axes."))
     projection || _check_dropped(t, blocks, _copied_support_on)
     n = length(blocks)
     stridesin = _block_strides(size(t), map(b -> _group_length(b.dropped), blocks))
     tables = map(blocks, Hsouts) do b, Hs
-        _gather_table([(i + 1, (o + 1, 1), w) for (i, o, w) in b.linear], prod(dim, Hs), 1)
+        _gather_table(((i + 1, (o + 1, 1), w) for (i, o, w) in b.linear), prod(dim, Hs), 1)
     end
     placed(A, k) = reshape(_adapt_like(t, A), ntuple(d -> d == 2k - 1 ? size(A, 1) : d == 2k ? size(A, 2) : 1, 2n))
     LL = broadcast(+, 1, ntuple(k -> placed((tables[k][1] .- 1) .* stridesin[k], k), n)...)
@@ -753,8 +754,10 @@ end
         @test reshape(v, H => Hparts; alg) == reshape(v, H => Hparts)
         @test reshape(m, H => Hparts; alg) == reshape(m, H => Hparts)
         @test reshape(m, H => Hparts, H => reverse(Hparts); alg) == reshape(m, H => Hparts, H => reverse(Hparts))
-        T = reshape(m, H => Hparts)
-        @test reshape(T, Hparts => H; alg, projection = true) == reshape(T, Hparts => H; projection = true)
+        T = rand(ComplexF64, map(dim, Hparts)..., map(dim, Hparts)...)
+        @test reshape(T, Hparts => H, Hparts => H; alg, projection = true) == reshape(T, Hparts => H, Hparts => H; projection = true)
+        Tv = rand(ComplexF64, map(dim, Hparts)...)
+        @test reshape(Tv, Hparts => reverse(Hparts); alg) == reshape(Tv, Hparts => reverse(Hparts))
     end
     H = hilbert_space(f, 1:4, NumberConservation(2))
     @test_throws ArgumentError reshape(rand(dim(H1), dim(H2)), (H1, H2) => H; alg)

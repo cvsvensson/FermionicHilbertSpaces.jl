@@ -977,7 +977,7 @@ function _gather_table(entries, dK, nb)
     return L, W
 end
 # The r-th state of `H` that splits into the K-th state of `Hsub` and the b-th complement state
-_partial_trace_gather_table(splits, dsub, nb) = _gather_table([(J, (K, b), s) for (J, ss) in pairs(splits) for (K, b, s) in ss if !iszero(K)], dsub, nb)
+_partial_trace_gather_table(splits, dsub, nb) = _gather_table(((J, (K, b), s) for (J, ss) in pairs(splits) for (K, b, s) in ss if !iszero(K)), dsub, nb)
 
 _adapt_like(x, A) = copyto!(similar(x, eltype(A), size(A)), A)
 
