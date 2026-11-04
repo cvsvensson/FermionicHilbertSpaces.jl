@@ -17,3 +17,17 @@ JLArrays.allowscalar(false)
     end
     @test_throws ArgumentError partial_trace(JLArray(rand(dim(Hcons), dim(Hcons))), Hcons => hilbert_space(f, 1:2, NumberConservation(1)); alg)
 end
+
+@testset "reshape of GPU arrays" begin
+    alg = GatherPartialTraceAlg()
+    @fermions f
+    H1, H2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
+    H = hilbert_space(f, 1:4, NumberConservation(2))
+    for x in (rand(ComplexF64, dim(H)), rand(ComplexF64, dim(H), dim(H)))
+        T = reshape(JLArray(x), H => (H1, H2); alg)
+        @test T isa JLArray
+        @test Array(T) == reshape(x, H => (H1, H2))
+        @test Array(reshape(T, (H1, H2) => H; alg)) == x
+    end
+    @test_throws ArgumentError reshape(JLArray(rand(dim(H1), dim(H2))), (H1, H2) => H; alg)
+end
