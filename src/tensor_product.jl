@@ -715,13 +715,13 @@ _effective_dim(::UniformScaling, H) = dim(H)
 # Costs in units of one input-element visit by FullPartialTraceAlg, which visits the stored elements.
 # SubsystemPartialTraceAlg combines every subsystem state with every complement state, then visits
 # about d^2 ÷ dcomp terms, each reading the input (a binary search if `m` is sparse).
-function default_partial_trace_alg(m::Union{AbstractVecOrMat,UniformScaling}, Hsub, H, Hcomp)
+function default_partial_trace_alg(m::Union{AbstractVecOrMat, UniformScaling}, Hsub, H, Hcomp)
     dsub, d, dcomp = dim(Hsub), dim(H), dim(Hcomp)
     readcost = m isa AbstractSparseArray ? 20 : 5
     subcost = 16 * dsub * dcomp + readcost * (d^2 ÷ max(dcomp, 1))
     return subcost < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 end
-default_partial_trace_alg(m::Union{AbstractVecOrMat,UniformScaling}, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+default_partial_trace_alg(m::Union{AbstractVecOrMat, UniformScaling}, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 # Building a map, both algorithms emit the same terms, so only the states they visit differ:
 # every combination of a subsystem and a complement state, each costing about as much as
 # 8 pairs, or every pair of basis states of H.
