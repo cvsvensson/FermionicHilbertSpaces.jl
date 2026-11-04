@@ -14,7 +14,6 @@ using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Hermitian,
 using LowRankMatrices: LowRankMatrices, LowRankMatrix
 import SciMLOperators
 using FillArrays: Zeros, Fill, Eye
-using GPUArraysCore: AbstractGPUArray, AbstractGPUVector
 using OrderedCollections: OrderedDict
 using BitPermutations: BitPermutations, AbstractBitPermutation, BitPermutation, bitpermute
 using BitIntegers: UInt256, UInt512, UInt1024, @define_integers
