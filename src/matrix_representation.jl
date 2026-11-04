@@ -189,35 +189,32 @@ function apply_local_operators(op::NCMul, state, space, precomps; transpose)
 end
 
 struct TupleConcretizer end
-struct VecConcretizer end
 struct NoConcretizer end
 ___concretize(factors, ::TupleConcretizer) = Tuple(factors)
-# `map(identity, factors)` joins the element types one by one, which is slow, and products usually have one factor type
-function ___concretize(factors::AbstractVector, ::VecConcretizer)
-    T = isempty(factors) ? eltype(factors) : typeof(first(factors))
-    return all(f -> f isa T, factors) ? Vector{T}(factors) : map(identity, factors)
-end
-___concretize(factors::Tuple, ::VecConcretizer) = collect(factors)
 ___concretize(factors, ::NoConcretizer) = factors
 __concretize(x::NCMul, concr) = NCMul(x.coeff, ___concretize(x.factors, concr))
 __concretize(x::NCAdd, concr) = sum(__concretize(term, concr) for term in NCterms(x)) + x.coeff
 __concretize(x::ProductOperator, concr) = ProductOperator(map(op -> __concretize(op, concr), x.ops), x.spaces, x.inds)
 
 """
-    partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
+    partition_product(op::NCMul, bases, spaces)
 
-Split `op` into a `ProductOperator` with one `NCMul` per basis it acts on. The coefficient goes to the first of them.
+Split `op` into a `ProductOperator` with one `NCMul` per basis it acts on.
 """
-function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
-    factors = op.factors
-    group_inds = [_basis_index(symbolic_group(fac), bases) for fac in factors]
+function partition_product(op::NCMul, bases, spaces)
+    parts = NonCommutativeProducts.split_by_group(op)
+    group_inds = map(((_, part),) -> _basis_index(symbolic_group(first(part.factors)), bases), parts)
     any(iszero, group_inds) && throw(ArgumentError("Not all factors of the operator belong to a basis of the provided space."))
     inds = sort!(unique(group_inds))
-    ops = ntuple(length(inds)) do k
-        v = [fac for (fac, i) in zip(factors, group_inds) if i == inds[k]]
-        NCMul(k == 1 ? op.coeff : one(op.coeff), ___concretize(v, concr))
-    end
+    ops = ntuple(k -> _part_on_basis(parts, group_inds, inds[k]), length(inds))
     return ProductOperator(ops, spaces[inds], inds)
+end
+# A product that isn't sorted can have several runs of factors on one basis. Operators on different bases commute, so
+# the runs can be joined.
+function _part_on_basis(parts, group_inds, ind)
+    runs = [last(part) for (part, i) in zip(parts, group_inds) if i == ind]
+    length(runs) == 1 && return only(runs)
+    return NCMul(prod(run -> run.coeff, runs), reduce(vcat, [run.factors for run in runs]))
 end
 _basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
 
@@ -352,12 +349,10 @@ end
 function _span_matrix(prodop, span, spaces, repr; kwargs...)
     matrices = map(span) do n
         m = findfirst(==(n), prodop.inds)
-        isnothing(m) ? _identity(dim(spaces[n]), repr) : _term_matrix_representation(prodop.ops[m], spaces[n], repr, NoChunking(); kwargs...)
+        _term_matrix_representation(isnothing(m) ? missing : prodop.ops[m], spaces[n], repr, NoChunking(); kwargs...)
     end
-    return foldl(kron, Iterators.reverse(matrices))
+    return _kron_groups(matrices, prodop.inds .- (first(span) - 1), repr)
 end
-_identity(d, ::EagerSparseRepr) = sparse(I(d))
-_identity(d, ::EagerDenseRepr) = Matrix{Bool}(I, d, d)
 function _embed_span(core, span, spaces, repr)
     r = prod(n -> dim(spaces[n]), 1:(first(span) - 1); init = 1)
     l = prod(n -> dim(spaces[n]), (last(span) + 1):length(spaces); init = 1)
@@ -365,7 +360,10 @@ function _embed_span(core, span, spaces, repr)
     return _embed(core, l, r, repr)
 end
 _embed(core, l, r, ::EagerSparseRepr) = _kron_identities(convert(SparseMatrixCSC, core), l, r, eltype(core))
-_embed(core, l, r, ::EagerDenseRepr) = kron(Matrix{Bool}(I, l, l), core, Matrix{Bool}(I, r, r))
+function _embed(core, l, r, ::EagerDenseRepr)
+    left = l == 1 ? core : kron(Eye{Bool}(l), core)
+    return r == 1 ? left : kron(left, Eye{Bool}(r))
+end
 # `summed + coeff * I`, with the element type of `summed` promoted with that of `coeff * I` also when `coeff` is zero
 function _add_identity_term(summed, coeff, bases, space, repr)
     identity_term = convert(_repr_eltype(typeof(coeff), repr), coeff) * _matrix_representation(missing, bases, space, repr, NoChunking())

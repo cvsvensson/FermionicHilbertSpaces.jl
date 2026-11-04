@@ -15,11 +15,13 @@ _state_label_atomic(s::NambuState, H::_FermionModeSpace) = (s.hole ? "h" : "p") 
 
 # Ψ' m Ψ == Ψ' m_ph Ψ + tr(m) / 2 by the anticommutation relations, since the vector of adjoints Ψ' equals τx Ψ, and
 # m_ph = -τx transpose(m_ph) τx is the unique particle-hole symmetric representative.
-function normal_order_to_bdg(m::AbstractMatrix)
+normal_order_to_bdg(m::AbstractMatrix) = (m + ph_conjugate(m)) / 2
+function ph_conjugate(m)
     n = size(m, 1) ÷ 2
     swap = [(n + 1):2n; 1:n]
-    return (m - permutedims(m)[swap, swap]) / 2
+    return -permutedims(m)[swap, swap]
 end
+is_ph_symmetric(m; kwargs...) = iseven(size(m, 1)) && isapprox(m, ph_conjugate(m); kwargs...)
 
 struct BdGHilbertSpace{H}
     parent::H
@@ -279,7 +281,7 @@ BdGEigen() = BdGEigen(nothing)
 
 function LinearAlgebra.eigen(A::AbstractMatrix, alg::BdGEigen)
     rtol = sqrt(eps(real(float(eltype(A)))))
-    isapprox(A, A'; rtol) || throw(ArgumentError("BdGEigen requires a Hermitian BdG matrix, the representation of a hermitian operator."))
+    isapprox(A, A'; rtol) && is_ph_symmetric(A; rtol) || throw(ArgumentError("BdGEigen requires a Hermitian, particle-hole symmetric BdG matrix, the representation of a hermitian operator."))
     F = eigen(Hermitian(Matrix(A)))
     cutoff = something(alg.cutoff, size(A, 1) * eps(eltype(F.values)))
     tol = cutoff * maximum(abs, F.values; init = zero(eltype(F.values)))
@@ -429,6 +431,8 @@ end
     # Zero modes at a large energy scale
     test_bdg_eigen(1.0e8 * representation(f[1]' * f[2] + f[1]' * f[2]' + f[3]' * f[4] + f[3]' * f[4]' + hc, hilbert_space(f, 1:4, BdG()), :dense))
     @test_throws ArgumentError eigen([0 1; 0 0], BdGEigen())
+    @test_throws ArgumentError eigen([1.0 0; 0 2], BdGEigen())
+    @test_throws ArgumentError eigen(Matrix(1.0I, 3, 3), BdGEigen())
 end
 
 # The operators Ψ_j^† that create the basis states of `H`, such that `representation(Σ_ab M_ab Ψ_a^† Ψ_b, H) == M`

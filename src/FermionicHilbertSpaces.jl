@@ -73,6 +73,7 @@ operator type subtypes it, registers itself with `NonCommutativeProducts.@nc` an
 [`apply_local_operator`](@ref) and [`symbolic_group`](@ref).
 """
 abstract type AbstractSym end
+NonCommutativeProducts.atom_group(op::AbstractSym) = symbolic_group(op)
 
 # The order of labels, tags and groups. Values are ranked by kind, and those of one kind are compared with `isless`.
 # Kinds depend only on the code, so the order is the same in every session.
@@ -188,6 +189,22 @@ PrecompileTools.@setup_workload begin
         Hs = hilbert_space(s)
         H = tensor_product(H2, Hb, Hs)
         mat = representation(b'b + 1.0 * s[:x] * f[3], H)
+        # Small chains, with fermions covering each common coefficient type.
+        hamf = sum(f[n + 1]'f[n] + hc for n in 1:2) + sum(f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
+        Hf = hilbert_space(f, 1:3, NumberConservation())
+        representation(hamf, Hf)
+        representation(hamf, sector(1, Hf), :dense)
+        hamf = sum(0.5 * f[n + 1]'f[n] + hc for n in 1:2) + sum(0.5 * f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
+        representation(hamf, Hf)
+        representation(hamf, sector(1, Hf), :dense)
+        hamf = sum((0.5 + 0.5im) * f[n + 1]'f[n] + hc for n in 1:2) + sum((0.5 + 0.5im) * f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
+        representation(hamf, Hf)
+        representation(hamf, sector(1, Hf), :dense)
+        @spins S 1 // 2
+        representation(sum(S[k][:]'S[k + 1][:] for k in 1:2), hilbert_space(S, 1:3))
+        @bosons bs
+        hamb = sum(bs[k]'bs[k + 1] + hc for k in 1:1) + sum(bs[k]'bs[k] * bs[k]'bs[k] for k in 1:2)
+        representation(hamb, hilbert_space(bs, 1:2, 3))
     end
 end
 
