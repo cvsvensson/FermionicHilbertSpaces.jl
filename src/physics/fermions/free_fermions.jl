@@ -85,6 +85,7 @@ module FreeFermions
 end
 
 @testitem "Kets of single-particle and BdG spaces" begin
+    using FermionicHilbertSpaces: vector_representation
     using FermionicHilbertSpaces.FreeFermions
     using LinearAlgebra
     @fermions f
