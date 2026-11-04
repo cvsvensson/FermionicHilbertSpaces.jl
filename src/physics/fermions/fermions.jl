@@ -1,6 +1,6 @@
 
 # `modes` and `mode_ordering` are type parameters so that a device copy can replace them by what the kernels read.
-struct FermionicSpace{F,L,FG<:FermionicGroup,M,O} <: AbstractGroupedHilbertSpace{F}
+struct FermionicSpace{F, L, FG <: FermionicGroup, M, O} <: AbstractGroupedHilbertSpace{F}
     modes::M
     mode_ordering::O
     group::FG
@@ -8,9 +8,9 @@ struct FermionicSpace{F,L,FG<:FermionicGroup,M,O} <: AbstractGroupedHilbertSpace
         modes = map(_normalize_sym, _modes)
         mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("The modes of a fermionic group must be distinct, got $modes."))
-        new{F,L,FG,Vector{L},OrderedDict{L,Int}}(modes, mode_ordering, group)
+        return new{F, L, FG, Vector{L}, OrderedDict{L, Int}}(modes, mode_ordering, group)
     end
-    FermionicSpace{F,L,FG,M,O}(modes, mode_ordering, group) where {F,L,FG,M,O} = new{F,L,FG,M,O}(modes, mode_ordering, group)
+    FermionicSpace{F, L, FG, M, O}(modes, mode_ordering, group) where {F, L, FG, M, O} = new{F, L, FG, M, O}(modes, mode_ordering, group)
 end
 function FermionicSpace(factors::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F,L<:FermionicSpace}
     all(c -> group_id(c) == group, factors) || throw(ArgumentError("All factors must belong to the group `$group`."))

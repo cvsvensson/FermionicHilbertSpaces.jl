@@ -279,13 +279,13 @@ end
 end
 
 # `op` is a Symbol, except in device copies of a SpinSym, which cannot hold one and store a Char from `_spin_op_char`.
-struct SpinSym{B,O} <: AbstractSym
+struct SpinSym{B, O} <: AbstractSym
     op::O
     basis::B
     exponent::Int
     function SpinSym{B}(op, basis::B, exponent) where {B}
         #bypass any checks for internal use when we know the input is valid
-        return new{B,typeof(op)}(op, basis, exponent)
+        return new{B, typeof(op)}(op, basis, exponent)
     end
 end
 _spin_op_char(op::Symbol) = op === :z ? 'z' : op === :+ ? '+' : '-'

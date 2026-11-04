@@ -21,7 +21,7 @@ Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
 # ProductSpaces consists of a list of groups (stored as `factors`) and their atoms, in group-major order
 # `atoms` and `atom_index` are type parameters so that a device copy can drop them.
-struct ProductSpace{B,C,AS,T,LI,CI,AI} <: AbstractProductHilbertSpace{B}
+struct ProductSpace{B, C, AS, T, LI, CI, AI} <: AbstractProductHilbertSpace{B}
     factors::C
     atoms::AS
     atom_index::AI # atomic_id => position in atoms. Only used for lookups, so a Dict{Any,Int}
@@ -39,10 +39,10 @@ struct ProductSpace{B,C,AS,T,LI,CI,AI} <: AbstractProductHilbertSpace{B}
         cartinds = CartesianIndices(map(dim, factors))
         LI = typeof(lininds)
         CI = typeof(cartinds)
-        new{B,C,typeof(atoms),typeof(fast_path),LI,CI,typeof(atom_index)}(factors, atoms, atom_index, fast_path, lininds, cartinds)
+        return new{B, C, typeof(atoms), typeof(fast_path), LI, CI, typeof(atom_index)}(factors, atoms, atom_index, fast_path, lininds, cartinds)
     end
-    ProductSpace{B,C,AS,T,LI,CI,AI}(factors, atoms, atom_index, fast_path, lininds, cartinds) where {B,C,AS,T,LI,CI,AI} =
-        new{B,C,AS,T,LI,CI,AI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
+    ProductSpace{B, C, AS, T, LI, CI, AI}(factors, atoms, atom_index, fast_path, lininds, cartinds) where {B, C, AS, T, LI, CI, AI} =
+        new{B, C, AS, T, LI, CI, AI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
 end
 fast_path(space::ProductSpace) = space.fast_path
 isconstrained(H::ProductSpace) = false
@@ -304,12 +304,12 @@ function partial_transpose_phase_factor(state1, state2, space::ProductSpace)
     prod(map(partial_transpose_phase_factor, state1.states, state2.states, space.factors); init=1)
 end
 
-struct ProductOperator{C,O,S,I}
+struct ProductOperator{C, O, S, I}
     ops::O
     spaces::S
     inds::I # indices of active spaces in full space, a Vector{Int} except in device copies
-    function ProductOperator{C}(ops::O, spaces::S, inds::I) where {C,O,S,I}
-        new{C,O,S,I}(ops, spaces, inds)
+    function ProductOperator{C}(ops::O, spaces::S, inds::I) where {C, O, S, I}
+        return new{C, O, S, I}(ops, spaces, inds)
     end
 end
 function ProductOperator(ops::O, spaces::S, inds::Vector{Int}) where {O,S}
