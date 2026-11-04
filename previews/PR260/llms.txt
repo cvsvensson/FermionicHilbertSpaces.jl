@@ -21,6 +21,7 @@ Typical workflow: define symbols with `@fermions`/`@bosons`/`@spins`, build a sp
 - [Braiding Majorana zero modes](literate_output/braiding/)
 - [Spatial symmetries](literate_output/translation_symmetry/)
 - [Mean-field](literate_output/mean_field/)
+- [Mean-field at finite temperature](literate_output/mean_field_thermal/)
 
 ## Guides
 
