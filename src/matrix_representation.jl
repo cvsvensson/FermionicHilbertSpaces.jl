@@ -360,15 +360,10 @@ end
 function _split_diagonals(sums, N)
     isempty(sums) && return []
     diagonal = zeros(mapreduce(eltype ∘ first, promote_type, sums), N)
-    foreach(((A, r),) -> _add_diagonal!(diagonal, A, r), sums)
-    return [[KronTerm(((A - Diagonal(diag(A)), r),)) for (A, r) in sums]; KronTerm(((sparse(Diagonal(diagonal)), 1),))]
-end
-function _add_diagonal!(diagonal, A, r)
-    d = diag(A)
-    return _foldl_columns(diagonal, ((A, r),), eachindex(diagonal)) do diagonal, n, (c,)
-        diagonal[n] += d[c + 1]
-        return diagonal
+    for (A, r) in sums
+        reshape(diagonal, r, size(A, 1), :) .+= transpose(Vector(diag(A)))
     end
+    return [[KronTerm(((A - Diagonal(diag(A)), r),)) for (A, r) in sums]; KronTerm(((sparse(Diagonal(diagonal)), 1),))]
 end
 # The term kron(…, A_2, I, A_1, I) of a sum, with identities on the groups that no factor acts on. Each pair `(A, r)` in
 # the tuple `factors` is a square matrix on one group or a range of groups, and the product `r` of the dimensions of the
