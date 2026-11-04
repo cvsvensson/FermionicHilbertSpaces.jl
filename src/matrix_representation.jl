@@ -213,7 +213,7 @@ function _part_on_basis(parts, group_inds, ind)
 end
 _basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
 
-function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr, chunking; kwargs...)
+function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr,LazyRepr}, chunking; kwargs...)
     spaces = groups(space)
     length(spaces) == 1 && return _term_matrix_representation(op, only(spaces), repr, chunking; kwargs...)
     prodop = partition_product(op, bases, spaces)
@@ -452,8 +452,8 @@ function _matrix_representation_single_space(op::NCAdd, space, repr, chunking; k
     _terms_matrix(_repr_eltype(mat_eltype(op), repr), NCterms(op), op.coeff, space, repr, chunking; kwargs...)
 end
 
-# The matrix of `sum(terms) + coeff * I` with element type `T`. A new format builds sums of terms on any space by
-# adding a method here.
+# The matrix of `sum(terms) + coeff * I` with element type `T`. A new format builds sums of terms and single terms on
+# any space by adding a method here.
 _terms_matrix(::Type{T}, terms, coeff, space, repr::EagerDenseRepr, ::NoChunking; kwargs...) where {T} = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 _terms_matrix(::Type{T}, terms, coeff, space::Axes, repr::EagerSparseRepr, ::NoChunking; kwargs...) where {T} = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 
@@ -466,6 +466,7 @@ function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) wh
     return finalize!(accumulator, space)
 end
 
+_term_matrix_representation(op, H, repr, chunking; kwargs...) = _terms_matrix(_repr_eltype(mat_eltype(op), repr), (op,), 0, H, repr, chunking; kwargs...)
 function _term_matrix_representation(op, H, repr::Union{EagerSparseRepr, EagerDenseRepr}, chunking; kwargs...)
     _accumulator = matrix_accumulator(op, H, repr)
     accumulator = operator_indices_and_amplitudes!(_accumulator, op, H; kwargs...)
@@ -958,6 +959,8 @@ end
     @test representation(op, H, TermsFormat()) == representation(op, H)
     opf = f[1]' * f[2] + hc + 2
     @test representation(opf, Hf, TermsFormat()) == representation(opf, Hf)
+    @test representation(f[1], Hf, TermsFormat()) == representation(f[1], Hf)
+    @test representation(f[1], H, TermsFormat()) == representation(f[1], H)
 end
 
 @testitem "Scheduler extension correctness" begin
