@@ -655,7 +655,7 @@ _convert_repr_eltype(M, ::EagerDenseRepr{Missing}) = Matrix(M)
 _convert_repr_eltype(M, ::EagerSparseRepr{T}) where T = SparseArrays.sparse(T.(M))
 _convert_repr_eltype(M, ::EagerDenseRepr{T}) where T = Matrix{T}(M)
 _convert_repr_eltype(M, ::Union{LazyRepr, PartitionedSparseRepr}) = M
-_convert_repr_eltype(M, repr) = _convert_repr_eltype(M, _canonicalize_repr(repr))
+_convert_repr_eltype(M, repr::Type) = _convert_repr_eltype(M, _canonicalize_repr(repr))
 _convert_repr_eltype(M, ::Type{A}) where {A <: SparseArrays.AbstractSparseArray} = SparseArrays.sparse(_convert_repr_eltype(M, _canonicalize_repr(A)))
 
 # A concrete element type fixes the matrix type, also where inference cannot follow the assembly
@@ -950,6 +950,14 @@ end
     @test representation(op, H, TermsFormat()) == representation(op, H)
     opf = f[1]' * f[2] + hc + 2
     @test representation(opf, Hf, TermsFormat()) == representation(opf, Hf)
+end
+
+@testitem "Format without a method for the identity" begin
+    import FermionicHilbertSpaces: _canonicalize_repr
+    struct BareFormat end
+    _canonicalize_repr(repr::BareFormat) = repr
+    @fermions f
+    @test_throws MethodError representation(2, hilbert_space(f, 1:2), BareFormat())
 end
 
 @testitem "Scheduler extension correctness" begin
