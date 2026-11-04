@@ -68,6 +68,10 @@ Create a symbolic spin basis `s` for constructing spin operators such as
 The operators are spin operators, not Pauli matrices: `s[:z]` has eigenvalues `-J, …, J`, so
 for spin 1/2 `s[:x]` is `σˣ/2`, and `s[:±] = s[:x] ± i s[:y]`. The basis states of
 `hilbert_space(s, J)` are ordered by increasing `s[:z]` eigenvalue, starting at `-J`.
+
+For `J ≥ 1`, `==` and `iszero` on symbolic expressions compare their stored form, which is not
+unique, so equal operators can compare unequal: `iszero(s[:z]*s[:+]^2 - s[:+]^2)` is `false` for
+`J = 1`. Matrix representations are exact.
 """
 macro spin(x)
     Expr(:block, :($(esc(x)) = SymbolicSpinBasis($(Expr(:quote, x)))),
@@ -108,7 +112,7 @@ Base.:(==)(a::SpinState, b::SpinState) = a.m == b.m
 Base.isless(a::SpinState, b::SpinState) = a.m < b.m
 Base.hash(x::SpinState, h::UInt) = hash(twice(x.m), h)
 
-_no_spin_count() = throw(ArgumentError("Spins have no particle number or fermion parity, so `NumberConservation` and `ParityConservation` do not apply to spin spaces. To count spin excitations, use `FermionicHilbertSpaces.AdditiveConstraint` with a map such as `s -> s.m + J`."))
+_no_spin_count() = throw(ArgumentError("Spins have no particle number or fermion parity, so `NumberConservation` and `ParityConservation` do not apply to spin spaces. To count spin excitations, use `AdditiveConstraint` with a map such as `s -> s.m + J`."))
 particle_number(::SpinState) = _no_spin_count()
 parity(::SpinState) = _no_spin_count()
 
