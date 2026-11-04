@@ -44,7 +44,7 @@ function _collect_block!(block, capacity, precomps, coeff, space, incols, offset
     extra = iszero(coeff) ? 0 : length(incols)
     known = _known_length(precomps, incols)
     capacity = max(capacity, isnothing(known) ? _sparse_length_guess(length(precomps), length(incols)) : known + extra)
-    foreach(v -> sizehint!(v, capacity; shrink=false), block)
+    foreach(v -> sizehint!(v, capacity; shrink = false), block)
     for (k, (term, precomp)) in enumerate(precomps)
         chunked_operator_indices_and_amplitudes_generic!(block, term, space, precomp, incols, offset; kwargs...)
         isnothing(known) && (capacity = _reserve_remaining!(block, capacity, k, length(precomps), extra))
