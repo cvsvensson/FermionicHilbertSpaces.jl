@@ -75,6 +75,9 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
     size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
     _check_no_alias(mout, m)
+    if !(m isa AbstractSparseMatrix) && _is_full_fock_partial_transpose(H, Hout, mapper_in)
+        return _fock_partial_transpose!(mout, m, nbr_of_modes(H), first(mapper_in.fermionpositions); phase_factors)
+    end
     fill!(mout, zero(eltype(mout)))
     splits = _split_all_states(H, mapper_in)
     _foreach_partial_transpose_term(tensor_product_iterator(m, H), H, Hsub, Hout, splits, mapper_out; phase_factors, projection) do J1, J2, K1, K2, v
@@ -82,6 +85,48 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     end
     return mout
 end
+_is_full_fock_partial_transpose(H, Hout, mapper) = false
+
+"""
+    _fock_partial_transpose!(mout, m, N, A; phase_factors=true)
+
+Partial transpose on the modes `A` of the full Fock space of `N` modes, as a `permutedims` of
+`m` and broadcasts with sign vectors of length `2^N`, so it runs on any array type.
+"""
+function _fock_partial_transpose!(mout, m, N, A; phase_factors = true)
+    dims, perm = _fock_partial_transpose_permutation(N, A)
+    phase_factors || return (permutedims!(reshape(mout, dims), reshape(m, dims), perm); mout)
+    # The phase of |ν⟩⟨ν′| ↦ |μ⟩⟨μ′| is i^{p_A(ν) ⊻ p_A(ν′)} a(ν) a(ν′) a(μ) a(μ′), where p_A is
+    # the parity of A and a(f) = (-1)^{#{i ∈ A, j ∉ A, i < j : f_i = f_j = 1}}.
+    maskA = sum(i -> 1 << (i - 1), A; init = 0)
+    maskB = (1 << N - 1) ⊻ maskA
+    states = 0:(1 << N - 1)
+    a = _to_device(m, [_pair_parity(f & maskB, f & maskA) ? -1 : 1 for f in states])
+    pA = _to_device(m, [isodd(count_ones(f & maskA)) for f in states])
+    permutedims!(reshape(mout, dims), reshape(a .* m .* transpose(a), dims), perm)
+    mout .*= a .* ifelse.(pA .== transpose(pA), 1 + 0im, 0 + 1im) .* transpose(a)
+    return mout
+end
+_to_device(m, v::AbstractVector) = copyto!(similar(m, eltype(v), length(v)), v)
+
+# Each run of consecutive modes on the same side of the cut becomes one dimension of size 2^length.
+function _fock_partial_transpose_permutation(N, A)
+    runs = Int[]
+    inA = Bool[]
+    for k in 1:N
+        if !isempty(inA) && last(inA) == (k in A)
+            runs[end] += 1
+        else
+            push!(runs, 1)
+            push!(inA, k in A)
+        end
+    end
+    n = length(runs)
+    dims = Tuple(2 .^ [runs; runs])
+    perm = [(inA[k] ? k + n : k for k in 1:n)..., (inA[k] ? k : k + n for k in 1:n)...]
+    return dims, perm
+end
+
 function partial_transpose!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), kwargs...)
     partial_transpose!(mout, m, H, Hsub, complement, H; kwargs...)
 end
@@ -127,7 +172,7 @@ function _partial_transpose(m::AbstractMatrix, H, Hsub, Hout;
     mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
     mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
     T = promote_type(eltype(m), partial_transpose_phase_factor_eltype(H))
-    mout = zeros(T, dim(Hout), dim(Hout))
+    mout = m isa AbstractSparseMatrix ? zeros(T, dim(Hout), dim(Hout)) : similar(m, T, dim(Hout), dim(Hout))
     return partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection)
 end
 
@@ -354,6 +399,16 @@ end
     @test pt(m) ≈ partial_transpose(m, H => Hfull, HA)
     @test size(pt(m)) == (dim(Hfull), dim(Hfull))
     @test partial_transpose(H => Hfull, HA; phase_factors=false)(m) ≈ partial_transpose(m, H => Hfull, HA; phase_factors=false)
+end
+
+@testitem "Partial transpose: dense full Fock space matches the sparse map" begin
+    @fermions f
+    H = hilbert_space(f, 1:5)
+    m = rand(ComplexF64, dim(H), dim(H))
+    for A in ([1, 2], [2, 4, 5], [3], 1:5), phase_factors in (true, false)
+        HA = hilbert_space(f, A)
+        @test partial_transpose(m, H, HA; phase_factors) ≈ partial_transpose(H, HA; phase_factors)(m)
+    end
 end
 
 @testitem "Partial transpose: bosons, spins, and Majoranas" begin
