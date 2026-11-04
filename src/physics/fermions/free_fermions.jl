@@ -11,13 +11,13 @@ module FreeFermions
     using ..FermionicHilbertSpaces: FermionicHilbertSpaces, AbstractFockState, AbstractHilbertSpace,
         EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, MajoranaSym, NoChunking, SymbolicFermionBasis,
         SymbolicMajoranaBasis,
-        _FermionModeSpace, _canonicalize_repr, _xlogx, _zero_matrix, exchange_phase, finalize!,
+    _FermionModeSpace, _canonicalize_repr, _xlogx, _zero_matrix, exchange_phase, finalize!,
         matrix_accumulator, mode_position, push_inds_amps!, state_index
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,
         _state_label_atomic, apply_local_operators, basisstate, basisstates, dim, von_neumann_entropy, expectation,
         hilbert_space, matrix_representation, mode_ordering, modes, partial_trace, representation
     using LinearAlgebra: LinearAlgebra, Diagonal, Eigen, Hermitian, Symmetric, UniformScaling, I,
-        det, eigen, eigvals, issymmetric, normalize, svd
+    det, eigen, eigvals, issymmetric, normalize, svd
     using NonCommutativeProducts: NonCommutativeProducts, NCAdd, NCMul, NCterms
     using OrderedCollections: OrderedDict
 
@@ -56,8 +56,8 @@ module FreeFermions
     # operator if `number_conserving`
     _is_quadratic_fermion_operator(op, number_conserving) = _is_quadratic_operator(op, (a, b) -> a isa FermionSym && b isa FermionSym && (!number_conserving || a.creation != b.creation))
 
-    _check_size(G, H) = size(G) == (dim(H), dim(H)) ||
-        throw(DimensionMismatch("The correlation matrix has size $(size(G)), but the space has dimension $(dim(H))."))
+_check_size(G, H) = size(G) == (dim(H), dim(H)) ||
+    throw(DimensionMismatch("The correlation matrix has size $(size(G)), but the space has dimension $(dim(H))."))
 
     function _mode_positions(H, Hsub)
         positions = [mode_position(m, H) for m in modes(Hsub)]
