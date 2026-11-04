@@ -375,7 +375,7 @@ end
 # without a method of its own, `_terms_matrix` builds the sum of all terms.
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the type of `coeff`.
-function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split=10, kwargs...)
+function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split = 10, kwargs...)
     spaces = groups(_input_space(space))
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
     Tterms = _repr_eltype(mapreduce(mat_eltype, promote_type, prodops), repr)
@@ -459,7 +459,7 @@ end
 
 # The matrix of `sum(terms) + coeff * I` with element type `T`. A new format builds sums of terms on any space by
 # adding a method here.
-_terms_matrix(::Type{T}, terms, coeff, space, repr::EagerDenseRepr, ::NoChunking; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
+_terms_matrix(::Type{T}, terms, coeff, space, repr::EagerDenseRepr, ::NoChunking; kwargs...) where {T} = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 _terms_matrix(::Type{T}, terms, coeff, space::Axes, repr::EagerSparseRepr, ::NoChunking; kwargs...) where {T} = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 
 function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T
@@ -945,7 +945,7 @@ end
     import FermionicHilbertSpaces: _canonicalize_repr, _terms_matrix, EagerSparseRepr
     struct TermsFormat end
     _canonicalize_repr(repr::TermsFormat) = repr
-    _terms_matrix(::Type{T}, terms, coeff, space, ::TermsFormat, chunking; kwargs...) where T =
+    _terms_matrix(::Type{T}, terms, coeff, space, ::TermsFormat, chunking; kwargs...) where {T} =
         _terms_matrix(T, terms, coeff, space, EagerSparseRepr(), chunking; kwargs...)
     @fermions f
     @boson b
