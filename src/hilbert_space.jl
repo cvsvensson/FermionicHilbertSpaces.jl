@@ -116,7 +116,7 @@ end
 """
     dim(H)
 
-Return the Hilbert-space dimension of `H`, i.e. the number of basis states. Throws an `OverflowError` if it does not fit in an integer of the space's index type.
+Return the Hilbert-space dimension of `H`, i.e. the number of basis states. Throws an `OverflowError` if the dimension overflows its integer type.
 """
 dim(H::AbstractHilbertSpace) = Int(length(basisstates(H)))
 
