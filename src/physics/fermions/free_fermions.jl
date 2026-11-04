@@ -11,14 +11,14 @@ module FreeFermions
     using ..FermionicHilbertSpaces: FermionicHilbertSpaces, AbstractFockState, AbstractHilbertSpace,
         EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, MajoranaSym, NoChunking, SymbolicFermionBasis,
         SymbolicMajoranaBasis,
-        _FermionModeSpace, _canonicalize_repr, _matrix_format, _operator_type, _repr_eltype, _zero_matrix, exchange_phase, finalize!,
+        _FermionModeSpace, _canonicalize_repr, _matrix_format, _operator_type, _repr_eltype, _xlogx, _zero_matrix, exchange_phase, finalize!,
         matrix_accumulator, mode_position, push_inds_amps!, state_index
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,
         _state_label_atomic, _unwrap_space, apply_local_operators, atom_ids, basisstate, basisstates, dim, von_neumann_entropy, expectation,
         group_id, hilbert_space, interpret_state, matrix_representation, mode_ordering, modes, partial_trace, representation,
         statetype, vector_representation
     using LinearAlgebra: LinearAlgebra, Diagonal, Eigen, Hermitian, Symmetric, UniformScaling, I,
-        det, eigen, issymmetric, normalize, svd
+    det, eigen, eigvals, issymmetric, normalize, svd
     using NonCommutativeProducts: NonCommutativeProducts, NCAdd, NCMul, NCterms
     using OrderedCollections: OrderedDict
 
@@ -60,6 +60,9 @@ end
     # operator if `number_conserving`
     _is_quadratic_fermion_operator(op, number_conserving) = _is_quadratic_operator(op, (a, b) -> a isa FermionSym && b isa FermionSym && (!number_conserving || a.creation != b.creation))
 
+_check_size(G, H) = size(G) == (dim(H), dim(H)) ||
+    throw(DimensionMismatch("The correlation matrix has size $(size(G)), but the space has dimension $(dim(H))."))
+
     function _mode_positions(H, Hsub)
         positions = [mode_position(m, H) for m in modes(Hsub)]
         any(iszero, positions) && throw(ArgumentError("The modes of $Hsub are not a subset of the modes of $H."))
@@ -95,9 +98,9 @@ end
     for H in (hilbert_space(f, 1:3, SingleParticle()), hilbert_space(f, 1:3, BdG()))
         basis = Matrix(I, dim(H), dim(H))
         kets = Kets(H)
-        @test all(i -> representation(Ket(basisstate(i, H), H), H, :dense) == basis[:, i], 1:dim(H))
-        @test representation(kets[1] + 2 * kets[2], H, :dense) == basis[:, 1] + 2 * basis[:, 2]
-        @test vector_representation(kets[2]', H, :dense) == transpose(basis[:, 2])
+        @test all(i -> representation(Ket(basisstate(i, H), H), H, Vector) == basis[:, i], 1:dim(H))
+        @test representation(kets[1] + 2 * kets[2], H, Vector) == basis[:, 1] + 2 * basis[:, 2]
+        @test vector_representation(kets[2]', H, Vector) == transpose(basis[:, 2])
         @test kets[2]' * (kets[1] + 3 * kets[2]) == 3
     end
     Hsp = hilbert_space(f, 1:3, SingleParticle())
