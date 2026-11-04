@@ -77,7 +77,7 @@ function Base.isless(a::FermionSym, b::FermionSym)
     if tags(a.basis) !== tags(b.basis)
         tags(a.basis) < tags(b.basis)
     elseif a.creation == b.creation
-        a.basis.name == b.basis.name && return a.label < b.label
+        a.basis.name == b.basis.name && return _order_isless(a.label, b.label)
         a.basis.name < b.basis.name
     else
         a.creation > b.creation
@@ -236,4 +236,14 @@ end
     for i in eachindex(ops), j in eachindex(ops), k in eachindex(ops)
         @test representation(ops[i] * ops[j] * ops[k], H) ≈ mats[i] * mats[j] * mats[k]
     end
+end
+
+@testitem "Products of modes with mixed label types" begin
+    @fermions f
+    @majoranas γ
+    @test iszero(f[1] * f[:a] + f[:a] * f[1])
+    @test iszero(f[1] * f[1, :a] + f[1, :a] * f[1])
+    @test iszero(γ[1] * γ[:a] + γ[:a] * γ[1])
+    H = hilbert_space(f, [1, :a])
+    @test representation(f[1] * f[:a], H) == representation(f[1], H) * representation(f[:a], H)
 end
