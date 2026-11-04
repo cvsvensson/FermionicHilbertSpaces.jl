@@ -21,8 +21,9 @@ rewrap(H::ConstrainedSpace, parent) = ConstrainedSpace(parent, H.states, H.index
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
 constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}) = constrain_space(space, NoSymmetry(), states)
 
-constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, states)
-function constrain_space(space, constraint::AbstractConstraint, states=basisstates(space))
+constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, _states_of(space, states))
+function constrain_space(space, constraint::AbstractConstraint, labels = basisstates(space))
+    states = _states_of(space, labels)
     if supports_sector_grouping(constraint)
         f = sector_function(constraint, space)
         return sector_space(space, states, f, constraint)
@@ -32,6 +33,18 @@ function constrain_space(space, constraint::AbstractConstraint, states=basisstat
         return ConstrainedSpace(space, filtered_states; constraint)
     else
         throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
+    end
+end
+# Labels become states as in `Ket` and `state_index`, but a basis state or a value of the state type is kept as is,
+# so that a space whose states are strings is not parsed. States outside a subspace are dropped by `unnest`.
+_states_of(space, states::BasisStates) = states
+function _states_of(space, labels)
+    return map(labels) do label
+        # A subspace can store basis states of another type than its parent, which the parent cannot look up.
+        label isa AbstractBasisState && !(label isa statetype(space)) && return label
+        state = label isa statetype(space) ? label : interpret_state(label, space)
+        space isa AbstractSubspace || !iszero(state_index(state, space)) || throw(ArgumentError("The state `$label` is not a basis state of the space."))
+        state
     end
 end
 
@@ -186,6 +199,30 @@ same_state_kind(state::ProductState, ::Type{ProductState{S}}) where {S<:Tuple} =
     one_particle = Set(basisstates(constrain_space(H, NumberConservation(1))))
     @test basisstates(Hc) == filter(in(one_particle), states)
     @test_throws MethodError constrain_space(H, states, NumberConservation(1))
+end
+
+@testitem "constrain_space reads labels unless they are states" begin
+    using LinearAlgebra
+    struct Level
+        n::Int
+    end
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    Hs = constrain_space(H, ["100", "010"])
+    @test basisstates(Hs) == [Ket("100", H).ket, Ket("010", H).ket]
+    @test representation(f[1]' * f[2], Hs, :dense) == [0 1; 0 0]
+    @test partial_trace(Diagonal([1, 2]), Hs => hilbert_space(f, 1:1)) == Diagonal([2, 1])
+
+    Hg = GenericHilbertSpace(:a, ["up", "down", "x"])
+    @test basisstates(constrain_space(Hg, ["x", "up"])) == ["x", "up"]
+    P = tensor_product(Hg, hilbert_space(f, 1:2))
+    Pc = constrain_space(P, [("up", "10"), ("x", "01")])
+    @test partial_trace(Diagonal([1, 2]), Pc => Hg) == Diagonal([1, 0, 2])
+
+    Hl = GenericHilbertSpace(:l, Level.(1:3))
+    @test basisstates(constrain_space(Hl, [Level(3), Level(1)])) == [Level(3), Level(1)]
+    @test_throws ArgumentError constrain_space(Hl, [Level(4)])
+    @test_throws ArgumentError constrain_space(Hg, FilterConstraint(!=("x")), ["up", "y"])
 end
 
 @testitem "Constraining a ConstrainedSpace keeps only its states" begin
