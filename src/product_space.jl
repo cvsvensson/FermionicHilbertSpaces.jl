@@ -50,7 +50,11 @@ atomic_factors(H::ProductSpace) = H.atoms
 nbr_of_atoms(H::ProductSpace) = length(H.atoms)
 factors(H::ProductSpace) = H.factors
 groups(H::ProductSpace) = H.factors
-dim(H::ProductSpace) = mapfoldl(dim, Base.checked_mul, groups(H); init = 1)
+<<<<<<< Updated upstream
+dim(H::ProductSpace) = mapfoldl(dim, Base.Checked.checked_mul, groups(H); init = 1)
+=======
+dim(H::ProductSpace) = mapfoldl(dim, Base.Checked.checked_mul, groups(H); init=1)
+>>>>>>> Stashed changes
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
 # Iterates `cartinds` rather than `Iterators.product`, whose iteration allocates per state from 12 factors on
