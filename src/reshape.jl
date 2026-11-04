@@ -171,17 +171,12 @@ _spaces(Hs::Union{Tuple,AbstractVector}) = Tuple(Hs)
 _spaces(x) = throw(ArgumentError("Expected a Hilbert space or a tuple of Hilbert \
                                   spaces, got $(typeof(x))"))
 
-# Split one mapping into (input spaces, output spaces) and check that it is a
-# split, a combine, or an identity.
+# Split one mapping into (input spaces, output spaces).
 function _mapping_spaces(mapping::Pair)
     Hsin, Hsout = _spaces(first(mapping)), _spaces(last(mapping))
 
     (isempty(Hsin) || isempty(Hsout)) &&
         throw(ArgumentError("Empty Hilbert space group in mapping $mapping"))
-
-    length(Hsin) == 1 == length(Hsout) && only(Hsin) != only(Hsout) &&
-        throw(ArgumentError("A one-to-one mapping must be the identity `H => H`, \
-                             got $mapping"))
 
     return Hsin, Hsout
 end
@@ -252,14 +247,14 @@ function _partition_mapper(H, Hs)
 end
 
 function _mapper(Hsin, Hsout)
-    if length(Hsin) == 1 && length(Hsout) > 1        # split
-        _partition_mapper(only(Hsin), Hsout)
-    elseif length(Hsin) > 1 && length(Hsout) == 1    # combine
-        _partition_mapper(only(Hsout), Hsin)
-    elseif length(Hsin) > 1 && length(Hsout) > 1     # many-to-many
-        _build_many_to_many_mapper(Hsin, Hsout)
-    else                                             # identity
+    return if length(Hsin) == 1 && Hsin == Hsout            # identity
         nothing
+    elseif length(Hsin) == 1                         # split, possibly into one space
+        _partition_mapper(only(Hsin), Hsout)
+    elseif length(Hsout) == 1                        # combine
+        _partition_mapper(only(Hsout), Hsin)
+    else                                             # many-to-many
+        _build_many_to_many_mapper(Hsin, Hsout)
     end
 end
 # Each `_transitions` method returns `(; transitions, dropped)`. `transitions` is a vector
@@ -270,7 +265,7 @@ const _OneSpace = Tuple{AbstractHilbertSpace}
 const _SeveralSpaces = Tuple{AbstractHilbertSpace,AbstractHilbertSpace,Vararg{AbstractHilbertSpace}}
 
 # Split: H => (H1, H2, ...)
-function _transitions(Hsin::_OneSpace, Hsout::_SeveralSpaces, mapper)
+function _transitions(Hsin::_OneSpace, Hsout::Tuple, mapper)
     H = only(Hsin)
     entries = Iterators.flatten(Iterators.map(basisstates(H)) do f
         Iin = (Int(state_index(f, H)),)
@@ -520,6 +515,17 @@ end
 
     # Identity mappings leave the tensor unchanged
     @test reshape(A, H12_3 => H12_3, H3_3 => H3_3, H4_3 => H4_3) == A
+
+    # Splitting into a single space embeds by state index
+    for (N, qn) in ((1, ParityConservation()), (2, ParityConservation(1)))
+        Hp = hilbert_space(f, 1:N, qn)
+        Hu = hilbert_space(f, 1:N)
+        v = rand(dim(Hp))
+        u = zeros(dim(Hu))
+        u[indices(Hp, Hu)] = v
+        @test reshape(v, Hp => (Hu,)) == u
+        @test reshape(u, (Hu,) => Hp) == v
+    end
 
     # repeat=true applies one mapping to every index group
     A3 = rand(ComplexF64, dim(H12_3), dim(H12_3), dim(H12_3))
