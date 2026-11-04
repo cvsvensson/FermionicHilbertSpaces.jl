@@ -317,6 +317,14 @@ function _majorana_atomic_factor(H::MajoranaHilbertSpace, i, γs)
     γ1, γ2 = γs[2i-1], γs[2i]
     MajoranaHilbertSpace(OrderedDict(γ1 => 1, γ2 => 2), atom, symbolic_basis(γ1))
 end
+@testitem "Majoranas of fermion modes beyond 64" begin
+    import FermionicHilbertSpaces: FockNumber
+    @majoranas γ
+    H = constrain_space(hilbert_space(γ, 1:132), [FockNumber{UInt128}(0), FockNumber{UInt128}(1) << 65])
+    Hsmall = hilbert_space(γ, 1:2)
+    @test representation(γ[131], H, Matrix) == representation(γ[1], Hsmall, Matrix)
+    @test representation(γ[132], H, Matrix) == representation(γ[2], Hsmall, Matrix)
+end
 @testitem "Majorana matrix representations" begin
     using LinearAlgebra
     @majoranas γ
