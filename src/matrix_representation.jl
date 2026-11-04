@@ -1073,7 +1073,7 @@ end
 
     @boson b
     Hp = tensor_product(H, hilbert_space(b, 2))
-    for opp in (op * b' + hc, f[1])
+    for opp in (op * b' + hc + 1, f[1])
         Mp = representation(opp, Hp, rep)
         w = pvector(inds -> rand(ComplexF64, length(inds)), Mp.col_partition)
         @test collect(Mp * w) ≈ representation(opp, Hp) * collect(w)
