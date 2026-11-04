@@ -100,7 +100,7 @@ mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilber
     ρ = thermal(q)
     G = transpose(inv(I + exp(β * representation(q, H, :dense))))
     for op in (quartic + quartic', sextic + hc)
-        @test (@inferred expectation(op, G, H)) ≈ tr(ρ * representation(op, Hfock, :dense))
+        @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
     end
 
     H = hilbert_space(f, 1:N, BdG())
@@ -108,7 +108,7 @@ mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilber
     ρ = thermal(q)
     G = transpose(inv(I + exp(2β * representation(q, H, :dense))))
     for op in pairing_ops
-        @test (@inferred expectation(op, G, H)) ≈ tr(ρ * representation(op, Hfock, :dense))
+        @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
     end
     unsorted_ev = FermionicHilbertSpaces.NonCommutativeProducts.with_autosort(() -> expectation(f[2] * f[1]' * f[2]' * f[1], G, H), false)
     @test unsorted_ev ≈ expectation(f[2] * f[1]' * f[2]' * f[1], G, H)

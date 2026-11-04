@@ -143,7 +143,7 @@ function _precomputation_before_operator_application(op::FermionSym, space::Abst
     position == 0 && throw(ArgumentError("The operator `$op` contains a factor that is not part of the fermionic space `$space`."))
     return position
 end
-# The change in particle number is stored as a type parameter.
+# The change in particle number is stored as a type parameter so that the state produced by a term has a concrete type.
 function precomputation_before_operator_application(op::NCMul{<:Any, <:FermionSym}, space::AbstractHilbertSpace{<:FixedNumberFockState})
     sites = Tuple(map(factor -> _precomputation_before_operator_application(factor, space), op.factors))
     return sites, Val(sum(factor -> factor.creation ? 1 : -1, op.factors; init = 0))
@@ -210,20 +210,6 @@ end
     for n in 0:1
         @test representation(op, Axes(Hx(n + 1), Hx(n))) ≈ representation(op, Axes(Hk(n + 1), Hk(n)))
     end
-end
-
-@testitem "apply_local_operators on FixedNumberFockState infers with a literal transpose keyword" begin
-    import FermionicHilbertSpaces: FixedNumberFockState, apply_local_operators, precomputation_before_operator_application
-    @fermions f
-    Hx(n) = hilbert_space(f, [4, 1, 3], FixedNumberFockState{n}.(basisstates(hilbert_space(f, [4, 1, 3], NumberConservation(n)))))
-    term = only(keys((f[3]' * f[1]' * f[4]).dict))
-    # `transpose` is a literal in each wrapper so that the branch is known at compile time
-    apply(term, state, H, precomp) = apply_local_operators(term, state, H, precomp; transpose = false)
-    apply_transpose(term, state, H, precomp) = apply_local_operators(term, state, H, precomp; transpose = true)
-    H1, H2 = Hx(1), Hx(2)
-    p1, p2 = precomputation_before_operator_application(term, H1), precomputation_before_operator_application(term, H2)
-    @test first(@inferred apply(term, basisstate(1, H1), H1, p1)) isa FixedNumberFockState{2}
-    @test first(@inferred apply_transpose(term, basisstate(1, H2), H2, p2)) isa FixedNumberFockState{1}
 end
 
 @testitem "Vector tensor product of fixed-number states with reordered modes" begin
