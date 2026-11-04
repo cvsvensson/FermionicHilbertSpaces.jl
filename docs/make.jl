@@ -99,8 +99,8 @@ write(
 
     $(join(section.(sections), "\n\n"))
     """
-#! format: on
 )
+#! format: on
 
 # Concurrent PR previews race to push gh-pages; each retry re-fetches it.
 for attempt in 1:3
