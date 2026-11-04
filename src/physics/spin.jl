@@ -128,14 +128,14 @@ end
 function SpinSpace(sym::S, J) where {S<:SymbolicSpinBasis}
     Jhalf = HalfInteger(_check_spin(J))
     T = typeof(twice(Jhalf))
-    SpinSpace{T,S}(Jhalf, sym)
+    return SpinSpace{T, S}(Jhalf, sym)
 end
 SpinSpace(sym::S) where {S<:SymbolicSpinBasis} = (sym.spin isa Nothing ? throw(ArgumentError("$sym has no spin value. Pass J to hilbert_space, e.g. `hilbert_space(s, 1//2)` or `hilbert_space(s, labels, 1//2)`, or set it when creating the basis with `@spin s 1//2` or `@spins s 1//2`.")) : SpinSpace(sym, sym.spin))
 SpinSpace(label, J) = SpinSpace(SymbolicSpinBasis(label, nothing, J), J)
 basisstates(H::SpinSpace) = BasisStates(H, Iterators.map(n -> basisstate(n, H), 1:dim(H)))
-Base.@propagate_inbounds function basisstate(n::Integer, H::SpinSpace{T}) where T
+Base.@propagate_inbounds function basisstate(n::Integer, H::SpinSpace{T}) where {T}
     @boundscheck 1 <= n <= dim(H) || throw(BoundsError(H, n))
-    SpinState{T}(n - 1 - H.spin)
+    return SpinState{T}(n - 1 - H.spin)
 end
 dim(H::SpinSpace) = Int(twice(H.spin)) + 1
 function _state_index(s::SpinState, space::SpinSpace)
@@ -148,7 +148,7 @@ has_arithmetic_state_index(::SpinSpace) = true
 atomic_id(H::SpinSpace) = symbolic_group(H.sym)
 function add_tag(H::SpinSpace{T,S}, tag) where {T,S}
     newsym = add_tag(H.sym, tag)
-    SpinSpace{T,typeof(newsym)}(H.spin, newsym)
+    return SpinSpace{T, typeof(newsym)}(H.spin, newsym)
 end
 _check_spin_unset(sym) = sym.spin isa Nothing || throw(ArgumentError("The spin value was already given in the $(sym isa SpinField ? "spin field" : "symbolic basis"), so `J` must be omitted."))
 hilbert_space(sym::SymbolicSpinBasis) = SpinSpace(sym)
