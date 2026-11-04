@@ -580,7 +580,7 @@ places it in a matrix on `H` that is zero elsewhere.
 change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
 function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; skipmissing = false, kwargs...)
     n = m isa UniformScaling ? 2 : ndims(m)
-    from, to = _per_axis(Hfrom, n), _per_axis(Hto, n)
+    from, to = _per_axis(Hfrom, Val(n)), _per_axis(Hto, Val(n))
     size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, and a `UniformScaling` needs the same space on both axes, got $(summary(m))."))
     length(to.spaces) == n || throw(ArgumentError("The output needs one space per axis of `m`, got $(length(to.spaces)) spaces for $n axes."))
     U1 = basis_transformation(first(from.spaces), first(to.spaces))
@@ -589,22 +589,25 @@ function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{Ab
     transformations = map(transformation, from.spaces, to.spaces)
     if !skipmissing
         for (axis, Hf, (_, dropped)) in zip(1:n, from.spaces, transformations)
-            for j in dropped
-                _has_support_on(m, axis, j) && throw(ArgumentError("The state $(basisstate(j, Hf)) has nonzero weight but is not in the target Hilbert space. Pass `skipmissing=true` to drop it."))
-            end
+            _has_support_on(m, axis, dropped) || continue
+            j = first(Iterators.filter(j -> _has_support_on(m, axis, j:j), dropped))
+            throw(ArgumentError("The state $(basisstate(j, Hf)) has nonzero weight but is not in the target Hilbert space. Pass `skipmissing=true` to drop it."))
         end
     end
     return _change_basis(m, map(first, transformations))
 end
-_per_axis(H::AbstractHilbertSpace, n) = Axes(ntuple(_ -> H, n))
-_per_axis(ax::Axes, n) = ax
+_per_axis(H::AbstractHilbertSpace, n::Val) = Axes(ntuple(_ -> H, n))
+_per_axis(ax::Axes, n::Val) = ax
 _change_basis(m::AbstractMatrix, (Uout, Uin)) = Uout * m * Uin'
 _change_basis(m::LowRankMatrix, (Uout, Uin)) = Uout * Matrix(m) * Uin'
 _change_basis(v::AbstractVector, (U,)) = U * v
 _change_basis(m::UniformScaling, (Uout, Uin)) = m.λ * (Uout * Uin')
 
-_has_support_on(m, axis, j) = !iszero(selectdim(m, axis, j))
-_has_support_on(m::UniformScaling, axis, j) = !iszero(m.λ)
+# Whether `m` is nonzero on any of the indices `js` along `axis`. A view of a sparse array
+# visits every element, a copy only the stored ones.
+_has_support_on(m, axis, js) = !iszero(selectdim(m, axis, js))
+_has_support_on(m::AbstractSparseArray, axis, js) = !iszero(m[ntuple(d -> d == axis ? js : (:), Val(ndims(m)))...])
+_has_support_on(m::UniformScaling, axis, js) = !isempty(js) && !iszero(m.λ)
 
 function _checked_basis_transformation(Hfrom, Hto; skipmissing=false)
     U, dropped = basis_transformation(Hfrom, Hto)
@@ -1304,6 +1307,20 @@ end
         @test emb(msub) ≈ embed(Matrix(msub), Hsub => H; skipmissing=true)
         @test_throws DimensionMismatch pt(sprand(dim(H) + 1, dim(H) + 1, 0.5))
     end
+
+    # basis states 2 and 3 of Hfull form Hsec
+    Hsec = hilbert_space(f, 1:2, NumberConservation(1))
+    m = sparse([2, 2, 3], [2, 3, 3], [1.0, 2.0, 3.0], 4, 4)
+    m[1, 1] = 0 # a stored zero is no weight
+    @test FermionicHilbertSpaces.change_basis(m, Hfull => Hsec) == m[2:3, 2:3]
+    @test FermionicHilbertSpaces.change_basis(m[:, 3], Hfull => Hsec) == m[2:3, 3]
+    for (i, j) in ((4, 2), (2, 4))
+        mleak = copy(m)
+        mleak[i, j] = 1
+        @test_throws ArgumentError FermionicHilbertSpaces.change_basis(mleak, Hfull => Hsec)
+        @test FermionicHilbertSpaces.change_basis(mleak, Hfull => Hsec; skipmissing = true) == m[2:3, 2:3]
+    end
+    @test_throws ArgumentError FermionicHilbertSpaces.change_basis(sparsevec([4], [1.0], 4), Hfull => Hsec)
 end
 
 @testitem "Partial trace of a low-rank matrix" begin
