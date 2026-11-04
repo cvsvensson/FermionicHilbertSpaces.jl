@@ -81,7 +81,7 @@ representation(vf("10"), H)
 representation(vf("10") * vf("01")', H)
 ```
 
-This also works for sums of kets/bras/ketbras with coefficients. Kets and bras can be represented as `:sparse` or `:dense`, and ketbras also as `:lazy`.
+This also works for sums of kets/bras/ketbras with coefficients. Kets and bras give sparse vectors by default and dense ones with `Vector`. Ketbras give matrices and can also be `:lazy`.
 
 If the expression is a single kind of state, `representation` can find the space itself, as in `representation(vf("10"))`. Operators carry no space, so they need the space argument. A ketbra on one factor of a `tensor_product` can be represented on the product space, where it acts as the identity on the other factors. Expressions that combine kets or bras with operators or with states of other spaces, such as `b * vf("10")`, have no representation and throw an `ArgumentError`. Apply the operators to the state first, or represent the parts separately.
 
@@ -98,7 +98,7 @@ vfb = Kets(Hfb)
 vf("10") * vb("2") == vfb("10", "2")
 ```
 
-Operators and states from different factors can be freely interleaved in a product; they are automatically reordered (with correct signs) into operators acting first, then states combined per factor:
+Operators and states from different factors can be freely interleaved in a product; they are reordered into operators acting first, then states combined per factor:
 
 ```@example states
 f[1]' * vf("10") * b' * vb("2") == f[1]' * b' * vfb("10", "2")

@@ -99,7 +99,7 @@ ptmap = partial_trace(HND => subregion([b[i] for i in 1:div(N, 2)], HND))
 Us = range(0, 5, 50)
 entropies = map(Us) do U
     H = hamiltonian(b, N; J=1.0, U)
-    Ψ0 = eigvecs(representation(H, HND, :dense))[:, 1]
+    Ψ0 = eigvecs(representation(H, HND, Matrix))[:, 1]
     sum(-λ * log(λ) for λ in eigvals(ptmap(Ψ0)) if λ > 1e-12)
 end
 plot(Us, entropies; xlabel="U/J", ylabel="Half-system entropy", legend=false, ylims=(0, 2.1), frame=:box, size=(400, 250), lw=2)
