@@ -352,12 +352,10 @@ end
 function _span_matrix(prodop, span, spaces, repr; kwargs...)
     matrices = map(span) do n
         m = findfirst(==(n), prodop.inds)
-        isnothing(m) ? _identity(dim(spaces[n]), repr) : _term_matrix_representation(prodop.ops[m], spaces[n], repr, NoChunking(); kwargs...)
+        _term_matrix_representation(isnothing(m) ? missing : prodop.ops[m], spaces[n], repr, NoChunking(); kwargs...)
     end
-    return foldl(kron, Iterators.reverse(matrices))
+    return _kron_groups(matrices, prodop.inds .- (first(span) - 1), repr)
 end
-_identity(d, ::EagerSparseRepr) = sparse(I(d))
-_identity(d, ::EagerDenseRepr) = Matrix{Bool}(I, d, d)
 function _embed_span(core, span, spaces, repr)
     r = prod(n -> dim(spaces[n]), 1:(first(span) - 1); init = 1)
     l = prod(n -> dim(spaces[n]), (last(span) + 1):length(spaces); init = 1)
@@ -365,7 +363,10 @@ function _embed_span(core, span, spaces, repr)
     return _embed(core, l, r, repr)
 end
 _embed(core, l, r, ::EagerSparseRepr) = _kron_identities(convert(SparseMatrixCSC, core), l, r, eltype(core))
-_embed(core, l, r, ::EagerDenseRepr) = kron(Matrix{Bool}(I, l, l), core, Matrix{Bool}(I, r, r))
+function _embed(core, l, r, ::EagerDenseRepr)
+    left = l == 1 ? core : kron(Eye{Bool}(l), core)
+    return r == 1 ? left : kron(left, Eye{Bool}(r))
+end
 # `summed + coeff * I`, with the element type of `summed` promoted with that of `coeff * I` also when `coeff` is zero
 function _add_identity_term(summed, coeff, bases, space, repr)
     identity_term = convert(_repr_eltype(typeof(coeff), repr), coeff) * _matrix_representation(missing, bases, space, repr, NoChunking())
