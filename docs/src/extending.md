@@ -27,10 +27,9 @@ Algebra, from [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommu
   compare unequal. For two different types on the same group, rewrite one argument order in
   terms of the other.
 - Operators on different groups commute and are ordered by group, so no rule is needed for them.
-  Numbers are compared by value and other groups by type name, then with `isless`; tuple groups
-  are compared element by element with the same rule. Groups whose types share a name need an
-  `isless` that is a strict total order consistent with `==`; without one, `*` throws a
-  `MethodError`.
+  Groups of different types are ordered by type name; numbers and strings are compared by value,
+  and tuples element by element. Unequal groups whose types share a name need an `isless` that is
+  a strict total order consistent with `==`; without one, `*` throws a `MethodError`.
 
 Connection to Hilbert spaces:
 
