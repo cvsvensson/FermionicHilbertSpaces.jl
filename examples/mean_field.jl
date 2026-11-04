@@ -19,7 +19,7 @@ hubbard(U) = hopping + U * sum(n(i, :↑) * n(i, :↓) for i in 1:L) - U / 2 * s
 
 # The decoupled Hamiltonian is quadratic, so its BdG ground state gives the next `G`.
 Hbdg = hilbert_space(f, labels, BdG())
-ground_state_correlations(op, Hbdg) = correlation_matrix(eigen(representation(op, Hbdg, :dense), BdGEigen()));
+ground_state_correlations(op, Hbdg) = correlation_matrix(eigen(representation(op, Hbdg, Matrix), BdGEigen()));
 
 function self_consistent(ham, G, Hbdg; tol = 1.0e-8, maxiter = 1000)
     for _ in 1:maxiter
@@ -54,7 +54,7 @@ function sweep(Us, seed, order_parameter)
         ham = hubbard(U)
         G = self_consistent(ham, G, Hbdg)
         E_sea = real(expectation(ham, G_fermi_sea, Hbdg))
-        E_exact = eigmin(Hermitian(representation(ham, Hsector, :dense)))
+        E_exact = eigmin(Hermitian(representation(ham, Hsector, Matrix)))
         E_mf = real(expectation(ham, G, Hbdg))
         @assert E_mf > E_exact
         (order = order_parameter(G), E_mf = E_mf - E_sea, E_exact = E_exact - E_sea)
