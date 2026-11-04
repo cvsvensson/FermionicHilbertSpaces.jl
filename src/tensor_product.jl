@@ -525,13 +525,12 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
     phi(kron(reverse(map((phi, op) -> phi(op), phis, ops))...))
 end
 
-function partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; alg = nothing, kwargs...)
-    # LowRankMatrix copies ψ to a CPU Matrix
-    alg isa GatherPartialTraceAlg && return _partial_trace_by_gather(v, H, Hsub; kwargs...)
-    m = vec_to_density_matrix(v)
-    return isnothing(alg) ? partial_trace(m, H, Hsub; kwargs...) : partial_trace(m, H, Hsub; alg, kwargs...)
+function partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(v, Hsub, H, complement), kwargs...)
+    # vec_to_density_matrix copies ψ to a CPU Matrix
+    alg isa GatherAlg && return _partial_trace_by_gather(v, H, Hsub, complement; kwargs...)
+    return partial_trace(vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)
 end
-function _partial_trace_by_gather(ψ::AbstractVector, H, Hsub; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, phase_factors = true)
+function _partial_trace_by_gather(ψ::AbstractVector, H, Hsub, complement; projection = false, phase_factors = true)
     size_compatible(ψ, H) || throw(ArgumentError("The size of `ψ` must match `dim(H)` = $(dim(H)), got $(size(ψ))."))
     isnothing(complement) && return (φ = change_basis(ψ, H, Hsub; projection); φ * φ')
     return _partial_trace_by_gather(ψ, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement); projection, phase_factors)
@@ -544,7 +543,7 @@ end
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
     isnothing(complement) && return Base.inferencebarrier(change_basis)(m, H, Hsub; kwargs...)
-    alg isa GatherPartialTraceAlg && return _partial_trace_by_gather(m, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement); kwargs...)
+    alg isa GatherAlg && return _partial_trace_by_gather(m, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement); kwargs...)
     mout = zeros(promote_type(eltype(m), partial_trace_phase_factor_eltype(H)), dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
@@ -698,28 +697,31 @@ and of the maps `partial_trace(H => Hsub)` and `embed(Hsub => H)`.
 """
 struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
 """
-    GatherPartialTraceAlg()
+    GatherAlg()
 
-Partial-trace algorithm built from array indexing, broadcasting and reductions only, so that it
-runs on GPU arrays. It is an option for the `alg` keyword of [`partial_trace`](@ref) and [`partial_trace!`](@ref).
+Algorithm built from array indexing, broadcasting and reductions only, so that it runs on GPU
+arrays. It is an option for the `alg` keyword of [`partial_trace`](@ref) and [`partial_trace!`](@ref).
 """
-struct GatherPartialTraceAlg <: AbstractPartialTraceAlg end
+struct GatherAlg <: AbstractPartialTraceAlg end
 
 _effective_dim(m::AbstractMatrix, H) = length(m)
 _effective_dim(m::AbstractSparseMatrix, H) = nnz(m)
 _effective_dim(m::LowRankMatrix, H) = length(m.U) + length(m.V)
+# A pure state ψ is traced as `vec_to_density_matrix(ψ)`
+_effective_dim(v::AbstractVector, H) = 2 * length(v)
+_effective_dim(v::SparseVector, H) = nnz(v)^2
 _effective_dim(::UniformScaling, H) = dim(H)
 
 # Costs in units of one input-element visit by FullPartialTraceAlg, which visits the stored elements.
 # SubsystemPartialTraceAlg combines every subsystem state with every complement state, then visits
 # about d^2 ÷ dcomp terms, each reading the input (a binary search if `m` is sparse).
-function default_partial_trace_alg(m::Union{AbstractMatrix,UniformScaling}, Hsub, H, Hcomp)
+function default_partial_trace_alg(m::Union{AbstractVecOrMat,UniformScaling}, Hsub, H, Hcomp)
     dsub, d, dcomp = dim(Hsub), dim(H), dim(Hcomp)
-    readcost = m isa AbstractSparseMatrix ? 20 : 5
+    readcost = m isa AbstractSparseArray ? 20 : 5
     subcost = 16 * dsub * dcomp + readcost * (d^2 ÷ max(dcomp, 1))
     return subcost < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 end
-default_partial_trace_alg(m::Union{AbstractMatrix,UniformScaling}, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+default_partial_trace_alg(m::Union{AbstractVecOrMat,UniformScaling}, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 # Building a map, both algorithms emit the same terms, so only the states they visit differ:
 # every combination of a subsystem and a complement state, each costing about as much as
 # 8 pairs, or every pair of basis states of H.
@@ -853,13 +855,10 @@ to `mout`, which must have size `(dim(Hsub), dim(Hsub))`. See [`partial_trace`](
 `alg` is `SubsystemPartialTraceAlg()` or `FullPartialTraceAlg()`, chosen from the dimensions
 and sparsity of `m` by default.
 """
-function partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; alg = nothing, kwargs...)
-    if alg isa GatherPartialTraceAlg
-        _check_partial_trace_output(mout, v, Hsub)
-        return copyto!(mout, partial_trace(v, H, Hsub; alg, kwargs...))
-    end
-    m = vec_to_density_matrix(v)
-    return isnothing(alg) ? partial_trace!(mout, m, H, Hsub; kwargs...) : partial_trace!(mout, m, H, Hsub; alg, kwargs...)
+function partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(v, Hsub, H, complement), kwargs...)
+    alg isa GatherAlg || return partial_trace!(mout, vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)
+    _check_partial_trace_output(mout, v, Hsub)
+    return copyto!(mout, _partial_trace_by_gather(v, H, Hsub, complement; kwargs...))
 end
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
@@ -870,7 +869,7 @@ end
 partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
 
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper = _partial_trace_mapper(H, Hsub, complement); projection = false, phase_factors = true)
-    alg isa GatherPartialTraceAlg && return copyto!(mout, _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection, phase_factors))
+    alg isa GatherAlg && return copyto!(mout, _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection, phase_factors))
     fill!(mout, zero(eltype(mout)))
     covered = if alg isa FullPartialTraceAlg
         splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
@@ -1430,8 +1429,8 @@ end
 end
 
 @testitem "Partial trace by gather" begin
-    import FermionicHilbertSpaces: GatherPartialTraceAlg, partial_trace!, state_index
-    alg = GatherPartialTraceAlg()
+    import FermionicHilbertSpaces: GatherAlg, partial_trace!, state_index
+    alg = GatherAlg()
     @fermions f
     @spins s
     @bosons b
