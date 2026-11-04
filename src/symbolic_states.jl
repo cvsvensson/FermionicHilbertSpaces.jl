@@ -519,6 +519,7 @@ _grade_type(g) = :mixed
 
 Return the vector of `state` in `space`. `state` is a basis state, a symbolic ket or bra, or a product or sum of
 symbolic kets or of symbolic bras. Kets give a column vector, and bras give the transpose of one.
+This is the state-specific form of [`representation`](@ref).
 The optional `repr` selects the format as in [`representation`](@ref), except `:lazy`; for example `Vector` gives a dense vector.
 """
 function vector_representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
@@ -634,6 +635,7 @@ end
 
 @testitem "Unified representation API" begin
     using SparseArrays, LinearAlgebra
+    using FermionicHilbertSpaces: matrix_representation
     @fermions f
     @boson b
 
@@ -695,6 +697,7 @@ end
 end
 
 @testitem "vector_representation of symbolic kets and bras" begin
+    using FermionicHilbertSpaces: vector_representation
     @fermions f
     Hf = hilbert_space(f, 1:2)
     vf = Kets(Hf)
@@ -711,6 +714,7 @@ end
 @testitem "representation of different kinds of input" begin
     using LinearAlgebra, SparseArrays
     using FermionicHilbertSpaces.FreeFermions
+    using FermionicHilbertSpaces: matrix_representation
     @fermions f
     @majoranas γ
     @boson b

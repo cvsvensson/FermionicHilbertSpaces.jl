@@ -503,7 +503,7 @@ representation
     matrix_representation(op, space::AbstractHilbertSpace, [repr]; kwargs...)
     matrix_representation(op, Axes(Hout, Hin), [repr]; kwargs...)
 
-Return the matrix representation of symbolic operator `op` in Hilbert space `space`.
+Return the matrix representation of symbolic operator `op` in Hilbert space `space`. This is the operator-specific form of [`representation`](@ref).
 
 With [`Axes`](@ref)`(Hout, Hin)`, return the `dim(Hout) × dim(Hin)` matrix of `op` from `Hin` to `Hout`. The two
 spaces must have the same groups, for example two sectors of the same modes. Two different spaces support only eager
@@ -518,7 +518,7 @@ Keyword arguments include `projection` (default `false`) which if true will igno
 @fermions f
 H = hilbert_space(f, 1:2)
 op = f[1]' * f[2] + hc
-M = matrix_representation(op, H)
+M = FermionicHilbertSpaces.matrix_representation(op, H)
 size(M) == (dim(H), dim(H))
 ```
 """
@@ -529,7 +529,8 @@ function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparse
     if trivial_operator(op)
         return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
     end
-    return _matrix_representation(op, _checked_group_ids(op, space), space, _canonicalize_repr(repr), chunking; projection, kwargs...)
+    repr = _canonicalize_repr(repr)
+    return _cache_lazy(_matrix_representation(op, _checked_group_ids(op, space), space, repr, chunking; projection, kwargs...), space, repr)
 end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
@@ -731,9 +732,9 @@ end
     H = tensor_product(hilbert_space(f, 1:3), hilbert_space(b, 3); constraint=NumberConservation(1:2))
     op = f[1]' * f[2] + b' * f[1] + 1
     for (Repr, T) in ((EagerSparseRepr, ComplexF32), (EagerDenseRepr, Float32))
-        M = matrix_representation(op, H, Repr{T}())
+        M = representation(op, H, Repr{T}())
         @test eltype(M) == T
-        @test M ≈ matrix_representation(op, H)
+        @test M ≈ representation(op, H)
     end
 end
 
@@ -780,7 +781,7 @@ end
 
     ket = Ket(basisstate(1, Hout), Hout)
     bra = Ket(basisstate(2, Hin), Hin)'
-    @test representation(ket * bra, Axes(Hout, Hin)) == vector_representation(ket, Hout) * vector_representation(bra, Hin)
+    @test representation(ket * bra, Axes(Hout, Hin)) == representation(ket, Hout) * representation(bra, Hin)
 
     @test representation(ket, Axes(Hout)) == representation(ket, Hout)
     @test representation("010", Axes(H)) == representation("010", H)
