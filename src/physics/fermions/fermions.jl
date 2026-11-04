@@ -102,6 +102,7 @@ combine_states(states, H::FermionicSpace{F}) where F = (catenate_fock_states(sta
 
 state_mapper(H::FermionicSpace, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
 state_mapper(H::FermionicSpace, Hs) = _fock_mapper(H, Hs)
+_is_full_fock_kron(H::FermionicSpace{<:FockNumber}, mapper::FockMapper, Hs) = mapper.isfullpartition && all(Hk -> Hk isa FermionicSpace{<:FockNumber}, Hs)
 function _fock_mapper(H, Hs)
     fermionpositions = [[atom_position(atom, H) for atom in _fock_atoms(Hsub)] for Hsub in Hs]
     all(x -> x > 0, Iterators.flatten(fermionpositions)) || throw(ArgumentError("All subspaces in `Hs` must be part of `H`, got positions $fermionpositions."))

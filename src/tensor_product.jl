@@ -100,6 +100,23 @@ check_kron_sizes(ms, Hs) = kron_sizes_compatible(ms, Hs) || throw(ArgumentError(
     @test_throws ArgumentError tensor_product((rand(3, 3), m2, m3), Hs => H123)
 end
 
+abstract type AbstractKronAlg end
+"""
+    GenericKronAlg()
+
+Default algorithm for the `alg` keyword of [`generalized_kron`](@ref) and [`tensor_product`](@ref).
+"""
+struct GenericKronAlg <: AbstractKronAlg end
+"""
+    FactorizedKronAlg()
+
+Algorithm for the `alg` keyword of [`generalized_kron`](@ref) and [`tensor_product`](@ref) that uses
+reshapes and broadcasts only, so it also runs on GPU arrays. It needs dense arrays on unconstrained
+fermionic spaces `Hs` that partition the modes of the unconstrained fermionic space `H`.
+"""
+struct FactorizedKronAlg <: AbstractKronAlg end
+_check_kron_alg(alg) = alg isa AbstractKronAlg || throw(ArgumentError("`alg` must be `GenericKronAlg()` or `FactorizedKronAlg()`, got $alg."))
+
 """
     generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
 
@@ -116,16 +133,19 @@ Use `tensor_product` for product states, local observables, and anything that sh
 
 `generalized_kron(ms, Hs => H)` is also accepted, and `generalized_kron(Hs => H)` returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
+`alg` is `GenericKronAlg()` (the default) or `FactorizedKronAlg()`.
 
 The result is the compression of the tensor product onto `H`. Unless `projection=true`, throws an
 `ArgumentError` if the tensor product of matrices maps a state of `H` outside `H` with nonzero amplitude,
 or if the tensor product of vectors has a nonzero amplitude outside `H`.
 """
-function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); kwargs...)
+function generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs); alg = GenericKronAlg(), kwargs...)
     check_kron_sizes(ms, Hs)
+    _check_kron_alg(alg)
     N = ndims(first(ms))
-    mout = allocate_tensor_product_result(ms, Hs, H)
     extend_state = state_mapper(H, Hs)
+    alg isa FactorizedKronAlg && return _factorized_kron(Tuple(ms), Hs, H, extend_state, false; kwargs...)
+    mout = allocate_tensor_product_result(ms, Hs, H)
     if N == 1
         return generalized_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
     elseif N == 2
@@ -344,6 +364,33 @@ end
     @test generalized_kron(map(rep, ops, spaces), spaces => H) ≈ rep(f[1]' * f[2]' * f[3] * f[4] * f[5] * S[1][:x] * b', H)
 end
 
+@testitem "generalized_kron and tensor_product with FactorizedKronAlg" begin
+    using FermionicHilbertSpaces: FactorizedKronAlg, project_on_parity
+    @fermions f
+    H = hilbert_space(f, 1:6)
+    alg = FactorizedKronAlg()
+    for modes in ([[1, 2, 3], [4, 5, 6]], [[1, 4, 5], [2, 6], [3]], [[2, 5], [1, 3, 4, 6]])
+        Hs = map(m -> hilbert_space(f, m), modes)
+        # odd, even and mixed parity factors
+        ms = map(Hs, eachindex(Hs)) do Hk, k
+            m = rand(dim(Hk), dim(Hk))
+            k == 1 ? project_on_parity(m, Hk, -1) : k == 2 ? project_on_parity(m, Hk, 1) : m
+        end
+        vs = map(Hk -> rand(dim(Hk)), Hs)
+        for phase_factors in (true, false)
+            @test generalized_kron(ms, Hs => H; alg, phase_factors) ≈ generalized_kron(ms, Hs => H; phase_factors)
+            @test tensor_product(ms, Hs => H; alg, phase_factors) ≈ tensor_product(ms, Hs => H; phase_factors)
+            @test generalized_kron(vs, Hs => H; alg, phase_factors) ≈ generalized_kron(vs, Hs => H; phase_factors)
+            @test tensor_product(vs, Hs => H; alg, phase_factors) ≈ tensor_product(vs, Hs => H; phase_factors)
+        end
+    end
+    Hc = hilbert_space(f, 1:2, NumberConservation(1))
+    H1, H2 = hilbert_space(f, 1:1), hilbert_space(f, 2:2)
+    @test_throws ArgumentError tensor_product((rand(2, 2), rand(2, 2)), (H1, H2) => Hc; alg)
+    @test_throws ArgumentError generalized_kron((rand(2), rand(2)), (H1, H2) => Hc; alg)
+    @test_throws ArgumentError generalized_kron((rand(2, 2), rand(2, 2)), (H1, H2); alg = :fast)
+end
+
 """
     tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
     tensor_product(ms, Hs => H; kwargs...)
@@ -356,24 +403,89 @@ of the corresponding symbolic product. Terms that take a state of `H` outside `H
 which drops them. A matrix on a constrained space in `Hs` acts as zero on states outside that space.
 For vectors, the result is the product state: if each `ms[k] = ψₖ|0⟩` with `ψₖ` an operator on the modes of `Hs[k]`,
 the result is `ψ₁ψ₂⋯|0⟩`. Swapping two odd states flips the sign.
-`kwargs` can be passed a bool `phase_factors`. The last form returns a function of `ms`.
+`kwargs` can be passed a bool `phase_factors` and `alg`, as for [`generalized_kron`](@ref). The last form returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
-function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
+function tensor_product(ms::Union{<:AbstractVector,<:Tuple}, Hs, H::AbstractHilbertSpace; alg = GenericKronAlg(), kwargs...)
+    _check_kron_alg(alg)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     if all(_issquare, ms)
         check_kron_sizes(ms, Hs)
+        alg isa FactorizedKronAlg && return _factorized_kron(Tuple(ms), Hs, H, state_mapper(H, Hs), true; kwargs...)
         # on an unconstrained space, the product of embeddings is used
         isconstrained(H) || return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
         return ordered_product(Tuple(ms), Tuple(Hs), H; kwargs...)
     elseif all(_isket, ms)
-        return generalized_kron(map(vec, ms), Hs, H; kwargs...)
+        return generalized_kron(map(vec, ms), Hs, H; alg, kwargs...)
     elseif all(_isbra, ms)
         # All matrices are row vectors, so we can treat them as vectors and then reshape the result
-        return transpose(generalized_kron(map(vec, ms), Hs, H; kwargs...))
+        return transpose(generalized_kron(map(vec, ms), Hs, H; alg, kwargs...))
     end
     throw(ArgumentError("The elements of `ms` must be either all square matrices, all column vectors or all row vectors, got sizes $(map(size, ms))."))
 end
+_is_full_fock_kron(H, mapper, Hs) = false
+
+"""
+    _factorized_kron(ms, Hs, H, mapper, ordered; phase_factors=true, projection=false)
+
+Generalized kron (`ordered=false`) or product of embeddings (`ordered=true`) of the dense arrays
+`ms` on the full Fock space `H`, as one broadcast of reshaped factors times a phase.
+"""
+function _factorized_kron(ms, Hs, H, mapper, ordered; phase_factors = true, projection = false)
+    _is_full_fock_kron(H, mapper, Hs) && !any(m -> m isa AbstractSparseArray || m isa UniformScaling, ms) ||
+        throw(ArgumentError("FactorizedKronAlg needs dense arrays on unconstrained fermionic spaces that partition the modes of the unconstrained fermionic space `H`."))
+    N = nbr_of_modes(H)
+    D = dim(H)
+    owner = zeros(Int, N)
+    for (k, positions) in enumerate(mapper.fermionpositions), i in positions
+        owner[i] = k
+    end
+    # Each factor covers some runs of consecutive modes of H. Reshaping it to size 2^length on its
+    # own runs and 1 on the others places its entries at the mode positions of H, since the modes
+    # of each factor are in H order.
+    runstarts = [i for i in 1:N if i == 1 || owner[i] != owner[i - 1]]
+    runlengths = diff([runstarts; N + 1])
+    shape(k) = Tuple(owner[s] == k ? 2^l : 1 for (s, l) in zip(runstarts, runlengths))
+    n = ndims(first(ms))
+    # `identity.` makes plain device copies of wrapped factors (adjoints, views), whose reshapes would scalar-index.
+    product = broadcast(*, ntuple(k -> reshape(identity.(ms[k]), n == 1 ? shape(k) : (shape(k)..., shape(k)...)), length(ms))...)
+    if n == 1
+        out = vec(product)
+        phase_factors || return out
+        pfu = phase_factor_u(mapper)
+        return out .*= _device_vector(out, [pfu(basisstate(K, H)) for K in 1:D])
+    end
+    out = reshape(product, D, D)
+    phase_factors || return out
+    Q, r, c = _kron_phases(owner, ordered)
+    states = _device_vector(out, collect(0:(D - 1)))
+    return out .*= _kron_sign.(states, transpose(_device_vector(out, Q)), _device_vector(out, r), transpose(_device_vector(out, c)))
+end
+_device_vector(m, v::AbstractVector) = copyto!(similar(m, eltype(v), length(v)), v)
+_kron_sign(f, q, r, c) = isodd(count_ones(f & q)) ? -r * c : r * c
+
+# The phase of |ν⟩⟨ν′| is r(ν) c(ν′) (-1)^⟨ν, Q(ν′)⟩ with Q_j(x) = parity(x & G[j]) and
+# r(x) = (-1)^Σⱼ xⱼ parity(x & R[j]), c likewise with C. The generalized kron counts the pairs
+# i < j of modes in different factors; the product of embeddings in addition reorders the modes
+# of later factors past those of earlier ones.
+function _kron_phases(owner, ordered)
+    N = length(owner)
+    masks(p) = [sum(i -> p(i, j) ? 1 << (i - 1) : 0, 1:N; init = 0) for j in 1:N]
+    if ordered
+        G = masks((i, j) -> owner[i] < owner[j])
+        R = masks((i, j) -> i < j && owner[i] > owner[j])
+        C = masks((i, j) -> i < j && owner[i] < owner[j])
+    else
+        G = C = masks((i, j) -> i < j && owner[i] != owner[j])
+        R = zeros(Int, N)
+    end
+    parities(M, x) = (isodd(count_ones(x & M[j])) for j in 1:N)
+    quadratic_sign(M, x) = isodd(sum(((j, p),) -> isodd(x >> (j - 1)) & p, enumerate(parities(M, x)); init = 0)) ? Int8(-1) : Int8(1)
+    xs = 0:(2^N - 1)
+    Q = [sum(((j, p),) -> p << (j - 1), enumerate(parities(G, x)); init = 0) for x in xs]
+    return Q, quadratic_sign.(Ref(R), xs), quadratic_sign.(Ref(C), xs)
+end
+
 # Apply the factors right to left to each basis state of H. Only the final states are looked up in H.
 function ordered_product(ms, Hs, H; phase_factors = true, projection = false)
     factors = map(ms, Hs) do m, Hk
