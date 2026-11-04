@@ -353,10 +353,13 @@ function _check_dropped(t::AbstractArray, blocks, has_support_on = _has_support_
     return nothing
 end
 function _check_dropped_group(t3, lin, dropped, has_support_on)
-    has_support_on(t3, 2, [lin[Iin...] for Iin in dropped]) && throw(ArgumentError(
-        "Reshape would lose amplitude: the array has nonzero entries on basis states \
+    has_support_on(t3, 2, [lin[Iin...] for Iin in dropped]) && throw(
+        ArgumentError(
+            "Reshape would lose amplitude: the array has nonzero entries on basis states \
          that are missing in the output spaces. Pass `projection=true` to drop them \
-         silently."))
+         silently."
+        )
+    )
     return nothing
 end
 
