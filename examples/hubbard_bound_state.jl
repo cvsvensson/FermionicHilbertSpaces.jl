@@ -25,7 +25,7 @@ bound_energy(K) = eigsolve(ham, doublon(K), 1, :SR; ishermitian = true, eager = 
 Eexact(K) = -sqrt(U^2 + 16t^2 * cos(K / 2)^2)
 Ks = [2π * m / L for m in 0:(L ÷ 2)]
 Es = bound_energy.(Ks)
-plot(Eexact, 0, π; label = "exact", xlabel = "K", ylabel = "E", lw = 2, frame = :box, size = (500, 300))
-scatter!(Ks, Es; label = "eigsolve, L = $L")
+plot(K -> Eexact(K) / t, 0, π; label = "exact", xlabel = "K", ylabel = "E/t", lw = 2, frame = :box, size = (500, 300))
+scatter!(Ks, Es / t; label = "eigsolve, L = $L")
 
 # [^1]: F. H. L. Essler, H. Frahm, F. Göhmann, A. Klümper and V. E. Korepin, *The One-Dimensional Hubbard Model* (Cambridge University Press, 2005).
