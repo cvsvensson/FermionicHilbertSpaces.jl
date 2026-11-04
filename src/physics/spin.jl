@@ -123,22 +123,21 @@ function physical_rep(state::Int, ::Type{SpinState{T}}) where {T<:Integer}
 end
 struct SpinSpace{T<:Integer,S} <: AbstractAtomicHilbertSpace{SpinState{T}}
     spin::Half{T}
-    basisstates::Vector{SpinState{T}}
     sym::S
-    state_index::Dict{SpinState{T},Int}
 end
 function SpinSpace(sym::S, J) where {S<:SymbolicSpinBasis}
     Jhalf = HalfInteger(_check_spin(J))
-    states = spin_basisstates(Jhalf)
     T = typeof(twice(Jhalf))
-    state_index = Dict(s => i for (i, s) in enumerate(states))
-    SpinSpace{T,S}(Jhalf, states, sym, state_index)
+    SpinSpace{T,S}(Jhalf, sym)
 end
 SpinSpace(sym::S) where {S<:SymbolicSpinBasis} = (sym.spin isa Nothing ? throw(ArgumentError("$sym has no spin value. Pass J to hilbert_space, e.g. `hilbert_space(s, 1//2)` or `hilbert_space(s, labels, 1//2)`, or set it when creating the basis with `@spin s 1//2` or `@spins s 1//2`.")) : SpinSpace(sym, sym.spin))
 SpinSpace(label, J) = SpinSpace(SymbolicSpinBasis(label, nothing, J), J)
-basisstates(H::SpinSpace) = BasisStates(H, H.basisstates)
-Base.@propagate_inbounds basisstate(n::Integer, H::SpinSpace) = H.basisstates[n]
-dim(H::SpinSpace) = length(H.basisstates)
+basisstates(H::SpinSpace) = BasisStates(H, Iterators.map(n -> basisstate(n, H), 1:dim(H)))
+Base.@propagate_inbounds function basisstate(n::Integer, H::SpinSpace{T}) where T
+    @boundscheck 1 <= n <= dim(H) || throw(BoundsError(H, n))
+    SpinState{T}(n - 1 - H.spin)
+end
+dim(H::SpinSpace) = Int(twice(H.spin)) + 1
 function _state_index(s::SpinState, space::SpinSpace)
     t = twice(s.m) + twice(space.spin) # 2(m + J)
     i = (t >> 1) + one(t) # (checking i against dim rather than t against 4J avoids slow SLP vectorization in products of spins)
@@ -149,7 +148,7 @@ has_arithmetic_state_index(::SpinSpace) = true
 atomic_id(H::SpinSpace) = symbolic_group(H.sym)
 function add_tag(H::SpinSpace{T,S}, tag) where {T,S}
     newsym = add_tag(H.sym, tag)
-    SpinSpace{T,typeof(newsym)}(H.spin, H.basisstates, newsym, H.state_index)
+    SpinSpace{T,typeof(newsym)}(H.spin, newsym)
 end
 _check_spin_unset(sym) = sym.spin isa Nothing || throw(ArgumentError("The spin value was already given in the $(sym isa SpinField ? "spin field" : "symbolic basis"), so `J` must be omitted."))
 hilbert_space(sym::SymbolicSpinBasis) = SpinSpace(sym)
@@ -165,8 +164,8 @@ function hilbert_space(sym::SpinField, labels, J, constraint::AbstractConstraint
     _check_spin_unset(sym)
     tensor_product(map(l -> hilbert_space(sym[l], J), _field_labels(labels)); constraint)
 end
-Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.basisstates == b.basisstates)
-Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.basisstates, h))
+Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.spin == b.spin)
+Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.spin, h))
 
 function interpret_state(input::AbstractString, H::SpinSpace{T}) where {T}
     Jhalf = H.spin
@@ -189,15 +188,12 @@ function interpret_state(input::AbstractString, H::SpinSpace{T}) where {T}
 end
 interpret_state(input::AbstractChar, H::SpinSpace) = interpret_state(string(input), H)
 
-spin_basisstates(J::HalfInteger) = [SpinState(i - J) for i in 0:twice(J)]
-spin_basisstates(j) = spin_basisstates(HalfInteger(j))
-
 function operators(H::SpinSpace)
     Jhalf = H.spin
     Splus = spzeros(Float64, dim(H), dim(H))
     Sminus = spzeros(Float64, dim(H), dim(H))
     Sz = spzeros(Float64, dim(H), dim(H))
-    for state in H.basisstates
+    for state in basisstates(H)
         m = state.m
         i = state_index(state, H)
         if m < Jhalf
@@ -214,10 +210,10 @@ function operators(H::SpinSpace)
 end
 
 @testitem "Spin" begin
-    using FermionicHilbertSpaces: spin_basisstates, SpinSpace, SpinState, operators, SpinField, Half
+    using FermionicHilbertSpaces: SpinSpace, SpinState, operators, SpinField, Half
     using LinearAlgebra
-    @test spin_basisstates(1 // 2) == [SpinState(-1 // 2), SpinState(1 // 2)]
-    @test spin_basisstates(1) == [SpinState(-1), SpinState(0), SpinState(1)]
+    @test basisstates(SpinSpace(:s, 1 // 2)) == [SpinState(-1 // 2), SpinState(1 // 2)]
+    @test basisstates(SpinSpace(:s, 1)) == [SpinState(-1), SpinState(0), SpinState(1)]
     # equal states hash equally, also across integer types
     s16 = SpinState{Int16}(Half{Int16}(3 // 2))
     @test s16 == SpinState(3 // 2) && hash(s16) == hash(SpinState(3 // 2))
