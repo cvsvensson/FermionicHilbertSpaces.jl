@@ -371,10 +371,11 @@ function _add_identity_term(summed, coeff, bases, space, repr)
     T = promote_type(eltype(summed), eltype(identity_term))
     return convert(AbstractMatrix{T}, summed)
 end
-# On spaces with a basis-state loop (for example a constrained space over a ProductSpace), `_terms_matrix` builds the sum of all terms.
+# On spaces with a basis-state loop (for example a constrained space over a ProductSpace), and on any space for a format
+# without a method of its own, `_terms_matrix` builds the sum of all terms.
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the type of `coeff`.
-function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; tree_split=10, kwargs...)
+function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split=10, kwargs...)
     spaces = groups(_input_space(space))
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
     Tterms = _repr_eltype(mapreduce(mat_eltype, promote_type, prodops), repr)
@@ -452,12 +453,13 @@ function finalize!(m::Matrix, space)
 end
 
 
-function _matrix_representation_single_space(op::NCAdd, space, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
+function _matrix_representation_single_space(op::NCAdd, space, repr, chunking; kwargs...)
     _terms_matrix(_repr_eltype(mat_eltype(op), repr), NCterms(op), op.coeff, space, repr, chunking; kwargs...)
 end
 
-# The matrix of `sum(terms) + coeff * I` with element type `T`
-_terms_matrix(::Type{T}, terms, coeff, space, repr, ::NoChunking; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
+# The matrix of `sum(terms) + coeff * I` with element type `T`. A new format builds sums of terms on any space by
+# adding a method here.
+_terms_matrix(::Type{T}, terms, coeff, space, repr::EagerDenseRepr, ::NoChunking; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 _terms_matrix(::Type{T}, terms, coeff, space::Axes, repr::EagerSparseRepr, ::NoChunking; kwargs...) where {T} = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 
 function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T
@@ -937,6 +939,22 @@ end
     @test_throws InexactError representation(1im * k, H, Vector{Float64})
     Hbdg = hilbert_space(f, 1:2, FermionicHilbertSpaces.FreeFermions.BdG())
     @test representation(2, Hbdg, Matrix{ComplexF64}) isa Matrix{ComplexF64}
+end
+
+@testitem "Format that builds sums of terms with _terms_matrix" begin
+    import FermionicHilbertSpaces: _canonicalize_repr, _terms_matrix, EagerSparseRepr
+    struct TermsFormat end
+    _canonicalize_repr(repr::TermsFormat) = repr
+    _terms_matrix(::Type{T}, terms, coeff, space, ::TermsFormat, chunking; kwargs...) where T =
+        _terms_matrix(T, terms, coeff, space, EagerSparseRepr(), chunking; kwargs...)
+    @fermions f
+    @boson b
+    Hf = hilbert_space(f, 1:2)
+    H = tensor_product(Hf, hilbert_space(b, 3))
+    op = f[1]' * f[2] + hc + 0.5 * f[1]' * f[1] * (b + b') + 2
+    @test representation(op, H, TermsFormat()) == representation(op, H)
+    opf = f[1]' * f[2] + hc + 2
+    @test representation(opf, Hf, TermsFormat()) == representation(opf, Hf)
 end
 
 @testitem "Scheduler extension correctness" begin
