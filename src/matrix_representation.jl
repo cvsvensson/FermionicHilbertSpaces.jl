@@ -324,7 +324,7 @@ end
 # the matrix, so it is embedded with identities once instead of once per term. Terms on a single group join those on
 # it and a neighbour, if any, since their sum is still small. Joining larger ranges can make the summed matrices much
 # larger than the terms.
-function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; tree_split=10, kwargs...)
+function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}, chunking; tree_split = 10, kwargs...)
     sums = _span_sums(op, bases, groups(space), repr, chunking; tree_split, kwargs...)
     if length(sums) == 1 && only(sums).l == only(sums).r == 1
         return _add_identity_term(only(sums).core, op.coeff, bases, space, repr)

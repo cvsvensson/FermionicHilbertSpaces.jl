@@ -250,7 +250,7 @@ function _terms_matrix(::Type{T}, terms, coeff, space, repr::EagerDenseRepr, chu
 end
 
 function _summed_span_matrices(prodops, span, spaces, repr, chunking::ThreadedChunking; tree_split, kwargs...)
-    matrices = tmap(p -> _span_matrix(p, span, spaces, repr; kwargs...), prodops; scheduler=chunking.scheduler)
+    matrices = tmap(p -> _span_matrix(p, span, spaces, repr; kwargs...), prodops; scheduler = chunking.scheduler)
     return _sum_tree_threaded(matrices, tree_split, chunking.scheduler)
 end
 
