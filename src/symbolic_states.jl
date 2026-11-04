@@ -246,7 +246,7 @@ NonCommutativeProducts.adjoint_grade(a::StateGrade) = StateGrade(Dict{Any,Bicycl
 
 Convert `input`, such as the string `"10"`, to a basis state of `space`, or to a state of
 type `B`. [`Kets`](@ref), `basisstate` and `state_index` call it for strings and characters.
-A custom basis-state type adds a method for the inputs it accepts; a state is returned as it is.
+A custom basis-state type adds a method for the inputs it accepts; a state is returned as it is, and a state of another kind throws an `ArgumentError`.
 """
 interpret_state(state::B, ::Type{B}) where B = state
 interpret_state(state::AbstractBasisState, ::Type{B}) where {B} = state isa B ? state : throw(ArgumentError("The state `$state` cannot be converted to a state of type `$B`."))

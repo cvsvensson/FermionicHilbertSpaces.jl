@@ -75,7 +75,7 @@ _check_size(G, H) = size(G) == (dim(H), dim(H)) ||
     include("gaussian.jl")
     include("wick.jl")
 
-    # These spaces have the basis of their parent, where their kets and bras are represented
+    # These spaces share their parent's basis, so kets and bras are represented on the parent
     const _ParentBasisSpace = Union{SingleParticleHilbertSpace, BdGHilbertSpace}
     statetype(H::_ParentBasisSpace) = statetype(parent(H))
     interpret_state(state, H::_ParentBasisSpace) = interpret_state(state, parent(H))
