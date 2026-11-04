@@ -619,7 +619,7 @@ _change_basis(m::UniformScaling, (Uout, Uin)) = m.λ * (Uout * Uin')
 # visits every element, a copy only the stored ones, and a copy of a GPU array avoids scalar indexing.
 _has_support_on(m, axis, js) = !iszero(selectdim(m, axis, js))
 # A vector is a pure state ψ, and ψψ† has support on `js` along axis 2 exactly when it has along axis 1
-_has_support_on(m::Union{AbstractSparseArray,AbstractGPUArray}, axis, js) = axis <= ndims(m) && !iszero(m[ntuple(d -> d == axis ? js : (:), Val(ndims(m)))...])
+_has_support_on(m::Union{AbstractSparseArray, AbstractGPUArray}, axis, js) = axis <= ndims(m) && !iszero(m[ntuple(d -> d == axis ? js : (:), Val(ndims(m)))...])
 _has_support_on(m::UniformScaling, axis, js) = !isempty(js) && !iszero(m.λ)
 
 function _checked_basis_transformation(Hfrom, Hto; projection = false)
@@ -1411,9 +1411,11 @@ end
     @bosons b
     Hcons = hilbert_space(f, 1:6, NumberConservation(3))
     Hprod = tensor_product(hilbert_space(f, 1:3), hilbert_space(s[1], 1 // 1), hilbert_space(b[1], 3))
-    for (H, Hsub) in ((hilbert_space(f, 1:5), hilbert_space(f, [2, 4])),
-        (Hcons, subregion(hilbert_space(f, [1, 4]), Hcons)),
-        (Hprod, tensor_product(hilbert_space(f, 2:2), hilbert_space(b[1], 3))))
+    for (H, Hsub) in (
+            (hilbert_space(f, 1:5), hilbert_space(f, [2, 4])),
+            (Hcons, subregion(hilbert_space(f, [1, 4]), Hcons)),
+            (Hprod, tensor_product(hilbert_space(f, 2:2), hilbert_space(b[1], 3))),
+        )
         ρ = rand(ComplexF64, dim(H), dim(H))
         ψ = rand(ComplexF64, dim(H))
         @test _partial_trace_by_gather(ρ, H, Hsub) ≈ partial_trace(ρ, H => Hsub)
