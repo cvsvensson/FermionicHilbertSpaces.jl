@@ -1,4 +1,4 @@
-# # Schrieffer–Wolff transformation of the Anderson model
+# # Schrieffer–Wolff and the Kondo coupling
 
 # `linsolve` from KrylovKit works on symbolic kets, so second-order perturbation theory can be done exactly in a
 # space far too large for matrices. We compute the effective Hamiltonian of an Anderson impurity coupled to 81 bath

@@ -1,4 +1,4 @@
-# # Bound doublons in the Hubbard ring
+# # Bound doublons with KrylovKit
 
 # KrylovKit's `eigsolve` accepts a symbolic Hamiltonian as the linear map and symbolic kets as vectors, so
 # eigenstates can be found without ever building a matrix. We use this to find the bound pair (doublon) of two

@@ -1,8 +1,7 @@
-# # Toric code from the Kitaev honeycomb model
+# # Toric code from the Kitaev honeycomb
 
-# Symbolic kets let us apply spin operators on a lattice far too large to enumerate. We use this to derive the toric
-# code from Kitaev's honeycomb model[^1] on a 64-spin torus: we compute its coupling by fourth-order perturbation
-# theory and show that its ground space is four-fold degenerate.
+# We derive the toric code from Kitaev's honeycomb model[^1] on a 64-spin torus: we compute its coupling by
+# fourth-order perturbation theory and show that its ground space is four-fold degenerate.
 
 # ## The toric-code limit
 

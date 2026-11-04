@@ -1,9 +1,7 @@
-# # η-pairing in a large Hubbard chain
+# # η-pairing in a Hubbard chain
 
-# Symbolic kets store only their nonzero amplitudes and operators act on them without a basis, so exact
-# calculations are possible in spaces far too large for vectors. Here we build Yang's η-pairing eigenstates[^1] of a
-# 200-site Hubbard chain and show that they have off-diagonal long-range order: their pair correlations do not decay
-# with distance.
+# We build Yang's η-pairing eigenstates[^1] of a 200-site Hubbard chain and show that they have off-diagonal
+# long-range order: their pair correlations do not decay with distance.
 
 # ## η-pairing states
 
