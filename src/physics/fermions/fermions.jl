@@ -563,6 +563,7 @@ end
         H3 = hilbert_space(f, 1:3, qn)
         H3w = tensor_product(H1, H2)
         @test H3w == tensor_product((H1, H2)) == tensor_product([H1, H2])
+        @test tensor_product(H1) == tensor_product((H1,))
         Hs = [H1, H2]
         b1 = fermions(H1)
         b2 = fermions(H2)
