@@ -1,5 +1,5 @@
 module OhMyThreadsExt
-using SparseArrays: SparseArrays, findnz, nonzeros, nzrange, rowvals
+using SparseArrays: SparseArrays, nonzeros, nzrange, rowvals
 using OhMyThreads: OhMyThreads, Scheduler, chunks, tforeach, tmap
 using FermionicHilbertSpaces: FermionicHilbertSpaces
 using LinearAlgebra: LinearAlgebra, rmul!
