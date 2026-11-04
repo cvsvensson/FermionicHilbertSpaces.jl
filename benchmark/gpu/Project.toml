@@ -1,0 +1,20 @@
+[deps]
+AcceleratedKernels = "6a4ca0a5-0e36-4168-a932-d9be78d558f1"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+FermionicHilbertSpaces = "82e5dd95-83c3-46b2-a303-acc930c81756"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+
+[sources]
+FermionicHilbertSpaces = {path = "../.."}
+
+[compat]
+AcceleratedKernels = "0.5"
+BenchmarkTools = "1"
+CUDA = "6"
+LinearAlgebra = "1"
+OhMyThreads = "0.8"
+SparseArrays = "1"
+julia = "1.11"
