@@ -198,6 +198,10 @@ add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add
 The truncated space of the bosonic mode `b`, with basis states `|0⟩, …, |dimension-1⟩`, so the
 maximal occupation is `dimension - 1`. With `labels`, the tensor product of one such space for
 each mode `b[l]`, `l in labels`. An optional `constraint` restricts the basis states.
+
+Operator terms that would raise the occupation above the cutoff are dropped without error,
+while leaving a constrained space throws unless `projection=true`. Products are normal ordered
+before truncation, so `b * b'` is represented as `b'b + 1`.
 """
 hilbert_space(sym::BosonField, labels, dimension::Integer, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], dimension), labels); constraint)
 hilbert_space(sym::BosonSym, dimension::Integer) = TruncatedBosonicHilbertSpace(sym, dimension)
