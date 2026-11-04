@@ -184,10 +184,10 @@ end
 # Let's plot the results. Each line traces one Floquet eigenstate and we plot the quasienergies, <σz> and entanglement between spin and Floquet spaces as a function of drive amplitude.
 using Plots
 floquet_zone_inds = reduce(vcat, [indices(n, H) for n in -1:1]) # Get the zone indices of zones with floquet numbers -1 to 1.
-p1 = plot(xlabel="Drive amplitude  A/ω", title="Quasienergy spectrum",
+p1 = plot(xlabel="Drive amplitude  A/ω", ylabel="Quasienergy/ω", title="Quasienergy spectrum",
     legend=false, frame=:box, size=(500, 360), ylims=(-1.4, 1.4))
-plot!(p1, A_values ./ ω, spectrum[:, floquet_zone_inds]; lw=2, color=[1 2 3])
-hline!(p1, [0.5, -0.5] .* ω; color=:gray, lw=2, ls=:dash)
+plot!(p1, A_values ./ ω, spectrum[:, floquet_zone_inds] ./ ω; lw=2, color=[1 2 3])
+hline!(p1, [0.5, -0.5]; color=:gray, lw=2, ls=:dash)
 
 central_zone = indices(0, H) # central zone indices
 p2 = plot(xlabel="Drive amplitude  A/ω", title="Spin and Floquet",
@@ -200,7 +200,7 @@ plot!(
     p2, Float64[], Float64[]; lw = 3, color = :black, ls = :dot,
     label="Photon number")
 
-p3 = plot(xlabel="Drive amplitude  A/ω", title="Spin-Floquet entanglement",
+p3 = plot(xlabel="Drive amplitude  A/ω", ylabel="Entanglement entropy", title="Spin-Floquet entanglement",
     legend=false, frame=:box, size=(500, 360), ylims=(0, log(3) + 0.1))
 plot!(p3, A_values ./ ω, entanglement[:, central_zone]; lw=2)
 hline!(p3, [log(3)]; color=:gray, lw=2, ls=:dash)

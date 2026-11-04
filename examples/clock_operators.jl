@@ -82,18 +82,19 @@ function symmetry_resolved_entropy(ρ, Hsub, D; tol=1e-12)
 end
 # We now calculate and plot the symmetry resolved entanglement entropy in the ground state of the hamiltonian for a range of values of ``h``
 Hgs = sector(0, Hzd)
+J = 1.0
 hs = range(0.05, 2.5; length=30)
 ptmap = partial_trace(Hgs => Hhalf)
 r = map(hs) do h
-    hmat = representation(clock_hamiltonian(1.0, h), Hgs)
+    hmat = representation(clock_hamiltonian(J, h), Hgs)
     vals, vecs = eigs(Hermitian(hmat), nev=1, which=:SR)
     ρhalf = ptmap(vecs[:, 1])
     symmetry_resolved_entropy(ρhalf, Hhalf, D)
 end
 
-p1 = plot(hs, getproperty.(r, :Stotal), lw=3, c=:black, label="total  S(A)",
-    xlabel="h / J", ylabel="entropy", size=(400, 250),
+p1 = plot(hs ./ J, getproperty.(r, :Stotal), lw=3, c=:black, label="total  S(A)",
+    xlabel="h/J", ylabel="entropy", size=(400, 250),
     title="Half-chain entanglement", yscale=:log10, legend=:bottom)
-plot!(p1, hs, getproperty.(r, :Hcharge), lw=2, label="charge entropy  H(pₛ)",)
-plot!(p1, hs, getproperty.(r, :Swithin), lw=2, label="within-sector  ΣₛpₛSₛ")
+plot!(p1, hs ./ J, getproperty.(r, :Hcharge), lw=2, label="charge entropy  H(pₛ)",)
+plot!(p1, hs ./ J, getproperty.(r, :Swithin), lw=2, label="within-sector  ΣₛpₛSₛ")
 
