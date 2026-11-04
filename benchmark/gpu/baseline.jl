@@ -1,4 +1,3 @@
-# Untested prototype: written without being run.
 # Times the CPU matrix representation and its upload to the GPU as separate steps.
 #     julia --project -t auto baseline.jl [--large]
 include("cases.jl")

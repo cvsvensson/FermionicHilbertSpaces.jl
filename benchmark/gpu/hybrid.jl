@@ -1,4 +1,3 @@
-# Untested prototype: written without being run.
 # Generates the (I, J, V) entries on the CPU, uploads them, and assembles the CSR matrix on the device, with
 # cuSPARSE's `sparse` or with AcceleratedKernels. Checks both against `representation(op, H)`.
 #     julia --project -t auto hybrid.jl [--large] [--cpu]
@@ -20,8 +19,9 @@ end
 DeviceSparseRepr(A, build) = DeviceSparseRepr{A, typeof(build)}(build)
 
 FHS._canonicalize_repr(repr::DeviceSparseRepr) = repr
-function FHS._matrix_representation(op::FHS.NCAdd, bases, space, repr::DeviceSparseRepr{A}, chunking; kwargs...) where {A}
-    return repr.build(upload(A, host_ijv(op, bases, space, chunking; kwargs...))..., dim(space), dim(space))
+function FHS._terms_matrix(::Type{T}, terms, coeff, space, repr::DeviceSparseRepr{A}, chunking; kwargs...) where {T, A}
+    ijv = FHS._terms_matrix(T, terms, coeff, space, IJVFormat(), chunking; kwargs...)
+    return repr.build(upload(A, ijv)..., dim(space), dim(space))
 end
 
 upload(A, (rows, cols, vals)) = (A(Int32.(rows)), A(Int32.(cols)), A(vals))

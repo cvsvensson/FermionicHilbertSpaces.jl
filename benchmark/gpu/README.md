@@ -1,6 +1,6 @@
 # Operator matrices on the GPU
 
-Untested prototypes that compare ways to get a matrix from `representation` onto an NVIDIA GPU. Run from this directory:
+Prototypes that compare ways to get a matrix from `representation` onto an NVIDIA GPU. Run from this directory:
 
     julia --project -e 'using Pkg; Pkg.instantiate()'
     julia --project -t auto baseline.jl [--large]
