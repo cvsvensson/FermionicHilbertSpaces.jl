@@ -12,5 +12,6 @@
     check(hop(12) + 0.1 * f[1]' * f[12], H)
     # Leaving the space
     check(f[1], H; projection=true)
-    @test_throws Exception representation(f[1], H, DeviceDenseRepr(backend))
+    # Asynchronous backends throw when the result is used.
+    @test_throws Exception Array(representation(f[1], H, DeviceDenseRepr(backend)))
 end

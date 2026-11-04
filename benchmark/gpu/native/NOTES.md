@@ -1,11 +1,22 @@
 # Native device assembly: notes
 
-Status: all six stages pass on the KernelAbstractions 0.10 CPU backend and on JLArrays. Not yet run on a GPU.
+Status: all six stages pass on the KernelAbstractions 0.10 CPU backend, on JLArrays and on CUDA.
 
 Run with `julia --project=benchmark/gpu/native` and `include("benchmark/gpu/native/runall.jl")`. The backend is CUDA
 or JLArrays if `using CUDA` or `using JLArrays` ran before the include, and the KernelAbstractions CPU backend
 otherwise. JLArrays 0.4 requires KernelAbstractions 0.9, so it needs its own environment; CUDA 6 and the CPU backend
-use 0.10. Each stage script compares the dense and the CSC device matrices with `representation(op, H, Matrix{T})`.
+use 0.10. Each stage script compares `representation(op, H, DeviceDenseRepr{T}(backend))` and
+`DeviceCSCRepr{T}(backend)` with `representation(op, H, Matrix{T})`.
+
+## Entry point
+
+`DeviceDenseRepr(backend)` and `DeviceCSCRepr(backend)` are formats for `representation`, with an optional element
+type as in `DeviceDenseRepr{Float32}(backend)`. They plug into FHS through `_canonicalize_repr`, `_repr_eltype` and
+`_terms_matrix`, which FHS calls with the terms of a sum, already split by group on product spaces. Two more methods
+cover what FHS builds without `_terms_matrix`: `_term_matrix_representation` for a single term, which forwards to
+`_terms_matrix`, and `_convert_repr_eltype` for a number, which uploads `c * I` from the host. Widening the
+`_terms_matrix` hook in FHS to single terms would remove the first. On a product space, a coefficient of wider type
+than the terms makes FHS add two results, which the CSC named tuple does not support; an explicit `T` avoids it.
 
 The KernelAbstractions 0.10 CPU backend runs kernels through OpenCL (PoCL) and compiles them with GPUCompiler, so it
 rejects non-isbits arguments, dynamic dispatch and runtime allocation as a GPU backend would. JLArrays runs the
@@ -20,8 +31,7 @@ kernels as plain Julia and mainly checks the array and `Adapt` plumbing of a GPU
 - The output is a sink with a `push_inds_amps!` method: `DenseSink` adds into a dense device matrix, and `SlotSink`
   fills an `nslots × n` slot matrix. A second kernel sorts each column and sums duplicates in place, and a third copies
   the columns into CSC arrays after a prefix sum of the column counts.
-- Terms are prepared on the host as on the CPU: split by group with `partition_product` on spaces with several groups,
-  factors made into tuples with the existing `TupleConcretizer`, and the per-factor precomputation from
+- Terms arrive from FHS already split by group on spaces with several groups. On the host their factors are made into tuples with the existing `TupleConcretizer`, and the per-factor precomputation from
   `precomputation_before_operator_application`. Terms of equal type go into one device vector, and the kernel
   recurses over the tuple of these vectors.
 - Device data comes from `Adapt.adapt_structure`. Each struct keeps the fields its methods read on the device and
@@ -73,8 +83,8 @@ says which fields to keep. They would move to an FHS Adapt extension. No algebra
 
 ## What still fails or is missing
 
-- `projection=false` with an operator that leaves the space throws inside the kernel. On CUDA this surfaces as a
-  kernel exception without the FHS message.
+- `projection=false` with an operator that leaves the space throws inside the kernel. On CUDA this surfaces when
+  the result is used, as a kernel exception without the FHS message.
 - Unsupported, with an isbits error: `GenericHilbertSpace`, Majoranas, BdG and single-particle spaces, `TransposedSpace`
   and symbolic coefficients. `Axes(Hout, Hin)` is not supported. Products whose groups have no `internal_rep` take the
   slow product path, which indexes a heterogeneous tuple at run time and will not compile on a GPU.
@@ -83,9 +93,9 @@ says which fields to keep. They would move to an FHS Adapt extension. No algebra
   columns would need to be assembled in chunks.
 - Boson and spin amplitudes are computed in `Float64`, so Metal would fail.
 
-## Not covered by the CPU checks
+## Open questions
 
-- CUDA itself: the exceptions compiled into device code (`_skip_outside`'s `ArgumentError`, `throw_boundserror`)
-  and the kernel launch configuration. The CPU backend compiles them, so they are expected to work.
-- Performance. On the CPU backend, `device_csc` for a 16-mode number-conserving hopping model with interactions takes
-  about as long as `representation` on the host.
+- Performance. On an NVIDIA T1000 (weak in `Float64`), `DeviceCSCRepr` for a number-conserving hopping model with
+  interactions takes about as long as single-threaded `representation` on the host, both for 16 and for 20 modes at
+  half filling. Host preparation is negligible; the column kernel and the compaction of the slot matrix take
+  comparable time.
