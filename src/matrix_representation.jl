@@ -199,16 +199,22 @@ __concretize(x::ProductOperator, concr) = ProductOperator(map(op -> __concretize
 """
     partition_product(op::NCMul, bases, spaces)
 
-Split the sorted product `op` into a `ProductOperator` with one `NCMul` per basis it acts on.
+Split `op` into a `ProductOperator` with one `NCMul` per basis it acts on.
 """
 function partition_product(op::NCMul, bases, spaces)
     parts = NonCommutativeProducts.split_by_group(op)
     group_inds = map(((_, part),) -> _basis_index(symbolic_group(first(part.factors)), bases), parts)
     any(iszero, group_inds) && throw(ArgumentError("Not all factors of the operator belong to a basis of the provided space."))
-    allunique(group_inds) || throw(ArgumentError("The factors of each basis must be adjacent in `$op`. Sort it first."))
-    perm = sortperm(group_inds)
-    ops = ntuple(k -> last(parts[perm[k]]), length(perm))
-    return ProductOperator(ops, spaces[group_inds[perm]], group_inds[perm])
+    inds = sort!(unique(group_inds))
+    ops = ntuple(k -> _part_on_basis(parts, group_inds, inds[k]), length(inds))
+    return ProductOperator(ops, spaces[inds], inds)
+end
+# A product that isn't sorted can have several runs of factors on one basis. Operators on different bases commute, so
+# the runs can be joined.
+function _part_on_basis(parts, group_inds, ind)
+    runs = [last(part) for (part, i) in zip(parts, group_inds) if i == ind]
+    length(runs) == 1 && return only(runs)
+    return NCMul(prod(run -> run.coeff, runs), reduce(vcat, [run.factors for run in runs]))
 end
 _basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
 
