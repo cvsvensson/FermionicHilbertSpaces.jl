@@ -35,7 +35,7 @@ end
 
 # The entries `(rows, cols, amps)` of the columns `incols` of the matrix, stored at the column indices
 # `incols .- offset`, with duplicate entries not summed
-function _collect_ijv(::Type{T}, precomps, coeff, space, incols, offset; kwargs...) where T
+function _collect_ijv(::Type{T}, precomps, coeff, space, incols, offset; kwargs...) where {T}
     capacity = _sparse_length_guess(length(precomps), length(incols))
     ijv = sparse_matrix_accumulator(T, (capacity, capacity))
     _collect_block!(ijv, capacity, precomps, coeff, space, incols, offset; kwargs...)
