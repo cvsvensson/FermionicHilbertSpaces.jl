@@ -45,7 +45,7 @@ pages = [
         "Constrained spaces and quantum numbers" => "conservation.md",
         "Hilbert space operations" => "hilbert_space_operations.md",
         "Symbolic states" => "symbolic_states.md",
-        "Fermionic tensor products and partial traces" => "fermions.md",
+        "Fermionic tensor products, partial traces, and partial transpose" => "fermions.md",
         "Non-interacting systems" => "non_interacting.md",
         "Example: Free fermions" => "literate_output/free_fermions.md",
     ],

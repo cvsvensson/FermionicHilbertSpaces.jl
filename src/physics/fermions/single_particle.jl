@@ -1,5 +1,11 @@
+"""
+    SingleParticleState(i)
+
+A basis state of the [`SingleParticle`](@ref) space: one fermion in the mode at position `i`.
+"""
 const SingleParticleState = FixedNumberFockState{1}
 SingleParticleState(site::Int) = FixedNumberFockState((site,))
+Base.show(io::IO, s::SingleParticleState) = print(io, "SingleParticleState(", only(s.sites), ")")
 
 struct SingleParticleHilbertSpace{H}
     parent::H

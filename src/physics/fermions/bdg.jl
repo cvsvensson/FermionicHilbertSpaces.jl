@@ -1,3 +1,8 @@
+"""
+    NambuState(i, hole::Bool)
+
+A basis state of the [`BdG`](@ref) space: the hole (`hole = true`) or particle component of the mode at position `i`.
+"""
 struct NambuState <: AbstractFockState
     state::SingleParticleState
     hole::Bool
@@ -5,6 +10,7 @@ end
 NambuState(i::Integer, hole::Bool) = NambuState(SingleParticleState(i), hole)
 Base.:(==)(n1::NambuState, n2::NambuState) = n1.state == n2.state && n1.hole == n2.hole
 Base.hash(n::NambuState, h::UInt) = hash(n.hole, hash(n.state, h))
+Base.show(io::IO, n::NambuState) = print(io, "NambuState(", only(n.state.sites), ", ", n.hole, ")")
 _state_label_atomic(s::NambuState, H::_FermionModeSpace) = (s.hole ? "h" : "p") * _state_label_atomic(s.state, H)
 
 # Ψ' m Ψ == Ψ' m_ph Ψ + tr(m) / 2 by the anticommutation relations, since the vector of adjoints Ψ' equals τx Ψ, and
