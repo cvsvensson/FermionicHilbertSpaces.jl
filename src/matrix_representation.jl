@@ -1035,8 +1035,8 @@ end
     @boson b
     H3 = tensor_product(Hf, Hs, hilbert_space(b, 3))
     op3 = f[1]' * f[2] + hc + 2 * s[:z] + b' * b + 1im
-    @test representation(op3, H3; chunking=StateChunking(scheduler)) == representation(op3, H3)
-    @test representation(op3, H3, EagerDenseRepr(); chunking=TermChunking(scheduler)) == representation(op3, H3)
+    @test representation(op3, H3; chunking = StateChunking(scheduler)) == representation(op3, H3)
+    @test representation(op3, H3, EagerDenseRepr(); chunking = TermChunking(scheduler)) == representation(op3, H3)
 
     # Constrained single space
     Hc = constrain_space(Hf, NumberConservation(1:2))
