@@ -31,11 +31,11 @@ end
 
 # `HEOMOp{:up}(l)` raises ``n_l`` with amplitude ``n_l+1`` and vanishes at the truncation tier,
 # `HEOMOp{:down}(l)` lowers ``n_l``, and `HEOMOp{:damping}` multiplies by ``-\sum_l χ_l n_l``.
-struct HEOMOp{T,B} <: AbstractSym
+struct HEOMOp{T, B} <: AbstractSym
     l::Int
     bath::B
 end
-HEOMOp{T}(l, bath) where {T} = HEOMOp{T,typeof(bath)}(l, bath)
+HEOMOp{T}(l, bath) where {T} = HEOMOp{T, typeof(bath)}(l, bath)
 @nc HEOMOp
 symbolic_group(op::HEOMOp) = op.bath.id
 mat_eltype(::Type{<:HEOMOp}) = Float64
