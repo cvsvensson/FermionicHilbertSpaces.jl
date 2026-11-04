@@ -61,11 +61,12 @@ t = 1.0
 Us = range(0, 16; length=20)
 sweep = [ground_state_analysis(U; t) for U in Us];
 using Plots
-p1 = plot(Us ./ t, [res.variance for res in sweep]; label="Number variance ⟨Δn²⟩", xlabel="U/t", ylabel="Observable", lw=2)
-plot!(p1, Us ./ t, [res.hopping for res in sweep]; label="Hopping amplitude ⟨bᵢ†bᵢ₊₁⟩", lw=2)
-p2 = plot(1:N, ground_state_analysis(0; t).density; label="U/t = 0", m=:circle, lw=2,
+p1 = plot(Us ./ t, [res.variance for res in sweep]; label = "Number variance ⟨Δn²⟩", xlabel = "U/t", ylabel = "Observable", lw = 2)
+plot!(p1, Us ./ t, [res.hopping for res in sweep]; label = "Hopping amplitude ⟨bᵢ†bᵢ₊₁⟩", lw = 2)
+p2 = plot(
+    1:N, ground_state_analysis(0; t).density; label = "U/t = 0", m = :circle, lw = 2,
     xlabel="Site i", ylabel="⟨nᵢ⟩", xticks=1:N, title="Density profiles")
-plot!(p2, 1:N, ground_state_analysis(6t; t).density; label="U/t = 6", m=:square, lw=2)
+plot!(p2, 1:N, ground_state_analysis(6t; t).density; label = "U/t = 6", m = :square, lw = 2)
 plot(p1, p2; layout=(1, 2), size=(600, 300), frame=:box)
 
 # ## Dipole-conserving model
@@ -104,4 +105,4 @@ entropies = map(Us) do U
     Ψ0 = eigvecs(representation(H, HND, Matrix))[:, 1]
     sum(-λ * log(λ) for λ in eigvals(ptmap(Ψ0)) if λ > 1e-12)
 end
-plot(Us ./ J, entropies; xlabel="U/J", ylabel="Half-system entropy", legend=false, ylims=(0, 2.1), frame=:box, size=(400, 250), lw=2)
+plot(Us ./ J, entropies; xlabel = "U/J", ylabel = "Half-system entropy", legend = false, ylims = (0, 2.1), frame = :box, size = (400, 250), lw = 2)

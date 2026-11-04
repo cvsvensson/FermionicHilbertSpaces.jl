@@ -92,9 +92,10 @@ r = map(hs) do h
     symmetry_resolved_entropy(ρhalf, Hhalf, D)
 end
 
-p1 = plot(hs ./ J, getproperty.(r, :Stotal), lw=3, c=:black, label="total  S(A)",
-    xlabel="h/J", ylabel="entropy", size=(400, 250),
+p1 = plot(
+    hs ./ J, getproperty.(r, :Stotal), lw = 3, c = :black, label = "total  S(A)",
+    xlabel = "h/J", ylabel = "entropy", size = (400, 250),
     title="Half-chain entanglement", yscale=:log10, legend=:bottom)
-plot!(p1, hs ./ J, getproperty.(r, :Hcharge), lw=2, label="charge entropy  H(pₛ)",)
-plot!(p1, hs ./ J, getproperty.(r, :Swithin), lw=2, label="within-sector  ΣₛpₛSₛ")
+plot!(p1, hs ./ J, getproperty.(r, :Hcharge), lw = 2, label = "charge entropy  H(pₛ)")
+plot!(p1, hs ./ J, getproperty.(r, :Swithin), lw = 2, label = "within-sector  ΣₛpₛSₛ")
 
