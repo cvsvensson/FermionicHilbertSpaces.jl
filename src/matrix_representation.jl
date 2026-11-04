@@ -102,11 +102,6 @@ function operator_indices_and_amplitudes!(accumulator, op, space; kwargs...)
     return operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp; kwargs...)
 end
 
-function chunked_operator_indices_and_amplitudes!(accumulator, op, space::AbstractHilbertSpace, input_inds, col_offset; kwargs...)
-    precomp = precomputation_before_operator_application(op, space)
-    return chunked_operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp, input_inds, col_offset; kwargs...)
-end
-
 # Whether `outind` lies outside the space and `projection` allows skipping it. Throws if it lies outside and `projection` is false.
 function _skip_outside(outind, projection)
     iszero(outind) || return false
@@ -189,35 +184,32 @@ function apply_local_operators(op::NCMul, state, space, precomps; transpose)
 end
 
 struct TupleConcretizer end
-struct VecConcretizer end
 struct NoConcretizer end
 ___concretize(factors, ::TupleConcretizer) = Tuple(factors)
-# `map(identity, factors)` joins the element types one by one, which is slow, and products usually have one factor type
-function ___concretize(factors::AbstractVector, ::VecConcretizer)
-    T = isempty(factors) ? eltype(factors) : typeof(first(factors))
-    return all(f -> f isa T, factors) ? Vector{T}(factors) : map(identity, factors)
-end
-___concretize(factors::Tuple, ::VecConcretizer) = collect(factors)
 ___concretize(factors, ::NoConcretizer) = factors
 __concretize(x::NCMul, concr) = NCMul(x.coeff, ___concretize(x.factors, concr))
 __concretize(x::NCAdd, concr) = sum(__concretize(term, concr) for term in NCterms(x)) + x.coeff
 __concretize(x::ProductOperator, concr) = ProductOperator(map(op -> __concretize(op, concr), x.ops), x.spaces, x.inds)
 
 """
-    partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
+    partition_product(op::NCMul, bases, spaces)
 
-Split `op` into a `ProductOperator` with one `NCMul` per basis it acts on. The coefficient goes to the first of them.
+Split `op` into a `ProductOperator` with one `NCMul` per basis it acts on.
 """
-function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
-    factors = op.factors
-    group_inds = [_basis_index(symbolic_group(fac), bases) for fac in factors]
+function partition_product(op::NCMul, bases, spaces)
+    parts = NonCommutativeProducts.split_by_group(op)
+    group_inds = map(((_, part),) -> _basis_index(symbolic_group(first(part.factors)), bases), parts)
     any(iszero, group_inds) && throw(ArgumentError("Not all factors of the operator belong to a basis of the provided space."))
     inds = sort!(unique(group_inds))
-    ops = ntuple(length(inds)) do k
-        v = [fac for (fac, i) in zip(factors, group_inds) if i == inds[k]]
-        NCMul(k == 1 ? op.coeff : one(op.coeff), ___concretize(v, concr))
-    end
+    ops = ntuple(k -> _part_on_basis(parts, group_inds, inds[k]), length(inds))
     return ProductOperator(ops, spaces[inds], inds)
+end
+# A product that isn't sorted can have several runs of factors on one basis. Operators on different bases commute, so
+# the runs can be joined.
+function _part_on_basis(parts, group_inds, ind)
+    runs = [last(part) for (part, i) in zip(parts, group_inds) if i == ind]
+    length(runs) == 1 && return only(runs)
+    return NCMul(prod(run -> run.coeff, runs), reduce(vcat, [run.factors for run in runs]))
 end
 _basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
 
@@ -352,12 +344,10 @@ end
 function _span_matrix(prodop, span, spaces, repr; kwargs...)
     matrices = map(span) do n
         m = findfirst(==(n), prodop.inds)
-        isnothing(m) ? _identity(dim(spaces[n]), repr) : _term_matrix_representation(prodop.ops[m], spaces[n], repr, NoChunking(); kwargs...)
+        _term_matrix_representation(isnothing(m) ? missing : prodop.ops[m], spaces[n], repr, NoChunking(); kwargs...)
     end
-    return foldl(kron, Iterators.reverse(matrices))
+    return _kron_groups(matrices, prodop.inds .- (first(span) - 1), repr)
 end
-_identity(d, ::EagerSparseRepr) = sparse(I(d))
-_identity(d, ::EagerDenseRepr) = Matrix{Bool}(I, d, d)
 function _embed_span(core, span, spaces, repr)
     r = prod(n -> dim(spaces[n]), 1:(first(span) - 1); init = 1)
     l = prod(n -> dim(spaces[n]), (last(span) + 1):length(spaces); init = 1)
@@ -365,7 +355,10 @@ function _embed_span(core, span, spaces, repr)
     return _embed(core, l, r, repr)
 end
 _embed(core, l, r, ::EagerSparseRepr) = _kron_identities(convert(SparseMatrixCSC, core), l, r, eltype(core))
-_embed(core, l, r, ::EagerDenseRepr) = kron(Matrix{Bool}(I, l, l), core, Matrix{Bool}(I, r, r))
+function _embed(core, l, r, ::EagerDenseRepr)
+    left = l == 1 ? core : kron(Eye{Bool}(l), core)
+    return r == 1 ? left : kron(left, Eye{Bool}(r))
+end
 # `summed + coeff * I`, with the element type of `summed` promoted with that of `coeff * I` also when `coeff` is zero
 function _add_identity_term(summed, coeff, bases, space, repr)
     identity_term = convert(_repr_eltype(typeof(coeff), repr), coeff) * _matrix_representation(missing, bases, space, repr, NoChunking())
@@ -373,10 +366,11 @@ function _add_identity_term(summed, coeff, bases, space, repr)
     T = promote_type(eltype(summed), eltype(identity_term))
     return convert(AbstractMatrix{T}, summed)
 end
-# On spaces with a basis-state loop (for example a constrained space over a ProductSpace), `_terms_matrix` builds the sum of all terms.
+# On spaces with a basis-state loop (for example a constrained space over a ProductSpace) and for formats with no method of its own,
+# `_terms_matrix` builds the sum of all terms.
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the type of `coeff`.
-function __matrix_representation(op::NCAdd, bases, space, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; tree_split=10, kwargs...)
+function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split = 10, kwargs...)
     spaces = groups(_input_space(space))
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
     Tterms = _repr_eltype(mapreduce(mat_eltype, promote_type, prodops), repr)
@@ -454,12 +448,13 @@ function finalize!(m::Matrix, space)
 end
 
 
-function _matrix_representation_single_space(op::NCAdd, space, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking; kwargs...)
+function _matrix_representation_single_space(op::NCAdd, space, repr, chunking; kwargs...)
     _terms_matrix(_repr_eltype(mat_eltype(op), repr), NCterms(op), op.coeff, space, repr, chunking; kwargs...)
 end
 
-# The matrix of `sum(terms) + coeff * I` with element type `T`
-_terms_matrix(::Type{T}, terms, coeff, space, repr, ::NoChunking; kwargs...) where T = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
+# The matrix of `sum(terms) + coeff * I` with element type `T`. A new format builds sums of terms on any space by
+# adding a method here.
+_terms_matrix(::Type{T}, terms, coeff, space, repr::EagerDenseRepr, ::NoChunking; kwargs...) where {T} = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 _terms_matrix(::Type{T}, terms, coeff, space::Axes, repr::EagerSparseRepr, ::NoChunking; kwargs...) where {T} = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 
 function _accumulated_matrix(::Type{T}, terms, coeff, space, repr; kwargs...) where T
@@ -660,7 +655,7 @@ _convert_repr_eltype(M, ::EagerDenseRepr{Missing}) = Matrix(M)
 _convert_repr_eltype(M, ::EagerSparseRepr{T}) where T = SparseArrays.sparse(T.(M))
 _convert_repr_eltype(M, ::EagerDenseRepr{T}) where T = Matrix{T}(M)
 _convert_repr_eltype(M, ::Union{LazyRepr, PartitionedSparseRepr}) = M
-_convert_repr_eltype(M, repr) = _convert_repr_eltype(M, _canonicalize_repr(repr))
+_convert_repr_eltype(M, repr::Type) = _convert_repr_eltype(M, _canonicalize_repr(repr))
 _convert_repr_eltype(M, ::Type{A}) where {A <: SparseArrays.AbstractSparseArray} = SparseArrays.sparse(_convert_repr_eltype(M, _canonicalize_repr(A)))
 
 # A concrete element type fixes the matrix type, also where inference cannot follow the assembly
@@ -939,6 +934,30 @@ end
     @test_throws InexactError representation(1im * k, H, Vector{Float64})
     Hbdg = hilbert_space(f, 1:2, FermionicHilbertSpaces.FreeFermions.BdG())
     @test representation(2, Hbdg, Matrix{ComplexF64}) isa Matrix{ComplexF64}
+end
+
+@testitem "Format without a method for the identity" begin
+    import FermionicHilbertSpaces: _canonicalize_repr
+    struct BareFormat end
+    _canonicalize_repr(repr::BareFormat) = repr
+    @fermions f
+    @test_throws MethodError representation(2, hilbert_space(f, 1:2), BareFormat())
+end
+
+@testitem "Format that builds sums of terms with _terms_matrix" begin
+    import FermionicHilbertSpaces: _canonicalize_repr, _terms_matrix, EagerSparseRepr
+    struct TermsFormat end
+    _canonicalize_repr(repr::TermsFormat) = repr
+    _terms_matrix(::Type{T}, terms, coeff, space, ::TermsFormat, chunking; kwargs...) where {T} =
+        _terms_matrix(T, terms, coeff, space, EagerSparseRepr(), chunking; kwargs...)
+    @fermions f
+    @boson b
+    Hf = hilbert_space(f, 1:2)
+    H = tensor_product(Hf, hilbert_space(b, 3))
+    op = f[1]' * f[2] + hc + 0.5 * f[1]' * f[1] * (b + b') + 2
+    @test representation(op, H, TermsFormat()) == representation(op, H)
+    opf = f[1]' * f[2] + hc + 2
+    @test representation(opf, Hf, TermsFormat()) == representation(opf, Hf)
 end
 
 @testitem "Scheduler extension correctness" begin
