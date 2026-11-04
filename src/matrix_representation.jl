@@ -988,11 +988,12 @@ isquadratic(x::NCAdd) = all(isquadratic, NCterms(x))
 end
 
 @testitem "Single-particle and BdG operator checks" begin
+    using FermionicHilbertSpaces.FreeFermions
     @fermions f
     @majoranas γ
     @spin s 1 // 2
-    Hsp = single_particle_hilbert_space(f, 1:3)
-    Hbdg = bdg_hilbert_space(f, 1:3)
+    Hsp = hilbert_space(f, 1:3, SingleParticle())
+    Hbdg = hilbert_space(f, 1:3, BdG())
     op = 1.0 * f[1]' * f[2] + hc + f[3]' * f[3] + 2
     @test representation(op, Hsp) == representation(op - 2, Hsp)
     @test representation(op, Hbdg) == representation(op - 2, Hbdg)
