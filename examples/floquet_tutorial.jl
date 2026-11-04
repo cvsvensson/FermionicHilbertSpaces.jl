@@ -28,14 +28,14 @@
 # ## The Floquet algebra
 
 # The required pieces are listed in [Extending and performance hooks](../extending.md). Compared to the
-# [Clock operators](clock_operators.md), the Floquet operators are combined with spin operators, and their `mul_effect`
-# simplifies products.
+# [Clock operators](clock_operators.md), the Floquet operators are combined with spin operators, and their
+# `local_mul_effect` simplifies products.
 
 # We load the package and import the pieces we need to overload.
 using FermionicHilbertSpaces
 using FermionicHilbertSpaces: AbstractSym
-import FermionicHilbertSpaces.NonCommutativeProducts:
-    @nc, NCMul, mul_effect
+import FermionicHilbertSpaces: local_mul_effect
+import FermionicHilbertSpaces.NonCommutativeProducts: @nc, NCMul
 
 # `FloquetBasis` represents a Floquet degree of freedom (having an `id` allows multiple Floquet modes).
 # `FloquetLadder` represents ``F^k`` and `FloquetNumber` represents ``N^p``.
@@ -62,31 +62,25 @@ const Floquets = Union{FloquetLadder, FloquetNumber};
 
 @nc FloquetLadder FloquetNumber
 
-# Products are simplified by `mul_effect`. We sort Floquet operators from different modes by their 'id', and for operators of the same mode
-# we will put number operators before ladder operators.
-
-function mul_effect(a::Floquets, b::Floquets)
-    a.basis.id > b.basis.id && return b * a   # different subsystem: sort by id
-    a.basis.id < b.basis.id && return nothing   # already in order
-    return floquet_mul(a, b)                    # same subsystem: apply algebra
-end;
+# Products of operators on the same Floquet mode are simplified by `local_mul_effect`, which puts number
+# operators before ladder operators. Operators on different modes commute and are sorted by mode.
 
 # ``F^j \cdot F^k = F^{j+k}``.  Special case ``j+k=0``: ``F \cdot F^\dagger = \mathbf{1}``.
-function floquet_mul(a::FloquetLadder, b::FloquetLadder)
+function local_mul_effect(a::FloquetLadder, b::FloquetLadder)
     total_shift = a.shift + b.shift
     total_shift == 0 && return 1
     return FloquetLadder(total_shift, a.basis)
 end;
 
 # ``N^p \cdot N^q = N^{p+q}``.  Special case ``p=q=0``: ``N^0 = \mathbf{1}``.
-function floquet_mul(a::FloquetNumber, b::FloquetNumber)
+function local_mul_effect(a::FloquetNumber, b::FloquetNumber)
     a.power == b.power == 0 && return 1
     return FloquetNumber(a.power + b.power, a.basis)
 end;
 
 # ``F^k \cdot N = N \cdot F^k - k\,F^k``, from ``[N, F^k] = k\,F^k`` rearranged as
 # ``F^k N = N F^k - k F^k``.
-function floquet_mul(a::FloquetLadder, b::FloquetNumber)
+function local_mul_effect(a::FloquetLadder, b::FloquetNumber)
     if b.power == 1
         return b * a - a.shift * a         # Base case: F^k * N = N * F^k - k * F^k
     else
@@ -95,11 +89,9 @@ function floquet_mul(a::FloquetLadder, b::FloquetNumber)
         term2 = -a.shift * a * N_remaining                    # -k * F^k * N^(p-1)
         return term1 + term2
     end
-    throw(ArgumentError("Should not reach here"))
 end;
 
-# ``N \cdot F^k`` is already in normal order (``N`` sorts before ``F``).
-floquet_mul(::FloquetNumber, ::FloquetLadder) = nothing;
+# ``N \cdot F^k`` is already in normal order, so it needs no rule.
 
 # To get matrices we need basis states and a rule for how operators act on them. The basis states are
 using FermionicHilbertSpaces: AbstractBasisState
@@ -117,7 +109,8 @@ apply_local_operator(op::FloquetNumber, state::FloquetState, space, precomp) = s
 # Finally, `symbolic_group` matches operators to Hilbert spaces: each Floquet operator belongs to its `FloquetBasis`, which also labels the Hilbert space.
 import FermionicHilbertSpaces: symbolic_group
 symbolic_group(f::Floquets) = f.basis
-symbolic_group(b::FloquetBasis) = b;
+symbolic_group(b::FloquetBasis) = b
+Base.isless(a::FloquetBasis, b::FloquetBasis) = isless(a.id, b.id); # orders operators of several Floquet modes
 
 # With this we can build the Floquet Hilbert space and the matrix of an operator on it.
 floquet_basis = FloquetBasis(0)

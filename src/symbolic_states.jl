@@ -178,12 +178,22 @@ symbolic_group(s::SymbolicState) = group_id(s.space)
 group_id(s::SymbolicState) = group_id(s.space)
 
 @nc SymbolicState AbstractSym
-# Operators of different kinds on different groups commute and are ordered by `_group_isless`, as every other pair of
-# factors on different groups is. One order for all pairs keeps sorted products unique.
+# Operators on different groups commute and are ordered by `_group_isless`, as every other pair of factors on
+# different groups is. One order for all pairs keeps sorted products unique.
 function NonCommutativeProducts.mul_effect(a::AbstractSym, b::AbstractSym)
-    symbolic_group(a) == symbolic_group(b) && throw(ArgumentError("Products of `$a` and `$b` on the same group are not defined"))
+    symbolic_group(a) == symbolic_group(b) && return local_mul_effect(a, b)
     return _group_isless(b, a) ? Swap(1) : nothing
 end
+
+"""
+    local_mul_effect(a, b)
+
+Rule for the product `a * b` of two operators on the same group, returned as for
+`NonCommutativeProducts.mul_effect`; the default `nothing` keeps the product as written. Products on
+different groups commute and are ordered by group, so a custom operator defines this instead of
+`mul_effect`.
+"""
+local_mul_effect(a, b) = nothing
 
 ## Grading
 # Each space carries a grade k^m b^n in the bicyclic monoid, where a ket has (m, n) = (1, 0) and a bra (0, 1).
@@ -403,24 +413,24 @@ function _is_like_ket(factors, k, ket)
     s = factors[k]
     return s isa typeof(ket) && _same_space_id(s.space, ket.space)
 end
-# Tuples `(k, factors[k], op)`, where `op` is the product of the factors of `x` that act on the ket `factors[k]`,
-# or `nothing` if a factor of `x` acts on none of the kets. `mul_terms!!` calls this once per term of an operator sum,
-# so the common case of all factors acting on one ket returns a single tuple that reuses `x.factors` when its
-# element type is concrete.
+# Tuples `(k, factors[k], op)`, one per segment `op` of the sorted product `x`, where `factors[k]` is the ket that `op`
+# acts on, or `nothing` unless each segment acts on a different ket. `mul_terms!!` calls this once per term of an
+# operator sum, so the common case of a single segment returns a 1-tuple, which keeps the precomputations inferable.
 function _group_operators(x::NCMul, factors)
-    if !isempty(x.factors)
+    isempty(x.factors) && return nothing
+    parts = NonCommutativeProducts.split_by_group(NCMul(one(x.coeff), x.factors))
+    if length(parts) == 1
         k = _ket_index(first(x.factors), factors)
-        if !isnothing(k) && all(op -> _acts_on_ket(op, factors[k]), x.factors)
-            ops = isconcretetype(eltype(x.factors)) ? x.factors : ___concretize(x.factors, VecConcretizer())
-            return ((k, factors[k], NCMul(one(x.coeff), ops)),)
-        end
+        return isnothing(k) ? nothing : ((k, factors[k], last(only(parts))),)
     end
-    inds = map(op -> _ket_index(op, factors), x.factors)
-    any(isnothing, inds) && return nothing
-    return [(k, factors[k], NCMul(one(x.coeff), ___concretize(x.factors[inds .== k], VecConcretizer()))) for k in unique(inds)]
+    inds = map(((_, op),) -> _ket_index(first(op.factors), factors), parts)
+    (any(isnothing, inds) || !allunique(inds)) && return nothing
+    return map((k, (_, op)) -> (k, factors[k], op), inds, parts)
 end
-_ket_index(op, factors) = findfirst(s -> _acts_on_ket(op, s), factors)
-_acts_on_ket(op, s) = !(op isa SymbolicState) && s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space)
+_ket_index(::SymbolicState, factors) = nothing
+_ket_index(op, factors) = findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)
+# Operators and states of one group are separate segments, so that a segment of operators acts on a ket
+NonCommutativeProducts.atom_group(s::SymbolicState) = (group_id(s.space), :state)
 
 
 representation(s::SymbolicState; kwargs...) = representation(s, s.space; kwargs...)
@@ -1127,6 +1137,40 @@ end
     forms = [prod(p) for p in permutations([b2, s[:z], k1, b2])]
     @test all(x -> iszero(x - first(forms)), forms)
     @test iszero(b2 * s[:z] * k1 * k2 - s[:z] * k1 * (b2 * k2))
+    H = tensor_product(hilbert_space(b1, 3), hilbert_space(s))
+    P1 = k1 * k1'
+    @test representation(s[:z] * b1' * P1, H) == representation(b1' * s[:z] * P1, H) == representation(b1' * P1 * s[:z], H)
+end
+
+@testitem "Custom operators with local_mul_effect" begin
+    import FermionicHilbertSpaces: AbstractSym, symbolic_group, local_mul_effect
+    import FermionicHilbertSpaces.NonCommutativeProducts: @nc, Swap
+    # Pauli X and Z on each site: XX = ZZ = 1 and ZX = -XZ.
+    struct PauliX <: AbstractSym
+        site::Int
+    end
+    struct PauliZ <: AbstractSym
+        site::Int
+    end
+    struct NoRuleOp <: AbstractSym
+        id::Int
+    end
+    @nc PauliX PauliZ NoRuleOp
+    symbolic_group(op::Union{PauliX, PauliZ}) = (op.site, :pauli)
+    symbolic_group(::NoRuleOp) = 0
+    local_mul_effect(::T, ::T) where {T <: Union{PauliX, PauliZ}} = 1
+    local_mul_effect(::PauliZ, ::PauliX) = Swap(-1)
+    X, Z = PauliX, PauliZ
+
+    @test iszero(Z(1) * X(1) * Z(1) + X(1))
+    @test iszero(Z(1) * X(1) * X(2) + X(2) * X(1) * Z(1))
+    @boson b
+    b0 = b
+    @bosons b
+    @test Z(1) * b0 == b0 * Z(1)
+    @test b0 * b[1] == b[1] * b0
+    @test b[1] * b[0] == b[1.0] * b[0]
+    @test NoRuleOp(1) * NoRuleOp(2) != NoRuleOp(2) * NoRuleOp(1)
 end
 
 @testitem "Vector of a ket on factors in non-sorted order" begin
