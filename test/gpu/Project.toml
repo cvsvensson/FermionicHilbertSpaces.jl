@@ -1,7 +1,6 @@
 [deps]
 FermionicHilbertSpaces = "82e5dd95-83c3-46b2-a303-acc930c81756"
 JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
-LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [sources]

@@ -526,25 +526,25 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
 end
 
 function partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; alg = nothing, kwargs...)
-    # The gather traces ψ itself, so the result stays on ψ's device; a LowRankMatrix stores ψψ† on the CPU
+    # LowRankMatrix copies ψ to a CPU Matrix
     alg isa GatherPartialTraceAlg && return _partial_trace_by_gather(v, H, Hsub; kwargs...)
     m = vec_to_density_matrix(v)
     return isnothing(alg) ? partial_trace(m, H, Hsub; kwargs...) : partial_trace(m, H, Hsub; alg, kwargs...)
 end
-function _partial_trace_by_gather(m, H, Hsub; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, phase_factors = true)
-    size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
-    isnothing(complement) && return change_basis(m, H, Hsub; projection)
-    return _partial_trace_by_gather(m, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement), projection, phase_factors)
+function _partial_trace_by_gather(ψ::AbstractVector, H, Hsub; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, phase_factors = true)
+    size_compatible(ψ, H) || throw(ArgumentError("The size of `ψ` must match `dim(H)` = $(dim(H)), got $(size(ψ))."))
+    isnothing(complement) && return (φ = change_basis(ψ, H, Hsub; projection); φ * φ')
+    return _partial_trace_by_gather(ψ, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement); projection, phase_factors)
 end
-function _partial_trace_by_gather(m, H, Hsub, complement, mapper, projection, phase_factors)
+function _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection = false, phase_factors = true)
     splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
     projection || _check_covered(m, _covered_states(splits), _copied_support_on)
     return _gather_partial_trace(m, _partial_trace_gather_table(splits, dim(Hsub), dim(complement))...)
 end
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
-    alg isa GatherPartialTraceAlg && return _partial_trace_by_gather(m, H, Hsub; complement, kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
     isnothing(complement) && return Base.inferencebarrier(change_basis)(m, H, Hsub; kwargs...)
+    alg isa GatherPartialTraceAlg && return _partial_trace_by_gather(m, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement); kwargs...)
     mout = zeros(promote_type(eltype(m), partial_trace_phase_factor_eltype(H)), dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
@@ -621,11 +621,12 @@ _change_basis(m::LowRankMatrix, (Uout, Uin)) = Uout * Matrix(m) * Uin'
 _change_basis(v::AbstractVector, (U,)) = U * v
 _change_basis(m::UniformScaling, (Uout, Uin)) = m.λ * (Uout * Uin')
 
-# Whether `m` is nonzero on any of the indices `js` along `axis`. A view of a sparse array
-# visits every element, a copy only the stored ones, and a copy of a GPU array needs no scalar indexing.
+# Whether `m` is nonzero on any of the indices `js` along `axis`
 _has_support_on(m, axis, js) = !iszero(selectdim(m, axis, js))
 _has_support_on(m::AbstractSparseArray, axis, js) = _copied_support_on(m, axis, js)
-# A vector is a pure state ψ, and ψψ† has support on `js` along axis 2 exactly when it has along axis 1
+# A view of a sparse array visits every element, a copy only the stored ones, and a copy of a GPU
+# array needs no scalar indexing. A vector is a pure state ψ, and ψψ† has support on `js` along
+# axis 2 exactly when it has along axis 1
 _copied_support_on(m, axis, js) = axis <= ndims(m) && !iszero(m[ntuple(d -> d == axis ? js : (:), Val(ndims(m)))...])
 _has_support_on(m::UniformScaling, axis, js) = !isempty(js) && !iszero(m.λ)
 
@@ -828,6 +829,10 @@ function _check_covered(m, covered, has_support_on = _has_support_on)
 end
 
 _check_no_alias(mout, m) = Base.mightalias(mout, m) && throw(ArgumentError("output matrix must not be aliased with input matrix"))
+function _check_partial_trace_output(mout, m, Hsub)
+    size(mout) == (dim(Hsub), dim(Hsub)) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(mout))"))
+    return _check_no_alias(mout, m)
+end
 
 # The kernels index `complement` by the states that `mapper` splits off `H`, so a complement
 # that misses atoms of `H` would silently drop them. The atoms are looked up by name, as
@@ -848,18 +853,24 @@ to `mout`, which must have size `(dim(Hsub), dim(Hsub))`. See [`partial_trace`](
 `alg` is `SubsystemPartialTraceAlg()` or `FullPartialTraceAlg()`, chosen from the dimensions
 and sparsity of `m` by default.
 """
-partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) = partial_trace!(mout, vec_to_density_matrix(v), H, Hsub; kwargs...)
+function partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; alg = nothing, kwargs...)
+    if alg isa GatherPartialTraceAlg
+        _check_partial_trace_output(mout, v, Hsub)
+        return copyto!(mout, partial_trace(v, H, Hsub; alg, kwargs...))
+    end
+    m = vec_to_density_matrix(v)
+    return isnothing(alg) ? partial_trace!(mout, m, H, Hsub; kwargs...) : partial_trace!(mout, m, H, Hsub; alg, kwargs...)
+end
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
-    size(mout) == (dim(Hsub), dim(Hsub)) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(mout))"))
-    _check_no_alias(mout, m)
+    _check_partial_trace_output(mout, m, Hsub)
     isnothing(complement) && return copyto!(mout, change_basis(m, H, Hsub; kwargs...))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
 partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
 
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper = _partial_trace_mapper(H, Hsub, complement); projection = false, phase_factors = true)
-    alg isa GatherPartialTraceAlg && return copyto!(mout, _partial_trace_by_gather(m, H, Hsub, complement, mapper, projection, phase_factors))
+    alg isa GatherPartialTraceAlg && return copyto!(mout, _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection, phase_factors))
     fill!(mout, zero(eltype(mout)))
     covered = if alg isa FullPartialTraceAlg
         splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
@@ -943,9 +954,9 @@ function _full_partial_trace!(mout, m::SparseMatrixCSC, splits, H)
     return mout
 end
 
-# `sum(W .* x[inds...]; dims)` from array operations only, so that it runs on GPU arrays.
+# `sum(W .* x[inds]; dims)` from array operations only, so that it runs on GPU arrays.
 # Zero weights mark padding, and are masked so that a NaN in `x` does not leak into the result.
-_gather_reduce(W, dims, x, inds...) = sum(_masked_mul.(W, x[inds...]); dims)
+_gather_reduce(W, dims, x, inds) = sum(_masked_mul.(W, x[inds]); dims)
 _masked_mul(w, x) = iszero(w) ? zero(w * x) : w * x
 
 # `L[K, r, b]` and `W[K, r, b]` are the index and weight of the r-th state of `H` that splits into
@@ -967,7 +978,6 @@ function _partial_trace_gather_table(splits, dsub, nb)
     return L, W
 end
 
-# The host array `A` copied to an array of the same kind as `x`
 _adapt_like(x, A) = copyto!(similar(x, eltype(A), size(A)), A)
 
 function _gather_partial_trace(m::AbstractMatrix, L, W)
@@ -1420,22 +1430,25 @@ end
 end
 
 @testitem "Partial trace by gather" begin
-    import FermionicHilbertSpaces: GatherPartialTraceAlg, state_index
+    import FermionicHilbertSpaces: GatherPartialTraceAlg, partial_trace!, state_index
     alg = GatherPartialTraceAlg()
     @fermions f
     @spins s
     @bosons b
     Hcons = hilbert_space(f, 1:6, NumberConservation(3))
     Hprod = tensor_product(hilbert_space(f, 1:3), hilbert_space(s[1], 1 // 1), hilbert_space(b[1], 3))
+    Hsmall = hilbert_space(f, 1:3)
     for (H, Hsub) in (
             (hilbert_space(f, 1:5), hilbert_space(f, [2, 4])),
             (Hcons, subregion(hilbert_space(f, [1, 4]), Hcons)),
             (Hprod, tensor_product(hilbert_space(f, 2:2), hilbert_space(b[1], 3))),
+            (Hsmall, Hsmall),
         )
         ρ = rand(ComplexF64, dim(H), dim(H))
         ψ = rand(ComplexF64, dim(H))
         @test partial_trace(ρ, H => Hsub; alg) ≈ partial_trace(ρ, H => Hsub)
         @test partial_trace(ψ, H => Hsub; alg) ≈ partial_trace(ψ, H => Hsub)
+        @test partial_trace!(zeros(ComplexF64, dim(Hsub), dim(Hsub)), ψ, H => Hsub; alg) ≈ partial_trace(ψ, H => Hsub)
     end
 
     # the state with modes 1 and 2 occupied has no part in Hsub
