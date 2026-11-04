@@ -339,9 +339,10 @@ function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Un
     spans = collect(keys(by_span))
     terms = [(span, p) for span in spans for p in by_span[span]]
     term_matrices = _map(((span, p),) -> _span_matrix(p, span, spaces, repr; kwargs...), terms, chunking)
-    stops = cumsum(length(by_span[span]) for span in spans)
+    lengths = [length(by_span[span]) for span in spans]
+    stops = cumsum(lengths)
     matrices = _map(eachindex(spans), chunking) do k
-        core = _sum_tree(term_matrices[(stops[k] - length(by_span[spans[k]]) + 1):stops[k]], tree_split)
+        core = _sum_tree(term_matrices[(stops[k] - lengths[k] + 1):stops[k]], tree_split)
         _embed_span(core, spans[k], spaces, repr)
     end
     return _add_identity_term(_sum_tree(matrices, tree_split, chunking), op.coeff, bases, space, repr)
@@ -1025,6 +1026,12 @@ end
     M_states_prod_dense = representation(op_prod, Hprod, EagerDenseRepr(); chunking=StateChunking(scheduler))
     @test M_terms_prod_dense == M_serial_prod
     @test M_states_prod_dense == M_serial_prod
+
+    # More spans than are summed in one step
+    @spins S 1 // 2
+    Hchain = hilbert_space(S, 1:12)
+    op_chain = sum(0.3 * S[k][:x] * S[k + 1][:x] + S[k][:z] * S[k + 1][:z] for k in 1:11) + sum(0.1k * S[k][:z] for k in 1:12)
+    @test representation(op_chain, Hchain; chunking=StateChunking(scheduler)) == representation(op_chain, Hchain)
 
     # Constrained single space
     Hc = constrain_space(Hf, NumberConservation(1:2))
