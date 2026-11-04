@@ -3,11 +3,11 @@ using SparseArrays: SparseArrays, nonzeros, nzrange, rowvals
 using OhMyThreads: OhMyThreads, Scheduler, chunks, tforeach, tmap
 using FermionicHilbertSpaces: FermionicHilbertSpaces
 using LinearAlgebra: LinearAlgebra, rmul!
-using NonCommutativeProducts: NCAdd, NCMul, NCterms
+using NonCommutativeProducts: NCAdd, NCMul
 import SciMLOperators: cache_operator
 
 import OhMyThreads: Schedulers.chunking_args, Consecutive
-import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, ProductSpace, _matrix_representation, __matrix_representation, _terms_matrix, _precomputed_terms, _blocked_sparse_matrix, _narrowed, _add_identity_term, matrix_accumulator, add_identity!!, NoChunking, chunked_operator_indices_and_amplitudes_generic!, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, basisstate, state_index, _skip_outside, dim, _lazy_output_prototype, cache_operator!, _lazy_terms
+import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, _terms_matrix, _map, _precomputed_terms, _blocked_sparse_matrix, _narrowed, matrix_accumulator, add_identity!!, NoChunking, chunked_operator_indices_and_amplitudes_generic!, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, basisstate, state_index, _skip_outside, dim, _lazy_output_prototype, cache_operator!, _lazy_terms
 
 function _reduce_add!(y, partials)
     isempty(partials) && return y
@@ -249,29 +249,10 @@ function _terms_matrix(::Type{T}, terms, coeff, space, repr::EagerDenseRepr, chu
     return m
 end
 
-# On a ProductSpace, the Kronecker-product matrices of the terms are built in parallel and summed.
-function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerSparseRepr,EagerDenseRepr}, chunking::ThreadedChunking; tree_split=10, kwargs...)
+function _map(f, xs, chunking::ThreadedChunking)
     scheduler = chunking.scheduler
     scheduler isa Scheduler || throw(ArgumentError("The chunking scheduler must be an OhMyThreads `Scheduler`, got a `$(typeof(scheduler))`."))
-    matrices = tmap(collect(NCterms(op)); scheduler) do term
-        _matrix_representation(term, bases, space, repr, NoChunking(); kwargs...)
-    end
-    return _add_identity_term(_sum_tree_threaded(matrices, tree_split, scheduler), op.coeff, bases, space, repr)
-end
-
-function _sum_tree_threaded(matrices, k, scheduler)
-    n = length(matrices)
-    n == 0 && throw(ArgumentError("Cannot sum an empty collection of matrices."))
-    n == 1 && return only(matrices)
-    n <= k && return map(+, matrices...)
-
-    chunk_size = cld(n, k)
-    chunks = collect(Iterators.partition(matrices, chunk_size))
-
-    partials = tmap(chunks; scheduler) do chunk
-        _sum_tree_threaded(collect(chunk), k, scheduler)
-    end
-    return map(+, partials...)
+    return tmap(f, xs; scheduler)
 end
 
 end

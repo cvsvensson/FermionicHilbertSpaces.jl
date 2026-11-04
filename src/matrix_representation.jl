@@ -323,7 +323,8 @@ end
 # Terms acting on the same range of groups are summed on those groups, and the sum is embedded with identities on the
 # other groups once instead of once per term. Terms on a single group join those on it and a neighbour, if any, since
 # their sum is still small. Joining larger ranges can make the summed matrices much larger than the terms.
-function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
+# With a threaded chunking, the matrices of the terms, of the spans and their sums are built in parallel.
+function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; tree_split=10, kwargs...)
     spaces = groups(space)
     by_span = Dict{UnitRange{Int}, Vector{Any}}()
     for term in NCterms(op)
@@ -335,11 +336,15 @@ function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Un
             append!(by_span[span], pop!(by_span, n:n))
         end
     end
-    matrices = map(collect(by_span)) do (span, prodops)
-        core = _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)
-        _embed_span(core, span, spaces, repr)
+    spans = collect(keys(by_span))
+    terms = [(span, p) for span in spans for p in by_span[span]]
+    term_matrices = _map(((span, p),) -> _span_matrix(p, span, spaces, repr; kwargs...), terms, chunking)
+    stops = cumsum(length(by_span[span]) for span in spans)
+    matrices = _map(eachindex(spans), chunking) do k
+        core = _sum_tree(term_matrices[(stops[k] - length(by_span[spans[k]]) + 1):stops[k]], tree_split)
+        _embed_span(core, spans[k], spaces, repr)
     end
-    return _add_identity_term(_sum_matrices(matrices, repr; tree_split), op.coeff, bases, space, repr)
+    return _add_identity_term(_sum_tree(matrices, tree_split, chunking), op.coeff, bases, space, repr)
 end
 function _span_matrix(prodop, span, spaces, repr; kwargs...)
     matrices = map(span) do n
@@ -1145,9 +1150,10 @@ end
     @test a == 1.0 * f[2] * f[1] + 1 + f[1]
 end
 
-_sum_matrices(matrices, ::LazyRepr; tree_split=10) = sum(matrices)
-_sum_matrices(matrices, ::Union{EagerSparseRepr,EagerDenseRepr}; tree_split=10) = _sum_tree(matrices, tree_split)
-function _sum_tree(matrices, k)
+# `map`, run in parallel by the OhMyThreads extension for threaded chunkings
+_map(f, xs, ::NoChunking) = map(f, xs)
+
+function _sum_tree(matrices, k, chunking=NoChunking())
     n = length(matrices)
     n == 0 && throw(ArgumentError("Cannot sum an empty collection of matrices."))
     n == 1 && return only(matrices)
@@ -1155,8 +1161,8 @@ function _sum_tree(matrices, k)
 
     # Divide into k roughly equal parts
     chunk_size = cld(n, k)
-    chunks = Iterators.partition(matrices, chunk_size)
+    chunks = collect(Iterators.partition(matrices, chunk_size))
 
-    partials = [_sum_tree(collect(chunk), k) for chunk in chunks]
+    partials = _map(chunk -> _sum_tree(collect(chunk), k, chunking), chunks, chunking)
     return map(+, partials...)
 end
