@@ -53,8 +53,8 @@ results = [sweep(-Us, pairing); reverse(sweep(Us, staggered))];
 
 using Plots
 Uall = [-Us; reverse(Us)]
-plot(Uall ./ t, getfield.(results, :E_mf) ./ t; label = "mean field", xlabel = "U/t", ylabel = "(E − E(Fermi sea))/t", lw = 2, frame = :box)
-plot!(Uall ./ t, getfield.(results, :E_exact) ./ t; label = "exact", lw = 2)
+plot(Uall ./ t, getproperty.(results, :E_mf) ./ t; label = "mean field", xlabel = "U/t", ylabel = "(E − E(Fermi sea))/t", lw = 2, frame = :box)
+plot!(Uall ./ t, getproperty.(results, :E_exact) ./ t; label = "exact", lw = 2)
 
 # Mean field finds a superconductor for attractive and a magnet for repulsive `U`, but only beyond a threshold. For weak
 # coupling the best Gaussian state is the Fermi sea, and the mean-field energy stays at zero. The exact energy is lower

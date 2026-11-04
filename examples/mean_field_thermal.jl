@@ -1,7 +1,6 @@
 # # Mean-field theory at finite temperature
-# Hamiltonians are symbolic operators, so `mean_field(ham, G, Hbdg)` derives the decoupled Hartree-Fock-Bogoliubov
-# Hamiltonian directly from the interacting `ham`, given the Nambu correlation matrix `G` of a Gaussian state. At finite
-# temperature the next `G` is the thermal state of that Hamiltonian, which `correlation_matrix(F; β)` gives from its BdG
+# This page extends the [zero-temperature mean-field page](mean_field.md) to finite temperature. At finite
+# temperature the next `G` is the thermal state of the decoupled Hamiltonian, which `correlation_matrix(F; β)` gives from its BdG
 # eigendecomposition. We follow the superconducting order of an attractive Hubbard ring as the temperature rises.
 
 using FermionicHilbertSpaces, LinearAlgebra
@@ -33,11 +32,14 @@ end;
 # The order parameter is the pairing amplitude, the expectation value of `f[i, :↓] * f[i, :↑]`.
 pairing = sum(f[i, :↑]' * f[i, :↓]' + hc for i in 1:L)
 Ts = t .* (0.1:0.05:1.2)
-G = thermal_correlations(hopping + pairing, 1 / first(Ts))
-amplitude = map(Ts) do T
-    global G = self_consistent(G, 1 / T)
-    abs(expectation(f[1, :↓] * f[1, :↑], G, Hbdg))
+function sweep(Ts)
+    G = thermal_correlations(hopping + pairing, 1 / first(Ts))
+    return map(Ts) do T
+        G = self_consistent(G, 1 / T)
+        abs(expectation(f[1, :↓] * f[1, :↑], G, Hbdg))
+    end
 end;
+amplitude = sweep(Ts);
 
 using Plots
 plot(Ts ./ t, amplitude; xlabel = "T/t", ylabel = "pairing amplitude", legend = false, lw = 2, frame = :box)
