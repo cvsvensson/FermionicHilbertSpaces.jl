@@ -320,10 +320,11 @@ function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs.
     end
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
 end
-# Terms acting on the same range of groups are summed on those groups, and each sum is one `EmbeddedMatrix` term of
-# the matrix, so it is embedded with identities once instead of once per term. Terms on a single group join those on
-# it and a neighbour, if any, since their sum is still small. Joining larger ranges can make the summed matrices much
-# larger than the terms. Terms acting on all groups stay separate terms, as summing them would build full-size matrices.
+# Terms acting on the same range of groups are summed on those groups, so each sum is embedded with identities once
+# instead of once per term. Terms on a single group join those on it and a neighbour, if any, since their sum is still
+# small. Joining larger ranges can make the summed matrices much larger than the terms. Terms acting on all groups are
+# not summed, as that would build full-size matrices. The diagonals of the sums are added into one term, since the
+# entries that several sums share are mostly on the diagonal.
 function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}, chunking; tree_split = 10, kwargs...)
     spaces = groups(space)
     by_span = Dict{UnitRange{Int}, Vector{Any}}()
@@ -332,17 +333,13 @@ function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Un
         push!(get!(() -> [], by_span, minimum(prodop.inds):maximum(prodop.inds)), prodop)
     end
     for n in eachindex(spaces), span in (n:(n + 1), (n - 1):n)
-        if haskey(by_span, n:n) && haskey(by_span, span)
+        if span != eachindex(spaces) && haskey(by_span, n:n) && haskey(by_span, span)
             append!(by_span[span], pop!(by_span, n:n))
         end
     end
-    terms = mapreduce(vcat, collect(by_span); init = []) do (span, prodops)
-        span == eachindex(spaces) && return prodops
-        core = _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)
-        r = prod(n -> dim(spaces[n]), 1:(first(span) - 1); init = 1)
-        return [EmbeddedMatrix(convert(SparseMatrixCSC, core), r)]
-    end
-    return _sum_terms_matrix(terms, op.coeff, space, repr, chunking; kwargs...)
+    products = [_kron_term(p, spaces, repr; kwargs...) for p in get(by_span, eachindex(spaces), [])]
+    sums = [(convert(SparseMatrixCSC, _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)), _stride(spaces, first(span))) for (span, prodops) in by_span if span != eachindex(spaces)]
+    return _sum_terms_matrix([_split_diagonals(sums, dim(space)); products], op.coeff, space, repr, chunking; kwargs...)
 end
 function _span_matrix(prodop, span, spaces, repr; kwargs...)
     matrices = map(span) do n
@@ -351,27 +348,66 @@ function _span_matrix(prodop, span, spaces, repr; kwargs...)
     end
     return _kron_groups(matrices, prodop.inds .- (first(span) - 1), repr)
 end
-# The term kron(I, core, I(r)) of a sum
-struct EmbeddedMatrix{M}
-    core::M
-    r::Int
+_stride(spaces, n) = prod(m -> dim(spaces[m]), 1:(n - 1); init = 1)
+function _kron_term(prodop, spaces, repr; kwargs...)
+    factors = map(prodop.ops, Tuple(prodop.inds)) do op, n
+        (convert(SparseMatrixCSC, _term_matrix_representation(op, spaces[n], repr, NoChunking(); kwargs...)), _stride(spaces, n))
+    end
+    T = mapreduce(eltype ∘ first, promote_type, factors)
+    return KronTerm(map(((A, r),) -> (convert(SparseMatrixCSC{T, Int}, A), r), factors))
 end
-mat_eltype(::Type{EmbeddedMatrix{M}}) where {M} = eltype(M)
-precomputation_before_operator_application(::EmbeddedMatrix, ::AbstractHilbertSpace) = nothing
-function chunked_operator_indices_and_amplitudes_generic!(accumulator, term::EmbeddedMatrix, space::AbstractHilbertSpace, precomp, input_inds, col_offset; kwargs...)
-    (; core, r) = term
-    m, n = size(core)
-    rows, vals = rowvals(core), nonzeros(core)
-    for j in input_inds
-        t, q = divrem(j - 1, r)
-        b, jc = divrem(t, n)
-        for p in nzrange(core, jc + 1)
-            push_inds_amps!(accumulator, (b * m + rows[p] - 1) * r + q + 1, j - col_offset, vals[p])
+# The terms of the off-diagonal parts of the pairs `(A, r)` as in `KronTerm`, and one term of the sum of their diagonals
+function _split_diagonals(sums, N)
+    isempty(sums) && return []
+    diagonal = zeros(mapreduce(eltype ∘ first, promote_type, sums), N)
+    foreach(((A, r),) -> _add_diagonal!(diagonal, A, r), sums)
+    return [[KronTerm(((A - Diagonal(diag(A)), r),)) for (A, r) in sums]; KronTerm(((sparse(Diagonal(diagonal)), 1),))]
+end
+function _add_diagonal!(diagonal, A, r)
+    d = diag(A)
+    return _foldl_columns(diagonal, ((A, r),), eachindex(diagonal)) do diagonal, n, (c,)
+        diagonal[n] += d[c + 1]
+        return diagonal
+    end
+end
+# The term kron(…, A_2, I, A_1, I) of a sum, with identities on the groups that no factor acts on. Each pair `(A, r)` in
+# the tuple `factors` is a square matrix on one group or a range of groups, and the product `r` of the dimensions of the
+# groups before them.
+struct KronTerm{F <: Tuple}
+    factors::F
+end
+mat_eltype(term::KronTerm) = eltype(first(first(term.factors)))
+precomputation_before_operator_application(::KronTerm, ::AbstractHilbertSpace) = nothing
+function chunked_operator_indices_and_amplitudes_generic!(accumulator, term::KronTerm, space::AbstractHilbertSpace, precomp, input_inds, col_offset; kwargs...)
+    return _foldl_columns(accumulator, term.factors, input_inds) do accumulator, j, digits
+        _push_kron_entries!(accumulator, term.factors, digits, j - 1, true, j - col_offset)
+    end
+end
+_nentries(term::KronTerm, incols) =
+    _foldl_columns((n, _, digits) -> n + prod(map(((A, _), c) -> length(nzrange(A, c + 1)), term.factors, digits)), 0, term.factors, incols)
+# `acc = f(acc, j, digits)` for the columns `j` in `incols`, where column `j` of the term draws on column
+# `digits[k] + 1` of factor k. The digits are counted up instead of divided out of `j`, as divisions dominate the loop.
+function _foldl_columns(f, acc, factors, incols)
+    counters = map(((A, r),) -> (rem(first(incols) - 1, r), rem(div(first(incols) - 1, r), size(A, 2))), factors)
+    for j in incols
+        acc = f(acc, j, map(last, counters))
+        counters = map(factors, counters) do (A, r), (q, c)
+            q + 1 < r && return (q + 1, c)
+            return (0, c + 1 == size(A, 2) ? 0 : c + 1)
         end
+    end
+    return acc
+end
+_push_kron_entries!(accumulator, ::Tuple{}, ::Tuple{}, row, amp, col) = (push_inds_amps!(accumulator, row + 1, col, amp); accumulator)
+function _push_kron_entries!(accumulator, factors, digits, row, amp, col)
+    (A, r), c = first(factors), first(digits)
+    rows, vals = rowvals(A), nonzeros(A)
+    for p in nzrange(A, c + 1)
+        _push_kron_entries!(accumulator, Base.tail(factors), Base.tail(digits), row + (rows[p] - 1 - c) * r, amp * vals[p], col)
     end
     return accumulator
 end
-operator_indices_and_amplitudes_generic!(accumulator, term::EmbeddedMatrix, space, precomp; kwargs...) =
+operator_indices_and_amplitudes_generic!(accumulator, term::KronTerm, space, precomp; kwargs...) =
     chunked_operator_indices_and_amplitudes_generic!(accumulator, term, space, precomp, 1:dim(space), 0; kwargs...)
 # On spaces with a basis-state loop (for example a constrained space over a ProductSpace) and for formats with no method of its own,
 # `_terms_matrix` builds the sum of all terms.
