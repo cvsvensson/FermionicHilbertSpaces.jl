@@ -116,6 +116,7 @@ end
     @test (@inferred SymbolicState(H, x, nothing)) == kf * ks * kb
     @test (@inferred SymbolicState(H, nothing, x)) == kf' * ks' * kb'
     @test (@inferred SymbolicState(H, x, x)) == (kf * kf') * (ks * ks') * (kb * kb')
+    @test (@inferred Kets(H)("2", "↓", "01")) == kf * ks * kb
 end
 
 struct SymbolicState{K,B,H} <: AbstractSym
@@ -134,8 +135,8 @@ end
 function SymbolicState(space, ket::ProductState, bra::ProductState)
     _group_product(map(SymbolicState, groups(space), ket.states, bra.states))
 end
-# The sorted product of states of distinct groups, which commute. It is built directly rather than with `*`
-# so that its type is inferrable, and equals the autosorted product: a sum with the single term `1 * factors`.
+# The sorted product of states of distinct groups, which commute. It is built directly rather than with `*`,
+# and equals the autosorted product: a sum with the single term `1 * factors`.
 function _group_product(states::Tuple)
     factors = sort!([states...]; lt=_group_isless)
     NCAdd(NCMul(1, factors))
@@ -418,7 +419,7 @@ function _apply_group_operators!!(c, x, b, groupops, precomps)
 end
 _first_factors(b::NCMul) = b.factors
 _first_factors(b::NCAdd) = isempty(b.dict) ? () : first(keys(b.dict)).factors
-# Whether `factors[k]` is a ket of the same type and space as `ket`, which makes the loop above type stable
+# Whether `factors[k]` is a ket of the same type and space as `ket`
 function _is_like_ket(factors, k, ket)
     k <= length(factors) || return false
     s = factors[k]
@@ -481,6 +482,8 @@ _operator_type(op) = throw(ArgumentError("Cannot represent an object of type $(t
 #   :operator               there are no kets and bras: operators, scalars, and ketbras combined with operators,
 #   :mixed                  kets or bras are combined with other states or operators, which has no representation.
 function _operator_type(op::Union{NCMul,NCAdd,AbstractSym})
+    kind = _static_operator_type(typeof(op))
+    isnothing(kind) || return kind
     _iszero_ncadd(op) && return _zero_operator_type(op)
     hasket = false
     hasbra = false
@@ -510,6 +513,12 @@ function _operator_type(op::Union{NCMul,NCAdd,AbstractSym})
         return :mixed
     end
 end
+# The kind that the factor type alone shows, or `nothing`. Inference can see this kind.
+_static_operator_type(::Type{S}) where {S <: AbstractSym} = isconcretetype(S) && !(S <: SymbolicState) ? :operator : nothing
+_static_operator_type(::Type{<:SymbolicState{K, B}}) where {K, B} = B === Nothing ? (K === Nothing ? nothing : :kets) : (K === Nothing ? :bras : nothing)
+_static_operator_type(::Type{<:NCMul{<:Any, S}}) where {S} = _static_operator_type(S)
+_static_operator_type(::Type{<:NCAdd{<:Any, M}}) where {M} = _static_operator_type(M)
+_static_operator_type(::Type) = nothing
 _iszero_ncadd(op) = op isa NCAdd && iszero(op.coeff) && isempty(op.dict)
 # A zero has no factors left to inspect, so classify it by its grades instead
 function _zero_operator_type(op)
@@ -534,8 +543,7 @@ _grade_type(g) = :mixed
 Return the vector of `state` in `space`. `state` is a basis state, a symbolic ket or bra, or a product or sum of
 symbolic kets or of symbolic bras. Kets give a column vector, and bras give the transpose of one.
 This is the state-specific form of [`representation`](@ref).
-The optional `repr` selects the format: `:sparse` (the default), `:dense`, or a format object
-(`EagerSparseRepr()`, `EagerDenseRepr()`).
+The optional `repr` selects the format as in [`representation`](@ref), except `:lazy`; for example `Vector` gives a dense vector.
 """
 function vector_representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
     ind = _checked_state_index(state, space)
@@ -558,16 +566,16 @@ function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, re
     vector_representation(1 * s, space, repr; kwargs...)
 end
 function vector_representation(op, space, repr; kwargs...)
-    _repr = _canonicalize_repr(repr)
+    _repr = _vector_format(repr)
     _repr isa LazyRepr && throw(ArgumentError("Kets and bras support `:sparse` and `:dense` representations. `:lazy` is only for operators and ketbras."))
     return vector_representation(op, space, _repr; kwargs...)
 end
 
 function vector_representation(op::Union{NCMul,NCAdd}, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
-    _vector_representation(op, space, repr, _operator_type(op); kwargs...)
+    return _vector_representation(op, space, _vector_format(repr), _operator_type(op); kwargs...)
 end
 # `kind` is `:kets` or `:bras`, as computed by `_operator_type`
-function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, kind; kwargs...)
+Base.@constprop :aggressive function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, kind; kwargs...)
     symstates = op.factors
     perm = map(symstates) do state
         i = findfirst(g -> _same_space_id(g, state.space), groups(space))
@@ -575,13 +583,14 @@ function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, ki
         i
     end
     basis_state(symstate::SymbolicState) = kind == :kets ? symstate.ket : symstate.bra
+    coeff = convert(_repr_eltype(typeof(op.coeff), repr), op.coeff)
     vec = if length(symstates) == 1
-        op.coeff * vector_representation(basis_state(only(symstates)), space, repr)
+        coeff * vector_representation(basis_state(only(symstates)), space, repr)
     else
         # `symstates[i]` belongs to group `perm[i]`, so group n holds `symstates[iperm[n]]`
         iperm = invperm(perm)
         prodstate = ProductState(ntuple(n -> basis_state(symstates[iperm[n]]), length(perm)))
-        op.coeff * vector_representation(prodstate, space, repr)
+        coeff * vector_representation(prodstate, space, repr)
     end
     if kind == :kets
         return vec
@@ -597,10 +606,10 @@ function _vector_representation(op::NCAdd, space::AbstractHilbertSpace, repr, ki
         kind in (:kets, :bras) || throw(ArgumentError("`vector_representation` requires an `NCAdd` that is purely kets or purely bras."))
         # same eltype as the nonzero path, where each basis vector is scaled by a coefficient
         _repr = _canonicalize_repr(repr)
-        vec = _zero_vector(space, _repr, promote_type(_vector_eltype(_repr), valtype(op.dict)))
+        vec = _zero_vector(space, _repr, _repr_eltype(promote_type(Int, valtype(op.dict)), _repr))
         return kind == :kets ? vec : transpose(vec)
     end
-    return _sum_tree([coeff * _vector_representation(term, space, repr, kind; kwargs...) for (term, coeff) in pairs(op.dict)], 10)
+    return _sum_tree([convert(_repr_eltype(typeof(coeff), repr), coeff) * _vector_representation(term, space, repr, kind; kwargs...) for (term, coeff) in pairs(op.dict)], 10)
 end
 
 function representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
@@ -612,6 +621,7 @@ function representation(s::SymbolicState, space::AbstractHilbertSpace, repr=Eage
 end
 function matrix_representation(s::SymbolicState, space::AbstractHilbertSpace, repr=EagerSparseRepr(); kwargs...)
     isketbra(s) || throw(ArgumentError("`matrix_representation` is only defined for ketbra `SymbolicState` operators. Use `vector_representation(state, H)` for a ket or bra."))
+    repr = _matrix_format(repr)
     # a ketbra on one factor of a product space acts as the identity on the other factors
     _same_space_id(space, s.space) || return matrix_representation(1 * s, space, repr; kwargs...)
     ket_vec = vector_representation(SymbolicState(space, s.ket, nothing), space, repr)
@@ -625,9 +635,9 @@ function representation(op, space::Union{AbstractHilbertSpace,Axes}, repr=EagerS
     type = _operator_type(op)
     if type == :kets || type == :bras
         space isa Axes && throw(ArgumentError("A ket or bra has one axis, as in `representation(state, Axes(H))` or `representation(state, H)`."))
-        return _vector_representation(op, space, repr, type; kwargs...)
+        return _vector_representation(op, space, _vector_format(repr), type; kwargs...)
     elseif type == :ketbras
-        _repr = _canonicalize_repr(repr)
+        _repr = _matrix_format(repr)
         if _iszero_ncadd(op) && _repr isa Union{EagerSparseRepr,EagerDenseRepr}
             return _zero_matrix(space, _repr, _repr_eltype(mat_eltype(op), _repr))
         end
