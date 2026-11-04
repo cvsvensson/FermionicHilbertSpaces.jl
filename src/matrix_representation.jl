@@ -189,35 +189,32 @@ function apply_local_operators(op::NCMul, state, space, precomps; transpose)
 end
 
 struct TupleConcretizer end
-struct VecConcretizer end
 struct NoConcretizer end
 ___concretize(factors, ::TupleConcretizer) = Tuple(factors)
-# `map(identity, factors)` joins the element types one by one, which is slow, and products usually have one factor type
-function ___concretize(factors::AbstractVector, ::VecConcretizer)
-    T = isempty(factors) ? eltype(factors) : typeof(first(factors))
-    return all(f -> f isa T, factors) ? Vector{T}(factors) : map(identity, factors)
-end
-___concretize(factors::Tuple, ::VecConcretizer) = collect(factors)
 ___concretize(factors, ::NoConcretizer) = factors
 __concretize(x::NCMul, concr) = NCMul(x.coeff, ___concretize(x.factors, concr))
 __concretize(x::NCAdd, concr) = sum(__concretize(term, concr) for term in NCterms(x)) + x.coeff
 __concretize(x::ProductOperator, concr) = ProductOperator(map(op -> __concretize(op, concr), x.ops), x.spaces, x.inds)
 
 """
-    partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
+    partition_product(op::NCMul, bases, spaces)
 
-Split `op` into a `ProductOperator` with one `NCMul` per basis it acts on. The coefficient goes to the first of them.
+Split `op` into a `ProductOperator` with one `NCMul` per basis it acts on.
 """
-function partition_product(op::NCMul, bases, spaces, concr=NoConcretizer())
-    factors = op.factors
-    group_inds = [_basis_index(symbolic_group(fac), bases) for fac in factors]
+function partition_product(op::NCMul, bases, spaces)
+    parts = NonCommutativeProducts.split_by_group(op)
+    group_inds = map(((_, part),) -> _basis_index(symbolic_group(first(part.factors)), bases), parts)
     any(iszero, group_inds) && throw(ArgumentError("Not all factors of the operator belong to a basis of the provided space."))
     inds = sort!(unique(group_inds))
-    ops = ntuple(length(inds)) do k
-        v = [fac for (fac, i) in zip(factors, group_inds) if i == inds[k]]
-        NCMul(k == 1 ? op.coeff : one(op.coeff), ___concretize(v, concr))
-    end
+    ops = ntuple(k -> _part_on_basis(parts, group_inds, inds[k]), length(inds))
     return ProductOperator(ops, spaces[inds], inds)
+end
+# A product that isn't sorted can have several runs of factors on one basis. Operators on different bases commute, so
+# the runs can be joined.
+function _part_on_basis(parts, group_inds, ind)
+    runs = [last(part) for (part, i) in zip(parts, group_inds) if i == ind]
+    length(runs) == 1 && return only(runs)
+    return NCMul(prod(run -> run.coeff, runs), reduce(vcat, [run.factors for run in runs]))
 end
 _basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
 
