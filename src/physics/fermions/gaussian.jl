@@ -191,7 +191,7 @@ end
     @test_throws ArgumentError ground_state_parity(Eigen(F.values, 2 * F.vectors))
 end
 
-@testitem "Thermal BdG correlation matrix" begin
+@testitem "Thermal correlation matrix" begin
     using LinearAlgebra
     using FermionicHilbertSpaces.FreeFermions
     @fermions f
@@ -207,6 +207,16 @@ end
     F = eigen(representation(ham, Hbdg, Matrix), BdGEigen())
     @test correlation_matrix(F; β = 0.7) ≈ correlation_matrix(ρ, Hmb, Hbdg)
     @test correlation_matrix(F; β = 1.0e6) ≈ correlation_matrix(F)
+
+    @majoranas γ
+    Hmaj = hilbert_space(γ, 1:2N)
+    Hsp = hilbert_space(γ, 1:2N, SingleParticle())
+    A = randn(2N, 2N)
+    ham = 1im / 4 * sum((A[i, j] - A[j, i]) * γ[i] * γ[j] for i in 1:2N, j in 1:2N)
+    ρ = exp(-0.7 * Hermitian(representation(ham, Hmaj, Matrix)))
+    ρ /= tr(ρ)
+    F = eigen(Hermitian(representation(ham, Hsp, Matrix)))
+    @test correlation_matrix(F; β = 0.7) ≈ correlation_matrix(ρ, Hmaj, Hsp)
 end
 
 @testitem "Single particle correlation matrix" begin
