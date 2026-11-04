@@ -11,20 +11,20 @@ _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in) =
     Hout === H ? mapper_in : state_mapper(Hout, _pt_parts(Hsub, complement))
 
 function _throw_missing_pt_state(g, Hout)
-    throw(ArgumentError("The state $g is not in the output Hilbert space. The partial transpose does not preserve number/parity constraints: pass a larger output space as `H => Hout` (e.g. the unconstrained space on the same modes), or `skipmissing=true` to drop such terms."))
+    throw(ArgumentError("The state $g is not in the output Hilbert space. The partial transpose does not preserve number/parity constraints: pass a larger output space as `H => Hout` (e.g. the unconstrained space on the same modes), or `projection=true` to drop such terms."))
 end
 
 partial_transpose_phase_factor_eltype(H::AbstractHilbertSpace) = partial_trace_phase_factor_eltype(H) # default assumption 
 
 """
-    _foreach_partial_transpose_term(op, inds, H, Hsub, Hout, splits, mapper_out; phase_factors, skipmissing)
+    _foreach_partial_transpose_term(op, inds, H, Hsub, Hout, splits, mapper_out; phase_factors, projection)
 
 Kernel shared by the direct and the sparse-map implementation. For every index pair
 `(J1, J2)` in `inds` (matrix element `|f1⟩⟨f2|` of `H`), split `f1 → (a1, b1)`, `f2 → (a2, b2)`,
 swap the transposed parts, `|a1 b1⟩⟨a2 b2| ↦ |a2 b1⟩⟨a1 b2|`, recombine into `Hout` and call
 `op(J1, J2, K1, K2, v)` with the full coefficient `v`.
 """
-function _foreach_partial_transpose_term(op, inds, H, Hsub, Hout, splits, mapper_out; phase_factors=true, skipmissing=false)
+function _foreach_partial_transpose_term(op, inds, H, Hsub, Hout, splits, mapper_out; phase_factors = true, projection = false)
     for I in inds
         J1, J2 = I[1], I[2]
         f1 = basisstate(J1, H)
@@ -39,13 +39,13 @@ function _foreach_partial_transpose_term(op, inds, H, Hsub, Hout, splits, mapper
             for (g1, u1) in zip(gs1, us1)
                 K1 = state_index(g1, Hout)
                 if iszero(K1)
-                    skipmissing && continue
+                    projection && continue
                     _throw_missing_pt_state(g1, Hout)
                 end
                 for (g2, u2) in zip(gs2, us2)
                     K2 = state_index(g2, Hout)
                     if iszero(K2)
-                        skipmissing && continue
+                        projection && continue
                         _throw_missing_pt_state(g2, Hout)
                     end
                     s_out = phase_factors ? partial_trace_phase_factor(g1, g2, Hout) : 1 # operator basis → Fock(Hout)
@@ -60,7 +60,7 @@ end
 ## Direct (in-place) implementation
 
 """
-    partial_transpose!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, skipmissing=false)
+    partial_transpose!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false)
     partial_transpose!(mout, m, H => Hout, Hsub; kwargs...)
 
 In-place partial transpose of `m` (operator on `H`) on the subsystem `Hsub`, written to `mout`
@@ -70,13 +70,14 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     complement, Hout::AbstractHilbertSpace,
     mapper_in=state_mapper(H, _pt_parts(Hsub, complement)),
     mapper_out=_partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in);
-    phase_factors=true, skipmissing=false)
+        phase_factors = true, projection = false
+    )
     size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
     size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
     _check_no_alias(mout, m)
     fill!(mout, zero(eltype(mout)))
     splits = _split_all_states(H, mapper_in)
-    _foreach_partial_transpose_term(tensor_product_iterator(m, H), H, Hsub, Hout, splits, mapper_out; phase_factors, skipmissing) do J1, J2, K1, K2, v
+    _foreach_partial_transpose_term(tensor_product_iterator(m, H), H, Hsub, Hout, splits, mapper_out; phase_factors, projection) do J1, J2, K1, K2, v
         mout[K1, K2] += v * m[J1, J2]
     end
     return mout
@@ -89,7 +90,7 @@ function partial_transpose!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractH
 end
 
 """
-    partial_transpose(m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, skipmissing=false)
+    partial_transpose(m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false)
     partial_transpose(m, H => Hout, Hsub; kwargs...)
     partial_transpose(H, Hsub; kwargs...)  # -> PartialTransposeMap
     partial_transpose(H => Hout, Hsub; kwargs...)  # -> PartialTransposeMap
@@ -121,17 +122,19 @@ partial_transpose(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub:
     PartialTransposeMap(first(Hs), Hsub, last(Hs); kwargs...)
 
 function _partial_transpose(m::AbstractMatrix, H, Hsub, Hout;
-    complement=complementary_subsystem(H, Hsub), phase_factors=true, skipmissing=false)
+        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false
+    )
     mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
     mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
     T = promote_type(eltype(m), partial_transpose_phase_factor_eltype(H))
     mout = zeros(T, dim(Hout), dim(Hout))
-    partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, skipmissing)
+    return partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection)
 end
 
 # Pure state: direct kernel, no superoperator, and no ψψ† either (iterate nonzero pairs).
 function _partial_transpose(ψ::AbstractVector, H, Hsub, Hout;
-    complement=complementary_subsystem(H, Hsub), phase_factors=true, skipmissing=false)
+        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false
+    )
     if length(ψ) == dim(H)
         mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
         mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
@@ -139,13 +142,13 @@ function _partial_transpose(ψ::AbstractVector, H, Hsub, Hout;
         mout = zeros(T, dim(Hout), dim(Hout))
         nz = findall(!iszero, ψ)
         splits = Dict(j => split_state(basisstate(j, H), mapper_in) for j in nz)
-        _foreach_partial_transpose_term(((j, k) for j in nz for k in nz), H, Hsub, Hout, splits, mapper_out; phase_factors, skipmissing) do J1, J2, K1, K2, v
+        _foreach_partial_transpose_term(((j, k) for j in nz for k in nz), H, Hsub, Hout, splits, mapper_out; phase_factors, projection) do J1, J2, K1, K2, v
             mout[K1, K2] += v * ψ[J1] * conj(ψ[J2])
         end
         return mout
     end
     if length(ψ) == dim(H)^2
-        return _partial_transpose(reshape(ψ, dim(H), dim(H)), H, Hsub, Hout; complement, phase_factors, skipmissing)
+        return _partial_transpose(reshape(ψ, dim(H), dim(H)), H, Hsub, Hout; complement, phase_factors, projection)
     end
     throw(DimensionMismatch("The vector must have length $(dim(H)) (pure state) or $(dim(H)^2) (vectorized density matrix), got $(length(ψ))"))
 end
@@ -158,7 +161,8 @@ _partial_transpose(λ::UniformScaling, H, Hsub, Hout; kwargs...) =
 function partial_transpose_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, Hout::AbstractHilbertSpace,
     mapper_in=state_mapper(H, _pt_parts(Hsub, complement)),
     mapper_out=_partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in);
-    phase_factors=true, skipmissing=false)
+        phase_factors = true, projection = false
+    )
     T = partial_transpose_phase_factor_eltype(H)
     splits = _split_all_states(H, mapper_in)
     indK = LinearIndices((1:dim(Hout), 1:dim(Hout)))
@@ -167,7 +171,7 @@ function partial_transpose_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpa
     Js = Int[]
     Vs = T[]
     inds = CartesianIndices((dim(H), dim(H)))
-    _foreach_partial_transpose_term(inds, H, Hsub, Hout, splits, mapper_out; phase_factors, skipmissing) do J1, J2, K1, K2, v
+    _foreach_partial_transpose_term(inds, H, Hsub, Hout, splits, mapper_out; phase_factors, projection) do J1, J2, K1, K2, v
         push!(Is, indK[K1, K2])
         push!(Js, indJ[J1, J2])
         push!(Vs, v)
