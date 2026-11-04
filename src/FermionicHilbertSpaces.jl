@@ -172,10 +172,15 @@ PrecompileTools.@setup_workload begin
         Hs = hilbert_space(s)
         H = tensor_product(H2, Hb, Hs)
         mat = representation(b'b + 1.0 * s[:x] * f[3], H)
-        # Chains with integer coefficients, as users write them. The symbolic algebra and much
-        # of the representation code does not depend on the chain length.
+        # Small chains, with fermions covering each common coefficient type.
         hamf = sum(f[n + 1]'f[n] + hc for n in 1:2) + sum(f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
         Hf = hilbert_space(f, 1:3, NumberConservation())
+        representation(hamf, Hf)
+        representation(hamf, sector(1, Hf), :dense)
+        hamf = sum(0.5 * f[n + 1]'f[n] + hc for n in 1:2) + sum(0.5 * f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
+        representation(hamf, Hf)
+        representation(hamf, sector(1, Hf), :dense)
+        hamf = sum((0.5 + 0.5im) * f[n + 1]'f[n] + hc for n in 1:2) + sum((0.5 + 0.5im) * f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
         representation(hamf, Hf)
         representation(hamf, sector(1, Hf), :dense)
         @spins S 1 // 2
