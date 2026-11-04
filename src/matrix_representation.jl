@@ -375,7 +375,7 @@ end
 # `_terms_matrix` builds the sum of all terms.
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the type of `coeff`.
-function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split=10, kwargs...)
+function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split = 10, kwargs...)
     spaces = groups(_input_space(space))
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
     Tterms = _repr_eltype(mapreduce(mat_eltype, promote_type, prodops), repr)
