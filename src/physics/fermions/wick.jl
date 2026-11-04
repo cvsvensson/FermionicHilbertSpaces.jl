@@ -1,5 +1,4 @@
-# Each term of `op` is expanded on its own, so that the factors of every expansion have a single concrete type.
-# A sum is traversed through its dictionary, whose entries have a concrete type, unlike those of `termpairs`.
+# Each term of `op` is expanded on its own. A sum is traversed through its dictionary rather than `termpairs`.
 sum_over_terms(f, op::NCAdd) = mapreduce(((k, c),) -> f(k.factors, c), +, op.dict; init = f((), op.coeff))
 sum_over_terms(f, op) = mapreduce(((fs, c),) -> f(fs, c), +, NonCommutativeProducts.termpairs(1 * op); init = 0)
 
@@ -101,7 +100,7 @@ mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilber
     ρ = thermal(q)
     G = transpose(inv(I + exp(β * representation(q, H, :dense))))
     for op in (quartic + quartic', sextic + hc)
-        @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
+        @test (@inferred expectation(op, G, H)) ≈ tr(ρ * representation(op, Hfock, :dense))
     end
 
     H = hilbert_space(f, 1:N, BdG())
@@ -109,7 +108,7 @@ mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilber
     ρ = thermal(q)
     G = transpose(inv(I + exp(2β * representation(q, H, :dense))))
     for op in pairing_ops
-        @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
+        @test (@inferred expectation(op, G, H)) ≈ tr(ρ * representation(op, Hfock, :dense))
     end
     unsorted_ev = FermionicHilbertSpaces.NonCommutativeProducts.with_autosort(() -> expectation(f[2] * f[1]' * f[2]' * f[1], G, H), false)
     @test unsorted_ev ≈ expectation(f[2] * f[1]' * f[2]' * f[1], G, H)

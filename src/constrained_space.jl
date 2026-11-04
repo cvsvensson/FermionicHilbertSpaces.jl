@@ -131,7 +131,7 @@ end
     RootIndexDict(positions)
 
 A subspace index whose `positions[state_index(state, parent)]` is the position of `state`. It
-is keyed by the integer index rather than by the state because integers hash and compare faster.
+is keyed by the integer index rather than by the state.
 """
 struct RootIndexDict
     positions::Dict{Int, Int}

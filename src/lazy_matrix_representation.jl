@@ -566,8 +566,8 @@ end
 
     @test Lt * v ≈ M * v
     @test Ls * v ≈ M * v
-    @test mul!(fill(NaN + 0im, dim(Hf)), Lt, v, 0.5, 0.0) ≈ 0.5 * (M * v)
-    @test mul!(fill(NaN + 0im, dim(Hf)), Ls, v, 0.5, 0.0) ≈ 0.5 * (M * v)
+    @test (@inferred mul!(fill(NaN + 0im, dim(Hf)), Lt, v, 0.5, 0.0)) ≈ 0.5 * (M * v)
+    @test (@inferred mul!(fill(NaN + 0im, dim(Hf)), Ls, v, 0.5, 0.0)) ≈ 0.5 * (M * v)
     @test Lt * V ≈ M * V
     @test Ls * V ≈ M * V
     @test Lt * vs ≈ M * vs

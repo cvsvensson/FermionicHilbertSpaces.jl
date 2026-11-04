@@ -98,7 +98,7 @@ vfb = Kets(Hfb)
 vf("10") * vb("2") == vfb("10", "2")
 ```
 
-Operators and states from different factors can be freely interleaved in a product; they are automatically reordered (with correct signs) into operators acting first, then states combined per factor:
+Operators and states from different factors can be freely interleaved in a product; they are reordered into operators acting first, then states combined per factor:
 
 ```@example states
 f[1]' * vf("10") * b' * vb("2") == f[1]' * b' * vfb("10", "2")

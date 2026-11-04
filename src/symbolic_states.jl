@@ -116,6 +116,7 @@ end
     @test (@inferred SymbolicState(H, x, nothing)) == kf * ks * kb
     @test (@inferred SymbolicState(H, nothing, x)) == kf' * ks' * kb'
     @test (@inferred SymbolicState(H, x, x)) == (kf * kf') * (ks * ks') * (kb * kb')
+    @test (@inferred Kets(H)("2", "↓", "01")) == kf * ks * kb
 end
 
 struct SymbolicState{K,B,H} <: AbstractSym
@@ -134,8 +135,8 @@ end
 function SymbolicState(space, ket::ProductState, bra::ProductState)
     _group_product(map(SymbolicState, groups(space), ket.states, bra.states))
 end
-# The sorted product of states of distinct groups, which commute. It is built directly rather than with `*`
-# so that its type is inferrable, and equals the autosorted product: a sum with the single term `1 * factors`.
+# The sorted product of states of distinct groups, which commute. It is built directly rather than with `*`,
+# and equals the autosorted product: a sum with the single term `1 * factors`.
 function _group_product(states::Tuple)
     factors = sort!([states...]; lt=_group_isless)
     NCAdd(NCMul(1, factors))
@@ -396,7 +397,7 @@ function _apply_group_operators!!(c, x, b, groupops, precomps)
 end
 _first_factors(b::NCMul) = b.factors
 _first_factors(b::NCAdd) = isempty(b.dict) ? () : first(keys(b.dict)).factors
-# Whether `factors[k]` is a ket of the same type and space as `ket`, which makes the loop above type stable
+# Whether `factors[k]` is a ket of the same type and space as `ket`
 function _is_like_ket(factors, k, ket)
     k <= length(factors) || return false
     s = factors[k]
