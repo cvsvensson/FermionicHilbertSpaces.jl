@@ -805,6 +805,17 @@ function _check_covered(m, covered)
     return nothing
 end
 
+_check_no_alias(mout, m) = Base.mightalias(mout, m) && throw(ArgumentError("output matrix must not be aliased with input matrix"))
+
+# The kernels index `complement` by the states that `mapper` splits off `H`, so a complement
+# that misses atoms of `H` would silently drop them. The atoms are looked up by name, as
+# `ispartition(Hs, H)` builds a space per atom, which costs as much as a small partial trace.
+function _partial_trace_mapper(H, Hsub, complement)
+    positions = map(Hs -> Iterators.map(a -> atom_position(a, H), _fock_atoms(Hs)), (Hsub, complement))
+    ispartition(positions, nbr_of_atoms(H)) || throw(ArgumentError("`complement` must contain exactly the atoms of `H` that are not in `Hsub`, got `$complement`."))
+    return state_mapper(H, (Hsub, complement))
+end
+
 """
     partial_trace!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), alg, phase_factors=true, projection=false)
     partial_trace!(mout, m, H => Hsub; kwargs...)
@@ -819,12 +830,13 @@ partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractH
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
     size(mout) == (dim(Hsub), dim(Hsub)) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(mout))"))
+    _check_no_alias(mout, m)
     isnothing(complement) && return copyto!(mout, change_basis(m, H, Hsub; kwargs...))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
 partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
 
-function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper = state_mapper(H, (Hsub, complement)); projection = false, phase_factors = true)
+function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper = _partial_trace_mapper(H, Hsub, complement); projection = false, phase_factors = true)
     fill!(mout, zero(eltype(mout)))
     covered = if alg isa FullPartialTraceAlg
         splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
@@ -1128,7 +1140,7 @@ end
 
 # The map skips missing states.
 partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, ::Nothing, ::AbstractPartialTraceAlg; kwargs...) = transpose(transposed_basis_transformation_map(H, Hsub; projection = true, kwargs...))
-function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement::AbstractHilbertSpace, alg::AbstractPartialTraceAlg, mapper=state_mapper(H, (Hsub, complement)); phase_factors=true)
+function partial_trace_map(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement::AbstractHilbertSpace, alg::AbstractPartialTraceAlg, mapper = _partial_trace_mapper(H, Hsub, complement); phase_factors = true)
     indK = LinearIndices((1:dim(Hsub), 1:dim(Hsub)))
     indJ = LinearIndices((1:dim(H), 1:dim(H)))
     T = partial_trace_phase_factor_eltype(H)
@@ -1275,6 +1287,9 @@ end
         @test embed(Hsub => H; complement = Hcomp, alg)(msub) ≈ embed(msub, Hsub => H; complement = Hcomp, projection = true)
         # H2 lacks the parts on modes 3:4 with zero or two particles
         @test_throws ArgumentError partial_trace(m12full, H => Hsub; complement=H2, alg)
+        # misses mode 4
+        @test_throws ArgumentError partial_trace(m12full, H => Hsub; complement = hilbert_space(a, 3:3), alg)
+        @test_throws ArgumentError partial_trace(H => Hsub; complement = hilbert_space(a, 3:3), alg)
     end
     @test_throws ArgumentError embed(msub, Hsub => H; complement=Hcomp)
 
@@ -1406,6 +1421,10 @@ end
     mout = zeros(ComplexF64, dim(Hsub), dim(Hsub))
     @test partial_trace!(mout, m, H => Hsub) === mout
     @test mout ≈ partial_trace(m, H => Hsub)
+    H4 = hilbert_space(f, 1:4)
+    M = rand(dim(H4), dim(H4))
+    @test_throws ArgumentError partial_trace!(view(M, 1:4, 1:4), M, H4 => H)
+    @test_throws ArgumentError partial_trace!(m, m, H => Hsub)
 end
 
 @testitem "change_basis requires the same atoms" begin
