@@ -3,7 +3,7 @@ const _SpaceGroup = Union{AbstractHilbertSpace,Tuple{Vararg{AbstractHilbertSpace
 const _SpaceMapping = Pair{<:_SpaceGroup,<:_SpaceGroup}
 
 """
-    reshape(t, mappings...; repeat=false, projection=false, alg=nothing)
+    reshape(t, mappings...; repeat=false, projection=false, alg=GenericAlg())
 
 Reshape the array `t` by splitting or combining its indices according to
 Hilbert-space mappings. The mappings are applied left to right, each one
@@ -74,7 +74,7 @@ entries are fine, so e.g. combining unconstrained spaces into a
 parity-conserving space works for parity-preserving operators. With
 `projection=true`, the components on missing states are silently dropped.
 
-With `alg = GatherPartialTraceAlg()`, `t` is reshaped by array indexing and broadcasting only, so
+With `alg = GatherAlg()`, `t` is reshaped by array indexing and broadcasting only, so
 that GPU arrays work.
 
 # Precomputed form
@@ -84,8 +84,8 @@ that GPU arrays work.
 returns a callable `ReshapeMap` that precomputes the transitions, and can be
 applied as `op(t)` or in place as `op(out, t)`.
 """
-function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = nothing)
-    isnothing(alg) || alg isa GatherPartialTraceAlg || throw(ArgumentError("`alg` must be `nothing` or `GatherPartialTraceAlg()`, got $alg."))
+function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = GenericAlg())
+    alg isa GenericAlg || alg isa GatherAlg || throw(ArgumentError("`reshape` supports `alg = GenericAlg()` or `GatherAlg()`, got $alg."))
     mappings = (mapping, rest...)
     mappings = if repeat
         _repeat_mapping(t, mappings)
@@ -99,7 +99,7 @@ function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapp
     mappers = map(_mapper, Hsins, Hsouts)
     blocks = map(_transitions, Hsins, Hsouts, mappers)
 
-    alg isa GatherPartialTraceAlg && return _gather_reshape(t, blocks, Hsouts; projection)
+    alg isa GatherAlg && return _gather_reshape(t, blocks, Hsouts; projection)
     return _reshape(t, blocks, Hsouts; projection)
 end
 
@@ -404,7 +404,7 @@ end
 # Block k gathers along broadcast dimensions 2k-1 (its output index) and 2k (the transitions
 # into that output index), and its weights multiply those of the other blocks.
 function _gather_reshape(t, blocks, Hsouts; projection = false)
-    Base.has_offset_axes(t) && throw(ArgumentError("GatherPartialTraceAlg requires an array with one-based axes."))
+    Base.has_offset_axes(t) && throw(ArgumentError("GatherAlg requires an array with one-based axes."))
     projection || _check_dropped(t, blocks, _copied_support_on)
     n = length(blocks)
     stridesin = _block_strides(size(t), map(b -> _group_length(b.dropped), blocks))
@@ -741,8 +741,8 @@ end
 end
 
 @testitem "Reshape by gather" begin
-    import FermionicHilbertSpaces: GatherPartialTraceAlg
-    alg = GatherPartialTraceAlg()
+    import FermionicHilbertSpaces: GatherAlg
+    alg = GatherAlg()
     @fermions f
     @spins s
     H1, H2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
