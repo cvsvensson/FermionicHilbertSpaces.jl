@@ -320,11 +320,19 @@ function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs.
     end
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
 end
-# Terms acting on the same range of groups are summed on those groups, and the sum is embedded with identities on the
-# other groups once instead of once per term. Terms on a single group join those on it and a neighbour, if any, since
-# their sum is still small. Joining larger ranges can make the summed matrices much larger than the terms.
-function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking::NoChunking; tree_split=10, kwargs...)
-    spaces = groups(space)
+# Terms acting on the same range of groups are summed on those groups, and each sum is one `EmbeddedMatrix` term of
+# the matrix, so it is embedded with identities once instead of once per term. Terms on a single group join those on
+# it and a neighbour, if any, since their sum is still small. Joining larger ranges can make the summed matrices much
+# larger than the terms.
+function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; tree_split=10, kwargs...)
+    sums = _span_sums(op, bases, groups(space), repr, chunking; tree_split, kwargs...)
+    if length(sums) == 1 && only(sums).l == only(sums).r == 1
+        return _add_identity_term(only(sums).core, op.coeff, bases, space, repr)
+    end
+    terms = [EmbeddedMatrix(convert(SparseMatrixCSC, s.core), s.l, s.r) for s in sums]
+    return _sum_terms_matrix(terms, op.coeff, space, repr, chunking; kwargs...)
+end
+function _span_sums(op, bases, spaces, repr, chunking; tree_split, kwargs...)
     by_span = Dict{UnitRange{Int}, Vector{Any}}()
     for term in NCterms(op)
         prodop = partition_product(term, bases, spaces)
@@ -335,29 +343,21 @@ function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Un
             append!(by_span[span], pop!(by_span, n:n))
         end
     end
-    matrices = map(collect(by_span)) do (span, prodops)
-        core = _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)
-        _embed_span(core, span, spaces, repr)
+    return map(collect(by_span)) do (span, prodops)
+        core = _summed_span_matrices(prodops, span, spaces, repr, chunking; tree_split, kwargs...)
+        r = prod(n -> dim(spaces[n]), 1:(first(span) - 1); init = 1)
+        l = prod(n -> dim(spaces[n]), (last(span) + 1):length(spaces); init = 1)
+        (; core, l, r)
     end
-    return _add_identity_term(_sum_matrices(matrices, repr; tree_split), op.coeff, bases, space, repr)
 end
+_summed_span_matrices(prodops, span, spaces, repr, ::NoChunking; tree_split, kwargs...) =
+    _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)
 function _span_matrix(prodop, span, spaces, repr; kwargs...)
     matrices = map(span) do n
         m = findfirst(==(n), prodop.inds)
         _term_matrix_representation(isnothing(m) ? missing : prodop.ops[m], spaces[n], repr, NoChunking(); kwargs...)
     end
     return _kron_groups(matrices, prodop.inds .- (first(span) - 1), repr)
-end
-function _embed_span(core, span, spaces, repr)
-    r = prod(n -> dim(spaces[n]), 1:(first(span) - 1); init = 1)
-    l = prod(n -> dim(spaces[n]), (last(span) + 1):length(spaces); init = 1)
-    l == r == 1 && return core
-    return _embed(core, l, r, repr)
-end
-_embed(core, l, r, ::EagerSparseRepr) = _kron_identities(convert(SparseMatrixCSC, core), l, r, eltype(core))
-function _embed(core, l, r, ::EagerDenseRepr)
-    left = l == 1 ? core : kron(Eye{Bool}(l), core)
-    return r == 1 ? left : kron(left, Eye{Bool}(r))
 end
 # `summed + coeff * I`, with the element type of `summed` promoted with that of `coeff * I` also when `coeff` is zero
 function _add_identity_term(summed, coeff, bases, space, repr)
@@ -366,19 +366,45 @@ function _add_identity_term(summed, coeff, bases, space, repr)
     T = promote_type(eltype(summed), eltype(identity_term))
     return convert(AbstractMatrix{T}, summed)
 end
+# The term kron(I(l), core, I(r)) of a sum, with entries collected from the stored entries of `core`
+struct EmbeddedMatrix{M}
+    core::M
+    l::Int
+    r::Int
+end
+mat_eltype(::Type{EmbeddedMatrix{M}}) where {M} = eltype(M)
+precomputation_before_operator_application(::EmbeddedMatrix, ::AbstractHilbertSpace) = nothing
+function chunked_operator_indices_and_amplitudes_generic!(accumulator, term::EmbeddedMatrix, space::AbstractHilbertSpace, precomp, input_inds, col_offset; kwargs...)
+    (; core, r) = term
+    m, n = size(core)
+    rows, vals = rowvals(core), nonzeros(core)
+    for j in input_inds
+        t, q = divrem(j - 1, r)
+        b, jc = divrem(t, n)
+        for p in nzrange(core, jc + 1)
+            push_inds_amps!(accumulator, (b * m + rows[p] - 1) * r + q + 1, j - col_offset, vals[p])
+        end
+    end
+    return accumulator
+end
+operator_indices_and_amplitudes_generic!(accumulator, term::EmbeddedMatrix, space, precomp; kwargs...) =
+    chunked_operator_indices_and_amplitudes_generic!(accumulator, term, space, precomp, 1:dim(space), 0; kwargs...)
 # On spaces with a basis-state loop (for example a constrained space over a ProductSpace) and for formats with no method of its own,
 # `_terms_matrix` builds the sum of all terms.
-# The terms are summed in the element type of their matrices, and the identity term is added in that element type
-# promoted with the type of `coeff`.
 function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split = 10, kwargs...)
     spaces = groups(_input_space(space))
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
-    Tterms = _repr_eltype(mapreduce(mat_eltype, promote_type, prodops), repr)
-    T = _repr_eltype(promote_type(Tterms, typeof(op.coeff)), repr)
-    Tterms == T && return _terms_matrix(Tterms, prodops, op.coeff, space, repr, chunking; kwargs...)
-    summed = _terms_matrix(Tterms, prodops, zero(op.coeff), space, repr, chunking; kwargs...)
-    iszero(op.coeff) && return convert(AbstractMatrix{T}, summed)
-    return summed + _terms_matrix(T, (), op.coeff, space, repr, NoChunking(); kwargs...)
+    return _sum_terms_matrix(prodops, op.coeff, space, repr, chunking; kwargs...)
+end
+# The terms are summed in the element type of their matrices, and the identity term is added in that element type
+# promoted with the type of `coeff`.
+function _sum_terms_matrix(terms, coeff, space, repr, chunking; kwargs...)
+    Tterms = _repr_eltype(mapreduce(mat_eltype, promote_type, terms), repr)
+    T = _repr_eltype(promote_type(Tterms, typeof(coeff)), repr)
+    Tterms == T && return _terms_matrix(Tterms, terms, coeff, space, repr, chunking; kwargs...)
+    summed = _terms_matrix(Tterms, terms, zero(coeff), space, repr, chunking; kwargs...)
+    iszero(coeff) && return convert(AbstractMatrix{T}, summed)
+    return summed + _terms_matrix(T, (), coeff, space, repr, NoChunking(); kwargs...)
 end
 
 function _matrix_representation(op, bases, space, repr, chunking; kwargs...) #Assume op is a single symbolic operator
