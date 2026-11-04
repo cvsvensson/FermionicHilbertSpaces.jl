@@ -701,7 +701,7 @@ struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
     GatherPartialTraceAlg()
 
 Partial-trace algorithm built from array indexing, broadcasting and reductions only, so that it
-runs on GPU arrays. It is an option for the `alg` keyword of [`partial_trace`](@ref) and [`partial_trace!`](@ref).
+runs on GPU arrays. It is an option for the `alg` keyword of [`partial_trace`](@ref), [`partial_trace!`](@ref) and [`embed`](@ref).
 """
 struct GatherPartialTraceAlg <: AbstractPartialTraceAlg end
 
