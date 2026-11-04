@@ -26,7 +26,7 @@ Typical workflow: define symbols with `@fermions`/`@bosons`/`@spins`, build a sp
 - [Constrained spaces and quantum numbers](conservation/)
 - [Hilbert space operations](hilbert_space_operations/)
 - [Symbolic states](symbolic_states/)
-- [Fermionic tensor products and partial traces](fermions/)
+- [Fermionic tensor products, partial traces, and partial transpose](fermions/)
 - [Non-interacting systems](non_interacting/)
 - [Example: Free fermions](literate_output/free_fermions/)
 
