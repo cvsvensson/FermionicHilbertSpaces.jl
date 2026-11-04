@@ -213,7 +213,7 @@ function _part_on_basis(parts, group_inds, ind)
 end
 _basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
 
-function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr::Union{EagerDenseRepr,EagerSparseRepr,LazyRepr}, chunking; kwargs...)
+function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr, LazyRepr}, chunking; kwargs...)
     spaces = groups(space)
     length(spaces) == 1 && return _term_matrix_representation(op, only(spaces), repr, chunking; kwargs...)
     prodop = partition_product(op, bases, spaces)
