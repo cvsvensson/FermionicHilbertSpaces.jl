@@ -7,14 +7,13 @@ Consider a spinful fermionic mode $f$, a localized spin-half $S$, and a bosonic 
 H = \omega a^\dagger a + \Delta_f s_z + \Delta_S S_z
     + J\vec{s} \cdot \vec{S}
     + g\left(a^\dagger f_\downarrow^\dagger f_\uparrow
-    + a f_\uparrow^\dagger f_\downarrow\right).
+    + a f_\uparrow^\dagger f_\downarrow\right),
 ```
 where ``s_\alpha = \tfrac{1}{2} f^\dagger \sigma_\alpha f`` is the spin operator of the fermion. This model conserves ``Q = a^\dagger a + s_z + S_z`` and the fermion number ``N_f``. We will calculate the ground state in the ``N_f = 1``, ``Q = 0`` sector, and then the mutual information between different subsystems.
 
 ```@example mixed_fermion_spin_boson
-using FermionicHilbertSpaces
-using FermionicHilbertSpaces: particle_number
-using LinearAlgebra
+using FermionicHilbertSpaces, LinearAlgebra
+import FermionicHilbertSpaces: particle_number, von_neumann_entropy
 
 @fermions f
 @spin S 1//2
@@ -53,13 +52,10 @@ ham = ω*a'*a + Δf*sz + ΔS*S[:z] + J*s'*S[:] +
 Now compute the reduced density matrices and the mutual information between different subsystem pairs.
 
 ```@example mixed_fermion_spin_boson
-entropy(rho) = sum(-p * log(p) for p in eigvals(rho) if p > 1e-12)
-function mutual_info(rho, HA, HB, H)
+function mutual_info(ψ, HA, HB, H)
     HAB = tensor_product(HA, HB)
-    rhoA = partial_trace(rho, H => HA)
-    rhoB = partial_trace(rho, H => HB)
-    rhoAB = partial_trace(rho, H => HAB)
-    entropy(rhoA) + entropy(rhoB) - entropy(rhoAB)
+    S = von_neumann_entropy
+    S(partial_trace(ψ, H => HA)) + S(partial_trace(ψ, H => HB)) - S(partial_trace(ψ, H => HAB))
 end
 
 H_fermions = tensor_product(H_up, H_down; constraint = NumberConservation(1))
@@ -67,4 +63,4 @@ subsystems = [(H_fermions, H_spin), (H_fermions, H_boson), (H_spin, H_boson)]
 [mutual_info(ψ, HA, HB, H) for (HA, HB) in subsystems]
 ```
 
-This yields the mutual information for the three subsystem pairs.
+The three entries are the mutual information of the fermion with the spin, of the fermion with the boson, and of the spin with the boson.

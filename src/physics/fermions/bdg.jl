@@ -1,3 +1,8 @@
+"""
+    NambuState(i, hole::Bool)
+
+A basis state of the [`BdG`](@ref) space: the hole (`hole = true`) or particle component of the mode at position `i`.
+"""
 struct NambuState <: AbstractFockState
     state::SingleParticleState
     hole::Bool
@@ -5,6 +10,7 @@ end
 NambuState(i::Integer, hole::Bool) = NambuState(SingleParticleState(i), hole)
 Base.:(==)(n1::NambuState, n2::NambuState) = n1.state == n2.state && n1.hole == n2.hole
 Base.hash(n::NambuState, h::UInt) = hash(n.hole, hash(n.state, h))
+Base.show(io::IO, n::NambuState) = print(io, "NambuState(", only(n.state.sites), ", ", n.hole, ")")
 _state_label_atomic(s::NambuState, H::_FermionModeSpace) = (s.hole ? "h" : "p") * _state_label_atomic(s.state, H)
 
 # Ψ' m Ψ == Ψ' m_ph Ψ + tr(m) / 2 by the anticommutation relations, since the vector of adjoints Ψ' equals τx Ψ, and
@@ -433,7 +439,9 @@ _nambu_creators(H::MajoranaSingleParticleHilbertSpace) = [γ / sqrt(2) for γ in
 """
     quasiparticle(v, H)
 
-The quasiparticle creation operator `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])` for a column `v` of BdG eigenvectors on a `BdG` space `H` with `N` modes, or `γ' = Σ_n v[n] * f[n]'` on a `SingleParticle` space, or `Σ_n v[n] * γ[n] / √2` on a Majorana space.
+The quasiparticle creation operator for the single-particle vector `v` on `H`.
+
+On a `BdG` space with `N` modes it is `γ' = Σ_n (v[n] * f[n]' + v[n+N] * f[n])`, on a `SingleParticle` space `γ' = Σ_n v[n] * f[n]'`, and on a Majorana space `Σ_n v[n] * γ[n] / √2`.
 
 ```julia
 @fermions f

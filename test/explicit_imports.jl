@@ -13,7 +13,7 @@
     )
     nonpublic_qualified = (
         # NonCommutativeProducts interface functions that this package extends or calls.
-        Symbol("@commutative"), :grade, :grades, :grading, :mul_grade, :adjoint_grade,
+        :grade, :grades, :grading, :mul_grade, :adjoint_grade,
         :mul_effect, :isscalar, :ncmap, :ncmapreduce, :enable_autosort!,
         :contraction_key, :mul_terms!!, :termpairs,
         # Base internals.
