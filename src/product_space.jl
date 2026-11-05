@@ -329,25 +329,25 @@ end
     raise(i) = isodd(i) ? b[i]' : s[i][:+]
     lower(i) = isodd(i) ? b[i] : s[i][:-]
     fermion_spaces = [hilbert_space(f, i:i) for i in 1:2]
-    # The fermions form one group, so a chain of `n` sites gives `n + 1` groups
-    function system(n)
-        chain_spaces = Tuple(isodd(i) ? hilbert_space(b[i], 2) : hilbert_space(s[i]) for i in 1:n)
-        H = tensor_product(
+    # The fermions form one group, so this chain gives 33 groups
+    n = 32
+    chain_spaces = Tuple(isodd(i) ? hilbert_space(b[i], 2) : hilbert_space(s[i]) for i in 1:n)
+    op = -(f[1]' * f[2] + hc) - sum(raise(i) * lower(i + 1) + hc for i in 1:(n - 1))
+    function space(excitations)
+        return tensor_product(
             (fermion_spaces..., chain_spaces...);
-            constraint = NumberConservation(1, fermion_spaces) * AdditiveConstraint(1 // 1, chain_spaces, excitation)
+            constraint = NumberConservation(1, fermion_spaces) * AdditiveConstraint(excitations // 1, chain_spaces, excitation)
         )
-        op = -(f[1]' * f[2] + hc) - sum(raise(i) * lower(i + 1) + hc for i in 1:(n - 1))
-        return H, op
     end
-    function allocations(n)
-        H, op = system(n)
+    function allocations(excitations)
+        H = space(excitations)
         matrix_representation(op, H)
         return @allocations matrix_representation(op, H)
     end
-    @test allocations(32) < 2 * allocations(30)
+    # A cost per basis state would grow with the sector
+    @test allocations(2) < 2 * allocations(1)
 
-    n = 32
-    H, op = system(n)
+    H = space(1)
     exact = sort([-2cos(k * pi / (n + 1)) + d for k in 1:n for d in (-1, 1)])
     @test eigvals(Symmetric(Matrix(matrix_representation(op, H)))) ≈ exact
 end
