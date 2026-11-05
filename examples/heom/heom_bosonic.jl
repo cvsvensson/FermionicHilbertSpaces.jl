@@ -18,6 +18,8 @@ struct HEOMBosonicBath{L,V1,V2}
     χ::V1
     ξ::V2
 end
+Base.:(==)(a::HEOMBosonicBath, b::HEOMBosonicBath) = (a.id, a.m_max, a.χ, a.ξ) == (b.id, b.m_max, b.χ, b.ξ)
+Base.hash(b::HEOMBosonicBath, h::UInt) = hash((b.id, b.m_max), h)
 
 # An ADO is labelled by occupations ``n``, where ``n_l`` counts how often exponent ``l`` appears in its multi-index.
 struct ADO{N} <: AbstractBasisState
@@ -36,8 +38,8 @@ struct HEOMOp{T, B} <: AbstractSym
     bath::B
 end
 HEOMOp{T}(l, bath) where {T} = HEOMOp{T, typeof(bath)}(l, bath)
-Base.:(==)(a::HEOMOp{T}, b::HEOMOp{T}) where {T} = a.l == b.l && a.bath.id == b.bath.id
-Base.hash(op::HEOMOp{T}, h::UInt) where {T} = hash((T, op.l, op.bath.id), h)
+Base.:(==)(a::HEOMOp{T}, b::HEOMOp{T}) where {T} = a.l == b.l && a.bath == b.bath
+Base.hash(op::HEOMOp{T}, h::UInt) where {T} = hash((T, op.l, op.bath), h)
 @nc HEOMOp
 symbolic_group(op::HEOMOp) = op.bath.id
 mat_eltype(::Type{<:HEOMOp}) = Float64
