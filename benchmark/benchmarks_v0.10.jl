@@ -1,5 +1,7 @@
 using BenchmarkTools
 using FermionicHilbertSpaces
+using FermionicHilbertSpaces: matrix_representation
+using FermionicHilbertSpaces.FreeFermions
 using LinearAlgebra
 using SparseArrays
 using Random
@@ -58,11 +60,11 @@ let rng = Xoshiro(7)
     g["apply_pure_state_inplace"] = @benchmarkable $pt($out_v, $ψ)
 
     msub = rand(rng, ComplexF64, dim(Hsub), dim(Hsub))
-    emb = embed(Hsub => H; complement=Hcomp, skipmissing=true)
+    emb = embed(Hsub => H; complement = Hcomp, projection = true)
     out = zeros(ComplexF64, dim(H), dim(H))
     g = SUITE["embed"]["precomputed"]
-    g["construct"] = @benchmarkable embed($(Hsub => H); complement=$Hcomp, skipmissing=true)
-    g["eager"] = @benchmarkable embed($msub, $(Hsub => H); complement=$Hcomp, skipmissing=true)
+    g["construct"] = @benchmarkable embed($(Hsub => H); complement = $Hcomp, projection = true)
+    g["eager"] = @benchmarkable embed($msub, $(Hsub => H); complement = $Hcomp, projection = true)
     g["apply_inplace"] = @benchmarkable $emb($out, $msub)
 end
 
@@ -99,6 +101,9 @@ end
 ## Partial trace algorithms
 # Each input is traced with the algorithm forced through `alg`. Which
 # algorithm `partial_trace` picks by default is checked in the tests.
+# FullAlg on a dense input is a tight loop over all pairs of basis states. Its
+# time depends on where the JIT places that loop in memory, so identical code
+# measures at a few distinct speeds, up to about 2× apart, between processes.
 let rng = Xoshiro(4)
     @fermions f
     algs = ("SubAlg" => FHS.SubsystemPartialTraceAlg(), "FullAlg" => FHS.FullPartialTraceAlg())
@@ -124,6 +129,15 @@ let rng = Xoshiro(4)
     Hsub = subregion(hilbert_space(f, 1:2), H)
     d = dim(H)
     add_cases!(g["Full space"]["Dense"], rand(rng, ComplexF64, d, d), H, Hsub, ("SubAlg", "FullAlg"))
+end
+
+## Partial trace of a pure state on half of an unconstrained space
+let rng = Xoshiro(11)
+    @fermions f
+    H = hilbert_space(f, 1:16)
+    Hsub = hilbert_space(f, 1:8)
+    ψ = normalize(rand(rng, ComplexF64, dim(H)))
+    SUITE["partial_trace"]["pure_state_full_space"] = @benchmarkable partial_trace($ψ, $(H => Hsub))
 end
 
 ## Product spaces
@@ -258,6 +272,18 @@ let
         hilbert_space(f, [(i, :↓) for i in 1:N], NumberConservation(1)))
     no_double30 = prod(NumberConservation(0:1, [f[k, :↑], f[k, :↓]]) for k in 1:N)
     g["constrain_no_double_occupation_N30"] = @benchmarkable constrain_space($H30, $no_double30)
+
+    # Few states of a large parent, so the sector is indexed by a Dict.
+    L = representation(ham, H, :lazy)
+    x = randn(Xoshiro(12), ComplexF64, dim(H))
+    y = similar(x)
+    L_cached = FHS.SciMLOperators.cache_operator(L, x)
+    SUITE["matrix_application"]["lazy hubbard"]["mul!"] = @benchmarkable mul!($y, $L_cached, $x)
+
+    # The full space, large enough that the sparse matrix is built in many blocks of columns.
+    N = 8
+    Hfull = hilbert_space(f, [(i, σ) for i in 1:N for σ in (:↑, :↓)])
+    g["matrix_representation_full_space_N8"] = @benchmarkable matrix_representation($(hubbard(f, N, 1.0, 4.0)), $Hfull)
 end
 
 ## Bose-Hubbard chain
@@ -267,6 +293,13 @@ let
     H = hilbert_space(b, 1:N, 6, NumberConservation(6))
     ham = sum(-1.0 * b[n]' * b[n+1] + hc for n in 1:N-1) + sum(0.5 * b[n]' * b[n]' * b[n] * b[n] for n in 1:N)
     SUITE["bosons"]["matrix_representation"] = @benchmarkable matrix_representation($ham, $H)
+
+    # Few particles on many sites, a product of more than 32 groups.
+    N = 33
+    H33 = hilbert_space(b, 1:N, 3, NumberConservation(2))
+    ham33 = sum(-1.0 * b[n]' * b[n + 1] + hc for n in 1:(N - 1)) + sum(0.5 * b[n]' * b[n]' * b[n] * b[n] for n in 1:N)
+    SUITE["bosons"]["space_33_sites"] = @benchmarkable hilbert_space($b, $(1:N), 3, NumberConservation(2))
+    SUITE["bosons"]["matrix_representation_33_sites"] = @benchmarkable matrix_representation($ham33, $H33)
 end
 
 ## Partial transpose
@@ -305,29 +338,29 @@ let
     H = tensor_product(hilbert_space(f, 1:2), hilbert_space(c, 1:6))
     kets = Kets(H)
     pert = sum(0.1 * f[1]' * c[n] + hc for n in 1:6)
-    Q = I - sum(b * b' for b in kets.(["0", "10", "11", "01"]))
+    Q = I - sum(b * b' for b in kets.(["00", "10", "11", "01"] .* "0"^6))
     Hq = Q * (f[1]' * f[2] + hc + 10.0 * sum(c[n]'c[n] for n in 1:6) + pert) * Q
-    ψ = Q * pert * kets("10")
+    ψ = Q * pert * kets("10" * "0"^6)
     SUITE["symbolic_states"]["projected_op_on_state"] = @benchmarkable $Hq * ($Hq * ($Hq * $ψ))
 end
 
 # Every benchmark samples for one second. Fixing `evals` makes `tune!`
 # unnecessary. Benchmarks that take less than about 200 µs per evaluation run
 # several evaluations per sample, so that the sample is long compared with
-# timer and scheduling noise; the rest run one.
+# timer, scheduling and garbage-collection noise; the rest run one.
 const EVALS = Dict(
     "tensor_product/spaces" => 25,
     "partial_trace/product space/apply_precomputed" => 64,
     "reshape/precomputed/apply_inplace" => 16,
     "reshape/precomputed/construct" => 10,
     "partial_trace_algorithms/Full space/Dense/SubAlg" => 6,
-    "complement/fermions" => 4,
+    "complement/fermions" => 32,
     "embed/product space" => 4,
     "partial_trace_algorithms/Sparse space/Sparse/FullAlg" => 4,
     "partial_trace/precomputed/eager_pure_state" => 4,
     "complement/product space" => 3,
     "partial_trace/product space/map" => 3,
-    "reshape/mat_to_vec" => 3,
+    "reshape/mat_to_vec" => 24,
     "partial_trace/precomputed/apply_pure_state_inplace" => 3,
     "hilbert_space" => 2,
     "symbolic/sum" => 2,

@@ -1,6 +1,23 @@
 
 combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
 combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("The group `$group_id` requires a single space, got $spaces."))
+# Base's tuple `map` and `setindex`, and `LinearIndices`, are not inferred past 32 entries.
+@generated _tuple_map(f::F, a::NTuple{N, Any}, b::NTuple{N, Any}) where {F, N} = Expr(:tuple, (:(f(a[$i], b[$i])) for i in 1:N)...)
+function _linear_index(inds::NTuple{N, Int}, axes) where {N}
+    k, stride = 1, 1
+    for n in 1:N
+        k += (inds[n] - 1) * stride
+        stride *= length(axes[n])
+    end
+    return k
+end
+
+"""
+    ProductState(states::Tuple)
+
+A basis state of a tensor product space, holding one basis state per factor, e.g.
+`ProductState((SpinState(1//2), BosonicState(0)))`.
+"""
 struct ProductState{B} <: AbstractBasisState
     states::B
 end
@@ -44,19 +61,19 @@ atomic_factors(H::ProductSpace) = H.atoms
 nbr_of_atoms(H::ProductSpace) = length(H.atoms)
 factors(H::ProductSpace) = H.factors
 groups(H::ProductSpace) = H.factors
-dim(H::ProductSpace) = prod(dim, groups(H); init=1)
+dim(H::ProductSpace) = mapfoldl(dim, Base.Checked.checked_mul, groups(H); init = 1)
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
-basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(ProductState, Iterators.product(map(basisstates, H.factors)...)))
-Base.@propagate_inbounds function basisstate(n::Integer, H::ProductSpace{B}) where B
-    inds = Tuple(H.cartinds[n])
-    ProductState(map(basisstate, inds, H.factors))
-end
+# Iterates `cartinds` rather than `Iterators.product`, whose iteration allocates per state from 12 factors on
+basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(I -> _product_basisstate(I, H), H.cartinds))
+Base.@propagate_inbounds basisstate(n::Integer, H::ProductSpace) = _product_basisstate(H.cartinds[n], H)
+Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::ProductSpace) = ProductState(_tuple_map(basisstate, Tuple(I), H.factors))
 function _state_index(state::ProductState, H::ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
-    inds = map(_state_index, state.states, H.factors)
-    all(>(0), inds) || return 0
-    H.lininds[CartesianIndex(inds)]
+    inds = _tuple_map(_state_index, state.states, H.factors)
+    # `all` on a tuple of one type keeps the tuple in memory, which on a GPU is slow local memory
+    mapreduce(>(0), &, inds) || return 0
+    return _linear_index(inds, H.lininds.indices)
 end
 # `lininds` is exact only when the product of the factor dimensions fits in an `Int`
 has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && prod(big ∘ dim, H.factors) <= typemax(Int)
@@ -240,11 +257,18 @@ parity(state::ProductState) = prod(parity, atomic_factors(state))
     @test partial_trace(m, Hprod => H2) ≈ partial_trace(partial_trace(m, Hprod => H1), H1 => H2)
 
 
-    @test representation(a[1] + 1, Hprod; projection=true) == embed(representation(a[1], Ha), Ha => Hprod; skipmissing=true) + I
-    @test representation(c[1], Hprod; projection=true) == embed(representation(c[1], Hc), Hc => Hprod; skipmissing=true)
+    @test representation(a[1] + 1, Hprod; projection = true) == embed(representation(a[1], Ha), Ha => Hprod; projection = true) + I
+    @test representation(c[1], Hprod; projection = true) == embed(representation(c[1], Hc), Hc => Hprod; projection = true)
 
-    @test representation(a[1]' * b[1], Hprod) == embed(representation(a[1]' * b[1], Hab), Hab => Hprod; skipmissing=true)
+    @test representation(a[1]' * b[1], Hprod) == embed(representation(a[1]' * b[1], Hab), Hab => Hprod; projection = true)
 
+end
+
+@testitem "dim of a ProductSpace throws on overflow" begin
+    @spins S 1 // 2
+    H = hilbert_space(S, 1:64)
+    @test_throws OverflowError dim(H)
+    @test S[1][:x] * Ket(fill("↑", 64), H) == Ket(["↓"; fill("↑", 63)], H) / 2
 end
 
 @testitem "ProductSpaceMapper combines vectors of substates" begin
@@ -259,6 +283,73 @@ end
         @test combine_states(collect(Any, substates), mapper) == combine_states(substates, mapper)
     end
     @test_throws ArgumentError combine_states(Any[first(basisstates(Hs[1]))], mapper)
+end
+
+@testitem "split_state and combine_states infer on a fermion, boson and spin product" begin
+    import FermionicHilbertSpaces: state_mapper, split_state, combine_states
+    @fermions f
+    @boson b
+    @spin s 1 // 2
+    Hb, Hs = hilbert_space(b, 3), hilbert_space(s)
+    H = tensor_product(hilbert_space(f, 1:3), Hb, Hs)
+    mapper = state_mapper(H, (hilbert_space(f, [1, 3]), tensor_product(hilbert_space(f, 2:2), Hs), Hb))
+    for state in basisstates(H)
+        substates = only(first(@inferred split_state(state, mapper)))
+        @test only(first(@inferred combine_states(substates, mapper))) == state
+    end
+end
+
+@testitem "Bose-Hubbard matrix on more than 32 sites" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: matrix_representation
+    @bosons b
+    space(n) = hilbert_space(b, 1:n, 2, NumberConservation(1))
+    nb(i) = b[i]' * b[i]
+    hamiltonian(n) = -sum(b[i]' * b[i + 1] + hc for i in 1:(n - 1)) + sum(nb(i) * (nb(i) - 1) for i in 1:n)
+    function allocations(n)
+        H, op = space(n), hamiltonian(n)
+        matrix_representation(op, H)
+        return @allocations matrix_representation(op, H)
+    end
+    @test allocations(33) < 2 * allocations(31)
+
+    n = 33
+    exact = sort([-2cos(k * pi / (n + 1)) for k in 1:n])
+    @test eigvals(Symmetric(Matrix(matrix_representation(hamiltonian(n), space(n))))) ≈ exact
+end
+
+@testitem "Matrix on a fermion, boson and spin product of more than 32 groups" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: matrix_representation, BosonicState, SpinState
+    @fermions f
+    @bosons b
+    @spins s 1 // 2
+    excitation(state::BosonicState) = state.n // 1
+    excitation(state::SpinState) = state.m + 1 // 2
+    raise(i) = isodd(i) ? b[i]' : s[i][:+]
+    lower(i) = isodd(i) ? b[i] : s[i][:-]
+    fermion_spaces = [hilbert_space(f, i:i) for i in 1:2]
+    # The fermions form one group, so this chain gives 33 groups
+    n = 32
+    chain_spaces = Tuple(isodd(i) ? hilbert_space(b[i], 2) : hilbert_space(s[i]) for i in 1:n)
+    op = -(f[1]' * f[2] + hc) - sum(raise(i) * lower(i + 1) + hc for i in 1:(n - 1))
+    function space(excitations)
+        return tensor_product(
+            (fermion_spaces..., chain_spaces...);
+            constraint = NumberConservation(1, fermion_spaces) * AdditiveConstraint(excitations // 1, chain_spaces, excitation)
+        )
+    end
+    function allocations(excitations)
+        H = space(excitations)
+        matrix_representation(op, H)
+        return @allocations matrix_representation(op, H)
+    end
+    # A cost per basis state would grow with the sector
+    @test allocations(2) < 2 * allocations(1)
+
+    H = space(1)
+    exact = sort([-2cos(k * pi / (n + 1)) + d for k in 1:n for d in (-1, 1)])
+    @test eigvals(Symmetric(Matrix(matrix_representation(op, H)))) ≈ exact
 end
 
 @testitem "Fermion ordering" begin
@@ -338,7 +429,7 @@ physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state,
 function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::ProductSpace, precomps) where B
     if !ismissing(fast_path(space))
         T = typeof(fast_path(space))
-        internal_reps = map((s, f) -> _internal_rep(s, f, T), state.states, groups(space))
+        internal_reps = _tuple_map((s, f) -> _internal_rep(s, f, T), state.states, groups(space))
         newrep, amp = _apply_local_operators_fast(ops, internal_reps, space, precomps)
         return ProductState{B}(newrep), amp
     else
@@ -364,7 +455,8 @@ _apply_group_operators(amp, states, newstates, inds, k, ::Tuple{}, ::Tuple{}, ::
 function _apply_group_operators(amp::C, states, newstates, inds, k, ops::Tuple, spaces::Tuple, precomps::Tuple) where {C}
     n = inds[k]
     new_local_state, local_amp = _apply_local_operators(first(ops), states[n], first(spaces), first(precomps))
-    return _apply_group_operators(amp * convert(C, local_amp), states, Base.setindex(newstates, new_local_state, n),
+    return _apply_group_operators(
+        amp * convert(C, local_amp), states, ntuple(i -> i == n ? new_local_state : newstates[i], Val(length(newstates))),
         inds, k + 1, Base.tail(ops), Base.tail(spaces), Base.tail(precomps))
 end
 
@@ -394,10 +486,9 @@ add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors
 #
 # Type stability: all routing indices live in the *type domain* via
 # `PieceIndex{block,slot}`. Indexing a heterogeneous tuple with these
-# compile-time constants infers concretely, so the hot path is type stable
-# and allocation free even for heterogeneous states. Construction, by
-# contrast, is deliberately plain and dynamic (Dicts, Vectors, sorting) —
-# it runs once, so clarity wins there.
+# compile-time constants infers concretely, so the hot path is type stable.
+# Construction, by contrast, is deliberately plain and dynamic (Dicts,
+# Vectors, sorting) — it runs once, so clarity wins there.
 ###############################################################################
 
 # ─── Compile-time routing index ──────────────────────────────────────────────
@@ -594,8 +685,6 @@ leaf_phase_factor(::Uncovered) = (s1, s2) -> 1
 leaf_phase_factor(leaf::Union{Passthrough,Fractured}) = kron_phase_factor(leaf.mapper)
 
 function kron_phase_factor(sp::ProductSpaceMapper)
-    length(sp.target_spaces) == 2 ||
-        throw(ArgumentError("Phase factors currently only implemented for binary splits"))
     phase_fns = map(leaf_phase_factor, sp.leaves)
     function phase_factor(fullstate1, fullstate2)
         prod(map((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))

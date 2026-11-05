@@ -74,9 +74,9 @@ function filter_function(constraint::FilterConstraint{<:Any,<:Function}, space::
         constraint.reducer(values)
     end
 end
-function _check_maps_length(maps, spaces)
+function _check_maps_length(maps, spaces, name = "maps")
     (maps isa Function || ismissing(maps) || ismissing(spaces)) && return nothing
-    length(maps) == length(spaces) || throw(ArgumentError("Got $(length(maps)) maps for $(length(spaces)) spaces. Give one map per space, a single function to apply to every space, or pass `spaces` explicitly."))
+    length(maps) == length(spaces) || throw(ArgumentError("Got $(length(maps)) $name for $(length(spaces)) spaces. Give one per space, or pass `spaces` explicitly."))
     return nothing
 end
 supply_missing_constraint_info(constraint::FilterConstraint{<:Any,<:Any,Missing}, space, spaces) = FilterConstraint(constraint.reducer, constraint.maps, spaces)
@@ -156,6 +156,15 @@ supply_missing_constraint_info(constraint::AdditiveConstraint{<:Any,Missing}, sp
 supply_missing_constraint_info(constraint::AdditiveConstraint, space, spaces) = constraint
 
 """
+    particle_number(state)
+
+Return the number of particles in the basis state `state`: the number of occupied modes for
+fermions, the occupation for a boson, and the total over the factors of a product state. It is not
+defined for spins. This is the quantity [`NumberConservation`](@ref) conserves.
+"""
+function particle_number end
+
+"""
     NumberConservation(total=missing; spaces=missing, weights=missing)
     NumberConservation(total, spaces; weights=missing)
     NumberConservation(total, spaces, weights)
@@ -174,6 +183,7 @@ struct NumberConservation{T,H,W} <: AbstractConstraint
         total = _normalize_constraint_values(_total)
         subspace = _normalize_constraint_subspace(_spaces)
         weights = _normalize_constraint_values(_weights)
+        _check_maps_length(weights, subspace, "weights")
         new{typeof(total),typeof(subspace),typeof(weights)}(total, subspace, weights)
     end
 end
@@ -195,7 +205,8 @@ NumberConservation(space::AbstractHilbertSpace) = NumberConservation(missing; sp
     ParityConservation(space)
 
 Constraint enforcing allowed fermion parities, optionally on selected spaces.
-`parities` is a parity or a collection of parities, each `-1` or `1`. 
+`parities` is a parity or a collection of parities, each `1` (even) or `-1` (odd).
+Sectors are ordered by increasing quantum number, so the odd sector comes first.
 """
 struct ParityConservation{H} <: AbstractConstraint
     allowed_parities::Vector{Int}
@@ -276,6 +287,16 @@ function branch_constraint(constraint::NumberConservation{T,H,W}, spaces) where 
 end
 
 sectors(::AbstractConstraint) = nothing
+
+map_spaces(f, c) = c
+map_spaces(f, c::ProductConstraint) = ProductConstraint(map(ci -> map_spaces(f, ci), c.constraints))
+map_spaces(f, c::SectorConstraint) = SectorConstraint(map_spaces(f, c.filter))
+map_spaces(f, c::NumberConservation) = NumberConservation(c.total, _map_spaces(f, c.spaces), c.weights)
+map_spaces(f, c::ParityConservation) = ParityConservation(c.allowed_parities, _map_spaces(f, c.spaces))
+map_spaces(f, c::AdditiveConstraint) = AdditiveConstraint(c.allowed_values, _map_spaces(f, c.spaces), c.maps)
+map_spaces(f, c::FilterConstraint) = FilterConstraint(c.reducer, c.maps, _map_spaces(f, c.spaces))
+_map_spaces(f, spaces) = map(f, spaces)
+_map_spaces(f, ::Missing) = missing
 
 
 """

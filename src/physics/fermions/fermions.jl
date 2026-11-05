@@ -38,7 +38,7 @@ function _state_index(state::FockNumber, H::FermionicSpace{FockNumber{I}}) where
     iszero(state.f >> nbr_of_modes(H)) ? T(state.f) + one(T) : zero(T)
 end
 # Below 63 modes, computing `dim(H)` does not throw. Its type is `fock_index_type(I)`, which is
-# `UInt128` or `BigInt` for wide `FockNumber`s; `index_table` builds a table only when it is an `Int`.
+# a wide `UInt` or `BigInt` for wide `FockNumber`s; `root_keyed_index` builds an index only when it is an `Int`.
 has_arithmetic_state_index(H::FermionicSpace{<:FockNumber}) = nbr_of_modes(H) < 63
 function dim(H::FermionicSpace{FockNumber{I}}) where I
     d = one(fock_index_type(I)) << nbr_of_modes(H)
@@ -563,6 +563,7 @@ end
         H3 = hilbert_space(f, 1:3, qn)
         H3w = tensor_product(H1, H2)
         @test H3w == tensor_product((H1, H2)) == tensor_product([H1, H2])
+        @test tensor_product(H1) == tensor_product((H1,))
         Hs = [H1, H2]
         b1 = fermions(H1)
         b2 = fermions(H2)
@@ -625,9 +626,10 @@ end
 """
     partial_transpose_phase_factor(f1, f2, Hsub)
 
-Local phase of the matrix unit `|f1⟩⟨f2|` of the transposed subsystem `Hsub` under the
-graded transpose in the fermionic operator basis: `i^k` for fermions, where `k` is the
-number of modes in which `f1` and `f2` differ, and `1` for spaces without phase factors.
+Local phase of the matrix unit `|f1⟩⟨f2|` of `Hsub` under the graded partial transpose.
+
+It is `i^k` for fermions, where `k` is the number of modes in which `f1` and `f2` differ, and
+`1` for spaces without phase factors.
 """
 partial_transpose_phase_factor(f1, f2, H::FermionicSpace) = _ipow(_nbr_differing_modes(f1, f2, nbr_of_modes(H)))
 _ipow(k::Integer) = (1 + 0im, 0 + 1im, -1 + 0im, 0 - 1im)[mod(k, 4)+1]

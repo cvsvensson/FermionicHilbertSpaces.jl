@@ -22,9 +22,11 @@ abstract type AbstractMajoranaSym <: AbstractFermionSym end
 """
     @majoranas a b ...
 
-Create one or more Majorana species with the given names. Indexing into Majorana species
+Create one or more Majorana species with the given names. Returns the species, or a tuple of them if several names are given. Indexing into Majorana species
 gives a concrete Majorana. Majoranas in one `@majoranas` block anticommute with each other,
 and commute with Majoranas in other `@majoranas` blocks.
+
+Majoranas are Hermitian and normalised to square to one: `γᵢγⱼ + γⱼγᵢ = 2δᵢⱼ`.
 
 # Examples:
 - `@majoranas a b` creates two species of Majoranas that anticommute:
@@ -41,6 +43,7 @@ macro majoranas(xs...)
     defs = map(xs) do x
         :($(esc(x)) = SymbolicMajoranaBasis($(Expr(:quote, x)), $group))
     end
+    length(defs) == 1 && return only(defs)
     Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
 end
@@ -71,19 +74,19 @@ function Base.isless(a::MajoranaSym, b::MajoranaSym)
     if a.basis.group !== b.basis.group
         a.basis.group < b.basis.group
     elseif a.basis.name == b.basis.name
-        a.label < b.label
+        _order_isless(a.label, b.label)
     else
         a.basis.name < b.basis.name
     end
 end
+exchange_phase(a::MajoranaSym, b::MajoranaSym) = a.basis.group == b.basis.group ? -1 : 1
 function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym)
     if a == b
         1
     elseif a < b
         nothing
     elseif a > b
-        swap = Swap((-1)^(a.basis.group == b.basis.group))
-        return swap
+        return Swap(exchange_phase(a, b))
     else
         throw(ArgumentError("Cannot multiply `$a` and `$b`."))
     end
@@ -91,6 +94,14 @@ end
 
 mat_eltype(::Type{S}) where {S<:AbstractMajoranaSym} = Complex{Int}
 @nc MajoranaSym
+
+@testitem "@majoranas return value" begin
+    γ = @majoranas γ
+    @test γ isa FermionicHilbertSpaces.SymbolicMajoranaBasis
+    @test repr(γ) == "SymbolicMajoranaBasis(γ)"
+    a, b = @majoranas a b
+    @test a[1] * b[1] == -b[1] * a[1]
+end
 
 @testitem "MajoranaSym" begin
     @majoranas γ f
@@ -229,9 +240,9 @@ function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...
     f = SymbolicFermionBasis(y.name, tags(y).group)
     Hf = hilbert_space(f, pairs, args...; kwargs...)
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
+    length(majorana_position) == length(labels) || throw(ArgumentError("The Majoranas of a Hilbert space must be distinct, got $labels."))
     MajoranaHilbertSpace(majorana_position, Hf, y)
 end
-@deprecate majorana_hilbert_space(y, labels, args...; kwargs...) hilbert_space(y, labels, args...; kwargs...)
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
 
@@ -240,7 +251,7 @@ function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
     MajoranaHilbertSpace(Hsub.majoranaindices, parent_subregion, Hsub.sym)
 end
 
-partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg::AbstractPartialTraceAlg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
+partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
 
 function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,S<:AbstractMajoranaSym,F}
     sub_modes = modes(Hsub)
@@ -305,6 +316,14 @@ function _majorana_atomic_factor(H::MajoranaHilbertSpace, i, γs)
     atom = atomic_factor(H.parent, i)
     γ1, γ2 = γs[2i-1], γs[2i]
     MajoranaHilbertSpace(OrderedDict(γ1 => 1, γ2 => 2), atom, symbolic_basis(γ1))
+end
+@testitem "Majoranas of fermion modes from 64" begin
+    import FermionicHilbertSpaces: FockNumber
+    @majoranas γ
+    H = constrain_space(hilbert_space(γ, 1:132), [FockNumber{UInt128}(0), FockNumber{UInt128}(1) << 63])
+    Hsmall = hilbert_space(γ, 1:2)
+    @test representation(γ[127], H, Matrix) == representation(γ[1], Hsmall, Matrix)
+    @test representation(γ[128], H, Matrix) == representation(γ[2], Hsmall, Matrix)
 end
 @testitem "Majorana matrix representations" begin
     using LinearAlgebra

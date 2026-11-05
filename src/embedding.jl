@@ -1,15 +1,19 @@
-function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), skipmissing=false, kwargs...)
+function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, alg = ScalarIndexingAlg(), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
+    size_compatible(m, Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(Hsub)), got $(size(m))."))
+    !isnothing(complement) && m isa AbstractVector && throw(ArgumentError("A state vector can only be embedded into a space with the same modes, such as from a sector into its parent space. A state on a subsystem does not fix the state of the rest; use `tensor_product` of states or `embed` a density matrix instead."))
+    alg isa Union{ScalarIndexingAlg, NoScalarIndexingAlg} || throw(ArgumentError("`embed` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
     if isnothing(complement)
-        m isa AbstractVector && return change_basis(m, Hsub, H; skipmissing, kwargs...)
-        if !(skipmissing || m isa UniformScaling)
+        m isa AbstractVector && return change_basis(m, Hsub, H; projection, alg, kwargs...)
+        if !(projection || m isa UniformScaling)
             dropped = last(basis_transformation(Hsub, H))
             iszero(m[dropped, setdiff(axes(m, 2), dropped)]) ||
-                throw(ArgumentError("`m` maps a state of `H` outside `H` with nonzero amplitude. Pass `skipmissing=true` to drop such terms."))
+                throw(ArgumentError("`m` maps a state of `H` outside `H` with nonzero amplitude. Pass `projection=true` to drop such terms."))
         end
-        return change_basis(m, Hsub, H; skipmissing=true, kwargs...)
+        return change_basis(m, Hsub, H; projection = true, alg, kwargs...)
     end
-    return generalized_kron((m, I), (Hsub, complement), H; skipmissing, kwargs...)
+    alg isa NoScalarIndexingAlg && return _embed_by_gather(m, Hsub, H, complement; projection, kwargs...)
+    return generalized_kron((m, I), (Hsub, complement), H; projection, kwargs...)
 end
 
 """
@@ -18,13 +22,81 @@ end
 Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 
-The result is the compression `P (m ⊗ I) P` onto `H`, so that `tr(embed(A) * ρ) ==
-tr(A * partial_trace(ρ))` for `ρ` on `H`. Unless `skipmissing=true`, throws an `ArgumentError`
+The result is the compression `P (m ⊗ I) P` onto `H`, so that `tr(embed(A, Hsub => H) * ρ) ==
+tr(A * partial_trace(ρ, H => Hsub))` for `ρ` on `H`. Unless `projection=true`, throws an `ArgumentError`
 if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of `m` for states of
 `Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not
 in `Hsub` get zero.
+
+With `alg = NoScalarIndexingAlg()`, `m` can be a GPU array (see [`NoScalarIndexingAlg`](@ref)).
+
+If `m` is a vector, `Hsub` and `H` must have the same modes, as for a sector `Hsub` of `H`. The
+result is `m` placed at the indices [`indices`](@ref)`(Hsub, H)` and zero elsewhere.
+
+```jldoctest
+julia> using FermionicHilbertSpaces
+
+julia> @fermions f;
+
+julia> H = hilbert_space(f, 1:2, NumberConservation());
+
+julia> embed([1, 2], sector(1, H) => H)
+4-element Vector{Int64}:
+ 0
+ 1
+ 2
+ 0
+```
 """
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
+
+function _embed_by_gather(m::AbstractMatrix, Hsub, H, complement; projection = false, phase_factors = true)
+    splits = _full_partial_trace_splits(H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement), phase_factors)
+    P, B, S, present = _embed_gather_table(splits, dim(Hsub), dim(complement))
+    projection || _check_embed_into(m, present)
+    return _gather_embed(m, P, B, S)
+end
+_embed_by_gather(::UniformScaling, args...; kwargs...) = throw(ArgumentError("`UniformScaling` is not supported with `alg = NoScalarIndexingAlg()`."))
+
+# `P[J, r]`, `B[J, r]` and `S[J, r]` are the indices in `Hsub` and the complement, and the weight,
+# of the r-th split of the J-th state of `H`, padded with index 1 and weight 0.
+# `present[K, b]` is whether some state of `H` splits into (K, b).
+function _embed_gather_table(splits, dsub, nb)
+    R = maximum(ss -> count(!iszero ∘ first, ss), splits; init = 0)
+    P = ones(Int, length(splits), R)
+    B = ones(Int, size(P))
+    S = zeros(fieldtype(eltype(eltype(splits)), 3), size(P))
+    present = falses(dsub, nb)
+    for (J, ss) in pairs(splits)
+        r = 0
+        for (K, b, s) in ss
+            iszero(K) && continue
+            r += 1
+            P[J, r], B[J, r], S[J, r] = K, b, s
+            present[K, b] = true
+        end
+    end
+    return P, B, S, present
+end
+
+# m ⊗ I maps (K2, b) in `H` to (K1, b) outside `H` exactly when present[K2, b] and !present[K1, b]
+function _check_embed_into(m, present)
+    all(present) && return nothing
+    outside = (.!present) * transpose(present) .> 0
+    any(_adapt_like(m, Array(outside)) .& .!iszero.(m)) &&
+        throw(ArgumentError("`m` maps a state of `H` outside `H` with nonzero amplitude. Pass `projection=true` to drop such terms."))
+    return nothing
+end
+
+function _gather_embed(m::AbstractMatrix, P, B, S)
+    D, R = size(P)
+    P, B, S = _adapt_like(m, P), _adapt_like(m, B), _adapt_like(m, S)
+    row(A) = reshape(A, D, R, 1, 1)
+    col(A) = reshape(A, 1, 1, D, R)
+    LL = row(P) .+ size(m, 1) .* (col(P) .- 1)
+    WW = conj.(row(S)) .* col(S) .* (row(B) .== col(B))
+    return reshape(_gather_reduce(WW, (2, 4), m, LL), D, D)
+end
 
 struct EmbedMap{HS,H,C,K,M}
     Hsub::HS
@@ -34,10 +106,11 @@ struct EmbedMap{HS,H,C,K,M}
     map::M
 end
 
-# The map is the compression onto `H` and checks nothing, so `skipmissing` has no effect.
-function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), skipmissing=false, kwargs...)
+# The map is the compression onto `H` and checks nothing, so `projection` has no effect.
+function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(Hsub, H, complement), projection = false, kwargs...)
+    alg isa AbstractPartialTraceAlg || throw(ArgumentError("The map `embed(Hsub => H)` supports `alg = SubsystemPartialTraceAlg()` or `FullPartialTraceAlg()`, got $alg."))
     map = if isnothing(complement)
-        basis_transformation_map(Hsub, H; skipmissing=true, kwargs...)
+        basis_transformation_map(Hsub, H; projection = true, kwargs...)
     else
         _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, kwargs...))
     end
@@ -128,7 +201,7 @@ embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwar
     m = representation(f[1]', Hsub; projection=true)
     @test_throws ArgumentError embed(m, Hsub => H)
     compression = representation(f[1]', H; projection=true)
-    @test embed(m, Hsub => H; skipmissing=true) ≈ compression
+    @test embed(m, Hsub => H; projection = true) ≈ compression
     @test emb(m) ≈ compression # the map is the compression and does not check
     # with the same atoms: |00⟩⟨11| maps no state of the space with at most one particle outside it, |11⟩⟨00| does
     Hf, Hc = hilbert_space(f, 1:2), hilbert_space(f, 1:2, NumberConservation(0:1))
@@ -139,7 +212,53 @@ embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwar
     # embed is the adjoint of partial_trace
     A = rand(ComplexF64, dim(Hsub), dim(Hsub))
     ρ = rand(ComplexF64, dim(H), dim(H))
-    @test tr(embed(A, Hsub => H; skipmissing=true) * ρ) ≈ tr(A * partial_trace(ρ, H => Hsub))
+    @test tr(embed(A, Hsub => H; projection = true) * ρ) ≈ tr(A * partial_trace(ρ, H => Hsub))
+end
+
+@testitem "Embed by gather" begin
+    import FermionicHilbertSpaces: NoScalarIndexingAlg
+    alg = NoScalarIndexingAlg()
+    @fermions f
+    @spins s
+    @bosons b
+    Hcons = hilbert_space(f, 1:6, NumberConservation(3))
+    Hprod = tensor_product(hilbert_space(f, 1:3), hilbert_space(s[1], 1 // 1), hilbert_space(b[1], 3))
+    Hpar = hilbert_space(f, 1:4, ParityConservation())
+    for (Hsub, H) in (
+            (hilbert_space(f, [2, 4]), hilbert_space(f, 1:5)),
+            (subregion(hilbert_space(f, [1, 4]), Hcons), Hcons),
+            (tensor_product(hilbert_space(f, 2:2), hilbert_space(b[1], 3)), Hprod),
+            (sector(-1, Hpar), Hpar),
+        )
+        m = rand(ComplexF64, dim(Hsub), dim(Hsub))
+        @test embed(m, Hsub => H; alg, projection = true) ≈ embed(m, Hsub => H; projection = true)
+    end
+    v = rand(ComplexF64, dim(sector(-1, Hpar)))
+    @test embed(v, sector(-1, Hpar) => Hpar; alg) ≈ embed(v, sector(-1, Hpar) => Hpar)
+
+    # f[1]' maps states of the number sector outside it
+    H = hilbert_space(f, 1:6, NumberConservation(2))
+    Hsub = subregion(hilbert_space(f, 1:3), H)
+    @test_throws ArgumentError embed(representation(f[1]', Hsub, Matrix; projection = true), Hsub => H; alg)
+    m = representation(f[2]' * f[1] + hc, Hsub, Matrix)
+    @test embed(m, Hsub => H; alg) ≈ embed(m, Hsub => H)
+    Hf, Hc = hilbert_space(f, 1:2), hilbert_space(f, 1:2, NumberConservation(0:1))
+    @test_throws ArgumentError embed(rand(4, 4), Hf => Hc; alg)
+    @test_throws ArgumentError embed(rand(4), Hf => Hc; alg)
+    @test_throws ArgumentError embed(rand(4, 4), Hf => hilbert_space(f, 1:3); alg = :other)
+    @test_throws ArgumentError embed(Hf => hilbert_space(f, 1:3); alg)
+    @test_throws ArgumentError embed(sector(-1, Hpar) => Hpar; alg)
+end
+
+@testitem "Embedding a sector vector" begin
+    using LinearAlgebra
+    @fermions f
+    H = hilbert_space(f, 1:4, ParityConservation())
+    Hsec = sector(-1, H)
+    v = rand(ComplexF64, dim(Hsec))
+    w = embed(v, Hsec => H)
+    @test w[indices(Hsec, H)] == v && norm(w) ≈ norm(v)
+    @test_throws ArgumentError embed(rand(4), hilbert_space(f, 1:2) => H)
 end
 
 @testitem "Partial trace, embed" begin

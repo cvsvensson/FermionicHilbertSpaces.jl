@@ -24,6 +24,7 @@ add_tag(x::SymbolicFermionBasis, tag) = SymbolicFermionBasis(x.name, add_tag(x.t
 Create one or more fermion species with the given names. Indexing into fermions species
 gives a concrete fermion. Fermions in one `@fermions` block anticommute with each other, 
 and commute with fermions in other `@fermions` blocks.
+`a[l]` is the annihilation operator of the mode labelled `l`, `a[l]'` its creation operator, and `a[i, σ]` is the mode labelled `(i, σ)`.
 
 # Examples:
 - `@fermions a b` creates two species of fermions that anticommute:
@@ -54,6 +55,7 @@ struct FermionSym{L,B} <: AbstractFermionSym
     label::L
     basis::B
 end
+Base.getindex(::SymbolicFermionBasis, i::FermionSym) = throw(ArgumentError("Modes are indexed by labels, not by operators, got `$i`."))
 Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.label, x.basis)
 Base.iszero(x::FermionSym) = false
 symbolic_group(h::FermionSym) = symbolic_group(h.basis)
@@ -75,7 +77,7 @@ function Base.isless(a::FermionSym, b::FermionSym)
     if tags(a.basis) !== tags(b.basis)
         tags(a.basis) < tags(b.basis)
     elseif a.creation == b.creation
-        a.basis.name == b.basis.name && return a.label < b.label
+        a.basis.name == b.basis.name && return _order_isless(a.label, b.label)
         a.basis.name < b.basis.name
     else
         a.creation > b.creation
@@ -86,14 +88,15 @@ Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis,
 
 hilbert_space(f::FermionSym) = FermionicSpace([_normalize_sym(f)], symbolic_group(f))
 
+# The sign λ in a * b = λ * b * a + scalar
+exchange_phase(a::FermionSym, b::FermionSym) = tags(a.basis) == tags(b.basis) ? -1 : 1
 function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     if a == b
         0
     elseif a < b
         nothing
     elseif a > b
-        anti_commuting = tags(a.basis) == tags(b.basis)
-        swap = Swap((-1)^anti_commuting)
+        swap = Swap(exchange_phase(a, b))
         if a.label == b.label && a.basis == b.basis
             return AddTerms((swap, 1))
         else
@@ -233,4 +236,35 @@ end
     for i in eachindex(ops), j in eachindex(ops), k in eachindex(ops)
         @test representation(ops[i] * ops[j] * ops[k], H) ≈ mats[i] * mats[j] * mats[k]
     end
+end
+
+@testitem "Products with mixed labels and tags" begin
+    import FermionicHilbertSpaces: add_tag
+    @fermions f
+    @majoranas γ
+    @bosons b
+    @spins s 1 // 2
+    @test iszero(f[1] * f[:a] + f[:a] * f[1])
+    @test iszero(f[1] * f[1, :a] + f[1, :a] * f[1])
+    @test iszero(γ[1] * γ[:a] + γ[:a] * γ[1])
+    @test b[1] * b[:a] == b[:a] * b[1]
+    @test s[1][:z] * s[:a][:z] == s[:a][:z] * s[1][:z]
+    H = hilbert_space(f, [1, :a])
+    @test representation(f[1] * f[:a], H) == representation(f[1], H) * representation(f[:a], H)
+
+    # Tags of different types: operators on different groups commute
+    tagged(x, y) = x * y == y * x
+    @test tagged(add_tag(f, 1)[1], add_tag(f, :l)[1])
+    @test tagged(add_tag(γ, 1)[1], add_tag(γ, :l)[1])
+    @test tagged(add_tag(b, 1)[1], add_tag(b, :l)[1])
+    @test tagged(add_tag(s, 1)[1][:z], add_tag(s, :l)[1][:z])
+
+    # The sorted form doesn't depend on the starting order
+    l1, l2, l3 = 2, "a", UInt8(1)
+    @test allequal(
+        b[x] * b[y] * b[z] for (x, y, z) in
+            ((l1, l2, l3), (l1, l3, l2), (l2, l1, l3), (l2, l3, l1), (l3, l1, l2), (l3, l2, l1))
+    )
+    @test b[1] * b[0] == b[1.0] * b[0]
+    @test b["a"] * b[:x] == b[SubString("a")] * b[:x]
 end
