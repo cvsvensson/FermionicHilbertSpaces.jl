@@ -526,7 +526,6 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
 end
 
 function partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(v, Hsub, H, complement), kwargs...)
-    # vec_to_density_matrix copies ψ to a CPU Matrix
     alg isa GatherAlg && return _partial_trace_by_gather(v, H, Hsub, complement; kwargs...)
     return partial_trace(vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)
 end
@@ -624,9 +623,8 @@ _change_basis(m::UniformScaling, (Uout, Uin)) = m.λ * (Uout * Uin')
 _has_support_on(m, axis, js) = !iszero(selectdim(m, axis, js))
 _has_support_on(m::AbstractSparseArray, axis, js) = _copied_support_on(m, axis, js)
 # A view of a sparse array visits every element, a copy only the stored ones, and a copy of a GPU
-# array needs no scalar indexing. A vector is a pure state ψ, and ψψ† has support on `js` along
-# axis 2 exactly when it has along axis 1
-_copied_support_on(m, axis, js) = axis <= ndims(m) && !iszero(m[ntuple(d -> d == axis ? js : (:), Val(ndims(m)))...])
+# array needs no scalar indexing
+_copied_support_on(m, axis, js) = !iszero(m[ntuple(d -> d == axis ? js : (:), Val(ndims(m)))...])
 _has_support_on(m::UniformScaling, axis, js) = !isempty(js) && !iszero(m.λ)
 
 function _checked_basis_transformation(Hfrom, Hto; projection = false)
@@ -706,7 +704,7 @@ struct GatherAlg <: AbstractPartialTraceAlg end
 """
     GenericAlg()
 
-The standard element-wise code path of an operation, and the default `alg` of operations that also offer an array-only algorithm such as [`GatherAlg`](@ref).
+The standard element-wise code path of an operation, and the default `alg` of [`embed`](@ref).
 """
 struct GenericAlg end
 
@@ -721,13 +719,13 @@ _effective_dim(::UniformScaling, H) = dim(H)
 # Costs in units of one input-element visit by FullPartialTraceAlg, which visits the stored elements.
 # SubsystemPartialTraceAlg combines every subsystem state with every complement state, then visits
 # about d^2 ÷ dcomp terms, each reading the input (a binary search if `m` is sparse).
-function default_partial_trace_alg(m::Union{AbstractVecOrMat,UniformScaling}, Hsub, H, Hcomp)
+function default_partial_trace_alg(m::Union{AbstractVecOrMat, UniformScaling}, Hsub, H, Hcomp)
     dsub, d, dcomp = dim(Hsub), dim(H), dim(Hcomp)
     readcost = m isa AbstractSparseArray ? 20 : 5
     subcost = 16 * dsub * dcomp + readcost * (d^2 ÷ max(dcomp, 1))
     return subcost < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 end
-default_partial_trace_alg(m::Union{AbstractVecOrMat,UniformScaling}, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
+default_partial_trace_alg(m::Union{AbstractVecOrMat, UniformScaling}, Hsub, H, ::Nothing) = dim(Hsub)^2 < _effective_dim(m, H) ? SubsystemPartialTraceAlg() : FullPartialTraceAlg()
 # Building a map, both algorithms emit the same terms, so only the states they visit differ:
 # every combination of a subsystem and a complement state, each costing about as much as
 # 8 pairs, or every pair of basis states of H.
@@ -832,7 +830,7 @@ end
 function _check_covered(m, covered, has_support_on = _has_support_on)
     all(covered) && return nothing
     dropped = findall(!, covered)
-    (has_support_on(m, 1, dropped) || has_support_on(m, 2, dropped)) && throw(ArgumentError("`m` has nonzero weight on a state of `H` whose part on `Hsub` or on the complement is missing. Pass `projection=true` to drop it."))
+    (has_support_on(m, 1, dropped) || (!(m isa AbstractVector) && has_support_on(m, 2, dropped))) && throw(ArgumentError("`m` has nonzero weight on a state of `H` whose part on `Hsub` or on the complement is missing. Pass `projection=true` to drop it."))
     return nothing
 end
 
@@ -1444,11 +1442,14 @@ end
     Hcons = hilbert_space(f, 1:6, NumberConservation(3))
     Hprod = tensor_product(hilbert_space(f, 1:3), hilbert_space(s[1], 1 // 1), hilbert_space(b[1], 3))
     Hsmall = hilbert_space(f, 1:3)
+    @majoranas y
+    Hmaj = hilbert_space(y, 1:6)
     for (H, Hsub) in (
             (hilbert_space(f, 1:5), hilbert_space(f, [2, 4])),
             (Hcons, subregion(hilbert_space(f, [1, 4]), Hcons)),
             (Hprod, tensor_product(hilbert_space(f, 2:2), hilbert_space(b[1], 3))),
             (Hsmall, Hsmall),
+            (Hmaj, subregion(hilbert_space(y, 3:4), Hmaj)),
         )
         ρ = rand(ComplexF64, dim(H), dim(H))
         ψ = rand(ComplexF64, dim(H))
