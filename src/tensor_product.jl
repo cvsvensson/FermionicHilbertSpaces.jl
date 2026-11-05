@@ -378,9 +378,7 @@ end
             @test generalized_kron(vs, Hs => H; alg, phase_factors) ≈ generalized_kron(vs, Hs => H; phase_factors)
         end
     end
-    Hc = hilbert_space(f, 1:2, NumberConservation(1))
     H1, H2 = hilbert_space(f, 1:1), hilbert_space(f, 2:2)
-    @test_throws ArgumentError tensor_product((rand(2, 2), rand(2, 2)), (H1, H2) => Hc; alg)
     @test_throws ArgumentError generalized_kron((sparse(rand(2, 2)), rand(2, 2)), (H1, H2) => hilbert_space(f, 1:2); alg)
     @test_throws ArgumentError generalized_kron((rand(2, 2), rand(2, 2)), (H1, H2); alg = :fast)
     @test_throws ArgumentError tensor_product((rand(2, 2), rand(2, 2)), (H1, H2) => hilbert_space(f, 1:2); alg = :fast)
@@ -392,6 +390,8 @@ end
     @fermions f
     @spin s
     @boson b
+    @fermions g
+    Hfg = tensor_product(hilbert_space(f, 1:3), hilbert_space(g, 1:3))
     Hn = hilbert_space(f, 1:4, NumberConservation(2))
     Hp = hilbert_space(f, 1:5, ParityConservation())
     Hfsb = tensor_product(hilbert_space(f, 1:3), hilbert_space(s, 1 // 2), hilbert_space(b, 2))
@@ -399,6 +399,7 @@ end
         (Hn, (subregion(hilbert_space(f, [1, 3]), Hn), subregion(hilbert_space(f, [2, 4]), Hn))),
         (Hp, (hilbert_space(f, [1, 4], ParityConservation(1)), hilbert_space(f, [2, 3, 5]))),
         (Hfsb, (tensor_product(hilbert_space(f, 2:2), hilbert_space(b, 2)), hilbert_space(s, 1 // 2), hilbert_space(f, [1, 3]))),
+        (Hfg, (tensor_product(hilbert_space(f, [1, 3]), hilbert_space(g, 2:2)), tensor_product(hilbert_space(f, 2:2), hilbert_space(g, [1, 3])))),
     )
     for (H, Hs) in cases, phase_factors in (true, false)
         ms = map(Hk -> rand(ComplexF64, dim(Hk), dim(Hk)), Hs)
@@ -483,7 +484,7 @@ function _factorized_kron(ms, Hs, H, mapper, embeddings; phase_factors = true, p
         state_index(only(fs), H), only(amps)
     end
     groups, owner = _kron_modes(mapper)
-    signs && length(owner) >= 64 && throw(ArgumentError("FactorizedKronAlg supports at most 63 fermionic modes."))
+    signs && length(owner) > 64 && throw(ArgumentError("FactorizedKronAlg supports at most 64 fermionic modes."))
     Ks, amps = first.(positions), last.(positions)
     covered = .!iszero.(Ks)
     adapt(A) = _adapt_like(first(ms), A)
