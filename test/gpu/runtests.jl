@@ -1,7 +1,7 @@
 # Runs on JLArrays, a CPU implementation of the GPU array interface that disallows scalar indexing.
 # Not part of the main suite: `julia --project=test/gpu test/gpu/runtests.jl`.
 using FermionicHilbertSpaces, JLArrays, Test
-using FermionicHilbertSpaces: GatherAlg, FactorizedPartialTransposeAlg
+using FermionicHilbertSpaces: GatherAlg, FactorizedPartialTransposeAlg, FactorizedKronAlg
 JLArrays.allowscalar(false)
 
 @testset "partial_trace of GPU arrays" begin
@@ -56,5 +56,19 @@ end
         out = partial_transpose(JLArray(x), H, HA; alg)
         @test out isa JLArray
         @test Array(out) ≈ partial_transpose(x, H, HA)
+    end
+end
+
+@testset "generalized_kron and tensor_product of GPU arrays" begin
+    alg = FactorizedKronAlg()
+    @fermions f
+    Hs = (hilbert_space(f, [1, 3]), hilbert_space(f, [2, 4, 5]))
+    H = hilbert_space(f, 1:5)
+    ms = map(Hk -> rand(ComplexF64, dim(Hk), dim(Hk)), Hs)
+    vs = map(Hk -> rand(ComplexF64, dim(Hk)), Hs)
+    for (op, xs) in ((generalized_kron, ms), (generalized_kron, vs), (tensor_product, ms))
+        out = op(map(JLArray, xs), Hs => H; alg)
+        @test out isa JLArray
+        @test Array(out) ≈ op(xs, Hs => H)
     end
 end

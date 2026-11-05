@@ -100,13 +100,6 @@ check_kron_sizes(ms, Hs) = kron_sizes_compatible(ms, Hs) || throw(ArgumentError(
     @test_throws ArgumentError tensor_product((rand(3, 3), m2, m3), Hs => H123)
 end
 
-abstract type AbstractKronAlg end
-"""
-    GenericKronAlg()
-
-Default algorithm for the `alg` keyword of [`generalized_kron`](@ref) and [`tensor_product`](@ref).
-"""
-struct GenericKronAlg <: AbstractKronAlg end
 """
     FactorizedKronAlg()
 
@@ -114,7 +107,9 @@ Algorithm for the `alg` keyword of [`generalized_kron`](@ref) and [`tensor_produ
 reshapes and broadcasts only, so it also runs on GPU arrays. It needs dense arrays on unconstrained
 fermionic spaces `Hs` that partition the modes of the unconstrained fermionic space `H`.
 """
-struct FactorizedKronAlg <: AbstractKronAlg end
+struct FactorizedKronAlg end
+_check_kron_alg(alg) = alg isa GenericAlg || alg isa FactorizedKronAlg ||
+    throw(ArgumentError("`generalized_kron` and `tensor_product` support `alg = GenericAlg()` or `FactorizedKronAlg()`, got $alg."))
 
 """
     generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
@@ -132,14 +127,15 @@ Use `tensor_product` for product states, local observables, and anything that sh
 
 `generalized_kron(ms, Hs => H)` is also accepted, and `generalized_kron(Hs => H)` returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
-`alg` is `GenericKronAlg()` (the default) or `FactorizedKronAlg()`.
+`alg` is `GenericAlg()` (the default) or `FactorizedKronAlg()`.
 
 The result is the compression of the tensor product onto `H`. Unless `projection=true`, throws an
 `ArgumentError` if the tensor product of matrices maps a state of `H` outside `H` with nonzero amplitude,
 or if the tensor product of vectors has a nonzero amplitude outside `H`.
 """
-function generalized_kron(ms, Hs, H::AbstractHilbertSpace = tensor_product(Hs); alg::AbstractKronAlg = GenericKronAlg(), kwargs...)
+function generalized_kron(ms, Hs, H::AbstractHilbertSpace = tensor_product(Hs); alg = GenericAlg(), kwargs...)
     check_kron_sizes(ms, Hs)
+    _check_kron_alg(alg)
     N = ndims(first(ms))
     extend_state = state_mapper(H, Hs)
     alg isa FactorizedKronAlg && return _factorized_kron(Tuple(ms), Hs, H, extend_state, false; kwargs...)
@@ -386,7 +382,8 @@ end
     H1, H2 = hilbert_space(f, 1:1), hilbert_space(f, 2:2)
     @test_throws ArgumentError tensor_product((rand(2, 2), rand(2, 2)), (H1, H2) => Hc; alg)
     @test_throws ArgumentError generalized_kron((sparse(rand(2, 2)), rand(2, 2)), (H1, H2) => hilbert_space(f, 1:2); alg)
-    @test_throws TypeError generalized_kron((rand(2, 2), rand(2, 2)), (H1, H2); alg = :fast)
+    @test_throws ArgumentError generalized_kron((rand(2, 2), rand(2, 2)), (H1, H2); alg = :fast)
+    @test_throws ArgumentError tensor_product((rand(2, 2), rand(2, 2)), (H1, H2) => hilbert_space(f, 1:2); alg = :fast)
 end
 
 """
@@ -404,8 +401,9 @@ the result is `ψ₁ψ₂⋯|0⟩`. Swapping two odd states flips the sign.
 `kwargs` can be passed a bool `phase_factors` and `alg`, as for [`generalized_kron`](@ref). The last form returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
-function tensor_product(ms::Union{<:AbstractVector, <:Tuple}, Hs, H::AbstractHilbertSpace; alg::AbstractKronAlg = GenericKronAlg(), kwargs...)
+function tensor_product(ms::Union{<:AbstractVector, <:Tuple}, Hs, H::AbstractHilbertSpace; alg = GenericAlg(), kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
+    _check_kron_alg(alg)
     if all(_issquare, ms)
         check_kron_sizes(ms, Hs)
         alg isa FactorizedKronAlg && return _factorized_kron(Tuple(ms), Hs, H, state_mapper(H, Hs), true; kwargs...)
@@ -448,14 +446,13 @@ function _factorized_kron(ms, Hs, H, mapper, embeddings; phase_factors = true, p
     out = n == 1 ? vec(product) : reshape(product, D, D)
     phase_factors || return out
     pfu = phase_factor_u(mapper)
-    u() = _to_device(out, [pfu(basisstate(K, H)) for K in 1:D])
+    u() = _adapt_like(out, [pfu(basisstate(K, H)) for K in 1:D])
     n == 1 && return out .*= u()
-    Q, c = _to_device.(Ref(out), _kron_phases(owner, embeddings))
+    Q, c = _adapt_like.(Ref(out), _kron_phases(owner, embeddings))
     sign = Broadcast.broadcasted(_kron_sign, 0:(D - 1), transpose(Q), transpose(c))
     embeddings || return out .*= sign
     return out .*= u() .* sign
 end
-_to_device(m, v::AbstractVector) = copyto!(similar(m, eltype(v), length(v)), v)
 _kron_sign(f, q, c) = isodd(count_ones(f & q)) ? -c : c
 
 # The phase of |ν⟩⟨ν′| is r(ν) c(ν′) (-1)^⟨ν, Q(ν′)⟩ with Q_j(x) = parity(x & G[j]) and
