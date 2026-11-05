@@ -60,7 +60,8 @@ Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::ProductSpace)
 function _state_index(state::ProductState, H::ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
     inds = map(_state_index, state.states, H.factors)
-    all(>(0), inds) || return 0
+    # `all` on a tuple of one type keeps the tuple in memory, which on a GPU is slow local memory
+    mapreduce(>(0), &, inds) || return 0
     H.lininds[CartesianIndex(inds)]
 end
 # `lininds` is exact only when the product of the factor dimensions fits in an `Int`
