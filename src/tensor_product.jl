@@ -585,8 +585,8 @@ function _basis_transformation(Hfrom, Hto, mapper)
 end
 
 """
-    change_basis(m, Hfrom => Hto; projection=false, alg=nothing)
-    change_basis(m, Hfrom, Hto; projection=false, alg=nothing)
+    change_basis(m, Hfrom => Hto; projection=false, alg=GenericAlg())
+    change_basis(m, Hfrom, Hto; projection=false, alg=GenericAlg())
 
 Express `m` in the basis of `Hto`, where `Hfrom` and `Hto` have the same atoms but possibly
 different (or differently ordered) basis states. Unless `projection=true`, throws an
@@ -600,8 +600,8 @@ With `alg = GatherAlg()`, a vector or matrix `m` is transformed with array index
 broadcasting only, so that it can be a GPU array.
 """
 change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
-function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, alg = nothing, kwargs...)
-    isnothing(alg) || alg isa GatherAlg || throw(ArgumentError("`alg` must be `nothing` or `GatherAlg()`, got $alg."))
+function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, alg = GenericAlg(), kwargs...)
+    alg isa Union{GenericAlg, GatherAlg} || throw(ArgumentError("`change_basis` supports `alg = GenericAlg()` or `GatherAlg()`, got $alg."))
     n = m isa UniformScaling ? 2 : ndims(m)
     from, to = _per_axis(Hfrom, Val(n)), _per_axis(Hto, Val(n))
     size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, and a `UniformScaling` needs the same space on both axes, got $(summary(m))."))
@@ -713,7 +713,7 @@ struct GatherAlg <: AbstractPartialTraceAlg end
 """
     GenericAlg()
 
-The standard element-wise code path of an operation, and the default `alg` of [`embed`](@ref).
+The standard element-wise code path of an operation, and the default `alg` of [`embed`](@ref) and [`change_basis`](@ref).
 """
 struct GenericAlg end
 
@@ -972,8 +972,7 @@ end
 _gather_reduce(W, dims, x, inds) = sum(_masked_mul.(W, x[inds]); dims)
 _masked_mul(w, x) = iszero(w) ? zero(w * x) : w * x
 
-# The table of `U * x` as a gather, with every state of `Hfrom` split into one state of `Hto`
-# and the single complement state
+# A basis change is a partial trace with a single complement state
 function _basis_gather_table(U)
     splits = fill(((0, 1, zero(eltype(U))),), size(U, 2))
     for (i, j, s) in zip(findnz(U)...)
@@ -1630,9 +1629,10 @@ end
     Hsec = hilbert_space(f, 1:4, NumberConservation(2))
     Hout = hilbert_space(f, 1:4, NumberConservation(1))
     Hfb, Hbf = tensor_product(hilbert_space(f, 1:2), hilbert_space(b[1], 3)), tensor_product(hilbert_space(b[1], 3), hilbert_space(f, 1:2))
-    for (Hfrom, Hto, projection) in ((Hsec, H, false), (H, Hsec, true), (Hfb, Hbf, false), (H, Axes(Hout, Hsec), true))
+    for (Hfrom, Hto, projection) in ((Hsec, H, false), (Axes(Hout, Hsec), H, false), (Hfb, Hbf, false), (H, Axes(Hout, Hsec), true))
         n = Hto isa Axes ? 2 : 1
-        for x in (rand(ComplexF64, dim(Hfrom)), rand(ComplexF64, dim(Hfrom), dim(Hfrom)))
+        xs = Hfrom isa Axes ? (rand(ComplexF64, dim(Hout), dim(Hsec)),) : (rand(ComplexF64, dim(Hfrom)), rand(ComplexF64, dim(Hfrom), dim(Hfrom)))
+        for x in xs
             ndims(x) < n && continue
             @test change_basis(x, Hfrom => Hto; projection, alg) == change_basis(x, Hfrom => Hto; projection)
         end
