@@ -713,3 +713,13 @@ function phase_factor_u(sp::ProductSpaceMapper)
         return pf
     end
 end
+function _kron_modes(sp::ProductSpaceMapper)
+    groups, owner = Int[], Int[]
+    for (leaf, route) in zip(sp.leaves, sp.factor_routes)
+        g, o = _kron_modes(leaf.mapper)
+        append!(groups, g .+ maximum(groups; init = 0))
+        append!(owner, map(k -> block_idx(route[k]), o))
+    end
+    return groups, owner
+end
+_kron_bits(sp::ProductSpaceMapper, state) = reduce(vcat, map((leaf, s) -> _kron_bits(leaf.mapper, s), sp.leaves, state.states); init = Bool[])

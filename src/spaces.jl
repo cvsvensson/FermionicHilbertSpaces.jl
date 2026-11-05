@@ -324,6 +324,7 @@ Return phase-factor function associated with `mapper` for fermionic tensor produ
 """
 kron_phase_factor(mapper::AbstractStateMapper) = throw(MethodError(kron_phase_factor, (mapper,)))
 
+_kron_modes(m::AbstractStateMapper) = throw(ArgumentError("FactorizedKronAlg is not supported for state mappers of type $(typeof(m))."))
 struct AtomicStateMapper <: AbstractStateMapper end
 function state_mapper(H::AbstractAtomicHilbertSpace, Hs)
     atom_ids(only(Hs)) == atom_ids(H) || throw(ArgumentError("For atomic subspaces, the only valid partition is the whole space, got `Hs` = $Hs"))

@@ -259,6 +259,18 @@ function phase_factor_u(state_mapper::FockMapper{N}) where N
     end
 end
 
+# The group and the index in `Hs` of the space holding each fermionic mode, in the order of `_kron_bits`.
+_kron_modes(::AtomicStateMapper) = (Int[], Int[])
+function _kron_modes(m::FockMapper{N}) where {N}
+    owner = zeros(Int, N)
+    for (k, positions) in enumerate(m.fermionpositions), i in positions
+        owner[i] = k
+    end
+    return ones(Int, N), owner
+end
+_kron_bits(::FockMapper{N}, state) where {N} = [_bit(state, i) for i in 1:N]
+_kron_bits(::AtomicStateMapper, state) = Bool[]
+
 
 @testitem "Phase factor u" begin
     # Appendix C.4
