@@ -899,12 +899,12 @@ end
 
     @boson b
     H = hilbert_space(b, 3)
-    amplitude(op, ::Type{T}, transpose) where {T} =
+    amplitude(op, ::Type{T}, H, transpose) where {T} =
         last(FHS.apply_local_operators(FHS.NCMul(one(T), [op]), FHS.basisstate(1, H), H, (nothing,); transpose))
 
-    @test (@inferred amplitude(RootOp(), Float32, false)) === Float32(sqrt(2.0))
-    @test (@inferred amplitude(RootOp(), Float32, true)) === Float32(sqrt(2.0))
-    @test amplitude(PreciseRootOp(), BigFloat, false) == sqrt(big(2))
+    @test (@inferred amplitude(RootOp(), Float32, H, false)) === Float32(sqrt(2.0))
+    @test (@inferred amplitude(RootOp(), Float32, H, true)) === Float32(sqrt(2.0))
+    @test amplitude(PreciseRootOp(), BigFloat, H, false) == sqrt(big(2))
 end
 
 @testitem "Operators between two spaces with Axes" begin
