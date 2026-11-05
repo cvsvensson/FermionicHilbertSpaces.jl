@@ -526,7 +526,7 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
 end
 
 function partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(v, Hsub, H, complement), kwargs...)
-    alg isa GatherAlg && return _partial_trace_by_gather(v, H, Hsub, complement; kwargs...)
+    alg isa NoScalarIndexingAlg && return _partial_trace_by_gather(v, H, Hsub, complement; kwargs...)
     return partial_trace(vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)
 end
 function _partial_trace_by_gather(ψ::AbstractVector, H, Hsub, complement; projection = false, phase_factors = true)
@@ -542,7 +542,7 @@ end
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
     isnothing(complement) && return Base.inferencebarrier(change_basis)(m, H, Hsub; kwargs...)
-    alg isa GatherAlg && return _partial_trace_by_gather(m, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement); kwargs...)
+    alg isa NoScalarIndexingAlg && return _partial_trace_by_gather(m, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement); kwargs...)
     mout = zeros(promote_type(eltype(m), partial_trace_phase_factor_eltype(H)), dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
@@ -695,12 +695,15 @@ and of the maps `partial_trace(H => Hsub)` and `embed(Hsub => H)`.
 """
 struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
 """
-    GatherAlg()
+    NoScalarIndexingAlg()
 
-Algorithm built from array indexing, broadcasting and reductions only, so that it runs on GPU
-arrays. It is an option for the `alg` keyword of [`partial_trace`](@ref) and [`partial_trace!`](@ref).
+Algorithm that avoids scalar indexing, which is what makes GPU arrays work: it uses only array
+indexing, broadcasting and reductions, and returns an array of the input's kind. A pure state `ψ`
+is traced as `A * A'`, with `A` gathered from `ψ`, without forming `ψ * ψ'`. It is not specific to
+the partial trace; the operations that accept it as `alg` are [`partial_trace`](@ref) and
+[`partial_trace!`](@ref).
 """
-struct GatherAlg <: AbstractPartialTraceAlg end
+struct NoScalarIndexingAlg <: AbstractPartialTraceAlg end
 
 _effective_dim(m::AbstractMatrix, H) = length(m)
 _effective_dim(m::AbstractSparseMatrix, H) = nnz(m)
@@ -850,11 +853,11 @@ end
 In-place partial trace of `m` (an operator on `H` or a pure state) from `H` to `Hsub`, written
 to `mout`, which must have size `(dim(Hsub), dim(Hsub))`. See [`partial_trace`](@ref).
 
-`alg` is `SubsystemPartialTraceAlg()` or `FullPartialTraceAlg()`, chosen from the dimensions
-and sparsity of `m` by default.
+`alg` is `SubsystemPartialTraceAlg()`, `FullPartialTraceAlg()` or [`NoScalarIndexingAlg()`](@ref NoScalarIndexingAlg).
+By default it is one of the first two, chosen from the dimensions and sparsity of `m`.
 """
 function partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(v, Hsub, H, complement), kwargs...)
-    alg isa GatherAlg || return partial_trace!(mout, vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)
+    alg isa NoScalarIndexingAlg || return partial_trace!(mout, vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)
     _check_partial_trace_output(mout, v, Hsub)
     return copyto!(mout, _partial_trace_by_gather(v, H, Hsub, complement; kwargs...))
 end
@@ -867,7 +870,7 @@ end
 partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
 
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper = _partial_trace_mapper(H, Hsub, complement); projection = false, phase_factors = true)
-    alg isa GatherAlg && return copyto!(mout, _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection, phase_factors))
+    alg isa NoScalarIndexingAlg && return copyto!(mout, _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection, phase_factors))
     fill!(mout, zero(eltype(mout)))
     covered = if alg isa FullPartialTraceAlg
         splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
@@ -1427,8 +1430,8 @@ end
 end
 
 @testitem "Partial trace by gather" begin
-    import FermionicHilbertSpaces: GatherAlg, partial_trace!, state_index
-    alg = GatherAlg()
+    import FermionicHilbertSpaces: NoScalarIndexingAlg, partial_trace!, state_index
+    alg = NoScalarIndexingAlg()
     @fermions f
     @spins s
     @bosons b
