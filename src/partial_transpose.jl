@@ -59,14 +59,6 @@ end
 
 ## Direct (in-place) implementation
 
-abstract type AbstractPartialTransposeAlg end
-"""
-    GenericPartialTransposeAlg()
-
-Default algorithm for the `alg` keyword of [`partial_transpose`](@ref): visits the elements of
-the input and works for every space and input type.
-"""
-struct GenericPartialTransposeAlg <: AbstractPartialTransposeAlg end
 """
     FactorizedPartialTransposeAlg()
 
@@ -74,10 +66,12 @@ Algorithm for the `alg` keyword of [`partial_transpose`](@ref) that uses `permut
 broadcasts only, so it also runs on GPU arrays. It needs a dense matrix on an unconstrained
 fermionic space, with output space `H` and `Hsub` and its complement covering all modes.
 """
-struct FactorizedPartialTransposeAlg <: AbstractPartialTransposeAlg end
+struct FactorizedPartialTransposeAlg end
+_check_partial_transpose_alg(alg) = alg isa GenericAlg || alg isa FactorizedPartialTransposeAlg ||
+    throw(ArgumentError("`partial_transpose` supports `alg = GenericAlg()` or `FactorizedPartialTransposeAlg()`, got $alg."))
 
 """
-    partial_transpose!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false, alg=GenericPartialTransposeAlg())
+    partial_transpose!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false, alg=GenericAlg())
     partial_transpose!(mout, m, H => Hout, Hsub; kwargs...)
 
 In-place partial transpose of `m` (operator on `H`) on the subsystem `Hsub`, written to `mout`
@@ -87,11 +81,12 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     complement, Hout::AbstractHilbertSpace,
     mapper_in=state_mapper(H, _pt_parts(Hsub, complement)),
     mapper_out=_partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in);
-        phase_factors = true, projection = false, alg::AbstractPartialTransposeAlg = GenericPartialTransposeAlg()
+        phase_factors = true, projection = false, alg = GenericAlg()
     )
     size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
     size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
     _check_no_alias(mout, m)
+    _check_partial_transpose_alg(alg)
     if alg isa FactorizedPartialTransposeAlg
         !(m isa AbstractSparseMatrix) && _is_full_fock_partial_transpose(H, Hout, mapper_in) ||
             throw(ArgumentError("FactorizedPartialTransposeAlg needs a dense matrix on an unconstrained fermionic space `H`, with output space `H` and `Hsub` and its complement covering all modes."))
@@ -124,13 +119,12 @@ function _fock_partial_transpose!(mout, m, N, A; phase_factors = true)
     maskA = sum(i -> 1 << (i - 1), A; init = 0)
     maskB = (1 << N - 1) ⊻ maskA
     states = 0:(1 << N - 1)
-    a = _to_device(m, [_pair_parity(f & maskB, f & maskA) ? -1 : 1 for f in states])
-    pA = _to_device(m, [isodd(count_ones(f & maskA)) for f in states])
+    a = _adapt_like(m, [_pair_parity(f & maskB, f & maskA) ? -1 : 1 for f in states])
+    pA = _adapt_like(m, [isodd(count_ones(f & maskA)) for f in states])
     permutedims!(reshape(mout, dims), reshape(a .* m .* transpose(a), dims), perm)
     mout .*= a .* ifelse.(pA .== transpose(pA), 1 + 0im, 0 + 1im) .* transpose(a)
     return mout
 end
-_to_device(m, v::AbstractVector) = copyto!(similar(m, eltype(v), length(v)), v)
 
 # Merging runs of consecutive modes on the same side of the cut keeps the number of dimensions
 # small, so permutedims! does not loop over many size-2 dimensions.
@@ -181,8 +175,7 @@ The partial transpose does not preserve number or parity constraints. For constr
 pass a larger output space on the same modes as `H => Hout`. For fermions the result is not
 Hermitian: `(ρ^{R_A})' == p_A ρ^{R_A} p_A` for parity-even `ρ`, with `p_A` the parity of `Hsub`.
 
-For matrix input, `alg` is `GenericPartialTransposeAlg()` (the default) or
-`FactorizedPartialTransposeAlg()`.
+`alg` is `GenericAlg()` (the default) or `FactorizedPartialTransposeAlg()`.
 """
 partial_transpose(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) =
     _partial_transpose(m, H, Hsub, H; kwargs...)
@@ -194,7 +187,7 @@ partial_transpose(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub:
     PartialTransposeMap(first(Hs), Hsub, last(Hs); kwargs...)
 
 function _partial_transpose(m::AbstractMatrix, H, Hsub, Hout;
-        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = GenericPartialTransposeAlg()
+        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = GenericAlg()
     )
     mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
     mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
@@ -206,9 +199,10 @@ end
 
 # Pure state: direct kernel, no superoperator, and no ψψ† either (iterate nonzero pairs).
 function _partial_transpose(ψ::AbstractVector, H, Hsub, Hout;
-        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = GenericPartialTransposeAlg()
+        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = GenericAlg()
     )
     if length(ψ) == dim(H)
+        _check_partial_transpose_alg(alg)
         alg isa FactorizedPartialTransposeAlg && return _partial_transpose(ψ * ψ', H, Hsub, Hout; complement, phase_factors, projection, alg)
         mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
         mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
@@ -444,6 +438,7 @@ end
     @test partial_transpose(ψ, H, hilbert_space(f, [2, 4]); alg) ≈ partial_transpose(ψ, H, hilbert_space(f, [2, 4]))
     Hc = hilbert_space(f, 1:4, NumberConservation(2))
     @test_throws ArgumentError partial_transpose(rand(dim(Hc), dim(Hc)), Hc => hilbert_space(f, 1:4), hilbert_space(f, 1:2); alg)
+    @test_throws ArgumentError partial_transpose(ψ, H, hilbert_space(f, [2, 4]); alg = :other)
 end
 
 @testitem "Partial transpose: bosons, spins, and Majoranas" begin
