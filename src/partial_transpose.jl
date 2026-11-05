@@ -67,11 +67,11 @@ broadcasts only, so it also runs on GPU arrays. It needs a dense matrix on an un
 fermionic space, with output space `H` and `Hsub` and its complement covering all modes.
 """
 struct FactorizedPartialTransposeAlg end
-_check_partial_transpose_alg(alg) = alg isa GenericAlg || alg isa FactorizedPartialTransposeAlg ||
-    throw(ArgumentError("`partial_transpose` supports `alg = GenericAlg()` or `FactorizedPartialTransposeAlg()`, got $alg."))
+_check_partial_transpose_alg(alg) = alg isa ScalarIndexingAlg || alg isa FactorizedPartialTransposeAlg ||
+    throw(ArgumentError("`partial_transpose` supports `alg = ScalarIndexingAlg()` or `FactorizedPartialTransposeAlg()`, got $alg."))
 
 """
-    partial_transpose!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false, alg=GenericAlg())
+    partial_transpose!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false, alg=ScalarIndexingAlg())
     partial_transpose!(mout, m, H => Hout, Hsub; kwargs...)
 
 In-place partial transpose of `m` (operator on `H`) on the subsystem `Hsub`, written to `mout`
@@ -81,7 +81,7 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     complement, Hout::AbstractHilbertSpace,
     mapper_in=state_mapper(H, _pt_parts(Hsub, complement)),
     mapper_out=_partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in);
-        phase_factors = true, projection = false, alg = GenericAlg()
+        phase_factors = true, projection = false, alg = ScalarIndexingAlg()
     )
     size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
     size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
@@ -174,7 +174,7 @@ The partial transpose does not preserve number or parity constraints. For constr
 pass a larger output space on the same modes as `H => Hout`. For fermions the result is not
 Hermitian: `(ρ^{R_A})' == p_A ρ^{R_A} p_A` for parity-even `ρ`, with `p_A` the parity of `Hsub`.
 
-`alg` is `GenericAlg()` (the default) or `FactorizedPartialTransposeAlg()`.
+`alg` is `ScalarIndexingAlg()` (the default) or `FactorizedPartialTransposeAlg()`.
 """
 partial_transpose(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) =
     _partial_transpose(m, H, Hsub, H; kwargs...)
@@ -186,7 +186,7 @@ partial_transpose(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub:
     PartialTransposeMap(first(Hs), Hsub, last(Hs); kwargs...)
 
 function _partial_transpose(m::AbstractMatrix, H, Hsub, Hout;
-        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = GenericAlg()
+        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = ScalarIndexingAlg()
     )
     mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
     mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
@@ -198,10 +198,10 @@ end
 
 # Pure state: direct kernel, no superoperator, and no ψψ† either (iterate nonzero pairs).
 function _partial_transpose(ψ::AbstractVector, H, Hsub, Hout;
-        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = GenericAlg()
+        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = ScalarIndexingAlg()
     )
     if length(ψ) == dim(H)
-        alg isa GenericAlg || return _partial_transpose(ψ * ψ', H, Hsub, Hout; complement, phase_factors, projection, alg)
+        alg isa ScalarIndexingAlg || return _partial_transpose(ψ * ψ', H, Hsub, Hout; complement, phase_factors, projection, alg)
         mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
         mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
         T = promote_type(eltype(ψ), partial_transpose_phase_factor_eltype(H))
