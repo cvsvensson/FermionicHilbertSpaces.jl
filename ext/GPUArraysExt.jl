@@ -6,12 +6,12 @@ using KernelAbstractions: @index, @kernel, allocate, get_backend, synchronize
 using NonCommutativeProducts: NCMul
 using SparseArrays: SparseArrays, SparseMatrixCSC
 import FermionicHilbertSpaces: _canonicalize_repr, _convert_repr_eltype, _repr_eltype, _skip_outside, _terms_matrix,
-    push_inds_amps!, state_position, subspace_index, subspace_states
-using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, BosonSym, DeviceFermionicSpace,
+    push_inds_amps!, state_position
+using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, BosonSym, ConstrainedSpace, DeviceFermionicSpace,
     DeviceProductSpace, DeviceSpinSym, FermionSym, FermionicSpace, IndexTable, ProductOperator, ProductSpace, RootIndexDict,
     SpinSpace, SpinSym, TruncatedBosonicHilbertSpace, TupleConcretizer, __concretize, _spin_shift,
     chunked_operator_indices_and_amplitudes_generic!, dim, mat_eltype, nbr_of_modes, precomputation_before_operator_application,
-    state_index
+    state_index, subspace_index, subspace_states
 
 const GPUSparseMatrix = Union{AbstractGPUSparseMatrixCSC, AbstractGPUSparseMatrixCSR}
 
@@ -70,21 +70,12 @@ function Adapt.adapt_structure(to::DeviceAdaptor, H::ProductSpace{B}) where {B}
     factors = adapt(to, H.factors)
     return DeviceProductSpace{B, typeof(factors), typeof(H.lininds), typeof(H.cartinds)}(factors, H.lininds, H.cartinds)
 end
-Adapt.adapt_structure(to::DeviceAdaptor, H::AbstractSubspace{B}) where {B} =
-    DeviceSubspace{B}(adapt(to, parent(H)), adapt(to, subspace_states(H)), adapt(to, _sorted_index(subspace_index(H))))
+Adapt.adapt_structure(to::DeviceAdaptor, H::AbstractSubspace) =
+    ConstrainedSpace(adapt(to, parent(H)), adapt(to, subspace_states(H)), adapt(to, _sorted_index(subspace_index(H))))
+# Limited to device copies, whose arrays the backend's own adaptor must reach
+Adapt.adapt_structure(to, H::ConstrainedSpace{<:Any, <:Any, <:AbstractGPUArray}) =
+    ConstrainedSpace(H.parent, adapt(to, H.states), adapt(to, H.index))
 Adapt.@adapt_structure IndexTable
-
-# `basisstate` and `state_index` of a subspace use only its parent, states and index
-struct DeviceSubspace{B, P, S, I} <: AbstractSubspace{B, P}
-    parent::P
-    states::S
-    index::I
-end
-DeviceSubspace{B}(parent, states, index) where {B} = DeviceSubspace{B, typeof(parent), typeof(states), typeof(index)}(parent, states, index)
-Adapt.adapt_structure(to, H::DeviceSubspace{B}) where {B} = DeviceSubspace{B}(adapt(to, H.parent), adapt(to, H.states), adapt(to, H.index))
-Base.parent(H::DeviceSubspace) = H.parent
-subspace_states(H::DeviceSubspace) = H.states
-subspace_index(H::DeviceSubspace) = H.index
 
 # A subspace index that finds `key(state, parent)` by binary search in the sorted `keys`, for the `Dict` indices,
 # which have no device version
@@ -148,8 +139,8 @@ _at_slot(s::SlotSink, slot) = SlotSink(s.rows, s.vals, slot)
 # Slot `s` of column `j` is at `[j, s]`, so that neighbouring threads write neighbouring addresses
 push_inds_amps!(s::SlotSink, outind, inind, amp) = (s.rows[inind, s.slot] = outind; s.vals[inind, s.slot] = amp; nothing)
 
-# Passed as `projection` when it is false: the kernels drop the entries outside the space and set `flag[1]`, and the
-# host then throws the error of the CPU path
+# Passed as `projection`: the kernels drop the entries outside the space and set `flag[1]`. With `projection = false`,
+# the host then throws the error of the CPU path.
 struct OutsideFlag{F}
     flag::F
 end
@@ -227,9 +218,9 @@ function _terms_matrix(::Type{T}, terms, coeff, H::AbstractHilbertSpace, r::GPUR
     _check_isbits(_bits_part(space), H)
     termgroups = _device_terms(terms, H, backend)
     flag = fill!(allocate(backend, Bool, 1), false)
-    run! = sink -> _column_kernel!(backend)(sink, space, termgroups, convert(T, coeff), projection ? true : OutsideFlag(flag); ndrange = dim(H))
+    run! = sink -> _column_kernel!(backend)(sink, space, termgroups, convert(T, coeff), OutsideFlag(flag); ndrange = dim(H))
     M = _assemble(r, T, run!, dim(H), length(terms) + !iszero(coeff))
-    @allowscalar(flag[1]) && _skip_outside(0, false)
+    !projection && @allowscalar(flag[1]) && _skip_outside(0, false)
     return M
 end
 
