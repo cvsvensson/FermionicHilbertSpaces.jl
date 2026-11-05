@@ -1,5 +1,11 @@
+"""
+    SingleParticleState(i)
+
+A basis state of the [`SingleParticle`](@ref) space: one fermion in the mode at position `i`.
+"""
 const SingleParticleState = FixedNumberFockState{1}
 SingleParticleState(site::Int) = FixedNumberFockState((site,))
+Base.show(io::IO, s::SingleParticleState) = print(io, "SingleParticleState(", only(s.sites), ")")
 
 struct SingleParticleHilbertSpace{H}
     parent::H
@@ -36,7 +42,7 @@ struct SingleParticle end
 """
     hilbert_space(f::SymbolicFermionBasis, labels, ::SingleParticle)
 
-The space spanned by the states ``c_n^\\dagger |0\\rangle`` for the modes `f[l]`, `l in labels`, suitable for non-interacting systems with fermion number conservation. The matrix representation of a quadratic operator is the single-particle matrix, without any contribution from the identity operator. The space wraps a constrained fermionic space, available through `parent`, and does not combine with tensor products or partial traces.
+The space spanned by the states ``c_n^\\dagger |0\\rangle`` for the modes `f[l]`, `l in labels`, suitable for non-interacting systems with fermion number conservation. The matrix representation of a quadratic operator is the single-particle matrix, without any contribution from the identity operator.
 """
 hilbert_space(f::SymbolicFermionBasis, labels, ::SingleParticle) = SingleParticleHilbertSpace(f, labels)
 Base.@propagate_inbounds basisstate(ind::Integer, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
@@ -57,7 +63,7 @@ end
 
 The von Neumann entropy of the number-conserving Gaussian state with correlation matrix `G[i, j] = ⟨c_i' c_j⟩` on `Hsp`.
 """
-von_neumann_entropy(G, ::SingleParticleHilbertSpace) = von_neumann_entropy(G) + von_neumann_entropy(I - G)
+von_neumann_entropy(G, H::SingleParticleHilbertSpace) = -sum(n -> _xlogx(n) + _xlogx(1 - n), _occupations(G, H))
 
 @testitem "Single particle hilbert space" begin
     using FermionicHilbertSpaces.FreeFermions
@@ -117,6 +123,7 @@ end
     @test partial_trace(G, Hsp => Hsub) ≈ [expectation(f[i]' * f[j], ψ, Hmb) for i in sub, j in sub]
     ρ = partial_trace(ψ * ψ', Hmb => hilbert_space(f, sort(sub)))
     @test von_neumann_entropy(partial_trace(G, Hsp => Hsub), Hsub) ≈ von_neumann_entropy(ρ)
+    @test_throws ArgumentError von_neumann_entropy(2G, Hsp)
     @test_throws ArgumentError partial_trace(G, Hsp => hilbert_space(f, [1, 5], SingleParticle()))
 end
 
@@ -130,5 +137,5 @@ function _single_particle_entry(term, H)
     a, b = term.factors
     outind = state_index(SingleParticleState(mode_position(a, H)), H)
     inind = state_index(SingleParticleState(mode_position(b, H)), H)
-    return outind, inind, (-1)^b.creation * term.coeff
+    return ((outind, inind, (-1)^b.creation * term.coeff),)
 end

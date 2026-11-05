@@ -74,7 +74,7 @@ function Base.isless(a::MajoranaSym, b::MajoranaSym)
     if a.basis.group !== b.basis.group
         a.basis.group < b.basis.group
     elseif a.basis.name == b.basis.name
-        a.label < b.label
+        _order_isless(a.label, b.label)
     else
         a.basis.name < b.basis.name
     end
@@ -240,13 +240,8 @@ function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...
     f = SymbolicFermionBasis(y.name, tags(y).group)
     Hf = hilbert_space(f, pairs, args...; kwargs...)
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
+    length(majorana_position) == length(labels) || throw(ArgumentError("The Majoranas of a Hilbert space must be distinct, got $labels."))
     MajoranaHilbertSpace(majorana_position, Hf, y)
-end
-@deprecate majorana_hilbert_space(y, labels, args...; kwargs...) hilbert_space(y, labels, args...; kwargs...) false
-@testitem "Deprecated majorana_hilbert_space" begin
-    @majoranas γ
-    Hmaj = @test_deprecated FermionicHilbertSpaces.majorana_hilbert_space(γ, 1:4, ParityConservation(1))
-    @test Hmaj == hilbert_space(γ, 1:4, ParityConservation(1))
 end
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
@@ -256,7 +251,7 @@ function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
     MajoranaHilbertSpace(Hsub.majoranaindices, parent_subregion, Hsub.sym)
 end
 
-partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg::AbstractPartialTraceAlg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
+partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
 
 function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,S<:AbstractMajoranaSym,F}
     sub_modes = modes(Hsub)
@@ -321,6 +316,14 @@ function _majorana_atomic_factor(H::MajoranaHilbertSpace, i, γs)
     atom = atomic_factor(H.parent, i)
     γ1, γ2 = γs[2i-1], γs[2i]
     MajoranaHilbertSpace(OrderedDict(γ1 => 1, γ2 => 2), atom, symbolic_basis(γ1))
+end
+@testitem "Majoranas of fermion modes from 64" begin
+    import FermionicHilbertSpaces: FockNumber
+    @majoranas γ
+    H = constrain_space(hilbert_space(γ, 1:132), [FockNumber{UInt128}(0), FockNumber{UInt128}(1) << 63])
+    Hsmall = hilbert_space(γ, 1:2)
+    @test representation(γ[127], H, Matrix) == representation(γ[1], Hsmall, Matrix)
+    @test representation(γ[128], H, Matrix) == representation(γ[2], Hsmall, Matrix)
 end
 @testitem "Majorana matrix representations" begin
     using LinearAlgebra

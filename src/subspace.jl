@@ -75,7 +75,8 @@ Base.@propagate_inbounds basisstate(n::Integer, H::AbstractSubspace) = subspace_
 _state_index(state, H::AbstractSubspace) = state_position(subspace_index(H), _check_state_kind(state, H), parent(H))
 isconstrained(H::AbstractSubspace) = true
 
-for f in (:atomic_factors, :groups, :factors, :atom_ids, :group_id, :partial_trace_phase_factor_eltype,
+for f in (
+        :atomic_factors, :groups, :factors, :atom_ids, :nbr_of_atoms, :group_id, :partial_trace_phase_factor_eltype,
         :partial_transpose_phase_factor_eltype, :fast_path, :mode_ordering, :modes,
     )
     @eval $f(H::AbstractSubspace) = $f(parent(H))
@@ -134,7 +135,7 @@ end
     @test dim(Hsub) == 4
     @test all(state_index(basisstate(i, Hsub), Hsub) == i for i in 1:dim(Hsub))
     op = f[2]' * f[3] + f[3]' * f[2] + 2 * f[2]' * f[2]
-    @test matrix_representation(op, Hsub) == matrix_representation(op, H)[1:2:end, 1:2:end]
+    @test representation(op, Hsub) == representation(op, H)[1:2:end, 1:2:end]
 end
 
 @testitem "Custom subspace indices" begin
@@ -147,7 +148,7 @@ end
     @fermions f
     H = hilbert_space(f, 1:4)
     op = sum(f[i]' * f[i+1] + hc for i in 1:3) + 2 * f[1]' * f[1]
-    observed(Hsub) = (map(s -> state_index(s, Hsub), basisstates(H)), matrix_representation(op, Hsub; projection=true))
+    observed(Hsub) = (map(s -> state_index(s, Hsub), basisstates(H)), representation(op, Hsub; projection = true))
     generic(Hsub) = constrain_space(H, collect(basisstates(Hsub)))
 
     selected = Ref(0)

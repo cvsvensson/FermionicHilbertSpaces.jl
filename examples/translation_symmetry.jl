@@ -1,5 +1,6 @@
-# # Spatial symmetry sectors 
-# This file demonstrates how to handle spatial symmetries like translations.
+# # Spatial symmetry sectors
+# Block-diagonalizing a Hamiltonian with a spatial symmetry such as translations shows which symmetry sector holds the ground state and shrinks the matrices to diagonalize. This example builds the sectors of an irreducible representation (irrep) with `symmetric_sector` and uses them to find the momentum and magnetization of the ground state of a Heisenberg ring.
+#
 # ## Permutations and irreducible representations
 #
 # Suppose a group $G$ acts on the sites of a system by permutations. Each
@@ -88,10 +89,11 @@ E0, idx = findmin(energies)
 using Plots
 best_irrep_per_M = map(argmin, eachcol(energies))
 best_M_per_irrep = map(argmin, eachrow(energies))
-p = heatmap(labels, mags, permutedims(energies);
+p = heatmap(
+    labels, mags, permutedims(energies) ./ J;
     xlabel="momentum (units of 2π/N)",
     ylabel="magnetization M",
-    title="Lowest energy per symmetry sector",
+    title = "Lowest energy per symmetry sector", colorbar_title = "E/J",
     c=:viridis, yticks=mags, frame=:box)
 scatter!(p, labels[best_irrep_per_M], mags;
     marker=:vline, markersize=6, markerstrokewidth=5,

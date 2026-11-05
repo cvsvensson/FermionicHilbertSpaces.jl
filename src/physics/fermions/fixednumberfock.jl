@@ -259,8 +259,8 @@ end
     @test ρsub_fock ≈ ρsub_fixed
 
     msub = rand(dim(Hsub_fock), dim(Hsub_fock))
-    m_fock = embed(msub, Hsub_fock => H_fock; skipmissing=true)
-    m_fixed = embed(msub, Hsub_fixed => H_fixed; skipmissing=true)
+    m_fock = embed(msub, Hsub_fock => H_fock; projection = true)
+    m_fixed = embed(msub, Hsub_fixed => H_fixed; projection = true)
     @test m_fock ≈ m_fixed
 
     Hcomp_fixed = FermionicHilbertSpaces.complementary_subsystem(H_fixed, Hsub_fixed)
@@ -294,6 +294,7 @@ end
 Generate a list of Fock states with `n` occupied fermions in a system with `M` different fermions.
 """
 function fixed_particle_number_fockstates(M, n, ::Type{T}=default_fock_representation(M)) where T
+    0 <= n <= M || return FockNumber{T}[]
     iszero(n) && return [FockNumber{T}(zero(T))]
     v = focknbr_from_bits([k <= n for k in 1:M])
     maxv = v << (M - n)

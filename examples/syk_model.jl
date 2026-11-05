@@ -40,7 +40,7 @@ cases = [(M = 16, class = "GOE", ref = 0.5307), (M = 18, class = "GUE", ref = 0.
 results = map(cases) do (; M, class, ref)
     Heven = hilbert_space(γ, 1:M, ParityConservation(1))
     r = mean(1:20) do _
-        E = eigvals(Hermitian(representation(syk_hamiltonian(M), Heven, :dense)))
+        E = eigvals(Hermitian(representation(syk_hamiltonian(M), Heven, Matrix)))
         gap_ratio(class == "GSE" ? E[1:2:end] : E)
     end
     (majoranas = M, expected_class = class, measured_ratio = round(r; digits = 3), random_matrix_ratio = ref)

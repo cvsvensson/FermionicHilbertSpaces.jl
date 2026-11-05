@@ -22,7 +22,7 @@ using BitIntegers: UInt256, UInt512, UInt1024, @define_integers
 @define_integers 4096
 @define_integers 2048
 using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice, ishalfinteger
-using SparseArrays: SparseArrays, AbstractSparseMatrix, SparseVector, findnz,
+using SparseArrays: SparseArrays, AbstractSparseArray, AbstractSparseMatrix, SparseVector, findnz,
     nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
 using TestItems: TestItems, @testitem, @testmodule
 import TupleTools
@@ -31,7 +31,7 @@ using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, N
 
 export FockNumber, hc, basisstates, dim, state_index, basisstate
 export hilbert_space, subregion
-export parityoperator, numberoperator, matrix_representation, representation, vector_representation, expectation
+export parityoperator, numberoperator, representation, expectation
 export Kets, Ket, ProductState, SpinState, BosonicState
 
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
@@ -42,7 +42,15 @@ export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint,
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export symmetric_sector
 export open_system
-public particle_number, Axes, dissipator, FreeFermions
+public particle_number, Axes, dissipator, FreeFermions, NonCommutativeProducts, add!!, matrix_representation, vector_representation
+
+"""
+    add!!(a, b)
+
+Return `a + b`, reusing the storage of `a` when possible, so use the returned value. `foldl(add!!, terms; init=0)` sums
+many operators in time linear in their number, where `sum` takes quadratic time.
+"""
+add!!
 
 """
     HC
@@ -65,26 +73,43 @@ operator type subtypes it, registers itself with `NonCommutativeProducts.@nc` an
 [`apply_local_operator`](@ref) and [`symbolic_group`](@ref).
 """
 abstract type AbstractSym end
+NonCommutativeProducts.atom_group(op::AbstractSym) = symbolic_group(op)
 
-# Factors from different groups are ordered by the type name of the group id, then by `isless`.
-# The type name depends only on the code, so the order is the same in every session and on every platform.
-function _group_isless(a, b)
-    ga, gb = symbolic_group(a), symbolic_group(b)
-    na, nb = nameof(typeof(ga)), nameof(typeof(gb))
-    na == nb ? isless(ga, gb) : isless(na, nb)
+# The order of labels, tags and groups. Values are ranked by kind, and those of one kind are compared with `isless`.
+# Kinds depend only on the code, so the order is the same in every session.
+# Numbers and strings of different types are one kind, so that they are ordered consistently with `==`, as `1 == 1.0`.
+# Tuples are one kind and are compared element by element, as `isless` may not compare their elements.
+_order_kind(x) = nameof(typeof(x))
+_order_kind(::Real) = :Real
+_order_kind(::AbstractString) = :AbstractString
+_order_kind(::Tuple) = :Tuple
+function _order_isless(a, b)
+    ka, kb = _order_kind(a), _order_kind(b)
+    ka == kb || return isless(ka, kb)
+    return !isequal(a, b) && isless(a, b)
+end
+_group_isless(a, b) = _order_isless(symbolic_group(a), symbolic_group(b))
+_order_isless(::Tuple{}, ::Tuple{}) = false
+_order_isless(::Tuple{}, ::Tuple) = true
+_order_isless(::Tuple, ::Tuple{}) = false
+function _order_isless(a::Tuple, b::Tuple)
+    x, y = first(a), first(b)
+    _order_isless(x, y) && return true
+    _order_isless(y, x) && return false
+    return _order_isless(Base.tail(a), Base.tail(b))
 end
 
 # The tags that identify a group of symbolic operators. `tags` is `nothing` or a tuple. For `@fermions` and
 # `@majoranas` the first element is the tuple of names given to the macro, so the names determine the group.
 # Elements appended by `add_tag` are symbols such as `:left` and `:right`.
-# Tags are ordered by `isless` of their tag tuples. For groups created by the macros this is the lexicographic order
+# Tags are ordered by `_order_isless` of their tag tuples. For groups created by the macros this is the lexicographic order
 # of the macro's names, e.g. the operators of `@fermions a` sort before those of `@fermions b`.
 struct Tags{T}
     tags::T
 end
 Base.hash(id::Tags, h::UInt) = hash(id.tags, h)
 Base.:(==)(a::Tags, b::Tags) = a.tags == b.tags
-Base.isless(a::Tags, b::Tags) = isless(tagset(a), tagset(b))
+Base.isless(a::Tags, b::Tags) = _order_isless(tagset(a), tagset(b))
 tagset(id::Tags) = id.tags
 tagset(::Tags{Nothing}) = ()
 tagset(x) = tagset(tags(x))
@@ -141,16 +166,10 @@ include("symbolic_states.jl")
 include("printing.jl")
 include("physics/fermions/free_fermions.jl")
 
-function __init__()
-    NonCommutativeProducts.enable_autosort!()
-end
-
-
 import PrecompileTools
 
 PrecompileTools.@setup_workload begin
     m = rand(4, 4)
-    NonCommutativeProducts.enable_autosort!()
     PrecompileTools.@compile_workload begin
         @fermions f
         sprint(show, f[1])
@@ -170,6 +189,22 @@ PrecompileTools.@setup_workload begin
         Hs = hilbert_space(s)
         H = tensor_product(H2, Hb, Hs)
         mat = representation(b'b + 1.0 * s[:x] * f[3], H)
+        # Small chains, with fermions covering each common coefficient type.
+        hamf = sum(f[n + 1]'f[n] + hc for n in 1:2) + sum(f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
+        Hf = hilbert_space(f, 1:3, NumberConservation())
+        representation(hamf, Hf)
+        representation(hamf, sector(1, Hf), :dense)
+        hamf = sum(0.5 * f[n + 1]'f[n] + hc for n in 1:2) + sum(0.5 * f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
+        representation(hamf, Hf)
+        representation(hamf, sector(1, Hf), :dense)
+        hamf = sum((0.5 + 0.5im) * f[n + 1]'f[n] + hc for n in 1:2) + sum((0.5 + 0.5im) * f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
+        representation(hamf, Hf)
+        representation(hamf, sector(1, Hf), :dense)
+        @spins S 1 // 2
+        representation(sum(S[k][:]'S[k + 1][:] for k in 1:2), hilbert_space(S, 1:3))
+        @bosons bs
+        hamb = sum(bs[k]'bs[k + 1] + hc for k in 1:1) + sum(bs[k]'bs[k] * bs[k]'bs[k] for k in 1:2)
+        representation(hamb, hilbert_space(bs, 1:2, 3))
     end
 end
 

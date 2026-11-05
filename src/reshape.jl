@@ -3,7 +3,7 @@ const _SpaceGroup = Union{AbstractHilbertSpace,Tuple{Vararg{AbstractHilbertSpace
 const _SpaceMapping = Pair{<:_SpaceGroup,<:_SpaceGroup}
 
 """
-    reshape(t, mappings...; repeat=false, skipmissing=false)
+    reshape(t, mappings...; repeat=false, projection=false, alg)
 
 Reshape the array `t` by splitting or combining its indices according to
 Hilbert-space mappings. The mappings are applied left to right, each one
@@ -72,16 +72,20 @@ symmetry-constrained space. By default an `ArgumentError` is thrown if `t` has
 a nonzero entry on such a state, since that amplitude would be lost. Zero
 entries are fine, so e.g. combining unconstrained spaces into a
 parity-conserving space works for parity-preserving operators. With
-`skipmissing=true`, the components on missing states are silently dropped.
+`projection=true`, the components on missing states are silently dropped.
+
+With `alg = NoScalarIndexingAlg()`, `t` is reshaped by array indexing and broadcasting only, so
+that GPU arrays work.
 
 # Precomputed form
 
-    reshape(mappings...; repeat=false, skipmissing=false)
+    reshape(mappings...; repeat=false, projection=false)
 
 returns a callable `ReshapeMap` that precomputes the transitions, and can be
 applied as `op(t)` or in place as `op(out, t)`.
 """
-function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat=false, skipmissing=false)
+function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = ScalarIndexingAlg())
+    alg isa ScalarIndexingAlg || alg isa NoScalarIndexingAlg || throw(ArgumentError("`reshape` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
     mappings = (mapping, rest...)
     mappings = if repeat
         _repeat_mapping(t, mappings)
@@ -95,13 +99,14 @@ function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapp
     mappers = map(_mapper, Hsins, Hsouts)
     blocks = map(_transitions, Hsins, Hsouts, mappers)
 
-    return _reshape(t, blocks, Hsouts; skipmissing)
+    alg isa NoScalarIndexingAlg && return _gather_reshape(t, blocks, Hsouts; projection)
+    return _reshape(t, blocks, Hsouts; projection)
 end
 
 struct ReshapeMap{M,P}
     mappings::M
     repeat::Bool
-    skipmissing::Bool
+    projection::Bool
     precomputed::P
 end
 
@@ -121,7 +126,7 @@ function (op::ReshapeMap)(t::AbstractArray)
     Hsouts = map(p -> p.Hsout, pre)
     blocks = map(p -> p.blocks, pre)
     _validate_from_spaces(t, Hsins, Hsouts)
-    _reshape(t, blocks, Hsouts; op.skipmissing)
+    return _reshape(t, blocks, Hsouts; op.projection)
 end
 
 function (op::ReshapeMap)(out::AbstractArray, t::AbstractArray)
@@ -140,13 +145,13 @@ function (op::ReshapeMap)(out::AbstractArray, t::AbstractArray)
     Hsouts = map(p -> p.Hsout, pre)
     blocks = map(p -> p.blocks, pre)
     _validate_from_spaces(t, Hsins, Hsouts)
-    _reshape!(out, t, blocks, Hsouts; op.skipmissing)
+    return _reshape!(out, t, blocks, Hsouts; op.projection)
 end
 
-function Base.reshape(mapping::_SpaceMapping, rest::_SpaceMapping...; repeat=false, skipmissing=false)
+function Base.reshape(mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false)
     mappings_t = (mapping, rest...)
     precomputed = Tuple(map(_precompute_mapping, mappings_t))
-    ReshapeMap(mappings_t, repeat, skipmissing, precomputed)
+    return ReshapeMap(mappings_t, repeat, projection, precomputed)
 end
 
 function _resolve_mappings(t::AbstractArray, mappings; repeat=false)
@@ -171,17 +176,12 @@ _spaces(Hs::Union{Tuple,AbstractVector}) = Tuple(Hs)
 _spaces(x) = throw(ArgumentError("Expected a Hilbert space or a tuple of Hilbert \
                                   spaces, got $(typeof(x))"))
 
-# Split one mapping into (input spaces, output spaces) and check that it is a
-# split, a combine, or an identity.
+# Split one mapping into (input spaces, output spaces).
 function _mapping_spaces(mapping::Pair)
     Hsin, Hsout = _spaces(first(mapping)), _spaces(last(mapping))
 
     (isempty(Hsin) || isempty(Hsout)) &&
         throw(ArgumentError("Empty Hilbert space group in mapping $mapping"))
-
-    length(Hsin) == 1 == length(Hsout) && only(Hsin) != only(Hsout) &&
-        throw(ArgumentError("A one-to-one mapping must be the identity `H => H`, \
-                             got $mapping"))
 
     return Hsin, Hsout
 end
@@ -242,19 +242,24 @@ function _build_many_to_many_mapper(Hsin, Hsout)
                              Original error: $(sprint(showerror, err))"))
     end
     combine_mapper = state_mapper(Hmid, Hsin)
-    split_mapper = state_mapper(Hmid, Hsout)
+    split_mapper = _partition_mapper(Hmid, Hsout)
     return _ComposedMapper(combine_mapper, split_mapper)
 end
 
+function _partition_mapper(H, Hs)
+    ispartition(Hs, H) || throw(ArgumentError("The spaces $Hs must split $H into subsystems that contain each of its atoms exactly once."))
+    return state_mapper(H, Hs)
+end
+
 function _mapper(Hsin, Hsout)
-    if length(Hsin) == 1 && length(Hsout) > 1        # split
-        state_mapper(only(Hsin), Hsout)
-    elseif length(Hsin) > 1 && length(Hsout) == 1    # combine
-        state_mapper(only(Hsout), Hsin)
-    elseif length(Hsin) > 1 && length(Hsout) > 1     # many-to-many
-        _build_many_to_many_mapper(Hsin, Hsout)
-    else                                             # identity
+    return if length(Hsin) == 1 && Hsin == Hsout            # identity
         nothing
+    elseif length(Hsin) == 1                         # split, possibly into one space
+        _partition_mapper(only(Hsin), Hsout)
+    elseif length(Hsout) == 1                        # combine
+        _partition_mapper(only(Hsout), Hsin)
+    else                                             # many-to-many
+        _build_many_to_many_mapper(Hsin, Hsout)
     end
 end
 # Each `_transitions` method returns `(; transitions, dropped)`. `transitions` is a vector
@@ -265,7 +270,7 @@ const _OneSpace = Tuple{AbstractHilbertSpace}
 const _SeveralSpaces = Tuple{AbstractHilbertSpace,AbstractHilbertSpace,Vararg{AbstractHilbertSpace}}
 
 # Split: H => (H1, H2, ...)
-function _transitions(Hsin::_OneSpace, Hsout::_SeveralSpaces, mapper)
+function _transitions(Hsin::_OneSpace, Hsout::Tuple, mapper)
     H = only(Hsin)
     entries = Iterators.flatten(Iterators.map(basisstates(H)) do f
         Iin = (Int(state_index(f, H)),)
@@ -331,7 +336,7 @@ _group_length(::AbstractVector{NTuple{N,Int}}) where {N} = N
 
 # Throw if a nonzero entry of `t` sits on an input index whose transitions were partly
 # dropped. Only the slices along dropped indices are visited.
-function _check_dropped(t::AbstractArray, blocks)
+function _check_dropped(t::AbstractArray, blocks, has_support_on = _has_support_on)
     all(b -> isempty(b.dropped), blocks) && return nothing
     sz = size(t)
     offset = 0
@@ -341,31 +346,33 @@ function _check_dropped(t::AbstractArray, blocks)
             # View t as (indices before, this group, indices after)
             gdims = sz[offset+1:offset+n]
             t3 = Base.reshape(t, prod(sz[1:offset]; init=1), prod(gdims), prod(sz[offset+n+1:end]; init=1))
-            _check_dropped_group(t3, LinearIndices(gdims), b.dropped)
+            _check_dropped_group(t3, LinearIndices(gdims), b.dropped, has_support_on)
         end
         offset += n
     end
     return nothing
 end
-function _check_dropped_group(t3, lin, dropped)
-    for Iin in dropped
-        any(!iszero, view(t3, :, lin[Iin...], :)) && throw(ArgumentError(
+function _check_dropped_group(t3, lin, dropped, has_support_on)
+    has_support_on(t3, 2, [lin[Iin...] for Iin in dropped]) && throw(
+        ArgumentError(
             "Reshape would lose amplitude: the array has nonzero entries on basis states \
-             that are missing in the output spaces. Pass `skipmissing=true` to drop them \
-             silently."))
-    end
+             that are missing in the output spaces. Pass `projection=true` to drop them \
+             silently."
+        )
+    )
+    return nothing
 end
 
-function _reshape(t::AbstractArray, blocks, Hsouts; skipmissing=false)
-    skipmissing || _check_dropped(t, blocks)
+function _reshape(t::AbstractArray, blocks, Hsouts; projection = false)
+    projection || _check_dropped(t, blocks)
     tout = zeros(eltype(t), map(dim, _flatten(Hsouts))...)
     return _reshape_kernel!(tout, t, blocks, Hsouts)
 end
 
-function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts; skipmissing=false)
+function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts; projection = false)
     Hsout_all = _flatten(Hsouts)
     size(tout) == map(dim, Hsout_all) || throw(DimensionMismatch("The output array has size $(size(tout)), but expected $(map(dim, Hsout_all))"))
-    skipmissing || _check_dropped(t, blocks)
+    projection || _check_dropped(t, blocks)
 
     fill!(tout, zero(eltype(tout)))
     return _reshape_kernel!(tout, t, blocks, Hsouts)
@@ -392,6 +399,22 @@ function _reshape_kernel!(tout, t, blocks, Hsouts)
         end
     end
     return tout
+end
+
+# Block k gathers along broadcast dimensions 2k-1 (its output index) and 2k (the transitions
+# into that output index), and its weights multiply those of the other blocks.
+function _gather_reshape(t, blocks, Hsouts; projection = false)
+    Base.has_offset_axes(t) && throw(ArgumentError("NoScalarIndexingAlg requires an array with one-based axes."))
+    projection || _check_dropped(t, blocks, _copied_support_on)
+    n = length(blocks)
+    stridesin = _block_strides(size(t), map(b -> _group_length(b.dropped), blocks))
+    tables = map(blocks, Hsouts) do b, Hs
+        _gather_table(fieldtype(eltype(b.linear), 3), ((i + 1, (o + 1, 1), w) for (i, o, w) in b.linear), prod(dim, Hs), 1)
+    end
+    placed(A, k) = reshape(_adapt_like(t, A), ntuple(d -> d == 2k - 1 ? size(A, 1) : d == 2k ? size(A, 2) : 1, 2n))
+    LL = broadcast(+, 1, ntuple(k -> placed((tables[k][1] .- 1) .* stridesin[k], k), n)...)
+    WW = broadcast(*, ntuple(k -> placed(tables[k][2], k), n)...)
+    return reshape(_gather_reduce(WW, ntuple(k -> 2k, n), t, LL), map(dim, _flatten(Hsouts)))
 end
 
 _has_linear_indices(a) = IndexStyle(a) isa IndexLinear && !Base.has_offset_axes(a)
@@ -516,6 +539,17 @@ end
     # Identity mappings leave the tensor unchanged
     @test reshape(A, H12_3 => H12_3, H3_3 => H3_3, H4_3 => H4_3) == A
 
+    # Splitting into a single space embeds by state index
+    for (N, qn) in ((1, ParityConservation()), (2, ParityConservation(1)))
+        Hp = hilbert_space(f, 1:N, qn)
+        Hu = hilbert_space(f, 1:N)
+        v = rand(dim(Hp))
+        u = zeros(dim(Hu))
+        u[indices(Hp, Hu)] = v
+        @test reshape(v, Hp => (Hu,)) == u
+        @test reshape(u, (Hu,) => Hp) == v
+    end
+
     # repeat=true applies one mapping to every index group
     A3 = rand(ComplexF64, dim(H12_3), dim(H12_3), dim(H12_3))
     @test reshape(A3, H12_3 => (H1_3, H2_3); repeat=true) ≈
@@ -628,7 +662,20 @@ end
     Mf = rand(ComplexF64, dim(Hfull), dim(Hfull))
     Mft = PermutedDimsArray(permutedims(Mf), (2, 1))
     @test_throws ArgumentError reshape(Mft, Hfull => (Hae, Hb))
-    @test reshape(Mft, Hfull => (Hae, Hb); skipmissing=true) == reshape(Mf, Hfull => (Hae, Hb); skipmissing=true)
+    @test reshape(Mft, Hfull => (Hae, Hb); projection = true) == reshape(Mf, Hfull => (Hae, Hb); projection = true)
+end
+
+@testitem "Reshape requires a partition" begin
+    @fermions f
+    H = hilbert_space(f, 1:4)
+    H12, H23, H34 = hilbert_space(f, 1:2), hilbert_space(f, 2:3), hilbert_space(f, 3:4)
+    v = rand(dim(H))
+    for Hs in ((H12, H23), (H12, H12), (H12, hilbert_space(f, 3:3)))
+        @test_throws ArgumentError reshape(v, H => Hs)
+        @test_throws ArgumentError reshape(H => Hs)(v)
+        @test_throws ArgumentError reshape(rand(map(dim, Hs)...), Hs => H)
+        @test_throws ArgumentError reshape(reshape(v, H => (H12, H34)), (H12, H34) => Hs)
+    end
 end
 
 @testitem "Reshape missing states" begin
@@ -647,13 +694,13 @@ end
 
     @test_throws ArgumentError reshape(v, H => (Hae, Hb))
     @test_throws ArgumentError reshape(m, H => (Hae, Hb))
-    vs = reshape(v, H => (Hae, Hb); skipmissing=true)
+    vs = reshape(v, H => (Hae, Hb); projection = true)
     @test size(vs) == (2, 4)
     @test norm(vs) < norm(v)
     # Agrees with going through the full subsystem and projecting explicitly
     vfull = reshape(v, H => (Ha, Hb))
     @test vs ≈ vfull[even, :]
-    ms = reshape(m, H => (Hae, Hb); skipmissing=true)
+    ms = reshape(m, H => (Hae, Hb); projection = true)
     @test size(ms) == (2, 4, 2, 4)
 
     # Entries that vanish on the missing states are fine
@@ -665,13 +712,13 @@ end
     rmap = reshape(H => (Hae, Hb))
     @test_throws ArgumentError rmap(m)
     @test_throws ArgumentError rmap(zeros(ComplexF64, 2, 4, 2, 4), m)
-    rmap_skip = reshape(H => (Hae, Hb); skipmissing=true)
+    rmap_skip = reshape(H => (Hae, Hb); projection = true)
     @test rmap_skip(m) == ms
     @test rmap_skip(zeros(ComplexF64, 2, 4, 2, 4), m) == ms
 
     # Many-to-many with missing states
     @test_throws ArgumentError reshape(vfull, (Ha, Hb) => (Hb, Hae))
-    @test reshape(vfull, (Ha, Hb) => (Hb, Hae); skipmissing=true) ≈ transpose(vs)
+    @test reshape(vfull, (Ha, Hb) => (Hb, Hae); projection = true) ≈ transpose(vs)
     @test reshape(veven, (Ha, Hb) => (Hb, Hae)) ≈ transpose(vs)
 
     # Combining unconstrained spaces into an even-parity space
@@ -689,8 +736,32 @@ end
     @test_throws ArgumentError reshape(G, (H1, H2) => He)
     @test_throws ArgumentError reshape((H1, H2) => He)(G)
     @test_throws ArgumentError reshape((H1, H2) => He)(similar(ρ), G)
-    @test reshape(G, (H1, H2) => He; skipmissing=true) ≈
-          reshape((H1, H2) => He; skipmissing=true)(G)
+    @test reshape(G, (H1, H2) => He; projection = true) ≈
+        reshape((H1, H2) => He; projection = true)(G)
+end
+
+@testitem "Reshape by gather" begin
+    import FermionicHilbertSpaces: NoScalarIndexingAlg
+    alg = NoScalarIndexingAlg()
+    @fermions f
+    @spins s
+    H1, H2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
+    Hs = hilbert_space(s[1], 1 // 2)
+    Hprod = tensor_product(H1, Hs)
+    for (H, Hparts) in ((hilbert_space(f, 1:4), (H1, H2)), (hilbert_space(f, 1:4, NumberConservation(2)), (H2, H1)), (Hprod, (Hs, H1)))
+        v = rand(ComplexF64, dim(H))
+        m = rand(ComplexF64, dim(H), dim(H))
+        @test reshape(v, H => Hparts; alg) == reshape(v, H => Hparts)
+        @test reshape(m, H => Hparts; alg) == reshape(m, H => Hparts)
+        @test reshape(m, H => Hparts, H => reverse(Hparts); alg) == reshape(m, H => Hparts, H => reverse(Hparts))
+        T = rand(ComplexF64, map(dim, Hparts)..., map(dim, Hparts)...)
+        @test reshape(T, Hparts => H, Hparts => H; alg, projection = true) == reshape(T, Hparts => H, Hparts => H; projection = true)
+        Tv = rand(ComplexF64, map(dim, Hparts)...)
+        @test reshape(Tv, Hparts => reverse(Hparts); alg) == reshape(Tv, Hparts => reverse(Hparts))
+    end
+    H = hilbert_space(f, 1:4, NumberConservation(2))
+    @test_throws ArgumentError reshape(rand(dim(H1), dim(H2)), (H1, H2) => H; alg)
+    @test_throws ArgumentError reshape(rand(dim(H)), H => (H1, H2); alg = :dense)
 end
 
 @testitem "Reshape missing states: truncated bosons" begin
@@ -710,13 +781,13 @@ end
 
     @test_throws ArgumentError reshape(v, H => (Hb2, Hf))
     @test_throws ArgumentError reshape(m, H => (Hb2, Hf))
-    vs = reshape(v, H => (Hb2, Hf); skipmissing=true)
+    vs = reshape(v, H => (Hb2, Hf); projection = true)
     @test size(vs) == (2, 4)
     @test norm(vs) < norm(v)
     # Agrees with going through the full space and truncating explicitly
     v3 = reshape(v, H => (Hb3, Hf))
     @test vs ≈ v3[1:2, :]
-    ms = reshape(m, H => (Hb2, Hf); skipmissing=true)
+    ms = reshape(m, H => (Hb2, Hf); projection = true)
     @test size(ms) == (2, 4, 2, 4)
 
     # Entries that vanish on the missing states are fine
@@ -733,13 +804,13 @@ end
     rmap = reshape(H => (Hb2, Hf))
     @test_throws ArgumentError rmap(m)
     @test_throws ArgumentError rmap(zeros(ComplexF64, 2, 4, 2, 4), m)
-    rmap_skip = reshape(H => (Hb2, Hf); skipmissing=true)
+    rmap_skip = reshape(H => (Hb2, Hf); projection = true)
     @test rmap_skip(m) == ms
     @test rmap_skip(zeros(ComplexF64, 2, 4, 2, 4), m) == ms
     @test reshape(H => (Hb4, Hf))(v) == v4
 
     # Many-to-many with missing states
     @test_throws ArgumentError reshape(v3, (Hb3, Hf) => (Hf, Hb2))
-    @test reshape(v3, (Hb3, Hf) => (Hf, Hb2); skipmissing=true) ≈ transpose(vs)
+    @test reshape(v3, (Hb3, Hf) => (Hf, Hb2); projection = true) ≈ transpose(vs)
     @test reshape(v3, (Hb3, Hf) => (Hf, Hb4)) ≈ transpose(v4)
 end

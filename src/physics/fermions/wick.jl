@@ -1,5 +1,4 @@
-# Each term of `op` is expanded on its own, so that the factors of every expansion have a single concrete type.
-# A sum is traversed through its dictionary, whose entries have a concrete type, unlike those of `termpairs`.
+# Each term of `op` is expanded on its own. A sum is traversed through its dictionary rather than `termpairs`.
 sum_over_terms(f, op::NCAdd) = mapreduce(((k, c),) -> f(k.factors, c), +, op.dict; init = f((), op.coeff))
 sum_over_terms(f, op) = mapreduce(((fs, c),) -> f(fs, c), +, NonCommutativeProducts.termpairs(1 * op); init = 0)
 
@@ -64,6 +63,7 @@ function _in_space(fs, H, projection)
     return false
 end
 function expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace, MajoranaSingleParticleHilbertSpace}; projection = false)
+    _check_size(G, H)
     return zero(eltype(G)) + wick_expectation(op, _contraction(G, H), fs -> _in_space(fs, H, projection), one(eltype(G)))
 end
 
@@ -81,7 +81,10 @@ H = hilbert_space(f, 1:2, SingleParticle())
 mean_field(f[1]' * f[1] * f[2]' * f[2], [0.5 0; 0 0.25], H) # 0.25 f[1]' f[1] + 0.5 f[2]' f[2] - 0.125
 ```
 """
-mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace, MajoranaSingleParticleHilbertSpace}; projection = false) = _mean_field(op, _contraction(G, H), fs -> _in_space(fs, H, projection), one(eltype(G)))
+function mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace, MajoranaSingleParticleHilbertSpace}; projection = false)
+    _check_size(G, H)
+    return _mean_field(op, _contraction(G, H), fs -> _in_space(fs, H, projection), one(eltype(G)))
+end
 
 @testitem "Wick expectation values" begin
     using FermionicHilbertSpaces.FreeFermions
@@ -126,6 +129,7 @@ mean_field(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace, BdGHilber
         @test_throws ArgumentError mean_field(outside + n, G0, H)
         @test expectation(outside, G0, H; projection = true) === 0.0
         @test mean_field(outside + n, G0, H; projection = true) == n
+        @test_throws DimensionMismatch expectation(n, zeros(dim(H) + 2, dim(H) + 2), H)
     end
 end
 
