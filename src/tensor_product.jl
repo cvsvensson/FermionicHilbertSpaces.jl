@@ -136,9 +136,9 @@ or if the tensor product of vectors has a nonzero amplitude outside `H`.
 function generalized_kron(ms, Hs, H::AbstractHilbertSpace = tensor_product(Hs); alg = GenericAlg(), kwargs...)
     check_kron_sizes(ms, Hs)
     _check_kron_alg(alg)
-    N = ndims(first(ms))
     extend_state = state_mapper(H, Hs)
     alg isa FactorizedKronAlg && return _factorized_kron(Tuple(ms), Hs, H, extend_state, false; kwargs...)
+    N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs, H)
     if N == 1
         return generalized_kron_vec!(mout, Tuple(ms), Tuple(Hs), H, extend_state; kwargs...)
@@ -419,12 +419,6 @@ function tensor_product(ms::Union{<:AbstractVector, <:Tuple}, Hs, H::AbstractHil
     throw(ArgumentError("The elements of `ms` must be either all square matrices, all column vectors or all row vectors, got sizes $(map(size, ms))."))
 end
 
-"""
-    _factorized_kron(ms, Hs, H, mapper, embeddings; phase_factors=true, projection=false)
-
-Generalized kron (`embeddings=false`) or product of embeddings (`embeddings=true`) of the dense arrays
-`ms` on the full Fock space `H`, as one broadcast of reshaped factors times a phase.
-"""
 function _factorized_kron(ms, Hs, H, mapper, embeddings; phase_factors = true, projection = false)
     _is_full_fock_kron(H, mapper, Hs) && !any(m -> m isa AbstractSparseArray || m isa UniformScaling, ms) ||
         throw(ArgumentError("FactorizedKronAlg needs dense arrays on unconstrained fermionic spaces that partition the modes of the unconstrained fermionic space `H`."))
@@ -804,7 +798,7 @@ struct GatherAlg <: AbstractPartialTraceAlg end
 """
     GenericAlg()
 
-The standard element-wise code path of an operation, and the default `alg` of [`embed`](@ref), `reshape` and [`partial_transpose`](@ref).
+The standard element-wise code path of an operation, and the default `alg` of [`embed`](@ref), `reshape`, [`partial_transpose`](@ref), [`generalized_kron`](@ref) and [`tensor_product`](@ref).
 """
 struct GenericAlg end
 
