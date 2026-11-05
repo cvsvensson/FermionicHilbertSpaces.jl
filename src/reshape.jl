@@ -172,7 +172,7 @@ function _precompute_mapping(mapping::Pair, alg)
     Hsin, Hsout = _mapping_spaces(mapping)
     mapper = _mapper(Hsin, Hsout)
     blocks = _transitions(Hsin, Hsout, mapper)
-    (; mapping, Hsin, Hsout, blocks = alg isa GatherAlg ? _gather_block(blocks, Hsin, Hsout) : blocks)
+    return (; mapping, Hsin, Hsout, blocks = alg isa GatherAlg ? _gather_block(blocks, Hsin, Hsout) : blocks)
 end
 
 _spaces(H::AbstractHilbertSpace) = (H,)

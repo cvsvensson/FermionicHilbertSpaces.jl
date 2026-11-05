@@ -1106,7 +1106,7 @@ end
 
 # `op(x) = op.f(x, op.args...)`, where `args` holds the gather tables built on the host.
 # `Adapt.adapt(CuArray, op)` moves the tables to the device.
-struct GatherMap{F,A<:Tuple}
+struct GatherMap{F, A <: Tuple}
     f::F
     args::A
 end
@@ -1339,7 +1339,7 @@ unlike `partial_trace`, does not check its input.
 With `alg = GatherAlg()`, it stores gather tables instead and can be applied to GPU arrays;
 `Adapt.adapt(CuArray, op)` moves the tables to the device.
 """
-function partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...)
+function partial_trace(Hs::Pair{<:AbstractHilbertSpace, <:AbstractHilbertSpace}; kwargs...)
     get(kwargs, :alg, nothing) isa GatherAlg && return _partial_trace_gather_map(Hs...; kwargs...)
     return PartialTraceMap(first(Hs), last(Hs); kwargs...)
 end
