@@ -1,7 +1,8 @@
 # Runs on JLArrays, a CPU implementation of the GPU array interface that disallows scalar indexing.
 # Not part of the main suite: `julia --project=test/gpu test/gpu/runtests.jl`.
 using FermionicHilbertSpaces, JLArrays, Test
-using FermionicHilbertSpaces: GatherAlg, FactorizedPartialTransposeAlg, FactorizedKronAlg
+using Adapt: adapt
+using FermionicHilbertSpaces: GatherAlg, FactorizedPartialTransposeAlg, FactorizedKronAlg, change_basis
 JLArrays.allowscalar(false)
 
 @testset "partial_trace of GPU arrays" begin
@@ -16,6 +17,21 @@ JLArrays.allowscalar(false)
         end
     end
     @test_throws ArgumentError partial_trace(JLArray(rand(dim(Hcons), dim(Hcons))), Hcons => hilbert_space(f, 1:2, NumberConservation(1)); alg)
+end
+
+@testset "change_basis of GPU arrays" begin
+    alg = GatherAlg()
+    @fermions f
+    H = hilbert_space(f, 1:4)
+    Hsec = hilbert_space(f, 1:4, NumberConservation(2))
+    for x in (rand(ComplexF64, dim(Hsec)), rand(ComplexF64, dim(Hsec), dim(Hsec)))
+        out = change_basis(JLArray(x), Hsec => H; alg)
+        @test out isa JLArray
+        @test Array(out) == change_basis(x, Hsec => H)
+    end
+    ρ = rand(ComplexF64, dim(H), dim(H))
+    @test Array(partial_trace(JLArray(ρ), H => Hsec; alg, projection = true)) == partial_trace(ρ, H => Hsec; projection = true)
+    @test_throws ArgumentError change_basis(JLArray(ρ), H => Hsec; alg)
 end
 
 @testset "embed of GPU arrays" begin
@@ -46,6 +62,23 @@ end
         @test Array(reshape(T, (H1, H2) => H; alg)) == x
     end
     @test_throws ArgumentError reshape(JLArray(rand(dim(H1), dim(H2))), (H1, H2) => H; alg)
+end
+
+@testset "precomputed gather maps on GPU arrays" begin
+    alg = GatherAlg()
+    @fermions f
+    H = hilbert_space(f, 1:4, NumberConservation(2))
+    Hsub = subregion(hilbert_space(f, 1:2), H)
+    H1, H2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
+    ρ = rand(ComplexF64, dim(H), dim(H))
+    m = rand(ComplexF64, dim(Hsub), dim(Hsub))
+    for (op, x) in ((partial_trace(H => Hsub; alg), ρ), (partial_trace(H => Hsub; alg), ρ[:, 1]), (partial_trace(H => Hsub; alg), vec(ρ)), (embed(Hsub => H; alg), m), (reshape(H => (H1, H2); alg), ρ))
+        out = adapt(JLArray, op)(JLArray(x))
+        @test out isa JLArray
+        @test Array(out) ≈ op(x)
+        @test Array(op(JLArray(x))) ≈ op(x)
+    end
+    @test_throws ArgumentError adapt(JLArray, reshape((H1, H2) => H; alg))(JLArray(rand(4, 4)))
 end
 
 @testset "partial_transpose of GPU arrays" begin
@@ -83,6 +116,10 @@ end
     @test Array(partial_trace(JLArray(m)', H => HA)) ≈ partial_trace(m', H => HA)
     out = JLArray(zeros(ComplexF64, dim(HA), dim(HA)))
     @test Array(FermionicHilbertSpaces.partial_trace!(out, JLArray(m), H => HA)) ≈ partial_trace(m, H => HA)
+    Hsec = hilbert_space(f, 1:4, NumberConservation(2))
+    msec = rand(ComplexF64, dim(Hsec), dim(Hsec))
+    @test Array(change_basis(JLArray(msec), Hsec => H)) == change_basis(msec, Hsec => H)
+    @test Array(partial_trace(JLArray(m), H => Hsec; projection = true)) == partial_trace(m, H => Hsec; projection = true)
     @test Array(embed(JLArray(mA), HA => H)) ≈ embed(mA, HA => H)
     @test Array(reshape(JLArray(v), H => (HA, HB))) == reshape(v, H => (HA, HB))
     @test Array(partial_transpose(JLArray(m), H, HA)) ≈ partial_transpose(m, H, HA)

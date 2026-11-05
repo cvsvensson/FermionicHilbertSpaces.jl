@@ -51,17 +51,11 @@ julia> embed([1, 2], sector(1, H) => H)
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
 function _embed_by_gather(m::AbstractVecOrMat, Hsub, H, complement; projection = false, phase_factors = true)
-    if isnothing(complement)
-        src = first(basis_transformation(Hsub, H)) * (1:dim(Hsub))
-        splits = [((K, 1, 1),) for K in src]
-    else
-        splits = _full_partial_trace_splits(H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement), phase_factors)
-    end
-    P, B, S, present = _embed_gather_table(splits, dim(Hsub), isnothing(complement) ? 1 : dim(complement))
+    splits, nb = _gather_splits(H, Hsub, complement, phase_factors)
+    P, B, S, present = _embed_gather_table(splits, dim(Hsub), nb)
     projection || _check_embed_into(m, present)
     return _gather_embed(m, P, B, S)
 end
-_embed_by_gather(::UniformScaling, args...; kwargs...) = throw(ArgumentError("`UniformScaling` is not supported with `alg = GatherAlg()`."))
 
 # `P[J, r]`, `B[J, r]` and `S[J, r]` are the indices in `Hsub` and the complement, and the weight,
 # of the r-th split of the J-th state of `H`, padded with index 1 and weight 0.
@@ -105,6 +99,23 @@ function _gather_embed(m::AbstractMatrix, P, B, S)
 end
 _gather_embed(v::AbstractVector, P, B, S) = vec(_gather_reduce(_adapt_like(v, S), 2, v, _adapt_like(v, P)))
 
+# The `map` of an `EmbedMap` with `alg = GatherAlg()`, see `_PartialTraceGather`.
+struct _EmbedGather{TP, TB, TS}
+    P::TP
+    B::TB
+    S::TS
+end
+function _embed_gather(Hsub, H, complement; phase_factors = true)
+    splits, nb = _gather_splits(H, Hsub, complement, phase_factors)
+    return _EmbedGather(Base.front(_embed_gather_table(splits, dim(Hsub), nb))...)
+end
+Base.:*(g::_EmbedGather, v::AbstractVector) = vec(_gather_embed(_square(v), g.P, g.B, g.S))
+
+const _GatherSuperop = Union{_PartialTraceGather, _EmbedGather}
+LinearAlgebra.mul!(w::AbstractVector, g::_GatherSuperop, v::AbstractVector) = copyto!(w, g * v)
+_gather_superop_error() = throw(ArgumentError("A map with `alg = GatherAlg()` has no `sparse` form or adjoint."))
+_adjoint_superop(::_GatherSuperop) = _gather_superop_error()
+
 struct EmbedMap{HS,H,C,K,M}
     Hsub::HS
     H::H
@@ -115,7 +126,9 @@ end
 
 # The map is the compression onto `H` and checks nothing, so `projection` has no effect.
 function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(Hsub, H, complement), projection = false, kwargs...)
-    map = if isnothing(complement)
+    map = if alg isa GatherAlg
+        _embed_gather(Hsub, H, complement; kwargs...)
+    elseif isnothing(complement)
         basis_transformation_map(Hsub, H; projection = true, kwargs...)
     else
         _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, kwargs...))
@@ -131,6 +144,8 @@ function (op::EmbedMap)(m::SparseMatrixCSC)
     size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
     _embed_sparse_matrix(op.map, m, dim(op.H))
 end
+
+_embed_sparse_matrix(g::_EmbedGather, m, D) = sparse(reshape(g * vec(Matrix(m)), D, D))
 
 # map * vec(m) as a sparse D × D matrix, avoiding the dense length-D^2 vector that map * m[:] would allocate
 function _embed_sparse_matrix(map::SparseMatrixCSC, m::SparseMatrixCSC, D)
@@ -176,6 +191,7 @@ function (op::EmbedMap)(m::UniformScaling)
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(mfull), dim(op.H))
 end
 SparseArrays.sparse(op::EmbedMap) = op.map
+SparseArrays.sparse(::Union{PartialTraceMap{<:Any, <:Any, <:Any, <:Any, <:_GatherSuperop}, EmbedMap{<:Any, <:Any, <:Any, <:Any, <:_GatherSuperop}}) = _gather_superop_error()
 Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
 Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
 Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
@@ -189,6 +205,8 @@ Create a callable embedding operation from `Hsub` into `H`.
 The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 It is the compression onto `H` and, unlike [`embed`](@ref), does not check its input.
+With `alg = GatherAlg()`, it stores gather tables instead, so it can be applied to GPU arrays
+but has no `sparse` or adjoint; `Adapt.adapt(CuArray, op)` moves the tables to the device.
 """
 embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwargs...)
 

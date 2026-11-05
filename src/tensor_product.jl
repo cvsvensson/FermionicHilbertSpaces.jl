@@ -623,20 +623,23 @@ function partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::Abstrac
     alg isa GatherAlg && return _partial_trace_by_gather(v, H, Hsub, complement; kwargs...)
     return partial_trace(vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)
 end
-function _partial_trace_by_gather(ψ::AbstractVector, H, Hsub, complement; projection = false, phase_factors = true)
-    size_compatible(ψ, H) || throw(ArgumentError("The size of `ψ` must match `dim(H)` = $(dim(H)), got $(size(ψ))."))
-    isnothing(complement) && return (φ = change_basis(ψ, H, Hsub; projection); φ * φ')
-    return _partial_trace_by_gather(ψ, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement); projection, phase_factors)
+function _partial_trace_by_gather(m, H, Hsub, complement; projection = false, phase_factors = true)
+    size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
+    if isnothing(complement)
+        φ = change_basis(m, H, Hsub; projection, alg = GatherAlg())
+        return m isa AbstractVector ? φ * φ' : φ
+    end
+    return _partial_trace_by_gather(m, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement); projection, phase_factors)
 end
 function _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection = false, phase_factors = true)
     splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
     projection || _check_covered(m, _covered_states(splits), _copied_support_on)
-    return _gather_partial_trace(m, _partial_trace_gather_table(splits, dim(Hsub), dim(complement))...)
+    return _gather_partial_trace(m, _partial_trace_gather_table(splits, dim(Hsub), dim(complement)))
 end
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_alg(partial_trace, m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
+    alg isa GatherAlg && return _partial_trace_by_gather(m, H, Hsub, complement; kwargs...)
     isnothing(complement) && return Base.inferencebarrier(change_basis)(m, H, Hsub; kwargs...)
-    alg isa GatherAlg && return _partial_trace_by_gather(m, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement); kwargs...)
     mout = zeros(promote_type(eltype(m), partial_trace_phase_factor_eltype(H)), dim(Hsub), dim(Hsub))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
@@ -676,8 +679,8 @@ function _basis_transformation(Hfrom, Hto, mapper)
 end
 
 """
-    change_basis(m, Hfrom => Hto; projection=false)
-    change_basis(m, Hfrom, Hto; projection=false)
+    change_basis(m, Hfrom => Hto; projection=false, alg=GenericAlg())
+    change_basis(m, Hfrom, Hto; projection=false, alg=GenericAlg())
 
 Express `m` in the basis of `Hto`, where `Hfrom` and `Hto` have the same atoms but possibly
 different (or differently ordered) basis states. Unless `projection=true`, throws an
@@ -686,9 +689,13 @@ different (or differently ordered) basis states. Unless `projection=true`, throw
 Either side can be an [`Axes`](@ref), one space per axis of `m`: `change_basis(m, H => Axes(Hout, Hin))`
 extracts the block of `m` with rows on `Hout` and columns on `Hin`, and `change_basis(blk, Axes(Hout, Hin) => H)`
 places it in a matrix on `H` that is zero elsewhere.
+
+With `alg = GatherAlg()`, a vector or matrix `m` is transformed with array indexing and
+broadcasting only, so that it can be a GPU array.
 """
 change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
-function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, kwargs...)
+function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, alg = GenericAlg(), kwargs...)
+    alg isa Union{GenericAlg, GatherAlg} || throw(ArgumentError("`change_basis` supports `alg = GenericAlg()` or `GatherAlg()`, got $alg."))
     n = m isa UniformScaling ? 2 : ndims(m)
     from, to = _per_axis(Hfrom, Val(n)), _per_axis(Hto, Val(n))
     size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, and a `UniformScaling` needs the same space on both axes, got $(summary(m))."))
@@ -698,13 +705,15 @@ function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{Ab
     transformation(Hf, Ht) = Hf === first(from.spaces) && Ht === first(to.spaces) ? U1 : basis_transformation(Hf, Ht)
     transformations = map(transformation, from.spaces, to.spaces)
     if !projection
+        has_support_on = alg isa GatherAlg ? _copied_support_on : _has_support_on
         for (axis, Hf, (_, dropped)) in zip(1:n, from.spaces, transformations)
-            _has_support_on(m, axis, dropped) || continue
-            j = first(Iterators.filter(j -> _has_support_on(m, axis, j:j), dropped))
+            has_support_on(m, axis, dropped) || continue
+            j = first(Iterators.filter(j -> has_support_on(m, axis, j:j), dropped))
             throw(ArgumentError("The state $(basisstate(j, Hf)) has nonzero weight but is not in the target Hilbert space. Pass `projection=true` to drop it."))
         end
     end
-    return _change_basis(m, map(first, transformations))
+    Us = map(first, transformations)
+    return alg isa GatherAlg ? _gather_transform(m, map(_basis_gather_table, Us)...) : _change_basis(m, Us)
 end
 _per_axis(H::AbstractHilbertSpace, n::Val) = Axes(ntuple(_ -> H, n))
 _per_axis(ax::Axes, n::Val) = ax
@@ -792,13 +801,13 @@ struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
     GatherAlg()
 
 Algorithm built from array indexing, broadcasting and reductions only, so that it runs on GPU
-arrays. It is an option for the `alg` keyword of [`partial_trace`](@ref), [`partial_trace!`](@ref), [`embed`](@ref) and `reshape`, and their default for GPU arrays.
+arrays. It is an option for the `alg` keyword of [`partial_trace`](@ref), [`partial_trace!`](@ref), [`embed`](@ref), [`change_basis`](@ref) and `reshape`, and their default for GPU arrays.
 """
 struct GatherAlg <: AbstractPartialTraceAlg end
 """
     GenericAlg()
 
-The standard element-wise code path of an operation, and the default `alg` of [`embed`](@ref), `reshape`, [`partial_transpose`](@ref), [`generalized_kron`](@ref) and [`tensor_product`](@ref) on CPU arrays.
+The standard element-wise code path of an operation, and the default `alg` of [`embed`](@ref), [`change_basis`](@ref), `reshape`, [`partial_transpose`](@ref), [`generalized_kron`](@ref) and [`tensor_product`](@ref) on CPU arrays.
 """
 struct GenericAlg end
 """
@@ -968,6 +977,7 @@ end
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_alg(partial_trace, m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
     _check_partial_trace_output(mout, m, Hsub)
+    alg isa GatherAlg && return copyto!(mout, _partial_trace_by_gather(m, H, Hsub, complement; kwargs...))
     isnothing(complement) && return copyto!(mout, change_basis(m, H, Hsub; kwargs...))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
@@ -1082,23 +1092,53 @@ function _gather_table(T, entries, dK, nb)
 end
 # The r-th state of `H` that splits into the K-th state of `Hsub` and the b-th complement state
 _partial_trace_gather_table(splits, dsub, nb) = _gather_table(fieldtype(eltype(eltype(splits)), 3), ((J, (K, b), s) for (J, ss) in pairs(splits) for (K, b, s) in ss if !iszero(K)), dsub, nb)
+# A basis change `U * m * U'` is a partial trace with a single complement state
+_basis_gather_table(U) = _gather_table(eltype(U), ((j, (i, 1), s) for (i, j, s) in zip(findnz(U)...)), size(U, 1), 1)
 
-_adapt_like(x, A) = copyto!(similar(x, eltype(A), size(A)), A)
+# `promote_op` only decides whether the copy can be skipped; both branches give equal arrays,
+# and callers do not mutate the result.
+_adapt_like(x, A) = typeof(A) === Base.promote_op(similar, typeof(x), Type{eltype(A)}, typeof(size(A))) ? A : copyto!(similar(x, eltype(A), size(A)), A)
 
-function _gather_partial_trace(m::AbstractMatrix, L, W)
-    dsub, R, nb = size(L)
-    L, W = _adapt_like(m, L), _adapt_like(m, W)
-    row(A) = reshape(A, dsub, R, 1, 1, nb)
-    col(A) = reshape(A, 1, 1, dsub, R, nb)
-    LL = row(L) .+ size(m, 1) .* (col(L) .- 1)
-    WW = row(W) .* conj.(col(W))
-    return reshape(_gather_reduce(WW, (2, 4, 5), m, LL), dsub, dsub)
+# `sum(Wout[K, r, b] * m[Lout[K, r, b], Lin[K', r', b]] * conj(Win[K', r', b]))`, over r, r' and b
+function _gather_transform(m::AbstractMatrix, (Lout, Wout), (Lin, Win))
+    dout, Rout, nb = size(Lout)
+    din, Rin, _ = size(Lin)
+    row(A) = reshape(_adapt_like(m, A), dout, Rout, 1, 1, nb)
+    col(A) = reshape(_adapt_like(m, A), 1, 1, din, Rin, nb)
+    LL = row(Lout) .+ size(m, 1) .* (col(Lin) .- 1)
+    WW = row(Wout) .* conj.(col(Win))
+    return reshape(_gather_reduce(WW, (2, 4, 5), m, LL), dout, din)
+end
+_gather_transform(ψ::AbstractVector, (L, W)) = vec(_gather_reduce(_adapt_like(ψ, W), 2, ψ, _adapt_like(ψ, L)))
+function _gather_partial_trace(m::AbstractMatrix, table)
+    table = map(A -> _adapt_like(m, A), table)
+    return _gather_transform(m, table, table)
 end
 # ψψ† gives A * A' with A[K, b] = sum(W[K, :, b] .* ψ[L[K, :, b]])
-function _gather_partial_trace(ψ::AbstractVector, L, W)
-    A = reshape(_gather_reduce(_adapt_like(ψ, W), 2, ψ, _adapt_like(ψ, L)), size(L, 1), :)
+function _gather_partial_trace(ψ::AbstractVector, table)
+    A = reshape(_gather_transform(ψ, table), size(first(table), 1), :)
     return A * A'
 end
+# The splits of the states of `H` into states of `Hsub` and the complement, and the complement dimension
+function _gather_splits(H, Hsub, complement, phase_factors)
+    isnothing(complement) && return [((K, 1, 1),) for K in first(basis_transformation(Hsub, H)) * (1:dim(Hsub))], 1
+    return _full_partial_trace_splits(H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement), phase_factors), dim(complement)
+end
+
+# The `map` of a `PartialTraceMap` with `alg = GatherAlg()`. Like a sparse superoperator, it acts
+# on vectorized density matrices.
+struct _PartialTraceGather{TL, TW}
+    L::TL
+    W::TW
+end
+function _partial_trace_gather(H, Hsub, complement; phase_factors = true)
+    splits, nb = _gather_splits(H, Hsub, complement, phase_factors)
+    return _PartialTraceGather(_partial_trace_gather_table(splits, dim(Hsub), nb)...)
+end
+Base.eltype(::Type{<:_PartialTraceGather{<:Any, TW}}) where {TW} = eltype(TW)
+_square(v) = reshape(v, isqrt(length(v)), :)
+Base.:*(g::_PartialTraceGather, v::AbstractVector) = vec(_gather_partial_trace(_square(v), (g.L, g.W)))
+_apply_superop_on_pure_state!(w::AbstractVector, g::_PartialTraceGather, ψ::AbstractVector) = copyto!(w, vec(_gather_partial_trace(ψ, (g.L, g.W))))
 
 """
     _transposed_superoperator(Is, Js, Vs, nout, nin)
@@ -1169,6 +1209,7 @@ function _apply_superop_on_pure_state!(w::AbstractVector, S::LinearAlgebra.Trans
 end
 
 # y = S * vec(m) for S = transpose(St) and a sparse D × D matrix m
+_superop_mul_matrix!(y::AbstractVector, g::_PartialTraceGather, m::SparseMatrixCSC) = copyto!(y, g * vec(Matrix(m)))
 function _superop_mul_matrix!(y::AbstractVector, S::LinearAlgebra.Transpose{<:Any,<:SparseMatrixCSC}, m::SparseMatrixCSC)
     D = size(m, 1)
     size(m, 2) == D && size(S, 2) == D^2 || throw(DimensionMismatch("The input matrix must be square with $(size(S, 2)) entries, got size $(size(m))"))
@@ -1203,7 +1244,7 @@ end
 
 # The map checks nothing, so `projection` has no effect.
 function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(Hsub, H, complement), projection = false, kwargs...)
-    map = partial_trace_map(H, Hsub, complement, alg; kwargs...)
+    map = alg isa GatherAlg ? _partial_trace_gather(H, Hsub, complement; kwargs...) : partial_trace_map(H, Hsub, complement, alg; kwargs...)
     PartialTraceMap(H, Hsub, complement, kwargs, map)
 end
 
@@ -1283,6 +1324,7 @@ function _apply_ptmap_on_vec(ptmap::PartialTraceMap, ψ::AbstractVector)
     _apply_ptmap_on_vec!(w, ptmap, ψ)
     return w
 end
+_apply_ptmap_on_vec(ptmap::PartialTraceMap{<:Any, <:Any, <:Any, <:Any, <:_PartialTraceGather}, ψ::AbstractVector) = vec(_gather_partial_trace(ψ, (ptmap.map.L, ptmap.map.W)))
 _apply_ptmap_on_vec!(w::AbstractVector, ptmap::PartialTraceMap, ψ::AbstractVector) = _apply_superop_on_pure_state!(w, ptmap.map, ψ)
 
 function (op::PartialTraceMap)(out, in::AbstractMatrix)
@@ -1313,6 +1355,8 @@ Create a callable partial-trace operation from `H` to `Hsub`.
 The operation can be applied directly as `op(m)` and can be converted to a sparse
 matrix map with `sparse(op)`. It skips the states of `H` that [`partial_trace`](@ref) drops and,
 unlike `partial_trace`, does not check its input.
+With `alg = GatherAlg()`, it stores gather tables instead, so it can be applied to GPU arrays
+but has no `sparse` or adjoint; `Adapt.adapt(CuArray, op)` moves the tables to the device.
 """
 partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = PartialTraceMap(first(Hs), last(Hs); kwargs...)
 function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
@@ -1534,6 +1578,45 @@ end
     end
 end
 
+@testitem "Precomputed gather maps" begin
+    using LinearAlgebra, SparseArrays
+    import FermionicHilbertSpaces: GatherAlg
+    alg = GatherAlg()
+    @fermions f
+    Hcons = hilbert_space(f, 1:4, NumberConservation(2))
+    Hpar = hilbert_space(f, 1:4, ParityConservation())
+    for (H, Hsub) in ((hilbert_space(f, 1:4), hilbert_space(f, [1, 3])), (Hcons, subregion(hilbert_space(f, 1:2), Hcons)), (Hpar, sector(-1, Hpar)))
+        ρ = rand(ComplexF64, dim(H), dim(H))
+        ψ = rand(ComplexF64, dim(H))
+        m = rand(ComplexF64, dim(Hsub), dim(Hsub))
+        pt = partial_trace(H => Hsub; alg)
+        em = embed(Hsub => H; alg)
+        for x in (ρ, ψ, vec(ρ))
+            @test pt(x) ≈ partial_trace(H => Hsub)(x)
+        end
+        for x in (m, vec(m))
+            @test em(x) ≈ embed(Hsub => H)(x)
+        end
+        @test_throws ArgumentError sparse(pt)
+        @test_throws ArgumentError em'
+        @test em(I) ≈ embed(Hsub => H)(I)
+        @test pt(sparse(ρ)) ≈ partial_trace(H => Hsub)(ρ)
+        @test em(sparse(m)) ≈ embed(Hsub => H)(m)
+    end
+    ρ = rand(ComplexF64, dim(Hcons), dim(Hcons))
+    out = zeros(ComplexF64, 4, 4)
+    @test partial_trace(Hcons => hilbert_space(f, 1:2); alg)(out, ρ) === out
+    @test out ≈ partial_trace(ρ, Hcons => hilbert_space(f, 1:2))
+
+    H1, H2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
+    op = reshape(Hcons => (H1, H2); alg)
+    for x in (rand(dim(Hcons)), ρ)
+        @test op(x) ≈ reshape(x, Hcons => (H1, H2))
+    end
+    @test op(zeros(ComplexF64, 4, 4, 4, 4), ρ) == reshape(ρ, Hcons => (H1, H2))
+    @test_throws ArgumentError reshape((H1, H2) => Hcons; alg)(rand(4, 4))
+end
+
 @testitem "Partial trace by gather" begin
     import FermionicHilbertSpaces: GatherAlg, partial_trace!, state_index
     alg = GatherAlg()
@@ -1697,4 +1780,31 @@ end
     @test_throws ArgumentError change_basis(2I, Axes(Hout, Hin) => H)
     v = rand(dim(H))
     @test change_basis(v, H => Axes(Hout); projection = true) == v[rows]
+end
+
+@testitem "change_basis by gather" begin
+    import FermionicHilbertSpaces: change_basis, GatherAlg
+    using FermionicHilbertSpaces: Axes
+    alg = GatherAlg()
+    @fermions f
+    @bosons b
+    H = hilbert_space(f, 1:4)
+    Hsec = hilbert_space(f, 1:4, NumberConservation(2))
+    Hout = hilbert_space(f, 1:4, NumberConservation(1))
+    Hfb, Hbf = tensor_product(hilbert_space(f, 1:2), hilbert_space(b[1], 3)), tensor_product(hilbert_space(b[1], 3), hilbert_space(f, 1:2))
+    for (Hfrom, Hto, projection) in ((Hsec, H, false), (Axes(Hout, Hsec), H, false), (Hfb, Hbf, false), (H, Axes(Hout, Hsec), true))
+        n = Hto isa Axes ? 2 : 1
+        xs = Hfrom isa Axes ? (rand(ComplexF64, dim(Hout), dim(Hsec)),) : (rand(ComplexF64, dim(Hfrom)), rand(ComplexF64, dim(Hfrom), dim(Hfrom)))
+        for x in xs
+            ndims(x) < n && continue
+            @test change_basis(x, Hfrom => Hto; projection, alg) == change_basis(x, Hfrom => Hto; projection)
+        end
+    end
+    @test_throws ArgumentError change_basis(rand(dim(H), dim(H)), H => Hsec; alg)
+    @test_throws ArgumentError change_basis(rand(dim(H)), H => Hsec; alg)
+    @test_throws ArgumentError change_basis(rand(dim(H)), H => Hsec; alg = :sparse)
+
+    Hsub = hilbert_space(f, 1:4, NumberConservation(1:2))
+    ρ = rand(dim(H), dim(H))
+    @test partial_trace(ρ, H => Hsub; alg, projection = true) == partial_trace(ρ, H => Hsub; projection = true)
 end
