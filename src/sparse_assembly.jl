@@ -37,8 +37,8 @@ function _known_length(precomps, incols)
     return total
 end
 
-# An upper bound on the stored entries of the `N` columns of a matrix, `typemax(Int)` if a term can't tell in advance
 _total_nentries(term, N) = nothing
+# An upper bound on the stored entries of the `N` columns of a matrix, `typemax(Int)` if a term can't tell in advance
 function _max_stored_entries(precomps, coeff, N)
     total = iszero(coeff) ? 0 : N
     for (term, _) in precomps
@@ -95,7 +95,7 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
     rowval = Int[]
     nzval = T[]
     capacity = 0
-    maxentries = M == N ? _max_stored_entries(precomps, coeff, N) : typemax(Int)
+    maxentries = M > 0 ? _max_stored_entries(precomps, coeff, N) : 0
     sortedrows = Int[]
     sortedamps = T[]
     mergebuffers = (zeros(Int32, N), Int[], T[])
@@ -193,6 +193,9 @@ end
 
     # A space without states
     @test size(representation(f[1]' * f[2] + 1, constrain_space(hilbert_space(f, 1:2), NumberConservation(5)))) == (0, 0)
+    @spin s 1//2
+    Hempty = tensor_product(GenericHilbertSpace(:a, [:x, :y]), GenericHilbertSpace(s, Int[]))
+    @test size(representation(s[:z] + s[:x] + 1, Hempty)) == (0, 0)
 
     # A constrained space with several groups, and an identity coefficient that widens the element type
     @boson b
