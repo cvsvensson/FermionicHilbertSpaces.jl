@@ -667,7 +667,7 @@ function fragment(op, H::AbstractHilbertSpace, seeds)
     terms = [length(bases) > 1 ? partition_product(term, bases, groups(H)) : term for term in NCterms(op)]
     states = unique!(collect(_states_of(H, seeds)))
     found = Set(states)
-    elements = Dict{Tuple{Int,eltype(states)},mat_eltype(op)}()
+    elements = Dict{Tuple{Int, eltype(states)}, mat_eltype(op)}()
     frontier = 1:length(states)
     while !isempty(frontier)
         empty!(elements)
@@ -683,7 +683,7 @@ function fragment(op, H::AbstractHilbertSpace, seeds)
         end
         frontier = (n + 1):length(states)
     end
-    return constrain_space(H, sort!(states; by=s -> state_index(s, H)))
+    return constrain_space(H, sort!(states; by = s -> state_index(s, H)))
 end
 # Amplitudes are summed over all terms before testing for zero, since terms can cancel.
 function _add_elements!(elements, term, states, H)
@@ -692,6 +692,7 @@ function _add_elements!(elements, term, states, H)
         newstate, amp = _apply_local_operators(term, state, H, precomp)
         iszero(amp) || (elements[(k, newstate)] = get(elements, (k, newstate), zero(amp)) + amp)
     end
+    return
 end
 
 @testitem "fragment" begin

@@ -43,7 +43,7 @@ ts = range(0, 20; length = 200)
 basis_vector(label) = (ψ = zeros(dim(H)); ψ[state_index(label, H)] = 1; ψ)
 function fidelity(label)
     c = V' * basis_vector(label)
-    [abs2(sum(abs2.(c) .* exp.(-im * E * t))) for t in ts]
+    return [abs2(sum(abs2.(c) .* exp.(-im * E * t))) for t in ts]
 end
 neel = "↑↓"^(N ÷ 2)
 plot(ts, fidelity(neel); label = "↑↓↑↓…", xlabel = "t", ylabel = "fidelity", size = (400, 250))
@@ -53,8 +53,10 @@ plot!(ts, fidelity("↓"^N); label = "↓↓↓↓…")
 # overlap much more with the Néel-like state than the other eigenstates do.
 
 overlap = abs2.(V' * basis_vector(neel))
-scatter(E, overlap; yscale = :log10, ylims = (1e-12, 1), label = false, ms = 2, xlabel = "E",
-    ylabel = "overlap with ↑↓↑↓…", size = (400, 250))
+scatter(
+    E, overlap; yscale = :log10, ylims = (1.0e-12, 1), label = false, ms = 2, xlabel = "E",
+    ylabel = "overlap with ↑↓↑↓…", size = (400, 250)
+)
 
 # ## Fragmentation from dipole conservation
 # The pair-hopping chain
