@@ -597,10 +597,10 @@ Either side can be an [`Axes`](@ref), one space per axis of `m`: `change_basis(m
 extracts the block of `m` with rows on `Hout` and columns on `Hin`, and `change_basis(blk, Axes(Hout, Hin) => H)`
 places it in a matrix on `H` that is zero elsewhere.
 
-With `alg = NoScalarIndexingAlg()`, a vector or matrix `m` can be a GPU array (see [`NoScalarIndexingAlg`](@ref)).
+A vector or matrix `m` can be a dense GPU array, for which `alg` defaults to [`NoScalarIndexingAlg`](@ref).
 """
 change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
-function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, alg = ScalarIndexingAlg(), kwargs...)
+function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, alg = default_indexing_alg(m), kwargs...)
     alg isa Union{ScalarIndexingAlg, NoScalarIndexingAlg} || throw(ArgumentError("`change_basis` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
     alg isa NoScalarIndexingAlg && m isa UniformScaling && throw(ArgumentError("`UniformScaling` is not supported with `alg = NoScalarIndexingAlg()`."))
     n = m isa UniformScaling ? 2 : ndims(m)
@@ -667,6 +667,8 @@ complement is not in `complement`. Unless `projection=true`, throws an `Argument
 has a nonzero element in the row or column of such a state. The map `partial_trace(H => Hsub)`
 does not check its input.
 
+`m` can be a dense GPU array, for which `alg` defaults to [`NoScalarIndexingAlg`](@ref).
+
 ```jldoctest
 julia> using FermionicHilbertSpaces; @fermions f;
 
@@ -711,15 +713,20 @@ Algorithm that avoids scalar indexing, which is what makes GPU arrays work: it u
 indexing, broadcasting and reductions, and returns an array of the input's kind. A pure state `ψ`
 is traced as `A * A'`, with `A` gathered from `ψ`, without forming `ψ * ψ'`. It is not specific to
 the partial trace; the operations that accept it as `alg` are [`partial_trace`](@ref),
-[`partial_trace!`](@ref), [`embed`](@ref), [`change_basis`](@ref) and `reshape`.
+[`partial_trace!`](@ref), [`embed`](@ref), [`change_basis`](@ref) and `reshape`, and it is their default
+for dense GPU arrays. GPU sparse arrays are not supported.
 """
 struct NoScalarIndexingAlg end
 """
     ScalarIndexingAlg()
 
-The element-wise code path of an operation, and the default `alg` of [`embed`](@ref), [`change_basis`](@ref) and `reshape`.
+The element-wise code path of an operation, and the default `alg` of [`embed`](@ref), [`change_basis`](@ref) and `reshape`
+for inputs other than GPU arrays.
 """
 struct ScalarIndexingAlg end
+
+# GPUArraysExt adds the methods for GPU arrays
+default_indexing_alg(m) = ScalarIndexingAlg()
 
 _effective_dim(m::AbstractMatrix, H) = length(m)
 _effective_dim(m::AbstractSparseMatrix, H) = nnz(m)
@@ -870,7 +877,7 @@ In-place partial trace of `m` (an operator on `H` or a pure state) from `H` to `
 to `mout`, which must have size `(dim(Hsub), dim(Hsub))`. See [`partial_trace`](@ref).
 
 `alg` is `SubsystemPartialTraceAlg()`, `FullPartialTraceAlg()` or [`NoScalarIndexingAlg()`](@ref NoScalarIndexingAlg).
-By default it is one of the first two, chosen from the dimensions and sparsity of `m`.
+By default it is one of the first two, chosen from the dimensions and sparsity of `m`, or the last for a dense GPU array `m`.
 """
 function partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(v, Hsub, H, complement), kwargs...)
     alg isa NoScalarIndexingAlg || return partial_trace!(mout, vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)

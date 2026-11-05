@@ -1,7 +1,7 @@
 # Runs on JLArrays, a CPU implementation of the GPU array interface that disallows scalar indexing.
 # Not part of the main suite: `julia --project=test/gpu test/gpu/runtests.jl`.
 using FermionicHilbertSpaces, JLArrays, Test
-using FermionicHilbertSpaces: FixedNumberFockState, NoScalarIndexingAlg, change_basis
+using FermionicHilbertSpaces: FixedNumberFockState, NoScalarIndexingAlg, change_basis, partial_trace!
 JLArrays.allowscalar(false)
 
 @testset "partial_trace of GPU arrays" begin
@@ -67,6 +67,36 @@ end
         @test Array(reshape(T, (H1, H2) => H; alg)) == x
     end
     @test_throws ArgumentError reshape(JLArray(rand(dim(H1), dim(H2))), (H1, H2) => H; alg)
+end
+
+@testset "GPU arrays select NoScalarIndexingAlg by default" begin
+    @fermions f
+    H, HA, HB = hilbert_space(f, 1:4), hilbert_space(f, [1, 3]), hilbert_space(f, [2, 4])
+    Hsec = hilbert_space(f, 1:4, NumberConservation(2))
+    m, v, mA = rand(ComplexF64, dim(H), dim(H)), rand(ComplexF64, dim(H)), rand(ComplexF64, dim(HA), dim(HA))
+    msec = rand(ComplexF64, dim(Hsec), dim(Hsec))
+    @test Array(partial_trace(JLArray(m), H => HA)) ≈ partial_trace(m, H => HA)
+    @test Array(partial_trace(JLArray(m)', H => HA)) ≈ partial_trace(m', H => HA)
+    @test Array(partial_trace(JLArray(v), H => HA)) ≈ partial_trace(v, H => HA)
+    @test Array(partial_trace(JLArray(m), H => Hsec; projection = true)) == partial_trace(m, H => Hsec; projection = true)
+    @test Array(partial_trace!(JLArray(zeros(ComplexF64, 4, 4)), JLArray(m), H => HA)) ≈ partial_trace(m, H => HA)
+    @test Array(embed(JLArray(mA), HA => H)) ≈ embed(mA, HA => H)
+    @test Array(reshape(JLArray(v), H => (HA, HB))) == reshape(v, H => (HA, HB))
+    @test Array(change_basis(JLArray(msec), Hsec => H)) == change_basis(msec, Hsec => H)
+end
+
+@testset "GPU sparse arrays are rejected" begin
+    @fermions f
+    H, HA, HB = hilbert_space(f, 1:4), hilbert_space(f, [1, 3]), hilbert_space(f, [2, 4])
+    S = representation(f[1]' * f[2] + hc, H, JLSparseMatrixCSC)
+    for kwargs in ((;), (; alg = NoScalarIndexingAlg()))
+        @test_throws ArgumentError partial_trace(S, H => HA; kwargs...)
+        @test_throws ArgumentError partial_trace(S', H => HA; kwargs...)
+        @test_throws ArgumentError partial_trace!(JLArray(zeros(4, 4)), S, H => HA; kwargs...)
+        @test_throws ArgumentError embed(S, H => H; kwargs...)
+        @test_throws ArgumentError change_basis(S, H => H; kwargs...)
+        @test_throws ArgumentError reshape(S, H => (HA, HB), H => (HA, HB); kwargs...)
+    end
 end
 
 @testset "representation as GPU arrays" begin

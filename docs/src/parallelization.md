@@ -50,3 +50,6 @@ products of groups without an integer internal representation, `Axes(Hout, Hin)`
 `ArgumentError`. Sparse formats index with their index type (`Int32` by default) and throw an `ArgumentError` when the
 matrix may need more entries than it can count. Operator coefficients keep their type on the GPU, usually `Float64`, and
 boson and spin matrix elements are computed in `Float64`, which Apple GPUs do not support.
+
+`partial_trace`, `embed`, `reshape` and `change_basis` of a dense GPU array also run on the GPU. GPU sparse arrays throw
+an `ArgumentError` there.

@@ -1,14 +1,16 @@
 module GPUArraysExt
 
 using Adapt: Adapt, adapt
-using GPUArrays: GPUArrays, @allowscalar, AbstractGPUArray, AbstractGPUSparseMatrixCSC, AbstractGPUSparseMatrixCSR
+using GPUArrays: GPUArrays, @allowscalar, AbstractGPUArray, AbstractGPUSparseArray, AbstractGPUSparseMatrixCSC, AbstractGPUSparseMatrixCSR, AnyGPUArray
 using KernelAbstractions: @index, @kernel, allocate, get_backend, synchronize
 using NonCommutativeProducts: NCMul
 using SparseArrays: SparseArrays, SparseMatrixCSC
 import FermionicHilbertSpaces: _canonicalize_repr, _convert_repr_eltype, _repr_eltype, _skip_outside, _terms_matrix,
-    push_inds_amps!, state_position
-using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, BosonSym, ConstrainedSpace, DeviceFermionicSpace,
-    DeviceProductSpace, DeviceSpinSym, FermionSym, FermionicSpace, IndexTable, ProductOperator, ProductSpace, RootIndexDict,
+    change_basis, default_indexing_alg, default_partial_trace_alg, embed, partial_trace, partial_trace!, push_inds_amps!,
+    state_position
+using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, Axes, BosonSym, ConstrainedSpace, DeviceFermionicSpace,
+    DeviceProductSpace, DeviceSpinSym, FermionSym, FermionicSpace, IndexTable, NoScalarIndexingAlg, ProductOperator, ProductSpace,
+    RootIndexDict, _SpaceMapping,
     SpinSpace, SpinSym, TruncatedBosonicHilbertSpace, TupleConcretizer, __concretize, _spin_shift,
     chunked_operator_indices_and_amplitudes_generic!, dim, mat_eltype, nbr_of_modes, precomputation_before_operator_application,
     state_index, subspace_index, subspace_states
@@ -46,6 +48,21 @@ function _convert_repr_eltype(M, r::GPURepr{<:Any, F}) where {F}
 end
 # Takes precedence over the method for `AbstractSparseArray` types, which converts the result with `sparse`
 _convert_repr_eltype(M, F::Type{<:GPUSparseMatrix}) = _convert_repr_eltype(M, _canonicalize_repr(F))
+
+## Algorithm selection
+
+default_indexing_alg(::AnyGPUArray) = NoScalarIndexingAlg()
+default_partial_trace_alg(::AnyGPUArray, Hsub, H, Hcomp) = NoScalarIndexingAlg()
+default_partial_trace_alg(::AnyGPUArray, Hsub, H, ::Nothing) = NoScalarIndexingAlg()
+
+# Neither algorithm can index device sparse storage, so these reject any `alg`.
+const GPUSparseInput = Union{AbstractGPUSparseArray, Adapt.WrappedArray{<:Any, <:Any, AbstractGPUSparseArray, AbstractGPUSparseArray}}
+_throw_sparse(f) = throw(ArgumentError("`$f` does not support GPU sparse arrays. Convert the input to a dense GPU array."))
+partial_trace(::GPUSparseInput, ::AbstractHilbertSpace, ::AbstractHilbertSpace; _...) = _throw_sparse(partial_trace)
+partial_trace!(_, ::GPUSparseInput, ::AbstractHilbertSpace, ::AbstractHilbertSpace; _...) = _throw_sparse(partial_trace!)
+embed(::GPUSparseInput, ::AbstractHilbertSpace, ::AbstractHilbertSpace; _...) = _throw_sparse(embed)
+change_basis(::GPUSparseInput, ::Union{AbstractHilbertSpace, Axes}, ::Union{AbstractHilbertSpace, Axes}; _...) = _throw_sparse(change_basis)
+Base.reshape(::GPUSparseInput, ::_SpaceMapping, ::_SpaceMapping...; _...) = _throw_sparse(reshape)
 
 ## Device copies of spaces and operators
 
