@@ -37,6 +37,18 @@ function _known_length(precomps, incols)
     return total
 end
 
+# An upper bound on the stored entries of the `N` columns of a matrix, `typemax(Int)` if a term can't tell in advance
+_total_nentries(term, N) = nothing
+function _max_stored_entries(precomps, coeff, N)
+    total = iszero(coeff) ? 0 : N
+    for (term, _) in precomps
+        n = _total_nentries(term, N)
+        isnothing(n) && return typemax(Int)
+        total += n
+    end
+    return total
+end
+
 # Replaces the entries of `block` by those of the columns `incols` of the matrix, stored at the column indices
 # `incols .- offset`. `capacity` is the number of entries reserved in `block`; returns the new one.
 function _collect_block!(block, capacity, precomps, coeff, space, incols, offset; kwargs...)
@@ -83,6 +95,7 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
     rowval = Int[]
     nzval = T[]
     capacity = 0
+    maxentries = M == N ? _max_stored_entries(precomps, coeff, N) : typemax(Int)
     sortedrows = Int[]
     sortedamps = T[]
     mergebuffers = (zeros(Int32, N), Int[], T[])
@@ -117,7 +130,7 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
         end
         total = length(rowval) + n
         if total > capacity
-            capacity = _extrapolated_length(total, c0 + nb, M - c0 - nb)
+            capacity = min(_extrapolated_length(total, c0 + nb, M - c0 - nb), maxentries)
             rowval = _with_capacity(rowval, capacity)
             nzval = _with_capacity(nzval, capacity)
         end

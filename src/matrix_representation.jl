@@ -381,6 +381,7 @@ function chunked_operator_indices_and_amplitudes_generic!(accumulator, term::Kro
 end
 _nentries(term::KronTerm, incols) =
     _foldl_columns((n, _, digits) -> n + prod(map(((A, _), c) -> length(nzrange(A, c + 1)), term.factors, digits)), 0, term.factors, incols)
+_total_nentries(term::KronTerm, N) = prod(map(((A, _),) -> nnz(A), term.factors)) * div(N, prod(map(((A, _),) -> size(A, 2), term.factors)))
 # `acc = f(acc, j, digits)` for the columns `j` in `incols`, where column `j` of the term draws on column
 # `digits[k] + 1` of factor k. The digits are counted up instead of divided out of `j`, as divisions dominate the loop.
 function _foldl_columns(f, acc, factors, incols)
