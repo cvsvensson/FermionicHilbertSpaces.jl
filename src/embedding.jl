@@ -98,6 +98,23 @@ function _gather_embed(m::AbstractMatrix, P, B, S)
     return reshape(_gather_reduce(WW, (2, 4), m, LL), D, D)
 end
 
+# The `map` of an `EmbedMap` with `alg = NoScalarIndexingAlg()`, see `_PartialTraceGather`.
+struct _EmbedGather{TP, TB, TS}
+    P::TP
+    B::TB
+    S::TS
+end
+function _embed_gather(Hsub, H, complement; phase_factors = true)
+    splits, nb = _gather_splits(H, Hsub, complement, phase_factors)
+    return _EmbedGather(Base.front(_embed_gather_table(splits, dim(Hsub), nb))...)
+end
+Base.:*(g::_EmbedGather, v::AbstractVector) = vec(_gather_embed(_square(v), g.P, g.B, g.S))
+
+const _GatherSuperop = Union{_PartialTraceGather, _EmbedGather}
+LinearAlgebra.mul!(w::AbstractVector, g::_GatherSuperop, v::AbstractVector) = copyto!(w, g * v)
+_gather_superop_error() = throw(ArgumentError("A map with `alg = NoScalarIndexingAlg()` has no `sparse` form or adjoint."))
+_adjoint_superop(::_GatherSuperop) = _gather_superop_error()
+
 struct EmbedMap{HS,H,C,K,M}
     Hsub::HS
     H::H
@@ -108,8 +125,10 @@ end
 
 # The map is the compression onto `H` and checks nothing, so `projection` has no effect.
 function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(Hsub, H, complement), projection = false, kwargs...)
-    alg isa AbstractPartialTraceAlg || throw(ArgumentError("The map `embed(Hsub => H)` supports `alg = SubsystemPartialTraceAlg()` or `FullPartialTraceAlg()`, got $alg."))
-    map = if isnothing(complement)
+    alg isa Union{AbstractPartialTraceAlg, NoScalarIndexingAlg} || throw(ArgumentError("The map `embed(Hsub => H)` supports `alg = SubsystemPartialTraceAlg()`, `FullPartialTraceAlg()` or `NoScalarIndexingAlg()`, got $alg."))
+    map = if alg isa NoScalarIndexingAlg
+        _embed_gather(Hsub, H, complement; kwargs...)
+    elseif isnothing(complement)
         basis_transformation_map(Hsub, H; projection = true, kwargs...)
     else
         _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, kwargs...))
@@ -125,6 +144,8 @@ function (op::EmbedMap)(m::SparseMatrixCSC)
     size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
     _embed_sparse_matrix(op.map, m, dim(op.H))
 end
+
+_embed_sparse_matrix(g::_EmbedGather, m, D) = sparse(reshape(g * vec(Matrix(m)), D, D))
 
 # map * vec(m) as a sparse D × D matrix, avoiding the dense length-D^2 vector that map * m[:] would allocate
 function _embed_sparse_matrix(map::SparseMatrixCSC, m::SparseMatrixCSC, D)
@@ -170,6 +191,7 @@ function (op::EmbedMap)(m::UniformScaling)
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(mfull), dim(op.H))
 end
 SparseArrays.sparse(op::EmbedMap) = op.map
+SparseArrays.sparse(::Union{PartialTraceMap{<:Any, <:Any, <:Any, <:Any, <:_GatherSuperop}, EmbedMap{<:Any, <:Any, <:Any, <:Any, <:_GatherSuperop}}) = _gather_superop_error()
 Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
 Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
 Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
@@ -183,6 +205,8 @@ Create a callable embedding operation from `Hsub` into `H`.
 The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 It is the compression onto `H` and, unlike [`embed`](@ref), does not check its input.
+With `alg = NoScalarIndexingAlg()`, it stores gather tables instead, so it can be applied to GPU arrays
+but has no `sparse` or adjoint; `Adapt.adapt(CuArray, op)` moves the tables to the device.
 """
 embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwargs...)
 
@@ -246,8 +270,6 @@ end
     @test_throws ArgumentError embed(rand(4, 4), Hf => Hc; alg)
     @test_throws ArgumentError embed(rand(4), Hf => Hc; alg)
     @test_throws ArgumentError embed(rand(4, 4), Hf => hilbert_space(f, 1:3); alg = :other)
-    @test_throws ArgumentError embed(Hf => hilbert_space(f, 1:3); alg)
-    @test_throws ArgumentError embed(sector(-1, Hpar) => Hpar; alg)
 end
 
 @testitem "Embedding a sector vector" begin
