@@ -704,7 +704,7 @@ struct GatherAlg <: AbstractPartialTraceAlg end
 """
     GenericAlg()
 
-The standard element-wise code path of an operation, and the default `alg` of [`embed`](@ref) and `reshape`.
+The standard element-wise code path of an operation, and the default `alg` of [`embed`](@ref), `reshape` and [`partial_transpose`](@ref).
 """
 struct GenericAlg end
 
