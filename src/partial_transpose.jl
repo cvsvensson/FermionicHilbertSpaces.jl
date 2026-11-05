@@ -116,8 +116,10 @@ function _factorized_partial_transpose!(mout, m, H, Hsub, complement, Hout, mapp
     for (J, (r, w)) in enumerate(zip(rin, win))
         iszero(r) || (q[r] = J; wq[r] = w)
     end
-    τ = [phase_factors ? partial_trace_phase_factor(a, a′, Hsub) * partial_trace_phase_factor(a′, a, Hsub) * partial_transpose_phase_factor(a, a′, Hsub) : 1
-         for a in basisstates(Hsub), a′ in basisstates(Hsub)]
+    τ = [
+        phase_factors ? partial_trace_phase_factor(a, a′, Hsub) * partial_trace_phase_factor(a′, a, Hsub) * partial_transpose_phase_factor(a, a′, Hsub) : 1
+            for a in basisstates(Hsub), a′ in basisstates(Hsub)
+    ]
     q, wq, τ = _adapt_like(m, q), _adapt_like(m, wq), _adapt_like(m, τ)
     W = reshape(wq, dA, dB, 1, 1) .* reshape(conj.(wq), 1, 1, dA, dB) .* reshape(τ, dA, 1, dA, 1)
     P = reshape(permutedims(_masked_mul.(W, reshape(m[q, q], dA, dB, dA, dB)), (3, 2, 1, 4)), dA * dB, dA * dB)
@@ -492,9 +494,11 @@ end
     Hn = hilbert_space(f, 1:4, NumberConservation(2))
     Hp = hilbert_space(f, 1:4, ParityConservation())
     Hfs = tensor_product(hilbert_space(f, 1:3), hilbert_space(s, 1 // 2), hilbert_space(b, 2))
-    cases = ((Hn => hilbert_space(f, 1:4), subregion(hilbert_space(f, [1, 3]), Hn)),
+    cases = (
+        (Hn => hilbert_space(f, 1:4), subregion(hilbert_space(f, [1, 3]), Hn)),
         (Hp => hilbert_space(f, 1:4), subregion(hilbert_space(f, [2, 3]), Hp)),
-        (Hfs => Hfs, tensor_product(hilbert_space(f, [1, 3]), hilbert_space(s, 1 // 2))))
+        (Hfs => Hfs, tensor_product(hilbert_space(f, [1, 3]), hilbert_space(s, 1 // 2))),
+    )
     for (Hs, HA) in cases, phase_factors in (true, false)
         m = rand(ComplexF64, dim(first(Hs)), dim(first(Hs)))
         @test partial_transpose(m, Hs, HA; phase_factors, alg) ≈ partial_transpose(m, Hs, HA; phase_factors)
