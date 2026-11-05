@@ -25,15 +25,20 @@ function FermionicSpace(a::SymbolicFermionBasis, modes::AbstractVector{F}) where
     end
     return FermionicSpace(modes, agroup)
 end
+# The copy of a `FermionicSpace` that GPU kernels use: only its number of modes
+struct DeviceFermionicSpace{F} <: AbstractHilbertSpace{F}
+    nbr_of_modes::Int
+end
+const _FockSpace{F} = Union{FermionicSpace{F}, DeviceFermionicSpace{F}}
 maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
 Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
 basisstates(H::FermionicSpace{FockNumber{I}}) where I = BasisStates(H, Iterators.map(FockNumber{I}, UnitRange{I}(0, dim(H) - 1)))
-Base.@propagate_inbounds function basisstate(ind::Integer, H::FermionicSpace{F}) where F
+Base.@propagate_inbounds function basisstate(ind::Integer, H::_FockSpace{F}) where {F}
     @boundscheck (ind >= 1 && iszero((ind - 1) >> nbr_of_modes(H))) || throw(BoundsError(H, ind))
     (F ∘ FockNumber)(ind - 1)
 end
-function _state_index(state::FockNumber, H::FermionicSpace{FockNumber{I}}) where I
+function _state_index(state::FockNumber, H::_FockSpace{FockNumber{I}}) where {I}
     T = fock_index_type(I)
     iszero(state.f >> nbr_of_modes(H)) ? T(state.f) + one(T) : zero(T)
 end
@@ -51,6 +56,7 @@ function atomic_factors(H::FermionicSpace)
 end
 atomic_factor(H::FermionicSpace, i) = length(H.modes) < 2 ? H : FermionicSpace([H.modes[i]], H.group, statetype(H))
 nbr_of_modes(H::FermionicSpace) = length(H.modes)
+nbr_of_modes(H::DeviceFermionicSpace) = H.nbr_of_modes
 nbr_of_modes(H::AbstractHilbertSpace) = nbr_of_modes(parent(H))
 group_id(H::FermionicSpace) = H.group
 # The atoms of a fermionic space are its single modes, named by the (normalized) mode itself,
@@ -163,7 +169,7 @@ function _precomputation_before_operator_application(op::FermionSym, space::Abst
 end
 
 
-function apply_local_operators(op::NCMul{<:Any,<:FermionSym}, state::FockNumber{I}, space::FermionicSpace, bitmasks; transpose) where I
+function apply_local_operators(op::NCMul{<:Any, <:FermionSym}, state::FockNumber{I}, space::_FockSpace, bitmasks; transpose) where {I}
     factors = op.factors
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1

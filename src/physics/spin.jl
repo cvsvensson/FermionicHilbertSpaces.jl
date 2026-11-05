@@ -306,6 +306,19 @@ function SpinSym(op, basis::B, exponent::Integer=1) where {B}
         SpinSym{B}(canonical, basis, Int(exponent))
     end
 end
+# The copy of a `SpinSym` that GPU kernels use, with the operator as the change of `m` per power: 1 for `:+`, -1 for `:-`
+# and 0 for `:z`
+struct DeviceSpinSym
+    shift::Int
+    exponent::Int
+end
+function _spin_shift(op::SpinSym)
+    op.op === :+ && return 1
+    op.op === :- && return -1
+    op.op === :z && return 0
+    throw(ArgumentError("Invalid spin operator symbol, got `$(op.op)`."))
+end
+_spin_shift(op::DeviceSpinSym) = op.shift
 const _spin_x_aliases = (:x, :X, 1)
 const _spin_y_aliases = (:y, :Y, 2)
 const _spin_z_aliases = (:z, :Z, 3)
@@ -450,60 +463,36 @@ end
 
 Apply a single spin operator to a spin state. Returns (newstate, amplitude) where amplitude is 0 if the operation is not allowed, and a nonzero value otherwise.
 """
-function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace, precomp)
+function apply_local_operator(op::Union{SpinSym, DeviceSpinSym}, state::SpinState, space::SpinSpace, precomp, ::Type{T} = Float64) where {T}
     J = space.spin
     m = state.m
-    newstate = state
-    T = Float64
-    amplitude = one(T)
-
-    if op.op == :z
-        m = newstate.m
-        # S_z |m⟩ = m |m⟩
-        amplitude = T(_fast_spin_z_exponent(m, op.exponent))
-        return (state, amplitude)
-    elseif op.op == :+
-        # S_+ |m⟩ = √(J(J+1) - m(m+1)) |m+1⟩
-        m + op.exponent > J && return (state, zero(T))
-        amplitude = T(_fast_spin_prefactor(J, m, +1, op.exponent))
-        newstate = SpinState(m + op.exponent)
-        return (newstate, amplitude)
-    elseif op.op == :-
-        m - op.exponent < -J && return (state, zero(T))
-        # S_- |m⟩ = √(J(J+1) - m(m-1)) |m-1⟩
-        amplitude = T(_fast_spin_prefactor(J, m, -1, op.exponent))
-        newstate = SpinState(m - op.exponent)
-        return (newstate, amplitude)
-    else
-        throw(ArgumentError("Invalid spin operator symbol, got `$(op.op)`."))
-    end
+    shift = _spin_shift(op)
+    # S_z |m⟩ = m |m⟩
+    iszero(shift) && return (state, _fast_spin_z_exponent(T, m, op.exponent))
+    # S_± |m⟩ = √(J(J+1) - m(m±1)) |m±1⟩
+    newm = m + shift * op.exponent
+    abs(newm) > J && return (state, zero(T))
+    return (SpinState(newm), _fast_spin_prefactor(T, J, m, shift, op.exponent))
 end
 
-function _fast_spin_z_exponent(m, exp::Int)
-    exp == 0 && return 1.0
-    m == 1 && return 1.0
-    m == -1 && return isodd(exp) ? -1.0 : 1.0
-    x = m
+function _fast_spin_z_exponent(::Type{T}, m::HalfInteger, exp::Int) where {T}
+    exp == 0 && return one(T)
+    m == 1 && return one(T)
+    m == -1 && return isodd(exp) ? -one(T) : one(T)
+    x = T(twice(m)) / 2
+    y = x
     for _ in Base.OneTo(exp - 1)
-        x *= m
+        y *= x
     end
-    return x
+    return y
 end
-function _fast_spin_prefactor(J, m, sign::Int, exp::Int)
-    x = 1.0
-    for _dm in Base.OneTo(exp)
-        dm = _dm - 1
-        x *= sqrt(J * (J + 1) - (m + dm * sign) * (m + _dm * sign))
-    end
-    return x
-end
-function _fast_spin_prefactor(J::HalfInteger, m::HalfInteger, sign::Int, exp::Int)
-    x = one(Float64)
+function _fast_spin_prefactor(::Type{T}, J::HalfInteger, m::HalfInteger, sign::Int, exp::Int) where {T}
+    x = one(T)
     J2 = twice(J)
     m2 = twice(m)
     for _dm in Base.OneTo(exp)
         dm = _dm - 1
-        x *= sqrt(J2 * (J2 + 2) - (m2 + dm * 2sign) * (m2 + _dm * 2sign)) * 0.5
+        x *= sqrt(T(J2 * (J2 + 2) - (m2 + dm * 2sign) * (m2 + _dm * 2sign))) / 2
     end
     return x
 end

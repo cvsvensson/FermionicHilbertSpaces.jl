@@ -16,7 +16,7 @@ function majorana_map(H::MajoranaHilbertSpace)
         return γ[a], γ[b]
     end
     maj_to_ferm = function (majorana::MajoranaSym)
-        pos = _find_position(majorana, H)
+        pos = mode_position(majorana, H)
         pos == 0 && throw(ArgumentError("Majorana $majorana not found in the Hilbert space."))
         isfirst = isodd(pos)
         paired_pos = isfirst ? pos + 1 : pos - 1
