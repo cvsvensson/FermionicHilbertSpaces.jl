@@ -707,9 +707,15 @@ struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
     GatherAlg()
 
 Algorithm built from array indexing, broadcasting and reductions only, so that it runs on GPU
-arrays. It is an option for the `alg` keyword of [`partial_trace`](@ref), [`partial_trace!`](@ref) and [`change_basis`](@ref).
+arrays. It is an option for the `alg` keyword of [`partial_trace`](@ref), [`partial_trace!`](@ref), [`embed`](@ref) and [`change_basis`](@ref).
 """
 struct GatherAlg <: AbstractPartialTraceAlg end
+"""
+    GenericAlg()
+
+The standard element-wise code path of an operation, and the default `alg` of [`embed`](@ref).
+"""
+struct GenericAlg end
 
 _effective_dim(m::AbstractMatrix, H) = length(m)
 _effective_dim(m::AbstractSparseMatrix, H) = nnz(m)

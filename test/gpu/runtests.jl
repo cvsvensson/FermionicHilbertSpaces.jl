@@ -32,3 +32,19 @@ end
     @test Array(partial_trace(JLArray(ρ), H => Hsec; alg, projection = true)) == partial_trace(ρ, H => Hsec; projection = true)
     @test_throws ArgumentError change_basis(JLArray(ρ), H => Hsec; alg)
 end
+
+@testset "embed of GPU arrays" begin
+    alg = GatherAlg()
+    @fermions f
+    Hcons = hilbert_space(f, 1:4, NumberConservation(2))
+    for (Hsub, H) in ((hilbert_space(f, [1, 3]), hilbert_space(f, 1:4)), (subregion(hilbert_space(f, 1:2), Hcons), Hcons))
+        m = rand(ComplexF64, dim(Hsub), dim(Hsub))
+        out = embed(JLArray(m), Hsub => H; alg, projection = true)
+        @test out isa JLArray
+        @test Array(out) ≈ embed(m, Hsub => H; projection = true)
+    end
+    Hpar = hilbert_space(f, 1:4, ParityConservation())
+    v = rand(ComplexF64, 8)
+    @test Array(embed(JLArray(v), sector(-1, Hpar) => Hpar; alg)) ≈ embed(v, sector(-1, Hpar) => Hpar)
+    @test_throws ArgumentError embed(JLArray(rand(4, 4)), hilbert_space(f, 1:2) => hilbert_space(f, 1:2, NumberConservation(0:1)); alg)
+end
