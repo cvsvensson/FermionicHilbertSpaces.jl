@@ -183,7 +183,7 @@ Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a
 Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.dimension, h))
 basisstates(H::TruncatedBosonicHilbertSpace) = BasisStates(H, Iterators.map(BosonicState, 0:(dim(H)-1)))
 Base.@propagate_inbounds function basisstate(n::Integer, H::TruncatedBosonicHilbertSpace)
-    @boundscheck 1 <= n <= dim(H) || Base.throw_boundserror(H, n)
+    @boundscheck 1 <= n <= dim(H) || throw(BoundsError(H, n))
     BosonicState(n - 1)
 end
 dim(H::TruncatedBosonicHilbertSpace) = H.dimension
