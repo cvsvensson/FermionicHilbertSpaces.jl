@@ -99,7 +99,6 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     end
     return mout
 end
-_is_full_fock_partial_transpose(H, Hout, mapper) = false
 
 """
     _fock_partial_transpose!(mout, m, N, A; phase_factors=true)
@@ -202,8 +201,7 @@ function _partial_transpose(ψ::AbstractVector, H, Hsub, Hout;
         complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = default_alg(partial_transpose, ψ)
     )
     if length(ψ) == dim(H)
-        _check_partial_transpose_alg(alg)
-        alg isa FactorizedPartialTransposeAlg && return _partial_transpose(ψ * ψ', H, Hsub, Hout; complement, phase_factors, projection, alg)
+        alg isa GenericAlg || return _partial_transpose(ψ * ψ', H, Hsub, Hout; complement, phase_factors, projection, alg)
         mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
         mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
         T = promote_type(eltype(ψ), partial_transpose_phase_factor_eltype(H))
