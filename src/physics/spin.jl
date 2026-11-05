@@ -463,7 +463,7 @@ end
 
 Apply a single spin operator to a spin state. Returns (newstate, amplitude) where amplitude is 0 if the operation is not allowed, and a nonzero value otherwise.
 """
-function apply_local_operator(op::Union{SpinSym, DeviceSpinSym}, state::SpinState, space::SpinSpace, precomp, ::Type{T}=Float64) where {T}
+function apply_local_operator(op::Union{SpinSym, DeviceSpinSym}, state::SpinState, space::SpinSpace, precomp, ::Type{T} = Float64) where {T}
     J = space.spin
     m = state.m
     shift = _spin_shift(op)

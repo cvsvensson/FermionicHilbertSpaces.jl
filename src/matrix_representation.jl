@@ -79,12 +79,12 @@ struct StateChunking{S} <: AbstractChunkingStrategy
 end
 
 function mat_eltype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S,F}
-    _term_eltype(C, S)
+    return _term_eltype(C, S)
 end
 function mat_eltype(::NCMul{C,S,F}) where {C,S,F}
-    _term_eltype(C, S)
+    return _term_eltype(C, S)
 end
-mat_eltype(::Type{NCMul{C,S,F}}) where {C,S,F} = _term_eltype(C, S)
+mat_eltype(::Type{NCMul{C, S, F}}) where {C, S, F} = _term_eltype(C, S)
 mat_eltype(::S) where {S} = mat_eltype(S)
 """
     mat_eltype(::Type{O})

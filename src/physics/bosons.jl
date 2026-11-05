@@ -210,7 +210,7 @@ particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 maximum_particles(H::TruncatedBosonicHilbertSpace) = dim(H) - 1
 
-function apply_local_operator(factor::BosonSym, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp, ::Type{T}=Float64) where {T}
+function apply_local_operator(factor::BosonSym, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp, ::Type{T} = Float64) where {T}
     n = state.n
     k = abs(factor.exp)
     amplitude = one(T)
