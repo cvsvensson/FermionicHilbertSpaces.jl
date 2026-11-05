@@ -16,6 +16,12 @@ JLArrays.allowscalar(false)
         end
     end
     @test_throws ArgumentError partial_trace(JLArray(rand(dim(Hcons), dim(Hcons))), Hcons => hilbert_space(f, 1:2, NumberConservation(1)); alg)
+
+    # States 1 and 2 share the entry (K, b) = (1, 1), with weights 1 and -1.
+    ψ = rand(ComplexF64, 3)
+    A = [ψ[1] - ψ[2], ψ[3]]
+    splits = [((1, 1, 1),), ((1, 1, -1),), ((2, 1, 1),)]
+    @test Array(FermionicHilbertSpaces._gather_partial_trace(JLArray(ψ), splits, 2, 1)) ≈ A * A'
 end
 
 @testset "embed of GPU arrays" begin

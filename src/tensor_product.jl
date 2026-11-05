@@ -538,7 +538,7 @@ _partial_trace_by_gather(::UniformScaling, H, Hsub, complement, mapper; kwargs..
 function _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection = false, phase_factors = true)
     splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
     projection || _check_covered(m, _covered_states(splits), _copied_support_on)
-    return _gather_partial_trace(m, _partial_trace_gather_table(splits, dim(Hsub), dim(complement))...)
+    return _gather_partial_trace(m, splits, dim(Hsub), dim(complement))
 end
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
@@ -975,7 +975,7 @@ function _partial_trace_gather_table(splits, dsub, nb)
         iszero(K) || (counts[K, b] += 1)
     end
     L = ones(Int, dsub, maximum(counts; init = 0), nb)
-    W = zeros(fieldtype(eltype(eltype(splits)), 3), size(L))
+    W = zeros(_split_weight_type(splits), size(L))
     fill!(counts, 0)
     for (J, ss) in pairs(splits), (K, b, s) in ss
         iszero(K) && continue
@@ -988,8 +988,9 @@ end
 
 _adapt_like(x, A) = copyto!(similar(x, eltype(A), size(A)), A)
 
-function _gather_partial_trace(m::AbstractMatrix, L, W)
-    dsub, R, nb = size(L)
+function _gather_partial_trace(m::AbstractMatrix, splits, dsub, nb)
+    L, W = _partial_trace_gather_table(splits, dsub, nb)
+    R = size(L, 2)
     L, W = _adapt_like(m, L), _adapt_like(m, W)
     row(A) = reshape(A, dsub, R, 1, 1, nb)
     col(A) = reshape(A, 1, 1, dsub, R, nb)
@@ -997,11 +998,34 @@ function _gather_partial_trace(m::AbstractMatrix, L, W)
     WW = row(W) .* conj.(col(W))
     return reshape(_gather_reduce(WW, (2, 4, 5), m, LL), dsub, dsub)
 end
-# ψψ† gives A * A' with A[K, b] = sum(W[K, :, b] .* ψ[L[K, :, b]])
-function _gather_partial_trace(ψ::AbstractVector, L, W)
-    A = reshape(_gather_reduce(_adapt_like(ψ, W), 2, ψ, _adapt_like(ψ, L)), size(L, 1), :)
+# ψψ† gives A * A' with A[K, b] the sum of s * ψ[J] over the splits (K, b, s) of the states J of `H`.
+function _gather_partial_trace(ψ::AbstractVector, splits, dsub, nb)
+    A = fill!(similar(ψ, promote_type(eltype(ψ), _split_weight_type(splits)), dsub, nb), 0)
+    for (I, J, W) in _partial_trace_gather_layers(splits, dsub, nb)
+        view(A, _adapt_like(ψ, I)) .+= _adapt_like(ψ, W) .* view(ψ, _adapt_like(ψ, J))
+    end
     return A * A'
 end
+# Index lists `(I, J, W)` with A[I[e]] += W[e] * ψ[J[e]]. They hold only the existing entries of A, which a
+# sector leaves mostly empty. Broadcasting to a repeated index in I would lose a term, so each repeat of an
+# entry goes in a further layer.
+function _partial_trace_gather_layers(splits, dsub, nb)
+    layer(n) = (sizehint!(Int[], n), sizehint!(Int[], n), sizehint!(_split_weight_type(splits)[], n))
+    layers = [layer(length(splits))]
+    counts = zeros(Int32, dsub, nb)
+    for (J, ss) in pairs(splits), (K, b, s) in ss
+        iszero(K) && continue
+        I = K + dsub * (b - 1)
+        r = counts[I] += 1
+        r > length(layers) && push!(layers, layer(0))
+        Is, Js, Ws = layers[r]
+        push!(Is, I)
+        push!(Js, J)
+        push!(Ws, s)
+    end
+    return layers
+end
+_split_weight_type(splits) = fieldtype(eltype(eltype(splits)), 3)
 
 """
     _transposed_superoperator(Is, Js, Vs, nout, nin)
