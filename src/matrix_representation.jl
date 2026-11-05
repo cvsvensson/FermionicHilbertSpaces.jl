@@ -494,8 +494,8 @@ function _matrix_representation_single_space(op::NCAdd, space, repr, chunking; k
     _terms_matrix(_repr_eltype(mat_eltype(op), repr), NCterms(op), op.coeff, space, repr, chunking; kwargs...)
 end
 
-# The matrix of `sum(terms) + coeff * I` with element type `T`. A new format needs only a method of this and of
-# `_canonicalize_repr`.
+# The matrix of `sum(terms) + coeff * I` with element type `T`. A new format defines a method of this and of
+# `_canonicalize_repr`, and of `_convert_repr_eltype` for operators that are a multiple of the identity.
 _terms_matrix(::Type{T}, terms, coeff, space, repr::EagerDenseRepr, ::NoChunking; kwargs...) where {T} = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 _terms_matrix(::Type{T}, terms, coeff, space::Axes, repr::EagerSparseRepr, ::NoChunking; kwargs...) where {T} = _accumulated_matrix(T, terms, coeff, space, repr; kwargs...)
 
