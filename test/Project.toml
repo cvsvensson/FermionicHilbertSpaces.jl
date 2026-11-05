@@ -18,3 +18,4 @@ TestItemRunner = "f8b46487-2199-4994-9208-9a1283c18c0a"
 [compat]
 Aqua = "0.8"
 ExplicitImports = "1.15"
+KernelAbstractions = "0.9"

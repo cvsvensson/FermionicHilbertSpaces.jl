@@ -6,12 +6,12 @@ using KernelAbstractions: @index, @kernel, allocate, get_backend
 using NonCommutativeProducts: NCMul
 using SparseArrays: SparseArrays, SparseMatrixCSC
 import FermionicHilbertSpaces: _canonicalize_repr, _convert_repr_eltype, _repr_eltype, _skip_outside, _terms_matrix,
-    push_inds_amps!, state_position
-using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, BosonSym, ConstrainedSpace, DeviceFermionicSpace,
+    push_inds_amps!, state_position, subspace_index, subspace_states
+using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, BosonSym, DeviceFermionicSpace,
     DeviceProductSpace, DeviceSpinSym, FermionSym, FermionicSpace, IndexTable, ProductOperator, ProductSpace, RootIndexDict,
     SpinSpace, SpinSym, TruncatedBosonicHilbertSpace, TupleConcretizer, __concretize, _spin_shift,
     chunked_operator_indices_and_amplitudes_generic!, dim, mat_eltype, nbr_of_modes, precomputation_before_operator_application,
-    state_index, subspace_index, subspace_states
+    state_index
 
 const GPUSparseMatrix = Union{AbstractGPUSparseMatrixCSC, AbstractGPUSparseMatrixCSR}
 
@@ -29,11 +29,7 @@ _index_type(::Type) = Int32
 _backend(A::Type{<:AbstractGPUArray}) = get_backend(adapt(A, Matrix{Bool}(undef, 0, 0)))
 
 _canonicalize_repr(F::Type{<:AbstractGPUArray}) = GPURepr{_format_eltype(F), F}(_backend(F))
-function _canonicalize_repr(F::Type{<:GPUSparseMatrix})
-    applicable(GPUArrays.dense_array_type, F) && applicable(F <: AbstractGPUSparseMatrixCSC ? GPUArrays.sparse_array_type : GPUArrays.csc_type, F) ||
-        throw(ArgumentError("`$F` does not implement the GPUArrays sparse interface (`dense_array_type` and `sparse_array_type` or `csc_type`) that `representation` builds it with."))
-    return GPURepr{_format_eltype(F), F}(_backend(GPUArrays.dense_array_type(F)))
-end
+_canonicalize_repr(F::Type{<:GPUSparseMatrix}) = GPURepr{_format_eltype(F), F}(_backend(GPUArrays.dense_array_type(F)))
 _repr_eltype(default, ::GPURepr{T}) where {T} = T === Missing ? default : T
 
 _csc_type(F::Type{<:AbstractGPUSparseMatrixCSC}) = GPUArrays.sparse_array_type(F)
@@ -53,23 +49,45 @@ _convert_repr_eltype(M, F::Type{<:GPUSparseMatrix}) = _convert_repr_eltype(M, _c
 
 ## Device copies of spaces and operators
 
+# The rules that map FHS types to their device copies apply only under these adaptors, so that a user's `adapt` of an
+# object holding FHS spaces or operators is unaffected. `DeviceAdaptor` adapts the arrays inside to `arrays`, a backend
+# or `DropArrays()`; `TermAdaptor` keeps them, so that a term holding arrays fails the isbits check.
+struct DeviceAdaptor{A}
+    arrays::A
+end
+struct TermAdaptor end
+const FHSAdaptor = Union{DeviceAdaptor, TermAdaptor}
+Adapt.adapt_storage(to::DeviceAdaptor, a::AbstractArray) = adapt(to.arrays, a)
+
 # Each keeps the fields that `basisstate`, `state_index` and the operator application read. Labels, bases, symbols and
 # mode lists only identify modes, which the precomputation has already resolved.
-Adapt.adapt_structure(to, f::FermionSym) = FermionSym(f.creation, nothing, nothing)
-Adapt.adapt_structure(to, b::BosonSym) = BosonSym{Nothing, Nothing, Nothing}(nothing, nothing, nothing, b.exp)
-Adapt.adapt_structure(to, s::SpinSym) = DeviceSpinSym(_spin_shift(s), s.exponent)
+Adapt.adapt_structure(::FHSAdaptor, f::FermionSym) = FermionSym(f.creation, nothing, nothing)
+Adapt.adapt_structure(::FHSAdaptor, b::BosonSym) = BosonSym{Nothing, Nothing, Nothing}(nothing, nothing, nothing, b.exp)
+Adapt.adapt_structure(::FHSAdaptor, s::SpinSym) = DeviceSpinSym(_spin_shift(s), s.exponent)
 
-Adapt.adapt_structure(to, H::FermionicSpace{F}) where {F} = DeviceFermionicSpace{F}(nbr_of_modes(H))
-Adapt.adapt_structure(to, H::TruncatedBosonicHilbertSpace) = TruncatedBosonicHilbertSpace(adapt(to, H.sym), H.dimension)
-Adapt.adapt_structure(to, H::SpinSpace{T}) where {T} = SpinSpace{T, Nothing}(H.spin, nothing)
-function Adapt.adapt_structure(to, H::ProductSpace{B}) where {B}
+Adapt.adapt_structure(::DeviceAdaptor, H::FermionicSpace{F}) where {F} = DeviceFermionicSpace{F}(nbr_of_modes(H))
+Adapt.adapt_structure(to::DeviceAdaptor, H::TruncatedBosonicHilbertSpace) = TruncatedBosonicHilbertSpace(adapt(to, H.sym), H.dimension)
+Adapt.adapt_structure(::DeviceAdaptor, H::SpinSpace{T}) where {T} = SpinSpace{T, Nothing}(H.spin, nothing)
+function Adapt.adapt_structure(to::DeviceAdaptor, H::ProductSpace{B}) where {B}
+    ismissing(H.fast_path) && throw(ArgumentError("Product spaces whose groups have no internal representation as integers are not supported on GPUs."))
     factors = adapt(to, H.factors)
     return DeviceProductSpace{B, typeof(factors), typeof(H.fast_path), typeof(H.lininds), typeof(H.cartinds)}(factors, H.fast_path, H.lininds, H.cartinds)
 end
-# `basisstate` and `state_index` of a subspace use only its parent, states and index
-Adapt.adapt_structure(to, H::AbstractSubspace) =
-    ConstrainedSpace(adapt(to, parent(H)), adapt(to, subspace_states(H)), adapt(to, _sorted_index(subspace_index(H))))
+Adapt.adapt_structure(to::DeviceAdaptor, H::AbstractSubspace{B}) where {B} =
+    DeviceSubspace{B}(adapt(to, parent(H)), adapt(to, subspace_states(H)), adapt(to, _sorted_index(subspace_index(H))))
 Adapt.@adapt_structure IndexTable
+
+# `basisstate` and `state_index` of a subspace use only its parent, states and index
+struct DeviceSubspace{B, P, S, I} <: AbstractSubspace{B, P}
+    parent::P
+    states::S
+    index::I
+end
+DeviceSubspace{B}(parent, states, index) where {B} = DeviceSubspace{B, typeof(parent), typeof(states), typeof(index)}(parent, states, index)
+Adapt.adapt_structure(to, H::DeviceSubspace{B}) where {B} = DeviceSubspace{B}(adapt(to, H.parent), adapt(to, H.states), adapt(to, H.index))
+Base.parent(H::DeviceSubspace) = H.parent
+subspace_states(H::DeviceSubspace) = H.states
+subspace_index(H::DeviceSubspace) = H.index
 
 # A subspace index that finds `key(state, parent)` by binary search in the sorted `keys`, for the `Dict` indices,
 # which have no device version
@@ -99,10 +117,9 @@ end
 
 # Terms reach the kernels as elements of a device array, so they cannot hold arrays. The group spaces of a
 # `ProductOperator` are only used for dispatch and sizes, so their arrays are replaced by `NoStorage`.
-struct TermAdaptor end
 Adapt.adapt_structure(to::TermAdaptor, x::NCMul) = NCMul(x.coeff, adapt(to, x.factors))
 Adapt.adapt_structure(to::TermAdaptor, x::ProductOperator{C}) where {C} =
-    ProductOperator{C}(adapt(to, x.ops), adapt(DropArrays(), x.spaces), Tuple(x.inds))
+    ProductOperator{C}(adapt(to, x.ops), adapt(DeviceAdaptor(DropArrays()), x.spaces), Tuple(x.inds))
 struct DropArrays end
 Adapt.adapt_storage(::DropArrays, a::DenseArray) = NoStorage{eltype(a), ndims(a)}(size(a))
 struct NoStorage{T, N} <: AbstractArray{T, N}
@@ -130,10 +147,11 @@ function _nonbits_field(x, path)
         isdefined(x, name) || continue
         field = getfield(x, name)
         isbits(field) && continue
-        field isa Tuple || parentmodule(typeof(field)) ∉ (Base, Core) || return "`$(path[2:end]).$name::$(typeof(field))`"
-        return _nonbits_field(field, "$path.$name")
+        fieldpath = isempty(path) ? string(name) : "$path.$name"
+        field isa Tuple || parentmodule(typeof(field)) ∉ (Base, Core) || return "`$fieldpath::$(typeof(field))`"
+        return _nonbits_field(field, fieldpath)
     end
-    return "`$(isempty(path) ? "the value" : path[2:end])::$(typeof(x))`"
+    return "`$(isempty(path) ? "the value" : path)::$(typeof(x))`"
 end
 
 ## Kernels
@@ -225,13 +243,13 @@ function _terms_matrix(::Type{T}, terms, coeff, H::AbstractHilbertSpace, r::GPUR
     T <: Real && !(mapreduce(mat_eltype, promote_type, terms; init = Bool) <: Real) &&
         throw(ArgumentError("The element type $T cannot hold the complex matrix elements of the operator."))
     backend = r.backend
-    space = adapt(backend, H)
+    space = adapt(DeviceAdaptor(backend), H)
     _check_isbits(adapt(DropArrays(), space), "The space")
     termgroups = _device_terms(terms, H, backend)
     flag = fill!(allocate(backend, Bool, 1), false)
     run! = sink -> _column_kernel!(backend)(sink, space, termgroups, convert(T, coeff), projection ? true : OutsideFlag(flag); ndrange = dim(H))
     M = _assemble(r, T, run!, dim(H), length(terms) + !iszero(coeff))
-    any(flag) && _skip_outside(0, false)
+    @allowscalar(flag[1]) && _skip_outside(0, false)
     return M
 end
 
@@ -242,6 +260,8 @@ function _assemble(r::GPURepr{<:Any, <:AbstractGPUArray}, ::Type{T}, run!, n, ns
 end
 function _assemble(r::GPURepr{<:Any, F}, ::Type{T}, run!, n, nslots) where {T, F}
     backend, Ti = r.backend, _index_type(F)
+    max(nslots, 1) * n < typemax(Ti) ||
+        throw(ArgumentError("The $n × $n matrix may need up to $(nslots * n) stored entries, more than its index type $Ti can count. Use a sparse format with `Int64` indices."))
     rows = fill!(allocate(backend, Ti, n, nslots), zero(Ti))
     vals = allocate(backend, T, n, nslots)
     run!(SlotSink(rows, vals, 0))

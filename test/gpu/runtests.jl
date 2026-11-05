@@ -1,7 +1,7 @@
 # Runs on JLArrays, a CPU implementation of the GPU array interface that disallows scalar indexing.
 # Not part of the main suite: `julia --project=test/gpu test/gpu/runtests.jl`.
 using FermionicHilbertSpaces, JLArrays, Test
-using FermionicHilbertSpaces: GatherAlg
+using FermionicHilbertSpaces: FixedNumberFockState, GatherAlg
 JLArrays.allowscalar(false)
 
 @testset "partial_trace of GPU arrays" begin
@@ -25,12 +25,17 @@ end
     hopping = sum(f[i]' * f[i + 1] + hc for i in 1:3) + sum(f[i]' * f[i] * f[i + 1]' * f[i + 1] for i in 1:3)
     mixed = f[1]' * f[2] * s[:+] + 1im * b' * s[:-] + hc + f[1]' * f[1] * b' * b + s[:z] + 2
     Hmixed = tensor_product(hilbert_space(f, 1:2, NumberConservation(1)), hilbert_space(s), hilbert_space(b, 3))
+    Hfixed = hilbert_space(f, 1:3, FixedNumberFockState{1}.(basisstates(hilbert_space(f, 1:3, NumberConservation(1)))))
     cases = (
         (hopping, hilbert_space(f, 1:4)),
         (hopping, hilbert_space(f, 1:4, NumberConservation(2))),
         (b' * b + b + b', hilbert_space(b, 4)),
         (s[:+] + s[:-] + 0.5 * s[:z], hilbert_space(s)),
         (mixed, Hmixed),
+        (f[1]' * f[2] + hc, hilbert_space(f, 1:10, NumberConservation(1))),
+        (2, hilbert_space(f, 1:2)),
+        (f[1]' * f[2] * s[:+] + hc + 2im, tensor_product(hilbert_space(f, 1:2), hilbert_space(s))),
+        (f[1]' * f[2] * s[:+] + hc, tensor_product(Hfixed, hilbert_space(s))),
     )
     for (op, H) in cases, format in (JLArray, JLSparseMatrixCSC, JLSparseMatrixCSR{ComplexF32})
         M = representation(op, H, format)
@@ -38,6 +43,7 @@ end
         @test collect(M) ≈ representation(op, H, Matrix)
     end
     @test_throws ArgumentError representation(f[1], hilbert_space(f, 1:4, NumberConservation(2)), JLArray)
+    @test_throws ArgumentError representation(hopping, hilbert_space(f, 1:4), JLSparseMatrixCSC{Float64, Int8})
     @majoranas γ
     @test_throws ArgumentError representation(1im * γ[1] * γ[2], hilbert_space(γ, 1:4), JLArray)
 end

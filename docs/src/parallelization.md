@@ -46,5 +46,7 @@ M = representation(op, H, CuSparseMatrixCSR{ComplexF32})
 Md = representation(op, H, CuArray)
 ```
 This works for fermions, bosons, spins, their products and constrained subspaces of them. Other spaces and operators,
-`Axes(Hout, Hin)` and symbolic coefficients throw an `ArgumentError`. Boson and spin matrix elements are computed in
+products of groups without an integer internal representation, `Axes(Hout, Hin)` and symbolic coefficients throw an
+`ArgumentError`. Sparse formats index with their index type (`Int32` by default) and throw an `ArgumentError` when the
+matrix may need more entries than it can count. Boson and spin matrix elements are computed in
 `Float64`, which Apple GPUs do not support.
