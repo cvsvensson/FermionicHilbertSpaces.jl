@@ -74,16 +74,18 @@ _state_index(state, H::BdGHilbertSpace) = _state_index(state, parent(H))
 function matrix_representation(op, H::BdGHilbertSpace, repr=EagerSparseRepr(); chunking=NoChunking(), kwargs...)
     repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, H, _canonicalize_repr(repr); chunking, kwargs...)
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
-    return normal_order_to_bdg(_nambu_matrix(op, H, repr))
-end
-# The matrix `m` with `op == c + Ψ' m Ψ` for a scalar `c`, of which the BdG matrix is the particle-hole symmetric part.
-function _nambu_matrix(op, H, repr)
     _is_quadratic_fermion_operator(op, false) || throw(ArgumentError("Only quadratic fermionic operators can be represented on a BdG Hilbert space. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))
-    return _quadratic_matrix(_bdg_entry, remove_identity(op), H, repr)
+    return _quadratic_matrix(_bdg_entries, remove_identity(op), H, repr) / 2
 end
-function _bdg_entry(term, H)
+# The entry of `m` with `op == c + Ψ' m Ψ` for a scalar `c`, and that of `ph_conjugate(m)`, so that the
+# sum over terms is `m + ph_conjugate(m)`, as in `normal_order_to_bdg`.
+function _bdg_entries(term, H)
     instate, outstate = _nambu_in_out(term, map(f -> mode_position(f, H), term.factors))
-    return state_index(outstate, H), state_index(instate, H), term.coeff
+    partner(s) = NambuState(s.state, !s.hole)
+    return (
+        (state_index(outstate, H), state_index(instate, H), term.coeff),
+        (state_index(partner(instate), H), state_index(partner(outstate), H), -term.coeff),
+    )
 end
 
 # The term c_a^(d1) c_b^(d2), with `a` and `b` at `positions`, maps the Nambu state (b, !d2) to (a, d1)
@@ -278,10 +280,12 @@ struct BdGEigen{T <: Union{Nothing, Real}} <: AbstractBdGEigenAlg
 end
 BdGEigen() = BdGEigen(nothing)
 
+# Converting to a `Matrix` and comparing with `copy(M')` rather than the lazy adjoint lets all array types share one compiled path.
 function LinearAlgebra.eigen(A::AbstractMatrix, alg::BdGEigen)
-    rtol = sqrt(eps(real(float(eltype(A)))))
-    isapprox(A, A'; rtol) && is_ph_symmetric(A; rtol) || throw(ArgumentError("BdGEigen requires a Hermitian, particle-hole symmetric BdG matrix, the representation of a hermitian operator."))
-    F = eigen(Hermitian(Matrix(A)))
+    M = Matrix{float(eltype(A))}(A)
+    rtol = sqrt(eps(real(eltype(M))))
+    isapprox(M, copy(M'); rtol) && is_ph_symmetric(M; rtol) || throw(ArgumentError("BdGEigen requires a Hermitian, particle-hole symmetric BdG matrix, the representation of a hermitian operator."))
+    F = eigen(Hermitian(M))
     cutoff = something(alg.cutoff, size(A, 1) * eps(eltype(F.values)))
     tol = cutoff * maximum(abs, F.values; init = zero(eltype(F.values)))
     return Eigen(enforce_ph_symmetry(F.values, complex(F.vectors), tol)...)
@@ -307,7 +311,8 @@ function enforce_ph_symmetry(es, ops, tol)
     zero_modes = (N - m + 1):(N + m)
     if !isempty(zero_modes)
         es[zero_modes] .= 0
-        ops[:, zero_modes] = canonicalize_zero_modes(ops[:, zero_modes])
+        # Zero modes are rare, so this is kept out of the inference of `eigen`
+        ops[:, zero_modes] = Base.inferencebarrier(canonicalize_zero_modes)(ops[:, zero_modes])
     end
     U, _, V = svd(ops)
     return es, U * V'

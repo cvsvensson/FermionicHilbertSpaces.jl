@@ -136,5 +136,5 @@ function _single_particle_entry(term, H)
     a, b = term.factors
     outind = state_index(SingleParticleState(mode_position(a, H)), H)
     inind = state_index(SingleParticleState(mode_position(b, H)), H)
-    return outind, inind, (-1)^b.creation * term.coeff
+    return ((outind, inind, (-1)^b.creation * term.coeff),)
 end
