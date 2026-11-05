@@ -7,10 +7,11 @@ using NonCommutativeProducts: NCMul
 using SparseArrays: SparseArrays, SparseMatrixCSC
 import FermionicHilbertSpaces: _canonicalize_repr, _convert_repr_eltype, _repr_eltype, _skip_outside, _terms_matrix,
     push_inds_amps!, state_position
-using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, BosonSym, ConstrainedSpace, FermionSym,
-    FermionicGroup, FermionicSpace, IndexTable, ProductOperator, ProductSpace, RootIndexDict, SpinSpace, SpinSym,
-    TruncatedBosonicHilbertSpace, TupleConcretizer, __concretize, _spin_op_char, chunked_operator_indices_and_amplitudes_generic!,
-    dim, mat_eltype, nbr_of_modes, precomputation_before_operator_application, state_index, subspace_index, subspace_states
+using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, BosonSym, ConstrainedSpace, DeviceFermionicSpace,
+    DeviceProductSpace, DeviceSpinSym, FermionSym, FermionicSpace, IndexTable, ProductOperator, ProductSpace, RootIndexDict,
+    SpinSpace, SpinSym, TruncatedBosonicHilbertSpace, TupleConcretizer, __concretize, _spin_shift,
+    chunked_operator_indices_and_amplitudes_generic!, dim, mat_eltype, nbr_of_modes, precomputation_before_operator_application,
+    state_index, subspace_index, subspace_states
 
 const GPUSparseMatrix = Union{AbstractGPUSparseMatrixCSC, AbstractGPUSparseMatrixCSR}
 
@@ -56,17 +57,14 @@ _convert_repr_eltype(M, F::Type{<:GPUSparseMatrix}) = _convert_repr_eltype(M, _c
 # mode lists only identify modes, which the precomputation has already resolved.
 Adapt.adapt_structure(to, f::FermionSym) = FermionSym(f.creation, nothing, nothing)
 Adapt.adapt_structure(to, b::BosonSym) = BosonSym{Nothing, Nothing, Nothing}(nothing, nothing, nothing, b.exp)
-Adapt.adapt_structure(to, s::SpinSym) = SpinSym{Nothing}(_spin_op_char(s.op), nothing, s.exponent)
+Adapt.adapt_structure(to, s::SpinSym) = DeviceSpinSym(_spin_shift(s), s.exponent)
 
-function Adapt.adapt_structure(to, H::FermionicSpace{F, L}) where {F, L}
-    modes = Base.OneTo(nbr_of_modes(H))
-    return FermionicSpace{F, L, FermionicGroup{Nothing}, typeof(modes), Nothing}(modes, nothing, FermionicGroup(nothing))
-end
+Adapt.adapt_structure(to, H::FermionicSpace{F}) where {F} = DeviceFermionicSpace{F}(nbr_of_modes(H))
 Adapt.adapt_structure(to, H::TruncatedBosonicHilbertSpace) = TruncatedBosonicHilbertSpace(adapt(to, H.sym), H.dimension)
 Adapt.adapt_structure(to, H::SpinSpace{T}) where {T} = SpinSpace{T, Nothing}(H.spin, nothing)
-function Adapt.adapt_structure(to, H::ProductSpace{B, <:Any, A}) where {B, A}
+function Adapt.adapt_structure(to, H::ProductSpace{B}) where {B}
     factors = adapt(to, H.factors)
-    return ProductSpace{B, typeof(factors), A, typeof(H.fast_path), typeof(H.lininds), typeof(H.cartinds), Nothing, Nothing}(factors, nothing, nothing, H.fast_path, H.lininds, H.cartinds)
+    return DeviceProductSpace{B, typeof(factors), typeof(H.fast_path), typeof(H.lininds), typeof(H.cartinds)}(factors, H.fast_path, H.lininds, H.cartinds)
 end
 # `basisstate` and `state_index` of a subspace use only its parent, states and index
 Adapt.adapt_structure(to, H::AbstractSubspace) =
