@@ -78,6 +78,13 @@ end
         @test out isa JLArray
         @test Array(out) ≈ partial_transpose(x, H, HA)
     end
+    Hc = hilbert_space(f, 1:4, NumberConservation(2))
+    HcA = subregion(HA, Hc)
+    m = rand(ComplexF64, dim(Hc), dim(Hc))
+    out = partial_transpose(JLArray(m), Hc => H, HcA; alg)
+    @test out isa JLArray
+    @test Array(out) ≈ partial_transpose(m, Hc => H, HcA)
+    @test_throws ArgumentError partial_transpose(JLArray(m), Hc, HcA; alg)
 end
 
 @testset "generalized_kron and tensor_product of GPU arrays" begin
