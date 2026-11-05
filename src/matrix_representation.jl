@@ -79,22 +79,45 @@ struct StateChunking{S} <: AbstractChunkingStrategy
 end
 
 function mat_eltype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S,F}
-    promote_type(C, mat_eltype(S))
+    return _term_eltype(C, S)
 end
 function mat_eltype(::NCMul{C,S,F}) where {C,S,F}
-    promote_type(C, mat_eltype(S))
+    return _term_eltype(C, S)
 end
-mat_eltype(::Type{NCMul{C,S,F}}) where {C,S,F} = promote_type(C, mat_eltype(S))
+mat_eltype(::Type{NCMul{C, S, F}}) where {C, S, F} = _term_eltype(C, S)
 mat_eltype(::S) where {S} = mat_eltype(S)
 """
     mat_eltype(::Type{O})
 
 Element type of the matrix elements of a symbolic operator of type `O`. Matrix
-representations promote it with the coefficients of the expression. The fallback is
-`Float64`, so an operator type with complex matrix elements must add a method, for example
-`mat_eltype(::Type{<:MyOp}) = ComplexF64`.
+representations promote it with the coefficients of the expression, after giving its floats
+the precision of float coefficients. The fallback is `Float64`, so an operator type with
+complex matrix elements must add a method, for example `mat_eltype(::Type{<:MyOp}) = ComplexF64`.
 """
 mat_eltype(::Type{S}) where {S} = Float64
+
+_term_eltype(::Type{C}, ::Type{S}) where {C, S} = promote_type(C, _with_precision(mat_eltype(S), _precision(C)))
+# The float type of `T`, and `nothing` for a type such as `Int`, which doesn't request a precision
+_precision(::Type{P}) where {P <: AbstractFloat} = P
+_precision(::Type{Complex{P}}) where {P <: AbstractFloat} = P
+_precision(::Type) = nothing
+_with_precision(::Type{T}, ::Nothing) where {T} = T
+_with_precision(::Type{<:AbstractFloat}, ::Type{P}) where {P} = P
+_with_precision(::Type{<:Complex{<:AbstractFloat}}, ::Type{P}) where {P} = Complex{P}
+_with_precision(::Type{T}, ::Type) where {T} = T
+_amp_at_precision(amp, ::Type{P}) where {P} = convert(_with_precision(typeof(amp), P), amp)
+
+# Gives the coefficients the precision of the element type of the format, so that the amplitudes are computed in it
+_at_format_precision(op, repr) = _at_precision(op, _precision(_repr_eltype(Nothing, repr)))
+_at_precision(op, ::Nothing) = op
+_at_precision(op, ::Type) = op
+_at_precision(op::AbstractSym, ::Type{P}) where {P} = NCMul(one(P), [op])
+_at_precision(op::NCMul, ::Type{P}) where {P} = NCMul(_coeff_at_precision(op.coeff, P), op.factors)
+_at_precision(op::NCAdd, ::Type{P}) where {P} =
+    NCAdd(_coeff_at_precision(op.coeff, P), Dict(k => _coeff_at_precision(v, P) for (k, v) in pairs(op.dict)))
+_coeff_at_precision(c::Union{Integer, Rational, AbstractFloat}, ::Type{P}) where {P} = P(c)
+_coeff_at_precision(c::Complex{<:Union{Integer, Rational, AbstractFloat}}, ::Type{P}) where {P} = Complex{P}(c)
+_coeff_at_precision(c, ::Type) = c
 
 
 function operator_indices_and_amplitudes!(accumulator, op, space; kwargs...)
@@ -166,18 +189,19 @@ as for fermions, where the whole product acts on a Fock state with bit operation
 function apply_local_operators(op::NCMul, state, space, precomps; transpose)
     # Accumulate in the element type of the matrix so that `amp` keeps one type through the loop.
     T = mat_eltype(op)
+    P = something(_precision(T), Float64)
     amp = convert(T, op.coeff)
     if !transpose
         for (factor, precomp) in Iterators.reverse(zip(op.factors, precomps))
-            state, _amp = apply_local_operator(factor, state, space, precomp)
+            state, _amp = apply_local_operator(factor, state, space, precomp, P)
             iszero(_amp) && return state, zero(T)
-            amp *= _amp
+            amp *= _amp_at_precision(_amp, P)
         end
     else
         for (factor, precomp) in zip(op.factors, precomps)
-            state, _amp = apply_local_operator(adjoint(factor), state, space, precomp)
+            state, _amp = apply_local_operator(adjoint(factor), state, space, precomp, P)
             iszero(_amp) && return state, zero(T)
-            amp *= conj(_amp)
+            amp *= conj(_amp_at_precision(_amp, P))
         end
     end
     return state, amp
@@ -557,6 +581,7 @@ Return a concrete representation of `op_or_state` in Hilbert space `space`. This
 - For ketbras, and operators that contain ketbras, returns a matrix.
 
 Coefficients are converted to a format's element type, so a complex coefficient with element type `Float64` throws an `InexactError`.
+Matrix elements are computed in the precision of a float element type. Without an element type, `Float32` coefficients give `Float32` matrix elements.
 
 Expressions that combine kets or bras with operators or with states of other spaces have no representation and throw an
 `ArgumentError`. Without the `space` argument, only expressions of symbolic states are accepted, and the space is taken from the states.
@@ -605,7 +630,7 @@ function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparse
     if trivial_operator(op)
         return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
     end
-    return _with_format_eltype(_cache_lazy(_matrix_representation(op, _checked_group_ids(op, space), space, format, chunking; projection, kwargs...), space, format), format)
+    return _with_format_eltype(_cache_lazy(_matrix_representation(_at_format_precision(op, format), _checked_group_ids(op, space), space, format, chunking; projection, kwargs...), space, format), format)
 end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
@@ -617,7 +642,7 @@ function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=
         coeff = get_trivial_op_coeff(op)
         return _accumulated_matrix(_repr_eltype(typeof(coeff), repr), (), coeff, ax, repr; projection)
     end
-    return _with_format_eltype(_matrix_representation(op, _checked_group_ids(op, Hin), ax, repr, chunking; projection, kwargs...), repr)
+    return _with_format_eltype(_matrix_representation(_at_format_precision(op, repr), _checked_group_ids(op, Hin), ax, repr, chunking; projection, kwargs...), repr)
 end
 function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
@@ -834,6 +859,58 @@ end
         @test M == representation(op, H, :dense)
     end
     @test eltype(representation(f[1]' * f[2] + 1, H)) == Int
+end
+
+@testitem "Matrix elements are computed in the requested precision" begin
+    @fermions f
+    @boson b
+    @spin s 1 // 2
+    @spin t
+    Hb = hilbert_space(b, 3)
+    Hs = hilbert_space(s)
+    Hmixed = tensor_product(hilbert_space(f, 1:1), Hb)
+
+    @test representation(b', Hb, Matrix{BigFloat})[3, 2] == sqrt(big(2))
+    @test representation(0.5 * b', Hb, Matrix{BigFloat})[3, 2] == sqrt(big(2)) / 2
+    @test representation(b' + 1, Hb, Matrix{BigFloat})[3, 2] == sqrt(big(2))
+    @test representation(f[1]' * b', Hmixed, Matrix{BigFloat})[6, 3] == sqrt(big(2))
+    @test representation(t[:+], hilbert_space(t, 3 // 2), Matrix{BigFloat})[2, 1] == sqrt(big(3))
+
+    for op in (b' * b + b, 0.5 * b' + 1), T in (Float32, ComplexF32)
+        M = @inferred representation(op, Hb, Matrix{T})
+        @test M isa Matrix{T}
+        @test M ≈ representation(op, Hb, :dense)
+    end
+    @test representation(1 // 3 * s[:z], Hs, Matrix{Float32}) ≈ representation(1 // 3 * s[:z], Hs, :dense)
+    @test eltype(representation(0.5f0 * b', Hb)) == Float32
+    @test eltype(representation(0.5f0 * s[:z] + 1.0f0im * s[:+], Hs)) == ComplexF32
+    @test eltype(representation(0.5 * b', Hb)) == Float64
+    @test eltype(representation(b', Hb)) == Float64
+end
+
+@testitem "Amplitudes of custom operators in the requested precision" begin
+    import FermionicHilbertSpaces as FHS
+    struct RootOp <: FHS.AbstractSym end
+    struct PreciseRootOp <: FHS.AbstractSym end
+    Base.adjoint(op::Union{RootOp, PreciseRootOp}) = op
+    FHS.apply_local_operator(::RootOp, state, space, precomp) = (state, sqrt(2.0))
+    FHS.apply_local_operator(::PreciseRootOp, state, space, precomp, ::Type{T}) where {T} = (state, sqrt(T(2)))
+
+    @boson b
+    H = hilbert_space(b, 3)
+    amplitude(op, ::Type{T}, H, transpose) where {T} =
+        last(FHS.apply_local_operators(FHS.NCMul(one(T), [op]), FHS.basisstate(1, H), H, (nothing,); transpose))
+
+    @test (@inferred amplitude(RootOp(), Float32, H, false)) === Float32(sqrt(2.0))
+    @test (@inferred amplitude(RootOp(), Float32, H, true)) === Float32(sqrt(2.0))
+    @test amplitude(PreciseRootOp(), BigFloat, H, false) == sqrt(big(2))
+
+    struct BigRootOp <: FHS.AbstractSym end
+    Base.adjoint(op::BigRootOp) = op
+    FHS.symbolic_group(::BigRootOp) = FHS.symbolic_group(b)
+    FHS.mat_eltype(::Type{BigRootOp}) = BigFloat
+    FHS.apply_local_operator(::BigRootOp, state, space, precomp) = (state, sqrt(big(2)))
+    @test representation(BigRootOp(), H)[1, 1] == sqrt(big(2))
 end
 
 @testitem "Operators between two spaces with Axes" begin
