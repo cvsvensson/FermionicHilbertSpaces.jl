@@ -526,7 +526,6 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
 end
 
 function partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(v, Hsub, H, complement), kwargs...)
-    # vec_to_density_matrix copies ψ to a CPU Matrix
     alg isa GatherAlg && return _partial_trace_by_gather(v, H, Hsub, complement; kwargs...)
     return partial_trace(vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)
 end
@@ -624,9 +623,8 @@ _change_basis(m::UniformScaling, (Uout, Uin)) = m.λ * (Uout * Uin')
 _has_support_on(m, axis, js) = !iszero(selectdim(m, axis, js))
 _has_support_on(m::AbstractSparseArray, axis, js) = _copied_support_on(m, axis, js)
 # A view of a sparse array visits every element, a copy only the stored ones, and a copy of a GPU
-# array needs no scalar indexing. A vector is a pure state ψ, and ψψ† has support on `js` along
-# axis 2 exactly when it has along axis 1
-_copied_support_on(m, axis, js) = axis <= ndims(m) && !iszero(m[ntuple(d -> d == axis ? js : (:), Val(ndims(m)))...])
+# array needs no scalar indexing
+_copied_support_on(m, axis, js) = !iszero(m[ntuple(d -> d == axis ? js : (:), Val(ndims(m)))...])
 _has_support_on(m::UniformScaling, axis, js) = !isempty(js) && !iszero(m.λ)
 
 function _checked_basis_transformation(Hfrom, Hto; projection = false)
@@ -826,7 +824,7 @@ end
 function _check_covered(m, covered, has_support_on = _has_support_on)
     all(covered) && return nothing
     dropped = findall(!, covered)
-    (has_support_on(m, 1, dropped) || has_support_on(m, 2, dropped)) && throw(ArgumentError("`m` has nonzero weight on a state of `H` whose part on `Hsub` or on the complement is missing. Pass `projection=true` to drop it."))
+    (has_support_on(m, 1, dropped) || (!(m isa AbstractVector) && has_support_on(m, 2, dropped))) && throw(ArgumentError("`m` has nonzero weight on a state of `H` whose part on `Hsub` or on the complement is missing. Pass `projection=true` to drop it."))
     return nothing
 end
 
@@ -1437,11 +1435,14 @@ end
     Hcons = hilbert_space(f, 1:6, NumberConservation(3))
     Hprod = tensor_product(hilbert_space(f, 1:3), hilbert_space(s[1], 1 // 1), hilbert_space(b[1], 3))
     Hsmall = hilbert_space(f, 1:3)
+    @majoranas y
+    Hmaj = hilbert_space(y, 1:6)
     for (H, Hsub) in (
             (hilbert_space(f, 1:5), hilbert_space(f, [2, 4])),
             (Hcons, subregion(hilbert_space(f, [1, 4]), Hcons)),
             (Hprod, tensor_product(hilbert_space(f, 2:2), hilbert_space(b[1], 3))),
             (Hsmall, Hsmall),
+            (Hmaj, subregion(hilbert_space(y, 3:4), Hmaj)),
         )
         ρ = rand(ComplexF64, dim(H), dim(H))
         ψ = rand(ComplexF64, dim(H))
