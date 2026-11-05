@@ -435,7 +435,8 @@ operator_indices_and_amplitudes_generic!(accumulator, term::KronTerm, space, pre
 function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split = 10, kwargs...)
     spaces = groups(_input_space(space))
     prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
-    return _sum_terms_matrix(prodops, op.coeff, space, repr, chunking; kwargs...)
+    T = _repr_eltype(promote_type(mapreduce(mat_eltype, promote_type, prodops), typeof(op.coeff)), repr)
+    return _terms_matrix(T, prodops, op.coeff, space, repr, chunking; kwargs...)
 end
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the type of `coeff`.
@@ -1203,6 +1204,14 @@ end
         rand(length(inds))
     end
     @test collect(M_dist * v) ≈ M_ref * collect(v)
+
+    @boson b
+    Hp = tensor_product(H, hilbert_space(b, 2))
+    for opp in (op * b' + hc + 1, f[1])
+        Mp = representation(opp, Hp, rep)
+        w = pvector(inds -> rand(ComplexF64, length(inds)), Mp.col_partition)
+        @test collect(Mp * w) ≈ representation(opp, Hp) * collect(w)
+    end
 end
 
 ## Symmetries
