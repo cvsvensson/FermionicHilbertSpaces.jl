@@ -92,6 +92,13 @@ add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag)
     Mexpected = embed(representation(opg, H1), H1 => Hmixed) *
                 embed(representation(f[1]' * f[1], Hf), Hf => Hmixed)
     @test M == Mexpected
+
+    # A group without states, in any position
+    @spin s 1 // 2
+    Hempty = GenericHilbertSpace(s, Int[])
+    for H in (tensor_product(Hf, Hempty), tensor_product(Hempty, Hf))
+        @test size(representation(f[1]' * f[1] + s[:z], H)) == (0, 0)
+    end
 end
 
 @testitem "Invalid space inputs" begin
