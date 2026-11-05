@@ -2,11 +2,11 @@
 # Not part of the main suite: `julia --project=test/gpu test/gpu/runtests.jl`.
 using FermionicHilbertSpaces, JLArrays, Test
 using Adapt: adapt
-using FermionicHilbertSpaces: GatherAlg, FactorizedPartialTransposeAlg, FactorizedKronAlg, change_basis
+using FermionicHilbertSpaces: NoScalarIndexingAlg, change_basis, FactorizedPartialTransposeAlg, FactorizedKronAlg
 JLArrays.allowscalar(false)
 
 @testset "partial_trace of GPU arrays" begin
-    alg = GatherAlg()
+    alg = NoScalarIndexingAlg()
     @fermions f
     Hcons = hilbert_space(f, 1:4, NumberConservation(2))
     for (H, Hsub) in ((hilbert_space(f, 1:4), hilbert_space(f, [1, 3])), (Hcons, subregion(hilbert_space(f, 1:2), Hcons)))
@@ -17,10 +17,16 @@ JLArrays.allowscalar(false)
         end
     end
     @test_throws ArgumentError partial_trace(JLArray(rand(dim(Hcons), dim(Hcons))), Hcons => hilbert_space(f, 1:2, NumberConservation(1)); alg)
+
+    # States 1 and 2 share the entry (K, b) = (1, 1), with weights 1 and -1.
+    ψ = rand(ComplexF64, 3)
+    A = [ψ[1] - ψ[2], ψ[3]]
+    splits = [((1, 1, 1),), ((1, 1, -1),), ((2, 1, 1),)]
+    @test Array(FermionicHilbertSpaces._gather_partial_trace(JLArray(ψ), splits, 2, 1)) ≈ A * A'
 end
 
 @testset "change_basis of GPU arrays" begin
-    alg = GatherAlg()
+    alg = NoScalarIndexingAlg()
     @fermions f
     H = hilbert_space(f, 1:4)
     Hsec = hilbert_space(f, 1:4, NumberConservation(2))
@@ -35,7 +41,7 @@ end
 end
 
 @testset "embed of GPU arrays" begin
-    alg = GatherAlg()
+    alg = NoScalarIndexingAlg()
     @fermions f
     Hcons = hilbert_space(f, 1:4, NumberConservation(2))
     for (Hsub, H) in ((hilbert_space(f, [1, 3]), hilbert_space(f, 1:4)), (subregion(hilbert_space(f, 1:2), Hcons), Hcons))
@@ -51,7 +57,7 @@ end
 end
 
 @testset "reshape of GPU arrays" begin
-    alg = GatherAlg()
+    alg = NoScalarIndexingAlg()
     @fermions f
     H1, H2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
     H = hilbert_space(f, 1:4, NumberConservation(2))
@@ -65,7 +71,7 @@ end
 end
 
 @testset "precomputed gather maps on GPU arrays" begin
-    alg = GatherAlg()
+    alg = NoScalarIndexingAlg()
     @fermions f
     H = hilbert_space(f, 1:4, NumberConservation(2))
     Hsub = subregion(hilbert_space(f, 1:2), H)

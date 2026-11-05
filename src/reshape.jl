@@ -2,7 +2,7 @@
 const _SpaceGroup = Union{AbstractHilbertSpace,Tuple{Vararg{AbstractHilbertSpace}},AbstractVector{<:AbstractHilbertSpace}}
 const _SpaceMapping = Pair{<:_SpaceGroup,<:_SpaceGroup}
 
-_check_reshape_alg(alg) = alg isa GenericAlg || alg isa GatherAlg || throw(ArgumentError("`reshape` supports `alg = GenericAlg()` or `GatherAlg()`, got $alg."))
+_check_reshape_alg(alg) = alg isa ScalarIndexingAlg || alg isa NoScalarIndexingAlg || throw(ArgumentError("`reshape` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
 
 """
     reshape(t, mappings...; repeat=false, projection=false, alg)
@@ -76,15 +76,15 @@ entries are fine, so e.g. combining unconstrained spaces into a
 parity-conserving space works for parity-preserving operators. With
 `projection=true`, the components on missing states are silently dropped.
 
-`GatherAlg`, the default for GPU arrays, reshapes by array indexing and broadcasting only, so
+`NoScalarIndexingAlg`, the default for GPU arrays, reshapes by array indexing and broadcasting only, so
 that GPU arrays work.
 
 # Precomputed form
 
-    reshape(mappings...; repeat=false, projection=false, alg=GenericAlg())
+    reshape(mappings...; repeat=false, projection=false, alg=ScalarIndexingAlg())
 
 returns a callable `ReshapeMap` that precomputes the transitions, and can be
-applied as `op(t)` or in place as `op(out, t)`. With `alg = GatherAlg()`, it stores
+applied as `op(t)` or in place as `op(out, t)`. With `alg = NoScalarIndexingAlg()`, it stores
 gather tables instead; `Adapt.adapt(CuArray, op)` moves them to the device.
 """
 function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = default_alg(reshape, t))
@@ -102,7 +102,7 @@ function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapp
     mappers = map(_mapper, Hsins, Hsouts)
     blocks = map(_transitions, Hsins, Hsouts, mappers)
 
-    alg isa GatherAlg && (blocks = map(_gather_block, blocks, Hsins, Hsouts))
+    alg isa NoScalarIndexingAlg && (blocks = map(_gather_block, blocks, Hsins, Hsouts))
     return _reshape(t, blocks, Hsouts; projection)
 end
 
@@ -151,7 +151,7 @@ function (op::ReshapeMap)(out::AbstractArray, t::AbstractArray)
     return _reshape!(out, t, blocks, Hsouts; op.projection)
 end
 
-function Base.reshape(mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = GenericAlg())
+function Base.reshape(mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = ScalarIndexingAlg())
     _check_reshape_alg(alg)
     mappings_t = (mapping, rest...)
     precomputed = Tuple(map(m -> _precompute_mapping(m, alg), mappings_t))
@@ -172,7 +172,7 @@ function _precompute_mapping(mapping::Pair, alg)
     Hsin, Hsout = _mapping_spaces(mapping)
     mapper = _mapper(Hsin, Hsout)
     blocks = _transitions(Hsin, Hsout, mapper)
-    return (; mapping, Hsin, Hsout, blocks = alg isa GatherAlg ? _gather_block(blocks, Hsin, Hsout) : blocks)
+    return (; mapping, Hsin, Hsout, blocks = alg isa NoScalarIndexingAlg ? _gather_block(blocks, Hsin, Hsout) : blocks)
 end
 
 _spaces(H::AbstractHilbertSpace) = (H,)
@@ -430,7 +430,7 @@ end
 # Block k gathers along broadcast dimensions 2k-1 (its output index) and 2k (the transitions
 # into that output index), and its weights multiply those of the other blocks.
 function _gather_reshape(t, blocks, Hsouts; projection = false)
-    Base.has_offset_axes(t) && throw(ArgumentError("GatherAlg requires an array with one-based axes."))
+    Base.has_offset_axes(t) && throw(ArgumentError("NoScalarIndexingAlg requires an array with one-based axes."))
     projection || _check_dropped(t, blocks, _copied_support_on)
     n = length(blocks)
     stridesin = _block_strides(size(t), map(_group_length, blocks))
@@ -764,8 +764,8 @@ end
 end
 
 @testitem "Reshape by gather" begin
-    import FermionicHilbertSpaces: GatherAlg
-    alg = GatherAlg()
+    import FermionicHilbertSpaces: NoScalarIndexingAlg
+    alg = NoScalarIndexingAlg()
     @fermions f
     @spins s
     H1, H2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)

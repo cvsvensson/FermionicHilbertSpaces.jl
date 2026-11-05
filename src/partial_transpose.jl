@@ -67,8 +67,8 @@ broadcasts only, so it also runs on GPU arrays. It needs a dense matrix on an un
 fermionic space, with output space `H` and `Hsub` and its complement covering all modes.
 """
 struct FactorizedPartialTransposeAlg end
-_check_partial_transpose_alg(alg) = alg isa GenericAlg || alg isa FactorizedPartialTransposeAlg ||
-    throw(ArgumentError("`partial_transpose` supports `alg = GenericAlg()` or `FactorizedPartialTransposeAlg()`, got $alg."))
+_check_partial_transpose_alg(alg) = alg isa ScalarIndexingAlg || alg isa FactorizedPartialTransposeAlg ||
+    throw(ArgumentError("`partial_transpose` supports `alg = ScalarIndexingAlg()` or `FactorizedPartialTransposeAlg()`, got $alg."))
 
 """
     partial_transpose!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false, alg)
@@ -174,7 +174,7 @@ The partial transpose does not preserve number or parity constraints. For constr
 pass a larger output space on the same modes as `H => Hout`. For fermions the result is not
 Hermitian: `(ρ^{R_A})' == p_A ρ^{R_A} p_A` for parity-even `ρ`, with `p_A` the parity of `Hsub`.
 
-`alg` is `GenericAlg()` or `FactorizedPartialTransposeAlg()`, the default for GPU arrays.
+`alg` is `ScalarIndexingAlg()` or `FactorizedPartialTransposeAlg()`, the default for GPU arrays.
 """
 partial_transpose(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) =
     _partial_transpose(m, H, Hsub, H; kwargs...)
@@ -201,7 +201,7 @@ function _partial_transpose(ψ::AbstractVector, H, Hsub, Hout;
         complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = default_alg(partial_transpose, ψ)
     )
     if length(ψ) == dim(H)
-        alg isa GenericAlg || return _partial_transpose(ψ * ψ', H, Hsub, Hout; complement, phase_factors, projection, alg)
+        alg isa ScalarIndexingAlg || return _partial_transpose(ψ * ψ', H, Hsub, Hout; complement, phase_factors, projection, alg)
         mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
         mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
         T = promote_type(eltype(ψ), partial_transpose_phase_factor_eltype(H))
