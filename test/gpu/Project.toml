@@ -1,0 +1,10 @@
+[deps]
+FermionicHilbertSpaces = "82e5dd95-83c3-46b2-a303-acc930c81756"
+JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+FermionicHilbertSpaces = {path = "../.."}
+
+[compat]
+JLArrays = "0.4"
