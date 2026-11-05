@@ -14,7 +14,7 @@
     nonpublic_qualified = (
         # NonCommutativeProducts interface functions that this package extends or calls.
         :grade, :grades, :grading, :mul_grade, :adjoint_grade,
-        :isscalar, :contraction_key, :mul_terms!!, :termpairs,
+        :isscalar, :contraction_key, :mul_terms!!, :termpairs, :split_by_group, :atom_group,
         # Base internals.
         :promote_op, :promote_eltype, :setindex, :product, :isiterable,
         :show_delim_array, :HasEltype, :broadcasted, :inferencebarrier, :mightalias,
