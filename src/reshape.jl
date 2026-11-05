@@ -74,8 +74,8 @@ entries are fine, so e.g. combining unconstrained spaces into a
 parity-conserving space works for parity-preserving operators. With
 `projection=true`, the components on missing states are silently dropped.
 
-With `alg = NoScalarIndexingAlg()`, `t` is reshaped by array indexing and broadcasting only, so
-that GPU arrays work.
+With `alg = NoScalarIndexingAlg()`, the default for dense GPU arrays, `t` is reshaped by array
+indexing and broadcasting only.
 
 # Precomputed form
 
@@ -84,7 +84,7 @@ that GPU arrays work.
 returns a callable `ReshapeMap` that precomputes the transitions, and can be
 applied as `op(t)` or in place as `op(out, t)`.
 """
-function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = ScalarIndexingAlg())
+function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = default_indexing_alg(t))
     alg isa ScalarIndexingAlg || alg isa NoScalarIndexingAlg || throw(ArgumentError("`reshape` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
     mappings = (mapping, rest...)
     mappings = if repeat
@@ -168,7 +168,7 @@ function _precompute_mapping(mapping::Pair)
     Hsin, Hsout = _mapping_spaces(mapping)
     mapper = _mapper(Hsin, Hsout)
     blocks = _transitions(Hsin, Hsout, mapper)
-    (; mapping, Hsin, Hsout, blocks)
+    return (; mapping, Hsin, Hsout, blocks)
 end
 
 _spaces(H::AbstractHilbertSpace) = (H,)
@@ -332,7 +332,7 @@ function _local_linear(transitions, Hsin, Hsout)
 end
 _linear_offset(I, strides) = sum(map((i, s) -> (i - 1) * s, I, strides); init=0)
 
-_group_length(::AbstractVector{NTuple{N,Int}}) where {N} = N
+_group_length(::AbstractVector{NTuple{N, Int}}) where {N} = N
 
 # Throw if a nonzero entry of `t` sits on an input index whose transitions were partly
 # dropped. Only the slices along dropped indices are visited.

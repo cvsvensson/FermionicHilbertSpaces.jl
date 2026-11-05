@@ -11,7 +11,7 @@
         # OhMyThreads scheduler internals.
         :Consecutive, :chunking_args,
         # GPUArrays does not declare its sparse types `public`.
-        :AbstractGPUSparseMatrixCSC, :AbstractGPUSparseMatrixCSR,
+        :AbstractGPUSparseArray, :AbstractGPUSparseMatrixCSC, :AbstractGPUSparseMatrixCSR,
     )
     nonpublic_qualified = (
         # NonCommutativeProducts interface functions that this package extends or calls.

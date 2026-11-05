@@ -1,4 +1,4 @@
-function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, alg = ScalarIndexingAlg(), kwargs...)
+function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, alg = default_indexing_alg(m), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
     size_compatible(m, Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(Hsub)), got $(size(m))."))
     !isnothing(complement) && m isa AbstractVector && throw(ArgumentError("A state vector can only be embedded into a space with the same modes, such as from a sector into its parent space. A state on a subsystem does not fix the state of the rest; use `tensor_product` of states or `embed` a density matrix instead."))
@@ -28,7 +28,7 @@ if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of 
 `Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not
 in `Hsub` get zero.
 
-With `alg = NoScalarIndexingAlg()`, `m` can be a GPU array (see [`NoScalarIndexingAlg`](@ref)).
+`m` can be a dense GPU array, for which `alg` defaults to [`NoScalarIndexingAlg`](@ref).
 
 If `m` is a vector, `Hsub` and `H` must have the same modes, as for a sector `Hsub` of `H`. The
 result is `m` placed at the indices [`indices`](@ref)`(Hsub, H)` and zero elsewhere.

@@ -638,4 +638,4 @@ It is `i^k` for fermions, where `k` is the number of modes in which `f1` and `f2
 `1` for spaces without phase factors.
 """
 partial_transpose_phase_factor(f1, f2, H::FermionicSpace) = _ipow(_nbr_differing_modes(f1, f2, nbr_of_modes(H)))
-_ipow(k::Integer) = (1 + 0im, 0 + 1im, -1 + 0im, 0 - 1im)[mod(k, 4)+1]
+_ipow(k::Integer) = (1 + 0im, 0 + 1im, -1 + 0im, 0 - 1im)[mod(k, 4) + 1]
