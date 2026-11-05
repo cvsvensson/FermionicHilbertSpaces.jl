@@ -21,14 +21,14 @@ TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 [weakdeps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
-GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
+GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
 PartitionedArrays = "5a9dfac6-5c52-46f7-8278-5e2210713be9"
 
 [extensions]
-AdaptExt = "Adapt"
 CombinatoricsExt = "Combinatorics"
-GPUArraysCoreExt = "GPUArraysCore"
+GPUArraysExt = ["Adapt", "GPUArrays", "KernelAbstractions"]
 OhMyThreadsExt = "OhMyThreads"
 PartitionedArraysExt = "PartitionedArrays"
 
@@ -38,8 +38,9 @@ BitIntegers = "0.3"
 BitPermutations = "0.3"
 Combinatorics = "1"
 FillArrays = "1"
-GPUArraysCore = "0.1, 0.2"
+GPUArrays = "12"
 HalfIntegers = "1.6"
+KernelAbstractions = "0.9.43, 0.10"
 LinearAlgebra = "1"
 LowRankMatrices = "1"
 NonCommutativeProducts = "0.6"
