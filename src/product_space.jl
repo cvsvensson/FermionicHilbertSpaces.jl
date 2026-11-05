@@ -43,14 +43,14 @@ struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
     end
 end
 # The copy of a `ProductSpace` that GPU kernels use, without the atoms
-struct DeviceProductSpace{B, C, T, LI, CI} <: AbstractHilbertSpace{B}
+struct DeviceProductSpace{B, C, LI, CI} <: AbstractHilbertSpace{B}
     factors::C
-    fast_path::T
     lininds::LI
     cartinds::CI
 end
 const _ProductSpace{B} = Union{ProductSpace{B}, DeviceProductSpace{B}}
-fast_path(space::_ProductSpace) = space.fast_path
+fast_path(space::ProductSpace) = space.fast_path
+fast_path(::DeviceProductSpace) = 0
 isconstrained(H::ProductSpace) = false
 Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1.factors == H2.factors && H1.atoms == H2.atoms
 Base.hash(H::ProductSpace, h::UInt) = hash(H.factors, hash(H.atoms, h))
@@ -373,7 +373,7 @@ function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, sp
     if !ismissing(fast_path(space))
         T = typeof(fast_path(space))
         internal_reps = map((s, f) -> _internal_rep(s, f, T), state.states, groups(space))
-        newrep, amp = _apply_local_operators_fast(ops, internal_reps, space, precomps)
+        newrep, amp = _apply_local_operators_fast(ops, internal_reps, precomps)
         return ProductState{B}(newrep), amp
     else
         newstate, amp = _apply_local_operators_slow(ops, state, space, precomps)
@@ -385,10 +385,10 @@ function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::Abst
     newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
     return _internal_rep(newstate, space, T), amp
 end
-@inline function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::Tuple{InternalRep{T}, Vararg{InternalRep{T}}}, space::_ProductSpace, precomps) where {C, T}
+@inline function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::Tuple{InternalRep{T}, Vararg{InternalRep{T}}}, precomps) where {C, T}
     return _apply_group_operators(one(C), internal_reps, internal_reps, ops.inds, 1, ops.ops, ops.spaces, precomps)
 end
-function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductState{B}, space::_ProductSpace, precomps) where {C, B <: Tuple}
+function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductState{B}, space::ProductSpace, precomps) where {C, B <: Tuple}
     newstates, amp = _apply_group_operators(one(C), state.states, state.states, ops.inds, 1, ops.ops, ops.spaces, precomps)
     return ProductState{B}(newstates), amp
 end
@@ -397,19 +397,10 @@ end
 @inline _apply_group_operators(amp, states, newstates, inds, k, ::Tuple{}, ::Tuple{}, ::Tuple{}) = (newstates, amp)
 @inline function _apply_group_operators(amp::C, states, newstates, inds, k, ops::Tuple, spaces::Tuple, precomps::Tuple) where {C}
     n = inds[k]
-    n in eachindex(states) || throw(BoundsError(states, n))
-    new_local_state, local_amp = _apply_local_operators(first(ops), _tuple_getindex(states, n), first(spaces), first(precomps))
-    return _apply_group_operators(
-        amp * convert(C, local_amp), states, _tuple_setindex(newstates, new_local_state, n),
+    new_local_state, local_amp = _apply_local_operators(first(ops), states[n], first(spaces), first(precomps))
+    return _apply_group_operators(amp * convert(C, local_amp), states, Base.setindex(newstates, new_local_state, n),
         inds, k + 1, Base.tail(ops), Base.tail(spaces), Base.tail(precomps))
 end
-# Indexing a tuple at a run-time position puts it in memory, which on a GPU is slow local memory. Selecting with
-# `ifelse` keeps a tuple of one type in registers.
-_tuple_getindex(t, n) = t[n]
-_tuple_getindex(t::Tuple{T}, n) where {T} = first(t)
-_tuple_getindex(t::Tuple{T, T, Vararg{T}}, n) where {T} = ifelse(n == 1, first(t), _tuple_getindex(Base.tail(t), n - 1))
-_tuple_setindex(t, x, n) = Base.setindex(t, x, n)
-_tuple_setindex(t::NTuple{N, T}, x::T, n) where {N, T} = ntuple(i -> ifelse(i == n, x, t[i]), Val(N))
 
 add_tag(H::ProductSpace, tag) = ProductSpace(map(f -> add_tag(f, tag), H.factors))
 

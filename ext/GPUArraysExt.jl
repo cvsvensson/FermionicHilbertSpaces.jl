@@ -2,7 +2,7 @@ module GPUArraysExt
 
 using Adapt: Adapt, adapt
 using GPUArrays: GPUArrays, @allowscalar, AbstractGPUArray, AbstractGPUSparseMatrixCSC, AbstractGPUSparseMatrixCSR
-using KernelAbstractions: @index, @kernel, allocate, get_backend
+using KernelAbstractions: @index, @kernel, allocate, get_backend, synchronize
 using NonCommutativeProducts: NCMul
 using SparseArrays: SparseArrays, SparseMatrixCSC
 import FermionicHilbertSpaces: _canonicalize_repr, _convert_repr_eltype, _repr_eltype, _skip_outside, _terms_matrix,
@@ -49,21 +49,18 @@ _convert_repr_eltype(M, F::Type{<:GPUSparseMatrix}) = _convert_repr_eltype(M, _c
 
 ## Device copies of spaces and operators
 
-# The rules that map FHS types to their device copies apply only under these adaptors, so that a user's `adapt` of an
-# object holding FHS spaces or operators is unaffected. `DeviceAdaptor` adapts the arrays inside to `arrays`, a backend
-# or `DropArrays()`; `TermAdaptor` keeps them, so that a term holding arrays fails the isbits check.
+# The rules that map FHS types to their device copies apply only under this adaptor, so that a user's `adapt` of an
+# object holding FHS spaces or operators is unaffected. It adapts the arrays inside to `arrays`, a backend.
 struct DeviceAdaptor{A}
     arrays::A
 end
-struct TermAdaptor end
-const FHSAdaptor = Union{DeviceAdaptor, TermAdaptor}
 Adapt.adapt_storage(to::DeviceAdaptor, a::AbstractArray) = adapt(to.arrays, a)
 
 # Each keeps the fields that `basisstate`, `state_index` and the operator application read. Labels, bases, symbols and
 # mode lists only identify modes, which the precomputation has already resolved.
-Adapt.adapt_structure(::FHSAdaptor, f::FermionSym) = FermionSym(f.creation, nothing, nothing)
-Adapt.adapt_structure(::FHSAdaptor, b::BosonSym) = BosonSym{Nothing, Nothing, Nothing}(nothing, nothing, nothing, b.exp)
-Adapt.adapt_structure(::FHSAdaptor, s::SpinSym) = DeviceSpinSym(_spin_shift(s), s.exponent)
+Adapt.adapt_structure(::DeviceAdaptor, f::FermionSym) = FermionSym(f.creation, nothing, nothing)
+Adapt.adapt_structure(::DeviceAdaptor, b::BosonSym) = BosonSym{Nothing, Nothing, Nothing}(nothing, nothing, nothing, b.exp)
+Adapt.adapt_structure(::DeviceAdaptor, s::SpinSym) = DeviceSpinSym(_spin_shift(s), s.exponent)
 
 Adapt.adapt_structure(::DeviceAdaptor, H::FermionicSpace{F}) where {F} = DeviceFermionicSpace{F}(nbr_of_modes(H))
 Adapt.adapt_structure(to::DeviceAdaptor, H::TruncatedBosonicHilbertSpace) = TruncatedBosonicHilbertSpace(adapt(to, H.sym), H.dimension)
@@ -71,7 +68,7 @@ Adapt.adapt_structure(::DeviceAdaptor, H::SpinSpace{T}) where {T} = SpinSpace{T,
 function Adapt.adapt_structure(to::DeviceAdaptor, H::ProductSpace{B}) where {B}
     ismissing(H.fast_path) && throw(ArgumentError("Product spaces whose groups have no internal representation as integers are not supported on GPUs."))
     factors = adapt(to, H.factors)
-    return DeviceProductSpace{B, typeof(factors), typeof(H.fast_path), typeof(H.lininds), typeof(H.cartinds)}(factors, H.fast_path, H.lininds, H.cartinds)
+    return DeviceProductSpace{B, typeof(factors), typeof(H.lininds), typeof(H.cartinds)}(factors, H.lininds, H.cartinds)
 end
 Adapt.adapt_structure(to::DeviceAdaptor, H::AbstractSubspace{B}) where {B} =
     DeviceSubspace{B}(adapt(to, parent(H)), adapt(to, subspace_states(H)), adapt(to, _sorted_index(subspace_index(H))))
@@ -115,61 +112,39 @@ end
 
 ## Terms
 
-# Terms reach the kernels as elements of a device array, so they cannot hold arrays. The group spaces of a
-# `ProductOperator` are only used for dispatch and sizes, so their arrays are replaced by `NoStorage`.
-Adapt.adapt_structure(to::TermAdaptor, x::NCMul) = NCMul(x.coeff, adapt(to, x.factors))
-Adapt.adapt_structure(to::TermAdaptor, x::ProductOperator{C}) where {C} =
-    ProductOperator{C}(adapt(to, x.ops), adapt(DeviceAdaptor(DropArrays()), x.spaces), Tuple(x.inds))
-struct DropArrays end
-Adapt.adapt_storage(::DropArrays, a::DenseArray) = NoStorage{eltype(a), ndims(a)}(size(a))
-struct NoStorage{T, N} <: AbstractArray{T, N}
-    dims::NTuple{N, Int}
-end
-Base.size(a::NoStorage) = a.dims
-Base.getindex(::NoStorage, ::Int...) = throw(ArgumentError("The arrays of the group spaces of a term are not available in GPU kernels."))
+# Terms reach the kernels as elements of a device array, so a term holding an array fails the isbits check.
+Adapt.adapt_structure(to::DeviceAdaptor, x::NCMul) = NCMul(x.coeff, adapt(to, x.factors))
+Adapt.adapt_structure(to::DeviceAdaptor, x::ProductOperator{C}) where {C} =
+    ProductOperator{C}(adapt(to, x.ops), adapt(to, x.spaces), Tuple(x.inds))
 
 # The terms with tuple factors and their precomputation. Terms of equal type share one device vector.
 function _device_terms(terms, H, backend)
+    to = DeviceAdaptor(backend)
     prepared = map(collect(terms)) do term
         t = __concretize(term, TupleConcretizer())
-        _check_isbits(adapt(TermAdaptor(), (t, precomputation_before_operator_application(t, H))), () -> "The term `$term`")
+        _check_isbits(adapt(to, (t, precomputation_before_operator_application(t, H))), term)
     end
     return Tuple(adapt(backend, collect(T, filter(x -> x isa T, prepared))) for T in unique(map(typeof, prepared)))
 end
 
-# `what` is a function because printing a term with default `show` takes milliseconds
-function _check_isbits(x, what)
-    isbits(x) || throw(ArgumentError("$(what()) is not supported on GPUs: $(_nonbits_field(x, "")) is not isbits. Its type needs an `Adapt.adapt_structure` method that keeps only isbits data and arrays."))
+function _check_isbits(x, original)
+    isbits(x) || throw(ArgumentError("`$original` is not supported on GPUs: its device copy of type `$(typeof(x))` is not isbits. Its type needs an `Adapt.adapt_structure` method that keeps only isbits data and arrays."))
     return x
 end
-# Descends into tuples and into types not from Base, whose fields name the offending data better than Base internals
-function _nonbits_field(x, path)
-    for name in fieldnames(typeof(x))
-        isdefined(x, name) || continue
-        field = getfield(x, name)
-        isbits(field) && continue
-        fieldpath = isempty(path) ? string(name) : "$path.$name"
-        field isa Tuple || parentmodule(typeof(field)) ∉ (Base, Core) || return "`$fieldpath::$(typeof(field))`"
-        return _nonbits_field(field, fieldpath)
-    end
-    return "`$(isempty(path) ? "the value" : path)::$(typeof(x))`"
-end
+# The states and index of a subspace are device arrays, which reach the kernels through the backend's own adaptor
+_bits_part(space) = space
+_bits_part(space::AbstractSubspace) = parent(space)
 
 ## Kernels
 
-struct DenseSink{M}
-    M::M
-end
 struct SlotSink{R, V}
     rows::R
     vals::V
     slot::Int
 end
-Adapt.@adapt_structure DenseSink
 Adapt.@adapt_structure SlotSink
-_at_slot(s::DenseSink, slot) = s
+_at_slot(M::AbstractMatrix, slot) = M
 _at_slot(s::SlotSink, slot) = SlotSink(s.rows, s.vals, slot)
-push_inds_amps!(s::DenseSink, outind, inind, amp) = (s.M[outind, inind] += amp; nothing)
 # Slot `s` of column `j` is at `[j, s]`, so that neighbouring threads write neighbouring addresses
 push_inds_amps!(s::SlotSink, outind, inind, amp) = (s.rows[inind, s.slot] = outind; s.vals[inind, s.slot] = amp; nothing)
 
@@ -202,10 +177,9 @@ end
 end
 
 # Sorts the entries of column `j` by row and sums duplicates, in place at the start of the column. A zero row marks
-# an empty slot. The count goes to `counts[j + 1]`, after `counts[1] = 1`.
+# an empty slot. The count goes to `counts[j + 1]`.
 @kernel function _compact_kernel!(counts, rows, vals)
     j = @index(Global)
-    j == 1 && (counts[1] = 1)
     c = 0
     for s in axes(rows, 2)
         r = rows[j, s]
@@ -240,12 +214,17 @@ end
 
 ## Assembly
 
+# JLArrays runs kernels on launch and defines no `synchronize` for its backend
+_synchronize(backend) = applicable(synchronize, backend) ? synchronize(backend) : nothing
+
+# Measured slower on an NVIDIA T1000 than slots, compaction and gather: sorting while inserting, compaction by repeated
+# selection of the smallest row, COO followed by cuSPARSE `sparse`, one launch per term group, and a prefix sum on the host.
 function _terms_matrix(::Type{T}, terms, coeff, H::AbstractHilbertSpace, r::GPURepr, chunking; projection = false, _...) where {T}
     T <: Real && !(mapreduce(mat_eltype, promote_type, terms; init = Bool) <: Real) &&
         throw(ArgumentError("The element type $T cannot hold the complex matrix elements of the operator."))
     backend = r.backend
     space = adapt(DeviceAdaptor(backend), H)
-    _check_isbits(adapt(DropArrays(), space), () -> "The space")
+    _check_isbits(_bits_part(space), H)
     termgroups = _device_terms(terms, H, backend)
     flag = fill!(allocate(backend, Bool, 1), false)
     run! = sink -> _column_kernel!(backend)(sink, space, termgroups, convert(T, coeff), projection ? true : OutsideFlag(flag); ndrange = dim(H))
@@ -256,7 +235,8 @@ end
 
 function _assemble(r::GPURepr{<:Any, <:AbstractGPUArray}, ::Type{T}, run!, n, nslots) where {T}
     M = fill!(allocate(r.backend, T, n, n), zero(T))
-    run!(DenseSink(M))
+    run!(M)
+    _synchronize(r.backend)
     return M
 end
 function _assemble(r::GPURepr{<:Any, F}, ::Type{T}, run!, n, nslots) where {T, F}
@@ -266,13 +246,16 @@ function _assemble(r::GPURepr{<:Any, F}, ::Type{T}, run!, n, nslots) where {T, F
     rows = fill!(allocate(backend, Ti, n, nslots), zero(Ti))
     vals = allocate(backend, T, n, nslots)
     run!(SlotSink(rows, vals, 0))
-    counts = allocate(backend, Ti, n + 1)
+    _synchronize(backend)
+    counts = fill!(allocate(backend, Ti, n + 1), one(Ti))
     _compact_kernel!(backend)(counts, rows, vals; ndrange = n)
+    _synchronize(backend)
     colptr = accumulate(+, counts)
     nnz = Int(@allowscalar colptr[end]) - 1
     rowval = allocate(backend, Ti, nnz)
     nzval = allocate(backend, T, nnz)
     nnz > 0 && _gather_kernel!(backend)(rowval, nzval, colptr, rows, vals; ndrange = nnz)
+    _synchronize(backend)
     return _sparse_matrix(F, colptr, rowval, nzval, n)
 end
 

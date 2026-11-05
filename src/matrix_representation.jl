@@ -145,7 +145,7 @@ function push_inds_amps!((outinds, ininds, amps), outind, inind, amp)
     push!(amps, amp)
     return nothing
 end
-function push_inds_amps!(m::Matrix, outind, inind, amp)
+function push_inds_amps!(m::AbstractMatrix, outind, inind, amp)
     m[outind, inind] += amp
 end
 
