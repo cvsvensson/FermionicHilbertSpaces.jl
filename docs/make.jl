@@ -15,6 +15,7 @@ literate_files = [
     "examples/free_fermions.jl",
     "examples/kitaev_chain.jl",
     "examples/open_system_lindblad.jl",
+    "examples/parafermions.jl",
     "examples/partial_transpose.jl",
     "examples/spin_chain.jl",
     "examples/syk_model.jl",
@@ -40,6 +41,7 @@ pages = [
         "SYK model" => "literate_output/syk_model.md",
         "Braiding Majorana zero modes" => "literate_output/braiding.md",
         "Spatial symmetries" => "literate_output/translation_symmetry.md",
+        "Parafermions" => "literate_output/parafermions.md",
     ],
     "Guides" => [
         "Constrained spaces and quantum numbers" => "conservation.md",
