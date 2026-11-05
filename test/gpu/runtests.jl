@@ -71,4 +71,11 @@ end
         @test out isa JLArray
         @test Array(out) ≈ op(xs, Hs => H)
     end
+    Hc = hilbert_space(f, 1:5, NumberConservation(2))
+    Hcs = map(Hk -> subregion(Hk, Hc), Hs)
+    mcs = map(Hk -> rand(ComplexF64, dim(Hk), dim(Hk)), Hcs)
+    out = tensor_product(map(JLArray, mcs), Hcs => Hc; alg, projection = true)
+    @test out isa JLArray
+    @test Array(out) ≈ tensor_product(mcs, Hcs => Hc; projection = true)
+    @test_throws ArgumentError tensor_product(map(JLArray, mcs), Hcs => Hc; alg)
 end

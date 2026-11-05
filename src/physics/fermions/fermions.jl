@@ -102,8 +102,14 @@ combine_states(states, H::FermionicSpace{F}) where F = (catenate_fock_states(sta
 
 state_mapper(H::FermionicSpace, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
 state_mapper(H::FermionicSpace, Hs) = _fock_mapper(H, Hs)
-_is_full_fock_kron(H, mapper, Hs) = false
-_is_full_fock_kron(H::FermionicSpace{<:FockNumber}, mapper::FockMapper, Hs) = mapper.isfullpartition && all(Hk -> Hk isa FermionicSpace{<:FockNumber}, Hs)
+function _kron_modes(m::FockMapper{N}) where {N}
+    owner = zeros(Int, N)
+    for (k, positions) in enumerate(m.fermionpositions), i in positions
+        owner[i] = k
+    end
+    return ones(Int, N), owner
+end
+_kron_bits(::FockMapper{N}, state) where {N} = [_bit(state, i) for i in 1:N]
 function _fock_mapper(H, Hs)
     fermionpositions = [[atom_position(atom, H) for atom in _fock_atoms(Hsub)] for Hsub in Hs]
     all(x -> x > 0, Iterators.flatten(fermionpositions)) || throw(ArgumentError("All subspaces in `Hs` must be part of `H`, got positions $fermionpositions."))
