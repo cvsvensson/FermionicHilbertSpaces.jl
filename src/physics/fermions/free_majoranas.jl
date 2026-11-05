@@ -28,11 +28,11 @@ representation(op, H::MajoranaSingleParticleHilbertSpace, repr = EagerSparseRepr
 function matrix_representation(op, H::MajoranaSingleParticleHilbertSpace, repr = EagerSparseRepr(); chunking = NoChunking(), kwargs...)
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
     _is_quadratic_operator(op, (a, b) -> a isa MajoranaSym && b isa MajoranaSym) || throw(ArgumentError("Only quadratic Majorana operators can be represented on a MajoranaSingleParticleHilbertSpace. Use `hilbert_space(γ, labels)` and `representation(op, H)` for other operators."))
-    m = _quadratic_matrix(remove_identity(op), H, repr) do term, H
+    return _quadratic_matrix(remove_identity(op), H, repr) do term, H
         a, b = term.factors
-        return mode_position(a, H), mode_position(b, H), term.coeff
+        i, j = mode_position(a, H), mode_position(b, H)
+        return ((i, j, term.coeff), (j, i, -term.coeff))
     end
-    return m - permutedims(m)
 end
 
 @testitem "Majorana single-particle space" begin
