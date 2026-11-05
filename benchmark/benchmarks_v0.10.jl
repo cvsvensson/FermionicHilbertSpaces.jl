@@ -297,7 +297,7 @@ let
     # Few particles on more sites than Base's tuple functions infer.
     N = 33
     H33 = hilbert_space(b, 1:N, 3, NumberConservation(2))
-    ham33 = sum(-1.0 * b[n]' * b[n+1] + hc for n in 1:N-1) + sum(0.5 * b[n]' * b[n]' * b[n] * b[n] for n in 1:N)
+    ham33 = sum(-1.0 * b[n]' * b[n + 1] + hc for n in 1:(N - 1)) + sum(0.5 * b[n]' * b[n]' * b[n] * b[n] for n in 1:N)
     SUITE["bosons"]["space_33_sites"] = @benchmarkable hilbert_space($b, $(1:N), 3, NumberConservation(2))
     SUITE["bosons"]["matrix_representation_33_sites"] = @benchmarkable matrix_representation($ham33, $H33)
 end

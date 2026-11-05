@@ -2,8 +2,8 @@
 combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
 combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("The group `$group_id` requires a single space, got $spaces."))
 # Base's tuple `map` and `setindex`, and `LinearIndices`, are not inferred past 32 entries.
-_tuple_map(f::F, a::NTuple{N,Any}, b::NTuple{N,Any}) where {F,N} = ntuple(i -> f(a[i], b[i]), Val(N))
-function _linear_index(inds::NTuple{N,Int}, axes) where {N}
+_tuple_map(f::F, a::NTuple{N, Any}, b::NTuple{N, Any}) where {F, N} = ntuple(i -> f(a[i], b[i]), Val(N))
+function _linear_index(inds::NTuple{N, Int}, axes) where {N}
     k, stride = 1, 1
     for n in 1:N
         k += (inds[n] - 1) * stride
@@ -72,7 +72,7 @@ function _state_index(state::ProductState, H::ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
     inds = _tuple_map(_state_index, state.states, H.factors)
     all(>(0), inds) || return 0
-    _linear_index(inds, H.lininds.indices)
+    return _linear_index(inds, H.lininds.indices)
 end
 # `lininds` is exact only when the product of the factor dimensions fits in an `Int`
 has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && prod(big ∘ dim, H.factors) <= typemax(Int)
@@ -304,7 +304,7 @@ end
     @bosons b
     space(n) = hilbert_space(b, 1:n, 2, NumberConservation(1))
     nb(i) = b[i]' * b[i]
-    hamiltonian(n) = -sum(b[i]' * b[i+1] + hc for i in 1:n-1) + sum(nb(i) * (nb(i) - 1) for i in 1:n)
+    hamiltonian(n) = -sum(b[i]' * b[i + 1] + hc for i in 1:(n - 1)) + sum(nb(i) * (nb(i) - 1) for i in 1:n)
     function allocations(n)
         H, op = space(n), hamiltonian(n)
         matrix_representation(op, H)
@@ -420,7 +420,8 @@ _apply_group_operators(amp, states, newstates, inds, k, ::Tuple{}, ::Tuple{}, ::
 function _apply_group_operators(amp::C, states, newstates, inds, k, ops::Tuple, spaces::Tuple, precomps::Tuple) where {C}
     n = inds[k]
     new_local_state, local_amp = _apply_local_operators(first(ops), states[n], first(spaces), first(precomps))
-    return _apply_group_operators(amp * convert(C, local_amp), states, ntuple(i -> i == n ? new_local_state : newstates[i], Val(length(newstates))),
+    return _apply_group_operators(
+        amp * convert(C, local_amp), states, ntuple(i -> i == n ? new_local_state : newstates[i], Val(length(newstates))),
         inds, k + 1, Base.tail(ops), Base.tail(spaces), Base.tail(precomps))
 end
 
