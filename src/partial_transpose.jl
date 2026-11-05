@@ -10,8 +10,9 @@ _split_all_states(H, mapper) = map(Base.Fix2(split_state, mapper), basisstates(H
 _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in) =
     Hout === H ? mapper_in : state_mapper(Hout, _pt_parts(Hsub, complement))
 
+const _PT_OUTPUT_SPACE_HINT = "Pass a larger output space as `H => Hout` (e.g. the unconstrained space on the same modes), or `projection=true` to drop such terms."
 function _throw_missing_pt_state(g, Hout)
-    throw(ArgumentError("The state $g is not in the output Hilbert space. The partial transpose does not preserve number/parity constraints: pass a larger output space as `H => Hout` (e.g. the unconstrained space on the same modes), or `projection=true` to drop such terms."))
+    throw(ArgumentError("The state $g is not in the output Hilbert space. The partial transpose does not preserve number/parity constraints. " * _PT_OUTPUT_SPACE_HINT))
 end
 
 partial_transpose_phase_factor_eltype(H::AbstractHilbertSpace) = partial_trace_phase_factor_eltype(H) # default assumption 
@@ -104,13 +105,15 @@ end
 
 # Gathers `m` into the product basis of `Hsub` and its complement, swaps the `Hsub` indices of rows
 # and columns with `permutedims`, and gathers the result onto `Hout`. For fermions the phase of
-# |ν⟩⟨ν′| ↦ |μ⟩⟨μ′| is τ(a, a′) α(ν) α(ν′) α(μ) α(μ′), with ν = (a, b), ν′ = (a′, b′), α(f) = `phase_factor_u`
-# of f split as (complement, Hsub) and τ(a, a′) = f_A(a, a′) f_A(a′, a) i^{k_A(a, a′)} on `Hsub`.
+# |ν⟩⟨ν′| ↦ |μ⟩⟨μ′| is τ(a, a′) c(ν) c(ν′) c(μ) c(μ′), with ν = (a, b), ν′ = (a′, b′). Here c(f) is
+# `phase_factor_u` of f split as (complement, Hsub), and τ(a, a′) is the product of
+# `partial_trace_phase_factor(a, a′, Hsub)`, `partial_trace_phase_factor(a′, a, Hsub)` and
+# `partial_transpose_phase_factor(a, a′, Hsub)`.
 function _factorized_partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection)
     parts = _pt_parts(Hsub, complement)
     dA, dB = dim(Hsub), isnothing(complement) ? 1 : dim(complement)
-    α(Hx) = phase_factors && !isnothing(complement) ? phase_factor_u(state_mapper(Hx, (complement, Hsub))) : (f -> 1)
-    rin, win = _product_positions(H, mapper_in, parts, α(H))
+    cutphase(Hx) = phase_factors && !isnothing(complement) ? phase_factor_u(state_mapper(Hx, (complement, Hsub))) : (f -> 1)
+    rin, win = _product_positions(H, mapper_in, parts, cutphase(H))
     projection || _check_covered(m, .!iszero.(rin), _copied_support_on)
     q, wq = ones(Int, dA * dB), zeros(eltype(win), dA * dB)
     for (J, (r, w)) in enumerate(zip(rin, win))
@@ -121,14 +124,18 @@ function _factorized_partial_transpose!(mout, m, H, Hsub, complement, Hout, mapp
             for a in basisstates(Hsub), a′ in basisstates(Hsub)
     ]
     q, wq, τ = _adapt_like(m, q), _adapt_like(m, wq), _adapt_like(m, τ)
-    W = reshape(wq, dA, dB, 1, 1) .* reshape(conj.(wq), 1, 1, dA, dB) .* reshape(τ, dA, 1, dA, 1)
-    P = reshape(permutedims(_masked_mul.(W, reshape(m[q, q], dA, dB, dA, dB)), (3, 2, 1, 4)), dA * dB, dA * dB)
-    rout, wout = Hout === H ? (rin, win) : _product_positions(Hout, mapper_out, parts, α(Hout))
-    covered = zeros(Bool, dA * dB)
-    covered[filter(!iszero, rout)] .= true
-    if !projection && !all(covered)
-        c = _adapt_like(m, covered)
-        any(.!(c .& transpose(c)) .& .!iszero.(P)) && throw(ArgumentError("The partial transpose has nonzero weight on states that are not in the output Hilbert space. Pass a larger output space as `H => Hout` (e.g. the unconstrained space on the same modes), or `projection=true` to drop such terms."))
+    P = _masked_mul.(
+        reshape(wq, dA, dB, 1, 1) .* reshape(conj.(wq), 1, 1, dA, dB) .* reshape(τ, dA, 1, dA, 1),
+        reshape(m[q, q], dA, dB, dA, dB),
+    )
+    P = reshape(permutedims(P, (3, 2, 1, 4)), dA * dB, dA * dB)
+    rout, wout = Hout === H ? (rin, win) : _product_positions(Hout, mapper_out, parts, cutphase(Hout))
+    if !projection
+        covered = zeros(Bool, dA * dB)
+        covered[filter(!iszero, rout)] .= true
+        dropped = findall(iszero, covered)
+        (_copied_support_on(P, 1, dropped) || _copied_support_on(P, 2, dropped)) &&
+            throw(ArgumentError("The partial transpose has nonzero weight on states that are not in the output Hilbert space. " * _PT_OUTPUT_SPACE_HINT))
     end
     r, w = _adapt_like(m, max.(rout, 1)), _adapt_like(m, wout)
     mout .= _masked_mul.(w .* adjoint(w), P[r, r])
@@ -491,13 +498,16 @@ end
     @fermions f
     @spin s
     @boson b
+    @majoranas γ
     Hn = hilbert_space(f, 1:4, NumberConservation(2))
     Hp = hilbert_space(f, 1:4, ParityConservation())
     Hfs = tensor_product(hilbert_space(f, 1:3), hilbert_space(s, 1 // 2), hilbert_space(b, 2))
+    Hγ = hilbert_space(γ, 1:6)
     cases = (
         (Hn => hilbert_space(f, 1:4), subregion(hilbert_space(f, [1, 3]), Hn)),
         (Hp => hilbert_space(f, 1:4), subregion(hilbert_space(f, [2, 3]), Hp)),
         (Hfs => Hfs, tensor_product(hilbert_space(f, [1, 3]), hilbert_space(s, 1 // 2))),
+        (Hγ => Hγ, subregion(hilbert_space(γ, 3:4), Hγ)),
     )
     for (Hs, HA) in cases, phase_factors in (true, false)
         m = rand(ComplexF64, dim(first(Hs)), dim(first(Hs)))
