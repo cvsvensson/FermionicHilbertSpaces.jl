@@ -193,7 +193,7 @@ end
 
     # A space without states
     @test size(representation(f[1]' * f[2] + 1, constrain_space(hilbert_space(f, 1:2), NumberConservation(5)))) == (0, 0)
-    @spin s 1//2
+    @spin s 1 // 2
     Hempty = tensor_product(GenericHilbertSpace(:a, [:x, :y]), GenericHilbertSpace(s, Int[]))
     @test size(representation(s[:z] + s[:x] + 1, Hempty)) == (0, 0)
 
