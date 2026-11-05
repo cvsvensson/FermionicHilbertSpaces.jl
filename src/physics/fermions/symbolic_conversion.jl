@@ -74,7 +74,7 @@ end
 
     op = 3 + 2im * γ[1] * γ[3] - 5 * γ[2]
     @test to_majorana(to_fermion(op, M), M) == op
-    @test matrix_representation(op, H) == matrix_representation(to_fermion(op, M), parent(H))
+    @test representation(op, H) == representation(to_fermion(op, M), parent(H))
 end
 
 @testitem "MajoranaMap (custom mapping)" begin
