@@ -318,7 +318,7 @@ end
     @test eigvals(Symmetric(Matrix(matrix_representation(hamiltonian(n), space(n))))) ≈ exact
 end
 
-@testitem "Matrix on a fermion, boson and spin product allocates little" begin
+@testitem "Matrix on a fermion, boson and spin product of more than 32 groups" begin
     using LinearAlgebra
     import FermionicHilbertSpaces: matrix_representation, BosonicState, SpinState
     @fermions f
@@ -328,18 +328,28 @@ end
     excitation(state::SpinState) = state.m + 1 // 2
     raise(i) = isodd(i) ? b[i]' : s[i][:+]
     lower(i) = isodd(i) ? b[i] : s[i][:-]
-    n = 7
     fermion_spaces = [hilbert_space(f, i:i) for i in 1:2]
-    chain_spaces = Tuple(isodd(i) ? hilbert_space(b[i], 2) : hilbert_space(s[i]) for i in 1:n)
-    H = tensor_product(
-        (fermion_spaces..., chain_spaces...);
-        constraint = NumberConservation(1, fermion_spaces) * AdditiveConstraint(1 // 1, chain_spaces, excitation)
-    )
-    op = -(f[1]' * f[2] + hc) - sum(raise(i) * lower(i + 1) + hc for i in 1:(n - 1))
-    m = matrix_representation(op, H)
-    @test (@allocations matrix_representation(op, H)) < 3000
+    # The fermions form one group, so a chain of `n` sites gives `n + 1` groups
+    function system(n)
+        chain_spaces = Tuple(isodd(i) ? hilbert_space(b[i], 2) : hilbert_space(s[i]) for i in 1:n)
+        H = tensor_product(
+            (fermion_spaces..., chain_spaces...);
+            constraint = NumberConservation(1, fermion_spaces) * AdditiveConstraint(1 // 1, chain_spaces, excitation)
+        )
+        op = -(f[1]' * f[2] + hc) - sum(raise(i) * lower(i + 1) + hc for i in 1:(n - 1))
+        return H, op
+    end
+    function allocations(n)
+        H, op = system(n)
+        matrix_representation(op, H)
+        return @allocations matrix_representation(op, H)
+    end
+    @test allocations(32) < 2 * allocations(30)
+
+    n = 32
+    H, op = system(n)
     exact = sort([-2cos(k * pi / (n + 1)) + d for k in 1:n for d in (-1, 1)])
-    @test eigvals(Symmetric(Matrix(m))) ≈ exact
+    @test eigvals(Symmetric(Matrix(matrix_representation(op, H)))) ≈ exact
 end
 
 @testitem "Fermion ordering" begin
