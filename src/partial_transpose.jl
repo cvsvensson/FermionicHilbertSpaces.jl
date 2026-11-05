@@ -62,9 +62,9 @@ end
 """
     FactorizedPartialTransposeAlg()
 
-Algorithm for the `alg` keyword of [`partial_transpose`](@ref) that uses `permutedims` and
-broadcasts only, so it also runs on GPU arrays. It needs a dense matrix on an unconstrained
-fermionic space, with output space `H` and `Hsub` and its complement covering all modes.
+Algorithm for the `alg` keyword of [`partial_transpose`](@ref) that uses gathers, `permutedims`
+and broadcasts only, so it also runs on GPU arrays. It needs a dense matrix, and basis states of
+`H` and `Hout` that split into a single pair of states of `Hsub` and its complement.
 """
 struct FactorizedPartialTransposeAlg end
 _check_partial_transpose_alg(alg) = alg isa GenericAlg || alg isa FactorizedPartialTransposeAlg ||
@@ -88,9 +88,11 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     _check_no_alias(mout, m)
     _check_partial_transpose_alg(alg)
     if alg isa FactorizedPartialTransposeAlg
-        !(m isa AbstractSparseMatrix) && _is_full_fock_partial_transpose(H, Hout, mapper_in) ||
-            throw(ArgumentError("FactorizedPartialTransposeAlg needs a dense matrix on an unconstrained fermionic space `H`, with output space `H` and `Hsub` and its complement covering all modes."))
-        return _fock_partial_transpose!(mout, m, nbr_of_modes(H), first(mapper_in.fermionpositions); phase_factors)
+        m isa AbstractSparseMatrix && throw(ArgumentError("FactorizedPartialTransposeAlg needs a dense matrix."))
+        # On the full Fock space the product basis is a reshape of `m`, so no gathers are needed.
+        _is_full_fock_partial_transpose(H, Hout, mapper_in) &&
+            return _fock_partial_transpose!(mout, m, nbr_of_modes(H), first(mapper_in.fermionpositions); phase_factors)
+        return _factorized_partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection)
     end
     fill!(mout, zero(eltype(mout)))
     splits = _split_all_states(H, mapper_in)
@@ -98,6 +100,50 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
         mout[K1, K2] += v * m[J1, J2]
     end
     return mout
+end
+
+# Gathers `m` into the product basis of `Hsub` and its complement, swaps the `Hsub` indices of rows
+# and columns with `permutedims`, and gathers the result onto `Hout`. For fermions the phase of
+# |ν⟩⟨ν′| ↦ |μ⟩⟨μ′| is τ(a, a′) α(ν) α(ν′) α(μ) α(μ′), with ν = (a, b), ν′ = (a′, b′), α(f) = `phase_factor_u`
+# of f split as (complement, Hsub) and τ(a, a′) = f_A(a, a′) f_A(a′, a) i^{k_A(a, a′)} on `Hsub`.
+function _factorized_partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection)
+    parts = _pt_parts(Hsub, complement)
+    dA, dB = dim(Hsub), isnothing(complement) ? 1 : dim(complement)
+    α(Hx) = phase_factors && !isnothing(complement) ? phase_factor_u(state_mapper(Hx, (complement, Hsub))) : (f -> 1)
+    rin, win = _product_positions(H, mapper_in, parts, α(H))
+    projection || _check_covered(m, .!iszero.(rin), _copied_support_on)
+    q, wq = ones(Int, dA * dB), zeros(eltype(win), dA * dB)
+    for (J, (r, w)) in enumerate(zip(rin, win))
+        iszero(r) || (q[r] = J; wq[r] = w)
+    end
+    τ = [phase_factors ? partial_trace_phase_factor(a, a′, Hsub) * partial_trace_phase_factor(a′, a, Hsub) * partial_transpose_phase_factor(a, a′, Hsub) : 1
+         for a in basisstates(Hsub), a′ in basisstates(Hsub)]
+    q, wq, τ = _adapt_like(m, q), _adapt_like(m, wq), _adapt_like(m, τ)
+    W = reshape(wq, dA, dB, 1, 1) .* reshape(conj.(wq), 1, 1, dA, dB) .* reshape(τ, dA, 1, dA, 1)
+    P = reshape(permutedims(_masked_mul.(W, reshape(m[q, q], dA, dB, dA, dB)), (3, 2, 1, 4)), dA * dB, dA * dB)
+    rout, wout = Hout === H ? (rin, win) : _product_positions(Hout, mapper_out, parts, α(Hout))
+    covered = zeros(Bool, dA * dB)
+    covered[filter(!iszero, rout)] .= true
+    if !projection && !all(covered)
+        c = _adapt_like(m, covered)
+        any(.!(c .& transpose(c)) .& .!iszero.(P)) && throw(ArgumentError("The partial transpose has nonzero weight on states that are not in the output Hilbert space. Pass a larger output space as `H => Hout` (e.g. the unconstrained space on the same modes), or `projection=true` to drop such terms."))
+    end
+    r, w = _adapt_like(m, max.(rout, 1)), _adapt_like(m, wout)
+    mout .= _masked_mul.(w .* adjoint(w), P[r, r])
+    return mout
+end
+
+# The index of each basis state of `H` in the product basis of `parts` and its weight times `α`,
+# or (0, 0) if it is not in that basis.
+function _product_positions(H, mapper, parts, α)
+    inds = LinearIndices(map(dim, parts))
+    positions = map(basisstates(H)) do f
+        substates, amps = split_state(f, mapper)
+        length(substates) == 1 || throw(ArgumentError("FactorizedPartialTransposeAlg needs states that split uniquely into `Hsub` and its complement."))
+        ks = map(state_index, only(substates), parts)
+        any(iszero, ks) ? (0, zero(only(amps) * α(f))) : (inds[ks...], only(amps) * α(f))
+    end
+    return first.(positions), last.(positions)
 end
 
 """
@@ -434,9 +480,29 @@ end
     end
     ψ = rand(ComplexF64, dim(H))
     @test partial_transpose(ψ, H, hilbert_space(f, [2, 4]); alg) ≈ partial_transpose(ψ, H, hilbert_space(f, [2, 4]))
-    Hc = hilbert_space(f, 1:4, NumberConservation(2))
-    @test_throws ArgumentError partial_transpose(rand(dim(Hc), dim(Hc)), Hc => hilbert_space(f, 1:4), hilbert_space(f, 1:2); alg)
     @test_throws ArgumentError partial_transpose(ψ, H, hilbert_space(f, [2, 4]); alg = :other)
+end
+
+@testitem "Partial transpose: FactorizedPartialTransposeAlg on constrained and product spaces" begin
+    using FermionicHilbertSpaces: FactorizedPartialTransposeAlg
+    alg = FactorizedPartialTransposeAlg()
+    @fermions f
+    @spin s
+    @boson b
+    Hn = hilbert_space(f, 1:4, NumberConservation(2))
+    Hp = hilbert_space(f, 1:4, ParityConservation())
+    Hfs = tensor_product(hilbert_space(f, 1:3), hilbert_space(s, 1 // 2), hilbert_space(b, 2))
+    cases = ((Hn => hilbert_space(f, 1:4), subregion(hilbert_space(f, [1, 3]), Hn)),
+        (Hp => hilbert_space(f, 1:4), subregion(hilbert_space(f, [2, 3]), Hp)),
+        (Hfs => Hfs, tensor_product(hilbert_space(f, [1, 3]), hilbert_space(s, 1 // 2))))
+    for (Hs, HA) in cases, phase_factors in (true, false)
+        m = rand(ComplexF64, dim(first(Hs)), dim(first(Hs)))
+        @test partial_transpose(m, Hs, HA; phase_factors, alg) ≈ partial_transpose(m, Hs, HA; phase_factors)
+    end
+    HnA = subregion(hilbert_space(f, [1, 3]), Hn)
+    m = rand(dim(Hn), dim(Hn))
+    @test_throws ArgumentError partial_transpose(m, Hn, HnA; alg)
+    @test partial_transpose(m, Hn, HnA; alg, projection = true) ≈ partial_transpose(m, Hn, HnA; projection = true)
 end
 
 @testitem "Partial transpose: bosons, spins, and Majoranas" begin
