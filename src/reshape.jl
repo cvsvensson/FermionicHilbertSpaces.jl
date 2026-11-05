@@ -84,7 +84,7 @@ that GPU arrays work.
 returns a callable `ReshapeMap` that precomputes the transitions, and can be
 applied as `op(t)` or in place as `op(out, t)`.
 """
-function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = GenericAlg())
+function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = default_alg(reshape, t))
     alg isa GenericAlg || alg isa GatherAlg || throw(ArgumentError("`reshape` supports `alg = GenericAlg()` or `GatherAlg()`, got $alg."))
     mappings = (mapping, rest...)
     mappings = if repeat

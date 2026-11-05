@@ -72,3 +72,21 @@ end
         @test Array(out) ≈ op(xs, Hs => H)
     end
 end
+
+@testset "GPU-capable algorithms are the default for GPU arrays" begin
+    @fermions f
+    H, HA, HB = hilbert_space(f, 1:4), hilbert_space(f, [1, 3]), hilbert_space(f, [2, 4])
+    m, v = rand(ComplexF64, dim(H), dim(H)), rand(ComplexF64, dim(H))
+    mA, mB = rand(ComplexF64, dim(HA), dim(HA)), rand(ComplexF64, dim(HB), dim(HB))
+    @test Array(partial_trace(JLArray(m), H => HA)) ≈ partial_trace(m, H => HA)
+    @test Array(partial_trace(JLArray(v), H => HA)) ≈ partial_trace(v, H => HA)
+    @test Array(partial_trace(JLArray(m)', H => HA)) ≈ partial_trace(m', H => HA)
+    out = JLArray(zeros(ComplexF64, dim(HA), dim(HA)))
+    @test Array(FermionicHilbertSpaces.partial_trace!(out, JLArray(m), H => HA)) ≈ partial_trace(m, H => HA)
+    @test Array(embed(JLArray(mA), HA => H)) ≈ embed(mA, HA => H)
+    @test Array(reshape(JLArray(v), H => (HA, HB))) == reshape(v, H => (HA, HB))
+    @test Array(partial_transpose(JLArray(m), H, HA)) ≈ partial_transpose(m, H, HA)
+    for op in (generalized_kron, tensor_product)
+        @test Array(op((JLArray(mA), JLArray(mB)), (HA, HB) => H)) ≈ op((mA, mB), (HA, HB) => H)
+    end
+end

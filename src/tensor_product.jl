@@ -127,13 +127,13 @@ Use `tensor_product` for product states, local observables, and anything that sh
 
 `generalized_kron(ms, Hs => H)` is also accepted, and `generalized_kron(Hs => H)` returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
-`alg` is `GenericAlg()` (the default) or `FactorizedKronAlg()`.
+`alg` is `GenericAlg()` or `FactorizedKronAlg()`, the default for GPU arrays.
 
 The result is the compression of the tensor product onto `H`. Unless `projection=true`, throws an
 `ArgumentError` if the tensor product of matrices maps a state of `H` outside `H` with nonzero amplitude,
 or if the tensor product of vectors has a nonzero amplitude outside `H`.
 """
-function generalized_kron(ms, Hs, H::AbstractHilbertSpace = tensor_product(Hs); alg = GenericAlg(), kwargs...)
+function generalized_kron(ms, Hs, H::AbstractHilbertSpace = tensor_product(Hs); alg = default_alg(generalized_kron, first(ms)), kwargs...)
     check_kron_sizes(ms, Hs)
     _check_kron_alg(alg)
     N = ndims(first(ms))
@@ -401,7 +401,7 @@ the result is `ψ₁ψ₂⋯|0⟩`. Swapping two odd states flips the sign.
 `kwargs` can be passed a bool `phase_factors` and `alg`, as for [`generalized_kron`](@ref). The last form returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
 """
-function tensor_product(ms::Union{<:AbstractVector, <:Tuple}, Hs, H::AbstractHilbertSpace; alg = GenericAlg(), kwargs...)
+function tensor_product(ms::Union{<:AbstractVector, <:Tuple}, Hs, H::AbstractHilbertSpace; alg = default_alg(tensor_product, first(ms)), kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
     _check_kron_alg(alg)
     if all(_issquare, ms)
@@ -625,7 +625,7 @@ function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
     phi(kron(reverse(map((phi, op) -> phi(op), phis, ops))...))
 end
 
-function partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(v, Hsub, H, complement), kwargs...)
+function partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_alg(partial_trace, v, Hsub, H, complement), kwargs...)
     # vec_to_density_matrix copies ψ to a CPU Matrix
     alg isa GatherAlg && return _partial_trace_by_gather(v, H, Hsub, complement; kwargs...)
     return partial_trace(vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)
@@ -640,7 +640,7 @@ function _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection = f
     projection || _check_covered(m, _covered_states(splits), _copied_support_on)
     return _gather_partial_trace(m, _partial_trace_gather_table(splits, dim(Hsub), dim(complement))...)
 end
-function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
+function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_alg(partial_trace, m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
     isnothing(complement) && return Base.inferencebarrier(change_basis)(m, H, Hsub; kwargs...)
     alg isa GatherAlg && return _partial_trace_by_gather(m, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement); kwargs...)
@@ -800,7 +800,7 @@ struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
     GatherAlg()
 
 Algorithm built from array indexing, broadcasting and reductions only, so that it runs on GPU
-arrays. It is an option for the `alg` keyword of [`partial_trace`](@ref), [`partial_trace!`](@ref), [`embed`](@ref) and `reshape`.
+arrays. It is an option for the `alg` keyword of [`partial_trace`](@ref), [`partial_trace!`](@ref), [`embed`](@ref) and `reshape`, and their default for GPU arrays.
 """
 struct GatherAlg <: AbstractPartialTraceAlg end
 """
@@ -809,6 +809,14 @@ struct GatherAlg <: AbstractPartialTraceAlg end
 The standard element-wise code path of an operation, and the default `alg` of operations that also offer an array-only algorithm such as [`GatherAlg`](@ref).
 """
 struct GenericAlg end
+"""
+    default_alg(op, x, args...)
+
+The default `alg` keyword of operation `op` on input `x`, with `args` passed on to `default_partial_trace_alg` for `partial_trace`.
+Package extensions add methods for GPU arrays.
+"""
+default_alg(op, x, args...) = GenericAlg()
+default_alg(::typeof(partial_trace), x, args...) = default_partial_trace_alg(x, args...)
 
 _effective_dim(m::AbstractMatrix, H) = length(m)
 _effective_dim(m::AbstractSparseMatrix, H) = nnz(m)
@@ -961,12 +969,12 @@ to `mout`, which must have size `(dim(Hsub), dim(Hsub))`. See [`partial_trace`](
 `alg` is `SubsystemPartialTraceAlg()` or `FullPartialTraceAlg()`, chosen from the dimensions
 and sparsity of `m` by default.
 """
-function partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(v, Hsub, H, complement), kwargs...)
+function partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_alg(partial_trace, v, Hsub, H, complement), kwargs...)
     alg isa GatherAlg || return partial_trace!(mout, vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)
     _check_partial_trace_output(mout, v, Hsub)
     return copyto!(mout, _partial_trace_by_gather(v, H, Hsub, complement; kwargs...))
 end
-function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
+function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_alg(partial_trace, m, Hsub, H, complement), kwargs...)
     size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
     _check_partial_trace_output(mout, m, Hsub)
     isnothing(complement) && return copyto!(mout, change_basis(m, H, Hsub; kwargs...))

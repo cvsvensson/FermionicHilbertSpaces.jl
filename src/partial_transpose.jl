@@ -81,7 +81,7 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     complement, Hout::AbstractHilbertSpace,
     mapper_in=state_mapper(H, _pt_parts(Hsub, complement)),
     mapper_out=_partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in);
-        phase_factors = true, projection = false, alg = GenericAlg()
+        phase_factors = true, projection = false, alg = default_alg(partial_transpose, m)
     )
     size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
     size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
@@ -175,7 +175,7 @@ The partial transpose does not preserve number or parity constraints. For constr
 pass a larger output space on the same modes as `H => Hout`. For fermions the result is not
 Hermitian: `(ρ^{R_A})' == p_A ρ^{R_A} p_A` for parity-even `ρ`, with `p_A` the parity of `Hsub`.
 
-`alg` is `GenericAlg()` (the default) or `FactorizedPartialTransposeAlg()`.
+`alg` is `GenericAlg()` or `FactorizedPartialTransposeAlg()`, the default for GPU arrays.
 """
 partial_transpose(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) =
     _partial_transpose(m, H, Hsub, H; kwargs...)
@@ -187,7 +187,7 @@ partial_transpose(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub:
     PartialTransposeMap(first(Hs), Hsub, last(Hs); kwargs...)
 
 function _partial_transpose(m::AbstractMatrix, H, Hsub, Hout;
-        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = GenericAlg()
+        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = default_alg(partial_transpose, m)
     )
     mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
     mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
@@ -199,7 +199,7 @@ end
 
 # Pure state: direct kernel, no superoperator, and no ψψ† either (iterate nonzero pairs).
 function _partial_transpose(ψ::AbstractVector, H, Hsub, Hout;
-        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = GenericAlg()
+        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = default_alg(partial_transpose, ψ)
     )
     if length(ψ) == dim(H)
         _check_partial_transpose_alg(alg)
