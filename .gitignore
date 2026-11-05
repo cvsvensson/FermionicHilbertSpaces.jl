@@ -16,3 +16,4 @@ benchmark/Manifest*.toml
 .vscode/
 .DS_Store
 /.claude/*
+/test/gpu/Manifest*.toml
