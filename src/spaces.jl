@@ -265,6 +265,8 @@ This is the method that connects a custom operator type to matrix representation
 traces and the other operations on spaces.
 """
 function apply_local_operator end
+# Operators with amplitudes that need rounding add a method that computes them in the float type `P`
+apply_local_operator(op, state, space, precomp, ::Type{P}) where {P} = apply_local_operator(op, state, space, precomp)
 
 function precomputation_before_operator_application(op::NCMul, space::AbstractHilbertSpace)
     map(op -> _precomputation_before_operator_application(op, space), op.factors)
