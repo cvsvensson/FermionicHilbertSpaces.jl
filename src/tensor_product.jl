@@ -717,7 +717,7 @@ struct NoScalarIndexingAlg end
 """
     ScalarIndexingAlg()
 
-The element-wise code path of an operation, and the default `alg` of [`embed`](@ref), [`change_basis`](@ref) and `reshape`.
+The element-wise code path of an operation, and the default `alg` of [`embed`](@ref), [`change_basis`](@ref), `reshape` and [`partial_transpose`](@ref).
 """
 struct ScalarIndexingAlg end
 
