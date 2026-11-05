@@ -168,7 +168,7 @@ function _precompute_mapping(mapping::Pair)
     Hsin, Hsout = _mapping_spaces(mapping)
     mapper = _mapper(Hsin, Hsout)
     blocks = _transitions(Hsin, Hsout, mapper)
-    (; mapping, Hsin, Hsout, blocks)
+    return (; mapping, Hsin, Hsout, blocks)
 end
 
 _spaces(H::AbstractHilbertSpace) = (H,)
@@ -332,7 +332,7 @@ function _local_linear(transitions, Hsin, Hsout)
 end
 _linear_offset(I, strides) = sum(map((i, s) -> (i - 1) * s, I, strides); init=0)
 
-_group_length(::AbstractVector{NTuple{N,Int}}) where {N} = N
+_group_length(::AbstractVector{NTuple{N, Int}}) where {N} = N
 
 # Throw if a nonzero entry of `t` sits on an input index whose transitions were partly
 # dropped. Only the slices along dropped indices are visited.
