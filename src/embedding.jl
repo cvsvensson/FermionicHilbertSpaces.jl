@@ -101,7 +101,7 @@ end
 _gather_embed(v::AbstractVector, P, B, S) = vec(_gather_reduce(_adapt_like(v, S), 2, v, _adapt_like(v, P)))
 
 # The `map` of an `EmbedMap` with `alg = GatherAlg()`, see `_PartialTraceGather`.
-struct _EmbedGather{TP,TB,TS}
+struct _EmbedGather{TP, TB, TS}
     P::TP
     B::TB
     S::TS
@@ -185,13 +185,13 @@ function (op::EmbedMap)(out::AbstractVector, v::AbstractVector)
     out
 end
 
-(op::EmbedMap{<:Any,<:Any,<:Any,<:Any,<:_EmbedGather})(m::UniformScaling) = _embed_by_gather(m)
+(op::EmbedMap{<:Any, <:Any, <:Any, <:Any, <:_EmbedGather})(m::UniformScaling) = _embed_by_gather(m)
 function (op::EmbedMap)(m::UniformScaling)
     mfull = m.λ * I(dim(op.Hsub))
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(mfull), dim(op.H))
 end
 SparseArrays.sparse(op::EmbedMap) = op.map
-SparseArrays.sparse(::Union{PartialTraceMap{<:Any,<:Any,<:Any,<:Any,<:_GatherSuperop},EmbedMap{<:Any,<:Any,<:Any,<:Any,<:_GatherSuperop}}) = _gather_superop_error()
+SparseArrays.sparse(::Union{PartialTraceMap{<:Any, <:Any, <:Any, <:Any, <:_GatherSuperop}, EmbedMap{<:Any, <:Any, <:Any, <:Any, <:_GatherSuperop}}) = _gather_superop_error()
 Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
 Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
 Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))

@@ -1102,7 +1102,7 @@ end
 
 # The `map` of a `PartialTraceMap` with `alg = GatherAlg()`. Like a sparse superoperator, it acts
 # on vectorized density matrices.
-struct _PartialTraceGather{TL,TW}
+struct _PartialTraceGather{TL, TW}
     L::TL
     W::TW
 end
@@ -1297,7 +1297,7 @@ function _apply_ptmap_on_vec(ptmap::PartialTraceMap, ψ::AbstractVector)
     _apply_ptmap_on_vec!(w, ptmap, ψ)
     return w
 end
-_apply_ptmap_on_vec(ptmap::PartialTraceMap{<:Any,<:Any,<:Any,<:Any,<:_PartialTraceGather}, ψ::AbstractVector) = vec(_gather_partial_trace(ψ, ptmap.map.L, ptmap.map.W))
+_apply_ptmap_on_vec(ptmap::PartialTraceMap{<:Any, <:Any, <:Any, <:Any, <:_PartialTraceGather}, ψ::AbstractVector) = vec(_gather_partial_trace(ψ, ptmap.map.L, ptmap.map.W))
 _apply_ptmap_on_vec!(w::AbstractVector, ptmap::PartialTraceMap, ψ::AbstractVector) = _apply_superop_on_pure_state!(w, ptmap.map, ψ)
 
 function (op::PartialTraceMap)(out, in::AbstractMatrix)
