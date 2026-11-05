@@ -112,7 +112,7 @@ function _embed_gather(Hsub, H, complement; phase_factors = true)
 end
 Base.:*(g::_EmbedGather, v::AbstractVector) = vec(_gather_embed(_square(v), g.P, g.B, g.S))
 
-const _GatherSuperop = Union{_PartialTraceGather,_EmbedGather}
+const _GatherSuperop = Union{_PartialTraceGather, _EmbedGather}
 LinearAlgebra.mul!(w::AbstractVector, g::_GatherSuperop, v::AbstractVector) = copyto!(w, g * v)
 _gather_superop_error() = throw(ArgumentError("A map with `alg = GatherAlg()` has no `sparse` form or adjoint."))
 _adjoint_superop(::_GatherSuperop) = _gather_superop_error()
