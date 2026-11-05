@@ -57,7 +57,7 @@ end
     H1, H2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
     ρ = rand(ComplexF64, dim(H), dim(H))
     m = rand(ComplexF64, dim(Hsub), dim(Hsub))
-    for (op, x) in ((partial_trace(H => Hsub; alg), ρ), (partial_trace(H => Hsub; alg), ρ[:, 1]), (embed(Hsub => H; alg), m), (reshape(H => (H1, H2); alg), ρ))
+    for (op, x) in ((partial_trace(H => Hsub; alg), ρ), (partial_trace(H => Hsub; alg), ρ[:, 1]), (partial_trace(H => Hsub; alg), vec(ρ)), (embed(Hsub => H; alg), m), (reshape(H => (H1, H2); alg), ρ))
         out = adapt(JLArray, op)(JLArray(x))
         @test out isa JLArray
         @test Array(out) ≈ op(x)

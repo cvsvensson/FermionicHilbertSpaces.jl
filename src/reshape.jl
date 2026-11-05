@@ -102,7 +102,7 @@ function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapp
     mappers = map(_mapper, Hsins, Hsouts)
     blocks = map(_transitions, Hsins, Hsouts, mappers)
 
-    alg isa GatherAlg && return _gather_reshape(t, map(_gather_block, blocks, Hsins, Hsouts), Hsouts; projection)
+    alg isa GatherAlg && (blocks = map(_gather_block, blocks, Hsins, Hsouts))
     return _reshape(t, blocks, Hsouts; projection)
 end
 
@@ -370,16 +370,19 @@ function _check_dropped_group(t3, js, has_support_on)
 end
 
 function _reshape(t::AbstractArray, blocks, Hsouts; projection = false)
-    blocks isa Tuple{Vararg{_GatherBlock}} && return _gather_reshape(t, blocks, Hsouts; projection)
     projection || _check_dropped(t, blocks)
     tout = zeros(eltype(t), map(dim, _flatten(Hsouts))...)
     return _reshape_kernel!(tout, t, blocks, Hsouts)
 end
 
-function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts; projection = false)
+function _check_reshape_out(tout, Hsouts)
     Hsout_all = _flatten(Hsouts)
     size(tout) == map(dim, Hsout_all) || throw(DimensionMismatch("The output array has size $(size(tout)), but expected $(map(dim, Hsout_all))"))
-    blocks isa Tuple{Vararg{_GatherBlock}} && return copyto!(tout, _gather_reshape(t, blocks, Hsouts; projection))
+    return nothing
+end
+
+function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts; projection = false)
+    _check_reshape_out(tout, Hsouts)
     projection || _check_dropped(t, blocks)
 
     fill!(tout, zero(eltype(tout)))
@@ -418,6 +421,11 @@ end
 const _GatherBlock = NamedTuple{(:L, :W, :dropped, :n)}
 _group_length(b::_GatherBlock) = b.n
 _dropped_indices(b::_GatherBlock, lin) = b.dropped
+_reshape(t::AbstractArray, blocks::Tuple{Vararg{_GatherBlock}}, Hsouts; projection = false) = _gather_reshape(t, blocks, Hsouts; projection)
+function _reshape!(tout::AbstractArray, t::AbstractArray, blocks::Tuple{Vararg{_GatherBlock}}, Hsouts; projection = false)
+    _check_reshape_out(tout, Hsouts)
+    return copyto!(tout, _gather_reshape(t, blocks, Hsouts; projection))
+end
 
 # Block k gathers along broadcast dimensions 2k-1 (its output index) and 2k (the transitions
 # into that output index), and its weights multiply those of the other blocks.

@@ -1,6 +1,7 @@
 function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, alg = GenericAlg(), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
-    _check_embed_input(m, Hsub, complement)
+    size_compatible(m, Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(Hsub)), got $(size(m))."))
+    !isnothing(complement) && m isa AbstractVector && throw(ArgumentError("A state vector can only be embedded into a space with the same modes, such as from a sector into its parent space. A state on a subsystem does not fix the state of the rest; use `tensor_product` of states or `embed` a density matrix instead."))
     alg isa GatherAlg && return _embed_by_gather(m, Hsub, H, complement; projection, kwargs...)
     alg isa GenericAlg || throw(ArgumentError("`embed` supports `alg = GenericAlg()` or `GatherAlg()`, got $alg."))
     if isnothing(complement)
@@ -48,12 +49,6 @@ julia> embed([1, 2], sector(1, H) => H)
 ```
 """
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
-
-function _check_embed_input(m, Hsub, complement)
-    size_compatible(m, Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(Hsub)), got $(size(m))."))
-    !isnothing(complement) && m isa AbstractVector && throw(ArgumentError("A state vector can only be embedded into a space with the same modes, such as from a sector into its parent space. A state on a subsystem does not fix the state of the rest; use `tensor_product` of states or `embed` a density matrix instead."))
-    return nothing
-end
 
 function _embed_by_gather(m::AbstractVecOrMat, Hsub, H, complement; projection = false, phase_factors = true)
     splits, nb = _gather_splits(H, Hsub, complement, phase_factors)
@@ -104,17 +99,23 @@ function _gather_embed(m::AbstractMatrix, P, B, S)
     return reshape(_gather_reduce(WW, (2, 4), m, LL), D, D)
 end
 _gather_embed(v::AbstractVector, P, B, S) = vec(_gather_reduce(_adapt_like(v, S), 2, v, _adapt_like(v, P)))
-function _gather_embed(m, Hsub, complement, P, B, S)
-    _check_embed_input(m, Hsub, complement)
-    return _gather_embed(m, P, B, S)
-end
 
-# Like `EmbedMap`, the map is the compression onto `H` and checks nothing, so `projection` has no effect.
-function _embed_gather_map(Hsub, H; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg, projection = false, phase_factors = true)
-    splits, nb = _gather_splits(H, Hsub, complement, phase_factors)
-    P, B, S, _ = _embed_gather_table(splits, dim(Hsub), nb)
-    return GatherMap(_gather_embed, (Hsub, complement, P, B, S))
+# The `map` of an `EmbedMap` with `alg = GatherAlg()`, see `_PartialTraceGather`.
+struct _EmbedGather{TP,TB,TS}
+    P::TP
+    B::TB
+    S::TS
 end
+function _embed_gather(Hsub, H, complement; phase_factors = true)
+    splits, nb = _gather_splits(H, Hsub, complement, phase_factors)
+    return _EmbedGather(Base.front(_embed_gather_table(splits, dim(Hsub), nb))...)
+end
+Base.:*(g::_EmbedGather, v::AbstractVector) = vec(_gather_embed(_square(v), g.P, g.B, g.S))
+
+const _GatherSuperop = Union{_PartialTraceGather,_EmbedGather}
+LinearAlgebra.mul!(w::AbstractVector, g::_GatherSuperop, v::AbstractVector) = copyto!(w, g * v)
+_gather_superop_error() = throw(ArgumentError("A map with `alg = GatherAlg()` has no `sparse` form or adjoint."))
+_adjoint_superop(::_GatherSuperop) = _gather_superop_error()
 
 struct EmbedMap{HS,H,C,K,M}
     Hsub::HS
@@ -126,7 +127,9 @@ end
 
 # The map is the compression onto `H` and checks nothing, so `projection` has no effect.
 function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(Hsub, H, complement), projection = false, kwargs...)
-    map = if isnothing(complement)
+    map = if alg isa GatherAlg
+        _embed_gather(Hsub, H, complement; kwargs...)
+    elseif isnothing(complement)
         basis_transformation_map(Hsub, H; projection = true, kwargs...)
     else
         _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, kwargs...))
@@ -182,11 +185,13 @@ function (op::EmbedMap)(out::AbstractVector, v::AbstractVector)
     out
 end
 
+(op::EmbedMap{<:Any,<:Any,<:Any,<:Any,<:_EmbedGather})(m::UniformScaling) = _embed_by_gather(m)
 function (op::EmbedMap)(m::UniformScaling)
     mfull = m.λ * I(dim(op.Hsub))
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(mfull), dim(op.H))
 end
 SparseArrays.sparse(op::EmbedMap) = op.map
+SparseArrays.sparse(::Union{PartialTraceMap{<:Any,<:Any,<:Any,<:Any,<:_GatherSuperop},EmbedMap{<:Any,<:Any,<:Any,<:Any,<:_GatherSuperop}}) = _gather_superop_error()
 Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
 Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
 Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
@@ -200,13 +205,10 @@ Create a callable embedding operation from `Hsub` into `H`.
 The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 It is the compression onto `H` and, unlike [`embed`](@ref), does not check its input.
-With `alg = GatherAlg()`, it stores gather tables instead and can be applied to GPU arrays;
-`Adapt.adapt(CuArray, op)` moves the tables to the device.
+With `alg = GatherAlg()`, it stores gather tables instead, so it can be applied to GPU arrays
+but has no `sparse` or adjoint (both throw an `ArgumentError`); `Adapt.adapt(CuArray, op)` moves the tables to the device.
 """
-function embed(Hs::PairWithHilbertSpaces; kwargs...)
-    get(kwargs, :alg, nothing) isa GatherAlg && return _embed_gather_map(first(Hs), last(Hs); kwargs...)
-    return EmbedMap(first(Hs), last(Hs); kwargs...)
-end
+embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwargs...)
 
 @testitem "Embedding into a number sector" begin
     using LinearAlgebra
