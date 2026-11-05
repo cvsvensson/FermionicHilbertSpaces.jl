@@ -58,7 +58,7 @@ atomic_factors(H::ProductSpace) = H.atoms
 nbr_of_atoms(H::ProductSpace) = length(H.atoms)
 factors(H::ProductSpace) = H.factors
 groups(H::_ProductSpace) = H.factors
-dim(H::ProductSpace) = prod(dim, groups(H); init=1)
+dim(H::ProductSpace) = mapfoldl(dim, Base.Checked.checked_mul, groups(H); init = 1)
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
 # Iterates `cartinds` rather than `Iterators.product`, whose iteration allocates per state from 12 factors on
@@ -258,6 +258,13 @@ parity(state::ProductState) = prod(parity, atomic_factors(state))
 
     @test representation(a[1]' * b[1], Hprod) == embed(representation(a[1]' * b[1], Hab), Hab => Hprod; projection = true)
 
+end
+
+@testitem "dim of a ProductSpace throws on overflow" begin
+    @spins S 1 // 2
+    H = hilbert_space(S, 1:64)
+    @test_throws OverflowError dim(H)
+    @test S[1][:x] * Ket(fill("↑", 64), H) == Ket(["↓"; fill("↑", 63)], H) / 2
 end
 
 @testitem "ProductSpaceMapper combines vectors of substates" begin
