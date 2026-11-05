@@ -534,6 +534,7 @@ function _partial_trace_by_gather(ψ::AbstractVector, H, Hsub, complement; proje
     isnothing(complement) && return (φ = change_basis(ψ, H, Hsub; projection); φ * φ')
     return _partial_trace_by_gather(ψ, H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement); projection, phase_factors)
 end
+_partial_trace_by_gather(::UniformScaling, H, Hsub, complement, mapper; kwargs...) = throw(ArgumentError("`UniformScaling` is not supported with `alg = NoScalarIndexingAlg()`."))
 function _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection = false, phase_factors = true)
     splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
     projection || _check_covered(m, _covered_states(splits), _copied_support_on)
@@ -700,10 +701,16 @@ struct FullPartialTraceAlg <: AbstractPartialTraceAlg end
 Algorithm that avoids scalar indexing, which is what makes GPU arrays work: it uses only array
 indexing, broadcasting and reductions, and returns an array of the input's kind. A pure state `ψ`
 is traced as `A * A'`, with `A` gathered from `ψ`, without forming `ψ * ψ'`. It is not specific to
-the partial trace; the operations that accept it as `alg` are [`partial_trace`](@ref) and
-[`partial_trace!`](@ref).
+the partial trace; the operations that accept it as `alg` are [`partial_trace`](@ref),
+[`partial_trace!`](@ref) and [`embed`](@ref).
 """
-struct NoScalarIndexingAlg <: AbstractPartialTraceAlg end
+struct NoScalarIndexingAlg end
+"""
+    ScalarIndexingAlg()
+
+The element-wise code path of an operation, and the default `alg` of [`embed`](@ref).
+"""
+struct ScalarIndexingAlg end
 
 _effective_dim(m::AbstractMatrix, H) = length(m)
 _effective_dim(m::AbstractSparseMatrix, H) = nnz(m)
@@ -869,8 +876,9 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
 end
 partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
 
-function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg::AbstractPartialTraceAlg, mapper = _partial_trace_mapper(H, Hsub, complement); projection = false, phase_factors = true)
+function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg, mapper = _partial_trace_mapper(H, Hsub, complement); projection = false, phase_factors = true)
     alg isa NoScalarIndexingAlg && return copyto!(mout, _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection, phase_factors))
+    alg isa AbstractPartialTraceAlg || throw(ArgumentError("`partial_trace` supports `alg = SubsystemPartialTraceAlg()`, `FullPartialTraceAlg()` or `NoScalarIndexingAlg()`, got $alg."))
     fill!(mout, zero(eltype(mout)))
     covered = if alg isa FullPartialTraceAlg
         splits = _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
@@ -1430,6 +1438,7 @@ end
 end
 
 @testitem "Partial trace by gather" begin
+    using LinearAlgebra: I
     import FermionicHilbertSpaces: NoScalarIndexingAlg, partial_trace!, state_index
     alg = NoScalarIndexingAlg()
     @fermions f
@@ -1452,6 +1461,7 @@ end
         @test partial_trace(ρ, H => Hsub; alg) ≈ partial_trace(ρ, H => Hsub)
         @test partial_trace(ψ, H => Hsub; alg) ≈ partial_trace(ψ, H => Hsub)
         @test partial_trace!(zeros(ComplexF64, dim(Hsub), dim(Hsub)), ψ, H => Hsub; alg) ≈ partial_trace(ψ, H => Hsub)
+        @test partial_trace!(zeros(ComplexF64, dim(Hsub), dim(Hsub)), ρ, H => Hsub; alg) ≈ partial_trace(ρ, H => Hsub)
     end
 
     # the state with modes 1 and 2 occupied has no part in Hsub
@@ -1463,6 +1473,8 @@ end
     @test_throws ArgumentError partial_trace(ψ, H => Hsub; alg)
     ρ[state_index(FockNumber(3), H), :] .= NaN
     @test partial_trace(ρ, H => Hsub; alg, projection = true) ≈ partial_trace(ρ, H => Hsub; projection = true)
+    @test_throws ArgumentError partial_trace(I, H => Hsub; alg)
+    @test_throws ArgumentError partial_trace(rand(dim(H), dim(H)), H => Hsub; alg = :other)
 end
 
 @testitem "Partial trace and embed across truncations" begin
