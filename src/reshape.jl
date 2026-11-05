@@ -409,7 +409,7 @@ function _gather_reshape(t, blocks, Hsouts; projection = false)
     n = length(blocks)
     stridesin = _block_strides(size(t), map(b -> _group_length(b.dropped), blocks))
     tables = map(blocks, Hsouts) do b, Hs
-        _gather_table(((i + 1, (o + 1, 1), w) for (i, o, w) in b.linear), prod(dim, Hs), 1)
+        _gather_table(fieldtype(eltype(b.linear), 3), ((i + 1, (o + 1, 1), w) for (i, o, w) in b.linear), prod(dim, Hs), 1)
     end
     placed(A, k) = reshape(_adapt_like(t, A), ntuple(d -> d == 2k - 1 ? size(A, 1) : d == 2k ? size(A, 2) : 1, 2n))
     LL = broadcast(+, 1, ntuple(k -> placed((tables[k][1] .- 1) .* stridesin[k], k), n)...)
