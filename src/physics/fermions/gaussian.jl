@@ -79,13 +79,15 @@ function correlation_matrix(F::Eigen; β = Inf)
         G = conj(U) * transpose(U)
         # G + transpose(G) == I for Majoranas and G + τx * transpose(G) * τx == I for Nambu spinors fail when `eigen`
         # returns zero-energy eigenvectors that are not particle-hole partners.
-        G + transpose(G) ≈ I || is_ph_symmetric(G - I / 2) || throw(ArgumentError(_unpaired_error))
+        Base.inferencebarrier(_is_paired)(G) || throw(ArgumentError(_unpaired_error))
         return G
     end
     # The BdG matrix carries a factor 1/2, so the quasiparticle energies are 2 * F.values.
     n = inv.(exp.(2β .* F.values) .+ 1)
     return conj(F.vectors) * Diagonal(n) * transpose(F.vectors)
 end
+# Called behind a barrier so that thermal states, the common case, do not compile it
+_is_paired(G) = G + transpose(G) ≈ I || is_ph_symmetric(G - I / 2)
 const _unpaired_error = "The eigenvectors are not particle-hole partners, as happens for unpaired zero-energy modes."
 
 """

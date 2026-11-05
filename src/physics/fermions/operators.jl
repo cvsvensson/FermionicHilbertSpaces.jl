@@ -60,13 +60,13 @@ function togglefermions(digitpositions, daggers, focknbr::FockNumber{I}) where I
     return newfocknbr, fermionstatistics
 end
 
-function togglemajoranas(digitpositions, daggers, focknbr)
+function togglemajoranas(digitpositions, daggers, focknbr::FockNumber{I}) where {I}
     newfocknbr = zero(focknbr)
     allowed = true
     fermionstatistics = 1
     amp = Complex{Int}(1)
     for (digitpos, dagger) in zip(digitpositions, daggers)
-        op = FockNumber(1 << (digitpos - 1))
+        op = FockNumber(one(I) << (digitpos - 1))
         newfocknbr = op ⊻ focknbr
         if dagger
             occupied = iszero(op & focknbr)
