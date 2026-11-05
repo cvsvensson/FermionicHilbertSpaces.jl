@@ -40,6 +40,10 @@ Connection to Hilbert spaces:
   used for open systems, apply `adjoint(op)`.
 - [`mat_eltype`](@ref)`(::Type{<:MyOp})` gives the element type of the matrix elements. The
   default is `Float64`, so operators with complex matrix elements need a method.
+- `apply_local_operator(op, state, space, precomp, ::Type{T})` is optional and computes the
+  amplitude in the float type `T` of the matrix. Without it, the amplitude of the method above
+  is converted to `T`, which adds no precision and leaves any `Float64` arithmetic of that method
+  in GPU kernels.
 
 For speed:
 

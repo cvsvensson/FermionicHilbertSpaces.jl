@@ -378,9 +378,9 @@ symbolic_basis(a::ParafermionSym) = a.basis
 group_id(a::ParafermionSym) = symbolic_group(a)
 atomic_id(a::ParafermionSym) = (a.basis, a.label)
 label(a::ParafermionSym) = a.label
-change_basis(a::ParafermionSym, basis) = ParafermionSym(a.creation, a.label, basis)
+with_basis(a::ParafermionSym, basis) = ParafermionSym(a.creation, a.label, basis)
 
-add_tag(a::ParafermionSym, tag) = change_basis(a, add_tag(a.basis, tag))
+add_tag(a::ParafermionSym, tag) = with_basis(a, add_tag(a.basis, tag))
 
 parafermion_order(a::ParafermionSym) = parafermion_order(a.basis)
 parafermion_sigma(a::ParafermionSym) = parafermion_sigma(a.basis)
