@@ -4,51 +4,73 @@
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/)
 [![Build Status](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/cvsvensson/FermionicHilbertSpaces.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/cvsvensson/FermionicHilbertSpaces.jl)
+[![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
+
+FermionicHilbertSpaces.jl turns symbolic fermion, boson and spin operators into matrices on Hilbert spaces, so you never index vectors and matrices by hand.
+- **Symbolic operators:** fermions, bosons and spins are combined algebraically, e.g. `f[1]'f[2] + hc`, and simplified with their commutation relations. `representation` turns them into matrices on any Hilbert space.
+- **Hilbert spaces:** spaces keep track of their basis states and ordering, so you never index by hand. They can be restricted by particle number, parity or any rule on the basis states ([constrained spaces](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/conservation/)).
+- **Tensor products and partial traces:** spaces combine and split, as in `partial_trace(ρ, H => Hsub)`, with fermionic signs handled automatically ([fermionic conventions](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/fermions/)).
+- **Extensible:** custom operators and spaces can be added, see [Extending](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/extending/).
+
+It is not a solver: combine it with LinearAlgebra, KrylovKit or ODE solvers for eigenstates and time evolution.
+
+Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`. See the [documentation](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/) for getting started, tutorials, guides and the API reference.
 
 
-This package provides tools for working with fermionic hilbert spaces. This includes:
-- Fermionic tensor products and partial traces mapping between different hilbert spaces, taking into account the fermionic properties.
-- Operators on the hilbert spaces.
+## Quick example
+Let's define a small fermionic system, find the ground state and compute the entanglement entropy of half the system.
 
-## Introduction
-Let's analyze a small fermionic system. We first define a basis
-```julia
-using FermionicHilbertSpaces
-N = 2 # number of fermions
-spatial_labels = 1:N 
-internal_labels = (:↑,:↓)
-labels = Base.product(spatial_labels, internal_labels) 
-H = hilbert_space(labels) 
-#= 16⨯16 SimpleFockHilbertSpace:
-modes: [(1, :↑), (2, :↑), (1, :↓), (2, :↓)]=#
-c = fermions(H) #fermionic annihilation operators
-```
-
-Indexing into `c` returns sparse representations of the fermionic operators, so that one can write down Hamiltonians in a natural way:
-```julia
-H_hopping = c[1,:↑]'c[2,:↑] + c[1,:↓]'c[2,:↓] + hc 
-H_coulomb = sum(c[n,:↑]'c[n,:↑]c[n,:↓]'c[n,:↓] for n in spatial_labels)
-H = H_hopping + H_coulomb
-#= 16×16 SparseArrays.SparseMatrixCSC{Int64, Int64} with 23 stored entries:
-⎡⠠⠂⠀⠀⠀⠀⠀⠀⎤
-⎢⠀⠀⠰⢂⠑⢄⠀⠀⎥
-⎢⠀⠀⠑⢄⠠⢆⠀⠀⎥
-⎣⠀⠀⠀⠀⠀⠀⠰⢆⎦ =#
-```
-
-## Tensor product and Partial trace
-```julia
+````julia
 using FermionicHilbertSpaces, LinearAlgebra
-H1 = hilbert_space([1, 2])
-H2 = hilbert_space([3, 4])
-H = tensor_product(H1, H2)
+@fermions f # Defines a symbolic fermion
+sym_ham = sum(rand() * f[n]'f[n] for n in 1:4) +
+    sum(f[n+1]'f[n] + hc for n in 1:3)
 
-c1 = fermions(H1)
-c2 = fermions(H2)
-c = fermions(H)
+#Hilbert space of the four modes
+H = hilbert_space(f, 1:4)
 
-c1c3 = tensor_product([c1[1], c2[3]], [H1, H2] => H)
-c[1]*c[3] == c1c3 # true
+#Diagonalize to find the ground state
+Ψ = eigvecs(Hermitian(representation(sym_ham, H, Matrix)))[:, 1]
 
-partial_trace(tensor_product([c1[1], I/4],[H1,H2] => H), H => H1) == c1[1] # true
-```
+#Define a subsystem and partial trace to find the reduced density matrix
+Hsub = hilbert_space(f, 1:2)
+ρsub = partial_trace(Ψ, H => Hsub)
+entanglement_entropy = sum(-λ * log(λ) for λ in eigvals(Hermitian(ρsub)) if λ > 0)
+````
+
+````
+0.44395495955661934
+````
+
+`representation` returns a sparse matrix by default; a third argument such as `Matrix` selects the format, see the [docs](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/docstrings/).
+
+This hamiltonian conserves the number of fermions, which we can exploit. Let's specialize to the 3-particle sector and compute the entanglement entropy of the ground state in that sector.
+
+````julia
+Hcons = hilbert_space(f, 1:4, NumberConservation(3))
+Hsubcons = subregion(Hsub, Hcons) # Include only substates consistent with Hcons
+Ψcons = eigvecs(representation(sym_ham, Hcons, Matrix))[:, 1]
+ρsub = partial_trace(Ψcons, Hcons => Hsubcons)
+sum(-λ * log(λ) for λ in eigvals(Hermitian(ρsub)) if λ > 0)
+````
+
+````
+0.6390308969922927
+````
+
+## Who is this for?
+You may be interested if you
+- deal with fermions and want correct tensor products and partial traces. [More info.](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/fermions/)
+- have complicated constraints on your Hilbert space. See examples [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/conservation/).
+- want to define your own physics and never think about indexing. Examples:  [Clock operators](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/clock_operators/), [Floquet](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/floquet_tutorial/)
+
+You might want to look elsewhere if you
+- have large hilbert spaces that need methods like tensor networks.
+- deal with qubits.
+- deal with non-interacting systems (though there is some functionality for free fermions, see [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/non_interacting/) and [here](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/literate_output/free_fermions/)).
+
+The documentation has examples of combining this package with other Julia packages for eigenstates and time evolution.
+
+## Related packages
+FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).
+

@@ -1,180 +1,144 @@
-function Base.show(io::IO, H::Htype) where Htype<:AbstractHilbertSpace
-    n, m = size(H)
-    println(io, "$(n)⨯$m $(Htype.name.name):")
-    print(io, "modes: $(mode_ordering(H))")
+"""
+    GenericHilbertSpace(label, basisstates[, state_index])
+    GenericHilbertSpace{B}(label, basisstates[, state_index])
+
+Atomic Hilbert space whose basis states are given explicitly by `basisstates`, indexed by integers.
+`label` is returned by `symbolic_group` and `atomic_id` and identifies the space in symbolic expressions.
+`state_index` gives the integer index of a basis state. It is either an `AbstractDict` from basis states
+to indices, or a function that takes a basis state and returns its index. By default it is a dictionary
+built from `basisstates`.
+
+`B` is the basis-state type and defaults to `eltype(basisstates)`. When `B` is given and `basisstates`
+is an `AbstractVector` or `Tuple`, its elements are converted to `B`.
+"""
+struct GenericHilbertSpace{B,L,S,SI} <: AbstractAtomicHilbertSpace{B}
+    label::L
+    basisstates::S
+    state_index::SI
+    GenericHilbertSpace{B,L,S,SI}(label, basisstates, state_index) where {B,L,S,SI} = new{B,L,S,SI}(label, basisstates, state_index)
 end
-Base.show(io::IO, ::MIME"text/plain", H::AbstractHilbertSpace) = show(io, H)
-
-Base.size(H::AbstractFockHilbertSpace) = (length(focknumbers(H)), length(focknumbers(H)))
-Base.size(H::AbstractFockHilbertSpace, i) = i == 1 || i == 2 ? length(focknumbers(H)) : throw(BoundsError(H, (i,)))
-function isorderedpartition(Hs, H::AbstractHilbertSpace)
-    partition = map(keys, Hs)
-    isorderedpartition(partition, H.jw)
+GenericHilbertSpace(label, basisstates, args...) = GenericHilbertSpace{eltype(basisstates)}(label, basisstates, args...)
+function GenericHilbertSpace{B}(label, basisstates) where B
+    states = _convert_basisstates(B, basisstates)
+    return GenericHilbertSpace{B}(label, states, position_dict(states))
 end
-isorderedsubsystem(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace) = isorderedsubsystem(Hsub.jw, H.jw)
-isorderedsubsystem(Hsub::AbstractHilbertSpace, jw::JordanWignerOrdering) = isorderedsubsystem(Hsub.jw, jw)
-issubsystem(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = issubsystem(subsystem.jw, jw)
-issubsystem(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = issubsystem(subsystem.jw, H.jw)
-consistent_ordering(subsystem::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = consistent_ordering(subsystem.jw, jw)
-consistent_ordering(subsystem::AbstractFockHilbertSpace, H::AbstractFockHilbertSpace) = consistent_ordering(subsystem.jw, H.jw)
-focknbr_from_site_labels(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = focknbr_from_site_labels(keys(H), jw)
-ispartition(partition, H::AbstractFockHilbertSpace) = ispartition(partition, H.jw)
-isorderedpartition(partition, H::AbstractFockHilbertSpace) = isorderedpartition(partition, H.jw)
+function GenericHilbertSpace{B}(label, basisstates, state_index) where B
+    states = _convert_basisstates(B, basisstates)
+    GenericHilbertSpace{B,typeof(label),typeof(states),typeof(state_index)}(label, states, state_index)
+end
+_convert_basisstates(::Type{B}, states::Union{AbstractVector,BasisStates}) where B = convert(AbstractVector{B}, _stored_states(states))::AbstractVector{B}
+_convert_basisstates(::Type{B}, states::Tuple) where B = map(s -> convert(B, s)::B, states)
+_convert_basisstates(::Type, states) = states
+Base.:(==)(H1::GenericHilbertSpace, H2::GenericHilbertSpace) = H1 === H2 || (H1.label == H2.label && H1.basisstates == H2.basisstates)
+Base.hash(H::GenericHilbertSpace, h::UInt) = hash((H.label, H.basisstates), h)
+basisstates(H::GenericHilbertSpace) = H.basisstates isa AbstractVector ? BasisStates(H, H.basisstates) : H.basisstates
+dim(H::GenericHilbertSpace) = length(H.basisstates)
+Base.@propagate_inbounds basisstate(ind::Integer, H::GenericHilbertSpace) = H.basisstates[ind]
+Base.keys(H::GenericHilbertSpace) = (H.label,)
+_state_index(state::B, H::GenericHilbertSpace{B,<:Any,<:Any,<:AbstractDict}) where B = get(H.state_index, state, 0)
+_state_index(state::B, H::GenericHilbertSpace{B}) where B = H.state_index(state)
+symbolic_group(H::GenericHilbertSpace) = H.label
+atomic_id(H::GenericHilbertSpace) = H.label
+add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag), H.basisstates, H.state_index)
 
-siteindices(H::AbstractFockHilbertSpace, jw::JordanWignerOrdering) = siteindices(H.jw, jw)
+@testitem "GenericHilbertSpace, ProductSpace" begin
+    using FermionicHilbertSpaces: Kets, fast_path
+    using LinearAlgebra
+    H1 = GenericHilbertSpace(:A, [:a, :b])
+    custom_state_index(s) = begin
+        s == :c && return 1
+        s == :d && return 2
+        return 0
+    end
+    H2 = GenericHilbertSpace(:B, (:c, :d), custom_state_index)
+    @test all(state_index(b, H1) == n for (n, b) in enumerate(basisstates(H1)))
+    @test all(state_index(b, H2) == n for (n, b) in enumerate(basisstates(H2)))
 
-mode_ordering(H::AbstractFockHilbertSpace) = H.jw.labels
-mode_ordering(jw::JordanWignerOrdering) = jw.labels
-mode_ordering(v::AbstractVector) = v
-embedding_unitary(partition, H::AbstractFockHilbertSpace) = embedding_unitary(partition, focknumbers(H), H.jw)
-bipartite_embedding_unitary(X, Xbar, H::AbstractFockHilbertSpace) = bipartite_embedding_unitary(X, Xbar, focknumbers(H), H.jw)
+    # Basis-state type parameter
+    @test GenericHilbertSpace(:a, [1, 2, 3]) == GenericHilbertSpace{Int}(:a, [1, 2, 3])
+    @test GenericHilbertSpace(:a, [1, 2, 3]) isa GenericHilbertSpace{Int}
+    Hf64 = GenericHilbertSpace{Float64}(:a, [1, 2])
+    @test Hf64 isa GenericHilbertSpace{Float64}
+    @test basisstates(Hf64) == [1.0, 2.0] && eltype(basisstates(Hf64)) == Float64
+    @test state_index(2.0, Hf64) == 2
+    Ht = GenericHilbertSpace{Float64}(:t, (1, 2), s -> Int(s))
+    @test basisstates(Ht) === (1.0, 2.0)
+    @test state_index(2.0, Ht) == 2
+    @test GenericHilbertSpace(:r, 1:3) isa GenericHilbertSpace{Int,Symbol,UnitRange{Int}}
+
+    P = tensor_product(H1, H2)
+    @test dim(P) == dim(H1) * dim(H2)
+    @test 2 * I(2) == partial_trace(1.0 * I(4), P => H1)
+
+    @test embed(I, H1 => P) == I(4)
+
+    @fermions f
+    Hf = hilbert_space(f, 1:2)
+    P2 = tensor_product(Hf, H1, H2)
+    @test dim(P2) / dim(H1) * I(2) == partial_trace(1.0 * I(dim(P2)), P2 => H1)
+
+    P3 = tensor_product(Hf, P)
+    @test P3 == P2
+    @test_throws ArgumentError tensor_product(Hf, P2)
+
+    # GenericHilbertSpace does not define internal_rep/physical_rep,
+    # so constrained product spaces must dispatch through the slow operator path.
+    Hmixed = tensor_product(constrain_space(Hf, NumberConservation()), H1)
+    @test ismissing(fast_path(Hmixed))
+    vg = Kets(H1)
+    opg = vg(:a) * vg(:b)'
+    op = opg * (f[1]' * f[1])
+    M = representation(op, Hmixed)
+    Mexpected = embed(representation(opg, H1), H1 => Hmixed) *
+                embed(representation(f[1]' * f[1], Hf), Hf => Hmixed)
+    @test M == Mexpected
+end
+
+@testitem "Invalid space inputs" begin
+    @test_throws ArgumentError GenericHilbertSpace(:a, [1, 1, 2])
+    @majoranas γ
+    @test_throws ArgumentError hilbert_space(γ, [1, 1])
+    @test_throws ArgumentError hilbert_space(γ, [1, 2, 2, 3])
+    @test dim(hilbert_space(γ, [1, 2, 3, 4])) == 4
+    @fermions f
+    @test_throws ArgumentError hilbert_space(f, 1:2, NumberConservation(1; weights = [1, 2, 3]))
+    @test_throws ArgumentError hilbert_space(f, 1:2, NumberConservation(1; weights = [1]))
+    @test dim(hilbert_space(f, 1:2, NumberConservation(2; weights = [1, 2]))) == 1
+    @test_throws ArgumentError hilbert_space(f, [f[1]])
+    using FermionicHilbertSpaces: Kets
+    @spin s
+    @test_throws ArgumentError Kets(hilbert_space(s, 1))("up")
+    @test_throws ArgumentError Kets(hilbert_space(s, 0))("down")
+    @test Kets(hilbert_space(s, 1 // 2))("up") == Kets(hilbert_space(s, 1 // 2))("1/2")
+end
 
 
 """
-    SimpleFockHilbertSpace
-A type representing a simple Fock Hilbert space with all fock states included.
-"""
-struct SimpleFockHilbertSpace{L} <: AbstractFockHilbertSpace
-    jw::JordanWignerOrdering{L}
-    function SimpleFockHilbertSpace(labels)
-        jw = JordanWignerOrdering(labels)
-        new{eltype(jw)}(jw)
-    end
-end
-Base.keys(H::SimpleFockHilbertSpace) = keys(H.jw)
-"""
-    focknumbers(H)
-Return an iterator over all Fock states for the given Hilbert space `H`.
-"""
-focknumbers(H::SimpleFockHilbertSpace) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
-indtofock(ind, ::SimpleFockHilbertSpace) = FockNumber(ind - 1)
-focktoind(focknbr::FockNumber, ::SimpleFockHilbertSpace) = focknbr.f + 1
-function Base.:(==)(H1::SimpleFockHilbertSpace, H2::SimpleFockHilbertSpace)
-    if H1 === H2
-        return true
-    end
-    if H1.jw != H2.jw
-        return false
-    end
-    return true
-end
+    dim(H)
 
+Return the Hilbert-space dimension of `H`, i.e. the number of basis states. Throws an `OverflowError` if the dimension overflows its integer type.
 """
-    FockHilbertSpace
-A type representing a Fock Hilbert space with a given set of modes and Fock states.
-"""
-struct FockHilbertSpace{L,F,I} <: AbstractFockHilbertSpace
-    jw::JordanWignerOrdering{L}
-    focknumbers::F
-    focktoind::I
-    function FockHilbertSpace(labels, focknumbers::F=map(FockNumber, 0:2^length(labels)-1)) where F
-        jw = JordanWignerOrdering(labels)
-        focktoind = Dict(reverse(pair) for pair in enumerate(focknumbers))
-        new{eltype(jw),F,typeof(focktoind)}(jw, focknumbers, focktoind)
-    end
-end
-Base.keys(H::FockHilbertSpace) = keys(H.jw)
-focknumbers(H::FockHilbertSpace) = H.focknumbers
-indtofock(ind, H::FockHilbertSpace) = focknumbers(H)[ind]
-focktoind(focknbr::FockNumber, H::FockHilbertSpace) = H.focktoind[focknbr]
-function Base.:(==)(H1::FockHilbertSpace, H2::FockHilbertSpace)
-    if H1 === H2
-        return true
-    end
-    if H1.jw != H2.jw
-        return false
-    end
-    if H1.focknumbers != H2.focknumbers
-        return false
-    end
-    if H1.focktoind != H2.focktoind
-        return false
-    end
-    return true
-end
+dim(H::AbstractHilbertSpace) = Int(length(basisstates(H)))
 
 
-"""
-    SymmetricFockHilbertSpace
-A type representing a Fock Hilbert space with fockstates organized by their quantum number.
-"""
-struct SymmetricFockHilbertSpace{L,S} <: AbstractFockHilbertSpace
-    jw::JordanWignerOrdering{L}
-    symmetry::S
-end
-function SymmetricFockHilbertSpace(labels, qn::AbstractSymmetry)
-    SymmetricFockHilbertSpace(JordanWignerOrdering(labels), qn)
-end
-function SymmetricFockHilbertSpace(jw::JordanWignerOrdering, qn::AbstractSymmetry)
-    labelled_symmetry, focknumbers = instantiate_and_get_focknumbers(jw, qn)
-    sym_concrete = focksymmetry(focknumbers, labelled_symmetry)
-    SymmetricFockHilbertSpace{eltype(jw),typeof(sym_concrete)}(jw, sym_concrete)
-end
-
-function Base.show(io::IO, H::SymmetricFockHilbertSpace)
-    n, m = size(H)
-    println(io, "$(n)⨯$m SymmetricFockHilbertSpace:")
-    println(io, "modes: $(mode_ordering(H))")
-    show(io, H.symmetry)
-end
-Base.show(io::IO, sym::FockSymmetry) = print(io, sym.conserved_quantity)
-
-Base.keys(H::SymmetricFockHilbertSpace) = keys(H.jw)
-indtofock(ind, H::SymmetricFockHilbertSpace) = indtofock(ind, H.symmetry)
-focktoind(f::FockNumber, H::SymmetricFockHilbertSpace) = focktoind(f, H.symmetry)
-focknumbers(H::SymmetricFockHilbertSpace) = focknumbers(H.symmetry)
-focknumbers(H::SymmetricFockHilbertSpace{<:Any,NoSymmetry}) = Iterators.map(FockNumber, 0:2^length(H.jw)-1)
-
-function Base.:(==)(H1::SymmetricFockHilbertSpace, H2::SymmetricFockHilbertSpace)
-    if H1 === H2
-        return true
-    end
-    if H1.jw != H2.jw
-        return false
-    end
-    if H1.symmetry != H2.symmetry
-        return false
-    end
-    return true
-end
-
-"""
-    hilbert_space(labels[, symmetry, focknumbers])
-Construct a Hilbert space from a set of labels, with optional symmetry and Fock number specification.
-"""
-hilbert_space(labels) = SimpleFockHilbertSpace(labels)
-hilbert_space(labels, focknumbers) = FockHilbertSpace(labels, focknumbers)
-hilbert_space(labels, ::NoSymmetry) = SimpleFockHilbertSpace(labels)
-hilbert_space(labels, ::NoSymmetry, focknumbers) = FockHilbertSpace(labels, focknumbers)
-hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, qn)
-
-#= Tests for isorderedsubsystem, issubsystem, and consistent_ordering for Hilbert spaces =#
 @testitem "Hilbert space subsystem and ordering" begin
-    import FermionicHilbertSpaces: isorderedsubsystem, issubsystem, consistent_ordering
+    import FermionicHilbertSpaces: isorderedsubsystem, issubsystem
+    @fermions f
     # Simple Hilbert spaces
-    H = hilbert_space([1, 2, 3])
-    Hsub1 = hilbert_space([1, 2])
-    Hsub2 = hilbert_space([2, 3])
-    Hsub3 = hilbert_space([2, 1])
-    Hsub4 = hilbert_space([3, 2])
-    Hsub5 = hilbert_space([4])
+    H = hilbert_space(f, [1, 2, 3])
+    Hsub1 = hilbert_space(f, [1, 2])
+    Hsub2 = hilbert_space(f, [2, 3])
+    Hsub3 = hilbert_space(f, [2, 1])
+    Hsub4 = hilbert_space(f, [3, 2])
+    Hsub5 = hilbert_space(f, [4])
 
     # issubsystem
     @test issubsystem(Hsub1, H)
     @test issubsystem(Hsub2, H)
     @test !issubsystem(Hsub5, H)
-    @test issubsystem(Hsub1, H.jw)
-    @test !issubsystem(Hsub5, H.jw)
-
-    # consistent_ordering
-    @test consistent_ordering(Hsub1, H)
-    @test consistent_ordering(Hsub2, H.jw)
-    @test !consistent_ordering(Hsub3, H)
-    @test !consistent_ordering(Hsub4, H.jw)
 
     # isorderedsubsystem
     @test isorderedsubsystem(Hsub1, H)
-    @test isorderedsubsystem(Hsub2, H.jw)
     @test !isorderedsubsystem(Hsub3, H)
     @test !isorderedsubsystem(Hsub4, H)
     @test !isorderedsubsystem(Hsub5, H)
@@ -182,127 +146,80 @@ hilbert_space(labels, qn::AbstractSymmetry) = SymmetricFockHilbertSpace(labels, 
     # ispartition and isorderedpartition
     import FermionicHilbertSpaces: ispartition, isorderedpartition
     # Partition of Hilbert spaces (as required by isorderedpartition(Hs, H))
-    H = hilbert_space([1, 2, 3])
-    Hs1 = [hilbert_space([1]), hilbert_space([2, 3])]
-    Hs2 = [hilbert_space([2]), hilbert_space([1, 3])]
-    Hs3 = [hilbert_space([1, 2, 3])]
-    Hs4 = [hilbert_space([1]), hilbert_space([2])]
-    @test ispartition(Hs1, H.jw)
-    @test ispartition(map(keys, Hs2), H.jw)
-    @test ispartition(map(keys, Hs2), H)
+    H = hilbert_space(f, [1, 2, 3])
+    Hs1 = [hilbert_space(f, [1]), hilbert_space(f, [2, 3])]
+    Hs2 = [hilbert_space(f, [2]), hilbert_space(f, [1, 3])]
+    Hs3 = [hilbert_space(f, [1, 2, 3])]
+    Hs4 = [hilbert_space(f, [1]), hilbert_space(f, [2])]
+    @test ispartition(Hs1, H)
+    @test ispartition(Hs2, H)
     @test !ispartition(Hs4, H)
-    @test isorderedpartition(Hs1, H.jw)
-    @test isorderedpartition(map(keys, Hs3), H)
+    @test isorderedpartition(Hs1, H)
+    @test isorderedpartition(Hs3, H)
     @test !isorderedpartition(Hs4, H)
 end
 
-"""
-    subregion(modes, H::AbstractHilbertSpace)
 
-Return a subregion of the Hilbert space `H` that is spanned by the modes in `modes`. Only substates in `H` are included.
-"""
-function subregion(modes, H::SimpleFockHilbertSpace)
-    if !isorderedsubsystem(modes, H.jw)
-        throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
-    end
-    SimpleFockHilbertSpace(modes)
-end
+statetype(::AbstractHilbertSpace{F}) where F = F
+statetype(::Nothing) = Nothing
 
-function subregion(modes, H::FockHilbertSpace)
-    if !isorderedsubsystem(modes, H.jw)
-        throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
-    end
-    # loop through all focknumbers in H and collect the fock states that are in the subsystem
-    outinds = siteindices(modes, H.jw)
-    outbits(f) = Iterators.map(i -> _bit(f, i), outinds)
-    subfocks = eltype(H.focknumbers)[]
-    for f in focknumbers(H)
-        subbits = outbits(f)
-        subfock = focknbr_from_bits(subbits)
-        push!(subfocks, subfock)
-    end
-    sort!(unique!(subfocks), by=f -> f.f)
-    FockHilbertSpace(modes, subfocks)
-end
+@testitem "Subregion of fermionic spaces with conservation laws" begin
+    using FermionicHilbertSpaces: atomic_factors
+    @fermions f
+    H = hilbert_space(f, [1, 2, 3])
+    Hsub = hilbert_space(f, [1, 2])
+    Hsubcons = subregion(Hsub, H)
+    @test atomic_factors(Hsubcons) == atomic_factors(Hsub)
 
-function subregion(modes, H::SymmetricFockHilbertSpace)
-    if !isorderedsubsystem(modes, H.jw)
-        throw(ArgumentError("The modes $(modes) are not an ordered subsystem of the Hilbert space $(H)"))
-    end
-    # loop through all focknumbers in H and collect the fock states that are in the subsystem
-    outinds = siteindices(modes, H.jw)
-    outbits(f) = Iterators.map(i -> _bit(f, i), outinds)
-    subfocks = eltype(H.symmetry.focknumbers)[]
-    for f in focknumbers(H)
-        subbits = outbits(f)
-        subfock = focknbr_from_bits(subbits)
-        push!(subfocks, subfock)
-    end
-    sort!(unique!(subfocks), by=f -> f.f)
-    FockHilbertSpace(modes, subfocks)
-end
-
-@testitem "subregion function" begin
-    using FermionicHilbertSpaces
-    # SimpleFockHilbertSpace
-    H = hilbert_space([1, 2, 3])
-    Hsub = subregion([1, 2], H)
-    @test Hsub isa SimpleFockHilbertSpace
-    @test keys(Hsub) == [1, 2]
-    # FockHilbertSpace
     focks = [FockNumber(1), FockNumber(3)]
-    HF = FockHilbertSpace([1, 2], focks)
-    HFsub = subregion([1], HF)
-    @test HFsub isa FockHilbertSpace
-    @test keys(HFsub) == [1]
-    focknumbers(HFsub) == [FockNumber(1)]
-    # SymmetricFockHilbertSpace
-    qn = ParityConservation()
-    HS = hilbert_space([1, 2], qn)
-    HSsub = subregion([1], HS)
-    @test HSsub isa FockHilbertSpace
-    @test keys(HSsub) == [1]
-    focknumbers(HSsub) == [FockNumber(0), FockNumber(1)]
+    HF = hilbert_space(f, [1, 2], focks)
+    HFsub = subregion(hilbert_space(f, [1]), HF)
+    @test basisstates(HFsub) == [FockNumber(1)]
+
+    constraint = ParityConservation()
+    HS = hilbert_space(f, [1, 2], constraint)
+    HSsub = subregion(hilbert_space(f, [1]), HS)
+    @test all(in([FockNumber(0), FockNumber(1)]), basisstates(HSsub))
     # Error on non-subsystem
-    @test_throws ArgumentError subregion([4], H)
+    @test_throws ArgumentError subregion(hilbert_space(f, [4]), H)
 end
 
-
-
-function sector(m::AbstractMatrix, qn::Int, H::SymmetricFockHilbertSpace)
-    ls = length.(H.symmetry.qntofockstates)
-    startindex = 1
-    for (n, l) in pairs(ls)
-        if n == qn
-            return m[startindex:startindex+l-1, startindex:startindex+l-1]
-        end
-        startindex += l
-    end
-    throw(ArgumentError("Sector $qn not found in the matrix."))
-end
 
 @testitem "Hilbert space printing" begin
     # Check that printing of Hilbert spaces doesn't error
     using FermionicHilbertSpaces
     io = IOBuffer()
-    # SimpleFockHilbertSpace
-    H_simple = hilbert_space(1:3)
+    @fermions f
+    H_simple = hilbert_space(f, 1:3)
     @test begin
         show(io, H_simple)
         true
     end
     # FockHilbertSpace
     focks = [FockNumber(0), FockNumber(1), FockNumber(2)]
-    H_fock = FockHilbertSpace(1:2, focks)
+    H_fock = hilbert_space(f, 1:2, focks)
     @test begin
         show(io, H_fock)
         true
     end
     # SymmetricFockHilbertSpace
     qn = ParityConservation()
-    H_sym = hilbert_space(1:2, qn)
+    H_sym = hilbert_space(f, 1:2, qn)
     @test begin
         show(io, H_sym)
         true
     end
+end
+
+@testitem "Complementary system" begin
+    using FermionicHilbertSpaces: complementary_subsystem
+    @fermions f
+    H = hilbert_space(f, 1:4)
+    H1 = hilbert_space(f, 1:2, NumberConservation(1))
+    H2 = complementary_subsystem(H, H1)
+    H20 = hilbert_space(f, 3:4, NumberConservation(1))
+    H2qn = constrain_space(H2, NumberConservation(1))
+    @test dim(H2) == 4
+    @test dim(H20) == 2
+    @test H20 == H2qn
 end

@@ -1,0 +1,650 @@
+_check_spin(J) = (J isa Real && ishalfinteger(J) && J >= 0) ? J : throw(ArgumentError("Spin J must be a nonnegative half-integer such as 1//2 or 1, got $(repr(J))."))
+_to_halfint(::Nothing) = nothing
+_to_halfint(spin) = HalfInt(_check_spin(spin))
+
+"""
+    SpinField
+
+A family of spins, created by [`@spins`](@ref). `s[i]` is the spin on site `i`, e.g. `s[i][:z]`.
+"""
+struct SpinField{I}
+    name::Symbol
+    spin::Union{Nothing,HalfInt}
+    tags::I
+    SpinField(name::Symbol, spin, tags::I) where I = new{I}(name, _to_halfint(spin), tags)
+end
+SpinField(name::Symbol, spin=nothing) = SpinField(name, spin, Tags(nothing))
+Base.:(==)(a::SpinField, b::SpinField) = a.name == b.name
+Base.hash(b::SpinField, h::UInt) = hash(b.name, h)
+Base.show(io::IO, b::SpinField) = print(io, "SpinField(", b.name, ")")
+tags(s::SpinField) = s.tags
+add_tag(s::SpinField, tag) = SpinField(s.name, s.spin, add_tag(s.tags, tag))
+
+struct SymbolicSpinBasis{L,P,T<:Tags}
+    label::L
+    field::P
+    spin::Union{Nothing,HalfInt}
+    tags::T
+    function SymbolicSpinBasis(label::L, field::P, spin, tags::T) where {L,P,T}
+        new{L,P,T}(label, field, _to_halfint(spin), tags)
+    end
+end
+
+SymbolicSpinBasis(label, field=nothing, spin=nothing) = SymbolicSpinBasis(label, field, spin, Tags(nothing))
+Base.:(==)(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = a.label == b.label && a.field == b.field && a.spin == b.spin && a.tags == b.tags
+_spin_order_key(s::SymbolicSpinBasis) = (_spin_field_name(s.field), s.label, s.tags, something(s.spin, -1))
+_spin_field_name(::Nothing) = Symbol("")
+_spin_field_name(f::SpinField) = f.name
+Base.isless(a::SymbolicSpinBasis, b::SymbolicSpinBasis) = _order_isless(_spin_order_key(a), _spin_order_key(b))
+Base.getindex(s::SymbolicSpinBasis, op) = SpinSym(op, s)
+Base.getindex(s::SymbolicSpinBasis, ::Colon) = [SpinSym(σ, s) for σ in (:x, :y, :z)]
+Base.hash(x::SymbolicSpinBasis, h::UInt) = hash(x.tags, hash(x.spin, hash(x.field, hash(x.label, h))))
+label(S::SymbolicSpinBasis) = S.label
+Base.getindex(s::SpinField, i) = SymbolicSpinBasis(i, s, s.spin, tags(s))
+atomic_factors(s::SymbolicSpinBasis) = (s,)
+atomic_id(s::SymbolicSpinBasis) = symbolic_group(s)
+tags(s::SymbolicSpinBasis) = s.tags
+add_tag(s::SymbolicSpinBasis, tag) = SymbolicSpinBasis(s.label, s.field, s.spin, add_tag(s.tags, tag))
+symbolic_group(s::SymbolicSpinBasis) = s
+
+function Base.show(io::IO, S::SymbolicSpinBasis)
+    spin_suffix = S.spin isa Nothing ? "" : ", spin=$(S.spin)"
+    if S.field isa Nothing
+        print(io, "SpinBasis(", S.label, spin_suffix, ")")
+    else
+        print(io, "SpinBasis(", S.field.name, "[", S.label, "]", spin_suffix, ")")
+    end
+end
+
+"""
+    @spin s
+
+    @spin s J
+
+Create a symbolic spin basis `s` for constructing spin operators such as
+`s[:x]`, `s[:y]`, `s[:z]`, `s[:+]`, and `s[:-]`. The spin `J` can be given here or later to
+`hilbert_space`.
+
+The operators are spin operators, not Pauli matrices: `s[:z]` has eigenvalues `-J, …, J`, so
+for spin 1/2 `s[:x]` is `σˣ/2`, and `s[:±] = s[:x] ± i s[:y]`. The basis states of
+`hilbert_space(s, J)` are ordered by increasing `s[:z]` eigenvalue, starting at `-J`.
+
+For `J ≥ 1`, `==` and `iszero` on symbolic expressions compare their stored form, which is not
+unique, so equal operators can compare unequal: `iszero(s[:z]*s[:+]^2 - s[:+]^2)` is `false` for
+`J = 1`.
+"""
+macro spin(x)
+    Expr(:block, :($(esc(x)) = SymbolicSpinBasis($(Expr(:quote, x)))),
+        :($(esc(x))))
+end
+macro spin(x, spin)
+    Expr(:block, :($(esc(x)) = SymbolicSpinBasis($(Expr(:quote, x)), nothing, $(esc(spin)))),
+        :($(esc(x))))
+end
+
+"""
+    @spins s 
+
+    @spins s J
+
+Create a spin basis `s`. Index into it to get site-specific
+spin bases: `s[1][:z]` gives the z-operator on site 1. Operators and basis states follow the
+conventions of [`@spin`](@ref).
+"""
+macro spins(name)
+    return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)))), :($(esc(name))))
+end
+macro spins(name, spin)
+    return Expr(:block, :($(esc(name)) = SpinField($(Expr(:quote, name)), $(esc(spin)))), :($(esc(name))))
+end
+
+
+"""
+    SpinState(m)
+
+The basis state of a single spin with `s[:z]` eigenvalue `m`, e.g. `SpinState(-1//2)`.
+"""
+struct SpinState{T<:Integer} <: AbstractBasisState
+    m::Half{T}
+end
+SpinState(m) = SpinState(HalfInteger(m))
+Base.:(==)(a::SpinState, b::SpinState) = a.m == b.m
+Base.isless(a::SpinState, b::SpinState) = a.m < b.m
+Base.hash(x::SpinState, h::UInt) = hash(twice(x.m), h)
+
+_no_spin_count() = throw(ArgumentError("Spins have no particle number or fermion parity, so `NumberConservation` and `ParityConservation` do not apply to spin spaces. To count spin excitations, use `AdditiveConstraint` with a map such as `s -> s.m + J`."))
+particle_number(::SpinState) = _no_spin_count()
+parity(::SpinState) = _no_spin_count()
+
+internal_rep(state::SpinState, ::AbstractHilbertSpace, ::Type{Int}) = Int(twice(state.m))
+physical_rep(state::Int, ::Type{SpinState}) = SpinState(half(state))
+function physical_rep(state::Int, ::Type{SpinState{T}}) where {T<:Integer}
+    SpinState{T}(convert(Half{T}, half(state)))
+end
+struct SpinSpace{T<:Integer,S} <: AbstractAtomicHilbertSpace{SpinState{T}}
+    spin::Half{T}
+    sym::S
+end
+function SpinSpace(sym::S, J) where {S<:SymbolicSpinBasis}
+    Jhalf = HalfInteger(_check_spin(J))
+    T = typeof(twice(Jhalf))
+    return SpinSpace{T, S}(Jhalf, sym)
+end
+SpinSpace(sym::S) where {S<:SymbolicSpinBasis} = (sym.spin isa Nothing ? throw(ArgumentError("$sym has no spin value. Pass J to hilbert_space, e.g. `hilbert_space(s, 1//2)` or `hilbert_space(s, labels, 1//2)`, or set it when creating the basis with `@spin s 1//2` or `@spins s 1//2`.")) : SpinSpace(sym, sym.spin))
+SpinSpace(label, J) = SpinSpace(SymbolicSpinBasis(label, nothing, J), J)
+basisstates(H::SpinSpace) = BasisStates(H, Iterators.map(n -> basisstate(n, H), 1:dim(H)))
+Base.@propagate_inbounds function basisstate(n::Integer, H::SpinSpace{T}) where {T}
+    @boundscheck 1 <= n <= dim(H) || throw(BoundsError(H, n))
+    return SpinState{T}(n - 1 - H.spin)
+end
+dim(H::SpinSpace) = Int(twice(H.spin)) + 1
+function _state_index(s::SpinState, space::SpinSpace)
+    t = twice(s.m) + twice(space.spin) # 2(m + J)
+    i = (t >> 1) + one(t) # (checking i against dim rather than t against 4J avoids slow SLP vectorization in products of spins)
+    (iseven(t) && 1 <= i <= dim(space)) ? i : zero(t)
+end
+has_arithmetic_state_index(::SpinSpace) = true
+
+atomic_id(H::SpinSpace) = symbolic_group(H.sym)
+function add_tag(H::SpinSpace{T,S}, tag) where {T,S}
+    newsym = add_tag(H.sym, tag)
+    return SpinSpace{T, typeof(newsym)}(H.spin, newsym)
+end
+_check_spin_unset(sym) = sym.spin isa Nothing || throw(ArgumentError("The spin value was already given in the $(sym isa SpinField ? "spin field" : "symbolic basis"), so `J` must be omitted."))
+hilbert_space(sym::SymbolicSpinBasis) = SpinSpace(sym)
+function hilbert_space(sym::SymbolicSpinBasis, J)
+    _check_spin_unset(sym)
+    SpinSpace(sym, J)
+end
+# Tuples and vectors are mapped over directly; other iterables (generators, sets, matrices) are flattened to a vector.
+_field_labels(labels::Union{Tuple,AbstractVector}) = labels
+_field_labels(labels) = vec(collect(labels))
+hilbert_space(sym::SpinField, labels, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l]), _field_labels(labels)); constraint)
+function hilbert_space(sym::SpinField, labels, J, constraint::AbstractConstraint=NoSymmetry())
+    _check_spin_unset(sym)
+    tensor_product(map(l -> hilbert_space(sym[l], J), _field_labels(labels)); constraint)
+end
+Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.spin == b.spin)
+Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.spin, h))
+
+function interpret_state(input::AbstractString, H::SpinSpace{T}) where {T}
+    Jhalf = H.spin
+    input in ("up", "↑", "down", "↓") && Jhalf != 1 // 2 && throw(ArgumentError("The spin state `\"$input\"` is only defined for `J` = 1/2, got `J` = $Jhalf. Give `m` as a half-integer instead."))
+    if input in ("up", "↑")
+        return SpinState(Jhalf)
+    elseif input in ("down", "↓")
+        return SpinState(-Jhalf)
+    end
+    m = try
+        parse(HalfInt, input)
+    catch
+        throw(ArgumentError("A spin state string must be `\"up\"`, `\"down\"` or a half-integer, got `\"$input\"`."))
+    end
+    m = convert(Half{T}, m)
+    if m < -Jhalf || m > Jhalf
+        throw(ArgumentError("The spin state `m` must be between `-J` and `J`, got `m` = $m for `J` = $Jhalf."))
+    end
+    return SpinState(m)
+end
+interpret_state(input::AbstractChar, H::SpinSpace) = interpret_state(string(input), H)
+
+function operators(H::SpinSpace)
+    Jhalf = H.spin
+    Splus = spzeros(Float64, dim(H), dim(H))
+    Sminus = spzeros(Float64, dim(H), dim(H))
+    Sz = spzeros(Float64, dim(H), dim(H))
+    for state in basisstates(H)
+        m = state.m
+        i = state_index(state, H)
+        if m < Jhalf
+            j = state_index(SpinState(m + 1), H)
+            Splus[j, i] = sqrt(Jhalf * (Jhalf + 1) - m * (m + 1))
+        end
+        if m > -Jhalf
+            j = state_index(SpinState(m - 1), H)
+            Sminus[j, i] = sqrt(Jhalf * (Jhalf + 1) - m * (m - 1))
+        end
+        Sz[i, i] = m
+    end
+    return Dict(:+ => Splus, :- => Sminus, :Z => Sz, :X => (Splus + Sminus) / 2, :Y => (Splus - Sminus) / (2im))
+end
+
+@testitem "Spin" begin
+    using FermionicHilbertSpaces: SpinSpace, SpinState, operators, SpinField, Half
+    using LinearAlgebra
+    @test basisstates(SpinSpace(:s, 1 // 2)) == [SpinState(-1 // 2), SpinState(1 // 2)]
+    @test basisstates(SpinSpace(:s, 1)) == [SpinState(-1), SpinState(0), SpinState(1)]
+    # equal states hash equally, also across integer types
+    s16 = SpinState{Int16}(Half{Int16}(3 // 2))
+    @test s16 == SpinState(3 // 2) && hash(s16) == hash(SpinState(3 // 2))
+    @test hash(SpinState(1 // 2)) != hash(SpinState(-1 // 2))
+
+    @spin s
+    H = hilbert_space(s, 1 // 2)
+    S = operators(H)
+    @test S[:+] == [0 0; 1 0]
+    @test S[:-] == [0 1; 0 0]
+    @test S[:Z] == [-1//2 0; 0 1//2]
+    @test S[:X] == [0 1//2; 1//2 0]
+    @test S[:Y] == [0 im//2; -im//2 0]
+    # test pauli algebra
+    @test S[:X] * S[:Y] - S[:Y] * S[:X] ≈ im * S[:Z]
+    @test S[:Y] * S[:Z] - S[:Z] * S[:Y] ≈ im * S[:X]
+    @test S[:Z] * S[:X] - S[:X] * S[:Z] ≈ im * S[:Y]
+    # spin algebra for higher spins
+    for j in (1, 3 // 2, 2)
+        Sj = operators(hilbert_space(s, j))
+        @test all(Sj[a] * Sj[b] - Sj[b] * Sj[a] ≈ im * Sj[c] for (a, b, c) in ((:X, :Y, :Z), (:Y, :Z, :X), (:Z, :X, :Y)))
+        @test Sj[:X]^2 + Sj[:Y]^2 + Sj[:Z]^2 ≈ j * (j + 1) * I
+    end
+    S1 = operators(hilbert_space(s, 1))
+    @test S1[:Z] == [-1 0 0; 0 0 0; 0 0 1]
+    @test S1[:+] ≈ [0 0 0; √2 0 0; 0 √2 0]
+    # states outside the space have index 0
+    @test [state_index(SpinState(m), H) for m in -3//2:1//2:3//2] == [0, 0, 1, 0, 2, 0, 0]
+    @test [state_index(SpinState(m), hilbert_space(s, 1)) for m in -2:1//2:2] == [0, 0, 1, 0, 2, 0, 3, 0, 0]
+    H1, H2 = [SpinSpace(k, 1 // 2) for k in 1:2]
+    P = tensor_product(H1, H2)
+    @test partial_trace(1.0 * I(dim(P)), P => H1) ≈ dim(H2) * I(dim(H1))
+
+    ops1 = operators(H1)
+    @test all(partial_trace(embed(op, H1 => P), P => H1) ≈ dim(H2) * op for op in values(ops1))
+
+    # Invalid or missing spin values
+    @spins t
+    for J in (-1 // 2, 1 // 3, 0.3, "1/2", nothing)
+        @test_throws ArgumentError hilbert_space(s, J)
+        @test_throws ArgumentError hilbert_space(t, 1:2, J)
+    end
+    @test_throws ArgumentError SpinField(:x, -1)
+    @test_throws "has no spin value" hilbert_space(t, 1:2)
+    @test_throws "has no spin value" hilbert_space(s)
+    @test dim(hilbert_space(s, 0)) == 1
+
+    # every spin macro form returns the created basis
+    @test (@spins u 1 // 2) === u
+    @test (@spins v) === v
+    @test (@spin w 1) === w
+
+    @fermions f
+    Hf = hilbert_space(f, 1:2)
+    mf = rand(dim(Hf), dim(Hf))
+    Pf = tensor_product(Hf, P)
+    @test partial_trace(embed(mf, Hf => Pf), Pf => Hf) ≈ dim(P) * mf
+
+    mf1 = rand(2, 2)
+    Hf1 = hilbert_space(f, 1:1)
+    @test partial_trace(embed(mf1, Hf1 => Pf), Pf => Hf) ≈ dim(P) * embed(mf1, Hf1 => Hf)
+
+end
+
+struct SpinSym{B} <: AbstractSym
+    op::Symbol
+    basis::B
+    exponent::Int
+    function SpinSym{B}(op, basis::B, exponent) where {B}
+        #bypass any checks for internal use when we know the input is valid
+        return new{B}(op, basis, exponent)
+    end
+end
+function SpinSym(op, basis::B, exponent::Integer=1) where {B}
+    exponent < 0 && throw(ArgumentError("The spin operator `exponent` must be nonnegative, got $exponent."))
+    exponent == 0 && return 1 // 1
+    if op in _spin_x_aliases
+        exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators, got `exponent` = $exponent for `$op`."))
+        return SpinSym{B}(:+, basis, 1) / 2 + SpinSym{B}(:-, basis, 1) / 2
+    elseif op in _spin_y_aliases
+        exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators, got `exponent` = $exponent for `$op`."))
+        return SpinSym{B}(:+, basis, 1) / (2im) - SpinSym{B}(:-, basis, 1) / (2im)
+    elseif op in _spin_identity_aliases
+        return 1 // 1
+    else
+        canonical = _canonical_spin_alias(op)
+        if !(basis.spin isa Nothing) && canonical in (:+, :-) && exponent > Int(2 * basis.spin)
+            return 0 // 1
+        end
+        SpinSym{B}(canonical, basis, Int(exponent))
+    end
+end
+const _spin_x_aliases = (:x, :X, 1)
+const _spin_y_aliases = (:y, :Y, 2)
+const _spin_z_aliases = (:z, :Z, 3)
+const _spin_identity_aliases = (:I, 0)
+const _spin_plus_aliases = (:+, :plus, :p)
+const _spin_minus_aliases = (:-, :minus, :m)
+_iscanonical(op) = op in (:+, :-, :z)
+function _canonical_spin_alias(op)
+    _iscanonical(op) && return op
+    if op in _spin_z_aliases
+        :z
+    elseif op in _spin_plus_aliases
+        :+
+    elseif op in _spin_minus_aliases
+        :-
+    else
+        throw(ArgumentError("Invalid spin operator symbol, got `$op`."))
+    end
+end
+
+function Base.show(io::IO, x::SpinSym)
+    if x.basis.field isa Nothing
+        print(io, x.basis.label, "[:$(x.op)]")
+    else
+        print(io, _symbolic_name_with_tags(x.basis.field.name, x.basis), "[", x.basis.label, "][:$(x.op)]")
+    end
+    if x.exponent != 1
+        print(io, "^", x.exponent)
+    end
+end
+
+Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.basis == b.basis && a.exponent == b.exponent
+Base.hash(a::SpinSym, h::UInt) = hash(a.exponent, hash(a.op, hash(a.basis, h)))
+symbolic_group(f::SpinSym) = symbolic_group(f.basis)
+symbolic_basis(f::SpinSym) = f.basis
+with_basis(f::SpinSym, newbasis) = SpinSym(f.op, newbasis, f.exponent)
+
+mat_eltype(::Type{<:SpinSym}) = Float64
+
+function Base.adjoint(x::SpinSym{B}) where B
+    if x.op == :+
+        SpinSym{B}(:-, x.basis, x.exponent) #unsafe constructor
+    elseif x.op == :-
+        SpinSym{B}(:+, x.basis, x.exponent) #unsafe constructor
+    elseif x.op == :z
+        x
+    else
+        throw(ArgumentError("Invalid spin operator symbol, got `$(x.op)`."))
+    end
+end
+_spin_name(a::SymbolicSpinBasis) = a.field isa Nothing ? a.label : Symbol(a.field.name, a.label)
+
+function _spin_commutator_term(a::SpinSym{B}, b::SpinSym{B}) where B
+    if a.op == :+ && b.op == :z
+        return (-1, SpinSym{B}(:+, a.basis, 1))
+    elseif a.op == :- && b.op == :z
+        return (1, SpinSym{B}(:-, a.basis, 1))
+    elseif a.op == :- && b.op == :+
+        return (-2, SpinSym{B}(:z, a.basis, 1))
+    else
+        return nothing
+    end
+end
+
+_factor_or_empty(x) = isone(x) ? Any[] : [x]
+
+# Equal bases can have different types, such as labels `1` and `Int32(1)`.
+local_mul_effect(a::SpinSym, b::SpinSym) = local_mul_effect(a, with_basis(b, a.basis))
+function local_mul_effect(a::S, b::S) where {S <: SpinSym}
+    if a.op == b.op && a.op in (:+, :-, :z)
+        exponent = a.exponent + b.exponent
+        if a.op in _spin_z_aliases
+            if a.basis.spin == 1 // 2
+                div, rem = divrem(exponent, 2)
+                return (1 // 4)^div * (rem == 0 ? 1 : SpinSym(a.op, a.basis, rem))
+            elseif a.basis.spin == 1
+                return iseven(exponent) ? SpinSym(a.op, a.basis, 2) : SpinSym(a.op, a.basis, 1)
+            end
+        end
+        return SpinSym(a.op, a.basis, exponent)
+    end
+
+    # Spin-aware identity: S+ S- = J(J+1) - Sz^2 + Sz
+    if a.op == :+ && b.op == :- && !(a.basis.spin isa Nothing)
+        J = a.basis.spin
+        left = SpinSym(a.op, a.basis, a.exponent - 1)
+        right = SpinSym(b.op, b.basis, b.exponent - 1)
+
+        left_factors = a.exponent == 1 ? Any[] : [left]
+        right_factors = b.exponent == 1 ? Any[] : [right]
+
+        const_term = J * (J + 1)
+        term_const = if iszero(const_term)
+            0
+        elseif length(left_factors) == 0 && length(right_factors) == 0
+            const_term
+        else
+            NCMul(const_term, S[left_factors..., right_factors...])
+        end
+        szsquare = if J == 1 // 2
+            1 // 4
+        else
+            SpinSym(:z, a.basis, 2)
+        end
+        term_sz2 = szsquare isa SpinSym ? NCMul(-1 // 1, S[left_factors..., SpinSym(:z, a.basis, 2), right_factors...]) : NCMul(-1 * szsquare // 1, S[left_factors..., right_factors...])
+        term_sz = NCMul(1 // 1, S[left_factors..., SpinSym(:z, a.basis), right_factors...])
+        return AddTerms((term_const, term_sz2, term_sz))
+    end
+
+    if a.basis.spin == 1 // 2 && a.op == :z
+        # apply Sz*S+ = S+/2 and related identities for spin-1/2
+        if b.op == :+
+            return NCMul((1 // 2)^(a.exponent), S[SpinSym(:+, a.basis, b.exponent)])
+        elseif b.op == :-
+            return NCMul((-1 // 2)^(a.exponent), S[SpinSym(:-, a.basis, b.exponent)])
+        end
+    end
+
+    comm = _spin_commutator_term(a, b)
+    if isnothing(comm)
+        return nothing
+    end
+
+    comm_coeff, comm_middle_factor = comm
+
+    # For A^N B^M (out-of-order), rewrite only the middle pair:
+    # A^(N-1) * (B*A + [A,B]) * B^(M-1)
+    left_factors = a.exponent == 1 ? S[] : S[SpinSym(a.op, a.basis, a.exponent - 1)]
+    right_factors = b.exponent == 1 ? S[] : S[SpinSym(b.op, b.basis, b.exponent - 1)]
+    swapped_factors = S[left_factors..., SpinSym(b.op, b.basis), SpinSym(a.op, a.basis), right_factors...]
+    comm_factors = S[left_factors..., comm_middle_factor, right_factors...]
+
+    swapped_term = NCMul(1 // 1, swapped_factors)
+    comm_term = NCMul(comm_coeff // 1, comm_factors)
+    return AddTerms((swapped_term, comm_term))
+end
+
+@nc SpinSym
+
+"""
+    apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace, precomp) -> (newstate, amplitude)
+
+Apply a single spin operator to a spin state. Returns (newstate, amplitude) where amplitude is 0 if the operation is not allowed, and a nonzero value otherwise.
+"""
+function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace, precomp)
+    J = space.spin
+    m = state.m
+    newstate = state
+    T = Float64
+    amplitude = one(T)
+
+    if op.op == :z
+        m = newstate.m
+        # S_z |m⟩ = m |m⟩
+        amplitude = T(_fast_spin_z_exponent(m, op.exponent))
+        return (state, amplitude)
+    elseif op.op == :+
+        # S_+ |m⟩ = √(J(J+1) - m(m+1)) |m+1⟩
+        m + op.exponent > J && return (state, zero(T))
+        amplitude = T(_fast_spin_prefactor(J, m, +1, op.exponent))
+        newstate = SpinState(m + op.exponent)
+        return (newstate, amplitude)
+    elseif op.op == :-
+        m - op.exponent < -J && return (state, zero(T))
+        # S_- |m⟩ = √(J(J+1) - m(m-1)) |m-1⟩
+        amplitude = T(_fast_spin_prefactor(J, m, -1, op.exponent))
+        newstate = SpinState(m - op.exponent)
+        return (newstate, amplitude)
+    else
+        throw(ArgumentError("Invalid spin operator symbol, got `$(op.op)`."))
+    end
+end
+
+function _fast_spin_z_exponent(m, exp::Int)
+    exp == 0 && return 1.0
+    m == 1 && return 1.0
+    m == -1 && return isodd(exp) ? -1.0 : 1.0
+    x = m
+    for _ in Base.OneTo(exp - 1)
+        x *= m
+    end
+    return x
+end
+function _fast_spin_prefactor(J, m, sign::Int, exp::Int)
+    x = 1.0
+    for _dm in Base.OneTo(exp)
+        dm = _dm - 1
+        x *= sqrt(J * (J + 1) - (m + dm * sign) * (m + _dm * sign))
+    end
+    return x
+end
+function _fast_spin_prefactor(J::HalfInteger, m::HalfInteger, sign::Int, exp::Int)
+    x = one(Float64)
+    J2 = twice(J)
+    m2 = twice(m)
+    for _dm in Base.OneTo(exp)
+        dm = _dm - 1
+        x *= sqrt(J2 * (J2 + 2) - (m2 + dm * 2sign) * (m2 + _dm * 2sign)) * 0.5
+    end
+    return x
+end
+
+@testitem "Spin: no particle number or parity" begin
+    @spin S 1//2
+    @boson b
+    H = tensor_product(hilbert_space(S), hilbert_space(b, 3))
+    @test_throws ArgumentError constrain_space(H, NumberConservation(1))
+    @test_throws ArgumentError constrain_space(H, ParityConservation(1))
+end
+
+@testitem "SpinSym" begin
+    @spin S1
+    @spin S2
+    @fermions f
+    @majoranas γ
+    @boson b
+
+    Sz1 = S1[:z]
+    Sp1 = S1[:+]
+    Sm1 = S1[:-]
+    Sx1 = S1[:x]
+    Sy1 = S1[:y]
+
+    Sz2 = S2[:z]
+    Sp2 = S2[:+]
+    Sm2 = S2[:-]
+
+    @test 1 * Sz1 == Sz1
+    @test 1 * Sz1 + 0 == Sz1
+    @test hash(Sz1) == hash(1 * Sz1) == hash(1 * Sz1 + 0)
+
+    # Test canonical commutation relations
+    # [Sz, S+] = S+
+    @test Sz1 * Sp1 - Sp1 * Sz1 == Sp1
+    # [Sz, S-] = -S-
+    @test Sz1 * Sm1 - Sm1 * Sz1 == -Sm1
+    # [S+, S-] = 2Sz
+    @test Sp1 * Sm1 - Sm1 * Sp1 == 2 * Sz1
+
+    # Reordering powers: Sz S± = S± (Sz ± 1)
+    @test Sp1^2 * Sz1 == Sz1 * Sp1^2 - 2 * Sp1^2
+    @test Sm1^2 * Sz1 == Sz1 * Sm1^2 + 2 * Sm1^2
+    @test Sp1 * Sz1^2 == (Sz1 - 1)^2 * Sp1
+    @test Sm1^2 * Sz1^2 == (Sz1 + 2)^2 * Sm1^2
+    @test Sm1^2 * Sp1 - Sp1 * Sm1^2 == -2 * (Sz1 * Sm1 + Sm1 * Sz1)
+    @test (Sp1^2 * Sz1) * Sm1 == Sp1^2 * (Sz1 * Sm1)
+
+    # Test x and y operators expand correctly
+    @test Sx1 == (Sp1 + Sm1) / 2
+    @test Sy1 == (Sp1 - Sm1) / (2im)
+
+    # Spins at different sites commute
+    @test Sz1 * Sz2 - Sz2 * Sz1 == 0
+    @test Sp1 * Sp2 - Sp2 * Sp1 == 0
+    @test Sp1 * Sm2 - Sm2 * Sp1 == 0
+
+    # Spins commute with fermions
+    @test Sz1 * f[1] - f[1] * Sz1 == 0
+    @test Sp1 * f[1] - f[1] * Sp1 == 0
+    @test Sz1 * f[1]' - f[1]' * Sz1 == 0
+    @test Sp1 * f[1]' - f[1]' * Sp1 == 0
+
+    # Spins commute with majoranas
+    @test Sz1 * γ[1] - γ[1] * Sz1 == 0
+    @test Sp1 * γ[1] - γ[1] * Sp1 == 0
+
+    # Spins commute with bosons
+    @test Sz1 * b - b * Sz1 == 0
+    @test Sp1 * b - b * Sp1 == 0
+    @test Sz1 * b' - b' * Sz1 == 0
+    @test Sp1 * b' - b' * Sp1 == 0
+
+    # Test adjoint
+    @test Sp1' == Sm1
+    @test Sm1' == Sp1
+    @test Sz1' == Sz1
+
+    @test iszero(Sz1 - Sz1)
+    @test iszero(2 * Sz1 - 2 * Sz1)
+    @test iszero(0 * Sz1)
+    @test iszero(Sz1 * 0)
+    @test iszero(0 * (Sp1 + Sm1))
+    @test iszero((Sp1 + Sm1) * 0)
+
+    # Test algebraic properties
+    @test 1 + (Sp1 + Sm1) == 1 + Sp1 + Sm1 == Sp1 + Sm1 + 1 == Sp1 + 1 + Sm1
+
+    # Test with explicit spin
+    @spin Shalf 1 // 2
+    @test iszero(Shalf[:+]^2)
+    @test iszero(Shalf[:-]^2)
+    @test Shalf[:+] * Shalf[:-] == Shalf[:z] + 1 // 2
+
+    @spin Sone 1
+    Spo = Sone[:+]
+    @test iszero(Sone[:+]^3)
+    @test Sone[:z]^3 == Sone[:z]
+
+    # Test spin-1/2 identity: Sx^2 + Sy^2 + Sz^2 = 3/4 * I, and Colon operator
+    @test Shalf[:]' * Shalf[:] == 3 / 4 * Shalf[:I]
+
+    # Equal bases of different types
+    @spins s 1 // 2
+    @test s[1][:z] * s[Int32(1)][:z] == s[1][:z]^2
+end
+
+@testitem "Spin matrix reps" begin
+    @spin s
+    H = hilbert_space(s, 1 // 2)
+    S_mat = Dict(sym => representation(s[sym], H) for sym in (:x, :y, :z, :+, :-))
+    @test S_mat[:+] == [0 0; 1 0]
+    @test S_mat[:-] == [0 1; 0 0]
+    @test S_mat[:z] == [-1//2 0; 0 1//2]
+    @test S_mat[:x] == [0 1//2; 1//2 0]
+    @test S_mat[:y] == [0 im//2; -im//2 0]
+end
+
+@testitem "Heisenberg dimer" begin
+    using LinearAlgebra
+    @spins s 1 // 2
+    H = hilbert_space(s, 1:2)
+    dot_spins(a, b) = sum(a[c] * b[c] for c in (:x, :y, :z))
+    # singlet at -3/4, triplet at 1/4
+    @test eigvals(Hermitian(representation(dot_spins(s[1], s[2]), H, :dense))) ≈ [-3 / 4, 1 / 4, 1 / 4, 1 / 4]
+    Stot = (s[1][c] + s[2][c] for c in (:x, :y, :z))
+    @test eigvals(Hermitian(representation(sum(S^2 for S in Stot), H, :dense))) ≈ [0, 2, 2, 2]
+end
+
+@testitem "Spin: spin-aware vs not" begin
+    for J in (1 // 2, 1, 3 // 2)
+        @spin s J
+        H = hilbert_space(s)
+        @test dim(H) == 2J + 1
+        @test iszero(s[:+]^Int(2J + 1))
+        @test iszero(s[:-]^Int(2J + 1))
+        syms = (:+, :-, :z, :x, :y, :I)
+        smat = Dict(sym => representation(s[sym], H) for sym in syms)
+        @test all(smat[sym1] * smat[sym2] ≈ representation(s[sym1] * s[sym2], H) for sym1 in syms for sym2 in syms)
+        # triple products exercise reordering of powers
+        @test all(smat[s1] * smat[s2] * smat[s3] ≈ representation(s[s1] * s[s2] * s[s3], H) for s1 in syms for s2 in syms for s3 in syms)
+    end
+end

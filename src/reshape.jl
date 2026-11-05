@@ -1,256 +1,816 @@
+# Both sides of a mapping are a Hilbert space or a collection of Hilbert spaces.
+const _SpaceGroup = Union{AbstractHilbertSpace,Tuple{Vararg{AbstractHilbertSpace}},AbstractVector{<:AbstractHilbertSpace}}
+const _SpaceMapping = Pair{<:_SpaceGroup,<:_SpaceGroup}
 
-function Base.reshape(m::AbstractMatrix, H::AbstractFockHilbertSpace, Hs, phase_factors::Bool=true)
-    _reshape_mat_to_tensor(m, H, Hs, FockSplitter(H, Hs), phase_factors)
-end
-function Base.reshape(m::AbstractVector, H::AbstractFockHilbertSpace, Hs, phase_factors::Bool=true)
-    _reshape_vec_to_tensor(m, H, Hs, FockSplitter(H, Hs), phase_factors)
-end
-const PairWithHilbertSpace = Union{Pair{<:AbstractFockHilbertSpace,<:Any},Pair{<:Any,<:AbstractFockHilbertSpace}}
-Base.reshape(Hs::PairWithHilbertSpace, phase_factors=true) = m -> reshape(m, first(Hs), last(Hs), phase_factors)
-Base.reshape(m, Hs::PairWithHilbertSpace, phase_factors=true) = reshape(m, first(Hs), last(Hs), phase_factors)
+"""
+    reshape(t, mappings...; repeat=false, projection=false, alg)
 
-function Base.reshape(t::AbstractArray, Hs::Union{<:AbstractVector,Tuple}, H::AbstractFockHilbertSpace, phase_factors::Bool=true)
-    if ndims(t) == 2 * length(Hs)
-        return _reshape_tensor_to_mat(t, Hs, H, FockMapper(Hs, H), phase_factors)
-    elseif ndims(t) == length(Hs)
-        return _reshape_tensor_to_vec(t, Hs, H, FockMapper(Hs, H), phase_factors)
+Reshape the array `t` by splitting or combining its indices according to
+Hilbert-space mappings. The mappings are applied left to right, each one
+consuming the next consecutive group of input indices. Each mapping reads
+input => output; see [Pair arguments](@ref pair_convention).
+
+# Mapping forms
+
+    H => (H1, H2, ...)   split one index into several
+    (H1, H2, ...) => H   combine several consecutive indices into one
+    (H1, H2, ...) => (K1, K2, ...)  repartition several indices into several
+    H => H               leave one index unchanged
+
+# Specifying multiple mappings
+
+Give one mapping per group of input indices:
+
+    reshape(A, H1 => (H1a, H1b), (H2a, H2b) => H2, H3 => H3)
+
+This splits the first index, combines the next two, and leaves the last
+unchanged.
+
+# Single-mapping shorthand
+
+When only one mapping is given, it is replicated if needed:
+
+- If it consumes all indices of `t`, it is applied once:
+
+      reshape(v, H => (H1, H2))        # length-1 vector → 2-index tensor
+
+- If `t` has twice as many indices as the mapping consumes, the mapping
+  is applied to the first half and again to the second half. This covers
+  the common case of a square operator matrix, where the first index is
+  the output space and the second is the input space:
+
+      reshape(m, H => (H1, H2))        # matrix → 4-index tensor
+      # equivalent to reshape(m, H => (H1, H2), H => (H1, H2))
+
+      reshape(T, (H1, H2) => H)        # 4-index tensor → matrix
+      # equivalent to reshape(T, (H1, H2) => H, (H1, H2) => H)
+
+For asymmetric operators, specify both mappings explicitly:
+
+    reshape(m, Hout => (H1, H2), Hin => (K1, K2))
+
+Many-to-many mappings are evaluated directly and are equivalent to an explicit
+combine-then-split composition:
+
+    reshape(A, (H1, H2) => (K1, K2))
+    # equivalent to reshape(reshape(A, (H1, H2) => Hmid), Hmid => (K1, K2))
+
+where `Hmid` is the canonical combined space of the input tuple.
+
+When `repeat=true`, the single given mapping is applied to every
+consecutive group of input indices. For example, with a 3-index array
+where every index lives on `H`:
+
+    reshape(A, H => (H1, H2); repeat=true)
+    # equivalent to reshape(A, H => (H1, H2), H => (H1, H2), H => (H1, H2))
+
+# Missing states
+
+Some basis states of the input spaces may have no counterpart in the output
+spaces, e.g. when splitting into a truncated space or combining into a
+symmetry-constrained space. By default an `ArgumentError` is thrown if `t` has
+a nonzero entry on such a state, since that amplitude would be lost. Zero
+entries are fine, so e.g. combining unconstrained spaces into a
+parity-conserving space works for parity-preserving operators. With
+`projection=true`, the components on missing states are silently dropped.
+
+With `alg = NoScalarIndexingAlg()`, `t` is reshaped by array indexing and broadcasting only, so
+that GPU arrays work.
+
+# Precomputed form
+
+    reshape(mappings...; repeat=false, projection=false)
+
+returns a callable `ReshapeMap` that precomputes the transitions, and can be
+applied as `op(t)` or in place as `op(out, t)`.
+"""
+function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = ScalarIndexingAlg())
+    alg isa ScalarIndexingAlg || alg isa NoScalarIndexingAlg || throw(ArgumentError("`reshape` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
+    mappings = (mapping, rest...)
+    mappings = if repeat
+        _repeat_mapping(t, mappings)
+    elseif length(mappings) == 1
+        _expand_single_mapping(t, only(mappings))
     else
-        throw(ArgumentError("The number of dimensions in the tensor must match the number of subsystems"))
+        mappings
+    end
+
+    Hsins, Hsouts = _validate(t, mappings)
+    mappers = map(_mapper, Hsins, Hsouts)
+    blocks = map(_transitions, Hsins, Hsouts, mappers)
+
+    alg isa NoScalarIndexingAlg && return _gather_reshape(t, blocks, Hsouts; projection)
+    return _reshape(t, blocks, Hsouts; projection)
+end
+
+struct ReshapeMap{M,P}
+    mappings::M
+    repeat::Bool
+    projection::Bool
+    precomputed::P
+end
+
+function (op::ReshapeMap)(t::AbstractArray)
+    mappings = _resolve_mappings(t, op.mappings; repeat=op.repeat)
+
+    n = length(mappings)
+    pre = if length(op.precomputed) == 1
+        ntuple(_ -> only(op.precomputed), n)
+    elseif length(op.precomputed) == n
+        op.precomputed
+    else
+        throw(ArgumentError("Unexpected resolved mapping count $(length(mappings)) for reshape operation with $(length(op.precomputed)) precomputed mapping(s)."))
+    end
+
+    Hsins = map(p -> p.Hsin, pre)
+    Hsouts = map(p -> p.Hsout, pre)
+    blocks = map(p -> p.blocks, pre)
+    _validate_from_spaces(t, Hsins, Hsouts)
+    return _reshape(t, blocks, Hsouts; op.projection)
+end
+
+function (op::ReshapeMap)(out::AbstractArray, t::AbstractArray)
+    mappings = _resolve_mappings(t, op.mappings; repeat=op.repeat)
+
+    n = length(mappings)
+    pre = if length(op.precomputed) == 1
+        ntuple(_ -> only(op.precomputed), n)
+    elseif length(op.precomputed) == n
+        op.precomputed
+    else
+        throw(ArgumentError("Unexpected resolved mapping count $(length(mappings)) for reshape operation with $(length(op.precomputed)) precomputed mapping(s)."))
+    end
+
+    Hsins = map(p -> p.Hsin, pre)
+    Hsouts = map(p -> p.Hsout, pre)
+    blocks = map(p -> p.blocks, pre)
+    _validate_from_spaces(t, Hsins, Hsouts)
+    return _reshape!(out, t, blocks, Hsouts; op.projection)
+end
+
+function Base.reshape(mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false)
+    mappings_t = (mapping, rest...)
+    precomputed = Tuple(map(_precompute_mapping, mappings_t))
+    return ReshapeMap(mappings_t, repeat, projection, precomputed)
+end
+
+function _resolve_mappings(t::AbstractArray, mappings; repeat=false)
+    if repeat
+        _repeat_mapping(t, mappings)
+    elseif length(mappings) == 1
+        _expand_single_mapping(t, only(mappings))
+    else
+        mappings
     end
 end
 
-function _reshape_vec_to_tensor(v, H::AbstractFockHilbertSpace, Hs, fock_splitter, phase_factors)
-    if phase_factors
-        isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
-    end
-    dims = length.(focknumbers.(Hs))
-    fs = focknumbers(H)
-    Is = map(f -> focktoind(f, H), fs)
-    Iouts = map(f -> focktoind.(fock_splitter(f), Hs), fs)
-    t = Array{eltype(v),length(Hs)}(undef, dims...)
-    for (I, Iout) in zip(Is, Iouts)
-        t[Iout...] = v[I...]
-    end
-    return t
+function _precompute_mapping(mapping::Pair)
+    Hsin, Hsout = _mapping_spaces(mapping)
+    mapper = _mapper(Hsin, Hsout)
+    blocks = _transitions(Hsin, Hsout, mapper)
+    (; mapping, Hsin, Hsout, blocks)
 end
 
-function _reshape_mat_to_tensor(m::AbstractMatrix, H::AbstractFockHilbertSpace, Hs, fock_splitter, phase_factors)
-    #reshape the matrix m in basis b into a tensor where each index pair has a basis in bs
-    if phase_factors
-        isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
+_spaces(H::AbstractHilbertSpace) = (H,)
+_spaces(Hs::Union{Tuple,AbstractVector}) = Tuple(Hs)
+_spaces(x) = throw(ArgumentError("Expected a Hilbert space or a tuple of Hilbert \
+                                  spaces, got $(typeof(x))"))
+
+# Split one mapping into (input spaces, output spaces).
+function _mapping_spaces(mapping::Pair)
+    Hsin, Hsout = _spaces(first(mapping)), _spaces(last(mapping))
+
+    (isempty(Hsin) || isempty(Hsout)) &&
+        throw(ArgumentError("Empty Hilbert space group in mapping $mapping"))
+
+    return Hsin, Hsout
+end
+
+# Check that the mappings describe every index of t, and that the dimensions match.
+function _validate(t::AbstractArray, mappings)
+    Hsins = map(m -> _mapping_spaces(m)[1], mappings)
+    Hsouts = map(m -> _mapping_spaces(m)[2], mappings)
+
+    _validate_from_spaces(t, Hsins, Hsouts)
+end
+
+function _validate_from_spaces(t::AbstractArray, Hsins, Hsouts)
+
+    Hsin_all = _flatten(Hsins)
+    length(Hsin_all) == ndims(t) ||
+        throw(DimensionMismatch("The mappings consume $(length(Hsin_all)) indices, \
+                                 but the array has $(ndims(t))"))
+
+    size(t) == map(dim, Hsin_all) ||
+        throw(DimensionMismatch("The array has size $(size(t)), but the input \
+                                 Hilbert spaces have dimensions $(map(dim, Hsin_all))"))
+
+    return Hsins, Hsouts
+end
+
+# A single mapping either covers the whole array, or is applied to out and in indices.
+function _expand_single_mapping(t::AbstractArray, mapping::Pair)
+    n = length(_mapping_spaces(mapping)[1])
+    ndims(t) == n && return (mapping,)
+    ndims(t) == 2n && return (mapping, mapping)
+    throw(ArgumentError("The mapping $mapping consumes $n indices, but the array has \
+                         $(ndims(t)). Give one mapping per index group, or use `repeat=true`."))
+end
+
+function _repeat_mapping(t::AbstractArray, mappings)
+    length(mappings) == 1 ||
+        throw(ArgumentError("`repeat=true` requires exactly one mapping, got $(length(mappings))"))
+    n = length(_mapping_spaces(only(mappings))[1])
+    ndims(t) % n == 0 ||
+        throw(DimensionMismatch("`ndims(t)` must be divisible by $n, got $(ndims(t))"))
+    return ntuple(_ -> only(mappings), ndims(t) ÷ n)
+end
+
+# _flatten(groups::Tuple) = reduce((a, b) -> (a..., b...), groups; init=())
+_flatten(groups::Tuple) = TupleTools.flatten(groups...)
+struct _ComposedMapper{M1,M2}
+    combine_mapper::M1
+    split_mapper::M2
+end
+
+function _build_many_to_many_mapper(Hsin, Hsout)
+    Hmid = try
+        tensor_product(Hsin)
+    catch err
+        throw(ArgumentError("Cannot infer an intermediate space for many-to-many mapping $Hsin => $Hsout. \
+                             Use an explicit two-step mapping `(H1, H2, ...) => H => (K1, K2, ...)`. \
+                             Original error: $(sprint(showerror, err))"))
     end
-    dims = length.(focknumbers.(Hs))
-    fs = focknumbers(H)
-    Is = map(f -> focktoind(f, H), fs)
-    Iouts = map(f -> focktoind.(fock_splitter(f), Hs), fs)
-    t = Array{eltype(m),2 * length(Hs)}(undef, dims..., dims...)
-    partition = map(collect ∘ keys, Hs)
-    for (I1, Iout1, f1) in zip(Is, Iouts, fs)
-        for (I2, Iout2, f2) in zip(Is, Iouts, fs)
-            s = phase_factors ? phase_factor_h(f1, f2, partition, H.jw) : 1
-            t[Iout1..., Iout2...] = m[I1, I2] * s
+    combine_mapper = state_mapper(Hmid, Hsin)
+    split_mapper = _partition_mapper(Hmid, Hsout)
+    return _ComposedMapper(combine_mapper, split_mapper)
+end
+
+function _partition_mapper(H, Hs)
+    ispartition(Hs, H) || throw(ArgumentError("The spaces $Hs must split $H into subsystems that contain each of its atoms exactly once."))
+    return state_mapper(H, Hs)
+end
+
+function _mapper(Hsin, Hsout)
+    return if length(Hsin) == 1 && Hsin == Hsout            # identity
+        nothing
+    elseif length(Hsin) == 1                         # split, possibly into one space
+        _partition_mapper(only(Hsin), Hsout)
+    elseif length(Hsout) == 1                        # combine
+        _partition_mapper(only(Hsout), Hsin)
+    else                                             # many-to-many
+        _build_many_to_many_mapper(Hsin, Hsout)
+    end
+end
+# Each `_transitions` method returns `(; transitions, dropped)`. `transitions` is a vector
+# of `(Iin, Iout, weight)` and `dropped` holds the input index tuples `Iin` for which at
+# least one transition was discarded because the output state is missing from the output
+# spaces (state index 0).
+const _OneSpace = Tuple{AbstractHilbertSpace}
+const _SeveralSpaces = Tuple{AbstractHilbertSpace,AbstractHilbertSpace,Vararg{AbstractHilbertSpace}}
+
+# Split: H => (H1, H2, ...)
+function _transitions(Hsin::_OneSpace, Hsout::Tuple, mapper)
+    H = only(Hsin)
+    entries = Iterators.flatten(Iterators.map(basisstates(H)) do f
+        Iin = (Int(state_index(f, H)),)
+        substates, ws = split_state(f, mapper)
+        ((Iin, map(_int_state_index, states, Hsout), w) for (states, w) in zip(substates, ws))
+    end)
+    return _transitions_and_dropped(entries, Hsin, Hsout)
+end
+
+# Combine: (H1, H2, ...) => H
+function _transitions(Hsin::_SeveralSpaces, Hsout::_OneSpace, mapper)
+    H = only(Hsout)
+    entries = Iterators.flatten(Iterators.map(Base.product(basisstates.(Hsin)...)) do fs
+        Iin = map(_int_state_index, fs, Hsin)
+        states, ws = combine_states(fs, mapper)
+        ((Iin, (_int_state_index(f, H),), w) for (f, w) in zip(states, ws))
+    end)
+    return _transitions_and_dropped(entries, Hsin, Hsout)
+end
+
+# Many-to-many: (H1, H2, ...) => (K1, K2, ...)
+function _transitions(Hsin::_SeveralSpaces, Hsout::_SeveralSpaces, mapper::_ComposedMapper)
+    entries = Iterators.flatten(Iterators.map(Base.product(basisstates.(Hsin)...)) do fs
+        Iin = map(_int_state_index, fs, Hsin)
+        mid_states, ws1 = combine_states(fs, mapper.combine_mapper)
+        Iterators.flatten(Iterators.map(zip(mid_states, ws1)) do (fmid, w1)
+            out_states, ws2 = split_state(fmid, mapper.split_mapper)
+            ((Iin, map(_int_state_index, states, Hsout), w1 * w2) for (states, w2) in zip(out_states, ws2))
+        end)
+    end)
+    return _transitions_and_dropped(entries, Hsin, Hsout)
+end
+
+_int_state_index(state, H) = Int(state_index(state, H))
+
+function _transitions_and_dropped(entries, Hsin, Hsout)
+    all_entries = collect(entries)
+    dropped = NTuple{length(Hsin),Int}[]
+    # Entries of one `Iin` are contiguous, so comparing with `last(dropped)` deduplicates.
+    for (Iin, Iout, _) in all_entries
+        any(iszero, Iout) && (isempty(dropped) || last(dropped) != Iin) && push!(dropped, Iin)
+    end
+    transitions = isempty(dropped) ? all_entries : filter(e -> !any(iszero, e[2]), all_entries)
+    return (; transitions, dropped, linear=_local_linear(transitions, Hsin, Hsout))
+end
+
+# Identity: H => H
+function _transitions(Hsin::_OneSpace, Hsout::_OneSpace, ::Nothing)
+    H = only(Hsin)
+    transitions = [((I,), (I,), 1) for I in 1:dim(H)]
+    return (; transitions, dropped=NTuple{1,Int}[], linear=_local_linear(transitions, Hsin, Hsout))
+end
+
+# Zero-based linear offsets of each transition within the block's own dimensions.
+function _local_linear(transitions, Hsin, Hsout)
+    stridesin = Base.front(accumulate(*, (1, map(dim, Hsin)...)))
+    stridesout = Base.front(accumulate(*, (1, map(dim, Hsout)...)))
+    return [(_linear_offset(Iin, stridesin), _linear_offset(Iout, stridesout), w) for (Iin, Iout, w) in transitions]
+end
+_linear_offset(I, strides) = sum(map((i, s) -> (i - 1) * s, I, strides); init=0)
+
+_group_length(::AbstractVector{NTuple{N,Int}}) where {N} = N
+
+# Throw if a nonzero entry of `t` sits on an input index whose transitions were partly
+# dropped. Only the slices along dropped indices are visited.
+function _check_dropped(t::AbstractArray, blocks, has_support_on = _has_support_on)
+    all(b -> isempty(b.dropped), blocks) && return nothing
+    sz = size(t)
+    offset = 0
+    for b in blocks
+        n = _group_length(b.dropped)
+        if !isempty(b.dropped)
+            # View t as (indices before, this group, indices after)
+            gdims = sz[offset+1:offset+n]
+            t3 = Base.reshape(t, prod(sz[1:offset]; init=1), prod(gdims), prod(sz[offset+n+1:end]; init=1))
+            _check_dropped_group(t3, LinearIndices(gdims), b.dropped, has_support_on)
+        end
+        offset += n
+    end
+    return nothing
+end
+function _check_dropped_group(t3, lin, dropped, has_support_on)
+    has_support_on(t3, 2, [lin[Iin...] for Iin in dropped]) && throw(
+        ArgumentError(
+            "Reshape would lose amplitude: the array has nonzero entries on basis states \
+             that are missing in the output spaces. Pass `projection=true` to drop them \
+             silently."
+        )
+    )
+    return nothing
+end
+
+function _reshape(t::AbstractArray, blocks, Hsouts; projection = false)
+    projection || _check_dropped(t, blocks)
+    tout = zeros(eltype(t), map(dim, _flatten(Hsouts))...)
+    return _reshape_kernel!(tout, t, blocks, Hsouts)
+end
+
+function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts; projection = false)
+    Hsout_all = _flatten(Hsouts)
+    size(tout) == map(dim, Hsout_all) || throw(DimensionMismatch("The output array has size $(size(tout)), but expected $(map(dim, Hsout_all))"))
+    projection || _check_dropped(t, blocks)
+
+    fill!(tout, zero(eltype(tout)))
+    return _reshape_kernel!(tout, t, blocks, Hsouts)
+end
+
+function _reshape_kernel!(tout, t, blocks, Hsouts)
+    if _has_linear_indices(t) && _has_linear_indices(tout)
+        stridesin = _block_strides(size(t), map(b -> _group_length(b.dropped), blocks))
+        stridesout = _block_strides(size(tout), map(length, Hsouts))
+        for entries in Base.product(map(b -> b.linear, blocks)...)
+            tval = t[1+sum(map((e, s) -> e[1] * s, entries, stridesin))]
+            iszero(tval) && continue
+            tout[1+sum(map((e, s) -> e[2] * s, entries, stridesout))] += prod(last, entries) * tval
+        end
+    else
+        for transitions in Base.product(map(b -> b.transitions, blocks)...)
+            Iin = _flatten(map(tr -> tr[1], transitions))
+            tval = t[Iin...]
+            iszero(tval) && continue
+
+            Iout = _flatten(map(tr -> tr[2], transitions))
+            w = prod(tr -> tr[3], transitions)
+            tout[Iout...] += w * tval
         end
     end
-    return t
+    return tout
 end
 
-function _reshape_tensor_to_mat(t, Hs, H::AbstractFockHilbertSpace, fockmapper, phase_factors)
-    if phase_factors
-        isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
+# Block k gathers along broadcast dimensions 2k-1 (its output index) and 2k (the transitions
+# into that output index), and its weights multiply those of the other blocks.
+function _gather_reshape(t, blocks, Hsouts; projection = false)
+    Base.has_offset_axes(t) && throw(ArgumentError("NoScalarIndexingAlg requires an array with one-based axes."))
+    projection || _check_dropped(t, blocks, _copied_support_on)
+    n = length(blocks)
+    stridesin = _block_strides(size(t), map(b -> _group_length(b.dropped), blocks))
+    tables = map(blocks, Hsouts) do b, Hs
+        _gather_table(fieldtype(eltype(b.linear), 3), ((i + 1, (o + 1, 1), w) for (i, o, w) in b.linear), prod(dim, Hs), 1)
     end
-    fs = Base.product(focknumbers.(Hs)...)
-    fsb = map(fockmapper, fs)
-    Is = map(f -> focktoind.(f, Hs), fs)
-    Iouts = map(f -> focktoind(f, H), fsb)
-    m = Matrix{eltype(t)}(undef, length(fsb), length(fsb))
-    partition = map(collect ∘ keys, Hs)
-
-    for (I1, Iout1, f1) in zip(Is, Iouts, fsb)
-        for (I2, Iout2, f2) in zip(Is, Iouts, fsb)
-            s = phase_factors ? phase_factor_h(f1, f2, partition, H.jw) : 1
-            m[Iout1, Iout2] = t[I1..., I2...] * s
-        end
-    end
-    return m
+    placed(A, k) = reshape(_adapt_like(t, A), ntuple(d -> d == 2k - 1 ? size(A, 1) : d == 2k ? size(A, 2) : 1, 2n))
+    LL = broadcast(+, 1, ntuple(k -> placed((tables[k][1] .- 1) .* stridesin[k], k), n)...)
+    WW = broadcast(*, ntuple(k -> placed(tables[k][2], k), n)...)
+    return reshape(_gather_reduce(WW, ntuple(k -> 2k, n), t, LL), map(dim, _flatten(Hsouts)))
 end
 
-function _reshape_tensor_to_vec(t, Hs, H::AbstractFockHilbertSpace, fockmapper, phase_factors)
-    isorderedpartition(Hs, H) || throw(ArgumentError("The partition must be ordered according to jw"))
-    fs = Base.product(focknumbers.(Hs)...)
-    v = Vector{eltype(t)}(undef, length(fs))
-    for fs in fs
-        Is = focktoind.(fs, Hs)
-        fb = fockmapper(fs)
-        Iout = focktoind(fb, H)
-        v[Iout] = t[Is...]
-    end
-    return v
+_has_linear_indices(a) = IndexStyle(a) isa IndexLinear && !Base.has_offset_axes(a)
+
+# Stride of the first dimension of each block of `lengths` consecutive dimensions.
+function _block_strides(sz, lengths)
+    strides = Base.front(accumulate(*, (1, sz...)))
+    offsets = Base.front(accumulate(+, (0, lengths...)))
+    return map(o -> strides[o+1], offsets)
 end
 
-@testitem "Reshape" begin
+@testitem "Reshape Properties" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: project_on_parities, project_on_parity
-    function majorana_basis(H)
-        b = fermions(H)
-        majoranas = Dict((l, s) => (s == :- ? 1im : 1) * b[l] + hc for (l, s) in Base.product(keys(b), [:+, :-]))
-        labels = collect(keys(majoranas))
-        basisops = mapreduce(vec, vcat, [[prod(l -> majoranas[l], ls) for ls in Base.product([labels for _ in 1:n]...) if (issorted(ls) && allunique(ls))] for n in 1:length(labels)])
-        pushfirst!(basisops, I + 0 * first(basisops))
-        map(Hermitian ∘ (x -> x / sqrt(complex(tr(x * x)))), basisops)
-    end
+    using FermionicHilbertSpaces: permutation_operator, fermions
 
-    qns = [NoSymmetry(), ParityConservation(), FermionConservation()]
-    for qn in qns
-        H = hilbert_space(1:2, qn)
-        majbasis = majorana_basis(H)
-        @test all(map(ishermitian, majbasis))
-        overlaps = [tr(Γ1' * Γ2) for (Γ1, Γ2) in Base.product(majbasis, majbasis)]
-        @test overlaps ≈ I
-        @test rank(mapreduce(vec, hcat, majbasis)) == length(majbasis)
-    end
+    @fermions f
 
-    for (qn1, qn2, qn3) in Base.product(qns, qns, qns)
-        H1 = hilbert_space((1, 3), qn1)
-        H2 = hilbert_space((2, 4), qn2)
-        d1 = 4
-        d2 = 4
+    # ── 2-subsystem property tests across symmetry types ──────────────────────
+    for (qn1, qn2, qn3) in [
+        (NoSymmetry(), NoSymmetry(), NoSymmetry()),
+        (ParityConservation(), ParityConservation(), ParityConservation()),
+        (NumberConservation(), NumberConservation(), NumberConservation()),
+        (NoSymmetry(), ParityConservation(), NumberConservation()),
+    ]
+        H1 = hilbert_space(f, [1, 2], qn1)
+        H2 = hilbert_space(f, [3, 4], qn2)
+        H = hilbert_space(f, 1:4, qn3)
         Hs = (H1, H2)
-        H = hilbert_space(sort(vcat(keys(H1)..., keys(H2)...)), qn3)
+        d = dim(H)
+
+        # Property 1: Round-trip identity for operators
+        m = rand(ComplexF64, d, d)
+        @test reshape(reshape(m, H => Hs), Hs => H) ≈ m
+
+        # Property 2: Round-trip identity for state vectors
+        v = rand(ComplexF64, d)
+        m1 = reshape(v, H => Hs)
+        @test reshape(m1, Hs => H) == v
+        @test reshape(v, H => reverse(Hs)) == transpose(m1)
+
+        # Property 2b: Callable reshape operation object matches direct call
+        to_tensor = reshape(H => Hs)
+        to_matrix = reshape(Hs => H)
+        @test to_tensor(m) ≈ reshape(m, H => Hs)
+        @test to_matrix(to_tensor(m)) ≈ m
+
+        # Property 3: Norm invariance (reshape is an isometry)
         b = fermions(H)
-        b1 = fermions(H1)
-        b2 = fermions(H2)
-        m = b[1]
-        t = reshape(m, H => Hs)
-        m12 = FermionicHilbertSpaces.reshape_to_matrix(t, (1, 3))
-        @test rank(m12) == 1
-        @test abs(dot(reshape(svd(m12).U, d1, d1, d2^2)[:, :, 1], b1[1])) ≈ norm(b1[1])
+        op = b[1]
+        @test norm(op) ≈ norm(reshape(op, H => Hs))
 
-        m = b[1] + b[2]
-        t = reshape(m, H => Hs)
-        m12 = FermionicHilbertSpaces.reshape_to_matrix(t, (1, 3))
-        @test rank(m12) == 2
-
-        m = rand(ComplexF64, d1 * d2, d1 * d2)
-        t = reshape(m, H => Hs)
-        m2 = reshape(t, Hs => H)
-        @test m ≈ m2
-        t = reshape(m, H => Hs, false) #without phase factors (standard decomposition)
-        m2 = reshape(t, Hs => H, false)
-        @test m ≈ m2
-
-        v = rand(ComplexF64, d1 * d2)
-        tv = reshape(v, H => Hs)
-        v2 = reshape(tv, Hs => H)
-        @test v ≈ v2
-        # Note the how reshaping without phase factors is used in a contraction
-        @test sum(reshape(m, H => Hs, false)[:, :, i, j] * tv[i, j] for i in 1:d1, j in 1:d2) ≈ reshape(m * v, H => Hs)
-
-        m1 = rand(ComplexF64, d1 * d2, d1 * d2)
-        m2 = rand(ComplexF64, d1 * d2, d1 * d2)
-        t1 = reshape(m1, H => Hs, false)
-        t2 = reshape(m2, H => Hs, false)
+        # Property 4: Multiplication consistency — tensor contraction equals matrix product
+        m1, m2 = rand(ComplexF64, d, d), rand(ComplexF64, d, d)
+        t1, t2 = reshape(m1, H => Hs), reshape(m2, H => Hs)
+        d1, d2 = dim(H1), dim(H2)
         t3 = zeros(ComplexF64, d1, d2, d1, d2)
-        for i in 1:d1, j in 1:d2, k in 1:d1, l in 1:d2, k1 in 1:d1, k2 in 1:d2
-            t3[i, j, k, l] += t1[i, j, k1, k2] * t2[k1, k2, k, l]
+        for i in 1:d1, j in 1:d2, k in 1:d1, l in 1:d2
+            for k1 in 1:d1, k2 in 1:d2
+                t3[i, j, k, l] += t1[i, j, k1, k2] * t2[k1, k2, k, l]
+            end
         end
-        @test reshape(m1 * m2, H => Hs, false) ≈ t3
-        @test m1 * m2 ≈ reshape(t3, Hs => H, false)
+        @test reshape(m1 * m2, H => Hs) ≈ t3
 
-        basis1 = majorana_basis(H1)
-        basis2 = majorana_basis(H2)
-        basis12all = [fermionic_kron((Γ1, Γ2), Hs => H) for (Γ1, Γ2) in Base.product(basis1, basis2)]
-        basis12oddodd = [project_on_parities(Γ, H, Hs, (-1, -1)) for Γ in basis12all]
-        basis12oddeven = [project_on_parities(Γ, H, Hs, (-1, 1)) for Γ in basis12all]
-        basis12evenodd = [project_on_parities(Γ, H, Hs, (1, -1)) for Γ in basis12all]
-        basis12eveneven = [project_on_parities(Γ, H, Hs, (1, 1)) for Γ in basis12all]
-        basis12normalized = map(x -> x / sqrt(tr(x^2) + 0im), basis12all)
+        # Property 5: Round-trip survives subsystem reorder (H2, H1)
+        @test reshape(reshape(m, H => (H2, H1)), (H2, H1) => H) ≈ m
 
-        @test all(map(tr, map(adjoint, basis12all) .* basis12all) .≈ 1)
-        overlaps = [tr(Γ1' * Γ2) for (Γ1, Γ2) in Base.product(vec(basis12all), vec(basis12all))]
-        @test overlaps ≈ I
-        @test all(ishermitian, basis12normalized)
-        @test all(map(tr, basis12normalized .* basis12normalized) .≈ 1)
-        @test all(filter(x -> abs(x) > 0.01, map(tr, basis12oddodd .* basis12oddodd)) .≈ -1)
-        @test all(filter(x -> abs(x) > 0.01, map(tr, basis12eveneven .* basis12eveneven)) .≈ 1)
-        @test all(filter(x -> abs(x) > 0.01, map(tr, basis12evenodd .* basis12evenodd)) .≈ 1)
-        @test all(filter(x -> abs(x) > 0.01, map(tr, basis12oddeven .* basis12oddeven)) .≈ 1)
+        # Property 6: Permutation covariance — permutation_operator is consistent with reshape
+        P = permutation_operator(H, [H1, H2], [2, 1])
+        @test P * P ≈ I
+        @test reshape(reshape(P * m * P', H => Hs), Hs => H) ≈ P * m * P'
+    end
 
-        Hvirtual = rand(ComplexF64, length(basis1), length(basis2))
-        Hoddoddvirtual = [Hvirtual[I] * norm(basis12oddodd[I]) for I in CartesianIndices(Hvirtual)]
-        Hvirtual_no_oddodd = Hvirtual - Hoddoddvirtual
-        h = sum(Hvirtual[I] * basis12all[I] for I in CartesianIndices(Hvirtual))
-        H_no_oddodd = sum(Hvirtual_no_oddodd[I] * basis12all[I] for I in CartesianIndices(Hvirtual))
-        Hotherbasis = sum(Hvirtual[I] * basis12normalized[I] for I in CartesianIndices(Hvirtual))
-        H_no_oddodd_otherbasis = sum(Hvirtual_no_oddodd[I] * basis12normalized[I] for I in CartesianIndices(Hvirtual))
-        @test H_no_oddodd_otherbasis ≈ H_no_oddodd
+    # ── Fixed-number sector: NumberConservation(1) ─────────────────────────────
+    H_nc = hilbert_space(f, 1:4, NumberConservation())
+    Hn1 = sector(1, H_nc)
+    H1_ns = hilbert_space(f, [1, 2], NoSymmetry())
+    H2_ns = hilbert_space(f, [3, 4], NoSymmetry())
+    d_n1 = dim(Hn1)
+    m_n1 = rand(ComplexF64, d_n1, d_n1)
+    @test reshape(reshape(m_n1, Hn1 => (H1_ns, H2_ns)), (H1_ns, H2_ns) => Hn1) ≈ m_n1
 
-        t = reshape(h, H => Hs)
-        Hvirtual2 = FermionicHilbertSpaces.reshape_to_matrix(t, (1, 3))
-        @test svdvals(Hvirtual) ≈ svdvals(Hvirtual2)
-        Hvirtual3 = [tr(Γ' * h) / sqrt(tr(Γ' * Γ) + 0im) for Γ in basis12all]
-        @test Hvirtual3 ≈ Hvirtual
-        Hvirtual4 = [tr(Γ' * Hotherbasis) for Γ in basis12normalized]
-        @test Hvirtual4 ≈ Hvirtual
-        # @test svdvals(Hvirtual) ≈ svdvals(Hvirtual4)
+    v_n1 = rand(ComplexF64, d_n1)
+    @test reshape(reshape(v_n1, Hn1 => (H1_ns, H2_ns)), (H1_ns, H2_ns) => Hn1) ≈ v_n1
 
-        t_no_oddodd = reshape(H_no_oddodd, H, Hs, true)
-        Hvirtual_no_oddodd2 = FermionicHilbertSpaces.reshape_to_matrix(t_no_oddodd, (1, 3))
-        @test svdvals(Hvirtual_no_oddodd) ≈ svdvals(Hvirtual_no_oddodd2)
-        Hvirtual_no_oddodd3 = [tr(Γ' * H_no_oddodd) / sqrt(tr(Γ' * Γ) + 0im) for Γ in basis12all]
-        @test svdvals(Hvirtual_no_oddodd) ≈ svdvals(Hvirtual_no_oddodd3)
-        Hvirtual_no_oddodd4 = [tr(Γ' * H_no_oddodd_otherbasis) for Γ in basis12normalized]
-        @test svdvals(Hvirtual_no_oddodd) ≈ svdvals(Hvirtual_no_oddodd4)
+    # ── 3-subsystem: round-trip and subsystem reorder ─────────────────────────
+    H1_3 = hilbert_space(f, [1], NoSymmetry())
+    H2_3 = hilbert_space(f, [2], NoSymmetry())
+    H3_3 = hilbert_space(f, [3], NoSymmetry())
+    H_3 = tensor_product(H1_3, H2_3, H3_3)
+    d_3 = dim(H_3)
+    m3 = rand(ComplexF64, d_3, d_3)
 
-        ## Test consistency with partial trace
-        m = rand(ComplexF64, d1 * d2, d1 * d2)
-        m2 = partial_trace(m, H => H2, true)
-        t = reshape(m, H => Hs, true)
-        tpt = sum(t[k, :, k, :] for k in axes(t, 1))
-        @test m2 ≈ tpt
+    # ── 4-subsystem: rectangular operator, mixed reshape, identity ───────────
+    H4_3 = hilbert_space(f, [4], NoSymmetry())
+    H12_3 = tensor_product(H1_3, H2_3)
+    H34_3 = tensor_product(H3_3, H4_3)
 
-        m2 = partial_trace(m, H => H2, false)
-        t = reshape(m, H => Hs, false)
-        tpt = sum(t[k, :, k, :] for k in axes(t, 1))
-        @test m2 ≈ tpt
+    # Rectangular operator: different out/in composite spaces
+    R = rand(ComplexF64, dim(H12_3), dim(H34_3))
+    RT = reshape(R, H12_3 => (H1_3, H2_3), H34_3 => (H3_3, H4_3))
+    @test size(RT) == (dim(H1_3), dim(H2_3), dim(H3_3), dim(H4_3))
+    @test reshape(RT, (H1_3, H2_3) => H12_3, (H3_3, H4_3) => H34_3) ≈ R
 
-        mE = project_on_parity(m, H, 1)
-        mO = project_on_parity(m, H, -1)
-        m1 = rand(ComplexF64, d1, d1)
-        m2 = rand(ComplexF64, d2, d2)
-        m2O = project_on_parity(m2, H2, -1)
-        m2E = project_on_parity(m2, H2, 1)
-        m1O = project_on_parity(m1, H1, -1)
-        m1E = project_on_parity(m1, H1, 1)
-        mEE = project_on_parities(m, H, Hs, (1, 1))
-        mOO = project_on_parities(m, H, Hs, (-1, -1))
+    # Mixed split and combine on a general 3-index tensor
+    A = rand(ComplexF64, dim(H12_3), dim(H3_3), dim(H4_3))
+    B = reshape(A, H12_3 => (H1_3, H2_3), (H3_3, H4_3) => H34_3)
+    @test size(B) == (dim(H1_3), dim(H2_3), dim(H34_3))
+    @test reshape(B, (H1_3, H2_3) => H12_3, H34_3 => (H3_3, H4_3)) ≈ A
 
-        F = partial_trace(H => H2)(m * fermionic_kron(Hs => H)(m1, I))
-        @test tr(F * m2) ≈ tr(m * fermionic_kron((m1, I), Hs, H) * fermionic_kron((I, m2), Hs, H))
+    # Direct many-to-many mapping is equivalent to explicit two-step composition
+    H13_3 = tensor_product(H1_3, H3_3)
+    H24_3 = tensor_product(H2_3, H4_3)
+    H1234 = tensor_product(H12_3, H34_3)
+    M24 = rand(ComplexF64, dim(H12_3), dim(H34_3))
+    M24_direct = reshape(M24, (H12_3, H34_3) => (H13_3, H24_3))
+    M24_twostep = reshape(reshape(M24, (H12_3, H34_3) => H1234), H1234 => (H13_3, H24_3))
+    @test M24_direct ≈ M24_twostep
 
-        t = reshape(m, H => Hs, false)
-        tpt = sum(t[k1, :, k2, :] * m1[k2, k1] for k1 in axes(t, 1), k2 in axes(t, 3))
-        @test partial_trace(m * kron((m1, I), Hs, H), H => H2, false) ≈ tpt
+    # Inverse many-to-many map restores the original matrix
+    @test reshape(M24_direct, (H13_3, H24_3) => (H12_3, H34_3)) ≈ M24
 
-        ## More bases
-        H3 = hilbert_space(5:5, qn3)
-        d3 = 2
-        Hs = (H1, H2, H3)
-        H = tensor_product(Hs)
-        m = rand(ComplexF64, d1 * d2 * d3, d1 * d2 * d3)
-        t = reshape(m, H => Hs)
-        @test ndims(t) == 6
-        @test m ≈ reshape(t, Hs, H)
+    # Identity mappings leave the tensor unchanged
+    @test reshape(A, H12_3 => H12_3, H3_3 => H3_3, H4_3 => H4_3) == A
+
+    # Splitting into a single space embeds by state index
+    for (N, qn) in ((1, ParityConservation()), (2, ParityConservation(1)))
+        Hp = hilbert_space(f, 1:N, qn)
+        Hu = hilbert_space(f, 1:N)
+        v = rand(dim(Hp))
+        u = zeros(dim(Hu))
+        u[indices(Hp, Hu)] = v
+        @test reshape(v, Hp => (Hu,)) == u
+        @test reshape(u, (Hu,) => Hp) == v
+    end
+
+    # repeat=true applies one mapping to every index group
+    A3 = rand(ComplexF64, dim(H12_3), dim(H12_3), dim(H12_3))
+    @test reshape(A3, H12_3 => (H1_3, H2_3); repeat=true) ≈
+          reshape(A3, H12_3 => (H1_3, H2_3), H12_3 => (H1_3, H2_3),
+        H12_3 => (H1_3, H2_3))
+    to_split_repeat = reshape(H12_3 => (H1_3, H2_3); repeat=true)
+    @test to_split_repeat(A3) ≈ reshape(A3, H12_3 => (H1_3, H2_3); repeat=true)
+
+    # Standard ordering round-trip with ndims check
+    t3 = reshape(m3, H_3 => (H1_3, H2_3, H3_3))
+    @test ndims(t3) == 6
+    @test m3 ≈ reshape(t3, (H1_3, H2_3, H3_3) => H_3)
+
+    # Permuted subsystem orderings round-trip
+    @test m3 ≈ reshape(reshape(m3, H_3 => (H1_3, H3_3, H2_3)), (H1_3, H3_3, H2_3) => H_3)
+    @test m3 ≈ reshape(reshape(m3, H_3 => (H3_3, H2_3, H1_3)), (H3_3, H2_3, H1_3) => H_3)
+end
+
+@testitem "Mixed reshape mapping check" begin
+    @fermions f
+    # Build elementary spaces
+    H1a = hilbert_space(f, [1], NoSymmetry())
+    H1b = hilbert_space(f, [2], NumberConservation())
+    H2a = hilbert_space(f, [3], NoSymmetry())
+    H2b = hilbert_space(f, [4], ParityConservation())
+    H3a = hilbert_space(f, [5], NoSymmetry())
+    H3b = hilbert_space(f, [6], NumberConservation())
+    H3c = hilbert_space(f, [7], NoSymmetry())
+    H4 = hilbert_space(f, [8], NoSymmetry())
+
+    # Composite spaces used in the mapping
+    H1ab = tensor_product(H1a, H1b)
+    H2ab = tensor_product(H2a, H2b)
+    H3bc = tensor_product(H3b, H3c)
+    H3ab = tensor_product(H3a, H3b)
+
+    # Input tensor has indices: (H1ab, H2a, H2b, H3a, H3bc, H4)
+    A = rand(ComplexF64,
+        dim(H1ab), dim(H2a), dim(H2b), dim(H3a), dim(H3bc), dim(H4)
+    )
+
+    B = reshape(A,
+        H1ab => (H1a, H1b),
+        (H2a, H2b) => H2ab,
+        (H3a, H3bc) => (H3ab, H3c),
+        H4 => H4,
+    )
+    rmap = reshape(H1ab => (H1a, H1b), (H2a, H2b) => H2ab, (H3a, H3bc) => (H3ab, H3c), H4 => H4)
+    @test B ≈ rmap(A)
+
+    # Expected output indices: (H1a, H1b, H2ab, H3ab, H3c, H4)
+    @test size(B) == (dim(H1a), dim(H1b), dim(H2ab), dim(H3ab), dim(H3c), dim(H4))
+
+    # Inverse mapping should recover A
+    A_rt = reshape(B,
+        (H1a, H1b) => H1ab,
+        H2ab => (H2a, H2b),
+        (H3ab, H3c) => (H3a, H3bc),
+        H4 => H4,
+    )
+    @test A_rt ≈ A
+
+    # Optional: direct many-to-many equals explicit two-step composition
+    H3abc = tensor_product(H3a, H3bc)
+    B_twostep = reshape(
+        reshape(A,
+            H1ab => (H1a, H1b),
+            (H2a, H2b) => H2ab,
+            (H3a, H3bc) => H3abc,
+            H4 => H4,
+        ),
+        H1a => H1a,
+        H1b => H1b,
+        H2ab => H2ab,
+        H3abc => (H3ab, H3c),
+        H4 => H4,
+    )
+    @test B_twostep ≈ B
+end
+
+@testitem "Reshape of arrays without linear indexing" begin
+    using Random
+    Random.seed!(2)
+    @fermions f
+    H1 = hilbert_space(f, 1:2, NumberConservation())
+    H2 = hilbert_space(f, 3:4, ParityConservation())
+    H = tensor_product(H1, H2)
+    M = rand(ComplexF64, dim(H), dim(H))
+    Mt = PermutedDimsArray(permutedims(M), (2, 1)) # a Cartesian-indexed copy of M
+    @test IndexStyle(Mt) isa IndexCartesian
+    T = reshape(M, H => (H1, H2))
+    @test reshape(Mt, H => (H1, H2)) == T
+    @test reshape(PermutedDimsArray(permutedims(T, (4, 3, 2, 1)), (4, 3, 2, 1)), (H1, H2) => H) == reshape(T, (H1, H2) => H)
+    out = similar(T)
+    @test reshape(H => (H1, H2))(out, Mt) == T
+    outt = PermutedDimsArray(similar(T, reverse(size(T))), (4, 3, 2, 1))
+    @test reshape(H => (H1, H2))(outt, M) == T
+
+    # Many-to-many
+    K1 = hilbert_space(f, [1, 3])
+    K2 = hilbert_space(f, [2, 4])
+    V = reshape(rand(ComplexF64, dim(H)), H => (H1, H2))
+    Vt = PermutedDimsArray(permutedims(V), (2, 1))
+    @test reshape(Vt, (H1, H2) => (K1, K2)) == reshape(V, (H1, H2) => (K1, K2))
+
+    # Missing states
+    Hfull = hilbert_space(f, 1:4)
+    Hae = hilbert_space(f, 1:2, ParityConservation(1))
+    Hb = hilbert_space(f, 3:4)
+    Mf = rand(ComplexF64, dim(Hfull), dim(Hfull))
+    Mft = PermutedDimsArray(permutedims(Mf), (2, 1))
+    @test_throws ArgumentError reshape(Mft, Hfull => (Hae, Hb))
+    @test reshape(Mft, Hfull => (Hae, Hb); projection = true) == reshape(Mf, Hfull => (Hae, Hb); projection = true)
+end
+
+@testitem "Reshape requires a partition" begin
+    @fermions f
+    H = hilbert_space(f, 1:4)
+    H12, H23, H34 = hilbert_space(f, 1:2), hilbert_space(f, 2:3), hilbert_space(f, 3:4)
+    v = rand(dim(H))
+    for Hs in ((H12, H23), (H12, H12), (H12, hilbert_space(f, 3:3)))
+        @test_throws ArgumentError reshape(v, H => Hs)
+        @test_throws ArgumentError reshape(H => Hs)(v)
+        @test_throws ArgumentError reshape(rand(map(dim, Hs)...), Hs => H)
+        @test_throws ArgumentError reshape(reshape(v, H => (H12, H34)), (H12, H34) => Hs)
     end
 end
 
-function reshape_to_matrix(t::AbstractArray{<:Any,N}, leftindices::NTuple{NL,Int}) where {N,NL}
-    rightindices::NTuple{N - NL,Int} = Tuple(setdiff(ntuple(identity, N), leftindices))
-    reshape_to_matrix(t, leftindices, rightindices)
+@testitem "Reshape missing states" begin
+    using LinearAlgebra, Random
+    Random.seed!(1)
+    @fermions f
+
+    # Splitting into an even-parity subsystem drops the odd states of f[1:2]
+    H = hilbert_space(f, 1:4)
+    Ha = hilbert_space(f, 1:2)
+    Hae = hilbert_space(f, 1:2, ParityConservation(1))
+    Hb = hilbert_space(f, 3:4)
+    even = indices(Hae, Ha)
+    v = rand(ComplexF64, dim(H))
+    m = rand(ComplexF64, dim(H), dim(H))
+
+    @test_throws ArgumentError reshape(v, H => (Hae, Hb))
+    @test_throws ArgumentError reshape(m, H => (Hae, Hb))
+    vs = reshape(v, H => (Hae, Hb); projection = true)
+    @test size(vs) == (2, 4)
+    @test norm(vs) < norm(v)
+    # Agrees with going through the full subsystem and projecting explicitly
+    vfull = reshape(v, H => (Ha, Hb))
+    @test vs ≈ vfull[even, :]
+    ms = reshape(m, H => (Hae, Hb); projection = true)
+    @test size(ms) == (2, 4, 2, 4)
+
+    # Entries that vanish on the missing states are fine
+    veven = zero(vfull)
+    veven[even, :] = vfull[even, :]
+    @test reshape(reshape(veven, (Ha, Hb) => H), H => (Hae, Hb)) ≈ vfull[even, :]
+
+    # Precomputed form, both call methods
+    rmap = reshape(H => (Hae, Hb))
+    @test_throws ArgumentError rmap(m)
+    @test_throws ArgumentError rmap(zeros(ComplexF64, 2, 4, 2, 4), m)
+    rmap_skip = reshape(H => (Hae, Hb); projection = true)
+    @test rmap_skip(m) == ms
+    @test rmap_skip(zeros(ComplexF64, 2, 4, 2, 4), m) == ms
+
+    # Many-to-many with missing states
+    @test_throws ArgumentError reshape(vfull, (Ha, Hb) => (Hb, Hae))
+    @test reshape(vfull, (Ha, Hb) => (Hb, Hae); projection = true) ≈ transpose(vs)
+    @test reshape(veven, (Ha, Hb) => (Hb, Hae)) ≈ transpose(vs)
+
+    # Combining unconstrained spaces into an even-parity space
+    H1 = hilbert_space(f, 1:2)
+    H2 = hilbert_space(f, 3:4)
+    He = hilbert_space(f, 1:4, ParityConservation(1))
+    ψ = normalize(rand(ComplexF64, dim(He)))
+    ρ = ψ * ψ'
+    T = reshape(ρ, He => (H1, H2))
+    @test reshape(T, (H1, H2) => He) ≈ ρ
+    @test reshape((H1, H2) => He)(T) ≈ ρ
+    @test reshape((H1, H2) => He)(similar(ρ), T) ≈ ρ
+    # Generic operator on the full space has weight outside the even sector
+    G = rand(ComplexF64, dim(H1), dim(H2), dim(H1), dim(H2))
+    @test_throws ArgumentError reshape(G, (H1, H2) => He)
+    @test_throws ArgumentError reshape((H1, H2) => He)(G)
+    @test_throws ArgumentError reshape((H1, H2) => He)(similar(ρ), G)
+    @test reshape(G, (H1, H2) => He; projection = true) ≈
+        reshape((H1, H2) => He; projection = true)(G)
 end
-function reshape_to_matrix(t::AbstractArray{<:Any,N}, leftindices::NTuple{NL,Int}, rightindices::NTuple{NR,Int}) where {N,NL,NR}
-    @assert NL + NR == N
-    tperm = permutedims(t, (leftindices..., rightindices...))
-    lsize = prod(i -> size(t, i), leftindices, init=1)
-    rsize = prod(i -> size(t, i), rightindices, init=1)
-    reshape(tperm, lsize, rsize)
+
+@testitem "Reshape by gather" begin
+    import FermionicHilbertSpaces: NoScalarIndexingAlg
+    alg = NoScalarIndexingAlg()
+    @fermions f
+    @spins s
+    H1, H2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
+    Hs = hilbert_space(s[1], 1 // 2)
+    Hprod = tensor_product(H1, Hs)
+    for (H, Hparts) in ((hilbert_space(f, 1:4), (H1, H2)), (hilbert_space(f, 1:4, NumberConservation(2)), (H2, H1)), (Hprod, (Hs, H1)))
+        v = rand(ComplexF64, dim(H))
+        m = rand(ComplexF64, dim(H), dim(H))
+        @test reshape(v, H => Hparts; alg) == reshape(v, H => Hparts)
+        @test reshape(m, H => Hparts; alg) == reshape(m, H => Hparts)
+        @test reshape(m, H => Hparts, H => reverse(Hparts); alg) == reshape(m, H => Hparts, H => reverse(Hparts))
+        T = rand(ComplexF64, map(dim, Hparts)..., map(dim, Hparts)...)
+        @test reshape(T, Hparts => H, Hparts => H; alg, projection = true) == reshape(T, Hparts => H, Hparts => H; projection = true)
+        Tv = rand(ComplexF64, map(dim, Hparts)...)
+        @test reshape(Tv, Hparts => reverse(Hparts); alg) == reshape(Tv, Hparts => reverse(Hparts))
+    end
+    H = hilbert_space(f, 1:4, NumberConservation(2))
+    @test_throws ArgumentError reshape(rand(dim(H1), dim(H2)), (H1, H2) => H; alg)
+    @test_throws ArgumentError reshape(rand(dim(H)), H => (H1, H2); alg = :dense)
+end
+
+@testitem "Reshape missing states: truncated bosons" begin
+    using LinearAlgebra, Random
+    Random.seed!(1)
+    @bosons b
+    @fermions f
+
+    # Truncated boson: 3 levels -> 2 levels drops the top level
+    Hb3 = hilbert_space(b[1], 3)
+    Hb2 = hilbert_space(b[1], 2)
+    Hb4 = hilbert_space(b[1], 4)
+    Hf = hilbert_space(f, 1:2)
+    H = tensor_product(Hb3, Hf)
+    v = rand(ComplexF64, dim(H))
+    m = rand(ComplexF64, dim(H), dim(H))
+
+    @test_throws ArgumentError reshape(v, H => (Hb2, Hf))
+    @test_throws ArgumentError reshape(m, H => (Hb2, Hf))
+    vs = reshape(v, H => (Hb2, Hf); projection = true)
+    @test size(vs) == (2, 4)
+    @test norm(vs) < norm(v)
+    # Agrees with going through the full space and truncating explicitly
+    v3 = reshape(v, H => (Hb3, Hf))
+    @test vs ≈ v3[1:2, :]
+    ms = reshape(m, H => (Hb2, Hf); projection = true)
+    @test size(ms) == (2, 4, 2, 4)
+
+    # Entries that vanish on the missing states are fine
+    v_low = reshape(vcat(v3[1:2, :], zeros(1, 4)), (Hb3, Hf) => H)
+    @test reshape(v_low, H => (Hb2, Hf)) ≈ v3[1:2, :]
+
+    # Embedding 3 -> 4 drops nothing
+    v4 = reshape(v, H => (Hb4, Hf))
+    @test v4[1:3, :] ≈ v3
+    @test iszero(v4[4, :])
+    @test norm(v4) ≈ norm(v)
+
+    # Precomputed form, both call methods
+    rmap = reshape(H => (Hb2, Hf))
+    @test_throws ArgumentError rmap(m)
+    @test_throws ArgumentError rmap(zeros(ComplexF64, 2, 4, 2, 4), m)
+    rmap_skip = reshape(H => (Hb2, Hf); projection = true)
+    @test rmap_skip(m) == ms
+    @test rmap_skip(zeros(ComplexF64, 2, 4, 2, 4), m) == ms
+    @test reshape(H => (Hb4, Hf))(v) == v4
+
+    # Many-to-many with missing states
+    @test_throws ArgumentError reshape(v3, (Hb3, Hf) => (Hf, Hb2))
+    @test reshape(v3, (Hb3, Hf) => (Hf, Hb2); projection = true) ≈ transpose(vs)
+    @test reshape(v3, (Hb3, Hf) => (Hf, Hb4)) ≈ transpose(v4)
 end

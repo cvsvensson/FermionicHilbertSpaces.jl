@@ -1,37 +1,56 @@
+"""
+    FermionicHilbertSpaces
+
+Symbolic fermions, bosons and spins, Hilbert spaces with constraints, and the tensor
+products, partial traces and matrix representations that connect them.
+
+"""
 module FermionicHilbertSpaces
 
-using LinearAlgebra, SparseArrays
-using SplitApplyCombine: group, sortkeys!
-using Dictionaries: dictionary, Dictionary
-import FillArrays: Zeros
-import OrderedCollections: OrderedDict
-using TestItems
-using TermInterface
+using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Hermitian,
+    UniformScaling, diag, diagind, dot,
+    eigen!, eigvals, eigvecs, ishermitian,
+    mul!, normalize, qr, rank, rmul!, svdvals, tr, I
+using LowRankMatrices: LowRankMatrices, LowRankMatrix
+import SciMLOperators
+using FillArrays: Zeros, Fill, Eye
+using OrderedCollections: OrderedDict
+using BitPermutations: BitPermutations, AbstractBitPermutation, BitPermutation, bitpermute
+using BitIntegers: UInt256, UInt512, UInt1024, @define_integers
+# Widest first, so that `widen` of each type finds the next wider one.
+@define_integers 8192
+@define_integers 4096
+@define_integers 2048
+using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice, ishalfinteger
+using SparseArrays: SparseArrays, AbstractSparseArray, AbstractSparseMatrix, SparseVector, findnz,
+    nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
+using TestItems: TestItems, @testitem, @testmodule
+import TupleTools
+using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 
 
-export FockNumber, JordanWignerOrdering, hc, focknumbers
-export FockHilbertSpace, SymmetricFockHilbertSpace, SimpleFockHilbertSpace, hilbert_space, subregion
-export parityoperator, numberoperator, fermions, majoranas, matrix_representation
+export FockNumber, hc, basisstates, dim, state_index, basisstate
+export hilbert_space, subregion
+export parityoperator, numberoperator, representation, expectation
+export Kets, Ket, ProductState, SpinState, BosonicState
 
-export partial_trace, fermionic_kron, tensor_product, embedding, extension
-export @fermions, @majoranas
-export FermionConservation, NoSymmetry, ParityConservation, IndexConservation
+export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
+export @fermions, @majoranas, @boson, @bosons, @spin, @spins
+export BosonField, SpinField
+export NoSymmetry, ParityConservation, NumberConservation, constrain_space
+export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
+export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
+export symmetric_sector
+export open_system
+public particle_number, Axes, dissipator, FreeFermions, NonCommutativeProducts, add!!, matrix_representation, vector_representation
 
-## Symbolics extension
 """
-    fermion_to_majorana(expr)
-Convert symbolic fermions to symbolic majoranas.
-"""
-function fermion_to_majorana end
-"""
-    majorana_to_fermion(expr)
-Convert symbolic majoranas to symbolic fermions.
-"""
-function majorana_to_fermion end
+    add!!(a, b)
 
-## Some types
-abstract type AbstractHilbertSpace end
-abstract type AbstractFockHilbertSpace <: AbstractHilbertSpace end
+Return `a + b`, reusing the storage of `a` when possible, so use the returned value. `foldl(add!!, terms; init=0)` sums
+many operators in time linear in their number, where `sum` takes quadratic time.
+"""
+add!!
 
 """
     HC
@@ -40,42 +59,152 @@ Represents the Hermitian conjugate.
 struct HC end
 Base.:+(m, ::HC) = (m + m')
 Base.:-(m, ::HC) = (m - m')
+"""
+    hc
+Adding this is equivalent to adding the hermitian conjugate.
+"""
 const hc = HC()
 
+"""
+    AbstractSym
+
+Supertype of symbolic operators such as fermions, Majoranas, bosons and spins. A custom
+operator type subtypes it, registers itself with `NonCommutativeProducts.@nc` and defines
+[`apply_local_operator`](@ref) and [`symbolic_group`](@ref).
+"""
+abstract type AbstractSym end
+NonCommutativeProducts.atom_group(op::AbstractSym) = symbolic_group(op)
+
+# The order of labels, tags and groups. Values are ranked by kind, and those of one kind are compared with `isless`.
+# Kinds depend only on the code, so the order is the same in every session.
+# Numbers and strings of different types are one kind, so that they are ordered consistently with `==`, as `1 == 1.0`.
+# Tuples are one kind and are compared element by element, as `isless` may not compare their elements.
+_order_kind(x) = nameof(typeof(x))
+_order_kind(::Real) = :Real
+_order_kind(::AbstractString) = :AbstractString
+_order_kind(::Tuple) = :Tuple
+function _order_isless(a, b)
+    ka, kb = _order_kind(a), _order_kind(b)
+    ka == kb || return isless(ka, kb)
+    return !isequal(a, b) && isless(a, b)
+end
+_group_isless(a, b) = _order_isless(symbolic_group(a), symbolic_group(b))
+_order_isless(::Tuple{}, ::Tuple{}) = false
+_order_isless(::Tuple{}, ::Tuple) = true
+_order_isless(::Tuple, ::Tuple{}) = false
+function _order_isless(a::Tuple, b::Tuple)
+    x, y = first(a), first(b)
+    _order_isless(x, y) && return true
+    _order_isless(y, x) && return false
+    return _order_isless(Base.tail(a), Base.tail(b))
+end
+
+# The tags that identify a group of symbolic operators. `tags` is `nothing` or a tuple. For `@fermions` and
+# `@majoranas` the first element is the tuple of names given to the macro, so the names determine the group.
+# Elements appended by `add_tag` are symbols such as `:left` and `:right`.
+# Tags are ordered by `_order_isless` of their tag tuples. For groups created by the macros this is the lexicographic order
+# of the macro's names, e.g. the operators of `@fermions a` sort before those of `@fermions b`.
+struct Tags{T}
+    tags::T
+end
+Base.hash(id::Tags, h::UInt) = hash(id.tags, h)
+Base.:(==)(a::Tags, b::Tags) = a.tags == b.tags
+Base.isless(a::Tags, b::Tags) = _order_isless(tagset(a), tagset(b))
+tagset(id::Tags) = id.tags
+tagset(::Tags{Nothing}) = ()
+tagset(x) = tagset(tags(x))
+
+function _symbolic_name_with_tags(name, tagged; skip_first=0)
+    tags = tagset(tagged)
+    tags = skip_first > 0 ? tags[(skip_first+1):end] : tags
+    isempty(tags) && return string(name)
+    return string(name, "(", join(tags, ","), ")")
+end
+
+add_tag(t::Tags, tag) = Tags((t.tags..., tag))
+add_tag(::Tags{Nothing}, tag) = Tags((tag,))
+
+function _resolve_sector_permutations_and_weights end # for Combinatorics extension
+function cache_operator! end # for OhMyThreads extension
+
 ## Files
-include("fock.jl")
-include("phase_factors.jl")
-include("symmetry.jl")
+include("spaces.jl")
 include("hilbert_space.jl")
-include("operators.jl")
+include("subspace.jl")
+include("sectors.jl")
+include("product_space.jl")
+
+include("constraints.jl")
+include("constrained_space.jl")
+
 include("tensor_product.jl")
+include("permutation_symmetry.jl")
 include("embedding.jl")
 include("reshape.jl")
+include("partial_transpose.jl")
 
-include("qubit.jl")
+include("generate_constrained_states.jl")
 
-include("symbolics/muladd.jl")
-include("symbolics/symbolic_fermions.jl")
-include("symbolics/symbolic_majoranas.jl")
+include("matrix_representation.jl")
+include("sparse_assembly.jl")
+include("lazy_matrix_representation.jl")
+
+include("physics/fermions/fock.jl")
+include("physics/fermions/phase_factors.jl")
+include("physics/fermions/symbolic_fermions.jl")
+include("physics/fermions/fermions.jl")
+include("physics/fermions/operators.jl")
+include("physics/fermions/majoranas.jl")
+include("physics/fermions/fixednumberfock.jl")
+
+
+include("physics/bosons.jl")
+include("physics/spin.jl")
+include("physics/open_systems.jl")
+include("symbolic_states.jl")
+
+include("printing.jl")
+include("physics/fermions/free_fermions.jl")
 
 import PrecompileTools
 
-PrecompileTools.@compile_workload begin
+PrecompileTools.@setup_workload begin
     m = rand(4, 4)
     PrecompileTools.@compile_workload begin
-        H1 = hilbert_space(1:2)
-        H2 = hilbert_space(3:3, ParityConservation())
-        c1 = fermions(H1)
-        c2 = fermions(H2)
-        partial_trace(m + hc, H1 => hilbert_space(1:1))
-        H = tensor_product(H1, H2)
-        extension(c1[1], H1 => H2)
-        embedding(c1[1], H1 => H)
         @fermions f
-        FermionicHilbertSpaces.eval_in_basis((f[1] * f[2]' + 1 + f[1])^2 * 2.0 + hc, c1)
-        matrix_representation((f[1] * f[2]' + 1 + f[1])^2 * 2.0, H1)
-        @majoranas γ
-        (γ[1] * γ[2] + 1.0 + γ[1])^2
+        sprint(show, f[1])
+        H1 = hilbert_space(f, 1:2)
+        H2 = hilbert_space(f, 3:3, ParityConservation())
+        subregion([f[3]], H2)
+        partial_trace(m + hc, H1 => hilbert_space(f, 1:1, NumberConservation()))
+        H = tensor_product(H1, H2)
+        c = representation(f[1], H1)
+        embed(c, H1 => H)
+        representation((1.0*f[1] * f[2]' + 1 + f[1])^2 * 2.0, H1)
+        @boson b
+        sprint(show, b)
+        @spin s 1 // 2
+        sprint(show, s[:z])
+        Hb = hilbert_space(b, 2)
+        Hs = hilbert_space(s)
+        H = tensor_product(H2, Hb, Hs)
+        mat = representation(b'b + 1.0 * s[:x] * f[3], H)
+        # Small chains, with fermions covering each common coefficient type.
+        hamf = sum(f[n + 1]'f[n] + hc for n in 1:2) + sum(f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
+        Hf = hilbert_space(f, 1:3, NumberConservation())
+        representation(hamf, Hf)
+        representation(hamf, sector(1, Hf), :dense)
+        hamf = sum(0.5 * f[n + 1]'f[n] + hc for n in 1:2) + sum(0.5 * f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
+        representation(hamf, Hf)
+        representation(hamf, sector(1, Hf), :dense)
+        hamf = sum((0.5 + 0.5im) * f[n + 1]'f[n] + hc for n in 1:2) + sum((0.5 + 0.5im) * f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
+        representation(hamf, Hf)
+        representation(hamf, sector(1, Hf), :dense)
+        @spins S 1 // 2
+        representation(sum(S[k][:]'S[k + 1][:] for k in 1:2), hilbert_space(S, 1:3))
+        @bosons bs
+        hamb = sum(bs[k]'bs[k + 1] + hc for k in 1:1) + sum(bs[k]'bs[k] * bs[k]'bs[k] for k in 1:2)
+        representation(hamb, hilbert_space(bs, 1:2, 3))
     end
 end
 
