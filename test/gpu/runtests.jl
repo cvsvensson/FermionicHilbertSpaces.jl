@@ -63,3 +63,31 @@ end
     @majoranas γ
     @test_throws ArgumentError representation(1im * γ[1] * γ[2], hilbert_space(γ, 1:4), JLArray)
 end
+
+@testset "representation of Hubbard, Holstein and t-J chains as GPU arrays" begin
+    @fermions c
+    @bosons b
+    n = 4
+    t, U, ω, g = 1 + 1im, 4.0, 1.0, 0.5
+    function check(op, H, T; projection = false)
+        @test collect(representation(op, H, JLSparseMatrixCSC{T}; projection)) ≈ representation(op, H, Matrix{T}; projection)
+        @test collect(representation(op, H, JLMatrix{T}; projection)) ≈ representation(op, H, Matrix{T}; projection)
+    end
+    hubbard = sum(-t * c[i, σ]' * c[i + 1, σ] + hc for σ in (:↑, :↓) for i in 1:(n - 1)) +
+        sum(U * c[i, :↑]' * c[i, :↑] * c[i, :↓]' * c[i, :↓] for i in 1:n)
+    labels(σ) = [(i, σ) for i in 1:n]
+    updown(k) = tensor_product(hilbert_space(c, labels(:↑), NumberConservation(k)), hilbert_space(c, labels(:↓), NumberConservation(k)))
+    check(hubbard, hilbert_space(c, [(i, σ) for i in 1:n for σ in (:↑, :↓)]), ComplexF32)
+    check(hubbard, updown(2), ComplexF32)
+
+    holstein = -sum(t * c[i]' * c[i + 1] + hc for i in 1:(n - 1)) + ω * sum(b[i]' * b[i] for i in 1:n) +
+        g * sum(c[i]' * c[i] * (b[i]' + b[i]) for i in 1:n)
+    check(holstein, tensor_product(hilbert_space(c, 1:n, NumberConservation(2)), hilbert_space(b, 1:n, 3)), ComplexF32)
+
+    nn(i, σ) = c[i, σ]' * c[i, σ]
+    splus(i) = c[i, :↑]' * c[i, :↓]
+    tj = sum(-c[i, σ]' * c[i + 1, σ] + hc for σ in (:↑, :↓) for i in 1:(n - 1)) +
+        sum(0.15 * splus(i) * splus(i + 1)' + hc - 0.15 * (nn(i, :↑) * nn(i + 1, :↓) + nn(i, :↓) * nn(i + 1, :↑)) for i in 1:(n - 1))
+    no_double = prod(NumberConservation(0:1, [c[i, :↑], c[i, :↓]]) for i in 1:n)
+    check(tj, constrain_space(updown(1), no_double), Float32; projection = true)
+end
