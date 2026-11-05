@@ -20,10 +20,11 @@ H = hilbert_space(γ, 0:3)
 hs = [representation(1im * γ[0] * γ[i], H, Matrix) for i in 1:3]
 coupling(t, T, k) = (1 + tanh(k * cos(2π * t / T))) / 2
 couplings(t, T, k) = [coupling(t - (i - 1) * T / 3, T, k) for i in 1:3]
-hamiltonian(t, T, k) = Hermitian(sum(couplings(t, T, k) .* hs))
+Δ = 1
+hamiltonian(t, T, k) = Hermitian(Δ * sum(couplings(t, T, k) .* hs))
 T, k = 1000, 20
 ts = range(0, T, 300)
-plot(ts, stack(couplings.(ts, T, k))'; label = ["Δ₁" "Δ₂" "Δ₃"], xlabel = "t", legend = :outerright, frame = :box, size = (450, 250), lw = 2)
+plot(ts ./ T, stack(couplings.(ts, T, k))'; label = ["Δ₁/Δ" "Δ₂/Δ" "Δ₃/Δ"], xlabel = "t/T", legend = :outerright, frame = :box, size = (450, 250), lw = 2)
 
 # We approximate the evolution by a product of exponentials of the Hamiltonian at the midpoints of time steps `dt`,
 # which must be short compared with the switching time of the couplings, about `T/(2πk)`.
