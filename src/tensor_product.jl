@@ -679,8 +679,8 @@ function _basis_transformation(Hfrom, Hto, mapper)
 end
 
 """
-    change_basis(m, Hfrom => Hto; projection=false, alg=GenericAlg())
-    change_basis(m, Hfrom, Hto; projection=false, alg=GenericAlg())
+    change_basis(m, Hfrom => Hto; projection=false, alg)
+    change_basis(m, Hfrom, Hto; projection=false, alg)
 
 Express `m` in the basis of `Hto`, where `Hfrom` and `Hto` have the same atoms but possibly
 different (or differently ordered) basis states. Unless `projection=true`, throws an
@@ -694,7 +694,7 @@ With `alg = GatherAlg()`, a vector or matrix `m` is transformed with array index
 broadcasting only, so that it can be a GPU array.
 """
 change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
-function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, alg = GenericAlg(), kwargs...)
+function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, alg = default_alg(change_basis, m), kwargs...)
     alg isa Union{GenericAlg, GatherAlg} || throw(ArgumentError("`change_basis` supports `alg = GenericAlg()` or `GatherAlg()`, got $alg."))
     n = m isa UniformScaling ? 2 : ndims(m)
     from, to = _per_axis(Hfrom, Val(n)), _per_axis(Hto, Val(n))
