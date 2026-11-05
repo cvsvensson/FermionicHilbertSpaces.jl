@@ -7,7 +7,7 @@ using NonCommutativeProducts: NCAdd, NCMul
 import SciMLOperators: cache_operator
 
 import OhMyThreads: Schedulers.chunking_args, Consecutive
-import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, _terms_matrix, _map, _precomputed_terms, _blocked_sparse_matrix, _narrowed, matrix_accumulator, add_identity!!, NoChunking, chunked_operator_indices_and_amplitudes_generic!, LazyOperator, lazy_mul!, _apply_single_term!, _apply_local_operators, basisstate, state_index, _skip_outside, dim, _lazy_output_prototype, cache_operator!, _lazy_terms
+import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, _terms_matrix, _map, _precomputed_terms, _blocked_sparse_matrix, _narrowed, matrix_accumulator
 
 function _reduce_add!(y, partials)
     isempty(partials) && return y
