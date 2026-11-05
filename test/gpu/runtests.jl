@@ -1,7 +1,7 @@
 # Runs on JLArrays, a CPU implementation of the GPU array interface that disallows scalar indexing.
 # Not part of the main suite: `julia --project=test/gpu test/gpu/runtests.jl`.
 using FermionicHilbertSpaces, JLArrays, Test
-using FermionicHilbertSpaces: NoScalarIndexingAlg
+using FermionicHilbertSpaces: NoScalarIndexingAlg, change_basis
 JLArrays.allowscalar(false)
 
 @testset "partial_trace of GPU arrays" begin
@@ -16,6 +16,21 @@ JLArrays.allowscalar(false)
         end
     end
     @test_throws ArgumentError partial_trace(JLArray(rand(dim(Hcons), dim(Hcons))), Hcons => hilbert_space(f, 1:2, NumberConservation(1)); alg)
+end
+
+@testset "change_basis of GPU arrays" begin
+    alg = NoScalarIndexingAlg()
+    @fermions f
+    H = hilbert_space(f, 1:4)
+    Hsec = hilbert_space(f, 1:4, NumberConservation(2))
+    for x in (rand(ComplexF64, dim(Hsec)), rand(ComplexF64, dim(Hsec), dim(Hsec)))
+        out = change_basis(JLArray(x), Hsec => H; alg)
+        @test out isa JLArray
+        @test Array(out) == change_basis(x, Hsec => H)
+    end
+    ρ = rand(ComplexF64, dim(H), dim(H))
+    @test Array(partial_trace(JLArray(ρ), H => Hsec; alg, projection = true)) == partial_trace(ρ, H => Hsec; projection = true)
+    @test_throws ArgumentError change_basis(JLArray(ρ), H => Hsec; alg)
 end
 
 @testset "embed of GPU arrays" begin

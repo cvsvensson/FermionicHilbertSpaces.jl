@@ -2,17 +2,17 @@ function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
     size_compatible(m, Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(Hsub)), got $(size(m))."))
     !isnothing(complement) && m isa AbstractVector && throw(ArgumentError("A state vector can only be embedded into a space with the same modes, such as from a sector into its parent space. A state on a subsystem does not fix the state of the rest; use `tensor_product` of states or `embed` a density matrix instead."))
-    alg isa NoScalarIndexingAlg && return _embed_by_gather(m, Hsub, H, complement; projection, kwargs...)
-    alg isa ScalarIndexingAlg || throw(ArgumentError("`embed` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
+    alg isa Union{ScalarIndexingAlg, NoScalarIndexingAlg} || throw(ArgumentError("`embed` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
     if isnothing(complement)
-        m isa AbstractVector && return change_basis(m, Hsub, H; projection, kwargs...)
+        m isa AbstractVector && return change_basis(m, Hsub, H; projection, alg, kwargs...)
         if !(projection || m isa UniformScaling)
             dropped = last(basis_transformation(Hsub, H))
             iszero(m[dropped, setdiff(axes(m, 2), dropped)]) ||
                 throw(ArgumentError("`m` maps a state of `H` outside `H` with nonzero amplitude. Pass `projection=true` to drop such terms."))
         end
-        return change_basis(m, Hsub, H; projection = true, kwargs...)
+        return change_basis(m, Hsub, H; projection = true, alg, kwargs...)
     end
+    alg isa NoScalarIndexingAlg && return _embed_by_gather(m, Hsub, H, complement; projection, kwargs...)
     return generalized_kron((m, I), (Hsub, complement), H; projection, kwargs...)
 end
 
@@ -50,14 +50,9 @@ julia> embed([1, 2], sector(1, H) => H)
 """
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
-function _embed_by_gather(m::AbstractVecOrMat, Hsub, H, complement; projection = false, phase_factors = true)
-    if isnothing(complement)
-        src = first(basis_transformation(Hsub, H)) * (1:dim(Hsub))
-        splits = [((K, 1, 1),) for K in src]
-    else
-        splits = _full_partial_trace_splits(H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement), phase_factors)
-    end
-    P, B, S, present = _embed_gather_table(splits, dim(Hsub), isnothing(complement) ? 1 : dim(complement))
+function _embed_by_gather(m::AbstractMatrix, Hsub, H, complement; projection = false, phase_factors = true)
+    splits = _full_partial_trace_splits(H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement), phase_factors)
+    P, B, S, present = _embed_gather_table(splits, dim(Hsub), dim(complement))
     projection || _check_embed_into(m, present)
     return _gather_embed(m, P, B, S)
 end
@@ -85,11 +80,10 @@ function _embed_gather_table(splits, dsub, nb)
 end
 
 # m ⊗ I maps (K2, b) in `H` to (K1, b) outside `H` exactly when present[K2, b] and !present[K1, b]
-_embed_outside(::AbstractMatrix, present) = (.!present) * transpose(present) .> 0
-_embed_outside(::AbstractVector, present) = vec(.!present)
 function _check_embed_into(m, present)
     all(present) && return nothing
-    any(_adapt_like(m, Array(_embed_outside(m, present))) .& .!iszero.(m)) &&
+    outside = (.!present) * transpose(present) .> 0
+    any(_adapt_like(m, Array(outside)) .& .!iszero.(m)) &&
         throw(ArgumentError("`m` maps a state of `H` outside `H` with nonzero amplitude. Pass `projection=true` to drop such terms."))
     return nothing
 end
@@ -103,7 +97,6 @@ function _gather_embed(m::AbstractMatrix, P, B, S)
     WW = conj.(row(S)) .* col(S) .* (row(B) .== col(B))
     return reshape(_gather_reduce(WW, (2, 4), m, LL), D, D)
 end
-_gather_embed(v::AbstractVector, P, B, S) = vec(_gather_reduce(_adapt_like(v, S), 2, v, _adapt_like(v, P)))
 
 struct EmbedMap{HS,H,C,K,M}
     Hsub::HS

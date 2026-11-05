@@ -3,7 +3,7 @@ const _SpaceGroup = Union{AbstractHilbertSpace,Tuple{Vararg{AbstractHilbertSpace
 const _SpaceMapping = Pair{<:_SpaceGroup,<:_SpaceGroup}
 
 """
-    reshape(t, mappings...; repeat=false, projection=false, alg=ScalarIndexingAlg())
+    reshape(t, mappings...; repeat=false, projection=false, alg)
 
 Reshape the array `t` by splitting or combining its indices according to
 Hilbert-space mappings. The mappings are applied left to right, each one
