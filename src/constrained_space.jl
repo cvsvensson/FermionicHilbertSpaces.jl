@@ -133,8 +133,8 @@ _duplicate_state_error(state) = ArgumentError("The state `$state` appears more t
 A subspace index whose `positions[state_index(state, parent)]` is the position of `state`, or
 `0` for a state of `parent` outside the subspace.
 """
-struct IndexTable
-    positions::Vector{Int32}
+struct IndexTable{V}
+    positions::V
 end
 function state_position(table::IndexTable, state, parent)
     k = state_index(state, parent)

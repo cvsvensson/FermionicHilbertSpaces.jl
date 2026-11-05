@@ -53,22 +53,30 @@ struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
         new{B,C,A,typeof(fast_path),LI,CI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
     end
 end
+# The copy of a `ProductSpace` that GPU kernels use, without the atoms
+struct DeviceProductSpace{B, C, LI, CI} <: AbstractHilbertSpace{B}
+    factors::C
+    lininds::LI
+    cartinds::CI
+end
+const _ProductSpace{B} = Union{ProductSpace{B}, DeviceProductSpace{B}}
 fast_path(space::ProductSpace) = space.fast_path
+fast_path(::DeviceProductSpace) = 0
 isconstrained(H::ProductSpace) = false
 Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1.factors == H2.factors && H1.atoms == H2.atoms
 Base.hash(H::ProductSpace, h::UInt) = hash(H.factors, hash(H.atoms, h))
 atomic_factors(H::ProductSpace) = H.atoms
 nbr_of_atoms(H::ProductSpace) = length(H.atoms)
 factors(H::ProductSpace) = H.factors
-groups(H::ProductSpace) = H.factors
+groups(H::_ProductSpace) = H.factors
 dim(H::ProductSpace) = mapfoldl(dim, Base.Checked.checked_mul, groups(H); init = 1)
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
 # Iterates `cartinds` rather than `Iterators.product`, whose iteration allocates per state from 12 factors on
 basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(I -> _product_basisstate(I, H), H.cartinds))
-Base.@propagate_inbounds basisstate(n::Integer, H::ProductSpace) = _product_basisstate(H.cartinds[n], H)
-Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::ProductSpace) = ProductState(_tuple_map(basisstate, Tuple(I), H.factors))
-function _state_index(state::ProductState, H::ProductSpace)
+Base.@propagate_inbounds basisstate(n::Integer, H::_ProductSpace) = _product_basisstate(H.cartinds[n], H)
+Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::_ProductSpace) = ProductState(_tuple_map(basisstate, Tuple(I), H.factors))
+function _state_index(state::ProductState, H::_ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
     inds = _tuple_map(_state_index, state.states, H.factors)
     # `all` on a tuple of one type keeps the tuple in memory, which on a GPU is slow local memory
@@ -374,14 +382,13 @@ function partial_transpose_phase_factor(state1, state2, space::ProductSpace)
     prod(map(partial_transpose_phase_factor, state1.states, state2.states, space.factors); init=1)
 end
 
-struct ProductOperator{C,O,S}
+struct ProductOperator{C, O, S, I}
     ops::O
     spaces::S
-    inds::Vector{Int} # indices of active spaces in full space
-    function ProductOperator{C}(ops::O, spaces::S, inds::Vector{Int}) where {C,O,S}
-        new{C,O,S}(ops, spaces, inds)
-    end
+    inds::I # indices of active spaces in full space, a `Vector{Int}` except in the copies for GPU kernels
+    ProductOperator{C, O, S, I}(ops, spaces, inds) where {C, O, S, I} = new{C, O, S, I}(ops, spaces, inds)
 end
+ProductOperator{C}(ops, spaces, inds) where {C} = ProductOperator{C, typeof(ops), typeof(spaces), typeof(inds)}(ops, spaces, inds)
 function ProductOperator(ops::O, spaces::S, inds::Vector{Int}) where {O,S}
     length(ops) == length(spaces) || throw(ArgumentError("`ops` and `spaces` must have the same length, got $(length(ops)) and $(length(spaces))."))
     C = promote_type(Iterators.map(mat_eltype, ops)...)
@@ -426,11 +433,11 @@ end
 internal_rep(state::ProductState, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))
 physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state, space)
 
-function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::ProductSpace, precomps) where B
+function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::_ProductSpace, precomps) where {B}
     if !ismissing(fast_path(space))
         T = typeof(fast_path(space))
         internal_reps = _tuple_map((s, f) -> _internal_rep(s, f, T), state.states, groups(space))
-        newrep, amp = _apply_local_operators_fast(ops, internal_reps, space, precomps)
+        newrep, amp = _apply_local_operators_fast(ops, internal_reps, precomps)
         return ProductState{B}(newrep), amp
     else
         newstate, amp = _apply_local_operators_slow(ops, state, space, precomps)
@@ -442,17 +449,17 @@ function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::Abst
     newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
     return _internal_rep(newstate, space, T), amp
 end
-function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::Tuple{InternalRep{T},Vararg{InternalRep{T}}}, space::ProductSpace, precomps) where {C,T}
+@inline function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::Tuple{InternalRep{T}, Vararg{InternalRep{T}}}, precomps) where {C, T}
     return _apply_group_operators(one(C), internal_reps, internal_reps, ops.inds, 1, ops.ops, ops.spaces, precomps)
 end
-function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductState{B}, space::ProductSpace, precomps) where {C,B<:Tuple}
+function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductState{B}, space::ProductSpace, precomps) where {C, B <: Tuple}
     newstates, amp = _apply_group_operators(one(C), state.states, state.states, ops.inds, 1, ops.ops, ops.spaces, precomps)
     return ProductState{B}(newstates), amp
 end
 # Apply the k-th local operator to the substate `states[inds[k]]` and recurse over the remaining
 # operators. Recursing over the tuples `ops`, `spaces` and `precomps` keeps each call concretely typed.
-_apply_group_operators(amp, states, newstates, inds, k, ::Tuple{}, ::Tuple{}, ::Tuple{}) = (newstates, amp)
-function _apply_group_operators(amp::C, states, newstates, inds, k, ops::Tuple, spaces::Tuple, precomps::Tuple) where {C}
+@inline _apply_group_operators(amp, states, newstates, inds, k, ::Tuple{}, ::Tuple{}, ::Tuple{}) = (newstates, amp)
+@inline function _apply_group_operators(amp::C, states, newstates, inds, k, ops::Tuple, spaces::Tuple, precomps::Tuple) where {C}
     n = inds[k]
     new_local_state, local_amp = _apply_local_operators(first(ops), states[n], first(spaces), first(precomps))
     return _apply_group_operators(
