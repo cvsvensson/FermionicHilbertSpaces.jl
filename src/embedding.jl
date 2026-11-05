@@ -56,7 +56,6 @@ function _embed_by_gather(m::AbstractVecOrMat, Hsub, H, complement; projection =
     projection || _check_embed_into(m, present)
     return _gather_embed(m, P, B, S)
 end
-_embed_by_gather(::UniformScaling, args...; kwargs...) = throw(ArgumentError("`UniformScaling` is not supported with `alg = GatherAlg()`."))
 
 # `P[J, r]`, `B[J, r]` and `S[J, r]` are the indices in `Hsub` and the complement, and the weight,
 # of the r-th split of the J-th state of `H`, padded with index 1 and weight 0.
@@ -146,6 +145,8 @@ function (op::EmbedMap)(m::SparseMatrixCSC)
     _embed_sparse_matrix(op.map, m, dim(op.H))
 end
 
+_embed_sparse_matrix(g::_EmbedGather, m, D) = sparse(reshape(g * vec(Matrix(m)), D, D))
+
 # map * vec(m) as a sparse D × D matrix, avoiding the dense length-D^2 vector that map * m[:] would allocate
 function _embed_sparse_matrix(map::SparseMatrixCSC, m::SparseMatrixCSC, D)
     n = size(m, 1)
@@ -185,7 +186,6 @@ function (op::EmbedMap)(out::AbstractVector, v::AbstractVector)
     out
 end
 
-(op::EmbedMap{<:Any, <:Any, <:Any, <:Any, <:_EmbedGather})(m::UniformScaling) = _embed_by_gather(m)
 function (op::EmbedMap)(m::UniformScaling)
     mfull = m.λ * I(dim(op.Hsub))
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(mfull), dim(op.H))
@@ -206,7 +206,7 @@ The operation can be applied directly as `op(m)` and converted to a sparse matri
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 It is the compression onto `H` and, unlike [`embed`](@ref), does not check its input.
 With `alg = GatherAlg()`, it stores gather tables instead, so it can be applied to GPU arrays
-but has no `sparse` or adjoint (both throw an `ArgumentError`); `Adapt.adapt(CuArray, op)` moves the tables to the device.
+but has no `sparse` or adjoint; `Adapt.adapt(CuArray, op)` moves the tables to the device.
 """
 embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwargs...)
 

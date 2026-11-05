@@ -337,7 +337,7 @@ end
 _linear_offset(I, strides) = sum(map((i, s) -> (i - 1) * s, I, strides); init=0)
 
 _group_length(::AbstractVector{NTuple{N,Int}}) where {N} = N
-_group_length(b) = _group_length(b.dropped)
+_group_length(b::NamedTuple) = _group_length(b.dropped)
 _dropped_indices(b, lin) = Int[lin[Iin...] for Iin in b.dropped]
 
 # Throw if a nonzero entry of `t` sits on an input index whose transitions were partly
@@ -391,7 +391,7 @@ end
 
 function _reshape_kernel!(tout, t, blocks, Hsouts)
     if _has_linear_indices(t) && _has_linear_indices(tout)
-        stridesin = _block_strides(size(t), map(b -> _group_length(b.dropped), blocks))
+        stridesin = _block_strides(size(t), map(_group_length, blocks))
         stridesout = _block_strides(size(tout), map(length, Hsouts))
         for entries in Base.product(map(b -> b.linear, blocks)...)
             tval = t[1+sum(map((e, s) -> e[1] * s, entries, stridesin))]

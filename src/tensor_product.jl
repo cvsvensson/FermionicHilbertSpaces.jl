@@ -1110,6 +1110,7 @@ function _partial_trace_gather(H, Hsub, complement; phase_factors = true)
     splits, nb = _gather_splits(H, Hsub, complement, phase_factors)
     return _PartialTraceGather(_partial_trace_gather_table(splits, dim(Hsub), nb)...)
 end
+Base.eltype(::Type{<:_PartialTraceGather{<:Any, TW}}) where {TW} = eltype(TW)
 _square(v) = reshape(v, isqrt(length(v)), :)
 Base.:*(g::_PartialTraceGather, v::AbstractVector) = vec(_gather_partial_trace(_square(v), g.L, g.W))
 _apply_superop_on_pure_state!(w::AbstractVector, g::_PartialTraceGather, ψ::AbstractVector) = copyto!(w, vec(_gather_partial_trace(ψ, g.L, g.W)))
@@ -1183,6 +1184,7 @@ function _apply_superop_on_pure_state!(w::AbstractVector, S::LinearAlgebra.Trans
 end
 
 # y = S * vec(m) for S = transpose(St) and a sparse D × D matrix m
+_superop_mul_matrix!(y::AbstractVector, g::_PartialTraceGather, m::SparseMatrixCSC) = copyto!(y, g * vec(Matrix(m)))
 function _superop_mul_matrix!(y::AbstractVector, S::LinearAlgebra.Transpose{<:Any,<:SparseMatrixCSC}, m::SparseMatrixCSC)
     D = size(m, 1)
     size(m, 2) == D && size(S, 2) == D^2 || throw(DimensionMismatch("The input matrix must be square with $(size(S, 2)) entries, got size $(size(m))"))
@@ -1329,7 +1331,7 @@ The operation can be applied directly as `op(m)` and can be converted to a spars
 matrix map with `sparse(op)`. It skips the states of `H` that [`partial_trace`](@ref) drops and,
 unlike `partial_trace`, does not check its input.
 With `alg = GatherAlg()`, it stores gather tables instead, so it can be applied to GPU arrays
-but has no `sparse` or adjoint (both throw an `ArgumentError`); `Adapt.adapt(CuArray, op)` moves the tables to the device.
+but has no `sparse` or adjoint; `Adapt.adapt(CuArray, op)` moves the tables to the device.
 """
 partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = PartialTraceMap(first(Hs), last(Hs); kwargs...)
 function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
@@ -1572,7 +1574,9 @@ end
         end
         @test_throws ArgumentError sparse(pt)
         @test_throws ArgumentError em'
-        @test_throws ArgumentError em(I)
+        @test em(I) ≈ embed(Hsub => H)(I)
+        @test pt(sparse(ρ)) ≈ partial_trace(H => Hsub)(ρ)
+        @test em(sparse(m)) ≈ embed(Hsub => H)(m)
     end
     ρ = rand(ComplexF64, dim(Hcons), dim(Hcons))
     out = zeros(ComplexF64, 4, 4)
@@ -1582,7 +1586,7 @@ end
     H1, H2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
     op = reshape(Hcons => (H1, H2); alg)
     for x in (rand(dim(Hcons)), ρ)
-        @test op(x) == reshape(x, Hcons => (H1, H2))
+        @test op(x) ≈ reshape(x, Hcons => (H1, H2))
     end
     @test op(zeros(ComplexF64, 4, 4, 4, 4), ρ) == reshape(ρ, Hcons => (H1, H2))
     @test_throws ArgumentError reshape((H1, H2) => Hcons; alg)(rand(4, 4))
