@@ -2,7 +2,7 @@
 combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
 combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("The group `$group_id` requires a single space, got $spaces."))
 # Base's tuple `map` and `setindex`, and `LinearIndices`, are not inferred past 32 entries.
-_tuple_map(f::F, a::NTuple{N, Any}, b::NTuple{N, Any}) where {F, N} = ntuple(i -> f(a[i], b[i]), Val(N))
+@generated _tuple_map(f::F, a::NTuple{N, Any}, b::NTuple{N, Any}) where {F, N} = :(Base.Cartesian.@ntuple $N i -> f(a[i], b[i]))
 function _linear_index(inds::NTuple{N, Int}, axes) where {N}
     k, stride = 1, 1
     for n in 1:N
@@ -315,6 +315,30 @@ end
     n = 33
     exact = sort([-2cos(k * pi / (n + 1)) for k in 1:n])
     @test eigvals(Symmetric(Matrix(matrix_representation(hamiltonian(n), space(n))))) ≈ exact
+end
+
+@testitem "Matrix on a fermion, boson and spin product allocates little" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: matrix_representation, BosonicState, SpinState
+    @fermions f
+    @bosons b
+    @spins s 1 // 2
+    excitation(state::BosonicState) = state.n // 1
+    excitation(state::SpinState) = state.m + 1 // 2
+    raise(i) = isodd(i) ? b[i]' : s[i][:+]
+    lower(i) = isodd(i) ? b[i] : s[i][:-]
+    n = 7
+    fermion_spaces = [hilbert_space(f, i:i) for i in 1:2]
+    chain_spaces = Tuple(isodd(i) ? hilbert_space(b[i], 2) : hilbert_space(s[i]) for i in 1:n)
+    H = tensor_product(
+        (fermion_spaces..., chain_spaces...);
+        constraint = NumberConservation(1, fermion_spaces) * AdditiveConstraint(1 // 1, chain_spaces, excitation)
+    )
+    op = -(f[1]' * f[2] + hc) - sum(raise(i) * lower(i + 1) + hc for i in 1:(n - 1))
+    m = matrix_representation(op, H)
+    @test (@allocations matrix_representation(op, H)) < 3000
+    exact = sort([-2cos(k * pi / (n + 1)) + d for k in 1:n for d in (-1, 1)])
+    @test eigvals(Symmetric(Matrix(m))) ≈ exact
 end
 
 @testitem "Fermion ordering" begin
