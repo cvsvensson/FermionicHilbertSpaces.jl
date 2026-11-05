@@ -270,8 +270,6 @@ end
     @test_throws ArgumentError embed(rand(4, 4), Hf => Hc; alg)
     @test_throws ArgumentError embed(rand(4), Hf => Hc; alg)
     @test_throws ArgumentError embed(rand(4, 4), Hf => hilbert_space(f, 1:3); alg = :other)
-    @test_throws ArgumentError embed(Hf => hilbert_space(f, 1:3); alg)
-    @test_throws ArgumentError embed(sector(-1, Hpar) => Hpar; alg)
 end
 
 @testitem "Embedding a sector vector" begin

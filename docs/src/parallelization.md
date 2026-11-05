@@ -32,3 +32,21 @@ MPI.Init()
 rep = PartitionedSparseRepr(; backend=distribute_with_mpi, nparts=MPI.Comm_size(MPI.COMM_WORLD))
 representation(op, space, rep)
 ```
+
+## GPUs
+
+With a GPU package loaded, a GPU array type as the format assembles the matrix on the GPU, with one thread per basis
+state. The type selects the backend, the matrix type and, optionally, the element type:
+```julia
+using FermionicHilbertSpaces, CUDA
+@fermions f
+H = hilbert_space(f, 1:20, NumberConservation(10))
+op = sum(f[i]' * f[i + 1] + hc for i in 1:19) + sum(f[i]' * f[i] * f[i + 1]' * f[i + 1] for i in 1:19)
+M = representation(op, H, cuSPARSE.CuSparseMatrixCSR{ComplexF32})
+Md = representation(op, H, CuArray)
+```
+This works for fermions, bosons, spins, their products and constrained subspaces of them. Other spaces and operators,
+products of groups without an integer internal representation, `Axes(Hout, Hin)` and symbolic coefficients throw an
+`ArgumentError`. Sparse formats index with their index type (`Int32` by default) and throw an `ArgumentError` when the
+matrix may need more entries than it can count. Operator coefficients keep their type on the GPU, usually `Float64`, and
+boson and spin matrix elements are computed in `Float64`, which Apple GPUs do not support.
