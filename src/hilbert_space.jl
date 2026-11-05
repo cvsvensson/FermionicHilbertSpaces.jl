@@ -1,27 +1,71 @@
-struct GenericHilbertSpace{B,L,S} <: AbstractAtomicHilbertSpace{B}
+"""
+    GenericHilbertSpace(label, basisstates[, state_index])
+    GenericHilbertSpace{B}(label, basisstates[, state_index])
+
+Atomic Hilbert space whose basis states are given explicitly by `basisstates`, indexed by integers.
+`label` is returned by `symbolic_group` and `atomic_id` and identifies the space in symbolic expressions.
+`state_index` gives the integer index of a basis state. It is either an `AbstractDict` from basis states
+to indices, or a function that takes a basis state and returns its index. By default it is a dictionary
+built from `basisstates`.
+
+`B` is the basis-state type and defaults to `eltype(basisstates)`. When `B` is given and `basisstates`
+is an `AbstractVector` or `Tuple`, its elements are converted to `B`.
+"""
+struct GenericHilbertSpace{B,L,S,SI} <: AbstractAtomicHilbertSpace{B}
     label::L
     basisstates::S
-    state_index::Dict{B,Int}
-    function GenericHilbertSpace(label::L, basisstates, state_index=Dict(reverse(pair) for pair in enumerate(basisstates))) where L
-        B = eltype(basisstates)
-        new{B,L,typeof(basisstates)}(label, basisstates, state_index)
-    end
+    state_index::SI
+    GenericHilbertSpace{B,L,S,SI}(label, basisstates, state_index) where {B,L,S,SI} = new{B,L,S,SI}(label, basisstates, state_index)
 end
+GenericHilbertSpace(label, basisstates, args...) = GenericHilbertSpace{eltype(basisstates)}(label, basisstates, args...)
+function GenericHilbertSpace{B}(label, basisstates) where B
+    states = _convert_basisstates(B, basisstates)
+    return GenericHilbertSpace{B}(label, states, position_dict(states))
+end
+function GenericHilbertSpace{B}(label, basisstates, state_index) where B
+    states = _convert_basisstates(B, basisstates)
+    GenericHilbertSpace{B,typeof(label),typeof(states),typeof(state_index)}(label, states, state_index)
+end
+_convert_basisstates(::Type{B}, states::Union{AbstractVector,BasisStates}) where B = convert(AbstractVector{B}, _stored_states(states))::AbstractVector{B}
+_convert_basisstates(::Type{B}, states::Tuple) where B = map(s -> convert(B, s)::B, states)
+_convert_basisstates(::Type, states) = states
 Base.:(==)(H1::GenericHilbertSpace, H2::GenericHilbertSpace) = H1 === H2 || (H1.label == H2.label && H1.basisstates == H2.basisstates)
 Base.hash(H::GenericHilbertSpace, h::UInt) = hash((H.label, H.basisstates), h)
-basisstates(H::GenericHilbertSpace) = H.basisstates
-basisstate(ind, H::GenericHilbertSpace) = H.basisstates[ind]
+basisstates(H::GenericHilbertSpace) = H.basisstates isa AbstractVector ? BasisStates(H, H.basisstates) : H.basisstates
+dim(H::GenericHilbertSpace) = length(H.basisstates)
+Base.@propagate_inbounds basisstate(ind::Integer, H::GenericHilbertSpace) = H.basisstates[ind]
 Base.keys(H::GenericHilbertSpace) = (H.label,)
-state_index(state::B, H::GenericHilbertSpace{B}) where B = get(H.state_index, state, 0)
+_state_index(state::B, H::GenericHilbertSpace{B,<:Any,<:Any,<:AbstractDict}) where B = get(H.state_index, state, 0)
+_state_index(state::B, H::GenericHilbertSpace{B}) where B = H.state_index(state)
 symbolic_group(H::GenericHilbertSpace) = H.label
 atomic_id(H::GenericHilbertSpace) = H.label
 add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag), H.basisstates, H.state_index)
 
 @testitem "GenericHilbertSpace, ProductSpace" begin
-    using FermionicHilbertSpaces: GenericHilbertSpace, Kets, fast_path
+    using FermionicHilbertSpaces: Kets, fast_path
     using LinearAlgebra
     H1 = GenericHilbertSpace(:A, [:a, :b])
-    H2 = GenericHilbertSpace(:B, [:c, :d])
+    custom_state_index(s) = begin
+        s == :c && return 1
+        s == :d && return 2
+        return 0
+    end
+    H2 = GenericHilbertSpace(:B, (:c, :d), custom_state_index)
+    @test all(state_index(b, H1) == n for (n, b) in enumerate(basisstates(H1)))
+    @test all(state_index(b, H2) == n for (n, b) in enumerate(basisstates(H2)))
+
+    # Basis-state type parameter
+    @test GenericHilbertSpace(:a, [1, 2, 3]) == GenericHilbertSpace{Int}(:a, [1, 2, 3])
+    @test GenericHilbertSpace(:a, [1, 2, 3]) isa GenericHilbertSpace{Int}
+    Hf64 = GenericHilbertSpace{Float64}(:a, [1, 2])
+    @test Hf64 isa GenericHilbertSpace{Float64}
+    @test basisstates(Hf64) == [1.0, 2.0] && eltype(basisstates(Hf64)) == Float64
+    @test state_index(2.0, Hf64) == 2
+    Ht = GenericHilbertSpace{Float64}(:t, (1, 2), s -> Int(s))
+    @test basisstates(Ht) === (1.0, 2.0)
+    @test state_index(2.0, Ht) == 2
+    @test GenericHilbertSpace(:r, 1:3) isa GenericHilbertSpace{Int,Symbol,UnitRange{Int}}
+
     P = tensor_product(H1, H2)
     @test dim(P) == dim(H1) * dim(H2)
     @test 2 * I(2) == partial_trace(1.0 * I(4), P => H1)
@@ -44,17 +88,35 @@ add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag)
     vg = Kets(H1)
     opg = vg(:a) * vg(:b)'
     op = opg * (f[1]' * f[1])
-    M = matrix_representation(op, Hmixed)
-    Mexpected = embed(matrix_representation(opg, H1), H1 => Hmixed) *
-                embed(matrix_representation(f[1]' * f[1], Hf), Hf => Hmixed)
+    M = representation(op, Hmixed)
+    Mexpected = embed(representation(opg, H1), H1 => Hmixed) *
+                embed(representation(f[1]' * f[1], Hf), Hf => Hmixed)
     @test M == Mexpected
+end
+
+@testitem "Invalid space inputs" begin
+    @test_throws ArgumentError GenericHilbertSpace(:a, [1, 1, 2])
+    @majoranas γ
+    @test_throws ArgumentError hilbert_space(γ, [1, 1])
+    @test_throws ArgumentError hilbert_space(γ, [1, 2, 2, 3])
+    @test dim(hilbert_space(γ, [1, 2, 3, 4])) == 4
+    @fermions f
+    @test_throws ArgumentError hilbert_space(f, 1:2, NumberConservation(1; weights = [1, 2, 3]))
+    @test_throws ArgumentError hilbert_space(f, 1:2, NumberConservation(1; weights = [1]))
+    @test dim(hilbert_space(f, 1:2, NumberConservation(2; weights = [1, 2]))) == 1
+    @test_throws ArgumentError hilbert_space(f, [f[1]])
+    using FermionicHilbertSpaces: Kets
+    @spin s
+    @test_throws ArgumentError Kets(hilbert_space(s, 1))("up")
+    @test_throws ArgumentError Kets(hilbert_space(s, 0))("down")
+    @test Kets(hilbert_space(s, 1 // 2))("up") == Kets(hilbert_space(s, 1 // 2))("1/2")
 end
 
 
 """
     dim(H)
 
-Return the Hilbert-space dimension of `H`, i.e. the number of basis states.
+Return the Hilbert-space dimension of `H`, i.e. the number of basis states. Throws an `OverflowError` if the dimension overflows its integer type.
 """
 dim(H::AbstractHilbertSpace) = Int(length(basisstates(H)))
 

@@ -1,0 +1,122 @@
+```@meta
+CurrentModule = FermionicHilbertSpaces
+```
+
+# Symbolic bras and kets
+
+Besides symbolic operators (`c[1]`, `c[1]'`, ...), this package lets you write basis states symbolically as bras and kets, multiply them with operators and with each other, and turn the resulting expressions into vectors or matrices.
+
+## Creating symbolic states
+
+`Kets(H)` returns a callable object that parses a basis-state label into a symbolic ket for the Hilbert space `H`.
+
+```@example states
+using FermionicHilbertSpaces
+@fermions f
+H = hilbert_space(f, 1:2)
+vf = Kets(H)
+vf("10")
+```
+
+The string is a Fock bitstring: one `'0'`/`'1'` character per mode, in the same order as the labels used to build `H`. A bra is obtained with `'`:
+
+```@example states
+vf("10")'
+```
+
+Other space types parse their labels differently. Bosons use an occupation-number string, e.g. `vb("3")` for a boson space `vb = Kets(hilbert_space(b, 1))`. For a `ProductSpace`, pass one label per factor, either as separate arguments or as a tuple: `vfb("0", "2")` for a fermion factor and a boson factor combined with `tensor_product`.
+
+`Kets(H)` can also be indexed and iterated. `vf[i]` is the ket of the `i`-th basis state, in the order of `basisstates(H)` and of the vector and matrix representations:
+
+```@example states
+vf[2], vf[end]
+```
+
+```@example states
+foreach(println, vf)
+```
+
+## Algebra
+
+Multiplying a bra and a ket contracts them. The product stays a symbolic expression, here a multiple of the identity:
+
+```@example states
+vf("10")' * vf("10")
+```
+
+`dot` from `LinearAlgebra` gives overlaps and matrix elements as numbers, and throws if the bra and ket don't contract to a scalar:
+
+```@example states
+using LinearAlgebra
+dot(vf("10"), vf("11")), dot(vf("11"), f[2]', vf("10"))
+```
+
+Multiplying a ket and a bra instead gives an operator (an outer product, or "ketbra"):
+
+```@example states
+vf("10") * vf("01")'
+```
+
+Symbolic operators act on kets from the left and on bras from the right, picking up the same fermionic signs as usual:
+
+```@example states
+f[2]' * vf("10")
+```
+
+```@example states
+vf("10")' * f[2]
+```
+
+`ket * ket` and `bra * bra` within the same space are not meaningful and throw an `ArgumentError`.
+
+## Numeric vectors and matrices
+
+`representation(x, H)` turns a symbolic ket, bra or ketbra into a concrete vector or matrix on `H`. A ket gives a column vector, a bra a row vector and a ketbra a matrix. The explicit forms are `vector_representation` for kets and bras and `matrix_representation` for operators and ketbras:
+
+```@example states
+representation(vf("10"), H)
+```
+
+```@example states
+representation(vf("10") * vf("01")', H)
+```
+
+This also works for sums of kets/bras/ketbras with coefficients. Kets and bras give sparse vectors by default and dense ones with `Vector`. Ketbras give matrices and can also be `:lazy`.
+
+If the expression is a single kind of state, `representation` can find the space itself, as in `representation(vf("10"))`. Operators carry no space, so they need the space argument. A ketbra on one factor of a `tensor_product` can be represented on the product space, where it acts as the identity on the other factors. Expressions that combine kets or bras with operators or with states of other spaces, such as `b * vf("10")`, have no representation and throw an `ArgumentError`. Apply the operators to the state first, or represent the parts separately.
+
+## Product spaces and mixed operator/state expressions
+
+States belonging to different factor spaces of a `tensor_product` combine into a joint state, matching the state you would get from `Kets` on the combined space directly:
+
+```@example states
+@boson b
+Hb = hilbert_space(b, 3)
+Hfb = tensor_product(H, Hb)
+vb = Kets(Hb)
+vfb = Kets(Hfb)
+vf("10") * vb("2") == vfb("10", "2")
+```
+
+Operators and states from different factors can be freely interleaved in a product; they are reordered into operators acting first, then states combined per factor:
+
+```@example states
+f[1]' * vf("10") * b' * vb("2") == f[1]' * b' * vfb("10", "2")
+```
+
+## Simple example
+
+Put together, here is a two-site fermion example that builds a ket, computes an overlap, and constructs a projector onto that state:
+
+```@example simple
+using FermionicHilbertSpaces, LinearAlgebra
+@fermions f
+H = hilbert_space(f, 1:2)
+vf = Kets(H)
+
+ket = vf("10")
+overlap = dot(ket, ket)     # 1, since the state is normalized
+
+projector = ket * ket'      # a rank-1 projector operator
+representation(projector, H)
+```

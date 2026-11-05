@@ -12,6 +12,7 @@ struct SymbolicFermionBasis{T<:Tags}
     name::Symbol
     tags::FermionicGroup{T}
 end
+Base.show(io::IO, x::SymbolicFermionBasis) = print(io, _symbolic_name_with_tags(x.name, x; skip_first=1))
 Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.tags, h))
 symbolic_group(x::SymbolicFermionBasis) = tags(x)
 tags(x::SymbolicFermionBasis) = x.tags
@@ -23,6 +24,7 @@ add_tag(x::SymbolicFermionBasis, tag) = SymbolicFermionBasis(x.name, add_tag(x.t
 Create one or more fermion species with the given names. Indexing into fermions species
 gives a concrete fermion. Fermions in one `@fermions` block anticommute with each other, 
 and commute with fermions in other `@fermions` blocks.
+`a[l]` is the annihilation operator of the mode labelled `l`, `a[l]'` its creation operator, and `a[i, σ]` is the mode labelled `(i, σ)`.
 
 # Examples:
 - `@fermions a b` creates two species of fermions that anticommute:
@@ -35,12 +37,14 @@ and commute with fermions in other `@fermions` blocks.
 See also [`@majoranas`](@ref).
 """
 macro fermions(xs...)
-    group = FermionicGroup(Tags((hash(xs),)))
+    group = FermionicGroup(Tags((xs,)))
     defs = map(xs) do x
         :($(esc(x)) = SymbolicFermionBasis($(Expr(:quote, x)), $group))
     end
-    Expr(:block, defs...,
+    fermions = Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
+    length(defs) == 1 && return only(defs)
+    return fermions
 end
 Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.tags == b.tags
 Base.getindex(f::SymbolicFermionBasis, is...) = FermionSym(false, is, f)
@@ -51,12 +55,13 @@ struct FermionSym{L,B} <: AbstractFermionSym
     label::L
     basis::B
 end
+Base.getindex(::SymbolicFermionBasis, i::FermionSym) = throw(ArgumentError("Modes are indexed by labels, not by operators, got `$i`."))
 Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.label, x.basis)
 Base.iszero(x::FermionSym) = false
 symbolic_group(h::FermionSym) = symbolic_group(h.basis)
 symbolic_basis(h::FermionSym) = h.basis
-change_basis(h::FermionSym, newbasis) = FermionSym(h.creation, h.label, newbasis)
-atomic_id(h::FermionSym) = (h.basis, h.label)
+with_basis(h::FermionSym, newbasis) = FermionSym(h.creation, h.label, newbasis)
+atomic_id(h::FermionSym) = _normalize_sym(h) # names the single-mode FermionicSpace of h
 label(h::FermionSym) = h.label
 group_id(f::FermionSym) = symbolic_group(f)
 
@@ -72,7 +77,7 @@ function Base.isless(a::FermionSym, b::FermionSym)
     if tags(a.basis) !== tags(b.basis)
         tags(a.basis) < tags(b.basis)
     elseif a.creation == b.creation
-        a.basis.name == b.basis.name && return a.label < b.label
+        a.basis.name == b.basis.name && return _order_isless(a.label, b.label)
         a.basis.name < b.basis.name
     else
         a.creation > b.creation
@@ -83,14 +88,15 @@ Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis,
 
 hilbert_space(f::FermionSym) = FermionicSpace([_normalize_sym(f)], symbolic_group(f))
 
+# The sign λ in a * b = λ * b * a + scalar
+exchange_phase(a::FermionSym, b::FermionSym) = tags(a.basis) == tags(b.basis) ? -1 : 1
 function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     if a == b
         0
     elseif a < b
         nothing
     elseif a > b
-        anti_commuting = tags(a.basis) == tags(b.basis)
-        swap = Swap((-1)^anti_commuting)
+        swap = Swap(exchange_phase(a, b))
         if a.label == b.label && a.basis == b.basis
             return AddTerms((swap, 1))
         else
@@ -109,6 +115,7 @@ mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
     using Symbolics, LinearAlgebra
     @fermions f c
     @fermions b
+    @test sprint(show, f) == "f"
     @variables a::Real z::Complex
     f1 = f[:a]
     f2 = f[:b]
@@ -171,4 +178,93 @@ mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
         @test op - 1.0I == op - 1.0 == -(1.0I - op) == -(1.0 - op)
     end
 
+end
+
+@testitem "Deterministic ordering of groups" begin
+    using FermionicHilbertSpaces: Tags, tags, add_tag, SymbolicState
+    @fermions a
+    @fermions b
+    @fermions c d
+    @majoranas γ
+
+    # the groups are identified by the names given to the macro, not by a hash of them
+    @test tags(a).id.tags == ((:a,),)
+    @test tags(c).id.tags == ((:c, :d),)
+    @test tags(γ).group.id.tags == ((:γ,),)
+    a_old = a
+    @fermions a
+    @test a == a_old
+
+    # groups are in lexicographic order of the names given to the macro
+    @test tags(a) < tags(b) < tags(c)
+    @test a[2] < b[1] && b[1] < c[1] && !(b[1] < a[2])
+    @test a[1]' < b[1]
+    @test only(keys((b[1] * a[1]).dict)).factors == [a[1], b[1]]
+    @test only(keys((c[1] * b[1]' * a[2]).dict)).factors == [a[2], b[1]', c[1]]
+
+    # the order is total and consistent with ==
+    ts = [Tags(nothing), tags(a).id, tags(b).id, tags(c).id,
+        add_tag(tags(a).id, :left), add_tag(tags(a).id, :right), add_tag(add_tag(tags(a).id, :left), :right),
+        Tags(((:a,),)), Tags(((:a, :b),))]
+    for x in ts, y in ts
+        @test (x == y) == (!(x < y) && !(y < x))
+        @test !(x < y && y < x)
+    end
+    @test issorted(sort(ts))
+    @test sort(ts) == sort(reverse(ts))
+
+    # symbolic states are ordered by group, space, ket and bra
+    @boson bb
+    Hf = hilbert_space(a, 1:1)
+    Hb = hilbert_space(bb, 3)
+    vf, vb = Kets(Hf), Kets(Hb)
+    @test vf("0") < vf("1")
+    @test vf("0")' < vf("0")
+    states = [vf("0"), vf("1"), vf("0")', vf("1")', SymbolicState(Hf, vf("1").ket, vf("0").ket),
+        vb("0"), vb("2"), vb("1")']
+    for x in states, y in states
+        @test (x == y) == (!(x < y) && !(y < x))
+    end
+    @test issorted(sort(states))
+end
+
+@testitem "Fermionic triple products vs matrices" begin
+    @fermions f c
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(c, 1:1))
+    ops = [f[1], f[1]', f[2], f[2]', c[1], c[1]']
+    mats = [representation(op, H) for op in ops]
+    for i in eachindex(ops), j in eachindex(ops), k in eachindex(ops)
+        @test representation(ops[i] * ops[j] * ops[k], H) ≈ mats[i] * mats[j] * mats[k]
+    end
+end
+
+@testitem "Products with mixed labels and tags" begin
+    import FermionicHilbertSpaces: add_tag
+    @fermions f
+    @majoranas γ
+    @bosons b
+    @spins s 1 // 2
+    @test iszero(f[1] * f[:a] + f[:a] * f[1])
+    @test iszero(f[1] * f[1, :a] + f[1, :a] * f[1])
+    @test iszero(γ[1] * γ[:a] + γ[:a] * γ[1])
+    @test b[1] * b[:a] == b[:a] * b[1]
+    @test s[1][:z] * s[:a][:z] == s[:a][:z] * s[1][:z]
+    H = hilbert_space(f, [1, :a])
+    @test representation(f[1] * f[:a], H) == representation(f[1], H) * representation(f[:a], H)
+
+    # Tags of different types: operators on different groups commute
+    tagged(x, y) = x * y == y * x
+    @test tagged(add_tag(f, 1)[1], add_tag(f, :l)[1])
+    @test tagged(add_tag(γ, 1)[1], add_tag(γ, :l)[1])
+    @test tagged(add_tag(b, 1)[1], add_tag(b, :l)[1])
+    @test tagged(add_tag(s, 1)[1][:z], add_tag(s, :l)[1][:z])
+
+    # The sorted form doesn't depend on the starting order
+    l1, l2, l3 = 2, "a", UInt8(1)
+    @test allequal(
+        b[x] * b[y] * b[z] for (x, y, z) in
+            ((l1, l2, l3), (l1, l3, l2), (l2, l1, l3), (l2, l3, l1), (l3, l1, l2), (l3, l2, l1))
+    )
+    @test b[1] * b[0] == b[1.0] * b[0]
+    @test b["a"] * b[:x] == b[SubString("a")] * b[:x]
 end

@@ -1,5 +1,5 @@
 using FermionicHilbertSpaces
-using LinearAlgebra, SparseArrays
+using LinearAlgebra
 
 N = 62 # If you go above 62, BigInt is used which is slower
 n = 2
@@ -10,16 +10,15 @@ H = hilbert_space(c, 1:N, NumberConservation(n)) # Spans all states with n fermi
 # Define a Hamiltonian that conserves the number of fermions
 hamiltonian = sum((c[i]' * c[i+1] + hc) for i in 1:N-1) + sum(rand() * c[i]' * c[i] * c[i+1]' * c[i+1] for i in 1:N-1) #+ sum(rand() * c[i]' * c[i] for i in 1:N);
 
-ham = Hermitian(matrix_representation(hamiltonian, H))
+ham = Hermitian(representation(hamiltonian, H))
 
 ## Solve for ground state
 using KrylovKit
-vals, vecs = eigsolve(v -> ham * v, rand(size(ham, 1)), 1)
+vals, vecs = eigsolve(v -> ham * v, rand(size(ham, 1)), 1, :SR; ishermitian=true)
 
 ## Partial trace to half the system
 Hsub = subregion(hilbert_space(c, 1:div(N, 2)), H)
-#vecs[1]*vecs[1]' runs out of memory for large N, so let's use LowRankMatrices.jl
-using LowRankMatrices
-rho = LowRankMatrix(vecs[1], conj(vecs[1]))
-@time subrho = partial_trace(rho, H => Hsub);
+#vecs[1]*vecs[1]' runs out of memory for large N, but by supplying a vector to partial_trace,
+# LowRankMatrices.jl will be used to avoid the full matrix
+@time subrho = partial_trace(vecs[1], H => Hsub);
 sum(v -> -v * log(abs(v) + 1e-16), eigvals(subrho))
