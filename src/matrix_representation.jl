@@ -104,6 +104,7 @@ _precision(::Type) = Float64
 _with_precision(::Type{<:AbstractFloat}, ::Type{P}) where {P} = P
 _with_precision(::Type{<:Complex{<:AbstractFloat}}, ::Type{P}) where {P} = Complex{P}
 _with_precision(::Type{T}, ::Type) where {T} = T
+_amp_at_precision(amp, ::Type{P}) where {P} = convert(_with_precision(typeof(amp), P), amp)
 
 # Gives the coefficients the precision of the element type of the format, so that the amplitudes are computed in it
 _at_format_precision(op, repr) = _at_precision(op, _precision_of_eltype(_repr_eltype(Nothing, repr)))
@@ -195,13 +196,13 @@ function apply_local_operators(op::NCMul{C}, state, space, precomps; transpose) 
         for (factor, precomp) in Iterators.reverse(zip(op.factors, precomps))
             state, _amp = apply_local_operator(factor, state, space, precomp, P)
             iszero(_amp) && return state, zero(T)
-            amp *= _amp
+            amp *= _amp_at_precision(_amp, P)
         end
     else
         for (factor, precomp) in zip(op.factors, precomps)
             state, _amp = apply_local_operator(adjoint(factor), state, space, precomp, P)
             iszero(_amp) && return state, zero(T)
-            amp *= conj(_amp)
+            amp *= conj(_amp_at_precision(_amp, P))
         end
     end
     return state, amp
@@ -886,6 +887,24 @@ end
     @test eltype(representation(0.5f0 * s[:z] + 1.0f0im * s[:+], Hs)) == ComplexF32
     @test eltype(representation(0.5 * b', Hb)) == Float64
     @test eltype(representation(b', Hb)) == Float64
+end
+
+@testitem "Amplitudes of custom operators in the requested precision" begin
+    import FermionicHilbertSpaces as FHS
+    struct RootOp <: FHS.AbstractSym end
+    struct PreciseRootOp <: FHS.AbstractSym end
+    Base.adjoint(op::Union{RootOp, PreciseRootOp}) = op
+    FHS.apply_local_operator(::RootOp, state, space, precomp) = (state, sqrt(2.0))
+    FHS.apply_local_operator(::PreciseRootOp, state, space, precomp, ::Type{T}) where {T} = (state, sqrt(T(2)))
+
+    @boson b
+    H = hilbert_space(b, 3)
+    amplitude(op, ::Type{T}, transpose) where {T} =
+        last(FHS.apply_local_operators(FHS.NCMul(one(T), [op]), FHS.basisstate(1, H), H, (nothing,); transpose))
+
+    @test (@inferred amplitude(RootOp(), Float32, false)) === Float32(sqrt(2.0))
+    @test (@inferred amplitude(RootOp(), Float32, true)) === Float32(sqrt(2.0))
+    @test amplitude(PreciseRootOp(), BigFloat, false) == sqrt(big(2))
 end
 
 @testitem "Operators between two spaces with Axes" begin
