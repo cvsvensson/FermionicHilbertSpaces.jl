@@ -45,7 +45,7 @@ end
 
 
 physical_rep(state::T, ::Type{FixedNumberFockState{N}}) where {T, N} = FixedNumberFockState{N}(physical_rep(state, FockNumber{T}))
-internal_rep(state::FixedNumberFockState, space::_FockSpace, ::Type{T}) where {T} = internal_rep(FockNumber(state), space, T)
+internal_rep(state::FixedNumberFockState, space::_FockSpace{FockNumber{I}}, ::Type{T}) where {I, T} = internal_rep(FockNumber{I}(state), space, T)
 
 
 Base.:(|)(f1::FixedNumberFockState, f2::FixedNumberFockState) = FixedNumberFockState((f1.sites..., f2.sites...))
