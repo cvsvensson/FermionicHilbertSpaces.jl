@@ -49,6 +49,31 @@ struct LazyRepr{T}
 end
 LazyRepr() = LazyRepr(missing)
 
+"""
+    DeviceDenseRepr(backend), DeviceDenseRepr{T}(backend)
+    DeviceCSCRepr(backend), DeviceCSCRepr{T}(backend)
+
+Formats for [`representation`](@ref) that assemble the matrix on the KernelAbstractions `backend`, as a dense device
+matrix or a sparse matrix with sorted rows. `T` fixes the element type, as in `Matrix{T}`. They need KernelAbstractions,
+Adapt and AcceleratedKernels to be loaded. `representation(op, H, DeviceCSCRepr{ComplexF32}(CUDABackend()))` gives a
+`CuSparseMatrixCSC`; backends without a device sparse type give a `SparseMatrixCSC` on the host.
+"""
+struct DeviceDenseRepr{T, B}
+    backend::B
+end
+@doc (@doc DeviceDenseRepr) struct DeviceCSCRepr{T, B}
+    backend::B
+end
+DeviceDenseRepr{T}(backend) where {T} = DeviceDenseRepr{T, typeof(backend)}(backend)
+DeviceCSCRepr{T}(backend) where {T} = DeviceCSCRepr{T, typeof(backend)}(backend)
+DeviceDenseRepr(backend) = DeviceDenseRepr{Missing}(backend)
+DeviceCSCRepr(backend) = DeviceCSCRepr{Missing}(backend)
+const DeviceRepr{T} = Union{DeviceDenseRepr{T}, DeviceCSCRepr{T}}
+
+# The result of `DeviceCSCRepr` from CSC arrays on `backend`. A backend with a device sparse type adds a method.
+_device_csc_matrix(backend, colptr, rowval, nzval, (m, n)) =
+    SparseArrays.SparseMatrixCSC(m, n, Array(colptr), Array(rowval), Array(nzval))
+
 abstract type AbstractChunkingStrategy end
 """
     NoChunking()
@@ -392,6 +417,7 @@ _matrix_size(space) = (dim(_output_space(space)), dim(_input_space(space)))
 
 # The element type given in the format (e.g. `EagerSparseRepr{ComplexF64}()`) takes precedence over the operator's
 _repr_eltype(default, ::Union{EagerSparseRepr{T},EagerDenseRepr{T}}) where T = T === Missing ? default : T
+_repr_eltype(default, ::DeviceRepr{T}) where {T} = T === Missing ? default : T
 _repr_eltype(default, _) = default
 
 function matrix_accumulator(::Type{T}, N::Int, (d1, d2)::Tuple{Int,Int}, ::EagerSparseRepr) where T
@@ -628,7 +654,7 @@ end
     ψ = representation("10", H)
     @test isequal(Symbolics.simplify(expectation(t * f[1]' * f[1] + f[1]' * f[2] + 2, ψ, H)), t + 2)
 end
-_canonicalize_repr(repr::Union{EagerSparseRepr, EagerDenseRepr, LazyRepr, PartitionedSparseRepr}) = repr
+_canonicalize_repr(repr::Union{EagerSparseRepr, EagerDenseRepr, LazyRepr, PartitionedSparseRepr, DeviceRepr}) = repr
 _canonicalize_repr(::Union{Type{Array}, Type{Matrix}, Type{Vector}}) = EagerDenseRepr()
 _canonicalize_repr(::Union{Type{Array{T}}, Type{Matrix{T}}, Type{Vector{T}}}) where {T} = EagerDenseRepr{T}()
 _canonicalize_repr(::Union{Type{SparseArrays.SparseMatrixCSC}, Type{SparseArrays.SparseVector}}) = EagerSparseRepr()

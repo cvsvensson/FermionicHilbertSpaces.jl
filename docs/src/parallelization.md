@@ -32,3 +32,25 @@ MPI.Init()
 rep = PartitionedSparseRepr(; backend=distribute_with_mpi, nparts=MPI.Comm_size(MPI.COMM_WORLD))
 representation(op, space, rep)
 ```
+
+## GPU
+
+`DeviceCSCRepr` and `DeviceDenseRepr` assemble the matrix on a [KernelAbstractions](https://github.com/JuliaGPU/KernelAbstractions.jl) backend, with the same per-state code as on the CPU. They need AcceleratedKernels in the environment, alongside the GPU package.
+```julia
+using FermionicHilbertSpaces, CUDA, AcceleratedKernels, LinearAlgebra
+@fermions f
+H = hilbert_space(f, 1:20, NumberConservation(10))
+op = sum(f[i]' * f[i+1] + hc for i in 1:19)
+S = representation(op, H, DeviceCSCRepr{ComplexF32}(CUDABackend()))
+x = CUDA.rand(ComplexF32, dim(H))
+y = mul!(similar(x), S, x)
+```
+On CUDA, `S` is a `CuSparseMatrixCSC`. A backend without a device sparse type gives a `SparseMatrixCSC` on the host, assembled on the device.
+
+Supported are fermions, bosons, spins and their products, with number and parity conservation, sectors, listed states and constraints. Not supported, with an error that names the field without a device version: `GenericHilbertSpace`, Majoranas, BdG and single-particle spaces, `TransposedSpace` and symbolic coefficients. Also not supported are `Axes(Hout, Hin)` and products whose groups have no `internal_rep`.
+
+- With `projection=false`, an operator that leaves the space throws inside the kernel, and on an asynchronous backend the error appears when the result is used, without the message of the CPU version.
+- The sparse assembly allocates one row per term, plus one for a scalar term, for every column, so many terms on a large space can run out of device memory.
+- Boson and spin amplitudes are computed in `Float64`, so a backend without `Float64` support fails on them.
+- The kernels inline more fully with `CUDABackend(always_inline=true)`, which makes product spaces with spins or bosons faster.
+- The index and states of the space are uploaded on every call.

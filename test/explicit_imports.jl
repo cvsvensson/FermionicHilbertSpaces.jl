@@ -1,7 +1,7 @@
 @testitem "ExplicitImports" begin
     using ExplicitImports
     # Load every weak dependency so that all package extensions are analyzed.
-    using Combinatorics, OhMyThreads, PartitionedArrays
+    using AcceleratedKernels, Adapt, Combinatorics, KernelAbstractions, OhMyThreads, PartitionedArrays
     # Package extensions import internals of FermionicHilbertSpaces to add methods to them.
     internal_names = Tuple(filter(n -> !Base.ispublic(FermionicHilbertSpaces, n),
         names(FermionicHilbertSpaces; all=true)))
