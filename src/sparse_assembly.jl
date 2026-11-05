@@ -69,7 +69,9 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
     N = dim(space)
     M = length(incols)
     offset = first(incols) - 1
-    B = SPARSE_BLOCK_SIZE
+    # The blocks shrink with the share of the columns of the space in `incols`, so that the chunks of a chunked build
+    # together buffer about as many entries as the serial build
+    B = max(1, cld(SPARSE_BLOCK_SIZE * M, max(N, 1)))
     if 0 < M <= B
         ijv = _collect_ijv(T, precomps, coeff, space, incols, offset; kwargs...)
         return _trimmed!(SparseArrays.sparse!(ijv..., N, M), length(first(ijv)))
@@ -83,7 +85,7 @@ function _blocked_sparse_matrix(::Type{T}, precomps, coeff, space, incols=1:dim(
     capacity = 0
     sortedrows = Int[]
     sortedamps = T[]
-    mergebuffers = (zeros(Int, N), Int[], T[])
+    mergebuffers = (zeros(Int32, N), Int[], T[])
     colstarts = Vector{Int}(undef, B + 1)
     for c0 in 0:B:M-1
         nb = min(B, M - c0)

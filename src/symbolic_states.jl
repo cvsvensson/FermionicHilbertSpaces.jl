@@ -309,10 +309,6 @@ function _apply_symbolic_operator_to_state(op::AbstractSym, state::AbstractBasis
     return _apply_local_operators(term, state, space, precomp)
 end
 
-function _term_matrix_representation(op::NCMul{<:Any,<:SymbolicState}, H::AbstractHilbertSpace, t::EagerSparseRepr; kwargs...)
-    matrix_representation(only(op.factors), H, t; kwargs...)
-end
-
 function NonCommutativeProducts.mul_effect(a::SymbolicState, b::SymbolicState)
     if !_same_space_id(a.space, b.space)
         group_id(a) == group_id(b) && throw(ArgumentError("Cannot multiply symbolic states on different spaces of the same group, got `$(a.space)` and `$(b.space)`."))
