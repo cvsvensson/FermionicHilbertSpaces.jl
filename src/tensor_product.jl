@@ -1103,7 +1103,10 @@ function _gather_transform(m::AbstractMatrix, (Lout, Wout), (Lin, Win))
     return reshape(_gather_reduce(WW, (2, 4, 5), m, LL), dout, din)
 end
 _gather_transform(ψ::AbstractVector, (L, W)) = vec(_gather_reduce(_adapt_like(ψ, W), 2, ψ, _adapt_like(ψ, L)))
-_gather_partial_trace(m::AbstractMatrix, table) = _gather_transform(m, table, table)
+function _gather_partial_trace(m::AbstractMatrix, table)
+    table = map(A -> _adapt_like(m, A), table)
+    return _gather_transform(m, table, table)
+end
 # ψψ† gives A * A' with A[K, b] = sum(W[K, :, b] .* ψ[L[K, :, b]])
 function _gather_partial_trace(ψ::AbstractVector, table)
     A = reshape(_gather_transform(ψ, table), size(first(table), 1), :)
