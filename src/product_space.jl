@@ -1,6 +1,17 @@
 
 combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
 combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("The group `$group_id` requires a single space, got $spaces."))
+# Base's tuple `map` and `setindex`, and `LinearIndices`, are not inferred past 32 entries.
+_tuple_map(f::F, a::NTuple{N,Any}, b::NTuple{N,Any}) where {F,N} = ntuple(i -> f(a[i], b[i]), Val(N))
+function _linear_index(inds::NTuple{N,Int}, axes) where {N}
+    k, stride = 1, 1
+    for n in 1:N
+        k += (inds[n] - 1) * stride
+        stride *= length(axes[n])
+    end
+    return k
+end
+
 """
     ProductState(states::Tuple)
 
@@ -56,12 +67,12 @@ atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 # Iterates `cartinds` rather than `Iterators.product`, whose iteration allocates per state from 12 factors on
 basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(I -> _product_basisstate(I, H), H.cartinds))
 Base.@propagate_inbounds basisstate(n::Integer, H::ProductSpace) = _product_basisstate(H.cartinds[n], H)
-Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::ProductSpace) = ProductState(map(basisstate, Tuple(I), H.factors))
+Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::ProductSpace) = ProductState(_tuple_map(basisstate, Tuple(I), H.factors))
 function _state_index(state::ProductState, H::ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
-    inds = map(_state_index, state.states, H.factors)
+    inds = _tuple_map(_state_index, state.states, H.factors)
     all(>(0), inds) || return 0
-    H.lininds[CartesianIndex(inds)]
+    _linear_index(inds, H.lininds.indices)
 end
 # `lininds` is exact only when the product of the factor dimensions fits in an `Int`
 has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && prod(big ∘ dim, H.factors) <= typemax(Int)
@@ -287,6 +298,25 @@ end
     end
 end
 
+@testitem "Bose-Hubbard matrix on more than 32 sites" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: matrix_representation
+    @bosons b
+    space(n) = hilbert_space(b, 1:n, 2, NumberConservation(1))
+    nb(i) = b[i]' * b[i]
+    hamiltonian(n) = -sum(b[i]' * b[i+1] + hc for i in 1:n-1) + sum(nb(i) * (nb(i) - 1) for i in 1:n)
+    function allocations(n)
+        H, op = space(n), hamiltonian(n)
+        matrix_representation(op, H)
+        return @allocations matrix_representation(op, H)
+    end
+    @test allocations(33) < 2 * allocations(31)
+
+    n = 33
+    exact = sort([-2cos(k * pi / (n + 1)) for k in 1:n])
+    @test eigvals(Symmetric(Matrix(matrix_representation(hamiltonian(n), space(n))))) ≈ exact
+end
+
 @testitem "Fermion ordering" begin
     import FermionicHilbertSpaces: state_mapper
     @fermions f
@@ -364,7 +394,7 @@ physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state,
 function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::ProductSpace, precomps) where B
     if !ismissing(fast_path(space))
         T = typeof(fast_path(space))
-        internal_reps = map((s, f) -> _internal_rep(s, f, T), state.states, groups(space))
+        internal_reps = _tuple_map((s, f) -> _internal_rep(s, f, T), state.states, groups(space))
         newrep, amp = _apply_local_operators_fast(ops, internal_reps, space, precomps)
         return ProductState{B}(newrep), amp
     else
@@ -390,7 +420,7 @@ _apply_group_operators(amp, states, newstates, inds, k, ::Tuple{}, ::Tuple{}, ::
 function _apply_group_operators(amp::C, states, newstates, inds, k, ops::Tuple, spaces::Tuple, precomps::Tuple) where {C}
     n = inds[k]
     new_local_state, local_amp = _apply_local_operators(first(ops), states[n], first(spaces), first(precomps))
-    return _apply_group_operators(amp * convert(C, local_amp), states, Base.setindex(newstates, new_local_state, n),
+    return _apply_group_operators(amp * convert(C, local_amp), states, ntuple(i -> i == n ? new_local_state : newstates[i], Val(length(newstates))),
         inds, k + 1, Base.tail(ops), Base.tail(spaces), Base.tail(precomps))
 end
 
