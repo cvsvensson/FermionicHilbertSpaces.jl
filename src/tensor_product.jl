@@ -556,11 +556,11 @@ end
 
 Return `(U, dropped)`, the basis change `U` from `Hfrom` to `Hto` and the dropped states.
 
-`U` is the sparse `dim(Hto) × dim(Hfrom)` matrix with `U[i, j] = 1` if basis state `j` of
+`U` is the sparse `dim(Hto) × dim(Hfrom)` matrix with `U[i, j] = ±1` if basis state `j` of
 `Hfrom` is basis state `i` of `Hto`, and `dropped` are the indices of the states of `Hfrom`
 that do not exist in `Hto`. States of `Hto` that do not exist
 in `Hfrom` give zero rows. `Hfrom` and `Hto` must have the same atoms (see `match_same_atoms`),
-but their groups may come in different orders.
+in any order. The sign is that of reordering the occupied fermionic modes.
 """
 function basis_transformation(Hfrom, Hto)
     match_same_atoms(Hfrom, Hto)
@@ -570,18 +570,20 @@ end
 function _basis_transformation(Hfrom, Hto, mapper)
     Is = Int[]
     Js = Int[]
+    Vs = Int[]
     dropped = Int[]
-    _to_state(f)  = only(first(combine_states((f,), mapper)))
     for (j, f) in enumerate(basisstates(Hfrom))
-        i = state_index(_to_state(f), Hto)
+        state, w = map(only, combine_states((f,), mapper))
+        i = state_index(state, Hto)
         if iszero(i)
             push!(dropped, j)
         else
             push!(Is, i)
             push!(Js, j)
+            push!(Vs, w)
         end
     end
-    U = SparseArrays.sparse!(Is, Js, ones(Int, length(Is)), dim(Hto), dim(Hfrom))
+    U = SparseArrays.sparse!(Is, Js, Vs, dim(Hto), dim(Hfrom))
     return U, dropped
 end
 
@@ -590,7 +592,8 @@ end
     change_basis(m, Hfrom, Hto; projection=false, alg)
 
 Express `m` in the basis of `Hto`, where `Hfrom` and `Hto` have the same atoms but possibly
-different (or differently ordered) basis states. Unless `projection=true`, throws an
+different (or differently ordered) basis states. The atoms may also be ordered differently, as in
+`change_basis(m, hilbert_space(f, 1:3) => hilbert_space(f, [3, 1, 2]))`. Unless `projection=true`, throws an
 `ArgumentError` if `m` has nonzero elements involving states of `Hfrom` that are not in `Hto`.
 
 Either side can be an [`Axes`](@ref), one space per axis of `m`: `change_basis(m, H => Axes(Hout, Hin))`
@@ -764,21 +767,21 @@ function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, :
     barstates = basisstates(complement)
     (isempty(substates) || isempty(barstates)) && return nothing
     # (K, J, w) for each state of H formed with one complement state, where w includes the phase
-    # factor σ of the pair (this state, the first such state), so that the phase factor of a pair is σ1 * conj(σ2).
-    f0 = first(substates)
-    fullstates0, amps0 = combine_states((f0, first(barstates)), mapper)
+    # factor σ of the pair (this state, the reference state with this complement state), so that
+    # the phase factor of a pair is σ1 * conj(σ2).
+    fsubref = _phase_reference(Hsub)
+    fullstates0, amps0 = combine_states((first(substates), first(barstates)), mapper)
     hits = Tuple{Int,Int,eltype(amps0)}[]
     for fbar in barstates
         empty!(hits)
-        ref = nothing
+        ref = _phase_reference_state(fsubref, fbar, mapper)
         for f in substates
             K = state_index(f, Hsub)
             fullstates, amps = combine_states((f, fbar), mapper)
             for (fullf, w) in zip(fullstates, amps)
                 J = state_index(fullf, H)
                 iszero(J) && continue
-                isnothing(ref) && (ref = (fullf, f))
-                σ = phase_factors ? _partial_trace_state_sign(fullf, f, ref[1], ref[2], H, Hsub) : 1
+                σ = phase_factors ? _partial_trace_state_sign(fullf, f, ref, fsubref, H, Hsub) : 1
                 push!(hits, (K, J, w * σ))
             end
         end
@@ -792,6 +795,12 @@ end
 # The phase factor of the pair (f, fref) of states of `H`, whose parts on `Hsub` are fsub and fsubref.
 # For states with the same complement state, the phase factor of a pair (f1, f2) is
 # σ(f1) * conj(σ(f2)), where σ(f) is the phase factor of (f, fref) for any fref with that complement state.
+# fref need not be in `H`. Its part on `Hsub` is `_phase_reference(Hsub)`, which has no fermions: the
+# phase factors in `Hsub` then do not depend on whether its modes are ordered as in `H`.
+_phase_reference(Hsub) = first(basisstates(Hsub))
+_phase_reference(Hsub::AbstractSubspace) = _phase_reference(parent(Hsub))
+_phase_reference(Hsub::ProductSpace) = ProductState(map(_phase_reference, groups(Hsub)))
+_phase_reference_state(fsubref, fbar, mapper) = first(first(combine_states((fsubref, fbar), mapper)))
 _partial_trace_state_sign(f, fsub, fref, fsubref, H, Hsub) =
     partial_trace_phase_factor(fsub, fsubref, Hsub) * conj(partial_trace_phase_factor(f, fref, H))
 
@@ -807,18 +816,17 @@ end
 # For each basis state f of `H`: `((K, Kbar, w), ...)`, with one entry per split of f into
 # (fsub, fbar), where K and Kbar are the indices of fsub in `Hsub` and of fbar in `complement`,
 # and K is 0 if fsub is not in `Hsub` or fbar is not in `complement`. w includes the phase factor
-# σ of f with the first state split off the same complement state, so that the phase factor of a
-# pair of states is σ1 * conj(σ2).
+# σ of f with the reference state of its complement state, so that the phase factor of a pair of
+# states is σ1 * conj(σ2).
 function _full_partial_trace_splits(H, Hsub, complement, mapper, phase_factors)
-    refs = Vector{Union{Nothing,Tuple{eltype(basisstates(H)),eltype(basisstates(Hsub))}}}(nothing, dim(complement))
+    fsubref = _phase_reference(Hsub)
+    refs = map(fbar -> _phase_reference_state(fsubref, fbar, mapper), basisstates(complement))
     map(basisstates(H)) do f
         substates, amps = split_state(f, mapper)
         map(substates, amps) do (fsub, fbar), w
             Kbar = state_index(fbar, complement)
             iszero(Kbar) && return (0, Kbar, w)
-            ref = refs[Kbar]
-            isnothing(ref) && (ref = refs[Kbar] = (f, fsub))
-            σ = phase_factors ? _partial_trace_state_sign(f, fsub, ref[1], ref[2], H, Hsub) : 1
+            σ = phase_factors ? _partial_trace_state_sign(f, fsub, refs[Kbar], fsubref, H, Hsub) : 1
             (state_index(fsub, Hsub), Kbar, w * σ)
         end
     end

@@ -11,7 +11,8 @@ function phase_factor_f(focknbr1, focknbr2, subinds::NTuple)
     return pf ? -1 : 1
 end
 function phase_factor_f(f1::FockNumber, f2::FockNumber, N::Int)
-    _pair_parity(f1.f ⊻ f2.f, f2.f) ? -1 : 1
+    a, b = promote(f1.f, f2.f)
+    return _pair_parity(a ⊻ b, b) ? -1 : 1
 end
 
 function phase_factor_f(focknbr1, focknbr2, N::Int)
