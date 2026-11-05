@@ -19,46 +19,53 @@ Base.hash(s::ProductState, h::UInt) = hash(s.states, h)
 Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
 
 symbolic_group(h::AbstractAtomicHilbertSpace) = h
-# ProductSpaces consists of a list of groups (stored as `factors`) and their atoms, in group-major order.
-# `AS` and `AI` are `Vector{A}` and `Dict{Any,Int}`, except in the copies for GPU kernels, which drop them.
-struct ProductSpace{B, C, A, T, LI, CI, AS, AI} <: AbstractProductHilbertSpace{B}
+# ProductSpaces consists of a list of groups (stored as `factors`) and their atoms, in group-major order
+struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
     factors::C
-    atoms::AS
-    atom_index::AI # atomic_id => position in atoms. Only used for lookups, so not concretely typed
+    atoms::Vector{A}
+    atom_index::Dict{Any,Int} # atomic_id => position in atoms. Only used for lookups, so not concretely typed
     fast_path::T
     lininds::LI
     cartinds::CI
-    ProductSpace{B, C, A, T, LI, CI, AS, AI}(factors, atoms, atom_index, fast_path, lininds, cartinds) where {B, C, A, T, LI, CI, AS, AI} =
-        new{B, C, A, T, LI, CI, AS, AI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
+    function ProductSpace(factors::C) where {C}
+        length(factors) == 0 && throw(ArgumentError("A product space must have at least one factor."))
+        atoms = collect(Iterators.flatten(map(atomic_factors, factors)))
+        A = eltype(atoms)
+        B = ProductState{Tuple{map(statetype, factors)...}}
+        atom_index = Dict{Any,Int}(atomic_id(a) => i for (i, a) in enumerate(atoms))
+        length(atom_index) == length(atoms) || throw(ArgumentError("The atoms of a product space must be distinct, got duplicates in $(map(atomic_id, atoms))."))
+        fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
+        lininds = LinearIndices(map(dim, factors))
+        cartinds = CartesianIndices(map(dim, factors))
+        LI = typeof(lininds)
+        CI = typeof(cartinds)
+        new{B,C,A,typeof(fast_path),LI,CI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
+    end
 end
-function ProductSpace(factors::C) where {C}
-    length(factors) == 0 && throw(ArgumentError("A product space must have at least one factor."))
-    atoms = collect(Iterators.flatten(map(atomic_factors, factors)))
-    A = eltype(atoms)
-    B = ProductState{Tuple{map(statetype, factors)...}}
-    atom_index = Dict{Any, Int}(atomic_id(a) => i for (i, a) in enumerate(atoms))
-    length(atom_index) == length(atoms) || throw(ArgumentError("The atoms of a product space must be distinct, got duplicates in $(map(atomic_id, atoms))."))
-    fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
-    lininds = LinearIndices(map(dim, factors))
-    cartinds = CartesianIndices(map(dim, factors))
-    return ProductSpace{B, C, A, typeof(fast_path), typeof(lininds), typeof(cartinds), Vector{A}, Dict{Any, Int}}(factors, atoms, atom_index, fast_path, lininds, cartinds)
+# The copy of a `ProductSpace` that GPU kernels use, without the atoms
+struct DeviceProductSpace{B, C, T, LI, CI} <: AbstractHilbertSpace{B}
+    factors::C
+    fast_path::T
+    lininds::LI
+    cartinds::CI
 end
-fast_path(space::ProductSpace) = space.fast_path
+const _ProductSpace{B} = Union{ProductSpace{B}, DeviceProductSpace{B}}
+fast_path(space::_ProductSpace) = space.fast_path
 isconstrained(H::ProductSpace) = false
 Base.:(==)(H1::ProductSpace, H2::ProductSpace) = H1.factors == H2.factors && H1.atoms == H2.atoms
 Base.hash(H::ProductSpace, h::UInt) = hash(H.factors, hash(H.atoms, h))
 atomic_factors(H::ProductSpace) = H.atoms
 nbr_of_atoms(H::ProductSpace) = length(H.atoms)
 factors(H::ProductSpace) = H.factors
-groups(H::ProductSpace) = H.factors
+groups(H::_ProductSpace) = H.factors
 dim(H::ProductSpace) = prod(dim, groups(H); init=1)
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
 # Iterates `cartinds` rather than `Iterators.product`, whose iteration allocates per state from 12 factors on
 basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(I -> _product_basisstate(I, H), H.cartinds))
-Base.@propagate_inbounds basisstate(n::Integer, H::ProductSpace) = _product_basisstate(H.cartinds[n], H)
-Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::ProductSpace) = ProductState(map(basisstate, Tuple(I), H.factors))
-function _state_index(state::ProductState, H::ProductSpace)
+Base.@propagate_inbounds basisstate(n::Integer, H::_ProductSpace) = _product_basisstate(H.cartinds[n], H)
+Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::_ProductSpace) = ProductState(map(basisstate, Tuple(I), H.factors))
+function _state_index(state::ProductState, H::_ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
     inds = map(_state_index, state.states, H.factors)
     all(>(0), inds) || return 0
@@ -354,7 +361,7 @@ end
 internal_rep(state::ProductState, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))
 physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state, space)
 
-function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::ProductSpace, precomps) where B
+function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::_ProductSpace, precomps) where {B}
     if !ismissing(fast_path(space))
         T = typeof(fast_path(space))
         internal_reps = map((s, f) -> _internal_rep(s, f, T), state.states, groups(space))
@@ -370,10 +377,10 @@ function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::Abst
     newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
     return _internal_rep(newstate, space, T), amp
 end
-function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::Tuple{InternalRep{T},Vararg{InternalRep{T}}}, space::ProductSpace, precomps) where {C,T}
+function _apply_local_operators_fast(ops::ProductOperator{C}, internal_reps::Tuple{InternalRep{T}, Vararg{InternalRep{T}}}, space::_ProductSpace, precomps) where {C, T}
     return _apply_group_operators(one(C), internal_reps, internal_reps, ops.inds, 1, ops.ops, ops.spaces, precomps)
 end
-function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductState{B}, space::ProductSpace, precomps) where {C,B<:Tuple}
+function _apply_local_operators_slow(ops::ProductOperator{C}, state::ProductState{B}, space::_ProductSpace, precomps) where {C, B <: Tuple}
     newstates, amp = _apply_group_operators(one(C), state.states, state.states, ops.inds, 1, ops.ops, ops.spaces, precomps)
     return ProductState{B}(newstates), amp
 end

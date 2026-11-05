@@ -134,7 +134,7 @@ SpinSpace(sym::S) where {S<:SymbolicSpinBasis} = (sym.spin isa Nothing ? throw(A
 SpinSpace(label, J) = SpinSpace(SymbolicSpinBasis(label, nothing, J), J)
 basisstates(H::SpinSpace) = BasisStates(H, Iterators.map(n -> basisstate(n, H), 1:dim(H)))
 Base.@propagate_inbounds function basisstate(n::Integer, H::SpinSpace{T}) where {T}
-    @boundscheck 1 <= n <= dim(H) || Base.throw_boundserror(H, n)
+    @boundscheck 1 <= n <= dim(H) || throw(BoundsError(H, n))
     return SpinState{T}(n - 1 - H.spin)
 end
 dim(H::SpinSpace) = Int(twice(H.spin)) + 1
@@ -278,17 +278,24 @@ end
 
 end
 
-# `O` is `Symbol`, except in the copies for GPU kernels, which store the `Char` of `_spin_op_char`.
-struct SpinSym{B, O} <: AbstractSym
-    op::O
+struct SpinSym{B} <: AbstractSym
+    op::Symbol
     basis::B
     exponent::Int
-    SpinSym{B, O}(op, basis, exponent) where {B, O} = new{B, O}(op, basis, exponent)
+    function SpinSym{B}(op, basis::B, exponent) where {B}
+        #bypass any checks for internal use when we know the input is valid
+        return new{B}(op, basis, exponent)
+    end
 end
-# Bypasses the checks of `SpinSym(op, basis, exponent)`, for internal use when the input is valid
-SpinSym{B}(op, basis, exponent) where {B} = SpinSym{B, typeof(op)}(op, basis, exponent)
-_spin_op_char(op::Symbol) = op === :z ? 'z' : op === :+ ? '+' : '-'
-_spin_op_char(op::Char) = op
+# The copy of a `SpinSym` that GPU kernels use, with the operator as the change of `m` per power: 1 for `:+`, -1 for `:-`
+# and 0 for `:z`
+struct DeviceSpinSym
+    shift::Int
+    exponent::Int
+end
+const _SpinSym = Union{SpinSym, DeviceSpinSym}
+_spin_shift(op::SpinSym) = op.op === :+ ? 1 : op.op === :- ? -1 : 0
+_spin_shift(op::DeviceSpinSym) = op.shift
 function SpinSym(op, basis::B, exponent::Integer=1) where {B}
     exponent < 0 && throw(ArgumentError("The spin operator `exponent` must be nonnegative, got $exponent."))
     exponent == 0 && return 1 // 1
@@ -452,33 +459,17 @@ end
 
 Apply a single spin operator to a spin state. Returns (newstate, amplitude) where amplitude is 0 if the operation is not allowed, and a nonzero value otherwise.
 """
-function apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace, precomp)
+function apply_local_operator(op::_SpinSym, state::SpinState, space::SpinSpace, precomp)
     J = space.spin
     m = state.m
-    newstate = state
     T = Float64
-    amplitude = one(T)
-
-    # The constructors store only :z, :+ and :-
-    kind = _spin_op_char(op.op)
-    if kind == 'z'
-        m = newstate.m
-        # S_z |m⟩ = m |m⟩
-        amplitude = T(_fast_spin_z_exponent(m, op.exponent))
-        return (state, amplitude)
-    elseif kind == '+'
-        # S_+ |m⟩ = √(J(J+1) - m(m+1)) |m+1⟩
-        m + op.exponent > J && return (state, zero(T))
-        amplitude = T(_fast_spin_prefactor(J, m, +1, op.exponent))
-        newstate = SpinState(m + op.exponent)
-        return (newstate, amplitude)
-    else
-        m - op.exponent < -J && return (state, zero(T))
-        # S_- |m⟩ = √(J(J+1) - m(m-1)) |m-1⟩
-        amplitude = T(_fast_spin_prefactor(J, m, -1, op.exponent))
-        newstate = SpinState(m - op.exponent)
-        return (newstate, amplitude)
-    end
+    shift = _spin_shift(op)
+    # S_z |m⟩ = m |m⟩
+    iszero(shift) && return (state, T(_fast_spin_z_exponent(m, op.exponent)))
+    # S_± |m⟩ = √(J(J+1) - m(m±1)) |m±1⟩
+    newm = m + shift * op.exponent
+    abs(newm) > J && return (state, zero(T))
+    return (SpinState(newm), T(_fast_spin_prefactor(J, m, shift, op.exponent)))
 end
 
 function _fast_spin_z_exponent(m, exp::Int)

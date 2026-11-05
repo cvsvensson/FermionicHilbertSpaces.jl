@@ -1,18 +1,20 @@
 
-# `M` and `O` are `Vector{L}` and `OrderedDict{L,Int}`, except in the copies for GPU kernels, which keep only what
-# the kernels read.
-struct FermionicSpace{F, L, FG <: FermionicGroup, M, O} <: AbstractGroupedHilbertSpace{F}
-    modes::M
-    mode_ordering::O
+struct FermionicSpace{F,L,FG<:FermionicGroup} <: AbstractGroupedHilbertSpace{F}
+    modes::Vector{L}
+    mode_ordering::OrderedDict{L,Int}
     group::FG
-    FermionicSpace{F, L, FG, M, O}(modes, mode_ordering, group) where {F, L, FG, M, O} = new{F, L, FG, M, O}(modes, mode_ordering, group)
+    function FermionicSpace(_modes::AbstractVector{L}, group::FG, ::Type{F}=FockNumber{default_fock_representation(length(_modes))}) where {F,L<:FermionSym,FG<:FermionicGroup}
+        modes = map(_normalize_sym, _modes)
+        mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
+        length(mode_ordering) == length(modes) || throw(ArgumentError("The modes of a fermionic group must be distinct, got $modes."))
+        new{F,L,FG}(modes, mode_ordering, group)
+    end
 end
-function FermionicSpace(_modes::AbstractVector{L}, group::FG, ::Type{F} = FockNumber{default_fock_representation(length(_modes))}) where {F, L <: FermionSym, FG <: FermionicGroup}
-    modes = map(_normalize_sym, _modes)
-    mode_ordering = OrderedDict{L, Int}(m => i for (i, m) in enumerate(modes))
-    length(mode_ordering) == length(modes) || throw(ArgumentError("The modes of a fermionic group must be distinct, got $modes."))
-    return FermionicSpace{F, L, FG, Vector{L}, OrderedDict{L, Int}}(modes, mode_ordering, group)
+# The copy of a `FermionicSpace` that GPU kernels use: only its number of modes
+struct DeviceFermionicSpace{F} <: AbstractHilbertSpace{F}
+    nbr_of_modes::Int
 end
+const _FockSpace{F} = Union{FermionicSpace{F}, DeviceFermionicSpace{F}}
 function FermionicSpace(factors::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F,L<:FermionicSpace}
     all(c -> group_id(c) == group, factors) || throw(ArgumentError("All factors must belong to the group `$group`."))
     fermionsyms = collect(Iterators.flatten(Iterators.map(modes, factors)))
@@ -32,18 +34,18 @@ maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
 Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
 basisstates(H::FermionicSpace{FockNumber{I}}) where I = BasisStates(H, Iterators.map(FockNumber{I}, UnitRange{I}(0, dim(H) - 1)))
-Base.@propagate_inbounds function basisstate(ind::Integer, H::FermionicSpace{F}) where F
-    @boundscheck (ind >= 1 && iszero((ind - 1) >> nbr_of_modes(H))) || Base.throw_boundserror(H, ind)
+Base.@propagate_inbounds function basisstate(ind::Integer, H::_FockSpace{F}) where {F}
+    @boundscheck (ind >= 1 && iszero((ind - 1) >> nbr_of_modes(H))) || throw(BoundsError(H, ind))
     (F ∘ FockNumber)(ind - 1)
 end
-function _state_index(state::FockNumber, H::FermionicSpace{FockNumber{I}}) where I
+function _state_index(state::FockNumber, H::_FockSpace{FockNumber{I}}) where {I}
     T = fock_index_type(I)
     iszero(state.f >> nbr_of_modes(H)) ? T(state.f) + one(T) : zero(T)
 end
 # Below 63 modes, computing `dim(H)` does not throw. Its type is `fock_index_type(I)`, which is
 # a wide `UInt` or `BigInt` for wide `FockNumber`s; `root_keyed_index` builds an index only when it is an `Int`.
 has_arithmetic_state_index(H::FermionicSpace{<:FockNumber}) = nbr_of_modes(H) < 63
-function dim(H::FermionicSpace{FockNumber{I}}) where I
+function dim(H::_FockSpace{FockNumber{I}}) where {I}
     d = one(fock_index_type(I)) << nbr_of_modes(H)
     d > 0 || throw(OverflowError("$(nbr_of_modes(H)) modes have more states than fit in $(fock_index_type(I))"))
     return d
@@ -54,6 +56,7 @@ function atomic_factors(H::FermionicSpace)
 end
 atomic_factor(H::FermionicSpace, i) = length(H.modes) < 2 ? H : FermionicSpace([H.modes[i]], H.group, statetype(H))
 nbr_of_modes(H::FermionicSpace) = length(H.modes)
+nbr_of_modes(H::DeviceFermionicSpace) = H.nbr_of_modes
 nbr_of_modes(H::AbstractHilbertSpace) = nbr_of_modes(parent(H))
 group_id(H::FermionicSpace) = H.group
 # The atoms of a fermionic space are its single modes, named by the (normalized) mode itself,
@@ -165,7 +168,7 @@ function _precomputation_before_operator_application(op::FermionSym, space::Abst
 end
 
 
-function apply_local_operators(op::NCMul{<:Any,<:FermionSym}, state::FockNumber{I}, space::FermionicSpace, bitmasks; transpose) where I
+function apply_local_operators(op::NCMul{<:Any, <:FermionSym}, state::FockNumber{I}, space::_FockSpace, bitmasks; transpose) where {I}
     factors = op.factors
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1

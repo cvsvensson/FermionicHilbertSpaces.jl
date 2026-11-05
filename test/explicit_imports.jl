@@ -17,7 +17,7 @@
         :isscalar, :contraction_key, :mul_terms!!, :termpairs, :split_by_group, :atom_group,
         # Base internals.
         :promote_op, :promote_eltype, :setindex, :product, :isiterable,
-        :show_delim_array, :HasEltype, :broadcasted, :inferencebarrier, :mightalias, :throw_boundserror,
+        :show_delim_array, :HasEltype, :broadcasted, :inferencebarrier, :mightalias,
         # SparseArrays internals.
         :getcolptr, :nonzeroinds, :sparse!, :AbstractSparseVecOrMat,
         :HigherOrderFns, :is_supported_sparse_broadcast,
