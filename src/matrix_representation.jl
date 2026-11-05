@@ -654,6 +654,65 @@ function _checked_group_ids(op, space)
 end
 
 """
+    fragment(op, H, seeds)
+
+Return the subspace of `H` spanned by the basis states reachable from `seeds` through nonzero matrix elements of `op`,
+in the order of `H`. `seeds` takes the same forms as the states of [`constrain_space`](@ref).
+Single terms of `op` can leave the fragment even when their sum does not, so use `representation(op, F; projection=true)`.
+
+For the PXP chain, `fragment(pxp, hilbert_space(S, 1:N), ["↓"^N])` gives the states without neighbouring up spins.
+"""
+function fragment(op, H::AbstractHilbertSpace, seeds)
+    bases = _checked_group_ids(op, H)
+    terms = [length(bases) > 1 ? partition_product(term, bases, groups(H)) : term for term in NCterms(op)]
+    states = unique!(collect(_states_of(H, seeds)))
+    found = Set(states)
+    elements = Dict{Tuple{Int,eltype(states)},mat_eltype(op)}()
+    frontier = 1:length(states)
+    while !isempty(frontier)
+        empty!(elements)
+        for term in terms
+            _add_elements!(elements, term, view(states, frontier), H)
+        end
+        n = length(states)
+        for ((_, newstate), amp) in elements
+            if !iszero(amp) && newstate ∉ found && !iszero(state_index(newstate, H))
+                push!(found, newstate)
+                push!(states, newstate)
+            end
+        end
+        frontier = (n + 1):length(states)
+    end
+    return constrain_space(H, sort!(states; by=s -> state_index(s, H)))
+end
+# Amplitudes are summed over all terms before testing for zero, since terms can cancel.
+function _add_elements!(elements, term, states, H)
+    precomp = precomputation_before_operator_application(term, H)
+    for (k, state) in enumerate(states)
+        newstate, amp = _apply_local_operators(term, state, H, precomp)
+        iszero(amp) || (elements[(k, newstate)] = get(elements, (k, newstate), zero(amp)) + amp)
+    end
+end
+
+@testitem "fragment" begin
+    @spins S 1 // 2
+    N = 6
+    H = hilbert_space(S, 1:N)
+    P(k) = 1 // 2 - S[k][:z]
+    X(k) = 2S[k][:x]
+    pxp = X(1) * P(2) + sum(P(k - 1) * X(k) * P(k + 1) for k in 2:(N - 1)) + P(N - 1) * X(N)
+    no_neighbours(m) = !any(k -> m[k] > 0 && m[k + 1] > 0, 1:(N - 1))
+    blockade = constrain_space(H, FilterConstraint(m -> no_neighbours(collect(m)); maps = s -> s.m, spaces = factors(H)))
+    F = fragment(pxp, H, ["↓"^N])
+    @test basisstates(F) == basisstates(blockade)
+    @test representation(pxp, F; projection = true) == representation(pxp, blockade; projection = true)
+
+    # The terms cancel on |↓↓⟩, though each flips spin 1.
+    H2 = hilbert_space(S, 1:2)
+    @test basisstates(fragment(S[1][:x] * (1 // 2 + S[2][:z]), H2, ["↓↓", "↓↓"])) == basisstates(constrain_space(H2, ["↓↓"]))
+end
+
+"""
     expectation(op, state, H)
 
 Return the expectation value of the operator `op` in `state` on the space `H`. A vector `ψ` gives `ψ' * M * ψ` and a
