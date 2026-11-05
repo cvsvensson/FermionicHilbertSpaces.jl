@@ -2,8 +2,10 @@
 const _SpaceGroup = Union{AbstractHilbertSpace,Tuple{Vararg{AbstractHilbertSpace}},AbstractVector{<:AbstractHilbertSpace}}
 const _SpaceMapping = Pair{<:_SpaceGroup,<:_SpaceGroup}
 
+_check_reshape_alg(alg) = alg isa GenericAlg || alg isa GatherAlg || throw(ArgumentError("`reshape` supports `alg = GenericAlg()` or `GatherAlg()`, got $alg."))
+
 """
-    reshape(t, mappings...; repeat=false, projection=false)
+    reshape(t, mappings...; repeat=false, projection=false, alg=GenericAlg())
 
 Reshape the array `t` by splitting or combining its indices according to
 Hilbert-space mappings. The mappings are applied left to right, each one
@@ -74,14 +76,19 @@ entries are fine, so e.g. combining unconstrained spaces into a
 parity-conserving space works for parity-preserving operators. With
 `projection=true`, the components on missing states are silently dropped.
 
+With `alg = GatherAlg()`, `t` is reshaped by array indexing and broadcasting only, so
+that GPU arrays work.
+
 # Precomputed form
 
-    reshape(mappings...; repeat=false, projection=false)
+    reshape(mappings...; repeat=false, projection=false, alg=GenericAlg())
 
 returns a callable `ReshapeMap` that precomputes the transitions, and can be
-applied as `op(t)` or in place as `op(out, t)`.
+applied as `op(t)` or in place as `op(out, t)`. With `alg = GatherAlg()`, it stores
+gather tables instead; `Adapt.adapt(CuArray, op)` moves them to the device.
 """
-function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false)
+function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = GenericAlg())
+    _check_reshape_alg(alg)
     mappings = (mapping, rest...)
     mappings = if repeat
         _repeat_mapping(t, mappings)
@@ -95,6 +102,7 @@ function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapp
     mappers = map(_mapper, Hsins, Hsouts)
     blocks = map(_transitions, Hsins, Hsouts, mappers)
 
+    alg isa GatherAlg && (blocks = map(_gather_block, blocks, Hsins, Hsouts))
     return _reshape(t, blocks, Hsouts; projection)
 end
 
@@ -143,9 +151,10 @@ function (op::ReshapeMap)(out::AbstractArray, t::AbstractArray)
     return _reshape!(out, t, blocks, Hsouts; op.projection)
 end
 
-function Base.reshape(mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false)
+function Base.reshape(mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = GenericAlg())
+    _check_reshape_alg(alg)
     mappings_t = (mapping, rest...)
-    precomputed = Tuple(map(_precompute_mapping, mappings_t))
+    precomputed = Tuple(map(m -> _precompute_mapping(m, alg), mappings_t))
     return ReshapeMap(mappings_t, repeat, projection, precomputed)
 end
 
@@ -159,11 +168,11 @@ function _resolve_mappings(t::AbstractArray, mappings; repeat=false)
     end
 end
 
-function _precompute_mapping(mapping::Pair)
+function _precompute_mapping(mapping::Pair, alg)
     Hsin, Hsout = _mapping_spaces(mapping)
     mapper = _mapper(Hsin, Hsout)
     blocks = _transitions(Hsin, Hsout, mapper)
-    (; mapping, Hsin, Hsout, blocks)
+    return (; mapping, Hsin, Hsout, blocks = alg isa GatherAlg ? _gather_block(blocks, Hsin, Hsout) : blocks)
 end
 
 _spaces(H::AbstractHilbertSpace) = (H,)
@@ -328,32 +337,36 @@ end
 _linear_offset(I, strides) = sum(map((i, s) -> (i - 1) * s, I, strides); init=0)
 
 _group_length(::AbstractVector{NTuple{N,Int}}) where {N} = N
+_group_length(b::NamedTuple) = _group_length(b.dropped)
+_dropped_indices(b, lin) = Int[lin[Iin...] for Iin in b.dropped]
 
 # Throw if a nonzero entry of `t` sits on an input index whose transitions were partly
 # dropped. Only the slices along dropped indices are visited.
-function _check_dropped(t::AbstractArray, blocks)
+function _check_dropped(t::AbstractArray, blocks, has_support_on = _has_support_on)
     all(b -> isempty(b.dropped), blocks) && return nothing
     sz = size(t)
     offset = 0
     for b in blocks
-        n = _group_length(b.dropped)
+        n = _group_length(b)
         if !isempty(b.dropped)
             # View t as (indices before, this group, indices after)
             gdims = sz[offset+1:offset+n]
             t3 = Base.reshape(t, prod(sz[1:offset]; init=1), prod(gdims), prod(sz[offset+n+1:end]; init=1))
-            _check_dropped_group(t3, LinearIndices(gdims), b.dropped)
+            _check_dropped_group(t3, _dropped_indices(b, LinearIndices(gdims)), has_support_on)
         end
         offset += n
     end
     return nothing
 end
-function _check_dropped_group(t3, lin, dropped)
-    for Iin in dropped
-        any(!iszero, view(t3, :, lin[Iin...], :)) && throw(ArgumentError(
+function _check_dropped_group(t3, js, has_support_on)
+    has_support_on(t3, 2, js) && throw(
+        ArgumentError(
             "Reshape would lose amplitude: the array has nonzero entries on basis states \
              that are missing in the output spaces. Pass `projection=true` to drop them \
-             silently."))
-    end
+             silently."
+        )
+    )
+    return nothing
 end
 
 function _reshape(t::AbstractArray, blocks, Hsouts; projection = false)
@@ -362,9 +375,14 @@ function _reshape(t::AbstractArray, blocks, Hsouts; projection = false)
     return _reshape_kernel!(tout, t, blocks, Hsouts)
 end
 
-function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts; projection = false)
+function _check_reshape_out(tout, Hsouts)
     Hsout_all = _flatten(Hsouts)
     size(tout) == map(dim, Hsout_all) || throw(DimensionMismatch("The output array has size $(size(tout)), but expected $(map(dim, Hsout_all))"))
+    return nothing
+end
+
+function _reshape!(tout::AbstractArray, t::AbstractArray, blocks, Hsouts; projection = false)
+    _check_reshape_out(tout, Hsouts)
     projection || _check_dropped(t, blocks)
 
     fill!(tout, zero(eltype(tout)))
@@ -373,7 +391,7 @@ end
 
 function _reshape_kernel!(tout, t, blocks, Hsouts)
     if _has_linear_indices(t) && _has_linear_indices(tout)
-        stridesin = _block_strides(size(t), map(b -> _group_length(b.dropped), blocks))
+        stridesin = _block_strides(size(t), map(_group_length, blocks))
         stridesout = _block_strides(size(tout), map(length, Hsouts))
         for entries in Base.product(map(b -> b.linear, blocks)...)
             tval = t[1+sum(map((e, s) -> e[1] * s, entries, stridesin))]
@@ -392,6 +410,34 @@ function _reshape_kernel!(tout, t, blocks, Hsouts)
         end
     end
     return tout
+end
+
+# The gather table (see `_gather_table`) of a block, with the linear indices of its dropped
+# input states within the group, and the number of input indices of the group.
+function _gather_block(b, Hsin, Hsout)
+    L, W = _gather_table(fieldtype(eltype(b.linear), 3), ((i + 1, (o + 1, 1), w) for (i, o, w) in b.linear), prod(dim, Hsout), 1)
+    return (; L, W, dropped = _dropped_indices(b, LinearIndices(map(dim, Hsin))), n = length(Hsin))
+end
+const _GatherBlock = NamedTuple{(:L, :W, :dropped, :n)}
+_group_length(b::_GatherBlock) = b.n
+_dropped_indices(b::_GatherBlock, lin) = b.dropped
+_reshape(t::AbstractArray, blocks::Tuple{Vararg{_GatherBlock}}, Hsouts; projection = false) = _gather_reshape(t, blocks, Hsouts; projection)
+function _reshape!(tout::AbstractArray, t::AbstractArray, blocks::Tuple{Vararg{_GatherBlock}}, Hsouts; projection = false)
+    _check_reshape_out(tout, Hsouts)
+    return copyto!(tout, _gather_reshape(t, blocks, Hsouts; projection))
+end
+
+# Block k gathers along broadcast dimensions 2k-1 (its output index) and 2k (the transitions
+# into that output index), and its weights multiply those of the other blocks.
+function _gather_reshape(t, blocks, Hsouts; projection = false)
+    Base.has_offset_axes(t) && throw(ArgumentError("GatherAlg requires an array with one-based axes."))
+    projection || _check_dropped(t, blocks, _copied_support_on)
+    n = length(blocks)
+    stridesin = _block_strides(size(t), map(_group_length, blocks))
+    placed(A, k) = reshape(_adapt_like(t, A), ntuple(d -> d == 2k - 1 ? size(A, 1) : d == 2k ? size(A, 2) : 1, 2n))
+    LL = broadcast(+, 1, ntuple(k -> placed((blocks[k].L .- 1) .* stridesin[k], k), n)...)
+    WW = broadcast(*, ntuple(k -> placed(blocks[k].W, k), n)...)
+    return reshape(_gather_reduce(WW, ntuple(k -> 2k, n), t, LL), map(dim, _flatten(Hsouts)))
 end
 
 _has_linear_indices(a) = IndexStyle(a) isa IndexLinear && !Base.has_offset_axes(a)
@@ -715,6 +761,30 @@ end
     @test_throws ArgumentError reshape((H1, H2) => He)(similar(ρ), G)
     @test reshape(G, (H1, H2) => He; projection = true) ≈
         reshape((H1, H2) => He; projection = true)(G)
+end
+
+@testitem "Reshape by gather" begin
+    import FermionicHilbertSpaces: GatherAlg
+    alg = GatherAlg()
+    @fermions f
+    @spins s
+    H1, H2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
+    Hs = hilbert_space(s[1], 1 // 2)
+    Hprod = tensor_product(H1, Hs)
+    for (H, Hparts) in ((hilbert_space(f, 1:4), (H1, H2)), (hilbert_space(f, 1:4, NumberConservation(2)), (H2, H1)), (Hprod, (Hs, H1)))
+        v = rand(ComplexF64, dim(H))
+        m = rand(ComplexF64, dim(H), dim(H))
+        @test reshape(v, H => Hparts; alg) == reshape(v, H => Hparts)
+        @test reshape(m, H => Hparts; alg) == reshape(m, H => Hparts)
+        @test reshape(m, H => Hparts, H => reverse(Hparts); alg) == reshape(m, H => Hparts, H => reverse(Hparts))
+        T = rand(ComplexF64, map(dim, Hparts)..., map(dim, Hparts)...)
+        @test reshape(T, Hparts => H, Hparts => H; alg, projection = true) == reshape(T, Hparts => H, Hparts => H; projection = true)
+        Tv = rand(ComplexF64, map(dim, Hparts)...)
+        @test reshape(Tv, Hparts => reverse(Hparts); alg) == reshape(Tv, Hparts => reverse(Hparts))
+    end
+    H = hilbert_space(f, 1:4, NumberConservation(2))
+    @test_throws ArgumentError reshape(rand(dim(H1), dim(H2)), (H1, H2) => H; alg)
+    @test_throws ArgumentError reshape(rand(dim(H)), H => (H1, H2); alg = :dense)
 end
 
 @testitem "Reshape missing states: truncated bosons" begin

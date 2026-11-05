@@ -102,6 +102,8 @@ combine_states(states, H::FermionicSpace{F}) where F = (catenate_fock_states(sta
 
 state_mapper(H::FermionicSpace, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
 state_mapper(H::FermionicSpace, Hs) = _fock_mapper(H, Hs)
+_is_full_fock_kron(H, mapper, Hs) = false
+_is_full_fock_kron(H::FermionicSpace{<:FockNumber}, mapper::FockMapper, Hs) = mapper.isfullpartition && all(Hk -> Hk isa FermionicSpace{<:FockNumber}, Hs)
 function _fock_mapper(H, Hs)
     fermionpositions = [[atom_position(atom, H) for atom in _fock_atoms(Hsub)] for Hsub in Hs]
     all(x -> x > 0, Iterators.flatten(fermionpositions)) || throw(ArgumentError("All subspaces in `Hs` must be part of `H`, got positions $fermionpositions."))
@@ -633,3 +635,5 @@ It is `i^k` for fermions, where `k` is the number of modes in which `f1` and `f2
 """
 partial_transpose_phase_factor(f1, f2, H::FermionicSpace) = _ipow(_nbr_differing_modes(f1, f2, nbr_of_modes(H)))
 _ipow(k::Integer) = (1 + 0im, 0 + 1im, -1 + 0im, 0 - 1im)[mod(k, 4)+1]
+_is_full_fock_partial_transpose(H, Hout, mapper) = false
+_is_full_fock_partial_transpose(H::FermionicSpace{<:FockNumber}, Hout, mapper::FockMapper) = Hout == H && mapper.isfullpartition
