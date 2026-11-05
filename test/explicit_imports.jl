@@ -1,7 +1,7 @@
 @testitem "ExplicitImports" begin
     using ExplicitImports
     # Load every weak dependency so that all package extensions are analyzed.
-    using Combinatorics, OhMyThreads, PartitionedArrays
+    using Adapt, Combinatorics, GPUArrays, KernelAbstractions, OhMyThreads, PartitionedArrays
     # Package extensions import internals of FermionicHilbertSpaces to add methods to them.
     internal_names = Tuple(filter(n -> !Base.ispublic(FermionicHilbertSpaces, n),
         names(FermionicHilbertSpaces; all=true)))
@@ -10,6 +10,8 @@
         :NCterms,
         # OhMyThreads scheduler internals.
         :Consecutive, :chunking_args,
+        # GPUArrays does not declare its sparse types `public`.
+        :AbstractGPUSparseMatrixCSC, :AbstractGPUSparseMatrixCSR,
     )
     nonpublic_qualified = (
         # NonCommutativeProducts interface functions that this package extends or calls.
@@ -23,6 +25,8 @@
         :HigherOrderFns, :is_supported_sparse_broadcast,
         # TupleTools and BitPermutations do not declare their API `public`.
         :flatten, :permute, :sort, :pext, :pdep,
+        # Nor do GPUArrays (its sparse interface) and Adapt.
+        :dense_array_type, :sparse_array_type, :csc_type, :csr_type, Symbol("@adapt_structure"),
     )
     test_explicit_imports(FermionicHilbertSpaces;
         all_explicit_imports_are_public=(; ignore=nonpublic_imports),

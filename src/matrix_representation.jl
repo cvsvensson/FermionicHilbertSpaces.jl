@@ -549,7 +549,8 @@ Return a concrete representation of `op_or_state` in Hilbert space `space`. This
   an array type such as `Matrix` or `SparseMatrixCSC`, with an optional element type as in `Matrix{ComplexF64}`,
   or a number type such as `Float64` for a sparse result of that element type. `:lazy` gives a matrix-free
   `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`, and `:dense` and `:sparse` also work.
-  A number `c` gives `c` times the identity.
+  A number `c` gives `c` times the identity. With a GPU package loaded, a GPU array type such as `CuArray` or
+  `CuSparseMatrixCSR{Float32}` builds the matrix on the GPU.
 - For `AbstractBasisState` and strings such as `"10"`, returns a one-hot sparse column vector.
 - For `SymbolicState` kets and bras, and sums of them, returns the corresponding column or row vector. Their array types
   are `Vector` and `SparseVector`. `Array` gives a dense result for both states and operators.
