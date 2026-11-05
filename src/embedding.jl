@@ -1,9 +1,9 @@
-function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, alg = GenericAlg(), kwargs...)
+function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, alg = ScalarIndexingAlg(), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
     size_compatible(m, Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(Hsub)), got $(size(m))."))
     !isnothing(complement) && m isa AbstractVector && throw(ArgumentError("A state vector can only be embedded into a space with the same modes, such as from a sector into its parent space. A state on a subsystem does not fix the state of the rest; use `tensor_product` of states or `embed` a density matrix instead."))
-    alg isa GatherAlg && return _embed_by_gather(m, Hsub, H, complement; projection, kwargs...)
-    alg isa GenericAlg || throw(ArgumentError("`embed` supports `alg = GenericAlg()` or `GatherAlg()`, got $alg."))
+    alg isa NoScalarIndexingAlg && return _embed_by_gather(m, Hsub, H, complement; projection, kwargs...)
+    alg isa ScalarIndexingAlg || throw(ArgumentError("`embed` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
     if isnothing(complement)
         m isa AbstractVector && return change_basis(m, Hsub, H; projection, kwargs...)
         if !(projection || m isa UniformScaling)
@@ -28,7 +28,7 @@ if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of 
 `Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not
 in `Hsub` get zero.
 
-With `alg = GatherAlg()`, `m` can be a GPU array (see [`GatherAlg`](@ref)).
+With `alg = NoScalarIndexingAlg()`, `m` can be a GPU array (see [`NoScalarIndexingAlg`](@ref)).
 
 If `m` is a vector, `Hsub` and `H` must have the same modes, as for a sector `Hsub` of `H`. The
 result is `m` placed at the indices [`indices`](@ref)`(Hsub, H)` and zero elsewhere.
@@ -61,7 +61,7 @@ function _embed_by_gather(m::AbstractVecOrMat, Hsub, H, complement; projection =
     projection || _check_embed_into(m, present)
     return _gather_embed(m, P, B, S)
 end
-_embed_by_gather(::UniformScaling, args...; kwargs...) = throw(ArgumentError("`UniformScaling` is not supported with `alg = GatherAlg()`."))
+_embed_by_gather(::UniformScaling, args...; kwargs...) = throw(ArgumentError("`UniformScaling` is not supported with `alg = NoScalarIndexingAlg()`."))
 
 # `P[J, r]`, `B[J, r]` and `S[J, r]` are the indices in `Hsub` and the complement, and the weight,
 # of the r-th split of the J-th state of `H`, padded with index 1 and weight 0.
@@ -115,6 +115,7 @@ end
 
 # The map is the compression onto `H` and checks nothing, so `projection` has no effect.
 function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(Hsub, H, complement), projection = false, kwargs...)
+    alg isa AbstractPartialTraceAlg || throw(ArgumentError("The map `embed(Hsub => H)` supports `alg = SubsystemPartialTraceAlg()` or `FullPartialTraceAlg()`, got $alg."))
     map = if isnothing(complement)
         basis_transformation_map(Hsub, H; projection = true, kwargs...)
     else
@@ -222,8 +223,8 @@ embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwar
 end
 
 @testitem "Embed by gather" begin
-    import FermionicHilbertSpaces: GatherAlg
-    alg = GatherAlg()
+    import FermionicHilbertSpaces: NoScalarIndexingAlg
+    alg = NoScalarIndexingAlg()
     @fermions f
     @spins s
     @bosons b
@@ -252,6 +253,8 @@ end
     @test_throws ArgumentError embed(rand(4, 4), Hf => Hc; alg)
     @test_throws ArgumentError embed(rand(4), Hf => Hc; alg)
     @test_throws ArgumentError embed(rand(4, 4), Hf => hilbert_space(f, 1:3); alg = :other)
+    @test_throws ArgumentError embed(Hf => hilbert_space(f, 1:3); alg)
+    @test_throws ArgumentError embed(sector(-1, Hpar) => Hpar; alg)
 end
 
 @testitem "Embedding a sector vector" begin
