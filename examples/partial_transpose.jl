@@ -37,7 +37,7 @@ end;
 # The bosonic negativity is zero throughout: viewed as qubits, the two ends are not entangled.
 @assert end_negativity(8, 0.0) ≈ log(2) / 2
 μs = range(0, 4, length = 41)
-plot(xlabel = "μ / t", ylabel = "negativity between the end sites", frame = :box)
+plot(xlabel = "μ/t", ylabel = "negativity between the end sites", frame = :box)
 for N in (4, 8, 12)
     plot!(μs, [end_negativity(N, μ) for μ in μs]; label = "fermionic, N = $N", lw = 2)
 end
