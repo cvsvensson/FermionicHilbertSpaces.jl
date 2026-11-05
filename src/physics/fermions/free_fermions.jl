@@ -11,13 +11,13 @@ module FreeFermions
     using ..FermionicHilbertSpaces: FermionicHilbertSpaces, AbstractFockState, AbstractHilbertSpace,
         EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, MajoranaSym, NoChunking, SymbolicFermionBasis,
         SymbolicMajoranaBasis,
-    _FermionModeSpace, _canonicalize_repr, _matrix_format, _repr_eltype, _zero_matrix, exchange_phase, finalize!,
+    _FermionModeSpace, _canonicalize_repr, _matrix_format, _repr_eltype, _xlogx, _zero_matrix, exchange_phase, finalize!,
         matrix_accumulator, mode_position, push_inds_amps!, state_index
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,
         _state_label_atomic, apply_local_operators, basisstate, basisstates, dim, von_neumann_entropy, expectation,
         hilbert_space, matrix_representation, mode_ordering, modes, partial_trace, representation
     using LinearAlgebra: LinearAlgebra, Diagonal, Eigen, Hermitian, Symmetric, UniformScaling, I,
-        det, eigen, issymmetric, normalize, svd
+    det, eigen, eigvals, issymmetric, normalize, svd
     using NonCommutativeProducts: NonCommutativeProducts, NCAdd, NCMul, NCterms
     using OrderedCollections: OrderedDict
 
@@ -40,11 +40,10 @@ end
         _repr isa Union{EagerSparseRepr, EagerDenseRepr} || throw(ArgumentError("Only the :sparse and :dense representations are supported on $(typeof(H)). Got $repr."))
         return _repr
     end
-    # The matrix of a sum of two-fermion terms, where `entry(term, H)` gives the row, column and value of the one entry of each term
-    function _quadratic_matrix(entry, op, H, repr)
+# The matrix of a sum of two-fermion terms, where `entries(term, H)` gives a tuple of the (row, column, value) entries of each term
+function _quadratic_matrix(entries, op, H, repr)
         accumulator = matrix_accumulator(op, H, _eager_repr(repr, H))
-        for term in NCterms(op)
-            outind, inind, amp = entry(term, H)
+    for term in NCterms(op), (outind, inind, amp) in entries(term, H)
             (iszero(outind) || iszero(inind)) && throw(ArgumentError("The operator `$term` contains a factor that is not part of the fermionic space `$H`."))
             push_inds_amps!(accumulator, outind, inind, amp)
         end
@@ -58,6 +57,9 @@ end
     # Whether every term of `op` is a product of two `FermionSym`s, with one creation and one annihilation
     # operator if `number_conserving`
     _is_quadratic_fermion_operator(op, number_conserving) = _is_quadratic_operator(op, (a, b) -> a isa FermionSym && b isa FermionSym && (!number_conserving || a.creation != b.creation))
+
+_check_size(G, H) = size(G) == (dim(H), dim(H)) ||
+    throw(DimensionMismatch("The correlation matrix has size $(size(G)), but the space has dimension $(dim(H))."))
 
     function _mode_positions(H, Hsub)
         positions = [mode_position(m, H) for m in modes(Hsub)]

@@ -89,23 +89,9 @@ function _boson_normal_order(a::BosonSym, c::BosonSym)
     end
     return AddTerms(terms)
 end
-function NonCommutativeProducts.mul_effect(a::BosonSym, b::BosonSym)
-    if symbolic_group(a) == symbolic_group(b)
-        if sign(a.exp) == sign(b.exp)
-            return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
-        else
-            if a.exp < 0 && b.exp > 0
-                return _boson_normal_order(a, b)
-            else
-                return nothing
-            end
-        end
-    end
-    if _group_isless(b, a)
-        return Swap(1)
-    else
-        return nothing
-    end
+function local_mul_effect(a::BosonSym, b::BosonSym)
+    sign(a.exp) == sign(b.exp) && return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
+    return a.exp < 0 && b.exp > 0 ? _boson_normal_order(a, b) : nothing
 end
 
 @nc BosonSym
@@ -183,14 +169,14 @@ Base.hash(x::BosonicState, h::UInt) = hash(x.n, h)
 internal_rep(state::BosonicState, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.n)
 physical_rep(state::T, ::Type{BosonicState}) where T<:Integer = BosonicState(Int(state))
 
-struct TruncatedBosonicHilbertSpace{L,B} <: AbstractAtomicHilbertSpace{BosonicState}
-    sym::BosonSym{L,B}
+struct TruncatedBosonicHilbertSpace{L, B, T} <: AbstractAtomicHilbertSpace{BosonicState}
+    sym::BosonSym{L, B, T}
     dimension::Int
-    function TruncatedBosonicHilbertSpace(sym::BosonSym{L,B}, dimension::Integer) where {L,B}
+    function TruncatedBosonicHilbertSpace(sym::BosonSym{L, B, T}, dimension::Integer) where {L, B, T}
         if dimension < 1
             throw(ArgumentError("Bosonic Hilbert space dimension must be positive, got $dimension"))
         end
-        new{L,B}(sym, Int(dimension))
+        return new{L, B, T}(sym, Int(dimension))
     end
 end
 Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)
