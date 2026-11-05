@@ -704,7 +704,7 @@ struct GatherAlg <: AbstractPartialTraceAlg end
 """
     GenericAlg()
 
-The standard element-wise code path of an operation, and the default `alg` of [`embed`](@ref).
+The standard element-wise code path of an operation, and the default `alg` of [`embed`](@ref) and `reshape`.
 """
 struct GenericAlg end
 
@@ -963,14 +963,14 @@ _gather_reduce(W, dims, x, inds) = sum(_masked_mul.(W, x[inds]); dims)
 _masked_mul(w, x) = iszero(w) ? zero(w * x) : w * x
 
 # `L[K, r, b]` and `W[K, r, b]` are the index J and weight w of the r-th entry `(J, (K, b), w)` of
-# `entries`, padded with index 1 and weight 0.
-function _gather_table(entries, dK, nb)
+# `entries`, padded with index 1 and weight 0. `W` has eltype `T`.
+function _gather_table(T, entries, dK, nb)
     counts = zeros(Int, dK, nb)
     for (_, Kb, _) in entries
         counts[Kb...] += 1
     end
     L = ones(Int, dK, maximum(counts; init = 0), nb)
-    W = zeros(mapreduce(typeof ∘ last, promote_type, entries; init = Bool), size(L))
+    W = zeros(T, size(L))
     fill!(counts, 0)
     for (J, (K, b), w) in entries
         r = counts[K, b] += 1
@@ -980,7 +980,7 @@ function _gather_table(entries, dK, nb)
     return L, W
 end
 # The r-th state of `H` that splits into the K-th state of `Hsub` and the b-th complement state
-_partial_trace_gather_table(splits, dsub, nb) = _gather_table(((J, (K, b), s) for (J, ss) in pairs(splits) for (K, b, s) in ss if !iszero(K)), dsub, nb)
+_partial_trace_gather_table(splits, dsub, nb) = _gather_table(fieldtype(eltype(eltype(splits)), 3), ((J, (K, b), s) for (J, ss) in pairs(splits) for (K, b, s) in ss if !iszero(K)), dsub, nb)
 
 _adapt_like(x, A) = copyto!(similar(x, eltype(A), size(A)), A)
 
