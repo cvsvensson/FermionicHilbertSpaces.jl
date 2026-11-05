@@ -804,8 +804,7 @@ struct GenericAlg end
 """
     default_alg(op, x, args...)
 
-The default `alg` keyword of operation `op` on input `x`, with `args` passed on to `default_partial_trace_alg` for `partial_trace`.
-Package extensions add methods for GPU arrays.
+The default `alg` keyword of `op` on input `x`; package extensions add methods for GPU arrays.
 """
 default_alg(op, x, args...) = GenericAlg()
 default_alg(::typeof(partial_trace), x, args...) = default_partial_trace_alg(x, args...)

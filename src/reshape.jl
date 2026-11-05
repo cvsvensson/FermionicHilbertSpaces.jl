@@ -3,7 +3,7 @@ const _SpaceGroup = Union{AbstractHilbertSpace,Tuple{Vararg{AbstractHilbertSpace
 const _SpaceMapping = Pair{<:_SpaceGroup,<:_SpaceGroup}
 
 """
-    reshape(t, mappings...; repeat=false, projection=false, alg=GenericAlg())
+    reshape(t, mappings...; repeat=false, projection=false, alg)
 
 Reshape the array `t` by splitting or combining its indices according to
 Hilbert-space mappings. The mappings are applied left to right, each one
@@ -74,7 +74,7 @@ entries are fine, so e.g. combining unconstrained spaces into a
 parity-conserving space works for parity-preserving operators. With
 `projection=true`, the components on missing states are silently dropped.
 
-With `alg = GatherAlg()`, `t` is reshaped by array indexing and broadcasting only, so
+`GatherAlg`, the default for GPU arrays, reshapes by array indexing and broadcasting only, so
 that GPU arrays work.
 
 # Precomputed form

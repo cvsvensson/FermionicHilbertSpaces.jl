@@ -71,7 +71,7 @@ _check_partial_transpose_alg(alg) = alg isa GenericAlg || alg isa FactorizedPart
     throw(ArgumentError("`partial_transpose` supports `alg = GenericAlg()` or `FactorizedPartialTransposeAlg()`, got $alg."))
 
 """
-    partial_transpose!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false, alg=GenericAlg())
+    partial_transpose!(mout, m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false, alg)
     partial_transpose!(mout, m, H => Hout, Hsub; kwargs...)
 
 In-place partial transpose of `m` (operator on `H`) on the subsystem `Hsub`, written to `mout`

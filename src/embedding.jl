@@ -28,7 +28,7 @@ if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of 
 `Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not
 in `Hsub` get zero.
 
-With `alg = GatherAlg()`, `m` can be a GPU array (see [`GatherAlg`](@ref)).
+`GatherAlg` is the default for GPU arrays (see [`GatherAlg`](@ref)).
 
 If `m` is a vector, `Hsub` and `H` must have the same modes, as for a sector `Hsub` of `H`. The
 result is `m` placed at the indices [`indices`](@ref)`(Hsub, H)` and zero elsewhere.
