@@ -1,18 +1,18 @@
-function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, alg = GenericAlg(), kwargs...)
+function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, alg = ScalarIndexingAlg(), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
     size_compatible(m, Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(Hsub)), got $(size(m))."))
     !isnothing(complement) && m isa AbstractVector && throw(ArgumentError("A state vector can only be embedded into a space with the same modes, such as from a sector into its parent space. A state on a subsystem does not fix the state of the rest; use `tensor_product` of states or `embed` a density matrix instead."))
-    alg isa GatherAlg && return _embed_by_gather(m, Hsub, H, complement; projection, kwargs...)
-    alg isa GenericAlg || throw(ArgumentError("`embed` supports `alg = GenericAlg()` or `GatherAlg()`, got $alg."))
+    alg isa Union{ScalarIndexingAlg, NoScalarIndexingAlg} || throw(ArgumentError("`embed` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
     if isnothing(complement)
-        m isa AbstractVector && return change_basis(m, Hsub, H; projection, kwargs...)
+        m isa AbstractVector && return change_basis(m, Hsub, H; projection, alg, kwargs...)
         if !(projection || m isa UniformScaling)
             dropped = last(basis_transformation(Hsub, H))
             iszero(m[dropped, setdiff(axes(m, 2), dropped)]) ||
                 throw(ArgumentError("`m` maps a state of `H` outside `H` with nonzero amplitude. Pass `projection=true` to drop such terms."))
         end
-        return change_basis(m, Hsub, H; projection = true, kwargs...)
+        return change_basis(m, Hsub, H; projection = true, alg, kwargs...)
     end
+    alg isa NoScalarIndexingAlg && return _embed_by_gather(m, Hsub, H, complement; projection, kwargs...)
     return generalized_kron((m, I), (Hsub, complement), H; projection, kwargs...)
 end
 
@@ -28,7 +28,7 @@ if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of 
 `Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not
 in `Hsub` get zero.
 
-With `alg = GatherAlg()`, `m` can be a GPU array (see [`GatherAlg`](@ref)).
+With `alg = NoScalarIndexingAlg()`, `m` can be a GPU array (see [`NoScalarIndexingAlg`](@ref)).
 
 If `m` is a vector, `Hsub` and `H` must have the same modes, as for a sector `Hsub` of `H`. The
 result is `m` placed at the indices [`indices`](@ref)`(Hsub, H)` and zero elsewhere.
@@ -50,12 +50,13 @@ julia> embed([1, 2], sector(1, H) => H)
 """
 embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
 
-function _embed_by_gather(m::AbstractVecOrMat, Hsub, H, complement; projection = false, phase_factors = true)
-    splits, nb = _gather_splits(H, Hsub, complement, phase_factors)
-    P, B, S, present = _embed_gather_table(splits, dim(Hsub), nb)
+function _embed_by_gather(m::AbstractMatrix, Hsub, H, complement; projection = false, phase_factors = true)
+    splits = _full_partial_trace_splits(H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement), phase_factors)
+    P, B, S, present = _embed_gather_table(splits, dim(Hsub), dim(complement))
     projection || _check_embed_into(m, present)
     return _gather_embed(m, P, B, S)
 end
+_embed_by_gather(::UniformScaling, args...; kwargs...) = throw(ArgumentError("`UniformScaling` is not supported with `alg = NoScalarIndexingAlg()`."))
 
 # `P[J, r]`, `B[J, r]` and `S[J, r]` are the indices in `Hsub` and the complement, and the weight,
 # of the r-th split of the J-th state of `H`, padded with index 1 and weight 0.
@@ -79,11 +80,10 @@ function _embed_gather_table(splits, dsub, nb)
 end
 
 # m ⊗ I maps (K2, b) in `H` to (K1, b) outside `H` exactly when present[K2, b] and !present[K1, b]
-_embed_outside(::AbstractMatrix, present) = (.!present) * transpose(present) .> 0
-_embed_outside(::AbstractVector, present) = vec(.!present)
 function _check_embed_into(m, present)
     all(present) && return nothing
-    any(_adapt_like(m, Array(_embed_outside(m, present))) .& .!iszero.(m)) &&
+    outside = (.!present) * transpose(present) .> 0
+    any(_adapt_like(m, Array(outside)) .& .!iszero.(m)) &&
         throw(ArgumentError("`m` maps a state of `H` outside `H` with nonzero amplitude. Pass `projection=true` to drop such terms."))
     return nothing
 end
@@ -97,9 +97,8 @@ function _gather_embed(m::AbstractMatrix, P, B, S)
     WW = conj.(row(S)) .* col(S) .* (row(B) .== col(B))
     return reshape(_gather_reduce(WW, (2, 4), m, LL), D, D)
 end
-_gather_embed(v::AbstractVector, P, B, S) = vec(_gather_reduce(_adapt_like(v, S), 2, v, _adapt_like(v, P)))
 
-# The `map` of an `EmbedMap` with `alg = GatherAlg()`, see `_PartialTraceGather`.
+# The `map` of an `EmbedMap` with `alg = NoScalarIndexingAlg()`, see `_PartialTraceGather`.
 struct _EmbedGather{TP, TB, TS}
     P::TP
     B::TB
@@ -113,7 +112,7 @@ Base.:*(g::_EmbedGather, v::AbstractVector) = vec(_gather_embed(_square(v), g.P,
 
 const _GatherSuperop = Union{_PartialTraceGather, _EmbedGather}
 LinearAlgebra.mul!(w::AbstractVector, g::_GatherSuperop, v::AbstractVector) = copyto!(w, g * v)
-_gather_superop_error() = throw(ArgumentError("A map with `alg = GatherAlg()` has no `sparse` form or adjoint."))
+_gather_superop_error() = throw(ArgumentError("A map with `alg = NoScalarIndexingAlg()` has no `sparse` form or adjoint."))
 _adjoint_superop(::_GatherSuperop) = _gather_superop_error()
 
 struct EmbedMap{HS,H,C,K,M}
@@ -126,7 +125,8 @@ end
 
 # The map is the compression onto `H` and checks nothing, so `projection` has no effect.
 function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(Hsub, H, complement), projection = false, kwargs...)
-    map = if alg isa GatherAlg
+    alg isa Union{AbstractPartialTraceAlg, NoScalarIndexingAlg} || throw(ArgumentError("The map `embed(Hsub => H)` supports `alg = SubsystemPartialTraceAlg()`, `FullPartialTraceAlg()` or `NoScalarIndexingAlg()`, got $alg."))
+    map = if alg isa NoScalarIndexingAlg
         _embed_gather(Hsub, H, complement; kwargs...)
     elseif isnothing(complement)
         basis_transformation_map(Hsub, H; projection = true, kwargs...)
@@ -205,7 +205,7 @@ Create a callable embedding operation from `Hsub` into `H`.
 The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 It is the compression onto `H` and, unlike [`embed`](@ref), does not check its input.
-With `alg = GatherAlg()`, it stores gather tables instead, so it can be applied to GPU arrays
+With `alg = NoScalarIndexingAlg()`, it stores gather tables instead, so it can be applied to GPU arrays
 but has no `sparse` or adjoint; `Adapt.adapt(CuArray, op)` moves the tables to the device.
 """
 embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwargs...)
@@ -240,8 +240,8 @@ embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwar
 end
 
 @testitem "Embed by gather" begin
-    import FermionicHilbertSpaces: GatherAlg
-    alg = GatherAlg()
+    import FermionicHilbertSpaces: NoScalarIndexingAlg
+    alg = NoScalarIndexingAlg()
     @fermions f
     @spins s
     @bosons b
@@ -270,6 +270,8 @@ end
     @test_throws ArgumentError embed(rand(4, 4), Hf => Hc; alg)
     @test_throws ArgumentError embed(rand(4), Hf => Hc; alg)
     @test_throws ArgumentError embed(rand(4, 4), Hf => hilbert_space(f, 1:3); alg = :other)
+    @test_throws ArgumentError embed(Hf => hilbert_space(f, 1:3); alg)
+    @test_throws ArgumentError embed(sector(-1, Hpar) => Hpar; alg)
 end
 
 @testitem "Embedding a sector vector" begin
