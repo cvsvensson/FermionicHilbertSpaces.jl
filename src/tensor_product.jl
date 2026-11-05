@@ -104,8 +104,8 @@ end
     FactorizedKronAlg()
 
 Algorithm for the `alg` keyword of [`generalized_kron`](@ref) and [`tensor_product`](@ref) that uses
-reshapes, gathers and broadcasts only, so it also runs on GPU arrays. It needs dense arrays on spaces
-`Hs` that partition the modes of `H`.
+gathers and broadcasts only, so it also runs on GPU arrays. It needs dense arrays on spaces
+`Hs` that partition the modes (or atoms) of `H`.
 """
 struct FactorizedKronAlg end
 _check_kron_alg(alg) = alg isa GenericAlg || alg isa FactorizedKronAlg ||
@@ -470,59 +470,46 @@ function _kron_phases(groups, owner, xs, embeddings)
     return Q, c
 end
 
-# Forms the product over the bases of `Hs` in one broadcast and gathers it onto the states of `H`.
-# A state of `H` that no product of basis states of `Hs` reaches gets zero weight.
+# Each entry of the result is gathered from the factors through the factor basis indices of the
+# states of `H`, so no array over the product of the bases of `Hs` is formed. A state of `H` that
+# no product of basis states of `Hs` reaches gets zero weight.
 function _factorized_kron(ms, Hs, H, mapper, embeddings; phase_factors = true, projection = false)
     any(m -> m isa AbstractSparseArray || m isa UniformScaling, ms) && throw(ArgumentError("FactorizedKronAlg needs dense arrays."))
     n = ndims(first(ms))
-    dims = map(dim, Tuple(Hs))
-    slot(k) = ntuple(j -> j == k ? dims[k] : 1, length(ms))
-    # `identity.` makes plain device copies of adjoints and views, whose reshapes would scalar-index.
-    P = broadcast(*, ntuple(k -> reshape(identity.(ms[k]), n == 1 ? slot(k) : (slot(k)..., slot(k)...)), length(ms))...)
-    P = reshape(P, ntuple(_ -> prod(dims), n))
-    positions = map(vec(CartesianIndices(dims))) do I
-        fs, amps = combine_states(map(basisstate, Tuple(I), Hs), mapper)
-        length(fs) == 1 || throw(ArgumentError("FactorizedKronAlg needs basis states of `Hs` that combine into a single state."))
+    signs = phase_factors && n == 2
+    Is = map(Tuple, vec(CartesianIndices(map(dim, Tuple(Hs)))))
+    positions = map(Is) do I
+        fs, amps = combine_states(map(basisstate, I, Tuple(Hs)), mapper)
         state_index(only(fs), H), only(amps)
     end
+    groups, owner = _kron_modes(mapper)
+    signs && length(owner) >= 64 && throw(ArgumentError("FactorizedKronAlg supports at most 63 fermionic modes."))
     Ks, amps = first.(positions), last.(positions)
     covered = .!iszero.(Ks)
+    adapt(A) = _adapt_like(first(ms), A)
     if !projection && !all(covered)
-        dropped = findall(!, covered)
-        (n == 1 ? _copied_support_on(P, 1, dropped) : !iszero(P[dropped, findall(covered)])) &&
-            throw(ArgumentError("The tensor product has nonzero weight on states that are not in `H`. Pass `projection=true` to drop such terms."))
+        rows = adapt(Is[.!covered])
+        nonzero = n == 1 ? _any_nonzero(_entry_prod, Ref(ms), rows) :
+            _any_nonzero(_entry_prod, Ref(ms), rows, reshape(adapt(Is[covered]), 1, :))
+        nonzero && throw(ArgumentError("The tensor product has nonzero weight on states that are not in `H`. Pass `projection=true` to drop such terms."))
     end
-    q, w = ones(Int, dim(H)), zeros(eltype(amps), dim(H))
-    q[Ks[covered]] = findall(covered)
+    idx, w = fill(first(Is), dim(H)), zeros(eltype(amps), dim(H))
+    idx[Ks[covered]] = Is[covered]
     w[Ks[covered]] = amps[covered]
     states = basisstates(H)
     wr = phase_factors && (n == 1 || embeddings) ? w .* map(phase_factor_u(mapper), states) : w
-    q, w, wr = _adapt_like.(Ref(P), (q, w, wr))
-    n == 1 && return _masked_mul.(wr, P[q])
-    phase_factors || return _masked_mul.(wr .* transpose(w), P[q, q])
-    groups, owner = _kron_modes(mapper)
-    length(owner) < 64 || throw(ArgumentError("FactorizedKronAlg supports at most 63 fermionic modes."))
+    idx, w, wr = adapt.((idx, w, wr))
+    n == 1 && return _masked_mul.(wr, _entry_prod.(Ref(ms), idx))
+    cols = reshape(idx, 1, :)
+    signs || return _masked_mul.(wr .* transpose(w), _entry_prod.(Ref(ms), idx, cols))
     x = map(f -> sum(((i, b),) -> b << (i - 1), enumerate(_kron_bits(mapper, f)); init = 0), states)
-    Q, c = _adapt_like.(Ref(P), _kron_phases(groups, owner, x, embeddings))
-    return _masked_mul.(wr .* transpose(w) .* _kron_sign.(_adapt_like(P, x), transpose(Q), transpose(c)), P[q, q])
+    Q, c = adapt.(_kron_phases(groups, owner, x, embeddings))
+    return _masked_mul.(wr .* transpose(w) .* _kron_sign.(adapt(x), transpose(Q), transpose(c)), _entry_prod.(Ref(ms), idx, cols))
 end
-
-# The group and the index in `Hs` of the space holding each fermionic mode, in the order of `_kron_bits`.
-_kron_modes(::AtomicStateMapper) = (Int[], Int[])
-function _kron_modes(sp::ProductSpaceMapper)
-    groups, owner = Int[], Int[]
-    for (leaf, route) in zip(sp.leaves, sp.factor_routes)
-        leaf isa Uncovered && continue
-        g, o = _kron_modes(leaf.mapper)
-        append!(groups, g .+ maximum(groups; init = 0))
-        append!(owner, map(k -> _piece_target(route[k]), o))
-    end
-    return groups, owner
-end
-_piece_target(::PieceIndex{b}) where {b} = b
-_kron_bits(::AtomicStateMapper, state) = Bool[]
-_kron_bits(sp::ProductSpaceMapper, state) =
-    reduce(vcat, (_kron_bits(leaf.mapper, s) for (leaf, s) in zip(sp.leaves, state.states) if !(leaf isa Uncovered)); init = Bool[])
+_entry_prod(ms, i) = prod(map(getindex, ms, i))
+_entry_prod(ms, i, j) = prod(map((m, a, b) -> m[a, b], ms, i, j))
+# A reduction over a lazy broadcast, which runs on the device without materializing it.
+_any_nonzero(f, args...) = mapreduce(!iszero, |, Broadcast.instantiate(Broadcast.broadcasted(f, args...)); init = false)
 
 # Apply the factors right to left to each basis state of H. Only the final states are looked up in H.
 function ordered_product(ms, Hs, H; phase_factors = true, projection = false)
