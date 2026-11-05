@@ -1,4 +1,4 @@
-struct MajoranaMap{F1,F2}
+struct MajoranaMap{F1, F2}
     ferm_to_maj::F1   # f -> (γ1, γ2)
     maj_to_ferm::F2     # γ -> (f, isfirst::Bool)
 end
@@ -25,7 +25,7 @@ function majorana_map(H::MajoranaHilbertSpace)
         ferm_label = isfirst ? (a, b) : (b, a)
         return (f[ferm_label], isodd(pos))
     end
-    majorana_map(; ferm_to_maj, maj_to_ferm)
+    return majorana_map(; ferm_to_maj, maj_to_ferm)
 end
 
 to_majorana(expr, M::MajoranaMap) = NonCommutativeProducts.ncmap(Base.Fix2(_to_majorana, M), expr)
@@ -34,28 +34,28 @@ to_fermion(expr, M::MajoranaMap) = NonCommutativeProducts.ncmap(Base.Fix2(_to_fe
 # leaf functions
 function _to_majorana(f::FermionSym, M::MajoranaMap)
     γ1, γ2 = unpair(f, M)
-    f.creation ? (1//2 * (γ1 + 1im * γ2)) : 1//2 * (γ1 - 1im * γ2)
+    return f.creation ? (1 // 2 * (γ1 + 1im * γ2)) : 1 // 2 * (γ1 - 1im * γ2)
 end
 _to_majorana(x, ::MajoranaMap) = x
 function _to_fermion(γ::MajoranaSym, M::MajoranaMap)
     f, isfirst = pair(γ, M)
-    isfirst ? f + f' : 1im * (f - f')
+    return isfirst ? f + f' : 1im * (f - f')
 end
 _to_fermion(x, ::MajoranaMap) = x
 
 
 function to_fermion(basis::SymbolicMajoranaBasis; name = Symbol("f_", basis.name))
-    SymbolicFermionBasis(name, tags(basis).group)
+    return SymbolicFermionBasis(name, tags(basis).group)
 end
 function to_majorana(basis::SymbolicFermionBasis; name = Symbol("γ_", basis.name))
-    SymbolicMajoranaBasis(name, MajoranaGroup(tags(basis)))
+    return SymbolicMajoranaBasis(name, MajoranaGroup(tags(basis)))
 end
 
 @testitem "MajoranaMap (from Hilbert space)" begin
     import FermionicHilbertSpaces: to_majorana, to_fermion, majorana_map, symbolic_fermion_basis
 
     @majoranas γ
-    @test to_majorana(to_fermion(γ); name=:γ) == γ
+    @test to_majorana(to_fermion(γ); name = :γ) == γ
 
     H = hilbert_space(γ, 1:4)
     f = symbolic_fermion_basis(H)
@@ -81,7 +81,7 @@ end
     import FermionicHilbertSpaces: to_majorana, to_fermion, majorana_map
 
     @majoranas γ
-    f = to_fermion(γ; name=:f)
+    f = to_fermion(γ; name = :f)
 
     function maj_to_ferm(majorana)
         lab, tag = majorana.label
@@ -90,7 +90,7 @@ end
     ferm_to_maj(fermion) = (γ[fermion.label, :a], γ[fermion.label, :b])
 
     M = majorana_map(; ferm_to_maj, maj_to_ferm)
-    @test to_majorana(f[1], M) == 1//2 * (γ[1, :a] - 1im * γ[1, :b])
+    @test to_majorana(f[1], M) == 1 // 2 * (γ[1, :a] - 1im * γ[1, :b])
     @test to_fermion(γ[1, :a], M) == f[1] + f[1]'
     expr = 2 * f[1] - 3im * f[2]' * f[5] + 5
     @test to_fermion(to_majorana(expr, M), M) == expr
