@@ -20,7 +20,7 @@ end
 GenericHilbertSpace(label, basisstates, args...) = GenericHilbertSpace{eltype(basisstates)}(label, basisstates, args...)
 function GenericHilbertSpace{B}(label, basisstates) where B
     states = _convert_basisstates(B, basisstates)
-    GenericHilbertSpace{B}(label, states, Dict(reverse(pair) for pair in enumerate(states)))
+    return GenericHilbertSpace{B}(label, states, position_dict(states))
 end
 function GenericHilbertSpace{B}(label, basisstates, state_index) where B
     states = _convert_basisstates(B, basisstates)
@@ -94,11 +94,29 @@ add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag)
     @test M == Mexpected
 end
 
+@testitem "Invalid space inputs" begin
+    @test_throws ArgumentError GenericHilbertSpace(:a, [1, 1, 2])
+    @majoranas γ
+    @test_throws ArgumentError hilbert_space(γ, [1, 1])
+    @test_throws ArgumentError hilbert_space(γ, [1, 2, 2, 3])
+    @test dim(hilbert_space(γ, [1, 2, 3, 4])) == 4
+    @fermions f
+    @test_throws ArgumentError hilbert_space(f, 1:2, NumberConservation(1; weights = [1, 2, 3]))
+    @test_throws ArgumentError hilbert_space(f, 1:2, NumberConservation(1; weights = [1]))
+    @test dim(hilbert_space(f, 1:2, NumberConservation(2; weights = [1, 2]))) == 1
+    @test_throws ArgumentError hilbert_space(f, [f[1]])
+    using FermionicHilbertSpaces: Kets
+    @spin s
+    @test_throws ArgumentError Kets(hilbert_space(s, 1))("up")
+    @test_throws ArgumentError Kets(hilbert_space(s, 0))("down")
+    @test Kets(hilbert_space(s, 1 // 2))("up") == Kets(hilbert_space(s, 1 // 2))("1/2")
+end
+
 
 """
     dim(H)
 
-Return the Hilbert-space dimension of `H`, i.e. the number of basis states.
+Return the Hilbert-space dimension of `H`, i.e. the number of basis states. Throws an `OverflowError` if the dimension overflows its integer type.
 """
 dim(H::AbstractHilbertSpace) = Int(length(basisstates(H)))
 

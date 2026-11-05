@@ -20,11 +20,16 @@ A new kind of symbolic operator is a subtype of [`AbstractSym`](@ref). The tutor
 Algebra, from [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl):
 
 - `@nc MyOp` makes `+` and `*` build symbolic sums and products of `MyOp`.
-- `mul_effect(a::MyOp, b::MyOp)` gives the rule for the product `a * b`: `nothing` keeps it,
-  `Swap(c)` rewrites it as `c * b * a`, and `AddTerms((Swap(c), r, ...))` adds further terms.
-  This is required; without it, products such as `X * X` throw a `MethodError`.
-- `@commutative MyOp AbstractSym` declares that `MyOp` commutes with all other operators.
-  This is required for products with the operators of the package.
+- [`local_mul_effect`](@ref)`(a::MyOp, b::MyOp)` gives the rule for the product `a * b` of
+  operators on the same group: `nothing` keeps it, `Swap(c)` rewrites it as `c * b * a`,
+  `AddTerms((Swap(c), r, ...))` adds further terms, and a number, operator or sum replaces it.
+  Without a rule, products stay as written, so operators that are equal in your algebra can
+  compare unequal. For two different types on the same group, rewrite one argument order in
+  terms of the other.
+- Operators on different groups commute and are ordered by group, so no rule is needed for them.
+  Groups of different types are ordered by type name; numbers and strings are compared by value,
+  and tuples element by element. Unequal groups whose types share a name need an `isless` that is
+  a strict total order consistent with `==`; without one, `*` throws a `MethodError`.
 
 Connection to Hilbert spaces:
 
@@ -46,6 +51,8 @@ For speed:
 
 ## Custom basis states and spaces
 
+`FermionicHilbertSpaces.groups(H)` returns the spaces that line up with the slots of a basis state: `factors(H)` for a product space, and `(H,)` for any other space. See [Hilbert space and array operations](hilbert_space_operations.md).
+
 The simplest custom space is a [`GenericHilbertSpace`](@ref)`(label, states)`, which works with
 any type of state. Its optional third argument `state_index` can be a function that computes
 the index of a state, which avoids the default dictionary lookup.
@@ -56,7 +63,7 @@ the index of a state, which avoids the default dictionary lookup.
   for [`Kets`](@ref), `basisstate` and `state_index`.
 - [`internal_rep`](@ref)`(state, space, Int)` and `physical_rep(n, ::Type{MyState})` convert
   states to integers and back. When all groups of a product space have them, operators on the
-  product space act on integers, which is faster.
+  product space act on integers.
 - [`has_arithmetic_state_index`](@ref)`(H)` returns `true` for a space type whose
   [`state_index`](@ref) is computed from the state alone. Constrained spaces over such a
   space then find states with a table instead of a dictionary. The table relies on
@@ -80,3 +87,5 @@ To restrict a space of custom states, use [`SectorConstraint`](@ref) or
 basis state. With `maps` and `spaces` together, it is called instead on the values that `maps`
 gives for the parts of the state in `spaces`. See
 [Constrained Hilbert spaces and conserved quantum numbers](conservation.md).
+
+Internally, `tensor_product`, `reshape` and `partial_trace` decompose and recombine basis states through a common mapper protocol. [`state_mapper`](@ref)`(H, Hs)` returns a mapper object, [`split_state`](@ref)`(state, mapper)` returns a pair `(outcomes, weights)`, where each outcome is a tuple with one substate per target subsystem, and [`combine_states`](@ref)`(substates, mapper)` returns a pair `(states, weights)`. The collections can have any concrete type; treat them as iterables.
