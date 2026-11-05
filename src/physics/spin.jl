@@ -287,15 +287,6 @@ struct SpinSym{B} <: AbstractSym
         return new{B}(op, basis, exponent)
     end
 end
-# The copy of a `SpinSym` that GPU kernels use, with the operator as the change of `m` per power: 1 for `:+`, -1 for `:-`
-# and 0 for `:z`
-struct DeviceSpinSym
-    shift::Int
-    exponent::Int
-end
-const _SpinSym = Union{SpinSym, DeviceSpinSym}
-_spin_shift(op::SpinSym) = op.op === :+ ? 1 : op.op === :- ? -1 : 0
-_spin_shift(op::DeviceSpinSym) = op.shift
 function SpinSym(op, basis::B, exponent::Integer=1) where {B}
     exponent < 0 && throw(ArgumentError("The spin operator `exponent` must be nonnegative, got $exponent."))
     exponent == 0 && return 1 // 1
@@ -315,6 +306,19 @@ function SpinSym(op, basis::B, exponent::Integer=1) where {B}
         SpinSym{B}(canonical, basis, Int(exponent))
     end
 end
+# The copy of a `SpinSym` that GPU kernels use, with the operator as the change of `m` per power: 1 for `:+`, -1 for `:-`
+# and 0 for `:z`
+struct DeviceSpinSym
+    shift::Int
+    exponent::Int
+end
+function _spin_shift(op::SpinSym)
+    op.op === :+ && return 1
+    op.op === :- && return -1
+    op.op === :z && return 0
+    throw(ArgumentError("Invalid spin operator symbol, got `$(op.op)`."))
+end
+_spin_shift(op::DeviceSpinSym) = op.shift
 const _spin_x_aliases = (:x, :X, 1)
 const _spin_y_aliases = (:y, :Y, 2)
 const _spin_z_aliases = (:z, :Z, 3)
@@ -459,7 +463,7 @@ end
 
 Apply a single spin operator to a spin state. Returns (newstate, amplitude) where amplitude is 0 if the operation is not allowed, and a nonzero value otherwise.
 """
-function apply_local_operator(op::_SpinSym, state::SpinState, space::SpinSpace, precomp)
+function apply_local_operator(op::Union{SpinSym, DeviceSpinSym}, state::SpinState, space::SpinSpace, precomp)
     J = space.spin
     m = state.m
     T = Float64

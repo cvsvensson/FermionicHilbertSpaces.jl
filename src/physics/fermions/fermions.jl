@@ -10,11 +10,6 @@ struct FermionicSpace{F,L,FG<:FermionicGroup} <: AbstractGroupedHilbertSpace{F}
         new{F,L,FG}(modes, mode_ordering, group)
     end
 end
-# The copy of a `FermionicSpace` that GPU kernels use: only its number of modes
-struct DeviceFermionicSpace{F} <: AbstractHilbertSpace{F}
-    nbr_of_modes::Int
-end
-const _FockSpace{F} = Union{FermionicSpace{F}, DeviceFermionicSpace{F}}
 function FermionicSpace(factors::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F,L<:FermionicSpace}
     all(c -> group_id(c) == group, factors) || throw(ArgumentError("All factors must belong to the group `$group`."))
     fermionsyms = collect(Iterators.flatten(Iterators.map(modes, factors)))
@@ -30,6 +25,11 @@ function FermionicSpace(a::SymbolicFermionBasis, modes::AbstractVector{F}) where
     end
     return FermionicSpace(modes, agroup)
 end
+# The copy of a `FermionicSpace` that GPU kernels use: only its number of modes
+struct DeviceFermionicSpace{F} <: AbstractHilbertSpace{F}
+    nbr_of_modes::Int
+end
+const _FockSpace{F} = Union{FermionicSpace{F}, DeviceFermionicSpace{F}}
 maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
 Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
@@ -45,7 +45,7 @@ end
 # Below 63 modes, computing `dim(H)` does not throw. Its type is `fock_index_type(I)`, which is
 # a wide `UInt` or `BigInt` for wide `FockNumber`s; `root_keyed_index` builds an index only when it is an `Int`.
 has_arithmetic_state_index(H::FermionicSpace{<:FockNumber}) = nbr_of_modes(H) < 63
-function dim(H::_FockSpace{FockNumber{I}}) where {I}
+function dim(H::FermionicSpace{FockNumber{I}}) where I
     d = one(fock_index_type(I)) << nbr_of_modes(H)
     d > 0 || throw(OverflowError("$(nbr_of_modes(H)) modes have more states than fit in $(fock_index_type(I))"))
     return d
