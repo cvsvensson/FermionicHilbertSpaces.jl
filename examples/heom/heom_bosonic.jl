@@ -36,6 +36,8 @@ struct HEOMOp{T, B} <: AbstractSym
     bath::B
 end
 HEOMOp{T}(l, bath) where {T} = HEOMOp{T, typeof(bath)}(l, bath)
+Base.:(==)(a::HEOMOp{T}, b::HEOMOp{T}) where {T} = a.l == b.l && a.bath.id == b.bath.id
+Base.hash(op::HEOMOp{T}, h::UInt) where {T} = hash((T, op.l, op.bath.id), h)
 @nc HEOMOp
 symbolic_group(op::HEOMOp) = op.bath.id
 mat_eltype(::Type{<:HEOMOp}) = Float64
