@@ -132,13 +132,14 @@ Base.getindex(::NoStorage, ::Int...) = throw(ArgumentError("The arrays of the gr
 function _device_terms(terms, H, backend)
     prepared = map(collect(terms)) do term
         t = __concretize(term, TupleConcretizer())
-        _check_isbits(adapt(TermAdaptor(), (t, precomputation_before_operator_application(t, H))), "The term `$term`")
+        _check_isbits(adapt(TermAdaptor(), (t, precomputation_before_operator_application(t, H))), () -> "The term `$term`")
     end
     return Tuple(adapt(backend, collect(T, filter(x -> x isa T, prepared))) for T in unique(map(typeof, prepared)))
 end
 
+# `what` is a function because printing a term with default `show` takes milliseconds
 function _check_isbits(x, what)
-    isbits(x) || throw(ArgumentError("$what is not supported on GPUs: $(_nonbits_field(x, "")) is not isbits. Its type needs an `Adapt.adapt_structure` method that keeps only isbits data and arrays."))
+    isbits(x) || throw(ArgumentError("$(what()) is not supported on GPUs: $(_nonbits_field(x, "")) is not isbits. Its type needs an `Adapt.adapt_structure` method that keeps only isbits data and arrays."))
     return x
 end
 # Descends into tuples and into types not from Base, whose fields name the offending data better than Base internals
@@ -244,7 +245,7 @@ function _terms_matrix(::Type{T}, terms, coeff, H::AbstractHilbertSpace, r::GPUR
         throw(ArgumentError("The element type $T cannot hold the complex matrix elements of the operator."))
     backend = r.backend
     space = adapt(DeviceAdaptor(backend), H)
-    _check_isbits(adapt(DropArrays(), space), "The space")
+    _check_isbits(adapt(DropArrays(), space), () -> "The space")
     termgroups = _device_terms(terms, H, backend)
     flag = fill!(allocate(backend, Bool, 1), false)
     run! = sink -> _column_kernel!(backend)(sink, space, termgroups, convert(T, coeff), projection ? true : OutsideFlag(flag); ndrange = dim(H))
