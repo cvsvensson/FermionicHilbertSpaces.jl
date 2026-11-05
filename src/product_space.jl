@@ -390,6 +390,7 @@ end
 mat_eltype(::ProductOperator{C}) where {C} = C
 
 function has_internal_rep(space::AbstractHilbertSpace, ::Type{T}) where {T}
+    iszero(dim(space)) && return false
     state = basisstate(1, space)
     has_internal_rep(state, space, T)
 end
