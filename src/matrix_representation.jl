@@ -97,19 +97,18 @@ complex matrix elements must add a method, for example `mat_eltype(::Type{<:MyOp
 mat_eltype(::Type{S}) where {S} = Float64
 
 _term_eltype(::Type{C}, ::Type{S}) where {C, S} = promote_type(C, _with_precision(mat_eltype(S), _precision(C)))
-# The float type in which the amplitudes of a term with coefficient type `C` are computed
+# The float type of `T`, and `nothing` for a type such as `Int`, which doesn't request a precision
 _precision(::Type{P}) where {P <: AbstractFloat} = P
 _precision(::Type{Complex{P}}) where {P <: AbstractFloat} = P
-_precision(::Type) = Float64
+_precision(::Type) = nothing
+_with_precision(::Type{T}, ::Nothing) where {T} = T
 _with_precision(::Type{<:AbstractFloat}, ::Type{P}) where {P} = P
 _with_precision(::Type{<:Complex{<:AbstractFloat}}, ::Type{P}) where {P} = Complex{P}
 _with_precision(::Type{T}, ::Type) where {T} = T
 _amp_at_precision(amp, ::Type{P}) where {P} = convert(_with_precision(typeof(amp), P), amp)
 
 # Gives the coefficients the precision of the element type of the format, so that the amplitudes are computed in it
-_at_format_precision(op, repr) = _at_precision(op, _precision_of_eltype(_repr_eltype(Nothing, repr)))
-_precision_of_eltype(::Type{T}) where {T <: Union{AbstractFloat, Complex{<:AbstractFloat}}} = _precision(T)
-_precision_of_eltype(::Type) = nothing
+_at_format_precision(op, repr) = _at_precision(op, _precision(_repr_eltype(Nothing, repr)))
 _at_precision(op, ::Nothing) = op
 _at_precision(op, ::Type) = op
 _at_precision(op::AbstractSym, ::Type{P}) where {P} = NCMul(one(P), [op])
@@ -187,10 +186,10 @@ With `transpose=true`, apply the transpose of `op` instead. The generic method a
 [`apply_local_operator`](@ref). A method for products of one operator type can be faster,
 as for fermions, where the whole product acts on a Fock state with bit operations.
 """
-function apply_local_operators(op::NCMul{C}, state, space, precomps; transpose) where {C}
+function apply_local_operators(op::NCMul, state, space, precomps; transpose)
     # Accumulate in the element type of the matrix so that `amp` keeps one type through the loop.
     T = mat_eltype(op)
-    P = _precision(C)
+    P = something(_precision(T), Float64)
     amp = convert(T, op.coeff)
     if !transpose
         for (factor, precomp) in Iterators.reverse(zip(op.factors, precomps))
@@ -905,6 +904,13 @@ end
     @test (@inferred amplitude(RootOp(), Float32, H, false)) === Float32(sqrt(2.0))
     @test (@inferred amplitude(RootOp(), Float32, H, true)) === Float32(sqrt(2.0))
     @test amplitude(PreciseRootOp(), BigFloat, H, false) == sqrt(big(2))
+
+    struct BigRootOp <: FHS.AbstractSym end
+    Base.adjoint(op::BigRootOp) = op
+    FHS.symbolic_group(::BigRootOp) = FHS.symbolic_group(b)
+    FHS.mat_eltype(::Type{BigRootOp}) = BigFloat
+    FHS.apply_local_operator(::BigRootOp, state, space, precomp) = (state, sqrt(big(2)))
+    @test representation(BigRootOp(), H)[1, 1] == sqrt(big(2))
 end
 
 @testitem "Operators between two spaces with Axes" begin
