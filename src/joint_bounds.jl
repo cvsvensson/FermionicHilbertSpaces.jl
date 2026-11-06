@@ -2,7 +2,7 @@
 # accept branches that no completion satisfies. Pruning by the joint values that valid states reach is exact. Sums with
 # inexact values, or with more than `MAX_JOINT_ENTRIES` joint values, keep the bounds alone. A single sum is joined
 # when its values have gaps, as for weights `5` and `1`.
-const MAX_JOINT_ENTRIES = 2^22
+const MAX_JOINT_ENTRIES = 2^20
 
 function _joint_cuts(p)
     n, T = length(p.sizes), eltype(p.constants)
