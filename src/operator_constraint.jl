@@ -242,6 +242,19 @@ end
     @test dim(hilbert_space(S, 1:4, nup => 2)) == 6
 end
 
+@testitem "Operator constraints on constrained and custom factors" begin
+    @fermions f
+    Hpair = hilbert_space(f, 1:2, NumberConservation(1))
+    Hlevel = GenericHilbertSpace(:level, ["a", "b", "c"])
+    Hs = (Hpair, Hlevel, hilbert_space(f[3]), hilbert_space(f[4]))
+    N = sum(f[i]'f[i] for i in 1:4)
+    full = collect(basisstates(tensor_product(Hs)))
+    expected = filter(s -> count_ones(s.states[1].f) == 2, full)
+    @test Set(basisstates(tensor_product(Hs; constraint = N => 2))) == Set(expected)
+    @spins S 1 // 2
+    @test eltype(quantumnumbers(hilbert_space(S, 1:4, sum(S[i][:z] for i in 1:4)))) == Int
+end
+
 @testitem "Invalid constraint operators throw" begin
     @fermions f
     @test_throws ArgumentError hilbert_space(f, 1:2, f[1]'f[2] + f[2]'f[1] => 1)
