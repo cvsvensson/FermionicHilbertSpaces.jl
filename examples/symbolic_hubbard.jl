@@ -15,7 +15,7 @@ Hdn = hilbert_space(f, [(j, :↓) for j in 1:2])
 # Restrict to N↑ = 1 and N↓ = 1
 Nup = sum(f[j, :↑]' * f[j, :↑] for j in 1:2)
 Ndn = sum(f[j, :↓]' * f[j, :↓] for j in 1:2)
-H = tensor_product(Hup, Hdn; constraint=(Nup => 1, Ndn => 1))
+H = tensor_product(Hup, Hdn; constraint = (Nup => 1, Ndn => 1))
 
 # Define the Hubbard Hamiltonian
 ham = sum(-t * (f[1, s]' * f[2, s] + hc) for s in (:↑, :↓)) +

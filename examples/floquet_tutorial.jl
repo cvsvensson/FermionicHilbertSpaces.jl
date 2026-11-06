@@ -125,7 +125,7 @@ F_mat = representation(F, Hfloq; projection = true); # we need projection=true b
 # Floquet operators now combine with spin operators, so we can represent mixed operators. We take a spin 1 as the physical system and couple it to the Floquet space to model a driven three-level system.  The full Hilbert space is a product of the spin and Floquet spaces, and the Hamiltonian is a symbolic expression mixing spin and Floquet operators. Using the Floquet number `Nf` as the constraint organizes the basis states into Floquet sectors, which we use later to select zones.
 @spin σ 1
 Hspin = hilbert_space(σ)
-H = tensor_product((Hspin, Hfloq); constraint=Nf)
+H = tensor_product((Hspin, Hfloq); constraint = Nf)
 
 # Floquet operators can be used together with spin operators to build the Floquet Hamiltonian, with an added anisotropy ``D\sigma_z^2``:
 
