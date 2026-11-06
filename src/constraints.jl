@@ -315,6 +315,8 @@ With a `constraint`, keep the basis states of `space` that satisfy it. If `state
 given, only those states are candidates. Constraints that group states into sectors,
 such as `NumberConservation`, return a space with sectors, with states ordered by sector.
 `constrain_space(space, NoSymmetry())` returns `space` unchanged.
+A constraint can also be `quantity => allowed` with a diagonal operator `quantity`, such as
+`constrain_space(H, sum(f[i]'f[i] for i in 1:4) => 2)`; a collection of allowed values also labels sectors.
 
 With only `states`, return the subspace spanned by exactly those basis states, in the
 given order; this is equivalent to `constrain_space(space, NoSymmetry(), states)`.

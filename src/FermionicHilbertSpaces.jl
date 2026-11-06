@@ -203,6 +203,8 @@ PrecompileTools.@setup_workload begin
         representation(hamf, sector(1, Hf), :dense)
         @spins S 1 // 2
         representation(sum(S[k][:]'S[k + 1][:] for k in 1:2), hilbert_space(S, 1:3))
+        hilbert_space(f, 1:3, (sum(f[n]'f[n] for n in 1:3) => 1, sum(n * f[n]'f[n] for n in 1:3)))
+        hilbert_space(S, 1:3, sum(S[k][:z] for k in 1:3) => 1 // 2)
         @bosons bs
         hamb = sum(bs[k]'bs[k + 1] + hc for k in 1:1) + sum(bs[k]'bs[k] * bs[k]'bs[k] for k in 1:2)
         representation(hamb, hilbert_space(bs, 1:2, 3))

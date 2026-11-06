@@ -25,6 +25,32 @@ indices(2, H)
 
 Passing a constraint while building a space prunes states as they are generated, so the full space is never built; only `FilterConstraint` and `SectorConstraint` test the full space afterwards. `constrain_space` always filters a space that already exists.
 
+## Constraints from operators
+A constraint can also be written as `quantity => allowed`, where `quantity` is a diagonal operator. A single allowed value restricts the space, a collection of values also splits it into sectors labelled by them, and a quantity without `=>` splits the space into all its sectors. Several constraints go in a tuple. The Hubbard sector with fixed numbers of spin up and spin down fermions and no doubly occupied sites:
+```@example operators
+using FermionicHilbertSpaces
+@fermions f
+L = 4
+n(i, σ) = f[i, σ]' * f[i, σ]
+Nup, Ndn = sum(n(i, :↑) for i in 1:L), sum(n(i, :↓) for i in 1:L)
+D = sum(n(i, :↑) * n(i, :↓) for i in 1:L)
+H = hilbert_space(f, [(i, σ) for i in 1:L for σ in (:↑, :↓)], (Nup => 2, Ndn => 2, D => 0))
+dim(H)
+```
+A spin chain split into sectors of total ``S^z``:
+```@example operators
+@spins S 1 // 2
+Hspin = hilbert_space(S, 1:6, sum(S[i][:z] for i in 1:6))
+quantumnumbers(Hspin)
+```
+The Rydberg blockade, which forbids neighbouring excitations, is a sum of local products. Coefficients must be integers or rationals, so that the values are exact:
+```@example operators
+up(i) = S[i][:z] + 1 // 2
+Hpxp = hilbert_space(S, 1:10, sum(up(i) * up(i + 1) for i in 1:9) => 0)
+dim(Hpxp)
+```
+The states are generated with pruning, as for the constraints below. The quantity can also be a function of the basis state, which is evaluated on each state of the full space.
+
 ## Available constraints
 
 #### NumberConservation
