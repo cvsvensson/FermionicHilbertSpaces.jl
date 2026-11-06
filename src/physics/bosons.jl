@@ -207,7 +207,6 @@ hilbert_space(sym::BosonField, labels, dimension::Integer, @nospecialize(constra
 hilbert_space(sym::BosonSym, dimension::Integer) = TruncatedBosonicHilbertSpace(sym, dimension)
 hilbert_space(sym::BosonSym, dimension::Integer, @nospecialize(constraint::ConstraintLike)) = constrain_space(hilbert_space(sym, dimension), constraint)
 particle_number(s::BosonicState) = s.n
-_is_annihilator(x::BosonSym) = x.exp == -1
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 
 function apply_local_operator(factor::BosonSym, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp, ::Type{T} = Float64) where {T}

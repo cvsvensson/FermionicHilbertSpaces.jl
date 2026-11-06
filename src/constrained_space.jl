@@ -19,7 +19,7 @@ subspace_index(H::ConstrainedSpace) = H.index
 rewrap(H::ConstrainedSpace, parent) = ConstrainedSpace(parent, H.states, H.index)
 
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
-constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}) = constrain_space(space, NoSymmetry(), states)
+constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}) = _holds_constraints(states) ? constrain_space(space, as_constraint(states)) : constrain_space(space, NoSymmetry(), states)
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, _states_of(space, states))
 function constrain_space(space, constraint::AbstractConstraint)
@@ -36,8 +36,9 @@ end
 # The subspace of the candidate `states` that satisfy `constraint`, grouped into sectors when it supports it.
 # Only `unchecked`, the part of `constraint` that `states` may violate, is filtered by when not grouping.
 # A constraint that cannot filter is taken to hold for all of `states`.
-function constrain_states(space, constraint, states, unchecked = constraint)
-    _resolve_labels!(constraint, space, states)
+function constrain_states(space, constraint, states, unchecked = nothing)
+    constraint = resolve(constraint, space, states)
+    unchecked = isnothing(unchecked) ? constraint : resolve(unchecked, space, states)
     if supports_sector_grouping(constraint) && supports_filtering(constraint)
         grouping = _with_sector_labels(space, constraint)
         return sector_space(space, states, sector_function(grouping, space), grouping)
@@ -46,13 +47,12 @@ function constrain_states(space, constraint, states, unchecked = constraint)
     end
     return ConstrainedSpace(space, states; constraint)
 end
-# The labels of a space with sectors are kept, and the labels of `constraint` follow them.
-_with_sector_labels(space, constraint) = constraint
-_with_sector_labels(space::SectorHilbertSpace, constraint) = isnothing(space.constraint) ? constraint : space.constraint * constraint
-_restricted_space(space, states, constraint) = ConstrainedSpace(space, states; constraint)
-# Restricting a space with sectors keeps its sectors.
-function _restricted_space(space::SectorHilbertSpace, states, constraint)
-    isnothing(space.constraint) && return ConstrainedSpace(space, states; constraint)
+# A `quantity => spec` constraint on a space with sectors keeps them, and its own labels follow theirs.
+_keeps_sectors(space, constraint) = false
+_keeps_sectors(space::SectorHilbertSpace, constraint) = !isnothing(space.constraint) && _spec_form(constraint)
+_with_sector_labels(space, constraint) = _keeps_sectors(space, constraint) ? space.constraint * constraint : constraint
+function _restricted_space(space, states, constraint)
+    _keeps_sectors(space, constraint) || return ConstrainedSpace(space, states; constraint)
     return sector_space(space, states, sector_function(space.constraint, parent(space)), space.constraint)
 end
 # The factors of `constraint` that the branch pruning of `generate_states` does not enforce.
@@ -477,11 +477,11 @@ localize_constraint(c::AbstractConstraint, ::SectorHilbertSpace) = c
 localize_constraint(c::AbstractAdditiveConstraint, H::SectorHilbertSpace) = supply_missing_constraint_info(c, H, (H,))
 # The states of `H` already satisfy the filtering factors, so only the grouping factors are kept.
 localize_constraint(c::ProductConstraint, H::SectorHilbertSpace) = ProductConstraint(map(ci -> localize_constraint(ci, H), filter(supports_sector_grouping, c.constraints)))
-function localize_constraint(c::SectorConstraint{<:FilterConstraint{<:Any,Missing,Missing}}, H::SectorHilbertSpace)
+function localize_constraint(c::StateConstraint{<:Any,Missing,Missing}, H::SectorHilbertSpace)
     # Bind the free-standing reducer to H as its single subspace.
     # sector_function on the larger space will split the state, extract the H-substate,
     # apply the original reducer to it, and return the label via `only`.
-    SectorConstraint(only, (c.filter.reducer,), (H,))
+    StateConstraint(only, (c.reducer,), (H,), c.rule)
 end
 
 """

@@ -35,7 +35,7 @@ The right-hand side of `quantity => spec` is read by its type:
 | any other function `f` | all | `f(v)` |
 | `f => rest` | what `rest` keeps of `f(v)` | what `rest` labels `f(v)` by |
 
-After a function, `rest` may also be a string, symbol or character, and a single tuple or vector must be wrapped, as in `=> [(0, 1)]`. A constraint that allows no value of its operator throws an error. Odd particle numbers, the sectors of even and odd particle number, and a ``\mathbb{Z}_3`` charge:
+After a function, `rest` may also be a string, symbol or character, and a single tuple or vector must be wrapped, as in `=> [(0, 1)]`. A labelling function can return `missing` to discard the states with that value. A constraint that allows no value of its operator throws an error. Odd particle numbers, the sectors of even and odd particle number, and a ``\mathbb{Z}_3`` charge:
 ```@example constraints
 Hodd = hilbert_space(f, 1:4, N => isodd)
 Hparity = hilbert_space(f, 1:4, N => (v -> mod(v, 2)) => 0:1)
@@ -45,7 +45,7 @@ dim(Hodd), quantumnumbers(Hparity), dim(Hcharge)
 ```
 [`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total number of fermions.
 
-Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. Labels are integers when every term of the quantity, with a share of its constant, takes integer values, and rationals otherwise, so the total ``S^z`` is labelled by rationals. Coefficients must be integers or rationals, so that the values are exact. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
+Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. Labels are integers when all values of the quantity are integers, and rationals otherwise. Coefficients must be integers or rationals, so that the values are exact. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
 ```@example constraints
 @spins S 1 // 2
 Hspin = hilbert_space(S, 1:6, sum(S[i][:z] for i in 1:6))
@@ -60,7 +60,7 @@ The quantity can also be a function of the basis state. It is evaluated on each 
 nup(state) = count(s -> s.m > 0, state.states)
 dim(hilbert_space(S, 1:6, nup => 2))
 ```
-`constrain_space` always filters a space that already exists, and the labels of a new constraint follow the labels the space already has.
+`constrain_space` always filters a space that already exists. A `quantity => spec` constraint keeps the sectors the space already has, and its labels follow theirs.
 
 ## Lower-level constraints
 #### NumberConservation
