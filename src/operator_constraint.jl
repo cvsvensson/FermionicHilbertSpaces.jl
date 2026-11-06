@@ -269,8 +269,10 @@ _exact_value(z::Complex, term) = complex(_exact_value(real(z), term), _exact_val
 branch_constraint(c::OperatorConstraint, allspaces) = branch_constraint([c], allspaces)
 # Prunes by several operator constraints at once. The groups of the terms are evaluated at the depth of their last space,
 # and a step is the groups of one constraint at one depth, so that each depth only evaluates the constraints it changes.
-function branch_constraint(constraints::AbstractVector{<:OperatorConstraint}, allspaces)
-    cs = filter(c -> !ismissing(c.allowed), constraints)
+# The spaces may be given as symbols, and a constraint without spaces is on all of them.
+function branch_constraint(constraints::AbstractVector{<:OperatorConstraint}, spaces)
+    allspaces = map(hilbert_space, spaces)
+    cs = filter(c -> !ismissing(c.allowed), map(c -> supply_missing_constraint_info(c, nothing, allspaces), constraints))
     T = mapreduce(c -> typeof(c.terms.constant), promote_type, cs; init = Int)
     unit_positions = [_subspace_positions(c.spaces, allspaces) for c in cs]
     owner = [k for (k, c) in enumerate(cs) for _ in c.terms.units]
@@ -360,6 +362,10 @@ end
         H isa FermionicHilbertSpaces.MajoranaHilbertSpace && continue
         @test samestates(tensor_product(collect(atomic_factors(H)); constraint), expected)
     end
+    H = hilbert_space(f, 1:6)
+    weighted = sum(i * n(i) for i in 1:6)
+    expected = brute_force(H, (sum(n(i) for i in 1:6) => 2, weighted => 7))
+    @test Set(FermionicHilbertSpaces.generate_states(H.modes, NumberConservation(2) * (weighted => 7), H)) == expected
 end
 
 @testitem "Operator constraints match the existing constraints" begin
