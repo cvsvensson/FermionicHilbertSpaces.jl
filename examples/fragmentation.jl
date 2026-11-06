@@ -33,8 +33,10 @@ dim(H), dim(Hfull)
 # the bond that closes the ring.
 
 up(s) = s.m > 0
-blockade = BranchConstraint((p, d, spaces) -> d == 1 ||
-    !(up(p[d]) && up(p[d - 1])) && (d < length(spaces) || !(up(p[d]) && up(p[1]))))
+blockade = BranchConstraint(
+    (p, d, spaces) -> d == 1 ||
+        !(up(p[d]) && up(p[d - 1])) && (d < length(spaces) || !(up(p[d]) && up(p[1])))
+)
 Hblockade = hilbert_space(S, 1:N, blockade)
 @assert Set(basisstates(H)) == Set(basisstates(Hblockade))
 
