@@ -250,10 +250,11 @@ function sector_function(c::AbstractAdditiveConstraint, space::AbstractHilbertSp
     S = _sum_type(allowed)
     return function sector(state)
         substates = unique_split_state(state, mapper)
-        value = label(c, _residue(modulus(c), sum(((k, s),) -> _summand(S, contribution(c, k, s)), enumerate(substates); init = zero(S))))
+        value = label(c, _residue(modulus(c), _additive_sum(c, substates, S)))
         return ismissing(allowed) || value in allowed ? value : missing
     end
 end
+_additive_sum(c, substates, ::Type{S}) where {S} = sum(((k, s),) -> _summand(S, contribution(c, k, s)), enumerate(substates); init = zero(S))
 _residue(::Nothing, sum) = sum
 _residue(m, sum) = mod(sum, m)
 function sector_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
