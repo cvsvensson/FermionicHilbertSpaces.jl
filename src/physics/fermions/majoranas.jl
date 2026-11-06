@@ -410,7 +410,7 @@ end
     @fermions f
     Hmix = tensor_product(hilbert_space(γ, 1:2), hilbert_space(f, 1:2))
     @test subregion([γ[1], γ[2], hilbert_space(f, 1:1)], Hmix) ==
-          subregion(tensor_product(hilbert_space(γ, 1:2), hilbert_space(f, 1:1)), Hmix)
+        subregion(tensor_product(hilbert_space(γ, 1:2), hilbert_space(f, 1:1)), Hmix)
 end
 
 @testitem "Majorana spaces with several names" begin
