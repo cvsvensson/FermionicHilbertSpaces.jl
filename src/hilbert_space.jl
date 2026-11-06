@@ -111,6 +111,7 @@ end
     @test_throws ArgumentError hilbert_space(f, 1:2, NumberConservation(1; weights = [1, 2, 3]))
     @test_throws ArgumentError hilbert_space(f, 1:2, NumberConservation(1; weights = [1]))
     @test dim(hilbert_space(f, 1:2, NumberConservation(2; weights = [1, 2]))) == 1
+    @test_throws ArgumentError constrain_space(hilbert_space(f, 1:2), NumberConservation(2; weights = [1, 2]))
     @test_throws ArgumentError hilbert_space(f, [f[1]])
     using FermionicHilbertSpaces: Kets
     @spin s

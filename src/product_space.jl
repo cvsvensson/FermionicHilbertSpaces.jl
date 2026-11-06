@@ -11,6 +11,16 @@ function _linear_index(inds::NTuple{N, Int}, axes) where {N}
     end
     return k
 end
+# `_linear_index` and `CartesianIndices` do unchecked `Int` arithmetic, so the index arrays exist only
+# when the total dimension fits in an `Int`. The states of a larger product are only reachable by
+# value, e.g. in a constrained subspace.
+function _product_indices(dims)
+    prod(big, dims) <= typemax(Int) || return (nothing, nothing)
+    intdims = map(Int, dims)
+    return (LinearIndices(intdims), CartesianIndices(intdims))
+end
+_index_array(a) = a
+_index_array(::Nothing) = throw(ArgumentError("A product space with more than `typemax(Int)` states has no integer indices for its states."))
 
 """
     ProductState(states::Tuple)
@@ -46,8 +56,7 @@ struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
         atom_index = Dict{Any,Int}(atomic_id(a) => i for (i, a) in enumerate(atoms))
         length(atom_index) == length(atoms) || throw(ArgumentError("The atoms of a product space must be distinct, got duplicates in $(map(atomic_id, atoms))."))
         fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
-        lininds = LinearIndices(map(dim, factors))
-        cartinds = CartesianIndices(map(dim, factors))
+        lininds, cartinds = _product_indices(map(dim, factors))
         LI = typeof(lininds)
         CI = typeof(cartinds)
         new{B,C,A,typeof(fast_path),LI,CI}(factors, atoms, atom_index, fast_path, lininds, cartinds)
@@ -73,18 +82,17 @@ dim(H::ProductSpace) = mapfoldl(dim, Base.Checked.checked_mul, groups(H); init =
 atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 
 # Iterates `cartinds` rather than `Iterators.product`, whose iteration allocates per state from 12 factors on
-basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(I -> _product_basisstate(I, H), H.cartinds))
-Base.@propagate_inbounds basisstate(n::Integer, H::_ProductSpace) = _product_basisstate(H.cartinds[n], H)
+basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(I -> _product_basisstate(I, H), _index_array(H.cartinds)))
+Base.@propagate_inbounds basisstate(n::Integer, H::_ProductSpace) = _product_basisstate(_index_array(H.cartinds)[n], H)
 Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::_ProductSpace) = ProductState(_tuple_map(basisstate, Tuple(I), H.factors))
 function _state_index(state::ProductState, H::_ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
     inds = _tuple_map(_state_index, state.states, H.factors)
     # `all` on a tuple of one type keeps the tuple in memory, which on a GPU is slow local memory
     mapreduce(>(0), &, inds) || return 0
-    return _linear_index(inds, H.lininds.indices)
+    return _linear_index(inds, _index_array(H.lininds).indices)
 end
-# `lininds` is exact only when the product of the factor dimensions fits in an `Int`
-has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && prod(big ∘ dim, H.factors) <= typemax(Int)
+has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && !isnothing(H.lininds)
 
 maximum_particles(H::ProductSpace) = sum(maximum_particles, groups(H))
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
@@ -277,6 +285,30 @@ end
     H = hilbert_space(S, 1:64)
     @test_throws OverflowError dim(H)
     @test S[1][:x] * Ket(fill("↑", 64), H) == Ket(["↓"; fill("↑", 63)], H) / 2
+end
+
+@testitem "Product space with more than typemax(Int) states" begin
+    import FermionicHilbertSpaces: basisstate, particle_number, state_index, ProductState, SpinState
+    @spins S 1 // 2
+    for N in (64, 65)
+        spins = [hilbert_space(S[i]) for i in 1:N]
+        P = tensor_product(spins)
+        @test_throws OverflowError dim(P)
+        @test_throws ArgumentError basisstate(1, P)
+        @test_throws ArgumentError state_index(ProductState(ntuple(_ -> SpinState(-1 // 2), N)), P)
+        H = tensor_product(spins; constraint = AdditiveConstraint(1; spaces = spins, maps = fill(s -> Int(1 // 2 - s.m), N)))
+        @test dim(H) == N
+        @test all(state_index(basisstate(n, H), H) == n for n in 1:dim(H))
+    end
+    @fermions f
+    spaces = [[hilbert_space(f, [i]) for i in 1:100]; [hilbert_space(S[i]) for i in 1:100]]
+    P = tensor_product(spaces)
+    @test_throws OverflowError dim(P)
+    @test_throws ArgumentError basisstate(1, P)
+    excitations = AdditiveConstraint(1; spaces, maps = [fill(particle_number, 100); fill(s -> Int(1 // 2 - s.m), 100)])
+    H = tensor_product(spaces; constraint = excitations)
+    @test dim(H) == 200
+    @test all(state_index(basisstate(n, H), H) == n for n in 1:dim(H))
 end
 
 @testitem "ProductSpaceMapper combines vectors of substates" begin
