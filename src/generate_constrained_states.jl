@@ -99,17 +99,17 @@ struct WeightedFunction{F,W}
     func::F
     weights::W
 end
-function _contribution_values(subspaces, functions)
-    map(__contribution_values, subspaces, functions)
+function _contribution_values(subspaces, functions, T)
+    return map((space, func) -> __contribution_values(space, func, T), subspaces, functions)
 end
-function _contribution_values(subspaces, func::Function)
-    map(Base.Fix2(__contribution_values, func), subspaces)
+function _contribution_values(subspaces, func::Function, T)
+    return map(space -> __contribution_values(space, func, T), subspaces)
 end
-function _contribution_values(subspaces, fw::WeightedFunction)
-    map((space, weight) -> __contribution_values(space, s -> weight * fw.func(s)), subspaces, fw.weights)
+function _contribution_values(subspaces, fw::WeightedFunction, T)
+    return map((space, weight) -> __contribution_values(space, s -> weight * fw.func(s), T), subspaces, fw.weights)
 end
-function __contribution_values(space, func)
-    values = unique(Iterators.map(_signed ∘ func, basisstates(space)))
+function __contribution_values(space, func, T)
+    values = unique(Iterators.map(s -> _summand(T, func(s)), basisstates(space)))
     isempty(values) && throw(ArgumentError("Cannot build an `AdditiveConstraint` from a space with no basis states."))
     values
 end
@@ -131,9 +131,9 @@ function _subspace_positions(subspaces, allspaces)
 end
 function _additive_branch_constraint(allowed_values, functions, subspaces, positions, n)
     ismissing(allowed_values) && return BranchConstraint((partial, depth, spaces) -> true)
-    contribution_values = _contribution_values(subspaces, functions)
-    T0 = mapreduce(vals -> mapreduce(typeof, promote_type, vals), promote_type, contribution_values)
-    T = promote_type(T0, typeof(sum(first, contribution_values))) # `sum` widens small integer types
+    S = _sum_type(allowed_values)
+    contribution_values = _contribution_values(subspaces, functions, S)
+    T = mapreduce(vals -> mapreduce(typeof, promote_type, vals), promote_type, contribution_values; init = S)
     contribution_min = zeros(T, n)
     contribution_max = zeros(T, n)
     position_starts = zeros(Int, n + 1)
@@ -158,7 +158,7 @@ function _additive_branch_constraint(allowed_values, functions, subspaces, posit
     BranchConstraint((partial, depth, _) -> begin
         current = prefix[depth]
         for i in position_starts[depth]:position_starts[depth+1]-1
-                current += _signed(_contribution(functions, subspace_order[i], partial[depth]))
+                current += _summand(S, _contribution(functions, subspace_order[i], partial[depth]))
         end
         prefix[depth+1] = current
         min_possible = current + remaining_min[depth+1]
@@ -166,9 +166,12 @@ function _additive_branch_constraint(allowed_values, functions, subspaces, posit
         any(t -> min_possible <= t <= max_possible, allowed_values)
     end)
 end
-# `UInt + Int` is a `UInt`, so a map returning `UInt` would make negative sums wrap around.
-_signed(x::Unsigned) = x % signed(promote_type(typeof(x), Int))
-_signed(x) = x
+# Integer contributions are summed in the allowed values' type promoted with `Int`, with a checked
+# conversion, since `UInt + Int` is a `UInt` and negative sums would wrap around.
+_sum_type(allowed_values) = promote_type(eltype(allowed_values), Int)
+_sum_type(::Missing) = Int
+_summand(S, x::Integer) = convert(S, x)
+_summand(S, x) = x
 _contribution(func::Function, k, substate) = func(substate)
 _contribution(fw::WeightedFunction, k, substate) = fw.weights[k] * fw.func(substate)
 _contribution(functions, k, substate) = functions[k](substate)
@@ -307,7 +310,7 @@ branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_cons
     @test Set(states) == Set(states2)
 end
 @testitem "Additive constraints on subsets of mixed spaces" begin
-    using FermionicHilbertSpaces: AdditiveConstraint
+    using FermionicHilbertSpaces: AdditiveConstraint, particle_number
     @fermions f
     @spin s1 1
     @spin s2 1 // 2
@@ -316,17 +319,20 @@ end
     H = tensor_product(Hs)
     spin_sum = AdditiveConstraint([1 // 2, 3 // 2]; spaces=(Hs[5], Hs[2]), maps=(s -> s.m, s -> 2 * s.m))
     weighted = NumberConservation([1, 2], (Hs[4], Hs[3]), (1, 2))
-    bool_count = AdditiveConstraint([2]; spaces=(Hs[1], Hs[4]), maps=s -> isodd(s.f))
+    bool_count = AdditiveConstraint([2]; spaces = (Hs[1], Hs[4]), maps = s -> isodd(particle_number(s)))
     for constraint in (spin_sum, weighted, bool_count, spin_sum * weighted)
         expected = basisstates(constrain_space(H, constraint))
         @test !isempty(expected)
         @test Set(basisstates(tensor_product(Hs; constraint))) == Set(expected)
     end
-    unsigned_and_negative = AdditiveConstraint([-2, 1]; spaces = Hs[1:2], maps = (s -> s.f, s -> Int(2s.m)))
+    unsigned_and_negative = AdditiveConstraint([-2, 1]; spaces = Hs[1:2], maps = (s -> UInt(particle_number(s)), s -> Int(2s.m)))
     H12 = tensor_product(Hs[1:2])
-    expected = filter(s -> Int(s.states[1].f) + Int(2s.states[2].m) in (-2, 1), collect(basisstates(H12)))
+    expected = filter(s -> particle_number(s.states[1]) + Int(2s.states[2].m) in (-2, 1), collect(basisstates(H12)))
     @test Set(basisstates(tensor_product(Hs[1:2]; constraint = unsigned_and_negative))) == Set(expected)
     @test Set(basisstates(constrain_space(H12, unsigned_and_negative))) == Set(expected)
+    unrepresentable = AdditiveConstraint([0]; spaces = Hs[1:2], maps = (s -> typemax(UInt), s -> Int(2s.m)))
+    @test_throws InexactError tensor_product(Hs[1:2]; constraint = unrepresentable)
+    @test_throws InexactError constrain_space(H12, unrepresentable)
     Hfs = map(hilbert_space, (f[1], f[2], f[3]))
     weighted_all = NumberConservation([2]; weights=(1, 2, 1))
     @test Set(basisstates(tensor_product(Hfs; constraint=weighted_all))) == Set(FockNumber.([0b010, 0b101]))
