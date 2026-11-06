@@ -11,12 +11,16 @@ function _linear_index(inds::NTuple{N, Int}, axes) where {N}
     end
     return k
 end
-# `LinearIndices` and `CartesianIndices` need `Int` dimensions. A product with a larger factor has
-# neither, and its states are only reachable by value, e.g. in a constrained subspace.
-_product_indices(dims::Tuple{Vararg{Int}}) = (LinearIndices(dims), CartesianIndices(dims))
-_product_indices(dims) = all(<=(typemax(Int)), dims) ? _product_indices(map(Int, dims)) : (nothing, nothing)
+# `_linear_index` and `CartesianIndices` do unchecked `Int` arithmetic, so the index arrays exist only
+# when the total dimension fits in an `Int`. The states of a larger product are only reachable by
+# value, e.g. in a constrained subspace.
+function _product_indices(dims)
+    prod(big, dims) <= typemax(Int) || return (nothing, nothing)
+    intdims = map(Int, dims)
+    return (LinearIndices(intdims), CartesianIndices(intdims))
+end
 _index_array(a) = a
-_index_array(::Nothing) = throw(ArgumentError("A product space with a factor of more than `typemax(Int)` states has no integer indices for its states."))
+_index_array(::Nothing) = throw(ArgumentError("A product space with more than `typemax(Int)` states has no integer indices for its states."))
 
 """
     ProductState(states::Tuple)
@@ -88,8 +92,7 @@ function _state_index(state::ProductState, H::_ProductSpace)
     mapreduce(>(0), &, inds) || return 0
     return _linear_index(inds, _index_array(H.lininds).indices)
 end
-# `lininds` is exact only when the product of the factor dimensions fits in an `Int`
-has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && prod(big ∘ dim, H.factors) <= typemax(Int)
+has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && !isnothing(H.lininds)
 
 maximum_particles(H::ProductSpace) = sum(maximum_particles, groups(H))
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
@@ -284,10 +287,20 @@ end
     @test S[1][:x] * Ket(fill("↑", 64), H) == Ket(["↓"; fill("↑", 63)], H) / 2
 end
 
-@testitem "Product space with a factor of more than typemax(Int) states" begin
-    import FermionicHilbertSpaces: basisstate, particle_number, state_index
-    @fermions f
+@testitem "Product space with more than typemax(Int) states" begin
+    import FermionicHilbertSpaces: basisstate, particle_number, state_index, ProductState, SpinState
     @spins S 1 // 2
+    for N in (64, 65)
+        spins = [hilbert_space(S[i]) for i in 1:N]
+        P = tensor_product(spins)
+        @test_throws OverflowError dim(P)
+        @test_throws ArgumentError basisstate(1, P)
+        @test_throws ArgumentError state_index(ProductState(ntuple(_ -> SpinState(-1 // 2), N)), P)
+        H = tensor_product(spins; constraint = AdditiveConstraint(1; spaces = spins, maps = fill(s -> Int(1 // 2 - s.m), N)))
+        @test dim(H) == N
+        @test all(state_index(basisstate(n, H), H) == n for n in 1:dim(H))
+    end
+    @fermions f
     spaces = [[hilbert_space(f, [i]) for i in 1:100]; [hilbert_space(S[i]) for i in 1:100]]
     P = tensor_product(spaces)
     @test_throws OverflowError dim(P)
