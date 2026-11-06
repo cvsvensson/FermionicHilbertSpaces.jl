@@ -88,6 +88,8 @@ end
 function partial_transpose!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(first(Hs), Hsub), kwargs...)
     partial_transpose!(mout, m, first(Hs), Hsub, complement, last(Hs); kwargs...)
 end
+partial_transpose!(mout, m, H::AbstractHilbertSpace, Hsub; kwargs...) = partial_transpose!(mout, m, H, _subsystem(Hsub, H); kwargs...)
+partial_transpose!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub; kwargs...) = partial_transpose!(mout, m, Hs, _subsystem(Hsub, first(Hs)); kwargs...)
 
 """
     partial_transpose(m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false)
