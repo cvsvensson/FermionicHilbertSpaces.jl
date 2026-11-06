@@ -115,11 +115,11 @@ Hermitian: `(ρ^{R_A})' == p_A ρ^{R_A} p_A` for parity-even `ρ`, with `p_A` th
 """
 partial_transpose(m, H::AbstractHilbertSpace, Hsub; kwargs...) =
     _partial_transpose(m, H, _subsystem(Hsub, H), H; kwargs...)
-partial_transpose(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub; kwargs...) =
+partial_transpose(m, Hs::Pair{<:AbstractHilbertSpace, <:AbstractHilbertSpace}, Hsub; kwargs...) =
     _partial_transpose(m, first(Hs), _subsystem(Hsub, first(Hs)), last(Hs); kwargs...)
 partial_transpose(H::AbstractHilbertSpace, Hsub; kwargs...) =
     PartialTransposeMap(H, _subsystem(Hsub, H), H; kwargs...)
-partial_transpose(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub; kwargs...) =
+partial_transpose(Hs::Pair{<:AbstractHilbertSpace, <:AbstractHilbertSpace}, Hsub; kwargs...) =
     PartialTransposeMap(first(Hs), _subsystem(Hsub, first(Hs)), last(Hs); kwargs...)
 
 function _partial_transpose(m::AbstractMatrix, H, Hsub, Hout;

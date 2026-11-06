@@ -256,7 +256,7 @@ function _pair_majoranas(names, H)
         γ1 in γs && γ2 in γs || throw(ArgumentError("A Majorana names a mode only together with its partner, got $(γ1 in γs ? γ1 : γ2) without $(γ1 in γs ? γ2 : γ1)."))
     end
     paired = Set(Iterators.flatten(keys(a.majoranaindices) for a in pairs))
-    [filter(x -> !(x in paired), names); pairs]
+    return [filter(x -> !(x in paired), names); pairs]
 end
 
 function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
