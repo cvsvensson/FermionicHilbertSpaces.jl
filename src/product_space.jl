@@ -518,6 +518,14 @@ PieceIndex(block::Int, slot::Int) = PieceIndex{block,slot}()
     n = fieldcount(ts[1])
     return Expr(:block, Expr(:meta, :inline), Expr(:tuple, (:(f($((:(ts[$k][$i]) for k in eachindex(ts))...))) for i in 1:n)...))
 end
+# `foldl(op, t; init)`, unrolled for any length so that a product of constants folds to a constant.
+@generated function tuplefoldl(op, init, t::Tuple)
+    ex = :init
+    for i in 1:fieldcount(t)
+        ex = :(op($ex, t[$i]))
+    end
+    return Expr(:block, Expr(:meta, :inline), ex)
+end
 
 # ─── Leaves: what happens to each source factor ──────────────────────────────
 
@@ -702,7 +710,7 @@ leaf_phase_factor(leaf::Union{Passthrough,Fractured}) = kron_phase_factor(leaf.m
 function kron_phase_factor(sp::ProductSpaceMapper)
     phase_fns = map(leaf_phase_factor, sp.leaves)
     function phase_factor(fullstate1, fullstate2)
-        return reduce(*, tuplemap((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))
+        return tuplefoldl(*, 1, tuplemap((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))
     end
 end
 function phase_factor_u(sp::ProductSpaceMapper)
@@ -712,6 +720,6 @@ function phase_factor_u(sp::ProductSpaceMapper)
     end
 
     function phase_factor(state)
-        return reduce(*, tuplemap((s, pfu) -> isnothing(pfu) ? 1 : pfu(s), state.states, leaf_pfus))
+        return tuplefoldl(*, 1, tuplemap((s, pfu) -> isnothing(pfu) ? 1 : pfu(s), state.states, leaf_pfus))
     end
 end

@@ -110,7 +110,7 @@ function FockMapper(fermionpositions::P, N) where P
     all(issorted, fermionpositions) || throw(ArgumentError("The fermions in each subsystem must be ordered as in the full system, got unsorted fermion positions $fermionpositions."))
     T = default_fock_representation(N)
     permutation = length(perm) == N && isperm(perm) && N < 64 ? BitPermutation{T}(perm)' : nothing
-    masks = map(Xp -> focknbr_from_site_indices(Xp), fermionpositions)
+    masks = map(Xp -> FockNumber{T}(focknbr_from_site_indices(Xp)), fermionpositions)
     isfullpartition = ispartition(fermionpositions, N)
     P1 = typeof(fermionpositions)
     W = typeof(widths)
