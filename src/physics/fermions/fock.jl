@@ -127,7 +127,7 @@ function Base.show(io::IO, fm::FockMapper{N}) where N
 end
 
 function split_state(f::FockNumber, fm::FockMapper{N}) where N
-    state = map(mask -> substate(mask, f), fm.masks)
+    state = tuplemap(mask -> substate(mask, f), fm.masks)
     (state,), (1,)
 end
 
