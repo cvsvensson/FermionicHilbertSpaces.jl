@@ -121,6 +121,7 @@ function _add_joint_cuts!(cuts, p, steps)
         end
         push!(cuts[d], (; terms, opens = collect(zip(opens[d + 1], open_stride[d + 1])), allowed = reached[d + 1]))
     end
+    return
 end
 
 function _joint_key(cut, values, index)
