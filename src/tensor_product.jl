@@ -37,16 +37,17 @@ function tensor_product(spaces; constraint=NoSymmetry())
         return constrain_space(only(spaces), constraint)
     end
     space, factor_states = product_space_and_states(spaces)
-    states = isnothing(factor_states) ? basisstates(space) : factor_states
+    # Only computed when needed, since a large product space has no `basisstates`
+    all_states() = isnothing(factor_states) ? basisstates(space) : factor_states
     if constraint == NoSymmetry()
         combined = _combined_sector_constraint(spaces)
-        !ismissing(combined) && return sector_space(space, states, sector_function(combined, space), combined)
+        !ismissing(combined) && return sector_space(space, all_states(), sector_function(combined, space), combined)
         return isnothing(factor_states) ? space : ConstrainedSpace(space, factor_states)
     end
 
     constraint = supply_missing_constraint_info(constraint, space, spaces)
 
-    supports_branch_pruning(constraint) || return constrain_states(space, constraint, states)
+    supports_branch_pruning(constraint) || return constrain_states(space, constraint, all_states())
     return constrain_states(space, constraint, generate_states(spaces, constraint, space), unpruned_part(constraint))
 end
 

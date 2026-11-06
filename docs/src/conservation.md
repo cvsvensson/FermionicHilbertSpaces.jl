@@ -82,7 +82,7 @@ map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(Hdistinct), sectors(Hd
 #### BranchConstraint
 Builds the states one factor at a time and calls `f(partial_state, depth, spaces)` after each factor is assigned. Returning `false` discards every state that starts this way, so a sector much smaller than the full space is found without enumerating it. Here no two neighbouring modes are both occupied:
 ```@example constraints
-no_neighbours = BranchConstraint((p, depth, spaces) -> depth == 1 || count_ones(p[depth]) + count_ones(p[depth-1]) < 2)
+no_neighbours = BranchConstraint((p, depth, spaces) -> depth == 1 || particle_number(p[depth]) + particle_number(p[depth-1]) < 2)
 dim(hilbert_space(f, 1:20, no_neighbours))
 ```
 
@@ -164,6 +164,7 @@ H = -t \sum_{i,\sigma} (c_{i,\sigma}^\dagger c_{i+1,\sigma} + \mathrm{h.c}) + J_
 ```
 with ``S^z_i = n_{i,↑} - n_{i,↓}`` and no double occupation, has a Hilbert space that splits into exponentially many dynamically disconnected sectors[^1]. Each sector is labelled by a spin pattern such as ↑↑↓↑↓: its states have the spins of the occupied sites in exactly that order, with holes in between. A `BranchConstraint` builds one such sector without the full space:
 ```@example hubbard
+import FermionicHilbertSpaces: particle_number
 function tjz(c, N, t, Jz)
     spins = (:↑,:↓)
     Sz(i) = c[i,:↑]'c[i,:↑] - c[i,:↓]'c[i,:↓]
@@ -175,7 +176,7 @@ function valid_state(partials, depth, spaces, expected_order)
     exc_count = 0
     prev_site = 0
     for n in 1:depth
-        if count_ones(partials[n]) == 1
+        if particle_number(partials[n]) == 1
             exc_count += 1
             site, spin = only(spaces[n].modes).label
             exc_count > length(expected_order) && return false

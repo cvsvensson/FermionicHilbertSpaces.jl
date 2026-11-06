@@ -275,7 +275,7 @@ end
             (Hγ, NumberConservation(1, hilbert_space(γ, 1:4))),
             (H, NumberConservation(0:2, Hs[3:7])),
             (H, NumberConservation(N ÷ 2, Hs) * dipole),
-            (H, NumberConservation(3, Hs[1:6]) * FilterConstraint(s -> isodd(s.f))),
+            (H, NumberConservation(3, Hs[1:6]) * FilterConstraint(s -> isodd(particle_number(s)))),
             (Hm, mixed),
             (H, NumberConservation(1, hilbert_space(f, 1:4)) * NumberConservation(2, Hs[3:6])),
         ]
