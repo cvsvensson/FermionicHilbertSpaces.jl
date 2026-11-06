@@ -269,9 +269,12 @@ _exact_value(z::Complex, term) = complex(_exact_value(real(z), term), _exact_val
 # The constraints on sums, which `generate_states` prunes by in one branch check.
 const SumConstraint = Union{OperatorConstraint, AbstractAdditiveConstraint}
 branch_constraint(c::SumConstraint, allspaces) = branch_constraint([c], allspaces)
-# Sums with values that are not exact are pruned separately, so that the exact ones are not rounded.
-function branch_constraint(constraints::AbstractVector{<:SumConstraint}, allspaces)
+# Sums with values that are not exact are pruned separately, so that the exact ones are not rounded. The spaces may
+# be given as symbols.
+function branch_constraint(constraints::AbstractVector{<:SumConstraint}, spaces)
+    allspaces = map(hilbert_space, spaces)
     sums = [_sum_terms(c, allspaces) for c in constraints if supports_branch_pruning(c)]
+    isempty(sums) && return BranchConstraint((_, _, _) -> true)
     exact = map(s -> eltype(eltype(s.tables)) <: Union{Integer, Rational}, sums)
     allequal(exact) && return _sums_branch_constraint(sums, allspaces)
     return ProductConstraint([_sums_branch_constraint(sums[exact], allspaces), _sums_branch_constraint(sums[.!exact], allspaces)])
