@@ -27,22 +27,25 @@ function constrain_space(space, constraint::AbstractConstraint)
     isnothing(split) && return constrain_space(space, constraint, basisstates(space))
     constraint = supply_missing_constraint_info(constraint, space, split)
     # The search varies its last space fastest and `basisstates(space)` its first atom, so the reversed split keeps that order.
-    return constrain_states(space, constraint, generate_states(reverse(split), constraint, space))
+    return constrain_states(space, constraint, generate_states(reverse(split), constraint, space), unpruned_part(constraint))
 end
 function constrain_space(space, constraint::AbstractConstraint, labels)
     supports_filtering(constraint) || throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     return constrain_states(space, constraint, _states_of(space, labels))
 end
 # The subspace of the candidate `states` that satisfy `constraint`, grouped into sectors when it supports it.
+# Only `unchecked`, the part of `constraint` that `states` may violate, is filtered by when not grouping.
 # A constraint that cannot filter is taken to hold for all of `states`.
-function constrain_states(space, constraint, states)
+function constrain_states(space, constraint, states, unchecked = constraint)
     if supports_sector_grouping(constraint) && supports_filtering(constraint)
         return sector_space(space, states, sector_function(constraint, space), constraint)
-    elseif supports_filtering(constraint)
-        return ConstrainedSpace(space, collect(Iterators.filter(filter_function(constraint, space), states)); constraint)
+    elseif supports_filtering(unchecked)
+        return ConstrainedSpace(space, collect(Iterators.filter(filter_function(unchecked, space), states)); constraint)
     end
     return ConstrainedSpace(space, states; constraint)
 end
+# The factors of `constraint` that the branch pruning of `generate_states` does not enforce.
+unpruned_part(constraint) = ProductConstraint(filter(!supports_branch_pruning, collect(constraint_factors(constraint))))
 
 # Spaces that the branch constraint of `c` reads: `missing` for the whole state, which any split fits,
 # and `nothing` when no split is known to fit, such as for a user's `BranchConstraint`.

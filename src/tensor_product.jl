@@ -46,8 +46,8 @@ function tensor_product(spaces; constraint=NoSymmetry())
 
     constraint = supply_missing_constraint_info(constraint, space, spaces)
 
-    states = supports_branch_pruning(constraint) ? generate_states(spaces, constraint, space) : states
-    return constrain_states(space, constraint, states)
+    supports_branch_pruning(constraint) || return constrain_states(space, constraint, states)
+    return constrain_states(space, constraint, generate_states(spaces, constraint, space), unpruned_part(constraint))
 end
 
 size_compatible(m, H) = size(m) == ntuple(_ -> dim(H), ndims(m))
