@@ -79,6 +79,18 @@ scatter(
     ylabel = "overlap with cat state", size = (400, 250)
 )
 
+# The half-chain entanglement entropy follows from [`partial_trace`](@ref) from the fragment to the first half of the
+# chain; the fragment is not a tensor product across the cut, but `partial_trace` maps to the half chain directly.
+# In the plot, the entropy of the state with all atoms in the ground state grows quickly to a thermal value, while that
+# of the cat state grows slowly and oscillates with the revival period.
+
+entropy(ρ) = sum(λ -> λ > 1.0e-12 ? -λ * log(λ) : 0.0, eigvals(Hermitian(ρ)))
+half = partial_trace(H => hilbert_space(S, 1:(N ÷ 2)))
+evolve(ψ, t) = B * (V * (exp.(-im * E * t) .* (V' * ψ)))
+halfentropy(ψ) = [entropy(half(evolve(ψ, t))) for t in ts]
+plot(ts, halfentropy(catstate); label = "cat state", xlabel = "t", ylabel = "half-chain entropy", size = (400, 250))
+plot!(ts, halfentropy(down); label = "↓↓↓↓…")
+
 # ## Fragmentation from dipole conservation
 # The pair-hopping chain, here with open boundaries,
 # ```math
@@ -101,10 +113,33 @@ seeds = ["↑↓↑↓↑↓↓↑↓↑↓↑", "↑↑↑↓↓↓↓↓↓↑
 # others are single frozen states.
 
 remaining = Set(basisstates(Hneutral))
-sizes = Int[]
+fragments = []
 while !isempty(remaining)
     F = fragment(pairhop, Hneutral, [first(remaining)])
     setdiff!(remaining, basisstates(F))
-    push!(sizes, dim(F))
+    push!(fragments, F)
 end
+sort!(fragments; by = dim)
+sizes = dim.(fragments)
 (; sector = dim(Hneutral), fragments = length(sizes), frozen = count(==(1), sizes), largest = maximum(sizes))
+
+# An eigenstate of a fragment has Schmidt rank across the middle of the chain at most the number of distinct left
+# halves among the fragment's basis states, which caps its half-chain entropy. In the plot, ordered by fragment size,
+# the frozen states have no entanglement and small fragments stay at or below their low caps. Only the largest fragment
+# reaches substantial entanglement; it saturates its own cap, which still lies well below that of the whole sector.
+
+lefthalves(F) = length(unique(s -> s.states[1:(N ÷ 2)], basisstates(F)))
+caps = [log(lefthalves(F)) for F in fragments]
+entropies = map(fragments) do F
+    half = partial_trace(F => hilbert_space(S, 1:(N ÷ 2)))
+    [entropy(half(v)) for v in eachcol(eigvecs(Hermitian(representation(pairhop, F, Matrix))))]
+end
+@assert all(maximum(Sv) <= cap + 1.0e-10 for (Sv, cap) in zip(entropies, caps))
+@assert all(Sv -> all(<(1.0e-10), Sv), entropies[sizes .== 1])
+scatter(
+    reduce(vcat, [fill(i, length(Sv)) for (i, Sv) in enumerate(entropies)]), reduce(vcat, entropies);
+    ms = 2, label = "eigenstates", xlabel = "fragment", ylabel = "half-chain entropy", legend = :topleft,
+    size = (400, 250)
+)
+scatter!(eachindex(caps), caps; marker = :hline, ms = 6, label = "cap")
+hline!([log(lefthalves(Hneutral))]; ls = :dash, label = "sector cap")
