@@ -430,6 +430,16 @@ end
     end
 end
 
+@testitem "Tensor product of a space with labelled and filtered constraints" begin
+    @spins S 1 // 2
+    @fermions f
+    nup(s) = count(x -> x.m > 0, s.states)
+    H1 = hilbert_space(S, 1:3, (sum(S[i][:z] for i in 1:3), nup => 1))
+    H = tensor_product(H1, hilbert_space(f, 1:2))
+    @test dim(H) == 4 * dim(H1)
+    @test Set(quantumnumbers(H)) == Set(quantumnumbers(H1))
+end
+
 @testitem "Tensor product keeps the sector rule of a factor" begin
     using FermionicHilbertSpaces: particle_number
     @fermions f
@@ -454,7 +464,8 @@ unsupported constraints are returned unchanged.
 """
 localize_constraint(c::AbstractConstraint, ::SectorHilbertSpace) = c
 localize_constraint(c::AbstractAdditiveConstraint, H::SectorHilbertSpace) = supply_missing_constraint_info(c, H, (H,))
-localize_constraint(c::ProductConstraint, H::SectorHilbertSpace) = ProductConstraint(map(ci -> localize_constraint(ci, H), c.constraints))
+# The states of `H` already satisfy the filtering factors, so only the grouping factors are kept.
+localize_constraint(c::ProductConstraint, H::SectorHilbertSpace) = ProductConstraint(map(ci -> localize_constraint(ci, H), filter(supports_sector_grouping, c.constraints)))
 function localize_constraint(c::SectorConstraint{<:FilterConstraint{<:Any,Missing,Missing}}, H::SectorHilbertSpace)
     # Bind the free-standing reducer to H as its single subspace.
     # sector_function on the larger space will split the state, extract the H-substate,
