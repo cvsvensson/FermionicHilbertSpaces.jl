@@ -81,9 +81,8 @@ scatter(
 N = 12
 Hfull = hilbert_space(S, 1:N)
 pairhop = sum(S[k][:+] * S[k + 1][:-] * S[k + 2][:-] * S[k + 3][:+] for k in 1:(N - 3)) + hc
-neutral = AdditiveConstraint(0; maps = s -> s.m, spaces = factors(Hfull)) *
-    AdditiveConstraint(0; maps = [s -> k * s.m for k in 1:N], spaces = factors(Hfull))
-Hneutral = constrain_space(Hfull, neutral)
+neutral = AdditiveConstraint(0; maps = s -> s.m) * AdditiveConstraint(0; maps = [s -> k * s.m for k in 1:N])
+Hneutral = hilbert_space(S, 1:N, neutral)
 seeds = ["↑↓↑↓↑↓↓↑↓↑↓↑", "↑↑↑↓↓↓↓↓↓↑↑↑"]
 @assert all(!iszero(state_index(s, Hneutral)) for s in seeds)
 [dim(fragment(pairhop, Hfull, [s])) for s in seeds]
