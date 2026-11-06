@@ -53,7 +53,7 @@ function Base.show(io::IO, H::FreeProductSpace)
     show(IOContext(io, :compact => true), H.free)
     print(io, " ⊗ ")
     show(IOContext(io, :compact => true), H.aux)
-    print(io, ")")
+    return print(io, ")")
 end
 
 _isfree_factor(x) = x isa Union{FermionSym, MajoranaSym}
@@ -187,7 +187,7 @@ _finalize_free_product(S, ::EagerDenseRepr) = Matrix(S)
         end
         return vec([fold(a - b) for a in εs[1], b in εs[2]])
     end
-    contained(a, b) = all(x -> minimum(abs.(b .- x)) < 1e-6, a)
+    contained(a, b) = all(x -> minimum(abs.(b .- x)) < 1.0e-6, a)
     cnumber = 0.37 + 0.21 * (F + F')
     P = reverse(Matrix(I, 2nmax + 1, 2nmax + 1), dims = 1) # n → -n
 

@@ -12,13 +12,13 @@ module FreeFermions
         EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, MajoranaSym, NoChunking, SymbolicFermionBasis,
         SymbolicMajoranaBasis,
     _FermionModeSpace, _canonicalize_repr, _matrix_format, _repr_eltype, _xlogx, _zero_matrix, exchange_phase, finalize!,
-        matrix_accumulator, mode_position, push_inds_amps!, state_index, SymbolicState
+    matrix_accumulator, mode_position, push_inds_amps!, state_index, SymbolicState
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,
         _state_label_atomic, apply_local_operators, basisstate, basisstates, dim, von_neumann_entropy, expectation,
-        hilbert_space, matrix_representation, mode_ordering, modes, partial_trace, representation, tensor_product
+    hilbert_space, matrix_representation, mode_ordering, modes, partial_trace, representation, tensor_product
     using LinearAlgebra: LinearAlgebra, Diagonal, Eigen, Hermitian, Symmetric, UniformScaling, I,
     det, eigen, eigvals, issymmetric, kron, normalize, svd
-    using SparseArrays: sparse, spzeros
+using SparseArrays: sparse, spzeros
     using NonCommutativeProducts: NonCommutativeProducts, NCAdd, NCMul, NCterms
     using OrderedCollections: OrderedDict
 
@@ -71,7 +71,7 @@ _check_size(G, H) = size(G) == (dim(H), dim(H)) ||
     include("single_particle.jl")
     include("free_majoranas.jl")
     include("bdg.jl")
-    include("free_product_space.jl")
+include("free_product_space.jl")
     include("gaussian.jl")
     include("wick.jl")
 
