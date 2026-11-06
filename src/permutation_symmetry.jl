@@ -31,13 +31,13 @@ Gives the matrix representation on `H` of a permutation `perm` of the partition 
 For fermionic factors it includes the sign of reordering the fermions, so that it maps `c'` in factor `perm[k]` to the
 corresponding operator in factor `k`. With `phase_factors=false`, it permutes the basis states without signs.
 """
-function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T}=Int; phase_factors=true) where T
+function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T} = Int; phase_factors = true) where {T}
     P = zeros(T, dim(H), dim(H))
     phase_of = perm -> _permutation_phase(H, Hs, perm, phase_factors)
-    add_permutation_operator!(P, (basisstates(H), Base.Fix2(state_index, H)), state_mapper(H, Hs), perm, one(T), phase_of)
+    return add_permutation_operator!(P, (basisstates(H), Base.Fix2(state_index, H)), state_mapper(H, Hs), perm, one(T), phase_of)
 end
 # `phase_of(perm)` gives the phase function of a permutation, see `_permutation_phase`.
-function add_permutation_operator!(P, (states, state_index), mapper, perm, weight=1, phase_of=perm -> (x, y) -> 1)
+function add_permutation_operator!(P, (states, state_index), mapper, perm, weight = 1, phase_of = perm -> (x, y) -> 1)
     substates = unique_split_state(first(states), mapper)
     perm = _match_perm(perm, substates)
     return _add_permutation_operator!(P, (states, state_index), mapper, perm, weight, phase_of(perm))
@@ -90,7 +90,7 @@ subsystem list (covering only a subset of atomic factors). In the subsystem case
 projector is first constructed on `Hsub = tensor_product(Hs...)` and then embedded
 back into `H` via `embed(Psub, Hsub => H)`.
 """
-function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothing, ::Type{T}=_default_projector_eltype(weights); normalize=true, sparse=true, phase_factors=true) where T
+function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights = nothing, ::Type{T} = _default_projector_eltype(weights); normalize = true, sparse = true, phase_factors = true) where {T}
     isempty(perms) && throw(ArgumentError("`perms` must contain at least one permutation."))
 
     # Subsystem branch: Hs does not partition H, treat as a proper subsystem.
@@ -271,7 +271,7 @@ _sector_parity(sector::Symbol) = sector === :symmetric ? 1 : sector === :antisym
 # times `sign(g)` in the antisymmetric case. An orbit containing a state that a
 # permutation maps to minus itself, including these signs, contributes nothing.
 # The orbits are found with the adjacent transpositions, which generate all permutations.
-function _orbit_sector_basis(H, Hs, parity, ::Type{T}; normalize=true, sparse=true, phase_factors=true) where T
+function _orbit_sector_basis(H, Hs, parity, ::Type{T}; normalize = true, sparse = true, phase_factors = true) where {T}
     # `normalize` and `sparse` only affect the projector, which is never built here.
     states = basisstates(H)
     mapper = state_mapper(H, Hs)
@@ -499,9 +499,9 @@ end
     # The swap maps |11⟩ to -|11⟩, which is antisymmetric. Without phase factors it is symmetric.
     @test size(Psign, 2) == 2
     @test size(Ptriv, 2) == 2
-    @test size(symmetric_sector(H, [H1, H2], :symmetric; phase_factors=false), 2) == 3
-    @test size(symmetric_sector(H, [H1, H2], :antisymmetric; phase_factors=false), 2) == 1
-    @test size(symmetric_sector(H, [H1, H2], sympw; phase_factors=false), 2) == 3
+    @test size(symmetric_sector(H, [H1, H2], :symmetric; phase_factors = false), 2) == 3
+    @test size(symmetric_sector(H, [H1, H2], :antisymmetric; phase_factors = false), 2) == 1
+    @test size(symmetric_sector(H, [H1, H2], sympw; phase_factors = false), 2) == 3
 
     Ttriv = symmetric_sector(H, [H1, H2], sympw; orth_method=nothing)
     Tsign = symmetric_sector(H, [H1, H2], antisymw; orth_method=nothing)
@@ -673,7 +673,7 @@ end
         for perm in permutations(1:length(Hs))
             R = permutation_operator(H, Hs, perm)
             @test all(x -> x in (-1, 0, 1), R)
-            @test all(==(1), sum(abs, R; dims=1)) && all(==(1), sum(abs, R; dims=2))
+            @test all(==(1), sum(abs, R; dims = 1)) && all(==(1), sum(abs, R; dims = 2))
         end
         for sector in (:symmetric, :antisymmetric)
             P = symmetric_sector(H, Hs, sector; orth_method=nothing)
@@ -688,7 +688,7 @@ end
     end
     # The orbit basis is computed in the requested precision
     Qbig = symmetric_sector(cases[1]..., :symmetric, BigFloat)
-    @test eltype(Qbig) == BigFloat && size(Qbig, 2) == 2 && maximum(abs, Qbig' * Qbig - I) < 1e-60
+    @test eltype(Qbig) == BigFloat && size(Qbig, 2) == 2 && maximum(abs, Qbig' * Qbig - I) < 1.0e-60
     # Single factor: the sector is the whole space
     H1 = hilbert_space(f, 1:1)
     @test symmetric_sector(H1, [H1], :antisymmetric) ≈ I
@@ -728,7 +728,7 @@ end
     ham = sum(c[1, s]' * c[2, s] + hc for s in (:u, :d)) + 3 * sum(c[k, :u]' * c[k, :u] * c[k, :d]' * c[k, :d] for k in 1:2)
     M = representation(ham, H2, Matrix)
     Qs, Qa = symmetric_sector(H2, sites[1:2], :symmetric), symmetric_sector(H2, sites[1:2], :antisymmetric)
-    @test norm(Qs' * M * Qa) < 1e-12
+    @test norm(Qs' * M * Qa) < 1.0e-12
 end
 
 @testitem "Checks on the weights of symmetric_sector" begin
