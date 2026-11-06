@@ -163,3 +163,18 @@ F = eigen(Hermitian(representation(ham, H, Matrix)))
 G = correlation_matrix(F)
 ground_state_parity(F, H), expectation(ham, G, H)
 ```
+
+## Coupling to other degrees of freedom
+`tensor_product(Hfree, Haux)` combines a `SingleParticle()`, `BdG()` or Majorana space with another space, such as the photon space of a periodically driven system. Its basis is the single-particle basis times the basis of `Haux`, not the many-body tensor product. An operator `Σₖ Qₖ Xₖ + Y`, with `Qₖ` quadratic and `Xₖ`, `Y` acting on `Haux`, is represented as `Σₖ representation(Qₖ, Hfree) ⊗ Xₖ` plus the action of `Y`. This is exact only when the fermions stay free: the `Xₖ` must act like multiplication by functions, such as ``e^{im\omega t}``, and `Y` like a derivative, such as ``-i\partial_t``. `representation` checks this and throws an `ArgumentError` otherwise, for example for `N^2` or `f[1]' * f[1] * N`.
+
+`Haux` declares this structure through two hooks on its basis states, [`FreeFermions.state_product`](@ref) and [`FreeFermions.unit_state`](@ref). With the Floquet operators `F` and `N` of the [Floquet tutorial](literate_output/floquet_tutorial.md), whose states `|n⟩` stand for ``e^{in\omega t}``:
+```julia
+import FermionicHilbertSpaces.FreeFermions: state_product, unit_state
+state_product(a::FloquetState, b::FloquetState) = FloquetState(a.mode + b.mode)
+unit_state(::GenericHilbertSpace{FloquetState}) = FloquetState(0)
+
+H = tensor_product(hilbert_space(f, 1:2, BdG()), Hfloq)
+K = ω * N + (f[1]' * f[2] + f[1]' * f[2]' + hc) + (A / 2 * f[1]' * f[1] * F + hc)
+S = representation(K, H, :dense) # Sambe matrix
+```
+On a `BdG()` space the eigenvalues of `S` are half the quasienergies, as for a static `BdG()` matrix. Terms of `Y` that are multiplications, such as constants or `A * (F + F')`, drop out. Index `i` of `Hfree` and `a` of `Haux` is index `(a - 1) * dim(Hfree) + i`. `BdGEigen` does not yet support these spaces.

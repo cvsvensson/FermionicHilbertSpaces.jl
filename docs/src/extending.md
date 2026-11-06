@@ -45,6 +45,11 @@ Connection to Hilbert spaces:
   is converted to `T`, which adds no precision and leaves any `Float64` arithmetic of that method
   in GPU kernels.
 
+A space can carry the coefficients of free fermions, as in [Coupling to other degrees of freedom](non_interacting.md#Coupling-to-other-degrees-of-freedom):
+
+- [`FreeFermions.state_product`](@ref)`(a, b)` is the product of the coefficients labelled by the basis states `a` and `b`, as a basis state.
+- [`FreeFermions.unit_state`](@ref)`(H)` is the basis state of the unit coefficient.
+
 For speed:
 
 - [`_precomputation_before_operator_application`](@ref)`(op, space)` computes data once per
