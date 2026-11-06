@@ -73,7 +73,7 @@ end
 function _show_rule(io, r::ValueRule)
     r.map === identity || print(io, " => ", r.map)
     r.allowed isa Union{Missing, Type} && return
-    print(io, " => ", _labels(r) ? r.allowed : repr(only(r.allowed)))
+    return print(io, " => ", _labels(r) ? r.allowed : repr(only(r.allowed)))
 end
 Base.show(io::IO, c::StateConstraint) = (print(io, c.reducer); _show_rule(io, c.rule))
 
@@ -474,8 +474,10 @@ end
 @testitem "Constraint types keep their label rules" begin
     @fermions f
     Hnumber = hilbert_space(f, 1:4, NumberConservation())
-    unlabelled = [NumberConservation(2) * FilterConstraint(s -> s.f != 3), ParityConservation() * FilterConstraint(s -> isodd(s.f)),
-        FilterConstraint(s -> s.f > 2) * SectorConstraint(s -> isodd(s.f) ? 1.0 : 2)]
+    unlabelled = [
+        NumberConservation(2) * FilterConstraint(s -> s.f != 3), ParityConservation() * FilterConstraint(s -> isodd(s.f)),
+        FilterConstraint(s -> s.f > 2) * SectorConstraint(s -> isodd(s.f) ? 1.0 : 2),
+    ]
     @test !any(c -> hilbert_space(f, 1:4, c) isa SectorHilbertSpace, unlabelled)
     @test !(constrain_space(hilbert_space(f, 1:4, NumberConservation(2)), FilterConstraint(s -> s.f != 3)) isa SectorHilbertSpace)
     H2 = constrain_space(Hnumber, NumberConservation(2))

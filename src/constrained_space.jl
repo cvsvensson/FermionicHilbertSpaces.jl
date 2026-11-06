@@ -19,7 +19,7 @@ subspace_index(H::ConstrainedSpace) = H.index
 rewrap(H::ConstrainedSpace, parent) = ConstrainedSpace(parent, H.states, H.index)
 
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
-constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}) = _holds_constraints(states) ? constrain_space(space, as_constraint(states)) : constrain_space(space, NoSymmetry(), states)
+constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector, BasisStates}) = _holds_constraints(states) ? constrain_space(space, as_constraint(states)) : constrain_space(space, NoSymmetry(), states)
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, _states_of(space, states))
 function constrain_space(space, constraint::AbstractConstraint)
@@ -477,11 +477,11 @@ localize_constraint(c::AbstractConstraint, ::SectorHilbertSpace) = c
 localize_constraint(c::AbstractAdditiveConstraint, H::SectorHilbertSpace) = supply_missing_constraint_info(c, H, (H,))
 # The states of `H` already satisfy the filtering factors, so only the grouping factors are kept.
 localize_constraint(c::ProductConstraint, H::SectorHilbertSpace) = ProductConstraint(map(ci -> localize_constraint(ci, H), filter(supports_sector_grouping, c.constraints)))
-function localize_constraint(c::StateConstraint{<:Any,Missing,Missing}, H::SectorHilbertSpace)
+function localize_constraint(c::StateConstraint{<:Any, Missing, Missing}, H::SectorHilbertSpace)
     # Bind the free-standing reducer to H as its single subspace.
     # sector_function on the larger space will split the state, extract the H-substate,
     # apply the original reducer to it, and return the label via `only`.
-    StateConstraint(only, (c.reducer,), (H,), c.rule)
+    return StateConstraint(only, (c.reducer,), (H,), c.rule)
 end
 
 """

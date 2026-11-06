@@ -154,7 +154,7 @@ end
     selected = Ref(0)
     keep(state) = isodd(particle_number(state))
     label(state) = isodd(particle_number(state))
-    function default_subspace_index(::Union{FilterConstraint{typeof(keep)},SectorConstraint{typeof(label)}}, parent, states)
+    function default_subspace_index(::Union{FilterConstraint{typeof(keep)}, SectorConstraint{typeof(label)}}, parent, states)
         selected[] += 1
         LinearSearch(states)
     end
