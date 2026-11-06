@@ -273,11 +273,13 @@ end
     @test quantumnumbers(hilbert_space(f, 1:2, (f[1]'f[1] + f[2]'f[2], f[1]'f[1] + 2f[2]'f[2]))) == [[0, 0], [1, 1], [1, 2], [2, 3]]
     @test basisstates(hilbert_space(f, 1:4, NumberConservation(2) * (P => 3))) == basisstates(hilbert_space(f, 1:4, (N => 2, P => 3)))
     @test dim(hilbert_space(f, 1:4, ())) == 16
+    @test quantumnumbers(constrain_space(hilbert_space(f, 1:4, N), P => 3)) == [1, 2]
     @spins S 1 // 2
     @test quantumnumbers(hilbert_space(S, 1:3, sum(S[i][:z] for i in 1:3))) == (-3 // 2):(3 // 2)
     nup(s) = count(x -> x.m > 0, s.states)
     @test quantumnumbers(hilbert_space(S, 1:3, nup)) == 0:3
     @test dim(hilbert_space(S, 1:4, nup => 2)) == 6
+    @test eltype(quantumnumbers(hilbert_space(S, 1:2, (S[1][:z] + S[2][:z], S[1][:z])))) == Vector{Rational{Int}}
     up(i) = S[i][:z] + 1 // 2
     @test dim(hilbert_space(S, 1:6, [up(i) * up(i + 1) => 0 for i in 1:5])) == 21
     @test dim(hilbert_space(S, 1:6, (up(i) * up(i + 1) => 0 for i in 1:5))) == 21

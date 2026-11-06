@@ -40,9 +40,15 @@ function constrain_states(space, constraint, states, unchecked = constraint)
     if supports_sector_grouping(constraint) && supports_filtering(constraint)
         return sector_space(space, states, sector_function(constraint, space), constraint)
     elseif supports_filtering(unchecked)
-        return ConstrainedSpace(space, collect(Iterators.filter(filter_function(unchecked, space), states)); constraint)
+        return _restricted_space(space, collect(Iterators.filter(filter_function(unchecked, space), states)), constraint)
     end
     return ConstrainedSpace(space, states; constraint)
+end
+_restricted_space(space, states, constraint) = ConstrainedSpace(space, states; constraint)
+# Restricting a space with sectors keeps its sectors.
+function _restricted_space(space::SectorHilbertSpace, states, constraint)
+    isnothing(space.constraint) && return ConstrainedSpace(space, states; constraint)
+    return sector_space(space, states, sector_function(space.constraint, parent(space)), space.constraint)
 end
 # The factors of `constraint` that the branch pruning of `generate_states` does not enforce.
 unpruned_part(constraint) = ProductConstraint(filter(!supports_branch_pruning, collect(constraint_factors(constraint))))

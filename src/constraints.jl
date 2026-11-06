@@ -272,7 +272,7 @@ function sector_function(constraint::ProductConstraint, space::AbstractHilbertSp
         return state -> keep(state) ? f(state) : missing
     end
     subspace_functions = map(cons -> sector_function(cons, space), grouping)
-    V = mapreduce(f -> nonmissingtype(Base.promote_op(f, statetype(space))), typejoin, subspace_functions; init=Union{})
+    V = mapreduce(f -> nonmissingtype(Base.promote_op(f, statetype(space))), promote_type, subspace_functions; init=Union{})
     function sector(state)
         keep(state) || return missing
         sectors = Vector{V}(undef, length(subspace_functions))
@@ -336,11 +336,11 @@ constrain_space
     H_mixed = hilbert_space(f, labels, qn_mixed)
     @test dim(H_mixed) == 2^4
     @test Set(quantumnumbers(H_mixed)) == Set(Any[n, n >= 2 ? :hi : :lo] for n in 0:4)
-    # Integer and floating-point labels keep their own types
+    # Numeric labels are promoted to a common type
     qn_numeric = NumberConservation() * FermionicHilbertSpaces.SectorConstraint(s -> isodd(particle_number(s)) ? 0.5 : 1.5)
     q_numeric = collect(quantumnumbers(hilbert_space(f, 1:2, qn_numeric)))
     @test [0, 1.5] in q_numeric
-    @test all(q -> q[1] isa Int && q[2] isa Float64, q_numeric)
+    @test all(q -> q isa Vector{Float64}, q_numeric)
     qn = prod(NumberConservation(missing, hilbert_space(f[l])) for l in labels)
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
