@@ -87,7 +87,7 @@ combine_states(substates, H::AbstractSubspace) = combine_states(substates, paren
 partial_trace_phase_factor(s1, s2, H::AbstractSubspace) = partial_trace_phase_factor(s1, s2, parent(H))
 partial_transpose_phase_factor(s1, s2, H::AbstractSubspace) = partial_transpose_phase_factor(s1, s2, parent(H))
 state_mapper(H::AbstractSubspace, Hs) = state_mapper(parent(H), Hs)
-_apply_local_operators(ops, state::AbstractBasisState, H::AbstractSubspace, precomp) = _apply_local_operators(ops, state, parent(H), precomp)
+_apply_local_operators(ops, state, H::AbstractSubspace, precomp) = _apply_local_operators(ops, state, parent(H), precomp)
 
 # The subspace `H` with `f` applied to its parent and to the spaces its constraint refers to; `f` must commute with taking factors, as tagging and transposing do.
 map_parent(f, H::AbstractSubspace) = rewrap(H, f(parent(H)))

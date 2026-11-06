@@ -67,7 +67,7 @@ interpret_state(state, H::TaggedSpace) = interpret_state(state, H.parent)
 
 _precomputation_before_operator_application(op::TaggedSym, space::TaggedSpace) =
     _precomputation_before_operator_application(op.op, space.parent)
-_precomputation_before_operator_application(op::TaggedSym, space::TransposedSpace) =
+_precomputation_before_operator_application(op::TaggedSym, space::Union{TransposedSpace, AbstractSubspace}) =
     _precomputation_before_operator_application(op, parent(space))
 apply_local_operator(op::TaggedSym, state, space::TaggedSpace, precomp) = apply_local_operator(op.op, state, space.parent, precomp)
 apply_local_operator(op::TaggedSym, state, space::TaggedSpace, precomp, ::Type{P}) where {P} =
@@ -96,21 +96,26 @@ end
     struct Num <: AbstractSym
         site::Any
     end
-    @nc Shift Num
+    struct Phase <: AbstractSym
+        site::Any
+    end
+    @nc Shift Num Phase
     Base.adjoint(s::Shift) = Shift(s.site, -s.k)
     Base.adjoint(n::Num) = n
-    symbolic_group(op::Union{Shift, Num}) = op.site
+    Base.adjoint(p::Phase) = p
+    symbolic_group(op::Union{Shift, Num, Phase}) = op.site
     local_mul_effect(a::Shift, b::Shift) = Shift(a.site, a.k + b.k)
     local_mul_effect(a::Num, b::Shift) = AddTerms((Swap(1), b.k * b))
-    local_mul_effect(::Shift, ::Num) = nothing
-    local_mul_effect(::Num, ::Num) = nothing
     struct Site <: AbstractBasisState
         n::Int
     end
     apply_local_operator(s::Shift, state::Site, space, precomp) = (Site(mod(state.n + s.k, 3)), 1)
     apply_local_operator(::Num, state::Site, space, precomp) = (state, state.n)
+    apply_local_operator(::Phase, state::Site, space, precomp) = (state, im^state.n)
+    apply_local_operator(s::Shift, n::Int, space, precomp) = (n + s.k, 1)
     mat_eltype(::Type{Shift}) = Int
     mat_eltype(::Type{Num}) = Int
+    mat_eltype(::Type{Phase}) = ComplexF64
 
     l(x) = add_tag(x, :l)
     r(x) = add_tag(x, :r)
@@ -118,6 +123,23 @@ end
     @test l(Num(1)) * l(Shift(1, 1)) == l(Shift(1, 1)) * l(Num(1)) + l(Shift(1, 1))
     @test l(Num(1)) * r(Shift(1, 1)) == r(Shift(1, 1)) * l(Num(1))
     @test l(r(Shift(1, 1))) != r(l(Shift(1, 1)))
+
+    # A product of different operator types has the element type of its factors
+    Hs = GenericHilbertSpace(1, Site.(0:2))
+    M = representation(Phase(1) * Shift(1, 1), Hs, Matrix)
+    @test M ≈ Diagonal(im .^ (0:2)) * representation(Shift(1, 1), Hs, Matrix)
+    @test representation(l(Phase(1) * Shift(1, 1)), l(Hs), Matrix) == M
+
+    # Kets of a tagged space, and a constrained space with states that are not `AbstractBasisState`s
+    @test representation(l(Kets(Hs)(Site(1))), l(Hs)) == representation(Kets(Hs)(Site(1)), Hs)
+    Hi = GenericHilbertSpace(3, 0:2)
+    Hc = constrain_space(Hi, SectorConstraint(v -> sum(v) <= 1 ? 0 : 1; maps = identity, spaces = (Hi,)))
+    MS = representation(Shift(3, 1), Hc, Matrix; projection = true)
+    @test representation(l(Shift(3, 1)), l(Hc), Matrix; projection = true) == MS
+    Hlr, Hl, Hr, left, right = open_system(Hc)
+    ρ = randn(dim(Hc), dim(Hc))
+    S = representation(left(Shift(3, 1)) * right(Shift(3, 1)), Hlr; projection = true)
+    @test reshape(S * reshape(ρ, (Hl, Hr) => Hlr), Hlr => (Hl, Hr)) ≈ MS * ρ * MS
 
     for labels in ((1, 2), (:a, :b))
         H = tensor_product([GenericHilbertSpace(k, Site.(0:2)) for k in labels])
