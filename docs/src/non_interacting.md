@@ -164,17 +164,16 @@ G = correlation_matrix(F)
 ground_state_parity(F, H), expectation(ham, G, H)
 ```
 
-## Coupling to other degrees of freedom
-`tensor_product(Hfree, Haux)` combines a `SingleParticle()`, `BdG()` or Majorana space with another space, such as the photon space of a periodically driven system. Its basis is the single-particle basis times the basis of `Haux`, not the many-body tensor product. An operator `Σₖ Qₖ Xₖ + Y`, with `Qₖ` quadratic and `Xₖ`, `Y` acting on `Haux`, is represented as `Σₖ representation(Qₖ, Hfree) ⊗ Xₖ` plus the action of `Y`. This is exact only when the fermions stay free: the `Xₖ` must act like multiplication by functions, such as ``e^{im\omega t}``, and `Y` like a derivative, such as ``-i\partial_t``. `representation` checks this and throws an `ArgumentError` otherwise, for example for `N^2` or `f[1]' * f[1] * N`.
+## Coupling to other systems
+`tensor_product(Hfree, Haux)` combines a `SingleParticle()`, `BdG()` or Majorana space with the space of another system, such as spins. Its basis is the single-particle basis times the basis of `Haux`, not the many-body tensor product. For an operator `Σₖ Qₖ Xₖ + Σⱼ Yⱼ`, with `Qₖ` quadratic in the fermions and `Xₖ`, `Yⱼ` acting on the other system, `representation` gives `Σₖ representation(Qₖ, Hfree) ⊗ Xₖ`, plus each `Yⱼ` that does not commute with the couplings `Xₖ`, scaled like the matrix of `Hfree`. Terms `Yⱼ` that commute with all couplings, such as constants, don't change the quasiparticles and drop out.
 
-`Haux` declares this structure through two hooks on its basis states, [`FreeFermions.state_product`](@ref) and [`FreeFermions.unit_state`](@ref). With the Floquet operators `F` and `N` of the [Floquet tutorial](literate_output/floquet_tutorial.md), whose states `|n⟩` stand for ``e^{in\omega t}``:
+The fermions are free only if the couplings commute with each other, and `representation` throws an `ArgumentError` otherwise. With a conserved coupling, the matrix is block diagonal with one free problem per eigenvalue of the coupling:
 ```julia
-import FermionicHilbertSpaces.FreeFermions: state_product, unit_state
-state_product(a::FloquetState, b::FloquetState) = FloquetState(a.mode + b.mode)
-unit_state(::GenericHilbertSpace{FloquetState}) = FloquetState(0)
-
-H = tensor_product(hilbert_space(f, 1:2, BdG()), Hfloq)
-K = ω * N + (f[1]' * f[2] + f[1]' * f[2]' + hc) + (A / 2 * f[1]' * f[1] * F + hc)
-S = representation(K, H, :dense) # Sambe matrix
+@fermions f
+@spins σ 1//2
+Hspins = hilbert_space(σ, 1:2)
+op = σ[1][:z] * (f[1]' * f[2] + f[1]' * f[2]' + hc) + 0.7 * σ[2][:x]   # σ[2][:x] drops out
+H = tensor_product(hilbert_space(f, 1:2, BdG()), Hspins)
+M = representation(op, H, :dense)   # eigenvalues: those of the BdG problems with σ[1][:z] = ±1/2
 ```
-On a `BdG()` space the eigenvalues of `S` are half the quasienergies, as for a static `BdG()` matrix. Terms of `Y` that are multiplications, such as constants or `A * (F + F')`, drop out. Index `i` of `Hfree` and `a` of `Haux` is index `(a - 1) * dim(Hfree) + i`. `BdGEigen` does not yet support these spaces.
+A term that does not commute with the couplings is kept when the fermions stay free, as for a counting operator `K` and couplings `Tᵐ` with `[K, Tᵐ] = m Tᵐ`. Such a term should be zero on the state that the quasiparticles are expanded around, since adding a constant to it shifts all eigenvalues. Index `i` of `Hfree` and `a` of `Haux` is index `(a - 1) * dim(Hfree) + i`. `BdGEigen` does not yet support these spaces.
