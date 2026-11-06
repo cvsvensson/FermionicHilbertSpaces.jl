@@ -47,15 +47,8 @@ function tensor_product(spaces; constraint=NoSymmetry())
 
     constraint = supply_missing_constraint_info(constraint, space, spaces)
 
-    states = supports_branch_pruning(constraint) ? generate_states(spaces, constraint, space) : all_states()
-    if supports_sector_grouping(constraint) && supports_filtering(constraint)
-        return sector_space(space, states, sector_function(constraint, space), constraint)
-    elseif supports_filtering(constraint)
-        filtered_states = collect(Iterators.filter(filter_function(constraint, space), states))
-        return ConstrainedSpace(space, filtered_states; constraint)
-    else
-        return ConstrainedSpace(space, states; constraint)
-    end
+    supports_branch_pruning(constraint) || return constrain_states(space, constraint, all_states())
+    return constrain_states(space, constraint, generate_states(spaces, constraint, space), unpruned_part(constraint))
 end
 
 size_compatible(m, H) = size(m) == ntuple(_ -> dim(H), ndims(m))

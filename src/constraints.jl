@@ -234,7 +234,12 @@ modulus(::ParityConservation) = 2
 label(::ParityConservation, n) = iseven(n) ? 1 : -1
 with_spaces(c::ParityConservation, spaces) = ParityConservation(c.allowed_parities, spaces)
 
-supports_branch_pruning(::AbstractAdditiveConstraint) = true
+# A constraint that allows every value restricts nothing, so pruning by it would only cost time.
+function supports_branch_pruning(c::AbstractAdditiveConstraint)
+    allowed, m = allowed_values(c), modulus(c)
+    ismissing(allowed) && return false
+    return isnothing(m) || !all(r -> label(c, r) in allowed, 0:(m - 1))
+end
 supports_filtering(::AbstractAdditiveConstraint) = true
 supports_sector_grouping(::AbstractAdditiveConstraint) = true
 supply_missing_constraint_info(c::AbstractAdditiveConstraint, space, spaces) = ismissing(constraint_spaces(c)) ? with_spaces(c, spaces) : c

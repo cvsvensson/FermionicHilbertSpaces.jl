@@ -12,15 +12,20 @@ Returning `true` continues exploring the branch, while returning `false`
 prunes it. The callback should therefore accept partial states and reject a
 branch only when no valid completion can satisfy the constraint.
 
-`BranchConstraint` is intended for use with `tensor_product` or more directly with `generate_states`.
+`tensor_product(spaces; constraint)` prunes with the given `spaces`. `constrain_space(H, constraint)`
+instead keeps the states of `H` for which `f` accepts every prefix, with `spaces` the [`factors`](@ref) of `H`.
 """
-struct BranchConstraint{F} <: AbstractBranchConstraint
+struct BranchConstraint{F, H} <: AbstractBranchConstraint
     f::F
+    spaces::H # the spaces that `f` is called with, or `missing` for the factors of the constrained space
 end
+BranchConstraint(f) = BranchConstraint(f, missing)
 supports_branch_pruning(::BranchConstraint) = true
-supports_filtering(::BranchConstraint) = false
+supports_filtering(::BranchConstraint) = true
 supports_sector_grouping(::BranchConstraint) = false
+supply_missing_constraint_info(constraint::BranchConstraint{<:Any, Missing}, space, spaces) = BranchConstraint(constraint.f, spaces)
 supply_missing_constraint_info(constraint::BranchConstraint, space, spaces) = constraint
+map_spaces(f, c::BranchConstraint) = BranchConstraint(c.f, _map_spaces(f, c.spaces))
 branch_constraint(constraint::BranchConstraint, space) = constraint
 """
     valid_branch(constraint, partial_state, depth, spaces) -> Bool
@@ -84,8 +89,20 @@ function backtrack!(results, partial, spaces, depth, constraint, partial_process
     end
 end
 
+# Accepts a state exactly when `generate_states` over `spaces` would reach it: the prefixes are replayed
+# in order, so that entries after `depth` are unassigned as during the search.
 function filter_function(constraint::BranchConstraint, space::AbstractHilbertSpace)
-    state -> true
+    spaces = ismissing(constraint.spaces) ? factors(space) : constraint.spaces
+    mapper = state_mapper(space, spaces)
+    T = Union{statetype.(spaces)...}
+    return function replay(state)
+        partial = Vector{T}(undef, length(spaces))
+        for (depth, substate) in enumerate(unique_split_state(state, mapper))
+            partial[depth] = substate
+            constraint.f(partial, depth, spaces) || return false
+        end
+        return true
+    end
 end
 
 _normalize_constraint_values(values::AbstractVector) = values
@@ -295,6 +312,20 @@ _summand(S, x) = x
     states2 = basisstates(constrain_space(H, constraint))
     @test Set(states) == Set(states2)
 end
+@testitem "BranchConstraint keeps the same states when filtering as when pruning" begin
+    using FermionicHilbertSpaces: particle_number
+    @fermions f
+    H = hilbert_space(f, 1:6)
+    blockade = BranchConstraint((p, d, s) -> d == 1 || count_ones(p[d].f) + count_ones(p[d - 1].f) < 2)
+    @test Set(basisstates(hilbert_space(f, 1:6, blockade))) == Set(basisstates(constrain_space(H, blockade)))
+    @test dim(constrain_space(H, NumberConservation(2) * BranchConstraint((p, d, s) -> false))) == 0
+
+    Hup, Hdn = hilbert_space(f, 1:3), hilbert_space(f, 4:6)
+    balanced = BranchConstraint((p, d, s) -> d == 1 || particle_number(p[1]) == particle_number(p[2]))
+    reference = constrain_space(H, FilterConstraint(allequal; maps = particle_number, spaces = (Hup, Hdn)))
+    @test Set(basisstates(tensor_product(Hup, Hdn; constraint = balanced))) == Set(basisstates(reference))
+end
+
 @testitem "Additive constraints on subsets of mixed spaces" begin
     using FermionicHilbertSpaces: AdditiveConstraint, particle_number
     @fermions f
