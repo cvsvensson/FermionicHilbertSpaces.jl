@@ -26,7 +26,11 @@ function quantity_constraint(f::Function, allowed)
     ismissing(values) && return SectorConstraint(FilterConstraint(f, missing, missing))
     return SectorConstraint(FilterConstraint(state -> (value = f(state); value in values ? value : missing), missing, missing))
 end
-quantity_constraint(op, allowed) = OperatorConstraint(op, _allowed(allowed)..., missing, nothing)
+quantity_constraint(op, allowed) = OperatorConstraint(op, _allowed(_exact_allowed(allowed))..., missing, nothing)
+# The values of an operator are exact, so a float could only match them by accident.
+_exact_allowed(x::AbstractFloat) = isinteger(x) ? Int(x) : throw(ArgumentError("The allowed values of a constraint operator must be exact, such as `1//10` instead of `0.1`, got $x."))
+_exact_allowed(x::Union{Number, Missing}) = x
+_exact_allowed(xs) = any(x -> x isa AbstractFloat, xs) ? [_exact_allowed(x) for x in xs] : xs
 
 constrain_space(space, @nospecialize(c::QuantitySpec), args...) = constrain_space(space, as_constraint(c), args...)
 constrain_space(space::AbstractHilbertSpace, @nospecialize(cs::ConstraintVector)) = constrain_space(space, as_constraint(cs))
@@ -78,24 +82,23 @@ end
 # of each product and its groups take few values, which keeps the bounds for pruning tight.
 function diagonal_terms(op, spaces)
     terms, constant = _operator_terms(op)
-    foreach(t -> _check_exact(t.coeff, op), terms)
-    _check_exact(constant, op)
     unit_of = Dict(id => k for (k, H) in enumerate(spaces) for id in atom_ids(H))
     supports = map(terms) do term
-        sort!(unique(map(x -> _unit_of(x, unit_of, spaces, op), term.factors)))
+        sort!(unique(map(x -> _unit_of(x, unit_of, spaces), term.factors)))
     end
     distinct = unique(supports)
     groups = filter(s -> !any(t -> length(t) > length(s) && issubset(s, t), distinct), distinct)
-    ops = Any[0 for _ in groups]
+    foreach(g -> _check_table_size(spaces[g], terms[findfirst(==(g), supports)]), groups)
+    group_terms = [Tuple{Any, NCMul}[] for _ in groups]
     for (term, support) in zip(terms, supports)
         owners = findall(g -> issubset(support, g), groups)
-        for g in owners
-            ops[g] += term * (1 // length(owners))
-        end
+        foreach(g -> push!(group_terms[g], (term.coeff * (1 // length(owners)), term)), owners)
     end
-    tables = Vector{Rational{Int}}[_diagonal_table(opg, spaces[g], op) for (g, opg) in zip(groups, ops)]
+    tables = Vector{Rational{Int}}[_diagonal_table(ts, spaces[g]) for (g, ts) in zip(groups, group_terms)]
+    _check_exact(constant, constant)
+    isreal(constant) || throw(ArgumentError("A constraint operator must be Hermitian, but it has the constant term $(_number_string(constant))."))
     strides = [cumprod([1; map(dim, spaces[g][1:(end - 1)])]) for g in groups]
-    return _diagonal_terms(_exact_value(constant, op), groups, strides, tables)
+    return _diagonal_terms(Rational{Int}(real(constant)), groups, strides, tables)
 end
 # Values are summed as integers when each table's entries differ by integers, with the common fractions moved to the constant.
 function _diagonal_terms(constant, units, strides, tables)
@@ -105,16 +108,23 @@ function _diagonal_terms(constant, units, strides, tables)
     integral || return DiagonalTerms{Rational{Int}}(constant, units, strides, tables)
     return DiagonalTerms{Int}(Int(total), units, strides, map((t, s) -> Int.(t .- s), tables, shifts))
 end
+# A term acting on several spaces is tabulated on their product space, whose dimension grows exponentially.
+const MAX_TABLE_SIZE = 2^12
+function _check_table_size(spaces, term)
+    entries = prod(dim, spaces)
+    (length(spaces) == 1 || entries <= MAX_TABLE_SIZE) && return nothing
+    throw(ArgumentError("The constraint operator has the term `$(_term_string(term))` acting on $(length(spaces)) spaces together, which needs a table of $entries values, more than the limit of $MAX_TABLE_SIZE. Use `ParityConservation` for a parity, and otherwise write the quantity as a sum of terms that each act on few spaces."))
+end
 _operator_terms(op::NCAdd) = collect(NCterms(op)), op.coeff
 _operator_terms(op::NCMul) = [op], 0
 _operator_terms(op::AbstractSym) = _operator_terms(1 * op)
 _operator_terms(op) = throw(ArgumentError("A constraint quantity must be a symbolic operator or a function of the basis state, got `$op`."))
 
-function _unit_of(x, unit_of, spaces, op)
+function _unit_of(x, unit_of, spaces)
     k = get(unit_of, atomic_id(x), 0)
     iszero(k) || return k
     k = something(findfirst(H -> _acts_in(x, H), spaces), 0)
-    iszero(k) && throw(ArgumentError("The constraint operator `$op` acts on `$x`, which is not in the space."))
+    iszero(k) && throw(ArgumentError("The constraint operator acts on `$x`, which is not in the space."))
     return k
 end
 # A symbol that names no atom, such as a single Majorana, acts in the space that contains it.
@@ -122,26 +132,39 @@ _acts_in(x, H) = false
 
 _isexact(x) = x isa Union{Integer, Rational}
 _isexact(x::Complex) = _isexact(real(x)) && _isexact(imag(x))
-_check_exact(x, op) = _isexact(x) || throw(ArgumentError("A constraint operator needs integer or rational coefficients, such as `1//2` instead of `0.5`, so that its values are exact. Got the coefficient $x in `$op`."))
+_check_exact(x, term) = _isexact(x) || throw(ArgumentError("A constraint operator needs integer or rational coefficients, such as `1//2` instead of `0.5`, so that its values are exact. Got the term `$(_term_string(term))`."))
+_term_string(term::NCMul) = string(isone(term.coeff) ? "" : _number_string(term.coeff) * "*", NCMul(1, term.factors))
+_term_string(x) = _number_string(x)
+_number_string(x::Rational) = isinteger(x) ? string(numerator(x)) : "($x)"
+_number_string(z::Complex) = iszero(imag(z)) ? _number_string(real(z)) : iszero(real(z)) ? (isone(imag(z)) ? "im" : "$(_number_string(imag(z)))im") : "($(_number_string(real(z))) + $(_number_string(imag(z)))im)"
+_number_string(x) = string(x)
 
-# The diagonal of `op` on the product of `spaces`, indexed by the positions of the states of `spaces`.
-function _diagonal_table(op, spaces, whole)
+# The diagonal of a sum of weighted terms on the product of `spaces`, indexed by the positions of the states of `spaces`.
+# Each term's diagonal is found without its coefficient, as the floating point values of a monomial are fractions with small
+# denominators, and then multiplied by the exact coefficient.
+function _diagonal_table(weighted_terms, spaces)
     H = length(spaces) == 1 ? only(spaces) : tensor_product(spaces)
-    m = representation(op, H)
-    isdiag(m) || throw(ArgumentError("A constraint operator must be diagonal in the basis, but `$whole` is not."))
-    values = map(v -> _exact_value(v, whole), Vector(diag(m)))
+    monomials = map(((_, t),) -> representation(NCMul(1, t.factors), H), weighted_terms)
+    if !isdiag(sum(map(((w, _), m) -> complex(float(w)) * m, weighted_terms, monomials)))
+        k = something(findfirst(!isdiag, monomials), 1)
+        throw(ArgumentError("A constraint operator must be diagonal in the basis, but its term `$(_term_string(weighted_terms[k][2]))` is not."))
+    end
+    foreach(((w, t),) -> _check_exact(w, t), weighted_terms)
+    contributions = map(((w, t), m) -> w .* map(v -> _exact_value(v, t), Vector(diag(m))), weighted_terms, monomials)
+    k = findfirst(c -> !all(isreal, c), contributions)
+    isnothing(k) || throw(ArgumentError("A constraint operator must be Hermitian, but its term `$(_term_string(weighted_terms[k][2]))` has complex values."))
+    values = Rational{Int}.(real.(sum(contributions)))
     length(spaces) == 1 && return values
     mapper = state_mapper(H, spaces)
     return vec([values[state_index(only(first(combine_states(states, mapper))), H)] for states in Iterators.product(map(basisstates, spaces)...)])
 end
-# Spin and boson matrix elements are floating point, so the values of an operator with exact coefficients are rounded to the nearby fraction.
-function _exact_value(v, op)
-    tol = 1.0e-10 * max(1, abs(v))
-    abs(imag(v)) <= tol || throw(ArgumentError("A constraint operator must be Hermitian, but `$op` has the value $v."))
-    x = real(v)
+function _exact_value(x::Real, term)
     _isexact(x) && return Rational{Int}(x)
-    return rationalize(Int, x; tol)
+    r = rationalize(Int, x; tol = 1.0e-10 * max(1, abs(x)))
+    abs(r - x) <= 4 * eps(max(1.0, abs(x))) || throw(ArgumentError("The values of the constraint operator term `$(_term_string(term))` are not exact fractions, such as $x."))
+    return r
 end
+_exact_value(z::Complex, term) = complex(_exact_value(real(z), term), _exact_value(imag(z), term))
 
 function branch_constraint(c::OperatorConstraint, allspaces)
     terms = c.terms
@@ -275,7 +298,18 @@ end
 
 @testitem "Invalid constraint operators throw" begin
     @fermions f
-    @test_throws ArgumentError hilbert_space(f, 1:2, f[1]'f[2] + f[2]'f[1] => 1)
-    @test_throws ArgumentError hilbert_space(f, 1:2, 0.5 * f[1]'f[1] => 1)
+    @spins S 1 // 2
+    @test_throws "diagonal" hilbert_space(f, 1:2, f[1]'f[2] + f[2]'f[1] => 1)
+    @test_throws "diagonal" hilbert_space(S, 1:2, S[1][:x] + S[2][:x] => 0)
+    @test_throws "rational" hilbert_space(f, 1:2, 0.5 * f[1]'f[1] => 1)
+    @test_throws "Hermitian" hilbert_space(f, 1:2, 1im * f[1]'f[1] => 1)
     @test_throws ArgumentError hilbert_space(f, 1:2, f[3]'f[3] => 1)
+    @test_throws "1//10" hilbert_space(f, 1:2, (1 // 10) * f[1]'f[1] => 0.1)
+    @test dim(hilbert_space(f, 1:2, f[1]'f[1] => 1.0)) == 2
+    @test_throws "ParityConservation" hilbert_space(f, 1:13, prod(1 - 2f[i]'f[i] for i in 1:13) => 1)
+end
+
+@testitem "Operator constraints with large denominators are exact" begin
+    @spins S 1 // 2
+    @test dim(hilbert_space(S, 1:2, (1 // 100003) * S[1][:z] => 1 // 200006)) == 2
 end
