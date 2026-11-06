@@ -660,8 +660,8 @@ Return the product-state fragment of `seeds`: the smallest subspace of `H` spann
 `seeds` and is closed under `op`, with states in the order of `H`. `seeds` takes the same forms as the states of
 [`constrain_space`](@ref). Matrix elements with `abs(amp) <= cutoff` count as zero. With a finite `depth`, the result
 holds the states `op^k` reaches for `k ≤ depth`, the support of `depth`-step Krylov evolution, and is in general not
-closed under `op`. Since `op` is stored
-expanded into products, some of which map states of the fragment outside it, use `representation(op, F; projection=true)`.
+closed under `op`. Since `op` is stored expanded into products, some of which map states of the fragment outside it,
+use `representation(op, F; projection=true)`.
 
 For the PXP chain, `fragment(pxp, hilbert_space(S, 1:N), ["↓"^N])` gives the states without neighbouring up spins.
 """
