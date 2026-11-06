@@ -9,7 +9,7 @@ module FermionicHilbertSpaces
 
 using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Hermitian,
     UniformScaling, diag, diagind, dot,
-    eigen!, eigvals, eigvecs, ishermitian,
+    eigen!, eigvals, eigvecs, isdiag, ishermitian,
     mul!, normalize, qr, rank, rmul!, svdvals, tr, I
 using LowRankMatrices: LowRankMatrices, LowRankMatrix
 import SciMLOperators
@@ -144,6 +144,7 @@ include("reshape.jl")
 include("partial_transpose.jl")
 
 include("generate_constrained_states.jl")
+include("operator_constraint.jl")
 
 include("matrix_representation.jl")
 include("sparse_assembly.jl")

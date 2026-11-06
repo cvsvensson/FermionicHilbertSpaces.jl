@@ -23,7 +23,7 @@ function branch_constraint(constraint::ProductConstraint, space)
 end
 supports_branch_pruning(c::ProductConstraint) = any(supports_branch_pruning, c.constraints)
 supports_filtering(c::ProductConstraint) = any(supports_filtering, c.constraints)
-supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c.constraints)
+supports_sector_grouping(c::ProductConstraint) = any(supports_sector_grouping, c.constraints)
 
 supply_missing_constraint_info(constraint::ProductConstraint, space, spaces) = ProductConstraint(map(cons -> supply_missing_constraint_info(cons, space, spaces), constraint.constraints))
 
@@ -259,13 +259,22 @@ function sector_function(c::AbstractAdditiveConstraint, space::AbstractHilbertSp
         return ismissing(allowed) || value in allowed ? value : missing
     end
 end
+filter_function(c::AbstractAdditiveConstraint, space::AbstractHilbertSpace) = !ismissing ∘ sector_function(c, space)
 _additive_sum(c, substates, ::Type{S}) where {S} = sum(((k, s),) -> _summand(S, contribution(c, k, s)), enumerate(substates); init = zero(S))
 _residue(::Nothing, sum) = sum
 _residue(m, sum) = mod(sum, m)
+# The sector label lists the labels of the grouping factors, or is the label of the only one; the other factors filter.
 function sector_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
-    subspace_functions = map(cons -> sector_function(cons, space), constraint.constraints)
+    grouping = filter(supports_sector_grouping, constraint.constraints)
+    keep = filter_function(ProductConstraint(filter(c -> !supports_sector_grouping(c) && supports_filtering(c), constraint.constraints)), space)
+    if length(grouping) == 1
+        f = sector_function(only(grouping), space)
+        return state -> keep(state) ? f(state) : missing
+    end
+    subspace_functions = map(cons -> sector_function(cons, space), grouping)
     V = mapreduce(f -> nonmissingtype(Base.promote_op(f, statetype(space))), typejoin, subspace_functions; init=Union{})
     function sector(state)
+        keep(state) || return missing
         sectors = Vector{V}(undef, length(subspace_functions))
         for (i, f) in enumerate(subspace_functions)
             label = f(state)

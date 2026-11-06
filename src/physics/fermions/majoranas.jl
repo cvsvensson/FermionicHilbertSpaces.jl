@@ -197,6 +197,7 @@ function atom_ids(H::MajoranaHilbertSpace)
     γs = collect(keys(H.majoranaindices))
     [(γs[2k-1], γs[2k]) for k in 1:length(γs)÷2]
 end
+_acts_in(x::AbstractMajoranaSym, H::MajoranaHilbertSpace) = haskey(H.majoranaindices, x)
 function atom_position(x, H::MajoranaHilbertSpace)
     id = atomic_id(x)
     id isa Tuple{Any,Any} || return 0 # only pairs name atoms
@@ -234,6 +235,7 @@ function majoranas(H::MajoranaHilbertSpace)
 end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
 
+hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, c::QuantitySpec) = constrain_space(hilbert_space(y, labels), c)
 function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even to define a Hilbert space, got $(length(labels))."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]

@@ -203,9 +203,9 @@ Operator terms that would raise the occupation above the cutoff are dropped with
 while leaving a constrained space throws unless `projection=true`. Products are normal ordered
 before truncation, so `b * b'` is represented as `b'b + 1`.
 """
-hilbert_space(sym::BosonField, labels, dimension::Integer, constraint::AbstractConstraint=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], dimension), labels); constraint)
+hilbert_space(sym::BosonField, labels, dimension::Integer, constraint::ConstraintLike=NoSymmetry()) = tensor_product(map(l -> hilbert_space(sym[l], dimension), labels); constraint)
 hilbert_space(sym::BosonSym, dimension::Integer) = TruncatedBosonicHilbertSpace(sym, dimension)
-hilbert_space(sym::BosonSym, dimension::Integer, constraint::AbstractConstraint) = constrain_space(hilbert_space(sym, dimension), constraint)
+hilbert_space(sym::BosonSym, dimension::Integer, constraint::ConstraintLike) = constrain_space(hilbert_space(sym, dimension), constraint)
 particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 
