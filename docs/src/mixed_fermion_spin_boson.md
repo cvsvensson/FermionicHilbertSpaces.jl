@@ -27,7 +27,8 @@ spaces = [H_up, H_down, H_spin, H_boson]
 n_up = f[:↑]'f[:↑]
 n_down = f[:↓]'f[:↓]
 Q = a'a + 1//2 * (n_up - n_down) + S[:z]
-H = tensor_product(spaces; constraint = (Q => 0, n_up + n_down => 1))
+charge_and_filling = (Q => 0, n_up + n_down => 1)
+H = tensor_product(spaces; constraint = charge_and_filling)
 basisstates(H)
 ```
 

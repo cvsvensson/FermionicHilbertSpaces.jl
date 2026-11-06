@@ -92,8 +92,9 @@ number = sum(b[i]'b[i] for i in 1:N)
 dipole = sum(i * b[i]'b[i] for i in 1:N)
 
 Hfull = hilbert_space(b, 1:N, local_dim)
-HN = hilbert_space(b, 1:N, local_dim, number => M)                       # only N fixed
-HND = hilbert_space(b, 1:N, local_dim, (number => M, dipole => Dtot))    # N and D fixed
+number_and_dipole = (number => M, dipole => Dtot)
+HN = hilbert_space(b, 1:N, local_dim, number => M)          # only N fixed
+HND = hilbert_space(b, 1:N, local_dim, number_and_dipole)   # N and D fixed
 dim(Hfull), dim(HN), dim(HND)
 
 # The half-system entanglement entropy of the ground state follows from a partial trace map onto the first half of the chain.
