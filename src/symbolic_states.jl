@@ -555,7 +555,7 @@ function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, re
 end
 function vector_representation(op, space, repr; kwargs...)
     _repr = _vector_format(repr)
-    _repr isa LazyRepr && throw(ArgumentError("Kets and bras support `:sparse` and `:dense` representations. `:lazy` is only for operators and ketbras."))
+    _repr isa LazyRepr && throw(ArgumentError("Kets and bras support `:sparse` and `Matrix` representations. `:lazy` is only for operators and ketbras."))
     return vector_representation(op, space, _repr; kwargs...)
 end
 
@@ -659,11 +659,11 @@ end
     op = f[1]' * f[2] + hc + 2
     @test representation(op, Hf) == matrix_representation(op, Hf)
     @test representation(op, Hf, :lazy) == matrix_representation(op, Hf, :lazy)
-    @test representation(op, Hf, :dense) == representation(op, Hf, :sparse)
+    @test representation(op, Hf, Matrix) == representation(op, Hf, :sparse)
 
     sf = basisstate(3, Hf)
     vf = representation(sf, Hf)
-    vfd = representation(sf, Hf, :dense)
+    vfd = representation(sf, Hf, Vector)
     @test vf[3] == 1
     @test count(!iszero, vf) == 1
     @test vfd isa Vector
@@ -697,7 +697,7 @@ end
     i = findfirst(==(FockNumber(1)), collect(basisstates(Hf)))
     for H in (Hf, TransposedSpace(Hf))
         @test representation(FockNumber(1), H) == onehot(i, 4)
-        @test representation(FockNumber(1), H, :dense) == onehot(i, 4)
+        @test representation(FockNumber(1), H, Vector) == onehot(i, 4)
     end
 
     HA = GenericHilbertSpace(:A, ["a", "b", "c"])
@@ -718,7 +718,7 @@ end
     v = vector_representation(ket, Hf)
     @test v == representation(ket, Hf)
     @test vector_representation(ket', Hf) == transpose(v)
-    @test vector_representation(1 * vf("10"), Hf, :dense) isa Vector
+    @test vector_representation(1 * vf("10"), Hf, Vector) isa Vector
     @test_throws ArgumentError vector_representation(ket, Hf, :lazy)
     @test_throws ArgumentError representation(vf("10")', Hf, :lazy)
     @test_throws ArgumentError representation("10", Hf, :lazy)
@@ -740,7 +740,7 @@ end
         @test Matrix(representation(2, Hf)) == 2 * idf
         @test Matrix(representation(I, Hf)) == idf
         @test iszero(representation(0, Hf))
-        @test representation(2, Hf, :dense) == 2 * idf
+        @test representation(2, Hf, Matrix) == 2 * idf
         @test_throws ArgumentError representation(2)
         @test_throws ArgumentError representation(I)
     end
@@ -800,7 +800,7 @@ end
         op = f[1]' * kb
         @test representation(op, H) == matrix_representation(op, H)
         @test representation(op, H) ≈ representation(f[1]', H) * representation(kb, H)
-        @test representation(op, H, :dense) ≈ representation(op, H)
+        @test representation(op, H, Matrix) ≈ representation(op, H)
         @test_throws ArgumentError representation(op)
 
         proj = vf("10") * vf("10")'
@@ -1011,7 +1011,7 @@ end
         for op in ops, st in basisstates(H)
             ket = FermionicHilbertSpaces.SymbolicState(H, st, nothing)
             v = Vector(representation(ket, H))
-            M = representation(op, H, :dense)
+            M = representation(op, H, Matrix)
             Mv, vM = M * v, vec(transpose(v) * M)
             @test iszero(Mv) ? iszero(op * ket) : Vector(representation(op * ket, H)) ≈ Mv
             @test iszero(vM) ? iszero(ket' * op) : vec(collect(representation(ket' * op, H))) ≈ vM
@@ -1032,7 +1032,7 @@ end
         ψ = sum(randn() * FermionicHilbertSpaces.SymbolicState(H, st, nothing) for st in states)
         φ = sum(randn(ComplexF64) * FermionicHilbertSpaces.SymbolicState(H, st, nothing) for st in states[1:2:end])
         v, w = Vector(representation(ψ, H)), Vector(representation(φ, H))
-        M = representation(op, H, :dense)
+        M = representation(op, H, Matrix)
         @test Vector(representation(op * ψ, H)) ≈ M * v
         @test inner(φ, ψ) ≈ dot(w, v)
         @test dot(φ, op, ψ) ≈ dot(w, M, v)
@@ -1043,7 +1043,7 @@ end
     H = tensor_product(hilbert_space(f, 1:2), hilbert_space(g, 1:2), hilbert_space(s))
     ψ = Ket(("10", "01", "0"), H) + 2 * Ket(("11", "00", "1"), H)
     op = f[1]' * g[2] * s[:+] + f[2]' * f[1] * g[1]' + hc + f[1]
-    M = representation(op, H, :dense)
+    M = representation(op, H, Matrix)
     @test Vector(representation(op * (op * ψ), H)) ≈ M * M * Vector(representation(ψ, H))
     Hx = hilbert_space(f, 1:3, FermionicHilbertSpaces.FixedNumberFockState{1}.(basisstates(hilbert_space(f, 1:3, NumberConservation(1)))))
     kx, ks = Kets(Hx), Kets(hilbert_space(s))
@@ -1178,8 +1178,8 @@ end
     @spins S 1 // 2
     H1, H2, H3 = [hilbert_space(S[i]) for i in 1:3]
     H = tensor_product(H3, H1, H2)
-    v = representation(Kets(H)("↑", "↓", "↓"), H, :dense)
-    @test [real(dot(v, representation(S[i][:z], H, :dense), v)) for i in 1:3] ≈ [-1 / 2, -1 / 2, 1 / 2]
+    v = representation(Kets(H)("↑", "↓", "↓"), H, Vector)
+    @test [real(dot(v, representation(S[i][:z], H, Matrix), v)) for i in 1:3] ≈ [-1 / 2, -1 / 2, 1 / 2]
 end
 
 @testitem "Grading of symbolic states" begin
@@ -1219,7 +1219,7 @@ end
         zx = x - x
         @test iszero(representation(zx, Hf))
         @test typeof(representation(zx, Hf)) == typeof(representation(x, Hf))
-        @test typeof(representation(zx, Hf, :dense)) == typeof(representation(x, Hf, :dense))
+        @test typeof(representation(zx, Hf, Array)) == typeof(representation(x, Hf, Array))
         @test size(representation(zx, Hf)) == size(representation(x, Hf))
     end
     @test_throws ArgumentError representation(z)

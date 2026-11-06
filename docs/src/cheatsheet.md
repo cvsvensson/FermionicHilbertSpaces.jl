@@ -23,7 +23,7 @@ representation(b'b * S[1][:z] + c[1, :↑]' * b + hc, Hm);
 ```
 A subregion given as a space must list its modes in the order of the parent space: `subregion(hilbert_space(c, [(1, :↑), (1, :↓)]), Hσ)` is the space of site 1.
 
-`sum` copies the partial sum at every step, so its time grows quadratically with the number of terms. For thousands of terms, accumulate in place with `add!!` (public, not exported), starting from `0`:
+For many terms, accumulating in place with `add!!` (public, not exported), starting from `0`, is faster than `sum`:
 ```@example cheat
 import FermionicHilbertSpaces: add!!
 longham = foldl(add!!, (f[n+1]'f[n] + hc for n in 1:999); init = 0);

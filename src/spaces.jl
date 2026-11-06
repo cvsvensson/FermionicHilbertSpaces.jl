@@ -240,6 +240,13 @@ end
 _internal_rep(state, space, ::Type{T}) where T = InternalRep{T}(internal_rep(state, space, T))
 _physical_rep(state::InternalRep, space_or_type) = physical_rep(state.data, space_or_type)
 Base.convert(::Type{B}, state::InternalRep{T}) where {B<:AbstractBasisState,T} = _physical_rep(state, B)
+"""
+    physical_rep(n::Int, ::Type{B}) -> B
+
+The basis state of type `B` that the integer `n` from [`internal_rep`](@ref) stands for. A custom state type implements
+both to let product spaces act on integers.
+"""
+function physical_rep end
 physical_rep(state, space::AbstractHilbertSpace) = physical_rep(state, statetype(space))
 """
     internal_rep(state, space, ::Type{Int}) -> Int

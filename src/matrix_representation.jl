@@ -574,7 +574,7 @@ Return a concrete representation of `op_or_state` in Hilbert space `space`. This
 - For symbolic operators and numbers, returns a sparse matrix by default. The optional `repr` selects the format:
   an array type such as `Matrix` or `SparseMatrixCSC`, with an optional element type as in `Matrix{ComplexF64}`,
   or a number type such as `Float64` for a sparse result of that element type. `:lazy` gives a matrix-free
-  `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`, and `:dense` and `:sparse` also work.
+  `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`, and `:sparse` also works.
   A number `c` gives `c` times the identity. With a GPU package loaded, a GPU array type such as `CuArray` or
   `cuSPARSE.CuSparseMatrixCSR{Float32}` builds the matrix on the GPU.
 - For `AbstractBasisState` and strings such as `"10"`, returns a one-hot sparse column vector.
@@ -682,7 +682,7 @@ expectation(op, ρ::AbstractMatrix, H::AbstractHilbertSpace) = dot(ρ', represen
     @fermions f
     H = hilbert_space(f, 1:4, NumberConservation(2))
     op = f[1]' * f[2] * f[3]' * f[4] + 1im * f[2]' * f[3] + hc + 2
-    M = representation(op, H, :dense)
+    M = representation(op, H, Matrix)
     ψ = normalize(rand(ComplexF64, dim(H)))
     @test expectation(op, ψ, H) ≈ ψ' * M * ψ
     ρ = rand(ComplexF64, dim(H), dim(H))
@@ -705,7 +705,7 @@ _canonicalize_repr(::Union{Type{Array{T}}, Type{Matrix{T}}, Type{Vector{T}}}) wh
 _canonicalize_repr(::Union{Type{SparseArrays.SparseMatrixCSC}, Type{SparseArrays.SparseVector}}) = EagerSparseRepr()
 _canonicalize_repr(::Union{Type{SparseArrays.SparseMatrixCSC{T}}, Type{SparseArrays.SparseMatrixCSC{T, Int}}, Type{SparseArrays.SparseVector{T}}, Type{SparseArrays.SparseVector{T, Int}}}) where {T} = EagerSparseRepr{T}()
 _canonicalize_repr(::Type{T}) where T<:Number = EagerSparseRepr{T}()
-_canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:sparse`, `:dense`, `:lazy`, a number type, or `Array`, `Matrix`, `Vector`, `SparseMatrixCSC` or `SparseVector`, optionally with an element type."))
+_canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:sparse`, `:lazy`, a number type, or `Array`, `Matrix`, `Vector`, `SparseMatrixCSC` or `SparseVector`, optionally with an element type."))
 _matrix_format(repr) = _canonicalize_repr(repr)
 _matrix_format(repr::Type{<:Union{Vector, SparseArrays.SparseVector}}) = throw(ArgumentError("`$(repr)` is a vector format, but this representation is a matrix. Use `Matrix`, `SparseMatrixCSC` or `Array`."))
 _vector_format(repr) = _canonicalize_repr(repr)
@@ -858,7 +858,7 @@ end
     for op in (f[1]' * f[2], s[:z] + 1.0, 2.0 * f[1]' * f[2] * s[:z]), (repr, T) in reprs
         M = representation(op, H, repr)
         @test eltype(M) == T
-        @test M == representation(op, H, :dense)
+        @test M == representation(op, H, Matrix)
     end
     @test eltype(representation(f[1]' * f[2] + 1, H)) == Int
 end
@@ -881,9 +881,9 @@ end
     for op in (b' * b + b, 0.5 * b' + 1), T in (Float32, ComplexF32)
         M = @inferred representation(op, Hb, Matrix{T})
         @test M isa Matrix{T}
-        @test M ≈ representation(op, Hb, :dense)
+        @test M ≈ representation(op, Hb, Matrix)
     end
-    @test representation(1 // 3 * s[:z], Hs, Matrix{Float32}) ≈ representation(1 // 3 * s[:z], Hs, :dense)
+    @test representation(1 // 3 * s[:z], Hs, Matrix{Float32}) ≈ representation(1 // 3 * s[:z], Hs, Matrix)
     @test eltype(representation(0.5f0 * b', Hb)) == Float32
     @test eltype(representation(0.5f0 * s[:z] + 1.0f0im * s[:+], Hs)) == ComplexF32
     @test eltype(representation(0.5 * b', Hb)) == Float64
@@ -983,7 +983,7 @@ end
 
     Hf = hilbert_space(f, 1:2)
     op = f[1]' * f[2] + 1im * f[2]' * f[1] + 2
-    Md = representation(op, Hf, :dense)
+    Md = representation(op, Hf, Matrix)
     Ms = representation(op, Hf)
     Ml = concretize(representation(op, Hf, :lazy))
     @test Md isa Matrix
@@ -995,7 +995,7 @@ end
     Hs = hilbert_space(s)
     Hprod = tensor_product(Hf, Hs)
     op_prod = f[1]' * f[2] * s[:z] + 2 * f[2]' * f[1] * s[:x] + 1im
-    Md = representation(op_prod, Hprod, :dense)
+    Md = representation(op_prod, Hprod, Matrix)
     Ms = representation(op_prod, Hprod)
     Ml = concretize(representation(op_prod, Hprod, :lazy))
     @test Md isa Matrix
@@ -1003,7 +1003,7 @@ end
     @test Md == Ms
     @test Md == Ml
 
-    trivial = representation(2, Hf, :dense)
+    trivial = representation(2, Hf, Matrix)
     @test trivial isa Matrix
     @test trivial == Matrix(2I, dim(Hf), dim(Hf))
 
@@ -1018,7 +1018,7 @@ end
     H = hilbert_space(f, 1:2)
     op = f[1]' * f[2] + hc
     k = Ket(basisstate(2, H), H)
-    ket = representation("10", H, :dense)
+    ket = representation("10", H, Vector)
     formats = (
         (Matrix, Vector, Matrix{Int}, Vector{Int}), (Array, Array, Matrix{Int}, Vector{Int}),
         (Matrix{ComplexF64}, Vector{ComplexF64}, Matrix{ComplexF64}, Vector{ComplexF64}),
@@ -1028,10 +1028,10 @@ end
     )
     for (mformat, vformat, MT, VT) in formats
         @test (@inferred representation(op, H, mformat)) isa MT
-        @test representation(op, H, mformat) == representation(op, H, :dense)
+        @test representation(op, H, mformat) == representation(op, H, Matrix)
         @test representation(2, H, mformat) isa MT
-        @test representation(2, H, mformat) == 2 * representation(1, H, :dense)
-        @test representation(k * k', H, mformat) == representation(k * k', H, :dense)
+        @test representation(2, H, mformat) == 2 * representation(1, H, Matrix)
+        @test representation(k * k', H, mformat) == representation(k * k', H, Matrix)
         @test (@inferred representation(k, H, vformat)) isa VT
         @test representation("10", H, vformat) == ket
     end

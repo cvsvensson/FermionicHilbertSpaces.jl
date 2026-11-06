@@ -135,7 +135,7 @@ end
 
     Hc = hilbert_space(f, 1:3, NumberConservation(1))
     op = f[2]'f[1] + f[1]'f[2] + s[:z]
-    @test representation(op, tensor_product(Hx, hilbert_space(s)), :dense) == representation(op, tensor_product(Hc, hilbert_space(s)), :dense)
+    @test representation(op, tensor_product(Hx, hilbert_space(s)), Matrix) == representation(op, tensor_product(Hc, hilbert_space(s)), Matrix)
 end
 
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{<:FixedNumberFockState})
