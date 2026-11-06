@@ -1,12 +1,10 @@
-# Sums that vary at a common depth are correlated, such as a charge and a dipole moment or a charge and the bonds of a
-# blockade, so the bounds of each remaining sum alone accept branches that no completion satisfies. `_joint_cuts` lets
-# `_sums_branch_constraint` also prune such sums by their joint values: `cuts[d]` holds, for each set of linked sums, the
-# sorted keys of the joint values after depth `d` that the valid states reach, which makes the pruning exact. A single
-# sum is pruned this way when the values of one of its groups have gaps, as for weights `5` and `1`. A sum is in the key
-# only while it varies both up to the cut and after it, so that local constraints do not enlarge the sets, and the key
-# also holds the states of the depths up to the cut that a later group reads, as for `nᵢnᵢ₊₁`. The keys are found by a
-# forward pass over those that the prefixes reach, narrowed by the bounds, and a backward pass that keeps those that a
-# suffix completes. Sums with values that are not exact, or with more than `MAX_JOINT_ENTRIES` keys, keep the bounds.
+# Sums that vary at a common depth are correlated, such as a charge and a dipole moment, so the bounds of each sum alone
+# accept branches that no completion satisfies. `cuts[d]` holds, for each set of such linked sums, the sorted keys of
+# their joint values after depth `d` that valid states reach, which makes pruning by them exact. A single sum is joined
+# when the values of a group have gaps, as for weights `5` and `1`. A sum is in the key only while it varies on both
+# sides of the cut, so that local constraints do not enlarge the sets, and the key also holds the states before the cut
+# that a later group reads, as for `nᵢnᵢ₊₁`. Sums with inexact values, or with more than `MAX_JOINT_ENTRIES` keys, keep
+# the bounds alone.
 const MAX_JOINT_ENTRIES = 2^22
 
 function _joint_cuts(p)
@@ -82,7 +80,7 @@ function _add_joint_cuts!(cuts, p, steps)
             ok = true
             for s in steps_at[d]
                 k = p.step_owner[s]
-                v = offset[k, d] + coordinate[k] * scale[k] * (first_depth[k] < d)
+                v = offset[k, d] + (first_depth[k] < d ? coordinate[k] * scale[k] : zero(T))
                 for g in p.step_groups[s]
                     v += p.tables[g][_table_index(p.strides[g], index, p.positions[g])]
                 end
@@ -103,6 +101,7 @@ function _add_joint_cuts!(cuts, p, steps)
         end
         return false
     end
+    # The keys that the prefixes reach, then only those that a suffix completes.
     reached = [[0]]
     for d in 1:n
         next = Int[]
