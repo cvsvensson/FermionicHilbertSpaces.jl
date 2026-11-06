@@ -30,7 +30,6 @@ struct DeviceFermionicSpace{F} <: AbstractHilbertSpace{F}
     nbr_of_modes::Int
 end
 const _FockSpace{F} = Union{FermionicSpace{F}, DeviceFermionicSpace{F}}
-maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
 Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
 basisstates(H::FermionicSpace{FockNumber{I}}) where I = BasisStates(H, Iterators.map(FockNumber{I}, UnitRange{I}(0, dim(H) - 1)))
@@ -80,7 +79,6 @@ _normalize_sym(f::FermionSym) = FermionSym(false, f.label, f.basis)
 statetype(f::FermionSym) = FockNumber{default_fock_representation(1)}
 basisstates(f::FermionSym) = [statetype(f)(0), statetype(f)(1)]
 nbr_of_modes(f::FermionSym) = 1
-maximum_particles(f::FermionSym) = 1
 isconstrained(f::FermionSym) = false
 
 partial_trace_phase_factor_eltype(::FermionicSpace) = Int

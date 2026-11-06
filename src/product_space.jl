@@ -94,7 +94,6 @@ function _state_index(state::ProductState, H::_ProductSpace)
 end
 has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && !isnothing(H.lininds)
 
-maximum_particles(H::ProductSpace) = sum(maximum_particles, groups(H))
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
 parity(state::ProductState) = prod(parity, atomic_factors(state))
 

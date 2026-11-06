@@ -233,7 +233,6 @@ atomic_factors(f::AbstractSym) = (f,)
 
 partial_trace_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1
 
-maximum_particles(H::AbstractHilbertSpace) = maximum(particle_number, basisstates(H))
 
 struct InternalRep{T}
     data::T

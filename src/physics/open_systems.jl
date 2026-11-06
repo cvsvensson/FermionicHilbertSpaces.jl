@@ -376,5 +376,4 @@ _keep_transposed_parts(newstate::ProductState{B}, state::ProductState, H::Produc
     ProductState{B}(map(_keep_transposed_parts, newstate.states, state.states, groups(H)))
 _keep_transposed_parts(newstate, state, H) = newstate
 
-maximum_particles(space::TransposedSpace) = maximum_particles(parent(space))
 rewrap(::TransposedSpace, space) = TransposedSpace(space)

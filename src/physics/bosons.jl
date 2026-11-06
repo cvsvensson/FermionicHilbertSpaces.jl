@@ -208,7 +208,6 @@ hilbert_space(sym::BosonSym, dimension::Integer) = TruncatedBosonicHilbertSpace(
 hilbert_space(sym::BosonSym, dimension::Integer, constraint::AbstractConstraint) = constrain_space(hilbert_space(sym, dimension), constraint)
 particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
-maximum_particles(H::TruncatedBosonicHilbertSpace) = dim(H) - 1
 
 function apply_local_operator(factor::BosonSym, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp, ::Type{T} = Float64) where {T}
     n = state.n
