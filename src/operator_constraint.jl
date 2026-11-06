@@ -270,9 +270,10 @@ _exact_value(z::Complex, term) = complex(_exact_value(real(z), term), _exact_val
 const SumConstraint = Union{OperatorConstraint, AbstractAdditiveConstraint}
 branch_constraint(c::SumConstraint, allspaces) = branch_constraint([c], allspaces)
 # Sums with values that are not exact are pruned separately, so that the exact ones are not rounded. The spaces may
-# be given as symbols.
+# be given as symbols, and a constraint without spaces is on all of them.
 function branch_constraint(constraints::AbstractVector{<:SumConstraint}, spaces)
     allspaces = map(hilbert_space, spaces)
+    constraints = map(c -> supply_missing_constraint_info(c, nothing, allspaces), constraints)
     sums = [_sum_terms(c, allspaces) for c in constraints if supports_branch_pruning(c)]
     isempty(sums) && return BranchConstraint((_, _, _) -> true)
     exact = map(s -> eltype(eltype(s.tables)) <: Union{Integer, Rational}, sums)
@@ -378,6 +379,10 @@ end
         H isa FermionicHilbertSpaces.MajoranaHilbertSpace && continue
         @test samestates(tensor_product(collect(atomic_factors(H)); constraint), expected)
     end
+    H = hilbert_space(f, 1:6)
+    weighted = sum(i * n(i) for i in 1:6)
+    expected = brute_force(H, (sum(n(i) for i in 1:6) => 2, weighted => 7))
+    @test Set(FermionicHilbertSpaces.generate_states(H.modes, NumberConservation(2) * (weighted => 7), H)) == expected
 end
 
 @testitem "Operator constraints match the existing constraints" begin
