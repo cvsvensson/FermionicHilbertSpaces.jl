@@ -234,7 +234,7 @@ function sector_function(cons::C, space::AbstractHilbertSpace) where {C<:Union{<
     allowed = in(allowed_vals)
     function number(state)
         subs = unique_split_state(state, mapper)
-        val = _apply_constraint_function(subs, cons)
+        val = _signed(_apply_constraint_function(subs, cons))
         allowed(val) ? val : missing
     end
 end

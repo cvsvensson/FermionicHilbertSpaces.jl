@@ -109,7 +109,7 @@ function _contribution_values(subspaces, fw::WeightedFunction)
     map((space, weight) -> __contribution_values(space, s -> weight * fw.func(s)), subspaces, fw.weights)
 end
 function __contribution_values(space, func)
-    values = unique(Iterators.map(func, basisstates(space)))
+    values = unique(Iterators.map(_signed ∘ func, basisstates(space)))
     isempty(values) && throw(ArgumentError("Cannot build an `AdditiveConstraint` from a space with no basis states."))
     values
 end
@@ -158,7 +158,7 @@ function _additive_branch_constraint(allowed_values, functions, subspaces, posit
     BranchConstraint((partial, depth, _) -> begin
         current = prefix[depth]
         for i in position_starts[depth]:position_starts[depth+1]-1
-            current += _contribution(functions, subspace_order[i], partial[depth])
+            current += _signed(_contribution(functions, subspace_order[i], partial[depth]))
         end
         prefix[depth+1] = current
         min_possible = current + remaining_min[depth+1]
@@ -166,6 +166,9 @@ function _additive_branch_constraint(allowed_values, functions, subspaces, posit
         any(t -> min_possible <= t <= max_possible, allowed_values)
     end)
 end
+# `UInt + Int` is a `UInt`, so a map returning `UInt` would make negative sums wrap around.
+_signed(x::Unsigned) = x % signed(promote_type(typeof(x), Int))
+_signed(x) = x
 _contribution(func::Function, k, substate) = func(substate)
 _contribution(fw::WeightedFunction, k, substate) = fw.weights[k] * fw.func(substate)
 _contribution(functions, k, substate) = functions[k](substate)
@@ -319,6 +322,11 @@ end
         @test !isempty(expected)
         @test Set(basisstates(tensor_product(Hs; constraint))) == Set(expected)
     end
+    unsigned_and_negative = AdditiveConstraint([-2, 1]; spaces=Hs[1:2], maps=(s -> s.f, s -> Int(2s.m)))
+    H12 = tensor_product(Hs[1:2])
+    expected = filter(s -> Int(s.states[1].f) + Int(2s.states[2].m) in (-2, 1), collect(basisstates(H12)))
+    @test Set(basisstates(tensor_product(Hs[1:2]; constraint=unsigned_and_negative))) == Set(expected)
+    @test Set(basisstates(constrain_space(H12, unsigned_and_negative))) == Set(expected)
     Hfs = map(hilbert_space, (f[1], f[2], f[3]))
     weighted_all = NumberConservation([2]; weights=(1, 2, 1))
     @test Set(basisstates(tensor_product(Hfs; constraint=weighted_all))) == Set(FockNumber.([0b010, 0b101]))
