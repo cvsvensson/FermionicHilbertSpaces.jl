@@ -26,10 +26,9 @@ function _phase_factor_f_bool(focknbr1, focknbr2, i::Int)
     _bit(focknbr2, i) ? (jwstring_anti_bool(i, focknbr1) ⊻ jwstring_anti_bool(i, focknbr2)) : false
 end
 
-function kron_phase_factor(state_mapper::FockMapper{N}) where N
+function kron_phase_factor(state_mapper::FockMapper)
     inds = state_mapper.fermionpositions
-    T = FockNumber{default_fock_representation(N)}
-    masks = map(Xp -> T(focknbr_from_site_indices(Xp)), inds)
+    masks = state_mapper.masks
     function pfh(f1, f2)
         phase_factor_h(f1, f2, inds, masks)
     end
@@ -250,10 +249,9 @@ function phase_factor_u(partition, masks, state::FockNumber)
 end
 
 phase_factor_u(::AtomicStateMapper) = state -> 1
-function phase_factor_u(state_mapper::FockMapper{N}) where N
+function phase_factor_u(state_mapper::FockMapper)
     inds = state_mapper.fermionpositions
-    T = FockNumber{default_fock_representation(N)}
-    masks = map(Xp -> T(focknbr_from_site_indices(Xp)), inds)
+    masks = state_mapper.masks
     function pfu(f1)
         phase_factor_u(inds, masks, f1)
     end
