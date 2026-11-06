@@ -49,9 +49,8 @@ end
 branch_spaces(c) = nothing
 branch_spaces(c::Union{NumberConservation,ParityConservation,AdditiveConstraint}) = c.spaces
 branch_spaces(::AdditiveConstraint{<:Any,Missing}) = nothing # its maps act on the whole state
-# Whether checking `c` on a state needs the state split into factors.
-splits_state(c) = !ismissing(c.spaces)
-splits_state(c::NumberConservation) = !ismissing(c.spaces) || !ismissing(c.weights)
+branch_spaces(::NumberConservation{<:Any,Missing,<:Any}) = nothing # its weights act on the whole state
+branch_spaces(::NumberConservation{<:Any,Missing,Missing}) = missing
 constraint_factors(c::ProductConstraint) = c.constraints
 constraint_factors(c) = (c,)
 
@@ -64,7 +63,7 @@ function pruning_split(H, constraint)
     isconstrained(H) && return nothing # the parent may have many more states than `H`
     prunable = filter(supports_branch_pruning, collect(constraint_factors(constraint)))
     spaces = map(branch_spaces, prunable)
-    (any(isnothing, spaces) || !any(splits_state, prunable)) && return nothing
+    (any(isnothing, spaces) || all(ismissing, spaces)) && return nothing
     atoms = collect(atomic_factors(H))
     owner = zeros(Int, length(atoms))
     blocks = []
