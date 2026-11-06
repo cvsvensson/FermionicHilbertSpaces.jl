@@ -229,6 +229,7 @@ unique_split_state(state, mapper) = only(first(split_state(state, mapper)))
 
 function sector_function(cons::C, space::AbstractHilbertSpace) where {C<:Union{<:NumberConservation,<:ParityConservation,<:AdditiveConstraint}}
     spaces = ismissing(cons.spaces) ? (space,) : cons.spaces
+    cons isa NumberConservation && _check_maps_length(cons.weights, spaces, "weights")
     mapper = state_mapper(space, spaces)
     allowed_vals = allowed_values(cons, space, mapper)
     allowed = in(allowed_vals)
