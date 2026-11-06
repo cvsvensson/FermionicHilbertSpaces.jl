@@ -39,7 +39,6 @@ _state_index(state::B, H::GenericHilbertSpace{B,<:Any,<:Any,<:AbstractDict}) whe
 _state_index(state::B, H::GenericHilbertSpace{B}) where B = H.state_index(state)
 symbolic_group(H::GenericHilbertSpace) = H.label
 atomic_id(H::GenericHilbertSpace) = H.label
-add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(add_tag(H.label, tag), H.basisstates, H.state_index)
 
 @testitem "GenericHilbertSpace, ProductSpace" begin
     using FermionicHilbertSpaces: Kets, fast_path

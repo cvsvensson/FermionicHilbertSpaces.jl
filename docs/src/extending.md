@@ -45,6 +45,11 @@ Connection to Hilbert spaces:
   is converted to `T`, which adds no precision and leaves any `Float64` arithmetic of that method
   in GPU kernels.
 
+Tagged copies, such as the left and right copies made by `open_system`, need nothing more:
+`add_tag` wraps a custom operator in a `TaggedSym` and an atomic space in a `TaggedSpace`, which
+act like the originals on a group of their own. Products of tagged operators are applied factor
+by factor, so a custom `apply_local_operators` method is not used for them.
+
 For speed:
 
 - [`_precomputation_before_operator_application`](@ref)`(op, space)` computes data once per
