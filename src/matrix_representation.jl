@@ -663,8 +663,7 @@ holds the states `op^k` reaches for `k ≤ depth`.
 """
 function fragment(op, H::AbstractHilbertSpace, seeds; depth = typemax(Int), cutoff = 0)
     states = unique!(collect(_states_of(H, seeds)))
-    indices = [state_index(s, H) for s in states]
-    any(iszero, indices) && throw(ArgumentError("The seeds must be basis states of the space."))
+    all(s -> isbasisstate(s, H), states) || throw(ArgumentError("The seeds must be basis states of the space."))
     if !trivial_operator(op)
         bases = _checked_group_ids(op, H)
         terms = [length(bases) > 1 ? partition_product(term, bases, groups(H)) : term for term in NCterms(op)]
@@ -680,16 +679,14 @@ function fragment(op, H::AbstractHilbertSpace, seeds; depth = typemax(Int), cuto
             n = length(states)
             for ((_, newstate), amp) in elements
                 (abs(amp) <= cutoff || newstate in found) && continue
-                index = state_index(newstate, H)
-                iszero(index) && continue
+                isbasisstate(newstate, H) || continue
                 push!(found, newstate)
                 push!(states, newstate)
-                push!(indices, index)
             end
             frontier = (n + 1):length(states)
         end
     end
-    return constrain_space(H, states[sortperm(indices)])
+    return constrain_space(H, states[sortperm([order_key(s, H) for s in states])])
 end
 # Amplitudes are summed over all terms before testing for zero, since terms can cancel.
 function _add_elements!(elements, term, states, H)
@@ -702,6 +699,7 @@ function _add_elements!(elements, term, states, H)
 end
 
 @testitem "fragment" begin
+    using LinearAlgebra
     @spins S 1 // 2
     N = 6
     H = hilbert_space(S, 1:N)
@@ -724,6 +722,14 @@ end
     rounding = (0.1 + 0.2) * S[1][:x] - 0.3 * S[1][:x]
     @test basisstates(fragment(rounding, H1, ["↓"])) == basisstates(H1)
     @test basisstates(fragment(rounding, H1, ["↓"]; cutoff = 1.0e-12)) == basisstates(constrain_space(H1, ["↓"]))
+
+    # A product of more than `typemax(Int)` states
+    N = 64
+    spins = [hilbert_space(S[k]) for k in 1:N]
+    hop = sum(S[k][:+] * S[k + 1][:-] + hc for k in 1:(N - 1))
+    F = fragment(hop, tensor_product(spins), ["↑" * "↓"^(N - 1)])
+    @test dim(F) == N && all(s -> count(t -> t.m > 0, s.states) == 1, basisstates(F))
+    @test ishermitian(representation(hop, F))
 end
 
 """

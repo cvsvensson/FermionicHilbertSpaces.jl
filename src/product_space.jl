@@ -86,12 +86,17 @@ basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(I -> _product_basiss
 Base.@propagate_inbounds basisstate(n::Integer, H::_ProductSpace) = _product_basisstate(_index_array(H.cartinds)[n], H)
 Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::_ProductSpace) = ProductState(_tuple_map(basisstate, Tuple(I), H.factors))
 function _state_index(state::ProductState, H::_ProductSpace)
-    length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
-    inds = _tuple_map(_state_index, state.states, H.factors)
+    inds = _factor_indices(state, H)
     # `all` on a tuple of one type keeps the tuple in memory, which on a GPU is slow local memory
     mapreduce(>(0), &, inds) || return 0
     return _linear_index(inds, _index_array(H.lininds).indices)
 end
+function _factor_indices(state::ProductState, H::_ProductSpace)
+    length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
+    return _tuple_map(_state_index, state.states, H.factors)
+end
+# The last factor varies slowest in the order of `H`
+order_key(state::ProductState, H::ProductSpace) = reverse(_factor_indices(state, H))
 has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && !isnothing(H.lininds)
 
 maximum_particles(H::ProductSpace) = sum(maximum_particles, groups(H))
