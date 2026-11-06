@@ -2,7 +2,7 @@
 
 # Bosonic modes are symbolic like fermions, but need a finite local dimension for numerics, which number
 # conservation keeps small. We use this to study the Bose-Hubbard model, where onsite repulsion suppresses
-# number fluctuations, and a dipole-conserving model, where a second weighted `NumberConservation` constrains the
+# number fluctuations, and a dipole-conserving model, where the conserved dipole moment constrains the
 # dynamics and shapes the entanglement.
 
 # ## Bosonic operators and spaces
@@ -71,7 +71,7 @@ plot(p1, p2; layout=(1, 2), size=(600, 300), frame=:box)
 
 # ## Dipole-conserving model
 
-# A second conserved quantity is handled by a weighted `NumberConservation`, and constraints combine with `*`. The model
+# Several conserved quantities are imposed together by passing their constraints in a tuple. The model
 # ```math
 #  H = -J \sum_i (b_{i-1}^\dagger b_{i+1}^\dagger b_i b_i + h.c.)
 #      + U/2 \sum_i n_i(n_i-1) 
@@ -88,12 +88,12 @@ M = 6
 local_dim = M + 1   # Large enough to avoid truncation error
 Dtot = sum(1:N)     # dipole of the uniform state
 
-number_cons = NumberConservation(M)
-dipole_cons = NumberConservation(Dtot; weights=1:N)
+number = sum(b[i]'b[i] for i in 1:N)
+dipole = sum(i * b[i]'b[i] for i in 1:N)
 
 Hfull = hilbert_space(b, 1:N, local_dim)
-HN = hilbert_space(b, 1:N, local_dim, number_cons)                # only N fixed
-HND = hilbert_space(b, 1:N, local_dim, number_cons * dipole_cons) # N and D fixed
+HN = hilbert_space(b, 1:N, local_dim, number => M)                       # only N fixed
+HND = hilbert_space(b, 1:N, local_dim, (number => M, dipole => Dtot))    # N and D fixed
 dim(Hfull), dim(HN), dim(HND)
 
 # The half-system entanglement entropy of the ground state follows from a partial trace map onto the first half of the chain.

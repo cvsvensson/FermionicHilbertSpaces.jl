@@ -45,8 +45,8 @@ J = 1.0
 h = 0.04
 
 @spins S 3 // 2
-magnetization(s::SpinState) = s.m
-space = hilbert_space(S, 1:N, SectorConstraint(sum; maps=magnetization))
+magnetization = sum(S[k][:z] for k in 1:N)
+space = hilbert_space(S, 1:N, magnetization)
 mags = quantumnumbers(space)
 
 H = J * sum(S[k][op] * S[mod1(k + 1, N)][op] for k in 1:N for op in (:x, :y, :z)) -
