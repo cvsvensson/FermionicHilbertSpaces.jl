@@ -158,7 +158,7 @@ function _additive_branch_constraint(allowed_values, functions, subspaces, posit
     BranchConstraint((partial, depth, _) -> begin
         current = prefix[depth]
         for i in position_starts[depth]:position_starts[depth+1]-1
-            current += _signed(_contribution(functions, subspace_order[i], partial[depth]))
+                current += _signed(_contribution(functions, subspace_order[i], partial[depth]))
         end
         prefix[depth+1] = current
         min_possible = current + remaining_min[depth+1]
@@ -322,10 +322,10 @@ end
         @test !isempty(expected)
         @test Set(basisstates(tensor_product(Hs; constraint))) == Set(expected)
     end
-    unsigned_and_negative = AdditiveConstraint([-2, 1]; spaces=Hs[1:2], maps=(s -> s.f, s -> Int(2s.m)))
+    unsigned_and_negative = AdditiveConstraint([-2, 1]; spaces = Hs[1:2], maps = (s -> s.f, s -> Int(2s.m)))
     H12 = tensor_product(Hs[1:2])
     expected = filter(s -> Int(s.states[1].f) + Int(2s.states[2].m) in (-2, 1), collect(basisstates(H12)))
-    @test Set(basisstates(tensor_product(Hs[1:2]; constraint=unsigned_and_negative))) == Set(expected)
+    @test Set(basisstates(tensor_product(Hs[1:2]; constraint = unsigned_and_negative))) == Set(expected)
     @test Set(basisstates(constrain_space(H12, unsigned_and_negative))) == Set(expected)
     Hfs = map(hilbert_space, (f[1], f[2], f[3]))
     weighted_all = NumberConservation([2]; weights=(1, 2, 1))
