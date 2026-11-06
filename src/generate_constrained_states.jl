@@ -117,7 +117,7 @@ function _subspace_positions(subspaces, allspaces)
     space_ids = map(collect ∘ atom_ids, allspaces) # collect, since spaces may be given as symbols
     return map(subspaces) do subspace
         pos = findfirst(==(collect(atom_ids(subspace))), space_ids)
-        isnothing(pos) && throw(ArgumentError("All subspaces of an `AdditiveConstraint` must be present in the generated space, but `$subspace` is not."))
+        isnothing(pos) && throw(ArgumentError("All subspaces of a constraint must be present in the generated space, but `$subspace` is not."))
         pos
     end
 end
