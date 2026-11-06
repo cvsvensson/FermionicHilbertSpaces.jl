@@ -656,34 +656,42 @@ end
 """
     fragment(op, H, seeds)
 
-Return the subspace of `H` spanned by the basis states reachable from `seeds` through nonzero matrix elements of `op`,
-in the order of `H`. `seeds` takes the same forms as the states of [`constrain_space`](@ref).
-Single terms of `op` can leave the fragment even when their sum does not, so use `representation(op, F; projection=true)`.
+Return the product-state fragment of `seeds`: the smallest subspace of `H` spanned by basis states that contains
+`seeds` and is closed under `op`, with states in the order of `H`. `seeds` takes the same forms as the states of
+[`constrain_space`](@ref). Matrix elements are tested for exact zero, so coefficients that cancel only up to rounding
+connect states; exact or rational coefficients avoid that. Since `op` is stored expanded into products, some of which
+map states of the fragment outside it, use `representation(op, F; projection=true)`.
 
 For the PXP chain, `fragment(pxp, hilbert_space(S, 1:N), ["↓"^N])` gives the states without neighbouring up spins.
 """
 function fragment(op, H::AbstractHilbertSpace, seeds)
-    bases = _checked_group_ids(op, H)
-    terms = [length(bases) > 1 ? partition_product(term, bases, groups(H)) : term for term in NCterms(op)]
     states = unique!(collect(_states_of(H, seeds)))
-    found = Set(states)
-    elements = Dict{Tuple{Int, eltype(states)}, mat_eltype(op)}()
-    frontier = 1:length(states)
-    while !isempty(frontier)
-        empty!(elements)
-        for term in terms
-            _add_elements!(elements, term, view(states, frontier), H)
-        end
-        n = length(states)
-        for ((_, newstate), amp) in elements
-            if !iszero(amp) && newstate ∉ found && !iszero(state_index(newstate, H))
+    indices = [state_index(s, H) for s in states]
+    any(iszero, indices) && throw(ArgumentError("The seeds must be basis states of the space."))
+    if !trivial_operator(op)
+        bases = _checked_group_ids(op, H)
+        terms = [length(bases) > 1 ? partition_product(term, bases, groups(H)) : term for term in NCterms(op)]
+        found = Set(states)
+        elements = Dict{Tuple{Int, eltype(states)}, mat_eltype(op)}()
+        frontier = 1:length(states)
+        while !isempty(frontier)
+            empty!(elements)
+            for term in terms
+                _add_elements!(elements, term, view(states, frontier), H)
+            end
+            n = length(states)
+            for ((_, newstate), amp) in elements
+                (iszero(amp) || newstate in found) && continue
+                index = state_index(newstate, H)
+                iszero(index) && continue
                 push!(found, newstate)
                 push!(states, newstate)
+                push!(indices, index)
             end
+            frontier = (n + 1):length(states)
         end
-        frontier = (n + 1):length(states)
     end
-    return constrain_space(H, sort!(states; by = s -> state_index(s, H)))
+    return constrain_space(H, states[sortperm(indices)])
 end
 # Amplitudes are summed over all terms before testing for zero, since terms can cancel.
 function _add_elements!(elements, term, states, H)
@@ -706,11 +714,12 @@ end
     blockade = constrain_space(H, FilterConstraint(m -> no_neighbours(collect(m)); maps = s -> s.m, spaces = factors(H)))
     F = fragment(pxp, H, ["↓"^N])
     @test basisstates(F) == basisstates(blockade)
-    @test representation(pxp, F; projection = true) == representation(pxp, blockade; projection = true)
+    @test basisstates(fragment(1, H, ["↓"^N, "↓"^N])) == basisstates(constrain_space(H, ["↓"^N]))
+    @test_throws ArgumentError fragment(pxp, blockade, ["↑"^N])
 
     # The terms cancel on |↓↓⟩, though each flips spin 1.
     H2 = hilbert_space(S, 1:2)
-    @test basisstates(fragment(S[1][:x] * (1 // 2 + S[2][:z]), H2, ["↓↓", "↓↓"])) == basisstates(constrain_space(H2, ["↓↓"]))
+    @test basisstates(fragment(S[1][:x] * (1 // 2 + S[2][:z]), H2, ["↓↓"])) == basisstates(constrain_space(H2, ["↓↓"]))
 end
 
 """

@@ -1,7 +1,7 @@
-# # Krylov fragments and quantum many-body scars
+# # Hilbert-space fragmentation and quantum many-body scars
 #
-# Some Hamiltonians split the space into blocks that no quantum number labels. [`fragment`](@ref) finds the block
-# containing given basis states, by following the nonzero matrix elements of the Hamiltonian from them.
+# Some Hamiltonians split the space into blocks that no conventional (local) symmetry labels. [`fragment`](@ref)
+# finds the block containing given basis states, by following the nonzero matrix elements of the Hamiltonian from them.
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots
 
@@ -11,74 +11,91 @@ using FermionicHilbertSpaces, LinearAlgebra, Plots
 # H = \sum_k P_{k-1} X_k P_{k+1},
 # ```
 # where ``X_k`` flips atom ``k`` and ``P_k`` projects it onto the ground state ``|{\downarrow}\rangle``. An atom can
-# only flip when its neighbours are in the ground state.
+# only flip when its neighbours are in the ground state. We take a ring, so atoms ``N`` and ``1`` are neighbours.
 
 @spins S 1 // 2
-N = 12
+N = 14
 Hfull = hilbert_space(S, 1:N)
-P(k) = 1 // 2 - S[k][:z]
+P(k) = 1 // 2 - S[mod1(k, N)][:z]
 X(k) = 2S[k][:x]
-pxp = X(1) * P(2) + sum(P(k - 1) * X(k) * P(k + 1) for k in 2:(N - 1)) + P(N - 1) * X(N)
+pxp = sum(P(k - 1) * X(k) * P(k + 1) for k in 1:N)
 H = fragment(pxp, Hfull, ["↓"^N])
 dim(H), dim(Hfull)
 
 # The fragment of the state with all atoms in the ground state is the space without neighbouring excited atoms, which
-# a constraint on the basis states also gives. For the PXP model, `fragment` gives no new information.
+# a constraint on the basis states also gives. The blockade space, with open or periodic boundaries, is a single
+# fragment, so for the PXP model `fragment` gives no new information.
 
-no_neighbours(m) = !any(k -> m[k] > 0 && m[k + 1] > 0, 1:(N - 1))
+no_neighbours(m) = !any(k -> m[k] > 0 && m[mod1(k + 1, N)] > 0, 1:N)
 blockade = FilterConstraint(m -> no_neighbours(collect(m)); maps = s -> s.m, spaces = factors(Hfull))
 @assert basisstates(H) == basisstates(constrain_space(Hfull, blockade))
 
-# Single terms of the Hamiltonian, such as ``X_1 P_2``, map states of the fragment outside it, while their sum does not.
-# `projection = true` drops those matrix elements.
+# Each term ``P_{k-1} X_k P_{k+1}`` maps blockade states to blockade states, but the Hamiltonian is stored expanded
+# into products such as ``S^z_{k-1} S^x_k``, which map states of the fragment outside it. `projection = true` drops
+# those matrix elements.
 
-ham = representation(pxp, H, Matrix; projection = true)
-E, V = eigen(Hermitian(ham));
+ham = representation(pxp, H, Matrix; projection = true);
 
 # ## Scars
-# A quench from the Néel-like state ``|{\uparrow\downarrow\uparrow\downarrow\cdots}\rangle`` shows revivals of the
-# fidelity, while the state with all atoms in the ground state relaxes.
+# The states ``|\mathbb{Z}_2\rangle = |{\uparrow\downarrow\uparrow\downarrow\cdots}\rangle`` and its translate
+# ``|\mathbb{Z}_2'\rangle`` are swapped by the dynamics. We follow their cat state
+# ``(|\mathbb{Z}_2\rangle + |\mathbb{Z}_2'\rangle)/\sqrt{2}``, which has zero momentum and is even under inversion, in
+# that sector of the ring's translations and reflections, built with [`symmetric_sector`](@ref).
+
+perms = [[mod1(r * i + s, N) for i in 1:N] for s in 0:(N - 1) for r in (1, -1)]
+B = symmetric_sector(H, factors(H), (perms, ones(length(perms))))
+E, V = eigen(Hermitian(Matrix(B' * ham * B)))
+basis_vector(label) = (ψ = zeros(dim(H)); ψ[state_index(label, H)] = 1; ψ)
+catstate = B' * (basis_vector("↑↓"^(N ÷ 2)) + basis_vector("↓↑"^(N ÷ 2))) / sqrt(2)
+down = B' * basis_vector("↓"^N);
+
+# A quench from the cat state shows revivals of the fidelity, while the state with all atoms in the ground state
+# relaxes without revivals.
 
 ts = range(0, 20; length = 200)
-basis_vector(label) = (ψ = zeros(dim(H)); ψ[state_index(label, H)] = 1; ψ)
-function fidelity(label)
-    c = V' * basis_vector(label)
+function fidelity(ψ)
+    c = V' * ψ
     return [abs2(sum(abs2.(c) .* exp.(-im * E * t))) for t in ts]
 end
-neel = "↑↓"^(N ÷ 2)
-plot(ts, fidelity(neel); label = "↑↓↑↓…", xlabel = "t", ylabel = "fidelity", size = (400, 250))
-plot!(ts, fidelity("↓"^N); label = "↓↓↓↓…")
+plot(ts, fidelity(catstate); label = "cat state", xlabel = "t", ylabel = "fidelity", size = (400, 250))
+plot!(ts, fidelity(down); label = "↓↓↓↓…")
 
 # The revivals come from a tower of eigenstates at nearly equally spaced energies, the quantum many-body scars, which
-# overlap much more with the Néel-like state than the other eigenstates do.
+# overlap much more with the cat state than the other eigenstates do. The scar states alternate between zero momentum
+# and momentum ``\pi``, so this sector holds every other state of the tower.
 
-overlap = abs2.(V' * basis_vector(neel))
 scatter(
-    E, overlap; yscale = :log10, ylims = (1.0e-12, 1), label = false, ms = 2, xlabel = "E",
-    ylabel = "overlap with ↑↓↑↓…", size = (400, 250)
+    E, abs2.(V' * catstate); yscale = :log10, ylims = (1.0e-9, 1), label = false, ms = 2, xlabel = "E",
+    ylabel = "overlap with cat state", size = (400, 250)
 )
 
 # ## Fragmentation from dipole conservation
-# The pair-hopping chain
+# The pair-hopping chain, here with open boundaries,
 # ```math
 # H = \sum_k S^+_k S^-_{k+1} S^-_{k+2} S^+_{k+3} + \mathrm{h.c.}
 # ```
 # conserves the charge ``\sum_k S^z_k`` and the dipole moment ``\sum_k k S^z_k``. These do not label all its blocks:
-# states with the same charge and dipole moment lie in fragments of very different sizes, and many are frozen.
+# the two states below both lie in the sector with zero charge and zero dipole moment, but in fragments of very
+# different sizes.
 
+N = 12
+Hfull = hilbert_space(S, 1:N)
 pairhop = sum(S[k][:+] * S[k + 1][:-] * S[k + 2][:-] * S[k + 3][:+] for k in 1:(N - 3)) + hc
-dim(fragment(pairhop, Hfull, ["↑↓↑↓↑↓↓↑↓↑↓↑"])), dim(fragment(pairhop, Hfull, ["↑↑↑↓↓↓↓↓↓↑↑↑"]))
+neutral = AdditiveConstraint(0; maps = s -> s.m, spaces = factors(Hfull)) *
+    AdditiveConstraint(0; maps = [s -> k * s.m for k in 1:N], spaces = factors(Hfull))
+Hneutral = constrain_space(Hfull, neutral)
+seeds = ["↑↓↑↓↑↓↓↑↓↑↓↑", "↑↑↑↓↓↓↓↓↓↑↑↑"]
+@assert all(!iszero(state_index(s, Hneutral)) for s in seeds)
+[dim(fragment(pairhop, Hfull, [s])) for s in seeds]
 
-# The sector with vanishing charge and dipole moment splits into these fragments:
+# Splitting the whole sector into fragments shows that one fragment holds a large share of it, while most of the
+# others are single frozen states.
 
-charge(m) = sum(m)
-dipole(m) = sum(k * m[k] for k in eachindex(m))
-neutral = FilterConstraint(m -> (m = collect(m); charge(m) == 0 && dipole(m) == 0); maps = s -> s.m, spaces = factors(Hfull))
-remaining = Set(basisstates(constrain_space(Hfull, neutral)))
+remaining = Set(basisstates(Hneutral))
 sizes = Int[]
 while !isempty(remaining)
-    F = fragment(pairhop, Hfull, [first(remaining)])
+    F = fragment(pairhop, Hneutral, [first(remaining)])
     setdiff!(remaining, basisstates(F))
     push!(sizes, dim(F))
 end
-sort!(sizes; rev = true)
+(; sector = dim(Hneutral), fragments = length(sizes), frozen = count(==(1), sizes), largest = maximum(sizes))

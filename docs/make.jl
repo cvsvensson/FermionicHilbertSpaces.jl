@@ -41,7 +41,7 @@ pages = [
         "SYK model" => "literate_output/syk_model.md",
         "Braiding Majorana zero modes" => "literate_output/braiding.md",
         "Spatial symmetries" => "literate_output/translation_symmetry.md",
-        "Fragmentation and scars" => "literate_output/fragmentation.md",
+        "Hilbert-space fragmentation and quantum many-body scars" => "literate_output/fragmentation.md",
     ],
     "Guides" => [
         "Constrained spaces and quantum numbers" => "conservation.md",
