@@ -263,7 +263,13 @@ end
     dipole = AdditiveConstraint([12, 13]; spaces = Hs, maps = [s -> i * particle_number(s) for i in 1:N])
     Hm = tensor_product(hilbert_space(f, 1:3), hilbert_space(s[1]), hilbert_space(s[2]))
     mixed = NumberConservation(1, hilbert_space(f, 1:2)) * AdditiveConstraint([0]; spaces = map(hilbert_space, (s[1], s[2])), maps = s -> s.m)
+    @bosons b
+    Hbs = [hilbert_space(b[i], 3) for i in 1:4]
+    @majoranas γ
+    Hγ = hilbert_space(γ, 1:8)
     for (space, constraint) in [
+            (tensor_product(Hbs), NumberConservation(1:2, Hbs[1:3]) * NumberConservation(2, Hbs[3:4])),
+            (Hγ, NumberConservation(1, hilbert_space(γ, 1:4))),
             (H, NumberConservation(0:2, Hs[3:7])),
             (H, NumberConservation(N ÷ 2, Hs) * dipole),
             (H, NumberConservation(3, Hs[1:6]) * FilterConstraint(s -> isodd(s.f))),
