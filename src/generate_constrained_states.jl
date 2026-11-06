@@ -108,7 +108,7 @@ end
 function _contribution_values(subspaces, fw::WeightedFunction, T)
     return map((space, weight) -> __contribution_values(space, s -> weight * fw.func(s), T), subspaces, fw.weights)
 end
-function __contribution_values(space, func, T)
+function __contribution_values(space, func, ::Type{T}) where {T}
     values = unique(Iterators.map(s -> _summand(T, func(s)), basisstates(space)))
     isempty(values) && throw(ArgumentError("Cannot build an `AdditiveConstraint` from a space with no basis states."))
     values

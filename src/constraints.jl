@@ -263,11 +263,12 @@ function filter_function(constraint::ProductConstraint, space::AbstractHilbertSp
     state -> all(f -> f(state), subspace_functions)
 end
 
-_apply_constraint_function(substates, ::NumberConservation{<:Any, <:Any, Missing}, S = Int) = sum(particle_number, substates; init = 0)
-_apply_constraint_function(substates, cons::NumberConservation, S = Int) = mapreduce((s, w) -> _summand(S, particle_number(s) * w), +, substates, cons.weights; init = zero(S))
-_apply_constraint_function(substates, ::ParityConservation, S = Int) = prod(parity, substates; init = 1)
-_apply_constraint_function(substates, cons::AdditiveConstraint{<:Any, <:Any, <:Function}, S = Int) = sum(s -> _summand(S, cons.maps(s)), substates; init = zero(S))
-_apply_constraint_function(substates, cons::AdditiveConstraint, S = Int) = mapreduce((s, f) -> _summand(S, f(s)), +, substates, cons.maps; init = zero(S))
+# `::Type{S}` forces specialization on `S`; Julia does not specialize on a type argument that is only captured by a closure.
+_apply_constraint_function(substates, ::NumberConservation{<:Any, <:Any, Missing}, ::Type = Int) = sum(particle_number, substates; init = 0)
+_apply_constraint_function(substates, cons::NumberConservation, ::Type{S} = Int) where {S} = mapreduce((s, w) -> _summand(S, particle_number(s) * w), +, substates, cons.weights; init = zero(S))
+_apply_constraint_function(substates, ::ParityConservation, ::Type = Int) = prod(parity, substates; init = 1)
+_apply_constraint_function(substates, cons::AdditiveConstraint{<:Any, <:Any, <:Function}, ::Type{S} = Int) where {S} = sum(s -> _summand(S, cons.maps(s)), substates; init = zero(S))
+_apply_constraint_function(substates, cons::AdditiveConstraint, ::Type{S} = Int) where {S} = mapreduce((s, f) -> _summand(S, f(s)), +, substates, cons.maps; init = zero(S))
 
 
 function branch_constraint(constraint::ParityConservation, spaces)
