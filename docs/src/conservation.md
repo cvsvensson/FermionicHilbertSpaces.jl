@@ -2,7 +2,7 @@
 Conservation laws let you work in a small part of an exponentially large Hilbert space. This page shows how a constraint selects basis states and groups them into sectors of fixed quantum numbers, lists the available constraints, and ends with worked examples where the full space would be far too large to build.
 
 ## Constraints and sectors
-A constraint is written `quantity => allowed`, where `quantity` is a diagonal operator. A single allowed value restricts the space, a collection of values also splits it into sectors labelled by them, and a quantity without `=>` splits the space into all its sectors. A constraint is given when building a space, either to `hilbert_space` or as the `constraint` keyword of `tensor_product`, and `constrain_space` applies one to an existing space:
+A constraint is written `quantity => spec`, where `quantity` is a diagonal operator. A single value restricts the space, a collection of values also splits it into sectors labelled by them, and a quantity without `=>` splits the space into all its sectors. A constraint is given when building a space, either to `hilbert_space` or as the `constraint` keyword of `tensor_product`, and `constrain_space` applies one to an existing space:
 ```@example constraints
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions f
@@ -24,7 +24,28 @@ hopping = sum(f[k]'f[k+1] + hc for k in 1:3)
 indices(2, H)
 ```
 
-Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. Labels are integers when every value of the quantity is an integer, and rationals otherwise. Coefficients must be integers or rationals, so that the values are exact. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
+The right-hand side of `quantity => spec` is read by its type:
+
+| `spec` | keeps the values `v` | labels sectors by |
+|:--- |:--- |:--- |
+| none | all | `v` |
+| a number `a` | `v == a` | none |
+| a collection, such as `0:2` or `[1, 3]` | `v` in it | `v` |
+| a function returning a `Bool`, such as `isodd` | where it is `true` | none |
+| any other function `f` | all | `f(v)` |
+| `f => rest` | what `rest` keeps of `f(v)` | what `rest` labels `f(v)` by |
+
+After a function, `rest` may also be a string, symbol or character, and a single tuple or vector must be wrapped, as in `=> [(0, 1)]`. A constraint that allows no value of its operator throws an error. Odd particle numbers, the sectors of even and odd particle number, and a ``\mathbb{Z}_3`` charge:
+```@example constraints
+Hodd = hilbert_space(f, 1:4, N => isodd)
+Hparity = hilbert_space(f, 1:4, N => (v -> mod(v, 2)) => 0:1)
+Q = sum(k * f[k]'f[k] for k in 1:4)
+Hcharge = hilbert_space(f, 1:4, Q => (v -> mod(v, 3)) => 0)
+dim(Hodd), quantumnumbers(Hparity), dim(Hcharge)
+```
+[`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total number of fermions.
+
+Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. Labels are integers when every term of the quantity, with a share of its constant, takes integer values, and rationals otherwise, so the total ``S^z`` is labelled by rationals. Coefficients must be integers or rationals, so that the values are exact. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
 ```@example constraints
 @spins S 1 // 2
 Hspin = hilbert_space(S, 1:6, sum(S[i][:z] for i in 1:6))
@@ -32,14 +53,14 @@ up(i) = S[i][:z] + 1 // 2
 Hpxp = hilbert_space(S, 1:10, [up(i) * up(i + 1) => 0 for i in 1:9])
 quantumnumbers(Hspin), dim(Hpxp)
 ```
-Passing a constraint while building a space prunes states as they are generated, so the full space is never built. A term that acts on several factors is tabulated on their product, which may have at most 4096 states. A parity is conserved with [`ParityConservation`](@ref) instead.
+Passing a constraint while building a space prunes states as they are generated, so the full space is never built. A term that acts on several factors is tabulated on their product, which may have at most 4096 states.
 
 The quantity can also be a function of the basis state. It is evaluated on each state of the full space, so the space must be small enough to build:
 ```@example constraints
 nup(state) = count(s -> s.m > 0, state.states)
 dim(hilbert_space(S, 1:6, nup => 2))
 ```
-`constrain_space` always filters a space that already exists.
+`constrain_space` always filters a space that already exists, and the labels of a new constraint follow the labels the space already has.
 
 ## Lower-level constraints
 #### NumberConservation

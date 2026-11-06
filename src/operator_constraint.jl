@@ -252,14 +252,15 @@ function diagonal_terms(op, spaces)
     strides = [cumprod([1; map(dim, spaces[g][1:(end - 1)])]) for g in groups]
     return _diagonal_terms(Rational{Int}(real(constant)), groups, strides, tables)
 end
-# Values are summed as integers when each table plus an equal share of the constant is integral, which depends on the
-# terms of the operator rather than on how many there are.
+# Values are summed as integers when the groups with fractional values become integral by sharing the constant equally,
+# as for `Σᵢ (Sᶻᵢ + 1//2)`. This depends on the terms of the operator rather than on how many there are.
 function _diagonal_terms(constant, units, strides, tables)
-    share = isempty(tables) ? zero(constant) : constant / length(tables)
-    rest = constant - share * length(tables)
-    integral = isinteger(rest) && all(t -> all(x -> isinteger(x + share), t), tables)
+    fractional = findall(t -> !all(isinteger, t), tables)
+    share = isempty(fractional) ? zero(constant) : constant / length(fractional)
+    rest = constant - share * length(fractional)
+    integral = isinteger(rest) && all(g -> all(x -> isinteger(x + share), tables[g]), fractional)
     integral || return DiagonalTerms{Rational{Int}}(constant, units, strides, tables)
-    return DiagonalTerms{Int}(Int(rest), units, strides, map(t -> Int.(t .+ share), tables))
+    return DiagonalTerms{Int}(Int(rest), units, strides, [Int.(g in fractional ? t .+ share : t) for (g, t) in enumerate(tables)])
 end
 # A term acting on several spaces is tabulated on their product space, whose dimension grows exponentially.
 const MAX_TABLE_SIZE = 2^12
