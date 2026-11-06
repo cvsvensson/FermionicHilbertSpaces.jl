@@ -325,7 +325,11 @@ hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionicSpace(
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState},BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, @nospecialize(constraint::ConstraintLike))
     length(labels) == 0 && return hilbert_space(a, labels)
-    tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
+    modes = map(l -> hilbert_space(a[l]), labels)
+    constraint = as_constraint(constraint)
+    n = _fixed_total_number(constraint, modes)
+    isnothing(n) || return ConstrainedSpace(hilbert_space(a, labels), fixed_particle_number_fockstates(length(labels), n))
+    tensor_product(modes; constraint)
 end
 
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::ParityConservation{Missing})

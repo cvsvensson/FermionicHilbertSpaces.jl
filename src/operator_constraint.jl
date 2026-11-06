@@ -48,10 +48,40 @@ end
 allowed_values(c::OperatorConstraint) = c.allowed
 function with_spaces(c::OperatorConstraint, spaces)
     units = collect(spaces)
-    return OperatorConstraint(c.op, c.allowed, c.labelled, units, diagonal_terms(c.op, units))
+    number = _number_constraint(c.op, units, c.allowed)
+    return OperatorConstraint(c.op, c.allowed, c.labelled, units, isnothing(number) ? diagonal_terms(c.op, units) : number)
 end
 # The terms index the states of each space by position, which tagging and transposing keep.
-map_spaces(f, c::OperatorConstraint) = OperatorConstraint(c.op, c.allowed, c.labelled, _map_spaces(f, c.spaces), c.terms)
+map_spaces(f, c::OperatorConstraint) = OperatorConstraint(c.op, c.allowed, c.labelled, _map_spaces(f, c.spaces), map_spaces(f, c.terms))
+
+# A weighted count `Σₖ wₖ nₖ` of single fermion or boson modes is the quantity of `NumberConservation`, which is faster.
+function _number_constraint(op, units, allowed)
+    ismissing(allowed) || eltype(allowed) <: Integer || return nothing
+    terms, constant = _operator_terms(op)
+    iszero(constant) || return nothing
+    unit_of = Dict(id => k for (k, H) in enumerate(units) for id in atom_ids(H))
+    weights = zeros(Int, length(units))
+    for t in terms
+        w, x = t.coeff, last(t.factors)
+        (_isexact(w) && isreal(w) && isinteger(real(w))) || return nothing
+        (length(t.factors) == 2 && _is_annihilator(x) && first(t.factors) == x') || return nothing
+        k = get(unit_of, atomic_id(x), 0)
+        (iszero(k) || length(atom_ids(units[k])) != 1) && return nothing
+        weights[k] = Int(real(w))
+    end
+    return NumberConservation(allowed, units, weights)
+end
+_is_annihilator(x) = false
+# The total number `n` when `c` restricts the sum of the numbers of all `modes` to `n`, whose states are built directly.
+_fixed_total_number(c, modes) = nothing
+function _fixed_total_number(c::OperatorConstraint{<:Any, <:Any, Missing}, modes)
+    c.labelled && return nothing
+    number = _number_constraint(c.op, modes, c.allowed)
+    (isnothing(number) || !all(isone, number.weights)) && return nothing
+    return only(c.allowed)
+end
+branch_constraint(c::OperatorConstraint{<:Any, <:Any, <:Any, <:NumberConservation}, allspaces) = branch_constraint(c.terms, allspaces)
+_additive_sum(c::OperatorConstraint{<:Any, <:Any, <:Any, <:NumberConservation}, substates, S::Type) = _additive_sum(c.terms, substates, S)
 supports_sector_grouping(c::OperatorConstraint) = c.labelled
 # Without spaces, the operator is split over the atoms of the constrained space, so any split fits.
 branch_spaces(::OperatorConstraint{<:Any, <:Any, Missing}) = ()
@@ -253,6 +283,7 @@ end
     N = sum(f[i]'f[i] for i in 1:5)
     modes = [hilbert_space(f[i]) for i in 1:5]
     @test basisstates(tensor_product(modes; constraint = N => 2)) == basisstates(tensor_product(modes; constraint = NumberConservation(2)))
+    @test basisstates(hilbert_space(f, 1:5, N => 2)) == basisstates(hilbert_space(f, 1:5, NumberConservation(2)))
     Sz = sum(S[i][:z] for i in 1:5)
     Hsz, Hadd = hilbert_space(S, 1:5, Sz), hilbert_space(S, 1:5, AdditiveConstraint(missing; maps = s -> s.m))
     @test quantumnumbers(Hsz) == quantumnumbers(Hadd) && basisstates(Hsz) == basisstates(Hadd)
