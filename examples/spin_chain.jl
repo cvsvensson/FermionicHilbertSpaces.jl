@@ -11,6 +11,7 @@
 # Pauli matrices: they satisfy $[S^x, S^y] = i S^z$, and $S^z$ has eigenvalues $-J, \dots, J$.
 
 using FermionicHilbertSpaces
+using FermionicHilbertSpaces: Axes
 using LinearAlgebra
 
 @spin T
@@ -54,5 +55,30 @@ blocks = map(J -> nullspace(Mtot - J * (J + 1) * I), 0:2)
 spectra = [eigvals(Hermitian(P' * Mham * P)) for P in blocks]
 @assert sort(reduce(vcat, spectra)) ≈ eigvals(Hermitian(Mham))
 minimum.(spectra)
+
+# The same blocks follow without forming $\vec S_\mathrm{tot}^2$. A multiplet with total spin $J$ has exactly one
+# highest-weight state, with $S^z_\mathrm{tot} = J$ and annihilated by the raising operator $S^+_\mathrm{tot}$.
+# Building one space with all magnetization sectors, the raising operator maps sector $J$ to sector $J+1$, and its
+# nullspace gives these states, one per multiplet. In the top sector $J = N/2$ every state is a highest-weight state.
+
+Splus = sum(S[k][:+] for k in 1:N)
+Hsz = hilbert_space(S, 1:N, Sz)
+function highest_weight_states(J)
+    HJ = sector(J, Hsz)
+    J + 1 in quantumnumbers(Hsz) || return HJ, Matrix(I, dim(HJ), dim(HJ))
+    raising = representation(Splus, Axes(sector(J + 1, Hsz), HJ), Matrix)
+    return HJ, nullspace(raising)
+end
+hw_spectra = map(0:2) do J
+    HJ, V = highest_weight_states(J)
+    eigvals(Hermitian(V' * representation(ham, HJ, Matrix) * V))
+end
+@assert all(hw_spectra .≈ spectra)
+
+# States symmetric under all permutations of the sites have the maximal total spin, so the symmetric
+# sector, built with [`symmetric_sector`](@ref), reproduces the highest-weight spectrum for $J = N/2$.
+
+Psym = symmetric_sector(Hm, factors(Hm))
+@assert eigvals(Hermitian(Psym' * Mham * Psym)) ≈ hw_spectra[end]
 
 # For Hamiltonians symmetric under permuting sites, [`symmetric_sector`](@ref) projects onto permutation sectors; see [Spatial symmetries](translation_symmetry.md).
