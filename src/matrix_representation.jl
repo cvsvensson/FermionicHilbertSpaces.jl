@@ -654,17 +654,18 @@ function _checked_group_ids(op, space)
 end
 
 """
-    fragment(op, H, seeds)
+    fragment(op, H, seeds; depth = typemax(Int), cutoff = 0)
 
 Return the product-state fragment of `seeds`: the smallest subspace of `H` spanned by basis states that contains
 `seeds` and is closed under `op`, with states in the order of `H`. `seeds` takes the same forms as the states of
-[`constrain_space`](@ref). Matrix elements are tested for exact zero, so coefficients that cancel only up to rounding
-connect states; exact or rational coefficients avoid that. Since `op` is stored expanded into products, some of which
-map states of the fragment outside it, use `representation(op, F; projection=true)`.
+[`constrain_space`](@ref). Matrix elements with `abs(amp) <= cutoff` count as zero. With a finite `depth`, the result
+holds the states `op^k` reaches for `k ≤ depth`, the support of `depth`-step Krylov evolution, and is in general not
+closed under `op`. Since `op` is stored
+expanded into products, some of which map states of the fragment outside it, use `representation(op, F; projection=true)`.
 
 For the PXP chain, `fragment(pxp, hilbert_space(S, 1:N), ["↓"^N])` gives the states without neighbouring up spins.
 """
-function fragment(op, H::AbstractHilbertSpace, seeds)
+function fragment(op, H::AbstractHilbertSpace, seeds; depth = typemax(Int), cutoff = 0)
     states = unique!(collect(_states_of(H, seeds)))
     indices = [state_index(s, H) for s in states]
     any(iszero, indices) && throw(ArgumentError("The seeds must be basis states of the space."))
@@ -674,14 +675,15 @@ function fragment(op, H::AbstractHilbertSpace, seeds)
         found = Set(states)
         elements = Dict{Tuple{Int, eltype(states)}, mat_eltype(op)}()
         frontier = 1:length(states)
-        while !isempty(frontier)
+        for _ in 1:depth
+            isempty(frontier) && break
             empty!(elements)
             for term in terms
                 _add_elements!(elements, term, view(states, frontier), H)
             end
             n = length(states)
             for ((_, newstate), amp) in elements
-                (iszero(amp) || newstate in found) && continue
+                (abs(amp) <= cutoff || newstate in found) && continue
                 index = state_index(newstate, H)
                 iszero(index) && continue
                 push!(found, newstate)
@@ -714,12 +716,18 @@ end
     blockade = constrain_space(H, FilterConstraint(m -> no_neighbours(collect(m)); maps = s -> s.m, spaces = factors(H)))
     F = fragment(pxp, H, ["↓"^N])
     @test basisstates(F) == basisstates(blockade)
+    @test collect(basisstates(fragment(pxp, H, ["↓"^N]; depth = 2))) == filter(s -> count(t -> t.m > 0, s.states) <= 2, collect(basisstates(blockade)))
     @test basisstates(fragment(1, H, ["↓"^N, "↓"^N])) == basisstates(constrain_space(H, ["↓"^N]))
     @test_throws ArgumentError fragment(pxp, blockade, ["↑"^N])
 
     # The terms cancel on |↓↓⟩, though each flips spin 1.
     H2 = hilbert_space(S, 1:2)
     @test basisstates(fragment(S[1][:x] * (1 // 2 + S[2][:z]), H2, ["↓↓"])) == basisstates(constrain_space(H2, ["↓↓"]))
+
+    H1 = hilbert_space(S, 1:1)
+    rounding = (0.1 + 0.2) * S[1][:x] - 0.3 * S[1][:x]
+    @test basisstates(fragment(rounding, H1, ["↓"])) == basisstates(H1)
+    @test basisstates(fragment(rounding, H1, ["↓"]; cutoff = 1.0e-12)) == basisstates(constrain_space(H1, ["↓"]))
 end
 
 """
