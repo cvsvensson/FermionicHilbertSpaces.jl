@@ -19,7 +19,13 @@ function as_constraint((quantity, spec)::Pair)
 end
 as_constraint(quantity) = quantity_constraint(quantity, ValueRule{true}(identity, missing))
 quantity_constraint(f::Function, rule) = StateConstraint(f, missing, missing, rule)
-quantity_constraint(op, rule) = OperatorConstraint(op, rule, missing, nothing, missing)
+function quantity_constraint(op, rule)
+    listed = rule.map === identity && rule.allowed isa Union{Tuple, AbstractArray, AbstractSet}
+    for x in (listed ? rule.allowed : ())
+        x isa AbstractFloat && !isinteger(x) && throw(ArgumentError("The values of a constraint operator are exact, so its allowed values must be integers or rationals, such as `$(rationalize(x))` instead of `$x`."))
+    end
+    return OperatorConstraint(op, rule, missing, nothing, missing)
+end
 # A vector holds constraints rather than basis states when its elements are constraints or quantities.
 _holds_constraints(states) = false
 _holds_constraints(xs::AbstractVector) = !isempty(xs) && all(x -> x isa Union{Pair, AbstractConstraint, NCAdd, NCMul, AbstractSym, Function}, xs)
@@ -138,7 +144,7 @@ function _resolve_on_values(c, values)
     rule = c.rule
     if length(values) > MAX_LISTED_VALUES || !_applies(rule.map, values)
         listed = rule.map === identity && rule.allowed isa Union{Tuple, AbstractArray, AbstractSet}
-        return rule, listed ? sort!(filter(x -> x isa Real && (_isexact(x) || isinteger(x)), collect(rule.allowed))) : missing
+        return rule, listed ? sort!(filter(x -> x isa Real, collect(rule.allowed))) : missing
     end
     rule = resolve(rule, first(values))
     kept = filter(v -> !ismissing(_label(rule, v)), values)
@@ -174,9 +180,16 @@ _table_index(strides, positions, units) = 1 + sum(j -> strides[j] * (positions[u
 
 # Each term goes to the group of its support, the spaces it acts on. A term whose support lies inside larger supports is
 # shared equally among them, so that a sum of local products such as `Σᵢ nᵢnᵢ₊₁` regains the expanded single-site pieces
-# of each product and its groups take few values, which keeps the bounds for pruning tight.
+# of each product and its groups take few values, which keeps the bounds for pruning tight. The values are integers when
+# each term, plus an equal share of the constant, takes integer values; then each term goes to one group, so that the
+# tables are integers too.
 function diagonal_terms(op, spaces)
     terms, constant = _operator_terms(op)
+    # Sums with float coefficients, such as of spin `x` components, can leave a constant `0.0`.
+    constant = iszero(constant) ? 0 : constant
+    _check_exact(constant, constant)
+    isreal(constant) || throw(ArgumentError("A constraint operator must be Hermitian, but it has the constant term $constant."))
+    constant = Rational{Int}(real(constant))
     unit_of = Dict(id => k for (k, H) in enumerate(spaces) for id in atom_ids(H))
     supports = map(terms) do term
         sort!(unique(map(x -> _unit_of(x, unit_of, spaces), term.factors)))
@@ -184,20 +197,24 @@ function diagonal_terms(op, spaces)
     distinct = unique(supports)
     groups = filter(s -> !any(t -> length(t) > length(s) && issubset(s, t), distinct), distinct)
     foreach(g -> _check_table_size(spaces[g], terms[findfirst(==(g), supports)]), groups)
-    group_terms = [Tuple{Any, NCMul}[] for _ in groups]
-    for (term, support) in zip(terms, supports)
-        owners = findall(g -> issubset(support, g), groups)
-        foreach(g -> push!(group_terms[g], (term.coeff * (1 // length(owners)), term)), owners)
+    owners = [findall(g -> issubset(support, g), groups) for support in supports]
+    share = isempty(terms) ? constant : constant // length(terms)
+    tables, integral = _group_tables(terms, owners, groups, spaces, share)
+    if integral && any(o -> length(o) > 1, owners)
+        tables, _ = _group_tables(terms, map(o -> o[1:1], owners), groups, spaces, share)
     end
-    tables = Vector{Rational{Int}}[_diagonal_table(ts, spaces[g]) for (g, ts) in zip(groups, group_terms)]
-    _check_exact(constant, constant)
-    isreal(constant) || throw(ArgumentError("A constraint operator must be Hermitian, but it has the constant term $constant."))
     strides = Vector{Int}[cumprod([1; map(dim, spaces[g][1:(end - 1)])]) for g in groups]
-    rational = DiagonalTerms(Rational{Int}(real(constant)), groups, strides, tables)
-    # When all values in the range are integers, so are the tables relative to their minima.
-    values = _value_range(rational)
-    (isinteger(first(values)) && isinteger(step(values))) || return rational
-    return DiagonalTerms(Int(first(values)), groups, strides, Vector{Int}[Int.(t .- minimum(t)) for t in tables])
+    rational = DiagonalTerms(constant, groups, strides, tables)
+    integral || return rational
+    return DiagonalTerms(Int(first(_value_range(rational))), groups, strides, Vector{Int}[Int.(t .- minimum(t)) for t in tables])
+end
+function _group_tables(terms, owners, groups, spaces, share)
+    group_terms = [Tuple{Any, NCMul}[] for _ in groups]
+    for (term, gs) in zip(terms, owners)
+        foreach(g -> push!(group_terms[g], (term.coeff * (1 // length(gs)), term)), gs)
+    end
+    tables = [_diagonal_table(ts, spaces[g], share) for (g, ts) in zip(groups, group_terms)]
+    return Vector{Rational{Int}}[first(t) for t in tables], isempty(terms) ? isinteger(share) : all(last, tables)
 end
 # A term acting on several spaces is tabulated on their product space, whose dimension grows exponentially.
 const MAX_TABLE_SIZE = 2^12
@@ -225,10 +242,11 @@ _isexact(x) = x isa Union{Integer, Rational}
 _isexact(x::Complex) = _isexact(real(x)) && _isexact(imag(x))
 _check_exact(x, term) = _isexact(x) || throw(ArgumentError("A constraint operator needs integer or rational coefficients, such as `1//2` instead of `0.5`, so that its values are exact. Got the term `$term`."))
 
-# The diagonal of a sum of weighted terms on the product of `spaces`, indexed by the positions of the states of `spaces`.
-# Each term's diagonal is found without its coefficient, as the floating point values of a monomial are fractions with small
-# denominators, and then multiplied by the exact coefficient.
-function _diagonal_table(weighted_terms, spaces)
+# The diagonal of a sum of weighted terms on the product of `spaces`, indexed by the positions of the states of `spaces`,
+# and whether each term with its own coefficient, plus `share`, takes integer values. Each term's diagonal is found without
+# its coefficient, as the floating point values of a monomial are fractions with small denominators, and then multiplied
+# by the exact coefficient.
+function _diagonal_table(weighted_terms, spaces, share)
     H = length(spaces) == 1 ? only(spaces) : tensor_product(spaces)
     monomials = map(((_, t),) -> representation(NCMul(1, t.factors), H), weighted_terms)
     if !isdiag(sum(map(((w, _), m) -> complex(float(w)) * m, weighted_terms, monomials)))
@@ -236,18 +254,24 @@ function _diagonal_table(weighted_terms, spaces)
         throw(ArgumentError("A constraint operator must be diagonal in the basis, but its term `$(weighted_terms[k][2])` is not."))
     end
     foreach(((w, t),) -> _check_exact(w, t), weighted_terms)
-    contributions = map(((w, t), m) -> w .* map(v -> _exact_value(v, t), Vector(diag(m))), weighted_terms, monomials)
+    diagonals = map(((_, t), m) -> map(v -> _exact_value(v, t), Vector(diag(m))), weighted_terms, monomials)
+    contributions = map(((w, _), d) -> w .* d, weighted_terms, diagonals)
     k = findfirst(c -> !all(isreal, c), contributions)
     isnothing(k) || throw(ArgumentError("A constraint operator must be Hermitian, but its term `$(weighted_terms[k][2])` has complex values."))
+    integral = all((((_, t), d),) -> all(v -> isinteger(real(t.coeff * v) + share), d), zip(weighted_terms, diagonals))
     values = Rational{Int}.(real.(sum(contributions)))
-    length(spaces) == 1 && return values
+    length(spaces) == 1 && return values, integral
     mapper = state_mapper(H, spaces)
-    return vec([values[state_index(only(first(combine_states(states, mapper))), H)] for states in Iterators.product(map(basisstates, spaces)...)])
+    return vec([values[state_index(only(first(combine_states(states, mapper))), H)] for states in Iterators.product(map(basisstates, spaces)...)]), integral
 end
+# The values of built-in operators have power-of-two denominators far below this bound, while an irrational value such as
+# `√2` only rounds to a fraction with a larger denominator.
+const MAX_DENOMINATOR = 2^16
 function _exact_value(x::Real, term)
     _isexact(x) && return Rational{Int}(x)
-    r = rationalize(Int, x; tol = 1.0e-10 * max(1, abs(x)))
-    abs(r - x) <= 4 * eps(max(1.0, abs(x))) || throw(ArgumentError("The values of the constraint operator term `$term` are not exact fractions, such as $x."))
+    tol = 4 * eps(max(1.0, abs(x)))
+    r = rationalize(Int, x; tol)
+    abs(r - x) <= tol && denominator(r) <= MAX_DENOMINATOR || throw(ArgumentError("The values of the constraint operator term `$term` are not exact fractions, such as $x."))
     return r
 end
 _exact_value(z::Complex, term) = complex(_exact_value(real(z), term), _exact_value(imag(z), term))
@@ -398,8 +422,18 @@ end
     expected = filter(s -> count_ones(s.states[1].f) == 2, full)
     @test Set(basisstates(tensor_product(Hs; constraint = N => 2))) == Set(expected)
     @spins S 1 // 2
-    @test eltype(quantumnumbers(hilbert_space(S, 1:2, S[1][:z] + 3S[2][:z]))) == Int
-    @test eltype(quantumnumbers(hilbert_space(S, 1:3, sum(S[i][:z] for i in 1:3)))) == Rational{Int}
+end
+
+@testitem "Labels are integers when every term of the operator takes integer values" begin
+    @fermions f
+    @spins S 1 // 2
+    @bosons b
+    labeltype(H, op) = eltype(quantumnumbers(constrain_space(H, op)))
+    Sz(L) = sum(S[i][:z] for i in 1:L)
+    @test labeltype(hilbert_space(S, 1:3), Sz(3)) == labeltype(hilbert_space(S, 1:4), Sz(4)) == Rational{Int}
+    @test labeltype(hilbert_space(S, 1:3), 2Sz(3)) == labeltype(hilbert_space(S, 1:3), sum(S[i][:z] + 1 // 2 for i in 1:3)) == Int
+    @test labeltype(hilbert_space(f, 1:3), sum(f[i]'f[i] for i in 1:3)) == Int
+    @test labeltype(hilbert_space(b, 1:2, 5), sum(b[i]'b[i] for i in 1:2)) == Int
 end
 
 @testitem "Invalid constraint operators throw" begin
@@ -412,6 +446,7 @@ end
     @test_throws ArgumentError hilbert_space(f, 1:2, f[3]'f[3] => 1)
     @test_throws "1//10" hilbert_space(f, 1:2, (1 // 10) * f[1]'f[1] => 0.1)
     @test dim(hilbert_space(f, 1:2, f[1]'f[1] => 1.0)) == 2
+    @test_throws "1//2" hilbert_space(f, 1:20, sum(i^4 * f[i]'f[i] for i in 1:20) => [0.5])
     @test_throws "ParityConservation" hilbert_space(f, 1:13, prod(1 - 2f[i]'f[i] for i in 1:13) => 1)
 end
 
@@ -549,4 +584,11 @@ end
     X(i) = Shift(i)
     Hs = [GenericHilbertSpace(k, Clock.(0:2)) for k in 1:2]
     @test Set(basisstates(tensor_product(Hs; constraint = X(1) * X(1) * X(1) + 2 * X(2) * X(2) * X(2) => 3))) == Set(basisstates(tensor_product(Hs)))
+    struct Root2 <: AbstractSym
+        site::Int
+    end
+    @nc Root2
+    apply_local_operator(::Root2, s::Clock, space, precomp) = s, sqrt(2)
+    symbolic_group(op::Root2) = op.site
+    @test_throws "not exact fractions" tensor_product(Hs; constraint = Root2(1) => 1)
 end

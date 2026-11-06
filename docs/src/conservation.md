@@ -45,7 +45,7 @@ dim(Hodd), quantumnumbers(Hparity), dim(Hcharge)
 ```
 [`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total number of fermions.
 
-Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. Labels are integers when all values of the quantity are integers, and rationals otherwise. Coefficients must be integers or rationals, so that the values are exact. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
+Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. Labels are integers when every term of the operator takes integer values, and rationals otherwise. Coefficients must be integers or rationals, so that the values are exact. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
 ```@example constraints
 @spins S 1 // 2
 Hspin = hilbert_space(S, 1:6, sum(S[i][:z] for i in 1:6))
