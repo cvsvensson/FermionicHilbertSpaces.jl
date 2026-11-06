@@ -138,7 +138,7 @@ end
 # is never conjugated, so callers conjugate the term coefficient themselves with `_conj_if`.
 _conj_if(c, conjugate) = conjugate ? conj(c) : c
 
-function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking,TermChunking})
+function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking, TermChunking})
     for (n, state) in enumerate(basisstates(space))
         xn = x[n] * coeff
         iszero(xn) && continue
@@ -170,7 +170,7 @@ function _foreach_term_entry(f, x::SparseArrays.AbstractSparseVector, space, ter
     end
 end
 
-function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking,TermChunking})
+function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking, TermChunking})
     for (n, state) in enumerate(basisstates(space))
         newstate, _amp = _apply_local_operators(term, state, space, precomp)
         if !iszero(_amp)
@@ -183,7 +183,7 @@ function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, 
     end
 end
 
-function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking,TermChunking})
+function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking, TermChunking})
     rows = rowvals(x)
     vals = nonzeros(x)
     for col in axes(x, 2)
