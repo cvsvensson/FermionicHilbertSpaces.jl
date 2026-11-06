@@ -2,15 +2,16 @@
 Conservation laws let you work in a small part of an exponentially large Hilbert space. This page shows how a constraint selects basis states and groups them into sectors of fixed quantum numbers, lists the available constraints, and ends with worked examples where the full space would be far too large to build.
 
 ## Constraints and sectors
-A constraint selects basis states of a space. Constraints for conserved quantities also group the selected states into sectors, one for each value of the quantum number. A constraint is given when building a space, either to `hilbert_space` or as the `constraint` keyword of `tensor_product`, and `constrain_space` applies one to an existing space:
+A constraint is written `quantity => allowed`, where `quantity` is a diagonal operator. A single allowed value restricts the space, a collection of values also splits it into sectors labelled by them, and a quantity without `=>` splits the space into all its sectors. A constraint is given when building a space, either to `hilbert_space` or as the `constraint` keyword of `tensor_product`, and `constrain_space` applies one to an existing space:
 ```@example constraints
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions f
+N = sum(f[k]'f[k] for k in 1:4)
 Hleft = hilbert_space(f, 1:2)
 Hright = hilbert_space(f, 3:4)
-Hone = tensor_product(Hleft, Hright; constraint = NumberConservation(1))
-Heven = constrain_space(hilbert_space(f, 1:4), ParityConservation(1))
-H = hilbert_space(f, 1:4, NumberConservation())
+Hone = tensor_product(Hleft, Hright; constraint = N => 1)
+Hfew = constrain_space(hilbert_space(f, 1:4), N => 0:1)
+H = hilbert_space(f, 1:4, N)
 ```
 
 The sector labels of a space are its quantum numbers. A sector is a space of its own, and an operator that conserves the quantity can be represented directly on it. `embed` places a state on a sector back into the full space, where `indices` locates the sector's states:
@@ -23,36 +24,24 @@ hopping = sum(f[k]'f[k+1] + hc for k in 1:3)
 indices(2, H)
 ```
 
-Passing a constraint while building a space prunes states as they are generated, so the full space is never built; only `FilterConstraint` and `SectorConstraint` test the full space afterwards. `constrain_space` always filters a space that already exists.
-
-## Constraints from operators
-A constraint can also be written as `quantity => allowed`, where `quantity` is a diagonal operator. A single allowed value restricts the space, a collection of values also splits it into sectors labelled by them, and a quantity without `=>` splits the space into all its sectors. Several constraints go in a tuple. The Hubbard sector with fixed numbers of spin up and spin down fermions and no doubly occupied sites:
-```@example operators
-using FermionicHilbertSpaces
-@fermions f
-L = 4
-n(i, σ) = f[i, σ]' * f[i, σ]
-Nup, Ndn = sum(n(i, :↑) for i in 1:L), sum(n(i, :↓) for i in 1:L)
-D = sum(n(i, :↑) * n(i, :↓) for i in 1:L)
-H = hilbert_space(f, [(i, σ) for i in 1:L for σ in (:↑, :↓)], (Nup => 2, Ndn => 2, D => 0))
-dim(H)
-```
-A spin chain split into sectors of total ``S^z``:
-```@example operators
+Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. Labels are integers when every value of the quantity is an integer, and rationals otherwise. Coefficients must be integers or rationals, so that the values are exact. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
+```@example constraints
 @spins S 1 // 2
 Hspin = hilbert_space(S, 1:6, sum(S[i][:z] for i in 1:6))
-quantumnumbers(Hspin)
-```
-The Rydberg blockade, which forbids neighbouring excitations, is a sum of local products. Coefficients must be integers or rationals, so that the values are exact:
-```@example operators
 up(i) = S[i][:z] + 1 // 2
-Hpxp = hilbert_space(S, 1:10, sum(up(i) * up(i + 1) for i in 1:9) => 0)
-dim(Hpxp)
+Hpxp = hilbert_space(S, 1:10, [up(i) * up(i + 1) => 0 for i in 1:9])
+quantumnumbers(Hspin), dim(Hpxp)
 ```
-The states are generated with pruning, as for the constraints below. The quantity can also be a function of the basis state, which is evaluated on each state of the full space.
+Passing a constraint while building a space prunes states as they are generated, so the full space is never built. A term that acts on several factors is tabulated on their product, which may have at most 4096 states. A parity is conserved with [`ParityConservation`](@ref) instead.
 
-## Available constraints
+The quantity can also be a function of the basis state. It is evaluated on each state of the full space, so the space must be small enough to build:
+```@example constraints
+nup(state) = count(s -> s.m > 0, state.states)
+dim(hilbert_space(S, 1:6, nup => 2))
+```
+`constrain_space` always filters a space that already exists.
 
+## Lower-level constraints
 #### NumberConservation
 Conserves the particle number, or a weighted sum of the particle numbers of selected spaces. The allowed total is one value or a collection; leaving it out keeps all sectors.
 ```@example constraints
@@ -78,9 +67,8 @@ tensor_product(pairs; constraint = pair_constraint)
 ```
 
 #### AdditiveConstraint
-Conserves a sum of contributions from the factors of a tensor product, given by `maps` applied to the state of each factor. This covers additive quantum numbers that are not particle numbers, such as the magnetization of spins:
+Conserves a sum of contributions from the factors of a tensor product, given by `maps` applied to the state of each factor. It works for any space, also one without symbolic operators:
 ```@example constraints
-@spins S 1//2
 spins = [hilbert_space(S[k]) for k in 1:4]
 Hmag = tensor_product(spins; constraint = AdditiveConstraint(-2:2; maps = s -> s.m))
 quantumnumbers(Hmag)
@@ -115,20 +103,19 @@ dim(hilbert_space(f, 1:20, no_neighbours))
 ## Examples
 
 #### Spinful fermions
-The package does not special-case spinful fermions: spin is an extra label. If the numbers of spin up and spin down fermions are separately conserved, the product of their number conservations divides the space into sectors labelled by both numbers:
+The package does not special-case spinful fermions: spin is an extra label. If the numbers of spin up and spin down fermions are separately conserved, the space divides into sectors labelled by both numbers:
 ```@example spin
 using FermionicHilbertSpaces
 @fermions f
-Hup = hilbert_space(f, [(i, :↑) for i in 1:4])
-Hdn = hilbert_space(f, [(i, :↓) for i in 1:4])
-H = tensor_product(Hup, Hdn)
-Hsectors = constrain_space(H, NumberConservation(Hup) * NumberConservation(Hdn))
+labels = [(i, σ) for i in 1:4 for σ in (:↑, :↓)]
+Nup = sum(f[i, :↑]'f[i, :↑] for i in 1:4)
+Ndn = sum(f[i, :↓]'f[i, :↓] for i in 1:4)
+H = hilbert_space(f, labels, (Nup, Ndn))
 ```
-The sector with two spin up and no spin down fermions can be picked out of this space, or built directly, which is cheaper. Building it in the tensor product is cheaper still, since it never enumerates the full space:
+The sector with two spin up and no spin down fermions can be picked out of this space, or built directly, which is cheaper since it never enumerates the full space:
 ```@example spin
-constraint = NumberConservation(2, Hup) * NumberConservation(0, Hdn)
-@assert basisstates(sector([2, 0], Hsectors)) == basisstates(constrain_space(H, constraint))
-tensor_product(Hup, Hdn; constraint)
+@assert Set(basisstates(sector((2, 0), H))) == Set(basisstates(hilbert_space(f, labels, (Nup => 2, Ndn => 0))))
+sector((2, 0), H)
 ```
 
 #### Hubbard model
@@ -155,11 +142,10 @@ size(ham)
 ```
 
 ##### No double occupation
-For strong interactions, double occupation can be forbidden by allowing at most one fermion on each site. The hamiltonian maps some states of this subspace outside it, and `projection = true` drops those terms:
+For strong interactions, double occupation can be forbidden by constraining the number of doubly occupied sites to zero. The hamiltonian maps some states of this subspace outside it, and `projection = true` drops those terms:
 ```@example hubbard
-local_modes(k) = [f[k, :↑], f[k, :↓]]
-no_double_occ = prod(NumberConservation(0:1, local_modes(k)) for k in 1:N)
-H_ndo = constrain_space(H, no_double_occ)
+D = sum(f[k, :↑]'f[k, :↑] * f[k, :↓]'f[k, :↓] for k in 1:N)
+H_ndo = constrain_space(H, D => 0)
 ham_ndo = representation(hubbard_hamiltonian(f, N, 1, 0), H_ndo; projection = true);
 size(ham_ndo)
 ```
@@ -169,16 +155,15 @@ size(ham_ndo)
 ```math
 H = \omega a^\dagger a + \omega_0 \sum_i S^z_i + g \sum_i \left(a^\dagger S^-_i + a S^+_i\right),
 ```
-conserve the number of excitations, the boson number plus ``\sum_i (S^z_i + 1/2)``. Spins have no particle number, so an `AdditiveConstraint` counts their excitations with one map per factor:
+conserve the number of excitations, the boson number plus ``\sum_i (S^z_i + 1/2)``:
 ```@example tavis_cummings
 using FermionicHilbertSpaces
-import FermionicHilbertSpaces: particle_number
 N = 3
 nmax = 4
 @spins S 1//2
 @boson a
 spaces = [hilbert_space(a, nmax + 1); [hilbert_space(S[i]) for i in 1:N]]
-excitations = AdditiveConstraint(0:nmax+N; spaces, maps = [particle_number; fill(s -> Int(s.m + 1//2), N)])
+excitations = a'a + sum(S[i][:z] + 1//2 for i in 1:N)
 H = tensor_product(spaces; constraint = excitations)
 ```
 The Hamiltonian is block diagonal in these sectors, one per excitation number.

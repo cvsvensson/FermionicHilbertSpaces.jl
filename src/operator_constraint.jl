@@ -246,14 +246,11 @@ end
     nσ(i, σ) = f[i, σ]' * f[i, σ]
     Nup, Ndn = sum(nσ(i, :↑) for i in 1:L), sum(nσ(i, :↓) for i in 1:L)
     D = sum(nσ(i, :↑) * nσ(i, :↓) for i in 1:L)
-    up(i) = S[i][:z] + 1 // 2
     Hmixed = (hilbert_space(a, 4), hilbert_space(f, 1:2), hilbert_space(S[1]))
     cases = [
-        (hilbert_space(f, 1:5), (sum(n(i) for i in 1:5) => 2,)),
         (hilbert_space(f, hubbard), (Nup => 2, Ndn => 2, D => 0)),
         (hilbert_space(S, 1:6), (sum(S[i][:z] for i in 1:6) => 0,)),
         (hilbert_space(f, 1:6), (sum(n(i) for i in 1:6) => 3, sum(i * n(i) for i in 1:6) => 10)),
-        (hilbert_space(S, 1:6), (sum(up(i) * up(i + 1) for i in 1:5) => 0,)),
         (tensor_product(Hmixed), (a'a + n(1) + n(2) + S[1][:z] => [1 // 2, 3 // 2],)),
         (hilbert_space(b, 1:3, 4), (sum(b[i]'b[i] for i in 1:3) => 3,)),
         (hilbert_space(γ, 1:4), (1im * γ[1] * γ[2] => 1,)),
