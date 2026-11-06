@@ -15,7 +15,7 @@ branch only when no valid completion can satisfy the constraint.
 `tensor_product(spaces; constraint)` prunes with the given `spaces`. `constrain_space(H, constraint)`
 instead keeps the states of `H` for which `f` accepts every prefix, with `spaces` the [`factors`](@ref) of `H`.
 """
-struct BranchConstraint{F,H} <: AbstractBranchConstraint
+struct BranchConstraint{F, H} <: AbstractBranchConstraint
     f::F
     spaces::H # the spaces that `f` is called with, or `missing` for the factors of the constrained space
 end
@@ -23,7 +23,7 @@ BranchConstraint(f) = BranchConstraint(f, missing)
 supports_branch_pruning(::BranchConstraint) = true
 supports_filtering(::BranchConstraint) = true
 supports_sector_grouping(::BranchConstraint) = false
-supply_missing_constraint_info(constraint::BranchConstraint{<:Any,Missing}, space, spaces) = BranchConstraint(constraint.f, spaces)
+supply_missing_constraint_info(constraint::BranchConstraint{<:Any, Missing}, space, spaces) = BranchConstraint(constraint.f, spaces)
 supply_missing_constraint_info(constraint::BranchConstraint, space, spaces) = constraint
 map_spaces(f, c::BranchConstraint) = BranchConstraint(c.f, _map_spaces(f, c.spaces))
 branch_constraint(constraint::BranchConstraint, space) = constraint
@@ -95,7 +95,7 @@ function filter_function(constraint::BranchConstraint, space::AbstractHilbertSpa
     spaces = ismissing(constraint.spaces) ? factors(space) : constraint.spaces
     mapper = state_mapper(space, spaces)
     T = Union{statetype.(spaces)...}
-    function replay(state)
+    return function replay(state)
         partial = Vector{T}(undef, length(spaces))
         for (depth, substate) in enumerate(unique_split_state(state, mapper))
             partial[depth] = substate
@@ -330,7 +330,7 @@ end
     using FermionicHilbertSpaces: particle_number
     @fermions f
     H = hilbert_space(f, 1:6)
-    blockade = BranchConstraint((p, d, s) -> d == 1 || count_ones(p[d].f) + count_ones(p[d-1].f) < 2)
+    blockade = BranchConstraint((p, d, s) -> d == 1 || count_ones(p[d].f) + count_ones(p[d - 1].f) < 2)
     @test Set(basisstates(hilbert_space(f, 1:6, blockade))) == Set(basisstates(constrain_space(H, blockade)))
     @test dim(constrain_space(H, NumberConservation(2) * BranchConstraint((p, d, s) -> false))) == 0
 
