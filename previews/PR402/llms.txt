@@ -20,7 +20,7 @@ Typical workflow: define symbols with `@fermions`/`@bosons`/`@spins`, build a sp
 - [SYK model](literate_output/syk_model/)
 - [Braiding Majorana zero modes](literate_output/braiding/)
 - [Spatial symmetries](literate_output/translation_symmetry/)
-- [Fragmentation and scars](literate_output/fragmentation/)
+- [Hilbert-space fragmentation and quantum many-body scars](literate_output/fragmentation/)
 
 ## Guides
 
