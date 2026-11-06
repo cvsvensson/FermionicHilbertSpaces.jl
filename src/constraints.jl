@@ -272,7 +272,7 @@ function sector_function(constraint::ProductConstraint, space::AbstractHilbertSp
         return state -> keep(state) ? f(state) : missing
     end
     subspace_functions = map(cons -> sector_function(cons, space), grouping)
-    V = mapreduce(f -> nonmissingtype(Base.promote_op(f, statetype(space))), promote_type, subspace_functions; init=Union{})
+    V = mapreduce(f -> nonmissingtype(Base.promote_op(f, statetype(space))), promote_type, subspace_functions; init = Union{})
     function sector(state)
         keep(state) || return missing
         sectors = Vector{V}(undef, length(subspace_functions))
