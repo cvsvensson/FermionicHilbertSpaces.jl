@@ -85,7 +85,7 @@ end
     H = hilbert_space(f, 1:3, SingleParticle())
     op = sum(rand(ComplexF64) * f[i]' * f[j] for i in 1:3, j in 1:3)
     M = representation(op, H)
-    D = representation(op, H, :dense)
+    D = representation(op, H, Matrix)
     @test D isa Matrix && D == M
     @test representation(op, H, ComplexF64) == M
     @test_throws ArgumentError representation(op, H, :lazy)
@@ -99,11 +99,11 @@ end
     H = hilbert_space(f, 1:N, SingleParticle())
     Hfock = hilbert_space(f, 1:N, NumberConservation())
     ham = sum(rand(ComplexF64) * f[i]' * f[j] + hc for i in 1:N, j in 1:N)
-    ρ = exp(-representation(ham, Hfock, :dense))
+    ρ = exp(-representation(ham, Hfock, Matrix))
     ρ /= tr(ρ)
-    G = [tr(ρ * representation(f[i]' * f[j], Hfock, :dense)) for i in 1:N, j in 1:N]
+    G = [tr(ρ * representation(f[i]' * f[j], Hfock, Matrix)) for i in 1:N, j in 1:N]
     op = f[1]' * f[2] + 2 * f[3] * f[1]' + 1
-    @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
+    @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, Matrix))
 end
 
 @testitem "Reduced single particle correlation matrix and entropy" begin
@@ -115,9 +115,9 @@ end
     Hsp = hilbert_space(f, 1:N, SingleParticle())
     Hmb = hilbert_space(f, 1:N, NumberConservation(2))
     ham = sum(rand(ComplexF64) * f[i]' * f[j] + hc for i in 1:N, j in 1:N)
-    U = eigvecs(Hermitian(representation(ham, Hsp, :dense)))[:, 1:2]
+    U = eigvecs(Hermitian(representation(ham, Hsp, Matrix)))[:, 1:2]
     G = conj(U) * transpose(U)
-    ψ = eigvecs(Hermitian(representation(ham, Hmb, :dense)))[:, 1]
+    ψ = eigvecs(Hermitian(representation(ham, Hmb, Matrix)))[:, 1]
     sub = [3, 1]
     Hsub = hilbert_space(f, sub, SingleParticle())
     @test partial_trace(G, Hsp => Hsub) ≈ [expectation(f[i]' * f[j], ψ, Hmb) for i in sub, j in sub]

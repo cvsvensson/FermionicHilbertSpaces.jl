@@ -300,7 +300,7 @@ end
     Hlr, Hl, Hr, left, right = open_system(c, 1:1)
     ham = 1.0 * c[1]'c[1]
     lindbladian = -1im * (left(ham) - right(ham)) + dissipator(√γin * c[1]') + dissipator(√γout * c[1])
-    mat = representation(lindbladian, Hlr, :dense)
+    mat = representation(lindbladian, Hlr, Matrix)
     Ivec = reshape(I(dim(Hl)), (Hl, Hr) => Hlr)
     @test norm(mat' * Ivec) < 1e-12
 
@@ -317,7 +317,7 @@ end
     L = 0.5 * c[1] + 0.8 * c[2]'
     mat = representation(-1im * (left(ham) - right(ham)) + dissipator(L), Hlr)
     H2 = hilbert_space(c, 1:2)
-    Hm, Lm = representation(ham, H2, :dense), representation(L, H2, :dense)
+    Hm, Lm = representation(ham, H2, Matrix), representation(L, H2, Matrix)
     P = Diagonal([(-1)^count_ones(i - 1) for i in 1:dim(H2)]) # parity in the Fock basis
     X = rand(ComplexF64, 4, 4)
     ρ = (X + X' + P * (X + X') * P) / 4
@@ -336,7 +336,7 @@ end
     ham = 0.4 * (f[1]'f[2] + f[2]'f[1]) + a[1]'a[1] + 0.3 * (f[1]'f[1] - f[2]'f[2]) * (a[1] + a[1]')
     L = 0.5 * a[1]
     mat = representation(-1im * (left(ham) - right(ham)) + dissipator(L), Hlr)
-    Hm, Lm = representation(ham, H, :dense), representation(L, H, :dense)
+    Hm, Lm = representation(ham, H, Matrix), representation(L, H, Matrix)
     X = rand(ComplexF64, dim(H), dim(H))
     ρ = X + X'
     dρ = reshape(mat * reshape(ρ, (Hl, Hr) => Hlr), Hlr => (Hl, Hr))
@@ -350,18 +350,18 @@ end
     v = rand(4)
     for H in (hilbert_space(c, 1:3, NumberConservation(0:1)), hilbert_space(c, 1:3, ParityConservation(1)))
         for op in (c[1]' * c[2] + 0.5 * c[3]' * c[1], c[1]' * c[1] * c[2]' * c[3] + 2I)
-            M = representation(op, H, :dense)
-            @test representation(op, TransposedSpace(H), :dense) ≈ transpose(M)
+            M = representation(op, H, Matrix)
+            @test representation(op, TransposedSpace(H), Matrix) ≈ transpose(M)
             @test transpose(representation(op, H, :lazy)) * v ≈ transpose(M) * v
         end
     end
     H = hilbert_space(c, 1:3, NumberConservation(0:1))
-    @test representation(c[1], TransposedSpace(H), :dense) ≈ transpose(representation(c[1], H, :dense))
+    @test representation(c[1], TransposedSpace(H), Matrix) ≈ transpose(representation(c[1], H, Matrix))
 
     Hlr, Hl, Hr, left, right = open_system(H)
     X = rand(dim(H), dim(H))
     S = representation(left(c[2]) * right(c[1]), Hlr)
-    @test reshape(S * reshape(X, (Hl, Hr) => Hlr), Hlr => (Hl, Hr)) ≈ representation(c[2], H, :dense) * X * representation(c[1], H, :dense)
+    @test reshape(S * reshape(X, (Hl, Hr) => Hlr), Hlr => (Hl, Hr)) ≈ representation(c[2], H, Matrix) * X * representation(c[1], H, Matrix)
     @test_throws ArgumentError representation(left(c[1]') * right(c[1]), Hlr)
 end
 

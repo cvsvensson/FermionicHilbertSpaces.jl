@@ -265,7 +265,7 @@ end
     Hs1 = tensor_product(hilbert_space(f, 2:2), hilbert_space(s))
     Hs2 = hilbert_space(f, 1:1)
     H = tensor_product(hilbert_space(f, 1:2), hilbert_space(s))
-    rep(op, H) = representation(op, H, :dense)
+    rep(op, H) = representation(op, H, Matrix)
     # the fermion vacuum with the given amplitudes on the spin states
     function vacuum(H, n, amplitudes)
         v = zeros(dim(H))
@@ -328,7 +328,7 @@ end
 end
 
 @testitem "generalized_kron of more than two factors on mixed spaces" begin
-    rep(op, H) = representation(op, H, :dense)
+    rep(op, H) = representation(op, H, Matrix)
     @fermions f
     @spins S 1 // 2
     @boson b

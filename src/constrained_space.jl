@@ -199,7 +199,7 @@ end
     H = hilbert_space(f, 1:3)
     Hs = constrain_space(H, ["100", "010"])
     @test basisstates(Hs) == [Ket("100", H).ket, Ket("010", H).ket]
-    @test representation(f[1]' * f[2], Hs, :dense) == [0 1; 0 0]
+    @test representation(f[1]' * f[2], Hs, Matrix) == [0 1; 0 0]
     @test partial_trace(Diagonal([1, 2]), Hs => hilbert_space(f, 1:1)) == Diagonal([2, 1])
 
     Hg = GenericHilbertSpace(:a, ["up", "down", "x"])

@@ -28,6 +28,29 @@ traces, `subregion` and `constrain_space` work on it.
 abstract type AbstractSubspace{B,P} <: AbstractHilbertSpace{B} end
 
 """
+    subspace_states(H::AbstractSubspace)
+
+The basis states of the subspace `H`, in order, each appearing once. Every [`AbstractSubspace`](@ref) implements it.
+"""
+function subspace_states end
+
+"""
+    subspace_index(H::AbstractSubspace)
+
+The index that `state_index` uses on `H`, an object with a [`state_position`](@ref) method, built once by the
+constructor of `H`. Every [`AbstractSubspace`](@ref) implements it.
+"""
+function subspace_index end
+
+"""
+    rewrap(H::AbstractSubspace, newparent)
+
+The subspace with the states and index of `H` over `newparent`, which has the same basis states and `state_index` as
+`parent(H)`. Every [`AbstractSubspace`](@ref) implements it.
+"""
+function rewrap end
+
+"""
     state_position(index, state, parent)
 
 The position of `state` in the subspace that `index` was built for, or `0` if it is not in it.
