@@ -41,7 +41,7 @@ branch_spaces(::OperatorConstraint{<:Any, <:Any, Missing}) = ()
 sector_function(c::OperatorConstraint{<:Any, <:Any, Missing}, space::AbstractHilbertSpace) = sector_function(with_spaces(c, atomic_factors(space)), space)
 function Base.show(io::IO, c::OperatorConstraint)
     print(io, c.op)
-    ismissing(c.allowed) || print(io, " => ", c.labelled ? c.allowed : only(c.allowed))
+    return ismissing(c.allowed) || print(io, " => ", c.labelled ? c.allowed : only(c.allowed))
 end
 
 function _additive_sum(c::OperatorConstraint, substates, ::Type)
@@ -236,7 +236,7 @@ end
     @test quantumnumbers(hilbert_space(f, 1:4, (N, P => 3))) == [1, 2]
     @test quantumnumbers(hilbert_space(f, 1:2, (f[1]'f[1] + f[2]'f[2], f[1]'f[1] + 2f[2]'f[2]))) == [[0, 0], [1, 1], [1, 2], [2, 3]]
     @spins S 1 // 2
-    @test quantumnumbers(hilbert_space(S, 1:3, sum(S[i][:z] for i in 1:3))) == -3//2:3//2
+    @test quantumnumbers(hilbert_space(S, 1:3, sum(S[i][:z] for i in 1:3))) == (-3 // 2):(3 // 2)
     nup(s) = count(x -> x.m > 0, s.states)
     @test quantumnumbers(hilbert_space(S, 1:3, nup)) == 0:3
     @test dim(hilbert_space(S, 1:4, nup => 2)) == 6
