@@ -174,7 +174,6 @@ Constraint enforcing conservation of a (possibly weighted) particle number, opti
 `total` can be a single value or collection of allowed values; `missing` allows any value.
 `spaces` restricts the count to the given subspaces (default: all of them). `weights` gives one
 weight per subspace in `spaces` (default: all `1`), and the conserved quantity is the weighted sum of their particle numbers.
-Without `spaces`, `constrain_space` treats the whole space as a single subspace.
 """
 struct NumberConservation{T,H,W} <: AbstractConstraint
     total::T
