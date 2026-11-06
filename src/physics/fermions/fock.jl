@@ -127,8 +127,10 @@ function Base.show(io::IO, fm::FockMapper{N}) where N
 end
 
 function split_state(f::FockNumber, fm::FockMapper{N}) where N
-    # Inlining `substate` into every unrolled slot makes compilation slow for many targets.
-    state = tuplemap(mask -> (@noinline substate(mask, f)), fm.masks)
+    # Inlining `substate` into every unrolled slot makes compilation slow for many targets,
+    # but calling it out of line doubles the cost of a split into a few targets.
+    state = length(fm.masks) <= 32 ? tuplemap(mask -> substate(mask, f), fm.masks) :
+        tuplemap(mask -> (@noinline substate(mask, f)), fm.masks)
     (state,), (1,)
 end
 
