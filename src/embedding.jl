@@ -21,6 +21,7 @@ end
 
 Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
+`Hsub` can also be given as symbols naming its modes, meaning [`subregion`](@ref)`(Hsub, H)`.
 
 The result is the compression `P (m ⊗ I) P` onto `H`, so that `tr(embed(A, Hsub => H) * ρ) ==
 tr(A * partial_trace(ρ, H => Hsub))` for `ρ` on `H`. Unless `projection=true`, throws an `ArgumentError`
@@ -48,7 +49,7 @@ julia> embed([1, 2], sector(1, H) => H)
  0
 ```
 """
-embed(m, Hs::PairWithHilbertSpaces; kwargs...) = embed(m, first(Hs), last(Hs); kwargs...)
+embed(m, (Hsub, H)::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = embed(m, _subsystem(Hsub, H), H; kwargs...)
 
 function _embed_by_gather(m::AbstractMatrix, Hsub, H, complement; projection = false, phase_factors = true)
     splits = _full_partial_trace_splits(H, Hsub, complement, _partial_trace_mapper(H, Hsub, complement), phase_factors)
@@ -184,7 +185,7 @@ The operation can be applied directly as `op(m)` and converted to a sparse matri
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 It is the compression onto `H` and, unlike [`embed`](@ref), does not check its input.
 """
-embed(Hs::PairWithHilbertSpaces; kwargs...) = EmbedMap(first(Hs), last(Hs); kwargs...)
+embed((Hsub, H)::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = EmbedMap(_subsystem(Hsub, H), H; kwargs...)
 
 @testitem "Embedding into a number sector" begin
     using LinearAlgebra

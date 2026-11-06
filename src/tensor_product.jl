@@ -662,6 +662,7 @@ end
 Compute the partial trace of `m` from `H` to `Hsub`. Fermionic phase factors are included if both `H` and `Hsub` are Fermionic, unless specified otherwise in `kwargs`.
 `H => Hsub` reads input => output; see [Pair arguments](@ref pair_convention).
 A vector `m` is treated as a pure state `ψ`, and the result is the reduced density matrix of `ψψ†`.
+`Hsub` can also be given as symbols naming its modes, meaning [`subregion`](@ref)`(Hsub, H)`, as in `H => [f[1], f[3]]`.
 
 The trace drops the states of `H` whose part on `Hsub` is not in `Hsub`, or whose part on the
 complement is not in `complement`. Unless `projection=true`, throws an `ArgumentError` if `m`
@@ -679,7 +680,7 @@ julia> partial_trace(representation(f[1]' * f[1], H), H => Hsub) == [0 0; 0 2]
 true
 ```
 """
-partial_trace(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
+partial_trace(m, (H, Hsub)::Pair{<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, H, _subsystem(Hsub, H); kwargs...)
 
 """
     von_neumann_entropy(ρ)
@@ -1268,7 +1269,7 @@ The operation can be applied directly as `op(m)` and can be converted to a spars
 matrix map with `sparse(op)`. It skips the states of `H` that [`partial_trace`](@ref) drops and,
 unlike `partial_trace`, does not check its input.
 """
-partial_trace(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = PartialTraceMap(first(Hs), last(Hs); kwargs...)
+partial_trace((H, Hsub)::Pair{<:AbstractHilbertSpace}; kwargs...) = PartialTraceMap(H, _subsystem(Hsub, H); kwargs...)
 function partial_trace_map(H, Hsub; complement=complementary_subsystem(H, Hsub), alg=default_partial_trace_alg(Hsub, H, complement), kwargs...)
     partial_trace_map(H, Hsub, complement, alg; kwargs...)
 end

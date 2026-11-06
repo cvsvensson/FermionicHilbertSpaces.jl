@@ -246,6 +246,19 @@ end
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
 
+# Replace each pair of Majoranas in `names` that forms an atom of `H` by that atom.
+function _pair_majoranas(names, H)
+    γs = Set(x for x in names if x isa AbstractMajoranaSym)
+    isempty(γs) && return names
+    pairs = [a for a in atomic_factors(H) if a isa MajoranaHilbertSpace && !isdisjoint(keys(a.majoranaindices), γs)]
+    for a in pairs
+        γ1, γ2 = keys(a.majoranaindices)
+        γ1 in γs && γ2 in γs || throw(ArgumentError("A Majorana names a mode only together with its partner, got $(γ1 in γs ? γ1 : γ2) without $(γ1 in γs ? γ2 : γ1)."))
+    end
+    paired = Set(Iterators.flatten(keys(a.majoranaindices) for a in pairs))
+    [filter(x -> !(x in paired), names); pairs]
+end
+
 function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
     parent_subregion = subregion(parent(Hsub), parent(H))
     MajoranaHilbertSpace(Hsub.majoranaindices, parent_subregion, Hsub.sym)
@@ -384,6 +397,13 @@ end
     @test dim(tensor_product(H, Hb)) == dim(H) * dim(Hb) # this errored for constrained spaces before, fixed by defining combine_states for MajoranaHilbertSpace
 
     @test dim(tensor_product(H, Hb; constraint = ParityConservation(1,[H]))) == dim(H) * dim(Hb) # constraint subspaces are matched by atom_ids
+end
+
+@testitem "Majorana pairs name subregions" begin
+    @majoranas γ
+    H = hilbert_space(γ, 1:4)
+    @test subregion([γ[4], γ[3]], H) == subregion(hilbert_space(γ, 3:4), H)
+    @test_throws ArgumentError subregion([γ[1], γ[3]], H)
 end
 
 @testitem "Majorana spaces with several names" begin
