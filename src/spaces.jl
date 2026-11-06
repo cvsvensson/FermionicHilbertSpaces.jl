@@ -250,6 +250,8 @@ Convert a basis state of type `B` to an integer and back, with
 `physical_rep(internal_rep(state, space, Int), B) == state`. When every group of a product
 space has these methods, operators on the product space act on the integers instead of on
 the states. Without them, the product space uses the states directly, which is slower.
+A product with a fermionic group of 63 or more modes uses a wider signed integer type in place
+of `Int`, so methods for any `T<:Integer` keep the integer path there.
 """
 internal_rep(state, space, ::Type{T}) where T = internal_rep(state, parent(space), T)
 

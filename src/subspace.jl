@@ -77,7 +77,7 @@ isconstrained(H::AbstractSubspace) = true
 
 for f in (
         :atomic_factors, :groups, :factors, :atom_ids, :nbr_of_atoms, :group_id, :partial_trace_phase_factor_eltype,
-        :partial_transpose_phase_factor_eltype, :fast_path, :mode_ordering, :modes,
+        :partial_transpose_phase_factor_eltype, :fast_path, :internal_rep_type, :mode_ordering, :modes,
     )
     @eval $f(H::AbstractSubspace) = $f(parent(H))
 end

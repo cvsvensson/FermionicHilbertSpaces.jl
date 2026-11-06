@@ -45,6 +45,7 @@ end
 # Below 63 modes, computing `dim(H)` does not throw. Its type is `fock_index_type(I)`, which is
 # a wide `UInt` or `BigInt` for wide `FockNumber`s; `root_keyed_index` builds an index only when it is an `Int`.
 has_arithmetic_state_index(H::FermionicSpace{<:FockNumber}) = nbr_of_modes(H) < 63
+internal_rep_type(H::FermionicSpace) = signed(default_fock_representation(nbr_of_modes(H)))
 function dim(H::FermionicSpace{FockNumber{I}}) where I
     d = one(fock_index_type(I)) << nbr_of_modes(H)
     d > 0 || throw(OverflowError("$(nbr_of_modes(H)) modes have more states than fit in $(fock_index_type(I))"))
