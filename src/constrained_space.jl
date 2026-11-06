@@ -22,18 +22,71 @@ constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
 constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}) = constrain_space(space, NoSymmetry(), states)
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, _states_of(space, states))
-function constrain_space(space, constraint::AbstractConstraint, labels = basisstates(space))
-    states = _states_of(space, labels)
-    if supports_sector_grouping(constraint)
-        f = sector_function(constraint, space)
-        return sector_space(space, states, f, constraint)
+function constrain_space(space, constraint::AbstractConstraint)
+    split = pruning_split(space, constraint)
+    isnothing(split) && return constrain_space(space, constraint, basisstates(space))
+    constraint = supply_missing_constraint_info(constraint, space, split)
+    # The search varies its last space fastest and `basisstates(space)` its first atom, so the reversed split keeps that order.
+    return constrain_states(space, constraint, generate_states(reverse(split), constraint, space))
+end
+function constrain_space(space, constraint::AbstractConstraint, labels)
+    supports_filtering(constraint) || throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
+    return constrain_states(space, constraint, _states_of(space, labels))
+end
+# The subspace of the candidate `states` that satisfy `constraint`, grouped into sectors when it supports it.
+# A constraint that cannot filter is taken to hold for all of `states`.
+function constrain_states(space, constraint, states)
+    if supports_sector_grouping(constraint) && supports_filtering(constraint)
+        return sector_space(space, states, sector_function(constraint, space), constraint)
     elseif supports_filtering(constraint)
-        f = filter_function(constraint, space)
-        filtered_states = collect(Iterators.filter(f, states))
-        return ConstrainedSpace(space, filtered_states; constraint)
-    else
-        throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
+        return ConstrainedSpace(space, collect(Iterators.filter(filter_function(constraint, space), states)); constraint)
     end
+    return ConstrainedSpace(space, states; constraint)
+end
+
+# Spaces that the branch constraint of `c` reads: `missing` for the whole state, which any split fits,
+# and `nothing` when no split is known to fit, such as for a user's `BranchConstraint`.
+branch_spaces(c) = nothing
+branch_spaces(c::Union{NumberConservation,ParityConservation,AdditiveConstraint}) = c.spaces
+branch_spaces(::AdditiveConstraint{<:Any,Missing}) = nothing # its maps act on the whole state
+# Whether checking `c` on a state needs the state split into factors.
+splits_state(c) = !ismissing(c.spaces)
+splits_state(c::NumberConservation) = !ismissing(c.spaces) || !ismissing(c.weights)
+constraint_factors(c::ProductConstraint) = c.constraints
+constraint_factors(c) = (c,)
+
+# Spaces to generate the states of `H` over with branch pruning by `constraint`: the spaces of its prunable
+# factors and the remaining atoms of `H`, in the order of the atoms. Returns `nothing` when the spaces are not
+# consecutive atoms of `H`, which the basis order needs, or overlap without being equal, which the branch
+# constraints cannot locate in the split. It also returns `nothing` when all prunable factors read the whole
+# state, as filtering by them is cheap.
+function pruning_split(H, constraint)
+    isconstrained(H) && return nothing # the parent may have many more states than `H`
+    prunable = filter(supports_branch_pruning, collect(constraint_factors(constraint)))
+    spaces = map(branch_spaces, prunable)
+    (any(isnothing, spaces) || !any(splits_state, prunable)) && return nothing
+    atoms = collect(atomic_factors(H))
+    owner = zeros(Int, length(atoms))
+    blocks = []
+    for space in Iterators.flatten(skipmissing(spaces))
+        range = atom_range(space, H, atoms)
+        isnothing(range) && return nothing
+        k = owner[first(range)]
+        !iszero(k) && blocks[k][1] == range && continue
+        all(iszero, view(owner, range)) || return nothing
+        push!(blocks, (range, space))
+        owner[range] .= length(blocks)
+    end
+    return [iszero(k) ? atoms[i] : blocks[k][2] for (i, k) in enumerate(owner) if iszero(k) || first(blocks[k][1]) == i]
+end
+# The positions of the atoms of `space` in `atoms`, the atoms of `H`, if they are consecutive and equal, otherwise `nothing`.
+function atom_range(space, H, atoms)
+    space isa AbstractHilbertSpace && !isconstrained(space) || return nothing
+    space_atoms = collect(atomic_factors(space))
+    start = atom_position(first(space_atoms), H)
+    range = start:start+length(space_atoms)-1
+    !iszero(start) && last(range) <= length(atoms) && atoms[range] == space_atoms || return nothing
+    return range
 end
 # Labels become states as in `Ket` and `state_index`, but a basis state or a value of the state type is kept as is,
 # so that a space whose states are strings is not parsed. States outside a subspace are dropped by `unnest`.
@@ -199,6 +252,27 @@ same_state_kind(state::ProductState, ::Type{ProductState{S}}) where {S<:Tuple} =
     one_particle = Set(basisstates(constrain_space(H, NumberConservation(1))))
     @test basisstates(Hc) == filter(in(one_particle), states)
     @test_throws MethodError constrain_space(H, states, NumberConservation(1))
+end
+
+@testitem "constrain_space on subspaces matches filtering all basis states" begin
+    using FermionicHilbertSpaces: AdditiveConstraint, particle_number
+    @fermions f
+    @spins s 1 // 2
+    N = 8
+    Hs = [hilbert_space(f[i]) for i in 1:N]
+    H = tensor_product(Hs)
+    dipole = AdditiveConstraint([12, 13]; spaces=Hs, maps=[s -> i * particle_number(s) for i in 1:N])
+    Hm = tensor_product(hilbert_space(f, 1:3), hilbert_space(s[1]), hilbert_space(s[2]))
+    mixed = NumberConservation(1, hilbert_space(f, 1:2)) * AdditiveConstraint([0]; spaces=map(hilbert_space, (s[1], s[2])), maps=s -> s.m)
+    for (space, constraint) in [
+        (H, NumberConservation(0:2, Hs[3:7])),
+        (H, NumberConservation(N ÷ 2, Hs) * dipole),
+        (H, NumberConservation(3, Hs[1:6]) * FilterConstraint(s -> isodd(s.f))),
+        (Hm, mixed),
+        (H, NumberConservation(1, hilbert_space(f, 1:4)) * NumberConservation(2, Hs[3:6])),
+    ]
+        @test constrain_space(space, constraint) == constrain_space(space, constraint, basisstates(space))
+    end
 end
 
 @testitem "constrain_space reads labels unless they are states" begin

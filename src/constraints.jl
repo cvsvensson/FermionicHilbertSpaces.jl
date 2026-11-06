@@ -147,6 +147,7 @@ end
 AdditiveConstraint(allowed_values; spaces=missing, maps=missing) = AdditiveConstraint(allowed_values, spaces, maps)
 AdditiveConstraint(allowed_values, maps) = AdditiveConstraint(allowed_values; maps)
 supports_branch_pruning(::AdditiveConstraint) = true
+supports_branch_pruning(::AdditiveConstraint{Missing}) = false
 supports_filtering(::AdditiveConstraint{<:Any,Missing}) = false
 supports_filtering(::AdditiveConstraint) = true
 supports_sector_grouping(::AdditiveConstraint{<:Any,Missing}) = false
@@ -191,6 +192,7 @@ _normalize_constraint_subspace(subspace::AbstractHilbertSpace) = (subspace,)
 _normalize_constraint_subspace(spaces) = spaces
 _normalize_constraint_subspace(spaces::Missing) = spaces
 supports_branch_pruning(::NumberConservation) = true
+supports_branch_pruning(::NumberConservation{Missing}) = false
 supports_filtering(::NumberConservation) = true
 supports_sector_grouping(::NumberConservation) = true
 supply_missing_constraint_info(constraint::NumberConservation{<:Any,Missing}, space, spaces) = NumberConservation(constraint.total, spaces, constraint.weights)
@@ -220,7 +222,7 @@ struct ParityConservation{H} <: AbstractConstraint
 end
 ParityConservation(parities=[-1, 1]; spaces=missing) = ParityConservation(parities, spaces)
 ParityConservation(space::AbstractHilbertSpace) = ParityConservation(; spaces=(space,))
-supports_branch_pruning(::ParityConservation) = true
+supports_branch_pruning(c::ParityConservation) = length(c.allowed_parities) == 1
 supports_filtering(::ParityConservation) = true
 supports_sector_grouping(::ParityConservation) = true
 supply_missing_constraint_info(constraint::ParityConservation{Missing}, space, spaces) = ParityConservation(constraint.allowed_parities, spaces)
