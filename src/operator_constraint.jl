@@ -138,7 +138,7 @@ function _resolve_on_values(c, values)
     rule = c.rule
     if length(values) > MAX_LISTED_VALUES || !_applies(rule.map, values)
         listed = rule.map === identity && rule.allowed isa Union{Tuple, AbstractArray, AbstractSet}
-        return rule, listed ? sort!(filter(x -> x isa Real, collect(rule.allowed))) : missing
+        return rule, listed ? sort!(filter(x -> x isa Real && (_isexact(x) || isinteger(x)), collect(rule.allowed))) : missing
     end
     rule = resolve(rule, first(values))
     kept = filter(v -> !ismissing(_label(rule, v)), values)
@@ -252,32 +252,59 @@ function _exact_value(x::Real, term)
 end
 _exact_value(z::Complex, term) = complex(_exact_value(real(z), term), _exact_value(imag(z), term))
 
-function branch_constraint(c::OperatorConstraint, allspaces)
-    ismissing(c.allowed) && return BranchConstraint((_, _, _) -> true)
-    terms = c.terms
-    unit_positions = _subspace_positions(c.spaces, allspaces)
-    positions = map(units -> unit_positions[units], terms.units)
-    n = length(allspaces)
-    done = map(maximum, positions)
-    order = sortperm(done)
-    starts = searchsortedfirst.(Ref(done[order]), 1:(n + 1))
-    T = typeof(terms.constant)
-    lo, hi = zeros(T, n), zeros(T, n)
-    for (d, table) in zip(done, terms.tables)
-        lo[d] += minimum(table)
-        hi[d] += maximum(table)
+branch_constraint(c::OperatorConstraint, allspaces) = branch_constraint([c], allspaces)
+# Prunes by several operator constraints at once. The groups of the terms are evaluated at the depth of their last space,
+# and a step is the groups of one constraint at one depth, so that each depth only evaluates the constraints it changes.
+function branch_constraint(constraints::AbstractVector{<:OperatorConstraint}, allspaces)
+    cs = filter(c -> !ismissing(c.allowed), constraints)
+    T = mapreduce(c -> typeof(c.terms.constant), promote_type, cs; init = Int)
+    unit_positions = [_subspace_positions(c.spaces, allspaces) for c in cs]
+    owner = [k for (k, c) in enumerate(cs) for _ in c.terms.units]
+    positions = Vector{Int}[unit_positions[k][units] for (k, c) in enumerate(cs) for units in c.terms.units]
+    depth = map(maximum, positions)
+    tables = Vector{T}[t for c in cs for t in c.terms.tables]
+    strides = Vector{Int}[s for c in cs for s in c.terms.strides]
+    keys = collect(zip(depth, owner))
+    order = sortperm(keys)
+    keys = keys[order]
+    steps = unique(keys)
+    nsteps, step_depth, step_owner = length(steps), first.(steps), last.(steps)
+    group_starts = push!(searchsortedfirst.(Ref(keys), steps), length(keys) + 1)
+    step_starts = [searchsortedfirst(step_depth, d) for d in 1:(length(allspaces) + 1)]
+    lo = [sum(i -> minimum(tables[order[i]]), group_starts[s]:(group_starts[s + 1] - 1)) for s in 1:nsteps]
+    hi = [sum(i -> maximum(tables[order[i]]), group_starts[s]:(group_starts[s + 1] - 1)) for s in 1:nsteps]
+    # A step continues from the value after the previous step of its constraint, or from its constant for the first,
+    # and the later steps of its constraint add between `remaining_min` and `remaining_max`.
+    previous, remaining_min, remaining_max = zeros(Int, nsteps), zeros(T, nsteps), zeros(T, nsteps)
+    latest, later_min, later_max = zeros(Int, length(cs)), zeros(T, length(cs)), zeros(T, length(cs))
+    for s in 1:nsteps
+        previous[s], latest[step_owner[s]] = latest[step_owner[s]], s
     end
-    index = zeros(Int, n)
-    increment = (partial, depth) -> begin
-        index[depth] = state_index(partial[depth], allspaces[depth])
-        value = zero(T)
-        for i in starts[depth]:(starts[depth + 1] - 1)
-            g = order[i]
-            value += terms.tables[g][_table_index(terms.strides[g], index, positions[g])]
+    for s in nsteps:-1:1
+        k = step_owner[s]
+        remaining_min[s], remaining_max[s] = later_min[k], later_max[k]
+        later_min[k] += lo[s]
+        later_max[k] += hi[s]
+    end
+    constants = T[c.terms.constant for c in cs]
+    targets = [T[x for x in c.allowed if T <: Rational || isinteger(x)] for c in cs]
+    values = zeros(T, nsteps)
+    index = zeros(Int, length(allspaces))
+    return BranchConstraint(
+        (partial, d, _) -> begin
+            index[d] = state_index(partial[d], allspaces[d])
+            for s in step_starts[d]:(step_starts[d + 1] - 1)
+                value = iszero(previous[s]) ? constants[step_owner[s]] : values[previous[s]]
+                for i in group_starts[s]:(group_starts[s + 1] - 1)
+                    g = order[i]
+                    value += tables[g][_table_index(strides[g], index, positions[g])]
+                end
+                values[s] = value
+                _reachable(value + remaining_min[s], value + remaining_max[s], targets[step_owner[s]], nothing) || return false
+            end
+            true
         end
-        value
-    end
-    return _sum_branch_constraint(increment, lo, hi, terms.constant, c.allowed, nothing)
+    )
 end
 
 @testitem "Operator constraints keep the states with allowed values" begin
@@ -307,6 +334,7 @@ end
     cases = [
         (hilbert_space(f, hubbard), (Nup => 2, Ndn => 2, D => 0)),
         (hilbert_space(S, 1:6), (sum(S[i][:z] for i in 1:6) => 0,)),
+        (hilbert_space(S, 1:5), (sum(S[i][:z] for i in 1:5) => 1 // 2, S[1][:z] + S[2][:z] => 0)),
         (hilbert_space(f, 1:6), (sum(n(i) for i in 1:6) => 3, sum(i * n(i) for i in 1:6) => 10)),
         (tensor_product(Hmixed), (a'a + n(1) + n(2) + S[1][:z] => [1 // 2, 3 // 2],)),
         (hilbert_space(b, 1:3, 4), (sum(b[i]'b[i] for i in 1:3) => 3,)),
