@@ -98,7 +98,7 @@ function Base.transpose(L::LazyOperator{<:ProductOperator{C}}) where C
     newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces), L.op.inds)
     LazyOperator(newop, TransposedSpace(L.space), L.chunking, L.precomp; projection=L.projection, conjugate=L.conjugate, ishermitian=L.ishermitian)
 end
-const LazyFunctionOperator = SciMLOperators.FunctionOperator{<:Any,<:Any,<:Any,<:Any,<:LazyOperator}
+const LazyFunctionOperator = SciMLOperators.FunctionOperator{<:Any, <:Any, <:Any, <:Any, <:LazyOperator}
 # SciMLOperators' fallbacks for these build the full matrix, so they are rewrapped lazily.
 for f in (:transpose, :conj)
     @eval function Base.$f(L::LazyFunctionOperator)
