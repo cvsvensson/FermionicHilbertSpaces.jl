@@ -233,9 +233,10 @@ function sector_function(cons::C, space::AbstractHilbertSpace) where {C<:Union{<
     mapper = state_mapper(space, spaces)
     allowed_vals = allowed_values(cons, space, mapper)
     allowed = in(allowed_vals)
+    S = _sum_type(allowed_vals)
     function number(state)
         subs = unique_split_state(state, mapper)
-        val = _apply_constraint_function(subs, cons)
+        val = _apply_constraint_function(subs, cons, S)
         allowed(val) ? val : missing
     end
 end
@@ -263,13 +264,12 @@ function filter_function(constraint::ProductConstraint, space::AbstractHilbertSp
     state -> all(f -> f(state), subspace_functions)
 end
 
-_apply_constraint_function(substates, ::NumberConservation{<:Any,<:Any,Missing}) = sum(particle_number, substates; init=0)
-_apply_constraint_function(substates, cons::NumberConservation{<:Any,<:Any,W}) where {W} = mapreduce((s, w) -> particle_number(s) * w, +, substates, cons.weights; init=0)
-_apply_constraint_function(substates, ::ParityConservation) = prod(parity, substates; init=1)
-_apply_constraint_function(substates, cons::AdditiveConstraint{<:Any,<:Any,<:Function}) = sum(cons.maps, substates; init=0)
-function _apply_constraint_function(substates, cons::AdditiveConstraint)
-    mapreduce((s, f) -> f(s), +, substates, cons.maps)
-end
+# `::Type{S}` forces specialization on `S`; Julia does not specialize on a type argument that is only captured by a closure.
+_apply_constraint_function(substates, ::NumberConservation{<:Any, <:Any, Missing}, ::Type = Int) = sum(particle_number, substates; init = 0)
+_apply_constraint_function(substates, cons::NumberConservation, ::Type{S} = Int) where {S} = mapreduce((s, w) -> _summand(S, particle_number(s) * w), +, substates, cons.weights; init = zero(S))
+_apply_constraint_function(substates, ::ParityConservation, ::Type = Int) = prod(parity, substates; init = 1)
+_apply_constraint_function(substates, cons::AdditiveConstraint{<:Any, <:Any, <:Function}, ::Type{S} = Int) where {S} = sum(s -> _summand(S, cons.maps(s)), substates; init = zero(S))
+_apply_constraint_function(substates, cons::AdditiveConstraint, ::Type{S} = Int) where {S} = mapreduce((s, f) -> _summand(S, f(s)), +, substates, cons.maps; init = zero(S))
 
 
 function branch_constraint(constraint::ParityConservation, spaces)
@@ -317,6 +317,7 @@ given order; this is equivalent to `constrain_space(space, NoSymmetry(), states)
 constrain_space
 
 @testitem "ProductSymmetry" begin
+    using FermionicHilbertSpaces: particle_number
     labels = 1:4
     qn = NumberConservation() * ParityConservation()
     @fermions f
@@ -324,12 +325,12 @@ constrain_space
     @test collect(quantumnumbers(H)) == [[n, (-1)^n] for n in 0:4]
     @test all(q -> q isa Vector{Int}, quantumnumbers(H))
     # Sector labels of mixed types
-    qn_mixed = NumberConservation() * FermionicHilbertSpaces.SectorConstraint(s -> isodd(s.f) ? :odd : :even)
+    qn_mixed = NumberConservation() * FermionicHilbertSpaces.SectorConstraint(s -> particle_number(s) >= 2 ? :hi : :lo)
     H_mixed = hilbert_space(f, labels, qn_mixed)
     @test dim(H_mixed) == 2^4
-    @test Set(quantumnumbers(H_mixed)) == Set(Any[n, s] for n in 0:4, s in (:odd, :even) if !(n == 0 && s == :odd) && !(n == 4 && s == :even))
+    @test Set(quantumnumbers(H_mixed)) == Set(Any[n, n >= 2 ? :hi : :lo] for n in 0:4)
     # Integer and floating-point labels keep their own types
-    qn_numeric = NumberConservation() * FermionicHilbertSpaces.SectorConstraint(s -> isodd(s.f) ? 0.5 : 1.5)
+    qn_numeric = NumberConservation() * FermionicHilbertSpaces.SectorConstraint(s -> isodd(particle_number(s)) ? 0.5 : 1.5)
     q_numeric = collect(quantumnumbers(hilbert_space(f, 1:2, qn_numeric)))
     @test [0, 1.5] in q_numeric
     @test all(q -> q[1] isa Int && q[2] isa Float64, q_numeric)
