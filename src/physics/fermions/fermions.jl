@@ -329,7 +329,7 @@ function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, @nospeci
     constraint = as_constraint(constraint)
     n = _fixed_total_number(constraint, modes)
     isnothing(n) || return ConstrainedSpace(hilbert_space(a, labels), fixed_particle_number_fockstates(length(labels), n))
-    tensor_product(modes; constraint)
+    return tensor_product(modes; constraint)
 end
 
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::ParityConservation{Missing})
