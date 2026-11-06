@@ -23,8 +23,10 @@ couplings `Xₖ`, where `s` is the scale of the `Hfree` matrix (`1/2` for `BdG()
 and is dropped. A kept `Yⱼ` should be zero on the state of `Haux` that the quasiparticles are expanded around;
 adding a constant to it shifts all eigenvalues.
 
-`representation` throws an `ArgumentError` unless the fermions stay free: the couplings must commute with each other,
-and each commutator of a kept `Yⱼ` with a coupling must commute with all couplings.
+`representation` throws an `ArgumentError` if two couplings do not commute, or if a commutator of a kept `Yⱼ` with a
+coupling does not commute with all couplings. These checks do not catch every operator for which the fermions are not
+free. The result is tested for couplings that commute with all other terms, such as `σz` of a spin, and for a counting
+operator `K` with couplings `Tᵐ`, `[K, Tᵐ] = m Tᵐ`.
 """
 tensor_product(Hfree::FreeFermionSpace, Haux::AbstractHilbertSpace) = FreeProductSpace(Hfree, Haux)
 dim(H::FreeProductSpace) = dim(H.free) * dim(H.aux)

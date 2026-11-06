@@ -176,4 +176,4 @@ op = σ[1][:z] * (f[1]' * f[2] + f[1]' * f[2]' + hc) + 0.7 * σ[2][:x]   # σ[2]
 H = tensor_product(hilbert_space(f, 1:2, BdG()), Hspins)
 M = representation(op, H, :dense)   # eigenvalues: those of the BdG problems with σ[1][:z] = ±1/2
 ```
-A term that does not commute with the couplings is kept when the fermions stay free, as for a counting operator `K` and couplings `Tᵐ` with `[K, Tᵐ] = m Tᵐ`. Such a term should be zero on the state that the quasiparticles are expanded around, since adding a constant to it shifts all eigenvalues. Index `i` of `Hfree` and `a` of `Haux` is index `(a - 1) * dim(Hfree) + i`. `BdGEigen` does not yet support these spaces.
+A term that does not commute with the couplings is kept, as for a counting operator `K` and couplings `Tᵐ` with `[K, Tᵐ] = m Tᵐ`. The checks do not catch every such term that makes the fermions interacting, so this case is tested only for terms like `K`. A kept term should be zero on the state that the quasiparticles are expanded around, since adding a constant to it shifts all eigenvalues. Index `i` of `Hfree` and `a` of `Haux` is index `(a - 1) * dim(Hfree) + i`. `BdGEigen` does not yet support these spaces.
