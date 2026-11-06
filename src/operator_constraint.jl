@@ -1,4 +1,4 @@
-# Constraints written as `quantity => allowed`, where `quantity` is a diagonal symbolic operator or a function of the basis state.
+# Constraints written as `quantity => spec`, where `quantity` is a diagonal symbolic operator or a function of the basis state.
 const ConstraintVector = AbstractVector{<:Union{Pair, AbstractConstraint}}
 const QuantitySpec = Union{Pair, Tuple, ConstraintVector, Base.Generator, NCAdd, NCMul, AbstractSym, Function}
 const ConstraintLike = Union{AbstractConstraint, QuantitySpec}
@@ -14,49 +14,168 @@ function as_constraint(@nospecialize(cs::Union{Tuple, ConstraintVector, Base.Gen
     isempty(constraints) && return NoSymmetry()
     return length(constraints) == 1 ? only(constraints) : ProductConstraint(map(identity, constraints))
 end
-as_constraint((quantity, allowed)::Pair) = quantity_constraint(quantity, allowed)
-as_constraint(quantity) = quantity_constraint(quantity, missing)
+as_constraint((quantity, spec)::Pair) = quantity_constraint(quantity, quantity isa Function ? _top_rule(spec) : _operator_rule(spec))
+as_constraint(quantity) = quantity_constraint(quantity, AllValues())
 
-# A scalar restricts without labelling sectors; a collection, or `missing` for all values, also labels them.
-_allowed(value::Number) = [value], false
-_allowed(values) = values, true
-function quantity_constraint(f::Function, allowed)
-    values, labelled = _allowed(allowed)
-    labelled || return FilterConstraint(state -> f(state) in values, missing, missing)
-    ismissing(values) && return SectorConstraint(FilterConstraint(f, missing, missing))
-    return SectorConstraint(FilterConstraint(state -> (value = f(state); value in values ? value : missing), missing, missing))
+# A rule says how `quantity => spec` treats a value `v` of the quantity: `_keep_label(rule, v, c)` returns whether `v`
+# is kept and its sector label, which is `nothing` when the rule does not label.
+struct AllValues end
+struct ValueIs{T}
+    value::T
 end
-quantity_constraint(op, allowed) = OperatorConstraint(op, _allowed(_exact_allowed(allowed))..., missing, nothing)
-# The values of an operator are exact, so a float could only match them by accident.
-_exact_allowed(x::AbstractFloat) = isinteger(x) ? Int(x) : throw(ArgumentError("The allowed values of a constraint operator must be exact, such as `1//10` instead of `0.1`, got $x."))
-_exact_allowed(x::Union{Number, Missing}) = x
-_exact_allowed(xs) = any(x -> x isa AbstractFloat, xs) ? [_exact_allowed(x) for x in xs] : xs
+struct ValueIn{C}
+    values::C
+end
+# Reads `f(v)` by `rest`, or, without `rest`, keeps the values where `f` returns `true` if it returns a `Bool` and
+# labels by `f(v)` otherwise. Which of the two is known once `f` is applied, so `predicate` is set by the first value.
+mutable struct ValueMap{F, R}
+    const f::F
+    const rest::R
+    predicate::Union{Nothing, Bool}
+    const cache::Dict{Any, Any}
+end
+ValueMap(f, rest) = ValueMap(f, rest, nothing, Dict{Any, Any}())
+
+_rule(x::Union{Number, AbstractString, Symbol, AbstractChar}) = ValueIs(x)
+_rule(xs::Union{AbstractArray, AbstractSet, Tuple}) = ValueIn(xs)
+function _rule((f, rest)::Pair)
+    f isa _NotCallable && throw(ArgumentError("In a constraint `quantity => f => rest`, `f` must be a function applied to the value, got `$(repr(f))`."))
+    return ValueMap(f, _rule(rest))
+end
+_rule(x::Union{Missing, Nothing}) = throw(ArgumentError("`=> $x` is not a constraint; leave it out to keep all values and label sectors by them."))
+_rule(::AbstractDict) = throw(ArgumentError("A dictionary is not a constraint; use a function such as `v -> d[v]`."))
+_rule(f) = ValueMap(f, nothing)
+const _NotCallable = Union{Number, AbstractString, Symbol, AbstractChar, AbstractArray, AbstractSet, Tuple, Pair, Missing, Nothing, AbstractDict}
+_top_rule(x::Bool) = throw(ArgumentError("`=> $x` is not a constraint; pass a function such as `isodd` to keep the values where it returns `true`."))
+_top_rule(x) = _rule(x)
+# The values of an operator are exact numbers, so a float could only match them by accident.
+_operator_rule(x) = _top_rule(x)
+_operator_rule(x::AbstractFloat) = ValueIs(_exact(x))
+_operator_rule(xs::Union{AbstractArray, AbstractSet, Tuple}) = ValueIn(any(x -> x isa AbstractFloat, xs) ? map(_exact, collect(xs)) : xs)
+_operator_rule(x::Union{AbstractString, Symbol, AbstractChar}) = throw(ArgumentError("The values of a constraint operator are numbers, got `$(repr(x))`. Label sectors by other values with a function, such as `N => (v -> iseven(v) ? \"even\" : \"odd\")`."))
+_exact(x::AbstractFloat) = isinteger(x) ? Int(x) : throw(ArgumentError("The allowed values of a constraint operator must be exact, such as `1//10` instead of `0.1`, got $x."))
+_exact(x) = x
+
+_keep_label(::AllValues, v, c) = (true, v)
+_keep_label(r::ValueIs, v, c) = (isequal(v, r.value), nothing)
+_keep_label(r::ValueIn, v, c) = (v in r.values, v)
+function _keep_label(r::ValueMap, v, c)
+    w = get(r.cache, v, r)
+    w === r && (w = r.cache[v] = _apply(r, v, c))
+    return isnothing(r.rest) ? (w isa Bool ? (w, nothing) : (true, w)) : _keep_label(r.rest, w, c)
+end
+function _apply(r::ValueMap, v, c)
+    w = try
+        r.f(v)
+    catch e
+        throw(ArgumentError("The constraint `$c` failed to apply `$(r.f)` to the value $(repr(v)): $(sprint(showerror, e))"))
+    end
+    isnothing(r.rest) || return w
+    isnothing(r.predicate) && (r.predicate = w isa Bool)
+    r.predicate == (w isa Bool) || throw(ArgumentError("In the constraint `$c`, `$(r.f)` returns a `Bool` for some values and $(repr(w)) for $(repr(v)); it must either select values by returning a `Bool` or label them."))
+    return w
+end
+# Whether the rule labels sectors, or `nothing` when that is not known yet.
+_labels(::AllValues) = true
+_labels(::ValueIs) = false
+_labels(::ValueIn) = true
+_labels(r::ValueMap) = isnothing(r.rest) ? (isnothing(r.predicate) ? nothing : !r.predicate) : _labels(r.rest)
+_reset!(r) = nothing
+_reset!(r::ValueMap) = (r.predicate = nothing; _reset!(r.rest))
+_show_rule(io, ::AllValues) = nothing
+_show_rule(io, r::ValueIs) = print(io, " => ", repr(r.value))
+_show_rule(io, r::ValueIn) = print(io, " => ", r.values)
+_show_rule(io, r::ValueMap) = (print(io, " => ", r.f); isnothing(r.rest) || _show_rule(io, r.rest))
+_kept_label(c, value) = ((keep, label) = _keep_label(c.rule, value, c); keep ? label : missing)
 
 constrain_space(space, @nospecialize(c::QuantitySpec), args...) = constrain_space(space, as_constraint(c), args...)
 constrain_space(space::AbstractHilbertSpace, @nospecialize(cs::ConstraintVector)) = constrain_space(space, as_constraint(cs))
 Base.:*(c::AbstractConstraint, p::Pair) = c * as_constraint(p)
 Base.:*(p::Pair, c::AbstractConstraint) = as_constraint(p) * c
 
-# The constraint that the diagonal operator `op` has a value in `allowed`. `terms` holds its values on `spaces`.
-struct OperatorConstraint{O, A, H, D} <: AbstractAdditiveConstraint
+# The constraint `f => spec` on a function `f` of the basis state, which is evaluated on each state.
+struct StateConstraint{F, R} <: AbstractConstraint
+    f::F
+    rule::R
+end
+quantity_constraint(f::Function, rule) = StateConstraint(f, rule)
+supports_branch_pruning(::StateConstraint) = false
+supports_filtering(::StateConstraint) = true
+supports_sector_grouping(c::StateConstraint) = _labels(c.rule) === true
+supply_missing_constraint_info(c::StateConstraint, space, spaces) = c
+sector_function(c::StateConstraint, ::AbstractHilbertSpace) = state -> _kept_label(c, c.f(state))
+filter_function(c::StateConstraint, space::AbstractHilbertSpace) = !ismissing ∘ sector_function(c, space)
+localize_constraint(c::StateConstraint, H::SectorHilbertSpace) = SectorConstraint(only, (sector_function(c, H),), (H,))
+Base.show(io::IO, c::StateConstraint) = (print(io, c.f); _show_rule(io, c.rule))
+
+# The constraint `op => spec` on a diagonal operator `op`. `terms` holds its values on `spaces`, and `allowed` the sorted
+# values that `spec` keeps, for pruning, or `missing` when it keeps all values or they are not listed.
+struct OperatorConstraint{O, R, H, D, A} <: AbstractAdditiveConstraint
     op::O
-    allowed::A
-    labelled::Bool
+    rule::R
     spaces::H
     terms::D
+    allowed::A
 end
+quantity_constraint(op, rule) = OperatorConstraint(op, rule, missing, nothing, missing)
 allowed_values(c::OperatorConstraint) = c.allowed
 function with_spaces(c::OperatorConstraint, spaces)
     units = collect(spaces)
-    number = _number_constraint(c.op, units, c.allowed)
-    return OperatorConstraint(c.op, c.allowed, c.labelled, units, isnothing(number) ? diagonal_terms(c.op, units) : number)
+    number = _number_constraint(c.op, units, _number_total(c.rule))
+    terms = isnothing(number) ? diagonal_terms(c.op, units) : number
+    return OperatorConstraint(c.op, c.rule, units, terms, _pruning_targets(c.rule, c, _value_range(terms)))
 end
 # The terms index the states of each space by position, which tagging and transposing keep.
-map_spaces(f, c::OperatorConstraint) = OperatorConstraint(c.op, c.allowed, c.labelled, _map_spaces(f, c.spaces), map_spaces(f, c.terms))
+map_spaces(f, c::OperatorConstraint) = OperatorConstraint(c.op, c.rule, _map_spaces(f, c.spaces), map_spaces(f, c.terms), c.allowed)
+
+# Whether a function `spec` selects or labels is decided by applying it to the value of one of the candidate states.
+_resolve_labels!(c, space, states) = nothing
+_resolve_labels!(c::ProductConstraint, space, states) = foreach(ci -> _resolve_labels!(ci, space, states), c.constraints)
+function _resolve_labels!(c::Union{OperatorConstraint, StateConstraint}, space, states)
+    isnothing(_labels(c.rule)) && !isempty(states) && filter_function(c, space)(first(states))
+    return nothing
+end
+
+_pruning_targets(::AllValues, c, values) = missing
+function _pruning_targets(r::Union{ValueIs, ValueIn}, c, values)
+    targets = sort!(filter(x -> x isa Real, collect(r isa ValueIs ? (r.value,) : r.values)))
+    _check_reachable(c, targets, values)
+    return targets
+end
+# `spec` is applied to the values in the range of the operator, which may include values that no state has. If that
+# fails, the values are found at the states instead, so that errors do not depend on the range.
+function _pruning_targets(r::ValueMap, c, values)
+    isnothing(values) && return missing
+    targets = try
+        filter(v -> first(_keep_label(r, v, c)), values)
+    catch
+        _reset!(r)
+        return missing
+    end
+    _check_reachable(c, targets, values)
+    return length(targets) == length(values) ? missing : targets
+end
+_check_reachable(c, targets, values) = isnothing(values) || any(in(values), targets) || throw(ArgumentError("No value of `$(c.op)` is allowed by `$c`; its values are in $(isone(step(values)) ? "$(first(values)):$(last(values))" : values)."))
+# The values of the operator lie in `lo:step:hi`, or `nothing` when that range is too long to list.
+const MAX_LISTED_VALUES = 2^16
+_value_range(terms) = _value_range(terms.constant, terms.tables)
+_value_range(c::NumberConservation) = _value_range(0, [unique(contribution(c, k, s) for s in basisstates(H)) for (k, H) in enumerate(c.spaces)])
+function _value_range(constant, value_sets)
+    lo = constant + sum(minimum, value_sets; init = zero(constant))
+    hi = constant + sum(maximum, value_sets; init = zero(constant))
+    step = mapreduce(vs -> mapreduce(v -> v - minimum(vs), gcd, vs), gcd, value_sets; init = zero(lo))
+    iszero(step) && return lo:one(lo):lo
+    (hi - lo) / step < MAX_LISTED_VALUES || return nothing
+    return lo:step:hi
+end
 
 # A weighted count `Σₖ wₖ nₖ` of single fermion or boson modes is the quantity of `NumberConservation`, which is faster.
+_number_total(::AllValues) = missing
+_number_total(r::ValueIs{<:Integer}) = [r.value]
+_number_total(r::ValueIn{<:Union{AbstractArray{<:Integer}, Tuple{Vararg{Integer}}}}) = r.values
+_number_total(r) = nothing
 function _number_constraint(op, units, allowed)
-    ismissing(allowed) || eltype(allowed) <: Integer || return nothing
+    isnothing(allowed) && return nothing
     terms, constant = _operator_terms(op)
     iszero(constant) || return nothing
     unit_of = Dict(id => k for (k, H) in enumerate(units) for id in atom_ids(H))
@@ -74,22 +193,25 @@ end
 _is_annihilator(x) = false
 # The total number `n` when `c` restricts the sum of the numbers of all `modes` to `n`, whose states are built directly.
 _fixed_total_number(c, modes) = nothing
-function _fixed_total_number(c::OperatorConstraint{<:Any, <:Any, Missing}, modes)
-    c.labelled && return nothing
-    number = _number_constraint(c.op, modes, c.allowed)
-    (isnothing(number) || !all(isone, number.weights)) && return nothing
-    return only(c.allowed)
+function _fixed_total_number(c::OperatorConstraint{<:Any, <:ValueIs{<:Integer}, Missing}, modes)
+    n = c.rule.value
+    number = _number_constraint(c.op, modes, [n])
+    (isnothing(number) || !all(isone, number.weights) || !(0 <= n <= length(modes))) && return nothing
+    return n
 end
 branch_constraint(c::OperatorConstraint{<:Any, <:Any, <:Any, <:NumberConservation}, allspaces) = branch_constraint(c.terms, allspaces)
 _additive_sum(c::OperatorConstraint{<:Any, <:Any, <:Any, <:NumberConservation}, substates, S::Type) = _additive_sum(c.terms, substates, S)
-supports_sector_grouping(c::OperatorConstraint) = c.labelled
+supports_sector_grouping(c::OperatorConstraint) = _labels(c.rule) === true
 # Without spaces, the operator is split over the atoms of the constrained space, so any split fits.
 branch_spaces(::OperatorConstraint{<:Any, <:Any, Missing}) = ()
+supports_branch_pruning(c::OperatorConstraint{<:Any, <:Any, Missing}) = !(c.rule isa AllValues)
 sector_function(c::OperatorConstraint{<:Any, <:Any, Missing}, space::AbstractHilbertSpace) = sector_function(with_spaces(c, atomic_factors(space)), space)
-function Base.show(io::IO, c::OperatorConstraint)
-    print(io, c.op)
-    return ismissing(c.allowed) || print(io, " => ", c.labelled ? c.allowed : only(c.allowed))
+function sector_function(c::OperatorConstraint, space::AbstractHilbertSpace)
+    mapper = state_mapper(space, c.spaces)
+    S = _sum_type(c.allowed)
+    return state -> _kept_label(c, _additive_sum(c, unique_split_state(state, mapper), S))
 end
+Base.show(io::IO, c::OperatorConstraint) = (print(io, c.op); _show_rule(io, c.rule))
 
 function _additive_sum(c::OperatorConstraint, substates, ::Type)
     positions = map(state_index, substates, c.spaces)
@@ -130,13 +252,14 @@ function diagonal_terms(op, spaces)
     strides = [cumprod([1; map(dim, spaces[g][1:(end - 1)])]) for g in groups]
     return _diagonal_terms(Rational{Int}(real(constant)), groups, strides, tables)
 end
-# Values are summed as integers when each table's entries differ by integers, with the common fractions moved to the constant.
+# Values are summed as integers when each table plus an equal share of the constant is integral, which depends on the
+# terms of the operator rather than on how many there are.
 function _diagonal_terms(constant, units, strides, tables)
-    shifts = map(t -> t[1] - floor(t[1]), tables)
-    total = constant + sum(shifts; init = zero(constant))
-    integral = isinteger(total) && all(((t, s),) -> all(x -> isinteger(x - s), t), zip(tables, shifts))
+    share = isempty(tables) ? zero(constant) : constant / length(tables)
+    rest = constant - share * length(tables)
+    integral = isinteger(rest) && all(t -> all(x -> isinteger(x + share), t), tables)
     integral || return DiagonalTerms{Rational{Int}}(constant, units, strides, tables)
-    return DiagonalTerms{Int}(Int(total), units, strides, map((t, s) -> Int.(t .- s), tables, shifts))
+    return DiagonalTerms{Int}(Int(rest), units, strides, map(t -> Int.(t .+ share), tables))
 end
 # A term acting on several spaces is tabulated on their product space, whose dimension grows exponentially.
 const MAX_TABLE_SIZE = 2^12
@@ -197,6 +320,7 @@ end
 _exact_value(z::Complex, term) = complex(_exact_value(real(z), term), _exact_value(imag(z), term))
 
 function branch_constraint(c::OperatorConstraint, allspaces)
+    ismissing(c.allowed) && return BranchConstraint((_, _, _) -> true)
     terms = c.terms
     unit_positions = _subspace_positions(c.spaces, allspaces)
     positions = map(units -> unit_positions[units], terms.units)
@@ -313,7 +437,7 @@ end
     expected = filter(s -> count_ones(s.states[1].f) == 2, full)
     @test Set(basisstates(tensor_product(Hs; constraint = N => 2))) == Set(expected)
     @spins S 1 // 2
-    @test eltype(quantumnumbers(hilbert_space(S, 1:4, sum(S[i][:z] for i in 1:4)))) == Int
+    @test all(L -> eltype(quantumnumbers(hilbert_space(S, 1:L, sum(S[i][:z] for i in 1:L)))) == Rational{Int}, 3:4)
 end
 
 @testitem "Invalid constraint operators throw" begin
@@ -332,4 +456,81 @@ end
 @testitem "Operator constraints with large denominators are exact" begin
     @spins S 1 // 2
     @test dim(hilbert_space(S, 1:2, (1 // 100003) * S[1][:z] => 1 // 200006)) == 2
+end
+
+@testitem "Specifications select and label the values of a quantity" begin
+    using LinearAlgebra
+    # The reference maps each kept state to its label, with `rule(v)` the label of the value `v`, `nothing` to keep
+    # the state without a label and `missing` to drop it.
+    reference(H, value, rule) = Dict(s => l for s in basisstates(H) for l in (rule(value(s)),) if !ismissing(l))
+    labels(H::SectorHilbertSpace) = Dict(s => q for q in quantumnumbers(H) for s in basisstates(H)[indices(q, H)])
+    labels(H) = Dict(s => nothing for s in basisstates(H))
+    exact(x) = isinteger(x) ? Int(x) : rationalize(Int, x)
+    function operator_values(op, H)
+        values = exact.(real(diag(Matrix(representation(op, H)))))
+        return s -> values[state_index(s, H)]
+    end
+    @fermions f
+    H = hilbert_space(f, 1:4)
+    N = sum(f[i]'f[i] for i in 1:4)
+    P = sum(i * f[i]'f[i] for i in 1:4)
+    @spins S 1 // 2
+    Hspin = hilbert_space(S, 1:4)
+    Sz = sum(S[i][:z] for i in 1:4)
+    nup(s) = count(x -> x.m > 0, s.states)
+    cases = [
+        (H, N => isodd, N, v -> isodd(v) ? nothing : missing),
+        (H, N => (v -> mod(v, 2)), N, v -> mod(v, 2)),
+        (H, N => (v -> mod(v, 2)) => 0, N, v -> iseven(v) ? nothing : missing),
+        (H, N => (v -> mod(v, 2)) => 0:1, N, v -> mod(v, 2)),
+        (H, N => (v -> (-1)^v) => [-1, 1], N, v -> (-1)^v),
+        (H, P => (v -> mod(v, 3)) => 0, P, v -> mod(v, 3) == 0 ? nothing : missing),
+        (Hspin, Sz => abs => 0:1, Sz, v -> abs(v) <= 1 ? abs(v) : missing),
+        (Hspin, nup => (v -> mod(v, 3)) => 0:1, nup, v -> mod(v, 3) <= 1 ? mod(v, 3) : missing),
+    ]
+    for (Hc, constraint, quantity, rule) in cases
+        value = quantity isa Function ? quantity : operator_values(quantity, Hc)
+        @test labels(constrain_space(Hc, constraint)) == reference(Hc, value, rule)
+    end
+    Hface = hilbert_space(f, 1:4, N => (v -> iseven(v) ? "😀" : "😢"))
+    @test Set(basisstates(sector("😀", Hface))) == Set(s for s in basisstates(H) if iseven(count_ones(s.f)))
+end
+
+@testitem "Invalid specifications throw" begin
+    @fermions f
+    N = sum(f[i]'f[i] for i in 1:4)
+    for spec in (missing, nothing, true, "a", :a, 'a', Dict(1 => 1), 1 => 2, 0.5, v -> v == 2 || v)
+        @test_throws ArgumentError hilbert_space(f, 1:4, N => spec)
+    end
+    @test_throws "boom" hilbert_space(f, 1:4, N => (v -> v == 3 ? error("boom") : v))
+    @test_throws "0:4" hilbert_space(f, 1:4, N => 7)
+end
+
+@testitem "Labels of several constraints combine" begin
+    @fermions f
+    N(r) = sum(f[i]'f[i] for i in r)
+    H = constrain_space(hilbert_space(f, 1:4, N(1:4)), N(1:2))
+    @test Set(quantumnumbers(H)) == Set([a + b, a] for a in 0:2, b in 0:2)
+    @spins S 1 // 2
+    nup(s) = count(x -> x.m > 0, s.states)
+    pair(r) = hilbert_space(S, r, nup => (v -> mod(v, 2)))
+    @test quantumnumbers(tensor_product(pair(1:2), pair(3:4))) == [[0, 0], [0, 1], [1, 0], [1, 1]]
+end
+
+@testitem "The diagonal of an operator is found numerically" begin
+    import FermionicHilbertSpaces: AbstractBasisState, AbstractSym, apply_local_operator, symbolic_group
+    import FermionicHilbertSpaces.NonCommutativeProducts: @nc
+    # A cyclic shift, whose cube is the identity, which its products do not simplify to.
+    struct Shift <: AbstractSym
+        site::Int
+    end
+    @nc Shift
+    struct Clock <: AbstractBasisState
+        n::Int
+    end
+    apply_local_operator(::Shift, s::Clock, space, precomp) = Clock(mod(s.n + 1, 3)), 1
+    symbolic_group(op::Shift) = op.site
+    X(i) = Shift(i)
+    Hs = [GenericHilbertSpace(k, Clock.(0:2)) for k in 1:2]
+    @test Set(basisstates(tensor_product(Hs; constraint = X(1) * X(1) * X(1) + 2 * X(2) * X(2) * X(2) => 3))) == Set(basisstates(tensor_product(Hs)))
 end

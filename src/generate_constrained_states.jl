@@ -162,6 +162,7 @@ end
 # Prunes a branch unless the sum can still reach `targets` (modulo `m`). `increment(partial, depth)` is the part of the
 # sum that the state at `depth` completes, between `lo[depth]` and `hi[depth]`, and `init` is the part no state changes.
 function _sum_branch_constraint(increment::F, lo, hi, init, targets, m) where {F}
+    targets = isnothing(m) ? sort(collect(targets)) : targets
     remaining_min = push!(reverse!(cumsum(reverse(lo))), zero(eltype(lo)))
     remaining_max = push!(reverse!(cumsum(reverse(hi))), zero(eltype(hi)))
     # `prefix[d]` is the sum completed by depths `1:d-1` on the current branch. This relies on
@@ -175,8 +176,8 @@ function _sum_branch_constraint(increment::F, lo, hi, init, targets, m) where {F
         end
     )
 end
-# Whether a sum in `lo:hi` can equal one of `targets`, or, with a modulus `m`, be congruent to one.
-_reachable(lo, hi, targets, ::Nothing) = any(t -> lo <= t <= hi, targets)
+# Whether a sum in `lo:hi` can equal one of the sorted `targets`, or, with a modulus `m`, be congruent to one.
+_reachable(lo, hi, targets, ::Nothing) = (i = searchsortedfirst(targets, lo); i <= length(targets) && targets[i] <= hi)
 _reachable(lo, hi, residues, m) = any(r -> lo + mod(r - lo, m) <= hi, residues)
 # Integer contributions are summed in the allowed values' type promoted with `Int`, with a checked
 # conversion, since `UInt + Int` is a `UInt` and negative sums would wrap around.

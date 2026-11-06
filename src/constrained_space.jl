@@ -37,13 +37,18 @@ end
 # Only `unchecked`, the part of `constraint` that `states` may violate, is filtered by when not grouping.
 # A constraint that cannot filter is taken to hold for all of `states`.
 function constrain_states(space, constraint, states, unchecked = constraint)
+    _resolve_labels!(constraint, space, states)
     if supports_sector_grouping(constraint) && supports_filtering(constraint)
-        return sector_space(space, states, sector_function(constraint, space), constraint)
+        grouping = _with_sector_labels(space, constraint)
+        return sector_space(space, states, sector_function(grouping, space), grouping)
     elseif supports_filtering(unchecked)
         return _restricted_space(space, collect(Iterators.filter(filter_function(unchecked, space), states)), constraint)
     end
     return ConstrainedSpace(space, states; constraint)
 end
+# The labels of a space with sectors are kept, and the labels of `constraint` follow them.
+_with_sector_labels(space, constraint) = constraint
+_with_sector_labels(space::SectorHilbertSpace, constraint) = isnothing(space.constraint) ? constraint : space.constraint * constraint
 _restricted_space(space, states, constraint) = ConstrainedSpace(space, states; constraint)
 # Restricting a space with sectors keeps its sectors.
 function _restricted_space(space::SectorHilbertSpace, states, constraint)
