@@ -98,10 +98,15 @@ function Base.transpose(L::LazyOperator{<:ProductOperator{C}}) where C
     newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces), L.op.inds)
     LazyOperator(newop, TransposedSpace(L.space), L.chunking, L.precomp; projection=L.projection, conjugate=L.conjugate, ishermitian=L.ishermitian)
 end
-function Base.transpose(L::SciMLOperators.FunctionOperator{<:Any,<:Any,<:Any,<:Any,<:LazyOperator})
-    isnothing(L.cache) && return scimloperator(transpose(L.op))
-    return scimloperator(transpose(L.op), first(L.cache))
+const LazyFunctionOperator = SciMLOperators.FunctionOperator{<:Any, <:Any, <:Any, <:Any, <:LazyOperator}
+# SciMLOperators' fallbacks for these build the full matrix, so they are rewrapped lazily.
+for f in (:transpose, :conj)
+    @eval function Base.$f(L::LazyFunctionOperator)
+        isnothing(L.cache) && return scimloperator($f(L.op))
+        return scimloperator($f(L.op), first(L.cache))
+    end
 end
+SparseArrays.sparse(L::LazyFunctionOperator) = sparse(L.op)
 LinearAlgebra.ishermitian(L::LazyOperator) = L.ishermitian
 
 function _eager_matrix_representation(L::LazyOperator{<:Union{NCMul,ProductOperator}})
@@ -378,6 +383,10 @@ end
     @test transpose(L) isa SciMLOperators.FunctionOperator
     @test adjoint(L) isa SciMLOperators.FunctionOperator
     @test transpose(L) * v ≈ transpose(M) * v
+    @test conj(L) isa SciMLOperators.FunctionOperator
+    @test conj(L) * v ≈ conj(M) * v
+    @test sparse(L) ≈ M
+    @test sparse(L') ≈ M'
     @test L * Vm ≈ M * Vm
     t = 0
     u = p = nothing
