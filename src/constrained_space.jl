@@ -47,10 +47,10 @@ end
 # Spaces that the branch constraint of `c` reads: `missing` for the whole state, which any split fits,
 # and `nothing` when no split is known to fit, such as for a user's `BranchConstraint`.
 branch_spaces(c) = nothing
-branch_spaces(c::Union{NumberConservation,ParityConservation,AdditiveConstraint}) = c.spaces
-branch_spaces(::AdditiveConstraint{<:Any,Missing}) = nothing # its maps act on the whole state
-branch_spaces(::NumberConservation{<:Any,Missing,<:Any}) = nothing # its weights act on the whole state
-branch_spaces(::NumberConservation{<:Any,Missing,Missing}) = missing
+branch_spaces(c::Union{NumberConservation, ParityConservation, AdditiveConstraint}) = c.spaces
+branch_spaces(::AdditiveConstraint{<:Any, Missing}) = nothing # its maps act on the whole state
+branch_spaces(::NumberConservation{<:Any, Missing, <:Any}) = nothing # its weights act on the whole state
+branch_spaces(::NumberConservation{<:Any, Missing, Missing}) = missing
 constraint_factors(c::ProductConstraint) = c.constraints
 constraint_factors(c) = (c,)
 
@@ -83,7 +83,7 @@ function atom_range(space, H, atoms)
     space isa AbstractHilbertSpace && !isconstrained(space) || return nothing
     space_atoms = collect(atomic_factors(space))
     start = atom_position(first(space_atoms), H)
-    range = start:start+length(space_atoms)-1
+    range = start:(start + length(space_atoms) - 1)
     !iszero(start) && last(range) <= length(atoms) && atoms[range] == space_atoms || return nothing
     return range
 end
@@ -260,16 +260,16 @@ end
     N = 8
     Hs = [hilbert_space(f[i]) for i in 1:N]
     H = tensor_product(Hs)
-    dipole = AdditiveConstraint([12, 13]; spaces=Hs, maps=[s -> i * particle_number(s) for i in 1:N])
+    dipole = AdditiveConstraint([12, 13]; spaces = Hs, maps = [s -> i * particle_number(s) for i in 1:N])
     Hm = tensor_product(hilbert_space(f, 1:3), hilbert_space(s[1]), hilbert_space(s[2]))
-    mixed = NumberConservation(1, hilbert_space(f, 1:2)) * AdditiveConstraint([0]; spaces=map(hilbert_space, (s[1], s[2])), maps=s -> s.m)
+    mixed = NumberConservation(1, hilbert_space(f, 1:2)) * AdditiveConstraint([0]; spaces = map(hilbert_space, (s[1], s[2])), maps = s -> s.m)
     for (space, constraint) in [
-        (H, NumberConservation(0:2, Hs[3:7])),
-        (H, NumberConservation(N ÷ 2, Hs) * dipole),
-        (H, NumberConservation(3, Hs[1:6]) * FilterConstraint(s -> isodd(s.f))),
-        (Hm, mixed),
-        (H, NumberConservation(1, hilbert_space(f, 1:4)) * NumberConservation(2, Hs[3:6])),
-    ]
+            (H, NumberConservation(0:2, Hs[3:7])),
+            (H, NumberConservation(N ÷ 2, Hs) * dipole),
+            (H, NumberConservation(3, Hs[1:6]) * FilterConstraint(s -> isodd(s.f))),
+            (Hm, mixed),
+            (H, NumberConservation(1, hilbert_space(f, 1:4)) * NumberConservation(2, Hs[3:6])),
+        ]
         @test constrain_space(space, constraint) == constrain_space(space, constraint, basisstates(space))
     end
 end
