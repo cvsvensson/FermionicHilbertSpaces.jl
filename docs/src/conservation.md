@@ -38,9 +38,11 @@ The right-hand side of `quantity => spec` is read by its type:
 After a function, `rest` may also be a string, symbol or character, and a single tuple or vector must be wrapped, as in `=> [(0, 1)]`. A labelling function can return `missing` to discard the states with that value. A constraint that allows no value of its operator throws an error. Odd particle numbers, the sectors of even and odd particle number, and a ``\mathbb{Z}_3`` charge:
 ```@example constraints
 Hodd = hilbert_space(f, 1:4, N => isodd)
-Hparity = hilbert_space(f, 1:4, N => (v -> mod(v, 2)) => 0:1)
+parity(v) = mod(v, 2)
+Hparity = hilbert_space(f, 1:4, N => parity => 0:1)
 Q = sum(k * f[k]'f[k] for k in 1:4)
-Hcharge = hilbert_space(f, 1:4, Q => (v -> mod(v, 3)) => 0)
+charge(v) = mod(v, 3)
+Hcharge = hilbert_space(f, 1:4, Q => charge => 0)
 dim(Hodd), quantumnumbers(Hparity), dim(Hcharge)
 ```
 [`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total number of fermions.
@@ -48,9 +50,11 @@ dim(Hodd), quantumnumbers(Hparity), dim(Hcharge)
 Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. Labels are integers when every term of the operator takes integer values, and rationals otherwise. Coefficients must be integers or rationals, so that the values are exact. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
 ```@example constraints
 @spins S 1 // 2
-Hspin = hilbert_space(S, 1:6, sum(S[i][:z] for i in 1:6))
+Sz = sum(S[i][:z] for i in 1:6)
+Hspin = hilbert_space(S, 1:6, Sz)
 up(i) = S[i][:z] + 1 // 2
-Hpxp = hilbert_space(S, 1:10, [up(i) * up(i + 1) => 0 for i in 1:9])
+blockade = [up(i) * up(i + 1) => 0 for i in 1:9]
+Hpxp = hilbert_space(S, 1:10, blockade)
 quantumnumbers(Hspin), dim(Hpxp)
 ```
 Passing a constraint while building a space prunes states as they are generated, so the full space is never built. A term that acts on several factors is tabulated on their product, which may have at most 4096 states.
@@ -70,7 +74,8 @@ Conserves the particle number, or a weighted sum of the particle numbers of sele
 Hf = hilbert_space(f, 1:3)
 Hb = hilbert_space(b, 10)
 # fermions in Hf minus bosons in Hb is 0 or 1
-tensor_product(Hf, Hb; constraint = NumberConservation(0:1, [Hf, Hb], [1, -1]))
+imbalance = NumberConservation(0:1, [Hf, Hb], [1, -1])
+tensor_product(Hf, Hb; constraint = imbalance)
 ```
 
 #### ParityConservation
@@ -91,7 +96,8 @@ tensor_product(pairs; constraint = pair_constraint)
 Conserves a sum of contributions from the factors of a tensor product, given by `maps` applied to the state of each factor. It works for any space, also one without symbolic operators:
 ```@example constraints
 spins = [hilbert_space(S[k]) for k in 1:4]
-Hmag = tensor_product(spins; constraint = AdditiveConstraint(-2:2; maps = s -> s.m))
+magnetization = AdditiveConstraint(-2:2; maps = s -> s.m)
+Hmag = tensor_product(spins; constraint = magnetization)
 quantumnumbers(Hmag)
 ```
 
