@@ -21,6 +21,7 @@ representation(1im * γ[1] * γ[2], H, Matrix) # [0 1im; -1im 0]
 """
 function hilbert_space(γ::SymbolicMajoranaBasis, labels::AbstractVector, ::SingleParticle)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even, got $(length(labels))."))
+    allunique(labels) || throw(ArgumentError("The Majorana labels must be distinct, got $labels."))
     return MajoranaSingleParticleHilbertSpace(OrderedDict(γ[l] => n for (n, l) in enumerate(labels)))
 end
 
@@ -54,4 +55,5 @@ end
     @test_throws ArgumentError representation(γ[1] * γ[2] * γ[3] * γ[4], H)
     @test_throws ArgumentError representation(γ[1] * γ[7], H)
     @test_throws ArgumentError hilbert_space(γ, 1:3, SingleParticle())
+    @test_throws ArgumentError hilbert_space(γ, [1, 1], SingleParticle())
 end
