@@ -116,9 +116,9 @@ _no_spin_count() = throw(ArgumentError("Spins have no particle number or fermion
 particle_number(::SpinState) = _no_spin_count()
 parity(::SpinState) = _no_spin_count()
 
-internal_rep(state::SpinState, ::AbstractHilbertSpace, ::Type{Int}) = Int(twice(state.m))
-physical_rep(state::Int, ::Type{SpinState}) = SpinState(half(state))
-function physical_rep(state::Int, ::Type{SpinState{T}}) where {T<:Integer}
+internal_rep(state::SpinState, ::AbstractHilbertSpace, ::Type{T}) where {T <: Integer} = T(twice(state.m))
+physical_rep(state::Integer, ::Type{SpinState}) = SpinState(half(state))
+function physical_rep(state::Integer, ::Type{SpinState{T}}) where {T <: Integer}
     SpinState{T}(convert(Half{T}, half(state)))
 end
 struct SpinSpace{T<:Integer,S} <: AbstractAtomicHilbertSpace{SpinState{T}}

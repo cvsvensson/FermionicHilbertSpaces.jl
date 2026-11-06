@@ -55,7 +55,8 @@ struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
         B = ProductState{Tuple{map(statetype, factors)...}}
         atom_index = Dict{Any,Int}(atomic_id(a) => i for (i, a) in enumerate(atoms))
         length(atom_index) == length(atoms) || throw(ArgumentError("The atoms of a product space must be distinct, got duplicates in $(map(atomic_id, atoms))."))
-        fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
+        T = mapreduce(internal_rep_type, promote_type, factors)
+        fast_path = all(has_internal_rep(f, T) for f in factors) ? zero(T) : missing
         lininds, cartinds = _product_indices(map(dim, factors))
         LI = typeof(lininds)
         CI = typeof(cartinds)
@@ -288,6 +289,8 @@ end
 
 @testitem "Product space with more than typemax(Int) states" begin
     import FermionicHilbertSpaces: basisstate, particle_number, state_index, ProductState, SpinState
+    using LinearAlgebra: diag
+    using SparseArrays: sparse
     @spins S 1 // 2
     for N in (64, 65)
         spins = [hilbert_space(S[i]) for i in 1:N]
@@ -308,6 +311,10 @@ end
     H = tensor_product(spaces; constraint = excitations)
     @test dim(H) == 200
     @test all(state_index(basisstate(n, H), H) == n for n in 1:dim(H))
+    # Fock states of modes 64 and up do not fit in an Int
+    i = findfirst(isone, diag(representation(f[99]' * f[99], H)))
+    j = findfirst(isone, diag(representation(f[100]' * f[100], H)))
+    @test representation(f[99]' * f[100] + hc, H) == sparse([i, j], [j, i], [1, 1], 200, 200)
 end
 
 @testitem "ProductSpaceMapper combines vectors of substates" begin
@@ -426,6 +433,9 @@ function ProductOperator(ops::O, spaces::S, inds::Vector{Int}) where {O,S}
     ProductOperator{C}(ops, spaces, inds)
 end
 mat_eltype(::ProductOperator{C}) where {C} = C
+
+# An integer type that holds `internal_rep` of every state of `space`. `has_internal_rep` checks only one state.
+internal_rep_type(::AbstractHilbertSpace) = Int
 
 function has_internal_rep(space::AbstractHilbertSpace, ::Type{T}) where {T}
     iszero(dim(space)) && return false
