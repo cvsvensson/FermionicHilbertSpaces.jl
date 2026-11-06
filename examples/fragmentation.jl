@@ -25,10 +25,18 @@ dim(H), dim(Hfull)
 # The fragment of the state with all atoms in the ground state is the space without neighbouring excited atoms, which
 # a constraint on the basis states also gives. The blockade space, with open or periodic boundaries, is a single
 # fragment, so for the PXP model `fragment` gives no new information.
+#
+# A [`BranchConstraint`](@ref) (see [Constrained Hilbert spaces](../conservation.md)) builds the states site by site and
+# calls its function after each site is set, with the partial state `p`, the current site `d` and the spaces.
+# Returning `false` discards every state that starts that way, so the blockade space is built without enumerating the
+# full space. The function rejects two neighbouring excited atoms and, once the last site is set, an excited pair across
+# the bond that closes the ring.
 
-no_neighbours(m) = !any(k -> m[k] > 0 && m[mod1(k + 1, N)] > 0, 1:N)
-blockade = FilterConstraint(m -> no_neighbours(collect(m)); maps = s -> s.m, spaces = factors(Hfull))
-@assert basisstates(H) == basisstates(constrain_space(Hfull, blockade))
+up(s) = s.m > 0
+blockade = BranchConstraint((p, d, spaces) -> d == 1 ||
+    !(up(p[d]) && up(p[d - 1])) && (d < length(spaces) || !(up(p[d]) && up(p[1]))))
+Hblockade = hilbert_space(S, 1:N, blockade)
+@assert Set(basisstates(H)) == Set(basisstates(Hblockade))
 
 # Each term ``P_{k-1} X_k P_{k+1}`` maps blockade states to blockade states, but the Hamiltonian is stored expanded
 # into products such as ``S^z_{k-1} S^x_k``, which map states of the fragment outside it. `projection = true` drops
