@@ -19,9 +19,9 @@ Base.:*(sym1::ProductConstraint, sym2::AbstractConstraint) = ProductConstraint([
 Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint([sym1.constraints..., sym2.constraints...])
 function branch_constraint(constraint::ProductConstraint, space)
     prunable = filter(supports_branch_pruning, constraint.constraints)
-    operators = OperatorConstraint[c for c in prunable if c isa OperatorConstraint]
-    branches = AbstractConstraint[branch_constraint(c, space) for c in prunable if !(c isa OperatorConstraint)]
-    isempty(operators) || push!(branches, branch_constraint(operators, space))
+    sums = SumConstraint[c for c in prunable if c isa SumConstraint]
+    branches = AbstractConstraint[branch_constraint(c, space) for c in prunable if !(c isa SumConstraint)]
+    isempty(sums) || push!(branches, branch_constraint(sums, space))
     return ProductConstraint(map(identity, branches))
 end
 supports_branch_pruning(c::ProductConstraint) = any(supports_branch_pruning, c.constraints)

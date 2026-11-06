@@ -145,6 +145,7 @@ include("partial_transpose.jl")
 
 include("generate_constrained_states.jl")
 include("operator_constraint.jl")
+include("joint_bounds.jl")
 
 include("matrix_representation.jl")
 include("sparse_assembly.jl")

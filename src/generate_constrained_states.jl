@@ -121,64 +121,26 @@ function _subspace_positions(subspaces, allspaces)
         pos
     end
 end
-function branch_constraint(c::AbstractAdditiveConstraint, allspaces)
-    unconstrained = BranchConstraint((partial, depth, spaces) -> true)
-    allowed = allowed_values(c)
-    ismissing(allowed) && return unconstrained
-    m = modulus(c)
-    targets = isnothing(m) ? _normalize_constraint_values(allowed) : filter(r -> label(c, r) in allowed, 0:(m - 1))
-    isnothing(m) || length(targets) < m || return unconstrained
+# The contribution of each space is a table over its states, and a modulus `m` is pruned by the residues it allows.
+function _sum_terms(c::AbstractAdditiveConstraint, allspaces)
+    allowed, m = allowed_values(c), modulus(c)
     S = _sum_type(allowed)
     spaces = constraint_spaces(c)
-    subspaces = map(hilbert_space, ismissing(spaces) ? allspaces : spaces)
-    positions = ismissing(spaces) ? (1:length(allspaces)) : _subspace_positions(subspaces, allspaces)
-    contribution_values = map(enumerate(subspaces)) do (k, space)
-        values = unique(_summand(S, contribution(c, k, s)) for s in basisstates(space))
-        isempty(values) && throw(ArgumentError("Cannot build an `AdditiveConstraint` from a space with no basis states."))
-        values
+    positions = ismissing(spaces) ? eachindex(allspaces) : _subspace_positions(map(hilbert_space, spaces), allspaces)
+    tables = map(enumerate(positions)) do (k, p)
+        table = [_summand(S, contribution(c, k, s)) for s in basisstates(allspaces[p])]
+        isempty(table) && throw(ArgumentError("Cannot build an `AdditiveConstraint` from a space with no basis states."))
+        table
     end
-    T = mapreduce(vals -> mapreduce(typeof, promote_type, vals), promote_type, contribution_values; init = S)
-    n = length(allspaces)
-    contribution_min = zeros(T, n)
-    contribution_max = zeros(T, n)
-    position_starts = zeros(Int, n + 1)
-    position_starts[1] = 1
-    for (pos, vals) in zip(positions, contribution_values)
-        contribution_min[pos] += minimum(vals)
-        contribution_max[pos] += maximum(vals)
-        position_starts[pos + 1] += 1
-    end
-    cumsum!(position_starts, position_starts)
-    subspace_order = sortperm(collect(positions))
-    increment = (partial, depth) -> begin
-        value = zero(T)
-        for i in position_starts[depth]:(position_starts[depth + 1] - 1)
-            value += _summand(S, contribution(c, subspace_order[i], partial[depth]))
-        end
-        value
-    end
-    return _sum_branch_constraint(increment, contribution_min, contribution_max, zero(T), targets, m)
+    targets = isnothing(m) ? _normalize_constraint_values(allowed) : filter(r -> label(c, r) in allowed, 0:(m - 1))
+    return (; constant = zero(S), positions = [[p] for p in positions], strides = [[1] for _ in positions], tables, allowed = targets, modulus = something(m, 0))
 end
-# Prunes a branch unless the sum can still reach `targets` (modulo `m`). `increment(partial, depth)` is the part of the
-# sum that the state at `depth` completes, between `lo[depth]` and `hi[depth]`, and `init` is the part no state changes.
-function _sum_branch_constraint(increment::F, lo, hi, init, targets, m) where {F}
-    targets = isnothing(m) ? sort(collect(targets)) : targets
-    remaining_min = push!(reverse!(cumsum(reverse(lo))), zero(eltype(lo)))
-    remaining_max = push!(reverse!(cumsum(reverse(hi))), zero(eltype(hi)))
-    # `prefix[d]` is the sum completed by depths `1:d-1` on the current branch. This relies on
-    # `generate_states` validating depth `d` only after accepting depths `1:d-1` of the same branch.
-    prefix = fill(init, length(lo) + 1)
-    return BranchConstraint(
-        (partial, depth, _) -> begin
-            current = prefix[depth] + increment(partial, depth)
-            prefix[depth + 1] = current
-            _reachable(current + remaining_min[depth + 1], current + remaining_max[depth + 1], targets, m)
-        end
-    )
+# Whether a sum in `lo:hi` can equal one of the sorted `targets`, or, with a nonzero modulus `m`, be congruent to one.
+function _reachable(lo, hi, targets, m)
+    iszero(m) || return any(r -> lo + mod(r - lo, m) <= hi, targets)
+    i = searchsortedfirst(targets, lo)
+    return i <= length(targets) && targets[i] <= hi
 end
-# Whether a sum in `lo:hi` can equal one of the sorted `targets`, or, with a modulus `m`, be congruent to one.
-_reachable(lo, hi, targets, ::Nothing) = (i = searchsortedfirst(targets, lo); i <= length(targets) && targets[i] <= hi)
-_reachable(lo, hi, residues, m) = any(r -> lo + mod(r - lo, m) <= hi, residues)
 # Integer contributions are summed in the allowed values' type promoted with `Int`, with a checked
 # conversion, since `UInt + Int` is a `UInt` and negative sums would wrap around.
 _sum_type(allowed_values) = promote_type(eltype(allowed_values), Int)
