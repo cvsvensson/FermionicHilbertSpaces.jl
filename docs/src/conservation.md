@@ -141,7 +141,8 @@ H = hilbert_space(f, labels, (Nup, Ndn))
 ```
 The sector with two spin up and no spin down fermions can be picked out of this space, or built directly, which is cheaper since it never enumerates the full space:
 ```@example spin
-@assert Set(basisstates(sector((2, 0), H))) == Set(basisstates(hilbert_space(f, labels, (Nup => 2, Ndn => 0))))
+two_up_none_down = (Nup => 2, Ndn => 0)
+@assert Set(basisstates(sector((2, 0), H))) == Set(basisstates(hilbert_space(f, labels, two_up_none_down)))
 sector((2, 0), H)
 ```
 
