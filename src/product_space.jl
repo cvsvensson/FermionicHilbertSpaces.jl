@@ -94,7 +94,6 @@ function _state_index(state::ProductState, H::_ProductSpace)
 end
 has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && !isnothing(H.lininds)
 
-maximum_particles(H::ProductSpace) = sum(maximum_particles, groups(H))
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
 parity(state::ProductState) = prod(parity, atomic_factors(state))
 
@@ -544,6 +543,21 @@ struct PieceIndex{block,slot} end
 PieceIndex(block::Int, slot::Int) = PieceIndex{block,slot}()
 @inline getpiece(blocks, ::PieceIndex{b,s}) where {b,s} = blocks[b][s]
 
+# `map` over tuples, unrolled for any length. Base's `map` stops unrolling beyond 32 elements
+# and then dispatches dynamically per element.
+@generated function tuplemap(f, ts::Tuple...)
+    n = fieldcount(ts[1])
+    return Expr(:block, Expr(:meta, :inline), Expr(:tuple, (:(f($((:(ts[$k][$i]) for k in eachindex(ts))...))) for i in 1:n)...))
+end
+# `foldl(op, t; init)`, unrolled for any length so that a product of constants folds to a constant.
+@generated function tuplefoldl(op, init, t::Tuple)
+    ex = :init
+    for i in 1:fieldcount(t)
+        ex = :(op($ex, t[$i]))
+    end
+    return Expr(:block, Expr(:meta, :inline), ex)
+end
+
 # ─── Leaves: what happens to each source factor ──────────────────────────────
 
 """A source factor not covered by any target. It is dropped on split and
@@ -693,10 +707,10 @@ end
 
 function split_state(state::ProductState, sp::ProductSpaceMapper)
     # 1. Fracture each source factor into its pieces.
-    pieces = map(split_pieces, sp.leaves, state.states)
+    pieces = tuplemap(split_pieces, sp.leaves, state.states)
     # 2. Assemble each target from its pieces.
-    outstates = map(sp.target_routes, sp.target_spaces) do route, tspace
-        gathered = map(ref -> getpiece(pieces, ref), route)
+    outstates = tuplemap(sp.target_routes, sp.target_spaces) do route, tspace
+        gathered = tuplemap(ref -> getpiece(pieces, ref), route)
         only(first(combine_states(gathered, tspace)))
     end
     return (outstates,), (1,)
@@ -704,10 +718,10 @@ end
 
 function combine_states(substates::Tuple, sp::ProductSpaceMapper)
     # 1. Take each target's state apart into its pieces (one per group).
-    tpieces = map(substate_pieces, substates)
+    tpieces = tuplemap(substate_pieces, substates)
     # 2. Assemble each source factor from its pieces.
-    states = map(sp.leaves, sp.factor_routes) do leaf, route
-        combine_pieces(leaf, map(ref -> getpiece(tpieces, ref), route))
+    states = tuplemap(sp.leaves, sp.factor_routes) do leaf, route
+        combine_pieces(leaf, tuplemap(ref -> getpiece(tpieces, ref), route))
     end
     return (ProductState(states),), (1,)
 end
@@ -727,7 +741,7 @@ leaf_phase_factor(leaf::Union{Passthrough,Fractured}) = kron_phase_factor(leaf.m
 function kron_phase_factor(sp::ProductSpaceMapper)
     phase_fns = map(leaf_phase_factor, sp.leaves)
     function phase_factor(fullstate1, fullstate2)
-        prod(map((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))
+        return tuplefoldl(*, 1, tuplemap((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))
     end
 end
 function phase_factor_u(sp::ProductSpaceMapper)
@@ -737,11 +751,6 @@ function phase_factor_u(sp::ProductSpaceMapper)
     end
 
     function phase_factor(state)
-        pf = 1
-        for (s, leaf, pfu) in zip(state.states, sp.leaves, leaf_pfus)
-            leaf isa Uncovered && continue
-            pf *= pfu(s)
-        end
-        return pf
+        return tuplefoldl(*, 1, tuplemap((s, pfu) -> isnothing(pfu) ? 1 : pfu(s), state.states, leaf_pfus))
     end
 end

@@ -123,6 +123,16 @@ end
 supply_missing_constraint_info(constraint::SectorConstraint, space, spaces) = supply_missing_constraint_info(constraint.filter, space, spaces) |> SectorConstraint
 
 
+# A constraint on a sum over the states of `constraint_spaces(c)` (`missing` for the spaces
+# `tensor_product` combines, or the whole space in `constrain_space`). The internal interface:
+# `allowed_values(c)` (`missing` allows every sum), `contribution(c, k, state)` of the state of the
+# `k`th space, `modulus(c)` (`nothing`, or `m` to sum modulo `m`), `label(c, sum)` for the sector
+# label, and `with_spaces(c, spaces)`.
+abstract type AbstractAdditiveConstraint <: AbstractConstraint end
+constraint_spaces(c::AbstractAdditiveConstraint) = c.spaces
+modulus(::AbstractAdditiveConstraint) = nothing
+label(::AbstractAdditiveConstraint, value) = value
+
 """
     AdditiveConstraint(allowed_values; spaces=missing, maps=missing)
     AdditiveConstraint(allowed_values, maps)
@@ -135,7 +145,7 @@ to all spaces; a collection of maps supplies one function per subspace.
 If `spaces` is missing, `tensor_product` uses the spaces it combines, and
 `constrain_space` treats the whole space as a single subspace.
 """
-struct AdditiveConstraint{T,H,F} <: AbstractConstraint
+struct AdditiveConstraint{T, H, F} <: AbstractAdditiveConstraint
     allowed_values::T
     spaces::H
     maps::F
@@ -146,15 +156,13 @@ struct AdditiveConstraint{T,H,F} <: AbstractConstraint
 end
 AdditiveConstraint(allowed_values; spaces=missing, maps=missing) = AdditiveConstraint(allowed_values, spaces, maps)
 AdditiveConstraint(allowed_values, maps) = AdditiveConstraint(allowed_values; maps)
-supports_branch_pruning(::AdditiveConstraint) = true
-supports_branch_pruning(::AdditiveConstraint{Missing}) = false
-supports_filtering(::AdditiveConstraint{<:Any,Missing}) = false
-supports_filtering(::AdditiveConstraint) = true
-supports_sector_grouping(::AdditiveConstraint{<:Any,Missing}) = false
-supports_sector_grouping(::AdditiveConstraint) = true
-
-supply_missing_constraint_info(constraint::AdditiveConstraint{<:Any,Missing}, space, spaces) = AdditiveConstraint(constraint.allowed_values, spaces, constraint.maps)
-supply_missing_constraint_info(constraint::AdditiveConstraint, space, spaces) = constraint
+allowed_values(c::AdditiveConstraint) = c.allowed_values
+contribution(c::AdditiveConstraint{<:Any, <:Any, <:Function}, k, state) = c.maps(state)
+contribution(c::AdditiveConstraint, k, state) = c.maps[k](state)
+with_spaces(c::AdditiveConstraint, spaces) = AdditiveConstraint(c.allowed_values, spaces, c.maps)
+# Without spaces, the maps are only applied to the factors of a `tensor_product`.
+supports_filtering(::AdditiveConstraint{<:Any, Missing}) = false
+supports_sector_grouping(::AdditiveConstraint{<:Any, Missing}) = false
 
 """
     particle_number(state)
@@ -176,7 +184,7 @@ Constraint enforcing conservation of a (possibly weighted) particle number, opti
 `spaces` restricts the count to the given subspaces (default: all of them). `weights` gives one
 weight per subspace in `spaces` (default: all `1`), and the conserved quantity is the weighted sum of their particle numbers.
 """
-struct NumberConservation{T,H,W} <: AbstractConstraint
+struct NumberConservation{T, H, W} <: AbstractAdditiveConstraint
     total::T
     spaces::H
     weights::W
@@ -191,12 +199,10 @@ end
 _normalize_constraint_subspace(subspace::AbstractHilbertSpace) = (subspace,)
 _normalize_constraint_subspace(spaces) = spaces
 _normalize_constraint_subspace(spaces::Missing) = spaces
-supports_branch_pruning(::NumberConservation) = true
-supports_branch_pruning(::NumberConservation{Missing}) = false
-supports_filtering(::NumberConservation) = true
-supports_sector_grouping(::NumberConservation) = true
-supply_missing_constraint_info(constraint::NumberConservation{<:Any,Missing}, space, spaces) = NumberConservation(constraint.total, spaces, constraint.weights)
-supply_missing_constraint_info(constraint::NumberConservation, space, spaces) = constraint
+allowed_values(c::NumberConservation) = c.total
+contribution(::NumberConservation{<:Any, <:Any, Missing}, k, state) = particle_number(state)
+contribution(c::NumberConservation, k, state) = c.weights[k] * particle_number(state)
+with_spaces(c::NumberConservation, spaces) = NumberConservation(c.total, spaces, c.weights)
 NumberConservation(total=missing; weights=missing, spaces=missing) = NumberConservation(total, spaces, weights)
 NumberConservation(total, spaces; weights=missing) = NumberConservation(total; spaces, weights)
 NumberConservation(space::AbstractHilbertSpace) = NumberConservation(missing; spaces=(space,), weights=missing)
@@ -210,7 +216,7 @@ Constraint enforcing allowed fermion parities, optionally on selected spaces.
 `parities` is a parity or a collection of parities, each `1` (even) or `-1` (odd).
 Sectors are ordered by increasing quantum number, so the odd sector comes first.
 """
-struct ParityConservation{H} <: AbstractConstraint
+struct ParityConservation{H} <: AbstractAdditiveConstraint
     allowed_parities::Vector{Int}
     spaces::H
     function ParityConservation(_allowed, _spaces)
@@ -222,26 +228,40 @@ struct ParityConservation{H} <: AbstractConstraint
 end
 ParityConservation(parities=[-1, 1]; spaces=missing) = ParityConservation(parities, spaces)
 ParityConservation(space::AbstractHilbertSpace) = ParityConservation(; spaces=(space,))
-supports_branch_pruning(c::ParityConservation) = length(c.allowed_parities) == 1
-supports_filtering(::ParityConservation) = true
-supports_sector_grouping(::ParityConservation) = true
-supply_missing_constraint_info(constraint::ParityConservation{Missing}, space, spaces) = ParityConservation(constraint.allowed_parities, spaces)
-supply_missing_constraint_info(constraint::ParityConservation, space, spaces) = constraint
+allowed_values(c::ParityConservation) = c.allowed_parities
+contribution(::ParityConservation, k, state) = particle_number(state)
+modulus(::ParityConservation) = 2
+label(::ParityConservation, n) = iseven(n) ? 1 : -1
+with_spaces(c::ParityConservation, spaces) = ParityConservation(c.allowed_parities, spaces)
+
+# A constraint that allows every value restricts nothing, so pruning by it would only cost time.
+function supports_branch_pruning(c::AbstractAdditiveConstraint)
+    allowed, m = allowed_values(c), modulus(c)
+    ismissing(allowed) && return false
+    return isnothing(m) || !all(r -> label(c, r) in allowed, 0:(m - 1))
+end
+supports_filtering(::AbstractAdditiveConstraint) = true
+supports_sector_grouping(::AbstractAdditiveConstraint) = true
+supply_missing_constraint_info(c::AbstractAdditiveConstraint, space, spaces) = ismissing(constraint_spaces(c)) ? with_spaces(c, spaces) : c
+map_spaces(f, c::AbstractAdditiveConstraint) = with_spaces(c, _map_spaces(f, constraint_spaces(c)))
+
 unique_split_state(state, mapper) = only(first(split_state(state, mapper)))
 
-function sector_function(cons::C, space::AbstractHilbertSpace) where {C<:Union{<:NumberConservation,<:ParityConservation,<:AdditiveConstraint}}
-    spaces = ismissing(cons.spaces) ? (space,) : cons.spaces
-    cons isa NumberConservation && _check_maps_length(cons.weights, spaces, "weights")
+function sector_function(c::AbstractAdditiveConstraint, space::AbstractHilbertSpace)
+    spaces = coalesce(constraint_spaces(c), (space,))
+    c isa NumberConservation && _check_maps_length(c.weights, spaces, "weights")
     mapper = state_mapper(space, spaces)
-    allowed_vals = allowed_values(cons, space, mapper)
-    allowed = in(allowed_vals)
-    S = _sum_type(allowed_vals)
-    function number(state)
-        subs = unique_split_state(state, mapper)
-        val = _apply_constraint_function(subs, cons, S)
-        allowed(val) ? val : missing
+    allowed = allowed_values(c)
+    S = _sum_type(allowed)
+    return function sector(state)
+        substates = unique_split_state(state, mapper)
+        value = label(c, _residue(modulus(c), _additive_sum(c, substates, S)))
+        return ismissing(allowed) || value in allowed ? value : missing
     end
 end
+_additive_sum(c, substates, ::Type{S}) where {S} = sum(((k, s),) -> _summand(S, contribution(c, k, s)), enumerate(substates); init = zero(S))
+_residue(::Nothing, sum) = sum
+_residue(m, sum) = mod(sum, m)
 function sector_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
     subspace_functions = map(cons -> sector_function(cons, space), constraint.constraints)
     V = mapreduce(f -> nonmissingtype(Base.promote_op(f, statetype(space))), typejoin, subspace_functions; init=Union{})
@@ -266,37 +286,11 @@ function filter_function(constraint::ProductConstraint, space::AbstractHilbertSp
     state -> all(f -> f(state), subspace_functions)
 end
 
-# `::Type{S}` forces specialization on `S`; Julia does not specialize on a type argument that is only captured by a closure.
-_apply_constraint_function(substates, ::NumberConservation{<:Any, <:Any, Missing}, ::Type = Int) = sum(particle_number, substates; init = 0)
-_apply_constraint_function(substates, cons::NumberConservation, ::Type{S} = Int) where {S} = mapreduce((s, w) -> _summand(S, particle_number(s) * w), +, substates, cons.weights; init = zero(S))
-_apply_constraint_function(substates, ::ParityConservation, ::Type = Int) = prod(parity, substates; init = 1)
-_apply_constraint_function(substates, cons::AdditiveConstraint{<:Any, <:Any, <:Function}, ::Type{S} = Int) where {S} = sum(s -> _summand(S, cons.maps(s)), substates; init = zero(S))
-_apply_constraint_function(substates, cons::AdditiveConstraint, ::Type{S} = Int) where {S} = mapreduce((s, f) -> _summand(S, f(s)), +, substates, cons.maps; init = zero(S))
-
-
-function branch_constraint(constraint::ParityConservation, spaces)
-    possible_numbers = ismissing(constraint.spaces) ? (0:sum(maximum_particles, spaces)) : (0:sum(maximum_particles, constraint.spaces))
-    allowed_numbers = filter(n -> any(p -> p == (-1)^n, constraint.allowed_parities), possible_numbers)
-    cons = NumberConservation(allowed_numbers, constraint.spaces, missing)
-    branch_constraint(cons, spaces)
-end
-
-function branch_constraint(constraint::NumberConservation{T,H,W}, spaces) where {T,H,W}
-    subspaces = H === Missing ? missing : constraint.spaces
-    if W === Missing
-        return additive_branch_constraint(constraint.total, particle_number, subspaces, spaces)
-    end
-    additive_branch_constraint(constraint.total, WeightedFunction(particle_number, constraint.weights), subspaces, spaces)
-end
-
 sectors(::AbstractConstraint) = nothing
 
 map_spaces(f, c) = c
 map_spaces(f, c::ProductConstraint) = ProductConstraint(map(ci -> map_spaces(f, ci), c.constraints))
 map_spaces(f, c::SectorConstraint) = SectorConstraint(map_spaces(f, c.filter))
-map_spaces(f, c::NumberConservation) = NumberConservation(c.total, _map_spaces(f, c.spaces), c.weights)
-map_spaces(f, c::ParityConservation) = ParityConservation(c.allowed_parities, _map_spaces(f, c.spaces))
-map_spaces(f, c::AdditiveConstraint) = AdditiveConstraint(c.allowed_values, _map_spaces(f, c.spaces), c.maps)
 map_spaces(f, c::FilterConstraint) = FilterConstraint(c.reducer, c.maps, _map_spaces(f, c.spaces))
 _map_spaces(f, spaces) = map(f, spaces)
 _map_spaces(f, ::Missing) = missing

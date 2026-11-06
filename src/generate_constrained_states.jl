@@ -112,32 +112,7 @@ _normalize_constraint_values(value) = [value]
 _normalize_constraint_values(::Missing) = missing
 
 
-struct WeightedFunction{F,W}
-    func::F
-    weights::W
-end
-function _contribution_values(subspaces, functions, T)
-    return map((space, func) -> __contribution_values(space, func, T), subspaces, functions)
-end
-function _contribution_values(subspaces, func::Function, T)
-    return map(space -> __contribution_values(space, func, T), subspaces)
-end
-function _contribution_values(subspaces, fw::WeightedFunction, T)
-    return map((space, weight) -> __contribution_values(space, s -> weight * fw.func(s), T), subspaces, fw.weights)
-end
-function __contribution_values(space, func, ::Type{T}) where {T}
-    values = unique(Iterators.map(s -> _summand(T, func(s)), basisstates(space)))
-    isempty(values) && throw(ArgumentError("Cannot build an `AdditiveConstraint` from a space with no basis states."))
-    values
-end
 hilbert_space(space::AbstractHilbertSpace) = space
-additive_branch_constraint(allowed_sums, functions, allspaces) = additive_branch_constraint(allowed_sums, functions, missing, allspaces)
-function additive_branch_constraint(allowed_sums, functions, _subspaces, allspaces)
-    allowed_values = _normalize_constraint_values(allowed_sums)
-    subspaces = map(hilbert_space, ismissing(_subspaces) ? allspaces : _subspaces)
-    positions = ismissing(_subspaces) ? (1:length(allspaces)) : _subspace_positions(subspaces, allspaces)
-    _additive_branch_constraint(allowed_values, functions, subspaces, positions, length(allspaces))
-end
 function _subspace_positions(subspaces, allspaces)
     space_ids = map(collect ∘ atom_ids, allspaces) # collect, since spaces may be given as symbols
     return map(subspaces) do subspace
@@ -146,11 +121,24 @@ function _subspace_positions(subspaces, allspaces)
         pos
     end
 end
-function _additive_branch_constraint(allowed_values, functions, subspaces, positions, n)
-    ismissing(allowed_values) && return BranchConstraint((partial, depth, spaces) -> true)
-    S = _sum_type(allowed_values)
-    contribution_values = _contribution_values(subspaces, functions, S)
+function branch_constraint(c::AbstractAdditiveConstraint, allspaces)
+    unconstrained = BranchConstraint((partial, depth, spaces) -> true)
+    allowed = allowed_values(c)
+    ismissing(allowed) && return unconstrained
+    m = modulus(c)
+    targets = isnothing(m) ? _normalize_constraint_values(allowed) : filter(r -> label(c, r) in allowed, 0:(m - 1))
+    isnothing(m) || length(targets) < m || return unconstrained
+    S = _sum_type(allowed)
+    spaces = constraint_spaces(c)
+    subspaces = map(hilbert_space, ismissing(spaces) ? allspaces : spaces)
+    positions = ismissing(spaces) ? (1:length(allspaces)) : _subspace_positions(subspaces, allspaces)
+    contribution_values = map(enumerate(subspaces)) do (k, space)
+        values = unique(_summand(S, contribution(c, k, s)) for s in basisstates(space))
+        isempty(values) && throw(ArgumentError("Cannot build an `AdditiveConstraint` from a space with no basis states."))
+        values
+    end
     T = mapreduce(vals -> mapreduce(typeof, promote_type, vals), promote_type, contribution_values; init = S)
+    n = length(allspaces)
     contribution_min = zeros(T, n)
     contribution_max = zeros(T, n)
     position_starts = zeros(Int, n + 1)
@@ -158,7 +146,7 @@ function _additive_branch_constraint(allowed_values, functions, subspaces, posit
     for (pos, vals) in zip(positions, contribution_values)
         contribution_min[pos] += minimum(vals)
         contribution_max[pos] += maximum(vals)
-        position_starts[pos+1] += 1
+        position_starts[pos + 1] += 1
     end
     cumsum!(position_starts, position_starts)
     subspace_order = sortperm(collect(positions))
@@ -166,34 +154,32 @@ function _additive_branch_constraint(allowed_values, functions, subspaces, posit
     remaining_min = zeros(T, n + 1)
     remaining_max = zeros(T, n + 1)
     for i in n:-1:1
-        remaining_min[i] = remaining_min[i+1] + contribution_min[i]
-        remaining_max[i] = remaining_max[i+1] + contribution_max[i]
+        remaining_min[i] = remaining_min[i + 1] + contribution_min[i]
+        remaining_max[i] = remaining_max[i + 1] + contribution_max[i]
     end
     # `prefix[d]` is the contribution of positions `1:d-1` on the current branch. This relies on
     # `generate_states` validating depth `d` only after accepting depths `1:d-1` of the same branch.
     prefix = zeros(T, n + 1)
-    BranchConstraint((partial, depth, _) -> begin
-        current = prefix[depth]
-        for i in position_starts[depth]:position_starts[depth+1]-1
-                current += _summand(S, _contribution(functions, subspace_order[i], partial[depth]))
+    return BranchConstraint(
+        (partial, depth, _) -> begin
+            current = prefix[depth]
+            for i in position_starts[depth]:(position_starts[depth + 1] - 1)
+                current += _summand(S, contribution(c, subspace_order[i], partial[depth]))
+            end
+            prefix[depth + 1] = current
+            _reachable(current + remaining_min[depth + 1], current + remaining_max[depth + 1], targets, m)
         end
-        prefix[depth+1] = current
-        min_possible = current + remaining_min[depth+1]
-        max_possible = current + remaining_max[depth+1]
-        any(t -> min_possible <= t <= max_possible, allowed_values)
-    end)
+    )
 end
+# Whether a sum in `lo:hi` can equal one of `targets`, or, with a modulus `m`, be congruent to one.
+_reachable(lo, hi, targets, ::Nothing) = any(t -> lo <= t <= hi, targets)
+_reachable(lo, hi, residues, m) = any(r -> lo + mod(r - lo, m) <= hi, residues)
 # Integer contributions are summed in the allowed values' type promoted with `Int`, with a checked
 # conversion, since `UInt + Int` is a `UInt` and negative sums would wrap around.
 _sum_type(allowed_values) = promote_type(eltype(allowed_values), Int)
 _sum_type(::Missing) = Int
 _summand(S, x::Integer) = convert(S, x)
 _summand(S, x) = x
-_contribution(func::Function, k, substate) = func(substate)
-_contribution(fw::WeightedFunction, k, substate) = fw.weights[k] * fw.func(substate)
-_contribution(functions, k, substate) = functions[k](substate)
-
-branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_constraint(constraint.allowed_values, constraint.maps, constraint.spaces, spaces)
 
 
 @testitem "generate_states with BranchConstraint" begin
@@ -367,4 +353,14 @@ end
     Hfs = map(hilbert_space, (f[1], f[2], f[3]))
     weighted_all = NumberConservation([2]; weights=(1, 2, 1))
     @test Set(basisstates(tensor_product(Hfs; constraint=weighted_all))) == Set(FockNumber.([0b010, 0b101]))
+end
+@testitem "AdditiveConstraint without allowed values keeps all sectors" begin
+    @spins S 1 // 2
+    Hs = [hilbert_space(S[k]) for k in 1:3]
+    H = tensor_product(Hs; constraint = AdditiveConstraint(missing; maps = s -> s.m))
+    full = collect(basisstates(tensor_product(Hs)))
+    @test dim(H) == length(full)
+    for qn in quantumnumbers(H)
+        @test Set(basisstates(sector(qn, H))) == Set(filter(s -> sum(x -> x.m, s.states) == qn, full))
+    end
 end

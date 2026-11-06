@@ -50,10 +50,10 @@ unpruned_part(constraint) = ProductConstraint(filter(!supports_branch_pruning, c
 # Spaces that the branch constraint of `c` reads: `missing` for the whole state, which any split fits,
 # and `nothing` when no split is known to fit, such as for a user's `BranchConstraint`.
 branch_spaces(c) = nothing
-branch_spaces(c::Union{NumberConservation, ParityConservation, AdditiveConstraint}) = c.spaces
-branch_spaces(::AdditiveConstraint{<:Any, Missing}) = nothing # its maps act on the whole state
-branch_spaces(::NumberConservation{<:Any, Missing, <:Any}) = nothing # its weights act on the whole state
-branch_spaces(::NumberConservation{<:Any, Missing, Missing}) = missing
+branch_spaces(c::AbstractAdditiveConstraint) = constraint_spaces(c)
+# Without spaces, per-space maps or weights act on the factors of a `tensor_product`, which no split is known to match.
+branch_spaces(::AdditiveConstraint{<:Any, Missing}) = nothing
+branch_spaces(c::NumberConservation{<:Any, Missing}) = ismissing(c.weights) ? missing : nothing
 constraint_factors(c::ProductConstraint) = c.constraints
 constraint_factors(c) = (c,)
 
@@ -120,17 +120,6 @@ function build_subspace_index(constraint, parent, states)
     end
     return index
 end
-
-allowed_values(::NumberConservation{Missing,Missing,Missing}, space, mapper) = 0:maximum_particles(space)
-function allowed_values(nc::NumberConservation{Missing}, space, mapper)
-    Iterators.map(basisstates(space)) do state
-        subs = unique_split_state(state, mapper)
-        _apply_constraint_function(subs, nc)
-    end |> unique
-end
-allowed_values(constraint::NumberConservation{T}, space, mapper) where T = constraint.total
-allowed_values(p::ParityConservation, space, mapper) = p.allowed_parities
-allowed_values(c::AdditiveConstraint, space, mapper) = c.allowed_values
 
 """
     has_arithmetic_state_index(H)
@@ -441,6 +430,20 @@ end
     end
 end
 
+@testitem "Tensor product keeps the sector rule of a factor" begin
+    using FermionicHilbertSpaces: particle_number
+    @fermions f
+    rule = s -> particle_number(s) >= 2 ? :hi : :lo
+    H1 = hilbert_space(f, 1:2, NumberConservation() * SectorConstraint(rule))
+    H2 = hilbert_space(f, 3:4)
+    H = tensor_product(H1, H2)
+    @test Set(quantumnumbers(H)) == Set(quantumnumbers(H1))
+    for qn in quantumnumbers(H1)
+        expected = tensor_product(constrain_space(hilbert_space(f, 1:2), collect(basisstates(sector(qn, H1)))), H2)
+        @test Set(basisstates(sector(qn, H))) == Set(basisstates(expected))
+    end
+end
+
 """
     localize_constraint(c, H::SectorHilbertSpace)
 
@@ -450,24 +453,8 @@ the contribution from `H` only.  Already-localized (non-`Missing` subspace) or
 unsupported constraints are returned unchanged.
 """
 localize_constraint(c::AbstractConstraint, ::SectorHilbertSpace) = c
-function localize_constraint(c::NumberConservation{<:Any,Missing,W}, H::SectorHilbertSpace) where W
-    allowed = collect(keys(H.qn_to_states))
-    NumberConservation(allowed, H, c.weights)
-end
-function localize_constraint(c::ParityConservation{Missing}, H::SectorHilbertSpace)
-    ParityConservation(c.allowed_parities, H)
-end
-function localize_constraint(c::ProductConstraint, H::SectorHilbertSpace)
-    qns = collect(keys(H.qn_to_states))
-    localized = map(enumerate(c.constraints)) do (i, sub_c)
-        allowed_i = unique!(map(qn -> qn[i], qns))
-        _localize_sub_constraint(sub_c, allowed_i, H)
-    end
-    ProductConstraint(localized)
-end
-_localize_sub_constraint(c::NumberConservation{<:Any, Missing}, allowed, H) = NumberConservation(allowed, H, c.weights)
-_localize_sub_constraint(c::ParityConservation{Missing}, allowed, H) = ParityConservation(allowed, H)
-_localize_sub_constraint(c::AbstractConstraint, _allowed, _H) = c
+localize_constraint(c::AbstractAdditiveConstraint, H::SectorHilbertSpace) = supply_missing_constraint_info(c, H, (H,))
+localize_constraint(c::ProductConstraint, H::SectorHilbertSpace) = ProductConstraint(map(ci -> localize_constraint(ci, H), c.constraints))
 function localize_constraint(c::SectorConstraint{<:FilterConstraint{<:Any,Missing,Missing}}, H::SectorHilbertSpace)
     # Bind the free-standing reducer to H as its single subspace.
     # sector_function on the larger space will split the state, extract the H-substate,
