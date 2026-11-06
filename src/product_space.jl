@@ -516,7 +516,7 @@ PieceIndex(block::Int, slot::Int) = PieceIndex{block,slot}()
 # and then dispatches dynamically per element.
 @generated function tuplemap(f, ts::Tuple...)
     n = fieldcount(ts[1])
-    Expr(:block, Expr(:meta, :inline), Expr(:tuple, (:(f($((:(ts[$k][$i]) for k in eachindex(ts))...))) for i in 1:n)...))
+    return Expr(:block, Expr(:meta, :inline), Expr(:tuple, (:(f($((:(ts[$k][$i]) for k in eachindex(ts))...))) for i in 1:n)...))
 end
 
 # ─── Leaves: what happens to each source factor ──────────────────────────────
@@ -702,7 +702,7 @@ leaf_phase_factor(leaf::Union{Passthrough,Fractured}) = kron_phase_factor(leaf.m
 function kron_phase_factor(sp::ProductSpaceMapper)
     phase_fns = map(leaf_phase_factor, sp.leaves)
     function phase_factor(fullstate1, fullstate2)
-        reduce(*, tuplemap((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))
+        return reduce(*, tuplemap((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))
     end
 end
 function phase_factor_u(sp::ProductSpaceMapper)
@@ -712,6 +712,6 @@ function phase_factor_u(sp::ProductSpaceMapper)
     end
 
     function phase_factor(state)
-        reduce(*, tuplemap((s, pfu) -> isnothing(pfu) ? 1 : pfu(s), state.states, leaf_pfus))
+        return reduce(*, tuplemap((s, pfu) -> isnothing(pfu) ? 1 : pfu(s), state.states, leaf_pfus))
     end
 end
