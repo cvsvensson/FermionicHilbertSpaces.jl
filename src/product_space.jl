@@ -516,7 +516,7 @@ PieceIndex(block::Int, slot::Int) = PieceIndex{block,slot}()
 # and then dispatches dynamically per element.
 @generated function tuplemap(f, ts::Tuple...)
     n = fieldcount(ts[1])
-    Expr(:tuple, (:(f($((:(ts[$k][$i]) for k in eachindex(ts))...))) for i in 1:n)...)
+    Expr(:block, Expr(:meta, :inline), Expr(:tuple, (:(f($((:(ts[$k][$i]) for k in eachindex(ts))...))) for i in 1:n)...))
 end
 
 # ─── Leaves: what happens to each source factor ──────────────────────────────
