@@ -169,8 +169,9 @@ same_state_kind(state::ProductState, ::Type{ProductState{S}}) where {S<:Tuple} =
     @test dim(constrain_space(H, NumberConservation(1))) == 2
     @test dim(constrain_space(H, NumberConservation(0:1))) == 3
 
+    # bosons carry no fermion parity
     @test dim(constrain_space(H, ParityConservation())) == 4
-    @test dim(constrain_space(H, ParityConservation(1))) == 2
+    @test dim(constrain_space(H, ParityConservation(1))) == 4
 
     H1 = constrain_space(H, NumberConservation())
     H2 = constrain_space(H1, NumberConservation(0:1))

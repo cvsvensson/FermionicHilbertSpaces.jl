@@ -112,9 +112,8 @@ Base.:(==)(a::SpinState, b::SpinState) = a.m == b.m
 Base.isless(a::SpinState, b::SpinState) = a.m < b.m
 Base.hash(x::SpinState, h::UInt) = hash(twice(x.m), h)
 
-_no_spin_count() = throw(ArgumentError("Spins have no particle number or fermion parity, so `NumberConservation` and `ParityConservation` do not apply to spin spaces. To count spin excitations, use `AdditiveConstraint` with a map such as `s -> s.m + J`."))
-particle_number(::SpinState) = _no_spin_count()
-parity(::SpinState) = _no_spin_count()
+particle_number(::SpinState) = throw(ArgumentError("Spins have no particle number, so `NumberConservation` does not apply to spin spaces. To count spin excitations, use `AdditiveConstraint` with a map such as `s -> s.m + J`."))
+fermionnumber(::SpinState) = 0
 
 internal_rep(state::SpinState, ::AbstractHilbertSpace, ::Type{Int}) = Int(twice(state.m))
 physical_rep(state::Int, ::Type{SpinState}) = SpinState(half(state))
@@ -497,12 +496,11 @@ function _fast_spin_prefactor(::Type{T}, J::HalfInteger, m::HalfInteger, sign::I
     return x
 end
 
-@testitem "Spin: no particle number or parity" begin
+@testitem "Spin: no particle number" begin
     @spin S 1//2
     @boson b
     H = tensor_product(hilbert_space(S), hilbert_space(b, 3))
     @test_throws ArgumentError constrain_space(H, NumberConservation(1))
-    @test_throws ArgumentError constrain_space(H, ParityConservation(1))
 end
 
 @testitem "SpinSym" begin

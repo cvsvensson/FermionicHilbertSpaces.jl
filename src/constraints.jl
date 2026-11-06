@@ -229,7 +229,7 @@ end
 ParityConservation(parities=[-1, 1]; spaces=missing) = ParityConservation(parities, spaces)
 ParityConservation(space::AbstractHilbertSpace) = ParityConservation(; spaces=(space,))
 allowed_values(c::ParityConservation) = c.allowed_parities
-contribution(::ParityConservation, k, state) = particle_number(state)
+contribution(::ParityConservation, k, state) = fermionnumber(state)
 modulus(::ParityConservation) = 2
 label(::ParityConservation, n) = iseven(n) ? 1 : -1
 with_spaces(c::ParityConservation, spaces) = ParityConservation(c.allowed_parities, spaces)
@@ -329,6 +329,23 @@ constrain_space
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
     @test all(isone ∘ dim, sectors(H))
+end
+
+@testitem "ParityConservation counts fermions only" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: particle_number
+    @fermions c
+    @boson b
+    @spin S 1 // 2
+    for Hx in (hilbert_space(b, 4), hilbert_space(S))
+        H = tensor_product(hilbert_space(c, 1:2), Hx)
+        @test basisstates(constrain_space(H, ParityConservation(1))) == filter(s -> iseven(particle_number(s.states[1])), collect(basisstates(H)))
+    end
+    H = tensor_product(hilbert_space(c, 1:2), hilbert_space(b, 4))
+    Heven = constrain_space(H, ParityConservation(1))
+    ham = 0.3 * (b + b') + c[1]' * c[2] + hc + c[1]' * c[1]
+    even = findall(s -> iseven(particle_number(s.states[1])), collect(basisstates(H)))
+    @test eigvals(Hermitian(representation(ham, Heven, Matrix))) ≈ eigvals(Hermitian(representation(ham, H, Matrix)[even, even]))
 end
 
 @testitem "ProductConstraint filtering" begin
