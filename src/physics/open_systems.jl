@@ -107,7 +107,7 @@ representation(dissipator(c[1]), Hlr)
 """
 dissipator(L) = tag_left(L) * tag_right(L') - (tag_left(L' * L) + tag_right(L' * L)) / 2
 
-function add_tag(factor::Union{FermionSym,MajoranaSym,SpinSym}, tag)
+function add_tag(factor::Union{FermionSym, MajoranaSym, SpinSym}, tag)
     basis = symbolic_basis(factor)
     new_basis = add_tag(basis, tag)
     return with_basis(factor, new_basis)

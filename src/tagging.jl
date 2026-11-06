@@ -6,7 +6,7 @@
 
 The group or atom id `id` of a [`TaggedSym`](@ref) or [`TaggedSpace`](@ref) with its `tags`.
 """
-struct TaggedId{I,T<:Tuple}
+struct TaggedId{I, T <: Tuple}
     id::I
     tags::T
 end
@@ -21,7 +21,7 @@ The operator `op` on a copy of its space told apart by `tags`, which `add_tag` m
 own method. It multiplies with an operator of the same tags as `op` does with that operator's untagged version, and
 commutes with all other operators.
 """
-struct TaggedSym{O<:AbstractSym,T<:Tuple} <: AbstractSym
+struct TaggedSym{O <: AbstractSym, T <: Tuple} <: AbstractSym
     op::O
     tags::T
 end
@@ -33,10 +33,10 @@ atomic_id(op::TaggedSym) = TaggedId(atomic_id(op.op), op.tags)
 Base.adjoint(op::TaggedSym) = TaggedSym(adjoint(op.op), op.tags)
 Base.:(==)(a::TaggedSym, b::TaggedSym) = a.op == b.op && a.tags == b.tags
 Base.hash(a::TaggedSym, h::UInt) = hash(a.tags, hash(a.op, h))
-mat_eltype(::Type{TaggedSym{O,T}}) where {O,T} = mat_eltype(O)
+mat_eltype(::Type{TaggedSym{O, T}}) where {O, T} = mat_eltype(O)
 
 local_mul_effect(a::TaggedSym, b::TaggedSym) = _tag_effect(NonCommutativeProducts.mul_effect(a.op, b.op), a.tags)
-_tag_effect(effect::Union{Nothing,Number,Swap}, tags) = effect
+_tag_effect(effect::Union{Nothing, Number, Swap}, tags) = effect
 _tag_effect(effect::AddTerms, tags) = AddTerms(map(term -> _tag_effect(term, tags), effect.terms))
 _tag_effect(effect, tags) = NonCommutativeProducts.ncmap(op -> TaggedSym(op, tags), effect)
 
@@ -47,7 +47,7 @@ The atomic space `H` with its id told apart by `tags`, which `add_tag` makes for
 method. It has the basis states of `H`, and a [`TaggedSym`](@ref) with the same tags acts on it as its untagged
 operator acts on `H`.
 """
-struct TaggedSpace{B,H<:AbstractAtomicHilbertSpace{B},T<:Tuple} <: AbstractAtomicHilbertSpace{B}
+struct TaggedSpace{B, H <: AbstractAtomicHilbertSpace{B}, T <: Tuple} <: AbstractAtomicHilbertSpace{B}
     parent::H
     tags::T
 end
@@ -75,12 +75,12 @@ apply_local_operator(op::TaggedSym, state, space::TaggedSpace, precomp, ::Type{P
 
 function Base.show(io::IO, op::TaggedSym)
     show(io, op.op)
-    print(io, "(", join(op.tags, ","), ")")
+    return print(io, "(", join(op.tags, ","), ")")
 end
 function Base.show(io::IO, H::TaggedSpace)
-    lines = split(sprint(show, H.parent; context=io), '\n')
+    lines = split(sprint(show, H.parent; context = io), '\n')
     lines[1] *= string(" (", join(H.tags, ","), ")")
-    print(io, join(lines, '\n'))
+    return print(io, join(lines, '\n'))
 end
 
 @testitem "Tagging custom operators and spaces" begin
@@ -99,7 +99,7 @@ end
     @nc Shift Num
     Base.adjoint(s::Shift) = Shift(s.site, -s.k)
     Base.adjoint(n::Num) = n
-    symbolic_group(op::Union{Shift,Num}) = op.site
+    symbolic_group(op::Union{Shift, Num}) = op.site
     local_mul_effect(a::Shift, b::Shift) = Shift(a.site, a.k + b.k)
     local_mul_effect(a::Num, b::Shift) = AddTerms((Swap(1), b.k * b))
     local_mul_effect(::Shift, ::Num) = nothing
@@ -130,6 +130,6 @@ end
         S = representation(left(A) * right(B), Hlr)
         @test reshape(S * v, Hlr => (Hl, Hr)) ≈ MA * ρ * MB
         L = representation(-1im * (left(A + A') - right(A + A')) + dissipator(B), Hlr)
-        @test abs(tr(reshape(L * v, Hlr => (Hl, Hr)))) < 1e-10
+        @test abs(tr(reshape(L * v, Hlr => (Hl, Hr)))) < 1.0e-10
     end
 end
