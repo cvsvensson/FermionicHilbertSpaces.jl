@@ -235,7 +235,7 @@ function majoranas(H::MajoranaHilbertSpace)
 end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
 
-hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, c::QuantitySpec) = constrain_space(hilbert_space(y, labels), c)
+hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, @nospecialize(c::QuantitySpec)) = constrain_space(hilbert_space(y, labels), c)
 function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even to define a Hilbert space, got $(length(labels))."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]

@@ -1,9 +1,19 @@
 # Constraints written as `quantity => allowed`, where `quantity` is a diagonal symbolic operator or a function of the basis state.
-const QuantitySpec = Union{Pair, Tuple, NCAdd, NCMul, AbstractSym, Function}
+const ConstraintVector = AbstractVector{<:Union{Pair, AbstractConstraint}}
+const QuantitySpec = Union{Pair, Tuple, ConstraintVector, Base.Generator, NCAdd, NCMul, AbstractSym, Function}
 const ConstraintLike = Union{AbstractConstraint, QuantitySpec}
 
 as_constraint(c::AbstractConstraint) = c
-as_constraint(cs::Tuple) = prod(as_constraint, cs)
+# Collected into a vector so that a long tuple of constraints does not compile code for its length.
+function as_constraint(@nospecialize(cs::Union{Tuple, ConstraintVector, Base.Generator}))
+    constraints = AbstractConstraint[]
+    for c in cs
+        c = as_constraint(c)
+        c isa ProductConstraint ? append!(constraints, c.constraints) : push!(constraints, c)
+    end
+    isempty(constraints) && return NoSymmetry()
+    return length(constraints) == 1 ? only(constraints) : ProductConstraint(map(identity, constraints))
+end
 as_constraint((quantity, allowed)::Pair) = quantity_constraint(quantity, allowed)
 as_constraint(quantity) = quantity_constraint(quantity, missing)
 
@@ -18,7 +28,10 @@ function quantity_constraint(f::Function, allowed)
 end
 quantity_constraint(op, allowed) = OperatorConstraint(op, _allowed(allowed)..., missing, nothing)
 
-constrain_space(space, c::QuantitySpec, args...) = constrain_space(space, as_constraint(c), args...)
+constrain_space(space, @nospecialize(c::QuantitySpec), args...) = constrain_space(space, as_constraint(c), args...)
+constrain_space(space::AbstractHilbertSpace, @nospecialize(cs::ConstraintVector)) = constrain_space(space, as_constraint(cs))
+Base.:*(c::AbstractConstraint, p::Pair) = c * as_constraint(p)
+Base.:*(p::Pair, c::AbstractConstraint) = as_constraint(p) * c
 
 # The constraint that the diagonal operator `op` has a value in `allowed`. `terms` holds its values on `spaces`.
 struct OperatorConstraint{O, A, H, D} <: AbstractAdditiveConstraint
@@ -235,11 +248,16 @@ end
     @test quantumnumbers(hilbert_space(f, 1:4, (N => 2, P))) == 3:7
     @test quantumnumbers(hilbert_space(f, 1:4, (N, P => 3))) == [1, 2]
     @test quantumnumbers(hilbert_space(f, 1:2, (f[1]'f[1] + f[2]'f[2], f[1]'f[1] + 2f[2]'f[2]))) == [[0, 0], [1, 1], [1, 2], [2, 3]]
+    @test basisstates(hilbert_space(f, 1:4, NumberConservation(2) * (P => 3))) == basisstates(hilbert_space(f, 1:4, (N => 2, P => 3)))
+    @test dim(hilbert_space(f, 1:4, ())) == 16
     @spins S 1 // 2
     @test quantumnumbers(hilbert_space(S, 1:3, sum(S[i][:z] for i in 1:3))) == (-3 // 2):(3 // 2)
     nup(s) = count(x -> x.m > 0, s.states)
     @test quantumnumbers(hilbert_space(S, 1:3, nup)) == 0:3
     @test dim(hilbert_space(S, 1:4, nup => 2)) == 6
+    up(i) = S[i][:z] + 1 // 2
+    @test dim(hilbert_space(S, 1:6, [up(i) * up(i + 1) => 0 for i in 1:5])) == 21
+    @test dim(hilbert_space(S, 1:6, (up(i) * up(i + 1) => 0 for i in 1:5))) == 21
 end
 
 @testitem "Operator constraints on constrained and custom factors" begin
