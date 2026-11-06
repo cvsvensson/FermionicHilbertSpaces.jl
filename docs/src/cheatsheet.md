@@ -3,7 +3,7 @@
 Common tasks and the functions that do them. Snippets build on the variables of earlier ones; run them in order. Results are mostly suppressed with `;`, so run a line to see its output.
 
 ## Spaces
-`@fermions f` defines symbolic fermions, `hilbert_space(f, labels, constraint)` a space, and `representation(op, H)` the sparse matrix of an operator (add `Matrix` when you need a dense one, `Matrix{ComplexF64}` to also fix the element type, `:lazy` for a matrix-free one). Products of constraints conserve each species separately, and `tensor_product` combines any spaces, including bosons (levels given as the number) and spins (value set in the macro).
+`@fermions f` defines symbolic fermions, `hilbert_space(f, labels, constraint)` a space, and `representation(op, H)` the sparse matrix of an operator (add `Matrix` when you need a dense one, `Matrix{ComplexF64}` to also fix the element type, `:lazy` for a matrix-free one). A tuple of constraints, here on the number operators of each spin, conserves them separately, and `tensor_product` combines any spaces, including bosons (levels given as the number) and spins (value set in the macro).
 ```@example cheat
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions f
@@ -16,8 +16,10 @@ H = hilbert_space(f, 1:N, NumberConservation())
 @spins S 1//2
 Hup = hilbert_space(c, [(i, :↑) for i in 1:2])
 Hdn = hilbert_space(c, [(i, :↓) for i in 1:2])
-Hσ = tensor_product(Hup, Hdn; constraint = NumberConservation(Hup) * NumberConservation(Hdn))
-Hσ1 = sector([1, 1], Hσ)
+Nup = sum(c[i, :↑]'c[i, :↑] for i in 1:2)
+Ndn = sum(c[i, :↓]'c[i, :↓] for i in 1:2)
+Hσ = tensor_product(Hup, Hdn; constraint = (Nup, Ndn))
+Hσ1 = sector((1, 1), Hσ)
 Hm = tensor_product(Hup, hilbert_space(b, 3), hilbert_space(S, 1:2))
 representation(b'b * S[1][:z] + c[1, :↑]' * b + hc, Hm);
 ```
