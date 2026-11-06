@@ -336,7 +336,7 @@ end
     using FermionicHilbertSpaces: particle_number
     @fermions c
     @boson b
-    @spin S 1//2
+    @spin S 1 // 2
     for Hx in (hilbert_space(b, 4), hilbert_space(S))
         H = tensor_product(hilbert_space(c, 1:2), Hx)
         @test basisstates(constrain_space(H, ParityConservation(1))) == filter(s -> iseven(particle_number(s.states[1])), collect(basisstates(H)))
