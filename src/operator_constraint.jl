@@ -205,32 +205,22 @@ function branch_constraint(c::OperatorConstraint, allspaces)
     order = sortperm(done)
     starts = searchsortedfirst.(Ref(done[order]), 1:(n + 1))
     T = typeof(terms.constant)
-    remaining_min = zeros(T, n + 1)
-    remaining_max = zeros(T, n + 1)
+    lo, hi = zeros(T, n), zeros(T, n)
     for (d, table) in zip(done, terms.tables)
-        remaining_min[d] += minimum(table)
-        remaining_max[d] += maximum(table)
+        lo[d] += minimum(table)
+        hi[d] += maximum(table)
     end
-    for i in n:-1:1
-        remaining_min[i] += remaining_min[i + 1]
-        remaining_max[i] += remaining_max[i + 1]
-    end
-    targets = c.allowed
     index = zeros(Int, n)
-    # As for the additive constraints, `prefix[d]` is the value of the groups completed before depth `d` on the current branch.
-    prefix = fill(terms.constant, n + 1)
-    return BranchConstraint(
-        (partial, depth, _) -> begin
-            index[depth] = state_index(partial[depth], allspaces[depth])
-            current = prefix[depth]
-            for i in starts[depth]:(starts[depth + 1] - 1)
-                g = order[i]
-                current += terms.tables[g][_table_index(terms.strides[g], index, positions[g])]
-            end
-            prefix[depth + 1] = current
-            _reachable(current + remaining_min[depth + 1], current + remaining_max[depth + 1], targets, nothing)
+    increment = (partial, depth) -> begin
+        index[depth] = state_index(partial[depth], allspaces[depth])
+        value = zero(T)
+        for i in starts[depth]:(starts[depth + 1] - 1)
+            g = order[i]
+            value += terms.tables[g][_table_index(terms.strides[g], index, positions[g])]
         end
-    )
+        value
+    end
+    return _sum_branch_constraint(increment, lo, hi, terms.constant, c.allowed, nothing)
 end
 
 @testitem "Operator constraints keep the states with allowed values" begin

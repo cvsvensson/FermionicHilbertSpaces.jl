@@ -150,22 +150,26 @@ function branch_constraint(c::AbstractAdditiveConstraint, allspaces)
     end
     cumsum!(position_starts, position_starts)
     subspace_order = sortperm(collect(positions))
-
-    remaining_min = zeros(T, n + 1)
-    remaining_max = zeros(T, n + 1)
-    for i in n:-1:1
-        remaining_min[i] = remaining_min[i + 1] + contribution_min[i]
-        remaining_max[i] = remaining_max[i + 1] + contribution_max[i]
+    increment = (partial, depth) -> begin
+        value = zero(T)
+        for i in position_starts[depth]:(position_starts[depth + 1] - 1)
+            value += _summand(S, contribution(c, subspace_order[i], partial[depth]))
+        end
+        value
     end
-    # `prefix[d]` is the contribution of positions `1:d-1` on the current branch. This relies on
+    return _sum_branch_constraint(increment, contribution_min, contribution_max, zero(T), targets, m)
+end
+# Prunes a branch unless the sum can still reach `targets` (modulo `m`). `increment(partial, depth)` is the part of the
+# sum that the state at `depth` completes, between `lo[depth]` and `hi[depth]`, and `init` is the part no state changes.
+function _sum_branch_constraint(increment::F, lo, hi, init, targets, m) where {F}
+    remaining_min = push!(reverse!(cumsum(reverse(lo))), zero(eltype(lo)))
+    remaining_max = push!(reverse!(cumsum(reverse(hi))), zero(eltype(hi)))
+    # `prefix[d]` is the sum completed by depths `1:d-1` on the current branch. This relies on
     # `generate_states` validating depth `d` only after accepting depths `1:d-1` of the same branch.
-    prefix = zeros(T, n + 1)
+    prefix = fill(init, length(lo) + 1)
     return BranchConstraint(
         (partial, depth, _) -> begin
-            current = prefix[depth]
-            for i in position_starts[depth]:(position_starts[depth + 1] - 1)
-                current += _summand(S, contribution(c, subspace_order[i], partial[depth]))
-            end
+            current = prefix[depth] + increment(partial, depth)
             prefix[depth + 1] = current
             _reachable(current + remaining_min[depth + 1], current + remaining_max[depth + 1], targets, m)
         end
