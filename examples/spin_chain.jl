@@ -11,7 +11,6 @@
 # Pauli matrices: they satisfy $[S^x, S^y] = i S^z$, and $S^z$ has eigenvalues $-J, \dots, J$.
 
 using FermionicHilbertSpaces
-using FermionicHilbertSpaces: Axes
 using LinearAlgebra
 
 @spin T
@@ -58,27 +57,48 @@ minimum.(spectra)
 
 # The same blocks follow without forming $\vec S_\mathrm{tot}^2$. A multiplet with total spin $J$ has exactly one
 # highest-weight state, with $S^z_\mathrm{tot} = J$ and annihilated by the raising operator $S^+_\mathrm{tot}$.
-# Building one space with all magnetization sectors, the raising operator maps sector $J$ to sector $J+1$, and its
-# nullspace gives these states, one per multiplet. In the top sector $J = N/2$ every state is a highest-weight state.
+# On a space with all magnetization sectors, `highest_weight_states` returns these states for each sector $J$,
+# one per multiplet, in the basis of `sector(J, Hsz)`.
 
+using FermionicHilbertSpaces: highest_weight_states, multiplets
 Splus = sum(S[k][:+] for k in 1:N)
 Hsz = hilbert_space(S, 1:N, Sz)
-function highest_weight_states(J)
-    HJ = sector(J, Hsz)
-    J + 1 in quantumnumbers(Hsz) || return HJ, Matrix(I, dim(HJ), dim(HJ))
-    raising = representation(Splus, Axes(sector(J + 1, Hsz), HJ), Matrix)
-    return HJ, nullspace(raising)
-end
-hw_spectra = map(0:2) do J
-    HJ, V = highest_weight_states(J)
-    eigvals(Hermitian(V' * representation(ham, HJ, Matrix) * V))
-end
+hw_spectra = [eigvals(Hermitian(V' * representation(ham, sector(J, Hsz), Matrix) * V)) for (J, V) in highest_weight_states(Hsz, Splus)]
 @assert all(hw_spectra .≈ spectra)
+
+# Lowering them with $S^-_\mathrm{tot}$ gives `multiplets`, for each $(J, M)$ an orthonormal basis of the states with
+# total spin $J$ in sector $M$. The triplets have the same energies in each of the sectors $M = -1, 0, 1$.
+
+W = multiplets(Hsz, Splus)
+@assert all(eigvals(Hermitian(B' * representation(ham, sector(M, Hsz), Matrix) * B)) ≈ spectra[2] for ((J, M), B) in W if J == 1)
 
 # States symmetric under all permutations of the sites have the maximal total spin, so the symmetric
 # sector, built with [`symmetric_sector`](@ref), reproduces the highest-weight spectrum for $J = N/2$.
 
 Psym = symmetric_sector(Hm, factors(Hm))
 @assert eigvals(Hermitian(Psym' * Mham * Psym)) ≈ hw_spectra[end]
+
+# Total spin $J$ needs only the sectors from $M = J$ up, so longer chains never need the full space.
+# The $J = 3$ states of a Heisenberg ring with $N = 10$ sites come from the space with $S^z_\mathrm{tot} \geq 3$.
+
+N = 10
+ring = sum(S[k][:]'S[mod1(k + 1, N)][:] for k in 1:N)
+Sz = sum(S[k][:z] for k in 1:N)
+Splus = sum(S[k][:+] for k in 1:N)
+H3 = hilbert_space(S, 1:N, Sz => 3:(N // 2))
+V = highest_weight_states(H3, Splus)[3]
+E3 = eigvals(Hermitian(V' * representation(ring, sector(3, H3), Matrix) * V))
+
+# The states with $J = 3$ and $M = 2$ follow by lowering once. They form a subspace whose dimension is the number of
+# $J = 3$ multiplets, with the same energies. As a check, we compare with the eigenstates in the $M = 2$ sector that
+# have $\vec S_\mathrm{tot}^2 = 12$.
+
+H2 = hilbert_space(S, 1:N, Sz => 2:(N // 2))
+W32 = multiplets(H2, Splus)[3, 2]
+E32 = eigvals(Hermitian(W32' * representation(ring, sector(2, H2), Matrix) * W32))
+@assert E32 ≈ E3
+Stot2 = sum(sum(S[k][op] for k in 1:N)^2 for op in (:x, :y, :z))
+P = nullspace(representation(Stot2, sector(2, H2), Matrix) - 12I)
+@assert E32 ≈ eigvals(Hermitian(P' * representation(ring, sector(2, H2), Matrix) * P))
 
 # For Hamiltonians symmetric under permuting sites, [`symmetric_sector`](@ref) projects onto permutation sectors; see [Spatial symmetries](translation_symmetry.md).
