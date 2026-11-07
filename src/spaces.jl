@@ -363,7 +363,7 @@ true
 """
 function subregion(Hs, H::AbstractHilbertSpace)
     Hs_items = Hs isa Tuple || Hs isa AbstractVector ? Hs : (Hs,)
-    names = _pair_majoranas(collect(Iterators.flatten(Iterators.map(atomic_factors, Hs_items))), H)
+    names = _pair_majoranas(collect(Iterators.flatten(Iterators.map(_subregion_atoms, Hs_items))), H)
     isempty(names) && throw(ArgumentError("`Hs` must contain at least one space or symbolic operator."))
     positions = map(x -> atom_position(x, H), names)
     all(>(0), positions) || throw(ArgumentError("The spaces/operators in `Hs` must match atomic factors of `H`, got the following unmatched ones: $(names[iszero.(positions)])."))
@@ -377,6 +377,8 @@ function subregion(Hs, H::AbstractHilbertSpace)
     states = _find_subregion_states(H, state_mapper(H, (Hsub,)))
     ConstrainedSpace(Hsub, states)
 end
+_subregion_atoms(x) = applicable(atomic_factors, x) ? atomic_factors(x) :
+    throw(ArgumentError("expected a Hilbert space or a collection of symbols, got $x"))
 # A subsystem of `H` given as a space, or as symbols resolved by `subregion`
 _subsystem(Hsub::AbstractHilbertSpace, H) = Hsub
 _subsystem(Hs, H) = subregion(Hs, H)
@@ -423,6 +425,7 @@ end
 
 @testitem "Subsystems given as symbols" begin
     using LinearAlgebra
+    using FermionicHilbertSpaces: partial_transpose!
     @fermions f
     L = 3
     labels = [(i, σ) for i in 1:L for σ in (:↑, :↓)]
@@ -433,6 +436,7 @@ end
         @test partial_trace(ψ, H => syms) == partial_trace(ψ, H => Hsub)
         @test partial_trace(ψ * ψ', H => syms) == partial_trace(H => Hsub)(ψ * ψ')
     end
+    @test_throws ArgumentError partial_trace(ψ * ψ', H => 1)
 
     Hfull = hilbert_space(f, labels)
     syms = [f[1, :↑], f[3, :↓]]
@@ -441,6 +445,7 @@ end
     @test embed(A, syms => Hfull) == embed(Hsub => Hfull)(A)
     ρ = rand(dim(Hfull), dim(Hfull))
     @test partial_transpose(ρ, Hfull, syms) == partial_transpose(Hfull, Hsub)(ρ)
+    @test partial_transpose!(complex(zero(ρ)), ρ, Hfull, syms) == partial_transpose(ρ, Hfull, Hsub)
 end
 
 @testitem "Matching syms and spaces with mutable labels" begin
