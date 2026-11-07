@@ -84,6 +84,17 @@ energies = stack(map(sector_energies, mags))
 E0, idx = findmin(energies)
 (; E0, irrep=labels[idx[1]], M=mags[idx[2]])
 
+# Translations commute with the total raising operator $S^+ = \sum_k S^+_k$, so the states in a momentum sector
+# with total spin equal to $M$ are those that $S^+$ annihilates. The ground state is among them, so its total
+# spin equals its magnetization.
+
+using FermionicHilbertSpaces: Axes
+Splus = sum(S[k][:+] for k in 1:N)
+sec = sector(mags[idx[2]], space)
+P = symmetric_sector(sec, factors(sec), (perms, weights[idx[1]]))
+Q = P * nullspace(Matrix(representation(Splus, Axes(sector(mags[idx[2]] + 1, space), sec)) * P))
+@assert eigmin(Hermitian(Matrix(Q' * representation(H, sec) * Q))) ≈ E0
+
 # Let's plot the results. The heatmap shows the lowest energy in each (irrep, $M$) block. Green marks the lowest energy for each irrep; red marks the lowest energy for each magnetization.
 
 using Plots
