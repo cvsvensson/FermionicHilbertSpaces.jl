@@ -216,41 +216,6 @@ end
     @test_throws MethodError subregion(H, H)
 end
 
-function isbdgmatrix(A::AbstractMatrix)
-    # Check if A is a BdG matrix, i.e., it has the form:
-    # [H, Δ; -conj(Δ), -conj(H)]
-    # where H is Hermitian and Δ is antisymmetric.
-    size(A, 1) == size(A, 2) || return false
-    N = div(size(A, 1), 2)
-    inds1, inds2 = axes(A)
-    H = @views A[inds1[1:N], inds2[1:N]]
-    Δ = @views A[inds1[1:N], inds2[(N+1):2N]]
-    Hd = @views A[inds1[(N+1):2N], inds2[(N+1):2N]]
-    Δd = @views A[inds1[(N+1):2N], inds2[1:N]]
-    _isbdgmatrix(H, Δ, Hd, Δd)
-end
-function _isbdgmatrix(H, Δ, Hd, Δd)
-    indsm, indsn = axes(H)
-    if indsm != indsn
-        return false
-    end
-    for i = first(indsn):last(indsn), j = (i):last(indsn)
-        if H[i, j] != conj(H[j, i])
-            return false
-        end
-        if H[i, j] != -conj(Hd[i, j])
-            return false
-        end
-        if Δ[i, j] != -conj(Δd[i, j])
-            return false
-        end
-        if Δ[i, j] != -Δ[j, i]
-            return false
-        end
-    end
-    return true
-end
-
 function quasiparticle_adjoint(v::AbstractVector)
     Base.require_one_based_indexing(v)
     N = div(length(v), 2)
