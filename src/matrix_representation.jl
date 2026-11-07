@@ -78,12 +78,16 @@ struct StateChunking{S} <: AbstractChunkingStrategy
     scheduler::S
 end
 
-function mat_eltype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S,F}
-    return _term_eltype(C, S)
+# When the factor type is not concrete, as in a product of different operator types, the factors are promoted one by one.
+function mat_eltype(x::NCAdd{C, NCMul{C2, S, F}}) where {C, C2, S, F}
+    isconcretetype(S) && return _term_eltype(C, S)
+    return foldl((T, term) -> _factors_eltype(T, C, term.factors), keys(x.dict); init = C)
 end
-function mat_eltype(::NCMul{C,S,F}) where {C,S,F}
-    return _term_eltype(C, S)
+function mat_eltype(x::NCMul{C, S, F}) where {C, S, F}
+    isconcretetype(S) && return _term_eltype(C, S)
+    return _factors_eltype(C, C, x.factors)
 end
+_factors_eltype(T, C, factors) = foldl((T, f) -> promote_type(T, _term_eltype(C, typeof(f))), factors; init = T)
 mat_eltype(::Type{NCMul{C, S, F}}) where {C, S, F} = _term_eltype(C, S)
 mat_eltype(::S) where {S} = mat_eltype(S)
 """
