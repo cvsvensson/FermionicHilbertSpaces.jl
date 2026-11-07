@@ -78,4 +78,27 @@ W = multiplets(Hsz, Splus)
 Psym = symmetric_sector(Hm, factors(Hm))
 @assert eigvals(Hermitian(Psym' * Mham * Psym)) ≈ hw_spectra[end]
 
+# Total spin $J$ needs only the sectors from $M = J$ up, so longer chains never need the full space.
+# The $J = 3$ states of a Heisenberg ring with $N = 10$ sites come from the space with $S^z_\mathrm{tot} \geq 3$.
+
+N = 10
+ring = sum(S[k][:]'S[mod1(k + 1, N)][:] for k in 1:N)
+Sz = sum(S[k][:z] for k in 1:N)
+Splus = sum(S[k][:+] for k in 1:N)
+H3 = hilbert_space(S, 1:N, Sz => 3:(N // 2))
+V = highest_weight_states(H3, Splus)[3]
+E3 = eigvals(Hermitian(V' * representation(ring, sector(3, H3), Matrix) * V))
+
+# The states with $J = 3$ and $M = 2$ follow by lowering once. They form a subspace whose dimension is the number of
+# $J = 3$ multiplets, with the same energies. As a check, we compare with the eigenstates in the $M = 2$ sector that
+# have $\vec S_\mathrm{tot}^2 = 12$.
+
+H2 = hilbert_space(S, 1:N, Sz => 2:(N // 2))
+W32 = multiplets(H2, Splus)[3][2]
+E32 = eigvals(Hermitian(W32' * representation(ring, sector(2, H2), Matrix) * W32))
+@assert E32 ≈ E3
+Stot2 = sum(sum(S[k][op] for k in 1:N)^2 for op in (:x, :y, :z))
+P = nullspace(representation(Stot2, sector(2, H2), Matrix) - 12I)
+@assert E32 ≈ eigvals(Hermitian(P' * representation(ring, sector(2, H2), Matrix) * P))
+
 # For Hamiltonians symmetric under permuting sites, [`symmetric_sector`](@ref) projects onto permutation sectors; see [Spatial symmetries](translation_symmetry.md).
