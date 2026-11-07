@@ -27,8 +27,8 @@ representation(T[:z], hilbert_space(T, 1))
 
 # `@spins S` declares a field of spins, where `S[k]` is the spin on site `k`, and `hilbert_space(S, labels)` builds
 # the space of the sites in `labels` (with `J` as a third argument if the field has no spin value).
-# Constraints act on the basis states of each site through their $S^z$ eigenvalue `s.m`; for example,
-# `AdditiveConstraint(M; maps = s -> s.m)` keeps the states with total $S^z$ equal to `M`.
+# A diagonal operator constrains a space; for example, `sum(S[k][:z] for k in 1:N) => M` keeps the states with
+# total $S^z$ equal to `M`.
 
 # ## Heisenberg chain
 
@@ -40,7 +40,7 @@ N = 4
 ham = sum(S[k][:]'S[k + 1][:] for k in 1:(N - 1))
 Sz = sum(S[k][:z] for k in 1:N)
 @assert ham * Sz - Sz * ham == 0
-Hm = hilbert_space(S, 1:N, AdditiveConstraint(0; maps = s -> s.m))
+Hm = hilbert_space(S, 1:N, Sz => 0)
 Mham = representation(ham, Hm, Matrix);
 
 # The chain also conserves the total spin, fixed by the Casimir operator $\vec S_\mathrm{tot}^2 = J(J+1)$.

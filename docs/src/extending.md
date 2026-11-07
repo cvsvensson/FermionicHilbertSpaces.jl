@@ -86,7 +86,10 @@ the index of a state, which avoids the default dictionary lookup.
   its basis states and `state_index`. Constructors check the index on the first, middle and
   last state and throw an `ArgumentError` on a mismatch.
 
-To restrict a space of custom states, use [`SectorConstraint`](@ref) or
+A custom operator that is diagonal in the basis, with integer or rational values, can be the
+quantity of a `quantity => spec` constraint, like the Floquet number in
+[Custom operators: Floquet](literate_output/floquet_tutorial.md).
+Otherwise, to restrict a space of custom states, use [`SectorConstraint`](@ref) or
 [`FilterConstraint`](@ref). Their required argument is the reducer, which is called on each
 basis state. With `maps` and `spaces` together, it is called instead on the values that `maps`
 gives for the parts of the state in `spaces`. See
