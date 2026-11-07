@@ -76,7 +76,7 @@ function tower_energies(s)
     raise = representation(Splus, Axes(space, sec))
     return map(weights) do w
         P = symmetric_sector(sec, factors(sec), (perms, w))
-        # An absolute cutoff, since raise * P vanishes only up to roundoff.
+        ## An absolute cutoff, since raise * P vanishes only up to roundoff.
         Q = P * nullspace(Matrix(raise * P); atol = 1.0e-8)
         size(Q, 2) == 0 && return Inf
         eigmin(Hermitian(Matrix(Q' * HS * Q)))
