@@ -134,18 +134,20 @@ _operators(op) = (op,)
 Return an `OrderedDict` `qn => W` for each highest weight `qn` of [`highest_weight_states`](@ref), where the
 columns of `W` are an orthonormal basis, in the basis of `H`, of all multiplets with that highest weight.
 The lowering operators are the adjoints of `raisers`, which holds for a unitary representation.
-For a symmetric operator with matrix `M`, `W' * M * W` is its block on these multiplets.
 """
 function multiplets(H, raisers)
-    Fs = map(E -> representation(E, H)', _operators(raisers))
-    # Each level is the image of orthonormal vectors, so roundoff is small relative to the operator norm.
-    tol = sqrt(eps()) * maximum(norm, Fs)
+    Es = map(E -> representation(E, H), _operators(raisers))
+    scale = maximum(E -> maximum(abs, E), Es)
     OrderedDict(map(collect(highest_weight_states(H, raisers))) do (qn, V)
+        # Each level is the image of orthonormal vectors, so roundoff is small relative to the scale of the raisers.
+        tol = sqrt(eps(real(eltype(V)))) * scale
         level = zeros(eltype(V), dim(H), size(V, 2))
         level[indices(qn, H), :] = V
         levels = [level]
-        while size(level, 2) > 0
-            level = _orthonormalize_sectors(reduce(hcat, [F * level for F in Fs]), H, tol)
+        # Lowering strictly decreases the height, so there are fewer levels than sectors.
+        for _ in quantumnumbers(H)
+            level = _orthonormalize_sectors(reduce(hcat, [E' * level for E in Es]), H, tol)
+            size(level, 2) == 0 && break
             push!(levels, level)
         end
         qn => reduce(hcat, levels)

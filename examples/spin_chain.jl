@@ -63,9 +63,7 @@ minimum.(spectra)
 using FermionicHilbertSpaces: highest_weight_states, multiplets
 Splus = sum(S[k][:+] for k in 1:N)
 Hsz = hilbert_space(S, 1:N, Sz)
-hw_spectra = map(collect(highest_weight_states(Hsz, Splus))) do (J, V)
-    eigvals(Hermitian(V' * representation(ham, sector(J, Hsz), Matrix) * V))
-end
+hw_spectra = [eigvals(Hermitian(V' * representation(ham, sector(J, Hsz), Matrix) * V)) for (J, V) in highest_weight_states(Hsz, Splus)]
 @assert all(hw_spectra .≈ spectra)
 
 # Lowering them with $S^-_\mathrm{tot}$ gives `multiplets`, an orthonormal basis of all states with total spin $J$.
