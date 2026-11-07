@@ -165,10 +165,10 @@ end
 """
     multiplets(H, raisers; check = true)
 
-Return `J => (M => W)`: for each key `J` of [`highest_weight_states`](@ref) and each sector `M` of `H`, the columns of
-`W` are an orthonormal basis, in `sector(M, H)`, of the states with total spin `J` and `Sz = M`. They are obtained by
-lowering the highest-weight states with the adjoints of `raisers` (S⁻ = (S⁺)†). For example,
-`multiplets(hilbert_space(S, 1:N, Sz => 2:N//2), Splus)[3][2]` has one column per multiplet with total spin 3, the
+Return `(J, M) => W`: for each key `J` of [`highest_weight_states`](@ref) and each sector `M` of `H`, the columns of
+`W` are an orthonormal basis, in `sector(M, H)`, of the states with total spin `J` and `Sz = M`, obtained by lowering
+the highest-weight states with the adjoints of `raisers` (S⁻ = (S⁺)†). For example,
+`multiplets(hilbert_space(S, 1:N, Sz => 2:N//2), Splus)[3, 2]` has one column per multiplet with total spin 3, the
 state of that multiplet with Sz = 2.
 """
 function multiplets(H, raisers; check = true)
@@ -176,21 +176,22 @@ function multiplets(H, raisers; check = true)
     lowerers = map(E -> copy(E'), Es)
     # Each level is the image of orthonormal vectors, so roundoff is small relative to the scale of the raisers.
     tol = sqrt(eps(real(float(eltype(first(Es)))))) * maximum(E -> maximum(abs, E), Es)
-    return OrderedDict(
-        map(collect(highest_weight_states(H, Es; check = false))) do (J, V)
-            level = OrderedDict(J => V)
-            W = copy(level)
-            # Lowering strictly decreases the weight, so there are fewer levels than sectors.
-            for _ in quantumnumbers(H)
-                X = reduce(hcat, [F[:, indices(M, H)] * B for F in lowerers for (M, B) in level])
-                level = OrderedDict(M => _column_span(X[indices(M, H), :], tol) for M in quantumnumbers(H))
-                filter!(((M, B),) -> size(B, 2) > 0, level)
-                isempty(level) && break
-                merge!(W, level)
+    hws = highest_weight_states(H, Es; check = false)
+    W = OrderedDict{Tuple{keytype(hws), keytype(hws)}, valtype(hws)}()
+    for (J, V) in hws
+        level = OrderedDict(J => V)
+        # Lowering strictly decreases the weight, so there are at most as many levels as sectors.
+        for _ in quantumnumbers(H)
+            for (M, B) in level
+                W[J, M] = B
             end
-            J => W
+            X = reduce(hcat, [F[:, indices(M, H)] * B for F in lowerers for (M, B) in level])
+            level = OrderedDict(M => _column_span(X[indices(M, H), :], tol) for M in quantumnumbers(H))
+            filter!(((M, B),) -> size(B, 2) > 0, level)
+            isempty(level) && break
         end
-    )
+    end
+    return W
 end
 function _column_span(X, tol)
     U, S = svd(X)
@@ -437,10 +438,10 @@ end
     @test Dict(qn => size(V, 2) for (qn, V) in highest_weight_states(H, E)) == Dict([2, 0, 0] => 1, [1, 1, 0] => 3)
     W = multiplets(H, E)
     weyl_dim((n1, n2, n3)) = (n1 - n2 + 1) * (n2 - n3 + 1) * (n1 - n3 + 2) ÷ 2
-    @test all(sum(B -> size(B, 2), values(W[qn])) == size(V, 2) * weyl_dim(qn) for (qn, V) in highest_weight_states(H, E))
+    @test all(sum(size(B, 2) for ((J, M), B) in W if J == qn) == size(V, 2) * weyl_dim(qn) for (qn, V) in highest_weight_states(H, E))
     hop = sum(c[1, a]'c[2, a] + hc for a in 1:3)
     for qn in quantumnumbers(H)
-        Ws = [w[qn] for w in values(W) if haskey(w, qn)]
+        Ws = [B for ((J, M), B) in W if M == qn]
         Wall = reduce(hcat, Ws)
         @test Wall' * Wall ≈ I(dim(sector(qn, H)))
         M = representation(hop, sector(qn, H), Matrix)

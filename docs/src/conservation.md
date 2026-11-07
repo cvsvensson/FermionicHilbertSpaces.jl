@@ -255,9 +255,9 @@ H = hilbert_space(S, 1:N, Sz => 0:(N // 2))
 energies(op, V, qn, H) = eigvals(Hermitian(V' * representation(op, sector(qn, H), Matrix) * V))
 [s => minimum(energies(ham, V, s, H)) for (s, V) in highest_weight_states(H, Splus)]
 ```
-Total spin ``S`` at ``S^z_\mathrm{tot} = M`` needs the sectors from ``M`` up to the top, so `Sz => 0:N//2` covers every ``S`` at ``M \geq 0``. `multiplets(H, Splus)[S][M]` is the subspace with total spin ``S`` and ``S^z_\mathrm{tot} = M``, with one column per multiplet:
+Total spin ``S`` at ``S^z_\mathrm{tot} = M`` needs the sectors from ``M`` up to the top, so `Sz => 0:N//2` covers every ``S`` at ``M \geq 0``. `multiplets(H, Splus)[S, M]` is the subspace with total spin ``S`` and ``S^z_\mathrm{tot} = M``, with one column per multiplet:
 ```@example multiplets
-W = multiplets(H, Splus)[1][0]
+W = multiplets(H, Splus)[1, 0]
 energies(ham, W, 0, H)
 ```
 
