@@ -121,11 +121,11 @@ function highest_weight_states(H, raisers)
     Es = map(E -> representation(E, H), _operators(raisers))
     kernels = map(quantumnumbers(H)) do qn
         M = reduce(vcat, [E[:, indices(qn, H)] for E in Es])
-        qn => nullspace(Matrix(M[vec(any(!iszero, M; dims=2)), :]))
+        qn => nullspace(Matrix(M[vec(any(!iszero, M; dims = 2)), :]))
     end
-    OrderedDict(filter(((qn, V),) -> size(V, 2) > 0, kernels))
+    return OrderedDict(filter(((qn, V),) -> size(V, 2) > 0, kernels))
 end
-_operators(ops::Union{Tuple,AbstractVector}) = ops
+_operators(ops::Union{Tuple, AbstractVector}) = ops
 _operators(op) = (op,)
 
 """
@@ -138,20 +138,22 @@ The lowering operators are the adjoints of `raisers`, which holds for a unitary 
 function multiplets(H, raisers)
     Es = map(E -> representation(E, H), _operators(raisers))
     scale = maximum(E -> maximum(abs, E), Es)
-    OrderedDict(map(collect(highest_weight_states(H, raisers))) do (qn, V)
-        # Each level is the image of orthonormal vectors, so roundoff is small relative to the scale of the raisers.
-        tol = sqrt(eps(real(eltype(V)))) * scale
-        level = zeros(eltype(V), dim(H), size(V, 2))
-        level[indices(qn, H), :] = V
-        levels = [level]
-        # Lowering strictly decreases the height, so there are fewer levels than sectors.
-        for _ in quantumnumbers(H)
-            level = _orthonormalize_sectors(reduce(hcat, [E' * level for E in Es]), H, tol)
-            size(level, 2) == 0 && break
-            push!(levels, level)
+    return OrderedDict(
+        map(collect(highest_weight_states(H, raisers))) do (qn, V)
+            # Each level is the image of orthonormal vectors, so roundoff is small relative to the scale of the raisers.
+            tol = sqrt(eps(real(eltype(V)))) * scale
+            level = zeros(eltype(V), dim(H), size(V, 2))
+            level[indices(qn, H), :] = V
+            levels = [level]
+            # Lowering strictly decreases the height, so there are fewer levels than sectors.
+            for _ in quantumnumbers(H)
+                level = _orthonormalize_sectors(reduce(hcat, [E' * level for E in Es]), H, tol)
+                size(level, 2) == 0 && break
+                push!(levels, level)
+            end
+            qn => reduce(hcat, levels)
         end
-        qn => reduce(hcat, levels)
-    end)
+    )
 end
 function _orthonormalize_sectors(X, H, tol)
     blocks = map(quantumnumbers(H)) do qn
@@ -161,7 +163,7 @@ function _orthonormalize_sectors(X, H, tol)
         Y[rows, :] = U[:, axes(Y, 2)]
         Y
     end
-    reduce(hcat, blocks)
+    return reduce(hcat, blocks)
 end
 
 function space_indices(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace)
