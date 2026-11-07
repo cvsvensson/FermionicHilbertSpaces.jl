@@ -14,6 +14,8 @@ literate_files = [
     "examples/floquet_tutorial.jl",
     "examples/free_fermions.jl",
     "examples/kitaev_chain.jl",
+    "examples/mean_field.jl",
+    "examples/mean_field_thermal.jl",
     "examples/open_system_lindblad.jl",
     "examples/partial_transpose.jl",
     "examples/spin_chain.jl",
@@ -40,6 +42,8 @@ pages = [
         "SYK model" => "literate_output/syk_model.md",
         "Braiding Majorana zero modes" => "literate_output/braiding.md",
         "Spatial symmetries" => "literate_output/translation_symmetry.md",
+        "Mean-field" => "literate_output/mean_field.md",
+        "Mean-field at finite temperature" => "literate_output/mean_field_thermal.md",
     ],
     "Guides" => [
         "Constrained spaces and quantum numbers" => "conservation.md",
