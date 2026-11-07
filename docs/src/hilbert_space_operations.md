@@ -60,6 +60,9 @@ H1 = hilbert_space(f, 1:4, NumberConservation(1))
 size(representation(f[1], Axes(H1, H2)))
 ```
 
+The [Anderson impurity example](literate_output/anderson_impurity.md) uses such matrices to
+compute a spectral function.
+
 ## Arrays
 
 The operations below include the fermionic phase factors implied by the mode order; `phase_factors=false` turns them off.

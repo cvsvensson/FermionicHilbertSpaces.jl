@@ -8,6 +8,7 @@ DocMeta.setdocmeta!(FermionicHilbertSpaces, :DocTestSetup, :(using FermionicHilb
 
 # One entry per line, sorted, so PRs adding examples rarely conflict.
 literate_files = [
+    "examples/anderson_impurity.jl",
     "examples/bosons.jl",
     "examples/braiding.jl",
     "examples/clock_operators.jl",
@@ -40,6 +41,7 @@ pages = [
         "SYK model" => "literate_output/syk_model.md",
         "Braiding Majorana zero modes" => "literate_output/braiding.md",
         "Spatial symmetries" => "literate_output/translation_symmetry.md",
+        "Anderson impurity" => "literate_output/anderson_impurity.md",
     ],
     "Guides" => [
         "Constrained spaces and quantum numbers" => "conservation.md",
