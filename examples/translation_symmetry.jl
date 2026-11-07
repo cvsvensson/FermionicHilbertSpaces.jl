@@ -96,12 +96,16 @@ best_S_per_irrep = map(argmin, eachrow(energies))
 p = heatmap(
     labels, spins, permutedims(energies) ./ J;
     xlabel="momentum (units of 2π/N)",
-    ylabel="total spin S",
+    ylabel = "total spin S",
     title = "Tower of states", colorbar_title = "E/J",
-    c=:viridis, yticks=spins, frame=:box)
-scatter!(p, labels[best_irrep_per_S], spins;
+    c = :viridis, yticks = spins, frame = :box
+)
+scatter!(
+    p, labels[best_irrep_per_S], spins;
     marker=:vline, markersize=6, markerstrokewidth=5,
-    color=:red, label="lowest state at fixed S")
-scatter!(p, labels, spins[best_S_per_irrep];
+    color = :red, label = "lowest state at fixed S"
+)
+scatter!(
+    p, labels, spins[best_S_per_irrep];
     marker=:hline, markersize=8, markerstrokewidth=5,
     color=:green, label="lowest state in fixed irrep")
