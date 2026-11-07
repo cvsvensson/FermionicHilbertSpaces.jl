@@ -32,7 +32,8 @@ julia> state_index("10", H)
 """
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 tensor_product(H::AbstractHilbertSpace; kwargs...) = tensor_product((H,); kwargs...)
-function tensor_product(spaces; constraint=NoSymmetry())
+function tensor_product(spaces; @nospecialize(constraint = NoSymmetry()))
+    constraint = as_constraint(constraint)
     if length(spaces) == 1
         return constrain_space(only(spaces), constraint)
     end
@@ -46,6 +47,9 @@ function tensor_product(spaces; constraint=NoSymmetry())
     end
 
     constraint = supply_missing_constraint_info(constraint, space, spaces)
+    # A `quantity => spec` constraint keeps the labels of the factors, and its own labels follow theirs.
+    labels = _spec_form(constraint) ? _combined_sector_constraint(spaces) : missing
+    ismissing(labels) || (constraint = labels * constraint)
 
     supports_branch_pruning(constraint) || return constrain_states(space, constraint, all_states())
     return constrain_states(space, constraint, generate_states(spaces, constraint, space), unpruned_part(constraint))

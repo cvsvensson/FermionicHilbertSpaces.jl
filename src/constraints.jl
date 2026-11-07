@@ -19,13 +19,35 @@ Base.:*(sym1::ProductConstraint, sym2::AbstractConstraint) = ProductConstraint([
 Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint([sym1.constraints..., sym2.constraints...])
 function branch_constraint(constraint::ProductConstraint, space)
     prunable = filter(supports_branch_pruning, constraint.constraints)
-    ProductConstraint(map(cons -> branch_constraint(cons, space), prunable))
+    operators = OperatorConstraint[c for c in prunable if c isa OperatorConstraint]
+    branches = AbstractConstraint[branch_constraint(c, space) for c in prunable if !(c isa OperatorConstraint)]
+    isempty(operators) || push!(branches, branch_constraint(operators, space))
+    return ProductConstraint(map(identity, branches))
 end
 supports_branch_pruning(c::ProductConstraint) = any(supports_branch_pruning, c.constraints)
 supports_filtering(c::ProductConstraint) = any(supports_filtering, c.constraints)
-supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c.constraints)
+# A product with a `quantity => spec` factor also groups when only some factors do, and the others then filter.
+supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c.constraints) || (_spec_form(c) && any(supports_sector_grouping, c.constraints))
 
 supply_missing_constraint_info(constraint::ProductConstraint, space, spaces) = ProductConstraint(map(cons -> supply_missing_constraint_info(cons, space, spaces), constraint.constraints))
+
+# A constraint on a function of the basis state: `reducer(state)`, or with `maps` and `spaces`, `reducer` of the values
+# of the maps on the states of the spaces. `rule` turns that value into the sector label, `nothing` to keep the state
+# without a label, or `missing` to discard it.
+struct StateConstraint{R, FS, H, U} <: AbstractConstraint
+    reducer::R
+    maps::FS
+    spaces::H
+    rule::U
+    function StateConstraint(reducer::R, maps::FS, spaces::H, rule::U) where {R, FS, H, U}
+        _check_maps_length(maps, spaces)
+        return new{R, FS, H, U}(reducer, maps, spaces, rule)
+    end
+end
+_keep_true(keep) = keep ? nothing : missing
+_label(rule::Function, value) = rule(value)
+_labels(::typeof(_keep_true)) = false
+_labels(::typeof(identity)) = true
 
 """
     FilterConstraint(reducer; maps=missing, spaces=missing)
@@ -39,50 +61,9 @@ spaces, each map is applied to its corresponding subspace, and the
 reducer is called on the resulting values. A single function is applied to all
 spaces; a collection of maps supplies one function per subspace.
 """
-struct FilterConstraint{R,FS,H} <: AbstractConstraint
-    reducer::R
-    maps::FS
-    spaces::H
-    function FilterConstraint(reducer::R, maps::FS, spaces::H) where {H,FS,R}
-        _check_maps_length(maps, spaces)
-        new{R,FS,H}(reducer, maps, spaces)
-    end
-end
-function FilterConstraint(reducer::R; maps=missing, spaces=missing) where {R<:Function}
-    FilterConstraint(reducer, maps, spaces)
-end
-supports_branch_pruning(::FilterConstraint) = false
-supports_filtering(::FilterConstraint) = true
-supports_sector_grouping(c::FilterConstraint) = false
-function filter_function(constraint::FilterConstraint{F,Missing,Missing}, ::AbstractHilbertSpace) where F
-    return constraint.reducer
-end
-function filter_function(constraint::FilterConstraint, space::AbstractHilbertSpace)
-    mapper = state_mapper(space, constraint.spaces)
-    function _filter_function(state)
-        subs = unique_split_state(state, mapper)
-        values = Iterators.map((s, f) -> f(s), subs, constraint.maps)
-        constraint.reducer(values)
-    end
-end
-function filter_function(constraint::FilterConstraint{<:Any,<:Function}, space::AbstractHilbertSpace)
-    mapper = state_mapper(space, constraint.spaces)
-    f = constraint.maps
-    function _filter_function(state)
-        subs = unique_split_state(state, mapper)
-        values = Iterators.map(f, subs)
-        constraint.reducer(values)
-    end
-end
-function _check_maps_length(maps, spaces, name = "maps")
-    (maps isa Function || ismissing(maps) || ismissing(spaces)) && return nothing
-    length(maps) == length(spaces) || throw(ArgumentError("Got $(length(maps)) $name for $(length(spaces)) spaces. Give one per space, or pass `spaces` explicitly."))
-    return nothing
-end
-supply_missing_constraint_info(constraint::FilterConstraint{<:Any,<:Any,Missing}, space, spaces) = FilterConstraint(constraint.reducer, constraint.maps, spaces)
-supply_missing_constraint_info(constraint::FilterConstraint{<:Any,Missing,Missing}, space, spaces) = FilterConstraint(constraint.reducer, constraint.maps, missing) # if subspace functions are missing, the reducer acts directly on the full state
-supply_missing_constraint_info(constraint::FilterConstraint, space, spaces) = constraint
-
+const FilterConstraint{R, FS, H} = StateConstraint{R, FS, H, typeof(_keep_true)}
+FilterConstraint(reducer, maps, spaces) = StateConstraint(reducer, maps, spaces, _keep_true)
+FilterConstraint(reducer::Function; maps = missing, spaces = missing) = FilterConstraint(reducer, maps, spaces)
 
 """
     SectorConstraint(reducer; maps=missing, spaces=missing)
@@ -99,29 +80,27 @@ selected spaces, the maps are applied to them, and the reducer receives
 the resulting values. A single function is applied to all spaces; a
 collection of maps supplies one function per subspace.
 """
-struct SectorConstraint{F<:FilterConstraint} <: AbstractConstraint
-    filter::F
-end
-function SectorConstraint(reducer, maps, spaces)
-    SectorConstraint(FilterConstraint(reducer, maps, spaces))
-end
-function SectorConstraint(reducer; maps=missing, spaces=missing)
-    SectorConstraint(FilterConstraint(reducer, maps, spaces))
-end
+const SectorConstraint{R, FS, H} = StateConstraint{R, FS, H, typeof(identity)}
+SectorConstraint(reducer, maps, spaces) = StateConstraint(reducer, maps, spaces, identity)
+SectorConstraint(reducer; maps = missing, spaces = missing) = SectorConstraint(reducer, maps, spaces)
 
-supports_branch_pruning(::SectorConstraint) = false
-supports_filtering(::SectorConstraint) = true
-supports_sector_grouping(::SectorConstraint) = true
-function sector_function(constraint::SectorConstraint, space::AbstractHilbertSpace)
-    return filter_function(constraint.filter, space)
+function _check_maps_length(maps, spaces, name = "maps")
+    (maps isa Function || ismissing(maps) || ismissing(spaces)) && return nothing
+    length(maps) == length(spaces) || throw(ArgumentError("Got $(length(maps)) $name for $(length(spaces)) spaces. Give one per space, or pass `spaces` explicitly."))
+    return nothing
 end
-function filter_function(constraint::SectorConstraint, space::AbstractHilbertSpace)
-    sec = filter_function(constraint.filter, space)
-    return !ismissing ∘ sec
+supports_branch_pruning(::StateConstraint) = false
+# Without `maps`, the reducer acts directly on the full state.
+supply_missing_constraint_info(c::StateConstraint, space, spaces) = ismissing(c.maps) || !ismissing(c.spaces) ? c : StateConstraint(c.reducer, c.maps, spaces, c.rule)
+quantity_function(c::StateConstraint{<:Any, Missing, Missing}, ::AbstractHilbertSpace) = c.reducer
+function quantity_function(c::StateConstraint, space::AbstractHilbertSpace)
+    mapper = state_mapper(space, c.spaces)
+    maps = c.maps
+    return state -> c.reducer(_mapped_values(maps, unique_split_state(state, mapper)))
 end
-
-supply_missing_constraint_info(constraint::SectorConstraint, space, spaces) = supply_missing_constraint_info(constraint.filter, space, spaces) |> SectorConstraint
-
+_mapped_values(f::Function, states) = Iterators.map(f, states)
+_mapped_values(maps, states) = Iterators.map((s, f) -> f(s), states, maps)
+map_spaces(f, c::StateConstraint) = StateConstraint(c.reducer, c.maps, _map_spaces(f, c.spaces), c.rule)
 
 # A constraint on a sum over the states of `constraint_spaces(c)` (`missing` for the spaces
 # `tensor_product` combines, or the whole space in `constrain_space`). The internal interface:
@@ -262,10 +241,18 @@ end
 _additive_sum(c, substates, ::Type{S}) where {S} = sum(((k, s),) -> _summand(S, contribution(c, k, s)), enumerate(substates); init = zero(S))
 _residue(::Nothing, sum) = sum
 _residue(m, sum) = mod(sum, m)
+# The sector label lists the labels of the grouping factors, or is the label of the only one; the other factors filter.
 function sector_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
-    subspace_functions = map(cons -> sector_function(cons, space), constraint.constraints)
-    V = mapreduce(f -> nonmissingtype(Base.promote_op(f, statetype(space))), typejoin, subspace_functions; init=Union{})
+    grouping = filter(supports_sector_grouping, constraint.constraints)
+    keep = filter_function(ProductConstraint(filter(c -> !supports_sector_grouping(c) && supports_filtering(c), constraint.constraints)), space)
+    if length(grouping) == 1
+        f = sector_function(only(grouping), space)
+        return state -> keep(state) ? f(state) : missing
+    end
+    subspace_functions = map(cons -> sector_function(cons, space), grouping)
+    V = mapreduce(f -> nonmissingtype(Base.promote_op(f, statetype(space))), promote_type, subspace_functions; init = Union{})
     function sector(state)
+        keep(state) || return missing
         sectors = Vector{V}(undef, length(subspace_functions))
         for (i, f) in enumerate(subspace_functions)
             label = f(state)
@@ -290,8 +277,6 @@ sectors(::AbstractConstraint) = nothing
 
 map_spaces(f, c) = c
 map_spaces(f, c::ProductConstraint) = ProductConstraint(map(ci -> map_spaces(f, ci), c.constraints))
-map_spaces(f, c::SectorConstraint) = SectorConstraint(map_spaces(f, c.filter))
-map_spaces(f, c::FilterConstraint) = FilterConstraint(c.reducer, c.maps, _map_spaces(f, c.spaces))
 _map_spaces(f, spaces) = map(f, spaces)
 _map_spaces(f, ::Missing) = missing
 
@@ -306,6 +291,9 @@ With a `constraint`, keep the basis states of `space` that satisfy it. If `state
 given, only those states are candidates. Constraints that group states into sectors,
 such as `NumberConservation`, return a space with sectors, with states ordered by sector.
 `constrain_space(space, NoSymmetry())` returns `space` unchanged.
+A constraint can also be `quantity => spec` with a diagonal operator `quantity`, such as
+`constrain_space(H, N => 2)` with `N = sum(f[i]'f[i] for i in 1:4)`; see [Constraints and sectors](@ref) for what `spec` can be.
+A `quantity => spec` constraint on a space with sectors keeps its labels, and its own labels follow them.
 
 With only `states`, return the subspace spanned by exactly those basis states, in the
 given order; this is equivalent to `constrain_space(space, NoSymmetry(), states)`.
@@ -325,11 +313,11 @@ constrain_space
     H_mixed = hilbert_space(f, labels, qn_mixed)
     @test dim(H_mixed) == 2^4
     @test Set(quantumnumbers(H_mixed)) == Set(Any[n, n >= 2 ? :hi : :lo] for n in 0:4)
-    # Integer and floating-point labels keep their own types
+    # Numeric labels are promoted to a common type
     qn_numeric = NumberConservation() * FermionicHilbertSpaces.SectorConstraint(s -> isodd(particle_number(s)) ? 0.5 : 1.5)
     q_numeric = collect(quantumnumbers(hilbert_space(f, 1:2, qn_numeric)))
     @test [0, 1.5] in q_numeric
-    @test all(q -> q[1] isa Int && q[2] isa Float64, q_numeric)
+    @test all(q -> q isa Vector{Float64}, q_numeric)
     qn = prod(NumberConservation(missing, hilbert_space(f[l])) for l in labels)
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4

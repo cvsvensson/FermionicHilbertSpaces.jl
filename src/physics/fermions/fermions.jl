@@ -323,9 +323,18 @@ end
 
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState},BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
-function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::AbstractConstraint)
+function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, @nospecialize(constraint::ConstraintLike))
     length(labels) == 0 && return hilbert_space(a, labels)
-    tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
+    constraint = as_constraint(constraint)
+    # The states of a total number of fermions are built directly.
+    if constraint isa OperatorConstraint && constraint.op == sum(a[l]'a[l] for l in labels)
+        rule = constraint.rule
+        rule isa ValueRule{true, typeof(identity), Missing} && return hilbert_space(a, labels, NumberConservation())
+        if rule isa ValueRule{false, typeof(identity), <:Tuple{Integer}} && 0 <= only(rule.allowed) <= length(labels)
+            return ConstrainedSpace(hilbert_space(a, labels), fixed_particle_number_fockstates(length(labels), only(rule.allowed)))
+        end
+    end
+    return tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
 end
 
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::ParityConservation{Missing})
