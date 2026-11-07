@@ -165,11 +165,11 @@ end
 """
     multiplets(H, raisers; check = true)
 
-For each key J of `highest_weight_states(H, raisers)`, return a dictionary from sector labels M of `H` to `W`, whose
-columns are an orthonormal basis, in `sector(M, H)`, of the states in sector M of the multiplets with highest weight J.
-They are obtained by lowering the highest-weight states with the adjoints of `raisers` (S⁻ = (S⁺)†). For example,
-`multiplets(hilbert_space(S, 1:N, Sz => 2:N//2), Splus)[3][2]` spans the states with total spin 3 and Sz = 2. It has
-one column per J = 3 multiplet: this is a subspace, and a single state only when there is one such multiplet.
+Return `J => (M => W)`: for each key `J` of [`highest_weight_states`](@ref) and each sector `M` of `H`, the columns of
+`W` are an orthonormal basis, in `sector(M, H)`, of the states with total spin `J` and `Sz = M`. They are obtained by
+lowering the highest-weight states with the adjoints of `raisers` (S⁻ = (S⁺)†). For example,
+`multiplets(hilbert_space(S, 1:N, Sz => 2:N//2), Splus)[3][2]` has one column per multiplet with total spin 3, the
+state of that multiplet with Sz = 2.
 """
 function multiplets(H, raisers; check = true)
     Es = _raiser_matrices(H, raisers, check)
