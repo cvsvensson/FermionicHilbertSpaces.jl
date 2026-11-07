@@ -13,6 +13,7 @@ using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Hermitian,
     mul!, normalize, qr, rank, rmul!, svdvals, tr, I
 using LowRankMatrices: LowRankMatrices, LowRankMatrix
 import SciMLOperators
+import SciMLOperators: update_coefficients!
 using FillArrays: Zeros, Fill, Eye
 using OrderedCollections: OrderedDict
 using BitPermutations: BitPermutations, AbstractBitPermutation, BitPermutation, bitpermute
@@ -40,6 +41,7 @@ export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
+export ParametricSparseMatrix
 export symmetric_sector
 export open_system
 public particle_number, Axes, dissipator, FreeFermions, NonCommutativeProducts, add!!, matrix_representation, vector_representation
@@ -149,6 +151,7 @@ include("operator_constraint.jl")
 include("matrix_representation.jl")
 include("sparse_assembly.jl")
 include("lazy_matrix_representation.jl")
+include("parametric_sparse.jl")
 
 include("physics/fermions/fock.jl")
 include("physics/fermions/phase_factors.jl")
