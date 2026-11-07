@@ -14,23 +14,39 @@ function permute_state(state, mapper, perm::NTuple)
     return newstate
 end
 
+# The fermionic permutation `R`, with `R * c' * R'` the corresponding operator in the factor that `perm` moves `c` to,
+# maps the basis state `x` to `u(x) * uπ(y) * y`, where `y` is the permuted state and `u` and `uπ` are the phase factors
+# of the partitions `Hs` and `Hs[invperm(perm)]`. Both are one for spaces without fermions.
+function _permutation_phase(H, Hs, perm, phase_factors)
+    phase_factors || return (x, y) -> 1
+    u = phase_factor_u(state_mapper(H, Hs))
+    uπ = phase_factor_u(state_mapper(H, Hs[invperm(collect(perm))]))
+    return (x, y) -> u(x) * uπ(y)
+end
+
 """
-    permutation_operator(H, Hs, perm)
+    permutation_operator(H, Hs, perm; phase_factors=true)
 
 Gives the matrix representation on `H` of a permutation `perm` of the partition `Hs`.
+For fermionic factors it includes the sign of reordering the fermions, so that it maps `c'` in factor `perm[k]` to the
+corresponding operator in factor `k`. With `phase_factors=false`, it permutes the basis states without signs.
 """
-function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T}=Int) where T
+function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T} = Int; phase_factors = true) where {T}
     P = zeros(T, dim(H), dim(H))
-    add_permutation_operator!(P, (basisstates(H), Base.Fix2(state_index, H)), state_mapper(H, Hs), perm, one(T))
+    phase_of = perm -> _permutation_phase(H, Hs, perm, phase_factors)
+    return add_permutation_operator!(P, (basisstates(H), Base.Fix2(state_index, H)), state_mapper(H, Hs), perm, one(T), phase_of)
 end
-function add_permutation_operator!(P, (states, state_index), mapper, perm, weight=1)
+# `phase_of(perm)` gives the phase function of a permutation, see `_permutation_phase`.
+function add_permutation_operator!(P, (states, state_index), mapper, perm, weight = 1, phase_of = perm -> (x, y) -> 1)
     substates = unique_split_state(first(states), mapper)
-    return _add_permutation_operator!(P, (states, state_index), mapper, _match_perm(perm, substates), weight)
+    perm = _match_perm(perm, substates)
+    return _add_permutation_operator!(P, (states, state_index), mapper, perm, weight, phase_of(perm))
 end
-function add_permutation_operators!(P, (states, state_index), mapper, perms, weights)
+function add_permutation_operators!(P, (states, state_index), mapper, perms, weights, phase_of)
     substates = unique_split_state(first(states), mapper)
     for (perm, w) in zip(perms, weights)
-        _add_permutation_operator!(P, (states, state_index), mapper, _match_perm(perm, substates), w)
+        perm = _match_perm(perm, substates)
+        _add_permutation_operator!(P, (states, state_index), mapper, perm, w, phase_of(perm))
     end
     return P
 end
@@ -42,17 +58,17 @@ function _match_perm(perm, ::NTuple{N,Any}) where N
 end
 _match_perm(perm, substates) = perm
 
-function _add_permutation_operator!(P, (states, state_index), mapper, perm, weight)
+function _add_permutation_operator!(P, (states, state_index), mapper, perm, weight, phase)
     for (j, state) in enumerate(states)
         state2 = permute_state(state, mapper, perm)
         i = state_index(state2)
         iszero(i) && throw(ArgumentError("The permutation maps the basis state `$state` outside the space."))
-        push_inds_amps!(P, i, j, weight)
+        push_inds_amps!(P, i, j, weight * phase(state, state2))
     end
     return P
 end
 """
-    permutation_projector(H, Hs, perms[, weights[, T]]; normalize=true, sparse=true)
+    permutation_projector(H, Hs, perms[, weights[, T]]; normalize=true, sparse=true, phase_factors=true)
 
 Build a group-averaged projector/operator from permutation operators:
 `P = sum(weights[g] * R_g for g)`, where `R_g` permutes the factors `Hs` according to
@@ -67,20 +83,21 @@ Keywords:
 - `normalize`: rescale `P` by `conj(tr(P)) / sum(abs2, P)`, which makes `P^2 == P` when `P`
   is proportional to a projector.
 - `sparse`: return a `SparseMatrixCSC` if `true`, and a `Matrix` otherwise.
+- `phase_factors`: include the fermionic signs of the permutations, as in [`permutation_operator`](@ref).
 
 `Hs` may be either a full partition of `H` (covering all atomic factors) or a proper
 subsystem list (covering only a subset of atomic factors). In the subsystem case the
 projector is first constructed on `Hsub = tensor_product(Hs...)` and then embedded
 back into `H` via `embed(Psub, Hsub => H)`.
 """
-function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothing, ::Type{T}=_default_projector_eltype(weights); normalize=true, sparse=true) where T
+function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights = nothing, ::Type{T} = _default_projector_eltype(weights); normalize = true, sparse = true, phase_factors = true) where {T}
     isempty(perms) && throw(ArgumentError("`perms` must contain at least one permutation."))
 
     # Subsystem branch: Hs does not partition H, treat as a proper subsystem.
     if !ispartition(Hs, H)
         Hsub = subregion(tensor_product(Hs...), H)
         issubsystem(Hsub, H) || throw(ArgumentError("`Hs` must be a partition or a subsystem of `H`."))
-        Psub = permutation_projector(Hsub, Hs, perms, weights, T; normalize, sparse)
+        Psub = permutation_projector(Hsub, Hs, perms, weights, T; normalize, sparse, phase_factors)
         P = embed(Psub, Hsub => H)
         return sparse ? P : Matrix(P)
     end
@@ -106,7 +123,7 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights=nothi
     mapper = state_mapper(H, Hs)
     states = basisstates(H)
     si = Base.Fix2(state_index, H)
-    add_permutation_operators!(accum, (states, si), mapper, perms, ws)
+    add_permutation_operators!(accum, (states, si), mapper, perms, ws, perm -> _permutation_phase(H, Hs, perm, phase_factors))
     P = if sparse
         SparseArrays.sparse(finalize!(accum, H))
     else
@@ -141,7 +158,7 @@ function _default_projector_eltype(weights)
 end
 
 """
-    symmetric_sector(H, Hs, sector=:symmetric, T=default; orth_method=:qr, check=true, normalize=true, sparse=true)
+    symmetric_sector(H, Hs, sector=:symmetric, T=default; orth_method=:qr, check=true, normalize=true, sparse=true, phase_factors=true)
 
 Return a basis for the sector of `H` selected by `sector`, under permutations of the
 factors `Hs`.
@@ -179,6 +196,7 @@ Hermitian. `check=false` skips these checks.
 
 `Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
 case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
+`phase_factors` includes the fermionic signs of the permutations, as in [`permutation_operator`](@ref).
 """
 function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type{T}=_default_sector_eltype(sector);
     orth_method=:qr, check=true, kwargs...) where T
@@ -242,21 +260,22 @@ _sector_parity(sector::Symbol) = sector === :symmetric ? 1 : sector === :antisym
 
 # Orthonormal basis of the symmetric (`parity = 1`) or antisymmetric (`parity = -1`)
 # sector of `H` under all permutations of the partition `Hs`.
-# `permute_state` returns one basis state and discards the amplitude that `combine_states`
-# returns, so every permutation acts as a permutation matrix on the basis. The
-# group-averaged projector is then a sum over orbits of basis states, and each orbit
-# contributes one column with entries `sign(g) / sqrt(length(orbit))`, where `g` maps the
-# orbit's first state to the entry's state. In the antisymmetric case an orbit whose
-# states are fixed by an odd permutation contributes nothing.
+# Every permutation maps each basis state to one basis state times a sign, the fermionic
+# phase. The group-averaged projector is then a sum over orbits of basis states, and each
+# orbit contributes one column with entries `±1 / sqrt(length(orbit))`, where the sign is
+# the phase of the permutation `g` mapping the orbit's first state to the entry's state,
+# times `sign(g)` in the antisymmetric case. An orbit containing a state that a
+# permutation maps to minus itself, including these signs, contributes nothing.
 # The orbits are found with the adjacent transpositions, which generate all permutations.
-function _orbit_sector_basis(H, Hs, parity, ::Type{T}; normalize=true, sparse=true) where T
+function _orbit_sector_basis(H, Hs, parity, ::Type{T}; normalize = true, sparse = true, phase_factors = true) where {T}
     # `normalize` and `sparse` only affect the projector, which is never built here.
     states = basisstates(H)
     mapper = state_mapper(H, Hs)
     n = length(Hs)
     substates = unique_split_state(first(states), mapper)
     gens = [_match_perm([1:k-1; k + 1; k; k+2:n], substates) for k in 1:n-1]
-    parent, rel, odd = _signed_orbits(states, Base.Fix2(state_index, H), mapper, gens, parity)
+    phases = [_permutation_phase(H, Hs, g, phase_factors) for g in gens]
+    parent, rel, odd = _signed_orbits(states, Base.Fix2(state_index, H), mapper, gens, phases, parity)
 
     d = length(parent)
     label = zeros(Int, d)  # column of each orbit root, -1 for dropped orbits
@@ -289,25 +308,26 @@ end
 
 # Signed union-find over the basis states: `parent` and `rel` encode a forest where the
 # amplitude of state `x` in its orbit's column is `rel[x]` times that of `parent[x]`. Each
-# generator application `i = g(j)` requires amplitude(i) = parity * amplitude(j). An orbit
-# whose constraints contradict each other is marked in `odd`: such an orbit contains a
-# closed walk with an odd number of transpositions, so a state in it is fixed by an odd
-# permutation.
-function _signed_orbits(states, state_index, mapper, gens, parity)
+# generator application `i = g(j)` with phase `p` requires amplitude(i) = parity * p * amplitude(j).
+# An orbit whose constraints contradict each other is marked in `odd`: a state in it is
+# mapped to minus itself, so the orbit is absent from the sector.
+function _signed_orbits(states, state_index, mapper, gens, phases, parity)
     d = length(states)
     parent = collect(1:d)
     rel = ones(Int, d)
     odd = falses(d)
-    for (j, state) in enumerate(states), g in gens
-        i = state_index(permute_state(state, mapper, g))
+    for (j, state) in enumerate(states), (g, phase) in zip(gens, phases)
+        newstate = permute_state(state, mapper, g)
+        i = state_index(newstate)
         iszero(i) && throw(ArgumentError("The permutation maps the basis state `$state` outside the space."))
+        p = parity * phase(state, newstate)
         ri, si = _find_signed!(parent, rel, i)
         rj, sj = _find_signed!(parent, rel, j)
         if ri == rj
-            si == parity * sj || (odd[ri] = true)
+            si == p * sj || (odd[ri] = true)
         else
             parent[ri] = rj
-            rel[ri] = si * parity * sj
+            rel[ri] = si * p * sj
             odd[rj] |= odd[ri]
         end
     end
@@ -388,8 +408,12 @@ end
     @test Ptriv * Ptriv' ≈ Qtriv * Qtriv'
     @test Psign * Psign' ≈ Qsign * Qsign'
 
-    @test size(Psign, 2) == 1
-    @test size(Ptriv, 2) == 3
+    # The swap maps |11⟩ to -|11⟩, which is antisymmetric. Without phase factors it is symmetric.
+    @test size(Psign, 2) == 2
+    @test size(Ptriv, 2) == 2
+    @test size(symmetric_sector(H, [H1, H2], :symmetric; phase_factors = false), 2) == 3
+    @test size(symmetric_sector(H, [H1, H2], :antisymmetric; phase_factors = false), 2) == 1
+    @test size(symmetric_sector(H, [H1, H2], sympw; phase_factors = false), 2) == 3
 
     Ttriv = symmetric_sector(H, [H1, H2], sympw; orth_method=nothing)
     Tsign = symmetric_sector(H, [H1, H2], antisymw; orth_method=nothing)
@@ -477,7 +501,7 @@ end
     cw = ([idperm, swapperm], [1.0 + 0im, 1.0 + 0im])
     Qc = symmetric_sector(H, [H1, H2], cw)
     @test eltype(Qc) <: Complex
-    @test size(Qc, 2) == 3
+    @test size(Qc, 2) == 2
     @test eltype(symmetric_sector(H, [H1, H2], ([idperm, swapperm], [1, -1]))) == Float64
 
     # Irreps absent from the space give an empty basis, not a rank-1 projector from roundoff
@@ -526,7 +550,7 @@ end
     # Complex characters of the cyclic group on 4 modes
     @fermions f
     H = hilbert_space(f, 1:4)
-    for (k, rank) in zip(0:3, (6, 3, 4, 3))
+    for (k, rank) in zip(0:3, (4, 4, 4, 4))
         check(H, factors(H), ([circshift(1:4, j) for j in 0:3], [cis(2pi * k * j / 4) for j in 0:3]), rank)
     end
 end
@@ -547,11 +571,11 @@ end
         (Hspins, factors(Hspins)), (tensor_product(sites), sites),
         (tensor_product(bosons), bosons), (tensor_product(mixed), mixed)]
     for (H, Hs) in cases
-        # The orbit construction relies on every permutation acting as a permutation matrix
+        # The orbit construction relies on every permutation acting as a signed permutation matrix
         for perm in permutations(1:length(Hs))
             R = permutation_operator(H, Hs, perm)
-            @test all(x -> x == 0 || x == 1, R)
-            @test all(==(1), sum(R; dims=1)) && all(==(1), sum(R; dims=2))
+            @test all(x -> x in (-1, 0, 1), R)
+            @test all(==(1), sum(abs, R; dims = 1)) && all(==(1), sum(abs, R; dims = 2))
         end
         for sector in (:symmetric, :antisymmetric)
             P = symmetric_sector(H, Hs, sector; orth_method=nothing)
@@ -566,11 +590,28 @@ end
     end
     # The orbit basis is computed in the requested precision
     Qbig = symmetric_sector(cases[1]..., :symmetric, BigFloat)
-    @test eltype(Qbig) == BigFloat && size(Qbig, 2) == 5 && maximum(abs, Qbig' * Qbig - I) < 1e-60
+    @test eltype(Qbig) == BigFloat && size(Qbig, 2) == 2 && maximum(abs, Qbig' * Qbig - I) < 1.0e-60
     # Single factor: the sector is the whole space
     H1 = hilbert_space(f, 1:1)
     @test symmetric_sector(H1, [H1], :antisymmetric) ≈ I
     @test_throws ArgumentError symmetric_sector(cases[1]..., :invalid)
+end
+
+@testitem "Fermionic permutations" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: permutation_operator, symmetric_sector
+    @fermions c
+    sites = [hilbert_space(c, [(k, :u), (k, :d)]) for k in 1:3]
+    H = tensor_product(sites)
+    perm = [2, 3, 1]
+    R = permutation_operator(H, sites, perm)
+    @test all(R * Matrix(representation(c[perm[k], s]', H)) * R' ≈ Matrix(representation(c[k, s]', H)) for k in 1:3, s in (:u, :d))
+    # The site-exchange symmetric and antisymmetric sectors block-diagonalize a Hubbard dimer
+    H2 = tensor_product(sites[1:2])
+    ham = sum(c[1, s]' * c[2, s] + hc for s in (:u, :d)) + 3 * sum(c[k, :u]' * c[k, :u] * c[k, :d]' * c[k, :d] for k in 1:2)
+    M = representation(ham, H2, Matrix)
+    Qs, Qa = symmetric_sector(H2, sites[1:2], :symmetric), symmetric_sector(H2, sites[1:2], :antisymmetric)
+    @test norm(Qs' * M * Qa) < 1.0e-12
 end
 
 @testitem "Checks on the weights of symmetric_sector" begin
