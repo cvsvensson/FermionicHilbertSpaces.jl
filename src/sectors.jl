@@ -109,6 +109,59 @@ Return all sectors of `H` in the same order as `quantumnumbers(H)`.
 """
 sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
 
+"""
+    highest_weight_states(H, raisers)
+
+Return an `OrderedDict` `qn => V` over the sectors of `H` that contain states annihilated by all
+`raisers` (one operator or a collection). The columns of `V` are an orthonormal basis of those states in
+the basis of `sector(qn, H)`. For two spins 1/2, `highest_weight_states(hilbert_space(S, 1:2, Sz), Splus)`
+has one state at `Sz = 0` (the singlet) and one at `Sz = 1` (the triplet).
+"""
+function highest_weight_states(H, raisers)
+    Es = map(E -> representation(E, H), _operators(raisers))
+    kernels = map(quantumnumbers(H)) do qn
+        M = reduce(vcat, [E[:, indices(qn, H)] for E in Es])
+        qn => nullspace(Matrix(M[vec(any(!iszero, M; dims=2)), :]))
+    end
+    OrderedDict(filter(((qn, V),) -> size(V, 2) > 0, kernels))
+end
+_operators(ops::Union{Tuple,AbstractVector}) = ops
+_operators(op) = (op,)
+
+"""
+    multiplets(H, raisers)
+
+Return an `OrderedDict` `qn => W` for each highest weight `qn` of [`highest_weight_states`](@ref), where the
+columns of `W` are an orthonormal basis, in the basis of `H`, of all multiplets with that highest weight.
+The lowering operators are the adjoints of `raisers`, which holds for a unitary representation.
+For a symmetric operator with matrix `M`, `W' * M * W` is its block on these multiplets.
+"""
+function multiplets(H, raisers)
+    Fs = map(E -> representation(E, H)', _operators(raisers))
+    # Each level is the image of orthonormal vectors, so roundoff is small relative to the operator norm.
+    tol = sqrt(eps()) * maximum(norm, Fs)
+    OrderedDict(map(collect(highest_weight_states(H, raisers))) do (qn, V)
+        level = zeros(eltype(V), dim(H), size(V, 2))
+        level[indices(qn, H), :] = V
+        levels = [level]
+        while size(level, 2) > 0
+            level = _orthonormalize_sectors(reduce(hcat, [F * level for F in Fs]), H, tol)
+            push!(levels, level)
+        end
+        qn => reduce(hcat, levels)
+    end)
+end
+function _orthonormalize_sectors(X, H, tol)
+    blocks = map(quantumnumbers(H)) do qn
+        rows = indices(qn, H)
+        U, S = svd(X[rows, :])
+        Y = zeros(eltype(U), size(X, 1), count(>(tol), S))
+        Y[rows, :] = U[:, axes(Y, 2)]
+        Y
+    end
+    reduce(hcat, blocks)
+end
+
 function space_indices(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace)
     # `Hsub` is a sector of `H` when it equals `sector(qn, H)` for some `qn`
     qn = Hsub isa ConstrainedSpace && parent(Hsub) == parent(H) ? findfirst(isequal(subspace_states(Hsub)), H.qn_to_states) : nothing
@@ -335,6 +388,25 @@ end
     end
     @test_throws ArgumentError representation(hopping_symham, H)
     @test size(representation(hopping_symham, H; projection=true), 1) == dim(H)
+end
+
+@testitem "SU(3) highest weights and multiplets" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: highest_weight_states, multiplets
+    @fermions c
+    L = 2
+    n(a) = sum(c[j, a]'c[j, a] for j in 1:L)
+    H = hilbert_space(c, [(j, a) for j in 1:L for a in 1:3], (n(1) + n(2) + n(3) => 2, n(1), n(2), n(3)))
+    E = [sum(c[j, a]'c[j, a + 1] for j in 1:L) for a in 1:2]
+    # ∧²(C³ ⊗ C²) = 6 ⊕ 3 ⋅ 3̄
+    @test Dict(qn => size(V, 2) for (qn, V) in highest_weight_states(H, E)) == Dict([2, 0, 0] => 1, [1, 1, 0] => 3)
+    W = multiplets(H, E)
+    weyl_dim((n1, n2, n3)) = (n1 - n2 + 1) * (n2 - n3 + 1) * (n1 - n3 + 2) ÷ 2
+    @test all(size(W[qn], 2) == size(V, 2) * weyl_dim(qn) for (qn, V) in highest_weight_states(H, E))
+    Wall = reduce(hcat, values(W))
+    @test Wall' * Wall ≈ I(dim(H))
+    M = representation(sum(c[1, a]'c[2, a] + hc for a in 1:3), H, Matrix)
+    @test all(M * w ≈ w * (w' * M * w) for w in values(W))
 end
 
 @testitem "Sector propagation in tensor_product" begin
