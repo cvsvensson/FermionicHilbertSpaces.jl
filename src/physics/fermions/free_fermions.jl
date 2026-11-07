@@ -11,11 +11,12 @@ module FreeFermions
     using ..FermionicHilbertSpaces: FermionicHilbertSpaces, AbstractFockState, AbstractHilbertSpace,
         EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, MajoranaSym, NoChunking, SymbolicFermionBasis,
         SymbolicMajoranaBasis,
-    _FermionModeSpace, _canonicalize_repr, _matrix_format, _repr_eltype, _xlogx, _zero_matrix, exchange_phase, finalize!,
+        _FermionModeSpace, _canonicalize_repr, _matrix_format, _operator_type, _repr_eltype, _xlogx, _zero_matrix, exchange_phase, finalize!,
         matrix_accumulator, mode_position, push_inds_amps!, state_index
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,
-        _state_label_atomic, apply_local_operators, basisstate, basisstates, dim, von_neumann_entropy, expectation,
-        hilbert_space, matrix_representation, mode_ordering, modes, partial_trace, representation
+        _state_label_atomic, _unwrap_space, apply_local_operators, atom_ids, basisstate, basisstates, dim, von_neumann_entropy, expectation,
+        group_id, hilbert_space, interpret_state, matrix_representation, mode_ordering, modes, partial_trace, representation,
+        statetype, vector_representation
     using LinearAlgebra: LinearAlgebra, Diagonal, Eigen, Hermitian, Symmetric, UniformScaling, I,
     det, eigen, eigvals, issymmetric, normalize, svd
     using NonCommutativeProducts: NonCommutativeProducts, NCAdd, NCMul, NCterms
@@ -73,4 +74,35 @@ _check_size(G, H) = size(G) == (dim(H), dim(H)) ||
     include("gaussian.jl")
     include("wick.jl")
 
+    # These spaces share their parent's basis, so kets and bras are represented on the parent
+    const _ParentBasisSpace = Union{SingleParticleHilbertSpace, BdGHilbertSpace}
+    statetype(H::_ParentBasisSpace) = statetype(parent(H))
+    interpret_state(state, H::_ParentBasisSpace) = interpret_state(state, parent(H))
+    group_id(H::_ParentBasisSpace) = group_id(parent(H))
+    atom_ids(H::_ParentBasisSpace) = atom_ids(parent(H))
+    _unwrap_space(H::_ParentBasisSpace) = _unwrap_space(parent(H))
+    vector_representation(op, H::_ParentBasisSpace, repr = EagerSparseRepr(); kwargs...) = vector_representation(op, parent(H), repr; kwargs...)
+    function representation(op, H::_ParentBasisSpace, repr = EagerSparseRepr(); chunking = NoChunking(), kwargs...)
+        _operator_type(op) in (:kets, :bras) && return representation(op, parent(H), repr; kwargs...)
+        return matrix_representation(op, H, repr; chunking, kwargs...)
+    end
+
+end
+
+@testitem "Kets of single-particle and BdG spaces" begin
+    using FermionicHilbertSpaces: vector_representation
+    using FermionicHilbertSpaces.FreeFermions
+    using LinearAlgebra
+    @fermions f
+    for H in (hilbert_space(f, 1:3, SingleParticle()), hilbert_space(f, 1:3, BdG()))
+        basis = Matrix(I, dim(H), dim(H))
+        kets = Kets(H)
+        @test all(i -> representation(Ket(basisstate(i, H), H), H, Vector) == basis[:, i], 1:dim(H))
+        @test representation(kets[1] + 2 * kets[2], H, Vector) == basis[:, 1] + 2 * basis[:, 2]
+        @test vector_representation(kets[2]', H, Vector) == transpose(basis[:, 2])
+        @test kets[2]' * (kets[1] + 3 * kets[2]) == 3
+    end
+    Hsp = hilbert_space(f, 1:3, SingleParticle())
+    @test Ket("010", Hsp) == Kets(Hsp)[2]
+    @test repr(Ket("010", Hsp)) == "|010⟩"
 end

@@ -127,7 +127,6 @@ end
     @test_throws ArgumentError partial_trace(G, Hsp => hilbert_space(f, [1, 5], SingleParticle()))
 end
 
-representation(op, H::SingleParticleHilbertSpace, repr = EagerSparseRepr(); chunking = NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking = chunking, kwargs...)
 function matrix_representation(op, H::SingleParticleHilbertSpace, repr = EagerSparseRepr(); chunking = NoChunking(), kwargs...)
     _isscalar_operator(op) && return _identity_free_zero(H, repr)
     _is_quadratic_fermion_operator(op, true) || throw(ArgumentError("Only quadratic, number conserving fermionic operators can be represented on a SingleParticleHilbertSpace. Use `hilbert_space(f, labels)` and `representation(op, H)` for other operators."))

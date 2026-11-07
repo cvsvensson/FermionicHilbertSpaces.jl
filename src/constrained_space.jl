@@ -210,7 +210,8 @@ state_position(d::Dict, state, parent) = get(d, state, 0)
 same_state_kind(state, ::Type{B}) where {B} = _type_family(typeof(state)) === _type_family(B)
 _type_family(T) = (parentmodule(T), nameof(T))
 # Returns `state` if it is of the kind of the states of the subspace `H`, and throws a `MethodError` otherwise.
-_check_state_kind(state, H) = (state isa statetype(H) || same_state_kind(state, statetype(H))) ? state : throw(MethodError(state_index, (state, H)))
+_check_state_kind(state, H) = is_state_kind_of(state, H) ? state : throw(MethodError(state_index, (state, H)))
+is_state_kind_of(state, H) = state isa statetype(H) || same_state_kind(state, statetype(H))
 same_state_kind(state::ProductState, ::Type{ProductState{S}}) where {S<:Tuple} = state.states isa Tuple && length(state.states) == fieldcount(S) && all(map(same_state_kind, state.states, fieldtypes(S)))
 
 @testitem "constrain_space" begin
