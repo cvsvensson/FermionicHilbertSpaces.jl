@@ -110,15 +110,23 @@ Return all sectors of `H` in the same order as `quantumnumbers(H)`.
 sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
 
 """
-    highest_weight_states(H, raisers)
+    highest_weight_states(H, raisers; check = true)
 
-Return an `OrderedDict` `qn => V` over the sectors of `H` that contain states annihilated by all
-`raisers` (one operator or a collection). The columns of `V` are an orthonormal basis of those states in
-the basis of `sector(qn, H)`. For two spins 1/2, `highest_weight_states(hilbert_space(S, 1:2, Sz), Splus)`
-has one state at `Sz = 0` (the singlet) and one at `Sz = 1` (the triplet).
+Return `M => V` for each sector of `H` that has highest-weight states, i.e. states annihilated by all `raisers`.
+For spins, with `H = hilbert_space(S, 1:N, Sz)` and `Splus = sum(S[k][:+] for k in 1:N)`, the columns of
+`highest_weight_states(H, Splus)[J]` are an orthonormal basis, in `sector(J, H)`, of the states |J, J⟩, one per
+multiplet with total spin J. Several raisers (e.g. the two of SU(3)) go in a vector; a raiser may be an operator
+or its matrix on `H`.
+
+  - The sectors must be labelled by the eigenvalues of the symmetry's diagonal generators (`Sz` for spins, each
+    flavour number for SU(N)); extra labels are fine.
+  - `H` must contain the sectors the raisers map into, e.g. `Sz => 3:N//2` suffices for J = 3; otherwise
+    `representation` throws.
+
+`check` verifies the commutator conditions and can be turned off.
 """
-function highest_weight_states(H, raisers)
-    Es = map(E -> representation(E, H), _operators(raisers))
+function highest_weight_states(H, raisers; check = true)
+    Es = _raiser_matrices(H, raisers, check)
     kernels = map(quantumnumbers(H)) do qn
         M = reduce(vcat, [E[:, indices(qn, H)] for E in Es])
         qn => nullspace(Matrix(M[vec(any(!iszero, M; dims = 2)), :]))
@@ -127,43 +135,65 @@ function highest_weight_states(H, raisers)
 end
 _operators(ops::Union{Tuple, AbstractVector}) = ops
 _operators(op) = (op,)
+_raiser_matrix(E::AbstractMatrix, H) = E
+_raiser_matrix(E, H) = representation(E, H)
+function _raiser_matrices(H, raisers, check)
+    Es = map(E -> _raiser_matrix(E, H), _operators(raisers))
+    check && _check_raisers(Es, H)
+    return Es
+end
+function _check_raisers(Es, H)
+    tol = sqrt(eps(real(float(eltype(first(Es)))))) * maximum(E -> maximum(abs, E), Es)^2
+    for (a, Ea) in pairs(Es), (b, Eb) in pairs(Es)
+        C = Ea * Eb' - Eb' * Ea
+        msg = a == b ?
+            "raisers[$a] and its adjoint do not commute to a constant on each sector; the raisers must be raising operators of a symmetry (like the total S⁺), lowered by their adjoints, and the sectors must be labelled by all the weights (like Sz)" :
+            "raisers[$a] does not commute with the adjoint of raisers[$b]; distinct raisers must be independent raising operators, like the two simple raisers of SU(3)"
+        for qn in quantumnumbers(H)
+            cols = indices(qn, H)
+            # Eb' may lead out of a truncated `H` from sectors that Eb does not map into.
+            iszero(Eb[cols, :]) && continue
+            D = C[:, cols]
+            a == b && (D[cols, :] -= D[first(cols), 1] * I)
+            maximum(abs, D) <= tol || throw(ArgumentError(msg))
+        end
+    end
+    return nothing
+end
 
 """
-    multiplets(H, raisers)
+    multiplets(H, raisers; check = true)
 
-Return an `OrderedDict` `qn => W` for each highest weight `qn` of [`highest_weight_states`](@ref), where the
-columns of `W` are an orthonormal basis, in the basis of `H`, of all multiplets with that highest weight.
-The lowering operators are the adjoints of `raisers`, which holds for a unitary representation.
+Return `J => (M => W)`, where the columns of `W` are an orthonormal basis of the states in `H` with total spin J and
+`S^z = M`, in the basis of `sector(M, H)`. They are the states obtained by lowering the highest-weight states with
+the adjoints of `raisers` (S⁻ = (S⁺)†). For example, `multiplets(hilbert_space(S, 1:N, Sz => 2:N//2), Splus)[3][2]`
+spans the states with J = 3 and M = 2. It has one column per J = 3 multiplet: this is a subspace, and a single state
+only when there is one such multiplet.
 """
-function multiplets(H, raisers)
-    Es = map(E -> representation(E, H), _operators(raisers))
-    scale = maximum(E -> maximum(abs, E), Es)
+function multiplets(H, raisers; check = true)
+    Es = _raiser_matrices(H, raisers, check)
+    lowerers = map(E -> copy(E'), Es)
+    # Each level is the image of orthonormal vectors, so roundoff is small relative to the scale of the raisers.
+    tol = sqrt(eps(real(float(eltype(first(Es)))))) * maximum(E -> maximum(abs, E), Es)
     return OrderedDict(
-        map(collect(highest_weight_states(H, raisers))) do (qn, V)
-            # Each level is the image of orthonormal vectors, so roundoff is small relative to the scale of the raisers.
-            tol = sqrt(eps(real(eltype(V)))) * scale
-            level = zeros(eltype(V), dim(H), size(V, 2))
-            level[indices(qn, H), :] = V
-            levels = [level]
-            # Lowering strictly decreases the height, so there are fewer levels than sectors.
+        map(collect(highest_weight_states(H, Es; check = false))) do (J, V)
+            level = OrderedDict(J => V)
+            W = copy(level)
+            # Lowering strictly decreases the weight, so there are fewer levels than sectors.
             for _ in quantumnumbers(H)
-                level = _orthonormalize_sectors(reduce(hcat, [E' * level for E in Es]), H, tol)
-                size(level, 2) == 0 && break
-                push!(levels, level)
+                X = reduce(hcat, [F[:, indices(M, H)] * B for F in lowerers for (M, B) in level])
+                level = OrderedDict(M => _column_span(X[indices(M, H), :], tol) for M in quantumnumbers(H))
+                filter!(((M, B),) -> size(B, 2) > 0, level)
+                isempty(level) && break
+                merge!(W, level)
             end
-            qn => reduce(hcat, levels)
+            J => W
         end
     )
 end
-function _orthonormalize_sectors(X, H, tol)
-    blocks = map(quantumnumbers(H)) do qn
-        rows = indices(qn, H)
-        U, S = svd(X[rows, :])
-        Y = zeros(eltype(U), size(X, 1), count(>(tol), S))
-        Y[rows, :] = U[:, axes(Y, 2)]
-        Y
-    end
-    return reduce(hcat, blocks)
+function _column_span(X, tol)
+    U, S = svd(X)
+    return U[:, 1:count(>(tol), S)]
 end
 
 function space_indices(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace)
@@ -406,11 +436,28 @@ end
     @test Dict(qn => size(V, 2) for (qn, V) in highest_weight_states(H, E)) == Dict([2, 0, 0] => 1, [1, 1, 0] => 3)
     W = multiplets(H, E)
     weyl_dim((n1, n2, n3)) = (n1 - n2 + 1) * (n2 - n3 + 1) * (n1 - n3 + 2) ÷ 2
-    @test all(size(W[qn], 2) == size(V, 2) * weyl_dim(qn) for (qn, V) in highest_weight_states(H, E))
-    Wall = reduce(hcat, values(W))
-    @test Wall' * Wall ≈ I(dim(H))
-    M = representation(sum(c[1, a]'c[2, a] + hc for a in 1:3), H, Matrix)
-    @test all(M * w ≈ w * (w' * M * w) for w in values(W))
+    @test all(sum(B -> size(B, 2), values(W[qn])) == size(V, 2) * weyl_dim(qn) for (qn, V) in highest_weight_states(H, E))
+    hop = sum(c[1, a]'c[2, a] + hc for a in 1:3)
+    for qn in quantumnumbers(H)
+        Ws = [w[qn] for w in values(W) if haskey(w, qn)]
+        Wall = reduce(hcat, Ws)
+        @test Wall' * Wall ≈ I(dim(sector(qn, H)))
+        M = representation(hop, sector(qn, H), Matrix)
+        @test all(M * w ≈ w * (w' * M * w) for w in Ws)
+    end
+end
+
+@testitem "Raisers must be symmetry raisers with fine enough sectors" begin
+    import FermionicHilbertSpaces: highest_weight_states
+    @spins S 1 // 2
+    Splus = sum(S[k][:+] for k in 1:3)
+    H = hilbert_space(S, 1:3, sum(S[k][:z] for k in 1:3))
+    @test size(highest_weight_states(H, representation(Splus, H))[1 // 2], 2) == 2
+    @test_throws ArgumentError highest_weight_states(H, S[1][:+])
+    @fermions c
+    n(a) = c[1, a]'c[1, a] + c[2, a]'c[2, a]
+    Hcoarse = hilbert_space(c, [(j, a) for j in 1:2 for a in 1:3], n(1) + n(2) + n(3))
+    @test_throws ArgumentError highest_weight_states(Hcoarse, [c[1, 1]'c[1, 2] + c[2, 1]'c[2, 2]])
 end
 
 @testitem "Sector propagation in tensor_product" begin

@@ -66,11 +66,11 @@ Hsz = hilbert_space(S, 1:N, Sz)
 hw_spectra = [eigvals(Hermitian(V' * representation(ham, sector(J, Hsz), Matrix) * V)) for (J, V) in highest_weight_states(Hsz, Splus)]
 @assert all(hw_spectra .≈ spectra)
 
-# Lowering them with $S^-_\mathrm{tot}$ gives `multiplets`, an orthonormal basis of all states with total spin $J$.
-# The energy of each triplet then appears three times, once per value of $S^z_\mathrm{tot}$.
+# Lowering them with $S^-_\mathrm{tot}$ gives `multiplets`, for each $J$ an orthonormal basis of the states with
+# total spin $J$ in each sector $M$. The triplets have the same energies in each of the sectors $M = -1, 0, 1$.
 
 W = multiplets(Hsz, Splus)
-@assert eigvals(Hermitian(W[1]' * representation(ham, Hsz, Matrix) * W[1])) ≈ repeat(spectra[2], inner = 3)
+@assert all(eigvals(Hermitian(B' * representation(ham, sector(M, Hsz), Matrix) * B)) ≈ spectra[2] for (M, B) in W[1])
 
 # States symmetric under all permutations of the sites have the maximal total spin, so the symmetric
 # sector, built with [`symmetric_sector`](@ref), reproduces the highest-weight spectrum for $J = N/2$.
