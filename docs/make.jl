@@ -11,11 +11,15 @@ literate_files = [
     "examples/bosons.jl",
     "examples/braiding.jl",
     "examples/clock_operators.jl",
+    "examples/eta_pairing.jl",
     "examples/floquet_tutorial.jl",
     "examples/free_fermions.jl",
+    "examples/hubbard_bound_state.jl",
     "examples/kitaev_chain.jl",
+    "examples/kitaev_honeycomb_toric_code.jl",
     "examples/open_system_lindblad.jl",
     "examples/partial_transpose.jl",
+    "examples/schrieffer_wolff_kondo.jl",
     "examples/spin_chain.jl",
     "examples/syk_model.jl",
     "examples/translation_symmetry.jl",
@@ -40,6 +44,12 @@ pages = [
         "SYK model" => "literate_output/syk_model.md",
         "Braiding Majorana zero modes" => "literate_output/braiding.md",
         "Spatial symmetries" => "literate_output/translation_symmetry.md",
+        "Advanced: symbolic states" => [
+            "η-pairing in a Hubbard chain" => "literate_output/eta_pairing.md",
+            "Bound doublons with KrylovKit" => "literate_output/hubbard_bound_state.md",
+            "Schrieffer–Wolff and the Kondo coupling" => "literate_output/schrieffer_wolff_kondo.md",
+            "Toric code from the Kitaev honeycomb" => "literate_output/kitaev_honeycomb_toric_code.md",
+        ],
     ],
     "Guides" => [
         "Constrained spaces and quantum numbers" => "conservation.md",
@@ -86,7 +96,8 @@ sections = [
     [p for p in pages if p.second isa Vector && p.first ∉ optional]...,
     "Optional" => [q for p in pages if p.first ∈ optional for q in p.second],
 ]
-link((title, file)) = "- [$title]($(file == "index.md" ? "./" : replace(file, r"\.md$" => "/")))"
+link((title, file)) = file isa Vector ? join(link.(file), "\n") :
+    "- [$title]($(file == "index.md" ? "./" : replace(file, r"\.md$" => "/")))"
 section((name, ps)) = "## $name\n\n" * join(link.(ps), "\n")
 #! format: off
 write(
