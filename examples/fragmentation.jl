@@ -26,12 +26,11 @@ dim(H), dim(Hfull)
 # a constraint on the basis states also gives. The blockade space, with open or periodic boundaries, is a single
 # fragment, so for the PXP model `fragment` gives no new information.
 #
-# A constraint that each product of neighbouring excitation projectors is zero builds the blockade space without
-# enumerating the full space (see [Constrained Hilbert spaces](../conservation.md)). The last term is the bond that
-# closes the ring.
+# Requiring the number of neighbouring excited pairs to be zero builds the blockade space without enumerating the full
+# space (see [Constrained Hilbert spaces](../conservation.md)). The last term is the bond that closes the ring.
 
 excited(k) = 1 // 2 + S[mod1(k, N)][:z]
-blockade = [excited(k) * excited(k + 1) => 0 for k in 1:N]
+blockade = sum(excited(k) * excited(k + 1) for k in 1:N) => 0
 Hblockade = hilbert_space(S, 1:N, blockade)
 @assert Set(basisstates(H)) == Set(basisstates(Hblockade))
 
