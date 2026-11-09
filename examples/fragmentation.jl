@@ -49,9 +49,8 @@ ham = representation(pxp, H, Matrix; projection = true);
 perms = [[mod1(r * i + s, N) for i in 1:N] for s in 0:(N - 1) for r in (1, -1)]
 B = symmetric_sector(H, factors(H), (perms, ones(length(perms))))
 E, V = eigen(Hermitian(Matrix(B' * ham * B)))
-basis_vector(label) = (ψ = zeros(dim(H)); ψ[state_index(label, H)] = 1; ψ)
-catstate = B' * (basis_vector("↑↓"^(N ÷ 2)) + basis_vector("↓↑"^(N ÷ 2))) / sqrt(2)
-down = B' * basis_vector("↓"^N);
+catstate = B' * (representation("↑↓"^(N ÷ 2), H) + representation("↓↑"^(N ÷ 2), H)) / sqrt(2)
+down = B' * representation("↓"^N, H);
 
 # A quench from the cat state shows revivals of the fidelity, while the state with all atoms in the ground state
 # relaxes without revivals.
