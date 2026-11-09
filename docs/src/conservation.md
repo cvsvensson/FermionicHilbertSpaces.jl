@@ -49,7 +49,7 @@ dim(Hodd), quantumnumbers(Hparity), dim(Hcharge)
 ```
 [`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total number of fermions.
 
-Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. Labels are integers when every term of the operator takes integer values, and rationals otherwise. Coefficients must be integers or rationals, so that the values are exact. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
+Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
 ```@example constraints
 @spins S 1 // 2
 Sz = sum(S[i][:z] for i in 1:6)
@@ -59,6 +59,8 @@ blockade = [up(i) * up(i + 1) => 0 for i in 1:9]
 Hpxp = hilbert_space(S, 1:10, blockade)
 quantumnumbers(Hspin), dim(Hpxp)
 ```
+
+The values of an operator are exact: labels are integers when every term takes integer values, and rationals otherwise. Coefficients must be integers or rationals, while the values of operators such as `b'b` are rounded to exact fractions. Complex values are not supported; for a ``\mathbb{Z}_N`` charge with values ``\omega^q``, write `Q` as a sum of operators with the integer values ``q`` and constrain `Q => (v -> mod(v, N))`.
 
 A function of the basis state works the same way:
 ```@example constraints
