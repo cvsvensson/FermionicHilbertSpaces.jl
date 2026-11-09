@@ -150,7 +150,6 @@ function _resolve_on_values(c, values)
     end
     rule = resolve(rule, first(values))
     kept = filter(v -> !ismissing(_label(rule, v)), values)
-    isempty(kept) && throw(ArgumentError("No value of `$(c.op)` is allowed by `$(OperatorConstraint(c.op, rule, missing, nothing, missing))`; its values are in $(isone(step(values)) ? "$(first(values)):$(last(values))" : values)."))
     return rule, length(kept) == length(values) ? missing : kept
 end
 function _applies(f, values)
@@ -507,7 +506,8 @@ end
         @test_throws ArgumentError hilbert_space(f, 1:4, N => spec)
     end
     @test_throws "boom" hilbert_space(f, 1:4, N => (v -> v == 3 ? error("boom") : v))
-    @test_throws "0:4" hilbert_space(f, 1:4, N => 7)
+    @test dim(hilbert_space(f, 1:4, N => 7)) == 0
+    @test isempty(quantumnumbers(hilbert_space(f, 1:4, N => [7, 8])))
     @test_throws "nothing" hilbert_space(f, 1:4, N => (v -> v > 2 ? nothing : v))
     cnt(s) = count_ones(s.f)
     @test_throws "Bool" hilbert_space(f, 1:4, cnt => (v -> v == 1 || v))

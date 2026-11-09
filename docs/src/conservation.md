@@ -37,7 +37,7 @@ With `v` the value after the functions, the end of the constraint decides what i
 | a quantity or function giving `true` or `false` | `N => isodd` | `v` is `true` | none |
 | a quantity or function giving anything else | `N`, `N => parity` | always | `v` |
 
-A state where a function returns `missing` is discarded. To allow a single tuple or vector, wrap it, as in `=> [(0, 1)]`. A constraint that allows no value of its operator throws an error. Odd particle numbers, the sectors of even and odd particle number, and a ``\mathbb{Z}_3`` charge:
+A state where a function returns `missing` is discarded. To allow a single tuple or vector, wrap it, as in `=> [(0, 1)]`. Odd particle numbers, the sectors of even and odd particle number, and a ``\mathbb{Z}_3`` charge:
 ```@example constraints
 Hodd = hilbert_space(f, 1:4, N => isodd)
 parity(v) = mod(v, 2)
