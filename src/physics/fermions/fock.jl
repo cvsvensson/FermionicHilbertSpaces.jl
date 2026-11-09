@@ -98,6 +98,7 @@ struct FockMapper{N,P1,W,P2,M} <: AbstractStateMapper
     permutation::P2
     masks::M
     isfullpartition::Bool
+    contiguous::Bool # each subsystem is a block of consecutive modes, so combining is a shift
 end
 # `N` is the number of modes of the full space and sets the integer type of combined states.
 # The bit permutation is only built when the subsystems cover all `N` modes.
@@ -112,11 +113,12 @@ function FockMapper(fermionpositions::P, N) where P
     permutation = length(perm) == N && isperm(perm) && N < 64 ? BitPermutation{T}(perm)' : nothing
     masks = map(Xp -> FockNumber{T}(focknbr_from_site_indices(Xp)), fermionpositions)
     isfullpartition = ispartition(fermionpositions, N)
+    contiguous = all(p -> collect(p) == first(p):last(p), fermionpositions)
     P1 = typeof(fermionpositions)
     W = typeof(widths)
     P2 = typeof(permutation)
     M = typeof(masks)
-    FockMapper{N,P1,W,P2,M}(fermionpositions, widths, permutation, masks, isfullpartition)
+    FockMapper{N,P1,W,P2,M}(fermionpositions, widths, permutation, masks, isfullpartition, contiguous)
 end
 unique_split(::FockMapper) = true
 unique_combine(::FockMapper) = true
@@ -145,17 +147,26 @@ end
 
 function combine_states(fs, fm::FockMapper{N,<:Any,<:Any,<:AbstractBitPermutation}) where {N}
     _require_full_partition(fm)
+    fm.contiguous && return (_shift_combine(fs, fm.masks, default_fock_representation(Val(N))),), (1,)
     state = concatenate_and_permute(fs, fm.widths, fm.permutation, FockNumber{default_fock_representation(Val(N))})
     (state,), (1,)
 end
 function combine_states(f, fm::FockMapper{N}) where N
     _require_full_partition(fm)
     IT = default_fock_representation(Val(N))
+    fm.contiguous && return (_shift_combine(f, fm.masks, IT),), (1,)
     result = zero(IT)
     for (fock, mask) in zip(f, fm.masks)
         result |= BitPermutations.pdep(IT(fock.f), IT(mask.f))
     end
     (FockNumber{IT}(result),), (1,)
+end
+function _shift_combine(fs, masks, ::Type{IT}) where IT
+    result = zero(IT)
+    for (fock, mask) in zip(fs, masks)
+        result |= IT(fock.f) << trailing_zeros(mask.f)
+    end
+    FockNumber{IT}(result)
 end
 function catenate_fock_states(fock_states, spaces, ::Type{T}) where T
     num = zero(T)
@@ -283,6 +294,14 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
         combine = Base.Fix2(_combine, fockmapper)
         ident = combine ∘ split
         @test all(ident(FockNumber(k)) == FockNumber(k) for k in 0:(2^4-1))
+
+        # Blocks of consecutive modes, in any order and mixed with other subsystems
+        for positions in (((3, 4, 5), (1, 2)), ((1, 2), (4, 5), (3,)), ((1, 2), (3, 5), (4,)), (4:5, [1, 2, 3]))
+            fockmapper = FockMapper(positions)
+            @test all(_combine(_split(FockNumber(k), fockmapper), fockmapper) == FockNumber(k) for k in 0:(2^5-1))
+        end
+        @test fock((1, 4)) == _combine((fock((2,)), fock((1,))), FockMapper(((3, 4), (1, 2))))
+        @test_throws ArgumentError FockMapper(((1, 3, 2, 4),))
     end
 
     @testset "partial partitions" begin
@@ -320,12 +339,13 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
 
     @testset "wide integers" begin
         for N in (100, 200, 400, 800, 1100)
-            fermionpositions = (collect(1:3:N), setdiff(1:N, 1:3:N))
-            fockmapper = FockMapper(fermionpositions, N)
-            sites = [n for n in 1:N if n % 5 in (0, 2)]
-            substates = map(pos -> fock(findall(in(sites), pos)), fermionpositions)
-            @test _split(fock(sites), fockmapper) == substates
-            @test _combine(substates, fockmapper) == fock(sites)
+            for fermionpositions in ((collect(1:3:N), setdiff(1:N, 1:3:N)), (N÷2+1:N, 1:N÷2))
+                fockmapper = FockMapper(fermionpositions, N)
+                sites = [n for n in 1:N if n % 5 in (0, 2)]
+                substates = map(pos -> fock(findall(in(sites), pos)), fermionpositions)
+                @test _split(fock(sites), fockmapper) == substates
+                @test _combine(substates, fockmapper) == fock(sites)
+            end
         end
     end
 
