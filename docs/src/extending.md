@@ -87,7 +87,7 @@ the index of a state, which avoids the default dictionary lookup.
   last state and throw an `ArgumentError` on a mismatch.
 
 A custom operator that is diagonal in the basis, with integer or rational values, can be the
-quantity of a `quantity => spec` constraint, like the Floquet number in
+quantity of a [constraint](@ref "Writing a constraint"), like the Floquet number in
 [Custom operators: Floquet](literate_output/floquet_tutorial.md).
 Otherwise, to restrict a space of custom states, use [`SectorConstraint`](@ref) or
 [`FilterConstraint`](@ref). Their required argument is the reducer, which is called on each

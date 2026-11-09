@@ -2,7 +2,7 @@
 Conservation laws let you work in a small part of an exponentially large Hilbert space. This page shows how a constraint selects basis states and groups them into sectors of fixed quantum numbers, lists the available constraints, and ends with worked examples where the full space would be far too large to build.
 
 ## Constraints and sectors
-A constraint is written `quantity => spec`, where `quantity` is a diagonal operator. A single value restricts the space, a collection of values also splits it into sectors labelled by them, and a quantity without `=>` splits the space into all its sectors. A constraint is given when building a space, either to `hilbert_space` or as the `constraint` keyword of `tensor_product`, and `constrain_space` applies one to an existing space:
+A constraint selects basis states, and can split them into sectors labelled by quantum numbers. It is given when building a space, either to `hilbert_space` or as the `constraint` keyword of `tensor_product`, and `constrain_space` applies one to an existing space:
 ```@example constraints
 using FermionicHilbertSpaces, LinearAlgebra
 @fermions f
@@ -24,13 +24,22 @@ hopping = sum(f[k]'f[k+1] + hc for k in 1:3)
 indices(2, H)
 ```
 
-In general, a constraint is a chain `quantity => f => g => ... => allowed`: the functions are applied to the value of the quantity in turn, and both they and `allowed` are optional. The end of the chain decides what is kept:
+### Writing a constraint
+A constraint is `quantity => f => g => ... => allowed`, where everything after `quantity` is optional:
+- `quantity` is a diagonal operator, such as `N`, or a function of the basis state.
+- `f`, `g`, … are functions applied to the value of the quantity in turn.
+- `allowed` is a single value or a collection of values.
 
-- One value, as in `N => 2`, keeps the states with that value.
-- A collection, as in `N => 0:2` or `N => [1, 3]`, keeps the states with a value in it, in sectors labelled by the value.
-- Without allowed values, as in `N` or `N => isodd`, a `true` or `false` value keeps the `true` states, and any other value splits the states into sectors labelled by it.
+With `v` the value after the functions, the end of the constraint decides what it does:
 
-A function can return `missing` to discard the states with that value. After a function, a single value may also be a string, symbol or character, and a single tuple or vector must be wrapped, as in `=> [(0, 1)]`. A constraint that allows no value of its operator throws an error. Odd particle numbers, the sectors of even and odd particle number, and a ``\mathbb{Z}_3`` charge:
+| the constraint ends in | example | keeps the states where | labels sectors by |
+|:--- |:--- |:--- |:--- |
+| a value `a` | `N => 2` | `v == a` | none |
+| a collection `c` | `N => 0:2` | `v ∈ c` | `v` |
+| a quantity or function giving `true` or `false` | `N => isodd` | `v` is `true` | none |
+| a quantity or function giving anything else | `N`, `N => parity` | always | `v` |
+
+A state where a function returns `missing` is discarded. To allow a single tuple or vector, wrap it, as in `=> [(0, 1)]`. A constraint that allows no value of its operator throws an error. Odd particle numbers, the sectors of even and odd particle number, and a ``\mathbb{Z}_3`` charge:
 ```@example constraints
 Hodd = hilbert_space(f, 1:4, N => isodd)
 parity(v) = mod(v, 2)
@@ -52,14 +61,18 @@ blockade = [up(i) * up(i + 1) => 0 for i in 1:9]
 Hpxp = hilbert_space(S, 1:10, blockade)
 quantumnumbers(Hspin), dim(Hpxp)
 ```
-Passing a constraint while building a space prunes states as they are generated, so the full space is never built. A term that acts on several factors is tabulated on their product, which may have at most 4096 states.
 
-The quantity can also be a function of the basis state, so a predicate keeps the states where it is `true`. It is evaluated on each state of the full space, so the space must be small enough to build:
+A function of the basis state works the same way:
 ```@example constraints
 nup(state) = count(s -> s.m > 0, state.states)
 dim(hilbert_space(S, 1:6, nup => 2)), dim(hilbert_space(S, 1:6, s -> nup(s) <= 1))
 ```
-`constrain_space` always filters a space that already exists. A `quantity => spec` constraint keeps the sectors the space already has, and its labels follow theirs.
+Applied to a space with sectors, a constraint written this way keeps those sectors, and its own labels follow theirs.
+
+### How a constrained space is built
+The states are built one factor at a time, as a tree. Each term of an operator is assigned to the factors it acts on, so after each factor the value so far is known, along with the range that the remaining factors can still add. A branch that cannot reach an allowed value is skipped. For a particle number, a magnetization or a blockade, every branch that is kept leads to a kept state, so the cost grows with the size of the result rather than the full space. A term that acts on several factors is tabulated on their product, which may have at most 4096 states.
+
+A function of the basis state cannot be split this way, so it is evaluated on every state of the full space, which must be small enough to build. `constrain_space` on a space that is already constrained also checks its states one by one.
 
 ## Lower-level constraints
 #### NumberConservation
