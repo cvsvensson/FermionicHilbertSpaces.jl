@@ -26,17 +26,12 @@ dim(H), dim(Hfull)
 # a constraint on the basis states also gives. The blockade space, with open or periodic boundaries, is a single
 # fragment, so for the PXP model `fragment` gives no new information.
 #
-# A [`BranchConstraint`](@ref) (see [Constrained Hilbert spaces](../conservation.md)) builds the states site by site and
-# calls its function after each site is set, with the partial state `p`, the current site `d` and the spaces.
-# Returning `false` discards every state that starts that way, so the blockade space is built without enumerating the
-# full space. The function rejects two neighbouring excited atoms and, once the last site is set, an excited pair across
-# the bond that closes the ring.
+# A constraint that each product of neighbouring excitation projectors is zero builds the blockade space without
+# enumerating the full space (see [Constrained Hilbert spaces](../conservation.md)). The last term is the bond that
+# closes the ring.
 
-up(s) = s.m > 0
-blockade = BranchConstraint(
-    (p, d, spaces) -> d == 1 ||
-        !(up(p[d]) && up(p[d - 1])) && (d < length(spaces) || !(up(p[d]) && up(p[1])))
-)
+excited(k) = 1 // 2 + S[mod1(k, N)][:z]
+blockade = [excited(k) * excited(k + 1) => 0 for k in 1:N]
 Hblockade = hilbert_space(S, 1:N, blockade)
 @assert Set(basisstates(H)) == Set(basisstates(Hblockade))
 
@@ -103,8 +98,9 @@ plot!(ts, halfentropy(down); label = "↓↓↓↓…")
 N = 12
 Hfull = hilbert_space(S, 1:N)
 pairhop = sum(S[k][:+] * S[k + 1][:-] * S[k + 2][:-] * S[k + 3][:+] for k in 1:(N - 3)) + hc
-neutral = AdditiveConstraint(0; maps = s -> s.m) * AdditiveConstraint(0; maps = [s -> k * s.m for k in 1:N])
-Hneutral = hilbert_space(S, 1:N, neutral)
+charge = sum(S[k][:z] for k in 1:N)
+dipole = sum(k * S[k][:z] for k in 1:N)
+Hneutral = hilbert_space(S, 1:N, [charge => 0, dipole => 0])
 seeds = ["↑↓↑↓↑↓↓↑↓↑↓↑", "↑↑↑↓↓↓↓↓↓↑↑↑"]
 @assert all(!iszero(state_index(s, Hneutral)) for s in seeds)
 [dim(fragment(pairhop, Hfull, [s])) for s in seeds]
