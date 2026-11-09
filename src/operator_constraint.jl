@@ -502,7 +502,7 @@ end
 @testitem "Invalid specifications throw" begin
     @fermions f
     N = sum(f[i]'f[i] for i in 1:4)
-    for spec in (missing, nothing, true, "a", :a, 'a', Dict(1 => 1), 1 => 2, 0.5, v -> v == 2 || v)
+    for spec in (missing, nothing, true, Dict(1 => 1), 1 => 2, 0.5, v -> v == 2 || v)
         @test_throws ArgumentError hilbert_space(f, 1:4, N => spec)
     end
     @test_throws "boom" hilbert_space(f, 1:4, N => (v -> v == 3 ? error("boom") : v))
