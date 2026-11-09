@@ -51,17 +51,10 @@ Hs = [GenericHilbertSpace(k, states) for k in 1:L]
 Hfull = tensor_product(Hs)
 clock_hamiltonian(J, h) = -J * sum(X(i)' * X(i + 1) + hc for i in 1:(L-1)) - h * sum(Z(i) + hc for i in 1:L)
 
-# Define a constraint and a function which divides the hilbert space up into sectors.
-function clock_sectors(H)
-    constraint = SectorConstraint(
-        values -> mod(sum(values), D);  # sum the values mod D where
-        maps = state -> state.n,        # the values are the local clock values
-        spaces = factors(H)             # of each factor of the hilbert space
-    )
-    return constrain_space(H, constraint)
-end
-Hzd = clock_sectors(Hfull)
-Hhalf = clock_sectors(tensor_product(Hs[1:div(L, 2)]))
+# The clock charge, the sum of the local clock values mod D, divides the Hilbert space into sectors.
+clock_charge(state) = mod(sum(s.n for s in state.states), D)
+Hzd = constrain_space(Hfull, clock_charge)
+Hhalf = constrain_space(tensor_product(Hs[1:div(L, 2)]), clock_charge)
 
 # Functions to calculate entropies.
 shannon(p; tol=1e-12) = -sum(x * log(x) for x in p if x > tol)

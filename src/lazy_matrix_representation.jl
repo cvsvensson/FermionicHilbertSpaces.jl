@@ -98,10 +98,15 @@ function Base.transpose(L::LazyOperator{<:ProductOperator{C}}) where C
     newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces), L.op.inds)
     LazyOperator(newop, TransposedSpace(L.space), L.chunking, L.precomp; projection=L.projection, conjugate=L.conjugate, ishermitian=L.ishermitian)
 end
-function Base.transpose(L::SciMLOperators.FunctionOperator{<:Any,<:Any,<:Any,<:Any,<:LazyOperator})
-    isnothing(L.cache) && return scimloperator(transpose(L.op))
-    return scimloperator(transpose(L.op), first(L.cache))
+const LazyFunctionOperator = SciMLOperators.FunctionOperator{<:Any, <:Any, <:Any, <:Any, <:LazyOperator}
+# SciMLOperators' fallbacks for these build the full matrix, so they are rewrapped lazily.
+for f in (:transpose, :conj)
+    @eval function Base.$f(L::LazyFunctionOperator)
+        isnothing(L.cache) && return scimloperator($f(L.op))
+        return scimloperator($f(L.op), first(L.cache))
+    end
 end
+SparseArrays.sparse(L::LazyFunctionOperator) = sparse(L.op)
 LinearAlgebra.ishermitian(L::LazyOperator) = L.ishermitian
 
 function _eager_matrix_representation(L::LazyOperator{<:Union{NCMul,ProductOperator}})
@@ -134,8 +139,11 @@ function LinearAlgebra.mul!(Y::AbstractMatrix, L::LazyOperator, X::AbstractMatri
     return Y
 end
 
-function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, precomp, _coeff, conjugate, projection, ::Union{NoChunking,TermChunking})
-    coeff = (conjugate ? conj(_coeff) : _coeff)
+# `conjugate` applies to the amplitudes of `term`. `coeff` is used as given because it includes the `α` of `mul!`, which
+# is never conjugated, so callers conjugate the term coefficient themselves with `_conj_if`.
+_conj_if(c, conjugate) = conjugate ? conj(c) : c
+
+function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking, TermChunking})
     for (n, state) in enumerate(basisstates(space))
         xn = x[n] * coeff
         iszero(xn) && continue
@@ -155,8 +163,7 @@ function _apply_single_term!(y::AbstractVector, x::SparseArrays.AbstractSparseVe
 end
 
 # Calls `f(outind, value)` for each output entry of `coeff * term` applied to the sparse `x`.
-function _foreach_term_entry(f, x::SparseArrays.AbstractSparseVector, space, term, precomp, _coeff, conjugate, projection)
-    coeff = (conjugate ? conj(_coeff) : _coeff)
+function _foreach_term_entry(f, x::SparseArrays.AbstractSparseVector, space, term, precomp, coeff, conjugate, projection)
     for (n, xn) in zip(SparseArrays.nonzeroinds(x), nonzeros(x))
         iszero(xn) && continue
         state = basisstate(n, space)
@@ -168,8 +175,7 @@ function _foreach_term_entry(f, x::SparseArrays.AbstractSparseVector, space, ter
     end
 end
 
-function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, _coeff, conjugate, projection, ::Union{NoChunking,TermChunking})
-    coeff = (conjugate ? conj(_coeff) : _coeff)
+function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking, TermChunking})
     for (n, state) in enumerate(basisstates(space))
         newstate, _amp = _apply_local_operators(term, state, space, precomp)
         if !iszero(_amp)
@@ -182,8 +188,7 @@ function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, 
     end
 end
 
-function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC, space, term, precomp, _coeff, conjugate, projection, ::Union{NoChunking,TermChunking})
-    coeff = (conjugate ? conj(_coeff) : _coeff)
+function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking, TermChunking})
     rows = rowvals(x)
     vals = nonzeros(x)
     for col in axes(x, 2)
@@ -232,10 +237,10 @@ function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd}, x::Abstract
     end
     op = L.op
     for (term, coeff, precomp) in L.precomp
-        _apply_single_term!(y, x, L.space, term, precomp, coeff * α, L.conjugate, L.projection, L.chunking)
+        _apply_single_term!(y, x, L.space, term, precomp, _conj_if(coeff, L.conjugate) * α, L.conjugate, L.projection, L.chunking)
     end
     if !iszero(op.coeff) && !iszero(α)
-        scalar_coeff = α * (L.conjugate ? conj(op.coeff) : op.coeff)
+        scalar_coeff = α * _conj_if(op.coeff, L.conjugate)
         y .+= scalar_coeff .* x
     end
     return y
@@ -255,10 +260,10 @@ function Base.:*(L::LazyOperator, x::SparseArrays.AbstractSparseVector)
     amps = T[]
     push_entry = (i, v) -> (push!(outinds, i); push!(amps, v))
     for (term, coeff, precomp) in _lazy_terms(L)
-        _foreach_term_entry(push_entry, x, L.space, term, precomp, coeff, L.conjugate, L.projection)
+        _foreach_term_entry(push_entry, x, L.space, term, precomp, _conj_if(coeff, L.conjugate), L.conjugate, L.projection)
     end
     if L.op isa NCAdd && !iszero(L.op.coeff)
-        scalar_coeff = L.conjugate ? conj(L.op.coeff) : L.op.coeff
+        scalar_coeff = _conj_if(L.op.coeff, L.conjugate)
         append!(outinds, SparseArrays.nonzeroinds(x))
         append!(amps, scalar_coeff .* nonzeros(x))
     end
@@ -378,6 +383,10 @@ end
     @test transpose(L) isa SciMLOperators.FunctionOperator
     @test adjoint(L) isa SciMLOperators.FunctionOperator
     @test transpose(L) * v ≈ transpose(M) * v
+    @test conj(L) isa SciMLOperators.FunctionOperator
+    @test conj(L) * v ≈ conj(M) * v
+    @test sparse(L) ≈ M
+    @test sparse(L') ≈ M'
     @test L * Vm ≈ M * Vm
     t = 0
     u = p = nothing
@@ -533,6 +542,10 @@ end
         @test mul!(copy(w), L, v, 0.3, -0.7) ≈ 0.3 * (M * v) - 0.7 * w
         @test mul!(similar(w), L', v) ≈ M' * v
     end
+    op = S[1][:z] * S[2][:z] + 0.5im * S[1][:x]
+    L, M = representation(op, H, :lazy), representation(op, H)
+    v, w = randn(ComplexF64, dim(H)), randn(ComplexF64, dim(H))
+    @test mul!(copy(w), L', v, 0.3im, -0.7) ≈ 0.3im * (M' * v) - 0.7 * w
 end
 
 @testitem "lazy matrix_representation chunking" begin
@@ -568,6 +581,9 @@ end
     @test Ls * v ≈ M * v
     @test (@inferred mul!(fill(NaN + 0im, dim(Hf)), Lt, v, 0.5, 0.0)) ≈ 0.5 * (M * v)
     @test (@inferred mul!(fill(NaN + 0im, dim(Hf)), Ls, v, 0.5, 0.0)) ≈ 0.5 * (M * v)
+    for L in (Ln, Lt, Ls, representation(f[1]' * f[2], Hf, :lazy))
+        @test mul!(zeros(ComplexF64, dim(Hf)), L', v, 0.5im, 0.0) ≈ 0.5im * (concretize(L)' * v)
+    end
     @test Lt * V ≈ M * V
     @test Ls * V ≈ M * V
     @test Lt * vs ≈ M * vs

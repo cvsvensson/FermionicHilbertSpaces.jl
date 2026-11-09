@@ -110,7 +110,7 @@ function FockMapper(fermionpositions::P, N) where P
     all(issorted, fermionpositions) || throw(ArgumentError("The fermions in each subsystem must be ordered as in the full system, got unsorted fermion positions $fermionpositions."))
     T = default_fock_representation(N)
     permutation = length(perm) == N && isperm(perm) && N < 64 ? BitPermutation{T}(perm)' : nothing
-    masks = map(Xp -> focknbr_from_site_indices(Xp), fermionpositions)
+    masks = map(Xp -> FockNumber{T}(focknbr_from_site_indices(Xp)), fermionpositions)
     isfullpartition = ispartition(fermionpositions, N)
     P1 = typeof(fermionpositions)
     W = typeof(widths)
@@ -127,7 +127,10 @@ function Base.show(io::IO, fm::FockMapper{N}) where N
 end
 
 function split_state(f::FockNumber, fm::FockMapper{N}) where N
-    state = map(mask -> substate(mask, f), fm.masks)
+    # Inlining `substate` into every unrolled slot makes compilation slow for many targets,
+    # but calling it out of line doubles the cost of a split into a few targets.
+    state = length(fm.masks) <= 32 ? tuplemap(mask -> substate(mask, f), fm.masks) :
+        tuplemap(mask -> (@noinline substate(mask, f)), fm.masks)
     (state,), (1,)
 end
 

@@ -30,7 +30,6 @@ struct DeviceFermionicSpace{F} <: AbstractHilbertSpace{F}
     nbr_of_modes::Int
 end
 const _FockSpace{F} = Union{FermionicSpace{F}, DeviceFermionicSpace{F}}
-maximum_particles(H::FermionicSpace) = nbr_of_modes(H)
 Base.:(==)(c1::FermionicSpace, c2::FermionicSpace) = c1.modes == c2.modes && c1.group == c2.group
 Base.hash(c::FermionicSpace, h::UInt) = hash(c.modes, hash(c.group, h))
 basisstates(H::FermionicSpace{FockNumber{I}}) where I = BasisStates(H, Iterators.map(FockNumber{I}, UnitRange{I}(0, dim(H) - 1)))
@@ -45,6 +44,7 @@ end
 # Below 63 modes, computing `dim(H)` does not throw. Its type is `fock_index_type(I)`, which is
 # a wide `UInt` or `BigInt` for wide `FockNumber`s; `root_keyed_index` builds an index only when it is an `Int`.
 has_arithmetic_state_index(H::FermionicSpace{<:FockNumber}) = nbr_of_modes(H) < 63
+internal_rep_type(H::FermionicSpace) = signed(default_fock_representation(nbr_of_modes(H)))
 function dim(H::FermionicSpace{FockNumber{I}}) where I
     d = one(fock_index_type(I)) << nbr_of_modes(H)
     d > 0 || throw(OverflowError("$(nbr_of_modes(H)) modes have more states than fit in $(fock_index_type(I))"))
@@ -80,7 +80,6 @@ _normalize_sym(f::FermionSym) = FermionSym(false, f.label, f.basis)
 statetype(f::FermionSym) = FockNumber{default_fock_representation(1)}
 basisstates(f::FermionSym) = [statetype(f)(0), statetype(f)(1)]
 nbr_of_modes(f::FermionSym) = 1
-maximum_particles(f::FermionSym) = 1
 isconstrained(f::FermionSym) = false
 
 partial_trace_phase_factor_eltype(::FermionicSpace) = Int
@@ -324,9 +323,18 @@ end
 
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
 hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState},BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
-function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::AbstractConstraint)
+function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, @nospecialize(constraint::ConstraintLike))
     length(labels) == 0 && return hilbert_space(a, labels)
-    tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
+    constraint = as_constraint(constraint)
+    # The states of a total number of fermions are built directly.
+    if constraint isa OperatorConstraint && constraint.op == sum(a[l]'a[l] for l in labels)
+        rule = constraint.rule
+        rule isa ValueRule{true, typeof(identity), Missing} && return hilbert_space(a, labels, NumberConservation())
+        if rule isa ValueRule{false, typeof(identity), <:Tuple{Integer}} && 0 <= only(rule.allowed) <= length(labels)
+            return ConstrainedSpace(hilbert_space(a, labels), fixed_particle_number_fockstates(length(labels), only(rule.allowed)))
+        end
+    end
+    return tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
 end
 
 function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::ParityConservation{Missing})

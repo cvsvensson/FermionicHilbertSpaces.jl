@@ -55,7 +55,8 @@ struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
         B = ProductState{Tuple{map(statetype, factors)...}}
         atom_index = Dict{Any,Int}(atomic_id(a) => i for (i, a) in enumerate(atoms))
         length(atom_index) == length(atoms) || throw(ArgumentError("The atoms of a product space must be distinct, got duplicates in $(map(atomic_id, atoms))."))
-        fast_path = all(has_internal_rep(f, Int) for f in factors) ? zero(Int) : missing
+        T = mapreduce(internal_rep_type, promote_type, factors)
+        fast_path = all(has_internal_rep(f, T) for f in factors) ? zero(T) : missing
         lininds, cartinds = _product_indices(map(dim, factors))
         LI = typeof(lininds)
         CI = typeof(cartinds)
@@ -99,7 +100,6 @@ end
 order_key(state::ProductState, H::ProductSpace) = reverse(_factor_indices(state, H))
 has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && !isnothing(H.lininds)
 
-maximum_particles(H::ProductSpace) = sum(maximum_particles, groups(H))
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
 parity(state::ProductState) = prod(parity, atomic_factors(state))
 
@@ -294,6 +294,8 @@ end
 
 @testitem "Product space with more than typemax(Int) states" begin
     import FermionicHilbertSpaces: basisstate, particle_number, state_index, ProductState, SpinState
+    using LinearAlgebra: diag
+    using SparseArrays: sparse
     @spins S 1 // 2
     for N in (64, 65)
         spins = [hilbert_space(S[i]) for i in 1:N]
@@ -314,6 +316,10 @@ end
     H = tensor_product(spaces; constraint = excitations)
     @test dim(H) == 200
     @test all(state_index(basisstate(n, H), H) == n for n in 1:dim(H))
+    # Fock states of modes 64 and up do not fit in an Int
+    i = findfirst(isone, diag(representation(f[99]' * f[99], H)))
+    j = findfirst(isone, diag(representation(f[100]' * f[100], H)))
+    @test representation(f[99]' * f[100] + hc, H) == sparse([i, j], [j, i], [1, 1], 200, 200)
 end
 
 @testitem "ProductSpaceMapper combines vectors of substates" begin
@@ -433,6 +439,9 @@ function ProductOperator(ops::O, spaces::S, inds::Vector{Int}) where {O,S}
 end
 mat_eltype(::ProductOperator{C}) where {C} = C
 
+# An integer type that holds `internal_rep` of every state of `space`. `has_internal_rep` checks only one state.
+internal_rep_type(::AbstractHilbertSpace) = Int
+
 function has_internal_rep(space::AbstractHilbertSpace, ::Type{T}) where {T}
     iszero(dim(space)) && return false
     state = basisstate(1, space)
@@ -548,6 +557,21 @@ tuples can be indexed without type instability.
 struct PieceIndex{block,slot} end
 PieceIndex(block::Int, slot::Int) = PieceIndex{block,slot}()
 @inline getpiece(blocks, ::PieceIndex{b,s}) where {b,s} = blocks[b][s]
+
+# `map` over tuples, unrolled for any length. Base's `map` stops unrolling beyond 32 elements
+# and then dispatches dynamically per element.
+@generated function tuplemap(f, ts::Tuple...)
+    n = fieldcount(ts[1])
+    return Expr(:block, Expr(:meta, :inline), Expr(:tuple, (:(f($((:(ts[$k][$i]) for k in eachindex(ts))...))) for i in 1:n)...))
+end
+# `foldl(op, t; init)`, unrolled for any length so that a product of constants folds to a constant.
+@generated function tuplefoldl(op, init, t::Tuple)
+    ex = :init
+    for i in 1:fieldcount(t)
+        ex = :(op($ex, t[$i]))
+    end
+    return Expr(:block, Expr(:meta, :inline), ex)
+end
 
 # ─── Leaves: what happens to each source factor ──────────────────────────────
 
@@ -698,10 +722,10 @@ end
 
 function split_state(state::ProductState, sp::ProductSpaceMapper)
     # 1. Fracture each source factor into its pieces.
-    pieces = map(split_pieces, sp.leaves, state.states)
+    pieces = tuplemap(split_pieces, sp.leaves, state.states)
     # 2. Assemble each target from its pieces.
-    outstates = map(sp.target_routes, sp.target_spaces) do route, tspace
-        gathered = map(ref -> getpiece(pieces, ref), route)
+    outstates = tuplemap(sp.target_routes, sp.target_spaces) do route, tspace
+        gathered = tuplemap(ref -> getpiece(pieces, ref), route)
         only(first(combine_states(gathered, tspace)))
     end
     return (outstates,), (1,)
@@ -709,10 +733,10 @@ end
 
 function combine_states(substates::Tuple, sp::ProductSpaceMapper)
     # 1. Take each target's state apart into its pieces (one per group).
-    tpieces = map(substate_pieces, substates)
+    tpieces = tuplemap(substate_pieces, substates)
     # 2. Assemble each source factor from its pieces.
-    states = map(sp.leaves, sp.factor_routes) do leaf, route
-        combine_pieces(leaf, map(ref -> getpiece(tpieces, ref), route))
+    states = tuplemap(sp.leaves, sp.factor_routes) do leaf, route
+        combine_pieces(leaf, tuplemap(ref -> getpiece(tpieces, ref), route))
     end
     return (ProductState(states),), (1,)
 end
@@ -732,7 +756,7 @@ leaf_phase_factor(leaf::Union{Passthrough,Fractured}) = kron_phase_factor(leaf.m
 function kron_phase_factor(sp::ProductSpaceMapper)
     phase_fns = map(leaf_phase_factor, sp.leaves)
     function phase_factor(fullstate1, fullstate2)
-        prod(map((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))
+        return tuplefoldl(*, 1, tuplemap((pf, s1, s2) -> pf(s1, s2), phase_fns, fullstate1.states, fullstate2.states))
     end
 end
 function phase_factor_u(sp::ProductSpaceMapper)
@@ -742,11 +766,6 @@ function phase_factor_u(sp::ProductSpaceMapper)
     end
 
     function phase_factor(state)
-        pf = 1
-        for (s, leaf, pfu) in zip(state.states, sp.leaves, leaf_pfus)
-            leaf isa Uncovered && continue
-            pf *= pfu(s)
-        end
-        return pf
+        return tuplefoldl(*, 1, tuplemap((s, pfu) -> isnothing(pfu) ? 1 : pfu(s), state.states, leaf_pfus))
     end
 end

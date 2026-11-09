@@ -12,15 +12,20 @@ Returning `true` continues exploring the branch, while returning `false`
 prunes it. The callback should therefore accept partial states and reject a
 branch only when no valid completion can satisfy the constraint.
 
-`BranchConstraint` is intended for use with `tensor_product` or more directly with `generate_states`.
+`tensor_product(spaces; constraint)` prunes with the given `spaces`. `constrain_space(H, constraint)`
+instead keeps the states of `H` for which `f` accepts every prefix, with `spaces` the [`factors`](@ref) of `H`.
 """
-struct BranchConstraint{F} <: AbstractBranchConstraint
+struct BranchConstraint{F, H} <: AbstractBranchConstraint
     f::F
+    spaces::H # the spaces that `f` is called with, or `missing` for the factors of the constrained space
 end
+BranchConstraint(f) = BranchConstraint(f, missing)
 supports_branch_pruning(::BranchConstraint) = true
-supports_filtering(::BranchConstraint) = false
+supports_filtering(::BranchConstraint) = true
 supports_sector_grouping(::BranchConstraint) = false
+supply_missing_constraint_info(constraint::BranchConstraint{<:Any, Missing}, space, spaces) = BranchConstraint(constraint.f, spaces)
 supply_missing_constraint_info(constraint::BranchConstraint, space, spaces) = constraint
+map_spaces(f, c::BranchConstraint) = BranchConstraint(c.f, _map_spaces(f, c.spaces))
 branch_constraint(constraint::BranchConstraint, space) = constraint
 """
     valid_branch(constraint, partial_state, depth, spaces) -> Bool
@@ -84,8 +89,20 @@ function backtrack!(results, partial, spaces, depth, constraint, partial_process
     end
 end
 
+# Accepts a state exactly when `generate_states` over `spaces` would reach it: the prefixes are replayed
+# in order, so that entries after `depth` are unassigned as during the search.
 function filter_function(constraint::BranchConstraint, space::AbstractHilbertSpace)
-    state -> true
+    spaces = ismissing(constraint.spaces) ? factors(space) : constraint.spaces
+    mapper = state_mapper(space, spaces)
+    T = Union{statetype.(spaces)...}
+    return function replay(state)
+        partial = Vector{T}(undef, length(spaces))
+        for (depth, substate) in enumerate(unique_split_state(state, mapper))
+            partial[depth] = substate
+            constraint.f(partial, depth, spaces) || return false
+        end
+        return true
+    end
 end
 
 _normalize_constraint_values(values::AbstractVector) = values
@@ -95,76 +112,34 @@ _normalize_constraint_values(value) = [value]
 _normalize_constraint_values(::Missing) = missing
 
 
-struct WeightedFunction{F,W}
-    func::F
-    weights::W
-end
-function _contribution_values(subspaces, functions, T)
-    return map((space, func) -> __contribution_values(space, func, T), subspaces, functions)
-end
-function _contribution_values(subspaces, func::Function, T)
-    return map(space -> __contribution_values(space, func, T), subspaces)
-end
-function _contribution_values(subspaces, fw::WeightedFunction, T)
-    return map((space, weight) -> __contribution_values(space, s -> weight * fw.func(s), T), subspaces, fw.weights)
-end
-function __contribution_values(space, func, ::Type{T}) where {T}
-    values = unique(Iterators.map(s -> _summand(T, func(s)), basisstates(space)))
-    isempty(values) && throw(ArgumentError("Cannot build an `AdditiveConstraint` from a space with no basis states."))
-    values
-end
 hilbert_space(space::AbstractHilbertSpace) = space
-additive_branch_constraint(allowed_sums, functions, allspaces) = additive_branch_constraint(allowed_sums, functions, missing, allspaces)
-function additive_branch_constraint(allowed_sums, functions, _subspaces, allspaces)
-    allowed_values = _normalize_constraint_values(allowed_sums)
-    subspaces = map(hilbert_space, ismissing(_subspaces) ? allspaces : _subspaces)
-    positions = ismissing(_subspaces) ? (1:length(allspaces)) : _subspace_positions(subspaces, allspaces)
-    _additive_branch_constraint(allowed_values, functions, subspaces, positions, length(allspaces))
-end
 function _subspace_positions(subspaces, allspaces)
     space_ids = map(collect ∘ atom_ids, allspaces) # collect, since spaces may be given as symbols
     return map(subspaces) do subspace
         pos = findfirst(==(collect(atom_ids(subspace))), space_ids)
-        isnothing(pos) && throw(ArgumentError("All subspaces of an `AdditiveConstraint` must be present in the generated space, but `$subspace` is not."))
+        isnothing(pos) && throw(ArgumentError("All subspaces of a constraint must be present in the generated space, but `$subspace` is not."))
         pos
     end
 end
-function _additive_branch_constraint(allowed_values, functions, subspaces, positions, n)
-    ismissing(allowed_values) && return BranchConstraint((partial, depth, spaces) -> true)
-    S = _sum_type(allowed_values)
-    contribution_values = _contribution_values(subspaces, functions, S)
-    T = mapreduce(vals -> mapreduce(typeof, promote_type, vals), promote_type, contribution_values; init = S)
-    contribution_min = zeros(T, n)
-    contribution_max = zeros(T, n)
-    position_starts = zeros(Int, n + 1)
-    position_starts[1] = 1
-    for (pos, vals) in zip(positions, contribution_values)
-        contribution_min[pos] += minimum(vals)
-        contribution_max[pos] += maximum(vals)
-        position_starts[pos+1] += 1
+# The contribution of each space is a table over its states, and a modulus `m` is pruned by the residues it allows.
+function _sum_terms(c::AbstractAdditiveConstraint, allspaces)
+    allowed, m = allowed_values(c), modulus(c)
+    S = _sum_type(allowed)
+    spaces = constraint_spaces(c)
+    positions = ismissing(spaces) ? eachindex(allspaces) : _subspace_positions(map(hilbert_space, spaces), allspaces)
+    tables = map(enumerate(positions)) do (k, p)
+        table = [_summand(S, contribution(c, k, s)) for s in basisstates(allspaces[p])]
+        isempty(table) && throw(ArgumentError("Cannot build an `AdditiveConstraint` from a space with no basis states."))
+        table
     end
-    cumsum!(position_starts, position_starts)
-    subspace_order = sortperm(collect(positions))
-
-    remaining_min = zeros(T, n + 1)
-    remaining_max = zeros(T, n + 1)
-    for i in n:-1:1
-        remaining_min[i] = remaining_min[i+1] + contribution_min[i]
-        remaining_max[i] = remaining_max[i+1] + contribution_max[i]
-    end
-    # `prefix[d]` is the contribution of positions `1:d-1` on the current branch. This relies on
-    # `generate_states` validating depth `d` only after accepting depths `1:d-1` of the same branch.
-    prefix = zeros(T, n + 1)
-    BranchConstraint((partial, depth, _) -> begin
-        current = prefix[depth]
-        for i in position_starts[depth]:position_starts[depth+1]-1
-                current += _summand(S, _contribution(functions, subspace_order[i], partial[depth]))
-        end
-        prefix[depth+1] = current
-        min_possible = current + remaining_min[depth+1]
-        max_possible = current + remaining_max[depth+1]
-        any(t -> min_possible <= t <= max_possible, allowed_values)
-    end)
+    targets = isnothing(m) ? _normalize_constraint_values(allowed) : filter(r -> label(c, r) in allowed, 0:(m - 1))
+    return (; constant = zero(S), positions = [[p] for p in positions], strides = [[1] for _ in positions], tables, allowed = targets, modulus = something(m, 0))
+end
+# Whether a sum in `lo:hi` can equal one of the sorted `targets`, or, with a nonzero modulus `m`, be congruent to one.
+function _reachable(lo, hi, targets, m)
+    iszero(m) || return any(r -> lo + mod(r - lo, m) <= hi, targets)
+    i = searchsortedfirst(targets, lo)
+    return i <= length(targets) && targets[i] <= hi
 end
 # Integer contributions are summed in the allowed values' type promoted with `Int`, with a checked
 # conversion, since `UInt + Int` is a `UInt` and negative sums would wrap around.
@@ -172,11 +147,6 @@ _sum_type(allowed_values) = promote_type(eltype(allowed_values), Int)
 _sum_type(::Missing) = Int
 _summand(S, x::Integer) = convert(S, x)
 _summand(S, x) = x
-_contribution(func::Function, k, substate) = func(substate)
-_contribution(fw::WeightedFunction, k, substate) = fw.weights[k] * fw.func(substate)
-_contribution(functions, k, substate) = functions[k](substate)
-
-branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_constraint(constraint.allowed_values, constraint.maps, constraint.spaces, spaces)
 
 
 @testitem "generate_states with BranchConstraint" begin
@@ -309,6 +279,20 @@ branch_constraint(constraint::AdditiveConstraint, spaces) = additive_branch_cons
     states2 = basisstates(constrain_space(H, constraint))
     @test Set(states) == Set(states2)
 end
+@testitem "BranchConstraint keeps the same states when filtering as when pruning" begin
+    using FermionicHilbertSpaces: particle_number
+    @fermions f
+    H = hilbert_space(f, 1:6)
+    blockade = BranchConstraint((p, d, s) -> d == 1 || count_ones(p[d].f) + count_ones(p[d - 1].f) < 2)
+    @test Set(basisstates(hilbert_space(f, 1:6, blockade))) == Set(basisstates(constrain_space(H, blockade)))
+    @test dim(constrain_space(H, NumberConservation(2) * BranchConstraint((p, d, s) -> false))) == 0
+
+    Hup, Hdn = hilbert_space(f, 1:3), hilbert_space(f, 4:6)
+    balanced = BranchConstraint((p, d, s) -> d == 1 || particle_number(p[1]) == particle_number(p[2]))
+    reference = constrain_space(H, FilterConstraint(allequal; maps = particle_number, spaces = (Hup, Hdn)))
+    @test Set(basisstates(tensor_product(Hup, Hdn; constraint = balanced))) == Set(basisstates(reference))
+end
+
 @testitem "Additive constraints on subsets of mixed spaces" begin
     using FermionicHilbertSpaces: AdditiveConstraint, particle_number
     @fermions f
@@ -336,4 +320,14 @@ end
     Hfs = map(hilbert_space, (f[1], f[2], f[3]))
     weighted_all = NumberConservation([2]; weights=(1, 2, 1))
     @test Set(basisstates(tensor_product(Hfs; constraint=weighted_all))) == Set(FockNumber.([0b010, 0b101]))
+end
+@testitem "AdditiveConstraint without allowed values keeps all sectors" begin
+    @spins S 1 // 2
+    Hs = [hilbert_space(S[k]) for k in 1:3]
+    H = tensor_product(Hs; constraint = AdditiveConstraint(missing; maps = s -> s.m))
+    full = collect(basisstates(tensor_product(Hs)))
+    @test dim(H) == length(full)
+    for qn in quantumnumbers(H)
+        @test Set(basisstates(sector(qn, H))) == Set(filter(s -> sum(x -> x.m, s.states) == qn, full))
+    end
 end

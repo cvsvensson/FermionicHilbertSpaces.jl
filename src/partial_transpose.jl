@@ -88,6 +88,8 @@ end
 function partial_transpose!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub::AbstractHilbertSpace; complement=complementary_subsystem(first(Hs), Hsub), kwargs...)
     partial_transpose!(mout, m, first(Hs), Hsub, complement, last(Hs); kwargs...)
 end
+partial_transpose!(mout, m, H::AbstractHilbertSpace, Hsub; kwargs...) = partial_transpose!(mout, m, H, _subsystem(Hsub, H); kwargs...)
+partial_transpose!(mout, m, Hs::Pair{<:AbstractHilbertSpace, <:AbstractHilbertSpace}, Hsub; kwargs...) = partial_transpose!(mout, m, Hs, _subsystem(Hsub, first(Hs)); kwargs...)
 
 """
     partial_transpose(m, H, Hsub; complement=complementary_subsystem(H, Hsub), phase_factors=true, projection=false)
@@ -96,7 +98,8 @@ end
     partial_transpose(H => Hout, Hsub; kwargs...)  # -> PartialTransposeMap
 
 Partial transpose of `m` (an operator on `H`, a pure state, or a vectorized density matrix)
-on the subsystem `Hsub`, which may be any subset of the modes of `H` (contiguous or not).
+on the subsystem `Hsub`, which may be any subset of the modes of `H` (contiguous or not), given
+as a space or as symbols naming the modes, meaning [`subregion`](@ref)`(Hsub, H)`.
 The result is an operator on `Hout`, which defaults to `H`. `H => Hout` reads input => output;
 see [Pair arguments](@ref pair_convention).
 
@@ -112,14 +115,14 @@ The partial transpose does not preserve number or parity constraints. For constr
 pass a larger output space on the same modes as `H => Hout`. For fermions the result is not
 Hermitian: `(ρ^{R_A})' == p_A ρ^{R_A} p_A` for parity-even `ρ`, with `p_A` the parity of `Hsub`.
 """
-partial_transpose(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) =
-    _partial_transpose(m, H, Hsub, H; kwargs...)
-partial_transpose(m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub::AbstractHilbertSpace; kwargs...) =
-    _partial_transpose(m, first(Hs), Hsub, last(Hs); kwargs...)
-partial_transpose(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; kwargs...) =
-    PartialTransposeMap(H, Hsub, H; kwargs...)
-partial_transpose(Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}, Hsub::AbstractHilbertSpace; kwargs...) =
-    PartialTransposeMap(first(Hs), Hsub, last(Hs); kwargs...)
+partial_transpose(m, H::AbstractHilbertSpace, Hsub; kwargs...) =
+    _partial_transpose(m, H, _subsystem(Hsub, H), H; kwargs...)
+partial_transpose(m, Hs::Pair{<:AbstractHilbertSpace, <:AbstractHilbertSpace}, Hsub; kwargs...) =
+    _partial_transpose(m, first(Hs), _subsystem(Hsub, first(Hs)), last(Hs); kwargs...)
+partial_transpose(H::AbstractHilbertSpace, Hsub; kwargs...) =
+    PartialTransposeMap(H, _subsystem(Hsub, H), H; kwargs...)
+partial_transpose(Hs::Pair{<:AbstractHilbertSpace, <:AbstractHilbertSpace}, Hsub; kwargs...) =
+    PartialTransposeMap(first(Hs), _subsystem(Hsub, first(Hs)), last(Hs); kwargs...)
 
 function _partial_transpose(m::AbstractMatrix, H, Hsub, Hout;
         complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false
