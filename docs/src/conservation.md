@@ -259,4 +259,56 @@ Hsub_full = hilbert_space(f, [(i, s) for i in 1:div(N,2) for s in (:↑,:↓)])
 Hsub_frac = subregion(Hsub_full, Hfrac)
 ```
 
+## Total spin and SU(N) multiplets
+A multiplet of total spin ``S`` has exactly one highest-weight state, the state with ``S^z_\mathrm{tot} = S`` that ``S^+_\mathrm{tot}`` annihilates; lowering it with ``S^-_\mathrm{tot}`` gives the rest of the multiplet. On a space split into ``S^z_\mathrm{tot}`` sectors, `highest_weight_states` returns these states, one column per multiplet, keyed by ``S``. This gives the lowest energy for each total spin of a Heisenberg ring:
+```@example multiplets
+using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces: highest_weight_states, multiplets
+@spins S 1 // 2
+N = 6
+ham = sum(S[k][:]'S[mod1(k + 1, N)][:] for k in 1:N)
+Sz = sum(S[k][:z] for k in 1:N)
+Splus = sum(S[k][:+] for k in 1:N)
+H = hilbert_space(S, 1:N, Sz => 0:(N // 2))
+energies(op, V, qn, H) = eigvals(Hermitian(V' * representation(op, sector(qn, H), Matrix) * V))
+[s => minimum(energies(ham, V, s, H)) for (s, V) in highest_weight_states(H, Splus)]
+```
+Total spin ``S`` at ``S^z_\mathrm{tot} = M`` needs the sectors from ``M`` up to the top, so `Sz => 0:N//2` covers every ``S`` at ``M \geq 0``. `multiplets(H, Splus)[S, M]` is the subspace with total spin ``S`` and ``S^z_\mathrm{tot} = M``, with one column per multiplet:
+```@example multiplets
+W = multiplets(H, Splus)[1, 0]
+energies(ham, W, 0, H)
+```
+
+#### Hubbard ring: spin and pseudospin
+At half filling, the particle-hole-symmetric Hubbard ring with an even number of sites has two commuting SU(2) symmetries: spin, raised by ``S^+ = \sum_i c^\dagger_{i↑} c_{i↓}``, and η-pairing pseudospin, raised by ``η^+ = \sum_i (-1)^i c^\dagger_{i↑} c^\dagger_{i↓}``. Since ``η^+`` changes the particle number, the space is the full Fock space split by `(Nup, Ndn)`. The key `[Nup, Ndn]` then holds the multiplets with ``S = (N_↑ - N_↓)/2`` and ``η = (N_↑ + N_↓ - L)/2``, and the lowest energy for each ``(S, η)`` is
+```@example multiplets
+@fermions f
+L = 4
+Nup = sum(f[i, :↑]'f[i, :↑] for i in 1:L)
+Ndn = sum(f[i, :↓]'f[i, :↓] for i in 1:L)
+H = hilbert_space(f, [(i, σ) for i in 1:L for σ in (:↑, :↓)], (Nup, Ndn))
+hub = sum(-f[i, σ]'f[mod1(i + 1, L), σ] + hc for i in 1:L for σ in (:↑, :↓)) +
+    4 * sum((f[i, :↑]'f[i, :↑] - 1 // 2) * (f[i, :↓]'f[i, :↓] - 1 // 2) for i in 1:L)
+Splus = sum(f[i, :↑]'f[i, :↓] for i in 1:L)
+etaplus = sum((-1)^i * f[i, :↑]'f[i, :↓]' for i in 1:L)
+@assert iszero(hub * Splus - Splus * hub) && iszero(hub * etaplus - etaplus * hub)
+[(S = (nup - ndn) // 2, η = (nup + ndn - L) // 2) => minimum(energies(hub, V, [nup, ndn], H))
+ for ((nup, ndn), V) in highest_weight_states(H, [Splus, etaplus])]
+```
+Passing only `Splus` gives the spin multiplets alone. The functions never see the Hamiltonian, so the check that it commutes with the raisers is up to the caller. For example, ``η^+`` commutes only with the particle-hole-symmetric interaction ``U (n_↑ - 1/2)(n_↓ - 1/2)``; with ``U n_↑ n_↓`` its multiplets do not block-diagonalize the Hamiltonian, and nothing warns about it.
+
+#### SU(3) flavour exchange
+Several raisers go in a vector. Three-flavour fermions with one fermion per site have sectors labelled by the three flavour numbers, and the raisers of SU(3) are the two flavour hops. On a 3-site ring the space splits as ``10 \oplus 8 \oplus 8 \oplus 1``, with keys `[3, 0, 0]`, `[2, 1, 0]` (two multiplets) and `[1, 1, 1]`. The flavour-exchange Hamiltonian has one energy per irrep:
+```@example multiplets
+@fermions c
+L = 3
+n(a) = sum(c[i, a]'c[i, a] for i in 1:L)
+one_per_site = [sum(c[i, a]'c[i, a] for a in 1:3) => 1 for i in 1:L]
+H = hilbert_space(c, [(i, a) for i in 1:L for a in 1:3], (one_per_site..., n(1), n(2), n(3)))
+raisers = [sum(c[i, a]'c[i, a + 1] for i in 1:L) for a in 1:2]
+exchange = sum(c[i, a]'c[i, b] * c[mod1(i + 1, L), b]'c[mod1(i + 1, L), a] for i in 1:L for a in 1:3 for b in 1:3)
+[w => energies(exchange, V, w, H) for (w, V) in highest_weight_states(H, raisers)]
+```
+With `check = true`, the default, both functions throw if the raisers are not raising operators of a symmetry or the sector labels are too coarse to resolve the weights.
+
 [^1]: T. Rakovszky, P. Sala, R. Verresen, M. Knap and F. Pollmann, "Statistical localization: from strong fragmentation to strong edge modes", [Phys. Rev. B 101, 125126 (2020)](https://doi.org/10.1103/PhysRevB.101.125126), [arXiv:1910.06341](https://arxiv.org/abs/1910.06341).
