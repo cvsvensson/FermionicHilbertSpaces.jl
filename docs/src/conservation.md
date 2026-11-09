@@ -6,16 +6,14 @@ A constraint selects basis states, and can split them into sectors labelled by q
 ```@example constraints
 using FermionicHilbertSpaces
 @fermions f
-constraint = sum(f[k]'f[k] for k in 1:3)
-H = hilbert_space(f, 1:3, constraint)
+N = sum(f[k]'f[k] for k in 1:3)
+H = hilbert_space(f, 1:3, N)
 ```
 
 The sector labels of a space are its quantum numbers. A sector is a space of its own, and an operator that conserves the quantity can be represented directly on it:
 ```@example constraints
-quantumnumbers(H)
-H2 = sector(2, H)
 hopping = sum(f[k]'f[k+1] + hc for k in 1:2)
-representation(hopping, H2)
+representation(hopping, sector(2, H))
 ```
 
 ### Writing a constraint
@@ -33,15 +31,22 @@ With `v` the value after the functions, the end of the constraint decides what i
 | a quantity or function giving `true` or `false` | `N => isodd` | `v` is `true` | none |
 | a quantity or function giving anything else | `N`, `N => parity` | always | `v` |
 
-A state where a function returns `missing` is discarded. To allow a single tuple or vector, wrap it, as in `=> [(0, 1)]`. Odd particle numbers, the sectors of even and odd particle number, and a ``\mathbb{Z}_3`` charge:
+A state where a function returns `missing` is discarded. To allow a single tuple or vector, wrap it, as in `=> [(0, 1)]`. 
+
+Examples:
 ```@example constraints
+# Keep odd particle numbers
 Hodd = hilbert_space(f, 1:4, N => isodd)
+```
+```@example constraints
+# Label even states by 0 and odd states by 1
 parity(v) = mod(v, 2)
 Hparity = hilbert_space(f, 1:4, N => parity => 0:1)
-Q = sum(k * f[k]'f[k] for k in 1:4)
-charge(v) = mod(v, 3)
-Hcharge = hilbert_space(f, 1:4, Q => charge => 0)
-dim(Hodd), quantumnumbers(Hparity), dim(Hcharge)
+```
+```@example constraints
+# Conserve the Dipole moment modulo 3
+Q3 = sum(k * f[k]'f[k] for k in 1:4) => (v -> mod(v, 3))
+Hdip = hilbert_space(f, 1:4, Q3)
 ```
 [`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total particle number, which also counts bosons.
 
