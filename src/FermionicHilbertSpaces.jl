@@ -209,6 +209,10 @@ PrecompileTools.@setup_workload begin
         @bosons bs
         hamb = sum(bs[k]'bs[k + 1] + hc for k in 1:1) + sum(bs[k]'bs[k] * bs[k]'bs[k] for k in 1:2)
         representation(hamb, hilbert_space(bs, 1:2, 3))
+        # Reduced states of a state vector in a constrained space
+        partial_trace(rand(dim(Hf)), Hf => subregion([f[1]], Hf))
+        Hn = hilbert_space(f, 1:4, NumberConservation(2))
+        partial_trace(rand(dim(Hn)), Hn => subregion([f[1], f[2]], Hn))
     end
 end
 
