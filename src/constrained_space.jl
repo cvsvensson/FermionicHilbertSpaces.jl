@@ -25,9 +25,10 @@ constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, _states_o
 function constrain_space(space, constraint::AbstractConstraint)
     split = pruning_split(space, constraint)
     isnothing(split) && return constrain_space(space, constraint, basisstates(space))
-    constraint = supply_missing_constraint_info(constraint, space, split)
     # The search varies its last space fastest and `basisstates(space)` its first atom, so the reversed split keeps that order.
-    return constrain_states(space, constraint, generate_states(reverse(split), constraint, space), unpruned_part(constraint))
+    states = generate_states(reverse(split), supply_missing_constraint_info(constraint, space, split), space)
+    # Sectors are labelled by `constraint` as given, as splitting each state over `split` again would be slower.
+    return constrain_states(space, constraint, states, unpruned_part(constraint))
 end
 function constrain_space(space, constraint::AbstractConstraint, labels)
     supports_filtering(constraint) || throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
