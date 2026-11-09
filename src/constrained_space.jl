@@ -25,9 +25,10 @@ constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, _states_o
 function constrain_space(space, constraint::AbstractConstraint)
     split = pruning_split(space, constraint)
     isnothing(split) && return constrain_space(space, constraint, basisstates(space))
-    constraint = supply_missing_constraint_info(constraint, space, split)
     # The search varies its last space fastest and `basisstates(space)` its first atom, so the reversed split keeps that order.
-    return constrain_states(space, constraint, generate_states(reverse(split), constraint, space), unpruned_part(constraint))
+    states = generate_states(reverse(split), supply_missing_constraint_info(constraint, space, split), space)
+    # Sectors are labelled by `constraint` as given, as splitting each state over `split` again would be slower.
+    return constrain_states(space, constraint, states, unpruned_part(constraint))
 end
 function constrain_space(space, constraint::AbstractConstraint, labels)
     supports_filtering(constraint) || throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
@@ -71,13 +72,14 @@ constraint_factors(c) = (c,)
 # Spaces to generate the states of `H` over with branch pruning by `constraint`: the spaces of its prunable
 # factors and the remaining atoms of `H`, in the order of the atoms. Returns `nothing` when the spaces are not
 # consecutive atoms of `H`, which the basis order needs, or overlap without being equal, which the branch
-# constraints cannot locate in the split. It also returns `nothing` when all prunable factors read the whole
-# state, as filtering by them is cheap.
+# constraints cannot locate in the split. It also returns `nothing` when all prunable factors are residues of sums
+# over the whole state, such as a parity, which only prune at the last atom.
 function pruning_split(H, constraint)
     isconstrained(H) && return nothing # the parent may have many more states than `H`
     prunable = filter(supports_branch_pruning, collect(constraint_factors(constraint)))
     spaces = map(branch_spaces, prunable)
-    (any(isnothing, spaces) || all(ismissing, spaces)) && return nothing
+    (isempty(prunable) || any(isnothing, spaces)) && return nothing
+    all(c -> ismissing(branch_spaces(c)) && !isnothing(modulus(c)), prunable) && return nothing
     atoms = collect(atomic_factors(H))
     owner = zeros(Int, length(atoms))
     blocks = []
@@ -278,6 +280,10 @@ end
             (H, NumberConservation(3, Hs[1:6]) * FilterConstraint(s -> isodd(particle_number(s)))),
             (Hm, mixed),
             (H, NumberConservation(1, hilbert_space(f, 1:4)) * NumberConservation(2, Hs[3:6])),
+            (hilbert_space(f, 1:N), NumberConservation(2:3)),
+            (hilbert_space(f, 1:N), NumberConservation(3) * ParityConservation(1)),
+            (tensor_product(Hbs), NumberConservation(2)),
+            (Hγ, NumberConservation(1)),
         ]
         @test constrain_space(space, constraint) == constrain_space(space, constraint, basisstates(space))
     end
