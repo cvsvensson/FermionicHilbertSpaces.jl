@@ -291,8 +291,9 @@ With a `constraint`, keep the basis states of `space` that satisfy it. If `state
 given, only those states are candidates. Constraints that group states into sectors,
 such as `NumberConservation`, return a space with sectors, with states ordered by sector.
 `constrain_space(space, NoSymmetry())` returns `space` unchanged.
-A constraint can also be `quantity => spec` with a diagonal operator `quantity`, such as
-`constrain_space(H, N => 2)` with `N = sum(f[i]'f[i] for i in 1:4)`; see [Constraints and sectors](@ref) for what `spec` can be.
+A constraint can also be `quantity` or `quantity => spec`, where `quantity` is a diagonal operator or a function
+of the basis state, such as `constrain_space(H, N => 2)` with `N = sum(f[i]'f[i] for i in 1:4)`;
+see [Constraints and sectors](@ref) for what `spec` can be.
 A `quantity => spec` constraint on a space with sectors keeps its labels, and its own labels follow them.
 
 With only `states`, return the subspace spanned by exactly those basis states, in the

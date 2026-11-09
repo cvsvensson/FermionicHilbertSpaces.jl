@@ -18,6 +18,8 @@ function as_constraint((quantity, spec)::Pair)
     return quantity_constraint(quantity, _rule(spec))
 end
 as_constraint(quantity) = quantity_constraint(quantity, ValueRule{true}(identity, missing))
+# Like a function at the end of a spec, a function of the state selects when it returns a `Bool`.
+as_constraint(quantity::Function) = quantity_constraint(quantity, _rule(identity))
 quantity_constraint(f::Function, rule) = StateConstraint(f, missing, missing, rule)
 function quantity_constraint(op, rule)
     listed = rule.map === identity && rule.allowed isa Union{Tuple, AbstractArray, AbstractSet}
@@ -402,6 +404,9 @@ end
     nup(s) = count(x -> x.m > 0, s.states)
     @test quantumnumbers(hilbert_space(S, 1:3, nup)) == 0:3
     @test dim(hilbert_space(S, 1:4, nup => 2)) == 6
+    allup(s) = all(x -> x.m > 0, s.states)
+    @test !(hilbert_space(S, 1:3, allup) isa SectorHilbertSpace) && dim(hilbert_space(S, 1:3, allup)) == 1
+    @test quantumnumbers(hilbert_space(S, 1:3, allup => [false, true])) == [false, true]
     @test eltype(quantumnumbers(hilbert_space(S, 1:2, (S[1][:z] + S[2][:z], S[1][:z])))) == Vector{Rational{Int}}
     up(i) = S[i][:z] + 1 // 2
     @test dim(hilbert_space(S, 1:6, [up(i) * up(i + 1) => 0 for i in 1:5])) == 21

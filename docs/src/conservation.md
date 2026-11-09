@@ -24,18 +24,13 @@ hopping = sum(f[k]'f[k+1] + hc for k in 1:3)
 indices(2, H)
 ```
 
-The right-hand side of `quantity => spec` is read by its type:
+In general, a constraint is a chain `quantity => f => g => ... => allowed`: the functions are applied to the value of the quantity in turn, and both they and `allowed` are optional. The end of the chain decides what is kept:
 
-| `spec` | keeps the values `v` | labels sectors by |
-|:--- |:--- |:--- |
-| none | all | `v` |
-| a number `a` | `v == a` | none |
-| a collection, such as `0:2` or `[1, 3]` | `v` in it | `v` |
-| a function returning a `Bool`, such as `isodd` | where it is `true` | none |
-| any other function `f` | all | `f(v)` |
-| `f => rest` | what `rest` keeps of `f(v)` | what `rest` labels `f(v)` by |
+- One value, as in `N => 2`, keeps the states with that value.
+- A collection, as in `N => 0:2` or `N => [1, 3]`, keeps the states with a value in it, in sectors labelled by the value.
+- Without allowed values, as in `N` or `N => isodd`, a `true` or `false` value keeps the `true` states, and any other value splits the states into sectors labelled by it.
 
-After a function, `rest` may also be a string, symbol or character, and a single tuple or vector must be wrapped, as in `=> [(0, 1)]`. A labelling function can return `missing` to discard the states with that value. A constraint that allows no value of its operator throws an error. Odd particle numbers, the sectors of even and odd particle number, and a ``\mathbb{Z}_3`` charge:
+A function can return `missing` to discard the states with that value. After a function, a single value may also be a string, symbol or character, and a single tuple or vector must be wrapped, as in `=> [(0, 1)]`. A constraint that allows no value of its operator throws an error. Odd particle numbers, the sectors of even and odd particle number, and a ``\mathbb{Z}_3`` charge:
 ```@example constraints
 Hodd = hilbert_space(f, 1:4, N => isodd)
 parity(v) = mod(v, 2)
@@ -59,10 +54,10 @@ quantumnumbers(Hspin), dim(Hpxp)
 ```
 Passing a constraint while building a space prunes states as they are generated, so the full space is never built. A term that acts on several factors is tabulated on their product, which may have at most 4096 states.
 
-The quantity can also be a function of the basis state. It is evaluated on each state of the full space, so the space must be small enough to build:
+The quantity can also be a function of the basis state, so a predicate keeps the states where it is `true`. It is evaluated on each state of the full space, so the space must be small enough to build:
 ```@example constraints
 nup(state) = count(s -> s.m > 0, state.states)
-dim(hilbert_space(S, 1:6, nup => 2))
+dim(hilbert_space(S, 1:6, nup => 2)), dim(hilbert_space(S, 1:6, s -> nup(s) <= 1))
 ```
 `constrain_space` always filters a space that already exists. A `quantity => spec` constraint keeps the sectors the space already has, and its labels follow theirs.
 
