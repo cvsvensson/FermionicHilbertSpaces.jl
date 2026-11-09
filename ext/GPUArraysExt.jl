@@ -83,7 +83,7 @@ Adapt.adapt_structure(::DeviceAdaptor, H::FermionicSpace{F}) where {F} = DeviceF
 Adapt.adapt_structure(to::DeviceAdaptor, H::TruncatedBosonicHilbertSpace) = TruncatedBosonicHilbertSpace(adapt(to, H.sym), H.dimension)
 Adapt.adapt_structure(::DeviceAdaptor, H::SpinSpace{T}) where {T} = SpinSpace{T, Nothing}(H.spin, nothing)
 function Adapt.adapt_structure(to::DeviceAdaptor, H::ProductSpace{B}) where {B}
-    ismissing(H.fast_path) && throw(ArgumentError("Product spaces whose groups have no internal representation as integers are not supported on GPUs."))
+    H.fast_path isa Int || throw(ArgumentError("Product spaces whose groups have no internal representation as `Int` are not supported on GPUs."))
     factors = adapt(to, H.factors)
     return DeviceProductSpace{B, typeof(factors), typeof(H.lininds), typeof(H.cartinds)}(factors, H.lininds, H.cartinds)
 end

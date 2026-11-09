@@ -197,6 +197,7 @@ function atom_ids(H::MajoranaHilbertSpace)
     γs = collect(keys(H.majoranaindices))
     [(γs[2k-1], γs[2k]) for k in 1:length(γs)÷2]
 end
+_acts_in(x::AbstractMajoranaSym, H::MajoranaHilbertSpace) = haskey(H.majoranaindices, x)
 function atom_position(x, H::MajoranaHilbertSpace)
     id = atomic_id(x)
     id isa Tuple{Any,Any} || return 0 # only pairs name atoms
@@ -234,6 +235,7 @@ function majoranas(H::MajoranaHilbertSpace)
 end
 symbolic_basis(H::MajoranaHilbertSpace) = H.sym
 
+hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, @nospecialize(c::QuantitySpec)) = constrain_space(hilbert_space(y, labels), c)
 function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even to define a Hilbert space, got $(length(labels))."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
@@ -245,6 +247,21 @@ function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...
 end
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
+
+# Replace each pair of Majoranas in `names` that forms an atom of `H` by that atom, placed
+# where the first of the two appears.
+function _pair_majoranas(names, H)
+    γs = Set(x for x in names if x isa AbstractMajoranaSym)
+    isempty(γs) && return names
+    pair_of = Dict(γ => a for a in atomic_factors(H) if a isa MajoranaHilbertSpace for γ in keys(a.majoranaindices) if γ in γs)
+    for a in values(pair_of)
+        γ1, γ2 = keys(a.majoranaindices)
+        γ1 in γs && γ2 in γs || throw(ArgumentError("A Majorana names a mode only together with its partner, got $(γ1 in γs ? γ1 : γ2) without $(γ1 in γs ? γ2 : γ1)."))
+    end
+    placed = Set{MajoranaHilbertSpace}()
+    isnew(a) = !(a in placed) && (push!(placed, a); true)
+    return [get(pair_of, x, x) for x in names if !haskey(pair_of, x) || isnew(pair_of[x])]
+end
 
 function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
     parent_subregion = subregion(parent(Hsub), parent(H))
@@ -384,6 +401,18 @@ end
     @test dim(tensor_product(H, Hb)) == dim(H) * dim(Hb) # this errored for constrained spaces before, fixed by defining combine_states for MajoranaHilbertSpace
 
     @test dim(tensor_product(H, Hb; constraint = ParityConservation(1,[H]))) == dim(H) * dim(Hb) # constraint subspaces are matched by atom_ids
+end
+
+@testitem "Majorana pairs name subregions" begin
+    @majoranas γ
+    H = hilbert_space(γ, 1:4)
+    @test subregion([γ[4], γ[3]], H) == subregion(hilbert_space(γ, 3:4), H)
+    @test_throws ArgumentError subregion([γ[1], γ[3]], H)
+    @test subregion([γ[1], γ[2], hilbert_space(γ, 3:4)], H) == subregion(hilbert_space(γ, 1:4), H)
+    @fermions f
+    Hmix = tensor_product(hilbert_space(γ, 1:2), hilbert_space(f, 1:2))
+    @test subregion([γ[1], γ[2], hilbert_space(f, 1:1)], Hmix) ==
+        subregion(tensor_product(hilbert_space(γ, 1:2), hilbert_space(f, 1:1)), Hmix)
 end
 
 @testitem "Majorana spaces with several names" begin

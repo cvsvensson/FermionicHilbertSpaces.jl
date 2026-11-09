@@ -15,8 +15,6 @@ abstract type AbstractAtomicHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractProductHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractGroupedHilbertSpace{B} <: AbstractProductHilbertSpace{B} end
 
-const PairWithHilbertSpaces = Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}
-
 """
     Axes(H1, H2, ...)
 
@@ -256,6 +254,8 @@ Convert a basis state of type `B` to an integer and back, with
 `physical_rep(internal_rep(state, space, Int), B) == state`. When every group of a product
 space has these methods, operators on the product space act on the integers instead of on
 the states. Without them, the product space uses the states directly, which is slower.
+A product with a fermionic group of 63 or more modes uses a wider signed integer type in place
+of `Int`, so methods for any `T<:Integer` keep the integer path there.
 """
 internal_rep(state, space, ::Type{T}) where T = internal_rep(state, parent(space), T)
 
@@ -356,6 +356,7 @@ operator, or a list/tuple of spaces or symbolic operators (e.g. `[f[1], b[2]]`).
 If `Hs` contains only symbolic operators, their order does not matter: the modes are ordered
 as in `H`. If any element of `Hs` is a space, the modes must keep their order within each
 group of `H` (e.g. the Jordan-Wigner order of fermions), otherwise an `ArgumentError` is thrown.
+A Majorana names a mode only together with its partner, as in `[γ[1], γ[2]]`.
 
 # Examples
 ```jldoctest
@@ -369,7 +370,7 @@ true
 """
 function subregion(Hs, H::AbstractHilbertSpace)
     Hs_items = Hs isa Tuple || Hs isa AbstractVector ? Hs : (Hs,)
-    names = collect(Iterators.flatten(Iterators.map(atomic_factors, Hs_items)))
+    names = _pair_majoranas(collect(Iterators.flatten(Iterators.map(_subregion_atoms, Hs_items))), H)
     isempty(names) && throw(ArgumentError("`Hs` must contain at least one space or symbolic operator."))
     positions = map(x -> atom_position(x, H), names)
     all(>(0), positions) || throw(ArgumentError("The spaces/operators in `Hs` must match atomic factors of `H`, got the following unmatched ones: $(names[iszero.(positions)])."))
@@ -383,6 +384,11 @@ function subregion(Hs, H::AbstractHilbertSpace)
     states = _find_subregion_states(H, state_mapper(H, (Hsub,)))
     ConstrainedSpace(Hsub, states)
 end
+_subregion_atoms(x) = applicable(atomic_factors, x) ? atomic_factors(x) :
+    throw(ArgumentError("expected a Hilbert space or a collection of symbols, got $x"))
+# A subsystem of `H` given as a space, or as symbols resolved by `subregion`
+_subsystem(Hsub::AbstractHilbertSpace, H) = Hsub
+_subsystem(Hs, H) = subregion(Hs, H)
 
 @testitem "Subregion: matching spaces with symbols" begin
     @fermions f
@@ -422,6 +428,31 @@ end
     H = tensor_product(hilbert_space(f, up, NumberConservation(2)), hilbert_space(f, dn, NumberConservation(2)))
     @test subregion([f[(i, σ)] for i in 1:2 for σ in (:↑, :↓)], H) ==
           subregion(hilbert_space(f, [up[1:2]; dn[1:2]]), H)
+end
+
+@testitem "Subsystems given as symbols" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: partial_transpose!
+    @fermions f
+    L = 3
+    labels = [(i, σ) for i in 1:L for σ in (:↑, :↓)]
+    H = hilbert_space(f, labels, NumberConservation(L))
+    ψ = normalize(rand(ComplexF64, dim(H)))
+    for syms in ([f[2, :↑], f[2, :↓]], [f[i, :↑] for i in 1:L])
+        Hsub = subregion(syms, H)
+        @test partial_trace(ψ, H => syms) == partial_trace(ψ, H => Hsub)
+        @test partial_trace(ψ * ψ', H => syms) == partial_trace(H => Hsub)(ψ * ψ')
+    end
+    @test_throws ArgumentError partial_trace(ψ * ψ', H => 1)
+
+    Hfull = hilbert_space(f, labels)
+    syms = [f[1, :↑], f[3, :↓]]
+    Hsub = subregion(syms, Hfull)
+    A = rand(dim(Hsub), dim(Hsub))
+    @test embed(A, syms => Hfull) == embed(Hsub => Hfull)(A)
+    ρ = rand(dim(Hfull), dim(Hfull))
+    @test partial_transpose(ρ, Hfull, syms) == partial_transpose(Hfull, Hsub)(ρ)
+    @test partial_transpose!(complex(zero(ρ)), ρ, Hfull, syms) == partial_transpose(ρ, Hfull, Hsub)
 end
 
 @testitem "Matching syms and spaces with mutable labels" begin

@@ -76,6 +76,8 @@ A = representation(f[2]' * f[4], Hsub)
 tr(embed(A, Hsub => H) * ρ) ≈ tr(A * partial_trace(ρ, H => Hsub))
 ```
 
+The subsystem can also be named by its symbols, which means `subregion(syms, H)`. For a Hubbard chain, `partial_trace(ρ, H => [f[k, :↑], f[k, :↓]])` is the state of site `k` and `partial_trace(ρ, H => [f[i, :↑] for i in 1:L])` that of the spin-up modes.
+
 `expectation(op, state, H)` gives the expectation value of a symbolic operator in a state vector or density matrix on `H`.
 
 ### Partial transpose

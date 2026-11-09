@@ -100,7 +100,7 @@ isconstrained(H::AbstractSubspace) = true
 
 for f in (
         :atomic_factors, :groups, :factors, :atom_ids, :nbr_of_atoms, :group_id, :partial_trace_phase_factor_eltype,
-        :partial_transpose_phase_factor_eltype, :fast_path, :mode_ordering, :modes,
+        :partial_transpose_phase_factor_eltype, :fast_path, :internal_rep_type, :mode_ordering, :modes,
     )
     @eval $f(H::AbstractSubspace) = $f(parent(H))
 end
@@ -177,7 +177,7 @@ end
     selected = Ref(0)
     keep(state) = isodd(particle_number(state))
     label(state) = isodd(particle_number(state))
-    function default_subspace_index(::Union{FilterConstraint{typeof(keep)},SectorConstraint{<:FilterConstraint{typeof(label)}}}, parent, states)
+    function default_subspace_index(::Union{FilterConstraint{typeof(keep)}, SectorConstraint{typeof(label)}}, parent, states)
         selected[] += 1
         LinearSearch(states)
     end

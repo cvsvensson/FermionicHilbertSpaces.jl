@@ -19,21 +19,89 @@ subspace_index(H::ConstrainedSpace) = H.index
 rewrap(H::ConstrainedSpace, parent) = ConstrainedSpace(parent, H.states, H.index)
 
 constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
-constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector,BasisStates}) = constrain_space(space, NoSymmetry(), states)
+constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector, BasisStates}) = _holds_constraints(states) ? constrain_space(space, as_constraint(states)) : constrain_space(space, NoSymmetry(), states)
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, _states_of(space, states))
-function constrain_space(space, constraint::AbstractConstraint, labels = basisstates(space))
-    states = _states_of(space, labels)
-    if supports_sector_grouping(constraint)
-        f = sector_function(constraint, space)
-        return sector_space(space, states, f, constraint)
-    elseif supports_filtering(constraint)
-        f = filter_function(constraint, space)
-        filtered_states = collect(Iterators.filter(f, states))
-        return ConstrainedSpace(space, filtered_states; constraint)
-    else
-        throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
+function constrain_space(space, constraint::AbstractConstraint)
+    split = pruning_split(space, constraint)
+    isnothing(split) && return constrain_space(space, constraint, basisstates(space))
+    # The search varies its last space fastest and `basisstates(space)` its first atom, so the reversed split keeps that order.
+    states = generate_states(reverse(split), supply_missing_constraint_info(constraint, space, split), space)
+    # Sectors are labelled by `constraint` as given, as splitting each state over `split` again would be slower.
+    return constrain_states(space, constraint, states, unpruned_part(constraint))
+end
+function constrain_space(space, constraint::AbstractConstraint, labels)
+    supports_filtering(constraint) || throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
+    return constrain_states(space, constraint, _states_of(space, labels))
+end
+# The subspace of the candidate `states` that satisfy `constraint`, grouped into sectors when it supports it.
+# Only `unchecked`, the part of `constraint` that `states` may violate, is filtered by when not grouping.
+# A constraint that cannot filter is taken to hold for all of `states`.
+function constrain_states(space, constraint, states, unchecked = nothing)
+    constraint = resolve(constraint, space, states)
+    unchecked = isnothing(unchecked) ? constraint : resolve(unchecked, space, states)
+    if supports_sector_grouping(constraint) && supports_filtering(constraint)
+        grouping = _with_sector_labels(space, constraint)
+        return sector_space(space, states, sector_function(grouping, space), grouping)
+    elseif supports_filtering(unchecked)
+        return _restricted_space(space, collect(Iterators.filter(filter_function(unchecked, space), states)), constraint)
     end
+    return ConstrainedSpace(space, states; constraint)
+end
+# A `quantity => spec` constraint on a space with sectors keeps them, and its own labels follow theirs.
+_keeps_sectors(space, constraint) = false
+_keeps_sectors(space::SectorHilbertSpace, constraint) = !isnothing(space.constraint) && _spec_form(constraint)
+_with_sector_labels(space, constraint) = _keeps_sectors(space, constraint) ? space.constraint * constraint : constraint
+function _restricted_space(space, states, constraint)
+    _keeps_sectors(space, constraint) || return ConstrainedSpace(space, states; constraint)
+    return sector_space(space, states, sector_function(space.constraint, parent(space)), space.constraint)
+end
+# The factors of `constraint` that the branch pruning of `generate_states` does not enforce.
+unpruned_part(constraint) = ProductConstraint(filter(!supports_branch_pruning, collect(constraint_factors(constraint))))
+
+# Spaces that the branch constraint of `c` reads: `missing` for the whole state, which any split fits,
+# and `nothing` when no split is known to fit, such as for a user's `BranchConstraint`.
+branch_spaces(c) = nothing
+branch_spaces(c::AbstractAdditiveConstraint) = constraint_spaces(c)
+# Without spaces, per-space maps or weights act on the factors of a `tensor_product`, which no split is known to match.
+branch_spaces(::AdditiveConstraint{<:Any, Missing}) = nothing
+branch_spaces(c::NumberConservation{<:Any, Missing}) = ismissing(c.weights) ? missing : nothing
+constraint_factors(c::ProductConstraint) = c.constraints
+constraint_factors(c) = (c,)
+
+# Spaces to generate the states of `H` over with branch pruning by `constraint`: the spaces of its prunable
+# factors and the remaining atoms of `H`, in the order of the atoms. Returns `nothing` when the spaces are not
+# consecutive atoms of `H`, which the basis order needs, or overlap without being equal, which the branch
+# constraints cannot locate in the split. It also returns `nothing` when all prunable factors are residues of sums
+# over the whole state, such as a parity, which only prune at the last atom.
+function pruning_split(H, constraint)
+    isconstrained(H) && return nothing # the parent may have many more states than `H`
+    prunable = filter(supports_branch_pruning, collect(constraint_factors(constraint)))
+    spaces = map(branch_spaces, prunable)
+    (isempty(prunable) || any(isnothing, spaces)) && return nothing
+    all(c -> ismissing(branch_spaces(c)) && !isnothing(modulus(c)), prunable) && return nothing
+    atoms = collect(atomic_factors(H))
+    owner = zeros(Int, length(atoms))
+    blocks = []
+    for space in Iterators.flatten(skipmissing(spaces))
+        range = atom_range(space, H, atoms)
+        isnothing(range) && return nothing
+        k = owner[first(range)]
+        !iszero(k) && blocks[k][1] == range && continue
+        all(iszero, view(owner, range)) || return nothing
+        push!(blocks, (range, space))
+        owner[range] .= length(blocks)
+    end
+    return [iszero(k) ? atoms[i] : blocks[k][2] for (i, k) in enumerate(owner) if iszero(k) || first(blocks[k][1]) == i]
+end
+# The positions of the atoms of `space` in `atoms`, the atoms of `H`, if they are consecutive and equal, otherwise `nothing`.
+function atom_range(space, H, atoms)
+    space isa AbstractHilbertSpace && !isconstrained(space) || return nothing
+    space_atoms = collect(atomic_factors(space))
+    start = atom_position(first(space_atoms), H)
+    range = start:(start + length(space_atoms) - 1)
+    !iszero(start) && last(range) <= length(atoms) && atoms[range] == space_atoms || return nothing
+    return range
 end
 # Labels become states as in `Ket` and `state_index`, but a basis state or a value of the state type is kept as is,
 # so that a space whose states are strings is not parsed. States outside a subspace are dropped by `unnest`.
@@ -188,6 +256,37 @@ same_state_kind(state::ProductState, ::Type{ProductState{S}}) where {S<:Tuple} =
     one_particle = Set(basisstates(constrain_space(H, NumberConservation(1))))
     @test basisstates(Hc) == filter(in(one_particle), states)
     @test_throws MethodError constrain_space(H, states, NumberConservation(1))
+end
+
+@testitem "constrain_space on subspaces matches filtering all basis states" begin
+    using FermionicHilbertSpaces: AdditiveConstraint, particle_number
+    @fermions f
+    @spins s 1 // 2
+    N = 8
+    Hs = [hilbert_space(f[i]) for i in 1:N]
+    H = tensor_product(Hs)
+    dipole = AdditiveConstraint([12, 13]; spaces = Hs, maps = [s -> i * particle_number(s) for i in 1:N])
+    Hm = tensor_product(hilbert_space(f, 1:3), hilbert_space(s[1]), hilbert_space(s[2]))
+    mixed = NumberConservation(1, hilbert_space(f, 1:2)) * AdditiveConstraint([0]; spaces = map(hilbert_space, (s[1], s[2])), maps = s -> s.m)
+    @bosons b
+    Hbs = [hilbert_space(b[i], 3) for i in 1:4]
+    @majoranas γ
+    Hγ = hilbert_space(γ, 1:8)
+    for (space, constraint) in [
+            (tensor_product(Hbs), NumberConservation(1:2, Hbs[1:3]) * NumberConservation(2, Hbs[3:4])),
+            (Hγ, NumberConservation(1, hilbert_space(γ, 1:4))),
+            (H, NumberConservation(0:2, Hs[3:7])),
+            (H, NumberConservation(N ÷ 2, Hs) * dipole),
+            (H, NumberConservation(3, Hs[1:6]) * FilterConstraint(s -> isodd(particle_number(s)))),
+            (Hm, mixed),
+            (H, NumberConservation(1, hilbert_space(f, 1:4)) * NumberConservation(2, Hs[3:6])),
+            (hilbert_space(f, 1:N), NumberConservation(2:3)),
+            (hilbert_space(f, 1:N), NumberConservation(3) * ParityConservation(1)),
+            (tensor_product(Hbs), NumberConservation(2)),
+            (Hγ, NumberConservation(1)),
+        ]
+        @test constrain_space(space, constraint) == constrain_space(space, constraint, basisstates(space))
+    end
 end
 
 @testitem "constrain_space reads labels unless they are states" begin
@@ -348,6 +447,16 @@ end
     end
 end
 
+@testitem "Tensor product of a space with labelled and filtered constraints" begin
+    @spins S 1 // 2
+    @fermions f
+    nup(s) = count(x -> x.m > 0, s.states)
+    H1 = hilbert_space(S, 1:3, (sum(S[i][:z] for i in 1:3), nup => 1))
+    H = tensor_product(H1, hilbert_space(f, 1:2))
+    @test dim(H) == 4 * dim(H1)
+    @test Set(quantumnumbers(H)) == Set(quantumnumbers(H1))
+end
+
 @testitem "Tensor product keeps the sector rule of a factor" begin
     using FermionicHilbertSpaces: particle_number
     @fermions f
@@ -372,12 +481,13 @@ unsupported constraints are returned unchanged.
 """
 localize_constraint(c::AbstractConstraint, ::SectorHilbertSpace) = c
 localize_constraint(c::AbstractAdditiveConstraint, H::SectorHilbertSpace) = supply_missing_constraint_info(c, H, (H,))
-localize_constraint(c::ProductConstraint, H::SectorHilbertSpace) = ProductConstraint(map(ci -> localize_constraint(ci, H), c.constraints))
-function localize_constraint(c::SectorConstraint{<:FilterConstraint{<:Any,Missing,Missing}}, H::SectorHilbertSpace)
+# The states of `H` already satisfy the filtering factors, so only the grouping factors are kept.
+localize_constraint(c::ProductConstraint, H::SectorHilbertSpace) = ProductConstraint(map(ci -> localize_constraint(ci, H), filter(supports_sector_grouping, c.constraints)))
+function localize_constraint(c::StateConstraint{<:Any, Missing, Missing}, H::SectorHilbertSpace)
     # Bind the free-standing reducer to H as its single subspace.
     # sector_function on the larger space will split the state, extract the H-substate,
     # apply the original reducer to it, and return the label via `only`.
-    SectorConstraint(only, (c.filter.reducer,), (H,))
+    return StateConstraint(only, (c.reducer,), (H,), c.rule)
 end
 
 """

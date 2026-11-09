@@ -61,7 +61,7 @@ von_neumann_entropy(G, H::BdGHilbertSpace) = -sum(_xlogx, _occupations(G, H))
 """
     correlation_matrix(F::LinearAlgebra.Eigen; β = Inf)
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground state, where `F` is the result of `eigen(A, BdGEigen())`; the default `β = Inf` assumes no zero-energy modes. It equals `correlation_matrix(ψ, H, Hbdg)` for the many-body ground state `ψ`. A finite `β` gives the thermal state `exp(-β * H) / Z` of the many-body Hamiltonian `H` that `A` represents. For the matrix `R` of a Majorana operator, `F = eigen(Hermitian(R))` gives `G[i, j] = ⟨γ_i γ_j⟩ / 2`.
+The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground state, where `F` is `eigen(A, BdGEigen())` or `eigen(Hermitian(A))`. It equals `correlation_matrix(ψ, H, Hbdg)` for the many-body ground state `ψ`. Zero-energy modes are half occupied, which gives the equal mixture of the degenerate ground states. A finite `β` gives the thermal state `exp(-β * H) / Z` of the many-body Hamiltonian `H` that `A` represents. For the matrix `R` of a Majorana operator, `F = eigen(Hermitian(R))` gives `G[i, j] = ⟨γ_i γ_j⟩ / 2`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions, LinearAlgebra; @fermions f;
@@ -72,22 +72,18 @@ julia> correlation_matrix(eigen(A, BdGEigen())) ≈ [1 0; 0 0]
 true
 ```
 """
+# G depends on the eigenvectors only through the spectral projectors, so any basis of a degenerate eigenspace works.
 function correlation_matrix(F::Eigen; β = Inf)
-    N = div(size(F.vectors, 2), 2)
+    e = F.values
     if isinf(β)
-        U = F.vectors[:, 1:N]
-        G = conj(U) * transpose(U)
-        # G + transpose(G) == I for Majoranas and G + τx * transpose(G) * τx == I for Nambu spinors fail when `eigen`
-        # returns zero-energy eigenvectors that are not particle-hole partners.
-        Base.inferencebarrier(_is_paired)(G) || throw(ArgumentError(_unpaired_error))
-        return G
+        tol = length(e) * eps(eltype(e)) * maximum(abs, e; init = zero(eltype(e)))
+        n = map(x -> x < -tol ? one(x) : x > tol ? zero(x) : one(x) / 2, e)
+    else
+        # The BdG matrix carries a factor 1/2, so the quasiparticle energies are 2 * F.values.
+        n = inv.(exp.(2 * convert(eltype(e), β) .* e) .+ 1)
     end
-    # The BdG matrix carries a factor 1/2, so the quasiparticle energies are 2 * F.values.
-    n = inv.(exp.(2β .* F.values) .+ 1)
     return conj(F.vectors) * Diagonal(n) * transpose(F.vectors)
 end
-# Called behind a barrier so that thermal states, the common case, do not compile it
-_is_paired(G) = G + transpose(G) ≈ I || is_ph_symmetric(G - I / 2)
 const _unpaired_error = "The eigenvectors are not particle-hole partners, as happens for unpaired zero-energy modes."
 
 """
@@ -105,8 +101,12 @@ julia> ground_state_parity(eigen(A, BdGEigen()))
 ```
 """
 function ground_state_parity(F::Eigen)
-    N = div(size(F.vectors, 2), 2)
-    return _parity(det(F.vectors[:, [2N:-1:(N + 1); 1:N]]))
+    V = F.vectors
+    N = div(size(V, 2), 2)
+    partners = V[:, 2N:-1:(N + 1)]
+    isapprox(partners, mapslices(quasiparticle_adjoint, V[:, 1:N]; dims = 1); rtol = sqrt(eps(real(float(eltype(V)))))) ||
+        throw(ArgumentError("Columns `k` and `2N + 1 - k` of the eigenvectors must be particle-hole partners, as `eigen(A, BdGEigen())` gives."))
+    return _parity(det([partners V[:, 1:N]]))
 end
 function _parity(d)
     p = sign(real(d))
@@ -125,7 +125,7 @@ function ground_state_parity(F::Eigen, ::MajoranaSingleParticleHilbertSpace)
     # The quasiparticle of a negative-energy column u = (x + iy) / √2 annihilates the ground state, so the Majoranas
     # γ_x = x ⋅ γ and γ_y = y ⋅ γ have i γ_x γ_y = -1 there. The columns x, y form an orthogonal W, and the product of
     # these pair parities is det(W) times the parity.
-    W = sqrt(2) * stack(Iterators.flatten((real(u), imag(u)) for u in eachcol(F.vectors[:, 1:N])))
+    W = sqrt(2 * one(real(eltype(F.vectors)))) * stack(Iterators.flatten((real(u), imag(u)) for u in eachcol(F.vectors[:, 1:N])))
     W' * W ≈ I || throw(ArgumentError(_unpaired_error))
     return _parity((-1)^N * det(W))
 end
@@ -149,7 +149,7 @@ function gaussian_state(G, H, Hbdg::BdGHilbertSpace)
     dim(H) == 2^N || throw(ArgumentError("The many-body space must have exactly the $N modes of the BdG space."))
     _check_correlation_matrix(G, Hbdg)
     # transpose(G)[i, j] = ⟨Ψ_j' Ψ_i⟩, so ⟨γ' γ⟩ = v' * transpose(G) * v for γ' = quasiparticle(v, Hbdg)
-    vals, vecs = eigen(transpose(G) - I / 2, BdGEigen())
+    vals, vecs = eigen(transpose(G) - I * (one(real(float(eltype(G)))) / 2), BdGEigen())
     tol = sqrt(eps(real(eltype(vals))))
     all(λ -> abs(λ) <= 1 / 2 + tol, vals) ||
         throw(ArgumentError("The occupations of G must lie in [0, 1]."))
@@ -189,8 +189,20 @@ end
         ground_state_parity(F)
     end
     @test parities[1] == 1 && parities[3] == -1
-    F = eigen(representation(quadratic, Hbdg, Matrix), BdGEigen())
+
+    A = representation(quadratic, Hbdg, Matrix)
+    F = eigen(A, BdGEigen())
     @test_throws ArgumentError ground_state_parity(Eigen(F.values, 2 * F.vectors))
+    # `eigen` fixes the phase of each column separately, so particle-hole partners are not paired
+    @test_throws ArgumentError ground_state_parity(eigen(Hermitian(A)))
+    @test correlation_matrix(eigen(Hermitian(A))) ≈ correlation_matrix(F)
+
+    F32 = eigen(ComplexF32.(A), BdGEigen())
+    @test ground_state_parity(F32) == ground_state_parity(F)
+    @test correlation_matrix(F32) isa Matrix{ComplexF32}
+    @test correlation_matrix(F32) ≈ correlation_matrix(F) atol = 1.0e-5
+    @test correlation_matrix(F32; β = 0.7) isa Matrix{ComplexF32}
+    @test gaussian_state(correlation_matrix(F32; β = 0.7), Hmb, Hbdg) ≈ gaussian_state(correlation_matrix(F; β = 0.7), Hmb, Hbdg) atol = 1.0e-5
 end
 
 @testitem "Thermal correlation matrix" begin
@@ -260,11 +272,19 @@ end
     @test parities == [1, -1]
     F = eigen(Hermitian(representation(quadratic, H, Matrix)))
     @test_throws ArgumentError ground_state_parity(Eigen(F.values, 2 * F.vectors), H)
-    # Two zero modes, γ[1] and γ[4], whose eigenvectors `eigen` does not pair
+    F32 = eigen(Hermitian(ComplexF32.(representation(quadratic, H, :dense))))
+    @test ground_state_parity(F32, H) == ground_state_parity(eigen(Hermitian(representation(quadratic, H, :dense))), H)
+
+    # Two zero modes, γ[1] and γ[4], whose eigenvectors `eigen` does not pair. The ground states are degenerate, so the
+    # parity is undefined and G is that of their equal mixture.
+    ham = 1im * γ[2] * γ[3]
     Hzero = hilbert_space(γ, 1:4, SingleParticle())
-    F = eigen(Hermitian(representation(1im * γ[2] * γ[3], Hzero, Matrix)))
+    F = eigen(Hermitian(representation(ham, Hzero, Matrix)))
     @test_throws ArgumentError ground_state_parity(F, Hzero)
-    @test_throws ArgumentError correlation_matrix(F)
+    Hzero_mb = hilbert_space(γ, 1:4)
+    vals, vecs = eigen(Hermitian(representation(ham, Hzero_mb, :dense)))
+    ground = vecs[:, vals .≈ vals[1]]
+    @test correlation_matrix(F) ≈ correlation_matrix(ground * ground' / size(ground, 2), Hzero_mb, Hzero)
 end
 
 @testitem "Gaussian state from a correlation matrix" begin

@@ -9,8 +9,8 @@ module FermionicHilbertSpaces
 
 using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Hermitian,
     UniformScaling, diag, diagind, dot,
-    eigen!, eigvals, eigvecs, ishermitian,
-    mul!, normalize, qr, rank, rmul!, svdvals, tr, I
+    eigen!, eigvals, eigvecs, isdiag, ishermitian,
+    mul!, normalize, nullspace, qr, rank, rmul!, svd, svdvals, tr, I
 using LowRankMatrices: LowRankMatrices, LowRankMatrix
 import SciMLOperators
 using FillArrays: Zeros, Fill, Eye
@@ -144,6 +144,8 @@ include("reshape.jl")
 include("partial_transpose.jl")
 
 include("generate_constrained_states.jl")
+include("operator_constraint.jl")
+include("joint_bounds.jl")
 
 include("matrix_representation.jl")
 include("sparse_assembly.jl")
@@ -202,9 +204,15 @@ PrecompileTools.@setup_workload begin
         representation(hamf, sector(1, Hf), Matrix)
         @spins S 1 // 2
         representation(sum(S[k][:]'S[k + 1][:] for k in 1:2), hilbert_space(S, 1:3))
+        hilbert_space(f, 1:3, (sum(f[n]'f[n] for n in 1:3) => 1, sum(n * f[n]'f[n] for n in 1:3)))
+        hilbert_space(S, 1:3, sum(S[k][:z] for k in 1:3) => 1 // 2)
         @bosons bs
         hamb = sum(bs[k]'bs[k + 1] + hc for k in 1:1) + sum(bs[k]'bs[k] * bs[k]'bs[k] for k in 1:2)
         representation(hamb, hilbert_space(bs, 1:2, 3))
+        # Reduced states of a state vector in a constrained space
+        partial_trace(rand(dim(Hf)), Hf => subregion([f[1]], Hf))
+        Hn = hilbert_space(f, 1:4, NumberConservation(2))
+        partial_trace(rand(dim(Hn)), Hn => subregion([f[1], f[2]], Hn))
     end
 end
 

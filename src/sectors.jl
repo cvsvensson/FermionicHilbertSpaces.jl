@@ -109,6 +109,95 @@ Return all sectors of `H` in the same order as `quantumnumbers(H)`.
 """
 sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
 
+"""
+    highest_weight_states(H, raisers; check = true)
+
+Return a dictionary from sector labels of `H` to the states in that sector annihilated by all `raisers`. For spins,
+with `H = hilbert_space(S, 1:N, Sz)` and `Splus = sum(S[k][:+] for k in 1:N)`, the key is the total spin J and the
+columns of `highest_weight_states(H, Splus)[J]` are an orthonormal basis, in `sector(J, H)`, of the states |J, J⟩, one
+per multiplet. With other labels the key is the label of the highest-weight sector, e.g. `[Nup, Ndn]` for spinful
+fermions or `[n1, n2, n3]` for SU(3). Several raisers go in a vector; a raiser may be an operator or its matrix on `H`.
+
+  - The sectors must be labelled by the eigenvalues of the symmetry's diagonal generators (`Sz` for spins, each
+    flavour number for SU(N)); extra labels are fine.
+  - Total spin J at Sz = M needs the sectors from M up to the top, e.g. `Sz => M:N//2`, or `Sz => 0:N//2` for every
+    J at M ≥ 0; otherwise `representation` throws.
+
+`check` verifies the commutator conditions and can be turned off. The results block-diagonalize a Hamiltonian only if
+it commutes with the raisers, which is not checked.
+"""
+function highest_weight_states(H, raisers; check = true)
+    Es = _raiser_matrices(H, raisers, check)
+    kernels = map(quantumnumbers(H)) do qn
+        M = reduce(vcat, [E[:, indices(qn, H)] for E in Es])
+        qn => nullspace(Matrix(M[vec(any(!iszero, M; dims = 2)), :]))
+    end
+    return OrderedDict(filter(((qn, V),) -> size(V, 2) > 0, kernels))
+end
+_operators(ops::Union{Tuple, AbstractVector}) = ops
+_operators(op) = (op,)
+_raiser_matrix(E::AbstractMatrix, H) = E
+_raiser_matrix(E, H) = representation(E, H)
+function _raiser_matrices(H, raisers, check)
+    Es = map(E -> _raiser_matrix(E, H), _operators(raisers))
+    check && _check_raisers(Es, H)
+    return Es
+end
+function _check_raisers(Es, H)
+    tol = sqrt(eps(real(float(eltype(first(Es)))))) * maximum(E -> maximum(abs, E), Es)^2
+    for (a, Ea) in pairs(Es), (b, Eb) in pairs(Es)
+        C = Ea * Eb' - Eb' * Ea
+        msg = a == b ?
+            "raisers[$a] and its adjoint do not commute to a constant on each sector; the raisers must be raising operators of a symmetry (like the total S⁺), lowered by their adjoints, and the sectors must be labelled by all the weights (like Sz)" :
+            "raisers[$a] does not commute with the adjoint of raisers[$b]; distinct raisers must be independent raising operators, like the two simple raisers of SU(3)"
+        for qn in quantumnumbers(H)
+            cols = indices(qn, H)
+            # Eb' may lead out of a truncated `H` from sectors that Eb does not map into.
+            iszero(Eb[cols, :]) && continue
+            D = C[:, cols]
+            a == b && (D[cols, :] -= D[first(cols), 1] * I)
+            maximum(abs, D) <= tol || throw(ArgumentError(msg))
+        end
+    end
+    return nothing
+end
+
+"""
+    multiplets(H, raisers; check = true)
+
+Return `(J, M) => W`: for each key `J` of [`highest_weight_states`](@ref) and each sector `M` of `H`, the columns of
+`W` are an orthonormal basis, in `sector(M, H)`, of the states with total spin `J` and `Sz = M`, obtained by lowering
+the highest-weight states with the adjoints of `raisers` (S⁻ = (S⁺)†). For example,
+`multiplets(hilbert_space(S, 1:N, Sz => 2:N//2), Splus)[3, 2]` has one column per multiplet with total spin 3, the
+state of that multiplet with Sz = 2.
+"""
+function multiplets(H, raisers; check = true)
+    Es = _raiser_matrices(H, raisers, check)
+    lowerers = map(E -> copy(E'), Es)
+    # Each level is the image of orthonormal vectors, so roundoff is small relative to the scale of the raisers.
+    tol = sqrt(eps(real(float(eltype(first(Es)))))) * maximum(E -> maximum(abs, E), Es)
+    hws = highest_weight_states(H, Es; check = false)
+    W = OrderedDict{Tuple{keytype(hws), keytype(hws)}, valtype(hws)}()
+    for (J, V) in hws
+        level = OrderedDict(J => V)
+        # Lowering strictly decreases the weight, so there are at most as many levels as sectors.
+        for _ in quantumnumbers(H)
+            for (M, B) in level
+                W[J, M] = B
+            end
+            X = reduce(hcat, [F[:, indices(M, H)] * B for F in lowerers for (M, B) in level])
+            level = OrderedDict(M => _column_span(X[indices(M, H), :], tol) for M in quantumnumbers(H))
+            filter!(((M, B),) -> size(B, 2) > 0, level)
+            isempty(level) && break
+        end
+    end
+    return W
+end
+function _column_span(X, tol)
+    U, S = svd(X)
+    return U[:, 1:count(>(tol), S)]
+end
+
 function space_indices(Hsub::AbstractHilbertSpace, H::SectorHilbertSpace)
     # `Hsub` is a sector of `H` when it equals `sector(qn, H)` for some `qn`
     qn = Hsub isa ConstrainedSpace && parent(Hsub) == parent(H) ? findfirst(isequal(subspace_states(Hsub)), H.qn_to_states) : nothing
@@ -335,6 +424,42 @@ end
     end
     @test_throws ArgumentError representation(hopping_symham, H)
     @test size(representation(hopping_symham, H; projection=true), 1) == dim(H)
+end
+
+@testitem "SU(3) highest weights and multiplets" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: highest_weight_states, multiplets
+    @fermions c
+    L = 2
+    n(a) = sum(c[j, a]'c[j, a] for j in 1:L)
+    H = hilbert_space(c, [(j, a) for j in 1:L for a in 1:3], (n(1) + n(2) + n(3) => 2, n(1), n(2), n(3)))
+    E = [sum(c[j, a]'c[j, a + 1] for j in 1:L) for a in 1:2]
+    # ∧²(C³ ⊗ C²) = 6 ⊕ 3 ⋅ 3̄
+    @test Dict(qn => size(V, 2) for (qn, V) in highest_weight_states(H, E)) == Dict([2, 0, 0] => 1, [1, 1, 0] => 3)
+    W = multiplets(H, E)
+    weyl_dim((n1, n2, n3)) = (n1 - n2 + 1) * (n2 - n3 + 1) * (n1 - n3 + 2) ÷ 2
+    @test all(sum(size(B, 2) for ((J, M), B) in W if J == qn) == size(V, 2) * weyl_dim(qn) for (qn, V) in highest_weight_states(H, E))
+    hop = sum(c[1, a]'c[2, a] + hc for a in 1:3)
+    for qn in quantumnumbers(H)
+        Ws = [B for ((J, M), B) in W if M == qn]
+        Wall = reduce(hcat, Ws)
+        @test Wall' * Wall ≈ I(dim(sector(qn, H)))
+        M = representation(hop, sector(qn, H), Matrix)
+        @test all(M * w ≈ w * (w' * M * w) for w in Ws)
+    end
+end
+
+@testitem "Raisers must be symmetry raisers with fine enough sectors" begin
+    import FermionicHilbertSpaces: highest_weight_states
+    @spins S 1 // 2
+    Splus = sum(S[k][:+] for k in 1:3)
+    H = hilbert_space(S, 1:3, sum(S[k][:z] for k in 1:3))
+    @test size(highest_weight_states(H, representation(Splus, H))[1 // 2], 2) == 2
+    @test_throws ArgumentError highest_weight_states(H, S[1][:+])
+    @fermions c
+    n(a) = c[1, a]'c[1, a] + c[2, a]'c[2, a]
+    Hcoarse = hilbert_space(c, [(j, a) for j in 1:2 for a in 1:3], n(1) + n(2) + n(3))
+    @test_throws ArgumentError highest_weight_states(Hcoarse, [c[1, 1]'c[1, 2] + c[2, 1]'c[2, 2]])
 end
 
 @testitem "Sector propagation in tensor_product" begin

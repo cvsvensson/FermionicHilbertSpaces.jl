@@ -58,8 +58,8 @@ n = representation(left(c[1]'c[1]), Hl)
 # The difference in particle number between the left and right copies, ``Q = n_l - n_r``,
 # is conserved by this Liouvillian. A constraint on it block-diagonalizes the matrix, and the
 # ``Q=0`` block, which holds the populations, contains the steady state.
-constraint = NumberConservation(-1:1, [Hl, Hr], [1, -1])
-Hcons = tensor_product((Hl, Hr); constraint)
+Q = left(c[1]'c[1]) - right(c[1]'c[1])
+Hcons = tensor_product((Hl, Hr); constraint = Q)
 L0 = representation(lindbladian, sector(0, Hcons), Matrix)
 @assert any(abs(λ) < 1.0e-12 for λ in eigvals(L0))
 
