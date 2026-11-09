@@ -18,6 +18,8 @@ function as_constraint((quantity, spec)::Pair)
     return quantity_constraint(quantity, _rule(spec))
 end
 as_constraint(quantity) = quantity_constraint(quantity, ValueRule{true}(identity, missing))
+# Like a function at the end of a spec, a function of the state selects when it returns a `Bool`.
+as_constraint(quantity::Function) = quantity_constraint(quantity, _rule(identity))
 quantity_constraint(f::Function, rule) = StateConstraint(f, missing, missing, rule)
 function quantity_constraint(op, rule)
     listed = rule.map === identity && rule.allowed isa Union{Tuple, AbstractArray, AbstractSet}
@@ -148,7 +150,6 @@ function _resolve_on_values(c, values)
     end
     rule = resolve(rule, first(values))
     kept = filter(v -> !ismissing(_label(rule, v)), values)
-    isempty(kept) && throw(ArgumentError("No value of `$(c.op)` is allowed by `$(OperatorConstraint(c.op, rule, missing, nothing, missing))`; its values are in $(isone(step(values)) ? "$(first(values)):$(last(values))" : values)."))
     return rule, length(kept) == length(values) ? missing : kept
 end
 function _applies(f, values)
@@ -188,7 +189,7 @@ function diagonal_terms(op, spaces)
     # Sums with float coefficients, such as of spin `x` components, can leave a constant `0.0`.
     constant = iszero(constant) ? 0 : constant
     _check_exact(constant, constant)
-    isreal(constant) || throw(ArgumentError("A constraint operator must be Hermitian, but it has the constant term $constant."))
+    isreal(constant) || throw(ArgumentError("Constraint operators with complex values are not supported, but the constant term is $constant. $_ZN_HINT"))
     constant = Rational{Int}(real(constant))
     unit_of = Dict(id => k for (k, H) in enumerate(spaces) for id in atom_ids(H))
     supports = map(terms) do term
@@ -233,6 +234,7 @@ _acts_in(x, H) = false
 
 _isexact(x) = x isa Union{Integer, Rational}
 _isexact(x::Complex) = _isexact(real(x)) && _isexact(imag(x))
+const _ZN_HINT = "For a ℤ_N charge with values `ω^q`, constrain a sum `Q` of operators with the integer values `q` instead, as `Q => (v -> mod(v, N))`."
 _check_exact(x, term) = _isexact(x) || throw(ArgumentError("A constraint operator needs integer or rational coefficients, such as `1//2` instead of `0.5`, so that its values are exact. Got the term `$term`."))
 
 # The diagonal of a sum of weighted terms on the product of `spaces`, indexed by the positions of the states of `spaces`.
@@ -248,7 +250,7 @@ function _diagonal_table(weighted_terms, spaces)
     foreach(((w, t),) -> _check_exact(w, t), weighted_terms)
     contributions = map(((w, t), m) -> w .* map(v -> _exact_value(v, t), Vector(diag(m))), weighted_terms, monomials)
     k = findfirst(c -> !all(isreal, c), contributions)
-    isnothing(k) || throw(ArgumentError("A constraint operator must be Hermitian, but its term `$(weighted_terms[k][2])` has complex values."))
+    isnothing(k) || throw(ArgumentError("Constraint operators with complex values are not supported, but the term `$(weighted_terms[k][2])` has complex values. $_ZN_HINT"))
     values = Rational{Int}.(real.(sum(contributions)))
     length(spaces) == 1 && return values
     mapper = state_mapper(H, spaces)
@@ -257,14 +259,17 @@ end
 # The values of built-in operators have power-of-two denominators far below this bound, while an irrational value such as
 # `√2` only rounds to a fraction with a larger denominator.
 const MAX_DENOMINATOR = 2^16
-function _exact_value(x::Real, term)
+function _exact_value(x::Real, term, hint = "")
     _isexact(x) && return Rational{Int}(x)
     tol = 4 * eps(max(1.0, abs(x)))
     r = rationalize(Int, x; tol)
-    abs(r - x) <= tol && denominator(r) <= MAX_DENOMINATOR || throw(ArgumentError("The values of the constraint operator term `$term` are not exact fractions, such as $x."))
+    abs(r - x) <= tol && denominator(r) <= MAX_DENOMINATOR || throw(ArgumentError("The values of the constraint operator term `$term` are not exact fractions, such as $x.$hint"))
     return r
 end
-_exact_value(z::Complex, term) = complex(_exact_value(real(z), term), _exact_value(imag(z), term))
+function _exact_value(z::Complex, term)
+    hint = iszero(imag(z)) ? "" : " " * _ZN_HINT
+    return complex(_exact_value(real(z), term, hint), _exact_value(imag(z), term, hint))
+end
 
 # The constraints on sums, which `generate_states` prunes by in one branch check.
 const SumConstraint = Union{OperatorConstraint, AbstractAdditiveConstraint}
@@ -419,6 +424,9 @@ end
     nup(s) = count(x -> x.m > 0, s.states)
     @test quantumnumbers(hilbert_space(S, 1:3, nup)) == 0:3
     @test dim(hilbert_space(S, 1:4, nup => 2)) == 6
+    allup(s) = all(x -> x.m > 0, s.states)
+    @test !(hilbert_space(S, 1:3, allup) isa SectorHilbertSpace) && dim(hilbert_space(S, 1:3, allup)) == 1
+    @test quantumnumbers(hilbert_space(S, 1:3, allup => [false, true])) == [false, true]
     @test eltype(quantumnumbers(hilbert_space(S, 1:2, (S[1][:z] + S[2][:z], S[1][:z])))) == Vector{Rational{Int}}
     up(i) = S[i][:z] + 1 // 2
     @test dim(hilbert_space(S, 1:6, [up(i) * up(i + 1) => 0 for i in 1:5])) == 21
@@ -457,7 +465,7 @@ end
     @test_throws "diagonal" hilbert_space(f, 1:2, f[1]'f[2] + f[2]'f[1] => 1)
     @test_throws "diagonal" hilbert_space(S, 1:2, S[1][:x] + S[2][:x] => 0)
     @test_throws "rational" hilbert_space(f, 1:2, 0.5 * f[1]'f[1] => 1)
-    @test_throws "Hermitian" hilbert_space(f, 1:2, 1im * f[1]'f[1] => 1)
+    @test_throws "mod(v, N)" hilbert_space(f, 1:2, 1im * f[1]'f[1] => 1)
     @test_throws ArgumentError hilbert_space(f, 1:2, f[3]'f[3] => 1)
     @test_throws "1//10" hilbert_space(f, 1:2, (1 // 10) * f[1]'f[1] => 0.1)
     @test dim(hilbert_space(f, 1:2, f[1]'f[1] => 1.0)) == 2
@@ -511,11 +519,12 @@ end
 @testitem "Invalid specifications throw" begin
     @fermions f
     N = sum(f[i]'f[i] for i in 1:4)
-    for spec in (missing, nothing, true, "a", :a, 'a', Dict(1 => 1), 1 => 2, 0.5, v -> v == 2 || v)
+    for spec in (missing, nothing, true, Dict(1 => 1), 1 => 2, 0.5, v -> v == 2 || v)
         @test_throws ArgumentError hilbert_space(f, 1:4, N => spec)
     end
     @test_throws "boom" hilbert_space(f, 1:4, N => (v -> v == 3 ? error("boom") : v))
-    @test_throws "0:4" hilbert_space(f, 1:4, N => 7)
+    @test dim(hilbert_space(f, 1:4, N => 7)) == 0
+    @test isempty(quantumnumbers(hilbert_space(f, 1:4, N => [7, 8])))
     @test_throws "nothing" hilbert_space(f, 1:4, N => (v -> v > 2 ? nothing : v))
     cnt(s) = count_ones(s.f)
     @test_throws "Bool" hilbert_space(f, 1:4, cnt => (v -> v == 1 || v))

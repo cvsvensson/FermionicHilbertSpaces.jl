@@ -1,6 +1,6 @@
 # Mixed fermion-spin-boson example
 
-This example combines several features at once: fermionic, spin, and bosonic Hilbert spaces; custom constraints; and reduced density matrices.
+This example combines several features at once: fermionic, spin, and bosonic Hilbert spaces; constraints on operators acting on all of them; and reduced density matrices.
 
 Consider a spinful fermionic mode $f$, a localized spin-half $S$, and a bosonic mode $a$ with the Hamiltonian
 ```math
@@ -13,7 +13,7 @@ where ``s_\alpha = \tfrac{1}{2} f^\dagger \sigma_\alpha f`` is the spin operator
 
 ```@example mixed_fermion_spin_boson
 using FermionicHilbertSpaces, LinearAlgebra
-import FermionicHilbertSpaces: particle_number, von_neumann_entropy
+import FermionicHilbertSpaces: von_neumann_entropy
 
 @fermions f
 @spin S 1//2
@@ -24,21 +24,18 @@ H_spin = hilbert_space(S)
 H_boson = hilbert_space(a, 4)  # Truncated boson with 4 levels
 spaces = [H_up, H_down, H_spin, H_boson]
 
-Q = FilterConstraint(iszero ∘ sum;
-    maps = [state -> 1//2 * particle_number(state),
-    state -> -1//2 * particle_number(state),
-    state -> state.m,
-    state -> particle_number(state)],
-    spaces)
-Nf = NumberConservation(1; spaces = [H_up, H_down])
-H = tensor_product(spaces; constraint = Q * Nf)
+n_up = f[:↑]'f[:↑]
+n_down = f[:↓]'f[:↓]
+Q = a'a + 1//2 * (n_up - n_down) + S[:z]
+charge_and_filling = (Q => 0, n_up + n_down => 1)
+H = tensor_product(spaces; constraint = charge_and_filling)
 basisstates(H)
 ```
 
 The sector of interest has three states. Let's define the symbolic operators, build the Hamiltonian, and compute the ground state.
 
 ```@example mixed_fermion_spin_boson
-sz = (f[:↑]'*f[:↑] - f[:↓]'*f[:↓]) / 2
+sz = (n_up - n_down) / 2
 sx = (f[:↑]'*f[:↓] + f[:↓]'*f[:↑]) / 2
 sy = (f[:↑]'*f[:↓] - f[:↓]'*f[:↑]) / (2im)
 s = [sx, sy, sz]
