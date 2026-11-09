@@ -191,7 +191,7 @@ NumberConservation(space::AbstractHilbertSpace) = NumberConservation(missing; sp
     ParityConservation(parities, spaces)
     ParityConservation(space)
 
-Constraint enforcing allowed fermion parities, optionally on selected spaces.
+Constraint enforcing allowed parities of the particle number, which also counts bosons, optionally on selected spaces.
 `parities` is a parity or a collection of parities, each `1` (even) or `-1` (odd).
 Sectors are ordered by increasing quantum number, so the odd sector comes first.
 """

@@ -6,19 +6,15 @@ A constraint selects basis states, and can split them into sectors labelled by q
 ```@example constraints
 using FermionicHilbertSpaces
 @fermions f
-N = sum(f[k]'f[k] for k in 1:4)
-Hleft = hilbert_space(f, 1:2)
-Hright = hilbert_space(f, 3:4)
-Hone = tensor_product(Hleft, Hright; constraint = N => 1)
-Hfew = constrain_space(hilbert_space(f, 1:4), N => 0:1)
-H = hilbert_space(f, 1:4, N)
+constraint = sum(f[k]'f[k] for k in 1:3)
+H = hilbert_space(f, 1:3, constraint)
 ```
 
 The sector labels of a space are its quantum numbers. A sector is a space of its own, and an operator that conserves the quantity can be represented directly on it:
 ```@example constraints
 quantumnumbers(H)
 H2 = sector(2, H)
-hopping = sum(f[k]'f[k+1] + hc for k in 1:3)
+hopping = sum(f[k]'f[k+1] + hc for k in 1:2)
 representation(hopping, H2)
 ```
 
@@ -47,7 +43,7 @@ charge(v) = mod(v, 3)
 Hcharge = hilbert_space(f, 1:4, Q => charge => 0)
 dim(Hodd), quantumnumbers(Hparity), dim(Hcharge)
 ```
-[`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total number of fermions.
+[`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total particle number, which also counts bosons.
 
 Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
 ```@example constraints
@@ -87,7 +83,7 @@ tensor_product(Hf, Hb; constraint = imbalance)
 ```
 
 #### ParityConservation
-Conserves fermion parity, `1` for even and `-1` for odd states; without arguments it keeps both sectors.
+Conserves the parity of the particle number, `1` for even and `-1` for odd states; without arguments it keeps both sectors.
 ```@example constraints
 quantumnumbers(hilbert_space(f, 1:4, ParityConservation()))
 ```
