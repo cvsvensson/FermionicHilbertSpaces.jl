@@ -118,7 +118,7 @@ function FockMapper(fermionpositions::P, N) where P
     W = typeof(widths)
     P2 = typeof(permutation)
     M = typeof(masks)
-    FockMapper{N,P1,W,P2,M}(fermionpositions, widths, permutation, masks, isfullpartition, contiguous)
+    return FockMapper{N, P1, W, P2, M}(fermionpositions, widths, permutation, masks, isfullpartition, contiguous)
 end
 unique_split(::FockMapper) = true
 unique_combine(::FockMapper) = true
@@ -161,12 +161,12 @@ function combine_states(f, fm::FockMapper{N}) where N
     end
     (FockNumber{IT}(result),), (1,)
 end
-function _shift_combine(fs, masks, ::Type{IT}) where IT
+function _shift_combine(fs, masks, ::Type{IT}) where {IT}
     result = zero(IT)
     for (fock, mask) in zip(fs, masks)
         result |= IT(fock.f) << trailing_zeros(mask.f)
     end
-    FockNumber{IT}(result)
+    return FockNumber{IT}(result)
 end
 function catenate_fock_states(fock_states, spaces, ::Type{T}) where T
     num = zero(T)
@@ -298,7 +298,7 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
         # Blocks of consecutive modes, in any order and mixed with other subsystems
         for positions in (((3, 4, 5), (1, 2)), ((1, 2), (4, 5), (3,)), ((1, 2), (3, 5), (4,)), (4:5, [1, 2, 3]))
             fockmapper = FockMapper(positions)
-            @test all(_combine(_split(FockNumber(k), fockmapper), fockmapper) == FockNumber(k) for k in 0:(2^5-1))
+            @test all(_combine(_split(FockNumber(k), fockmapper), fockmapper) == FockNumber(k) for k in 0:(2^5 - 1))
         end
         @test fock((1, 4)) == _combine((fock((2,)), fock((1,))), FockMapper(((3, 4), (1, 2))))
         @test_throws ArgumentError FockMapper(((1, 3, 2, 4),))
@@ -339,7 +339,7 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
 
     @testset "wide integers" begin
         for N in (100, 200, 400, 800, 1100)
-            for fermionpositions in ((collect(1:3:N), setdiff(1:N, 1:3:N)), (N÷2+1:N, 1:N÷2))
+            for fermionpositions in ((collect(1:3:N), setdiff(1:N, 1:3:N)), ((N ÷ 2 + 1):N, 1:(N ÷ 2)))
                 fockmapper = FockMapper(fermionpositions, N)
                 sites = [n for n in 1:N if n % 5 in (0, 2)]
                 substates = map(pos -> fock(findall(in(sites), pos)), fermionpositions)
