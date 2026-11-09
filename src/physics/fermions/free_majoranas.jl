@@ -44,9 +44,9 @@ end
     H = hilbert_space(γ, 1:N, SingleParticle())
     Hmb = hilbert_space(γ, 1:N)
     op = sum(randn(ComplexF64) * γ[i] * γ[j] for i in 1:N, j in 1:N)
-    R = representation(op, H, :dense)
+    R = representation(op, H, Matrix)
     @test R == representation(op, H)
-    rep(x) = representation(x, Hmb, :dense)
+    rep(x) = representation(x, Hmb, Matrix)
     for k in 1:N
         @test rep(op * γ[k] - γ[k] * op) ≈ -2 * sum(R[k, j] * rep(γ[j]) for j in 1:N)
     end

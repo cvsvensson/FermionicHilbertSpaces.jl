@@ -79,8 +79,8 @@ count_weighted_ones(x, weights::Union{Vector,Tuple}) = sum(w for (i, w) in enume
 
 """
     jwstring(site, focknbr)
-    
-Parity of the number of fermions to the right of site.
+
+The parity, `1` or `-1`, of the number of fermions on the sites before `site`.
 """
 jwstring(site, focknbr) = jwstring_left(site, focknbr)
 jwstring_anti(site, focknbr) = jwstring_right(site, focknbr)
@@ -361,7 +361,7 @@ end
     @test dim(hilbert_space(f, 1:2, NumberConservation(-1))) == 0
     H = hilbert_space(f, 1:3, NumberConservation(5))
     @test size(representation(f[1], H, :sparse)) == (0, 0)
-    @test size(representation(f[1], H, :dense)) == (0, 0)
+    @test size(representation(f[1], H, Matrix)) == (0, 0)
     @test size(representation(f[1], H; projection = true)) == (0, 0)
     @test size(representation(f[1], H, :lazy)) == (0, 0)
 end

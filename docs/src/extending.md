@@ -65,7 +65,7 @@ the index of a state, which avoids the default dictionary lookup.
   name states, and lets constrained spaces return index `0` for states of other types.
 - [`interpret_state`](@ref)`(input, ::Type{MyState})` parses labels such as strings into states,
   for [`Kets`](@ref), `basisstate` and `state_index`.
-- [`internal_rep`](@ref)`(state, space, Int)` and `physical_rep(n, ::Type{MyState})` convert
+- [`internal_rep`](@ref)`(state, space, Int)` and [`physical_rep`](@ref)`(n, ::Type{MyState})` convert
   states to integers and back. When all groups of a product space have them, operators on the
   product space act on integers.
 - [`has_arithmetic_state_index`](@ref)`(H)` returns `true` for a space type whose
@@ -74,8 +74,8 @@ the index of a state, which avoids the default dictionary lookup.
   `state_index` returning the exact index in `1:dim(H)` for each basis state and `0` for every
   other state of the same type.
 - [`AbstractSubspace`](@ref) is the supertype of spaces spanned by some basis states of a
-  parent space. A subtype implements `parent`, `subspace_states`, `subspace_index` and
-  `rewrap`, and gets tensor products, partial traces and matrix representations from its parent.
+  parent space. A subtype implements `parent`, [`subspace_states`](@ref), [`subspace_index`](@ref) and
+  [`rewrap`](@ref), and gets tensor products, partial traces and matrix representations from its parent.
   [`default_subspace_index`](@ref) builds the index.
 - [`default_subspace_index`](@ref)`(constraint, parent, states)` builds the lookup that
   `state_index` uses on constrained and sector spaces. A method that dispatches on the type of

@@ -113,7 +113,8 @@ factors, it is the ordinary partial transpose.
 
 The partial transpose does not preserve number or parity constraints. For constrained `H`,
 pass a larger output space on the same modes as `H => Hout`. For fermions the result is not
-Hermitian: `(ρ^{R_A})' == p_A ρ^{R_A} p_A` for parity-even `ρ`, with `p_A` the parity of `Hsub`.
+Hermitian: `(ρ^{R_A})' == p_A ρ^{R_A} p_A` for Hermitian `ρ`, with `p_A` the parity of `Hsub`.
+Applying the fermionic partial transpose twice gives `p_A ρ p_A`, not `ρ`.
 """
 partial_transpose(m, H::AbstractHilbertSpace, Hsub; kwargs...) =
     _partial_transpose(m, H, _subsystem(Hsub, H), H; kwargs...)
@@ -568,7 +569,7 @@ end
             ρ = pure(cos(θ) * Ket("00", H2) + sin(θ) * Ket("11", H2))
             @test logarithmic_negativity(ρ, H2, H1) ≈ 2log(cos(θ) + sin(θ))
         end
-        M = representation(f[1]' * f[2] + f[2]' * f[1], H2, :dense)
+        M = representation(f[1]' * f[2] + f[2]' * f[1], H2, Matrix)
         for β in (0.3, 1.0, 2.5)     # thermal hopping state
             ρ = exp(-β * M)
             ρ /= tr(ρ)

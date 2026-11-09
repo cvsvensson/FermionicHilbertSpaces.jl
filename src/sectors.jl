@@ -319,17 +319,17 @@ end
     ham = sum(rand(ComplexF64) * f[i]' * f[j] + hc for i in 1:N, j in 1:N) +
           sum(rand() * f[i]' * f[i] * f[j]' * f[j] for i in 1:N, j in 1:N)
     H = hilbert_space(f, 1:N, NumberConservation())
-    M = representation(ham, H, :dense)
+    M = representation(ham, H, Matrix)
     spectrum(m) = eigvals(Hermitian(m))
     sector_spectra = map(quantumnumbers(H)) do n
         inds = indices(n, H)
         rest = setdiff(1:dim(H), inds)
         @test iszero(M[inds, rest])
         Hn = hilbert_space(f, 1:N, NumberConservation(n))
-        @test spectrum(M[inds, inds]) ≈ spectrum(representation(ham, Hn, :dense))
+        @test spectrum(M[inds, inds]) ≈ spectrum(representation(ham, Hn, Matrix))
         spectrum(M[inds, inds])
     end
-    @test sort(reduce(vcat, sector_spectra)) ≈ spectrum(representation(ham, hilbert_space(f, 1:N), :dense))
+    @test sort(reduce(vcat, sector_spectra)) ≈ spectrum(representation(ham, hilbert_space(f, 1:N), Matrix))
 end
 
 

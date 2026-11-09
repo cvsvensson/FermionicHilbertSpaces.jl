@@ -180,8 +180,8 @@ end
     quadratic = sum(f[n]' * h[n, m] * f[m] + Δ[n, m] * f[n]' * f[m]' + hc for n in 1:N, m in 1:N)
     parities = map([-20, 0, 20]) do μ
         ham = quadratic - μ * sum(f[n]' * f[n] for n in 1:N)
-        ψ = eigvecs(Hermitian(representation(ham, Hmb, :dense)))[:, 1]
-        F = eigen(representation(ham, Hbdg, :dense), BdGEigen())
+        ψ = eigvecs(Hermitian(representation(ham, Hmb, Matrix)))[:, 1]
+        F = eigen(representation(ham, Hbdg, Matrix), BdGEigen())
         G = correlation_matrix(F)
         @test G ≈ correlation_matrix(ψ, Hmb, Hbdg) ≈ correlation_matrix(ψ * ψ', Hmb, Hbdg)
         @test expectation(ham, G, Hbdg) ≈ expectation(ham, ψ, Hmb)
@@ -189,7 +189,8 @@ end
         ground_state_parity(F)
     end
     @test parities[1] == 1 && parities[3] == -1
-    A = representation(quadratic, Hbdg, :dense)
+
+    A = representation(quadratic, Hbdg, Matrix)
     F = eigen(A, BdGEigen())
     @test_throws ArgumentError ground_state_parity(Eigen(F.values, 2 * F.vectors))
     # `eigen` fixes the phase of each column separately, so particle-hole partners are not paired
@@ -257,9 +258,9 @@ end
     quartic = γ[1] * γ[2] * γ[3] * γ[6] + 2 * γ[2] * γ[4] * γ[5] * γ[1] * γ[3] * γ[6]
     parities = map([-20, 20]) do μ
         ham = quadratic + 1im * μ / 2 * sum(γ[2k - 1] * γ[2k] for k in 1:N)
-        vals, vecs = eigen(Hermitian(representation(ham, Hmb, :dense)))
+        vals, vecs = eigen(Hermitian(representation(ham, Hmb, Matrix)))
         ψ = vecs[:, 1]
-        F = eigen(Hermitian(representation(ham, H, :dense)))
+        F = eigen(Hermitian(representation(ham, H, Matrix)))
         @test vals[1] ≈ sum(filter(<(0), F.values))
         G = correlation_matrix(F)
         @test G ≈ correlation_matrix(ψ, Hmb, H) ≈ [expectation(γ[i] * γ[j], ψ, Hmb) / 2 for i in 1:2N, j in 1:2N]
@@ -269,7 +270,7 @@ end
         ground_state_parity(F, H)
     end
     @test parities == [1, -1]
-    F = eigen(Hermitian(representation(quadratic, H, :dense)))
+    F = eigen(Hermitian(representation(quadratic, H, Matrix)))
     @test_throws ArgumentError ground_state_parity(Eigen(F.values, 2 * F.vectors), H)
     F32 = eigen(Hermitian(ComplexF32.(representation(quadratic, H, :dense))))
     @test ground_state_parity(F32, H) == ground_state_parity(eigen(Hermitian(representation(quadratic, H, :dense))), H)
@@ -278,7 +279,7 @@ end
     # parity is undefined and G is that of their equal mixture.
     ham = 1im * γ[2] * γ[3]
     Hzero = hilbert_space(γ, 1:4, SingleParticle())
-    F = eigen(Hermitian(representation(ham, Hzero, :dense)))
+    F = eigen(Hermitian(representation(ham, Hzero, Matrix)))
     @test_throws ArgumentError ground_state_parity(F, Hzero)
     Hzero_mb = hilbert_space(γ, 1:4)
     vals, vecs = eigen(Hermitian(representation(ham, Hzero_mb, :dense)))
@@ -298,15 +299,15 @@ end
     Δ = Δ - transpose(Δ)
     ham = sum(f[n]' * h[n, m] * f[m] + Δ[n, m] * f[n]' * f[m]' + hc for n in 1:N, m in 1:N)
 
-    G = correlation_matrix(eigen(representation(ham, Hbdg, :dense), BdGEigen()))
-    ψ = eigvecs(Hermitian(representation(ham, Hmb, :dense)))[:, 1]
+    G = correlation_matrix(eigen(representation(ham, Hbdg, Matrix), BdGEigen()))
+    ψ = eigvecs(Hermitian(representation(ham, Hmb, Matrix)))[:, 1]
     for sub in ([1, 3], 1:N)
         Hsub = hilbert_space(f, sub)
         Gsub = G[[sub; sub .+ N], [sub; sub .+ N]]
         @test gaussian_state(Gsub, Hsub, hilbert_space(f, sub, BdG())) ≈ partial_trace(ψ * ψ', Hmb => Hsub)
     end
 
-    ρ = exp(-Hermitian(representation(ham, Hmb, :dense)))
+    ρ = exp(-Hermitian(representation(ham, Hmb, Matrix)))
     ρ /= tr(ρ)
     Gthermal = correlation_matrix(ρ, Hmb, Hbdg)
     @test gaussian_state(Gthermal, Hmb, Hbdg) ≈ ρ
@@ -326,9 +327,9 @@ end
     Δ = rand(ComplexF64, N, N)
     Δ = Δ - transpose(Δ)
     ham = sum(f[n]' * h[n, m] * f[m] + Δ[n, m] * f[n]' * f[m]' + hc for n in 1:N, m in 1:N)
-    ρ = exp(-Hermitian(representation(ham, Hmb, :dense)))
+    ρ = exp(-Hermitian(representation(ham, Hmb, Matrix)))
     ρ /= tr(ρ)
-    ψ = eigvecs(Hermitian(representation(ham, Hmb, :dense)))[:, 1]
+    ψ = eigvecs(Hermitian(representation(ham, Hmb, Matrix)))[:, 1]
     sub = [3, 1]
     Hsub = hilbert_space(f, sub, BdG())
     for state in (ψ * ψ', ρ)

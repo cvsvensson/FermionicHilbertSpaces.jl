@@ -92,7 +92,7 @@ end
     @fermions f
     N, β = 3, 0.7
     Hfock = hilbert_space(f, 1:N)
-    thermal(q) = (ρ = exp(-β * representation(q, Hfock, :dense)); ρ / tr(ρ))
+    thermal(q) = (ρ = exp(-β * representation(q, Hfock, Matrix)); ρ / tr(ρ))
     hop = sum(randn(ComplexF64) * f[i]' * f[j] for i in 1:N, j in 1:N)
     pair = sum(randn(ComplexF64) * f[i]' * f[j]' for i in 1:N, j in 1:N)
     quartic = sum(randn(ComplexF64) * f[i]' * f[j]' * f[k] * f[l] for i in 1:N, j in 1:N, k in 1:N, l in 1:N)
@@ -102,17 +102,17 @@ end
     H = hilbert_space(f, 1:N, SingleParticle())
     q = hop + hop'
     ρ = thermal(q)
-    G = transpose(inv(I + exp(β * representation(q, H, :dense))))
+    G = transpose(inv(I + exp(β * representation(q, H, Matrix))))
     for op in (quartic + quartic', sextic + hc)
-        @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
+        @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, Matrix))
     end
 
     H = hilbert_space(f, 1:N, BdG())
     q = hop + pair + hc
     ρ = thermal(q)
-    G = transpose(inv(I + exp(2β * representation(q, H, :dense))))
+    G = transpose(inv(I + exp(2β * representation(q, H, Matrix))))
     for op in pairing_ops
-        @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
+        @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, Matrix))
     end
     unsorted_ev = FermionicHilbertSpaces.NonCommutativeProducts.with_autosort(() -> expectation(f[2] * f[1]' * f[2]' * f[1], G, H), false)
     @test unsorted_ev ≈ expectation(f[2] * f[1]' * f[2]' * f[1], G, H)
@@ -138,9 +138,9 @@ end
     @majoranas γ
     H = hilbert_space(γ, 1:4)
     A = randn(4, 4)
-    ρ = exp(-representation(1im * sum((A[i, j] - A[j, i]) * γ[i] * γ[j] for i in 1:4, j in 1:4), H, :dense))
+    ρ = exp(-representation(1im * sum((A[i, j] - A[j, i]) * γ[i] * γ[j] for i in 1:4, j in 1:4), H, Matrix))
     ρ /= tr(ρ)
-    ev(op) = tr(ρ * representation(op, H, :dense))
+    ev(op) = tr(ρ * representation(op, H, Matrix))
     op = γ[1] * γ[2] * γ[3] * γ[4] + 2 * γ[4] * γ[1] * γ[3] * γ[1] + γ[2] * γ[3]
     @test FermionicHilbertSpaces.FreeFermions.wick_expectation(op, (x, y) -> ev(x * y)) ≈ ev(op)
 end
@@ -152,14 +152,14 @@ end
     N = 3
     H = hilbert_space(f, 1:N, BdG())
     q = sum(randn(ComplexF64) * f[i]' * f[j] + randn(ComplexF64) * f[i]' * f[j]' for i in 1:N, j in 1:N)
-    G = transpose(inv(I + exp(2 * representation(q + q', H, :dense))))
+    G = transpose(inv(I + exp(2 * representation(q + q', H, Matrix))))
     ev(op) = expectation(op, G, H)
     n1, n2 = f[1]' * f[1], f[2]' * f[2]
     hartree = ev(n2) * n1 + ev(n1) * n2 - ev(n1) * ev(n2)
     fock = -ev(f[1]' * f[2]) * f[2]' * f[1] - ev(f[2]' * f[1]) * f[1]' * f[2] + ev(f[1]' * f[2]) * ev(f[2]' * f[1])
     pairing = ev(f[1]' * f[2]') * f[2] * f[1] + ev(f[2] * f[1]) * f[1]' * f[2]' - ev(f[1]' * f[2]') * ev(f[2] * f[1])
     Hfock = hilbert_space(f, 1:N)
-    @test representation(mean_field(n1 * n2, G, H), Hfock, :dense) ≈ representation(hartree + fock + pairing, Hfock, :dense)
+    @test representation(mean_field(n1 * n2, G, H), Hfock, Matrix) ≈ representation(hartree + fock + pairing, Hfock, Matrix)
 
     op = f[1]' * f[2]' * f[3]' * f[3] * f[1] * f[2] + f[1]' * f[2]' * f[3] * f[1] + hc
     @test ev(mean_field(op, G, H)) ≈ ev(op)

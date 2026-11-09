@@ -134,7 +134,7 @@ end
     τx = [0I I(N); I(N) 0I]
     c() = rand(-5:5) // 1 + rand(-5:5) // 1 * im
     op = sum(c() * f[i]' * f[j] + c() * f[i]' * f[j]' + c() * f[i] * f[j] for i in 1:N, j in 1:N)
-    M = representation(op, H, :dense)
+    M = representation(op, H, Matrix)
     @test M == -τx * transpose(M) * τx
     rest = op - sum(M[i, j] * Ψ[i]' * Ψ[j] for i in 1:2N, j in 1:2N)
     @test FermionicHilbertSpaces.NonCommutativeProducts.isscalar(rest)
@@ -148,8 +148,8 @@ end
     Hfock = hilbert_space(f, 1:N)
     Ψ = [[f[i] for i in 1:N]; [f[i]' for i in 1:N]]
     op = sum(rand(ComplexF64) * f[i]' * f[j] + rand(ComplexF64) * f[i]' * f[j]' + rand(ComplexF64) * f[i] * f[j] for i in 1:N, j in 1:N)
-    M = representation(op, H, :dense)
-    rep(x) = representation(x, Hfock, :dense)
+    M = representation(op, H, Matrix)
+    rep(x) = representation(x, Hfock, Matrix)
     for k in 1:2N
         @test rep(op * Ψ[k] - Ψ[k] * op) ≈ -2 * sum(M[k, j] * rep(Ψ[j]) for j in 1:2N)
     end
@@ -163,12 +163,12 @@ end
     H = hilbert_space(f, 1:N, BdG())
     Hfock = hilbert_space(f, 1:N)
     ham = sum(rand(ComplexF64) * f[i]' * f[j] + rand(ComplexF64) * f[i]' * f[j]' + hc for i in 1:N, j in 1:N)
-    ρ = exp(-representation(ham, Hfock, :dense))
+    ρ = exp(-representation(ham, Hfock, Matrix))
     ρ /= tr(ρ)
     Ψ = [[f[i] for i in 1:N]; [f[i]' for i in 1:N]]
-    G = [tr(ρ * representation(Ψ[i]' * Ψ[j], Hfock, :dense)) for i in 1:2N, j in 1:2N]
+    G = [tr(ρ * representation(Ψ[i]' * Ψ[j], Hfock, Matrix)) for i in 1:2N, j in 1:2N]
     for op in (f[1]' * f[2], f[1] * f[2], f[1]' * f[2]', f[1] * f[2]', ham + 2)
-        @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, :dense))
+        @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, Matrix))
     end
 end
 
@@ -178,7 +178,7 @@ end
     H = hilbert_space(f, 1:3, BdG())
     op = sum(rand(ComplexF64) * f[i]' * f[j] + rand(ComplexF64) * f[i]' * f[j]' + hc for i in 1:3, j in 1:3)
     M = representation(op, H)
-    D = representation(op, H, :dense)
+    D = representation(op, H, Matrix)
     @test D isa Matrix && D == M
     @test representation(op, H, ComplexF64) == M
     @test_throws ArgumentError representation(op, H, :lazy)
@@ -365,7 +365,7 @@ end
     @fermions f
     symham = f[1]' * f[2] + f[1]' * f[2]' + hc
     H = hilbert_space(f, 1:2, BdG())
-    vals, vecs = eigen(representation(symham, H, :dense), BdGEigen())
+    vals, vecs = eigen(representation(symham, H, Matrix), BdGEigen())
     @test vals ≈ [-1, 0, 0, 1]
     @test 1 ≈ abs(vecs[:, 2][1]^2 + vecs[:, 3][1]^2) / (abs2(vecs[:, 2][1]) + abs2(vecs[:, 3][1]))
 
@@ -373,8 +373,8 @@ end
     symham = f[1]' * f[2] + f[2]' * f[3] + f[1]' * f[2]' + f[2]' * f[3]' + hc
     H = hilbert_space(f, 1:3, BdG())
     Hmb = hilbert_space(f, 1:3)
-    matmb = representation(symham, Hmb, :dense)
-    vals, vecs = eigen(representation(symham, H, :dense), BdGEigen())
+    matmb = representation(symham, Hmb, Matrix)
+    vals, vecs = eigen(representation(symham, H, Matrix), BdGEigen())
     @test 1 ≈ abs(vecs[:, 3][1]^2 + vecs[:, 4][1]^2) / (abs2(vecs[:, 3][1]) + abs2(vecs[:, 4][1]))
 
     # The BdG matrix is half the Nambu Hamiltonian, so a positive eigenvalue e_k gives a
@@ -390,8 +390,8 @@ end
     Δ = Δ - transpose(Δ)
     symham = sum(f[n]' * h[n, m] * f[m] for n in 1:3, m in 1:3) +
              sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:3, m in 1:3)
-    vals, _ = eigen(representation(symham, H, :dense), BdGEigen())
-    @test eigvals(Hermitian(representation(symham, Hmb, :dense))) ≈ mb_energies(vals[4:6], real(tr(h)))
+    vals, _ = eigen(representation(symham, H, Matrix), BdGEigen())
+    @test eigvals(Hermitian(representation(symham, Hmb, Matrix))) ≈ mb_energies(vals[4:6], real(tr(h)))
 end
 
 @testitem "BdGEigen quasiparticles" begin
@@ -403,8 +403,8 @@ end
         @test issorted(F.values)
         @test F.vectors' * F.vectors ≈ I
         Hmb = hilbert_space(f, 1:N)
-        Hm = representation(op, Hmb, :dense)
-        γ(k) = representation(sum(F.vectors[i, k] * f[i]' + F.vectors[N + i, k] * f[i] for i in 1:N), Hmb, :dense)
+        Hm = representation(op, Hmb, Matrix)
+        γ(k) = representation(sum(F.vectors[i, k] * f[i]' + F.vectors[N + i, k] * f[i] for i in 1:N), Hmb, Matrix)
         for k in 1:2N
             @test Hm * γ(k) - γ(k) * Hm ≈ 2F.values[k] * γ(k) atol = 1.0e-12
             @test γ(2N + 1 - k) ≈ γ(k)'
@@ -431,10 +431,10 @@ end
     end
     # Kitaev-type chain with a tiny but nonzero Majorana splitting
     op = sum(f[i]' * f[i + 1] + 0.9 * f[i]' * f[i + 1]' + hc for i in 1:11) + 0.3 * sum(f[i]' * f[i] for i in 1:12)
-    vals = test_bdg_eigen(representation(op, hilbert_space(f, 1:12, BdG()), :dense)).values
+    vals = test_bdg_eigen(representation(op, hilbert_space(f, 1:12, BdG()), Matrix)).values
     @test 0 < vals[13] < 1.0e-6
     # Zero modes at a large energy scale
-    test_bdg_eigen(1.0e8 * representation(f[1]' * f[2] + f[1]' * f[2]' + f[3]' * f[4] + f[3]' * f[4]' + hc, hilbert_space(f, 1:4, BdG()), :dense))
+    test_bdg_eigen(1.0e8 * representation(f[1]' * f[2] + f[1]' * f[2]' + f[3]' * f[4] + f[3]' * f[4]' + hc, hilbert_space(f, 1:4, BdG()), Matrix))
     @test_throws ArgumentError eigen([0 1; 0 0], BdGEigen())
     @test_throws ArgumentError eigen([1.0 0; 0 2], BdGEigen())
     @test_throws ArgumentError eigen(Matrix(1.0I, 3, 3), BdGEigen())
@@ -494,14 +494,14 @@ end
     Δ = Δ - transpose(Δ)
     op = sum(f[n]' * h[n, m] * f[m] for n in 1:N, m in 1:N) +
         sum(f[n]' * Δ[n, m] * f[m]' / 2 + hc for n in 1:N, m in 1:N)
-    M = representation(op, H, :dense)
+    M = representation(op, H, Matrix)
     @test representation(symbolic_operator(M, H), H) ≈ M
-    @test representation(symbolic_operator(M, H) - op, Hmb, :dense) ≈ -tr(h) / 2 * I
+    @test representation(symbolic_operator(M, H) - op, Hmb, Matrix) ≈ -tr(h) / 2 * I
 
     vals, vecs = eigen(M, BdGEigen())
-    Hmat = representation(op, Hmb, :dense)
+    Hmat = representation(op, Hmb, Matrix)
     for k in (N + 1):2N
-        q = representation(quasiparticle(vecs[:, k], H), Hmb, :dense)
+        q = representation(quasiparticle(vecs[:, k], H), Hmb, Matrix)
         @test Hmat * q - q * Hmat ≈ 2vals[k] * q
     end
 end
@@ -514,8 +514,8 @@ end
     h = rand(ComplexF64, 3, 3) + hc
     op = symbolic_operator(h, H)
     @test representation(op, H) ≈ h
-    Hmat = representation(op, hilbert_space(f, 1:3), :dense)
+    Hmat = representation(op, hilbert_space(f, 1:3), Matrix)
     vals, vecs = eigen(Hermitian(h))
-    q = representation(quasiparticle(vecs[:, 1], H), hilbert_space(f, 1:3), :dense)
+    q = representation(quasiparticle(vecs[:, 1], H), hilbert_space(f, 1:3), Matrix)
     @test Hmat * q - q * Hmat ≈ vals[1] * q
 end

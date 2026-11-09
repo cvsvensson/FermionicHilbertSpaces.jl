@@ -298,8 +298,8 @@ end
     @boson b
     H = hilbert_space(b, 25)
     low = 1:5 # states that b'^18 keeps below the cutoff
-    ref = representation(b, H, :dense)^18 * representation(b', H, :dense)^18
-    @test representation(b^18 * b'^18, H, :dense)[low, low] ≈ ref[low, low]
+    ref = representation(b, H, Matrix)^18 * representation(b', H, Matrix)^18
+    @test representation(b^18 * b'^18, H, Matrix)[low, low] ≈ ref[low, low]
     @test_throws OverflowError b^19 * b'^19
 end
 
