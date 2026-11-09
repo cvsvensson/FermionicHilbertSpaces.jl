@@ -4,7 +4,7 @@ Conservation laws let you work in a small part of an exponentially large Hilbert
 ## Constraints and sectors
 A constraint selects basis states, and can split them into sectors labelled by quantum numbers. It is given when building a space, either to `hilbert_space` or as the `constraint` keyword of `tensor_product`, and `constrain_space` applies one to an existing space:
 ```@example constraints
-using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces
 @fermions f
 N = sum(f[k]'f[k] for k in 1:4)
 Hleft = hilbert_space(f, 1:2)
@@ -14,14 +14,12 @@ Hfew = constrain_space(hilbert_space(f, 1:4), N => 0:1)
 H = hilbert_space(f, 1:4, N)
 ```
 
-The sector labels of a space are its quantum numbers. A sector is a space of its own, and an operator that conserves the quantity can be represented directly on it. `embed` places a state on a sector back into the full space, where `indices` locates the sector's states:
+The sector labels of a space are its quantum numbers. A sector is a space of its own, and an operator that conserves the quantity can be represented directly on it:
 ```@example constraints
 quantumnumbers(H)
 H2 = sector(2, H)
 hopping = sum(f[k]'f[k+1] + hc for k in 1:3)
-ψ = eigvecs(Hermitian(representation(hopping, H2, Matrix)))[:, 1]
-@assert embed(ψ, H2 => H)[indices(2, H)] ≈ ψ
-indices(2, H)
+representation(hopping, H2)
 ```
 
 ### Writing a constraint
@@ -152,6 +150,15 @@ The sector with two spin up and no spin down fermions can be picked out of this 
 two_up_none_down = (Nup => 2, Ndn => 0)
 @assert Set(basisstates(sector((2, 0), H))) == Set(basisstates(hilbert_space(f, labels, two_up_none_down)))
 sector((2, 0), H)
+```
+A state found on a sector, such as the ground state of the hopping there, is placed in the full space by `embed`, and `indices` gives the positions of the sector's states in it:
+```@example spin
+using LinearAlgebra
+H20 = sector((2, 0), H)
+hopping = sum(f[i, σ]'f[i+1, σ] + hc for i in 1:3 for σ in (:↑, :↓))
+ψ = eigvecs(Hermitian(representation(hopping, H20, Matrix)))[:, 1]
+@assert embed(ψ, H20 => H)[indices((2, 0), H)] ≈ ψ
+indices((2, 0), H)
 ```
 
 #### Hubbard model
