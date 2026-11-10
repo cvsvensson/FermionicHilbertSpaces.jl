@@ -656,7 +656,7 @@ end
 function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
     space_groups = group_ids(space)
-    all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic bases of the operator must match the atomic groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
+    all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic groups of the operator must match the groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
     return space_groups
 end
 

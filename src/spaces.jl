@@ -193,7 +193,7 @@ group_id(H::AbstractAtomicHilbertSpace) = atomic_id(H)
     atomic_id(atom)
 
 Name of an atom: the key that identifies its degrees of freedom. It is built only from
-symbolic identity (basis, label and tags), never from truncation, spin value, transposition
+symbolic identity (field, label and tags), never from truncation, spin value, transposition
 or constraints, so a symbol naming a whole atom has the same id as the atom. Only atoms and
 symbols have an `atomic_id`; composite spaces are named by `atom_ids`.
 """
@@ -204,7 +204,8 @@ atomic_id(f::AbstractSym) = symbolic_group(f) # generic fallback
 
 Key that matches the symbolic operator `op` to the group of a Hilbert space it acts on:
 `symbolic_group(op) == group_id(group)`. A custom operator type adds a method that returns
-the label of its space, for example the `label` of a [`GenericHilbertSpace`](@ref).
+the label of its space, for example the `label` of a [`GenericHilbertSpace`](@ref). An operator on a
+field defines [`mode`](@ref) instead.
 """
 function symbolic_group end
 
