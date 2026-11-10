@@ -147,19 +147,29 @@ _atom_names(op::Op) = (op,)
 # generators and matrices, are flattened into one. The order of the labels is the order of the basis, so
 # unordered collections are rejected.
 function hilbert_space(f::Field, labels, args...; kwargs...)
-    labels isa AbstractVector && throw(MethodError(hilbert_space, (f, labels, args...)))
+    isempty(kwargs) || throw(ArgumentError("`hilbert_space` takes no keyword arguments, got `$(join(keys(kwargs), ", "))`. A constraint is the last positional argument."))
+    labels isa AbstractVector && _no_space(f, labels, args...)
     (labels isa Union{AbstractString, AbstractChar, Number, AbstractSet, AbstractDict} || !applicable(iterate, labels)) &&
-        throw(ArgumentError("`labels` must be an ordered collection of labels such as `1:3` or `[:a, :b]`, got `$(repr(labels))`."))
+        throw(ArgumentError("`labels` must be an ordered collection of labels such as `1:3` or `[:a, :b]`, got `$(repr(labels))`. $(_space_usage(f))"))
     labels = vec(collect(labels))
     # An empty tuple collects to a `Vector{Union{}}`, which matches the methods for every element type.
-    return hilbert_space(f, labels isa Vector{Union{}} ? Any[] : labels, args...; kwargs...)
+    return hilbert_space(f, labels isa Vector{Union{}} ? Any[] : labels, args...)
 end
 # The product of the spaces `hilbert_space(f[l], args...)` of the modes of `f`, constrained by `constraint`.
 _mode_product(f::Field, labels, constraint, args...) =
     tensor_product(map(l -> hilbert_space(Mode(f, l), args...), labels); constraint)
 hilbert_space(f::Field, labels::AbstractVector, x, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint, x)
+hilbert_space(f::Field) = throw(ArgumentError("The field `$f` needs labels. $(_space_usage(f))"))
+hilbert_space(m::Mode, args...) = _no_space(m, args...)
+# The error for arguments that no method of `hilbert_space` accepts, with the usage of the field of `x`.
+function _no_space(x, args...)
+    got = isempty(args) ? "without arguments" : "from `" * join((repr(a; context = :limit => true) for a in args), ", ") * "`"
+    throw(ArgumentError("`hilbert_space` cannot build a space for `$x` $got. $(_space_usage(x))"))
+end
+_space_usage(m::Mode) = _space_usage(m.field)
+_space_usage(::Field) = "A field takes labels and the basis states of one mode, as in `hilbert_space(c, 1:3, states)`."
 function hilbert_space(m::Mode{<:Field{K}}, states) where {K}
-    (isnothing(mode_operator(K)) && states isa Union{AbstractVector, Tuple, BasisStates}) || throw(MethodError(hilbert_space, (m, states)))
+    (isnothing(mode_operator(K)) && states isa Union{AbstractVector, Tuple, BasisStates}) || _no_space(m, states)
     isnothing(m.field.group) || throw(ArgumentError("The grouped field `$(m.field)` needs its own space type and a `combine_into_group(::Group{K}, atoms)` method."))
     return GenericHilbertSpace(m, states)
 end
@@ -175,9 +185,14 @@ end
     @test_throws ArgumentError FermionicHilbertSpaces.Mode(b, 1)[2]
     @test hilbert_space(b, (1, 2), 2) == hilbert_space(b, [1, 2], 2) == hilbert_space(b, (i for i in 1:2), 2)
     @fermions f
-    @test_throws MethodError hilbert_space(f, 1:3, 1)
-    @test_throws MethodError hilbert_space(b, 1:2, 3.0)
-    @test_throws MethodError hilbert_space(b[1], [0, 1])
+    @test_throws "`NumberConservation(2)`" hilbert_space(f, 1:3, 2)
+    @test_throws "truncation dimension" hilbert_space(b, 1:2)
+    @test_throws "truncation dimension" hilbert_space(b[1])
+    @test_throws ArgumentError hilbert_space(b, 1:2, 3.0)
+    @test_throws ArgumentError hilbert_space(b[1], [0, 1])
+    @test_throws "needs labels" hilbert_space(f)
+    @test_throws "keyword" hilbert_space(f, 1:3; constraint = NumberConservation(1))
+    @test_throws "truncation dimension" hilbert_space(b, 3)
     for labels in (:a, "ab", 1, Set(1:2), Dict(1 => 2))
         @test_throws ArgumentError hilbert_space(f, labels)
     end
