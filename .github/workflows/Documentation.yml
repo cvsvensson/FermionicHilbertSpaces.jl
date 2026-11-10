@@ -13,6 +13,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Runners have varying CPUs; native-target pkgimages from the cache are rejected on a different CPU.
+      JULIA_CPU_TARGET: generic
+      # BitPermutations picks BMI2/AVX-512 intrinsics from the host CPU, which fail to compile for the generic target.
+      BIT_PERMUTATIONS_USE_INTRINSICS: false
     permissions:
       actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
       contents: write
@@ -23,6 +28,9 @@ jobs:
         with:
           version: '1'
       - uses: julia-actions/cache@v3
+        with:
+          # Pkgimages built with other settings above are not detected as stale and fail to load, so they get their own cache.
+          cache-name: julia-cache;workflow=${{ github.workflow }};job=${{ github.job }};cpu=generic;bitpermutations-intrinsics=false
       - name: Configure doc environment
         shell: julia --project=docs --color=yes {0}
         run: |
