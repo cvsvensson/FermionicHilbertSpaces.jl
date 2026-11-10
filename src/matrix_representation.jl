@@ -350,7 +350,7 @@ end
 # not summed, as that would build full-size matrices, but those that differ only on their first group are one term
 # with the sum of their factors on that group. The diagonals of the sums are added into one term, since the entries
 # that several sums share are mostly on the diagonal.
-function _product_terms(op::NCAdd, bases, space::ProductSpace, repr; tree_split = 10, kwargs...)
+function _product_terms(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}; tree_split = 10, kwargs...)
     spaces = groups(space)
     by_span = Dict{UnitRange{Int}, Vector{Any}}()
     for term in NCterms(op)

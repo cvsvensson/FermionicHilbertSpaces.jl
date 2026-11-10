@@ -92,7 +92,9 @@ end
 # spaces of a `ProductOperator` and the matrices of a `KronTerm`.
 _transposed(op) = op
 _transposed(op::ProductOperator{C}) where {C} = ProductOperator{C}(op.ops, map(TransposedSpace, op.spaces), op.inds)
-_transposed(term::KronTerm) = KronTerm(map(((A, r),) -> (copy(transpose(A)), r), term.factors))
+_transposed(term::KronTerm) = KronTerm(map(((A, r),) -> (_transposed_matrix(A), r), term.factors))
+# Symmetric factors, such as the diagonal term of a product space, are shared instead of copied.
+_transposed_matrix(A) = issymmetric(A) ? A : copy(transpose(A))
 _transposed_precomp(L::LazyOperator) = L.precomp
 _transposed_precomp(L::LazyOperator{<:NCAdd}) = [(_transposed(term), precomp) for (term, precomp) in L.precomp]
 const LazyFunctionOperator = SciMLOperators.FunctionOperator{<:Any, <:Any, <:Any, <:Any, <:LazyOperator}
@@ -140,7 +142,6 @@ end
 _conj_if(c, conjugate) = conjugate ? conj(c) : c
 
 # Adds `coeff * amp * x[inind]` to `y[outind]`, or to row `outind` of `y` for matrices, for the entries of a term.
-# For a single entry `x` of a sparse input, `y` is a function that is called with `outind` and the value.
 struct MulAccumulator{Y, X, C}
     y::Y
     x::X
