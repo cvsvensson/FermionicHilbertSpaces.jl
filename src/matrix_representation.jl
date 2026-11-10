@@ -677,7 +677,7 @@ function fragment(op, H::AbstractHilbertSpace, seeds; projection = false, depth 
     for _ in 1:depth
         isempty(frontier) && break
         n = length(states)
-        for k in frontier, (newstate, amp) in col(states[k])
+        for k in frontier, (newstate, amp) in last(col(states[k]))
             (abs(amp) <= cutoff || newstate in found) && continue
             _skip_outside(isbasisstate(newstate, H), projection) && continue
             push!(found, newstate)
@@ -692,32 +692,66 @@ end
     matrix_column(op, H; projection = false)
 
 Return a function `col` where `col(state)` gives the nonzero elements `newstate => ⟨newstate|op|state⟩` in the column
-of the basis state `state` of `H`, without building the matrix. Elements to states outside `H` throw an error, or are
-dropped with `projection = true`.
+of the basis state `state` of `H`, without building the matrix, with the diagonal element first if it is nonzero.
+Elements to states outside `H` throw an error, or are dropped with `projection = true`.
 
     @fermions f; H = hilbert_space(f, 1:2); matrix_column(f[1]' * f[2], H)(FockNumber(2))  # [FockNumber(1) => 1]
 """
 function matrix_column(op, H::AbstractHilbertSpace; projection = false)
     col = _matrix_column(op, H)
-    return state -> [s => a for (s, a) in col(state) if !_skip_outside(isbasisstate(s, H), projection, s, state, H)]
+    return function (state)
+        diagonal, elements = col(state)
+        filter!(((s, _),) -> !_skip_outside(isbasisstate(s, H), projection, s, state, H), elements)
+        return iszero(diagonal) ? elements : pushfirst!(elements, state => diagonal)
+    end
 end
 
+# Returns a function of a basis state giving the diagonal element and the other nonzero elements of its column,
+# including those to states outside `H`.
 function _matrix_column(op, H)
     terms, coeff = trivial_operator(op) ? ((), get_trivial_op_coeff(op)) : _operator_terms(op)
     prodops = isempty(terms) ? terms : _partitioned_terms(terms, _checked_group_ids(op, H), groups(H))
-    precomps = [precomputation_before_operator_application(term, H) for term in prodops]
     T = promote_type(typeof(coeff), mapreduce(mat_eltype, promote_type, prodops; init = Bool))
+    termgroups = _grouped_by_type(_precomputed_terms(map(t -> __concretize(t, TupleConcretizer()), prodops), H))
     diagonal = convert(T, coeff)
     return function (state)
         isbasisstate(state, H) || throw(ArgumentError("`$state` is not a basis state of the space."))
-        elements = Dict{statetype(H), typeof(diagonal)}()
-        iszero(diagonal) || (elements[state] = diagonal)
-        for (term, precomp) in zip(prodops, precomps)
-            newstate, amp = _apply_local_operators(term, state, H, precomp)
-            iszero(amp) || (elements[newstate] = get(elements, newstate, zero(diagonal)) + amp)
-        end
-        return [s => a for (s, a) in elements if !iszero(a)]
+        elements = Pair{statetype(H), T}[]
+        d = _apply_term_groups!(elements, diagonal, termgroups, state, H)
+        return d, _sum_duplicates!(elements, H)
     end
+end
+
+# One concretely typed vector per type of the elements, so that a loop over each vector is type stable
+_grouped_by_type(xs) = Tuple(T[x for x in xs if x isa T] for T in unique!(map(typeof, xs)))
+
+_apply_term_groups!(elements, diagonal, ::Tuple{}, state, H) = diagonal
+function _apply_term_groups!(elements, diagonal, termgroups::Tuple, state, H)
+    for (term, precomp) in first(termgroups)
+        newstate, amp = _apply_local_operators(term, state, H, precomp)
+        iszero(amp) && continue
+        newstate == state ? (diagonal += convert(typeof(diagonal), amp)) : push!(elements, newstate => amp)
+    end
+    return _apply_term_groups!(elements, diagonal, Base.tail(termgroups), state, H)
+end
+
+# States outside `H` share the zero key, so equal states need not be adjacent within a run of equal keys
+function _sum_duplicates!(elements, H)
+    sort!(elements; by = p -> order_key(first(p), H))
+    n = 0
+    for (s, a) in elements
+        j = n
+        while j > 0 && first(elements[j]) != s && order_key(first(elements[j]), H) == order_key(s, H)
+            j -= 1
+        end
+        if j > 0 && first(elements[j]) == s
+            elements[j] = s => last(elements[j]) + a
+        else
+            n += 1
+            elements[n] = s => a
+        end
+    end
+    return filter!(!iszero ∘ last, resize!(elements, n))
 end
 
 @testitem "matrix_column" begin
@@ -731,15 +765,17 @@ end
             elements = col(x)
             foreach(((s, a),) -> v[state_index(s, H)] += a, elements)
             j = state_index(x, H)
-            length(elements) == count(!iszero, M[:, j]) && v ≈ M[:, j]
+            length(elements) == count(!iszero, M[:, j]) && v ≈ M[:, j] && (iszero(M[j, j]) || first(first(elements)) == x)
         end
     end
     @fermions f
+    @bosons b
     @spins S 1 // 2
     Hn = constrain_space(hilbert_space(f, 1:4), NumberConservation(2))
     @test matches_matrix(sum(f[k]' * f[k + 1] + hc for k in 1:3) + f[1]' * f[4] - 2f[1]' * f[1] * f[3]' * f[3] + 3, Hn)
     Hp = tensor_product(hilbert_space(f, 1:2), hilbert_space(S, 1:2))
     @test matches_matrix(f[1]' * f[2] * S[1][:+] + hc + f[2]' * S[2][:x] + S[1][:z] * S[2][:z] + 1, Hp)
+    @test matches_matrix(sum(b[k]' * b[k + 1] + hc for k in 1:2) + b[1]' * b[1]' * b[1] * b[1] + b[2]' * b[2], hilbert_space(b, 1:3, 3))
 
     x = first(basisstates(Hn))
     @test matrix_column(2I, Hn)(x) == [x => 2]
