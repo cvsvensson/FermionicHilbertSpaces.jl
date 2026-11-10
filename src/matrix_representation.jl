@@ -347,8 +347,9 @@ end
 # Terms acting on the same range of groups are summed on those groups, so each sum is embedded with identities once
 # instead of once per term. Terms on a single group join those on it and a neighbour, if any, since their sum is still
 # small. Joining larger ranges can make the summed matrices much larger than the terms. Terms acting on all groups are
-# not summed, as that would build full-size matrices. The diagonals of the sums are added into one term, since the
-# entries that several sums share are mostly on the diagonal.
+# not summed, as that would build full-size matrices, but those that differ only on their first group are one term
+# with the sum of their factors on that group. The diagonals of the sums are added into one term, since the entries
+# that several sums share are mostly on the diagonal.
 function _product_terms(op::NCAdd, bases, space::ProductSpace, repr; tree_split = 10, kwargs...)
     spaces = groups(space)
     by_span = Dict{UnitRange{Int}, Vector{Any}}()
@@ -361,9 +362,12 @@ function _product_terms(op::NCAdd, bases, space::ProductSpace, repr; tree_split 
             append!(by_span[span], pop!(by_span, n:n))
         end
     end
-    products = [_kron_term(p, spaces, repr; kwargs...) for p in get(by_span, eachindex(spaces), [])]
+    products = OrderedDict{Any, Vector{Any}}()
+    for p in get(by_span, eachindex(spaces), [])
+        push!(get!(() -> [], products, (p.inds, map(op -> op.factors, Base.tail(p.ops)))), p)
+    end
     sums = [(convert(SparseMatrixCSC, _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)), _stride(spaces, first(span))) for (span, prodops) in by_span if span != eachindex(spaces)]
-    return [_split_diagonals(sums, dim(space)); products]
+    return [_split_diagonals(sums, dim(space)); [_kron_term(ps, spaces, repr; kwargs...) for ps in values(products)]]
 end
 function _span_matrix(prodop, span, spaces, repr; kwargs...)
     matrices = map(span) do n
@@ -373,10 +377,14 @@ function _span_matrix(prodop, span, spaces, repr; kwargs...)
     return _kron_groups(matrices, prodop.inds .- (first(span) - 1), repr)
 end
 _stride(spaces, n) = prod(m -> dim(spaces[m]), 1:(n - 1); init = 1)
-function _kron_term(prodop, spaces, repr; kwargs...)
-    factors = map(prodop.ops, Tuple(prodop.inds)) do op, n
-        (convert(SparseMatrixCSC, _term_matrix_representation(op, spaces[n], repr, NoChunking(); kwargs...)), _stride(spaces, n))
-    end
+# The sum of the products `prodops`, which differ only in their factor on the first group
+function _kron_term(prodops, spaces, repr; kwargs...)
+    matrix(op, n) = _term_matrix_representation(op, spaces[n], repr, NoChunking(); kwargs...)
+    p = first(prodops)
+    inds = Tuple(p.inds)
+    A1 = sum(q -> prod(op -> op.coeff, Base.tail(q.ops); init = true) * matrix(first(q.ops), first(inds)), prodops)
+    rest = map((op, n) -> matrix(NCMul(one(op.coeff), op.factors), n), Base.tail(p.ops), Base.tail(inds))
+    factors = map((A, n) -> (convert(SparseMatrixCSC, A), _stride(spaces, n)), (A1, rest...), inds)
     T = mapreduce(eltype ∘ first, promote_type, factors)
     return KronTerm(map(((A, r),) -> (convert(SparseMatrixCSC{T, Int}, A), r), factors))
 end
@@ -820,7 +828,8 @@ end
     ops = [f[1]' * f[2] * s[:+] + hc + 2 * b[1]' * b[2] + hc + 1,
         0.5 * f[1]' * f[1] * b[1]' * b[1] + s[:z] * b[2]' * b[2],
         1im * f[1]' * s[:-] * b[2] + hc + 2.5,
-        f[1]' * f[2] + f[2]' * f[1]]
+        f[1]' * f[2] + f[2]' * f[1],
+        sum(0.3n * (b[1]' + b[1]) * f[n]' * f[n] for n in 1:2) + 1im * s[:x] * f[1]' * f[2] * b[2]]
     for op in ops, repr in (:sparse, :dense, EagerDenseRepr())
         M = representation(op, H, repr)
         Mc = representation(op, Hc, repr; projection=true)
