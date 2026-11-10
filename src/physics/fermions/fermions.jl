@@ -119,7 +119,7 @@ function _compact_fermionic_modes(io::IO, c::FermionicSpace;
         end
     end
 
-    fmt((name, labels)) = labels == [()] ? "$name" : "$name{$(join(_truncate(labels, max_labels_per_group, edge_labels), ", "))}"
+    fmt((name, labels)) = labels == [()] ? "$name" : "$name[$(join(_truncate(labels, max_labels_per_group, edge_labels), ", "))]"
     print(io, join(_truncate(map(fmt, groups), max_groups, edge_groups), ", "))
 end
 function embedding_unitary(partition, H::FermionicSpace)

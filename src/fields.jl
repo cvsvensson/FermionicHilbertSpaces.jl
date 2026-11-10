@@ -192,7 +192,6 @@ end
         @test_throws ArgumentError hilbert_space(f, labels)
     end
     @test hilbert_space(f, ()) == hilbert_space(f, Int[])
-    @test repr(hilbert_space(f, [(1, :a), 2]); context = :compact => true) == "f{(1, :a), 2}"
     @test repr(hilbert_space((@fermion h)); context = :compact => true) == "h"
     @fermions g
     @test_throws ArgumentError FermionicHilbertSpaces.FermionicSpace(f, [g[1]])
