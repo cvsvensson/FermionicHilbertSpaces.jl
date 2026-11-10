@@ -278,7 +278,7 @@ v = normalize(randn(size(L, 1)))
 ψ = embed(v, sector(0, Hks[1]) => hilbert_space(S, 1:N, Sz))
 norm(ψ), real(dot(v, L * v))
 ```
-Representing an operator throws if it fails a check, on one representative per orbit, that it commutes with the translation. The check catches typical mistakes such as single-site terms, staggered fields and open bonds, but it does not prove invariance. Translations of fermionic modes throw for now, since the fermionic reordering sign is not yet included.
+Representing an operator throws if it fails a check, on one representative per orbit, that it commutes with the translation. The check catches typical mistakes such as single-site terms, staggered fields and open bonds, but it does not prove invariance. `Permutations(sites, generators) => eigenvalues` generalizes this to any group of permutations of the sites, such as translations together with reflections, and keeps the states on which each generator acts as multiplication by its eigenvalue.
 
 ## Total spin and SU(N) multiplets
 A multiplet of total spin ``S`` has exactly one highest-weight state, the state with ``S^z_\mathrm{tot} = S`` that ``S^+_\mathrm{tot}`` annihilates; lowering it with ``S^-_\mathrm{tot}`` gives the rest of the multiplet. On a space split into ``S^z_\mathrm{tot}`` sectors, `highest_weight_states` returns these states, one column per multiplet, keyed by ``S``. This gives the lowest energy for each total spin of a Heisenberg ring:
