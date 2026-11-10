@@ -505,6 +505,18 @@ end
     @test_throws ArgumentError constrain_space(H, ParityConservation(1))
 end
 
+@testitem "Custom states without particle number" begin
+    struct NoCountState <: FermionicHilbertSpaces.AbstractBasisState
+        n::Int
+    end
+    @fermions f
+    Hf = hilbert_space(f, 1:2)
+    H = tensor_product(Hf, GenericHilbertSpace(:q, [NoCountState(0), NoCountState(1)]))
+    @test_throws ArgumentError constrain_space(H, NumberConservation(1))
+    @test_throws ArgumentError constrain_space(H, ParityConservation(1))
+    @test dim(constrain_space(H, NumberConservation(1; spaces = [Hf]))) == 4
+end
+
 @testitem "SpinSym" begin
     @spin S1
     @spin S2
