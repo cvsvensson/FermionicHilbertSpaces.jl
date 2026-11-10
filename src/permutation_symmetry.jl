@@ -155,7 +155,8 @@ element type of `weights`, for example `ComplexF64` for complex weights.
 
 With `Hs` a partition of `H` and `orth_method` not `nothing`, the projector is not built,
 the basis is a `SparseMatrixCSC` with element type `float(T)`, and `sparse` has no effect.
-For `:symmetric` and `:antisymmetric` `normalize` has no effect either, since scaling does not change the span.
+For `:symmetric` and `:antisymmetric` `normalize` has no effect either, since scaling does
+not change the span.
 Otherwise the projector is built with
 `permutation_projector(H, Hs, perms, weights, T; normalize, sparse)`, and `:symmetric` and
 `:antisymmetric` require `Combinatorics.jl` to be loaded.
