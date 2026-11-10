@@ -398,12 +398,12 @@ end
     Sp1 = S1[:+]
     Sm1 = S1[:-]
     Sx1 = S1[:x]
-    @test_throws ArgumentError S1[1]
     Sy1 = S1[:y]
 
     Sz2 = S2[:z]
     Sp2 = S2[:+]
     Sm2 = S2[:-]
+    @test_throws ArgumentError S1[1]
 
     @test 1 * Sz1 == Sz1
     @test 1 * Sz1 + 0 == Sz1
