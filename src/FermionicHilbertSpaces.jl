@@ -117,6 +117,16 @@ end
 add_tag(t::Tags, tag) = Tags((t.tags..., tag))
 add_tag(::Tags{Nothing}, tag) = Tags((tag,))
 
+"""
+    tag_label(label, tag)
+
+Return the group label `label` with `tag` appended. Any label works, e.g. `1` or `:a`. A custom
+operator supports [`open_system`](@ref) by rebuilding itself with a tagged label:
+`add_tag(s::Shift, tag) = Shift(tag_label(s.site, tag), s.k)`.
+"""
+tag_label(label, tag) = Tags((label, tag))
+tag_label(label::Tags, tag) = add_tag(label, tag)
+
 function _resolve_sector_permutations_and_weights end # for Combinatorics extension
 function cache_operator! end # for OhMyThreads extension
 

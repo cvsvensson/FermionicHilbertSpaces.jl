@@ -78,13 +78,17 @@ struct StateChunking{S} <: AbstractChunkingStrategy
     scheduler::S
 end
 
-function mat_eltype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S,F}
-    return _term_eltype(C, S)
+# A factor type that is not concrete, as in a product of different operator types, says nothing about the
+# matrix elements, so the factors are promoted one by one.
+function mat_eltype(x::NCAdd{C, NCMul{C2, S, F}}) where {C, C2, S, F}
+    isconcretetype(S) && return _term_eltype(C, S)
+    return _factors_eltype(C, Iterators.flatten(term.factors for term in keys(x.dict)))
 end
-function mat_eltype(::NCMul{C,S,F}) where {C,S,F}
-    return _term_eltype(C, S)
+function mat_eltype(x::NCMul{C, S}) where {C, S}
+    isconcretetype(S) && return _term_eltype(C, S)
+    return _factors_eltype(C, x.factors)
 end
-mat_eltype(::Type{NCMul{C, S, F}}) where {C, S, F} = _term_eltype(C, S)
+_factors_eltype(C, factors) = mapreduce(f -> _term_eltype(C, typeof(f)), promote_type, factors; init = C)
 mat_eltype(::S) where {S} = mat_eltype(S)
 """
     mat_eltype(::Type{O})
@@ -186,9 +190,10 @@ With `transpose=true`, apply the transpose of `op` instead. The generic method a
 [`apply_local_operator`](@ref). A method for products of one operator type can be faster,
 as for fermions, where the whole product acts on a Fock state with bit operations.
 """
-function apply_local_operators(op::NCMul, state, space, precomps; transpose)
-    # Accumulate in the element type of the matrix so that `amp` keeps one type through the loop.
-    T = mat_eltype(op)
+function apply_local_operators(op::NCMul{C, S}, state, space, precomps; transpose) where {C, S}
+    # Accumulate in the element type of the matrix so that `amp` keeps one type through the loop. It is taken from the
+    # factor type so that it costs nothing per state; with factors of different types, `amp` is promoted by their amplitudes.
+    T = _term_eltype(C, S)
     P = something(_precision(T), Float64)
     amp = convert(T, op.coeff)
     if !transpose
@@ -913,6 +918,32 @@ end
     FHS.mat_eltype(::Type{BigRootOp}) = BigFloat
     FHS.apply_local_operator(::BigRootOp, state, space, precomp) = (state, sqrt(big(2)))
     @test representation(BigRootOp(), H)[1, 1] == sqrt(big(2))
+end
+
+@testitem "Products of operator types with different matrix element types" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: AbstractSym, AbstractBasisState, symbolic_group, apply_local_operator, mat_eltype
+    import FermionicHilbertSpaces.NonCommutativeProducts: @nc
+    struct Shift <: AbstractSym
+        k::Int
+    end
+    struct Phase <: AbstractSym end
+    @nc Shift Phase
+    Base.adjoint(s::Shift) = Shift(-s.k)
+    Base.adjoint(p::Phase) = p
+    symbolic_group(::Union{Shift, Phase}) = 1
+    struct Site <: AbstractBasisState
+        n::Int
+    end
+    apply_local_operator(s::Shift, state::Site, space, precomp) = (Site(mod(state.n + s.k, 3)), 1)
+    apply_local_operator(::Phase, state::Site, space, precomp) = (state, im^state.n)
+    mat_eltype(::Type{Shift}) = Int
+    mat_eltype(::Type{Phase}) = ComplexF64
+
+    H = GenericHilbertSpace(1, Site.(0:2))
+    S = representation(Shift(1), H, Matrix)
+    @test representation(Phase() * Shift(1), H, Matrix) ≈ Diagonal(im .^ (0:2)) * S
+    @test representation(Phase() * Shift(1) + Shift(1), H) ≈ (Diagonal(im .^ (0:2)) + I) * S
 end
 
 @testitem "Operators between two spaces with Axes" begin
