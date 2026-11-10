@@ -253,6 +253,13 @@ Hfrac = hilbert_space(f, labels, spin_order_constraint([:↑, :↑, :↓, :↑, 
 ham = representation(tjz(f, N, 1, 1/4), Hfrac; projection = true);
 dim(Hfrac)
 ```
+`fragment` builds the same sector from one of its states, given hopping that cannot create a double occupation:
+```@example hubbard
+hole(i, σ) = 1 - f[i, σ == :↑ ? :↓ : :↑]'f[i, σ == :↑ ? :↓ : :↑]
+hop = -sum(f[i,σ]'hole(i,σ) * f[i+1,σ]hole(i+1,σ) + hc for σ in (:↑,:↓) for i in 1:N-1)
+F = FermionicHilbertSpaces.fragment(hop, hilbert_space(f, labels), [first(basisstates(Hfrac))])
+Set(basisstates(F)) == Set(basisstates(Hfrac))
+```
 The full space of these modes has dimension ``2^{32}``. `subregion` gives the space of the left half compatible with the constraint, which is what `partial_trace(ρ, Hfrac => Hsub_frac)` needs:
 ```@example hubbard
 Hsub_full = hilbert_space(f, [(i, s) for i in 1:div(N,2) for s in (:↑,:↓)])

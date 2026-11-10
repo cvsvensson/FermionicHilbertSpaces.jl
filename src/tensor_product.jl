@@ -1,6 +1,6 @@
 atomic_factors(op::AbstractSym) = throw(ArgumentError("The operator `$op` is not a space. Use `hilbert_space(...)` to construct the space it acts on."))
-# The unconstrained product of `spaces`, and its states when some of `spaces` are constrained, or `nothing`.
-function product_space_and_states(spaces)
+# The unconstrained product of `spaces`.
+function product_space(spaces)
     atoms = collect(Iterators.flatten(Iterators.map(atomic_factors, spaces)))
     factors = map(unique(map(group_id, atoms))) do id
         combine_into_group(id, map(identity, filter(a -> group_id(a) == id, atoms)))
@@ -10,8 +10,7 @@ function product_space_and_states(spaces)
     else
         ProductSpace(Tuple(factors))
     end
-    any(isconstrained, spaces) || return space, nothing
-    return space, _find_combined_states(space, spaces, state_mapper(space, spaces))
+    return space
 end
 """
     tensor_product(spaces...; constraint=NoSymmetry())
@@ -20,7 +19,8 @@ end
 Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
 
 Spaces of the same group, such as fermions of one `@fermions` basis, merge into one factor where
-the group first appears. The first factor varies fastest.
+the group first appears. The first factor varies fastest, so an operator `A` on the first of two spaces has the matrix
+`kron(I, A)`; use `embed` to build it.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces; @fermions f;
@@ -40,13 +40,14 @@ function tensor_product(spaces; @nospecialize(constraint = NoSymmetry()))
     if length(spaces) == 1
         return constrain_space(only(spaces), constraint)
     end
-    space, factor_states = product_space_and_states(spaces)
-    # Only computed when needed, since a large product space has no `basisstates`
-    all_states() = isnothing(factor_states) ? basisstates(space) : factor_states
+    space = product_space(spaces)
+    constrained = any(isconstrained, spaces)
+    # Only computed when needed, since a large product space has no `basisstates`, and `generate_states` does not use them
+    all_states() = constrained ? _find_combined_states(space, spaces) : basisstates(space)
     if constraint == NoSymmetry()
         combined = _combined_sector_constraint(spaces)
         !ismissing(combined) && return sector_space(space, all_states(), sector_function(combined, space), combined)
-        return isnothing(factor_states) ? space : ConstrainedSpace(space, factor_states)
+        return constrained ? ConstrainedSpace(space, all_states()) : space
     end
 
     constraint = supply_missing_constraint_info(constraint, space, spaces)

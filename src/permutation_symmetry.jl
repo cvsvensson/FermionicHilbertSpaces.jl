@@ -34,15 +34,16 @@ end
 """
     permutation_operator(H, Hs, perm; phase_factors=true)
 
-Gives the matrix representation on `H` of a permutation `perm` of the partition `Hs`.
+Gives the sparse matrix representation on `H` of a permutation `perm` of the partition `Hs`.
 For fermionic factors it includes the sign of reordering the fermions, so that it maps `c'` in factor `perm[k]` to the
 corresponding operator in factor `k`. With `phase_factors=false`, it permutes the basis states without signs.
 """
 function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T} = Int; phase_factors = true) where {T}
-    P = zeros(T, dim(H), dim(H))
+    entries = (Int[], Int[], T[])
     mapper = state_mapper(H, Hs)
     phase_of = _permutation_phases(H, Hs, mapper, phase_factors)
-    return add_permutation_operators!(P, (basisstates(H), Base.Fix2(state_index, H)), mapper, (perm,), (one(T),), phase_of)
+    add_permutation_operators!(entries, (basisstates(H), Base.Fix2(state_index, H)), mapper, (perm,), (one(T),), phase_of)
+    return sparse(entries..., dim(H), dim(H))
 end
 # `phase_of(perm)` gives the phase function of a permutation, see `_permutation_phases`.
 function add_permutation_operators!(P, (states, state_index), mapper, perms, weights, phase_of)

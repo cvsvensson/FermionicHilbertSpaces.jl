@@ -61,15 +61,15 @@ Base.:+(m, ::HC) = (m + m')
 Base.:-(m, ::HC) = (m - m')
 """
     hc
-Adding this is equivalent to adding the hermitian conjugate.
+`op + hc` is `op + op'` and `op - hc` is `op - op'`, for example `f[1]'f[2] + hc`.
 """
 const hc = HC()
 
 """
     AbstractSym
 
-Supertype of symbolic operators. Fermions, Majoranas, bosons and spins are [`Op`](@ref)s. Another
-operator type subtypes it and defines [`apply_local_operator`](@ref) and [`symbolic_group`](@ref).
+Supertype of the factors of symbolic expressions: operators on fields, which are [`Op`](@ref)s, and symbolic
+states.
 """
 abstract type AbstractSym end
 NonCommutativeProducts.atom_group(op::AbstractSym) = symbolic_group(op)
@@ -122,9 +122,7 @@ add_tag(::Tags{Nothing}, tag) = Tags((tag,))
 """
     tag_label(label, tag)
 
-Return the group label `label` with `tag` appended. Any label works, e.g. `1` or `:a`. A custom
-operator supports [`open_system`](@ref) by rebuilding itself with a tagged label:
-`add_tag(s::Shift, tag) = Shift(tag_label(s.site, tag), s.k)`.
+Return the group label `label` with `tag` appended. Any label works, e.g. `1` or `:a`.
 """
 tag_label(label, tag) = Tags((label, tag))
 tag_label(label::Tags, tag) = add_tag(label, tag)

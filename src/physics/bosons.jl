@@ -31,10 +31,11 @@ const BosonSym{M} = Op{Boson, M}
 mode_operator(::Type{Boson}) = Boson(-1)
 Base.adjoint(k::Boson) = Boson(-k.exp)
 function Base.show(io::IO, x::BosonSym)
+    exp = x.kind.exp
     show(io, x.mode.field)
-    print(io, x.kind.exp > 0 ? "†" : "")
-    if abs(x.kind.exp) !== 1
-        print(io, "^", abs(x.kind.exp))
+    print(io, exp > 0 ? "†" : "")
+    if abs(exp) !== 1
+        print(io, "^", abs(exp))
     end
     return _show_label(io, x.mode.label)
 end
@@ -52,8 +53,9 @@ function _boson_normal_order(a::BosonSym, c::BosonSym)
     return AddTerms(terms)
 end
 function local_mul_effect(a::BosonSym, b::BosonSym)
-    sign(a.kind.exp) == sign(b.kind.exp) && return Op(Boson(a.kind.exp + b.kind.exp), a.mode)
-    return a.kind.exp < 0 && b.kind.exp > 0 ? _boson_normal_order(a, b) : nothing
+    m, n = a.kind.exp, b.kind.exp
+    sign(m) == sign(n) && return Op(Boson(m + n), a.mode)
+    return m < 0 && n > 0 ? _boson_normal_order(a, b) : nothing
 end
 
 @testitem "BosonSym" begin
@@ -163,13 +165,12 @@ Operator terms that would raise the occupation above the cutoff are dropped with
 while leaving a constrained space throws unless `projection=true`. Products are normal ordered
 before truncation, so `b * b'` is represented as `b'b + 1`.
 """
-hilbert_space(b::BosonSym, args...) = hilbert_space(b.mode, args...)
 hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer) = TruncatedBosonicHilbertSpace(m, dimension)
 hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer, @nospecialize(constraint::ConstraintLike)) = constrain_space(hilbert_space(m, dimension), constraint)
 particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 
-function apply_local_operator(factor::Boson, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp, ::Type{T} = Float64) where {T}
+@inline function apply_local_operator(factor::Boson, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp, ::Type{T} = Float64) where {T}
     n = state.n
     k = abs(factor.exp)
     amplitude = one(T)

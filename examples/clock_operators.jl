@@ -8,41 +8,41 @@
 # The pieces a new algebra needs are listed in [Extending and performance hooks](../extending.md).
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
-import FermionicHilbertSpaces: @field, AbstractBasisState, Op, apply_local_operator, mat_eltype
+import FermionicHilbertSpaces: @field, AbstractBasisState, Op, apply_local_operator, local_mul_effect, mat_eltype
+import FermionicHilbertSpaces.NonCommutativeProducts: Swap
 
 # ## Defining the clock operators and states
 # The clock operators are defined on a local Hilbert space of dimension ``D``, with basis states ``|n\rangle`` for ``n = 0, 1, ..., D-1``. The operator ``X`` shifts the local clock value, ``X |n\rangle = |n + 1\rangle``, and ``Z`` measures the local clock value: ``Z |n\rangle = \exp(2π i n / D) |n\rangle``.
-struct Clock{T} # The kind of a clock operator: T is :X or :Z.
+## The kind of a clock operator: X or Z, or its adjoint. X and Z share one concrete type, which keeps products of them fast.
+struct Clock
+    z::Bool
     adjoint::Bool
 end
-Clock(T::Symbol) = Clock{T}(false)
-Base.adjoint(k::Clock{T}) where {T} = Clock{T}(!k.adjoint)
+Clock(k::Symbol) = k in (:X, :Z) ? Clock(k === :Z, false) : throw(ArgumentError("A clock operator is `:X` or `:Z`, got `$(repr(k))`."))
+Base.adjoint(k::Clock) = Clock(k.z, !k.adjoint)
 ## The sites are the modes `c[i]` of a field of clock operators, and `c[i][:X]` is the operator of kind `Clock(:X)` on `c[i]`.
 @field c::Clock
 ## Operators print as they are written: `c[1][:X]` and `c[1][:X]'`.
-Base.show(io::IO, op::Op{Clock{T}}) where {T} = print(io, op.mode, "[", repr(T), "]", op.kind.adjoint ? "'" : "")
-## Products on the same site are kept as they are. Operators on different sites commute and are sorted by site.
+Base.show(io::IO, op::Op{Clock}) = print(io, op.mode, op.kind.z ? "[:Z]" : "[:X]", op.kind.adjoint ? "'" : "")
 struct ClockState{D} <: AbstractBasisState # A clock state with dimension D.
     n::Int
     ClockState{D}(n) where D = new{D}(mod(n, D))
 end
 ## Action on local basis states.
-function apply_local_operator(op::Clock{:X}, state::ClockState{D}, space, precomp) where {D}
-    newstate = ClockState{D}(state.n + (op.adjoint ? -1 : 1))
-    amp = 1
-    newstate, amp
-end
-function apply_local_operator(op::Clock{:Z}, state::ClockState{D}, space, precomp) where {D}
-    amp = exp((op.adjoint ? -1 : 1) * 2π * im * state.n / D)
-    state, amp
+function apply_local_operator(k::Clock, state::ClockState{D}, space, precomp) where {D}
+    s = k.adjoint ? -1 : 1
+    return k.z ? (state, cispi(2 * s * state.n / D)) : (ClockState{D}(state.n + s), complex(1.0))
 end
 ## Clock operators have complex matrix elements.
-mat_eltype(::Type{<:Clock}) = ComplexF64
+mat_eltype(::Type{Clock}) = ComplexF64
 
 # ## Using it in practice: Hamiltonian and conservation laws
 # Let's take the case D = 3 for 6 sites. We define a hamiltonian which conserves the clock charge, the sum of the local clock values modulo D, and calculate the symmetry resolved entanglement entropy in the ground state.
-D = 3
+const D = 3
 L = 6
+## Clock operators obey ``Z X = ω X Z`` with ``ω = e^{2πi/D}``. This rule on the kinds orders X before Z on each site.
+sgn(k::Clock) = k.adjoint ? -1 : 1
+local_mul_effect(a::Clock, b::Clock) = a.z && !b.z ? Swap(cispi(2 * sgn(a) * sgn(b) / D)) : nothing
 states = [ClockState{D}(n) for n in 0:(D-1)]
 Hfull = hilbert_space(c, 1:L, states)
 clock_hamiltonian(J, h) = -J * sum(c[i][:X]' * c[i + 1][:X] + hc for i in 1:(L - 1)) - h * sum(c[i][:Z] + hc for i in 1:L)

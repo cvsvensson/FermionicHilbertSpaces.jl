@@ -285,9 +285,14 @@ function branch_constraint(constraints::AbstractVector{<:SumConstraint}, spaces)
     allequal(exact) && return _sums_branch_constraint(sums, allspaces)
     return ProductConstraint([_sums_branch_constraint(sums[exact], allspaces), _sums_branch_constraint(sums[.!exact], allspaces)])
 end
+# Prunes on the integer `(value - first(r)) / step(r)`, since rational arithmetic is much slower. The allowed values
+# off the lattice `r` are dropped, as no state has them.
 function _sum_terms(c::OperatorConstraint, allspaces)
     units = _subspace_positions(c.spaces, allspaces)
-    return (; c.terms.constant, positions = [units[u] for u in c.terms.units], c.terms.strides, c.terms.tables, c.allowed, modulus = 0)
+    r = _value_range(c.terms)
+    tables = Vector{Int}[Int[(v - minimum(t)) // step(r) for v in t] for t in c.terms.tables]
+    allowed = Int[searchsortedfirst(r, a) - 1 for a in c.allowed if a in r]
+    return (; constant = 0, positions = [units[u] for u in c.terms.units], c.terms.strides, tables, allowed, modulus = 0)
 end
 # Prunes by several sums at once. The groups of the terms are evaluated at the depth of their last space, and a step is
 # the groups of one sum at one depth, so that each depth only evaluates the sums it changes.
@@ -373,6 +378,7 @@ end
         (hilbert_space(f, hubbard), (Nup => 2, Ndn => 2, D => 0)),
         (hilbert_space(S, 1:6), (sum(S[i][:z] for i in 1:6) => 0,)),
         (hilbert_space(S, 1:5), (sum(S[i][:z] for i in 1:5) => 1 // 2, S[1][:z] + S[2][:z] => 0)),
+        (hilbert_space(S, 1:5), (sum(S[i][:z] for i in 1:5) => (1.0, 3 // 2),)),
         (hilbert_space(f, 1:6), (sum(n(i) for i in 1:6) => 3, sum(i * n(i) for i in 1:6) => 10)),
         (tensor_product(Hmixed), (a'a + n(1) + n(2) + S[1][:z] => [1 // 2, 3 // 2],)),
         (hilbert_space(b, 1:3, 4), (sum(b[i]'b[i] for i in 1:3) => 3,)),
@@ -593,26 +599,18 @@ end
 end
 
 @testitem "The diagonal of an operator is found numerically" begin
-    import FermionicHilbertSpaces: AbstractBasisState, AbstractSym, apply_local_operator, symbolic_group
-    import FermionicHilbertSpaces.NonCommutativeProducts: @nc
+    import FermionicHilbertSpaces: @field, Op, AbstractBasisState, apply_local_operator
     # A cyclic shift, whose cube is the identity, which its products do not simplify to.
-    struct Shift <: AbstractSym
-        site::Int
-    end
-    @nc Shift
+    struct Shift end
     struct Clock <: AbstractBasisState
         n::Int
     end
     apply_local_operator(::Shift, s::Clock, space, precomp) = Clock(mod(s.n + 1, 3)), 1
-    symbolic_group(op::Shift) = op.site
-    X(i) = Shift(i)
-    Hs = [GenericHilbertSpace(k, Clock.(0:2)) for k in 1:2]
+    @field x::Shift
+    X(i) = Op(Shift(), x[i])
+    Hs = [hilbert_space(x[k], Clock.(0:2)) for k in 1:2]
     @test Set(basisstates(tensor_product(Hs; constraint = X(1) * X(1) * X(1) + 2 * X(2) * X(2) * X(2) => 3))) == Set(basisstates(tensor_product(Hs)))
-    struct Root2 <: AbstractSym
-        site::Int
-    end
-    @nc Root2
+    struct Root2 end
     apply_local_operator(::Root2, s::Clock, space, precomp) = s, sqrt(2)
-    symbolic_group(op::Root2) = op.site
-    @test_throws "not exact fractions" tensor_product(Hs; constraint = Root2(1) => 1)
+    @test_throws "not exact fractions" tensor_product(Hs; constraint = Op(Root2(), x[1]) => 1)
 end
