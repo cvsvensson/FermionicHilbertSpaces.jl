@@ -392,7 +392,7 @@ rewrap(::TransposedSpace, space) = TransposedSpace(space)
     @nc Shift Num
     Base.adjoint(s::Shift) = Shift(s.site, -s.k)
     Base.adjoint(n::Num) = n
-    symbolic_group(op::Union{Shift,Num}) = op.site
+    symbolic_group(op::Union{Shift, Num}) = op.site
     local_mul_effect(a::Shift, b::Shift) = Shift(a.site, a.k + b.k)
     local_mul_effect(a::Num, b::Shift) = AddTerms((Swap(1), b.k * b))
     struct Site <: AbstractBasisState
@@ -419,6 +419,6 @@ rewrap(::TransposedSpace, space) = TransposedSpace(space)
         v = reshape(ρ, (Hl, Hr) => Hlr)
         @test reshape(representation(left(A) * right(B), Hlr) * v, Hlr => (Hl, Hr)) ≈ MA * ρ * MB
         L = representation(-1im * (left(A + A') - right(A + A')) + dissipator(B), Hlr)
-        @test abs(tr(reshape(L * v, Hlr => (Hl, Hr)))) < 1e-10
+        @test abs(tr(reshape(L * v, Hlr => (Hl, Hr)))) < 1.0e-10
     end
 end
