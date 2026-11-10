@@ -177,7 +177,9 @@ function push_inds_amps!(m::AbstractMatrix, outind, inind, amp)
 end
 
 
-function _apply_local_operators(op, state, space, precomp)
+# The term application chain is inlined down to `apply_local_operator`: a non-inlined call copies the
+# term, whose labels are heap references, to a GC-rooted stack slot, which costs more than applying it.
+@inline function _apply_local_operators(op, state, space, precomp)
     apply_local_operators(op, state, space, precomp; transpose=false)
 end
 
@@ -190,7 +192,7 @@ With `transpose=true`, apply the transpose of `op` instead. The generic method a
 [`apply_local_operator`](@ref). A method for products of one operator type can be faster,
 as for fermions, where the whole product acts on a Fock state with bit operations.
 """
-function apply_local_operators(op::NCMul{C, S}, state, space, precomps; transpose) where {C, S}
+@inline function apply_local_operators(op::NCMul{C, S}, state, space, precomps; transpose) where {C, S}
     # Accumulate in the element type of the matrix so that `amp` keeps one type through the loop. It is taken from the
     # factor type so that it costs nothing per state; with factors of different types, `amp` is promoted by their amplitudes.
     T = _term_eltype(C, S)
