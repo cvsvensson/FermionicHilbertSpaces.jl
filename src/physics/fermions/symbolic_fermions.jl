@@ -45,37 +45,25 @@ mode_operator(::Type{Fermion}) = Fermion(false)
 Base.adjoint(k::Fermion) = Fermion(!k.creation)
 
 Base.show(io::IO, x::FermionSym) = (show(io, x.mode.field); print(io, x.kind.creation ? "†" : ""); _show_label(io, x.mode.label))
-function Base.isless(a::FermionSym, b::FermionSym)
-    ga, gb = symbolic_group(a), symbolic_group(b)
-    return if ga != gb
-        ga < gb
-    elseif a.kind.creation == b.kind.creation
-        fa, fb = a.mode.field, b.mode.field
-        fa.name == fb.name && return _order_isless(a.mode.label, b.mode.label)
-        fa.name < fb.name
-    else
-        a.kind.creation > b.kind.creation
-    end
+# The order within a group: creation operators first, then by field name and label.
+function _local_isless(a::FermionSym, b::FermionSym)
+    a.kind.creation == b.kind.creation || return a.kind.creation
+    fa, fb = a.mode.field, b.mode.field
+    return fa.name == fb.name ? _order_isless(a.mode.label, b.mode.label) : fa.name < fb.name
 end
+Base.isless(a::FermionSym, b::FermionSym) = _group_isless(a, b) || (!_group_isless(b, a) && _local_isless(a, b))
 
 hilbert_space(m::Mode{<:Field{Fermion}}) = FermionicSpace([m], symbolic_group(m))
 
 # The sign λ in a * b = λ * b * a + scalar
 exchange_phase(a::FermionSym, b::FermionSym) = symbolic_group(a) == symbolic_group(b) ? -1 : 1
-function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
-    if a == b
+function local_mul_effect(a::FermionSym, b::FermionSym)
+    return if a == b
         0
-    elseif a < b
-        nothing
-    elseif a > b
-        swap = Swap(exchange_phase(a, b))
-        if a.mode == b.mode
-            return AddTerms((swap, 1))
-        else
-            return swap
-        end
+    elseif _local_isless(b, a)
+        a.mode == b.mode ? AddTerms((Swap(-1), 1)) : Swap(-1)
     else
-        return nothing
+        nothing
     end
 end
 
