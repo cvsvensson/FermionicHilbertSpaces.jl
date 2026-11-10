@@ -422,3 +422,16 @@ rewrap(::TransposedSpace, space) = TransposedSpace(space)
         @test abs(tr(reshape(L * v, Hlr => (Hl, Hr)))) < 1.0e-10
     end
 end
+
+@testitem "open_system of a projector onto a state" begin
+    using FermionicHilbertSpaces: open_system
+    @fermions c
+    H = hilbert_space(c, 1:2)
+    ψ = Kets(H)("10") + 1im * Kets(H)("01")
+    P = ψ * ψ'
+    MP = representation(P, H, Matrix)
+    Hlr, Hl, Hr, left, right = open_system(H)
+    ρ = randn(ComplexF64, dim(H), dim(H))
+    S = representation(left(P) * right(P'), Hlr)
+    @test reshape(S * reshape(ρ, (Hl, Hr) => Hlr), Hlr => (Hl, Hr)) ≈ MP * ρ * MP'
+end

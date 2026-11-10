@@ -124,6 +124,7 @@ struct SymbolicState{K,B,H} <: AbstractSym
     ket::K
     bra::B
 end
+add_tag(s::SymbolicState, tag) = SymbolicState(add_tag(s.space, tag), s.ket, s.bra)
 
 # A state of a product space is the product of states of its groups
 function SymbolicState(space, ket::ProductState, bra::Nothing)
