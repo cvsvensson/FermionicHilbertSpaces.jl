@@ -228,31 +228,31 @@ end
 
 _check_invariant(op, H::SymmetricSector) = foreach(g -> _check_invariant(op, H, g), H.symmetry.maps)
 _check_invariant(op, H, g) = iszero(_relabel(op, g) - op) || throw(ArgumentError("The operator changes under the permutation `$g`, so it has no representation on the symmetric sector."))
-# Numeric, since conjugating symbolic factors by a local map is not implemented. The permutations commute with the
-# operator (checked symbolically) and with the local map, so it suffices to compare on the orbit representatives.
 function _check_invariant(op, H, l::LocalMap)
-    atoms = collect(atomic_factors(H.parent))
-    mapper = state_mapper(H.parent, atoms)
-    perm, loc = _generator(l, H.parent, atoms, 0)
-    g = _match_perm(SiteMap(perm, loc, first(atoms)), unique_split_state(first(H.reps), mapper))
-    gstate(s) = permute_state(s, mapper, g)
-    A, B = (Dict{Tuple{Int, eltype(H.reps)}, mat_eltype(op)}() for _ in 1:2)
-    bases = _checked_group_ids(op, H.parent)
-    for term in NCterms(op)
-        term = length(bases) > 1 ? partition_product(term, bases, groups(H.parent)) : term
-        _add_elements!(A, term, H.reps, H.parent)
-        _add_elements!(B, term, map(gstate, H.reps), H.parent)
-    end
-    gA = Dict((k, gstate(s)) => a for ((k, s), a) in A)
-    tol = sqrt(eps()) * maximum(abs, values(A); init = 1.0)
-    all(x -> abs(get(gA, x, 0) - get(B, x, 0)) <= tol, union(keys(gA), keys(B))) ||
-        throw(ArgumentError("The operator changes under `$(l.op)`, so it has no representation on the symmetric sector."))
+    atoms = Dict(atomic_id(a) => a for a in atomic_factors(H.parent))
+    image(o::Op) = _local_image(l, o, atoms[o.mode])
+    iszero(_substitute(op, image) - op) || throw(ArgumentError("The operator changes under `$(l.op)`, so it has no representation on the symmetric sector."))
     return nothing
 end
-_relabel(op::Op, g) = Op(op.kind, Mode(op.mode.field, g(op.mode.label)))
-_relabel(m::NCMul, g) = m.coeff * prod(_relabel(x, g) for x in m.factors)
-_relabel(a::NCAdd, g) = a.coeff + sum((c * _relabel(m, g) for (m, c) in a.dict); init = 0)
-_relabel(op, g) = throw(ArgumentError("Only operators on fields can be checked for symmetry, got `$op`."))
+# The image of `o` under conjugation by the local map, as a combination of `_local_basis(o)`. The map is unitary, so
+# the fit is exact when the image lies in the span of the basis.
+function _local_image(l::LocalMap, o::Op, atom)
+    basis = _local_basis(o)
+    B = reduce(hcat, (vec(Matrix(representation(b, atom))) for b in basis))
+    U = Matrix(representation(l.op(label(o)), atom))
+    Y = vec(U * Matrix(representation(o, atom)) * U')
+    c = B \ Y
+    norm(B * c - Y) <= sqrt(eps()) || throw(ArgumentError("The local map `$(l.op)` does not act on `$o` within its local operators."))
+    return sum(round(x; digits = 12) * b for (x, b) in zip(c, basis))
+end
+_local_basis(o::Op{Spin}) = [Op(Spin(s, o.kind.exponent), o.mode) for s in -1:1]
+_local_basis(o::Op{Fermion}) = [Op(Fermion(true), o.mode), Op(Fermion(false), o.mode)]
+
+_relabel(op, g) = _substitute(op, o -> Op(o.kind, Mode(o.mode.field, g(o.mode.label))))
+_substitute(op::Op, f) = f(op)
+_substitute(m::NCMul, f) = m.coeff * prod(_substitute(x, f) for x in m.factors)
+_substitute(a::NCAdd, f) = a.coeff + sum((c * _substitute(m, f) for (m, c) in a.dict); init = 0)
+_substitute(op, f) = throw(ArgumentError("Only operators on fields can be checked for symmetry, got `$op`."))
 
 complementary_subsystem(H::AbstractHilbertSpace, ::_OrbitSpace) = nothing
 function basis_transformation(Hfrom::_OrbitSpace, Hto::_OrbitSpace)
