@@ -83,7 +83,7 @@ combine_into_group(group::Group{Fermion}, atoms) = FermionicSpace(atoms, group)
 
 operators(H::FermionicSpace) = fermions(H)
 isconstrained(H::FermionicSpace) = false
-combine_states(states, H::FermionicSpace{F}) where F = (_catenate_fock_states(states, Iterators.repeated(1), F),), (1,)
+combine_states(states, H::FermionicSpace{F}) where {F} = (_catenate_fock_states(states, Iterators.repeated(1), F),), (1,)
 
 state_mapper(H::FermionicSpace, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
 state_mapper(H::FermionicSpace, Hs) = _fock_mapper(H, Hs)

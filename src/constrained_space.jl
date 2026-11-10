@@ -386,7 +386,7 @@ end
 
     #total number of particles is 1
     Hc = constrain_space(H, NumberConservation(1))
-    Hc2 = tensor_product(atomic_factors(H); constraint=NumberConservation(1))
+    Hc2 = tensor_product(atomic_factors(H); constraint = NumberConservation(1))
     @test Set(basisstates(Hc)) == Set(basisstates(Hc2))
     @test dim(Hc) == N
     mc = representation(sym, Hc)
