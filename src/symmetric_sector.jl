@@ -153,9 +153,9 @@ Base.show(io::IO, H::SymmetricSector) = print(io, "$(dim(H))-dimensional Symmetr
 TransposedSpace(H::SymmetricSector) = SymmetricSector(TransposedSpace(H.parent), H.symmetry, H.amplitudes, H.reps, H.norms, !H.transposed)
 
 # A symmetric sector, or a subspace of one, with the orbit indices of its basis states
-const _OrbitSpace = Union{SymmetricSector, AbstractSubspace{<:Any, <:SymmetricSector}}
+const _OrbitSpace = Union{SymmetricSector, AbstractSubspace{<:OrbitRep, <:SymmetricSector}}
 _orbits(H::SymmetricSector) = (H, 1:dim(H))
-_orbits(H::AbstractSubspace{<:Any, <:SymmetricSector}) = (parent(H), [state.index for state in basisstates(H)])
+_orbits(H::AbstractSubspace{<:OrbitRep, <:SymmetricSector}) = (parent(H), [state.index for state in basisstates(H)])
 
 _amplitude_eltype(H::SymmetricSector) = eltype(H.amplitudes)
 _precomputation_before_operator_application(op, H::_OrbitSpace) = _precomputation_before_operator_application(op, parent(first(_orbits(H))))
