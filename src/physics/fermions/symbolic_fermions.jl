@@ -58,7 +58,6 @@ function Base.isless(a::FermionSym, b::FermionSym)
     end
 end
 
-hilbert_space(f::FermionSym) = hilbert_space(f.mode)
 hilbert_space(m::Mode{<:Field{Fermion}}) = FermionicSpace([m], symbolic_group(m))
 
 # The sign λ in a * b = λ * b * a + scalar

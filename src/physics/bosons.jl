@@ -165,7 +165,6 @@ Operator terms that would raise the occupation above the cutoff are dropped with
 while leaving a constrained space throws unless `projection=true`. Products are normal ordered
 before truncation, so `b * b'` is represented as `b'b + 1`.
 """
-hilbert_space(b::BosonSym, args...) = hilbert_space(b.mode, args...)
 hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer) = TruncatedBosonicHilbertSpace(m, dimension)
 hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer, @nospecialize(constraint::ConstraintLike)) = constrain_space(hilbert_space(m, dimension), constraint)
 particle_number(s::BosonicState) = s.n

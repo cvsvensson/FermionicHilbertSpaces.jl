@@ -192,7 +192,7 @@ majoranas(H::MajoranaHilbertSpace) = OrderedDict(m.label => representation(Op(Ma
 
 hilbert_space(y::Field{Majorana}, labels::AbstractVector, @nospecialize(c::QuantitySpec)) = constrain_space(hilbert_space(y, labels), c)
 hilbert_space(y::Field{Majorana}, labels::AbstractVector) = _majorana_space(y, labels)
-hilbert_space(y::Field{Majorana}, labels::AbstractVector, x) = _majorana_space(y, labels, x)
+hilbert_space(y::Field{Majorana}, labels::AbstractVector, x::Union{AbstractConstraint, AbstractVector, BasisStates}) = _majorana_space(y, labels, x)
 function _majorana_space(y, labels, args...)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even to define a Hilbert space, got $(length(labels))."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
