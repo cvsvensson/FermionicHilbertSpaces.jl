@@ -671,37 +671,20 @@ state out of `H` throws an error.
 function fragment(op, H::AbstractHilbertSpace, seeds; projection = false, depth = typemax(Int), cutoff = 0)
     states = unique!(collect(_states_of(H, seeds)))
     all(s -> isbasisstate(s, H), states) || throw(ArgumentError("The seeds must be basis states of the space."))
-    if !trivial_operator(op)
-        terms = _partitioned_terms(NCterms(op), _checked_group_ids(op, H), groups(H))
-        found = Set(states)
-        elements = Dict{Tuple{Int, eltype(states)}, mat_eltype(op)}()
-        frontier = 1:length(states)
-        for _ in 1:depth
-            isempty(frontier) && break
-            empty!(elements)
-            for term in terms
-                _add_elements!(elements, term, view(states, frontier), H)
-            end
-            n = length(states)
-            for ((_, newstate), amp) in elements
-                # Amplitudes are summed over all terms before testing for zero, since terms can cancel.
-                (abs(amp) <= cutoff || newstate in found) && continue
-                _skip_outside(isbasisstate(newstate, H), projection) && continue
-                push!(found, newstate)
-                push!(states, newstate)
-            end
-            frontier = (n + 1):length(states)
+    col = matrix_column(op, H; projection)
+    found = Set(states)
+    frontier = 1:length(states)
+    for _ in 1:depth
+        isempty(frontier) && break
+        n = length(states)
+        for k in frontier, (newstate, amp) in col(states[k])
+            (abs(amp) <= cutoff || newstate in found) && continue
+            push!(found, newstate)
+            push!(states, newstate)
         end
+        frontier = (n + 1):length(states)
     end
     return constrain_space(H, states[sortperm([order_key(s, H) for s in states])])
-end
-function _add_elements!(elements, term, states, H)
-    precomp = precomputation_before_operator_application(term, H)
-    for (k, state) in enumerate(states)
-        newstate, amp = _apply_local_operators(term, state, H, precomp)
-        iszero(amp) || (elements[(k, newstate)] = get(elements, (k, newstate), zero(amp)) + amp)
-    end
-    return
 end
 
 """
