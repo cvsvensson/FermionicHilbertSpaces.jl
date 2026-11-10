@@ -709,28 +709,43 @@ end
 # Returns a function of a basis state giving the diagonal element and the other nonzero elements of its column,
 # including those to states outside `H`.
 function _matrix_column(op, H)
-    terms, coeff = trivial_operator(op) ? ((), get_trivial_op_coeff(op)) : _operator_terms(op)
-    prodops = isempty(terms) ? terms : _partitioned_terms(terms, _checked_group_ids(op, H), groups(H))
-    T = promote_type(typeof(coeff), mapreduce(mat_eltype, promote_type, prodops; init = Bool))
-    termgroups = _grouped_by_type(_precomputed_terms(map(t -> __concretize(t, TupleConcretizer()), prodops), H))
-    diagonal = convert(T, coeff)
+    termgroups, diagonal = _column_terms(op, H)
     return function (state)
         isbasisstate(state, H) || throw(ArgumentError("`$state` is not a basis state of the space."))
-        elements = Pair{statetype(H), T}[]
+        elements = Pair{statetype(H), typeof(diagonal)}[]
         d = _apply_term_groups!(elements, diagonal, termgroups, state, H)
         return d, _sum_duplicates!(elements, H)
     end
 end
 
+# The terms of `op` on `H` with their precomputations, grouped by type, and the coefficient of the identity in `op`
+# in the element type of its matrix
+function _column_terms(op, H)
+    terms, coeff = trivial_operator(op) ? ((), get_trivial_op_coeff(op)) : _operator_terms(op)
+    prodops = isempty(terms) ? terms : _partitioned_terms(terms, _checked_group_ids(op, H), groups(H))
+    T = promote_type(typeof(coeff), mapreduce(mat_eltype, promote_type, prodops; init = Bool))
+    termgroups = _grouped_by_type(_precomputed_terms(map(t -> __concretize(t, TupleConcretizer()), prodops), H))
+    return termgroups, convert(T, coeff)
+end
+
+# Apply the `k`th term of `termgroups`, counting through the groups in order
+function _apply_term(termgroups::Tuple, k, state, H)
+    group = first(termgroups)
+    k <= length(group) || return _apply_term(Base.tail(termgroups), k - length(group), state, H)
+    term, precomp = group[k]
+    return _apply_local_operators(term, state, H, precomp)
+end
+
 # One concretely typed vector per type of the elements, so that a loop over each vector is type stable
 _grouped_by_type(xs) = Tuple(T[x for x in xs if x isa T] for T in unique!(map(typeof, xs)))
 
+# Returns the diagonal element and pushes the other nonzero elements to `elements`, unless it is `nothing`
 _apply_term_groups!(elements, diagonal, ::Tuple{}, state, H) = diagonal
 function _apply_term_groups!(elements, diagonal, termgroups::Tuple, state, H)
     for (term, precomp) in first(termgroups)
         newstate, amp = _apply_local_operators(term, state, H, precomp)
         iszero(amp) && continue
-        newstate == state ? (diagonal += convert(typeof(diagonal), amp)) : push!(elements, newstate => amp)
+        newstate == state ? (diagonal += convert(typeof(diagonal), amp)) : isnothing(elements) || push!(elements, newstate => amp)
     end
     return _apply_term_groups!(elements, diagonal, Base.tail(termgroups), state, H)
 end
