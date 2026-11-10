@@ -89,12 +89,12 @@ end
 _factors_eltype(C, factors) = mapreduce(f -> _term_eltype(C, typeof(f)), promote_type, factors; init = C)
 mat_eltype(::S) where {S} = mat_eltype(S)
 """
-    mat_eltype(::Type{O})
+    mat_eltype(::Type{K})
 
-Element type of the matrix elements of a symbolic operator of type `O`. Matrix
+Element type of the matrix elements of operators of kind `K`. Matrix
 representations promote it with the coefficients of the expression, after giving its floats
-the precision of float coefficients. The fallback is `Float64`, so an operator type with
-complex matrix elements must add a method, for example `mat_eltype(::Type{<:MyOp}) = ComplexF64`.
+the precision of float coefficients. The fallback is `Float64`, so a kind with
+complex matrix elements must add a method, for example `mat_eltype(::Type{MyKind}) = ComplexF64`.
 """
 mat_eltype(::Type{S}) where {S} = Float64
 
@@ -548,18 +548,12 @@ function _term_matrix_representation(op, H, repr::Union{EagerSparseRepr, EagerDe
     finalize!(accumulator, H)
 end
 
-# function apply_local_operator(op::NCMul{C,F}, state::AbstractFockState, space::AbstractHilbertSpace, (pos, daggers)) where {C,F<:AbstractFermionSym}
-#     new_state, amp = togglefermions(Iterators.reverse(pos), Iterators.reverse(daggers), state)
-#     return new_state, amp
-# end
-
-
 ## Automatic basis inference from operator
 """
     symbolic_groups(op)
 
-Extract all unique symbolic bases from an operator expression.
-Returns a set of unique bases found in the operator.
+Extract all unique groups from an operator expression.
+Returns a set of the groups found in the operator.
 """
 function symbolic_groups(op)
     combine(x, y) = nothing

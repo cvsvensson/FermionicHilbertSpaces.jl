@@ -5,7 +5,7 @@
 Create one or more fermion species with the given names. Indexing into fermions species
 gives a concrete fermion. Fermions in one `@fermions` block anticommute with each other, 
 and commute with fermions in other `@fermions` blocks.
-`a[l]` is the annihilation operator of the mode labelled `l`, `a[l]'` its creation operator, and `a[i, σ]` is the mode labelled `(i, σ)`.
+`a[l]` is the annihilation operator of the mode labelled `l`, `a[l]'` its creation operator, and `a[i, σ]` is the annihilation operator of the mode labelled `(i, σ)`.
 
 # Examples:
 - `@fermions a b` creates two species of fermions that anticommute:
@@ -59,6 +59,7 @@ function Base.isless(a::FermionSym, b::FermionSym)
 end
 
 hilbert_space(m::Mode{<:Field{Fermion}}) = FermionicSpace([m], symbolic_group(m))
+hilbert_space(m::Mode{<:Field{Fermion}}, states) = _no_space(m, states)
 
 # The sign λ in a * b = λ * b * a + scalar
 exchange_phase(a::FermionSym, b::FermionSym) = symbolic_group(a) == symbolic_group(b) ? -1 : 1
