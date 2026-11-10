@@ -169,7 +169,7 @@ function apply_local_operators(op::NCMul{<:Any, <:Union{Fermion, FermionSym}}, s
     return newfocknbr, (fermionparity ? -op.coeff : op.coeff)
 end
 
-function apply_local_operator(op::Fermion, state::FockNumber{I}, space, bitmask) where I
+function apply_local_operator(op::Fermion, state::FockNumber{I}, space, bitmask) where {I}
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1
     factor = op

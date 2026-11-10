@@ -227,7 +227,7 @@ end
 
 partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
 
-function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,S<:MajoranaSym,F}
+function partial_trace(m::NCMul{C, S, F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C, S <: MajoranaSym, F}
     sub_modes = modes(Hsub)
     for f in m.factors
         if f ∉ sub_modes
@@ -236,10 +236,10 @@ function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaH
     end
     return m * dim(H) / dim(Hsub)
 end
-function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace; kwargs...) where {C,C2,S<:MajoranaSym,F}
+function partial_trace(m::NCAdd{C, NCMul{C2, S, F}}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace; kwargs...) where {C, C2, S <: MajoranaSym, F}
     return sum(partial_trace(term, H, Hsub; kwargs...) for term in NCterms(m); init=0 * m) + m.coeff * dim(H) / dim(Hsub)
 end
-function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, Hs::Pair{<:MajoranaHilbertSpace,<:MajoranaHilbertSpace}) where {C,C2,S<:MajoranaSym,F}
+function partial_trace(m::NCAdd{C, NCMul{C2, S, F}}, Hs::Pair{<:MajoranaHilbertSpace, <:MajoranaHilbertSpace}) where {C, C2, S <: MajoranaSym, F}
     return partial_trace(m, Hs...)
 end
 

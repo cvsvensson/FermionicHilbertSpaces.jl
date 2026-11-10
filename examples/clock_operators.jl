@@ -27,12 +27,12 @@ struct ClockState{D} <: AbstractBasisState # A clock state with dimension D.
     ClockState{D}(n) where D = new{D}(mod(n, D))
 end
 ## Action on local basis states.
-function apply_local_operator(op::Clock{:X}, state::ClockState{D}, space, precomp) where D
+function apply_local_operator(op::Clock{:X}, state::ClockState{D}, space, precomp) where {D}
     newstate = ClockState{D}(state.n + (op.adjoint ? -1 : 1))
     amp = 1
     newstate, amp
 end
-function apply_local_operator(op::Clock{:Z}, state::ClockState{D}, space, precomp) where D
+function apply_local_operator(op::Clock{:Z}, state::ClockState{D}, space, precomp) where {D}
     amp = exp((op.adjoint ? -1 : 1) * 2π * im * state.n / D)
     state, amp
 end

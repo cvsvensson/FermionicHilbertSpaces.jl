@@ -261,7 +261,7 @@ end
 
 function Base.show(io::IO, x::SpinSym)
     print(io, x.mode, "[:", (:-, :z, :+)[x.kind.shift + 2], "]")
-    if x.kind.exponent != 1
+    return if x.kind.exponent != 1
         print(io, "^", x.kind.exponent)
     end
 end
