@@ -360,15 +360,15 @@ function _orbit_block_basis(H, Hs, perms, weights, method, ::Type{T}; check = tr
     mapper = state_mapper(H, Hs)
     substates = unique_split_state(first(states), mapper)
     gs = [_match_perm(perm, substates) for perm in perms]
-    images = [state_index(permute_state(state, mapper, g), H) for state in states, g in gs]
+    images = Int[state_index(permute_state(state, mapper, g), H) for state in states, g in gs]
     i = findfirst(iszero, images)
     isnothing(i) || throw(ArgumentError("The permutation maps the basis state `$(states[i[1]])` outside the space."))
 
     d = length(states)
     parent = collect(1:d)
     rel = ones(Int, d)
-    for j in 1:d, i in view(images, j, :)
-        ri, rj = first(_find_signed!(parent, rel, i)), first(_find_signed!(parent, rel, j))
+    for g in axes(images, 2), j in 1:d
+        ri, rj = first(_find_signed!(parent, rel, images[j, g])), first(_find_signed!(parent, rel, j))
         ri == rj || (parent[ri] = rj)
     end
     label = zeros(Int, d)
