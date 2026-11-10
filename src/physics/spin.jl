@@ -223,13 +223,13 @@ end
 
 end
 
-# The spin operator `op` on `mode`: a symbol or integer alias of `:x`, `:y`, `:z`, `:+`, `:-` or the identity `:I`.
+# The spin operator `op` on `mode`: `:x`, `:y`, `:z`, `:+`, `:-`, an alias of these, or the identity `:I`.
 function _spin_operator(mode, op)
     if op in _spin_x_aliases
         return Op(Spin(1, 1), mode) / 2 + Op(Spin(-1, 1), mode) / 2
     elseif op in _spin_y_aliases
         return Op(Spin(1, 1), mode) / (2im) - Op(Spin(-1, 1), mode) / (2im)
-    elseif op in _spin_identity_aliases
+    elseif op === :I
         return 1 // 1
     else
         return _spin_power(mode, _spin_shift(op), 1)
@@ -241,10 +241,9 @@ function _spin_power(mode, shift, exponent)
     !(_spin(mode) isa Nothing) && shift != 0 && exponent > Int(2 * _spin(mode)) && return 0 // 1
     return Op(Spin(shift, exponent), mode)
 end
-const _spin_x_aliases = (:x, :X, 1)
-const _spin_y_aliases = (:y, :Y, 2)
-const _spin_z_aliases = (:z, :Z, 3)
-const _spin_identity_aliases = (:I, 0)
+const _spin_x_aliases = (:x, :X)
+const _spin_y_aliases = (:y, :Y)
+const _spin_z_aliases = (:z, :Z)
 const _spin_plus_aliases = (:+, :plus, :p)
 const _spin_minus_aliases = (:-, :minus, :m)
 function _spin_shift(op)
@@ -255,7 +254,8 @@ function _spin_shift(op)
     elseif op in _spin_minus_aliases
         -1
     else
-        throw(ArgumentError("Invalid spin operator symbol, got `$op`."))
+        hint = op isa Integer ? " `@spin S` is a single spin with operators such as `S[:z]`, and `@spins s` gives the sites `s[i]`." : ""
+        throw(ArgumentError("Invalid spin operator symbol, got `$(repr(op))`.$hint"))
     end
 end
 
@@ -398,6 +398,7 @@ end
     Sp1 = S1[:+]
     Sm1 = S1[:-]
     Sx1 = S1[:x]
+    @test_throws ArgumentError S1[1]
     Sy1 = S1[:y]
 
     Sz2 = S2[:z]
