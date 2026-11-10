@@ -89,7 +89,7 @@ function _apply_term_chunks!(y, x, L, α, chnl::Channel)
     return y
 end
 
-function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:Any,<:Any,<:Any,<:StateChunking}, x::AbstractVecOrMat, α, β) where T
+function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:Any, <:Any, <:Any, <:StateChunking}, x::AbstractVecOrMat, α, β) where {T}
     if iszero(β)
         fill!(y, zero(T))
     else
