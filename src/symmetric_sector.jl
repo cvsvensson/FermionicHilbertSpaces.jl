@@ -43,6 +43,8 @@ function _is_symmetry(g)
     return all(ours)
 end
 const _MaybeSymmetry = Union{Relabel, LocalMap, ComposedFunction}
+hilbert_space(::Field, ::AbstractVector, g::Union{Relabel, LocalMap}) = as_constraint(g)
+constrain_space(space, g::Union{Relabel, LocalMap}) = as_constraint(g)
 as_constraint(g::_MaybeSymmetry) = _is_symmetry(g) ? throw(ArgumentError("A symmetry needs an eigenvalue, as in `Relabel(g) => 1`.")) : invoke(as_constraint, Tuple{Function}, g)
 as_constraint(p::Pair{<:_MaybeSymmetry}) = _is_symmetry(first(p)) ? SymmetryConstraint((first(p),), (last(p),)) : invoke(as_constraint, Tuple{Pair}, p)
 
@@ -102,6 +104,9 @@ function _root_of_unity(λ, n)
     return cispi(2 * round(Int, n * angle(λ) / 2π) / n)
 end
 
+_canonical(λ) = all(isinteger, reim(λ)) ? (isreal(λ) ? Int(real(λ)) : Complex{Int}(λ)) : λ
+_rounded(λ) = λ isa Complex{<:AbstractFloat} ? round(λ; digits = 4) : λ
+
 # All elements of the group with identity `e` and their characters. A word in the generators has the product of their
 # characters, so two words for one element must agree.
 function _group_and_characters(e, generators, λs)
@@ -159,7 +164,10 @@ function constrain_space(space::AbstractHilbertSpace, c::SymmetryConstraint)
     atoms = collect(atomic_factors(space))
     e = _element(Relabel(identity), space, atoms)
     generators = [_element(g, space, atoms) for g in c.maps]
-    elements, λs = _group_and_characters(e, generators, [_root_of_unity(λ, _order(g, e)) for (g, λ) in zip(generators, c.eigenvalues)])
+    roots = [_root_of_unity(λ, _order(g, e)) for (g, λ) in zip(generators, c.eigenvalues)]
+    # The sector does not depend on how its eigenvalues were written.
+    c = SymmetryConstraint(c.maps, Tuple(map(_canonical, roots)))
+    elements, λs = _group_and_characters(e, generators, roots)
     # Without local maps the elements are plain permutations, which are faster to apply and carry the fermionic signs.
     perms = all(g -> last(g) == last(e), elements) ? first.(elements) : [SiteMap(perm, locs, atoms) for (perm, locs) in elements]
     T = all(isreal, λs) ? Float64 : ComplexF64
@@ -196,7 +204,7 @@ factors(H::SymmetricSector) = throw(_no_factors_error(H))
 _no_factors_error(H) = ArgumentError("The basis states of `$H` are orbits of a symmetry, not product states, so it has no factors. Use its parent space.")
 Base.:(==)(H1::SymmetricSector, H2::SymmetricSector) = H1 === H2 || (H1.parent == H2.parent && H1.symmetry == H2.symmetry && H1.transposed == H2.transposed)
 Base.hash(H::SymmetricSector, h::UInt) = hash((H.parent, H.symmetry, H.transposed), h)
-Base.show(io::IO, H::SymmetricSector) = print(io, "$(dim(H))-dimensional SymmetricSector(", join(("$g => $λ" for (g, λ) in zip(H.symmetry.maps, H.symmetry.eigenvalues)), ", "), ")")
+Base.show(io::IO, H::SymmetricSector) = print(io, "$(dim(H))-dimensional SymmetricSector(", join(("$g => $(_rounded(λ))" for (g, λ) in zip(H.symmetry.maps, H.symmetry.eigenvalues)), ", "), ")")
 # The basis of the transposed space is the complex conjugate one.
 TransposedSpace(H::SymmetricSector) = SymmetricSector(TransposedSpace(H.parent), H.symmetry, H.amplitudes, H.reps, H.norms, !H.transposed)
 
@@ -363,6 +371,8 @@ end
     @test_throws ArgumentError representation(Sz, Axes(sector(0, space), H0))
     @test_throws ArgumentError hilbert_space(S, 1:N, Relabel(j -> j + 1) => 1)
     @test_throws ArgumentError hilbert_space(S, 1:N, Relabel(T) => im)
+    @test_throws "needs an eigenvalue" hilbert_space(S, 1:N, Relabel(T))
+    @test hilbert_space(S, 1:N, Relabel(T) => 1.0) == hilbert_space(S, 1:N, Relabel(T) => exp(0im))
     @test_throws ArgumentError constrain_space(space, Relabel(T) => 1, basisstates(space))
     @test sum(k -> dim(hilbert_space(S, 1:N, Relabel(T) => cispi(2k / N))), 0:(N - 1)) == 2^N
     @test size(representation(Sz, hilbert_space(S, 1:N, (Sz => N // 2, Relabel(T) => -1)))) == (0, 0)
@@ -434,6 +444,7 @@ end
     @test_throws ArgumentError representation(1.0e9 + S[1][:z], hilbert_space(S, 1:N, flip => 1))
     @test E(ham, H(flip ∘ (Relabel(T) ∘ flip) => -1)) ≈ E(ham, H(Relabel(T) => -1))
     @test_throws ArgumentError H(sin ∘ Relabel(T) => 1)
+    @test_throws "needs an eigenvalue" hilbert_space(S, 1:N, flip)
 
     # A staggered field is kept by neither the translation nor the inversion, but by their product
     staggered = ham + sum((-1)^j * S[j][:z] for j in 1:N)
