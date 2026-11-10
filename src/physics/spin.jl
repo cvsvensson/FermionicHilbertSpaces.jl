@@ -226,7 +226,7 @@ end
 
 end
 
-function SpinSym(mode::B, op, exponent::Integer=1) where {B}
+function SpinSym(mode::B, op, exponent::Integer = 1) where {B}
     exponent < 0 && throw(ArgumentError("The spin operator `exponent` must be nonnegative, got $exponent."))
     exponent == 0 && return 1 // 1
     if op in _spin_x_aliases
