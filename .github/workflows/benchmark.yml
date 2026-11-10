@@ -1,6 +1,8 @@
 name: Benchmark this PR
-# Comment `/benchmark` on a PR, or run `gh workflow run benchmark.yml -f pr=<number>`.
+# Runs on PRs labelled `performance`, on a `/benchmark` comment, or by hand: `gh workflow run benchmark.yml -f pr=<number>`.
 on:
+  pull_request_target:
+    types: [labeled, synchronize]
   issue_comment:
     types: [created]
   workflow_dispatch:
@@ -15,6 +17,8 @@ jobs:
   bench:
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'performance') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'performance')) ||
       (github.event.issue.pull_request && startsWith(github.event.comment.body, '/benchmark') &&
        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
@@ -23,7 +27,7 @@ jobs:
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ inputs.pr || github.event.issue.number }}
+          PR: ${{ inputs.pr || github.event.issue.number || github.event.pull_request.number }}
         run: |
           echo "number=$PR" >> "$GITHUB_OUTPUT"
           echo "sha=$(gh pr view "$PR" --repo "${{ github.repository }}" --json headRefOid --jq .headRefOid)" >> "$GITHUB_OUTPUT"
