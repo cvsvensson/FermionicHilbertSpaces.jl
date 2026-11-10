@@ -16,54 +16,61 @@ representation(ham, sector(0, Hk), :lazy)
 struct Permutation{G}
     map::G
 end
-as_constraint(::Permutation) = throw(ArgumentError("A permutation needs a charge, as in `Permutation(g) => k`."))
+Base.show(io::IO, p::Permutation) = print(io, "Permutation(", p.map, ")")
+
+"""
+    LocalMap(f)
+
+A symmetry that acts on each site `l` with the single-site operator `f(l)`, which must permute the basis states of the
+site, as `l -> 2S[l][:x]` does for spin 1/2. `LocalMap(f) => k` works like [`Permutation`](@ref) and combines with it.
+`Permutation(g) ∘ LocalMap(f) => k` is the single symmetry that acts with the local map and then permutes the modes.
+"""
+struct LocalMap{F}
+    op::F
+end
+Base.show(io::IO, l::LocalMap) = print(io, "LocalMap(", l.op, ")")
 
 struct PermutationConstraint{M <: Tuple, C <: Tuple} <: AbstractConstraint
     maps::M
     charges::C
 end
-
-"""
-    LocalMap(f)
-
-A symmetry that acts with the single-site operator `f(l)` on every site `l`, which must permute the basis states of the
-site in the same way on every site, as `l -> 2S[l][:x]` does for spin 1/2. `LocalMap(f) => k` works like
-[`Permutation`](@ref) and combines with it.
-"""
-struct LocalMap{F}
-    op::F
-end
-as_constraint(::LocalMap) = throw(ArgumentError("A local map needs a charge, as in `LocalMap(f) => k`."))
-
-function as_constraint((p, k)::Pair{<:Union{Permutation, LocalMap}})
-    k isa Integer || throw(ArgumentError("The charge of a permutation is an integer, got `$k`."))
-    return PermutationConstraint((p isa Permutation ? p.map : p,), (k,))
+const _Symmetry = Union{Permutation, LocalMap, ComposedFunction{<:Union{Permutation, LocalMap, ComposedFunction}, <:Union{Permutation, LocalMap}}}
+as_constraint(::_Symmetry) = throw(ArgumentError("A symmetry needs a charge, as in `Permutation(g) => k`."))
+function as_constraint((g, k)::Pair{<:_Symmetry})
+    k isa Integer || throw(ArgumentError("The charge of a symmetry is an integer, got `$k`."))
+    return PermutationConstraint((g,), (k,))
 end
 
-# A group element is a factor permutation and a permutation `loc` of the local basis states, applied on every site. The
-# two commute, since `loc` is the same on every site.
-_generator(g, space, atoms, d) = (_atom_permutation(g, atoms), collect(1:d))
-function _generator(l::LocalMap, space, atoms, d)
+# A group element `(perm, locs)` maps a product state to the one whose factor `i` is the image of the old factor
+# `perm[i]` under `locs[i]`, a permutation of the basis states of site `i`.
+_element(p::Permutation, space, atoms) = (_atom_permutation(p.map, atoms), [collect(1:dim(atom)) for atom in atoms])
+function _element(l::LocalMap, space, atoms)
     phase_factor_u(state_mapper(space, atoms)) == Returns(1) || throw(ArgumentError("A `LocalMap` does not support fermions."))
     locs = map(atoms) do atom
-        M = Matrix(representation(l.op(atomic_id(atom).label), atom))
-        loc = [findfirst(!iszero, c) for c in eachcol(M)]
-        all(isone, sum(!iszero, M; dims = 1)) && all(isone, M[CartesianIndex.(loc, axes(M, 2))]) && isperm(loc) ||
-            throw(ArgumentError("`$(l.op)` does not permute the basis states of `$atom`."))
+        M = representation(l.op(atomic_id(atom).label), atom, Matrix)
+        loc = [argmax(abs.(c)) for c in eachcol(M)]
+        isperm(loc) && M ≈ (axes(M, 1) .== permutedims(loc)) || throw(ArgumentError("`$l` does not permute the basis states of `$atom`."))
         loc
     end
-    allequal(locs) || throw(ArgumentError("`$(l.op)` does not act the same way on every site."))
-    return (collect(eachindex(atoms)), first(locs))
+    return (collect(eachindex(atoms)), locs)
 end
-_compose(g, h) = (h[1][g[1]], g[2][h[2]])
+_element(c::ComposedFunction, space, atoms) = _compose(_element(c.outer, space, atoms), _element(c.inner, space, atoms))
+_compose((p, ls), (q, ms)) = (q[p], [l[ms[i]] for (l, i) in zip(ls, p)])
+function _order(g, e)
+    n, h = 1, g
+    while h != e
+        n, h = n + 1, _compose(g, h)
+    end
+    return n
+end
 
 struct SiteMap{P, A}
     perm::P
-    loc::Vector{Int}
-    atom::A
+    locs::Vector{Vector{Int}}
+    atoms::A
 end
-_match_perm(g::SiteMap, substates::NTuple{N, Any}) where {N} = SiteMap(_match_perm(g.perm, substates), g.loc, g.atom)
-permute_state(state, mapper, g::SiteMap) = permute_state(state, mapper, g.perm, s -> basisstate(g.loc[state_index(s, g.atom)], g.atom))
+_match_perm(g::SiteMap, substates::NTuple{N, Any}) where {N} = SiteMap(_match_perm(g.perm, substates), g.locs, g.atoms)
+permute_state(state, mapper, g::SiteMap) = permute_state(state, mapper, g.perm, (i, s) -> basisstate(g.locs[i][state_index(s, g.atoms[i])], g.atoms[i]))
 
 # The permutation of `atoms` that `g` induces through the labels of their modes
 function _atom_permutation(g, atoms)
@@ -78,24 +85,9 @@ function _atom_permutation(g, atoms)
     return perm
 end
 
-# The least common multiple of the cycle lengths
-function _order(perm)
-    n, seen = 1, falses(length(perm))
-    for i in eachindex(perm)
-        len, j = 0, i
-        while !seen[j]
-            seen[j] = true
-            j, len = perm[j], len + 1
-        end
-        n = lcm(n, max(len, 1))
-    end
-    return n
-end
-
-# All elements of the group and their characters. A word in the generators has the product of their characters, so
-# two words for one element must agree.
-function _group_and_characters(generators, λs)
-    e = map(x -> collect(eachindex(x)), first(generators))
+# All elements of the group with identity `e` and their characters. A word in the generators has the product of their
+# characters, so two words for one element must agree.
+function _group_and_characters(e, generators, λs)
     characters = Dict(e => one(eltype(λs)))
     queue = [e]
     while !isempty(queue)
@@ -138,9 +130,9 @@ end
 """
     SymmetricSector
 
-The sector `constrain_space(H, Permutation(g) => k)` of a [`Permutation`](@ref), with one basis vector per orbit of the
-basis states of `H`. Representing an operator throws an `ArgumentError` unless relabeling its modes by each
-permutation leaves it unchanged. Move states with
+The sector `constrain_space(H, Permutation(g) => k)` of a [`Permutation`](@ref) or [`LocalMap`](@ref), with one basis
+vector per orbit of the basis states of `H`. Representing an operator throws an `ArgumentError` unless each symmetry
+leaves it unchanged. Move states with
 `embed(v, Hk => H)` and `change_basis(v, H => Hk; projection = true)`.
 """
 struct SymmetricSector{B, P, T, M <: SparseMatrixCSC{T}, C <: PermutationConstraint} <: AbstractHilbertSpace{OrbitRep{B}}
@@ -155,10 +147,11 @@ end
 
 function constrain_space(space::AbstractHilbertSpace, c::PermutationConstraint)
     atoms = collect(atomic_factors(space))
-    d = any(g -> g isa LocalMap, c.maps) ? dim(first(atoms)) : 0
-    generators = [_generator(g, space, atoms, d) for g in c.maps]
-    elements, λs = _group_and_characters(generators, [cispi(2k / lcm(_order(g[1]), _order(g[2]))) for (g, k) in zip(generators, c.charges)])
-    perms = iszero(d) ? first.(elements) : [SiteMap(p, loc, first(atoms)) for (p, loc) in elements]
+    e = _element(Permutation(identity), space, atoms)
+    generators = [_element(g, space, atoms) for g in c.maps]
+    elements, λs = _group_and_characters(e, generators, [cispi(2k / _order(g, e)) for (g, k) in zip(generators, c.charges)])
+    # Without local maps the elements are plain permutations, which are faster to apply and carry the fermionic signs.
+    perms = all(g -> last(g) == last(e), elements) ? first.(elements) : [SiteMap(perm, locs, atoms) for (perm, locs) in elements]
     T = all(isreal, λs) ? Float64 : ComplexF64
     Q = _orbit_block_basis(space, atoms, perms, T.(conj.(λs)), _QR(), T; check = false)
     reps = [basisstate(rowvals(Q)[first(nzrange(Q, n))], space) for n in axes(Q, 2)]
@@ -191,7 +184,7 @@ factors(H::SymmetricSector) = throw(_no_factors_error(H))
 _no_factors_error(H) = ArgumentError("The basis states of `$H` are translation orbits, not product states, so it has no factors. Use its parent space.")
 Base.:(==)(H1::SymmetricSector, H2::SymmetricSector) = H1 === H2 || (H1.parent == H2.parent && H1.symmetry == H2.symmetry && H1.transposed == H2.transposed)
 Base.hash(H::SymmetricSector, h::UInt) = hash((H.parent, H.symmetry, H.transposed), h)
-Base.show(io::IO, H::SymmetricSector) = print(io, "$(dim(H))-dimensional SymmetricSector(", join(("$(g isa LocalMap ? g : "Permutation($g)") => $k" for (g, k) in zip(H.symmetry.maps, H.symmetry.charges)), ", "), ")")
+Base.show(io::IO, H::SymmetricSector) = print(io, "$(dim(H))-dimensional SymmetricSector(", join(("$g => $k" for (g, k) in zip(H.symmetry.maps, H.symmetry.charges)), ", "), ")")
 # The basis of the transposed space is the complex conjugate one. Its operators are transposes of operators already
 # checked on `H`, so `_check_operator` skips it.
 TransposedSpace(H::SymmetricSector) = SymmetricSector(TransposedSpace(H.parent), H.symmetry, H.amplitudes, H.reps, H.norms, !H.transposed)
@@ -227,32 +220,52 @@ function _apply_local_operators(op, state::OrbitRep, H::SymmetricSector, precomp
 end
 
 _check_invariant(op, H::SymmetricSector) = foreach(g -> _check_invariant(op, H, g), H.symmetry.maps)
-_check_invariant(op, H, g) = iszero(_relabel(op, g) - op) || throw(ArgumentError("The operator changes under the permutation `$g`, so it has no representation on the symmetric sector."))
-function _check_invariant(op, H, l::LocalMap)
-    atoms = Dict(atomic_id(a) => a for a in atomic_factors(H.parent))
-    image(o::Op) = _local_image(l, o, atoms[o.mode])
-    iszero(_substitute(op, image) - op) || throw(ArgumentError("The operator changes under `$(l.op)`, so it has no representation on the symmetric sector."))
+_changes_error(g) = ArgumentError("The operator changes under `$g`, so it has no representation on the symmetric sector.")
+# Relabeling keeps the signs of reordering fermions.
+_check_invariant(op, H, p::Permutation) = iszero(_relabel(op, p.map) - op) || throw(_changes_error(p))
+_relabel(op::Op, g) = Op(op.kind, Mode(op.mode.field, g(op.mode.label)))
+_relabel(m::NCMul, g) = m.coeff * prod(_relabel(x, g) for x in m.factors)
+_relabel(a::NCAdd, g) = a.coeff + sum((c * _relabel(m, g) for (m, c) in a.dict); init = 0)
+_relabel(op, g) = throw(ArgumentError("Only operators on fields can be checked for symmetry, got `$op`."))
+
+# The element `(perm, locs)` maps the matrix unit `(a, b)` of site `perm[i]` to `(locs[i][a], locs[i][b])` of site `i`.
+function _check_invariant(op, H, g)
+    atoms = collect(atomic_factors(H.parent))
+    perm, locs = _element(g, H.parent, atoms)
+    site = invperm(perm)
+    units = _matrix_units(op, atoms)
+    image = Dict(sort!([site[n] => (locs[site[n]][a], locs[site[n]][b]) for (n, (a, b)) in key]) => x for (key, x) in units)
+    tol = sqrt(eps()) * maximum(abs, values(units))
+    all(x -> abs(x) <= tol, values(mergewith(-, units, image))) || throw(_changes_error(g))
     return nothing
 end
-# The image of `o` under conjugation by the local map, as a combination of `_local_basis(o)`. The map is unitary, so
-# the fit is exact when the image lies in the span of the basis.
-function _local_image(l::LocalMap, o::Op, atom)
-    basis = _local_basis(o)
-    B = reduce(hcat, (vec(Matrix(representation(b, atom))) for b in basis))
-    U = Matrix(representation(l.op(label(o)), atom))
-    Y = vec(U * Matrix(representation(o, atom)) * U')
-    c = B \ Y
-    norm(B * c - Y) <= sqrt(eps()) || throw(ArgumentError("The local map `$(l.op)` does not act on `$o` within its local operators."))
-    return sum(round(x; digits = 12) * b for (x, b) in zip(c, basis))
+# The coefficients of `op` in the products of single-site operators where each site has a matrix unit `site => (a, b)`
+# of the traceless part of its matrix. The identity parts go to the products on fewer sites, which makes the
+# coefficients independent of how `op` is written.
+function _matrix_units(op, atoms)
+    position = Dict(atomic_id(atom) => n for (n, atom) in enumerate(atoms))
+    matrices = Dict{Any, Matrix}()
+    terms, constant = _operator_terms(op)
+    units = Dict{Vector{Pair{Int, NTuple{2, Int}}}, Number}([] => constant)
+    for term in terms
+        products = Dict{Int, Matrix}()
+        for o in term.factors
+            n = get(() -> throw(ArgumentError("Only operators on the modes of the space can be checked for symmetry, got `$o`.")), position, atomic_id(o))
+            A = get!(() -> representation(o, atoms[n], Matrix), matrices, o)
+            products[n] = haskey(products, n) ? products[n] * A : A
+        end
+        parts = map(sort!(collect(products); by = first)) do (n, A)
+            t = tr(A) / size(A, 1)
+            A0 = A - t * I
+            [nothing => t; [(n => Tuple(ab)) => A0[ab] for ab in findall(!iszero, A0)]]
+        end
+        for choice in Iterators.product(parts...)
+            key = Pair{Int, NTuple{2, Int}}[unit for (unit, _) in choice if !isnothing(unit)]
+            units[key] = get(units, key, 0) + term.coeff * prod(last, choice)
+        end
+    end
+    return units
 end
-_local_basis(o::Op{Spin}) = [Op(Spin(s, o.kind.exponent), o.mode) for s in -1:1]
-_local_basis(o::Op{Fermion}) = [Op(Fermion(true), o.mode), Op(Fermion(false), o.mode)]
-
-_relabel(op, g) = _substitute(op, o -> Op(o.kind, Mode(o.mode.field, g(o.mode.label))))
-_substitute(op::Op, f) = f(op)
-_substitute(m::NCMul, f) = m.coeff * prod(_substitute(x, f) for x in m.factors)
-_substitute(a::NCAdd, f) = a.coeff + sum((c * _substitute(m, f) for (m, c) in a.dict); init = 0)
-_substitute(op, f) = throw(ArgumentError("Only operators on fields can be checked for symmetry, got `$op`."))
 
 complementary_subsystem(H::AbstractHilbertSpace, ::_OrbitSpace) = nothing
 function basis_transformation(Hfrom::_OrbitSpace, Hto::_OrbitSpace)
@@ -369,9 +382,27 @@ end
     flip = LocalMap(j -> 2S[j][:x])
     Sz = sum(S[j][:z] for j in 1:N)
     ham = sum(S[j][:]'S[mod1(j + 1, N)][:] for j in 1:N)
-    E(cs...) = eigvals(Hermitian(representation(ham, hilbert_space(S, 1:N, (Sz => 0, Permutation(T) => 0, cs...)), Matrix)))
-    @test sort([E(flip => 0); E(flip => 1)]) ≈ E()
+    E(op, H) = eigvals(Hermitian(representation(op, H, Matrix)))
+    H(cs...) = hilbert_space(S, 1:N, (Sz => 0, cs...))
+    @test sort([E(ham, H(Permutation(T) => 0, flip => 0)); E(ham, H(Permutation(T) => 0, flip => 1))]) ≈ E(ham, H(Permutation(T) => 0))
     @test_throws ArgumentError representation(Sz, hilbert_space(S, 1:N, (Permutation(T) => 0, flip => 0)))
     @test_throws ArgumentError hilbert_space(S, 1:N, (Sz, flip => 0))
     @test_throws ArgumentError hilbert_space(S, 1:N, LocalMap(j -> S[j][:z]) => 0)
+
+    # A staggered field is kept by neither the translation nor the inversion, but by their product
+    staggered = ham + sum((-1)^j * S[j][:z] for j in 1:N)
+    @test sort(reduce(vcat, [E(staggered, H(Permutation(T) ∘ flip => k)) for k in 0:(N - 1)])) ≈ E(staggered, H())
+    @test_throws ArgumentError E(staggered, H(Permutation(T) => 0))
+
+    # Inversion of the even sites only
+    fliphalf = LocalMap(j -> iseven(j) ? 2S[j][:x] : 1)
+    ising = sum(S[j][:x] * S[mod1(j + 1, N)][:x] for j in 1:N) + sum(S[j][:z] for j in 1:2:N)
+    @test sort([E(ising, hilbert_space(S, 1:N, fliphalf => 0)); E(ising, hilbert_space(S, 1:N, fliphalf => 1))]) ≈ E(ising, hilbert_space(S, 1:N))
+    @test_throws ArgumentError E(ising, hilbert_space(S, 1:N, flip => 0))
+
+    # Spin 1, where 2(S^x)^2 - 1 maps m to -m
+    @spins L 1
+    flip1 = LocalMap(j -> 2L[j][:x]^2 - 1)
+    ham1 = sum(L[j][:]'L[mod1(j + 1, 4)][:] + L[j][:z]^2 for j in 1:4)
+    @test sort([E(ham1, hilbert_space(L, 1:4, flip1 => 0)); E(ham1, hilbert_space(L, 1:4, flip1 => 1))]) ≈ E(ham1, hilbert_space(L, 1:4))
 end
