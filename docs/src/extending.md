@@ -29,7 +29,10 @@ Required:
   out of a truncated basis. The method goes on the kind, not on `Op{MyKind}`.
 - [`@field`](@ref) `c::MyKind` creates the field. `c[l]` is the mode labelled `l`, `c[l][k]` is
   `Op(MyKind(k), c[l])`, so a tuple index needs a constructor `MyKind(::Tuple)`, and
-  `hilbert_space(c, labels, states)` has one space per mode.
+  `hilbert_space(c, labels, states)` has one space per mode. A field names one kind type: an operator of
+  another kind on the same mode is `Op(OtherKind(...), c[l])`, or the field is typed by a common abstract
+  supertype whose constructor picks the kind, as in
+  [Custom operators: Floquet](literate_output/floquet_tutorial.md).
 
 Optional:
 
