@@ -377,3 +377,48 @@ _keep_transposed_parts(newstate::ProductState{B}, state::ProductState, H::Produc
 _keep_transposed_parts(newstate, state, H) = newstate
 
 rewrap(::TransposedSpace, space) = TransposedSpace(space)
+@testitem "open_system of a custom algebra" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: AbstractSym, AbstractBasisState, symbolic_group, local_mul_effect,
+        apply_local_operator, mat_eltype, add_tag, tag_label, open_system, dissipator
+    import FermionicHilbertSpaces.NonCommutativeProducts: @nc, Swap, AddTerms
+    struct Shift <: AbstractSym
+        site::Any
+        k::Int
+    end
+    struct Num <: AbstractSym
+        site::Any
+    end
+    @nc Shift Num
+    Base.adjoint(s::Shift) = Shift(s.site, -s.k)
+    Base.adjoint(n::Num) = n
+    symbolic_group(op::Union{Shift,Num}) = op.site
+    local_mul_effect(a::Shift, b::Shift) = Shift(a.site, a.k + b.k)
+    local_mul_effect(a::Num, b::Shift) = AddTerms((Swap(1), b.k * b))
+    struct Site <: AbstractBasisState
+        n::Int
+    end
+    apply_local_operator(s::Shift, state::Site, space, precomp) = (Site(mod(state.n + s.k, 3)), 1)
+    apply_local_operator(::Num, state::Site, space, precomp) = (state, state.n)
+    mat_eltype(::Type{Shift}) = Int
+    add_tag(s::Shift, tag) = Shift(tag_label(s.site, tag), s.k)
+    add_tag(n::Num, tag) = Num(tag_label(n.site, tag))
+
+    l(x) = add_tag(x, :l)
+    r(x) = add_tag(x, :r)
+    @test l(Num(1)) * l(Shift(1, 1)) == l(Shift(1, 1)) * l(Num(1)) + l(Shift(1, 1))
+    @test l(Num(1)) * r(Shift(1, 1)) == r(Shift(1, 1)) * l(Num(1))
+    @test l(r(Shift(1, 1))) != r(l(Shift(1, 1)))
+    for labels in ((1, 2), (:a, :b))
+        H = tensor_product([GenericHilbertSpace(k, Site.(0:2)) for k in labels])
+        Hlr, Hl, Hr, left, right = open_system(H)
+        A = Shift(labels[1], 1) * Num(labels[2]) + 2 * Num(labels[1])
+        B = Shift(labels[2], -1) + Shift(labels[1], 1) * Shift(labels[2], 1)
+        MA, MB = representation(A, H, Matrix), representation(B, H, Matrix)
+        ρ = randn(ComplexF64, dim(H), dim(H))
+        v = reshape(ρ, (Hl, Hr) => Hlr)
+        @test reshape(representation(left(A) * right(B), Hlr) * v, Hlr => (Hl, Hr)) ≈ MA * ρ * MB
+        L = representation(-1im * (left(A + A') - right(A + A')) + dissipator(B), Hlr)
+        @test abs(tr(reshape(L * v, Hlr => (Hl, Hr)))) < 1e-10
+    end
+end
