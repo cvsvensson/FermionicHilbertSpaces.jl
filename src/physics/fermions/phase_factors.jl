@@ -321,8 +321,8 @@ end
     @test uξ(p, fockstates) == [1, 1, 1, -1, 1, -1, -1, -1]
 
     # The sign of the occupied pairs whose mode in the later group has the smaller site
-    reference(p, f) = prod((-1)^(_bit(f, i) && _bit(f, j)) for s in eachindex(p) for r in s+1:length(p) for j in p[s] for i in p[r] if i < j; init=1)
+    reference(p, f) = prod((-1)^(_bit(f, i) && _bit(f, j)) for s in eachindex(p) for r in (s + 1):length(p) for j in p[s] for i in p[r] if i < j; init = 1)
     for p in ([[3, 7], [1, 5, 6], [2, 4]], [[7, 1], [4], [2, 6], [3, 5]])
-        @test all(f -> uξ(p, [f]) == [reference(p, f)], map(FockNumber, 0:2^7-1))
+        @test all(f -> uξ(p, [f]) == [reference(p, f)], map(FockNumber, 0:(2^7 - 1)))
     end
 end
