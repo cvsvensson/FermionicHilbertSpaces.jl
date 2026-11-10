@@ -23,6 +23,8 @@ constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector, Basis
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, _states_of(space, states))
 function constrain_space(space, constraint::AbstractConstraint)
+    constraint, translation = _split_translation(constraint)
+    isnothing(translation) || return constrain_space(constrain_space(space, constraint), translation)
     split = pruning_split(space, constraint)
     isnothing(split) && return constrain_space(space, constraint, basisstates(space))
     # The search varies its last space fastest and `basisstates(space)` its first atom, so the reversed split keeps that order.

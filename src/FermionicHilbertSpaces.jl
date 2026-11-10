@@ -9,8 +9,8 @@ module FermionicHilbertSpaces
 
 using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Hermitian,
     UniformScaling, diag, diagind, dot,
-    eigen!, eigvals, eigvecs, isdiag, ishermitian,
-    mul!, normalize, nullspace, qr, rank, rmul!, svd, svdvals, tr, I
+    eigen!, eigvals, eigvecs, isdiag, ishermitian, issymmetric,
+    mul!, norm, normalize, nullspace, qr, rank, rmul!, svd, svdvals, tr, I
 using LowRankMatrices: LowRankMatrices, LowRankMatrix
 import SciMLOperators
 using FillArrays: Zeros, Fill, Eye
@@ -168,6 +168,7 @@ include("physics/bosons.jl")
 include("physics/spin.jl")
 include("physics/open_systems.jl")
 include("symbolic_states.jl")
+include("symmetric_sector.jl")
 
 include("printing.jl")
 include("physics/fermions/free_fermions.jl")
