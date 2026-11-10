@@ -70,13 +70,14 @@ weights = [[cis(2π * k * s / N) for s in 0:N-1] for k in momenta];
 using FermionicHilbertSpaces: highest_weight_states
 Splus = sum(S[k][:+] for k in 1:N)
 spins = filter(>=(0), quantumnumbers(space))
+blocks = Dict(s => representation(H, sector(s, space)) for s in spins)
 function tower_energies(w)
     irrep_basis(M) = (sec = sector(M, space); symmetric_sector(sec, factors(sec), (perms, w)))
     hws = highest_weight_states(space, Splus; basis = irrep_basis)
     return map(spins) do s
         haskey(hws, s) || return Inf
         V = hws[s]
-        eigmin(Hermitian(Matrix(V' * representation(H, sector(s, space)) * V)))
+        eigmin(Hermitian(Matrix(V' * blocks[s] * V)))
     end
 end
 energies = stack(map(tower_energies, weights); dims = 1)
