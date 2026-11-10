@@ -6,14 +6,12 @@
 # [arXiv:2306.07522](https://arxiv.org/abs/2306.07522); `comparison.jl` checks it against HierarchicalEOM.jl.
 
 using FermionicHilbertSpaces
-import FermionicHilbertSpaces: AbstractBasisState, AbstractSym,
-    apply_local_operator, mat_eltype, symbolic_group, add_tag
-import FermionicHilbertSpaces.NonCommutativeProducts: @nc
+import FermionicHilbertSpaces: AbstractBasisState, Field, Op, apply_local_operator, add_tag
 
 # The bath correlation function is ``C(τ) = \sum_l ξ_l e^{-χ_l τ}``, and the hierarchy is
 # truncated at total tier `m_max`.
-struct HEOMBosonicBath{L,V1,V2}
-    id::L
+struct HEOMBosonicBath{V1,V2}
+    id::Symbol
     m_max::Int
     χ::V1
     ξ::V2
@@ -25,41 +23,41 @@ Base.hash(b::HEOMBosonicBath, h::UInt) = hash((b.id, b.m_max), h)
 struct ADO{N} <: AbstractBasisState
     n::NTuple{N,Int}
 end
+# The ADO index is the single mode of a field named after the bath.
+heom_mode(bath) = Field{HEOMKind}(bath.id)[]
 function heom_bosonic_aux_space(bath)
     m = bath.m_max
     ns = (reverse(n) for n in Iterators.product(ntuple(_ -> 0:m, length(bath.χ))...) if sum(n) <= m)
-    return GenericHilbertSpace(bath.id, [ADO(n) for n in ns])
+    return hilbert_space(heom_mode(bath), [ADO(n) for n in ns])
 end
 
-# `HEOMOp{:up}(l)` raises ``n_l`` with amplitude ``n_l+1`` and vanishes at the truncation tier,
-# `HEOMOp{:down}(l)` lowers ``n_l``, and `HEOMOp{:damping}` multiplies by ``-\sum_l χ_l n_l``.
-struct HEOMOp{T, B} <: AbstractSym
+# The kind `HEOMKind(:up, l, bath)` raises ``n_l`` with amplitude ``n_l+1`` and vanishes at the truncation tier,
+# `:down` lowers ``n_l``, and `:damping` multiplies by ``-\sum_l χ_l n_l``.
+struct HEOMKind{B}
+    type::Symbol
     l::Int
     bath::B
 end
-HEOMOp{T}(l, bath) where {T} = HEOMOp{T, typeof(bath)}(l, bath)
-Base.:(==)(a::HEOMOp{T}, b::HEOMOp{T}) where {T} = a.l == b.l && a.bath == b.bath
-Base.hash(op::HEOMOp{T}, h::UInt) where {T} = hash((T, op.l, op.bath), h)
-@nc HEOMOp
-symbolic_group(op::HEOMOp) = op.bath.id
-mat_eltype(::Type{<:HEOMOp}) = Float64
+HEOMOp(type, l, bath) = Op(HEOMKind(type, l, bath), heom_mode(bath))
 
-function apply_local_operator(op::HEOMOp{:up}, s::ADO, space, precomp)
-    sum(s.n) < op.bath.m_max || return s, 0.0
-    return ADO(Base.setindex(s.n, s.n[op.l] + 1, op.l)), float(s.n[op.l] + 1)
+function apply_local_operator(k::HEOMKind, s::ADO, space, precomp)
+    if k.type === :up
+        sum(s.n) < k.bath.m_max || return s, 0.0
+        return ADO(Base.setindex(s.n, s.n[k.l] + 1, k.l)), float(s.n[k.l] + 1)
+    elseif k.type === :down
+        s.n[k.l] > 0 || return s, 0.0
+        return ADO(Base.setindex(s.n, s.n[k.l] - 1, k.l)), 1.0
+    else
+        return s, -sum(k.bath.χ .* s.n)
+    end
 end
-function apply_local_operator(op::HEOMOp{:down}, s::ADO, space, precomp)
-    s.n[op.l] > 0 || return s, 0.0
-    return ADO(Base.setindex(s.n, s.n[op.l] - 1, op.l)), 1.0
-end
-apply_local_operator(op::HEOMOp{:damping}, s::ADO, space, precomp) = s, -sum(op.bath.χ .* s.n)
 
 # The generator of ``d\rho/dt`` for the system Hamiltonian `H` and the coupling `V` to the bath.
 function heom_generator(H, V, bath)
     Vl, Vr = add_tag(V, :left), add_tag(V, :right)
-    M = -1im * (add_tag(H, :left) - add_tag(H, :right)) + HEOMOp{:damping}(0, bath)
+    M = -1im * (add_tag(H, :left) - add_tag(H, :right)) + HEOMOp(:damping, 0, bath)
     for (l, ξ) in enumerate(bath.ξ)
-        M += -1im * (Vl - Vr) * HEOMOp{:down}(l, bath) - 1im * (ξ * Vl - conj(ξ) * Vr) * HEOMOp{:up}(l, bath)
+        M += -1im * (Vl - Vr) * HEOMOp(:down, l, bath) - 1im * (ξ * Vl - conj(ξ) * Vr) * HEOMOp(:up, l, bath)
     end
     return M
 end

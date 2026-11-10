@@ -78,6 +78,7 @@ function Base.getindex(m::Mode{<:Field{K}}, k) where {K}
     isnothing(mode_operator(K)) || throw(ArgumentError("`$(m.field)[l]` is already an operator, so it cannot be indexed further."))
     return Op(K(k), m)
 end
+Base.getindex(op::Op, k) = throw(ArgumentError("`$op` is already an operator, so it cannot be indexed further."))
 label(m::Mode) = m.label
 label(op::Op) = label(op.mode)
 tags(f::Field) = f.tags
@@ -135,6 +136,7 @@ symbolic_group(op::Op) = symbolic_group(op.mode)
 atomic_id(m::Mode) = m
 atomic_id(op::Op) = op.mode
 _atom_names(m::Mode) = (m,)
+_atom_names(op::Op) = (op,)
 
 # The methods of `hilbert_space(field, labels, ...)` take a vector of labels. Other collections, such as tuples,
 # generators and matrices, are flattened into one. The order of the labels is the order of the basis, so

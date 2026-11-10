@@ -593,26 +593,18 @@ end
 end
 
 @testitem "The diagonal of an operator is found numerically" begin
-    import FermionicHilbertSpaces: AbstractBasisState, AbstractSym, apply_local_operator, symbolic_group
-    import FermionicHilbertSpaces.NonCommutativeProducts: @nc
+    import FermionicHilbertSpaces: @field, Op, AbstractBasisState, apply_local_operator
     # A cyclic shift, whose cube is the identity, which its products do not simplify to.
-    struct Shift <: AbstractSym
-        site::Int
-    end
-    @nc Shift
+    struct Shift end
     struct Clock <: AbstractBasisState
         n::Int
     end
     apply_local_operator(::Shift, s::Clock, space, precomp) = Clock(mod(s.n + 1, 3)), 1
-    symbolic_group(op::Shift) = op.site
-    X(i) = Shift(i)
-    Hs = [GenericHilbertSpace(k, Clock.(0:2)) for k in 1:2]
+    @field x::Shift
+    X(i) = Op(Shift(), x[i])
+    Hs = [hilbert_space(x[k], Clock.(0:2)) for k in 1:2]
     @test Set(basisstates(tensor_product(Hs; constraint = X(1) * X(1) * X(1) + 2 * X(2) * X(2) * X(2) => 3))) == Set(basisstates(tensor_product(Hs)))
-    struct Root2 <: AbstractSym
-        site::Int
-    end
-    @nc Root2
+    struct Root2 end
     apply_local_operator(::Root2, s::Clock, space, precomp) = s, sqrt(2)
-    symbolic_group(op::Root2) = op.site
-    @test_throws "not exact fractions" tensor_product(Hs; constraint = Root2(1) => 1)
+    @test_throws "not exact fractions" tensor_product(Hs; constraint = Op(Root2(), x[1]) => 1)
 end

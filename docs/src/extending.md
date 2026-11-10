@@ -14,48 +14,50 @@ the exported API and may change in a minor release.
 ## Custom operators
 
 A symbolic operator is an [`Op`](@ref)`(kind, mode)`: a kind, which says what the operator is, acting on a mode of
-a field. A new algebra defines the kind, a plain struct `MyKind`; `const MyOp = Op{<:MyKind}` names its
-operators. The tutorial [Custom operators: Clock](literate_output/clock_operators.md) builds one step by step.
+a field. A new algebra defines the kind. The tutorials
+[Custom operators: Clock](literate_output/clock_operators.md) and
+[Custom operators: Floquet](literate_output/floquet_tutorial.md) build one step by step.
 
-Algebra, from [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl):
+Required:
 
-- [`local_mul_effect`](@ref)`(a::MyOp, b::MyOp)` gives the rule for the product `a * b` of
-  operators on the same group: `nothing` keeps it, `Swap(c)` rewrites it as `c * b * a`,
-  `AddTerms((Swap(c), r, ...))` adds further terms, and a number, operator or sum replaces it.
-  Without a rule, products stay as written, so operators that are equal in your algebra can
-  compare unequal. For two different types on the same group, rewrite one argument order in
-  terms of the other.
+- A kind `MyKind`: a plain struct. It should be isbits, and one concrete type for the whole algebra, with a label
+  such as `:X` or `:Z` in a field and not in a type parameter: products of operators of one type are several
+  times faster, and GPU kernels need isbits kinds.
+- `Base.adjoint(kind)` returns the kind of the adjoint operator.
+- [`apply_local_operator`](@ref)`(kind, state, space, precomp) -> (newstate, amplitude)` defines how an operator
+  of that kind acts on a basis state. The amplitude is zero for a state that the operator annihilates or maps
+  out of a truncated basis. The method goes on the kind, not on `Op{MyKind}`.
+- [`@field`](@ref) `c::MyKind` creates the field. `c[l]` is the mode labelled `l`, `c[l][k]` is
+  `Op(MyKind(k), c[l])`, so a tuple index needs a constructor `MyKind(::Tuple)`, and
+  `hilbert_space(c, labels, states)` has one space per mode.
+
+Optional:
+
+- [`local_mul_effect`](@ref)`(a, b)` gives the rule for the product `a * b` of operators on the same group:
+  `nothing` keeps it, `Swap(c)` rewrites it as `c * b * a`, `AddTerms((Swap(c), r, ...))` adds further terms, and
+  a number, operator or sum replaces it. `Swap` and `AddTerms` are imported from
+  `FermionicHilbertSpaces.NonCommutativeProducts`. A rule that returns `nothing`, a number or a `Swap` is defined
+  on the kinds, `local_mul_effect(a::MyKind, b::MyKind)`. A rule that returns operators or needs the mode is
+  defined on `Op{MyKind}`: there `a.kind` and `a.mode` are the parts of an operator, and `a.mode[k]` or
+  `Op(MyKind(...), a.mode)` is another operator on the same mode. Without a rule, products stay as written, so
+  operators that are equal in your algebra can compare unequal. Rules are applied before a basis is truncated,
+  so a simplified product can differ from the product of the truncated matrices at the edge of the basis, as
+  for bosons.
 - Operators on different groups commute and are ordered by group, so no rule is needed for them.
-  Groups of different types are ordered by type name; numbers and strings are compared by value,
-  and tuples element by element. Unequal groups whose types share a name need an `isless` that is
-  a strict total order consistent with `==`; without one, `*` throws a `MethodError`.
-
-Connection to Hilbert spaces:
-
-- [`apply_local_operator`](@ref)`(kind, state, space, precomp) -> (newstate, amplitude)` defines
-  how an operator of that kind acts on a basis state. This is required for matrix representations.
-- [`@field`](@ref) `c::MyKind` creates the field, `c[i][k]` builds `Op(MyKind(k), c[i])`, and
-  `hilbert_space(c, labels, states)` has one space per mode. With a [`mode_operator`](@ref), `c[i]` is the
-  single operator of the mode.
-- `Base.adjoint(kind)` returns the kind of the adjoint operator. This is required; transposed spaces, as
-  used for open systems, apply `adjoint(op)`.
-- [`mat_eltype`](@ref)`(::Type{<:MyKind})` gives the element type of the matrix elements. The
-  default is `Float64`, so operators with complex matrix elements need a method.
-- An operator type that is not an `Op` subtypes [`AbstractSym`](@ref) and defines the methods above for
-  itself. Its [`symbolic_group`](@ref)`(op)` returns a plain label of the space `op` acts on, such as
-  the label of a [`GenericHilbertSpace`](@ref), and `add_tag(op, tag)` rebuilds `op` with the label
-  [`tag_label`](@ref)`(label, tag)` for [`open_system`](@ref). A custom space type other than
-  `GenericHilbertSpace` needs an `add_tag` method too. See
-  [Custom operators: Floquet](literate_output/floquet_tutorial.md).
-- `apply_local_operator(op, state, space, precomp, ::Type{T})` is optional and computes the
-  amplitude in the float type `T` of the matrix. Without it, the amplitude of the method above
-  is converted to `T`, which adds no precision and leaves any `Float64` arithmetic of that method
-  in GPU kernels.
+- [`mat_eltype`](@ref)`(::Type{MyKind})` gives the element type of the matrix elements. The default is
+  `Float64`, so operators with complex matrix elements need a method.
+- `Base.show(io, op::Op{MyKind})` prints an operator; the default is `c[l][kind]`.
+- [`mode_operator`](@ref)`(::Type{MyKind})` returns the kind of the single operator of a mode, which makes
+  `c[l]` that operator.
+- `apply_local_operator(kind, state, space, precomp, ::Type{T})` computes the amplitude in the float type `T`
+  of the matrix. Without it, the amplitude of the method above is converted to `T`, which adds no precision and
+  leaves any `Float64` arithmetic of that method in GPU kernels.
 
 For speed:
 
-- [`_precomputation_before_operator_application`](@ref)`(op, space)` computes data once per
-  operator factor, which `apply_local_operator` then receives as `precomp` for every state.
+- [`_precomputation_before_operator_application`](@ref)`(op::Op{MyKind}, space)` computes data once per
+  operator factor, such as data that depends on the mode, which `apply_local_operator` then receives as
+  `precomp` for every state.
 - [`apply_local_operators`](@ref)`(op::NCMul, state, space, precomps; transpose)` applies a
   whole product at once. A method for products of one operator type avoids applying the
   factors one by one.

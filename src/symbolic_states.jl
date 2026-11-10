@@ -1149,24 +1149,21 @@ end
 end
 
 @testitem "Custom operators with local_mul_effect" begin
-    import FermionicHilbertSpaces: AbstractSym, symbolic_group, local_mul_effect
-    import FermionicHilbertSpaces.NonCommutativeProducts: @nc, Swap
+    import FermionicHilbertSpaces: @field, local_mul_effect
+    import FermionicHilbertSpaces.NonCommutativeProducts: Swap
     # Pauli X and Z on each site: XX = ZZ = 1 and ZX = -XZ.
-    struct PauliX <: AbstractSym
-        site::Int
+    struct Pauli
+        z::Bool
     end
-    struct PauliZ <: AbstractSym
-        site::Int
-    end
-    struct NoRuleOp <: AbstractSym
+    struct NoRule
         id::Int
     end
-    @nc PauliX PauliZ NoRuleOp
-    symbolic_group(op::Union{PauliX, PauliZ}) = (op.site, :pauli)
-    symbolic_group(::NoRuleOp) = 0
-    local_mul_effect(::T, ::T) where {T <: Union{PauliX, PauliZ}} = 1
-    local_mul_effect(::PauliZ, ::PauliX) = Swap(-1)
-    X, Z = PauliX, PauliZ
+    local_mul_effect(a::Pauli, b::Pauli) = a == b ? 1 : a.z ? Swap(-1) : nothing
+    @field σ::Pauli
+    @field noruleop::NoRule
+    X(i) = σ[i][false]
+    Z(i) = σ[i][true]
+    NoRuleOp(id) = noruleop[0][id]
 
     @test iszero(Z(1) * X(1) * Z(1) + X(1))
     @test iszero(Z(1) * X(1) * X(2) + X(2) * X(1) * Z(1))
