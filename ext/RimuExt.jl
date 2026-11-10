@@ -12,7 +12,7 @@ using FermionicHilbertSpaces: AbstractBasisState, dim, isbasisstate, matrix_colu
 
 # Mutable so that Rimu's `==` checks compare identity: on Julia 1.13, `===` can return false
 # for a large immutable compared with itself.
-mutable struct FHSHamiltonian{T,A,O,S,C,G} <: AbstractHamiltonian{T}
+mutable struct FHSHamiltonian{T, A, O, S, C, G} <: AbstractHamiltonian{T}
     const op::O
     const space::S
     const start::A
@@ -29,8 +29,10 @@ function rimu_hamiltonian(op, H, start)
     # Rimu's solvers and walker populations need floating point matrix elements.
     T = float(typeof(identity))
     nterms = sum(length, termgroups; init = 0)
-    return FHSHamiltonian{T,typeof(state),typeof(op),typeof(H),typeof(column),typeof(termgroups)}(op, H, state, column,
-        termgroups, identity, nterms)
+    return FHSHamiltonian{T, typeof(state), typeof(op), typeof(H), typeof(column), typeof(termgroups)}(
+        op, H, state, column,
+        termgroups, identity, nterms
+    )
 end
 
 Base.show(io::IO, h::FHSHamiltonian) = print(io, "rimu_hamiltonian(", h.op, ", ", h.space, ", ", h.start, ")")
@@ -40,12 +42,12 @@ default_starting_vector(state::AbstractBasisState; population = 10, kwargs...) =
     default_starting_vector(state => population; kwargs...)
 
 # The column is lazy: each function applies the terms of the operator to the address when called.
-struct FHSColumn{A,T,O} <: AbstractOperatorColumn{A,T,O}
+struct FHSColumn{A, T, O} <: AbstractOperatorColumn{A, T, O}
     operator::O
     address::A
 end
 
-operator_column(h::FHSHamiltonian{T,A}, address) where {T,A} = FHSColumn{A,T,typeof(h)}(h, address)
+operator_column(h::FHSHamiltonian{T, A}, address) where {T, A} = FHSColumn{A, T, typeof(h)}(h, address)
 
 parent_operator(c::FHSColumn) = c.operator
 starting_address(c::FHSColumn) = c.address
@@ -58,7 +60,7 @@ end
 num_offdiagonals(c::FHSColumn) = c.operator.nterms
 # Applies one uniformly random term. Terms that map the address to itself, to zero or outside the space spawn nothing,
 # which keeps the sum over terms of amplitude / probability unbiased.
-function random_offdiagonal(c::FHSColumn{A,T}) where {A,T}
+function random_offdiagonal(c::FHSColumn{A, T}) where {A, T}
     h = c.operator
     iszero(h.nterms) && return c.address, 1.0, zero(T)
     prob = 1 / h.nterms
