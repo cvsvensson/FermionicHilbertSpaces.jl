@@ -110,10 +110,15 @@ _atom_names(m::Mode) = (m,)
 add_tag(op::AbstractSym, tag) = with_mode(op, add_tag(mode(op), tag))
 
 # The methods of `hilbert_space(field, labels, ...)` take a vector of labels. Other collections, such as tuples,
-# generators, sets and matrices, are flattened into one.
+# generators and matrices, are flattened into one. The order of the labels is the order of the basis, so
+# unordered collections are rejected.
 function hilbert_space(f::Field, labels, args...; kwargs...)
     labels isa AbstractVector && throw(MethodError(hilbert_space, (f, labels, args...)))
-    return hilbert_space(f, vec(collect(labels)), args...; kwargs...)
+    (labels isa Union{AbstractString, AbstractChar, Number, AbstractSet, AbstractDict} || !applicable(iterate, labels)) &&
+        throw(ArgumentError("`labels` must be an ordered collection of labels such as `1:3` or `[:a, :b]`, got `$(repr(labels))`."))
+    labels = vec(collect(labels))
+    # An empty tuple collects to a `Vector{Union{}}`, which matches the methods for every element type.
+    return hilbert_space(f, labels isa Vector{Union{}} ? Any[] : labels, args...; kwargs...)
 end
 # The product of the spaces `hilbert_space(f[l], args...)` of the modes of `f`, constrained by `constraint`.
 _mode_product(f::Field, labels, constraint, args...) =
@@ -139,6 +144,10 @@ end
     @test_throws MethodError hilbert_space(f, 1:3, 1)
     @test_throws MethodError hilbert_space(b, 1:2, 3.0)
     @test_throws MethodError hilbert_space(b[1], [0, 1])
+    for labels in (:a, "ab", 1, Set(1:2), Dict(1 => 2))
+        @test_throws ArgumentError hilbert_space(f, labels)
+    end
+    @test hilbert_space(f, ()) == hilbert_space(f, Int[])
 end
 
 @testitem "Custom operators on a field" begin
