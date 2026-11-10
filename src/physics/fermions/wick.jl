@@ -39,7 +39,7 @@ function _mean_field(op, contraction, keep = Returns(true), unit = 1)
 end
 
 function _mode_position(x, H)
-    position = x isa Union{FermionSym, MajoranaSym} ? mode_position(x, H) : 0
+    position = mode_position(x, H)
     iszero(position) && throw(ArgumentError("The operator `$x` is not a mode of the space `$H`."))
     return position
 end
@@ -66,6 +66,8 @@ function expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace,
     _check_size(G, H)
     return zero(eltype(G)) + wick_expectation(op, _contraction(G, H), fs -> _in_space(fs, H, projection), one(eltype(G)))
 end
+# These spaces have no lazy representation
+expectation(op, ψ::AbstractVector, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace, MajoranaSingleParticleHilbertSpace}) = dot(ψ, representation(op, H), ψ)
 
 """
     mean_field(op, G, H; projection = false)

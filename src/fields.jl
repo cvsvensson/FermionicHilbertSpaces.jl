@@ -78,6 +78,7 @@ function Base.getindex(m::Mode{<:Field{K}}, k) where {K}
     isnothing(mode_operator(K)) || throw(ArgumentError("`$(m.field)[l]` is already an operator, so it cannot be indexed further."))
     return Op(K(k), m)
 end
+Base.getindex(op::Op, k) = throw(ArgumentError("`$op` is already an operator, so it cannot be indexed further."))
 label(m::Mode) = m.label
 label(op::Op) = label(op.mode)
 tags(f::Field) = f.tags
@@ -110,6 +111,11 @@ Base.adjoint(op::Op) = Op(adjoint(op.kind), op.mode)
 mat_eltype(::Type{<:Op{K}}) where {K} = mat_eltype(K)
 apply_local_operator(op::Op, state, space, precomp) = apply_local_operator(op.kind, state, space, precomp)
 apply_local_operator(op::Op, state, space, precomp, ::Type{P}) where {P} = apply_local_operator(op.kind, state, space, precomp, P)
+# Reached when a kind has no method for the state. A method on `Op{K}` is not called, since `Op` forwards to its kind.
+function apply_local_operator(kind::K, state, space, precomp) where {K}
+    kind isa AbstractSym && throw(MethodError(apply_local_operator, (kind, state, space, precomp)))
+    throw(ArgumentError("No `apply_local_operator` method for the kind `$K` on states of type `$(typeof(state))`. Define `apply_local_operator(kind::$K, state, space, precomp)` on the kind, not on `Op{$K}`."))
+end
 
 """
     Group{K}(names, tags)
@@ -134,25 +140,34 @@ symbolic_group(m::Mode) = isnothing(m.field.group) ? m : Group(m.field)
 symbolic_group(op::Op) = symbolic_group(op.mode)
 atomic_id(m::Mode) = m
 atomic_id(op::Op) = op.mode
-_atom_names(m::Mode) = (m,)
+_atom_names(x::Union{Mode, Op}) = (mode(x),)
 
 # The methods of `hilbert_space(field, labels, ...)` take a vector of labels. Other collections, such as tuples,
 # generators and matrices, are flattened into one. The order of the labels is the order of the basis, so
 # unordered collections are rejected.
 function hilbert_space(f::Field, labels, args...; kwargs...)
-    labels isa AbstractVector && throw(MethodError(hilbert_space, (f, labels, args...)))
+    isempty(kwargs) || throw(ArgumentError("`hilbert_space` takes no keyword arguments, got `$(join(keys(kwargs), ", "))`. A constraint is the last positional argument."))
+    labels isa AbstractVector && _no_space(f, labels, args...)
     (labels isa Union{AbstractString, AbstractChar, Number, AbstractSet, AbstractDict} || !applicable(iterate, labels)) &&
         throw(ArgumentError("`labels` must be an ordered collection of labels such as `1:3` or `[:a, :b]`, got `$(repr(labels))`."))
     labels = vec(collect(labels))
     # An empty tuple collects to a `Vector{Union{}}`, which matches the methods for every element type.
-    return hilbert_space(f, labels isa Vector{Union{}} ? Any[] : labels, args...; kwargs...)
+    return hilbert_space(f, labels isa Vector{Union{}} ? Any[] : labels, args...)
 end
 # The product of the spaces `hilbert_space(f[l], args...)` of the modes of `f`, constrained by `constraint`.
 _mode_product(f::Field, labels, constraint, args...) =
     tensor_product(map(l -> hilbert_space(Mode(f, l), args...), labels); constraint)
 hilbert_space(f::Field, labels::AbstractVector, x, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint, x)
+hilbert_space(f::Field) = throw(ArgumentError("The field `$f` needs labels. See `?hilbert_space`."))
+hilbert_space(op::Op, args...) = hilbert_space(op.mode, args...)
+hilbert_space(m::Mode, args...) = _no_space(m, args...)
+# The error for arguments that no method of `hilbert_space` accepts.
+function _no_space(x, args...)
+    got = isempty(args) ? "without arguments" : "from `" * join((repr(a; context = :limit => true) for a in args), ", ") * "`"
+    throw(ArgumentError("`hilbert_space` cannot build a space for `$x` $got. See `?hilbert_space`."))
+end
 function hilbert_space(m::Mode{<:Field{K}}, states) where {K}
-    (isnothing(mode_operator(K)) && states isa Union{AbstractVector, Tuple, BasisStates}) || throw(MethodError(hilbert_space, (m, states)))
+    (isnothing(mode_operator(K)) && states isa Union{AbstractVector, Tuple, BasisStates}) || _no_space(m, states)
     isnothing(m.field.group) || throw(ArgumentError("The grouped field `$(m.field)` needs its own space type and a `combine_into_group(::Group{K}, atoms)` method."))
     return GenericHilbertSpace(m, states)
 end
@@ -168,19 +183,24 @@ end
     @test_throws ArgumentError FermionicHilbertSpaces.Mode(b, 1)[2]
     @test hilbert_space(b, (1, 2), 2) == hilbert_space(b, [1, 2], 2) == hilbert_space(b, (i for i in 1:2), 2)
     @fermions f
-    @test_throws MethodError hilbert_space(f, 1:3, 1)
-    @test_throws MethodError hilbert_space(b, 1:2, 3.0)
-    @test_throws MethodError hilbert_space(b[1], [0, 1])
+    @test_throws ArgumentError hilbert_space(b, 1:2)
+    @test_throws ArgumentError hilbert_space(b[1])
+    @test_throws ArgumentError hilbert_space(f[1], 2)
+    @test_throws ArgumentError hilbert_space(f)
+    @test_throws "keyword" hilbert_space(f, 1:3; constraint = NumberConservation(1))
     for labels in (:a, "ab", 1, Set(1:2), Dict(1 => 2))
         @test_throws ArgumentError hilbert_space(f, labels)
     end
     @test hilbert_space(f, ()) == hilbert_space(f, Int[])
+    @test repr(hilbert_space((@fermion h)); context = :compact => true) == "h"
     @fermions g
     @test_throws ArgumentError FermionicHilbertSpaces.FermionicSpace(f, [g[1]])
 end
 
 @testitem "Custom operators on a field" begin
-    import FermionicHilbertSpaces: @field, Op, AbstractBasisState, apply_local_operator, mode, add_tag, open_system
+    import FermionicHilbertSpaces: @field, Op, AbstractBasisState, apply_local_operator, local_mul_effect, mode,
+        add_tag, open_system
+    import FermionicHilbertSpaces.NonCommutativeProducts: Swap
     struct Shift
         k::Int
     end
@@ -189,16 +209,21 @@ end
         n::Int
     end
     apply_local_operator(s::Shift, state::Site, space, precomp) = (Site(mod(state.n + s.k, 3)), 1)
+    local_mul_effect(a::Shift, b::Shift) = a.k == -b.k ? 1 : a.k > b.k ? Swap(1) : nothing
 
     @field c::Shift
     @test c[1][2] == Op(Shift(2), c[1])
     @test c[2][1] * c[1][1] == c[1][1] * c[2][1]
+    struct NoAction end
+    @test_throws "on the kind, not on `Op{" representation(Op(NoAction(), c[1]), hilbert_space(c, 1:1, Site.(0:2)))
     @test repr(mode(add_tag(c[1][1], :l))) == "c(l)[1]"
     H = hilbert_space(c, 1:2, Site.(0:2))
     @test H == tensor_product([GenericHilbertSpace(c[i], Site.(0:2)) for i in 1:2])
     @test_throws ArgumentError hilbert_space(FermionicHilbertSpaces.Field{Shift}(:g, (:g,)), 1:2, Site.(0:2))
     A = c[1][1] * c[2][-1]
     MA = representation(A, H, Matrix)
+    @test c[1][2] * c[1][1] == c[1][1] * c[1][2] && c[1][1] * c[1][-1] == 1
+    @test representation(c[1][2] * c[1][1], H, Matrix) == representation(c[1][2], H, Matrix) * representation(c[1][1], H, Matrix)
     Hlr, Hl, Hr, left, right = open_system(H)
     ρ = randn(dim(H), dim(H))
     v = reshape(ρ, (Hl, Hr) => Hlr)

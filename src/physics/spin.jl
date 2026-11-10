@@ -223,13 +223,13 @@ end
 
 end
 
-# The spin operator `op` on `mode`: a symbol or integer alias of `:x`, `:y`, `:z`, `:+`, `:-` or the identity `:I`.
+# The spin operator `op` on `mode`: `:x`, `:y`, `:z`, `:+`, `:-`, an alias of these, or the identity `:I`.
 function _spin_operator(mode, op)
     if op in _spin_x_aliases
         return Op(Spin(1, 1), mode) / 2 + Op(Spin(-1, 1), mode) / 2
     elseif op in _spin_y_aliases
         return Op(Spin(1, 1), mode) / (2im) - Op(Spin(-1, 1), mode) / (2im)
-    elseif op in _spin_identity_aliases
+    elseif op === :I
         return 1 // 1
     else
         return _spin_power(mode, _spin_shift(op), 1)
@@ -241,10 +241,9 @@ function _spin_power(mode, shift, exponent)
     !(_spin(mode) isa Nothing) && shift != 0 && exponent > Int(2 * _spin(mode)) && return 0 // 1
     return Op(Spin(shift, exponent), mode)
 end
-const _spin_x_aliases = (:x, :X, 1)
-const _spin_y_aliases = (:y, :Y, 2)
-const _spin_z_aliases = (:z, :Z, 3)
-const _spin_identity_aliases = (:I, 0)
+const _spin_x_aliases = (:x, :X)
+const _spin_y_aliases = (:y, :Y)
+const _spin_z_aliases = (:z, :Z)
 const _spin_plus_aliases = (:+, :plus, :p)
 const _spin_minus_aliases = (:-, :minus, :m)
 function _spin_shift(op)
@@ -255,7 +254,8 @@ function _spin_shift(op)
     elseif op in _spin_minus_aliases
         -1
     else
-        throw(ArgumentError("Invalid spin operator symbol, got `$op`."))
+        hint = op isa Integer ? " `@spin S` is a single spin with operators such as `S[:z]`, and `@spins s` gives the sites `s[i]`." : ""
+        throw(ArgumentError("Invalid spin operator symbol, got `$(repr(op))`.$hint"))
     end
 end
 
@@ -269,9 +269,10 @@ end
 Base.adjoint(k::Spin) = Spin(-k.shift, k.exponent)
 
 function _spin_commutator_term(a::SpinSym, b::SpinSym)
-    if a.kind.shift != 0 && b.kind.shift == 0
-        return (-a.kind.shift, Op(Spin(a.kind.shift, 1), a.mode))
-    elseif a.kind.shift == -1 && b.kind.shift == 1
+    ka, kb = a.kind, b.kind
+    if ka.shift != 0 && kb.shift == 0
+        return (-ka.shift, Op(Spin(ka.shift, 1), a.mode))
+    elseif ka.shift == -1 && kb.shift == 1
         return (-2, Op(Spin(0, 1), a.mode))
     else
         return nothing
@@ -281,9 +282,10 @@ end
 # Equal modes can have different types, such as labels `1` and `Int32(1)`.
 local_mul_effect(a::SpinSym, b::SpinSym) = local_mul_effect(a, Op(b.kind, a.mode))
 function local_mul_effect(a::S, b::S) where {S <: SpinSym}
-    if a.kind.shift == b.kind.shift
-        exponent = a.kind.exponent + b.kind.exponent
-        if a.kind.shift == 0
+    ka, kb = a.kind, b.kind
+    if ka.shift == kb.shift
+        exponent = ka.exponent + kb.exponent
+        if ka.shift == 0
             if _spin(a.mode) == 1 // 2
                 div, rem = divrem(exponent, 2)
                 return (1 // 4)^div * _spin_power(a.mode, 0, rem)
@@ -291,17 +293,17 @@ function local_mul_effect(a::S, b::S) where {S <: SpinSym}
                 return Op(Spin(0, iseven(exponent) ? 2 : 1), a.mode)
             end
         end
-        return _spin_power(a.mode, a.kind.shift, exponent)
+        return _spin_power(a.mode, ka.shift, exponent)
     end
 
     # Spin-aware identity: S+ S- = J(J+1) - Sz^2 + Sz
-    if a.kind.shift == 1 && b.kind.shift == -1 && !(_spin(a.mode) isa Nothing)
+    if ka.shift == 1 && kb.shift == -1 && !(_spin(a.mode) isa Nothing)
         J = _spin(a.mode)
-        left = Op(Spin(1, a.kind.exponent - 1), a.mode)
-        right = Op(Spin(-1, b.kind.exponent - 1), a.mode)
+        left = Op(Spin(1, ka.exponent - 1), a.mode)
+        right = Op(Spin(-1, kb.exponent - 1), a.mode)
 
-        left_factors = a.kind.exponent == 1 ? Any[] : [left]
-        right_factors = b.kind.exponent == 1 ? Any[] : [right]
+        left_factors = ka.exponent == 1 ? Any[] : [left]
+        right_factors = kb.exponent == 1 ? Any[] : [right]
 
         const_term = J * (J + 1)
         term_const = if iszero(const_term)
@@ -317,7 +319,7 @@ function local_mul_effect(a::S, b::S) where {S <: SpinSym}
     end
 
     # Sz^n S± = (±1/2)^n S± for spin 1/2
-    _spin(a.mode) == 1 // 2 && a.kind.shift == 0 && return NCMul((b.kind.shift // 2)^a.kind.exponent, S[b])
+    _spin(a.mode) == 1 // 2 && ka.shift == 0 && return NCMul((kb.shift // 2)^ka.exponent, S[b])
 
     comm = _spin_commutator_term(a, b)
     if isnothing(comm)
@@ -328,9 +330,9 @@ function local_mul_effect(a::S, b::S) where {S <: SpinSym}
 
     # For A^N B^M (out-of-order), rewrite only the middle pair:
     # A^(N-1) * (B*A + [A,B]) * B^(M-1)
-    left_factors = a.kind.exponent == 1 ? S[] : S[Op(Spin(a.kind.shift, a.kind.exponent - 1), a.mode)]
-    right_factors = b.kind.exponent == 1 ? S[] : S[Op(Spin(b.kind.shift, b.kind.exponent - 1), a.mode)]
-    swapped_factors = S[left_factors..., Op(Spin(b.kind.shift, 1), a.mode), Op(Spin(a.kind.shift, 1), a.mode), right_factors...]
+    left_factors = ka.exponent == 1 ? S[] : S[Op(Spin(ka.shift, ka.exponent - 1), a.mode)]
+    right_factors = kb.exponent == 1 ? S[] : S[Op(Spin(kb.shift, kb.exponent - 1), a.mode)]
+    swapped_factors = S[left_factors..., Op(Spin(kb.shift, 1), a.mode), Op(Spin(ka.shift, 1), a.mode), right_factors...]
     comm_factors = S[left_factors..., comm_middle_factor, right_factors...]
 
     swapped_term = NCMul(1 // 1, swapped_factors)
@@ -385,6 +387,18 @@ end
     @test_throws ArgumentError constrain_space(H, ParityConservation(1))
 end
 
+@testitem "Custom states without particle number" begin
+    struct NoCountState <: FermionicHilbertSpaces.AbstractBasisState
+        n::Int
+    end
+    @fermions f
+    Hf = hilbert_space(f, 1:2)
+    H = tensor_product(Hf, GenericHilbertSpace(:q, [NoCountState(0), NoCountState(1)]))
+    @test_throws ArgumentError constrain_space(H, NumberConservation(1))
+    @test_throws ArgumentError constrain_space(H, ParityConservation(1))
+    @test dim(constrain_space(H, NumberConservation(1; spaces = [Hf]))) == 4
+end
+
 @testitem "SpinSym" begin
     @spin S1
     @spin S2
@@ -401,6 +415,7 @@ end
     Sz2 = S2[:z]
     Sp2 = S2[:+]
     Sm2 = S2[:-]
+    @test_throws ArgumentError S1[1]
 
     @test 1 * Sz1 == Sz1
     @test 1 * Sz1 + 0 == Sz1
