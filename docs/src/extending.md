@@ -35,12 +35,12 @@ Connection to Hilbert spaces:
 
 - [`apply_local_operator`](@ref)`(op, state, space, precomp) -> (newstate, amplitude)` defines
   how `op` acts on a basis state. This is required for matrix representations.
-- [`symbolic_group`](@ref)`(op)` returns the label of the space `op` acts on. This is required, unless
-  `op` holds a [`Mode`](@ref): then [`mode`](@ref)`(op)` returning it, and `with_mode(op, m)` returning
-  `op` on the mode `m`, give `symbolic_group`, tags and [`open_system`](@ref). The modes are `c[i]` of a
-  field `c = Field{MyAlgebra}(:c)`, and `GenericHilbertSpace(c[i], states)` is the space of `c[i]`.
+- [`symbolic_group`](@ref)`(op)` returns the label of the space `op` acts on. This is required.
 - `Base.adjoint(op)` returns the adjoint operator. This is required; transposed spaces, as
   used for open systems, apply `adjoint(op)`.
+- `add_tag(op::MyOp, tag)` is needed for [`open_system`](@ref). It returns `op` rebuilt with
+  its group label replaced by [`tag_label`](@ref)`(label, tag)`, so the field holding the label
+  must accept that value. A custom space type other than `GenericHilbertSpace` needs the same method.
 - [`mat_eltype`](@ref)`(::Type{<:MyOp})` gives the element type of the matrix elements. The
   default is `Float64`, so operators with complex matrix elements need a method.
 - `apply_local_operator(op, state, space, precomp, ::Type{T})` is optional and computes the

@@ -387,7 +387,7 @@ end
     H = hilbert_space(f, 1:6)
     weighted = sum(i * n(i) for i in 1:6)
     expected = brute_force(H, (sum(n(i) for i in 1:6) => 2, weighted => 7))
-    @test Set(FermionicHilbertSpaces.generate_states(H.modes, NumberConservation(2) * (weighted => 7), H)) == expected
+    @test Set(FermionicHilbertSpaces.generate_states(atomic_factors(H), NumberConservation(2) * (weighted => 7), H)) == expected
 end
 
 @testitem "Operator constraints match the existing constraints" begin

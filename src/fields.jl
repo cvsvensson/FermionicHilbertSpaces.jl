@@ -71,8 +71,10 @@ _show_label(io, l) = print(io, "[", l, "]")
 """
     Group{A}(names, tags)
 
-The group of fields named `names` that share one space, such as the fermions of one `@fermions` block,
-which anticommute with each other.
+The group of the fields named `names`, such as the fermions of one `@fermions` block, whose modes share one space.
+It is the key that matches operators to spaces: `symbolic_group(op) == group_id(space)`, and `tensor_product`
+merges the atoms of one group with `combine_into_group(group, atoms)`, which a grouped algebra defines for
+`Group{A}`. The modes of a field without a group are their own groups and atoms.
 """
 struct Group{A, G, T <: Tags}
     names::G
@@ -85,23 +87,22 @@ Base.hash(g::Group{A}, h::UInt) where {A} = hash(g.tags, hash(g.names, hash(A, h
 Base.isless(a::Group{A}, b::Group{B}) where {A, B} = _order_isless((nameof(A), a.names, tagset(a)...), (nameof(B), b.names, tagset(b)...))
 tags(g::Group) = g.tags
 add_tag(g::Group{A}, tag) where {A} = Group{A}(g.names, add_tag(g.tags, tag))
-symbolic_group(g::Group) = g
 
-# A mode of a field without a group is its own group.
-symbolic_group(f::Field{A}) where {A} = Group{A}(f.group, f.tags)
-symbolic_group(m::Mode) = isnothing(m.field.group) ? m : symbolic_group(m.field)
+symbolic_group(m::Mode{<:Field{A}}) where {A} = isnothing(m.field.group) ? m : Group{A}(m.field.group, m.field.tags)
 symbolic_group(op::AbstractSym) = symbolic_group(mode(op))
 atomic_id(m::Mode) = m
-group_id(m::Mode) = symbolic_group(m)
-atomic_factors(m::Mode) = (m,)
+_atom_names(m::Mode) = (m,)
 add_tag(op::AbstractSym, tag) = with_mode(op, add_tag(mode(op), tag))
 
-# Tuples and vectors are mapped over directly; other iterables (generators, sets, matrices) are flattened to a vector.
-_field_labels(labels::Union{Tuple, AbstractVector}) = labels
-_field_labels(labels) = vec(collect(labels))
+# The methods of `hilbert_space(field, labels, ...)` take a vector of labels. Other collections, such as tuples,
+# generators, sets and matrices, are flattened into one.
+function hilbert_space(f::Field, labels, args...; kwargs...)
+    labels isa AbstractVector && throw(MethodError(hilbert_space, (f, labels, args...)))
+    return hilbert_space(f, vec(collect(labels)), args...; kwargs...)
+end
 # The product of the spaces `hilbert_space(f[l], args...)` of the modes of `f`, constrained by `constraint`.
 _mode_product(f::Field, labels, constraint, args...) =
-    tensor_product(map(l -> hilbert_space(Mode(f, l), args...), _field_labels(labels)); constraint)
+    tensor_product(map(l -> hilbert_space(Mode(f, l), args...), labels); constraint)
 
 @testitem "Fields and modes" begin
     using FermionicHilbertSpaces: add_tag

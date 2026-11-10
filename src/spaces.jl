@@ -227,7 +227,6 @@ atom_position(x, H::AbstractHilbertSpace) = something(findfirst(==(atomic_id(x))
 atom_position(x, H::AbstractAtomicHilbertSpace) = atomic_id(x) == atomic_id(H) ? 1 : 0
 
 isconstrained(H::AbstractAtomicHilbertSpace) = false
-atomic_factors(f::AbstractSym) = (f,)
 
 partial_trace_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1
 
@@ -370,7 +369,7 @@ true
 """
 function subregion(Hs, H::AbstractHilbertSpace)
     Hs_items = Hs isa Tuple || Hs isa AbstractVector ? Hs : (Hs,)
-    names = _pair_majoranas(collect(Iterators.flatten(Iterators.map(_subregion_atoms, Hs_items))), H)
+    names = _pair_majoranas(collect(Iterators.flatten(Iterators.map(_atom_names, Hs_items))), H)
     isempty(names) && throw(ArgumentError("`Hs` must contain at least one space or symbolic operator."))
     positions = map(x -> atom_position(x, H), names)
     all(>(0), positions) || throw(ArgumentError("The spaces/operators in `Hs` must match atomic factors of `H`, got the following unmatched ones: $(names[iszero.(positions)])."))
@@ -384,8 +383,10 @@ function subregion(Hs, H::AbstractHilbertSpace)
     states = _find_subregion_states(H, state_mapper(H, (Hsub,)))
     ConstrainedSpace(Hsub, states)
 end
-_subregion_atoms(x) = applicable(atomic_factors, x) ? atomic_factors(x) :
-    throw(ArgumentError("expected a Hilbert space or a collection of symbols, got $x"))
+# The atoms that a space or symbol names, for lookups by `atomic_id`; a symbol names the atom it acts on.
+_atom_names(x::AbstractHilbertSpace) = atomic_factors(x)
+_atom_names(x::AbstractSym) = (x,)
+_atom_names(x) = throw(ArgumentError("expected a Hilbert space or a collection of symbols, got $x"))
 # A subsystem of `H` given as a space, or as symbols resolved by `subregion`
 _subsystem(Hsub::AbstractHilbertSpace, H) = Hsub
 _subsystem(Hs, H) = subregion(Hs, H)

@@ -1,4 +1,3 @@
-# A fermionic mode, or an operator on it, stands for its single-mode space.
 const _FermionMode = Union{FermionSym, Mode{<:Field{Fermion}}}
 struct FermionicSpace{F, M, FG <: Group} <: AbstractGroupedHilbertSpace{F}
     modes::Vector{M}
@@ -16,11 +15,7 @@ function FermionicSpace(factors::AbstractVector{<:FermionicSpace}, group::Group,
     all(c -> group_id(c) == group, factors) || throw(ArgumentError("All factors must belong to the group `$group`."))
     return FermionicSpace(collect(Iterators.flatten(Iterators.map(modes, factors))), group, F)
 end
-function FermionicSpace(a::Field{Fermion}, modes::AbstractVector)
-    agroup = symbolic_group(a)
-    all(m -> group_id(m) == agroup, modes) || throw(ArgumentError("All modes must belong to the group `$agroup` of the field."))
-    return FermionicSpace(modes, agroup)
-end
+FermionicSpace(a::Field{Fermion}, modes::AbstractVector) = FermionicSpace(modes, Group{Fermion}(a.group, a.tags))
 # The copy of a `FermionicSpace` that GPU kernels use: only its number of modes
 struct DeviceFermionicSpace{F} <: AbstractHilbertSpace{F}
     nbr_of_modes::Int
@@ -72,10 +67,6 @@ mode_ordering(H::FermionicSpace) = H.mode_ordering
 modes(H::FermionicSpace) = H.modes
 add_tag(H::FermionicSpace, tag) = FermionicSpace(map(m -> add_tag(m, tag), H.modes), add_tag(group_id(H), tag), statetype(H))
 
-statetype(::_FermionMode) = FockNumber{default_fock_representation(1)}
-basisstates(f::_FermionMode) = [statetype(f)(0), statetype(f)(1)]
-nbr_of_modes(::_FermionMode) = 1
-isconstrained(::_FermionMode) = false
 
 partial_trace_phase_factor_eltype(::FermionicSpace) = Int
 partial_transpose_phase_factor_eltype(::FermionicSpace) = Complex{Int}
@@ -88,17 +79,11 @@ Jordan-Wigner order of fermions), or `0` if `H` has no such mode.
 """
 mode_position(f::_FermionMode, H) = get(mode_ordering(H), mode(f), 0)
 
-function combine_into_group(group::Group{Fermion}, fermions)
-    if all(f -> group_id(f) == group, fermions)
-        return FermionicSpace(fermions, group)
-    else
-        throw(ArgumentError("All fermions must belong to the group `$group`."))
-    end
-end
+combine_into_group(group::Group{Fermion}, atoms) = FermionicSpace(atoms, group)
 
 operators(H::FermionicSpace) = fermions(H)
 isconstrained(H::FermionicSpace) = false
-combine_states(states, H::FermionicSpace{F}) where F = (catenate_fock_states(states, H.modes, F),), (1,)
+combine_states(states, H::FermionicSpace{F}) where F = (_catenate_fock_states(states, Iterators.repeated(1), F),), (1,)
 
 state_mapper(H::FermionicSpace, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
 state_mapper(H::FermionicSpace, Hs) = _fock_mapper(H, Hs)
@@ -109,7 +94,7 @@ function _fock_mapper(H, Hs)
 end
 # The atoms of `Hsub`, or for fermionic spaces the modes naming them, which `atom_position`
 # accepts without building one single-mode space per mode.
-_fock_atoms(Hsub) = atomic_factors(Hsub)
+_fock_atoms(Hsub) = _atom_names(Hsub)
 _fock_atoms(Hsub::FermionicSpace) = nbr_of_modes(Hsub) == 0 ? (Hsub,) : modes(Hsub)
 _fock_atoms(Hsub::AbstractSubspace) = _fock_atoms(parent(Hsub))
 

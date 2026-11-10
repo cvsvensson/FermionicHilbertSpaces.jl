@@ -39,7 +39,6 @@ mode(f::FermionSym) = f.mode
 with_mode(f::FermionSym, m) = FermionSym(f.creation, m)
 atomic_id(f::FermionSym) = f.mode
 label(f::FermionSym) = f.mode.label
-group_id(f::FermionSym) = symbolic_group(f)
 
 Base.show(io::IO, x::FermionSym) = (show(io, x.mode.field); print(io, x.creation ? "†" : ""); _show_label(io, x.mode.label))
 function Base.isless(a::FermionSym, b::FermionSym)

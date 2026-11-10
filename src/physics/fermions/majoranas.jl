@@ -149,7 +149,7 @@ basisstates(m::MajoranaHilbertSpace) = basisstates(m.parent)
 Base.@propagate_inbounds basisstate(i::Integer, m::MajoranaHilbertSpace) = basisstate(i, m.parent)
 Base.parent(H::MajoranaHilbertSpace) = H.parent
 isconstrained(H::MajoranaHilbertSpace) = false
-group_id(H::MajoranaHilbertSpace) = symbolic_group(H.sym)
+group_id(H::MajoranaHilbertSpace) = Group{Majorana}(H.sym.group, H.sym.tags)
 function add_tag(H::MajoranaHilbertSpace, tag)
     majoranaindices = OrderedDict(add_tag(γ, tag) => n for (γ, n) in H.majoranaindices)
     MajoranaHilbertSpace(majoranaindices, add_tag(parent(H), tag), add_tag(H.sym, tag))

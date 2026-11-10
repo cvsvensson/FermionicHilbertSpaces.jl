@@ -217,12 +217,12 @@ _summand(S, x) = x
     H = hilbert_space(f, 1:N)
     allowed_ones = [[0, 1], [-1, 0], [2]]
     constraint = prod(NumberConservation(allowed) for allowed in allowed_ones)
-    states = generate_states(H.modes, constraint, H)
+    states = generate_states(FermionicHilbertSpaces.atomic_factors(H), constraint, H)
     @test all(s -> s.f >= 0, states)
 
     weights = [Int.(floor.(2sin.(1:N))), Int.(sign.((1:N) .- div(N, 2))), ones(Int, N)]
     constraint = prod(NumberConservation(allowed, missing, w) for (allowed, w) in zip(allowed_ones, weights))
-    states = generate_states(H.modes, constraint, H)
+    states = generate_states(FermionicHilbertSpaces.atomic_factors(H), constraint, H)
     @test all(s -> s.f >= 0, states)
 
     H = tensor_product(Hs)

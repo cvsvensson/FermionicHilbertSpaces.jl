@@ -102,8 +102,8 @@ function hilbert_space(sym::SpinMode, J)
     _check_spin_unset(sym.field)
     SpinSpace(sym, J)
 end
-hilbert_space(f::Field{Spin}, labels, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint)
-function hilbert_space(f::Field{Spin}, labels, J, @nospecialize(constraint::ConstraintLike = NoSymmetry()))
+hilbert_space(f::Field{Spin}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint)
+function hilbert_space(f::Field{Spin}, labels::AbstractVector, J, @nospecialize(constraint::ConstraintLike = NoSymmetry()))
     _check_spin_unset(f)
     return _mode_product(f, labels, constraint, J)
 end
