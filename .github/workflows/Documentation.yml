@@ -29,7 +29,7 @@ jobs:
           version: '1'
       - uses: julia-actions/cache@v3
         with:
-          # Keeps caches with native-target pkgimages from being restored, which fail to load as dependencies.
+          # Pkgimages built with other settings above are not detected as stale and fail to load, so they get their own cache.
           cache-name: julia-cache;workflow=${{ github.workflow }};job=${{ github.job }};cpu=generic;bitpermutations-intrinsics=false
       - name: Configure doc environment
         shell: julia --project=docs --color=yes {0}
