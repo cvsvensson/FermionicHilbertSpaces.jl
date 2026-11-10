@@ -39,7 +39,6 @@ Base.:(==)(s1::ProductState, s2::ProductState) = s1.states == s2.states
 Base.hash(s::ProductState, h::UInt) = hash(s.states, h)
 Base.isless(s1::ProductState, s2::ProductState) = s1.states < s2.states
 
-symbolic_group(h::AbstractAtomicHilbertSpace) = h
 # ProductSpaces consists of a list of groups (stored as `factors`) and their atoms, in group-major order
 struct ProductSpace{B,C,A,T,LI,CI} <: AbstractProductHilbertSpace{B}
     factors::C
