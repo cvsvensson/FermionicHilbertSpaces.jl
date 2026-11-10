@@ -111,6 +111,11 @@ Base.adjoint(op::Op) = Op(adjoint(op.kind), op.mode)
 mat_eltype(::Type{<:Op{K}}) where {K} = mat_eltype(K)
 apply_local_operator(op::Op, state, space, precomp) = apply_local_operator(op.kind, state, space, precomp)
 apply_local_operator(op::Op, state, space, precomp, ::Type{P}) where {P} = apply_local_operator(op.kind, state, space, precomp, P)
+# Reached when a kind has no method for the state. A method on `Op{K}` is not called, since `Op` forwards to its kind.
+function apply_local_operator(kind::K, state, space, precomp) where {K}
+    kind isa AbstractSym && throw(MethodError(apply_local_operator, (kind, state, space, precomp)))
+    throw(ArgumentError("No `apply_local_operator` method for the kind `$K` on states of type `$(typeof(state))`. Define `apply_local_operator(kind::$K, state, space, precomp)` on the kind, not on `Op{$K}`."))
+end
 
 """
     Group{K}(names, tags)
@@ -198,6 +203,8 @@ end
     @field c::Shift
     @test c[1][2] == Op(Shift(2), c[1])
     @test c[2][1] * c[1][1] == c[1][1] * c[2][1]
+    struct NoAction end
+    @test_throws "on the kind, not on `Op{" representation(Op(NoAction(), c[1]), hilbert_space(c, 1:1, Site.(0:2)))
     @test repr(mode(add_tag(c[1][1], :l))) == "c(l)[1]"
     H = hilbert_space(c, 1:2, Site.(0:2))
     @test H == tensor_product([GenericHilbertSpace(c[i], Site.(0:2)) for i in 1:2])
