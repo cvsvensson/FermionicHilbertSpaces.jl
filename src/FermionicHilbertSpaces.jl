@@ -67,9 +67,8 @@ const hc = HC()
 """
     AbstractSym
 
-Supertype of symbolic operators such as fermions, Majoranas, bosons and spins. A custom
-operator type subtypes it, registers itself with `NonCommutativeProducts.@nc` and defines
-[`apply_local_operator`](@ref) and [`symbolic_group`](@ref).
+Supertype of symbolic operators. Fermions, Majoranas, bosons and spins are [`Op`](@ref)s. Another
+operator type subtypes it and defines [`apply_local_operator`](@ref) and [`symbolic_group`](@ref).
 """
 abstract type AbstractSym end
 NonCommutativeProducts.atom_group(op::AbstractSym) = symbolic_group(op)

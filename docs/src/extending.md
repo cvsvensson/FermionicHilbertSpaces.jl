@@ -13,13 +13,12 @@ the exported API and may change in a minor release.
 
 ## Custom operators
 
-A new kind of symbolic operator is a subtype of [`AbstractSym`](@ref). The tutorials
-[Custom operators: Clock](literate_output/clock_operators.md) and
-[Custom operators: Floquet](literate_output/floquet_tutorial.md) build one step by step.
+A symbolic operator is an [`Op`](@ref)`(kind, mode)`: a kind, which says what the operator is, acting on a mode of
+a field. A new algebra defines the kind, a plain struct `MyKind`; `const MyOp = Op{<:MyKind}` names its
+operators. The tutorial [Custom operators: Clock](literate_output/clock_operators.md) builds one step by step.
 
 Algebra, from [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl):
 
-- `@nc MyOp` makes `+` and `*` build symbolic sums and products of `MyOp`.
 - [`local_mul_effect`](@ref)`(a::MyOp, b::MyOp)` gives the rule for the product `a * b` of
   operators on the same group: `nothing` keeps it, `Swap(c)` rewrites it as `c * b * a`,
   `AddTerms((Swap(c), r, ...))` adds further terms, and a number, operator or sum replaces it.
@@ -33,19 +32,21 @@ Algebra, from [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommu
 
 Connection to Hilbert spaces:
 
-- [`apply_local_operator`](@ref)`(op, state, space, precomp) -> (newstate, amplitude)` defines
-  how `op` acts on a basis state. This is required for matrix representations.
-- An operator acts on a mode of a field. [`@field`](@ref) `c::MyOp` creates the field, `c[i][k]` builds
-  `MyOp(c[i], k)`, and `hilbert_space(c, labels, states)` has one space per mode. `MyOp` stores its mode and
-  returns it from [`mode`](@ref); [`with_mode`](@ref)`(op, m)` adds [`open_system`](@ref).
-- Alternatively, [`symbolic_group`](@ref)`(op)` returns a plain label of the space `op` acts on, such as
+- [`apply_local_operator`](@ref)`(kind, state, space, precomp) -> (newstate, amplitude)` defines
+  how an operator of that kind acts on a basis state. This is required for matrix representations.
+- [`@field`](@ref) `c::MyKind` creates the field, `c[i][k]` builds `Op(MyKind(k), c[i])`, and
+  `hilbert_space(c, labels, states)` has one space per mode. With a [`mode_operator`](@ref), `c[i]` is the
+  single operator of the mode.
+- `Base.adjoint(kind)` returns the kind of the adjoint operator. This is required; transposed spaces, as
+  used for open systems, apply `adjoint(op)`.
+- [`mat_eltype`](@ref)`(::Type{<:MyKind})` gives the element type of the matrix elements. The
+  default is `Float64`, so operators with complex matrix elements need a method.
+- An operator type that is not an `Op` subtypes [`AbstractSym`](@ref) and defines the methods above for
+  itself. Its [`symbolic_group`](@ref)`(op)` returns a plain label of the space `op` acts on, such as
   the label of a [`GenericHilbertSpace`](@ref), and `add_tag(op, tag)` rebuilds `op` with the label
   [`tag_label`](@ref)`(label, tag)` for [`open_system`](@ref). A custom space type other than
-  `GenericHilbertSpace` needs an `add_tag` method too.
-- `Base.adjoint(op)` returns the adjoint operator. This is required; transposed spaces, as
-  used for open systems, apply `adjoint(op)`.
-- [`mat_eltype`](@ref)`(::Type{<:MyOp})` gives the element type of the matrix elements. The
-  default is `Float64`, so operators with complex matrix elements need a method.
+  `GenericHilbertSpace` needs an `add_tag` method too. See
+  [Custom operators: Floquet](literate_output/floquet_tutorial.md).
 - `apply_local_operator(op, state, space, precomp, ::Type{T})` is optional and computes the
   amplitude in the float type `T` of the matrix. Without it, the amplitude of the method above
   is converted to `T`, which adds no precision and leaves any `Float64` arithmetic of that method

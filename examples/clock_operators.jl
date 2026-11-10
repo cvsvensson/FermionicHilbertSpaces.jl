@@ -8,39 +8,34 @@
 # The pieces a new algebra needs are listed in [Extending and performance hooks](../extending.md).
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
-import FermionicHilbertSpaces: @field, AbstractBasisState, AbstractSym,
-    apply_local_operator, mat_eltype, mode
-import FermionicHilbertSpaces.NonCommutativeProducts: @nc
+import FermionicHilbertSpaces: @field, AbstractBasisState, apply_local_operator, mat_eltype
 
 # ## Defining the clock operators and states
 # The clock operators are defined on a local Hilbert space of dimension ``D``, with basis states ``|n\rangle`` for ``n = 0, 1, ..., D-1``. The operator ``X`` shifts the local clock value, ``X |n\rangle = |n + 1\rangle``, and ``Z`` measures the local clock value: ``Z |n\rangle = \exp(2π i n / D) |n\rangle``.
-struct ClockOp{T} <: AbstractSym # A clock operator of type T (:X or :Z) on the site `mode`.
-    mode
+struct Clock{T} # The kind of a clock operator: T is :X or :Z.
     adjoint::Bool
 end
-ClockOp(m, T) = ClockOp{T}(m, false)
-Base.adjoint(op::ClockOp{T}) where {T} = ClockOp{T}(op.mode, !op.adjoint)
-@nc ClockOp
-## The sites are the modes `c[i]` of a field of clock operators, and `c[i][:X]` is `ClockOp(c[i], :X)`.
-mode(op::ClockOp) = op.mode
-@field c::ClockOp
+Clock(T::Symbol) = Clock{T}(false)
+Base.adjoint(k::Clock{T}) where {T} = Clock{T}(!k.adjoint)
+## The sites are the modes `c[i]` of a field of clock operators, and `c[i][:X]` is the operator of kind `Clock(:X)` on `c[i]`.
+@field c::Clock
 ## Products on the same site are kept as they are. Operators on different sites commute and are sorted by site.
 struct ClockState{D} <: AbstractBasisState # A clock state with dimension D.
     n::Int
     ClockState{D}(n) where D = new{D}(mod(n, D))
 end
 ## Action on local basis states.
-function apply_local_operator(op::ClockOp{:X}, state::ClockState{D}, space, precomp) where D
+function apply_local_operator(op::Clock{:X}, state::ClockState{D}, space, precomp) where D
     newstate = ClockState{D}(state.n + (op.adjoint ? -1 : 1))
     amp = 1
     newstate, amp
 end
-function apply_local_operator(op::ClockOp{:Z}, state::ClockState{D}, space, precomp) where D
+function apply_local_operator(op::Clock{:Z}, state::ClockState{D}, space, precomp) where D
     amp = exp((op.adjoint ? -1 : 1) * 2π * im * state.n / D)
     state, amp
 end
 ## Clock operators have complex matrix elements.
-mat_eltype(::Type{<:ClockOp}) = ComplexF64
+mat_eltype(::Type{<:Clock}) = ComplexF64
 
 # ## Using it in practice: Hamiltonian and conservation laws
 # Let's take the case D = 3 for 6 sites. We define a hamiltonian which conserves the clock charge, the sum of the local clock values modulo D, and calculate the symmetry resolved entanglement entropy in the ground state.

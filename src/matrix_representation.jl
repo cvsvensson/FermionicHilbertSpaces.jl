@@ -1,5 +1,3 @@
-abstract type AbstractFermionSym <: AbstractSym end
-
 """
     EagerDenseRepr{T}()
     EagerDenseRepr()
@@ -1329,15 +1327,15 @@ end
 end
 
 ## Symmetries
-isnumberconserving(x::AbstractFermionSym) = false
+isnumberconserving(x::AbstractSym) = false
 isnumberconserving(x::NCMul) = iszero(sum(s -> 2s.creation - 1, x.factors))
 isnumberconserving(x::NCAdd) = all(isnumberconserving, NCterms(x))
 
-isparityconserving(x::AbstractFermionSym) = false
+isparityconserving(x::AbstractSym) = false
 isparityconserving(x::NCMul) = iseven(length(x.factors))
 isparityconserving(x::NCAdd) = all(isparityconserving, NCterms(x))
 
-isquadratic(::AbstractFermionSym) = false
+isquadratic(::AbstractSym) = false
 isquadratic(x::NCMul) = length(x.factors) == 2
 isquadratic(x::NCAdd) = all(isquadratic, NCterms(x))
 

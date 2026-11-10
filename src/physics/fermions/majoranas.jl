@@ -1,5 +1,3 @@
-
-abstract type AbstractMajoranaSym <: AbstractFermionSym end
 """
     @majoranas a b ...
 
@@ -21,22 +19,16 @@ See also [`@fermions`](@ref).
 """
 macro majoranas(xs...)
     defs = map(xs) do x
-        :($(esc(x)) = Field{MajoranaSym}($(Expr(:quote, x)), $xs))
+        :($(esc(x)) = Field{Majorana}($(Expr(:quote, x)), $xs))
     end
     length(defs) == 1 && return only(defs)
     Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
 end
-struct MajoranaSym{M} <: AbstractMajoranaSym
-    mode::M
-end
-_field_entry(m::Mode{<:Field{MajoranaSym}}) = MajoranaSym(m)
-Base.:(==)(a::MajoranaSym, b::MajoranaSym) = a.mode == b.mode
-Base.hash(a::MajoranaSym, h::UInt) = hash(a.mode, h)
-Base.adjoint(x::MajoranaSym) = x
-Base.iszero(x::MajoranaSym) = false
-mode(f::MajoranaSym) = f.mode
-with_mode(::MajoranaSym, m) = MajoranaSym(m)
+struct Majorana end
+const MajoranaSym{M} = Op{Majorana, M}
+mode_operator(::Type{Majorana}) = Majorana()
+Base.adjoint(k::Majorana) = k
 Base.show(io::IO, x::MajoranaSym) = show(io, x.mode)
 function Base.isless(a::MajoranaSym, b::MajoranaSym)
     ga, gb = symbolic_group(a), symbolic_group(b)
@@ -61,8 +53,7 @@ function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym)
     end
 end
 
-mat_eltype(::Type{S}) where {S<:AbstractMajoranaSym} = Complex{Int}
-@nc MajoranaSym
+mat_eltype(::Type{Majorana}) = Complex{Int}
 
 @testitem "@majoranas return value" begin
     γ = @majoranas γ
@@ -129,11 +120,11 @@ end
     end
 end
 
-struct MajoranaHilbertSpace{B, L, H, S <: Field{MajoranaSym}} <: AbstractGroupedHilbertSpace{B}
+struct MajoranaHilbertSpace{B, L, H, S <: Field{Majorana}} <: AbstractGroupedHilbertSpace{B}
     majoranaindices::L
     parent::H
     sym::S
-    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::S) where {L, H <: FermionicSpace, S <: Field{MajoranaSym}}
+    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::S) where {L, H <: FermionicSpace, S <: Field{Majorana}}
         B = statetype(parent)
         new{B,L,H,S}(majoranaindices, parent, sym)
     end
@@ -165,7 +156,7 @@ function atom_ids(H::MajoranaHilbertSpace)
     γs = collect(keys(H.majoranaindices))
     [(γs[2k-1], γs[2k]) for k in 1:length(γs)÷2]
 end
-_acts_in(x::AbstractMajoranaSym, H::MajoranaHilbertSpace) = haskey(H.majoranaindices, x)
+_acts_in(x::MajoranaSym, H::MajoranaHilbertSpace) = haskey(H.majoranaindices, x)
 function atom_position(x, H::MajoranaHilbertSpace)
     id = atomic_id(x)
     id isa Tuple{Any,Any} || return 0 # only pairs name atoms
@@ -173,8 +164,8 @@ function atom_position(x, H::MajoranaHilbertSpace)
     isodd(p) && get(H.majoranaindices, id[2], 0) == p + 1 ? (p + 1) ÷ 2 : 0
 end
 
-function combine_into_group(group::Group{MajoranaSym}, spaces)
-    fermionic_space = combine_into_group(Group{FermionSym}(group.names, group.tags), map(parent, spaces))
+function combine_into_group(group::Group{Majorana}, spaces)
+    fermionic_space = combine_into_group(Group{Fermion}(group.names, group.tags), map(parent, spaces))
     D = typeof(first(spaces).majoranaindices)
     majoranaindices = D()
     count = 1
@@ -199,13 +190,13 @@ partial_transpose_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_transpo
 
 majoranas(H::MajoranaHilbertSpace) = OrderedDict(γ.mode.label => representation(γ, H) for γ in modes(H))
 
-hilbert_space(y::Field{MajoranaSym}, labels::AbstractVector, @nospecialize(c::QuantitySpec)) = constrain_space(hilbert_space(y, labels), c)
-hilbert_space(y::Field{MajoranaSym}, labels::AbstractVector) = _majorana_space(y, labels)
-hilbert_space(y::Field{MajoranaSym}, labels::AbstractVector, x) = _majorana_space(y, labels, x)
+hilbert_space(y::Field{Majorana}, labels::AbstractVector, @nospecialize(c::QuantitySpec)) = constrain_space(hilbert_space(y, labels), c)
+hilbert_space(y::Field{Majorana}, labels::AbstractVector) = _majorana_space(y, labels)
+hilbert_space(y::Field{Majorana}, labels::AbstractVector, x) = _majorana_space(y, labels, x)
 function _majorana_space(y, labels, args...)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even to define a Hilbert space, got $(length(labels))."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
-    f = Field{FermionSym}(y.name, y.group, nothing, y.tags)
+    f = Field{Fermion}(y.name, y.group, nothing, y.tags)
     Hf = hilbert_space(f, pairs, args...)
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
     length(majorana_position) == length(labels) || throw(ArgumentError("The Majoranas of a Hilbert space must be distinct, got $labels."))
@@ -217,7 +208,7 @@ MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap
 # Replace each pair of Majoranas in `names` that forms an atom of `H` by that atom, placed
 # where the first of the two appears.
 function _pair_majoranas(names, H)
-    γs = Set(x for x in names if x isa AbstractMajoranaSym)
+    γs = Set(x for x in names if x isa MajoranaSym)
     isempty(γs) && return names
     pair_of = Dict(γ => a for a in atomic_factors(H) if a isa MajoranaHilbertSpace for γ in keys(a.majoranaindices) if γ in γs)
     for a in values(pair_of)
@@ -236,7 +227,7 @@ end
 
 partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
 
-function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,S<:AbstractMajoranaSym,F}
+function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,S<:MajoranaSym,F}
     sub_modes = modes(Hsub)
     for f in m.factors
         if f ∉ sub_modes
@@ -245,10 +236,10 @@ function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaH
     end
     return m * dim(H) / dim(Hsub)
 end
-function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace; kwargs...) where {C,C2,S<:AbstractMajoranaSym,F}
+function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace; kwargs...) where {C,C2,S<:MajoranaSym,F}
     return sum(partial_trace(term, H, Hsub; kwargs...) for term in NCterms(m); init=0 * m) + m.coeff * dim(H) / dim(Hsub)
 end
-function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, Hs::Pair{<:MajoranaHilbertSpace,<:MajoranaHilbertSpace}) where {C,C2,S<:AbstractMajoranaSym,F}
+function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, Hs::Pair{<:MajoranaHilbertSpace,<:MajoranaHilbertSpace}) where {C,C2,S<:MajoranaSym,F}
     return partial_trace(m, Hs...)
 end
 

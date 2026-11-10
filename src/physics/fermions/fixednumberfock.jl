@@ -148,7 +148,7 @@ function precomputation_before_operator_application(op::NCMul{<:Any, <:FermionSy
     sites = Tuple(map(factor -> _precomputation_before_operator_application(factor, space), op.factors))
     return sites, Val(sum(factor -> factor.creation ? 1 : -1, op.factors; init = 0))
 end
-function apply_local_operators(op::NCMul{<:Any, <:FermionSym}, f::FixedNumberFockState{N}, H::AbstractHilbertSpace, (sites, _)::Tuple{Any, Val{Δ}}; transpose) where {N, Δ}
+function apply_local_operators(op::NCMul{<:Any, <:Union{Fermion, FermionSym}}, f::FixedNumberFockState{N}, H::AbstractHilbertSpace, (sites, _)::Tuple{Any, Val{Δ}}; transpose) where {N, Δ}
     if !transpose
         daggers = Iterators.map(op -> op.creation, Iterators.reverse(op.factors))
         state, amp = togglefermions(reverse(sites), daggers, f, Val(N + Δ))

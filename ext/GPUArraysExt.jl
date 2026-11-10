@@ -8,10 +8,10 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
 import FermionicHilbertSpaces: _canonicalize_repr, _convert_repr_eltype, _repr_eltype, _skip_outside, _terms_matrix,
     change_basis, default_indexing_alg, default_partial_trace_alg, embed, partial_trace, partial_trace!, push_inds_amps!,
     state_position
-using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, Axes, BosonSym, ConstrainedSpace, DeviceFermionicSpace,
-    DeviceProductSpace, DeviceSpinSym, FermionSym, FermionicSpace, IndexTable, NoScalarIndexingAlg, ProductOperator, ProductSpace,
+using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, Axes, ConstrainedSpace, DeviceFermionicSpace,
+    DeviceProductSpace, FermionicSpace, IndexTable, NoScalarIndexingAlg, Op, ProductOperator, ProductSpace,
     RootIndexDict, _SpaceMapping,
-    SpinSpace, SpinSym, TruncatedBosonicHilbertSpace, TupleConcretizer, __concretize, _spin_shift,
+    SpinSpace, TruncatedBosonicHilbertSpace, TupleConcretizer, __concretize,
     chunked_operator_indices_and_amplitudes_generic!, dim, mat_eltype, nbr_of_modes, precomputation_before_operator_application,
     state_index, subspace_index, subspace_states
 
@@ -75,9 +75,7 @@ Adapt.adapt_storage(to::DeviceAdaptor, a::AbstractArray) = adapt(to.arrays, a)
 
 # Each keeps the fields that `basisstate`, `state_index` and the operator application read. Labels, bases, symbols and
 # mode lists only identify modes, which the precomputation has already resolved.
-Adapt.adapt_structure(::DeviceAdaptor, f::FermionSym) = FermionSym(f.creation, nothing)
-Adapt.adapt_structure(::DeviceAdaptor, b::BosonSym) = BosonSym(nothing, b.exp)
-Adapt.adapt_structure(::DeviceAdaptor, s::SpinSym) = DeviceSpinSym(_spin_shift(s), s.exponent)
+Adapt.adapt_structure(::DeviceAdaptor, op::Op) = op.kind
 
 Adapt.adapt_structure(::DeviceAdaptor, H::FermionicSpace{F}) where {F} = DeviceFermionicSpace{F}(nbr_of_modes(H))
 Adapt.adapt_structure(::DeviceAdaptor, H::TruncatedBosonicHilbertSpace) = TruncatedBosonicHilbertSpace(nothing, H.dimension)

@@ -38,7 +38,7 @@ function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSp
     TransposedSpace(FermionicSpace(map(H -> H.parent, spaces), group))
 end
 
-combine_into_group(group::Group{MajoranaSym}, spaces::AbstractVector{<:TransposedSpace}) =
+combine_into_group(group::Group{Majorana}, spaces::AbstractVector{<:TransposedSpace}) =
     TransposedSpace(combine_into_group(group, map(parent, spaces)))
 
 
