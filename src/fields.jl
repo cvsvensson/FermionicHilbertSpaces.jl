@@ -140,8 +140,7 @@ symbolic_group(m::Mode) = isnothing(m.field.group) ? m : Group(m.field)
 symbolic_group(op::Op) = symbolic_group(op.mode)
 atomic_id(m::Mode) = m
 atomic_id(op::Op) = op.mode
-_atom_names(m::Mode) = (m,)
-_atom_names(op::Op) = (op,)
+_atom_names(x::Union{Mode, Op}) = (mode(x),)
 
 # The methods of `hilbert_space(field, labels, ...)` take a vector of labels. Other collections, such as tuples,
 # generators and matrices, are flattened into one. The order of the labels is the order of the basis, so

@@ -443,7 +443,7 @@ end
 # The operators Ψ_j^† that create the basis states of `H`, such that `representation(Σ_ab M_ab Ψ_a^† Ψ_b, H) == M`
 _nambu_creators(H::SingleParticleHilbertSpace) = [Op(Fermion(true), m) for m in modes(H)]
 _nambu_creators(H::BdGHilbertSpace) = [[Op(Fermion(true), m) for m in modes(H)]; [Op(Fermion(false), m) for m in modes(H)]]
-_nambu_creators(H::MajoranaSingleParticleHilbertSpace) = [γ / sqrt(2) for γ in modes(H)]
+_nambu_creators(H::MajoranaSingleParticleHilbertSpace) = [Op(Majorana(), m) / sqrt(2) for m in modes(H)]
 
 """
     quasiparticle(v, H)
