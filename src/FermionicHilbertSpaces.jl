@@ -174,6 +174,7 @@ include("physics/bosons.jl")
 include("physics/spin.jl")
 include("physics/open_systems.jl")
 include("symbolic_states.jl")
+include("symmetric_sector.jl")
 
 include("printing.jl")
 include("physics/fermions/free_fermions.jl")
