@@ -3,8 +3,8 @@
 
 A named family of modes for operators of type `O`, created by [`@field`](@ref) or by macros such as
 [`@bosons`](@ref). `field[l]` is the mode labelled `l`, or the operator an algebra puts there, such as the
-annihilation operator `b[l]`. Fields of one `group` (e.g. `@fermions a b`) share one space, and `params`
-holds parameters of the algebra such as the spin `J`.
+annihilation operator `b[l]`. Fields of one `group` (e.g. `@fermions a b`) share one space, which their algebra
+builds with `combine_into_group(::Group{O}, atoms)`, and `params` holds parameters of the algebra such as the spin `J`.
 """
 struct Field{A, G, P, T <: Tags}
     name::Symbol
@@ -121,6 +121,7 @@ _mode_product(f::Field, labels, constraint, args...) =
 hilbert_space(f::Field, labels::AbstractVector, x, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint, x)
 function hilbert_space(m::Mode, states::Union{AbstractVector, Tuple, BasisStates})
     _field_entry(m) === m || throw(MethodError(hilbert_space, (m, states)))
+    isnothing(m.field.group) || throw(ArgumentError("The grouped field `$(m.field)` needs its own space type and a `combine_into_group(::Group{O}, atoms)` method."))
     return GenericHilbertSpace(m, states)
 end
 
@@ -163,6 +164,7 @@ end
     @test repr(mode(add_tag(c[1][1], :l))) == "c(l)[1]"
     H = hilbert_space(c, 1:2, Site.(0:2))
     @test H == tensor_product([GenericHilbertSpace(c[i], Site.(0:2)) for i in 1:2])
+    @test_throws ArgumentError hilbert_space(FermionicHilbertSpaces.Field{Shift}(:g, (:g,)), 1:2, Site.(0:2))
     A = c[1][1] * c[2][-1]
     MA = representation(A, H, Matrix)
     Hlr, Hl, Hr, left, right = open_system(H)
