@@ -170,7 +170,7 @@ hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer, @nospecialize(constra
 particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 
-function apply_local_operator(factor::Boson, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp, ::Type{T} = Float64) where {T}
+@inline function apply_local_operator(factor::Boson, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp, ::Type{T} = Float64) where {T}
     n = state.n
     k = abs(factor.exp)
     amplitude = one(T)

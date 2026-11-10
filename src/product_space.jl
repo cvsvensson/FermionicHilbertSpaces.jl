@@ -479,7 +479,7 @@ end
 internal_rep(state::ProductState, space::ProductSpace, ::Type{T}) where T<:Integer = T(state_index(state, space))
 physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state, space)
 
-function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::_ProductSpace, precomps) where {B}
+@inline function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::_ProductSpace, precomps) where {B}
     if !ismissing(fast_path(space))
         T = typeof(fast_path(space))
         internal_reps = _tuple_map((s, f) -> _internal_rep(s, f, T), state.states, groups(space))
@@ -490,7 +490,7 @@ function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, sp
         return ProductState{B}(newstate), amp
     end
 end
-function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::AbstractHilbertSpace, precomp; kwargs...) where T
+@inline function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::AbstractHilbertSpace, precomp; kwargs...) where {T}
     state = _physical_rep(int_state, space)
     newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
     return _internal_rep(newstate, space, T), amp

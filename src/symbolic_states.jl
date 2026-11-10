@@ -155,7 +155,7 @@ function Base.show(io::IO, s::SymbolicState)
 end
 
 Base.:(==)(a::SymbolicState, b::SymbolicState) = a.ket == b.ket && a.bra == b.bra && _same_space_id(a.space, b.space)
-Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, hash(group_id(a.space), h)))
+Base.hash(a::SymbolicState, h::UInt) = hash(a.bra, hash(a.ket, h))
 # States are ordered by group, then by space, then by ket and bra, where a missing ket or bra comes first.
 function Base.isless(a::SymbolicState, b::SymbolicState)
     _group_isless(a, b) && return true
