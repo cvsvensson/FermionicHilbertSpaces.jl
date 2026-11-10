@@ -110,7 +110,7 @@ Return all sectors of `H` in the same order as `quantumnumbers(H)`.
 sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
 
 """
-    highest_weight_states(H, raisers; check = true)
+    highest_weight_states(H, raisers; basis = Returns(I), check = true)
 
 Return a dictionary from sector labels of `H` to the states in that sector annihilated by all `raisers`. For spins,
 with `H = hilbert_space(S, 1:N, Sz)` and `Splus = sum(S[k][:+] for k in 1:N)`, the key is the total spin J and the
@@ -123,16 +123,26 @@ fermions or `[n1, n2, n3]` for SU(3). Several raisers go in a vector; a raiser m
   - Total spin J at Sz = M needs the sectors from M up to the top, e.g. `Sz => M:N//2`, or `Sz => 0:N//2` for every
     J at M ≥ 0; otherwise `representation` throws.
 
-`check` verifies the commutator conditions and can be turned off. The results block-diagonalize a Hamiltonian only if
-it commutes with the raisers, which is not checked.
+`basis(M)` restricts the search to the span of orthonormal columns in `sector(M, H)`, e.g. a momentum sector from
+[`symmetric_sector`](@ref); the results stay in `sector(M, H)` coordinates.
+
+`check` verifies the commutator conditions and that each `basis(M)` is orthonormal, and can be turned off. The results
+block-diagonalize a Hamiltonian only if it commutes with the raisers, which is not checked.
 """
-function highest_weight_states(H, raisers; check = true)
+function highest_weight_states(H, raisers; basis = Returns(I), check = true)
     Es = _raiser_matrices(H, raisers, check)
+    tol = _raiser_tol(Es)
     kernels = map(quantumnumbers(H)) do qn
         M = reduce(vcat, [E[:, indices(qn, H)] for E in Es])
-        qn => nullspace(Matrix(M[vec(any(!iszero, M; dims = 2)), :]))
+        Q = _sector_basis(basis, qn, check)
+        qn => Q * nullspace(Matrix(M[vec(any(!iszero, M; dims = 2)), :] * Q); atol = tol)
     end
     return OrderedDict(filter(((qn, V),) -> size(V, 2) > 0, kernels))
+end
+function _sector_basis(basis, qn, check)
+    Q = basis(qn)
+    check && !(Q' * Q ≈ I) && throw(ArgumentError("basis($qn) must have orthonormal columns"))
+    return Q
 end
 _operators(ops::Union{Tuple, AbstractVector}) = ops
 _operators(op) = (op,)
@@ -143,8 +153,10 @@ function _raiser_matrices(H, raisers, check)
     check && _check_raisers(Es, H)
     return Es
 end
+# Kernels and lowered levels come from orthonormal vectors, so roundoff is small relative to the scale of the raisers.
+_raiser_tol(Es) = sqrt(eps(real(float(eltype(first(Es)))))) * maximum(E -> maximum(abs, E), Es)
 function _check_raisers(Es, H)
-    tol = sqrt(eps(real(float(eltype(first(Es)))))) * maximum(E -> maximum(abs, E), Es)^2
+    tol = _raiser_tol(Es) * maximum(E -> maximum(abs, E), Es)
     for (a, Ea) in pairs(Es), (b, Eb) in pairs(Es)
         C = Ea * Eb' - Eb' * Ea
         msg = a == b ?
@@ -163,20 +175,22 @@ function _check_raisers(Es, H)
 end
 
 """
-    multiplets(H, raisers; check = true)
+    multiplets(H, raisers; basis = Returns(I), check = true)
 
 Return `(J, M) => W`: for each key `J` of [`highest_weight_states`](@ref) and each sector `M` of `H`, the columns of
 `W` are an orthonormal basis, in `sector(M, H)`, of the states with total spin `J` and `Sz = M`, obtained by lowering
 the highest-weight states with the adjoints of `raisers` (S⁻ = (S⁺)†). For example,
 `multiplets(hilbert_space(S, 1:N, Sz => 2:N//2), Splus)[3, 2]` has one column per multiplet with total spin 3, the
-state of that multiplet with Sz = 2.
+state of that multiplet with Sz = 2. With `basis` as in [`highest_weight_states`](@ref), each `W` stays in the span of
+`basis(M)`, which the lowering must preserve, e.g. momentum sectors when translations commute with the raisers;
+`check` verifies this.
 """
-function multiplets(H, raisers; check = true)
+function multiplets(H, raisers; basis = Returns(I), check = true)
     Es = _raiser_matrices(H, raisers, check)
     lowerers = map(E -> copy(E'), Es)
-    # Each level is the image of orthonormal vectors, so roundoff is small relative to the scale of the raisers.
-    tol = sqrt(eps(real(float(eltype(first(Es)))))) * maximum(E -> maximum(abs, E), Es)
-    hws = highest_weight_states(H, Es; check = false)
+    tol = _raiser_tol(Es)
+    Qs = OrderedDict(qn => _sector_basis(basis, qn, check) for qn in quantumnumbers(H))
+    hws = highest_weight_states(H, Es; basis = qn -> Qs[qn], check = false)
     W = OrderedDict{Tuple{keytype(hws), keytype(hws)}, valtype(hws)}()
     for (J, V) in hws
         level = OrderedDict(J => V)
@@ -186,12 +200,18 @@ function multiplets(H, raisers; check = true)
                 W[J, M] = B
             end
             X = reduce(hcat, [F[:, indices(M, H)] * B for F in lowerers for (M, B) in level])
-            level = OrderedDict(M => _column_span(X[indices(M, H), :], tol) for M in quantumnumbers(H))
+            level = OrderedDict(M => _span_in_basis(X[indices(M, H), :], Q, tol, check) for (M, Q) in Qs)
             filter!(((M, B),) -> size(B, 2) > 0, level)
             isempty(level) && break
         end
     end
     return W
+end
+function _span_in_basis(X, Q, tol, check)
+    Y = Q' * X
+    check && norm(X - Q * Y) > tol &&
+        throw(ArgumentError("lowering leads out of the span of the basis; each basis(M) must be invariant under the adjoints of the raisers, like momentum sectors when translations commute with them"))
+    return Q * _column_span(Y, tol)
 end
 function _column_span(X, tol)
     U, S = svd(X)
@@ -447,6 +467,37 @@ end
         M = representation(hop, sector(qn, H), Matrix)
         @test all(M * w ≈ w * (w' * M * w) for w in Ws)
     end
+end
+
+@testitem "Highest weights and multiplets in momentum bases" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: highest_weight_states, multiplets
+    N = 6
+    @spins S 1 // 2
+    space = hilbert_space(S, 1:N, sum(S[k][:z] for k in 1:N))
+    Splus = sum(S[k][:+] for k in 1:N)
+    S2 = sum(S[i][a] * S[j][a] for i in 1:N for j in 1:N for a in (:x, :y, :z))
+    perms = [[mod1(i + s, N) for i in 1:N] for s in 0:(N - 1)]
+    function momentum_basis(k)
+        weights = [cis(2π * k * s / N) for s in 0:(N - 1)]
+        return M -> (sec = sector(M, space); symmetric_sector(sec, factors(sec), (perms, weights)))
+    end
+    projector(V) = V * V'
+    for k in (0, 1)
+        basis = momentum_basis(k)
+        function reference(J, M)
+            Q = basis(M)
+            return Q * nullspace(Matrix(Q' * representation(S2, sector(M, space)) * Q) - J * (J + 1) * I; atol = 1.0e-8)
+        end
+        # For k = 1 the momentum states at Sz = 2 all have total spin 2, so S⁺ vanishes on them up to roundoff.
+        hws = highest_weight_states(space, Splus; basis)
+        @test all(haskey(hws, J) ? projector(hws[J]) ≈ projector(reference(J, J)) : isempty(reference(J, J)) for J in filter(>=(0), quantumnumbers(space)))
+        W = multiplets(space, Splus; basis)
+        @test all(projector(B) ≈ projector(reference(J, M)) for ((J, M), B) in W)
+        @test sum(B -> size(B, 2), values(W)) == sum(M -> size(basis(M), 2), quantumnumbers(space))
+    end
+    @test_throws ArgumentError highest_weight_states(space, Splus; basis = M -> 2 * momentum_basis(0)(M))
+    @test_throws ArgumentError multiplets(space, Splus; basis = M -> Matrix(I, dim(sector(M, space)), 1))
 end
 
 @testitem "Raisers must be symmetry raisers with fine enough sectors" begin
