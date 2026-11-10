@@ -9,11 +9,13 @@ import Rimu.Hamiltonians: dimension
 import FermionicHilbertSpaces: rimu_hamiltonian
 using FermionicHilbertSpaces: AbstractBasisState, dim, matrix_column, _states_of
 
-struct FHSHamiltonian{T,A,O,S,C} <: AbstractHamiltonian{T}
-    op::O
-    space::S
-    start::A
-    column::C
+# Mutable so that Rimu's `==` checks compare identity: on Julia 1.13, `===` can return false
+# for a large immutable compared with itself.
+mutable struct FHSHamiltonian{T,A,O,S,C} <: AbstractHamiltonian{T}
+    const op::O
+    const space::S
+    const start::A
+    const column::C
 end
 
 function rimu_hamiltonian(op, H, start)
@@ -40,8 +42,8 @@ end
 
 function operator_column(h::FHSHamiltonian{T,A}, address) where {T,A}
     elements = h.column(address)
-    i = findfirst(p -> p.first == address, elements)
-    diagonal = isnothing(i) ? zero(T) : popat!(elements, i).second
+    hasdiagonal = !isempty(elements) && first(first(elements)) == address
+    diagonal = hasdiagonal ? popfirst!(elements).second : zero(T)
     return FHSColumn{A,T,typeof(h)}(h, address, diagonal, elements)
 end
 

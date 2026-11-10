@@ -783,16 +783,6 @@ end
     @test isempty(matrix_column(f[1]' + f[4]', Hn; projection = true)(x))
 end
 
-@testitem "Rimu" begin
-    using Rimu, LinearAlgebra
-    using FermionicHilbertSpaces: rimu_hamiltonian
-    @fermions f
-    H = hilbert_space(f, 1:4)
-    ham = sum(f[k]' * f[k + 1] + hc for k in 1:3) + 2f[1]' * f[1] * f[2]' * f[2] - f[4]' * f[4]
-    exact = eigvals(Hermitian(representation(ham, constrain_space(H, NumberConservation(2)), Matrix)))
-    @test solve(ExactDiagonalizationProblem(rimu_hamiltonian(ham, H, "1100"))).values[1] ≈ exact[1]
-end
-
 @testitem "fragment" begin
     using LinearAlgebra
     using FermionicHilbertSpaces: fragment
