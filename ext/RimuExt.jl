@@ -72,6 +72,7 @@ function random_offdiagonal(c::FHSColumn{A, T}) where {A, T}
         (iszero(amp) || newstate == c.address || !isbasisstate(newstate, h.space)) && continue
         return newstate, 1 / c.noffdiagonals, convert(T, amp)
     end
+    return
 end
 
 end
