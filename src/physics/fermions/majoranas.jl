@@ -145,7 +145,7 @@ function add_tag(H::MajoranaHilbertSpace, tag)
     MajoranaHilbertSpace(majoranaindices, add_tag(parent(H), tag), add_tag(H.sym, tag))
 end
 # The atoms of a Majorana space are pairs of Majoranas (one fermionic mode each), named by the
-# pair. A single Majorana does not name an atom: its `atomic_id` is that of its whole group.
+# tuple of their two modes. A single Majorana's `atomic_id` is its mode, which names no atom.
 function atomic_id(H::MajoranaHilbertSpace)
     length(H.majoranaindices) == 2 || throw(ArgumentError("Only Majorana spaces with exactly two Majoranas have an atomic_id, use atom_ids for $H"))
     Tuple(keys(H.majoranaindices))
@@ -202,7 +202,6 @@ function _majorana_space(y, labels, args...)
     length(majorana_position) == length(labels) || throw(ArgumentError("The Majoranas of a Hilbert space must be distinct, got $labels."))
     MajoranaHilbertSpace(majorana_position, Hf, y)
 end
-# MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
 
 # Replace each pair of Majoranas in `names` that forms an atom of `H` by that atom, placed
@@ -210,9 +209,9 @@ MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap
 function _pair_majoranas(names, H)
     γs = Set(x for x in names if x isa Mode{<:Field{Majorana}})
     isempty(γs) && return names
-    pair_of = Dict(γ => a for a in atomic_factors(H) if a isa MajoranaHilbertSpace for γ in keys(a.majoranaindices) if γ in γs)
+    pair_of = Dict(γ => a for a in atomic_factors(H) if a isa MajoranaHilbertSpace for γ in modes(a) if γ in γs)
     for a in values(pair_of)
-        γ1, γ2 = keys(a.majoranaindices)
+        γ1, γ2 = modes(a)
         γ1 in γs && γ2 in γs || throw(ArgumentError("A Majorana names a mode only together with its partner, got $(γ1 in γs ? γ1 : γ2) without $(γ1 in γs ? γ2 : γ1)."))
     end
     placed = Set{MajoranaHilbertSpace}()
