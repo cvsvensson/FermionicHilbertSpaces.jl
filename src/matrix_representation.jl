@@ -138,7 +138,7 @@ end
 # On a transposed group, `newstate` holds the transposed action: an output outside the space is an element
 # ⟨state|op|t⟩ with t outside the space, which is not part of the matrix. Only the other groups can leave the space.
 _skip_outside(outind, projection, newstate, state, space) =
-    _skip_outside(outind, projection || iszero(outind) && !iszero(state_index(_keep_transposed_parts(newstate, state, space), space)))
+    _skip_outside(outind, projection || iszero(outind) && isbasisstate(_keep_transposed_parts(newstate, state, space), space))
 
 function operator_indices_and_amplitudes_generic!(accumulator, op, space, precomp; projection)
     Hin, Hout = _input_space(space), _output_space(space)
@@ -671,7 +671,7 @@ state out of `H` throws an error.
 function fragment(op, H::AbstractHilbertSpace, seeds; projection = false, depth = typemax(Int), cutoff = 0)
     states = unique!(collect(_states_of(H, seeds)))
     all(s -> isbasisstate(s, H), states) || throw(ArgumentError("The seeds must be basis states of the space."))
-    col = matrix_column(op, H; projection)
+    col = _matrix_column(op, H)
     found = Set(states)
     frontier = 1:length(states)
     for _ in 1:depth
@@ -679,6 +679,7 @@ function fragment(op, H::AbstractHilbertSpace, seeds; projection = false, depth 
         n = length(states)
         for k in frontier, (newstate, amp) in col(states[k])
             (abs(amp) <= cutoff || newstate in found) && continue
+            _skip_outside(isbasisstate(newstate, H), projection) && continue
             push!(found, newstate)
             push!(states, newstate)
         end
@@ -692,11 +693,18 @@ end
 
 Return a function `col` where `col(state)` gives the nonzero elements `newstate => ⟨newstate|op|state⟩` in the column
 of the basis state `state` of `H`, without building the matrix. Elements to states outside `H` throw an error, or are
-dropped with `projection = true`. For example, `matrix_column(f[1]' * f[2], H)(FockNumber(2))` is `[FockNumber(1) => 1]`.
+dropped with `projection = true`.
+
+    @fermions f; H = hilbert_space(f, 1:2); matrix_column(f[1]' * f[2], H)(FockNumber(2))  # [FockNumber(1) => 1]
 """
 function matrix_column(op, H::AbstractHilbertSpace; projection = false)
+    col = _matrix_column(op, H)
+    return state -> [s => a for (s, a) in col(state) if !_skip_outside(isbasisstate(s, H), projection, s, state, H)]
+end
+
+function _matrix_column(op, H)
     terms, coeff = trivial_operator(op) ? ((), get_trivial_op_coeff(op)) : _operator_terms(op)
-    prodops = _partitioned_terms(terms, _checked_group_ids(op, H), groups(H))
+    prodops = isempty(terms) ? terms : _partitioned_terms(terms, _checked_group_ids(op, H), groups(H))
     precomps = [precomputation_before_operator_application(term, H) for term in prodops]
     T = promote_type(typeof(coeff), mapreduce(mat_eltype, promote_type, prodops; init = Bool))
     diagonal = convert(T, coeff)
@@ -708,11 +716,12 @@ function matrix_column(op, H::AbstractHilbertSpace; projection = false)
             newstate, amp = _apply_local_operators(term, state, H, precomp)
             iszero(amp) || (elements[newstate] = get(elements, newstate, zero(diagonal)) + amp)
         end
-        return [s => a for (s, a) in elements if !iszero(a) && !_skip_outside(isbasisstate(s, H), projection)]
+        return [s => a for (s, a) in elements if !iszero(a)]
     end
 end
 
 @testitem "matrix_column" begin
+    using LinearAlgebra
     using FermionicHilbertSpaces: matrix_column
     function matches_matrix(op, H)
         col = matrix_column(op, H)
@@ -733,6 +742,7 @@ end
     @test matches_matrix(f[1]' * f[2] * S[1][:+] + hc + f[2]' * S[2][:x] + S[1][:z] * S[2][:z] + 1, Hp)
 
     x = first(basisstates(Hn))
+    @test matrix_column(2I, Hn)(x) == [x => 2]
     @test_throws ArgumentError matrix_column(f[1]' + f[4]', Hn)(x)
     @test isempty(matrix_column(f[1]' + f[4]', Hn; projection = true)(x))
 end
