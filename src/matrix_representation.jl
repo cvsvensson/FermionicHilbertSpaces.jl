@@ -661,6 +661,89 @@ function _checked_group_ids(op, space)
 end
 
 """
+    fragment(op, H, seeds; projection = false, depth = typemax(Int), cutoff = 0)
+
+Return the smallest subspace of `H` spanned by basis states that contains `seeds` and is closed under `op`, e.g.
+`FermionicHilbertSpaces.fragment(pxp, H, ["↓↓↓↓"])`. With a finite `depth`, only states within `depth` steps of the
+seeds are included, and amplitudes with `abs(amp) <= cutoff` count as zero. Unless `projection=true`, `op` mapping a
+state out of `H` throws an error.
+"""
+function fragment(op, H::AbstractHilbertSpace, seeds; projection = false, depth = typemax(Int), cutoff = 0)
+    states = unique!(collect(_states_of(H, seeds)))
+    all(s -> isbasisstate(s, H), states) || throw(ArgumentError("The seeds must be basis states of the space."))
+    if !trivial_operator(op)
+        bases = _checked_group_ids(op, H)
+        terms = [length(bases) > 1 ? partition_product(term, bases, groups(H)) : term for term in NCterms(op)]
+        found = Set(states)
+        elements = Dict{Tuple{Int, eltype(states)}, mat_eltype(op)}()
+        frontier = 1:length(states)
+        for _ in 1:depth
+            isempty(frontier) && break
+            empty!(elements)
+            for term in terms
+                _add_elements!(elements, term, view(states, frontier), H)
+            end
+            n = length(states)
+            for ((_, newstate), amp) in elements
+                # Amplitudes are summed over all terms before testing for zero, since terms can cancel.
+                (abs(amp) <= cutoff || newstate in found) && continue
+                _skip_outside(isbasisstate(newstate, H), projection) && continue
+                push!(found, newstate)
+                push!(states, newstate)
+            end
+            frontier = (n + 1):length(states)
+        end
+    end
+    return constrain_space(H, states[sortperm([order_key(s, H) for s in states])])
+end
+function _add_elements!(elements, term, states, H)
+    precomp = precomputation_before_operator_application(term, H)
+    for (k, state) in enumerate(states)
+        newstate, amp = _apply_local_operators(term, state, H, precomp)
+        iszero(amp) || (elements[(k, newstate)] = get(elements, (k, newstate), zero(amp)) + amp)
+    end
+    return
+end
+
+@testitem "fragment" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: fragment
+    @spins S 1 // 2
+    N = 6
+    H = hilbert_space(S, 1:N)
+    P(k) = 1 // 2 - S[k][:z]
+    X(k) = 2S[k][:x]
+    pxp = X(1) * P(2) + sum(P(k - 1) * X(k) * P(k + 1) for k in 2:(N - 1)) + P(N - 1) * X(N)
+    no_neighbours(m) = !any(k -> m[k] > 0 && m[k + 1] > 0, 1:(N - 1))
+    blockade = constrain_space(H, FilterConstraint(m -> no_neighbours(collect(m)); maps = s -> s.m, spaces = factors(H)))
+    F = fragment(pxp, H, ["↓"^N])
+    @test basisstates(F) == basisstates(blockade)
+    @test collect(basisstates(fragment(pxp, H, ["↓"^N]; depth = 2))) == filter(s -> count(t -> t.m > 0, s.states) <= 2, collect(basisstates(blockade)))
+    @test basisstates(fragment(1, H, ["↓"^N, "↓"^N])) == basisstates(constrain_space(H, ["↓"^N]))
+    @test_throws ArgumentError fragment(pxp, blockade, ["↑"^N])
+    flips = sum(X(k) for k in 1:N)
+    @test_throws ArgumentError fragment(flips, blockade, ["↓"^N])
+    @test basisstates(fragment(flips, blockade, ["↓"^N]; projection = true)) == basisstates(blockade)
+
+    # The terms cancel on |↓↓⟩, though each flips spin 1.
+    H2 = hilbert_space(S, 1:2)
+    @test basisstates(fragment(S[1][:x] * (1 // 2 + S[2][:z]), H2, ["↓↓"])) == basisstates(constrain_space(H2, ["↓↓"]))
+
+    H1 = hilbert_space(S, 1:1)
+    rounding = (0.1 + 0.2) * S[1][:x] - 0.3 * S[1][:x]
+    @test basisstates(fragment(rounding, H1, ["↓"])) == basisstates(H1)
+    @test basisstates(fragment(rounding, H1, ["↓"]; cutoff = 1.0e-12)) == basisstates(constrain_space(H1, ["↓"]))
+
+    # A product of more than `typemax(Int)` states
+    N = 64
+    spins = [hilbert_space(S[k]) for k in 1:N]
+    hop = sum(S[k][:+] * S[k + 1][:-] + hc for k in 1:(N - 1))
+    F = fragment(hop, tensor_product(spins), ["↑" * "↓"^(N - 1)])
+    @test dim(F) == N && all(s -> count(t -> t.m > 0, s.states) == 1, basisstates(F))
+    @test ishermitian(representation(hop, F))
+end
+
+"""
     expectation(op, state, H)
 
 Return the expectation value of the operator `op` in `state` on the space `H`. A vector `ψ` gives `ψ' * M * ψ` and a

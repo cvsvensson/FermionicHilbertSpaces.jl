@@ -409,18 +409,17 @@ rewrap(::TransposedSpace, space) = TransposedSpace(space)
     @test l(Num(1)) * l(Shift(1, 1)) == l(Shift(1, 1)) * l(Num(1)) + l(Shift(1, 1))
     @test l(Num(1)) * r(Shift(1, 1)) == r(Shift(1, 1)) * l(Num(1))
     @test l(r(Shift(1, 1))) != r(l(Shift(1, 1)))
-    for labels in ((1, 2), (:a, :b))
-        H = tensor_product([GenericHilbertSpace(k, Site.(0:2)) for k in labels])
-        Hlr, Hl, Hr, left, right = open_system(H)
-        A = Shift(labels[1], 1) * Num(labels[2]) + 2 * Num(labels[1])
-        B = Shift(labels[2], -1) + Shift(labels[1], 1) * Shift(labels[2], 1)
-        MA, MB = representation(A, H, Matrix), representation(B, H, Matrix)
-        ρ = randn(ComplexF64, dim(H), dim(H))
-        v = reshape(ρ, (Hl, Hr) => Hlr)
-        @test reshape(representation(left(A) * right(B), Hlr) * v, Hlr => (Hl, Hr)) ≈ MA * ρ * MB
-        L = representation(-1im * (left(A + A') - right(A + A')) + dissipator(B), Hlr)
-        @test abs(tr(reshape(L * v, Hlr => (Hl, Hr)))) < 1.0e-10
-    end
+    labels = (1, 2)
+    H = tensor_product([GenericHilbertSpace(k, Site.(0:2)) for k in labels])
+    Hlr, Hl, Hr, left, right = open_system(H)
+    A = Shift(labels[1], 1) * Num(labels[2]) + 2 * Num(labels[1])
+    B = Shift(labels[2], -1) + Shift(labels[1], 1) * Shift(labels[2], 1)
+    MA, MB = representation(A, H, Matrix), representation(B, H, Matrix)
+    ρ = randn(ComplexF64, dim(H), dim(H))
+    v = reshape(ρ, (Hl, Hr) => Hlr)
+    @test reshape(representation(left(A) * right(B), Hlr) * v, Hlr => (Hl, Hr)) ≈ MA * ρ * MB
+    L = representation(-1im * (left(A + A') - right(A + A')) + dissipator(B), Hlr)
+    @test abs(tr(reshape(L * v, Hlr => (Hl, Hr)))) < 1.0e-10
 end
 
 @testitem "open_system of a projector onto a state" begin

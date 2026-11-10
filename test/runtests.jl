@@ -2,7 +2,7 @@ using TestItemRunner
 
 # The suite is dominated by compilation, so the test items are split by name over separate processes.
 # `FHS_TEST_SHARDS=1` runs them all in this process.
-nshards = parse(Int, get(ENV, "FHS_TEST_SHARDS", string(clamp(Sys.CPU_THREADS ÷ 2, 1, 4))))
+nshards = parse(Int, get(ENV, "FHS_TEST_SHARDS", string(min(Sys.CPU_THREADS, 4))))
 shard = parse(Int, get(ENV, "FHS_TEST_SHARD", "0"))
 if nshards == 1 || shard > 0
     @run_package_tests verbose = true filter = ti -> nshards == 1 || mod(hash(ti.name), nshards) == shard - 1

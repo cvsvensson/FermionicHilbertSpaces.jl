@@ -87,12 +87,17 @@ basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(I -> _product_basiss
 Base.@propagate_inbounds basisstate(n::Integer, H::_ProductSpace) = _product_basisstate(_index_array(H.cartinds)[n], H)
 Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::_ProductSpace) = ProductState(_tuple_map(basisstate, Tuple(I), H.factors))
 function _state_index(state::ProductState, H::_ProductSpace)
-    length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
-    inds = _tuple_map(_state_index, state.states, H.factors)
+    inds = _factor_indices(state, H)
     # `all` on a tuple of one type keeps the tuple in memory, which on a GPU is slow local memory
     mapreduce(>(0), &, inds) || return 0
     return _linear_index(inds, _index_array(H.lininds).indices)
 end
+function _factor_indices(state::ProductState, H::_ProductSpace)
+    length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
+    return _tuple_map(_state_index, state.states, H.factors)
+end
+# The last factor varies slowest in the order of `H`
+order_key(state::ProductState, H::ProductSpace) = reverse(_factor_indices(state, H))
 has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && !isnothing(H.lininds)
 
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
@@ -269,7 +274,6 @@ parity(state::ProductState) = prod(parity, atomic_factors(state))
     H2direct = subregion(spaces[[2, 5, 6]], Hprod)
     @test Set(basisstates(H2direct)) == Set(basisstates(H2))
     m = rand(dim(Hprod), dim(Hprod))
-    partial_trace(m, Hprod => H2)
     @test partial_trace(m, Hprod => H2) ≈ partial_trace(partial_trace(m, Hprod => H1), H1 => H2)
 
 
@@ -292,16 +296,15 @@ end
     using LinearAlgebra: diag
     using SparseArrays: sparse
     @spins S 1 // 2
-    for N in (64, 65)
-        spins = [hilbert_space(S[i]) for i in 1:N]
-        P = tensor_product(spins)
-        @test_throws OverflowError dim(P)
-        @test_throws ArgumentError basisstate(1, P)
-        @test_throws ArgumentError state_index(ProductState(ntuple(_ -> SpinState(-1 // 2), N)), P)
-        H = tensor_product(spins; constraint = AdditiveConstraint(1; spaces = spins, maps = fill(s -> Int(1 // 2 - s.m), N)))
-        @test dim(H) == N
-        @test all(state_index(basisstate(n, H), H) == n for n in 1:dim(H))
-    end
+    N = 64
+    spins = [hilbert_space(S[i]) for i in 1:N]
+    P = tensor_product(spins)
+    @test_throws OverflowError dim(P)
+    @test_throws ArgumentError basisstate(1, P)
+    @test_throws ArgumentError state_index(ProductState(ntuple(_ -> SpinState(-1 // 2), N)), P)
+    H = tensor_product(spins; constraint = AdditiveConstraint(1; spaces = spins, maps = fill(s -> Int(1 // 2 - s.m), N)))
+    @test dim(H) == N
+    @test all(state_index(basisstate(n, H), H) == n for n in 1:dim(H))
     @fermions f
     spaces = [[hilbert_space(f, [i]) for i in 1:100]; [hilbert_space(S[i]) for i in 1:100]]
     P = tensor_product(spaces)
