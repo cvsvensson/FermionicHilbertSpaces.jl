@@ -113,6 +113,7 @@ end
         (b' * b + b + b', hilbert_space(b, 4)),
         (s[:+] + s[:-] + 0.5 * s[:z], hilbert_space(s)),
         (mixed, Hmixed),
+        (f[1]' * f[2] * s[:+] + hc + b' * b * s[:z] + f[1]' * f[1] * b, tensor_product(hilbert_space(f, 1:2), hilbert_space(s), hilbert_space(b, 3))),
         (f[1]' * f[2] + hc, hilbert_space(f, 1:10, NumberConservation(1))),
         (2, hilbert_space(f, 1:2)),
         (f[1]' * f[2] * s[:+] + hc + 2im, tensor_product(hilbert_space(f, 1:2), hilbert_space(s))),

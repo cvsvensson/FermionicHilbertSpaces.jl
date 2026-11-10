@@ -1,13 +1,12 @@
 module OhMyThreadsExt
-using SparseArrays: SparseArrays, nonzeros, nzrange, rowvals
 using OhMyThreads: OhMyThreads, Scheduler, chunks, tforeach, tmap
 using FermionicHilbertSpaces: FermionicHilbertSpaces
 using LinearAlgebra: LinearAlgebra, rmul!
-using NonCommutativeProducts: NCAdd, NCMul
+using NonCommutativeProducts: NCAdd
 import SciMLOperators: cache_operator
 
 import OhMyThreads: Schedulers.chunking_args, Consecutive
-import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, ProductOperator, _terms_matrix, _precomputed_terms, _blocked_sparse_matrix, _narrowed, matrix_accumulator, add_identity!!, NoChunking, chunked_operator_indices_and_amplitudes_generic!, LazyOperator, lazy_mul!, _apply_single_term!, _conj_if, _apply_local_operators, basisstate, state_index, _skip_outside, dim, _lazy_output_prototype, cache_operator!, _lazy_terms
+import FermionicHilbertSpaces: EagerDenseRepr, EagerSparseRepr, TermChunking, StateChunking, _terms_matrix, _precomputed_terms, _blocked_sparse_matrix, _narrowed, matrix_accumulator, add_identity!!, chunked_operator_indices_and_amplitudes_generic!, LazyOperator, lazy_mul!, _apply_single_term!, _add_scalar!, dim, _lazy_output_prototype, cache_operator!, _lazy_terms
 
 function _reduce_add!(y, partials)
     isempty(partials) && return y
@@ -68,14 +67,9 @@ function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd,<:Any,<:Any,<
     else
         rmul!(y, β)
     end
-    op = L.op
     cache_operator!(L, y)
     _apply_term_chunks!(y, x, L, α, L.cache)
-    if !iszero(op.coeff) && !iszero(α)
-        scalar_coeff = α * _conj_if(op.coeff, L.conjugate)
-        y .+= scalar_coeff .* x
-    end
-    return y
+    return _add_scalar!(y, L, x, α)
 end
 
 # The buffers come in as the argument `chnl`, not from the untyped field `L.cache`, so the loops are type stable.
@@ -84,8 +78,8 @@ function _apply_term_chunks!(y, x, L, α, chnl::Channel)
     tforeach(_term_chunk_data(L.precomp, L.chunking); scheduler = L.chunking.scheduler) do local_terms
         local_mat = take!(chnl)
         fill!(local_mat, zero(eltype(local_mat)))
-        for (term, coeff, precomp) in local_terms
-            _apply_single_term!(local_mat, x, L.space, term, precomp, _conj_if(coeff, L.conjugate) * α, L.conjugate, L.projection, NoChunking())
+        for (term, precomp) in local_terms
+            _apply_single_term!(local_mat, x, L.space, term, precomp, α, L.conjugate, L.projection)
         end
         lock(lk) do
             y .+= local_mat
@@ -95,7 +89,7 @@ function _apply_term_chunks!(y, x, L, α, chnl::Channel)
     return y
 end
 
-function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCMul,<:Any,<:Any,<:StateChunking}, x::AbstractVecOrMat, α, β) where T
+function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:Any, <:Any, <:Any, <:StateChunking}, x::AbstractVecOrMat, α, β) where {T}
     if iszero(β)
         fill!(y, zero(T))
     else
@@ -103,33 +97,7 @@ function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCMul,<:Any,<:Any,<
     end
     cache_operator!(L, y)
     _apply_terms!(y, x, L.space, _lazy_terms(L), α, L.conjugate, L.projection, L.chunking, L.cache)
-    return y
-end
-
-function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:ProductOperator,<:Any,<:Any,<:StateChunking}, x::AbstractVecOrMat, α, β) where T
-    if iszero(β)
-        fill!(y, zero(T))
-    else
-        rmul!(y, β)
-    end
-    cache_operator!(L, y)
-    _apply_terms!(y, x, L.space, _lazy_terms(L), α, L.conjugate, L.projection, L.chunking, L.cache)
-    return y
-end
-
-function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd,<:Any,<:Any,<:StateChunking}, x::AbstractVecOrMat, α, β) where T
-    if iszero(β)
-        fill!(y, zero(T))
-    else
-        rmul!(y, β)
-    end
-    cache_operator!(L, y)
-    _apply_terms!(y, x, L.space, _lazy_terms(L), α, L.conjugate, L.projection, L.chunking, L.cache)
-    if !iszero(L.op.coeff) && !iszero(α)
-        scalar_coeff = α * _conj_if(L.op.coeff, L.conjugate)
-        y .+= scalar_coeff .* x
-    end
-    return y
+    return _add_scalar!(y, L, x, α)
 end
 
 # Each chunk of input states applies all terms into its own buffer, which is added to `y` once.
@@ -139,8 +107,8 @@ function _apply_terms!(y, x, space, terms, α, conjugate, projection, chunking::
     tforeach(_state_chunk_data(space, chunking); scheduler = chunking.scheduler) do cols
         local_mat = take!(chnl)
         fill!(local_mat, zero(eltype(local_mat)))
-        for (term, coeff, precomp) in terms
-            _apply_chunk!(local_mat, x, space, term, precomp, _conj_if(coeff, conjugate) * α, conjugate, projection, cols)
+        for (term, precomp) in terms
+            _apply_single_term!(local_mat, x, space, term, precomp, α, conjugate, projection, cols)
         end
         lock(lk) do
             y .+= local_mat
@@ -149,79 +117,6 @@ function _apply_terms!(y, x, space, terms, α, conjugate, projection, chunking::
     end
     return y
 end
-
-function _apply_chunk!(y::AbstractVector, x::AbstractVector, space, term, precomp, coeff, conjugate, projection, cols)
-    for n in cols
-        xn = x[n] * coeff
-        iszero(xn) && continue
-        state = basisstate(n, space)
-        state, _amp = _apply_local_operators(term, state, space, precomp)
-        if !iszero(_amp)
-            outind = state_index(state, space)
-            if !_skip_outside(outind, projection)
-                amp = (conjugate ? conj(_amp) : _amp)
-                y[outind] += amp * xn
-            end
-        end
-    end
-    return y
-end
-
-function _apply_chunk!(y::AbstractVector, x::SparseArrays.AbstractSparseVector, space, term, precomp, coeff, conjugate, projection, cols)
-    lo, hi = first(cols), last(cols)
-    for (n, xn) in zip(SparseArrays.nonzeroinds(x), nonzeros(x))
-        (n < lo || n > hi) && continue
-        state = basisstate(n, space)
-        state, _amp = _apply_local_operators(term, state, space, precomp)
-        if !iszero(_amp)
-            outind = state_index(state, space)
-            amp = (conjugate ? conj(_amp) : _amp) * coeff
-            if !_skip_outside(outind, projection)
-                y[outind] += amp * xn
-            end
-        end
-    end
-    return y
-end
-
-function _apply_chunk!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, coeff, conjugate, projection, cols)
-    for n in cols
-        state = basisstate(n, space)
-        newstate, _amp = _apply_local_operators(term, state, space, precomp)
-        if !iszero(_amp)
-            outind = state_index(newstate, space)
-            amp = (conjugate ? conj(_amp) : _amp) * coeff
-            if !_skip_outside(outind, projection)
-                @views y[outind, :] .+= amp .* x[n, :]
-            end
-        end
-    end
-    return y
-end
-
-function _apply_chunk!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC, space, term, precomp, coeff, conjugate, projection, cols)
-    rows = rowvals(x)
-    vals = nonzeros(x)
-    lo, hi = first(cols), last(cols)
-    for col in axes(x, 2)
-        for ptr in nzrange(x, col)
-            n = rows[ptr]
-            (n < lo || n > hi) && continue
-            xn = vals[ptr]
-            state = basisstate(n, space)
-            newstate, _amp = _apply_local_operators(term, state, space, precomp)
-            if !iszero(_amp)
-                outind = state_index(newstate, space)
-                amp = (conjugate ? conj(_amp) : _amp) * coeff
-                if !_skip_outside(outind, projection)
-                    y[outind, col] += amp * xn
-                end
-            end
-        end
-    end
-    return y
-end
-
 
 # Each chunk of columns is built as its own sparse matrix by the serial blocked build, and the chunks are concatenated.
 function _terms_matrix(::Type{T}, terms, coeff, space, ::EagerSparseRepr, chunking::ThreadedChunking; kwargs...) where T

@@ -234,21 +234,29 @@ end
 end
 
 ## Phase factor u
+# Bit `b` of the result is the parity of the bits of `x` above `b`.
+function _parity_above(x)
+    y = x >>> 1
+    k = 1
+    while !iszero(y >>> k)
+        y ⊻= y >>> k
+        k <<= 1
+    end
+    return y
+end
+# The sign of the occupied pairs whose mode in the later group of `masks` has the smaller site.
 function phase_factor_u(partition, masks, state::FockNumber)
     phase = false
-    for (s, (Xs, mask)) in enumerate(zip(partition, masks))
-        for (r, Xr) in Iterators.drop(enumerate(partition), s)
-            for i in Xr
-                if _bit(state, i)
-                    phase ⊻= jwstring_anti_bool(i, mask & state)
-                end
-            end
-        end
+    earlier = zero(state.f)
+    for mask in masks
+        occupied = (mask & state).f
+        phase ⊻= isodd(count_ones(_parity_above(earlier) & occupied))
+        earlier |= occupied
     end
     return phase ? -1 : 1
 end
 
-phase_factor_u(::AtomicStateMapper) = state -> 1
+phase_factor_u(::AtomicStateMapper) = Returns(1)
 function phase_factor_u(state_mapper::FockMapper)
     inds = state_mapper.fermionpositions
     masks = state_mapper.masks
@@ -260,7 +268,7 @@ end
 
 @testitem "Phase factor u" begin
     # Appendix C.4
-    import FermionicHilbertSpaces: phase_factor_u, bits, focknbr_from_site_indices
+    import FermionicHilbertSpaces: phase_factor_u, bits, focknbr_from_site_indices, _bit
     N = 2
     fockstates = sort(map(FockNumber, 0:2^N-1), by=Base.Fix2(bits, N))
     # uX(p1, p2, fockstates) = [phase_factor_u(f1, p1, p2) for f1 in fockstates]
@@ -312,4 +320,9 @@ end
     p = [[3], [2], [1]]
     @test uξ(p, fockstates) == [1, 1, 1, -1, 1, -1, -1, -1]
 
+    # The sign of the occupied pairs whose mode in the later group has the smaller site
+    reference(p, f) = prod((-1)^(_bit(f, i) && _bit(f, j)) for s in eachindex(p) for r in (s + 1):length(p) for j in p[s] for i in p[r] if i < j; init = 1)
+    for p in ([[3, 7], [1, 5, 6], [2, 4]], [[7, 1], [4], [2, 6], [3, 5]])
+        @test all(f -> uξ(p, [f]) == [reference(p, f)], map(FockNumber, 0:(2^7 - 1)))
+    end
 end
