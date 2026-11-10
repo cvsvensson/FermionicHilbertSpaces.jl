@@ -10,7 +10,7 @@ import FermionicHilbertSpaces: AbstractBasisState, Field, Op, apply_local_operat
 
 # The bath correlation function is ``C(τ) = \sum_l ξ_l e^{-χ_l τ}``, and the hierarchy is
 # truncated at total tier `m_max`.
-struct HEOMBosonicBath{V1,V2}
+struct HEOMBosonicBath{V1, V2}
     id::Symbol
     m_max::Int
     χ::V1
