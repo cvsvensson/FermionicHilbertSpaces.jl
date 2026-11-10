@@ -1,5 +1,22 @@
 using TestItemRunner
-@run_package_tests verbose = true
+
+# The suite is dominated by compilation, so the test items are split by name over separate processes.
+# `FHS_TEST_SHARDS=1` runs them all in this process.
+nshards = parse(Int, get(ENV, "FHS_TEST_SHARDS", string(min(Sys.CPU_THREADS, 4))))
+shard = parse(Int, get(ENV, "FHS_TEST_SHARD", "0"))
+if nshards == 1 || shard > 0
+    @run_package_tests verbose = true filter = ti -> nshards == 1 || mod(hash(ti.name), nshards) == shard - 1
+else
+    outputs = [IOBuffer() for _ in 1:nshards]
+    procs = map(1:nshards) do s
+        cmd = addenv(`$(Base.julia_cmd()) --project=$(Base.active_project()) $(@__FILE__)`, "FHS_TEST_SHARD" => s, "FHS_TEST_SHARDS" => nshards)
+        run(pipeline(ignorestatus(cmd); stdout = outputs[s], stderr = outputs[s]); wait = false)
+    end
+    foreach(wait, procs)
+    foreach(io -> write(stdout, take!(io)), outputs)
+    failed = findall(!success, procs)
+    isempty(failed) || error("Test shards $failed failed.")
+end
 
 
 @testitem "Basis" begin

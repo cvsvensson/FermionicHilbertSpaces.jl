@@ -78,13 +78,17 @@ struct StateChunking{S} <: AbstractChunkingStrategy
     scheduler::S
 end
 
-function mat_eltype(::NCAdd{C,NCMul{C2,S,F}}) where {C,C2,S,F}
-    return _term_eltype(C, S)
+# A factor type that is not concrete, as in a product of different operator types, says nothing about the
+# matrix elements, so the factors are promoted one by one.
+function mat_eltype(x::NCAdd{C, NCMul{C2, S, F}}) where {C, C2, S, F}
+    isconcretetype(S) && return _term_eltype(C, S)
+    return _factors_eltype(C, Iterators.flatten(term.factors for term in keys(x.dict)))
 end
-function mat_eltype(::NCMul{C,S,F}) where {C,S,F}
-    return _term_eltype(C, S)
+function mat_eltype(x::NCMul{C, S}) where {C, S}
+    isconcretetype(S) && return _term_eltype(C, S)
+    return _factors_eltype(C, x.factors)
 end
-mat_eltype(::Type{NCMul{C, S, F}}) where {C, S, F} = _term_eltype(C, S)
+_factors_eltype(C, factors) = mapreduce(f -> _term_eltype(C, typeof(f)), promote_type, factors; init = C)
 mat_eltype(::S) where {S} = mat_eltype(S)
 """
     mat_eltype(::Type{O})
@@ -186,9 +190,10 @@ With `transpose=true`, apply the transpose of `op` instead. The generic method a
 [`apply_local_operator`](@ref). A method for products of one operator type can be faster,
 as for fermions, where the whole product acts on a Fock state with bit operations.
 """
-function apply_local_operators(op::NCMul, state, space, precomps; transpose)
-    # Accumulate in the element type of the matrix so that `amp` keeps one type through the loop.
-    T = mat_eltype(op)
+function apply_local_operators(op::NCMul{C, S}, state, space, precomps; transpose) where {C, S}
+    # Accumulate in the element type of the matrix so that `amp` keeps one type through the loop. It is taken from the
+    # factor type so that it costs nothing per state; with factors of different types, `amp` is promoted by their amplitudes.
+    T = _term_eltype(C, S)
     P = something(_precision(T), Float64)
     amp = convert(T, op.coeff)
     if !transpose
@@ -654,6 +659,89 @@ function _checked_group_ids(op, space)
 end
 
 """
+    fragment(op, H, seeds; projection = false, depth = typemax(Int), cutoff = 0)
+
+Return the smallest subspace of `H` spanned by basis states that contains `seeds` and is closed under `op`, e.g.
+`FermionicHilbertSpaces.fragment(pxp, H, ["↓↓↓↓"])`. With a finite `depth`, only states within `depth` steps of the
+seeds are included, and amplitudes with `abs(amp) <= cutoff` count as zero. Unless `projection=true`, `op` mapping a
+state out of `H` throws an error.
+"""
+function fragment(op, H::AbstractHilbertSpace, seeds; projection = false, depth = typemax(Int), cutoff = 0)
+    states = unique!(collect(_states_of(H, seeds)))
+    all(s -> isbasisstate(s, H), states) || throw(ArgumentError("The seeds must be basis states of the space."))
+    if !trivial_operator(op)
+        bases = _checked_group_ids(op, H)
+        terms = [length(bases) > 1 ? partition_product(term, bases, groups(H)) : term for term in NCterms(op)]
+        found = Set(states)
+        elements = Dict{Tuple{Int, eltype(states)}, mat_eltype(op)}()
+        frontier = 1:length(states)
+        for _ in 1:depth
+            isempty(frontier) && break
+            empty!(elements)
+            for term in terms
+                _add_elements!(elements, term, view(states, frontier), H)
+            end
+            n = length(states)
+            for ((_, newstate), amp) in elements
+                # Amplitudes are summed over all terms before testing for zero, since terms can cancel.
+                (abs(amp) <= cutoff || newstate in found) && continue
+                _skip_outside(isbasisstate(newstate, H), projection) && continue
+                push!(found, newstate)
+                push!(states, newstate)
+            end
+            frontier = (n + 1):length(states)
+        end
+    end
+    return constrain_space(H, states[sortperm([order_key(s, H) for s in states])])
+end
+function _add_elements!(elements, term, states, H)
+    precomp = precomputation_before_operator_application(term, H)
+    for (k, state) in enumerate(states)
+        newstate, amp = _apply_local_operators(term, state, H, precomp)
+        iszero(amp) || (elements[(k, newstate)] = get(elements, (k, newstate), zero(amp)) + amp)
+    end
+    return
+end
+
+@testitem "fragment" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: fragment
+    @spins S 1 // 2
+    N = 6
+    H = hilbert_space(S, 1:N)
+    P(k) = 1 // 2 - S[k][:z]
+    X(k) = 2S[k][:x]
+    pxp = X(1) * P(2) + sum(P(k - 1) * X(k) * P(k + 1) for k in 2:(N - 1)) + P(N - 1) * X(N)
+    no_neighbours(m) = !any(k -> m[k] > 0 && m[k + 1] > 0, 1:(N - 1))
+    blockade = constrain_space(H, FilterConstraint(m -> no_neighbours(collect(m)); maps = s -> s.m, spaces = factors(H)))
+    F = fragment(pxp, H, ["↓"^N])
+    @test basisstates(F) == basisstates(blockade)
+    @test collect(basisstates(fragment(pxp, H, ["↓"^N]; depth = 2))) == filter(s -> count(t -> t.m > 0, s.states) <= 2, collect(basisstates(blockade)))
+    @test basisstates(fragment(1, H, ["↓"^N, "↓"^N])) == basisstates(constrain_space(H, ["↓"^N]))
+    @test_throws ArgumentError fragment(pxp, blockade, ["↑"^N])
+    flips = sum(X(k) for k in 1:N)
+    @test_throws ArgumentError fragment(flips, blockade, ["↓"^N])
+    @test basisstates(fragment(flips, blockade, ["↓"^N]; projection = true)) == basisstates(blockade)
+
+    # The terms cancel on |↓↓⟩, though each flips spin 1.
+    H2 = hilbert_space(S, 1:2)
+    @test basisstates(fragment(S[1][:x] * (1 // 2 + S[2][:z]), H2, ["↓↓"])) == basisstates(constrain_space(H2, ["↓↓"]))
+
+    H1 = hilbert_space(S, 1:1)
+    rounding = (0.1 + 0.2) * S[1][:x] - 0.3 * S[1][:x]
+    @test basisstates(fragment(rounding, H1, ["↓"])) == basisstates(H1)
+    @test basisstates(fragment(rounding, H1, ["↓"]; cutoff = 1.0e-12)) == basisstates(constrain_space(H1, ["↓"]))
+
+    # A product of more than `typemax(Int)` states
+    N = 64
+    spins = [hilbert_space(S[k]) for k in 1:N]
+    hop = sum(S[k][:+] * S[k + 1][:-] + hc for k in 1:(N - 1))
+    F = fragment(hop, tensor_product(spins), ["↑" * "↓"^(N - 1)])
+    @test dim(F) == N && all(s -> count(t -> t.m > 0, s.states) == 1, basisstates(F))
+    @test ishermitian(representation(hop, F))
+end
+
+"""
     expectation(op, state, H)
 
 Return the expectation value of the operator `op` in `state` on the space `H`. A vector `ψ` gives `ψ' * M * ψ` and a
@@ -913,6 +1001,32 @@ end
     FHS.mat_eltype(::Type{BigRootOp}) = BigFloat
     FHS.apply_local_operator(::BigRootOp, state, space, precomp) = (state, sqrt(big(2)))
     @test representation(BigRootOp(), H)[1, 1] == sqrt(big(2))
+end
+
+@testitem "Products of operator types with different matrix element types" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: AbstractSym, AbstractBasisState, symbolic_group, apply_local_operator, mat_eltype
+    import FermionicHilbertSpaces.NonCommutativeProducts: @nc
+    struct Shift <: AbstractSym
+        k::Int
+    end
+    struct Phase <: AbstractSym end
+    @nc Shift Phase
+    Base.adjoint(s::Shift) = Shift(-s.k)
+    Base.adjoint(p::Phase) = p
+    symbolic_group(::Union{Shift, Phase}) = 1
+    struct Site <: AbstractBasisState
+        n::Int
+    end
+    apply_local_operator(s::Shift, state::Site, space, precomp) = (Site(mod(state.n + s.k, 3)), 1)
+    apply_local_operator(::Phase, state::Site, space, precomp) = (state, im^state.n)
+    mat_eltype(::Type{Shift}) = Int
+    mat_eltype(::Type{Phase}) = ComplexF64
+
+    H = GenericHilbertSpace(1, Site.(0:2))
+    S = representation(Shift(1), H, Matrix)
+    @test representation(Phase() * Shift(1), H, Matrix) ≈ Diagonal(im .^ (0:2)) * S
+    @test representation(Phase() * Shift(1) + Shift(1), H) ≈ (Diagonal(im .^ (0:2)) + I) * S
 end
 
 @testitem "Operators between two spaces with Axes" begin
