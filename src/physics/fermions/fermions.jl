@@ -1,4 +1,3 @@
-const _FermionMode = Union{FermionSym, Mode{<:Field{Fermion}}}
 struct FermionicSpace{F, M, FG <: Group} <: AbstractGroupedHilbertSpace{F}
     modes::Vector{M}
     mode_ordering::OrderedDict{M, Int}
@@ -79,7 +78,7 @@ partial_transpose_phase_factor_eltype(::FermionicSpace) = Complex{Int}
 Position of the mode that the operator `op` acts on, in the mode ordering of `H` (e.g. the
 Jordan-Wigner order of fermions), or `0` if `H` has no such mode.
 """
-mode_position(f::_FermionMode, H) = get(mode_ordering(H), mode(f), 0)
+mode_position(op, H) = get(mode_ordering(H), mode(op), 0)
 
 combine_into_group(group::Group{Fermion}, atoms) = FermionicSpace(atoms, group)
 

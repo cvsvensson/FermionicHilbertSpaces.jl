@@ -22,7 +22,7 @@ representation(1im * γ[1] * γ[2], H, Matrix) # [0 1im; -1im 0]
 function hilbert_space(γ::Field{Majorana}, labels::AbstractVector, ::SingleParticle)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even, got $(length(labels))."))
     allunique(labels) || throw(ArgumentError("The Majorana labels must be distinct, got $labels."))
-    return MajoranaSingleParticleHilbertSpace(OrderedDict(γ[l] => n for (n, l) in enumerate(labels)))
+    return MajoranaSingleParticleHilbertSpace(OrderedDict(Mode(γ, l) => n for (n, l) in enumerate(labels)))
 end
 
 representation(op, H::MajoranaSingleParticleHilbertSpace, repr = EagerSparseRepr(); chunking = NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking = chunking, kwargs...)
