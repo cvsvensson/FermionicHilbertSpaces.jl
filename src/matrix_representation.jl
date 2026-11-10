@@ -243,7 +243,7 @@ end
 _basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
 
 # Other formats have no identity matrices for the groups without factors
-function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr, LazyRepr}, chunking; kwargs...)
+function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}, chunking; kwargs...)
     spaces = groups(space)
     length(spaces) == 1 && return _term_matrix_representation(op, only(spaces), repr, chunking; kwargs...)
     prodop = partition_product(op, bases, spaces)
@@ -306,17 +306,7 @@ end
 function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; kwargs...)
     return Eye{_repr_eltype(Bool, repr)}(dim(space))
 end
-function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::LazyRepr, chunking; kwargs...)
-    SciMLOperators.IdentityOperator(dim(space))
-end
-function _matrix_representation(op::Missing, bases, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; kwargs...)
-    return Eye{_repr_eltype(Bool, repr)}(dim(space))
-end
-function _matrix_representation(op::Missing, bases, space::AbstractHilbertSpace, repr::LazyRepr, chunking; kwargs...)
-    SciMLOperators.IdentityOperator(dim(space))
-end
-_merge_diags(matrices, repr::LazyRepr) = matrices
-function _merge_diags(matrices, repr::Union{EagerDenseRepr,EagerSparseRepr})
+function _merge_diags(matrices, repr)
     # go through list of matrices and merge consecutive Diagonals with kron
     newmats = Any[]
     n = 1
@@ -350,12 +340,16 @@ function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs.
     end
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
 end
+function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}, chunking; tree_split = 10, kwargs...)
+    return _sum_terms_matrix(_product_terms(op, bases, space, repr; tree_split, kwargs...), op.coeff, space, repr, chunking; kwargs...)
+end
+# The terms of `op` on the groups of `space`, as `KronTerm`s.
 # Terms acting on the same range of groups are summed on those groups, so each sum is embedded with identities once
 # instead of once per term. Terms on a single group join those on it and a neighbour, if any, since their sum is still
 # small. Joining larger ranges can make the summed matrices much larger than the terms. Terms acting on all groups are
 # not summed, as that would build full-size matrices. The diagonals of the sums are added into one term, since the
 # entries that several sums share are mostly on the diagonal.
-function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}, chunking; tree_split = 10, kwargs...)
+function _product_terms(op::NCAdd, bases, space::ProductSpace, repr; tree_split = 10, kwargs...)
     spaces = groups(space)
     by_span = Dict{UnitRange{Int}, Vector{Any}}()
     for term in NCterms(op)
@@ -369,7 +363,7 @@ function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::Un
     end
     products = [_kron_term(p, spaces, repr; kwargs...) for p in get(by_span, eachindex(spaces), [])]
     sums = [(convert(SparseMatrixCSC, _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)), _stride(spaces, first(span))) for (span, prodops) in by_span if span != eachindex(spaces)]
-    return _sum_terms_matrix([_split_diagonals(sums, dim(space)); products], op.coeff, space, repr, chunking; kwargs...)
+    return [_split_diagonals(sums, dim(space)); products]
 end
 function _span_matrix(prodop, span, spaces, repr; kwargs...)
     matrices = map(span) do n
@@ -438,11 +432,11 @@ operator_indices_and_amplitudes_generic!(accumulator, term::KronTerm, space, pre
 # On spaces with a basis-state loop (for example a constrained space over a ProductSpace) and for formats with no method of its own,
 # `_terms_matrix` builds the sum of all terms.
 function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split = 10, kwargs...)
-    spaces = groups(_input_space(space))
-    prodops = [partition_product(term, bases, spaces) for term in NCterms(op)]
+    prodops = _product_terms(op, bases, space, repr)
     T = _repr_eltype(promote_type(mapreduce(mat_eltype, promote_type, prodops), typeof(op.coeff)), repr)
     return _terms_matrix(T, prodops, op.coeff, space, repr, chunking; kwargs...)
 end
+_product_terms(op::NCAdd, bases, space, repr; _...) = [partition_product(term, bases, groups(_input_space(space))) for term in NCterms(op)]
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the type of `coeff`.
 function _sum_terms_matrix(terms, coeff, space, repr, chunking; kwargs...)
@@ -637,7 +631,7 @@ function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparse
     if trivial_operator(op)
         return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
     end
-    return _with_format_eltype(_cache_lazy(_matrix_representation(_at_format_precision(op, format), _checked_group_ids(op, space), space, format, chunking; projection, kwargs...), space, format), format)
+    return _with_format_eltype(_matrix_representation(_at_format_precision(op, format), _checked_group_ids(op, space), space, format, chunking; projection, kwargs...), format)
 end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
@@ -1316,7 +1310,6 @@ end
     @test a == 1.0 * f[2] * f[1] + 1 + f[1]
 end
 
-_sum_matrices(matrices, ::LazyRepr; tree_split=10) = sum(matrices)
 _sum_matrices(matrices, ::Union{EagerSparseRepr,EagerDenseRepr}; tree_split=10) = _sum_tree(matrices, tree_split)
 function _sum_tree(matrices, k)
     n = length(matrices)
