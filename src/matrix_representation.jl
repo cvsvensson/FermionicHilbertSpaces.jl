@@ -735,7 +735,7 @@ function _apply_term_groups!(elements, diagonal, termgroups::Tuple, state, H)
     return _apply_term_groups!(elements, diagonal, Base.tail(termgroups), state, H)
 end
 
-# States outside `H` share the zero key, so equal states need not be adjacent within a run of equal keys
+# Distinct states outside `H` can have equal keys, so duplicates of them need not be adjacent
 function _sum_duplicates!(elements, H)
     sort!(elements; by = p -> order_key(first(p), H))
     n = 0
@@ -819,6 +819,8 @@ end
     F = fragment(hop, tensor_product(spins), ["↑" * "↓"^(N - 1)])
     @test dim(F) == N && all(s -> count(t -> t.m > 0, s.states) == 1, basisstates(F))
     @test ishermitian(representation(hop, F))
+    # Elements to states outside the space that cancel are not an error
+    @test dim(fragment(sum(S[k][:x] * (1 // 2 + S[mod1(k + 1, 3)][:z]) for k in 1:3), constrain_space(hilbert_space(S, 1:3), ["↓↓↓"]), ["↓↓↓"])) == 1
 end
 
 """
