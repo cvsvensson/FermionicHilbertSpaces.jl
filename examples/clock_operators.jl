@@ -19,7 +19,7 @@ struct ClockOp{T} <: AbstractSym # A clock operator of type T (:X or :Z) on the 
     adjoint::Bool
 end
 ClockOp(m, T) = ClockOp{T}(m, false)
-Base.adjoint(op::ClockOp{T}) where T = ClockOp{T}(op.mode, !op.adjoint)
+Base.adjoint(op::ClockOp{T}) where {T} = ClockOp{T}(op.mode, !op.adjoint)
 @nc ClockOp
 ## The sites are the modes `c[i]` of a field of clock operators, and `c[i][:X]` is `ClockOp(c[i], :X)`.
 mode(op::ClockOp) = op.mode
@@ -48,7 +48,7 @@ D = 3
 L = 6
 states = [ClockState{D}(n) for n in 0:(D-1)]
 Hfull = hilbert_space(c, 1:L, states)
-clock_hamiltonian(J, h) = -J * sum(c[i][:X]' * c[i+1][:X] + hc for i in 1:(L-1)) - h * sum(c[i][:Z] + hc for i in 1:L)
+clock_hamiltonian(J, h) = -J * sum(c[i][:X]' * c[i + 1][:X] + hc for i in 1:(L - 1)) - h * sum(c[i][:Z] + hc for i in 1:L)
 
 # The clock charge, the sum of the local clock values mod D, divides the Hilbert space into sectors.
 clock_charge(state) = mod(sum(s.n for s in state.states), D)
