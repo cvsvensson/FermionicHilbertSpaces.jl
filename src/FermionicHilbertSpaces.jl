@@ -137,6 +137,15 @@ tag_label(label::Tags, tag) = add_tag(label, tag)
 function _resolve_sector_permutations_and_weights end # for Combinatorics extension
 function cache_operator! end # for OhMyThreads extension
 
+"""
+    rimu_hamiltonian(op, H, start)
+
+Wrap the operator `op` on the space `H` as a Rimu.jl Hamiltonian with basis states of `H` as addresses, for exact
+diagonalization or FCIQMC starting from the basis state `start`, e.g. `rimu_hamiltonian(ham, H, "1100")`.
+Requires `using Rimu`.
+"""
+function rimu_hamiltonian end # for Rimu extension
+
 ## Files
 include("spaces.jl")
 include("hilbert_space.jl")
