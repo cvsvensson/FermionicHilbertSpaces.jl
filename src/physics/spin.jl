@@ -2,8 +2,17 @@ _check_spin(J) = (J isa Real && ishalfinteger(J) && J >= 0) ? J : throw(Argument
 _to_halfint(::Nothing) = nothing
 _to_halfint(spin) = HalfInt(_check_spin(spin))
 
-struct Spin end
-const SpinMode = Mode{<:Field{Spin}}
+# `op` is `:+`, `:-` or `:z`, raised to the power `exponent`.
+struct SpinSym{B} <: AbstractSym
+    op::Symbol
+    mode::B
+    exponent::Int
+    function SpinSym{B}(op, mode::B, exponent) where {B}
+        #bypass any checks for internal use when we know the input is valid
+        return new{B}(op, mode, exponent)
+    end
+end
+const SpinMode = Mode{<:Field{SpinSym}}
 _spin(m::SpinMode) = m.field.params
 Base.getindex(s::SpinMode, op) = SpinSym(op, s)
 Base.getindex(s::SpinMode, ::Colon) = [SpinSym(σ, s) for σ in (:x, :y, :z)]
@@ -43,7 +52,7 @@ conventions of [`@spin`](@ref).
 macro spins(name, spin = nothing)
     return Expr(:block, :($(esc(name)) = _spin_field($(Expr(:quote, name)), $(esc(spin)))), :($(esc(name))))
 end
-_spin_field(name, J) = Field{Spin}(name, nothing, _to_halfint(J))
+_spin_field(name, J) = Field{SpinSym}(name, nothing, _to_halfint(J))
 
 
 """
@@ -102,11 +111,7 @@ function hilbert_space(sym::SpinMode, J)
     _check_spin_unset(sym.field)
     SpinSpace(sym, J)
 end
-hilbert_space(f::Field{Spin}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint)
-function hilbert_space(f::Field{Spin}, labels::AbstractVector, J, @nospecialize(constraint::ConstraintLike = NoSymmetry()))
-    _check_spin_unset(f)
-    return _mode_product(f, labels, constraint, J)
-end
+hilbert_space(f::Field{SpinSym}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint)
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.spin == b.spin)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.spin, h))
 
@@ -222,15 +227,6 @@ end
 
 end
 
-struct SpinSym{B} <: AbstractSym
-    op::Symbol
-    mode::B
-    exponent::Int
-    function SpinSym{B}(op, mode::B, exponent) where {B}
-        #bypass any checks for internal use when we know the input is valid
-        return new{B}(op, mode, exponent)
-    end
-end
 function SpinSym(op, basis::B, exponent::Integer=1) where {B}
     exponent < 0 && throw(ArgumentError("The spin operator `exponent` must be nonnegative, got $exponent."))
     exponent == 0 && return 1 // 1
@@ -323,8 +319,8 @@ end
 
 _factor_or_empty(x) = isone(x) ? Any[] : [x]
 
-# Equal bases can have different types, such as labels `1` and `Int32(1)`.
-local_mul_effect(a::SpinSym, b::SpinSym) = local_mul_effect(a, with_mode(b, a.mode))
+# Equal modes can have different types, such as labels `1` and `Int32(1)`.
+local_mul_effect(a::SpinSym, b::SpinSym) = local_mul_effect(a, SpinSym{typeof(a.mode)}(b.op, a.mode, b.exponent))
 function local_mul_effect(a::S, b::S) where {S <: SpinSym}
     if a.op == b.op && a.op in (:+, :-, :z)
         exponent = a.exponent + b.exponent

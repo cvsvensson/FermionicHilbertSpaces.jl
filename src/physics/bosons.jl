@@ -7,7 +7,7 @@ Use `b'` for the corresponding creation operator.
 """
 macro boson(x)
     return Expr(
-        :block, :($(esc(x)) = BosonSym(Mode(Field{Boson}($(Expr(:quote, x))), ()), -1)),
+        :block, :($(esc(x)) = BosonSym(Mode(Field{BosonSym}($(Expr(:quote, x))), ()), -1)),
         :($(esc(x))))
 end
 """
@@ -18,18 +18,17 @@ Create a bosonic field `b`. Index into it to get bosonic mode operators:
 """
 macro bosons(name)
     return Expr(
-        :block, :($(esc(name)) = Field{Boson}($(Expr(:quote, name)))),
+        :block, :($(esc(name)) = Field{BosonSym}($(Expr(:quote, name)))),
         :($(esc(name))))
 end
 
-struct Boson end
 
 # `exp` is the power: `-k` for `b^k` and `k` for `b'^k`.
 struct BosonSym{M} <: AbstractSym
     mode::M
     exp::Int
 end
-_field_entry(m::Mode{<:Field{Boson}}) = BosonSym(m, -1)
+_field_entry(m::Mode{<:Field{BosonSym}}) = BosonSym(m, -1)
 mode(x::BosonSym) = x.mode
 with_mode(x::BosonSym, m) = BosonSym(m, x.exp)
 
@@ -162,7 +161,7 @@ add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add
 
 """
     hilbert_space(b::BosonSym, dimension[, constraint])
-    hilbert_space(b::Field{Boson}, labels, dimension[, constraint])
+    hilbert_space(b::Field{BosonSym}, labels, dimension[, constraint])
 
 The truncated space of the bosonic mode `b`, with basis states `|0⟩, …, |dimension-1⟩`, so the
 maximal occupation is `dimension - 1`. With `labels`, the tensor product of one such space for
@@ -172,10 +171,9 @@ Operator terms that would raise the occupation above the cutoff are dropped with
 while leaving a constrained space throws unless `projection=true`. Products are normal ordered
 before truncation, so `b * b'` is represented as `b'b + 1`.
 """
-hilbert_space(b::Field{Boson}, labels::AbstractVector, dimension::Integer, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(b, labels, constraint, dimension)
 hilbert_space(b::BosonSym, args...) = hilbert_space(b.mode, args...)
-hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer) = TruncatedBosonicHilbertSpace(m, dimension)
-hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer, @nospecialize(constraint::ConstraintLike)) = constrain_space(hilbert_space(m, dimension), constraint)
+hilbert_space(m::Mode{<:Field{BosonSym}}, dimension::Integer) = TruncatedBosonicHilbertSpace(m, dimension)
+hilbert_space(m::Mode{<:Field{BosonSym}}, dimension::Integer, @nospecialize(constraint::ConstraintLike)) = constrain_space(hilbert_space(m, dimension), constraint)
 particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 

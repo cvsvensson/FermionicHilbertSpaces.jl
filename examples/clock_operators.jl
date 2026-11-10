@@ -8,20 +8,22 @@
 # The pieces a new algebra needs are listed in [Extending and performance hooks](../extending.md).
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
-import FermionicHilbertSpaces: AbstractBasisState, AbstractSym,
-    apply_local_operator, mat_eltype, symbolic_group
+import FermionicHilbertSpaces: @field, AbstractBasisState, AbstractSym,
+    apply_local_operator, mat_eltype, mode
 import FermionicHilbertSpaces.NonCommutativeProducts: @nc
 
 # ## Defining the clock operators and states
 # The clock operators are defined on a local Hilbert space of dimension ``D``, with basis states ``|n\rangle`` for ``n = 0, 1, ..., D-1``. The operator ``X`` shifts the local clock value, ``X |n\rangle = |n + 1\rangle``, and ``Z`` measures the local clock value: ``Z |n\rangle = \exp(2π i n / D) |n\rangle``.
-struct ClockOp{T} <: AbstractSym # A clock operator of type T (:X or :Z).   
-    site::Int
+struct ClockOp{T} <: AbstractSym # A clock operator of type T (:X or :Z) on the site `mode`.
+    mode
     adjoint::Bool
 end
-Base.adjoint(op::ClockOp{T}) where T = ClockOp{T}(op.site, !op.adjoint)
-X(i) = ClockOp{:X}(i, false)
-Z(i) = ClockOp{:Z}(i, false)
+ClockOp(m, T) = ClockOp{T}(m, false)
+Base.adjoint(op::ClockOp{T}) where T = ClockOp{T}(op.mode, !op.adjoint)
 @nc ClockOp
+## The sites are the modes `c[i]` of a field of clock operators, and `c[i][:X]` is `ClockOp(c[i], :X)`.
+mode(op::ClockOp) = op.mode
+@field c::ClockOp
 ## Products on the same site are kept as they are. Operators on different sites commute and are sorted by site.
 struct ClockState{D} <: AbstractBasisState # A clock state with dimension D.
     n::Int
@@ -39,22 +41,19 @@ function apply_local_operator(op::ClockOp{:Z}, state::ClockState{D}, space, prec
 end
 ## Clock operators have complex matrix elements.
 mat_eltype(::Type{<:ClockOp}) = ComplexF64
-## Associate operators with Hilbert-space factors.
-symbolic_group(op::ClockOp) = op.site
 
 # ## Using it in practice: Hamiltonian and conservation laws
 # Let's take the case D = 3 for 6 sites. We define a hamiltonian which conserves the clock charge, the sum of the local clock values modulo D, and calculate the symmetry resolved entanglement entropy in the ground state.
 D = 3
 L = 6
 states = [ClockState{D}(n) for n in 0:(D-1)]
-Hs = [GenericHilbertSpace(k, states) for k in 1:L]
-Hfull = tensor_product(Hs)
-clock_hamiltonian(J, h) = -J * sum(X(i)' * X(i + 1) + hc for i in 1:(L-1)) - h * sum(Z(i) + hc for i in 1:L)
+Hfull = hilbert_space(c, 1:L, states)
+clock_hamiltonian(J, h) = -J * sum(c[i][:X]' * c[i+1][:X] + hc for i in 1:(L-1)) - h * sum(c[i][:Z] + hc for i in 1:L)
 
 # The clock charge, the sum of the local clock values mod D, divides the Hilbert space into sectors.
 clock_charge(state) = mod(sum(s.n for s in state.states), D)
 Hzd = constrain_space(Hfull, clock_charge)
-Hhalf = constrain_space(tensor_product(Hs[1:div(L, 2)]), clock_charge)
+Hhalf = hilbert_space(c, 1:div(L, 2), states, clock_charge)
 
 # Functions to calculate entropies.
 shannon(p; tol=1e-12) = -sum(x * log(x) for x in p if x > tol)

@@ -1,4 +1,3 @@
-struct Majorana end
 
 abstract type AbstractMajoranaSym <: AbstractFermionSym end
 """
@@ -22,7 +21,7 @@ See also [`@fermions`](@ref).
 """
 macro majoranas(xs...)
     defs = map(xs) do x
-        :($(esc(x)) = Field{Majorana}($(Expr(:quote, x)), $xs))
+        :($(esc(x)) = Field{MajoranaSym}($(Expr(:quote, x)), $xs))
     end
     length(defs) == 1 && return only(defs)
     Expr(:block, defs...,
@@ -31,7 +30,7 @@ end
 struct MajoranaSym{M} <: AbstractMajoranaSym
     mode::M
 end
-_field_entry(m::Mode{<:Field{Majorana}}) = MajoranaSym(m)
+_field_entry(m::Mode{<:Field{MajoranaSym}}) = MajoranaSym(m)
 Base.:(==)(a::MajoranaSym, b::MajoranaSym) = a.mode == b.mode
 Base.hash(a::MajoranaSym, h::UInt) = hash(a.mode, h)
 Base.adjoint(x::MajoranaSym) = x
@@ -130,11 +129,11 @@ end
     end
 end
 
-struct MajoranaHilbertSpace{B, L, H, S <: Field{Majorana}} <: AbstractGroupedHilbertSpace{B}
+struct MajoranaHilbertSpace{B, L, H, S <: Field{MajoranaSym}} <: AbstractGroupedHilbertSpace{B}
     majoranaindices::L
     parent::H
     sym::S
-    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::S) where {L, H <: FermionicSpace, S <: Field{Majorana}}
+    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::S) where {L, H <: FermionicSpace, S <: Field{MajoranaSym}}
         B = statetype(parent)
         new{B,L,H,S}(majoranaindices, parent, sym)
     end
@@ -149,7 +148,7 @@ basisstates(m::MajoranaHilbertSpace) = basisstates(m.parent)
 Base.@propagate_inbounds basisstate(i::Integer, m::MajoranaHilbertSpace) = basisstate(i, m.parent)
 Base.parent(H::MajoranaHilbertSpace) = H.parent
 isconstrained(H::MajoranaHilbertSpace) = false
-group_id(H::MajoranaHilbertSpace) = Group{Majorana}(H.sym.group, H.sym.tags)
+group_id(H::MajoranaHilbertSpace) = Group{MajoranaSym}(H.sym.group, H.sym.tags)
 function add_tag(H::MajoranaHilbertSpace, tag)
     majoranaindices = OrderedDict(add_tag(γ, tag) => n for (γ, n) in H.majoranaindices)
     MajoranaHilbertSpace(majoranaindices, add_tag(parent(H), tag), add_tag(H.sym, tag))
@@ -174,8 +173,8 @@ function atom_position(x, H::MajoranaHilbertSpace)
     isodd(p) && get(H.majoranaindices, id[2], 0) == p + 1 ? (p + 1) ÷ 2 : 0
 end
 
-function combine_into_group(group::Group{Majorana}, spaces)
-    fermionic_space = combine_into_group(Group{Fermion}(group.names, group.tags), map(parent, spaces))
+function combine_into_group(group::Group{MajoranaSym}, spaces)
+    fermionic_space = combine_into_group(Group{FermionSym}(group.names, group.tags), map(parent, spaces))
     D = typeof(first(spaces).majoranaindices)
     majoranaindices = D()
     count = 1
@@ -200,12 +199,14 @@ partial_transpose_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_transpo
 
 majoranas(H::MajoranaHilbertSpace) = OrderedDict(γ.mode.label => representation(γ, H) for γ in modes(H))
 
-hilbert_space(y::Field{Majorana}, labels::AbstractVector, @nospecialize(c::QuantitySpec)) = constrain_space(hilbert_space(y, labels), c)
-function hilbert_space(y::Field{Majorana}, labels::AbstractVector, args...; kwargs...)
+hilbert_space(y::Field{MajoranaSym}, labels::AbstractVector, @nospecialize(c::QuantitySpec)) = constrain_space(hilbert_space(y, labels), c)
+hilbert_space(y::Field{MajoranaSym}, labels::AbstractVector) = _majorana_space(y, labels)
+hilbert_space(y::Field{MajoranaSym}, labels::AbstractVector, x) = _majorana_space(y, labels, x)
+function _majorana_space(y, labels, args...)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even to define a Hilbert space, got $(length(labels))."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
-    f = Field{Fermion}(y.name, y.group, nothing, y.tags)
-    Hf = hilbert_space(f, pairs, args...; kwargs...)
+    f = Field{FermionSym}(y.name, y.group, nothing, y.tags)
+    Hf = hilbert_space(f, pairs, args...)
     majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
     length(majorana_position) == length(labels) || throw(ArgumentError("The Majoranas of a Hilbert space must be distinct, got $labels."))
     MajoranaHilbertSpace(majorana_position, Hf, y)

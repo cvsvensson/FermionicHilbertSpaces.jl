@@ -1,4 +1,3 @@
-struct Fermion end
 
 """
     @fermions a b ...
@@ -20,7 +19,7 @@ See also [`@majoranas`](@ref).
 """
 macro fermions(xs...)
     defs = map(xs) do x
-        :($(esc(x)) = Field{Fermion}($(Expr(:quote, x)), $xs))
+        :($(esc(x)) = Field{FermionSym}($(Expr(:quote, x)), $xs))
     end
     fermions = Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
@@ -32,7 +31,7 @@ struct FermionSym{M} <: AbstractFermionSym
     creation::Bool
     mode::M
 end
-_field_entry(m::Mode{<:Field{Fermion}}) = FermionSym(false, m)
+_field_entry(m::Mode{<:Field{FermionSym}}) = FermionSym(false, m)
 Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.mode)
 Base.iszero(x::FermionSym) = false
 mode(f::FermionSym) = f.mode
@@ -57,7 +56,7 @@ Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.mode ==
 Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.mode, h))
 
 hilbert_space(f::FermionSym) = hilbert_space(f.mode)
-hilbert_space(m::Mode{<:Field{Fermion}}) = FermionicSpace([m], symbolic_group(m))
+hilbert_space(m::Mode{<:Field{FermionSym}}) = FermionicSpace([m], symbolic_group(m))
 
 # The sign λ in a * b = λ * b * a + scalar
 exchange_phase(a::FermionSym, b::FermionSym) = symbolic_group(a) == symbolic_group(b) ? -1 : 1
