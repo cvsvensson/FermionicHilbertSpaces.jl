@@ -68,7 +68,8 @@ tags(m::Mode) = tags(m.field)
 
 Base.:(==)(::Field, ::Field) = false
 Base.:(==)(a::Field{O}, b::Field{O}) where {O} = a.name == b.name && a.group == b.group && a.params == b.params && a.tags == b.tags
-Base.hash(f::Field{O}, h::UInt) where {O} = hash(f.tags, hash(f.params, hash(f.group, hash(f.name, hash(O, h)))))
+# Few fields, since this runs in every Dict lookup of a symbolic term; `==` compares the others.
+Base.hash(f::Field, h::UInt) = hash(f.name, hash(f.tags, h))
 Base.:(==)(a::Mode, b::Mode) = a.field == b.field && a.label == b.label
 Base.hash(m::Mode, h::UInt) = hash(m.label, hash(m.field, h))
 _order_key(f::Field{O}) where {O} = (nameof(O), f.name, tagset(f), f.params, f.group)
