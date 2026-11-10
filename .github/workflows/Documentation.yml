@@ -13,6 +13,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Runners have varying CPUs; native-target pkgimages from the cache are rejected on a different CPU.
+      JULIA_CPU_TARGET: generic
     permissions:
       actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
       contents: write
