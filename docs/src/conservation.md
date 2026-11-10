@@ -260,15 +260,16 @@ Hsub_frac = subregion(Hsub_full, Hfrac)
 ```
 
 ## Momentum sectors
-On a ring of ``N`` sites, `Translation(N) => k` keeps the states of momentum ``k``: a state with a single excitation has the amplitude ``e^{2\pi i k j/N}`` on site ``j``. The result has one basis vector per orbit of product states under translations, so it is about ``N`` times smaller than its parent, and its matrix elements are computed from one representative product state per basis vector, without building the operator on the parent. Combined with a conserved quantity, it keeps its sectors. The lowest energy of a Heisenberg ring at ``S^z_\mathrm{tot} = 0`` for each momentum is
+A symmetry that permutes the modes is a function on their labels. On a ring of ``N`` sites, the translation `T(j) = mod1(j + 1, N)` and `Permutation(T) => k` keep the states of momentum ``k``: a state with a single excitation has the amplitude ``e^{2\pi i k j/N}`` on site ``j``. The result has one basis vector per orbit of product states under translations, so it is about ``N`` times smaller than its parent, and its matrix elements are computed from one representative product state per basis vector, without building the operator on the parent. Combined with a conserved quantity, it keeps its sectors. The lowest energy of a Heisenberg ring at ``S^z_\mathrm{tot} = 0`` for each momentum is
 ```@example momentum
 using FermionicHilbertSpaces, LinearAlgebra
-using FermionicHilbertSpaces: Translation
+using FermionicHilbertSpaces: Permutation
 @spins S 1 // 2
 N = 10
 ham = sum(S[j][:]'S[mod1(j + 1, N)][:] for j in 1:N)
 Sz = sum(S[j][:z] for j in 1:N)
-Hks = [hilbert_space(S, 1:N, (Sz, Translation(N) => k)) for k in 0:(N - 1)]
+T(j) = mod1(j + 1, N)
+Hks = [hilbert_space(S, 1:N, (Sz, Permutation(T) => k)) for k in 0:(N - 1)]
 [k => eigmin(Hermitian(representation(ham, sector(0, Hk), Matrix))) for (k, Hk) in zip(0:(N - 1), Hks)]
 ```
 A lazy representation applies the operator to one representative per basis vector, which suits Krylov methods on larger rings, and `embed` gives a state on the parent space:
@@ -278,7 +279,7 @@ v = normalize(randn(size(L, 1)))
 ψ = embed(v, sector(0, Hks[1]) => hilbert_space(S, 1:N, Sz))
 norm(ψ), real(dot(v, L * v))
 ```
-A symmetry is a map on mode labels: `Translation(N)` sends the label `j`, or `(j, σ)`, to the next site. `Permutations(generators...) => eigenvalues` takes several such maps, such as translations together with the reflection `j -> N + 1 - j`, and keeps the states on which each generator acts as multiplication by its eigenvalue. Representing an operator throws unless relabeling its modes by each generator leaves it unchanged.
+In general, `Permutation(g) => k` keeps the states on which the permutation acts as ``e^{2\pi i k/n}``, where ``n`` is its order, and several such pairs combine into a group. For example, `(Permutation(T) => 0, Permutation(R) => 1)` with the reflection `R(j) = N + 1 - j` keeps the states of zero momentum that are odd under reflection, and a function such as `((i, σ),) -> (i, σ == :↑ ? :↓ : :↑)` gives spin inversion on a Hubbard ring. Representing an operator throws unless relabeling its modes by each permutation leaves it unchanged.
 
 ## Total spin and SU(N) multiplets
 A multiplet of total spin ``S`` has exactly one highest-weight state, the state with ``S^z_\mathrm{tot} = S`` that ``S^+_\mathrm{tot}`` annihilates; lowering it with ``S^-_\mathrm{tot}`` gives the rest of the multiplet. On a space split into ``S^z_\mathrm{tot}`` sectors, `highest_weight_states` returns these states, one column per multiplet, keyed by ``S``. This gives the lowest energy for each total spin of a Heisenberg ring:
