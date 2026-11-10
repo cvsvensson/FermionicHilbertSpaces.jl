@@ -311,7 +311,7 @@ end
     y2 = representation(γ[2], H)
     @test y1 * y2 == representation(γ[1] * γ[2], H)
 
-    maj(f) = f.creation ? -1im * f + hc : f + hc
+    maj(f) = f.kind.creation ? -1im * f + hc : f + hc
     @test representation(γ[1], H) == representation(maj(f[(1, 2)]), Hf)
     @test representation(γ[2], H) == representation(maj(f[(1, 2)]'), Hf)
     @test representation(1, H) == representation(1, Hf) == representation(1I, H) == representation(1I, Hf)

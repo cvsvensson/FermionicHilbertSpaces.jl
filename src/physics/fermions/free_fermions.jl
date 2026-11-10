@@ -55,7 +55,7 @@ function _quadratic_matrix(entries, op, H, repr)
     _is_quadratic_operator(op::NCAdd, isvalid) = all(term -> _is_quadratic_operator(term, isvalid), keys(op.dict))
     # Whether every term of `op` is a product of two `FermionSym`s, with one creation and one annihilation
     # operator if `number_conserving`
-    _is_quadratic_fermion_operator(op, number_conserving) = _is_quadratic_operator(op, (a, b) -> a isa FermionSym && b isa FermionSym && (!number_conserving || a.creation != b.creation))
+    _is_quadratic_fermion_operator(op, number_conserving) = _is_quadratic_operator(op, (a, b) -> a isa FermionSym && b isa FermionSym && (!number_conserving || a.kind.creation != b.kind.creation))
 
 _check_size(G, H) = size(G) == (dim(H), dim(H)) ||
     throw(DimensionMismatch("The correlation matrix has size $(size(G)), but the space has dimension $(dim(H))."))

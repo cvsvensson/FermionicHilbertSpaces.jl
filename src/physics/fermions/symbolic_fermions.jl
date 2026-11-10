@@ -44,17 +44,17 @@ const FermionSym{M} = Op{Fermion, M}
 mode_operator(::Type{Fermion}) = Fermion(false)
 Base.adjoint(k::Fermion) = Fermion(!k.creation)
 
-Base.show(io::IO, x::FermionSym) = (show(io, x.mode.field); print(io, x.creation ? "†" : ""); _show_label(io, x.mode.label))
+Base.show(io::IO, x::FermionSym) = (show(io, x.mode.field); print(io, x.kind.creation ? "†" : ""); _show_label(io, x.mode.label))
 function Base.isless(a::FermionSym, b::FermionSym)
     ga, gb = symbolic_group(a), symbolic_group(b)
     return if ga != gb
         ga < gb
-    elseif a.creation == b.creation
+    elseif a.kind.creation == b.kind.creation
         fa, fb = a.mode.field, b.mode.field
         fa.name == fb.name && return _order_isless(a.mode.label, b.mode.label)
         fa.name < fb.name
     else
-        a.creation > b.creation
+        a.kind.creation > b.kind.creation
     end
 end
 

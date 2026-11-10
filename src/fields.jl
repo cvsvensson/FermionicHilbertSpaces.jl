@@ -31,15 +31,15 @@ end
     Op(kind, mode)
 
 The operator that acts as `kind` on `mode`. The kind says what the operator is, such as `Fermion(true)` for a
-creation operator, and defines `adjoint`, [`apply_local_operator`](@ref) and [`mat_eltype`](@ref). The fields of
-the kind are properties of the operator.
+creation operator, and defines `adjoint`, [`apply_local_operator`](@ref) and [`mat_eltype`](@ref).
 """
 struct Op{K, M} <: AbstractSym
     kind::K
     mode::M
 end
-Base.getproperty(op::Op, name::Symbol) =
-    name === :kind || name === :mode ? getfield(op, name) : getproperty(getfield(op, :kind), name)
+# GPU kernels receive the kind in place of the operator, so code that runs on both reads `kind(x)`.
+kind(op::Op) = op.kind
+kind(k) = k
 
 """
     @field c::K

@@ -32,15 +32,15 @@ mode_operator(::Type{Boson}) = Boson(-1)
 Base.adjoint(k::Boson) = Boson(-k.exp)
 function Base.show(io::IO, x::BosonSym)
     show(io, x.mode.field)
-    print(io, x.exp > 0 ? "†" : "")
-    if abs(x.exp) !== 1
-        print(io, "^", abs(x.exp))
+    print(io, x.kind.exp > 0 ? "†" : "")
+    if abs(x.kind.exp) !== 1
+        print(io, "^", abs(x.kind.exp))
     end
     return _show_label(io, x.mode.label)
 end
 # Normal ordering of a = b^m, c = b†^n: b^m b†^n = Σₖ k! C(m,k) C(n,k) b†^(n-k) b^(m-k)
 function _boson_normal_order(a::BosonSym, c::BosonSym)
-    m, n = -a.exp, c.exp
+    m, n = -a.kind.exp, c.kind.exp
     terms = map(0:min(m, n)) do k
         factors = typeof(a)[]
         n > k && push!(factors, Op(Boson(n - k), a.mode))
@@ -52,8 +52,8 @@ function _boson_normal_order(a::BosonSym, c::BosonSym)
     return AddTerms(terms)
 end
 function local_mul_effect(a::BosonSym, b::BosonSym)
-    sign(a.exp) == sign(b.exp) && return Op(Boson(a.exp + b.exp), a.mode)
-    return a.exp < 0 && b.exp > 0 ? _boson_normal_order(a, b) : nothing
+    sign(a.kind.exp) == sign(b.kind.exp) && return Op(Boson(a.kind.exp + b.kind.exp), a.mode)
+    return a.kind.exp < 0 && b.kind.exp > 0 ? _boson_normal_order(a, b) : nothing
 end
 
 @testitem "BosonSym" begin

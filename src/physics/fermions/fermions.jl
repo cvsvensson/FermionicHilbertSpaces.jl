@@ -157,7 +157,7 @@ function apply_local_operators(op::NCMul{<:Any, <:Union{Fermion, FermionSym}}, s
     @inbounds for m in eachindex(factors, bitmasks)
         n = !transpose ? N - m + 1 : m
         factor = factors[n]
-        dagger = xor(factor.creation, transpose)
+        dagger = xor(kind(factor).creation, transpose)
         bitmask = bitmasks[n]
         occupied = !iszero(bitmask & newfocknbr)
         if dagger == occupied

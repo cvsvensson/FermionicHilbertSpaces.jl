@@ -1332,7 +1332,7 @@ end
 
 ## Symmetries
 isnumberconserving(x::AbstractSym) = false
-isnumberconserving(x::NCMul) = iszero(sum(s -> 2s.creation - 1, x.factors))
+isnumberconserving(x::NCMul) = iszero(sum(s -> 2s.kind.creation - 1, x.factors))
 isnumberconserving(x::NCAdd) = all(isnumberconserving, NCterms(x))
 
 isparityconserving(x::AbstractSym) = false
