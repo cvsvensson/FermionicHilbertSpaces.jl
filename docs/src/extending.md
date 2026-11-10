@@ -38,6 +38,9 @@ Connection to Hilbert spaces:
 - [`symbolic_group`](@ref)`(op)` returns the label of the space `op` acts on. This is required.
 - `Base.adjoint(op)` returns the adjoint operator. This is required; transposed spaces, as
   used for open systems, apply `adjoint(op)`.
+- `add_tag(op::MyOp, tag)` is needed for [`open_system`](@ref). It returns `op` rebuilt with
+  its group label replaced by [`tag_label`](@ref)`(label, tag)`, so the field holding the label
+  must accept that value. A custom space type other than `GenericHilbertSpace` needs the same method.
 - [`mat_eltype`](@ref)`(::Type{<:MyOp})` gives the element type of the matrix elements. The
   default is `Float64`, so operators with complex matrix elements need a method.
 - `apply_local_operator(op, state, space, precomp, ::Type{T})` is optional and computes the
@@ -65,7 +68,7 @@ the index of a state, which avoids the default dictionary lookup.
   name states, and lets constrained spaces return index `0` for states of other types.
 - [`interpret_state`](@ref)`(input, ::Type{MyState})` parses labels such as strings into states,
   for [`Kets`](@ref), `basisstate` and `state_index`.
-- [`internal_rep`](@ref)`(state, space, Int)` and `physical_rep(n, ::Type{MyState})` convert
+- [`internal_rep`](@ref)`(state, space, Int)` and [`physical_rep`](@ref)`(n, ::Type{MyState})` convert
   states to integers and back. When all groups of a product space have them, operators on the
   product space act on integers.
 - [`has_arithmetic_state_index`](@ref)`(H)` returns `true` for a space type whose
@@ -74,8 +77,8 @@ the index of a state, which avoids the default dictionary lookup.
   `state_index` returning the exact index in `1:dim(H)` for each basis state and `0` for every
   other state of the same type.
 - [`AbstractSubspace`](@ref) is the supertype of spaces spanned by some basis states of a
-  parent space. A subtype implements `parent`, `subspace_states`, `subspace_index` and
-  `rewrap`, and gets tensor products, partial traces and matrix representations from its parent.
+  parent space. A subtype implements `parent`, [`subspace_states`](@ref), [`subspace_index`](@ref) and
+  [`rewrap`](@ref), and gets tensor products, partial traces and matrix representations from its parent.
   [`default_subspace_index`](@ref) builds the index.
 - [`default_subspace_index`](@ref)`(constraint, parent, states)` builds the lookup that
   `state_index` uses on constrained and sector spaces. A method that dispatches on the type of

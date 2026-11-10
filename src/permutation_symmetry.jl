@@ -153,11 +153,11 @@ permutations with weight one or the permutation sign.
 `:antisymmetric`, and for a tuple `(perms, weights)` to the floating point version of the
 element type of `weights`, for example `ComplexF64` for complex weights.
 
-For `:symmetric` and `:antisymmetric` with `Hs` a partition of `H` and `orth_method` not
-`nothing`, the basis is built directly from the orbits of the basis states under
-permutations, with one column per orbit that contributes to the sector. The basis then
-has element type `float(T)`, and the keywords `normalize` and `sparse` have no effect.
-In the remaining cases, the projector is built with
+With `Hs` a partition of `H` and `orth_method` not `nothing`, the projector is not built,
+the basis is a `SparseMatrixCSC` with element type `float(T)`, and `sparse` has no effect.
+For `:symmetric` and `:antisymmetric` `normalize` has no effect either, since scaling does
+not change the span.
+Otherwise the projector is built with
 `permutation_projector(H, Hs, perms, weights, T; normalize, sparse)`, and `:symmetric` and
 `:antisymmetric` require `Combinatorics.jl` to be loaded.
 `orth_method` selects what is returned:
@@ -175,7 +175,8 @@ of it or of its complex conjugate.
 With `check=true` and a tuple `(perms, weights)`, `symmetric_sector` throws an
 `ArgumentError` if `perms` does not contain the identity permutation or its weight is not
 real and positive, and, for `orth_method` not `nothing`, if the projector is not
-Hermitian. `check=false` skips these checks.
+Hermitian or, for weights of equal magnitude, not a multiple of a one-dimensional character.
+`check=false` skips these checks.
 
 `Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
 case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
@@ -191,6 +192,9 @@ function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type
     perms, weights = _resolve_sector_permutations_and_weights(Hs, sector, T)
     length(perms) == length(weights) || throw(ArgumentError("The generated weights and permutations must have the same length, got $(length(weights)) and $(length(perms))."))
     check && sector isa Tuple && _check_identity_weight(perms, weights)
+    if sector isa Tuple && !isnothing(method) && ispartition(Hs, H)
+        return _orbit_block_basis(H, Hs, perms, weights, method, T; check, kwargs...)
+    end
     P = permutation_projector(H, Hs, perms, weights, T; kwargs...)
     isnothing(method) && return P
     check && sector isa Tuple && _check_hermitian(P)
@@ -218,9 +222,9 @@ function _is_positive_weight(w::Complex{<:Union{Integer,Rational,AbstractFloat}}
     return abs(imag(w)) <= sqrt(eps(float(real(typeof(w))))) * abs(w) && real(w) > 0
 end
 
-_check_hermitian(P) = nothing
-function _check_hermitian(P::AbstractMatrix{<:Union{AbstractFloat,Complex{<:AbstractFloat}}})
-    maximum(abs, P - P'; init=zero(real(eltype(P)))) <= _rank_tol(P) ||
+_check_hermitian(P, tol = nothing) = nothing
+function _check_hermitian(P::AbstractMatrix{<:Union{AbstractFloat, Complex{<:AbstractFloat}}}, tol = _rank_tol(P))
+    maximum(abs, P - P'; init = zero(real(eltype(P)))) <= tol ||
         throw(ArgumentError("The projector is not Hermitian, so `weights` are not a multiple of a character of the group formed by `perms`, or of its complex conjugate. $_CHECK_HINT"))
     return nothing
 end
@@ -279,12 +283,10 @@ function _orbit_sector_basis(H, Hs, parity, ::Type{T}; normalize=true, sparse=tr
         label[r] > 0 && (sizes[label[r]] += 1)
     end
     F = float(T)
-    Q = zeros(F, d, length(sizes))
-    for x in 1:d
-        c = label[roots[x]]
-        c > 0 && (Q[x, c] = signs[x] * firstsign[c] / sqrt(real(F)(sizes[c])))
-    end
-    return Q
+    rows = filter(x -> label[roots[x]] > 0, 1:d)
+    cols = [label[roots[x]] for x in rows]
+    vals = [F(signs[x] * firstsign[c]) / sqrt(real(F)(sizes[c])) for (x, c) in zip(rows, cols)]
+    return SparseArrays.sparse(rows, cols, vals, d, length(sizes))
 end
 
 # Signed union-find over the basis states: `parent` and `rel` encode a forest where the
@@ -335,21 +337,106 @@ end
 # A tolerance of `sqrt(eps)` times the largest column norm (at most `p`) separates the two.
 _rank_tol(P) = sqrt(eps(real(float(eltype(P))))) * sqrt(maximum(sum(abs2, P; dims=1); init=zero(real(eltype(P)))))
 
-function _sector_basis(P::AbstractMatrix, ::_QR)
+function _sector_basis(P::AbstractMatrix, ::_QR, tol = _rank_tol(P))
     F = qr(Matrix{float(eltype(P))}(P), ColumnNorm())
-    k = count(>(_rank_tol(P)) ∘ abs, diag(F.R))
+    k = count(>(tol) ∘ abs, diag(F.R))
     return Matrix(F.Q)[:, 1:k]
 end
-function _sector_basis(P::SparseMatrixCSC, ::_QR)
-    F = qr(P; tol=_rank_tol(P))
+function _sector_basis(P::SparseMatrixCSC, ::_QR, tol = _rank_tol(P))
+    F = qr(P; tol)
     return F.Q[invperm(F.prow), 1:rank(F)]
 end
-function _sector_basis(P::AbstractMatrix, ::_EIG)
+function _sector_basis(P::AbstractMatrix, ::_EIG, tol = _rank_tol(P))
     E = eigen!(Hermitian(Matrix{float(eltype(P))}(P)))
-    tol = sqrt(eps(real(eltype(E.values)))) * maximum(abs, E.values; init=zero(eltype(E.values)))
     return E.vectors[:, abs.(E.values) .> tol]
 end
 
+# `P = sum(weights[g] * R_g)` is block diagonal over the orbits of the basis states under the
+# group `perms`, and each block is orthonormalized on its own. The rank tolerance comes from
+# the whole `P`, since a block that is pure roundoff has no scale of its own. For a
+# one-dimensional character each block has rank at most one and is spanned by its column at
+# the first state of the orbit, so only that column is computed.
+function _orbit_block_basis(H, Hs, perms, weights, method, ::Type{T}; check = true, normalize = true, sparse = true) where {T}
+    states = basisstates(H)
+    mapper = state_mapper(H, Hs)
+    substates = unique_split_state(first(states), mapper)
+    gs = [_match_perm(perm, substates) for perm in perms]
+    onedim = _has_equal_magnitudes(weights)
+    onedim && check && _check_1d_character(perms, weights)
+
+    F = float(T)
+    d = length(states)
+    si = Base.Fix2(state_index, H)
+    owner = zeros(Int, d)
+    pos = zeros(Int, d)
+    entries = (Int[], Int[], F[])
+    orbits = Vector{Int}[]
+    blocks = Matrix{F}[]
+    for (s, state) in enumerate(states)
+        iszero(owner[s]) || continue
+        _permutation_images!(entries, (state,), si, mapper, gs, weights)
+        orbit = Int[]
+        push!(orbits, orbit)
+        for t in entries[1]
+            iszero(owner[t]) && (push!(orbit, t); owner[t] = length(orbits); pos[t] = length(orbit))
+        end
+        onedim || _permutation_images!(entries, [states[x] for x in orbit], si, mapper, gs, weights)
+        B = zeros(F, length(orbit), onedim ? 1 : length(orbit))
+        for (i, j, w) in zip(entries...)
+            owner[i] == length(orbits) || throw(ArgumentError("`perms` is not closed under composition, so it is not a group."))
+            B[pos[i], j] += w
+        end
+        push!(blocks, _is_negligible(B, weights) ? zero(B) : B)
+    end
+    bases = if onedim
+        [iszero(B) ? B[:, 1:0] : B / sqrt(sum(abs2, B)) for B in blocks]
+    else
+        if normalize
+            tr2 = sum(B -> sum(abs2, B), blocks)
+            iszero(tr2) || (s = conj(sum(tr, blocks)) / tr2; blocks .*= s)
+        end
+        tol = maximum(_rank_tol, blocks)
+        check && foreach(B -> _check_hermitian(B, tol), blocks)
+        [_sector_basis(B, method, tol) for B in blocks]
+    end
+    rows, cols, vals = Int[], Int[], F[]
+    c = 0
+    for (orbit, basis) in zip(orbits, bases), col in eachcol(basis)
+        c += 1
+        append!(rows, orbit); append!(cols, Iterators.repeated(c, length(orbit))); append!(vals, col)
+    end
+    return SparseArrays.sparse(rows, cols, vals, d, c)
+end
+
+function _permutation_images!(entries, states, state_index, mapper, gs, weights)
+    foreach(empty!, entries)
+    for (g, w) in zip(gs, weights)
+        _add_permutation_operator!(entries, (states, state_index), mapper, g, w)
+    end
+    return entries
+end
+
+# A positive multiple of a character has weights of equal magnitude exactly when the
+# representation is a multiple of a one-dimensional one, since |χ(g)| equals the dimension
+# only when g acts as a scalar.
+const _NumericWeight = Union{Integer, Rational, AbstractFloat}
+_has_equal_magnitudes(weights) = all(w -> w isa Union{_NumericWeight, Complex{<:_NumericWeight}}, weights) &&
+    all(w -> isapprox(abs(w), abs(first(weights)); rtol = sqrt(eps(float(real(typeof(w)))))), weights)
+
+function _check_1d_character(perms, weights)
+    ps = map(collect, perms)
+    ws = collect(weights)
+    index = Dict(p => g for (g, p) in enumerate(ps))
+    c = abs(first(ws))
+    tol = sqrt(eps(float(typeof(c)))) * c^2
+    for (g, p) in enumerate(ps), (h, q) in enumerate(ps)
+        k = get(index, p[q], 0)
+        iszero(k) && throw(ArgumentError("`perms` is not closed under composition, so it is not a group. $_CHECK_HINT"))
+        abs(ws[g] * ws[h] - c * ws[k]) <= tol ||
+            throw(ArgumentError("`weights` are not a positive multiple of a one-dimensional character of the group formed by `perms`. $_CHECK_HINT"))
+    end
+    return nothing
+end
 
 @testitem "Permutation symmetry" begin
     using LinearAlgebra
@@ -529,12 +616,22 @@ end
     for (k, rank) in zip(0:3, (6, 3, 4, 3))
         check(H, factors(H), ([circshift(1:4, j) for j in 0:3], [cis(2pi * k * j / 4) for j in 0:3]), rank)
     end
+    # The two-dimensional irrep of S3, whose character is the number of fixed points minus one:
+    # twice in the orbit of (1, 0, -1), and absent from the single state with M = 3
+    @spins S 1
+    perms = collect(permutations(1:3))
+    chi = [count(i -> p[i] == i, 1:3) - 1.0 for p in perms]
+    for (M, rank) in ((0, 4), (3, 0))
+        Hm = hilbert_space(S, 1:3, AdditiveConstraint(M; maps = s -> s.m))
+        check(Hm, factors(Hm), (perms, chi), rank)
+    end
 end
 
 @testitem "Symmetric and antisymmetric sectors from orbits" begin
     using LinearAlgebra
     using FermionicHilbertSpaces: permutation_operator, symmetric_sector, AdditiveConstraint, _QR, _EIG
     using Combinatorics: permutations
+    using SparseArrays: SparseMatrixCSC
     @fermions f
     @spins S 1 // 2
     @bosons b
@@ -557,7 +654,7 @@ end
             P = symmetric_sector(H, Hs, sector; orth_method=nothing)
             for orth_method in (_QR(), _EIG())
                 Q = symmetric_sector(H, Hs, sector; orth_method)
-                @test Q isa Matrix{Float64}
+                @test Q isa SparseMatrixCSC{Float64}
                 @test size(Q, 2) == round(Int, tr(P))
                 @test Q' * Q ≈ I
                 @test Q * Q' ≈ P
@@ -573,6 +670,25 @@ end
     @test_throws ArgumentError symmetric_sector(cases[1]..., :invalid)
 end
 
+@testitem "Sectors of one-dimensional characters from orbits" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: permutation_projector, AdditiveConstraint
+    # Momentum sectors of a ring of spins 1/2 with total Sz = 0. Both vanish on the orbit of the
+    # Néel states, whose stabilizer contains the translation by two sites.
+    @spins S 1 // 2
+    N = 6
+    H = hilbert_space(S, 1:N, AdditiveConstraint(0; maps = s -> s.m))
+    translations = [circshift(1:N, j) for j in 0:(N - 1)]
+    for k in (1, 2)
+        ws = [cis(2pi * k * j / N) for j in 0:(N - 1)]
+        Q = symmetric_sector(H, factors(H), (translations, ws))
+        @test Q' * Q ≈ I
+        @test Q * Q' ≈ permutation_projector(H, factors(H), translations, ws)
+    end
+    @test_throws ArgumentError symmetric_sector(H, factors(H), (translations, [cis(pi * j / N) for j in 0:(N - 1)]))
+    @test_throws ArgumentError symmetric_sector(H, factors(H), (translations[1:3], ones(3)))
+end
+
 @testitem "Checks on the weights of symmetric_sector" begin
     @fermions f
     H = hilbert_space(f, 1:3)
@@ -585,6 +701,8 @@ end
     # normalize divides out a complex scale
     @test symmetric_sector(H, Hs, (cyclic, cis(pi / 4) .* chi); orth_method=nothing, check=false) ≈
           symmetric_sector(H, Hs, (cyclic, chi); orth_method=nothing)
+    Qs, Q = (symmetric_sector(H, Hs, (cyclic, ws); orth_method = :eig, check = false) for ws in (cis(pi / 4) .* chi, chi))
+    @test Qs * Qs' ≈ Q * Q'
     @test_throws ArgumentError symmetric_sector(H, Hs, (cyclic[2:3], chi[2:3]))
     # The Hermitian check runs only when a basis is computed
     @test_throws ArgumentError symmetric_sector(H, Hs, (cyclic, [1.0, 1.0, 0.0]))

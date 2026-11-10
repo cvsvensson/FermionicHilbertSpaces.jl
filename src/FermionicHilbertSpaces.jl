@@ -48,7 +48,7 @@ public particle_number, Axes, dissipator, FreeFermions, NonCommutativeProducts, 
     add!!(a, b)
 
 Return `a + b`, reusing the storage of `a` when possible, so use the returned value. `foldl(add!!, terms; init=0)` sums
-many operators in time linear in their number, where `sum` takes quadratic time.
+many operators faster than `sum`.
 """
 add!!
 
@@ -124,6 +124,16 @@ end
 add_tag(t::Tags, tag) = Tags((t.tags..., tag))
 add_tag(::Tags{Nothing}, tag) = Tags((tag,))
 
+"""
+    tag_label(label, tag)
+
+Return the group label `label` with `tag` appended. Any label works, e.g. `1` or `:a`. A custom
+operator supports [`open_system`](@ref) by rebuilding itself with a tagged label:
+`add_tag(s::Shift, tag) = Shift(tag_label(s.site, tag), s.k)`.
+"""
+tag_label(label, tag) = Tags((label, tag))
+tag_label(label::Tags, tag) = add_tag(label, tag)
+
 function _resolve_sector_permutations_and_weights end # for Combinatorics extension
 function cache_operator! end # for OhMyThreads extension
 
@@ -195,13 +205,13 @@ PrecompileTools.@setup_workload begin
         hamf = sum(f[n + 1]'f[n] + hc for n in 1:2) + sum(f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
         Hf = hilbert_space(f, 1:3, NumberConservation())
         representation(hamf, Hf)
-        representation(hamf, sector(1, Hf), :dense)
+        representation(hamf, sector(1, Hf), Matrix)
         hamf = sum(0.5 * f[n + 1]'f[n] + hc for n in 1:2) + sum(0.5 * f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
         representation(hamf, Hf)
-        representation(hamf, sector(1, Hf), :dense)
+        representation(hamf, sector(1, Hf), Matrix)
         hamf = sum((0.5 + 0.5im) * f[n + 1]'f[n] + hc for n in 1:2) + sum((0.5 + 0.5im) * f[n]'f[n] * f[n + 1]'f[n + 1] for n in 1:2)
         representation(hamf, Hf)
-        representation(hamf, sector(1, Hf), :dense)
+        representation(hamf, sector(1, Hf), Matrix)
         @spins S 1 // 2
         representation(sum(S[k][:]'S[k + 1][:] for k in 1:2), hilbert_space(S, 1:3))
         hilbert_space(f, 1:3, (sum(f[n]'f[n] for n in 1:3) => 1, sum(n * f[n]'f[n] for n in 1:3)))
