@@ -94,7 +94,7 @@ end
     dissipator(L)
 
 The symbolic Lindblad dissipator `ρ ↦ LρL† - ½{L†L, ρ}` for the jump operator `L`, acting on the
-vectorized density matrix of a space returned by [`open_system`](@ref). Public, not exported.
+vectorized density matrix of a space returned by [`open_system`](@ref). A prefactor belongs to `L`: `dissipator(c * L)` has rate `abs2(c)`. Public, not exported.
 
 # Examples
 ```julia

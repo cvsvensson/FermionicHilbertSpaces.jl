@@ -20,7 +20,8 @@ end
 Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
 
 Spaces of the same group, such as fermions of one `@fermions` basis, merge into one factor where
-the group first appears. The first factor varies fastest.
+the group first appears. The first factor varies fastest, so an operator `A` on the first of two spaces has the matrix
+`kron(I, A)`; `embed` builds such matrices without relying on this.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces; @fermions f;

@@ -18,6 +18,10 @@ a field. A new algebra defines the kind. The tutorials
 [Custom operators: Clock](literate_output/clock_operators.md) and
 [Custom operators: Floquet](literate_output/floquet_tutorial.md) build one step by step.
 
+Import what you extend, because methods are added to a function with `import`, not `using`:
+`import FermionicHilbertSpaces: @field, Op, apply_local_operator, local_mul_effect, mat_eltype` and
+`import FermionicHilbertSpaces.NonCommutativeProducts: Swap, AddTerms`.
+
 Required:
 
 - A kind `MyKind`: a plain struct. It should be isbits, and one concrete type for the whole algebra, with a label
@@ -29,7 +33,7 @@ Required:
   out of a truncated basis. The method goes on the kind, not on `Op{MyKind}`.
 - [`@field`](@ref) `c::MyKind` creates the field. `c[l]` is the mode labelled `l`, `c[l][k]` is
   `Op(MyKind(k), c[l])`, so a tuple index needs a constructor `MyKind(::Tuple)`, and
-  `hilbert_space(c, labels, states)` has one space per mode. A field names one kind type: an operator of
+  `hilbert_space(c, labels, states)` has one space per mode, whose basis order is the order of `states`. A field names one kind type: an operator of
   another kind on the same mode is `Op(OtherKind(...), c[l])`, or the field is typed by a common abstract
   supertype whose constructor picks the kind, as in
   [Custom operators: Floquet](literate_output/floquet_tutorial.md).
@@ -103,7 +107,7 @@ quantity of a [constraint](@ref "Writing a constraint"), like the Floquet number
 [Custom operators: Floquet](literate_output/floquet_tutorial.md).
 Otherwise, to restrict a space of custom states, use [`SectorConstraint`](@ref) or
 [`FilterConstraint`](@ref). Their required argument is the reducer, which is called on each
-basis state. With `maps` and `spaces` together, it is called instead on the values that `maps`
+basis state, a [`ProductState`](@ref) whose parts are `state.states` on a product space. With `maps` and `spaces` together, it is called instead on the values that `maps`
 gives for the parts of the state in `spaces`. See
 [Constrained Hilbert spaces and conserved quantum numbers](conservation.md).
 
