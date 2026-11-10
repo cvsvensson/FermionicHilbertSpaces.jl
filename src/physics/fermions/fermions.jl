@@ -1,20 +1,20 @@
 # A fermionic mode, or an operator on it, stands for its single-mode space.
-const _FermionMode = Union{FermionSym,Mode{<:Field{Fermion}}}
-struct FermionicSpace{F,M,FG<:Group} <: AbstractGroupedHilbertSpace{F}
+const _FermionMode = Union{FermionSym, Mode{<:Field{Fermion}}}
+struct FermionicSpace{F, M, FG <: Group} <: AbstractGroupedHilbertSpace{F}
     modes::Vector{M}
-    mode_ordering::OrderedDict{M,Int}
+    mode_ordering::OrderedDict{M, Int}
     group::FG
-    function FermionicSpace(_modes::AbstractVector{<:_FermionMode}, group::FG, ::Type{F}=FockNumber{default_fock_representation(length(_modes))}) where {F,FG<:Group}
+    function FermionicSpace(_modes::AbstractVector{<:_FermionMode}, group::FG, ::Type{F} = FockNumber{default_fock_representation(length(_modes))}) where {F, FG <: Group}
         modes = map(mode, _modes)
         M = eltype(modes)
-        mode_ordering = OrderedDict{M,Int}(m => i for (i, m) in enumerate(modes))
+        mode_ordering = OrderedDict{M, Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("The modes of a fermionic group must be distinct, got $modes."))
-        new{F,M,FG}(modes, mode_ordering, group)
+        return new{F, M, FG}(modes, mode_ordering, group)
     end
 end
-function FermionicSpace(factors::AbstractVector{<:FermionicSpace}, group::Group, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F}
+function FermionicSpace(factors::AbstractVector{<:FermionicSpace}, group::Group, ::Type{F} = FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F}
     all(c -> group_id(c) == group, factors) || throw(ArgumentError("All factors must belong to the group `$group`."))
-    FermionicSpace(collect(Iterators.flatten(Iterators.map(modes, factors))), group, F)
+    return FermionicSpace(collect(Iterators.flatten(Iterators.map(modes, factors))), group, F)
 end
 function FermionicSpace(a::Field{Fermion}, modes::AbstractVector)
     agroup = symbolic_group(a)
@@ -317,7 +317,7 @@ end
 end
 
 hilbert_space(a::Field{Fermion}, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
-hilbert_space(a::Field{Fermion}, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState},BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
+hilbert_space(a::Field{Fermion}, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState}, BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
 function hilbert_space(a::Field{Fermion}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike))
     length(labels) == 0 && return hilbert_space(a, labels)
     constraint = as_constraint(constraint)
@@ -343,7 +343,7 @@ function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::Pa
     end
     sector_space(H, states, parity, constraint)
 end
-function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::NumberConservation{T,Missing,Missing}) where T
+function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::NumberConservation{T, Missing, Missing}) where {T}
     H = hilbert_space(a, labels)
     N = nbr_of_modes(H)
     N == 0 && return H

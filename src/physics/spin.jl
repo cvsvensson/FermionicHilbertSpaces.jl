@@ -25,8 +25,9 @@ For `J ≥ 1`, `==` and `iszero` on symbolic expressions compare their stored fo
 unique, so equal operators can compare unequal: `iszero(s[:z]*s[:+]^2 - s[:+]^2)` is `false` for
 `J = 1`.
 """
-macro spin(x, spin=nothing)
-    Expr(:block, :($(esc(x)) = Mode(_spin_field($(Expr(:quote, x)), $(esc(spin))), ())),
+macro spin(x, spin = nothing)
+    return Expr(
+        :block, :($(esc(x)) = Mode(_spin_field($(Expr(:quote, x)), $(esc(spin))), ())),
         :($(esc(x))))
 end
 
@@ -39,7 +40,7 @@ Create a spin field `s`. Index into it to get the spin on a site:
 `s[1][:z]` gives the z-operator on site 1. Operators and basis states follow the
 conventions of [`@spin`](@ref).
 """
-macro spins(name, spin=nothing)
+macro spins(name, spin = nothing)
     return Expr(:block, :($(esc(name)) = _spin_field($(Expr(:quote, name)), $(esc(spin)))), :($(esc(name))))
 end
 _spin_field(name, J) = Field{Spin}(name, nothing, _to_halfint(J))
@@ -71,7 +72,7 @@ struct SpinSpace{T<:Integer,S} <: AbstractAtomicHilbertSpace{SpinState{T}}
     spin::Half{T}
     sym::S
 end
-function SpinSpace(sym::S, J) where {S<:SpinMode}
+function SpinSpace(sym::S, J) where {S <: SpinMode}
     Jhalf = HalfInteger(_check_spin(J))
     T = typeof(twice(Jhalf))
     return SpinSpace{T, S}(Jhalf, sym)
@@ -104,7 +105,7 @@ end
 hilbert_space(f::Field{Spin}, labels, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint)
 function hilbert_space(f::Field{Spin}, labels, J, @nospecialize(constraint::ConstraintLike = NoSymmetry()))
     _check_spin_unset(f)
-    _mode_product(f, labels, constraint, J)
+    return _mode_product(f, labels, constraint, J)
 end
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.sym == b.sym && a.spin == b.spin)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.sym, hash(x.spin, h))

@@ -6,14 +6,14 @@ A named family of modes of the algebra `A`, such as `Boson` or `Spin`, created b
 annihilation operator `b[l]`. Fields of one `group` (e.g. `@fermions a b`) share one space, and `params`
 holds parameters of the algebra such as the spin `J`.
 """
-struct Field{A,G,P,T<:Tags}
+struct Field{A, G, P, T <: Tags}
     name::Symbol
     group::G
     params::P
     tags::T
 end
-Field{A}(name::Symbol, group=nothing, params=nothing, tags::Tags=Tags(nothing)) where {A} =
-    Field{A,typeof(group),typeof(params),typeof(tags)}(name, group, params, tags)
+Field{A}(name::Symbol, group = nothing, params = nothing, tags::Tags = Tags(nothing)) where {A} =
+    Field{A, typeof(group), typeof(params), typeof(tags)}(name, group, params, tags)
 
 """
     Mode(field, label)
@@ -22,7 +22,7 @@ The mode of `field` labelled `label`. A mode without a field, such as `@boson b`
 A custom operator that holds a `Mode` and defines [`mode`](@ref) and [`with_mode`](@ref) gets
 `symbolic_group`, tags and printing from it.
 """
-struct Mode{F<:Field,L}
+struct Mode{F <: Field, L}
     field::F
     label::L
 end
@@ -74,15 +74,15 @@ _show_label(io, l) = print(io, "[", l, "]")
 The group of fields named `names` that share one space, such as the fermions of one `@fermions` block,
 which anticommute with each other.
 """
-struct Group{A,G,T<:Tags}
+struct Group{A, G, T <: Tags}
     names::G
     tags::T
 end
-Group{A}(names, tags::Tags) where {A} = Group{A,typeof(names),typeof(tags)}(names, tags)
+Group{A}(names, tags::Tags) where {A} = Group{A, typeof(names), typeof(tags)}(names, tags)
 Base.:(==)(::Group, ::Group) = false
 Base.:(==)(a::Group{A}, b::Group{A}) where {A} = a.names == b.names && a.tags == b.tags
 Base.hash(g::Group{A}, h::UInt) where {A} = hash(g.tags, hash(g.names, hash(A, h)))
-Base.isless(a::Group{A}, b::Group{B}) where {A,B} = _order_isless((nameof(A), a.names, tagset(a)...), (nameof(B), b.names, tagset(b)...))
+Base.isless(a::Group{A}, b::Group{B}) where {A, B} = _order_isless((nameof(A), a.names, tagset(a)...), (nameof(B), b.names, tagset(b)...))
 tags(g::Group) = g.tags
 add_tag(g::Group{A}, tag) where {A} = Group{A}(g.names, add_tag(g.tags, tag))
 symbolic_group(g::Group) = g
@@ -97,7 +97,7 @@ atomic_factors(m::Mode) = (m,)
 add_tag(op::AbstractSym, tag) = with_mode(op, add_tag(mode(op), tag))
 
 # Tuples and vectors are mapped over directly; other iterables (generators, sets, matrices) are flattened to a vector.
-_field_labels(labels::Union{Tuple,AbstractVector}) = labels
+_field_labels(labels::Union{Tuple, AbstractVector}) = labels
 _field_labels(labels) = vec(collect(labels))
 # The product of the spaces `hilbert_space(f[l], args...)` of the modes of `f`, constrained by `constraint`.
 _mode_product(f::Field, labels, constraint, args...) =

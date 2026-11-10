@@ -44,7 +44,7 @@ group_id(f::FermionSym) = symbolic_group(f)
 Base.show(io::IO, x::FermionSym) = (show(io, x.mode.field); print(io, x.creation ? "†" : ""); _show_label(io, x.mode.label))
 function Base.isless(a::FermionSym, b::FermionSym)
     ga, gb = symbolic_group(a), symbolic_group(b)
-    if ga != gb
+    return if ga != gb
         ga < gb
     elseif a.creation == b.creation
         fa, fb = a.mode.field, b.mode.field
@@ -173,8 +173,10 @@ end
     @test only(keys((c[1] * b[1]' * a[2]).dict)).factors == [a[2], b[1]', c[1]]
 
     # the order is total and consistent with ==
-    ts = [g(a), g(b), g(c), g(γ), g(add_tag(a, :left)), g(add_tag(a, :right)), g(add_tag(add_tag(a, :left), :right)),
-        g(add_tag(γ, :left))]
+    ts = [
+        g(a), g(b), g(c), g(γ), g(add_tag(a, :left)), g(add_tag(a, :right)), g(add_tag(add_tag(a, :left), :right)),
+        g(add_tag(γ, :left)),
+    ]
     for x in ts, y in ts
         @test (x == y) == (!(x < y) && !(y < x))
         @test !(x < y && y < x)

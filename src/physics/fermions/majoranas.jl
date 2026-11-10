@@ -41,7 +41,7 @@ with_mode(::MajoranaSym, m) = MajoranaSym(m)
 Base.show(io::IO, x::MajoranaSym) = show(io, x.mode)
 function Base.isless(a::MajoranaSym, b::MajoranaSym)
     ga, gb = symbolic_group(a), symbolic_group(b)
-    if ga != gb
+    return if ga != gb
         ga < gb
     elseif a.mode.field.name == b.mode.field.name
         _order_isless(a.mode.label, b.mode.label)
@@ -130,11 +130,11 @@ end
     end
 end
 
-struct MajoranaHilbertSpace{B,L,H,S<:Field{Majorana}} <: AbstractGroupedHilbertSpace{B}
+struct MajoranaHilbertSpace{B, L, H, S <: Field{Majorana}} <: AbstractGroupedHilbertSpace{B}
     majoranaindices::L
     parent::H
     sym::S
-    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::S) where {L,H<:FermionicSpace,S<:Field{Majorana}}
+    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::S) where {L, H <: FermionicSpace, S <: Field{Majorana}}
         B = statetype(parent)
         new{B,L,H,S}(majoranaindices, parent, sym)
     end
@@ -297,7 +297,7 @@ atomic_factor(H::MajoranaHilbertSpace, i) = _majorana_atomic_factor(H, i, collec
 function _majorana_atomic_factor(H::MajoranaHilbertSpace, i, γs)
     atom = atomic_factor(H.parent, i)
     γ1, γ2 = γs[2i-1], γs[2i]
-    MajoranaHilbertSpace(OrderedDict(γ1 => 1, γ2 => 2), atom, γ1.mode.field)
+    return MajoranaHilbertSpace(OrderedDict(γ1 => 1, γ2 => 2), atom, γ1.mode.field)
 end
 @testitem "Majoranas of fermion modes from 64" begin
     import FermionicHilbertSpaces: FockNumber

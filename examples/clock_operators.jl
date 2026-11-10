@@ -18,14 +18,14 @@ import FermionicHilbertSpaces.NonCommutativeProducts: @nc
 # `mode` and `with_mode` is matched to the space labelled by that mode, and can be tagged like the built-in operators.
 struct Clock end
 const c = Field{Clock}(:c)
-struct ClockOp{T,M} <: AbstractSym # A clock operator of type T (:X or :Z).
+struct ClockOp{T, M} <: AbstractSym # A clock operator of type T (:X or :Z).
     mode::M
     adjoint::Bool
 end
-ClockOp{T}(mode::M, adjoint) where {T,M} = ClockOp{T,M}(mode, adjoint)
+ClockOp{T}(mode::M, adjoint) where {T, M} = ClockOp{T, M}(mode, adjoint)
 mode(op::ClockOp) = op.mode
-with_mode(op::ClockOp{T}, m) where T = ClockOp{T}(m, op.adjoint)
-Base.adjoint(op::ClockOp{T}) where T = ClockOp{T}(op.mode, !op.adjoint)
+with_mode(op::ClockOp{T}, m) where {T} = ClockOp{T}(m, op.adjoint)
+Base.adjoint(op::ClockOp{T}) where {T} = ClockOp{T}(op.mode, !op.adjoint)
 X(i) = ClockOp{:X}(c[i], false)
 Z(i) = ClockOp{:Z}(c[i], false)
 @nc ClockOp

@@ -6,7 +6,8 @@ Create a symbolic bosonic annihilation operator `b`.
 Use `b'` for the corresponding creation operator.
 """
 macro boson(x)
-    Expr(:block, :($(esc(x)) = BosonSym(Mode(Field{Boson}($(Expr(:quote, x))), ()), -1)),
+    return Expr(
+        :block, :($(esc(x)) = BosonSym(Mode(Field{Boson}($(Expr(:quote, x))), ()), -1)),
         :($(esc(x))))
 end
 """
@@ -16,7 +17,8 @@ Create a bosonic field `b`. Index into it to get bosonic mode operators:
 `b[i]` returns the annihilation operator for mode `i`, `b[i]'` for the creation operator.
 """
 macro bosons(name)
-    Expr(:block, :($(esc(name)) = Field{Boson}($(Expr(:quote, name)))),
+    return Expr(
+        :block, :($(esc(name)) = Field{Boson}($(Expr(:quote, name)))),
         :($(esc(name))))
 end
 
@@ -39,7 +41,7 @@ function Base.show(io::IO, x::BosonSym)
     if abs(x.exp) !== 1
         print(io, "^", abs(x.exp))
     end
-    _show_label(io, x.mode.label)
+    return _show_label(io, x.mode.label)
 end
 Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.mode == b.mode
 Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.mode, h))
