@@ -1,5 +1,3 @@
-abstract type AbstractFermionSym <: AbstractSym end
-
 """
     EagerDenseRepr{T}()
     EagerDenseRepr()
@@ -1064,41 +1062,37 @@ end
 
 @testitem "Amplitudes of custom operators in the requested precision" begin
     import FermionicHilbertSpaces as FHS
-    struct RootOp <: FHS.AbstractSym end
-    struct PreciseRootOp <: FHS.AbstractSym end
-    Base.adjoint(op::Union{RootOp, PreciseRootOp}) = op
-    FHS.apply_local_operator(::RootOp, state, space, precomp) = (state, sqrt(2.0))
-    FHS.apply_local_operator(::PreciseRootOp, state, space, precomp, ::Type{T}) where {T} = (state, sqrt(T(2)))
+    struct Root end
+    struct PreciseRoot end
+    Base.adjoint(k::Union{Root, PreciseRoot}) = k
+    FHS.apply_local_operator(::Root, state, space, precomp) = (state, sqrt(2.0))
+    FHS.apply_local_operator(::PreciseRoot, state, space, precomp, ::Type{T}) where {T} = (state, sqrt(T(2)))
 
     @boson b
     H = hilbert_space(b, 3)
-    amplitude(op, ::Type{T}, H, transpose) where {T} =
-        last(FHS.apply_local_operators(FHS.NCMul(one(T), [op]), FHS.basisstate(1, H), H, (nothing,); transpose))
+    amplitude(kind, ::Type{T}, H, transpose) where {T} =
+        last(FHS.apply_local_operators(FHS.NCMul(one(T), [FHS.Op(kind, b.mode)]), FHS.basisstate(1, H), H, (nothing,); transpose))
 
-    @test (@inferred amplitude(RootOp(), Float32, H, false)) === Float32(sqrt(2.0))
-    @test (@inferred amplitude(RootOp(), Float32, H, true)) === Float32(sqrt(2.0))
-    @test amplitude(PreciseRootOp(), BigFloat, H, false) == sqrt(big(2))
+    @test (@inferred amplitude(Root(), Float32, H, false)) === Float32(sqrt(2.0))
+    @test (@inferred amplitude(Root(), Float32, H, true)) === Float32(sqrt(2.0))
+    @test amplitude(PreciseRoot(), BigFloat, H, false) == sqrt(big(2))
 
-    struct BigRootOp <: FHS.AbstractSym end
-    Base.adjoint(op::BigRootOp) = op
-    FHS.symbolic_group(::BigRootOp) = FHS.symbolic_group(b)
-    FHS.mat_eltype(::Type{BigRootOp}) = BigFloat
-    FHS.apply_local_operator(::BigRootOp, state, space, precomp) = (state, sqrt(big(2)))
-    @test representation(BigRootOp(), H)[1, 1] == sqrt(big(2))
+    struct BigRoot end
+    Base.adjoint(k::BigRoot) = k
+    FHS.mat_eltype(::Type{BigRoot}) = BigFloat
+    FHS.apply_local_operator(::BigRoot, state, space, precomp) = (state, sqrt(big(2)))
+    @test representation(FHS.Op(BigRoot(), b.mode), H)[1, 1] == sqrt(big(2))
 end
 
 @testitem "Products of operator types with different matrix element types" begin
     using LinearAlgebra
-    import FermionicHilbertSpaces: AbstractSym, AbstractBasisState, symbolic_group, apply_local_operator, mat_eltype
-    import FermionicHilbertSpaces.NonCommutativeProducts: @nc
-    struct Shift <: AbstractSym
+    import FermionicHilbertSpaces: @field, Op, AbstractBasisState, apply_local_operator, mat_eltype
+    struct Shift
         k::Int
     end
-    struct Phase <: AbstractSym end
-    @nc Shift Phase
+    struct Phase end
     Base.adjoint(s::Shift) = Shift(-s.k)
     Base.adjoint(p::Phase) = p
-    symbolic_group(::Union{Shift, Phase}) = 1
     struct Site <: AbstractBasisState
         n::Int
     end
@@ -1107,10 +1101,12 @@ end
     mat_eltype(::Type{Shift}) = Int
     mat_eltype(::Type{Phase}) = ComplexF64
 
-    H = GenericHilbertSpace(1, Site.(0:2))
-    S = representation(Shift(1), H, Matrix)
-    @test representation(Phase() * Shift(1), H, Matrix) ≈ Diagonal(im .^ (0:2)) * S
-    @test representation(Phase() * Shift(1) + Shift(1), H) ≈ (Diagonal(im .^ (0:2)) + I) * S
+    @field c::Shift
+    H = hilbert_space(c[1], Site.(0:2))
+    shift, phase = c[1][1], Op(Phase(), c[1])
+    S = representation(shift, H, Matrix)
+    @test representation(phase * shift, H, Matrix) ≈ Diagonal(im .^ (0:2)) * S
+    @test representation(phase * shift + shift, H) ≈ (Diagonal(im .^ (0:2)) + I) * S
 end
 
 @testitem "Operators between two spaces with Axes" begin
@@ -1413,15 +1409,15 @@ end
 end
 
 ## Symmetries
-isnumberconserving(x::AbstractFermionSym) = false
-isnumberconserving(x::NCMul) = iszero(sum(s -> 2s.creation - 1, x.factors))
+isnumberconserving(x::AbstractSym) = false
+isnumberconserving(x::NCMul) = iszero(sum(s -> 2s.kind.creation - 1, x.factors))
 isnumberconserving(x::NCAdd) = all(isnumberconserving, NCterms(x))
 
-isparityconserving(x::AbstractFermionSym) = false
+isparityconserving(x::AbstractSym) = false
 isparityconserving(x::NCMul) = iseven(length(x.factors))
 isparityconserving(x::NCAdd) = all(isparityconserving, NCterms(x))
 
-isquadratic(::AbstractFermionSym) = false
+isquadratic(::AbstractSym) = false
 isquadratic(x::NCMul) = length(x.factors) == 2
 isquadratic(x::NCAdd) = all(isquadratic, NCterms(x))
 

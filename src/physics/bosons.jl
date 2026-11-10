@@ -7,7 +7,7 @@ Use `b'` for the corresponding creation operator.
 """
 macro boson(x)
     return Expr(
-        :block, :($(esc(x)) = BosonSym(Mode(Field{BosonSym}($(Expr(:quote, x))), ()), -1)),
+        :block, :($(esc(x)) = Field{Boson}($(Expr(:quote, x)))[]),
         :($(esc(x))))
 end
 """
@@ -18,39 +18,34 @@ Create a bosonic field `b`. Index into it to get bosonic mode operators:
 """
 macro bosons(name)
     return Expr(
-        :block, :($(esc(name)) = Field{BosonSym}($(Expr(:quote, name)))),
+        :block, :($(esc(name)) = Field{Boson}($(Expr(:quote, name)))),
         :($(esc(name))))
 end
 
 
 # `exp` is the power: `-k` for `b^k` and `k` for `b'^k`.
-struct BosonSym{M} <: AbstractSym
-    mode::M
+struct Boson
     exp::Int
 end
-_field_entry(m::Mode{<:Field{BosonSym}}) = BosonSym(m, -1)
-mode(x::BosonSym) = x.mode
-with_mode(x::BosonSym, m) = BosonSym(m, x.exp)
-
-Base.adjoint(x::BosonSym) = BosonSym(x.mode, -x.exp)
-Base.iszero(x::BosonSym) = false
+const BosonSym{M} = Op{Boson, M}
+mode_operator(::Type{Boson}) = Boson(-1)
+Base.adjoint(k::Boson) = Boson(-k.exp)
 function Base.show(io::IO, x::BosonSym)
+    exp = x.kind.exp
     show(io, x.mode.field)
-    print(io, x.exp > 0 ? "†" : "")
-    if abs(x.exp) !== 1
-        print(io, "^", abs(x.exp))
+    print(io, exp > 0 ? "†" : "")
+    if abs(exp) !== 1
+        print(io, "^", abs(exp))
     end
     return _show_label(io, x.mode.label)
 end
-Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.mode == b.mode
-Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.mode, h))
 # Normal ordering of a = b^m, c = b†^n: b^m b†^n = Σₖ k! C(m,k) C(n,k) b†^(n-k) b^(m-k)
 function _boson_normal_order(a::BosonSym, c::BosonSym)
-    m, n = -a.exp, c.exp
+    m, n = -a.kind.exp, c.kind.exp
     terms = map(0:min(m, n)) do k
         factors = typeof(a)[]
-        n > k && push!(factors, BosonSym(a.mode, n - k))
-        m > k && push!(factors, BosonSym(a.mode, k - m))
+        n > k && push!(factors, Op(Boson(n - k), a.mode))
+        m > k && push!(factors, Op(Boson(k - m), a.mode))
         # Widening to BigInt on overflow would make mul_effect's return type a union too wide to split,
         # which slows down every boson product, so overflow throws instead.
         NCMul(Base.Checked.checked_mul(factorial(k), binomial(m, k), binomial(n, k)), factors)
@@ -58,11 +53,10 @@ function _boson_normal_order(a::BosonSym, c::BosonSym)
     return AddTerms(terms)
 end
 function local_mul_effect(a::BosonSym, b::BosonSym)
-    sign(a.exp) == sign(b.exp) && return BosonSym(a.mode, a.exp + b.exp)
-    return a.exp < 0 && b.exp > 0 ? _boson_normal_order(a, b) : nothing
+    m, n = a.kind.exp, b.kind.exp
+    sign(m) == sign(n) && return Op(Boson(m + n), a.mode)
+    return m < 0 && n > 0 ? _boson_normal_order(a, b) : nothing
 end
-
-@nc BosonSym
 
 @testitem "BosonSym" begin
     using Symbolics
@@ -161,7 +155,7 @@ add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add
 
 """
     hilbert_space(b::BosonSym, dimension[, constraint])
-    hilbert_space(b::Field{BosonSym}, labels, dimension[, constraint])
+    hilbert_space(b::Field{Boson}, labels, dimension[, constraint])
 
 The truncated space of the bosonic mode `b`, with basis states `|0⟩, …, |dimension-1⟩`, so the
 maximal occupation is `dimension - 1`. With `labels`, the tensor product of one such space for
@@ -172,12 +166,12 @@ while leaving a constrained space throws unless `projection=true`. Products are 
 before truncation, so `b * b'` is represented as `b'b + 1`.
 """
 hilbert_space(b::BosonSym, args...) = hilbert_space(b.mode, args...)
-hilbert_space(m::Mode{<:Field{BosonSym}}, dimension::Integer) = TruncatedBosonicHilbertSpace(m, dimension)
-hilbert_space(m::Mode{<:Field{BosonSym}}, dimension::Integer, @nospecialize(constraint::ConstraintLike)) = constrain_space(hilbert_space(m, dimension), constraint)
+hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer) = TruncatedBosonicHilbertSpace(m, dimension)
+hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer, @nospecialize(constraint::ConstraintLike)) = constrain_space(hilbert_space(m, dimension), constraint)
 particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 
-function apply_local_operator(factor::BosonSym, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp, ::Type{T} = Float64) where {T}
+function apply_local_operator(factor::Boson, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp, ::Type{T} = Float64) where {T}
     n = state.n
     k = abs(factor.exp)
     amplitude = one(T)
@@ -202,7 +196,6 @@ function apply_local_operator(factor::BosonSym, state::BosonicState, space::Trun
 end
 symbolic_group(H::TruncatedBosonicHilbertSpace) = H.mode
 atomic_id(H::TruncatedBosonicHilbertSpace) = H.mode
-mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
 
 @testitem "Bosonic hilbert space" begin
     using FermionicHilbertSpaces: TruncatedBosonicHilbertSpace, BosonicState, state_index, basisstate

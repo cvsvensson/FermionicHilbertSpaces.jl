@@ -67,9 +67,8 @@ const hc = HC()
 """
     AbstractSym
 
-Supertype of symbolic operators such as fermions, Majoranas, bosons and spins. A custom
-operator type subtypes it, registers itself with `NonCommutativeProducts.@nc` and defines
-[`apply_local_operator`](@ref) and [`symbolic_group`](@ref), or [`mode`](@ref) for an operator on a field.
+Supertype of the factors of symbolic expressions: operators on fields, which are [`Op`](@ref)s, and symbolic
+states.
 """
 abstract type AbstractSym end
 NonCommutativeProducts.atom_group(op::AbstractSym) = symbolic_group(op)
@@ -122,9 +121,7 @@ add_tag(::Tags{Nothing}, tag) = Tags((tag,))
 """
     tag_label(label, tag)
 
-Return the group label `label` with `tag` appended. Any label works, e.g. `1` or `:a`. A custom
-operator supports [`open_system`](@ref) by rebuilding itself with a tagged label:
-`add_tag(s::Shift, tag) = Shift(tag_label(s.site, tag), s.k)`.
+Return the group label `label` with `tag` appended. Any label works, e.g. `1` or `:a`.
 """
 tag_label(label, tag) = Tags((label, tag))
 tag_label(label::Tags, tag) = add_tag(label, tag)

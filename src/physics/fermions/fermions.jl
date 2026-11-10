@@ -1,4 +1,4 @@
-const _FermionMode = Union{FermionSym, Mode{<:Field{FermionSym}}}
+const _FermionMode = Union{FermionSym, Mode{<:Field{Fermion}}}
 struct FermionicSpace{F, M, FG <: Group} <: AbstractGroupedHilbertSpace{F}
     modes::Vector{M}
     mode_ordering::OrderedDict{M, Int}
@@ -17,7 +17,7 @@ function FermionicSpace(factors::AbstractVector{<:FermionicSpace}, group::Group,
     all(c -> group_id(c) == group, factors) || throw(ArgumentError("All factors must belong to the group `$group`."))
     return FermionicSpace(collect(Iterators.flatten(Iterators.map(modes, factors))), group, F)
 end
-FermionicSpace(a::Field{FermionSym}, modes::AbstractVector) = FermionicSpace(modes, Group(a))
+FermionicSpace(a::Field{Fermion}, modes::AbstractVector) = FermionicSpace(modes, Group(a))
 # The copy of a `FermionicSpace` that GPU kernels use: only its number of modes
 struct DeviceFermionicSpace{F} <: AbstractHilbertSpace{F}
     nbr_of_modes::Int
@@ -81,7 +81,7 @@ Jordan-Wigner order of fermions), or `0` if `H` has no such mode.
 """
 mode_position(f::_FermionMode, H) = get(mode_ordering(H), mode(f), 0)
 
-combine_into_group(group::Group{FermionSym}, atoms) = FermionicSpace(atoms, group)
+combine_into_group(group::Group{Fermion}, atoms) = FermionicSpace(atoms, group)
 
 operators(H::FermionicSpace) = fermions(H)
 isconstrained(H::FermionicSpace) = false
@@ -149,7 +149,7 @@ function _precomputation_before_operator_application(op::FermionSym, space::Abst
 end
 
 
-function apply_local_operators(op::NCMul{<:Any, <:FermionSym}, state::FockNumber{I}, space::_FockSpace, bitmasks; transpose) where {I}
+function apply_local_operators(op::NCMul{<:Any, <:Union{Fermion, FermionSym}}, state::FockNumber{I}, space::_FockSpace, bitmasks; transpose) where {I}
     factors = op.factors
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1
@@ -157,7 +157,7 @@ function apply_local_operators(op::NCMul{<:Any, <:FermionSym}, state::FockNumber
     @inbounds for m in eachindex(factors, bitmasks)
         n = !transpose ? N - m + 1 : m
         factor = factors[n]
-        dagger = xor(factor.creation, transpose)
+        dagger = xor(kind(factor).creation, transpose)
         bitmask = bitmasks[n]
         occupied = !iszero(bitmask & newfocknbr)
         if dagger == occupied
@@ -169,7 +169,7 @@ function apply_local_operators(op::NCMul{<:Any, <:FermionSym}, state::FockNumber
     return newfocknbr, (fermionparity ? -op.coeff : op.coeff)
 end
 
-function apply_local_operator(op::FermionSym, state::FockNumber{I}, space, bitmask) where I
+function apply_local_operator(op::Fermion, state::FockNumber{I}, space, bitmask) where {I}
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1
     factor = op
@@ -303,9 +303,9 @@ end
     end
 end
 
-hilbert_space(a::Field{FermionSym}, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
-hilbert_space(a::Field{FermionSym}, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState}, BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
-function hilbert_space(a::Field{FermionSym}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike))
+hilbert_space(a::Field{Fermion}, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
+hilbert_space(a::Field{Fermion}, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState}, BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
+function hilbert_space(a::Field{Fermion}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike))
     length(labels) == 0 && return hilbert_space(a, labels)
     constraint = as_constraint(constraint)
     # The states of a total number of fermions are built directly.
@@ -319,7 +319,7 @@ function hilbert_space(a::Field{FermionSym}, labels::AbstractVector, @nospeciali
     return tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
 end
 
-function hilbert_space(a::Field{FermionSym}, labels::AbstractVector, constraint::ParityConservation{Missing})
+function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::ParityConservation{Missing})
     H = hilbert_space(a, labels)
     nbr_of_modes(H) == 0 && return H
     states = if constraint.allowed_parities == [-1, 1]
@@ -330,7 +330,7 @@ function hilbert_space(a::Field{FermionSym}, labels::AbstractVector, constraint:
     end
     sector_space(H, states, parity, constraint)
 end
-function hilbert_space(a::Field{FermionSym}, labels::AbstractVector, constraint::NumberConservation{T, Missing, Missing}) where {T}
+function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::NumberConservation{T, Missing, Missing}) where {T}
     H = hilbert_space(a, labels)
     N = nbr_of_modes(H)
     N == 0 && return H

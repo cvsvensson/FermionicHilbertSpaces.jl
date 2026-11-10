@@ -197,15 +197,13 @@ symbolic identity (field, label and tags), never from truncation, spin value, tr
 or constraints, so a symbol naming a whole atom has the same id as the atom. Only atoms and
 symbols have an `atomic_id`; composite spaces are named by `atom_ids`.
 """
-atomic_id(f::AbstractSym) = symbolic_group(f) # generic fallback
+function atomic_id end
 
 """
     symbolic_group(op)
 
 Key that matches the symbolic operator `op` to the group of a Hilbert space it acts on:
-`symbolic_group(op) == group_id(group)`. A custom operator type adds a method that returns
-the label of its space, for example the `label` of a [`GenericHilbertSpace`](@ref). An operator on a
-field defines [`mode`](@ref) instead.
+`symbolic_group(op) == group_id(group)`. The group of an [`Op`](@ref) follows from its mode.
 """
 function symbolic_group end
 
@@ -391,7 +389,6 @@ function subregion(Hs, H::AbstractHilbertSpace)
 end
 # The atoms that a space or symbol names, for lookups by `atomic_id`; a symbol names the atom it acts on.
 _atom_names(x::AbstractHilbertSpace) = atomic_factors(x)
-_atom_names(x::AbstractSym) = (x,)
 _atom_names(x) = throw(ArgumentError("expected a Hilbert space or a collection of symbols, got $x"))
 # A subsystem of `H` given as a space, or as symbols resolved by `subregion`
 _subsystem(Hsub::AbstractHilbertSpace, H) = Hsub

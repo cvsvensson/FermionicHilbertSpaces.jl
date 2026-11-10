@@ -9,7 +9,7 @@ Base.show(io::IO, s::SingleParticleState) = print(io, "SingleParticleState(", on
 
 struct SingleParticleHilbertSpace{H}
     parent::H
-    function SingleParticleHilbertSpace(f::Field{FermionSym}, labels)
+    function SingleParticleHilbertSpace(f::Field{Fermion}, labels)
         states = [SingleParticleState(i) for (i, label) in enumerate(labels)]
         H = hilbert_space(f, labels, states)
         return new{typeof(H)}(H)
@@ -40,11 +40,11 @@ Marker passed as the last argument of `hilbert_space(f, labels, SingleParticle()
 struct SingleParticle end
 
 """
-    hilbert_space(f::Field{FermionSym}, labels, ::SingleParticle)
+    hilbert_space(f::Field{Fermion}, labels, ::SingleParticle)
 
 The space spanned by the states ``c_n^\\dagger |0\\rangle`` for the modes `f[l]`, `l in labels`, suitable for non-interacting systems with fermion number conservation. The matrix representation of a quadratic operator is the single-particle matrix, without any contribution from the identity operator.
 """
-hilbert_space(f::Field{FermionSym}, labels::AbstractVector, ::SingleParticle) = SingleParticleHilbertSpace(f, labels)
+hilbert_space(f::Field{Fermion}, labels::AbstractVector, ::SingleParticle) = SingleParticleHilbertSpace(f, labels)
 Base.@propagate_inbounds basisstate(ind::Integer, H::SingleParticleHilbertSpace) = basisstate(ind, parent(H))
 _state_index(state, H::SingleParticleHilbertSpace) = _state_index(state, parent(H))
 
@@ -137,5 +137,5 @@ function _single_particle_entry(term, H)
     a, b = term.factors
     outind = state_index(SingleParticleState(mode_position(a, H)), H)
     inind = state_index(SingleParticleState(mode_position(b, H)), H)
-    return ((outind, inind, (-1)^b.creation * term.coeff),)
+    return ((outind, inind, (-1)^b.kind.creation * term.coeff),)
 end

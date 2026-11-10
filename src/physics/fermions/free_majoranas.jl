@@ -9,7 +9,7 @@ Base.hash(x::MajoranaSingleParticleHilbertSpace, h::UInt) = hash(x.majoranaindic
 Base.show(io::IO, H::MajoranaSingleParticleHilbertSpace) = print(io, "MajoranaSingleParticleHilbertSpace($(dim(H)) Majoranas)")
 
 """
-    hilbert_space(γ::Field{MajoranaSym}, labels, ::SingleParticle)
+    hilbert_space(γ::Field{Majorana}, labels, ::SingleParticle)
 
 The space of the Majoranas `γ[l]`, `l in labels`, for quadratic Majorana operators. `representation(op, H)` is the antisymmetric matrix `R` with `op = Σᵢⱼ R[i, j] γ[i] γ[j] / 2` up to a constant.
 
@@ -19,7 +19,7 @@ H = hilbert_space(γ, 1:2, SingleParticle())
 representation(1im * γ[1] * γ[2], H, Matrix) # [0 1im; -1im 0]
 ```
 """
-function hilbert_space(γ::Field{MajoranaSym}, labels::AbstractVector, ::SingleParticle)
+function hilbert_space(γ::Field{Majorana}, labels::AbstractVector, ::SingleParticle)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even, got $(length(labels))."))
     allunique(labels) || throw(ArgumentError("The Majorana labels must be distinct, got $labels."))
     return MajoranaSingleParticleHilbertSpace(OrderedDict(γ[l] => n for (n, l) in enumerate(labels)))

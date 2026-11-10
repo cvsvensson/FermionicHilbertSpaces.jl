@@ -19,7 +19,7 @@ See also [`@majoranas`](@ref).
 """
 macro fermions(xs...)
     defs = map(xs) do x
-        :($(esc(x)) = Field{FermionSym}($(Expr(:quote, x)), $xs))
+        :($(esc(x)) = Field{Fermion}($(Expr(:quote, x)), $xs))
     end
     fermions = Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
@@ -34,39 +34,32 @@ Create the annihilation operator `f` of a single fermionic mode, with space `hil
 mode `f[]` of `@fermions f`.
 """
 macro fermion(x)
-    return :($(esc(x)) = FermionSym(false, Mode(Field{FermionSym}($(QuoteNode(x)), ($(QuoteNode(x)),)), ())))
+    return :($(esc(x)) = Field{Fermion}($(QuoteNode(x)), ($(QuoteNode(x)),))[])
 end
 
-struct FermionSym{M} <: AbstractFermionSym
+struct Fermion
     creation::Bool
-    mode::M
 end
-_field_entry(m::Mode{<:Field{FermionSym}}) = FermionSym(false, m)
-Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.mode)
-Base.iszero(x::FermionSym) = false
-mode(f::FermionSym) = f.mode
-with_mode(f::FermionSym, m) = FermionSym(f.creation, m)
-atomic_id(f::FermionSym) = f.mode
-label(f::FermionSym) = f.mode.label
+const FermionSym{M} = Op{Fermion, M}
+mode_operator(::Type{Fermion}) = Fermion(false)
+Base.adjoint(k::Fermion) = Fermion(!k.creation)
 
-Base.show(io::IO, x::FermionSym) = (show(io, x.mode.field); print(io, x.creation ? "†" : ""); _show_label(io, x.mode.label))
+Base.show(io::IO, x::FermionSym) = (show(io, x.mode.field); print(io, x.kind.creation ? "†" : ""); _show_label(io, x.mode.label))
 function Base.isless(a::FermionSym, b::FermionSym)
     ga, gb = symbolic_group(a), symbolic_group(b)
     return if ga != gb
         ga < gb
-    elseif a.creation == b.creation
+    elseif a.kind.creation == b.kind.creation
         fa, fb = a.mode.field, b.mode.field
         fa.name == fb.name && return _order_isless(a.mode.label, b.mode.label)
         fa.name < fb.name
     else
-        a.creation > b.creation
+        a.kind.creation > b.kind.creation
     end
 end
-Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.mode == b.mode
-Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.mode, h))
 
 hilbert_space(f::FermionSym) = hilbert_space(f.mode)
-hilbert_space(m::Mode{<:Field{FermionSym}}) = FermionicSpace([m], symbolic_group(m))
+hilbert_space(m::Mode{<:Field{Fermion}}) = FermionicSpace([m], symbolic_group(m))
 
 # The sign λ in a * b = λ * b * a + scalar
 exchange_phase(a::FermionSym, b::FermionSym) = symbolic_group(a) == symbolic_group(b) ? -1 : 1
@@ -87,9 +80,7 @@ function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     end
 end
 
-mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
-
-@nc FermionSym
+mat_eltype(::Type{Fermion}) = Int
 
 @testitem "SymbolicFermions" begin
     using Symbolics, LinearAlgebra

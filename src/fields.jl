@@ -1,25 +1,26 @@
 """
-    Field{O}(name, group=nothing, params=nothing)
+    Field{K}(name, group=nothing, params=nothing)
 
-A named family of modes for operators of type `O`, created by [`@field`](@ref) or by macros such as
-[`@bosons`](@ref). `field[l]` is the mode labelled `l`, or the operator an algebra puts there, such as the
-annihilation operator `b[l]`. Fields of one `group` (e.g. `@fermions a b`) share one space, which their algebra
-builds with `combine_into_group(::Group{O}, atoms)`, and `params` holds parameters of the algebra such as the spin `J`.
+A named family of modes for operators of kind `K`, created by [`@field`](@ref) or by macros such as
+[`@bosons`](@ref). `field[l]` is the mode labelled `l`, or the operator of that mode if `K` has a
+[`mode_operator`](@ref), such as the annihilation operator `b[l]`. Fields of one `group` (e.g. `@fermions a b`)
+share one space, which their algebra builds with `combine_into_group(::Group{K}, atoms)`, and `params` holds
+parameters of the algebra such as the spin `J`.
 """
-struct Field{A, G, P, T <: Tags}
+struct Field{K, G, P, T <: Tags}
     name::Symbol
     group::G
     params::P
     tags::T
 end
-Field{O}(name::Symbol, group = nothing, params = nothing, tags::Tags = Tags(nothing)) where {O} =
-    Field{O, typeof(group), typeof(params), typeof(tags)}(name, group, params, tags)
+Field{K}(name::Symbol, group = nothing, params = nothing, tags::Tags = Tags(nothing)) where {K} =
+    Field{K, typeof(group), typeof(params), typeof(tags)}(name, group, params, tags)
 
 """
     Mode(field, label)
 
 The mode of `field` labelled `label`. A mode without a field, such as `@boson b`, has the label `()`.
-For a field of operators of type `O`, `field[l][k]` is the operator `O(field[l], k)`.
+For a field of operators of kind `K`, `field[l][k]` is the operator `Op(K(k), field[l])`.
 """
 struct Mode{F <: Field, L}
     field::F
@@ -27,56 +28,76 @@ struct Mode{F <: Field, L}
 end
 
 """
-    @field c::O
+    Op(kind, mode)
 
-Create the field `c` of operators of type `O`: `c[l]` is the mode labelled `l`, `c[l][k]` the operator
-`O(c[l], k)`, and `hilbert_space(c, labels, states)` the product of one space with basis `states` per mode.
+The operator that acts as `kind` on `mode`. The kind says what the operator is, such as `Fermion(true)` for a
+creation operator, and defines `adjoint`, [`apply_local_operator`](@ref) and [`mat_eltype`](@ref).
+"""
+struct Op{K, M} <: AbstractSym
+    kind::K
+    mode::M
+end
+# GPU kernels receive the kind in place of the operator, so code that runs on both reads `kind(x)`.
+kind(op::Op) = op.kind
+kind(k) = k
+
+"""
+    @field c::K
+
+Create the field `c` of operators of kind `K`: `c[l]` is the mode labelled `l`, `c[l][k]` the operator
+`Op(K(k), c[l])`, and `hilbert_space(c, labels, states)` the product of one space with basis `states` per mode.
 """
 macro field(ex)
-    Meta.isexpr(ex, :(::), 2) || throw(ArgumentError("Use `@field c::O`, got `$ex`."))
-    name, O = ex.args
-    return :($(esc(name)) = Field{$(esc(O))}($(QuoteNode(name))))
+    Meta.isexpr(ex, :(::), 2) || throw(ArgumentError("Use `@field c::K`, got `$ex`."))
+    name, K = ex.args
+    return :($(esc(name)) = Field{$(esc(K))}($(QuoteNode(name))))
 end
+
+"""
+    mode_operator(::Type{K})
+
+The kind of the operator that `field[l]` returns when a mode of kind `K` has a single operator, as in
+`mode_operator(::Type{Boson}) = Boson(-1)` for the annihilation operator `b[l]`. The default `nothing` makes
+`field[l]` a [`Mode`](@ref) with the operators `field[l][k]`.
+"""
+mode_operator(::Type) = nothing
 
 """
     mode(op)
 
-The [`Mode`](@ref) that the operator `op` acts on, which gives its `symbolic_group`, ordering and
-printing. `with_mode(op, mode)`, the operator on another mode, is needed for tags and [`open_system`](@ref).
+The [`Mode`](@ref) that the operator `op` acts on.
 """
-function mode end
 mode(m::Mode) = m
-"""
-    with_mode(op, mode)
+mode(op::Op) = op.mode
 
-The operator `op` acting on `mode` instead. See [`mode`](@ref).
-"""
-function with_mode end
-
-# What `field[l]` returns for the mode `m` of label `l`.
-_field_entry(m::Mode) = m
+_field_entry(m::Mode{<:Field{K}}) where {K} = (k = mode_operator(K); isnothing(k) ? m : Op(k, m))
 Base.getindex(f::Field, l) = _field_entry(Mode(f, l))
 Base.getindex(f::Field, ls...) = _field_entry(Mode(f, ls))
 Base.getindex(::Field, l::AbstractSym) = throw(ArgumentError("Modes are indexed by labels, not by operators, got `$l`."))
-function Base.getindex(m::Mode{<:Field{O}}, k) where {O}
-    _field_entry(m) === m || throw(ArgumentError("`$(m.field)[l]` is already an operator, so it cannot be indexed further."))
-    return O(m, k)
+function Base.getindex(m::Mode{<:Field{K}}, k) where {K}
+    isnothing(mode_operator(K)) || throw(ArgumentError("`$(m.field)[l]` is already an operator, so it cannot be indexed further."))
+    return Op(K(k), m)
 end
+Base.getindex(op::Op, k) = throw(ArgumentError("`$op` is already an operator, so it cannot be indexed further."))
 label(m::Mode) = m.label
+label(op::Op) = label(op.mode)
 tags(f::Field) = f.tags
 tags(m::Mode) = tags(m.field)
 
 Base.:(==)(::Field, ::Field) = false
-Base.:(==)(a::Field{O}, b::Field{O}) where {O} = a.name == b.name && a.group == b.group && a.params == b.params && a.tags == b.tags
+Base.:(==)(a::Field{K}, b::Field{K}) where {K} = a.name == b.name && a.group == b.group && a.params == b.params && a.tags == b.tags
 # Few fields, since this runs in every Dict lookup of a symbolic term; `==` compares the others.
 Base.hash(f::Field, h::UInt) = hash(f.name, hash(f.tags, h))
 Base.:(==)(a::Mode, b::Mode) = a.field == b.field && a.label == b.label
 Base.hash(m::Mode, h::UInt) = hash(m.label, hash(m.field, h))
-_order_key(f::Field{O}) where {O} = (nameof(O), f.name, tagset(f), f.params, f.group)
+Base.:(==)(a::Op, b::Op) = a.kind == b.kind && a.mode == b.mode
+Base.hash(op::Op, h::UInt) = hash(op.kind, hash(op.mode, h))
+_order_key(f::Field{K}) where {K} = (nameof(K), f.name, tagset(f), f.params, f.group)
 Base.isless(a::Mode, b::Mode) = _order_isless((_order_key(a.field), a.label), (_order_key(b.field), b.label))
 
-add_tag(f::Field{O}, tag) where {O} = Field{O}(f.name, f.group, f.params, add_tag(f.tags, tag))
+add_tag(f::Field{K}, tag) where {K} = Field{K}(f.name, f.group, f.params, add_tag(f.tags, tag))
 add_tag(m::Mode, tag) = Mode(add_tag(m.field, tag), m.label)
+add_tag(op::Op, tag) = Op(op.kind, add_tag(op.mode, tag))
 tag_label(m::Mode, tag) = add_tag(m, tag)
 
 Base.show(io::IO, f::Field) = print(io, _symbolic_name_with_tags(f.name, f))
@@ -84,31 +105,43 @@ Base.show(io::IO, m::Mode) = (show(io, m.field); _show_label(io, m.label))
 _show_label(io, ::Tuple{}) = nothing
 _show_label(io, l::Tuple) = Base.show_delim_array(io, l, "[", ",", "]", false)
 _show_label(io, l) = print(io, "[", l, "]")
+Base.show(io::IO, op::Op) = print(io, op.mode, "[", op.kind, "]")
+
+Base.adjoint(op::Op) = Op(adjoint(op.kind), op.mode)
+mat_eltype(::Type{<:Op{K}}) where {K} = mat_eltype(K)
+apply_local_operator(op::Op, state, space, precomp) = apply_local_operator(op.kind, state, space, precomp)
+apply_local_operator(op::Op, state, space, precomp, ::Type{P}) where {P} = apply_local_operator(op.kind, state, space, precomp, P)
+# Reached when a kind has no method for the state. A method on `Op{K}` is not called, since `Op` forwards to its kind.
+function apply_local_operator(kind::K, state, space, precomp) where {K}
+    kind isa AbstractSym && throw(MethodError(apply_local_operator, (kind, state, space, precomp)))
+    throw(ArgumentError("No `apply_local_operator` method for the kind `$K` on states of type `$(typeof(state))`. Define `apply_local_operator(kind::$K, state, space, precomp)` on the kind, not on `Op{$K}`."))
+end
 
 """
-    Group{O}(names, tags)
+    Group{K}(names, tags)
 
 The group key of fields that share one space, such as one `@fermions a b` block: it equals `group_id` of that
-space, and `combine_into_group(::Group{O}, atoms)` builds it. A mode of an ungrouped field is its own group.
+space, and `combine_into_group(::Group{K}, atoms)` builds it. A mode of an ungrouped field is its own group.
 """
-struct Group{O, G, T <: Tags}
+struct Group{K, G, T <: Tags}
     names::G
     tags::T
 end
-Group{O}(names, tags::Tags) where {O} = Group{O, typeof(names), typeof(tags)}(names, tags)
-Group(f::Field{O}) where {O} = Group{O}(f.group, f.tags)
+Group{K}(names, tags::Tags) where {K} = Group{K, typeof(names), typeof(tags)}(names, tags)
+Group(f::Field{K}) where {K} = Group{K}(f.group, f.tags)
 Base.:(==)(::Group, ::Group) = false
-Base.:(==)(a::Group{O}, b::Group{O}) where {O} = a.names == b.names && a.tags == b.tags
-Base.hash(g::Group{O}, h::UInt) where {O} = hash(g.tags, hash(g.names, hash(O, h)))
-Base.isless(a::Group{O}, b::Group{P}) where {O, P} = _order_isless((nameof(O), a.names, tagset(a)...), (nameof(P), b.names, tagset(b)...))
+Base.:(==)(a::Group{K}, b::Group{K}) where {K} = a.names == b.names && a.tags == b.tags
+Base.hash(g::Group{K}, h::UInt) where {K} = hash(g.tags, hash(g.names, hash(K, h)))
+Base.isless(a::Group{K}, b::Group{P}) where {K, P} = _order_isless((nameof(K), a.names, tagset(a)...), (nameof(P), b.names, tagset(b)...))
 tags(g::Group) = g.tags
-add_tag(g::Group{O}, tag) where {O} = Group{O}(g.names, add_tag(g.tags, tag))
+add_tag(g::Group{K}, tag) where {K} = Group{K}(g.names, add_tag(g.tags, tag))
 
 symbolic_group(m::Mode) = isnothing(m.field.group) ? m : Group(m.field)
-symbolic_group(op::AbstractSym) = symbolic_group(mode(op))
+symbolic_group(op::Op) = symbolic_group(op.mode)
 atomic_id(m::Mode) = m
+atomic_id(op::Op) = op.mode
 _atom_names(m::Mode) = (m,)
-add_tag(op::AbstractSym, tag) = with_mode(op, add_tag(mode(op), tag))
+_atom_names(op::Op) = (op,)
 
 # The methods of `hilbert_space(field, labels, ...)` take a vector of labels. Other collections, such as tuples,
 # generators and matrices, are flattened into one. The order of the labels is the order of the basis, so
@@ -125,9 +158,9 @@ end
 _mode_product(f::Field, labels, constraint, args...) =
     tensor_product(map(l -> hilbert_space(Mode(f, l), args...), labels); constraint)
 hilbert_space(f::Field, labels::AbstractVector, x, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint, x)
-function hilbert_space(m::Mode, states)
-    (_field_entry(m) === m && states isa Union{AbstractVector, Tuple, BasisStates}) || throw(MethodError(hilbert_space, (m, states)))
-    isnothing(m.field.group) || throw(ArgumentError("The grouped field `$(m.field)` needs its own space type and a `combine_into_group(::Group{O}, atoms)` method."))
+function hilbert_space(m::Mode{<:Field{K}}, states) where {K}
+    (isnothing(mode_operator(K)) && states isa Union{AbstractVector, Tuple, BasisStates}) || throw(MethodError(hilbert_space, (m, states)))
+    isnothing(m.field.group) || throw(ArgumentError("The grouped field `$(m.field)` needs its own space type and a `combine_into_group(::Group{K}, atoms)` method."))
     return GenericHilbertSpace(m, states)
 end
 
@@ -154,31 +187,32 @@ end
 end
 
 @testitem "Custom operators on a field" begin
-    import FermionicHilbertSpaces: @field, AbstractSym, AbstractBasisState, apply_local_operator, mode, with_mode,
+    import FermionicHilbertSpaces: @field, Op, AbstractBasisState, apply_local_operator, local_mul_effect, mode,
         add_tag, open_system
-    import FermionicHilbertSpaces.NonCommutativeProducts: @nc
-    struct Shift{M} <: AbstractSym
-        mode::M
+    import FermionicHilbertSpaces.NonCommutativeProducts: Swap
+    struct Shift
         k::Int
     end
-    @nc Shift
-    mode(s::Shift) = s.mode
-    with_mode(s::Shift, m) = Shift(m, s.k)
-    Base.adjoint(s::Shift) = Shift(s.mode, -s.k)
+    Base.adjoint(s::Shift) = Shift(-s.k)
     struct Site <: AbstractBasisState
         n::Int
     end
     apply_local_operator(s::Shift, state::Site, space, precomp) = (Site(mod(state.n + s.k, 3)), 1)
+    local_mul_effect(a::Shift, b::Shift) = a.k == -b.k ? 1 : a.k > b.k ? Swap(1) : nothing
 
     @field c::Shift
-    @test c[1][2] == Shift(c[1], 2)
+    @test c[1][2] == Op(Shift(2), c[1])
     @test c[2][1] * c[1][1] == c[1][1] * c[2][1]
+    struct NoAction end
+    @test_throws "on the kind, not on `Op{" representation(Op(NoAction(), c[1]), hilbert_space(c, 1:1, Site.(0:2)))
     @test repr(mode(add_tag(c[1][1], :l))) == "c(l)[1]"
     H = hilbert_space(c, 1:2, Site.(0:2))
     @test H == tensor_product([GenericHilbertSpace(c[i], Site.(0:2)) for i in 1:2])
     @test_throws ArgumentError hilbert_space(FermionicHilbertSpaces.Field{Shift}(:g, (:g,)), 1:2, Site.(0:2))
     A = c[1][1] * c[2][-1]
     MA = representation(A, H, Matrix)
+    @test c[1][2] * c[1][1] == c[1][1] * c[1][2] && c[1][1] * c[1][-1] == 1
+    @test representation(c[1][2] * c[1][1], H, Matrix) == representation(c[1][2], H, Matrix) * representation(c[1][1], H, Matrix)
     Hlr, Hl, Hr, left, right = open_system(H)
     ρ = randn(dim(H), dim(H))
     v = reshape(ρ, (Hl, Hr) => Hlr)

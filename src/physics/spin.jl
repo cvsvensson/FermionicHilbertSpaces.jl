@@ -2,19 +2,16 @@ _check_spin(J) = (J isa Real && ishalfinteger(J) && J >= 0) ? J : throw(Argument
 _to_halfint(::Nothing) = nothing
 _to_halfint(spin) = HalfInt(_check_spin(spin))
 
-# `op` is `:+`, `:-` or `:z`, raised to the power `exponent`.
-struct SpinSym{B} <: AbstractSym
-    mode::B
-    op::Symbol
+# `shift` is the change of `m` per power, 1 for `:+`, -1 for `:-` and 0 for `:z`, raised to the power `exponent`.
+struct Spin
+    shift::Int
     exponent::Int
-    function SpinSym{B}(mode::B, op, exponent) where {B}
-        #bypass any checks for internal use when we know the input is valid
-        return new{B}(mode, op, exponent)
-    end
 end
-const SpinMode = Mode{<:Field{SpinSym}}
+const SpinSym{M} = Op{Spin, M}
+const SpinMode = Mode{<:Field{Spin}}
 _spin(m::SpinMode) = m.field.params
-Base.getindex(s::SpinMode, ::Colon) = [SpinSym(s, σ) for σ in (:x, :y, :z)]
+Base.getindex(s::SpinMode, op) = _spin_operator(s, op)
+Base.getindex(s::SpinMode, ::Colon) = [s[σ] for σ in (:x, :y, :z)]
 
 """
     @spin s
@@ -51,7 +48,7 @@ conventions of [`@spin`](@ref).
 macro spins(name, spin = nothing)
     return Expr(:block, :($(esc(name)) = _spin_field($(Expr(:quote, name)), $(esc(spin)))), :($(esc(name))))
 end
-_spin_field(name, J) = Field{SpinSym}(name, nothing, _to_halfint(J))
+_spin_field(name, J) = Field{Spin}(name, nothing, _to_halfint(J))
 
 
 """
@@ -110,7 +107,7 @@ function hilbert_space(sym::SpinMode, J)
     _check_spin_unset(sym.field)
     SpinSpace(sym, J)
 end
-hilbert_space(f::Field{SpinSym}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint)
+hilbert_space(f::Field{Spin}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint)
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.mode == b.mode && a.spin == b.spin)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.mode, hash(x.spin, h))
 
@@ -226,122 +223,87 @@ end
 
 end
 
-function SpinSym(mode::B, op, exponent::Integer = 1) where {B}
-    exponent < 0 && throw(ArgumentError("The spin operator `exponent` must be nonnegative, got $exponent."))
-    exponent == 0 && return 1 // 1
+# The spin operator `op` on `mode`: a symbol or integer alias of `:x`, `:y`, `:z`, `:+`, `:-` or the identity `:I`.
+function _spin_operator(mode, op)
     if op in _spin_x_aliases
-        exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators, got `exponent` = $exponent for `$op`."))
-        return SpinSym{B}(mode, :+, 1) / 2 + SpinSym{B}(mode, :-, 1) / 2
+        return Op(Spin(1, 1), mode) / 2 + Op(Spin(-1, 1), mode) / 2
     elseif op in _spin_y_aliases
-        exponent == 1 || throw(ArgumentError("Exponentiation is only supported for spin raising/lowering operators, got `exponent` = $exponent for `$op`."))
-        return SpinSym{B}(mode, :+, 1) / (2im) - SpinSym{B}(mode, :-, 1) / (2im)
+        return Op(Spin(1, 1), mode) / (2im) - Op(Spin(-1, 1), mode) / (2im)
     elseif op in _spin_identity_aliases
         return 1 // 1
     else
-        canonical = _canonical_spin_alias(op)
-        if !(_spin(mode) isa Nothing) && canonical in (:+, :-) && exponent > Int(2 * _spin(mode))
-            return 0 // 1
-        end
-        SpinSym{B}(mode, canonical, Int(exponent))
+        return _spin_power(mode, _spin_shift(op), 1)
     end
 end
-# The copy of a `SpinSym` that GPU kernels use, with the operator as the change of `m` per power: 1 for `:+`, -1 for `:-`
-# and 0 for `:z`
-struct DeviceSpinSym
-    shift::Int
-    exponent::Int
+# The power `exponent` of the operator with the given `shift`, which is a number when the power is the identity or zero.
+function _spin_power(mode, shift, exponent)
+    exponent == 0 && return 1 // 1
+    !(_spin(mode) isa Nothing) && shift != 0 && exponent > Int(2 * _spin(mode)) && return 0 // 1
+    return Op(Spin(shift, exponent), mode)
 end
-function _spin_shift(op::SpinSym)
-    op.op === :+ && return 1
-    op.op === :- && return -1
-    op.op === :z && return 0
-    throw(ArgumentError("Invalid spin operator symbol, got `$(op.op)`."))
-end
-_spin_shift(op::DeviceSpinSym) = op.shift
 const _spin_x_aliases = (:x, :X, 1)
 const _spin_y_aliases = (:y, :Y, 2)
 const _spin_z_aliases = (:z, :Z, 3)
 const _spin_identity_aliases = (:I, 0)
 const _spin_plus_aliases = (:+, :plus, :p)
 const _spin_minus_aliases = (:-, :minus, :m)
-_iscanonical(op) = op in (:+, :-, :z)
-function _canonical_spin_alias(op)
-    _iscanonical(op) && return op
+function _spin_shift(op)
     if op in _spin_z_aliases
-        :z
+        0
     elseif op in _spin_plus_aliases
-        :+
+        1
     elseif op in _spin_minus_aliases
-        :-
+        -1
     else
         throw(ArgumentError("Invalid spin operator symbol, got `$op`."))
     end
 end
 
 function Base.show(io::IO, x::SpinSym)
-    print(io, x.mode, "[:$(x.op)]")
-    if x.exponent != 1
-        print(io, "^", x.exponent)
+    print(io, x.mode, "[:", (:-, :z, :+)[x.kind.shift + 2], "]")
+    return if x.kind.exponent != 1
+        print(io, "^", x.kind.exponent)
     end
 end
 
-Base.:(==)(a::SpinSym, b::SpinSym) = a.op == b.op && a.mode == b.mode && a.exponent == b.exponent
-Base.hash(a::SpinSym, h::UInt) = hash(a.exponent, hash(a.op, hash(a.mode, h)))
-mode(f::SpinSym) = f.mode
-with_mode(f::SpinSym, m) = SpinSym(m, f.op, f.exponent)
+Base.adjoint(k::Spin) = Spin(-k.shift, k.exponent)
 
-mat_eltype(::Type{<:SpinSym}) = Float64
-
-function Base.adjoint(x::SpinSym{B}) where B
-    if x.op == :+
-        SpinSym{B}(x.mode, :-, x.exponent) #unsafe constructor
-    elseif x.op == :-
-        SpinSym{B}(x.mode, :+, x.exponent) #unsafe constructor
-    elseif x.op == :z
-        x
-    else
-        throw(ArgumentError("Invalid spin operator symbol, got `$(x.op)`."))
-    end
-end
-
-function _spin_commutator_term(a::SpinSym{B}, b::SpinSym{B}) where B
-    if a.op == :+ && b.op == :z
-        return (-1, SpinSym{B}(a.mode, :+, 1))
-    elseif a.op == :- && b.op == :z
-        return (1, SpinSym{B}(a.mode, :-, 1))
-    elseif a.op == :- && b.op == :+
-        return (-2, SpinSym{B}(a.mode, :z, 1))
+function _spin_commutator_term(a::SpinSym, b::SpinSym)
+    ka, kb = a.kind, b.kind
+    if ka.shift != 0 && kb.shift == 0
+        return (-ka.shift, Op(Spin(ka.shift, 1), a.mode))
+    elseif ka.shift == -1 && kb.shift == 1
+        return (-2, Op(Spin(0, 1), a.mode))
     else
         return nothing
     end
 end
 
-_factor_or_empty(x) = isone(x) ? Any[] : [x]
-
 # Equal modes can have different types, such as labels `1` and `Int32(1)`.
-local_mul_effect(a::SpinSym, b::SpinSym) = local_mul_effect(a, SpinSym{typeof(a.mode)}(a.mode, b.op, b.exponent))
+local_mul_effect(a::SpinSym, b::SpinSym) = local_mul_effect(a, Op(b.kind, a.mode))
 function local_mul_effect(a::S, b::S) where {S <: SpinSym}
-    if a.op == b.op && a.op in (:+, :-, :z)
-        exponent = a.exponent + b.exponent
-        if a.op in _spin_z_aliases
+    ka, kb = a.kind, b.kind
+    if ka.shift == kb.shift
+        exponent = ka.exponent + kb.exponent
+        if ka.shift == 0
             if _spin(a.mode) == 1 // 2
                 div, rem = divrem(exponent, 2)
-                return (1 // 4)^div * (rem == 0 ? 1 : SpinSym(a.mode, a.op, rem))
+                return (1 // 4)^div * _spin_power(a.mode, 0, rem)
             elseif _spin(a.mode) == 1
-                return iseven(exponent) ? SpinSym(a.mode, a.op, 2) : SpinSym(a.mode, a.op, 1)
+                return Op(Spin(0, iseven(exponent) ? 2 : 1), a.mode)
             end
         end
-        return SpinSym(a.mode, a.op, exponent)
+        return _spin_power(a.mode, ka.shift, exponent)
     end
 
     # Spin-aware identity: S+ S- = J(J+1) - Sz^2 + Sz
-    if a.op == :+ && b.op == :- && !(_spin(a.mode) isa Nothing)
+    if ka.shift == 1 && kb.shift == -1 && !(_spin(a.mode) isa Nothing)
         J = _spin(a.mode)
-        left = SpinSym(a.mode, a.op, a.exponent - 1)
-        right = SpinSym(b.mode, b.op, b.exponent - 1)
+        left = Op(Spin(1, ka.exponent - 1), a.mode)
+        right = Op(Spin(-1, kb.exponent - 1), a.mode)
 
-        left_factors = a.exponent == 1 ? Any[] : [left]
-        right_factors = b.exponent == 1 ? Any[] : [right]
+        left_factors = ka.exponent == 1 ? Any[] : [left]
+        right_factors = kb.exponent == 1 ? Any[] : [right]
 
         const_term = J * (J + 1)
         term_const = if iszero(const_term)
@@ -351,24 +313,13 @@ function local_mul_effect(a::S, b::S) where {S <: SpinSym}
         else
             NCMul(const_term, S[left_factors..., right_factors...])
         end
-        szsquare = if J == 1 // 2
-            1 // 4
-        else
-            SpinSym(a.mode, :z, 2)
-        end
-        term_sz2 = szsquare isa SpinSym ? NCMul(-1 // 1, S[left_factors..., SpinSym(a.mode, :z, 2), right_factors...]) : NCMul(-1 * szsquare // 1, S[left_factors..., right_factors...])
-        term_sz = NCMul(1 // 1, S[left_factors..., SpinSym(a.mode, :z), right_factors...])
+        term_sz2 = J == 1 // 2 ? NCMul(-1 // 4, S[left_factors..., right_factors...]) : NCMul(-1 // 1, S[left_factors..., Op(Spin(0, 2), a.mode), right_factors...])
+        term_sz = NCMul(1 // 1, S[left_factors..., Op(Spin(0, 1), a.mode), right_factors...])
         return AddTerms((term_const, term_sz2, term_sz))
     end
 
-    if _spin(a.mode) == 1 // 2 && a.op == :z
-        # apply Sz*S+ = S+/2 and related identities for spin-1/2
-        if b.op == :+
-            return NCMul((1 // 2)^(a.exponent), S[SpinSym(a.mode, :+, b.exponent)])
-        elseif b.op == :-
-            return NCMul((-1 // 2)^(a.exponent), S[SpinSym(a.mode, :-, b.exponent)])
-        end
-    end
+    # Sz^n S± = (±1/2)^n S± for spin 1/2
+    _spin(a.mode) == 1 // 2 && ka.shift == 0 && return NCMul((kb.shift // 2)^ka.exponent, S[b])
 
     comm = _spin_commutator_term(a, b)
     if isnothing(comm)
@@ -379,9 +330,9 @@ function local_mul_effect(a::S, b::S) where {S <: SpinSym}
 
     # For A^N B^M (out-of-order), rewrite only the middle pair:
     # A^(N-1) * (B*A + [A,B]) * B^(M-1)
-    left_factors = a.exponent == 1 ? S[] : S[SpinSym(a.mode, a.op, a.exponent - 1)]
-    right_factors = b.exponent == 1 ? S[] : S[SpinSym(b.mode, b.op, b.exponent - 1)]
-    swapped_factors = S[left_factors..., SpinSym(b.mode, b.op), SpinSym(a.mode, a.op), right_factors...]
+    left_factors = ka.exponent == 1 ? S[] : S[Op(Spin(ka.shift, ka.exponent - 1), a.mode)]
+    right_factors = kb.exponent == 1 ? S[] : S[Op(Spin(kb.shift, kb.exponent - 1), a.mode)]
+    swapped_factors = S[left_factors..., Op(Spin(kb.shift, 1), a.mode), Op(Spin(ka.shift, 1), a.mode), right_factors...]
     comm_factors = S[left_factors..., comm_middle_factor, right_factors...]
 
     swapped_term = NCMul(1 // 1, swapped_factors)
@@ -389,17 +340,15 @@ function local_mul_effect(a::S, b::S) where {S <: SpinSym}
     return AddTerms((swapped_term, comm_term))
 end
 
-@nc SpinSym
-
 """
-    apply_local_operator(op::SpinSym, state::SpinState, space::SpinSpace, precomp) -> (newstate, amplitude)
+    apply_local_operator(op::Spin, state::SpinState, space::SpinSpace, precomp) -> (newstate, amplitude)
 
 Apply a single spin operator to a spin state. Returns (newstate, amplitude) where amplitude is 0 if the operation is not allowed, and a nonzero value otherwise.
 """
-function apply_local_operator(op::Union{SpinSym, DeviceSpinSym}, state::SpinState, space::SpinSpace, precomp, ::Type{T} = Float64) where {T}
+function apply_local_operator(op::Spin, state::SpinState, space::SpinSpace, precomp, ::Type{T} = Float64) where {T}
     J = space.spin
     m = state.m
-    shift = _spin_shift(op)
+    shift = op.shift
     # S_z |m⟩ = m |m⟩
     iszero(shift) && return (state, _fast_spin_z_exponent(T, m, op.exponent))
     # S_± |m⟩ = √(J(J+1) - m(m±1)) |m±1⟩
