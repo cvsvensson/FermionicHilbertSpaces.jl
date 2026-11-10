@@ -33,7 +33,7 @@ partial_trace_phase_factor_eltype(H::TransposedSpace) = partial_trace_phase_fact
 partial_transpose_phase_factor_eltype(H::TransposedSpace) = partial_transpose_phase_factor_eltype(parent(H))
 partial_transpose_phase_factor(f1, f2, H::TransposedSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
 
-function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSpace}
+function FermionicSpace(spaces::AbstractVector{<:TransposedSpace}, group::Group)
     only(unique(map(group_id, spaces))) == group || throw(ArgumentError("All spaces must belong to the group `$group`."))
     TransposedSpace(FermionicSpace(map(H -> H.parent, spaces), group))
 end
