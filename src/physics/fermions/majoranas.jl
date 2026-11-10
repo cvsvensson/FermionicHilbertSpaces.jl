@@ -192,6 +192,7 @@ majoranas(H::MajoranaHilbertSpace) = OrderedDict(m.label => representation(Op(Ma
 
 hilbert_space(y::Field{Majorana}, labels::AbstractVector, @nospecialize(c::QuantitySpec)) = constrain_space(hilbert_space(y, labels), c)
 hilbert_space(y::Field{Majorana}, labels::AbstractVector) = _majorana_space(y, labels)
+hilbert_space(m::Mode{<:Field{Majorana}}, states) = _no_space(m, states)
 hilbert_space(y::Field{Majorana}, labels::AbstractVector, x::Union{AbstractConstraint, AbstractVector, BasisStates}) = _majorana_space(y, labels, x)
 function _majorana_space(y, labels, args...)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even to define a Hilbert space, got $(length(labels))."))
@@ -301,10 +302,10 @@ end
     using LinearAlgebra
     @majoranas γ
     H = hilbert_space(γ, 1:2)
-    Hf = H.parent
-    f = H.parent.modes[1].field
+    @fermions f
+    Hf = hilbert_space(f, [(1, 2)])
 
-    @test parityoperator(H.parent) == representation(1im * γ[1] * γ[2], H)
+    @test parityoperator(Hf) == representation(1im * γ[1] * γ[2], H)
     y1 = representation(γ[1], H)
     y2 = representation(γ[2], H)
     @test y1 * y2 == representation(γ[1] * γ[2], H)
@@ -336,7 +337,7 @@ end
     @test dim(H) == 2
     Hsub = subregion(hilbert_space(γ, 1:2), H)
     @test dim(Hsub) == 2
-    f = H.parent.parent.modes[1].field
+    @fermions f
     Hf = hilbert_space(f, [(1, 2), (3, 4)], ParityConservation(1))
     Hfsub = subregion(hilbert_space(f, [(1, 2)]), Hf)
     m = rand(dim(H), dim(H))
