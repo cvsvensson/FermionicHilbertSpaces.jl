@@ -736,16 +736,27 @@ function _apply_term(termgroups::Tuple, k, state, H)
     return _apply_local_operators(term, state, H, precomp)
 end
 
+# Adds the amplitudes of the terms that map `state` to itself to `diagonal`, and counts the terms that map it to another
+# basis state of `H`
+_diagonal_and_count(::Tuple{}, state, H, diagonal, count = 0) = diagonal, count
+function _diagonal_and_count(termgroups::Tuple, state, H, diagonal, count = 0)
+    for (term, precomp) in first(termgroups)
+        newstate, amp = _apply_local_operators(term, state, H, precomp)
+        iszero(amp) && continue
+        newstate == state ? (diagonal += convert(typeof(diagonal), amp)) : (count += isbasisstate(newstate, H))
+    end
+    return _diagonal_and_count(Base.tail(termgroups), state, H, diagonal, count)
+end
+
 # One concretely typed vector per type of the elements, so that a loop over each vector is type stable
 _grouped_by_type(xs) = Tuple(T[x for x in xs if x isa T] for T in unique!(map(typeof, xs)))
 
-# Returns the diagonal element and pushes the other nonzero elements to `elements`, unless it is `nothing`
 _apply_term_groups!(elements, diagonal, ::Tuple{}, state, H) = diagonal
 function _apply_term_groups!(elements, diagonal, termgroups::Tuple, state, H)
     for (term, precomp) in first(termgroups)
         newstate, amp = _apply_local_operators(term, state, H, precomp)
         iszero(amp) && continue
-        newstate == state ? (diagonal += convert(typeof(diagonal), amp)) : isnothing(elements) || push!(elements, newstate => amp)
+        newstate == state ? (diagonal += convert(typeof(diagonal), amp)) : push!(elements, newstate => amp)
     end
     return _apply_term_groups!(elements, diagonal, Base.tail(termgroups), state, H)
 end

@@ -7,31 +7,27 @@ import Rimu.Interfaces: starting_address, operator_column, parent_operator, diag
     num_offdiagonals, random_offdiagonal
 import Rimu.Hamiltonians: dimension
 import FermionicHilbertSpaces: rimu_hamiltonian
-using FermionicHilbertSpaces: AbstractBasisState, dim, isbasisstate, matrix_column, _states_of, _column_terms, _apply_term,
-    _apply_term_groups!
+using FermionicHilbertSpaces: AbstractBasisState, dim, isbasisstate, _states_of, _column_terms, _apply_term,
+    _apply_term_groups!, _diagonal_and_count
 
 # Mutable so that Rimu's `==` checks compare identity: on Julia 1.13, `===` can return false
 # for a large immutable compared with itself.
-mutable struct FHSHamiltonian{T, A, O, S, C, G} <: AbstractHamiltonian{T}
+mutable struct FHSHamiltonian{T, A, O, S, G} <: AbstractHamiltonian{T}
     const op::O
     const space::S
     const start::A
-    const column::C
     const termgroups::G
     const identity::T
     const nterms::Int
 end
 
 function rimu_hamiltonian(op, H, start)
-    column = matrix_column(op, H)
     state = only(_states_of(H, (start,)))
     termgroups, identity = _column_terms(op, H)
     # Rimu's solvers and walker populations need floating point matrix elements.
     T = float(typeof(identity))
-    nterms = sum(length, termgroups; init = 0)
-    return FHSHamiltonian{T, typeof(state), typeof(op), typeof(H), typeof(column), typeof(termgroups)}(
-        op, H, state, column,
-        termgroups, identity, nterms
+    return FHSHamiltonian{T, typeof(state), typeof(op), typeof(H), typeof(termgroups)}(
+        op, H, state, termgroups, identity, sum(length, termgroups; init = 0)
     )
 end
 
@@ -41,32 +37,41 @@ dimension(h::FHSHamiltonian, _) = dim(h.space)
 default_starting_vector(state::AbstractBasisState; population = 10, kwargs...) =
     default_starting_vector(state => population; kwargs...)
 
-# The column is lazy: each function applies the terms of the operator to the address when called.
+# The off-diagonals of a column are the terms of the operator that map the address to another basis state of the space,
+# one per term: terms with the same new state are not summed, so that each is drawn with probability
+# 1 / `num_offdiagonals`.
 struct FHSColumn{A, T, O} <: AbstractOperatorColumn{A, T, O}
     operator::O
     address::A
+    diagonal::T
+    noffdiagonals::Int
 end
 
-operator_column(h::FHSHamiltonian{T, A}, address) where {T, A} = FHSColumn{A, T, typeof(h)}(h, address)
+function operator_column(h::FHSHamiltonian{T, A}, address) where {T, A}
+    diagonal, count = _diagonal_and_count(h.termgroups, address, h.space, convert(T, h.identity))
+    return FHSColumn{A, T, typeof(h)}(h, address, diagonal, count)
+end
 
 parent_operator(c::FHSColumn) = c.operator
 starting_address(c::FHSColumn) = c.address
-diagonal_element(c::FHSColumn) = _apply_term_groups!(nothing, c.operator.identity, c.operator.termgroups, c.address, c.operator.space)
-function offdiagonals(c::FHSColumn)
-    elements = c.operator.column(c.address)
-    !isempty(elements) && first(first(elements)) == c.address && popfirst!(elements)
-    return elements
-end
-num_offdiagonals(c::FHSColumn) = c.operator.nterms
-# Applies one uniformly random term. Terms that map the address to itself, to zero or outside the space spawn nothing,
-# which keeps the sum over terms of amplitude / probability unbiased.
-function random_offdiagonal(c::FHSColumn{A, T}) where {A, T}
+diagonal_element(c::FHSColumn) = c.diagonal
+num_offdiagonals(c::FHSColumn) = c.noffdiagonals
+function offdiagonals(c::FHSColumn{A, T}) where {A, T}
     h = c.operator
-    iszero(h.nterms) && return c.address, 1.0, zero(T)
-    prob = 1 / h.nterms
-    newstate, amp = _apply_term(h.termgroups, rand(1:h.nterms), c.address, h.space)
-    (iszero(amp) || newstate == c.address || !isbasisstate(newstate, h.space)) && return c.address, prob, zero(T)
-    return newstate, prob, convert(T, amp)
+    elements = Pair{A, T}[]
+    _apply_term_groups!(elements, c.diagonal, h.termgroups, c.address, h.space)
+    return filter!(((s, _),) -> isbasisstate(s, h.space), elements)
+end
+# Draws uniform terms until one maps the address to another basis state, which picks each of these terms with
+# probability 1 / `num_offdiagonals`.
+function random_offdiagonal(c::FHSColumn{A, T}) where {A, T}
+    iszero(c.noffdiagonals) && return c.address, 1.0, zero(T)
+    h = c.operator
+    while true
+        newstate, amp = _apply_term(h.termgroups, rand(1:h.nterms), c.address, h.space)
+        (iszero(amp) || newstate == c.address || !isbasisstate(newstate, h.space)) && continue
+        return newstate, 1 / c.noffdiagonals, convert(T, amp)
+    end
 end
 
 end
