@@ -180,7 +180,9 @@ end
 end
 
 @testitem "Custom operators on a field" begin
-    import FermionicHilbertSpaces: @field, Op, AbstractBasisState, apply_local_operator, mode, add_tag, open_system
+    import FermionicHilbertSpaces: @field, Op, AbstractBasisState, apply_local_operator, local_mul_effect, mode,
+        add_tag, open_system
+    import FermionicHilbertSpaces.NonCommutativeProducts: Swap
     struct Shift
         k::Int
     end
@@ -189,6 +191,7 @@ end
         n::Int
     end
     apply_local_operator(s::Shift, state::Site, space, precomp) = (Site(mod(state.n + s.k, 3)), 1)
+    local_mul_effect(a::Shift, b::Shift) = a.k == -b.k ? 1 : a.k > b.k ? Swap(1) : nothing
 
     @field c::Shift
     @test c[1][2] == Op(Shift(2), c[1])
@@ -199,6 +202,8 @@ end
     @test_throws ArgumentError hilbert_space(FermionicHilbertSpaces.Field{Shift}(:g, (:g,)), 1:2, Site.(0:2))
     A = c[1][1] * c[2][-1]
     MA = representation(A, H, Matrix)
+    @test c[1][2] * c[1][1] == c[1][1] * c[1][2] && c[1][1] * c[1][-1] == 1
+    @test representation(c[1][2] * c[1][1], H, Matrix) == representation(c[1][2], H, Matrix) * representation(c[1][1], H, Matrix)
     Hlr, Hl, Hr, left, right = open_system(H)
     ρ = randn(dim(H), dim(H))
     v = reshape(ρ, (Hl, Hr) => Hlr)

@@ -8,7 +8,8 @@
 # The pieces a new algebra needs are listed in [Extending and performance hooks](../extending.md).
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
-import FermionicHilbertSpaces: @field, AbstractBasisState, Op, apply_local_operator, mat_eltype
+import FermionicHilbertSpaces: @field, AbstractBasisState, Op, apply_local_operator, local_mul_effect, mat_eltype
+import FermionicHilbertSpaces.NonCommutativeProducts: Swap
 
 # ## Defining the clock operators and states
 # The clock operators are defined on a local Hilbert space of dimension ``D``, with basis states ``|n\rangle`` for ``n = 0, 1, ..., D-1``. The operator ``X`` shifts the local clock value, ``X |n\rangle = |n + 1\rangle``, and ``Z`` measures the local clock value: ``Z |n\rangle = \exp(2π i n / D) |n\rangle``.
@@ -37,8 +38,11 @@ mat_eltype(::Type{Clock}) = ComplexF64
 
 # ## Using it in practice: Hamiltonian and conservation laws
 # Let's take the case D = 3 for 6 sites. We define a hamiltonian which conserves the clock charge, the sum of the local clock values modulo D, and calculate the symmetry resolved entanglement entropy in the ground state.
-D = 3
+const D = 3
 L = 6
+## Clock operators obey ``Z X = ω X Z`` with ``ω = e^{2πi/D}``. This rule on the kinds orders X before Z on each site.
+sgn(k::Clock) = k.adjoint ? -1 : 1
+local_mul_effect(a::Clock, b::Clock) = a.z && !b.z ? Swap(cispi(2 * sgn(a) * sgn(b) / D)) : nothing
 states = [ClockState{D}(n) for n in 0:(D-1)]
 Hfull = hilbert_space(c, 1:L, states)
 clock_hamiltonian(J, h) = -J * sum(c[i][:X]' * c[i + 1][:X] + hc for i in 1:(L - 1)) - h * sum(c[i][:Z] + hc for i in 1:L)

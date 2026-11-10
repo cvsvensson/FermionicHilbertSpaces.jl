@@ -193,8 +193,13 @@ Rule for the product `a * b` of two operators on the same group, returned as for
 `NonCommutativeProducts.mul_effect`; the default `nothing` keeps the product as written. Products on
 different groups commute and are ordered by group, so a custom operator defines this instead of
 `mul_effect`.
+
+A rule that returns `nothing`, a number or a `Swap` can be defined on the kinds, as in
+`local_mul_effect(a::MyKind, b::MyKind)`. On a grouped field it also applies to operators on different modes
+of the group. A rule that returns operators or needs the mode is defined on `Op{<:MyKind}`.
 """
 local_mul_effect(a, b) = nothing
+local_mul_effect(a::Op, b::Op) = local_mul_effect(a.kind, b.kind)
 
 ## Grading
 # Each space carries a grade k^m b^n in the bicyclic monoid, where a ket has (m, n) = (1, 0) and a bra (0, 1).
