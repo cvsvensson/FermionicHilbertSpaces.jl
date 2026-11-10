@@ -71,8 +71,6 @@ struct SymmetricSector{B, P, T, M <: SparseMatrixCSC{T}, C <: TranslationConstra
 end
 
 function constrain_space(space::AbstractHilbertSpace, c::TranslationConstraint)
-    any(g -> g isa Union{FermionicSpace, MajoranaHilbertSpace}, groups(space)) &&
-        throw(ArgumentError("Translations of fermionic modes are not supported yet, since `permute_state` drops the fermionic reordering sign."))
     sites = _site_spaces(space, c.translation.sites)
     ispartition(sites, space) || throw(ArgumentError("The sites of a translation must cover all factors of the space, got $(c.translation.sites)."))
     perms, weights = _permutations_and_weights(c)
@@ -116,6 +114,7 @@ _orbits(H::SymmetricSector) = (H, 1:dim(H))
 _orbits(H::AbstractSubspace{<:Any, <:SymmetricSector}) = (parent(H), [state.index for state in basisstates(H)])
 
 _amplitude_eltype(H::SymmetricSector) = eltype(H.amplitudes)
+_precomputation_before_operator_application(op, H::_OrbitSpace) = _precomputation_before_operator_application(op, parent(first(_orbits(H))))
 _check_operator(op, H::SymmetricSector) = H.transposed ? nothing : _check_invariant(op, H)
 # The output index of a basis state is its orbit in the input space, so both spaces must share the orbits.
 function _check_operator(op, ax::Axes{<:Tuple{_OrbitSpace, _OrbitSpace}})
@@ -143,15 +142,19 @@ end
 function _check_invariant(op, H::SymmetricSector)
     isempty(H.reps) && return nothing
     space = H.parent
-    mapper = state_mapper(space, _site_spaces(space, H.symmetry.translation.sites))
-    N = length(H.symmetry.translation.sites)
+    sites = _site_spaces(space, H.symmetry.translation.sites)
+    mapper = state_mapper(space, sites)
+    N = length(sites)
     g = _match_perm([mod1(i + 1, N) for i in 1:N], unique_split_state(first(H.reps), mapper))
-    translate(state) = permute_state(state, mapper, g)
+    phase = _permutation_phases(space, sites, mapper, true)(g)
+    image(t) = state_index(permute_state(basisstate(t, space), mapper, g), space)
     columns(states) = representation(op, Axes(space, ConstrainedSpace(space, states)); projection = true)
     opr = columns(H.reps)
-    rows = [state_index(translate(basisstate(t, space)), space) for t in rowvals(opr)]
-    sparse(rows, SparseArrays.findnz(opr)[2], nonzeros(opr), dim(space), dim(H)) ≈ columns(map(translate, H.reps)) ||
-        throw(ArgumentError("The operator does not commute with the translation, so it has no representation on the momentum sector."))
+    rows = map(image, rowvals(opr))
+    gop = sparse(rows, SparseArrays.findnz(opr)[2], nonzeros(opr) .* phase.(rowvals(opr), rows), dim(space), dim(H))
+    reps = [state_index(r, space) for r in H.reps]
+    opg = columns([basisstate(image(r), space) for r in reps]) * Diagonal(phase.(reps, image.(reps)))
+    gop ≈ opg || throw(ArgumentError("The operator does not commute with the translation, so it has no representation on the momentum sector."))
     return nothing
 end
 
@@ -223,10 +226,25 @@ end
     @test_throws ArgumentError hilbert_space(S, 1:N, Translation(1:(N - 1)) => k)
     @test sum(k -> dim(hilbert_space(S, 1:N, Translation(1:N) => k)), 0:(N - 1)) == 2^N
     @test size(representation(Sz, hilbert_space(S, 1:N, (Sz => N // 2, Translation(1:N) => 1)))) == (0, 0)
-    @fermions f
-    @test_throws ArgumentError hilbert_space(f, 1:N, Translation(1:N) => k)
 
     count_multiplets(H) = Dict(s => size(V, 2) for (s, V) in highest_weight_states(H, Splus))
     Hfull = hilbert_space(S, 1:N, Sz => 0:(N // 2))
     @test mergewith(+, [count_multiplets(constrain_space(Hfull, Translation(1:N) => k)) for k in 0:(N - 1)]...) == count_multiplets(Hfull)
+end
+
+@testitem "Translation sectors of a Hubbard ring" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: Translation
+    N = 4
+    @fermions f
+    ham = sum(-f[i, σ]' * f[mod1(i + 1, N), σ] + hc for σ in (:↑, :↓) for i in 1:N) + 4 * sum(f[i, :↑]'f[i, :↑] * f[i, :↓]'f[i, :↓] for i in 1:N)
+    Nσ(σ) = sum(f[i, σ]'f[i, σ] for i in 1:N)
+    H = hilbert_space(f, [(i, σ) for σ in (:↑, :↓) for i in 1:N], (Nσ(:↑), Nσ(:↓)))
+    sites = [hilbert_space(f, [(i, :↑), (i, :↓)]) for i in 1:N]
+    Hks = [constrain_space(H, Translation(sites) => k) for k in 0:(N - 1)]
+    for q in ((2, 1), (2, 2))
+        @test sort(reduce(vcat, [eigvals(Hermitian(representation(ham, sector(q, Hk), Matrix))) for Hk in Hks])) ≈
+            eigvals(Hermitian(representation(ham, sector(q, H), Matrix)))
+    end
+    @test_throws ArgumentError representation(f[1, :↑]'f[1, :↑], sector((2, 1), Hks[1]))
 end
