@@ -1,16 +1,36 @@
 name: Benchmark this PR
+# Comment `/benchmark` on a PR, or run `gh workflow run benchmark.yml -f pr=<number>`.
 on:
-  pull_request_target:
-    branches: [ main ]  # change to your default branch
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number
+        required: true
 permissions:
   pull-requests: write    # needed to post comments
 
 jobs:
   bench:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.pull_request && startsWith(github.event.comment.body, '/benchmark') &&
+       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     steps:
+      - name: Find the PR head
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr || github.event.issue.number }}
+        run: |
+          echo "number=$PR" >> "$GITHUB_OUTPUT"
+          echo "sha=$(gh pr view "$PR" --repo "${{ github.repository }}" --json headRefOid --jq .headRefOid)" >> "$GITHUB_OUTPUT"
+
       - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
+          rev: ${{ github.event.repository.default_branch }},${{ steps.pr.outputs.sha }}
           julia-version: '1'
           job-summary: 'true' # the full tables go into the comment below, folded
 
@@ -27,7 +47,7 @@ jobs:
         env:
           GITHUB_TOKEN: ""
           BASE_REV: ${{ github.event.repository.default_branch }}
-          HEAD_REV: ${{ github.event.pull_request.head.sha }}
+          HEAD_REV: ${{ steps.pr.outputs.sha }}
         run: |
           {
             julia base-checkout/benchmark/ci_report.jl "$BASE_REV" "$HEAD_REV"
@@ -41,7 +61,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ steps.pr.outputs.number }}
           REPO: ${{ github.repository }}
         run: |
           marker='<!-- performance-regressions -->'
