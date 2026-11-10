@@ -27,6 +27,16 @@ macro fermions(xs...)
     return fermions
 end
 
+"""
+    @fermion f
+
+Create the annihilation operator `f` of a single fermionic mode, with space `hilbert_space(f)`. It is the
+mode `f[]` of `@fermions f`.
+"""
+macro fermion(x)
+    return :($(esc(x)) = FermionSym(false, Mode(Field{FermionSym}($(QuoteNode(x)), ($(QuoteNode(x)),)), ())))
+end
+
 struct FermionSym{M} <: AbstractFermionSym
     creation::Bool
     mode::M
@@ -148,6 +158,14 @@ mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
         @test op - 1.0I == op - 1.0 == -(1.0I - op) == -(1.0 - op)
     end
 
+end
+
+@testitem "Single fermionic mode" begin
+    @fermion f
+    @fermions g
+    @test representation(f' * f, hilbert_space(f), Matrix) == [0 0; 0 1]
+    @test f * f' + f' * f == 1
+    @test f * g[1] == g[1] * f
 end
 
 @testitem "Deterministic ordering of groups" begin
