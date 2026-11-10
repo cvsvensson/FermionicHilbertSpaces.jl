@@ -489,7 +489,7 @@ physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state,
         return ProductState{B}(newstate), amp
     end
 end
-@inline function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::AbstractHilbertSpace, precomp; kwargs...) where T
+@inline function apply_local_operators(op::NCMul, int_state::InternalRep{T}, space::AbstractHilbertSpace, precomp; kwargs...) where {T}
     state = _physical_rep(int_state, space)
     newstate, amp = apply_local_operators(op, state, space, precomp; kwargs...)
     return _internal_rep(newstate, space, T), amp
