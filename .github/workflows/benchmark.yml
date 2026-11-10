@@ -21,8 +21,21 @@ jobs:
       (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'performance')) ||
       (github.event.issue.pull_request && startsWith(github.event.comment.body, '/benchmark') &&
        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+    # Job-level so that skipped runs, e.g. from bot comments, don't cancel a running benchmark.
+    concurrency:
+      group: benchmark-${{ inputs.pr || github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
+      - name: Acknowledge the /benchmark comment
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh api --method POST
+          "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions"
+          -f content=eyes > /dev/null
+
       - name: Find the PR head
         id: pr
         env:
