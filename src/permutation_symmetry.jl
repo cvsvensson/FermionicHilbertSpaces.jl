@@ -410,7 +410,8 @@ function _orbit_block_basis(H, Hs, perms, weights, method, ::Type{T}; check = tr
     return SparseArrays.sparse(rows, cols, vals, d, c)
 end
 
-function _permutation_images!(entries, states, state_index, mapper, gs, weights)
+# `::F` forces specialization, which Julia skips for a `Function` argument that is only passed on
+function _permutation_images!(entries, states, state_index::F, mapper, gs, weights) where {F}
     foreach(empty!, entries)
     for (g, w) in zip(gs, weights)
         _add_permutation_operator!(entries, (states, state_index), mapper, g, w)
