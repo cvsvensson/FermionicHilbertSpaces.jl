@@ -119,7 +119,10 @@ end
 _mode_product(f::Field, labels, constraint, args...) =
     tensor_product(map(l -> hilbert_space(Mode(f, l), args...), labels); constraint)
 hilbert_space(f::Field, labels::AbstractVector, x, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint, x)
-hilbert_space(m::Mode, states) = GenericHilbertSpace(m, states)
+function hilbert_space(m::Mode, states::Union{AbstractVector, Tuple, BasisStates})
+    _field_entry(m) === m || throw(MethodError(hilbert_space, (m, states)))
+    return GenericHilbertSpace(m, states)
+end
 
 @testitem "Fields and modes" begin
     using FermionicHilbertSpaces: add_tag
@@ -131,6 +134,10 @@ hilbert_space(m::Mode, states) = GenericHilbertSpace(m, states)
     @test repr(b[1, :a]') == "b†[1, :a]"
     @test_throws ArgumentError FermionicHilbertSpaces.Mode(b, 1)[2]
     @test hilbert_space(b, (1, 2), 2) == hilbert_space(b, [1, 2], 2) == hilbert_space(b, (i for i in 1:2), 2)
+    @fermions f
+    @test_throws MethodError hilbert_space(f, 1:3, 1)
+    @test_throws MethodError hilbert_space(b, 1:2, 3.0)
+    @test_throws MethodError hilbert_space(b[1], [0, 1])
 end
 
 @testitem "Custom operators on a field" begin
