@@ -17,13 +17,17 @@ end
 
 # The fermionic permutation `R`, with `R * c' * R'` the corresponding operator in the factor that `perm` moves `c` to,
 # maps the basis state `x` to `u(x) * uπ(y) * y`, where `y` is the permuted state and `u` and `uπ` are the phase factors
-# of the partitions `Hs` and `Hs[invperm(perm)]`. Both are one for spaces without fermions.
-# `_permutation_phases(H, Hs, phase_factors)(perm)` gives this phase as a function of the indices of `x` and `y`.
-# `u` is tabulated once and shared by all permutations.
-function _permutation_phases(H, Hs, phase_factors)
+# of the partitions `Hs` and `Hs[invperm(perm)]`.
+# `_permutation_phases(H, Hs, mapper, phase_factors)(perm)`, with `mapper = state_mapper(H, Hs)`, gives this phase as a
+# function of the indices of `x` and `y`.
+# `u` is tabulated once and shared by all permutations. When `u` is `Returns(1)`, as for spaces without fermions,
+# so is `uπ`, since permuting `Hs` leaves the kind of each factor's mapper unchanged.
+function _permutation_phases(H, Hs, mapper, phase_factors)
     phase_factors || return perm -> (j, i) -> 1
+    pfu = phase_factor_u(mapper)
+    pfu == Returns(1) && return perm -> (j, i) -> 1
     states = basisstates(H)
-    u = map(phase_factor_u(state_mapper(H, Hs)), states)
+    u = map(pfu, states)
     return function (perm)
         uπ = map(phase_factor_u(state_mapper(H, Hs[invperm(collect(perm))])), states)
         return (j, i) -> u[j] * uπ[i]
@@ -39,8 +43,9 @@ corresponding operator in factor `k`. With `phase_factors=false`, it permutes th
 """
 function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T} = Int; phase_factors = true) where {T}
     P = zeros(T, dim(H), dim(H))
-    phase_of = _permutation_phases(H, Hs, phase_factors)
-    return add_permutation_operator!(P, (basisstates(H), Base.Fix2(state_index, H)), state_mapper(H, Hs), perm, one(T), phase_of)
+    mapper = state_mapper(H, Hs)
+    phase_of = _permutation_phases(H, Hs, mapper, phase_factors)
+    return add_permutation_operator!(P, (basisstates(H), Base.Fix2(state_index, H)), mapper, perm, one(T), phase_of)
 end
 # `phase_of(perm)` gives the phase function of a permutation, see `_permutation_phases`.
 function add_permutation_operator!(P, (states, state_index), mapper, perm, weight = 1, phase_of = perm -> (j, i) -> 1)
@@ -130,7 +135,7 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights = not
     mapper = state_mapper(H, Hs)
     states = basisstates(H)
     si = Base.Fix2(state_index, H)
-    add_permutation_operators!(accum, (states, si), mapper, perms, ws, _permutation_phases(H, Hs, phase_factors))
+    add_permutation_operators!(accum, (states, si), mapper, perms, ws, _permutation_phases(H, Hs, mapper, phase_factors))
     P = if sparse
         SparseArrays.sparse(finalize!(accum, H))
     else
@@ -285,7 +290,7 @@ function _orbit_sector_basis(H, Hs, parity, ::Type{T}; normalize = true, sparse 
     n = length(Hs)
     substates = unique_split_state(first(states), mapper)
     gens = [_match_perm([1:k-1; k + 1; k; k+2:n], substates) for k in 1:n-1]
-    phases = map(_permutation_phases(H, Hs, phase_factors), gens)
+    phases = map(_permutation_phases(H, Hs, mapper, phase_factors), gens)
     parent, rel, odd = _signed_orbits(states, Base.Fix2(state_index, H), mapper, gens, phases, parity)
 
     d = length(parent)
@@ -388,7 +393,7 @@ function _orbit_block_basis(H, Hs, perms, weights, method, ::Type{T}; check = tr
     mapper = state_mapper(H, Hs)
     substates = unique_split_state(first(states), mapper)
     gs = [_match_perm(perm, substates) for perm in perms]
-    phases = map(_permutation_phases(H, Hs, phase_factors), gs)
+    phases = map(_permutation_phases(H, Hs, mapper, phase_factors), gs)
     onedim = _has_equal_magnitudes(weights)
     onedim && check && _check_1d_character(perms, weights)
 
