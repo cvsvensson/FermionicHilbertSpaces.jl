@@ -762,6 +762,8 @@ function phase_factor_u(sp::ProductSpaceMapper)
     leaf_pfus = map(sp.leaves) do leaf
         leaf isa Uncovered ? nothing : phase_factor_u(leaf.mapper)
     end
+    leaf_pfus isa Tuple{Vararg{Union{Nothing, Returns}}} &&
+        return Returns(tuplefoldl(*, 1, map(pfu -> isnothing(pfu) ? 1 : pfu(), leaf_pfus)))
 
     function phase_factor(state)
         return tuplefoldl(*, 1, tuplemap((s, pfu) -> isnothing(pfu) ? 1 : pfu(s), state.states, leaf_pfus))

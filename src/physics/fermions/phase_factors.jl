@@ -256,7 +256,7 @@ function phase_factor_u(partition, masks, state::FockNumber)
     return phase ? -1 : 1
 end
 
-phase_factor_u(::AtomicStateMapper) = state -> 1
+phase_factor_u(::AtomicStateMapper) = Returns(1)
 function phase_factor_u(state_mapper::FockMapper)
     inds = state_mapper.fermionpositions
     masks = state_mapper.masks

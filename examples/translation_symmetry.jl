@@ -62,27 +62,25 @@ labels = ["k = $k" for k in momenta]
 weights = [[cis(2π * k * s / N) for s in 0:N-1] for k in momenta];
 
 # Translations commute with the total raising operator $S^+ = \sum_k S^+_k$. A multiplet with total spin $S$ has
-# one state with $M = S$, and it is the one that $S^+$ annihilates. In the sector $M = S$, `symmetric_sector`
-# constructs a matrix `P` whose columns form a basis for an irrep's subspace, and the kernel of $S^+ P$ picks out
-# the states with total spin $S$. `factors(sec)` identifies the tensor factors permuted by the group. We
-# diagonalize $H$ on that subspace; an absent block gets energy `Inf`.
+# one state with $M = S$, and it is the one that $S^+$ annihilates. In each sector $M$, `symmetric_sector`
+# constructs a matrix whose columns form a basis for an irrep's subspace, and `factors(sec)` identifies the tensor
+# factors permuted by the group. Given these bases, `highest_weight_states` returns the states annihilated by $S^+$
+# in each irrep, keyed by total spin. We diagonalize $H$ on that subspace; an absent block gets energy `Inf`.
 
-using FermionicHilbertSpaces: Axes
+using FermionicHilbertSpaces: highest_weight_states
 Splus = sum(S[k][:+] for k in 1:N)
 spins = filter(>=(0), quantumnumbers(space))
-function tower_energies(s)
-    sec = sector(s, space)
-    HS = representation(H, sec)
-    raise = representation(Splus, Axes(space, sec))
-    return map(weights) do w
-        P = symmetric_sector(sec, factors(sec), (perms, w))
-        ## An absolute cutoff, since raise * P vanishes only up to roundoff.
-        Q = P * nullspace(Matrix(raise * P); atol = 1.0e-8)
-        size(Q, 2) == 0 && return Inf
-        eigmin(Hermitian(Matrix(Q' * HS * Q)))
+blocks = Dict(s => representation(H, sector(s, space)) for s in spins)
+function tower_energies(w)
+    irrep_basis(M) = (sec = sector(M, space); symmetric_sector(sec, factors(sec), (perms, w)))
+    hws = highest_weight_states(space, Splus; basis = irrep_basis)
+    return map(spins) do s
+        haskey(hws, s) || return Inf
+        V = hws[s]
+        eigmin(Hermitian(Matrix(V' * blocks[s] * V)))
     end
 end
-energies = stack(map(tower_energies, spins))
+energies = stack(map(tower_energies, weights); dims = 1)
 E0, idx = findmin(energies)
 @assert E0 ≈ eigmin(Hermitian(representation(H, space, Matrix)))
 (; E0, irrep = labels[idx[1]], S = spins[idx[2]])

@@ -10,7 +10,7 @@ module FermionicHilbertSpaces
 using LinearAlgebra: LinearAlgebra, ColumnNorm, Diagonal, Hermitian,
     UniformScaling, diag, diagind, dot,
     eigen!, eigvals, eigvecs, isdiag, ishermitian, issymmetric,
-    mul!, normalize, nullspace, qr, rank, rmul!, svd, svdvals, tr, I
+    mul!, norm, normalize, nullspace, qr, rank, rmul!, svd, svdvals, tr, I
 using LowRankMatrices: LowRankMatrices, LowRankMatrix
 import SciMLOperators
 using FillArrays: Zeros, Fill, Eye
