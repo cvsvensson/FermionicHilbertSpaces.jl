@@ -61,6 +61,7 @@ Base.isless(a::Mode, b::Mode) = _order_isless((_order_key(a.field), a.label), (_
 
 add_tag(f::Field{A}, tag) where {A} = Field{A}(f.name, f.group, f.params, add_tag(f.tags, tag))
 add_tag(m::Mode, tag) = Mode(add_tag(m.field, tag), m.label)
+tag_label(m::Mode, tag) = add_tag(m, tag)
 
 Base.show(io::IO, f::Field) = print(io, _symbolic_name_with_tags(f.name, f))
 Base.show(io::IO, m::Mode) = (show(io, m.field); _show_label(io, m.label))

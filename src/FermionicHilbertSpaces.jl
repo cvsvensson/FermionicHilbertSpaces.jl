@@ -104,6 +104,7 @@ struct Tags{T}
 end
 Base.hash(id::Tags, h::UInt) = hash(id.tags, h)
 Base.:(==)(a::Tags, b::Tags) = a.tags == b.tags
+Base.isless(a::Tags, b::Tags) = _order_isless(tagset(a), tagset(b))
 tagset(id::Tags) = id.tags
 tagset(::Tags{Nothing}) = ()
 tagset(x) = tagset(tags(x))
