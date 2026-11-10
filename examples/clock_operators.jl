@@ -8,7 +8,7 @@
 # The pieces a new algebra needs are listed in [Extending and performance hooks](../extending.md).
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
-import FermionicHilbertSpaces: @field, AbstractBasisState, apply_local_operator, mat_eltype
+import FermionicHilbertSpaces: @field, AbstractBasisState, Op, apply_local_operator, mat_eltype
 
 # ## Defining the clock operators and states
 # The clock operators are defined on a local Hilbert space of dimension ``D``, with basis states ``|n\rangle`` for ``n = 0, 1, ..., D-1``. The operator ``X`` shifts the local clock value, ``X |n\rangle = |n + 1\rangle``, and ``Z`` measures the local clock value: ``Z |n\rangle = \exp(2π i n / D) |n\rangle``.
@@ -19,18 +19,20 @@ Clock(T::Symbol) = Clock{T}(false)
 Base.adjoint(k::Clock{T}) where {T} = Clock{T}(!k.adjoint)
 ## The sites are the modes `c[i]` of a field of clock operators, and `c[i][:X]` is the operator of kind `Clock(:X)` on `c[i]`.
 @field c::Clock
+## Operators print as they are written: `c[1][:X]` and `c[1][:X]'`.
+Base.show(io::IO, op::Op{Clock{T}}) where {T} = print(io, op.mode, "[", repr(T), "]", op.kind.adjoint ? "'" : "")
 ## Products on the same site are kept as they are. Operators on different sites commute and are sorted by site.
 struct ClockState{D} <: AbstractBasisState # A clock state with dimension D.
     n::Int
     ClockState{D}(n) where D = new{D}(mod(n, D))
 end
 ## Action on local basis states.
-function apply_local_operator(op::Clock{:X}, state::ClockState{D}, space, precomp) where D
+function apply_local_operator(op::Clock{:X}, state::ClockState{D}, space, precomp) where {D}
     newstate = ClockState{D}(state.n + (op.adjoint ? -1 : 1))
     amp = 1
     newstate, amp
 end
-function apply_local_operator(op::Clock{:Z}, state::ClockState{D}, space, precomp) where D
+function apply_local_operator(op::Clock{:Z}, state::ClockState{D}, space, precomp) where {D}
     amp = exp((op.adjoint ? -1 : 1) * 2π * im * state.n / D)
     state, amp
 end

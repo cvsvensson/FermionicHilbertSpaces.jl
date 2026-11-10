@@ -260,18 +260,18 @@ function _spin_shift(op)
 end
 
 function Base.show(io::IO, x::SpinSym)
-    print(io, x.mode, "[:", (:-, :z, :+)[x.shift + 2], "]")
-    if x.exponent != 1
-        print(io, "^", x.exponent)
+    print(io, x.mode, "[:", (:-, :z, :+)[x.kind.shift + 2], "]")
+    return if x.kind.exponent != 1
+        print(io, "^", x.kind.exponent)
     end
 end
 
 Base.adjoint(k::Spin) = Spin(-k.shift, k.exponent)
 
 function _spin_commutator_term(a::SpinSym, b::SpinSym)
-    if a.shift != 0 && b.shift == 0
-        return (-a.shift, Op(Spin(a.shift, 1), a.mode))
-    elseif a.shift == -1 && b.shift == 1
+    if a.kind.shift != 0 && b.kind.shift == 0
+        return (-a.kind.shift, Op(Spin(a.kind.shift, 1), a.mode))
+    elseif a.kind.shift == -1 && b.kind.shift == 1
         return (-2, Op(Spin(0, 1), a.mode))
     else
         return nothing
@@ -281,9 +281,9 @@ end
 # Equal modes can have different types, such as labels `1` and `Int32(1)`.
 local_mul_effect(a::SpinSym, b::SpinSym) = local_mul_effect(a, Op(b.kind, a.mode))
 function local_mul_effect(a::S, b::S) where {S <: SpinSym}
-    if a.shift == b.shift
-        exponent = a.exponent + b.exponent
-        if a.shift == 0
+    if a.kind.shift == b.kind.shift
+        exponent = a.kind.exponent + b.kind.exponent
+        if a.kind.shift == 0
             if _spin(a.mode) == 1 // 2
                 div, rem = divrem(exponent, 2)
                 return (1 // 4)^div * _spin_power(a.mode, 0, rem)
@@ -291,17 +291,17 @@ function local_mul_effect(a::S, b::S) where {S <: SpinSym}
                 return Op(Spin(0, iseven(exponent) ? 2 : 1), a.mode)
             end
         end
-        return _spin_power(a.mode, a.shift, exponent)
+        return _spin_power(a.mode, a.kind.shift, exponent)
     end
 
     # Spin-aware identity: S+ S- = J(J+1) - Sz^2 + Sz
-    if a.shift == 1 && b.shift == -1 && !(_spin(a.mode) isa Nothing)
+    if a.kind.shift == 1 && b.kind.shift == -1 && !(_spin(a.mode) isa Nothing)
         J = _spin(a.mode)
-        left = Op(Spin(1, a.exponent - 1), a.mode)
-        right = Op(Spin(-1, b.exponent - 1), a.mode)
+        left = Op(Spin(1, a.kind.exponent - 1), a.mode)
+        right = Op(Spin(-1, b.kind.exponent - 1), a.mode)
 
-        left_factors = a.exponent == 1 ? Any[] : [left]
-        right_factors = b.exponent == 1 ? Any[] : [right]
+        left_factors = a.kind.exponent == 1 ? Any[] : [left]
+        right_factors = b.kind.exponent == 1 ? Any[] : [right]
 
         const_term = J * (J + 1)
         term_const = if iszero(const_term)
@@ -317,7 +317,7 @@ function local_mul_effect(a::S, b::S) where {S <: SpinSym}
     end
 
     # Sz^n S± = (±1/2)^n S± for spin 1/2
-    _spin(a.mode) == 1 // 2 && a.shift == 0 && return NCMul((b.shift // 2)^a.exponent, S[b])
+    _spin(a.mode) == 1 // 2 && a.kind.shift == 0 && return NCMul((b.kind.shift // 2)^a.kind.exponent, S[b])
 
     comm = _spin_commutator_term(a, b)
     if isnothing(comm)
@@ -328,9 +328,9 @@ function local_mul_effect(a::S, b::S) where {S <: SpinSym}
 
     # For A^N B^M (out-of-order), rewrite only the middle pair:
     # A^(N-1) * (B*A + [A,B]) * B^(M-1)
-    left_factors = a.exponent == 1 ? S[] : S[Op(Spin(a.shift, a.exponent - 1), a.mode)]
-    right_factors = b.exponent == 1 ? S[] : S[Op(Spin(b.shift, b.exponent - 1), a.mode)]
-    swapped_factors = S[left_factors..., Op(Spin(b.shift, 1), a.mode), Op(Spin(a.shift, 1), a.mode), right_factors...]
+    left_factors = a.kind.exponent == 1 ? S[] : S[Op(Spin(a.kind.shift, a.kind.exponent - 1), a.mode)]
+    right_factors = b.kind.exponent == 1 ? S[] : S[Op(Spin(b.kind.shift, b.kind.exponent - 1), a.mode)]
+    swapped_factors = S[left_factors..., Op(Spin(b.kind.shift, 1), a.mode), Op(Spin(a.kind.shift, 1), a.mode), right_factors...]
     comm_factors = S[left_factors..., comm_middle_factor, right_factors...]
 
     swapped_term = NCMul(1 // 1, swapped_factors)

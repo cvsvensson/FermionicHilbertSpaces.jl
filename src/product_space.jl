@@ -117,6 +117,7 @@ parity(state::ProductState) = prod(parity, atomic_factors(state))
     @test dim(H) == dim(Ha) * dim(Hb) * dim(Hc)
     @test H.atom_index == Dict(atomic_id(Ha) => 1, atomic_id(Hb) => 2, atomic_id(Hc) => 3)
     @test_throws ArgumentError tensor_product([Ha, Ha])
+    @test_throws ArgumentError tensor_product(a[1], a[2])
 
     Hab = H.factors[1]
     @test atomic_factors(Hab) == [Ha, Hb]

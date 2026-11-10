@@ -673,7 +673,7 @@ _with_eltype(format, _, kwargs) = format, kwargs
 function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
     space_groups = group_ids(space)
-    all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic bases of the operator must match the atomic groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
+    all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic groups of the operator must match the groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
     return space_groups
 end
 
@@ -1351,7 +1351,7 @@ end
 
 ## Symmetries
 isnumberconserving(x::AbstractSym) = false
-isnumberconserving(x::NCMul) = iszero(sum(s -> 2s.creation - 1, x.factors))
+isnumberconserving(x::NCMul) = iszero(sum(s -> 2s.kind.creation - 1, x.factors))
 isnumberconserving(x::NCAdd) = all(isnumberconserving, NCterms(x))
 
 isparityconserving(x::AbstractSym) = false

@@ -1,3 +1,4 @@
+atomic_factors(op::AbstractSym) = throw(ArgumentError("The operator `$op` is not a space. Use `hilbert_space(...)` to construct the space it acts on."))
 # The unconstrained product of `spaces`, and its states when some of `spaces` are constrained, or `nothing`.
 function product_space_and_states(spaces)
     atoms = collect(Iterators.flatten(Iterators.map(atomic_factors, spaces)))

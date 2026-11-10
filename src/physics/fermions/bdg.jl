@@ -92,7 +92,7 @@ end
 # The term c_a^(d1) c_b^(d2), with `a` and `b` at `positions`, maps the Nambu state (b, !d2) to (a, d1)
 function _nambu_in_out(term, positions)
     a, b = term.factors
-    return NambuState(positions[2], !b.creation), NambuState(positions[1], a.creation)
+    return NambuState(positions[2], !b.kind.creation), NambuState(positions[1], a.kind.creation)
 end
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{NambuState})
     position = mode_position(op, space)

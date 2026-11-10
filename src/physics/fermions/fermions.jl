@@ -3,8 +3,10 @@ struct FermionicSpace{F, M, FG <: Group} <: AbstractGroupedHilbertSpace{F}
     modes::Vector{M}
     mode_ordering::OrderedDict{M, Int}
     group::FG
-    function FermionicSpace(_modes::AbstractVector{<:_FermionMode}, group::FG, ::Type{F} = FockNumber{default_fock_representation(length(_modes))}) where {F, FG <: Group}
-        modes = map(mode, _modes)
+    function FermionicSpace(_modes::AbstractVector, group::FG, ::Type{F} = FockNumber{default_fock_representation(length(_modes))}) where {F, FG <: Group}
+        # Without `map` on modes, inference of an enclosing `map`, such as in `atomic_factors`, is not widened.
+        modes = _modes isa AbstractVector{<:Mode} ? collect(_modes) : map(mode, _modes)
+        all(m -> symbolic_group(m) == group, modes) || throw(ArgumentError("All modes must belong to the group `$group`."))
         M = eltype(modes)
         mode_ordering = OrderedDict{M, Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("The modes of a fermionic group must be distinct, got $modes."))
@@ -155,7 +157,7 @@ function apply_local_operators(op::NCMul{<:Any, <:Union{Fermion, FermionSym}}, s
     @inbounds for m in eachindex(factors, bitmasks)
         n = !transpose ? N - m + 1 : m
         factor = factors[n]
-        dagger = xor(factor.creation, transpose)
+        dagger = xor(kind(factor).creation, transpose)
         bitmask = bitmasks[n]
         occupied = !iszero(bitmask & newfocknbr)
         if dagger == occupied
@@ -167,7 +169,7 @@ function apply_local_operators(op::NCMul{<:Any, <:Union{Fermion, FermionSym}}, s
     return newfocknbr, (fermionparity ? -op.coeff : op.coeff)
 end
 
-function apply_local_operator(op::Fermion, state::FockNumber{I}, space, bitmask) where I
+function apply_local_operator(op::Fermion, state::FockNumber{I}, space, bitmask) where {I}
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1
     factor = op
