@@ -94,7 +94,7 @@ end
     dissipator(L)
 
 The symbolic Lindblad dissipator `ρ ↦ LρL† - ½{L†L, ρ}` for the jump operator `L`, acting on the
-vectorized density matrix of a space returned by [`open_system`](@ref). Public, not exported.
+vectorized density matrix of a space returned by [`open_system`](@ref). A prefactor belongs to `L`: `dissipator(c * L)` has rate `abs2(c)`. Public, not exported.
 
 # Examples
 ```julia
@@ -214,10 +214,10 @@ end
     H = hilbert_space(s)
     Ht = TransposedSpace(H)
 
-    A = sum((n + 1im) * s[n] for n in 0:3)
+    A = sum((n + 1im) * s[op] for (n, op) in zip(0:3, (:I, :x, :y, :z)))
     @test transpose(representation(A, H)) ≈ representation(A, Ht)
 
-    B = sum((n + 2)^2 * s[n] for n in 0:3)
+    B = sum((n + 2)^2 * s[op] for (n, op) in zip(0:3, (:I, :x, :y, :z)))
     @test representation(A * B, H) ≈ representation(A, H) * representation(B, H)
     @test representation(A * B, Ht) ≈ representation(B, Ht) * representation(A, Ht)
     @test representation(A * B, Ht) ≈ transpose(representation(A * B, H))
