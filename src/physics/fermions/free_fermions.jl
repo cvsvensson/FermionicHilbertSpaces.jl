@@ -9,7 +9,7 @@ their eigendecomposition and Gaussian states.
 module FreeFermions
 
     using ..FermionicHilbertSpaces: FermionicHilbertSpaces, AbstractFockState, AbstractHilbertSpace,
-    EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, MajoranaSym, NoChunking, Field,
+    EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, MajoranaSym, Mode, NoChunking, Field,
     _FermionModeSpace, _canonicalize_repr, _matrix_format, _repr_eltype, _xlogx, _zero_matrix, exchange_phase, finalize!,
         matrix_accumulator, mode_position, push_inds_amps!, state_index
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,

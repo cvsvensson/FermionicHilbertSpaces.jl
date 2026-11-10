@@ -39,7 +39,7 @@ function _mean_field(op, contraction, keep = Returns(true), unit = 1)
 end
 
 function _mode_position(x, H)
-    position = x isa Union{FermionSym, MajoranaSym} ? mode_position(x, H) : 0
+    position = mode_position(x, H)
     iszero(position) && throw(ArgumentError("The operator `$x` is not a mode of the space `$H`."))
     return position
 end

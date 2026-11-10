@@ -165,7 +165,7 @@ function atom_ids(H::MajoranaHilbertSpace)
     γs = collect(keys(H.majoranaindices))
     [(γs[2k-1], γs[2k]) for k in 1:length(γs)÷2]
 end
-_acts_in(x::AbstractMajoranaSym, H::MajoranaHilbertSpace) = haskey(H.majoranaindices, x)
+_acts_in(x::AbstractMajoranaSym, H::MajoranaHilbertSpace) = mode_position(x, H) > 0
 function atom_position(x, H::MajoranaHilbertSpace)
     id = atomic_id(x)
     id isa Tuple{Any,Any} || return 0 # only pairs name atoms
@@ -197,7 +197,7 @@ partial_transpose_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_transp
 partial_trace_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_trace_phase_factor_eltype(parent(H))
 partial_transpose_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_transpose_phase_factor_eltype(parent(H))
 
-majoranas(H::MajoranaHilbertSpace) = OrderedDict(γ.mode.label => representation(γ, H) for γ in modes(H))
+majoranas(H::MajoranaHilbertSpace) = OrderedDict(m.label => representation(MajoranaSym(m), H) for m in modes(H))
 
 hilbert_space(y::Field{MajoranaSym}, labels::AbstractVector, @nospecialize(c::QuantitySpec)) = constrain_space(hilbert_space(y, labels), c)
 hilbert_space(y::Field{MajoranaSym}, labels::AbstractVector) = _majorana_space(y, labels)
@@ -207,17 +207,19 @@ function _majorana_space(y, labels, args...)
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
     f = Field{FermionSym}(y.name, y.group, nothing, y.tags)
     Hf = hilbert_space(f, pairs, args...)
-    majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
+    majorana_position = OrderedDict(Mode(y, label) => n for (n, label) in enumerate(labels))
     length(majorana_position) == length(labels) || throw(ArgumentError("The Majoranas of a Hilbert space must be distinct, got $labels."))
     MajoranaHilbertSpace(majorana_position, Hf, y)
 end
 # MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
 
+_atom_names(x::MajoranaSym) = (mode(x),)
+
 # Replace each pair of Majoranas in `names` that forms an atom of `H` by that atom, placed
 # where the first of the two appears.
 function _pair_majoranas(names, H)
-    γs = Set(x for x in names if x isa AbstractMajoranaSym)
+    γs = Set(x for x in names if x isa Mode{<:Field{MajoranaSym}})
     isempty(γs) && return names
     pair_of = Dict(γ => a for a in atomic_factors(H) if a isa MajoranaHilbertSpace for γ in keys(a.majoranaindices) if γ in γs)
     for a in values(pair_of)
@@ -239,7 +241,7 @@ partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaH
 function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,S<:AbstractMajoranaSym,F}
     sub_modes = modes(Hsub)
     for f in m.factors
-        if f ∉ sub_modes
+        if mode(f) ∉ sub_modes
             return 0 * m
         end
     end
@@ -264,7 +266,6 @@ end
 
 
 _state_index(state, H::MajoranaHilbertSpace) = _state_index(state, H.parent)
-mode_position(f::MajoranaSym, H) = get(mode_ordering(H), f, 0)
 
 function _precomputation_before_operator_application(op::MajoranaSym, space::AbstractHilbertSpace{<:FockNumber})
     majoranaposition = mode_position(op, space)
@@ -298,7 +299,7 @@ atomic_factor(H::MajoranaHilbertSpace, i) = _majorana_atomic_factor(H, i, collec
 function _majorana_atomic_factor(H::MajoranaHilbertSpace, i, γs)
     atom = atomic_factor(H.parent, i)
     γ1, γ2 = γs[2i-1], γs[2i]
-    return MajoranaHilbertSpace(OrderedDict(γ1 => 1, γ2 => 2), atom, γ1.mode.field)
+    return MajoranaHilbertSpace(OrderedDict(γ1 => 1, γ2 => 2), atom, γ1.field)
 end
 @testitem "Majoranas of fermion modes from 64" begin
     import FermionicHilbertSpaces: FockNumber
@@ -382,10 +383,11 @@ end
 end
 
 @testitem "Majorana spaces with several names" begin
-    using FermionicHilbertSpaces: atom_ids, atomic_id, atomic_factors, add_tag
+    using FermionicHilbertSpaces: atom_ids, atomic_id, atomic_factors, add_tag, mode, modes
     @majoranas a c
     @bosons b
     Ha, Hc = hilbert_space(a, 1:2), hilbert_space(c, 1:2)
+    @test collect(modes(Ha)) == [mode(a[1]), mode(a[2])]
     Hac = tensor_product(Ha, Hc)
     # each atom keeps its own Majoranas, so the atoms of a and c are distinct
     @test collect(atomic_factors(Hac)) == [Ha, Hc]
