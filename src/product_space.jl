@@ -117,6 +117,7 @@ parity(state::ProductState) = prod(parity, atomic_factors(state))
     @test dim(H) == dim(Ha) * dim(Hb) * dim(Hc)
     @test H.atom_index == Dict(atomic_id(Ha) => 1, atomic_id(Hb) => 2, atomic_id(Hc) => 3)
     @test_throws ArgumentError tensor_product([Ha, Ha])
+    @test_throws ArgumentError tensor_product(a[1], a[2])
 
     Hab = H.factors[1]
     @test atomic_factors(Hab) == [Ha, Hb]
@@ -762,6 +763,8 @@ function phase_factor_u(sp::ProductSpaceMapper)
     leaf_pfus = map(sp.leaves) do leaf
         leaf isa Uncovered ? nothing : phase_factor_u(leaf.mapper)
     end
+    leaf_pfus isa Tuple{Vararg{Union{Nothing, Returns}}} &&
+        return Returns(tuplefoldl(*, 1, map(pfu -> isnothing(pfu) ? 1 : pfu(), leaf_pfus)))
 
     function phase_factor(state)
         return tuplefoldl(*, 1, tuplemap((s, pfu) -> isnothing(pfu) ? 1 : pfu(s), state.states, leaf_pfus))

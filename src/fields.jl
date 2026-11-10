@@ -4,7 +4,8 @@
 A named family of modes for operators of kind `K`, created by [`@field`](@ref) or by macros such as
 [`@bosons`](@ref). `field[l]` is the mode labelled `l`, or the operator of that mode if `K` has a
 [`mode_operator`](@ref), such as the annihilation operator `b[l]`. Fields of one `group` (e.g. `@fermions a b`)
-share one space, and `params` holds parameters of the algebra such as the spin `J`.
+share one space, which their algebra builds with `combine_into_group(::Group{K}, atoms)`, and `params` holds
+parameters of the algebra such as the spin `J`.
 """
 struct Field{K, G, P, T <: Tags}
     name::Symbol
@@ -84,7 +85,8 @@ tags(m::Mode) = tags(m.field)
 
 Base.:(==)(::Field, ::Field) = false
 Base.:(==)(a::Field{K}, b::Field{K}) where {K} = a.name == b.name && a.group == b.group && a.params == b.params && a.tags == b.tags
-Base.hash(f::Field{K}, h::UInt) where {K} = hash(f.tags, hash(f.params, hash(f.group, hash(f.name, hash(K, h)))))
+# Few fields, since this runs in every Dict lookup of a symbolic term; `==` compares the others.
+Base.hash(f::Field, h::UInt) = hash(f.name, hash(f.tags, h))
 Base.:(==)(a::Mode, b::Mode) = a.field == b.field && a.label == b.label
 Base.hash(m::Mode, h::UInt) = hash(m.label, hash(m.field, h))
 Base.:(==)(a::Op, b::Op) = a.kind == b.kind && a.mode == b.mode
@@ -135,16 +137,25 @@ atomic_id(op::Op) = op.mode
 _atom_names(m::Mode) = (m,)
 
 # The methods of `hilbert_space(field, labels, ...)` take a vector of labels. Other collections, such as tuples,
-# generators, sets and matrices, are flattened into one.
+# generators and matrices, are flattened into one. The order of the labels is the order of the basis, so
+# unordered collections are rejected.
 function hilbert_space(f::Field, labels, args...; kwargs...)
     labels isa AbstractVector && throw(MethodError(hilbert_space, (f, labels, args...)))
-    return hilbert_space(f, vec(collect(labels)), args...; kwargs...)
+    (labels isa Union{AbstractString, AbstractChar, Number, AbstractSet, AbstractDict} || !applicable(iterate, labels)) &&
+        throw(ArgumentError("`labels` must be an ordered collection of labels such as `1:3` or `[:a, :b]`, got `$(repr(labels))`."))
+    labels = vec(collect(labels))
+    # An empty tuple collects to a `Vector{Union{}}`, which matches the methods for every element type.
+    return hilbert_space(f, labels isa Vector{Union{}} ? Any[] : labels, args...; kwargs...)
 end
 # The product of the spaces `hilbert_space(f[l], args...)` of the modes of `f`, constrained by `constraint`.
 _mode_product(f::Field, labels, constraint, args...) =
     tensor_product(map(l -> hilbert_space(Mode(f, l), args...), labels); constraint)
 hilbert_space(f::Field, labels::AbstractVector, x, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint, x)
-hilbert_space(m::Mode, states) = GenericHilbertSpace(m, states)
+function hilbert_space(m::Mode{<:Field{K}}, states) where {K}
+    (isnothing(mode_operator(K)) && states isa Union{AbstractVector, Tuple, BasisStates}) || throw(MethodError(hilbert_space, (m, states)))
+    isnothing(m.field.group) || throw(ArgumentError("The grouped field `$(m.field)` needs its own space type and a `combine_into_group(::Group{K}, atoms)` method."))
+    return GenericHilbertSpace(m, states)
+end
 
 @testitem "Fields and modes" begin
     using FermionicHilbertSpaces: add_tag
@@ -156,6 +167,16 @@ hilbert_space(m::Mode, states) = GenericHilbertSpace(m, states)
     @test repr(b[1, :a]') == "b†[1, :a]"
     @test_throws ArgumentError FermionicHilbertSpaces.Mode(b, 1)[2]
     @test hilbert_space(b, (1, 2), 2) == hilbert_space(b, [1, 2], 2) == hilbert_space(b, (i for i in 1:2), 2)
+    @fermions f
+    @test_throws MethodError hilbert_space(f, 1:3, 1)
+    @test_throws MethodError hilbert_space(b, 1:2, 3.0)
+    @test_throws MethodError hilbert_space(b[1], [0, 1])
+    for labels in (:a, "ab", 1, Set(1:2), Dict(1 => 2))
+        @test_throws ArgumentError hilbert_space(f, labels)
+    end
+    @test hilbert_space(f, ()) == hilbert_space(f, Int[])
+    @fermions g
+    @test_throws ArgumentError FermionicHilbertSpaces.FermionicSpace(f, [g[1]])
 end
 
 @testitem "Custom operators on a field" begin
@@ -175,6 +196,7 @@ end
     @test repr(mode(add_tag(c[1][1], :l))) == "c(l)[1]"
     H = hilbert_space(c, 1:2, Site.(0:2))
     @test H == tensor_product([GenericHilbertSpace(c[i], Site.(0:2)) for i in 1:2])
+    @test_throws ArgumentError hilbert_space(FermionicHilbertSpaces.Field{Shift}(:g, (:g,)), 1:2, Site.(0:2))
     A = c[1][1] * c[2][-1]
     MA = representation(A, H, Matrix)
     Hlr, Hl, Hr, left, right = open_system(H)

@@ -33,7 +33,7 @@ end
 function LazyOperator(_op, space::S, chunking::C=NoChunking(); projection=false, conjugate=false, ishermitian=_ishermitian(_op), T=mat_eltype(_op), concretizer=NoConcretizer()
 ) where {S,C<:AbstractChunkingStrategy}
     op = __concretize(_op, concretizer)
-    precomp = lazy_precomputation(op, space)
+    precomp = lazy_precomputation(op, space; projection)
     O = typeof(op)
     P = typeof(precomp)
     LazyOperator{O,S,T,C,P}(op, space, chunking, precomp, projection, conjugate, ishermitian, nothing)
@@ -43,13 +43,13 @@ function LazyOperator(op::O, space::S, chunking::C, precomp::P; projection=false
 end
 
 # Data that `lazy_mul!` needs to apply `op` on `space`, computed once when the `LazyOperator`
-# is constructed. For an `NCAdd` it is a vector with one `(term, coeff, precomp)` tuple per
-# entry `term => coeff` of `op.dict`.
-lazy_precomputation(op, space) = precomputation_before_operator_application(op, space)
-function lazy_precomputation(op::NCAdd, space)
-    map(collect(op.dict)) do (term, coeff)
-        (term, coeff, precomputation_before_operator_application(term, space))
-    end
+# is constructed. For an `NCAdd` it is a vector of `(term, precomp)` tuples for the terms of
+# `op` without its scalar, which are the same as those of the eager representation.
+lazy_precomputation(op, space; _...) = precomputation_before_operator_application(op, space)
+function lazy_precomputation(op::NCAdd, space; projection)
+    bases = group_ids(space)
+    terms = length(bases) == 1 ? NCterms(op) : _product_terms(op, bases, space, EagerSparseRepr(); projection)
+    return _precomputed_terms(terms, space)
 end
 
 function _lazy_output_prototype(L::LazyOperator, input::AbstractVector)
@@ -84,20 +84,19 @@ Base.size(L::LazyOperator) = (d = dim(L.space); (d, d))
 Base.size(L::LazyOperator, i::Int) = size(L)[i]
 Base.eltype(::LazyOperator{O,S,T,C,P}) where {O,S,T,C,P} = T
 Base.conj(L::LazyOperator) = LazyOperator(L.op, L.space, L.chunking, L.precomp; projection=L.projection, conjugate=!L.conjugate, ishermitian=L.ishermitian)
-function Base.adjoint(L::LazyOperator)
-    LazyOperator(L.op, TransposedSpace(L.space), L.chunking, L.precomp; projection=L.projection, conjugate=!L.conjugate, ishermitian=L.ishermitian)
-end
+Base.adjoint(L::LazyOperator) = conj(transpose(L))
 function Base.transpose(L::LazyOperator)
-    LazyOperator(L.op, TransposedSpace(L.space), L.chunking, L.precomp; projection=L.projection, conjugate=L.conjugate, ishermitian=L.ishermitian)
+    return LazyOperator(_transposed(L.op), TransposedSpace(L.space), L.chunking, _transposed_precomp(L); projection = L.projection, conjugate = L.conjugate, ishermitian = L.ishermitian)
 end
-function Base.adjoint(L::LazyOperator{<:ProductOperator{C}}) where C
-    newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces), L.op.inds)
-    LazyOperator(newop, TransposedSpace(L.space), L.chunking, L.precomp; projection=L.projection, conjugate=!L.conjugate, ishermitian=L.ishermitian)
-end
-function Base.transpose(L::LazyOperator{<:ProductOperator{C}}) where C
-    newop = ProductOperator{C}(L.op.ops, map(TransposedSpace, L.op.spaces), L.op.inds)
-    LazyOperator(newop, TransposedSpace(L.space), L.chunking, L.precomp; projection=L.projection, conjugate=L.conjugate, ishermitian=L.ishermitian)
-end
+# On the transposed space, operators act transposed with the same precomputation, except for the
+# spaces of a `ProductOperator` and the matrices of a `KronTerm`.
+_transposed(op) = op
+_transposed(op::ProductOperator{C}) where {C} = ProductOperator{C}(op.ops, map(TransposedSpace, op.spaces), op.inds)
+_transposed(term::KronTerm) = KronTerm(map(((A, r),) -> (_transposed_matrix(A), r), term.factors))
+# Symmetric factors, such as the diagonal term of a product space, are shared instead of copied.
+_transposed_matrix(A) = issymmetric(A) ? A : copy(transpose(A))
+_transposed_precomp(L::LazyOperator) = L.precomp
+_transposed_precomp(L::LazyOperator{<:NCAdd}) = [(_transposed(term), precomp) for (term, precomp) in L.precomp]
 const LazyFunctionOperator = SciMLOperators.FunctionOperator{<:Any, <:Any, <:Any, <:Any, <:LazyOperator}
 # SciMLOperators' fallbacks for these build the full matrix, so they are rewrapped lazily.
 for f in (:transpose, :conj)
@@ -114,7 +113,7 @@ function _eager_matrix_representation(L::LazyOperator{<:Union{NCMul,ProductOpera
 end
 
 function _eager_matrix_representation(L::LazyOperator{<:NCAdd})
-    return _matrix_representation_single_space(L.op, L.space, EagerSparseRepr(), L.chunking; projection=L.projection)
+    return _terms_matrix(eltype(L), map(first, L.precomp), L.op.coeff, L.space, EagerSparseRepr(), L.chunking; projection = L.projection)
 end
 
 function Base.convert(::Type{AbstractMatrix}, L::LazyOperator)
@@ -139,110 +138,100 @@ function LinearAlgebra.mul!(Y::AbstractMatrix, L::LazyOperator, X::AbstractMatri
     return Y
 end
 
-# `conjugate` applies to the amplitudes of `term`. `coeff` is used as given because it includes the `α` of `mul!`, which
-# is never conjugated, so callers conjugate the term coefficient themselves with `_conj_if`.
+# `conjugate` applies to the amplitudes of the terms. The `α` of `mul!` is never conjugated.
 _conj_if(c, conjugate) = conjugate ? conj(c) : c
 
-function _apply_single_term!(y::AbstractVector, x::AbstractVector, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking, TermChunking})
-    for (n, state) in enumerate(basisstates(space))
-        xn = x[n] * coeff
-        iszero(xn) && continue
-        newstate, _amp = _apply_local_operators(term, state, space, precomp)
-        if !iszero(_amp)
-            outind = state_index(newstate, space)
-            if !_skip_outside(outind, projection, newstate, state, space)
-                amp = (conjugate ? conj(_amp) : _amp)
-                y[outind] += amp * xn
+# Adds `coeff * amp * x[inind]` to `y[outind]`, or to row `outind` of `y` for matrices, for the entries of a term.
+struct MulAccumulator{Y, X, C}
+    y::Y
+    x::X
+    coeff::C
+    conjugate::Bool
+end
+function push_inds_amps!(acc::MulAccumulator{<:AbstractVector}, outind, inind, amp)
+    acc.y[outind] += _conj_if(amp, acc.conjugate) * acc.coeff * acc.x[inind]
+    return nothing
+end
+function push_inds_amps!(acc::MulAccumulator{<:AbstractMatrix}, outind, inind, amp)
+    @views acc.y[outind, :] .+= (_conj_if(amp, acc.conjugate) * acc.coeff) .* acc.x[inind, :]
+    return nothing
+end
+function push_inds_amps!(acc::MulAccumulator{<:Function, <:Number}, outind, _, amp)
+    acc.y(outind, _conj_if(amp, acc.conjugate) * acc.coeff * acc.x)
+    return nothing
+end
+
+# For a dense input, the entries of a `KronTerm` are visited factor by factor over the stored entries, with the
+# identities between the factors as ranges of indices, instead of column by column. This skips empty columns.
+function chunked_operator_indices_and_amplitudes_generic!(acc::MulAccumulator{<:AbstractVecOrMat}, term::KronTerm, space::AbstractHilbertSpace, precomp, input_inds, col_offset; kwargs...)
+    return _kron_mul!(acc, term.factors, dim(space), 0, 0, true, input_inds)
+end
+# The entries of `amp * kron(…, A_2, I, A_1, I)` on `n` states in the columns `cols ⊆ col+1:col+n`, offset by `row` and `col`.
+function _kron_mul!(acc, factors, n, row, col, amp, cols)
+    A, r = last(factors)
+    rows, vals = rowvals(A), nonzeros(A)
+    for b in 0:(r * size(A, 2)):(n - 1), c in axes(A, 2)
+        j0 = col + b + (c - 1) * r
+        js = max(j0 + 1, first(cols)):min(j0 + r, last(cols))
+        isempty(js) && continue
+        if factors isa Tuple{Any} && r == 1 && acc.y isa AbstractVector
+            # The runs have length one, so the loop over the stored entries is innermost.
+            xj = _conj_if(amp, acc.conjugate) * acc.coeff * acc.x[j0 + 1]
+            for p in nzrange(A, c)
+                acc.y[row + b + rows[p]] += _conj_if(vals[p], acc.conjugate) * xj
+            end
+        else
+            for p in nzrange(A, c)
+                _kron_mul!(acc, Base.front(factors), r, row + b + (rows[p] - 1) * r, j0, amp * vals[p], js)
             end
         end
     end
+    return acc
 end
-
-function _apply_single_term!(y::AbstractVector, x::SparseArrays.AbstractSparseVector, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking,TermChunking})
-    _foreach_term_entry((i, v) -> (y[i] += v), x, space, term, precomp, coeff, conjugate, projection)
-end
-
-# Calls `f(outind, value)` for each output entry of `coeff * term` applied to the sparse `x`.
-function _foreach_term_entry(f, x::SparseArrays.AbstractSparseVector, space, term, precomp, coeff, conjugate, projection)
-    for (n, xn) in zip(SparseArrays.nonzeroinds(x), nonzeros(x))
-        iszero(xn) && continue
-        state = basisstate(n, space)
-        newstate, _amp = _apply_local_operators(term, state, space, precomp)
-        iszero(_amp) && continue
-        outind = state_index(newstate, space)
-        _skip_outside(outind, projection, newstate, state, space) && continue
-        f(outind, (conjugate ? conj(_amp) : _amp) * coeff * xn)
+function _kron_mul!(acc, ::Tuple{}, n, row, col, amp, cols)
+    for j in cols
+        push_inds_amps!(acc, j + row - col, j, amp)
     end
+    return acc
 end
 
-function _apply_single_term!(y::AbstractMatrix, x::AbstractMatrix, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking, TermChunking})
-    for (n, state) in enumerate(basisstates(space))
-        newstate, _amp = _apply_local_operators(term, state, space, precomp)
-        if !iszero(_amp)
-            outind = state_index(newstate, space)
-            amp = (conjugate ? conj(_amp) : _amp) * coeff
-            if !_skip_outside(outind, projection, newstate, state, space)
-                @views y[outind, :] .+= amp .* x[n, :]
-            end
-        end
-    end
+# Adds `coeff * term * x[cols]` to `y`, where `x[cols]` is `x` with the entries outside the rows `cols` set to zero.
+function _apply_single_term!(y, x, space, term, precomp, coeff, conjugate, projection, cols = axes(x, 1))
+    acc = MulAccumulator(y, x, coeff, conjugate)
+    return chunked_operator_indices_and_amplitudes_generic!(acc, term, space, precomp, cols, 0; projection)
 end
-
-function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC, space, term, precomp, coeff, conjugate, projection, ::Union{NoChunking, TermChunking})
-    rows = rowvals(x)
-    vals = nonzeros(x)
+function _apply_single_term!(y::AbstractVector, x::SparseArrays.AbstractSparseVector, space, term, precomp, coeff, conjugate, projection, cols = axes(x, 1))
+    return _foreach_term_entry((i, v) -> (y[i] += v), x, space, term, precomp, coeff, conjugate, projection, cols)
+end
+function _apply_single_term!(y::AbstractMatrix, x::SparseArrays.SparseMatrixCSC, space, term, precomp, coeff, conjugate, projection, cols = axes(x, 1))
     for col in axes(x, 2)
-        for ptr in nzrange(x, col)
-            n = rows[ptr]
-            xn = vals[ptr]
-            state = basisstate(n, space)
-            newstate, _amp = _apply_local_operators(term, state, space, precomp)
-            if !iszero(_amp)
-                outind = state_index(newstate, space)
-                amp = (conjugate ? conj(_amp) : _amp) * coeff
-                if !_skip_outside(outind, projection, newstate, state, space)
-                    y[outind, col] += amp * xn
-                end
-            end
-        end
+        _foreach_term_entry((i, v) -> (y[i, col] += v), view(x, :, col), space, term, precomp, coeff, conjugate, projection, cols)
     end
 end
 
-function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCMul}, x::AbstractVecOrMat, α, β) where T
+# Calls `f(outind, value)` for each output entry of `coeff * term` applied to the stored entries of the sparse `x` in
+# the rows `cols`. Each entry is applied as a range of one column, as a `KronTerm` takes ranges.
+function _foreach_term_entry(f, x, space, term, precomp, coeff, conjugate, projection, cols = axes(x, 1))
+    for (n, xn) in zip(SparseArrays.nonzeroinds(x), nonzeros(x))
+        (iszero(xn) || !(n in cols)) && continue
+        chunked_operator_indices_and_amplitudes_generic!(MulAccumulator(f, xn, coeff, conjugate), term, space, precomp, n:n, 0; projection)
+    end
+end
+
+function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator, x::AbstractVecOrMat, α, β) where {T}
     if iszero(β)
         fill!(y, zero(T))
     else
         rmul!(y, β)
     end
-    _apply_single_term!(y, x, L.space, L.op, L.precomp, α, L.conjugate, L.projection, L.chunking)
+    for (term, precomp) in _lazy_terms(L)
+        _apply_single_term!(y, x, L.space, term, precomp, α, L.conjugate, L.projection)
+    end
+    _add_scalar!(y, L, x, α)
     return y
 end
-
-function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:ProductOperator}, x::AbstractVecOrMat, α, β) where T
-    # This is for productspaces, where ops is a list of operators applying to each factor space
-    if iszero(β)
-        fill!(y, zero(T))
-    else
-        rmul!(y, β)
-    end
-    _apply_single_term!(y, x, L.space, L.op, L.precomp, α, L.conjugate, L.projection, L.chunking)
-    return y
-end
-
-function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd}, x::AbstractVecOrMat, α, β) where T
-    if iszero(β)
-        fill!(y, zero(T))
-    else
-        rmul!(y, β)
-    end
-    op = L.op
-    for (term, coeff, precomp) in L.precomp
-        _apply_single_term!(y, x, L.space, term, precomp, _conj_if(coeff, L.conjugate) * α, L.conjugate, L.projection, L.chunking)
-    end
-    if !iszero(op.coeff) && !iszero(α)
-        scalar_coeff = α * _conj_if(op.coeff, L.conjugate)
-        y .+= scalar_coeff .* x
-    end
+function _add_scalar!(y, L, x, α)
+    L.op isa NCAdd && !iszero(L.op.coeff) && !iszero(α) && (y .+= (α * _conj_if(L.op.coeff, L.conjugate)) .* x)
     return y
 end
 
@@ -259,8 +248,8 @@ function Base.:*(L::LazyOperator, x::SparseArrays.AbstractSparseVector)
     outinds = typeof(size(L, 1))[]
     amps = T[]
     push_entry = (i, v) -> (push!(outinds, i); push!(amps, v))
-    for (term, coeff, precomp) in _lazy_terms(L)
-        _foreach_term_entry(push_entry, x, L.space, term, precomp, _conj_if(coeff, L.conjugate), L.conjugate, L.projection)
+    for (term, precomp) in _lazy_terms(L)
+        _foreach_term_entry(push_entry, x, L.space, term, precomp, true, L.conjugate, L.projection)
     end
     if L.op isa NCAdd && !iszero(L.op.coeff)
         scalar_coeff = _conj_if(L.op.coeff, L.conjugate)
@@ -270,7 +259,7 @@ function Base.:*(L::LazyOperator, x::SparseArrays.AbstractSparseVector)
     return SparseArrays.sparsevec(outinds, amps, size(L, 1))
 end
 _lazy_terms(L::LazyOperator{<:NCAdd}) = L.precomp
-_lazy_terms(L::LazyOperator) = ((L.op, true, L.precomp),)
+_lazy_terms(L::LazyOperator) = ((L.op, L.precomp),)
 _sparse_input(H) = (d = dim(H); spzeros(mat_eltype(H), typeof(d), d))
 get_input(::LazyRepr{Missing}, H) = dim(H) < 1e4 ? Vector{mat_eltype(H)}(undef, dim(H)) : _sparse_input(H)
 function get_input(rep::LazyRepr{<:AbstractArray}, H)
@@ -282,80 +271,12 @@ function get_input(rep::LazyRepr{Symbol}, H)
     rep.input == :sparse && return _sparse_input(H)
 end
 
-# On product spaces the lazy operator contains `TensorProductOperator`s, whose `mul!` needs
-# buffers. They hold intermediate results, so they are dense also when the input is sparse.
-_cache_lazy(M, H, rep) = M
-function _cache_lazy(M::SciMLOperators.AbstractSciMLOperator, H, rep::LazyRepr)
-    SciMLOperators.iscached(M) && return M
-    T = promote_type(eltype(M), mat_eltype(H))
-    return SciMLOperators.cache_operator(M, Vector{T}(undef, dim(H)))
-end
-
 function _term_matrix_representation(op::Union{NCMul,ProductOperator}, H::AbstractHilbertSpace, rep::LazyRepr, chunking; kwargs...)
     scimloperator(LazyOperator(op, H, chunking; kwargs...), get_input(rep, H))
 end
 
-function _matrix_representation_single_space(op::NCAdd, H, rep::LazyRepr, chunking; kwargs...)
-    scimloperator(LazyOperator(op, H, chunking; kwargs...), get_input(rep, H))
-end
-
-function __matrix_representation(op::NCAdd, bases, space, repr::LazyRepr, chunking; kwargs...)
-    chunking isa TermChunking && @warn "TermChunking is not supported for LazyRepr. Ignoring chunking strategy."
-    mats = Any[_matrix_representation(term, bases, space, repr, chunking; kwargs...) for term in NCterms(op)]
-    if !iszero(op.coeff)
-        push!(mats, op.coeff * _matrix_representation(missing, bases, space, repr, NoChunking(); kwargs...))
-    end
-    return _lazy_sum(mats)
-end
-
-# On an unconstrained product space, the terms that act on a single group are summed into one
-# lazy operator on that group, which is embedded with identities on the other groups. The
-# scalar coefficient goes into the first of these. Terms acting on several groups are
-# represented one by one, as in the generic method.
-function __matrix_representation(op::NCAdd, bases, space::ProductSpace, repr::LazyRepr, chunking; kwargs...)
-    spaces = groups(space)
-    local_terms = [eltype(op.dict)[] for _ in spaces]
-    mats = []
-    for (term, coeff) in op.dict
-        n = _single_group_index(term, bases)
-        if isnothing(n)
-            push!(mats, _matrix_representation(NCMul(coeff, term.factors), bases, space, repr, chunking; kwargs...))
-        else
-            push!(local_terms[n], term => coeff)
-        end
-    end
-    scalar = op.coeff
-    local_mats = []
-    for (n, terms) in enumerate(local_terms)
-        isempty(terms) && continue
-        # factor vectors with a common supertype of the factors of the group
-        S = mapreduce(((term, _),) -> mapreduce(typeof, typejoin, term.factors), typejoin, terms)
-        local_op = NCAdd(scalar, Dict(NCMul(term.coeff, convert(Vector{S}, term.factors)) => coeff for (term, coeff) in terms))
-        scalar = zero(scalar)
-        local_mat = _matrix_representation_single_space(local_op, spaces[n], repr, chunking; T=mat_eltype(op), kwargs...)
-        factor_mats = [m == n ? local_mat : SciMLOperators.IdentityOperator(dim(spaces[m])) for m in eachindex(spaces)]
-        push!(local_mats, foldl(kron, Iterators.reverse(factor_mats)))
-    end
-    if !iszero(scalar)
-        push!(mats, scalar * _matrix_representation(missing, bases, space, repr, NoChunking(); kwargs...))
-    end
-    return _lazy_sum(vcat(local_mats, mats))
-end
-
-# The index of the group in `bases` that all factors of `term` belong to, or `nothing` if
-# the factors belong to several groups or there are no factors.
-function _single_group_index(term, bases)
-    isempty(term.factors) && return nothing
-    group = symbolic_group(first(term.factors))
-    all(fac -> symbolic_group(fac) == group, term.factors) || return nothing
-    return findfirst(==(group), bases)
-end
-
-_as_scimloperator(m::SciMLOperators.AbstractSciMLOperator) = m
-_as_scimloperator(m::AbstractMatrix) = SciMLOperators.MatrixOperator(m)
-function _lazy_sum(mats)
-    length(mats) == 1 && return only(mats)
-    return SciMLOperators.AddedOperator(Tuple(map(_as_scimloperator, mats)))
+function _matrix_representation(op::NCAdd, bases, space, rep::LazyRepr, chunking; kwargs...)
+    return scimloperator(LazyOperator(op, space, chunking; kwargs...), get_input(rep, space))
 end
 
 @testitem "lazy matrix_representation" begin
@@ -500,11 +421,13 @@ end
         v = randn(ComplexF64, dim(H))
         V = randn(ComplexF64, dim(H), 2)
         w = randn(ComplexF64, dim(H))
+        xs = sprandn(ComplexF64, dim(H), 0.3)
         Lc = cache_operator(L, v)
         y = copy(w)
         mul!(y, Lc, v, 0.3, -0.7)
-        return L * v ≈ M * v && L' * v ≈ M' * v && transpose(L) * v ≈ transpose(M) * v &&
-               L * V ≈ M * V && y ≈ 0.3 * (M * v) - 0.7 * w && concretize(L) ≈ M
+        return L * v ≈ M * v && L' * v ≈ M' * v && transpose(L) * v ≈ transpose(M) * v && conj(L) * v ≈ conj(M) * v &&
+            L * V ≈ M * V && y ≈ 0.3 * (M * v) - 0.7 * w && concretize(L) ≈ M &&
+            L * xs ≈ M * xs && L' * xs ≈ M' * xs && mul!(copy(w), L', xs, 0.3im, -0.7) ≈ 0.3im * (M' * xs) - 0.7 * w
     end
 
     @fermions c
@@ -603,6 +526,7 @@ end
     vprod = randn(ComplexF64, dim(Hprod))
     @test Ltprod * vprod ≈ Mprod * vprod
     @test Lsprod * vprod ≈ Mprod * vprod
+    @test representation(op_prod, Hprod, :lazy; chunking = StateChunking(StaticScheduler(; nchunks = 3))) * vprod ≈ Mprod * vprod
 
     Hcons = constrain_space(Hprod, NumberConservation(2, [Hf]))
     vcons = randn(ComplexF64, dim(Hcons))
