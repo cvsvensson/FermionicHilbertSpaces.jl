@@ -737,6 +737,25 @@ end
     @test norm(Qs' * M * Qa) < 1.0e-12
 end
 
+@testitem "Fermionic translation sectors" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: permutation_projector
+    # The fermionic translations commute with the boundary hopping of a ring
+    @fermions c
+    N = 10
+    H = hilbert_space(c, 1:N)
+    ham = sum(c[k]' * c[mod1(k + 1, N)] + hc + c[k]' * c[k] * c[mod1(k + 1, N)]' * c[mod1(k + 1, N)] for k in 1:N)
+    M = representation(ham, H, Matrix)
+    translations = [circshift(1:N, j) for j in 0:(N - 1)]
+    sectors = [symmetric_sector(H, factors(H), (translations, [cis(2pi * k * j / N) for j in 0:(N - 1)])) for k in 0:(N - 1)]
+    @test sort(reduce(vcat, [eigvals(Hermitian(Matrix(Q' * M * Q))) for Q in sectors])) ≈ eigvals(Hermitian(M))
+    # A two-dimensional irrep of the dihedral group, which is built block by block
+    perms = [translations; reverse.(translations)]
+    chi = [[2cos(2pi * j / N) for j in 0:(N - 1)]; zeros(N)]
+    Q = symmetric_sector(H, factors(H), (perms, chi))
+    @test Q * Q' ≈ permutation_projector(H, factors(H), perms, chi)
+end
+
 @testitem "Checks on the weights of symmetric_sector" begin
     @fermions f
     H = hilbert_space(f, 1:3)
