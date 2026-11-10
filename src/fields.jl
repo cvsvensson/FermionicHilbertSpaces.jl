@@ -148,6 +148,8 @@ end
         @test_throws ArgumentError hilbert_space(f, labels)
     end
     @test hilbert_space(f, ()) == hilbert_space(f, Int[])
+    @fermions g
+    @test_throws ArgumentError FermionicHilbertSpaces.FermionicSpace(f, [g[1]])
 end
 
 @testitem "Custom operators on a field" begin
