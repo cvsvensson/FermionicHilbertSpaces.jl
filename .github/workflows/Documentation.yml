@@ -16,6 +16,8 @@ jobs:
     env:
       # Runners have varying CPUs; native-target pkgimages from the cache are rejected on a different CPU.
       JULIA_CPU_TARGET: generic
+      # BitPermutations picks BMI2/AVX-512 intrinsics from the host CPU, which fail to compile for the generic target.
+      BIT_PERMUTATIONS_USE_INTRINSICS: false
     permissions:
       actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
       contents: write
