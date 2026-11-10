@@ -60,7 +60,7 @@ Base.:+(m, ::HC) = (m + m')
 Base.:-(m, ::HC) = (m - m')
 """
     hc
-Not a function: `op + hc` is `op + op'` and `op - hc` is `op - op'`, for example `f[1]'f[2] + hc`.
+`op + hc` is `op + op'` and `op - hc` is `op - op'`, for example `f[1]'f[2] + hc`.
 """
 const hc = HC()
 
