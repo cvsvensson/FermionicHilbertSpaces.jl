@@ -654,14 +654,14 @@ function _checked_group_ids(op, space)
 end
 
 """
-    fragment(op, H, seeds; depth = typemax(Int), cutoff = 0)
+    fragment(op, H, seeds; projection = false, depth = typemax(Int), cutoff = 0)
 
-Return the product-state fragment of `seeds`: the smallest subspace of `H` spanned by basis states that contains
-`seeds` and is closed under `op`, with states in the order of `H`. `seeds` takes the same forms as the states of
-[`constrain_space`](@ref). Matrix elements with `abs(amp) <= cutoff` count as zero. With a finite `depth`, the result
-holds the states `op^k` reaches for `k ≤ depth`.
+Return the smallest subspace of `H` spanned by basis states that contains `seeds` and is closed under `op`, e.g.
+`FermionicHilbertSpaces.fragment(pxp, H, ["↓↓↓↓"])`. With a finite `depth`, only states within `depth` steps of the
+seeds are included, and amplitudes with `abs(amp) <= cutoff` count as zero. Unless `projection=true`, `op` mapping a
+state out of `H` throws an error.
 """
-function fragment(op, H::AbstractHilbertSpace, seeds; depth = typemax(Int), cutoff = 0)
+function fragment(op, H::AbstractHilbertSpace, seeds; projection = false, depth = typemax(Int), cutoff = 0)
     states = unique!(collect(_states_of(H, seeds)))
     all(s -> isbasisstate(s, H), states) || throw(ArgumentError("The seeds must be basis states of the space."))
     if !trivial_operator(op)
@@ -678,8 +678,9 @@ function fragment(op, H::AbstractHilbertSpace, seeds; depth = typemax(Int), cuto
             end
             n = length(states)
             for ((_, newstate), amp) in elements
+                # Amplitudes are summed over all terms before testing for zero, since terms can cancel.
                 (abs(amp) <= cutoff || newstate in found) && continue
-                isbasisstate(newstate, H) || continue
+                _skip_outside(isbasisstate(newstate, H), projection) && continue
                 push!(found, newstate)
                 push!(states, newstate)
             end
@@ -688,7 +689,6 @@ function fragment(op, H::AbstractHilbertSpace, seeds; depth = typemax(Int), cuto
     end
     return constrain_space(H, states[sortperm([order_key(s, H) for s in states])])
 end
-# Amplitudes are summed over all terms before testing for zero, since terms can cancel.
 function _add_elements!(elements, term, states, H)
     precomp = precomputation_before_operator_application(term, H)
     for (k, state) in enumerate(states)
@@ -700,6 +700,7 @@ end
 
 @testitem "fragment" begin
     using LinearAlgebra
+    using FermionicHilbertSpaces: fragment
     @spins S 1 // 2
     N = 6
     H = hilbert_space(S, 1:N)
@@ -713,6 +714,9 @@ end
     @test collect(basisstates(fragment(pxp, H, ["↓"^N]; depth = 2))) == filter(s -> count(t -> t.m > 0, s.states) <= 2, collect(basisstates(blockade)))
     @test basisstates(fragment(1, H, ["↓"^N, "↓"^N])) == basisstates(constrain_space(H, ["↓"^N]))
     @test_throws ArgumentError fragment(pxp, blockade, ["↑"^N])
+    flips = sum(X(k) for k in 1:N)
+    @test_throws ArgumentError fragment(flips, blockade, ["↓"^N])
+    @test basisstates(fragment(flips, blockade, ["↓"^N]; projection = true)) == basisstates(blockade)
 
     # The terms cancel on |↓↓⟩, though each flips spin 1.
     H2 = hilbert_space(S, 1:2)

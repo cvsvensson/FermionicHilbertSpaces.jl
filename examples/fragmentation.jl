@@ -1,9 +1,11 @@
 # # Hilbert-space fragmentation and quantum many-body scars
 #
-# Some Hamiltonians split the space into blocks that no conventional (local) symmetry labels. [`fragment`](@ref)
-# finds the block containing given basis states, by following the nonzero matrix elements of the Hamiltonian from them.
+# Some Hamiltonians split the space into blocks that no conventional (local) symmetry labels.
+# [`fragment`](@ref FermionicHilbertSpaces.fragment) finds the block containing given basis states, by following the
+# nonzero matrix elements of the Hamiltonian from them.
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots
+using FermionicHilbertSpaces: fragment
 
 # ## The PXP model
 # Rydberg atoms in the blockade regime are described by the PXP chain
