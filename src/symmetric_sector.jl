@@ -33,6 +33,7 @@ _site_spaces(H, sites) = eltype(sites) <: Integer ? collect(factors(H))[sites] :
 
 # A constraint with a translation is applied as the rest of the constraint followed by the translation.
 _split_translation(c) = (c, nothing)
+_split_translation(c::TranslationConstraint) = (NoSymmetry(), c)
 function _split_translation(c::ProductConstraint)
     i = findfirst(x -> x isa TranslationConstraint, c.constraints)
     isnothing(i) && return (c, nothing)
@@ -53,18 +54,15 @@ end
 """
     SymmetricSector
 
-The states of a parent space with a fixed momentum under [`Translation`](@ref)s, with one basis vector per orbit
-of parent basis states, built by `constrain_space(H, Translation(sites) => k)`. Its basis states are
-[`OrbitRep`](@ref)s, so functions that need product states, such as `partial_trace` and `tensor_product`, throw.
-
-Matrix representations, including `:lazy`, apply the operator to one representative per basis vector. They
-throw an `ArgumentError` unless the operator commutes with the translation by one site on every representative,
-a check that costs about as much as building the sparse matrix. Use `embed(v, Hk => H)` and
-`change_basis(v, H => Hk; projection = true)` to move states between `Hk` and its parent `H`.
+The momentum sector `constrain_space(H, Translation(sites) => k)`, with one basis vector per translation orbit of
+the basis states of `H`. Representing an operator throws an `ArgumentError` if it fails a check that it commutes
+with the translation, made on one representative per orbit. The check catches typical non-invariant operators,
+such as single-site terms, staggered fields and open bonds, but does not prove invariance. Move states with
+`embed(v, Hk => H)` and `change_basis(v, H => Hk; projection = true)`.
 """
-struct SymmetricSector{B, P, T, M <: SparseMatrixCSC{T}} <: AbstractHilbertSpace{OrbitRep{B}}
+struct SymmetricSector{B, P, T, M <: SparseMatrixCSC{T}, C <: TranslationConstraint} <: AbstractHilbertSpace{OrbitRep{B}}
     parent::P
-    symmetry::TranslationConstraint
+    symmetry::C
     # `amplitudes[c, t]` is the amplitude of parent basis state `t` in basis vector `c`, with one entry per column.
     amplitudes::M
     reps::Vector{B}
@@ -73,9 +71,13 @@ struct SymmetricSector{B, P, T, M <: SparseMatrixCSC{T}} <: AbstractHilbertSpace
 end
 
 function constrain_space(space::AbstractHilbertSpace, c::TranslationConstraint)
+    any(g -> g isa Union{FermionicSpace, MajoranaHilbertSpace}, groups(space)) &&
+        throw(ArgumentError("Translations of fermionic modes are not supported yet, since `permute_state` drops the fermionic reordering sign."))
+    sites = _site_spaces(space, c.translation.sites)
+    ispartition(sites, space) || throw(ArgumentError("The sites of a translation must cover all factors of the space, got $(c.translation.sites)."))
     perms, weights = _permutations_and_weights(c)
     T = all(isreal, weights) ? Float64 : ComplexF64
-    Q = _orbit_block_basis(space, _site_spaces(space, c.translation.sites), perms, T.(weights), _QR(), T)
+    Q = _orbit_block_basis(space, sites, perms, T.(weights), _QR(), T)
     reps = [basisstate(rowvals(Q)[first(nzrange(Q, n))], space) for n in axes(Q, 2)]
     norms = [real(nonzeros(Q)[first(nzrange(Q, n))]) for n in axes(Q, 2)]
     H = SymmetricSector(space, c, sparse(transpose(Q)), reps, norms, false)
@@ -96,14 +98,31 @@ interpret_state(state, ::SymmetricSector) = throw(ArgumentError("`$state` is not
 has_arithmetic_state_index(::SymmetricSector) = true
 isconstrained(::SymmetricSector) = true
 groups(H::SymmetricSector) = groups(H.parent)
+# The functions that split basis states into factors, such as `partial_trace`, `tensor_product` and `subregion`,
+# get the factors of a space from these.
+atomic_factors(H::SymmetricSector) = throw(_no_factors_error(H))
+factors(H::SymmetricSector) = throw(_no_factors_error(H))
+_no_factors_error(H) = ArgumentError("The basis states of `$H` are translation orbits, not product states, so it has no factors. Use its parent space.")
 Base.:(==)(H1::SymmetricSector, H2::SymmetricSector) = H1 === H2 || (H1.parent == H2.parent && H1.symmetry == H2.symmetry && H1.transposed == H2.transposed)
 Base.hash(H::SymmetricSector, h::UInt) = hash((H.parent, H.symmetry, H.transposed), h)
 Base.show(io::IO, H::SymmetricSector) = print(io, "$(dim(H))-dimensional SymmetricSector(", H.symmetry.translation, " => ", H.symmetry.momentum, ")")
-# The basis of the transposed space is the complex conjugate one.
+# The basis of the transposed space is the complex conjugate one. Its operators are transposes of operators already
+# checked on `H`, so `_check_operator` skips it.
 TransposedSpace(H::SymmetricSector) = SymmetricSector(TransposedSpace(H.parent), H.symmetry, H.amplitudes, H.reps, H.norms, !H.transposed)
+
+# A symmetric sector, or a subspace of one, with the orbit indices of its basis states
+const _OrbitSpace = Union{SymmetricSector, AbstractSubspace{<:Any, <:SymmetricSector}}
+_orbits(H::SymmetricSector) = (H, 1:dim(H))
+_orbits(H::AbstractSubspace{<:Any, <:SymmetricSector}) = (parent(H), [state.index for state in basisstates(H)])
 
 _amplitude_eltype(H::SymmetricSector) = eltype(H.amplitudes)
 _check_operator(op, H::SymmetricSector) = H.transposed ? nothing : _check_invariant(op, H)
+# The output index of a basis state is its orbit in the input space, so both spaces must share the orbits.
+function _check_operator(op, ax::Axes{<:Tuple{_OrbitSpace, _OrbitSpace}})
+    Hout, Hin = ax.spaces
+    first(_orbits(Hout)) == first(_orbits(Hin)) || throw(ArgumentError("`Axes(Hout, Hin)` needs two sectors of the same `SymmetricSector`."))
+    return _check_operator(op, Hin)
+end
 
 # For an operator that commutes with the translations, ⟨c′|op|c⟩ = Σ_t conj(q_c′(t)) ⟨t|op|r⟩ / q_c(r), where `r`
 # is the representative of `c` and `q_c` the amplitudes of basis vector `c`.
@@ -122,38 +141,19 @@ end
 
 # Throws unless `op(g r) == g op(r)` for the translation `g` by one site and every representative `r`.
 function _check_invariant(op, H::SymmetricSector)
+    isempty(H.reps) && return nothing
     space = H.parent
-    op isa AbstractSym && (op = NCMul(1, [op]))
-    terms = _precomputed_terms([partition_product(term, _checked_group_ids(op, space), groups(space)) for term in NCterms(op)], space)
     mapper = state_mapper(space, _site_spaces(space, H.symmetry.translation.sites))
     N = length(H.symmetry.translation.sites)
     g = _match_perm([mod1(i + 1, N) for i in 1:N], unique_split_state(first(H.reps), mapper))
-    shifted = [permute_state(r, mapper, g) for r in H.reps]
-    T = mat_eltype(op)
-    gop, opg = (Int[], Int[], T[]), (Int[], Int[], T[])
-    for (term, precomp) in terms
-        _add_invariance_entries!(gop, opg, term, precomp, H.reps, shifted, space, mapper, g)
-    end
-    sparse(gop..., dim(space), dim(H)) ≈ sparse(opg..., dim(space), dim(H)) ||
+    translate(state) = permute_state(state, mapper, g)
+    columns(states) = representation(op, Axes(space, ConstrainedSpace(space, states)); projection = true)
+    opr = columns(H.reps)
+    rows = [state_index(translate(basisstate(t, space)), space) for t in rowvals(opr)]
+    sparse(rows, SparseArrays.findnz(opr)[2], nonzeros(opr), dim(space), dim(H)) ≈ columns(map(translate, H.reps)) ||
         throw(ArgumentError("The operator does not commute with the translation, so it has no representation on the momentum sector."))
     return nothing
 end
-function _add_invariance_entries!(gop, opg, term, precomp, reps, shifted, space, mapper, g)
-    for (n, (r, gr)) in enumerate(zip(reps, shifted))
-        s, amp = _apply_local_operators(term, r, space, precomp)
-        # images outside the parent are left to `projection`
-        iszero(amp) || iszero(state_index(s, space)) || push_inds_amps!(gop, state_index(permute_state(s, mapper, g), space), n, amp)
-        s, amp = _apply_local_operators(term, gr, space, precomp)
-        i = iszero(amp) ? 0 : state_index(s, space)
-        iszero(i) || push_inds_amps!(opg, i, n, amp)
-    end
-    return nothing
-end
-
-# A symmetric sector, or a subspace of one, with the orbit indices of its basis states
-const _OrbitSpace = Union{SymmetricSector, AbstractSubspace{<:Any, <:SymmetricSector}}
-_orbits(H::SymmetricSector) = (H, 1:dim(H))
-_orbits(H::AbstractSubspace{<:Any, <:SymmetricSector}) = (parent(H), [state.index for state in basisstates(H)])
 
 complementary_subsystem(H::AbstractHilbertSpace, ::_OrbitSpace) = nothing
 function basis_transformation(Hfrom::_OrbitSpace, Hto::_OrbitSpace)
@@ -217,8 +217,14 @@ end
     @test_throws ArgumentError change_basis(embed(v, H0 => space), space => H0)
     @test_throws ArgumentError representation(S[1][:z], H0)
     @test_throws ArgumentError representation("↑↑↑↓↓↓", H0)
-    @test_throws MethodError partial_trace(Matrix(I, dim(H0), dim(H0)), H0 => hilbert_space(S[1]))
-    @test_throws MethodError tensor_product(parent(H0), hilbert_space(S[1]))
+    @test_throws ArgumentError partial_trace(Matrix(I, dim(H0), dim(H0)), H0 => hilbert_space(S[1]))
+    @test_throws ArgumentError tensor_product(parent(H0), hilbert_space(S[1]))
+    @test_throws ArgumentError representation(Sz, Axes(sector(0, Hks[3]), H0))
+    @test_throws ArgumentError hilbert_space(S, 1:N, Translation(1:(N - 1)) => k)
+    @test sum(k -> dim(hilbert_space(S, 1:N, Translation(1:N) => k)), 0:(N - 1)) == 2^N
+    @test size(representation(Sz, hilbert_space(S, 1:N, (Sz => N // 2, Translation(1:N) => 1)))) == (0, 0)
+    @fermions f
+    @test_throws ArgumentError hilbert_space(f, 1:N, Translation(1:N) => k)
 
     count_multiplets(H) = Dict(s => size(V, 2) for (s, V) in highest_weight_states(H, Splus))
     Hfull = hilbert_space(S, 1:N, Sz => 0:(N // 2))

@@ -330,7 +330,7 @@ function _matrix_representation(op::NCMul, bases, space, repr, chunking; kwargs.
     if isempty(op.factors)
         return _convert_repr_eltype(op.coeff * I(dim(space)), repr)
     else
-        newop = length(bases) > 1 ? partition_product(op, bases, groups(space)) : op
+        newop = length(bases) > 1 ? partition_product(op, bases, groups(_input_space(space))) : op
         return _term_matrix_representation(newop, space, repr, chunking; kwargs...)
     end
 end
@@ -653,7 +653,7 @@ function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=
         coeff = get_trivial_op_coeff(op)
         return _accumulated_matrix(_repr_eltype(typeof(coeff), repr), (), coeff, ax, repr; projection)
     end
-    _check_operator(op, Hin)
+    _check_operator(op, ax)
     repr, kwargs = _with_amplitude_eltype(repr, op, Hin, kwargs)
     return _with_format_eltype(_matrix_representation(_at_format_precision(op, repr), _checked_group_ids(op, Hin), ax, repr, chunking; projection, kwargs...), repr)
 end
@@ -662,6 +662,7 @@ end
 # promoted with the element type of the operator.
 _check_operator(op, space) = nothing
 _check_operator(op, space::AbstractSubspace) = _check_operator(op, parent(space))
+_check_operator(op, ax::Axes) = _check_operator(op, _input_space(ax))
 _amplitude_eltype(space) = nothing
 _amplitude_eltype(space::AbstractSubspace) = _amplitude_eltype(parent(space))
 _with_amplitude_eltype(format, op, space, kwargs) = _with_amplitude_eltype(format, op, _amplitude_eltype(space), kwargs)
