@@ -75,12 +75,12 @@ Adapt.adapt_storage(to::DeviceAdaptor, a::AbstractArray) = adapt(to.arrays, a)
 
 # Each keeps the fields that `basisstate`, `state_index` and the operator application read. Labels, bases, symbols and
 # mode lists only identify modes, which the precomputation has already resolved.
-Adapt.adapt_structure(::DeviceAdaptor, f::FermionSym) = FermionSym(f.creation, nothing, nothing)
-Adapt.adapt_structure(::DeviceAdaptor, b::BosonSym) = BosonSym{Nothing, Nothing, Nothing}(nothing, nothing, nothing, b.exp)
+Adapt.adapt_structure(::DeviceAdaptor, f::FermionSym) = FermionSym(f.creation, nothing)
+Adapt.adapt_structure(::DeviceAdaptor, b::BosonSym) = BosonSym(nothing, b.exp)
 Adapt.adapt_structure(::DeviceAdaptor, s::SpinSym) = DeviceSpinSym(_spin_shift(s), s.exponent)
 
 Adapt.adapt_structure(::DeviceAdaptor, H::FermionicSpace{F}) where {F} = DeviceFermionicSpace{F}(nbr_of_modes(H))
-Adapt.adapt_structure(to::DeviceAdaptor, H::TruncatedBosonicHilbertSpace) = TruncatedBosonicHilbertSpace(adapt(to, H.sym), H.dimension)
+Adapt.adapt_structure(::DeviceAdaptor, H::TruncatedBosonicHilbertSpace) = TruncatedBosonicHilbertSpace(nothing, H.dimension)
 Adapt.adapt_structure(::DeviceAdaptor, H::SpinSpace{T}) where {T} = SpinSpace{T, Nothing}(H.spin, nothing)
 function Adapt.adapt_structure(to::DeviceAdaptor, H::ProductSpace{B}) where {B}
     H.fast_path isa Int || throw(ArgumentError("Product spaces whose groups have no internal representation as `Int` are not supported on GPUs."))

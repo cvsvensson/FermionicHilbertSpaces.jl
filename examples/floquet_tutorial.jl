@@ -33,29 +33,29 @@
 
 # We load the package and import the pieces we need to overload.
 using FermionicHilbertSpaces
-using FermionicHilbertSpaces: AbstractSym
-import FermionicHilbertSpaces: local_mul_effect
+using FermionicHilbertSpaces: AbstractSym, Field, Mode
+import FermionicHilbertSpaces: local_mul_effect, mode
 import FermionicHilbertSpaces.NonCommutativeProducts: @nc, NCMul
 
-# `FloquetBasis` represents a Floquet degree of freedom (having an `id` allows multiple Floquet modes).
-# `FloquetLadder` represents ``F^k`` and `FloquetNumber` represents ``N^p``.
-struct FloquetBasis
-    id::Int
-end
-struct FloquetLadder <: AbstractSym
+# A Floquet degree of freedom is a mode of the algebra `Floquet`; a field `Field{Floquet}(:F)` would hold several.
+# `FloquetLadder` represents ``F^k`` and `FloquetNumber` represents ``N^p``. Each holds its mode, and `mode`
+# returns it, which matches the operators to the space labelled by the same mode.
+struct Floquet end
+struct FloquetLadder{M} <: AbstractSym
     shift::Int        # +1 → F (raising), −1 → F† (lowering), k → F^k
-    basis::FloquetBasis
+    mode::M
 end
-struct FloquetNumber <: AbstractSym
+struct FloquetNumber{M} <: AbstractSym
     power::Int        # exponent p in N^p
-    basis::FloquetBasis
+    mode::M
 end
-FloquetLadder(b::FloquetBasis) = FloquetLadder(1, b)
-Base.adjoint(F::FloquetLadder) = FloquetLadder(-F.shift, F.basis)
+FloquetLadder(m::Mode) = FloquetLadder(1, m)
+Base.adjoint(F::FloquetLadder) = FloquetLadder(-F.shift, F.mode)
 Base.adjoint(N::FloquetNumber) = N          # N is Hermitian
 Base.show(io::IO, F::FloquetLadder) = print(io, "F^", F.shift)
 Base.show(io::IO, N::FloquetNumber) = print(io, "N^", N.power)
-const Floquets = Union{FloquetLadder, FloquetNumber};
+const Floquets = Union{FloquetLadder, FloquetNumber}
+mode(f::Floquets) = f.mode;
 
 # Declaring them with `@nc` makes them non-commutative symbols. As subtypes of `AbstractSym`, they commute with
 # operators on other groups, such as spin operators:
@@ -69,13 +69,13 @@ const Floquets = Union{FloquetLadder, FloquetNumber};
 function local_mul_effect(a::FloquetLadder, b::FloquetLadder)
     total_shift = a.shift + b.shift
     total_shift == 0 && return 1
-    return FloquetLadder(total_shift, a.basis)
+    return FloquetLadder(total_shift, a.mode)
 end;
 
 # ``N^p \cdot N^q = N^{p+q}``.  Special case ``p=q=0``: ``N^0 = \mathbf{1}``.
 function local_mul_effect(a::FloquetNumber, b::FloquetNumber)
     a.power == b.power == 0 && return 1
-    return FloquetNumber(a.power + b.power, a.basis)
+    return FloquetNumber(a.power + b.power, a.mode)
 end;
 
 # ``F^k \cdot N = N \cdot F^k - k\,F^k``, from ``[N, F^k] = k\,F^k`` rearranged as
@@ -84,8 +84,8 @@ function local_mul_effect(a::FloquetLadder, b::FloquetNumber)
     if b.power == 1
         return b * a - a.shift * a         # Base case: F^k * N = N * F^k - k * F^k
     else
-        N_remaining = FloquetNumber(b.power - 1, b.basis)
-        term1 = FloquetNumber(1, b.basis) * a * N_remaining   # N * F^k * N^(p-1)
+        N_remaining = FloquetNumber(b.power - 1, b.mode)
+        term1 = FloquetNumber(1, b.mode) * a * N_remaining   # N * F^k * N^(p-1)
         term2 = -a.shift * a * N_remaining                    # -k * F^k * N^(p-1)
         return term1 + term2
     end
@@ -106,18 +106,12 @@ apply_local_operator(op::FloquetLadder, state::FloquetState, space, precomp) = F
 # ``N^p`` multiplies the amplitude by ``n^p``, where ``n`` is the current mode index.
 apply_local_operator(op::FloquetNumber, state::FloquetState, space, precomp) = state, state.mode^op.power;
 
-# Finally, `symbolic_group` matches operators to Hilbert spaces: each Floquet operator belongs to its `FloquetBasis`, which also labels the Hilbert space.
-import FermionicHilbertSpaces: symbolic_group
-symbolic_group(f::Floquets) = f.basis
-symbolic_group(b::FloquetBasis) = b
-Base.isless(a::FloquetBasis, b::FloquetBasis) = isless(a.id, b.id); # orders operators of several Floquet modes
-
-# With this we can build the Floquet Hilbert space and the matrix of an operator on it.
-floquet_basis = FloquetBasis(0)
-F = FloquetLadder(floquet_basis)       # raising operator F
-Nf = FloquetNumber(1, floquet_basis)    # photon number N
+# With this we can build the Floquet Hilbert space, labelled by the Floquet mode, and the matrix of an operator on it.
+floquet_mode = Mode(Field{Floquet}(:F), ())
+F = FloquetLadder(floquet_mode)       # raising operator F
+Nf = FloquetNumber(1, floquet_mode)    # photon number N
 n_max = 5       # keep Floquet modes n = −n_max … n_max
-Hfloq = GenericHilbertSpace(floquet_basis, FloquetState.((-n_max):n_max))
+Hfloq = GenericHilbertSpace(floquet_mode, FloquetState.((-n_max):n_max))
 F_mat = representation(F, Hfloq; projection = true); # we need projection=true because we've truncated the Floquet space
 
 # ## Driven spin 1

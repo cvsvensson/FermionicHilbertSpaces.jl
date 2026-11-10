@@ -38,7 +38,7 @@ function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSp
     TransposedSpace(FermionicSpace(map(H -> H.parent, spaces), group))
 end
 
-combine_into_group(group::MajoranaGroup, spaces::AbstractVector{<:TransposedSpace}) =
+combine_into_group(group::Group{Majorana}, spaces::AbstractVector{<:TransposedSpace}) =
     TransposedSpace(combine_into_group(group, map(parent, spaces)))
 
 
@@ -107,11 +107,6 @@ representation(dissipator(c[1]), Hlr)
 """
 dissipator(L) = tag_left(L) * tag_right(L') - (tag_left(L' * L) + tag_right(L' * L)) / 2
 
-function add_tag(factor::AbstractSym, tag)
-    basis = symbolic_basis(factor)
-    new_basis = add_tag(basis, tag)
-    return with_basis(factor, new_basis)
-end
 add_tag(expr, tag) = NonCommutativeProducts.ncmap(Base.Fix2(add_tag, tag), expr)
 
 

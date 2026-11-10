@@ -6,83 +6,50 @@ Create a symbolic bosonic annihilation operator `b`.
 Use `b'` for the corresponding creation operator.
 """
 macro boson(x)
-    Expr(:block, :($(esc(x)) = BosonSym($(Expr(:quote, x)), Tags(nothing), -1)),
+    Expr(:block, :($(esc(x)) = BosonSym(Mode(Field{Boson}($(Expr(:quote, x))), ()), -1)),
         :($(esc(x))))
 end
 """
     @bosons b
 
-Create a bosonic basis `b`. Index into it to get bosonic mode operators:
+Create a bosonic field `b`. Index into it to get bosonic mode operators:
 `b[i]` returns the annihilation operator for mode `i`, `b[i]'` for the creation operator.
 """
 macro bosons(name)
-    Expr(:block, :($(esc(name)) = BosonField($(Expr(:quote, name)))),
+    Expr(:block, :($(esc(name)) = Field{Boson}($(Expr(:quote, name)))),
         :($(esc(name))))
 end
 
-"""
-    BosonField
+struct Boson end
 
-A family of bosonic modes, created by [`@bosons`](@ref). `b[i]` is the annihilation operator of mode `i`.
-"""
-struct BosonField{T<:Tags}
-    name::Symbol
-    tags::T
-end
-BosonField(name::Symbol) = BosonField(name, Tags(nothing))
-Base.:(==)(a::BosonField, b::BosonField) = a.name == b.name && a.tags == b.tags
-Base.hash(b::BosonField, h::UInt) = hash(b.tags, hash(b.name, h))
-Base.show(io::IO, b::BosonField) = print(io, "BosonField(", b.name, ")")
-tags(b::BosonField) = b.tags
-add_tag(b::BosonField, tag) = BosonField(b.name, add_tag(b.tags, tag))
-
-struct BosonSym{L,B,T} <: AbstractSym
-    label::L
-    basis::B
-    tags::T
+# `exp` is the power: `-k` for `b^k` and `k` for `b'^k`.
+struct BosonSym{M} <: AbstractSym
+    mode::M
     exp::Int
 end
-function BosonSym(label::L, basis::B, exp::Int) where {L,B<:BosonField}
-    BosonSym{L,B,Nothing}(label, basis, nothing, exp)
-end
-function BosonSym(label::L, tags::T, exp::Int) where {L,T<:Tags}
-    BosonSym{L,Nothing,T}(label, nothing, tags, exp)
-end
-Base.getindex(b::BosonField, i) = BosonSym(i, b, -1)
-Base.getindex(b::BosonField, is...) = BosonSym(is, b, -1)
+_field_entry(m::Mode{<:Field{Boson}}) = BosonSym(m, -1)
+mode(x::BosonSym) = x.mode
+with_mode(x::BosonSym, m) = BosonSym(m, x.exp)
 
-Base.adjoint(x::BosonSym) = BosonSym(x.label, x.basis, x.tags, -x.exp)
+Base.adjoint(x::BosonSym) = BosonSym(x.mode, -x.exp)
 Base.iszero(x::BosonSym) = false
-symbolic_basis(x::BosonSym{<:Any,<:BosonField}) = x.basis
-with_basis(x::BosonSym, newbasis) = BosonSym(x.label, newbasis, x.exp)
-const BosonSymWithBasis = BosonSym{L,B,Nothing} where {L,B<:BosonField}
-const BosonSymWithoutBasis = BosonSym{L,Nothing,T} where {L,T<:Tags}
-add_tag(x::BosonSymWithBasis, tag) = with_basis(x, add_tag(x.basis, tag))
-add_tag(x::BosonSymWithoutBasis, tag) = BosonSym(x.label, add_tag(x.tags, tag), x.exp)
-tags(x::BosonSym) = x.tags
 function Base.show(io::IO, x::BosonSym)
-    if x.basis isa Nothing
-        print(io, _symbolic_name_with_tags(x.label, x))
-    else
-        print(io, _symbolic_name_with_tags(x.basis.name, x.basis))
-    end
+    show(io, x.mode.field)
     print(io, x.exp > 0 ? "†" : "")
     if abs(x.exp) !== 1
         print(io, "^", abs(x.exp))
     end
-    if !(x.basis isa Nothing)
-        print(io, "[", x.label, "]")
-    end
+    _show_label(io, x.mode.label)
 end
-Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.label == b.label && isequal(a.basis, b.basis) && a.tags == b.tags
-Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.label, hash(a.basis, hash(a.tags, h))))
+Base.:(==)(a::BosonSym, b::BosonSym) = a.exp == b.exp && a.mode == b.mode
+Base.hash(a::BosonSym, h::UInt) = hash(a.exp, hash(a.mode, h))
 # Normal ordering of a = b^m, c = b†^n: b^m b†^n = Σₖ k! C(m,k) C(n,k) b†^(n-k) b^(m-k)
 function _boson_normal_order(a::BosonSym, c::BosonSym)
     m, n = -a.exp, c.exp
     terms = map(0:min(m, n)) do k
         factors = typeof(a)[]
-        n > k && push!(factors, BosonSym(a.label, a.basis, tags(a), n - k))
-        m > k && push!(factors, BosonSym(a.label, a.basis, tags(a), k - m))
+        n > k && push!(factors, BosonSym(a.mode, n - k))
+        m > k && push!(factors, BosonSym(a.mode, k - m))
         # Widening to BigInt on overflow would make mul_effect's return type a union too wide to split,
         # which slows down every boson product, so overflow throws instead.
         NCMul(Base.Checked.checked_mul(factorial(k), binomial(m, k), binomial(n, k)), factors)
@@ -90,7 +57,7 @@ function _boson_normal_order(a::BosonSym, c::BosonSym)
     return AddTerms(terms)
 end
 function local_mul_effect(a::BosonSym, b::BosonSym)
-    sign(a.exp) == sign(b.exp) && return BosonSym(a.label, a.basis, tags(a), a.exp + b.exp)
+    sign(a.exp) == sign(b.exp) && return BosonSym(a.mode, a.exp + b.exp)
     return a.exp < 0 && b.exp > 0 ? _boson_normal_order(a, b) : nothing
 end
 
@@ -169,18 +136,18 @@ Base.hash(x::BosonicState, h::UInt) = hash(x.n, h)
 internal_rep(state::BosonicState, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.n)
 physical_rep(state::T, ::Type{BosonicState}) where T<:Integer = BosonicState(Int(state))
 
-struct TruncatedBosonicHilbertSpace{L, B, T} <: AbstractAtomicHilbertSpace{BosonicState}
-    sym::BosonSym{L, B, T}
+struct TruncatedBosonicHilbertSpace{M} <: AbstractAtomicHilbertSpace{BosonicState}
+    mode::M
     dimension::Int
-    function TruncatedBosonicHilbertSpace(sym::BosonSym{L, B, T}, dimension::Integer) where {L, B, T}
+    function TruncatedBosonicHilbertSpace(mode::M, dimension::Integer) where {M}
         if dimension < 1
             throw(ArgumentError("Bosonic Hilbert space dimension must be positive, got $dimension"))
         end
-        return new{L, B, T}(sym, Int(dimension))
+        return new{M}(mode, Int(dimension))
     end
 end
-Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.sym == b.sym && a.dimension == b.dimension)
-Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.sym, hash(x.dimension, h))
+Base.:(==)(a::TruncatedBosonicHilbertSpace, b::TruncatedBosonicHilbertSpace) = a === b || (a.mode == b.mode && a.dimension == b.dimension)
+Base.hash(x::TruncatedBosonicHilbertSpace, h::UInt) = hash(x.mode, hash(x.dimension, h))
 basisstates(H::TruncatedBosonicHilbertSpace) = BasisStates(H, Iterators.map(BosonicState, 0:(dim(H)-1)))
 Base.@propagate_inbounds function basisstate(n::Integer, H::TruncatedBosonicHilbertSpace)
     @boundscheck 1 <= n <= dim(H) || throw(BoundsError(H, n))
@@ -189,11 +156,11 @@ end
 dim(H::TruncatedBosonicHilbertSpace) = H.dimension
 _state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace) = 0 <= s.n < dim(H) ? s.n + 1 : 0
 has_arithmetic_state_index(::TruncatedBosonicHilbertSpace) = true
-add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add_tag(H.sym, tag), H.dimension)
+add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add_tag(H.mode, tag), H.dimension)
 
 """
     hilbert_space(b::BosonSym, dimension[, constraint])
-    hilbert_space(b::BosonField, labels, dimension[, constraint])
+    hilbert_space(b::Field{Boson}, labels, dimension[, constraint])
 
 The truncated space of the bosonic mode `b`, with basis states `|0⟩, …, |dimension-1⟩`, so the
 maximal occupation is `dimension - 1`. With `labels`, the tensor product of one such space for
@@ -203,9 +170,10 @@ Operator terms that would raise the occupation above the cutoff are dropped with
 while leaving a constrained space throws unless `projection=true`. Products are normal ordered
 before truncation, so `b * b'` is represented as `b'b + 1`.
 """
-hilbert_space(sym::BosonField, labels, dimension::Integer, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = tensor_product(map(l -> hilbert_space(sym[l], dimension), labels); constraint)
-hilbert_space(sym::BosonSym, dimension::Integer) = TruncatedBosonicHilbertSpace(sym, dimension)
-hilbert_space(sym::BosonSym, dimension::Integer, @nospecialize(constraint::ConstraintLike)) = constrain_space(hilbert_space(sym, dimension), constraint)
+hilbert_space(b::Field{Boson}, labels, dimension::Integer, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(b, labels, constraint, dimension)
+hilbert_space(b::BosonSym, args...) = hilbert_space(b.mode, args...)
+hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer) = TruncatedBosonicHilbertSpace(m, dimension)
+hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer, @nospecialize(constraint::ConstraintLike)) = constrain_space(hilbert_space(m, dimension), constraint)
 particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 
@@ -232,18 +200,14 @@ function apply_local_operator(factor::BosonSym, state::BosonicState, space::Trun
     end
     return BosonicState(n), amplitude
 end
-# Group ids are `(name, label, tags)`. A boson without a basis has its own label as name and `()` as label.
-symbolic_group(f::BosonSym{<:Any,<:BosonField}) = (f.basis.name, f.label, f.basis.tags)
-symbolic_group(f::BosonSym{<:Any,Nothing}) = (f.label, (), f.tags)
-symbolic_group(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
-symbolic_basis(H::TruncatedBosonicHilbertSpace) = symbolic_group(H)
-atomic_id(H::TruncatedBosonicHilbertSpace) = symbolic_group(H.sym)
+symbolic_group(H::TruncatedBosonicHilbertSpace) = H.mode
+atomic_id(H::TruncatedBosonicHilbertSpace) = H.mode
 mat_eltype(::Type{S}) where {S<:BosonSym} = Float64
 
 @testitem "Bosonic hilbert space" begin
     using FermionicHilbertSpaces: TruncatedBosonicHilbertSpace, BosonicState, state_index, basisstate
     @boson b
-    H = TruncatedBosonicHilbertSpace(b, 4)
+    H = TruncatedBosonicHilbertSpace(b.mode, 4)
     @test collect(basisstates(H)) == [BosonicState(0), BosonicState(1), BosonicState(2), BosonicState(3)]
     @test dim(H) == 4
     @test basisstate(1, H) == BosonicState(0)
@@ -260,7 +224,7 @@ end
     using FermionicHilbertSpaces: TruncatedBosonicHilbertSpace
 
     @boson b
-    H = TruncatedBosonicHilbertSpace(b, 4)
+    H = TruncatedBosonicHilbertSpace(b.mode, 4)
 
     d = dim(H)
     a = spzeros(Float64, d, d)
@@ -354,7 +318,7 @@ end
     expected = kron(reverse([fmat, smat, bmat])...)
     @test mop ≈ expected
 
-    @test_throws ArgumentError representation(s_expr, FermionicHilbertSpaces.SpinSpace(:Not, 1 // 2))
+    @test_throws ArgumentError representation(s_expr, hilbert_space((@spin Not), 1 // 2))
 
     Hsb = tensor_product(Hs, Hb)
     @test partial_trace(1.0 * I(dim(Hsb)), Hsb => Hs) ≈ dim(Hb) * I(dim(Hs))

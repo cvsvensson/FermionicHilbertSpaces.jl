@@ -36,7 +36,6 @@ export Kets, Ket, ProductState, SpinState, BosonicState
 
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
 export @fermions, @majoranas, @boson, @bosons, @spin, @spins
-export BosonField, SpinField
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
@@ -99,24 +98,18 @@ function _order_isless(a::Tuple, b::Tuple)
     return _order_isless(Base.tail(a), Base.tail(b))
 end
 
-# The tags that identify a group of symbolic operators. `tags` is `nothing` or a tuple. For `@fermions` and
-# `@majoranas` the first element is the tuple of names given to the macro, so the names determine the group.
-# Elements appended by `add_tag` are symbols such as `:left` and `:right`.
-# Tags are ordered by `_order_isless` of their tag tuples. For groups created by the macros this is the lexicographic order
-# of the macro's names, e.g. the operators of `@fermions a` sort before those of `@fermions b`.
+# The tags of a field, `nothing` or a tuple of the tags appended by `add_tag`, such as `:left` and `:right`.
 struct Tags{T}
     tags::T
 end
 Base.hash(id::Tags, h::UInt) = hash(id.tags, h)
 Base.:(==)(a::Tags, b::Tags) = a.tags == b.tags
-Base.isless(a::Tags, b::Tags) = _order_isless(tagset(a), tagset(b))
 tagset(id::Tags) = id.tags
 tagset(::Tags{Nothing}) = ()
 tagset(x) = tagset(tags(x))
 
-function _symbolic_name_with_tags(name, tagged; skip_first=0)
+function _symbolic_name_with_tags(name, tagged)
     tags = tagset(tagged)
-    tags = skip_first > 0 ? tags[(skip_first+1):end] : tags
     isempty(tags) && return string(name)
     return string(name, "(", join(tags, ","), ")")
 end
@@ -151,6 +144,7 @@ include("matrix_representation.jl")
 include("sparse_assembly.jl")
 include("lazy_matrix_representation.jl")
 
+include("fields.jl")
 include("physics/fermions/fock.jl")
 include("physics/fermions/phase_factors.jl")
 include("physics/fermions/symbolic_fermions.jl")

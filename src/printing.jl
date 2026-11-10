@@ -212,8 +212,7 @@ function Base.show(io::IO, H::GenericHilbertSpace)
 end
 
 function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
-    sym = H.sym
-    lbl = sym.basis isa Nothing ? string(sym.label) : "$( _symbolic_name_with_tags(sym.basis.name, sym.basis) )[$(sym.label)]"
+    lbl = H.mode
     if get(io, :compact, false)
         print(io, "Bosons(", lbl, ", dim=", dim(H), ")")
     else
@@ -226,8 +225,7 @@ Base.show(io::IO, state::BosonicState) = print(io, "BosonicState(", state.n, ")"
 
 function Base.show(io::IO, H::SpinSpace)
     J = H.spin
-    sym = H.sym
-    lbl = sym.field isa Nothing ? sym.label : "$( _symbolic_name_with_tags(sym.field.name, sym) )[$(sym.label)]"
+    lbl = H.sym
     if get(io, :compact, false)
         print(io, "Spin{", J, "}(", lbl, ")")
     else

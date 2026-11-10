@@ -1,22 +1,4 @@
-struct FermionicGroup{T}
-    id::T
-end
-Base.hash(x::FermionicGroup, h::UInt) = hash(x.id, h)
-Base.:(==)(a::FermionicGroup, b::FermionicGroup) = a.id == b.id
-symbolic_group(g::FermionicGroup) = g
-Base.isless(g1::FermionicGroup, g2::FermionicGroup) = isless(g1.id, g2.id)
-add_tag(g::FermionicGroup, tag) = FermionicGroup(add_tag(g.id, tag))
-tags(g::FermionicGroup) = g.id
-
-struct SymbolicFermionBasis{T<:Tags}
-    name::Symbol
-    tags::FermionicGroup{T}
-end
-Base.show(io::IO, x::SymbolicFermionBasis) = print(io, _symbolic_name_with_tags(x.name, x; skip_first=1))
-Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.tags, h))
-symbolic_group(x::SymbolicFermionBasis) = tags(x)
-tags(x::SymbolicFermionBasis) = x.tags
-add_tag(x::SymbolicFermionBasis, tag) = SymbolicFermionBasis(x.name, add_tag(x.tags, tag))
+struct Fermion end
 
 """
     @fermions a b ...
@@ -37,59 +19,49 @@ and commute with fermions in other `@fermions` blocks.
 See also [`@majoranas`](@ref).
 """
 macro fermions(xs...)
-    group = FermionicGroup(Tags((xs,)))
     defs = map(xs) do x
-        :($(esc(x)) = SymbolicFermionBasis($(Expr(:quote, x)), $group))
+        :($(esc(x)) = Field{Fermion}($(Expr(:quote, x)), $xs))
     end
     fermions = Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
     length(defs) == 1 && return only(defs)
     return fermions
 end
-Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.tags == b.tags
-Base.getindex(f::SymbolicFermionBasis, is...) = FermionSym(false, is, f)
-Base.getindex(f::SymbolicFermionBasis, i) = FermionSym(false, i, f)
 
-struct FermionSym{L,B} <: AbstractFermionSym
+struct FermionSym{M} <: AbstractFermionSym
     creation::Bool
-    label::L
-    basis::B
+    mode::M
 end
-Base.getindex(::SymbolicFermionBasis, i::FermionSym) = throw(ArgumentError("Modes are indexed by labels, not by operators, got `$i`."))
-Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.label, x.basis)
+_field_entry(m::Mode{<:Field{Fermion}}) = FermionSym(false, m)
+Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.mode)
 Base.iszero(x::FermionSym) = false
-symbolic_group(h::FermionSym) = symbolic_group(h.basis)
-symbolic_basis(h::FermionSym) = h.basis
-with_basis(h::FermionSym, newbasis) = FermionSym(h.creation, h.label, newbasis)
-atomic_id(h::FermionSym) = _normalize_sym(h) # names the single-mode FermionicSpace of h
-label(h::FermionSym) = h.label
+mode(f::FermionSym) = f.mode
+with_mode(f::FermionSym, m) = FermionSym(f.creation, m)
+atomic_id(f::FermionSym) = f.mode
+label(f::FermionSym) = f.mode.label
 group_id(f::FermionSym) = symbolic_group(f)
 
-function Base.show(io::IO, x::FermionSym)
-    print(io, _symbolic_name_with_tags(x.basis.name, x.basis; skip_first=1), x.creation ? "†" : "")
-    if Base.isiterable(typeof(x.label))
-        Base.show_delim_array(io, x.label, "[", ",", "]", false)
-    else
-        print(io, "[", x.label, "]")
-    end
-end
+Base.show(io::IO, x::FermionSym) = (show(io, x.mode.field); print(io, x.creation ? "†" : ""); _show_label(io, x.mode.label))
 function Base.isless(a::FermionSym, b::FermionSym)
-    if tags(a.basis) !== tags(b.basis)
-        tags(a.basis) < tags(b.basis)
+    ga, gb = symbolic_group(a), symbolic_group(b)
+    if ga != gb
+        ga < gb
     elseif a.creation == b.creation
-        a.basis.name == b.basis.name && return _order_isless(a.label, b.label)
-        a.basis.name < b.basis.name
+        fa, fb = a.mode.field, b.mode.field
+        fa.name == fb.name && return _order_isless(a.mode.label, b.mode.label)
+        fa.name < fb.name
     else
         a.creation > b.creation
     end
 end
-Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
-Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
+Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.mode == b.mode
+Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.mode, h))
 
-hilbert_space(f::FermionSym) = FermionicSpace([_normalize_sym(f)], symbolic_group(f))
+hilbert_space(f::FermionSym) = hilbert_space(f.mode)
+hilbert_space(m::Mode{<:Field{Fermion}}) = FermionicSpace([m], symbolic_group(m))
 
 # The sign λ in a * b = λ * b * a + scalar
-exchange_phase(a::FermionSym, b::FermionSym) = tags(a.basis) == tags(b.basis) ? -1 : 1
+exchange_phase(a::FermionSym, b::FermionSym) = symbolic_group(a) == symbolic_group(b) ? -1 : 1
 function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
     if a == b
         0
@@ -97,7 +69,7 @@ function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
         nothing
     elseif a > b
         swap = Swap(exchange_phase(a, b))
-        if a.label == b.label && a.basis == b.basis
+        if a.mode == b.mode
             return AddTerms((swap, 1))
         else
             return swap
@@ -181,31 +153,28 @@ mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
 end
 
 @testitem "Deterministic ordering of groups" begin
-    using FermionicHilbertSpaces: Tags, tags, add_tag, SymbolicState
+    using FermionicHilbertSpaces: add_tag, symbolic_group, SymbolicState
     @fermions a
     @fermions b
     @fermions c d
     @majoranas γ
 
-    # the groups are identified by the names given to the macro, not by a hash of them
-    @test tags(a).id.tags == ((:a,),)
-    @test tags(c).id.tags == ((:c, :d),)
-    @test tags(γ).group.id.tags == ((:γ,),)
     a_old = a
     @fermions a
-    @test a == a_old
+    @test a == a_old && a[1] == a_old[1] && hash(a[1]) == hash(a_old[1])
+    @test c[1] * d[1] == -d[1] * c[1]
 
     # groups are in lexicographic order of the names given to the macro
-    @test tags(a) < tags(b) < tags(c)
+    g(x) = symbolic_group(x[1])
+    @test g(a) < g(b) < g(c) == g(d)
     @test a[2] < b[1] && b[1] < c[1] && !(b[1] < a[2])
     @test a[1]' < b[1]
     @test only(keys((b[1] * a[1]).dict)).factors == [a[1], b[1]]
     @test only(keys((c[1] * b[1]' * a[2]).dict)).factors == [a[2], b[1]', c[1]]
 
     # the order is total and consistent with ==
-    ts = [Tags(nothing), tags(a).id, tags(b).id, tags(c).id,
-        add_tag(tags(a).id, :left), add_tag(tags(a).id, :right), add_tag(add_tag(tags(a).id, :left), :right),
-        Tags(((:a,),)), Tags(((:a, :b),))]
+    ts = [g(a), g(b), g(c), g(γ), g(add_tag(a, :left)), g(add_tag(a, :right)), g(add_tag(add_tag(a, :left), :right)),
+        g(add_tag(γ, :left))]
     for x in ts, y in ts
         @test (x == y) == (!(x < y) && !(y < x))
         @test !(x < y && y < x)
