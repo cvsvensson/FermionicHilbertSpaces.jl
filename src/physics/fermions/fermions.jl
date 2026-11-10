@@ -15,7 +15,7 @@ function FermionicSpace(factors::AbstractVector{<:FermionicSpace}, group::Group,
     all(c -> group_id(c) == group, factors) || throw(ArgumentError("All factors must belong to the group `$group`."))
     return FermionicSpace(collect(Iterators.flatten(Iterators.map(modes, factors))), group, F)
 end
-FermionicSpace(a::Field{FermionSym}, modes::AbstractVector) = FermionicSpace(modes, Group{FermionSym}(a.group, a.tags))
+FermionicSpace(a::Field{FermionSym}, modes::AbstractVector) = FermionicSpace(modes, Group(a))
 # The copy of a `FermionicSpace` that GPU kernels use: only its number of modes
 struct DeviceFermionicSpace{F} <: AbstractHilbertSpace{F}
     nbr_of_modes::Int

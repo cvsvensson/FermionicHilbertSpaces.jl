@@ -18,7 +18,7 @@ Field{O}(name::Symbol, group = nothing, params = nothing, tags::Tags = Tags(noth
 """
     Mode(field, label)
 
-The mode of `field` labelled `label`. O mode without a field, such as `@boson b`, has the label `()`.
+The mode of `field` labelled `label`. A mode without a field, such as `@boson b`, has the label `()`.
 For a field of operators of type `O`, `field[l][k]` is the operator `O(field[l], k)`.
 """
 struct Mode{F <: Field, L}
@@ -58,7 +58,10 @@ _field_entry(m::Mode) = m
 Base.getindex(f::Field, l) = _field_entry(Mode(f, l))
 Base.getindex(f::Field, ls...) = _field_entry(Mode(f, ls))
 Base.getindex(::Field, l::AbstractSym) = throw(ArgumentError("Modes are indexed by labels, not by operators, got `$l`."))
-Base.getindex(m::Mode{<:Field{O}}, k) where {O} = O(m, k)
+function Base.getindex(m::Mode{<:Field{O}}, k) where {O}
+    _field_entry(m) === m || throw(ArgumentError("`$(m.field)[l]` is already an operator, so it cannot be indexed further."))
+    return O(m, k)
+end
 label(m::Mode) = m.label
 tags(f::Field) = f.tags
 tags(m::Mode) = tags(m.field)
@@ -84,16 +87,15 @@ _show_label(io, l) = print(io, "[", l, "]")
 """
     Group{O}(names, tags)
 
-The group of the fields named `names`, such as the fermions of one `@fermions` block, whose modes share one space.
-It is the key that matches operators to spaces: `symbolic_group(op) == group_id(space)`, and `tensor_product`
-merges the atoms of one group with `combine_into_group(group, atoms)`, which a grouped algebra defines for
-its `Group{O}`. The modes of a field without a group are their own groups and atoms.
+The group key of fields that share one space, such as one `@fermions a b` block: it equals `group_id` of that
+space, and `combine_into_group(::Group{O}, atoms)` builds it. A mode of an ungrouped field is its own group.
 """
 struct Group{O, G, T <: Tags}
     names::G
     tags::T
 end
 Group{O}(names, tags::Tags) where {O} = Group{O, typeof(names), typeof(tags)}(names, tags)
+Group(f::Field{O}) where {O} = Group{O}(f.group, f.tags)
 Base.:(==)(::Group, ::Group) = false
 Base.:(==)(a::Group{O}, b::Group{O}) where {O} = a.names == b.names && a.tags == b.tags
 Base.hash(g::Group{O}, h::UInt) where {O} = hash(g.tags, hash(g.names, hash(O, h)))
@@ -101,7 +103,7 @@ Base.isless(a::Group{O}, b::Group{P}) where {O, P} = _order_isless((nameof(O), a
 tags(g::Group) = g.tags
 add_tag(g::Group{O}, tag) where {O} = Group{O}(g.names, add_tag(g.tags, tag))
 
-symbolic_group(m::Mode{<:Field{O}}) where {O} = isnothing(m.field.group) ? m : Group{O}(m.field.group, m.field.tags)
+symbolic_group(m::Mode) = isnothing(m.field.group) ? m : Group(m.field)
 symbolic_group(op::AbstractSym) = symbolic_group(mode(op))
 atomic_id(m::Mode) = m
 _atom_names(m::Mode) = (m,)
@@ -127,6 +129,7 @@ hilbert_space(m::Mode, states) = GenericHilbertSpace(m, states)
     @test add_tag(s, :l) != s && add_tag(s, :l)[1] == add_tag(s[1], :l)
     @test repr(add_tag(S[:z], :l)) == "S(l)[:z]"
     @test repr(b[1, :a]') == "b†[1, :a]"
+    @test_throws ArgumentError FermionicHilbertSpaces.Mode(b, 1)[2]
     @test hilbert_space(b, (1, 2), 2) == hilbert_space(b, [1, 2], 2) == hilbert_space(b, (i for i in 1:2), 2)
 end
 
@@ -150,7 +153,7 @@ end
     @field c::Shift
     @test c[1][2] == Shift(c[1], 2)
     @test c[2][1] * c[1][1] == c[1][1] * c[2][1]
-    @test repr(add_tag(c[1][1], :l).mode) == "c(l)[1]"
+    @test repr(mode(add_tag(c[1][1], :l))) == "c(l)[1]"
     H = hilbert_space(c, 1:2, Site.(0:2))
     @test H == tensor_product([GenericHilbertSpace(c[i], Site.(0:2)) for i in 1:2])
     A = c[1][1] * c[2][-1]

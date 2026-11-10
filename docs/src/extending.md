@@ -35,11 +35,9 @@ Connection to Hilbert spaces:
 
 - [`apply_local_operator`](@ref)`(op, state, space, precomp) -> (newstate, amplitude)` defines
   how `op` acts on a basis state. This is required for matrix representations.
-- The space an operator acts on is a mode of a field. An operator `MyOp` that stores its mode,
-  with a constructor `MyOp(mode, k)` and [`mode`](@ref)`(op)` returning the mode, gets a field
-  from [`@field`](@ref)` c::MyOp`: `c[i][k]` is `MyOp(c[i], k)`, and `hilbert_space(c, labels, states)`
-  is one space of basis states `states` per mode. [`with_mode`](@ref)`(op, m)`, the operator on the
-  mode `m`, is needed for [`open_system`](@ref).
+- An operator acts on a mode of a field. [`@field`](@ref) `c::MyOp` creates the field, `c[i][k]` builds
+  `MyOp(c[i], k)`, and `hilbert_space(c, labels, states)` has one space per mode. `MyOp` stores its mode and
+  returns it from [`mode`](@ref); [`with_mode`](@ref)`(op, m)` adds [`open_system`](@ref).
 - Alternatively, [`symbolic_group`](@ref)`(op)` returns a plain label of the space `op` acts on, such as
   the label of a [`GenericHilbertSpace`](@ref), and `add_tag(op, tag)` rebuilds `op` with the label
   [`tag_label`](@ref)`(label, tag)` for [`open_system`](@ref). A custom space type other than

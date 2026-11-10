@@ -225,7 +225,7 @@ Base.show(io::IO, state::BosonicState) = print(io, "BosonicState(", state.n, ")"
 
 function Base.show(io::IO, H::SpinSpace)
     J = H.spin
-    lbl = H.sym
+    lbl = H.mode
     if get(io, :compact, false)
         print(io, "Spin{", J, "}(", lbl, ")")
     else
