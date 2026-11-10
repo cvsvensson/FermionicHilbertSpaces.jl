@@ -3,7 +3,7 @@ struct FermionicSpace{F, M, FG <: Group} <: AbstractGroupedHilbertSpace{F}
     modes::Vector{M}
     mode_ordering::OrderedDict{M, Int}
     group::FG
-    function FermionicSpace(_modes::AbstractVector{<:_FermionMode}, group::FG, ::Type{F} = FockNumber{default_fock_representation(length(_modes))}) where {F, FG <: Group}
+    function FermionicSpace(_modes::AbstractVector, group::FG, ::Type{F} = FockNumber{default_fock_representation(length(_modes))}) where {F, FG <: Group}
         modes = map(mode, _modes)
         M = eltype(modes)
         mode_ordering = OrderedDict{M, Int}(m => i for (i, m) in enumerate(modes))
