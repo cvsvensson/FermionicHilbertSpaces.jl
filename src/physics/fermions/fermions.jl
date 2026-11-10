@@ -304,7 +304,6 @@ end
 end
 
 hilbert_space(a::Field{Fermion}, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
-_space_usage(::Field{Fermion}) = "A fermion field takes labels, optionally followed by a constraint such as `NumberConservation(2)` or by basis states, as in `hilbert_space(f, 1:3, NumberConservation(2))`."
 hilbert_space(a::Field{Fermion}, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState}, BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
 function hilbert_space(a::Field{Fermion}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike))
     length(labels) == 0 && return hilbert_space(a, labels)

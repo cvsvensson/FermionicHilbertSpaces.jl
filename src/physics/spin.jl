@@ -103,7 +103,6 @@ function add_tag(H::SpinSpace{T,S}, tag) where {T,S}
 end
 _check_spin_unset(f::Field) = f.params isa Nothing || throw(ArgumentError("The spin value was already given when creating `$f`, so `J` must be omitted."))
 hilbert_space(sym::SpinMode) = SpinSpace(sym)
-_space_usage(::Field{Spin}) = "A spin field takes labels and the spin `J`, as in `hilbert_space(s, 1:3, 1//2)`, and a single spin only `J`, as in `hilbert_space(S, 1//2)`."
 function hilbert_space(sym::SpinMode, J)
     _check_spin_unset(sym.field)
     SpinSpace(sym, J)
