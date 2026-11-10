@@ -785,6 +785,8 @@ expectation(op, ρ::AbstractMatrix, H::AbstractHilbertSpace) = dot(ρ', represen
     occupied = [1, 5, 7]
     ψs = representation(join(i in occupied ? "1" : "0" for i in 1:N), Hlarge, SparseVector)
     @test expectation(sum(i * f[i]' * f[i] for i in 1:N), ψs, Hlarge) ≈ sum(occupied)
+    Hsp = hilbert_space(f, 1:4, FermionicHilbertSpaces.FreeFermions.SingleParticle())
+    @test expectation(f[1]' * f[2] + hc, [1, 1, 0, 0] / sqrt(2), Hsp) ≈ 1
 end
 
 @testitem "Expectation values with symbolic coefficients" begin

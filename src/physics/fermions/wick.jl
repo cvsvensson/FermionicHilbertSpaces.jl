@@ -66,6 +66,8 @@ function expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace,
     _check_size(G, H)
     return zero(eltype(G)) + wick_expectation(op, _contraction(G, H), fs -> _in_space(fs, H, projection), one(eltype(G)))
 end
+# These spaces have no lazy representation
+expectation(op, ψ::AbstractVector, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace, MajoranaSingleParticleHilbertSpace}) = dot(ψ, representation(op, H), ψ)
 
 """
     mean_field(op, G, H; projection = false)
