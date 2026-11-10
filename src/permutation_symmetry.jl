@@ -153,12 +153,10 @@ permutations with weight one or the permutation sign.
 `:antisymmetric`, and for a tuple `(perms, weights)` to the floating point version of the
 element type of `weights`, for example `ComplexF64` for complex weights.
 
-With `Hs` a partition of `H` and `orth_method` not `nothing`, the basis is built orbit by
-orbit from the orbits of the basis states under the permutations: for `:symmetric` and
-`:antisymmetric` with one column per orbit that contributes to the sector, and for a tuple
-`(perms, weights)` by orthonormalizing the block of the projector on each orbit. The basis
-then has element type `float(T)`, and the keywords `normalize` and `sparse` have no effect.
-In the remaining cases, the projector is built with
+With `Hs` a partition of `H` and `orth_method` not `nothing`, the projector is not built, the
+basis has element type `float(T)`, and `sparse` has no effect. For `:symmetric` and
+`:antisymmetric` `normalize` has no effect either, since scaling does not change the span.
+Otherwise the projector is built with
 `permutation_projector(H, Hs, perms, weights, T; normalize, sparse)`, and `:symmetric` and
 `:antisymmetric` require `Combinatorics.jl` to be loaded.
 `orth_method` selects what is returned:
@@ -363,7 +361,8 @@ function _orbit_block_basis(H, Hs, perms, weights, method, ::Type{T}; check=true
     substates = unique_split_state(first(states), mapper)
     gs = [_match_perm(perm, substates) for perm in perms]
     images = [state_index(permute_state(state, mapper, g), H) for state in states, g in gs]
-    any(iszero, images) && throw(ArgumentError("A permutation maps a basis state outside the space."))
+    i = findfirst(iszero, images)
+    isnothing(i) || throw(ArgumentError("The permutation maps the basis state `$(states[i[1]])` outside the space."))
 
     d = length(states)
     parent = collect(1:d)
@@ -390,6 +389,10 @@ function _orbit_block_basis(H, Hs, perms, weights, method, ::Type{T}; check=true
             B[pos[images[x, g]], k] += w
         end
         _is_negligible(B, weights) ? zero(B) : B
+    end
+    if normalize
+        tr2 = sum(B -> sum(abs2, B), blocks)
+        iszero(tr2) || (s = conj(sum(tr, blocks)) / tr2; blocks .*= s)
     end
     tol = maximum(_rank_tol, blocks)
     check && foreach(B -> _check_hermitian(B, tol), blocks)
@@ -647,6 +650,8 @@ end
     # normalize divides out a complex scale
     @test symmetric_sector(H, Hs, (cyclic, cis(pi / 4) .* chi); orth_method=nothing, check=false) ≈
           symmetric_sector(H, Hs, (cyclic, chi); orth_method=nothing)
+    Qs, Q = (symmetric_sector(H, Hs, (cyclic, ws); orth_method=:eig, check=false) for ws in (cis(pi / 4) .* chi, chi))
+    @test Qs * Qs' ≈ Q * Q'
     @test_throws ArgumentError symmetric_sector(H, Hs, (cyclic[2:3], chi[2:3]))
     # The Hermitian check runs only when a basis is computed
     @test_throws ArgumentError symmetric_sector(H, Hs, (cyclic, [1.0, 1.0, 0.0]))
