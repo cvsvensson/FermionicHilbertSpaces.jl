@@ -7,9 +7,10 @@ function permute_state(state, mapper, perm::AbstractVector)
     newstate = only(first(combine_states(permuted, mapper))) # only support unique combination for now
     return newstate
 end
-function permute_state(state, mapper, perm::NTuple)
+# `ntuple` rather than `map` (as in `TupleTools.permute`), which allocates for more than 32 factors
+function permute_state(state, mapper, perm::NTuple{N}) where {N}
     substates = unique_split_state(state, mapper) #only support unique splits for now
-    permuted = TupleTools.permute(substates, Tuple(perm))
+    permuted = ntuple(i -> substates[perm[i]], Val(N))
     newstate = only(first(combine_states(permuted, mapper))) # only support unique combination for now
     return newstate
 end
@@ -59,6 +60,7 @@ end
 # Convert `perm` to the container type that `permute_state` uses for `substates`.
 function _match_perm(perm, ::NTuple{N,Any}) where N
     length(perm) == N || throw(ArgumentError("The permutation `$perm` must have length $N, the number of factors."))
+    isperm(perm) || throw(ArgumentError("`$perm` is not a permutation."))
     return ntuple(i -> perm[i], Val(N))
 end
 _match_perm(perm, substates) = perm
@@ -435,7 +437,8 @@ function _orbit_block_basis(H, Hs, perms, weights, method, ::Type{T}; check = tr
 end
 
 # The images of `states[inds]`, with column `j` in `entries` for `states[inds[j]]`.
-function _permutation_images!(entries, inds, states, state_index, mapper, gs, weights, phases)
+# `::F` forces specialization, which Julia skips for a `Function` argument that is only passed on
+function _permutation_images!(entries, inds, states, state_index::F, mapper, gs, weights, phases) where {F}
     foreach(empty!, entries)
     for (g, w, phase) in zip(gs, weights, phases)
         _add_permutation_operator!(entries, ((states[x] for x in inds), state_index), mapper, g, w, (j, i) -> phase(inds[j], i))
@@ -543,6 +546,7 @@ end
     # Permutations must have one entry per factor
     @test_throws ArgumentError permutation_operator(H123, Hs3, [2, 1])
     @test_throws ArgumentError permutation_projector(H123, Hs3, [[2, 1, 3, 4]])
+    @test_throws ArgumentError permutation_operator(H123, Hs3, [1, 1, 2])
 
     @test_throws ArgumentError symmetric_sector(H, [H1, H2], :invalid)
 
@@ -620,6 +624,16 @@ end
 
     # Invalid input: Hs not a subsystem of H
     @test_throws ArgumentError permutation_projector(H, [H1, H3], [idperm, swapperm])
+end
+
+@testitem "Permutation of more than 32 factors" begin
+    using FermionicHilbertSpaces: permutation_operator
+    @bosons b
+    n = 36
+    H = hilbert_space(b, 1:n, 2, NumberConservation(1))
+    perm = circshift(1:n, 1)
+    R = permutation_operator(H, factors(H), perm)
+    @test all(R * representation(b[perm[k]]' * b[perm[k]], H) * R' == representation(b[k]' * b[k], H) for k in 1:n)
 end
 
 @testitem "Sector bases from the projector" begin
