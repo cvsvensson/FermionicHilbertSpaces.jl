@@ -1,11 +1,11 @@
 struct MajoranaSingleParticleHilbertSpace{D}
-    majoranaindices::D
+    mode_ordering::D
 end
-dim(H::MajoranaSingleParticleHilbertSpace) = length(H.majoranaindices)
-mode_ordering(H::MajoranaSingleParticleHilbertSpace) = H.majoranaindices
-modes(H::MajoranaSingleParticleHilbertSpace) = keys(H.majoranaindices)
-Base.:(==)(a::MajoranaSingleParticleHilbertSpace, b::MajoranaSingleParticleHilbertSpace) = a.majoranaindices == b.majoranaindices
-Base.hash(x::MajoranaSingleParticleHilbertSpace, h::UInt) = hash(x.majoranaindices, h)
+dim(H::MajoranaSingleParticleHilbertSpace) = length(H.mode_ordering)
+mode_ordering(H::MajoranaSingleParticleHilbertSpace) = H.mode_ordering
+modes(H::MajoranaSingleParticleHilbertSpace) = keys(H.mode_ordering)
+Base.:(==)(a::MajoranaSingleParticleHilbertSpace, b::MajoranaSingleParticleHilbertSpace) = a.mode_ordering == b.mode_ordering
+Base.hash(x::MajoranaSingleParticleHilbertSpace, h::UInt) = hash(x.mode_ordering, h)
 Base.show(io::IO, H::MajoranaSingleParticleHilbertSpace) = print(io, "MajoranaSingleParticleHilbertSpace($(dim(H)) Majoranas)")
 
 """
