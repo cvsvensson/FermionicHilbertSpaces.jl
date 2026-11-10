@@ -35,8 +35,8 @@ tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 tensor_product(H::AbstractHilbertSpace; kwargs...) = tensor_product((H,); kwargs...)
 function tensor_product(spaces; @nospecialize(constraint = NoSymmetry()))
     constraint = as_constraint(constraint)
-    constraint, translation = _split_translation(constraint)
-    isnothing(translation) || return constrain_space(tensor_product(spaces; constraint), translation)
+    constraint, symmetry = _split_symmetry(constraint)
+    isnothing(symmetry) || return constrain_space(tensor_product(spaces; constraint), symmetry)
     if length(spaces) == 1
         return constrain_space(only(spaces), constraint)
     end
