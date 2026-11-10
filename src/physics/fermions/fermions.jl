@@ -109,21 +109,18 @@ function _compact_fermionic_modes(io::IO, c::FermionicSpace;
 
     isempty(c.modes) && return print(io, "FermionicSpace()")
 
-    # Consecutive modes of one field are grouped as `f[1, 2]`. A mode with a tuple label is printed on its own,
-    # as `f[1, :a]`, since `f[1, :a]` in a group would read as two modes.
+    # Group consecutive modes by field
     groups = Tuple{Any, Vector{Any}}[]
     for m in c.modes
-        if m.label isa Tuple
-            push!(groups, (m, Any[]))
-        elseif !isempty(groups) && last(groups)[1] == m.field
+        if !isempty(groups) && last(groups)[1] == m.field
             push!(last(groups)[2], m.label)
         else
             push!(groups, (m.field, Any[m.label]))
         end
     end
 
-    fmt((name, labels)) = isempty(labels) ? string(name) : "$name[$(join(_truncate(labels, max_labels_per_group, edge_labels), ", "))]"
-    print(io, join(_truncate(map(fmt, groups), max_groups, edge_groups), ", "))
+    fmt((name, labels)) = labels == [()] ? "$name" : "$name: $(join(_truncate(map(repr, labels), max_labels_per_group, edge_labels), ", "))"
+    print(io, join(_truncate(map(fmt, groups), max_groups, edge_groups), "; "))
 end
 function embedding_unitary(partition, H::FermionicSpace)
     positions = [[atom_position(atom, H) for atom in atomic_factors(group)] for group in partition]
