@@ -124,8 +124,8 @@ end
 _mode_product(f::Field, labels, constraint, args...) =
     tensor_product(map(l -> hilbert_space(Mode(f, l), args...), labels); constraint)
 hilbert_space(f::Field, labels::AbstractVector, x, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint, x)
-function hilbert_space(m::Mode, states::Union{AbstractVector, Tuple, BasisStates})
-    _field_entry(m) === m || throw(MethodError(hilbert_space, (m, states)))
+function hilbert_space(m::Mode, states)
+    (_field_entry(m) === m && states isa Union{AbstractVector, Tuple, BasisStates}) || throw(MethodError(hilbert_space, (m, states)))
     isnothing(m.field.group) || throw(ArgumentError("The grouped field `$(m.field)` needs its own space type and a `combine_into_group(::Group{O}, atoms)` method."))
     return GenericHilbertSpace(m, states)
 end
