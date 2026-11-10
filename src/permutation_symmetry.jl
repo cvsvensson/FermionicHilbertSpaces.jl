@@ -17,11 +17,16 @@ end
 # The fermionic permutation `R`, with `R * c' * R'` the corresponding operator in the factor that `perm` moves `c` to,
 # maps the basis state `x` to `u(x) * uπ(y) * y`, where `y` is the permuted state and `u` and `uπ` are the phase factors
 # of the partitions `Hs` and `Hs[invperm(perm)]`. Both are one for spaces without fermions.
-function _permutation_phase(H, Hs, perm, phase_factors)
-    phase_factors || return (x, y) -> 1
-    u = phase_factor_u(state_mapper(H, Hs))
-    uπ = phase_factor_u(state_mapper(H, Hs[invperm(collect(perm))]))
-    return (x, y) -> u(x) * uπ(y)
+# `_permutation_phases(H, Hs, phase_factors)(perm)` gives this phase as a function of the indices of `x` and `y`.
+# `u` is tabulated once and shared by all permutations.
+function _permutation_phases(H, Hs, phase_factors)
+    phase_factors || return perm -> (j, i) -> 1
+    states = basisstates(H)
+    u = map(phase_factor_u(state_mapper(H, Hs)), states)
+    return function (perm)
+        uπ = map(phase_factor_u(state_mapper(H, Hs[invperm(collect(perm))])), states)
+        return (j, i) -> u[j] * uπ[i]
+    end
 end
 
 """
@@ -33,11 +38,11 @@ corresponding operator in factor `k`. With `phase_factors=false`, it permutes th
 """
 function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T} = Int; phase_factors = true) where {T}
     P = zeros(T, dim(H), dim(H))
-    phase_of = perm -> _permutation_phase(H, Hs, perm, phase_factors)
+    phase_of = _permutation_phases(H, Hs, phase_factors)
     return add_permutation_operator!(P, (basisstates(H), Base.Fix2(state_index, H)), state_mapper(H, Hs), perm, one(T), phase_of)
 end
-# `phase_of(perm)` gives the phase function of a permutation, see `_permutation_phase`.
-function add_permutation_operator!(P, (states, state_index), mapper, perm, weight = 1, phase_of = perm -> (x, y) -> 1)
+# `phase_of(perm)` gives the phase function of a permutation, see `_permutation_phases`.
+function add_permutation_operator!(P, (states, state_index), mapper, perm, weight = 1, phase_of = perm -> (j, i) -> 1)
     substates = unique_split_state(first(states), mapper)
     perm = _match_perm(perm, substates)
     return _add_permutation_operator!(P, (states, state_index), mapper, perm, weight, phase_of(perm))
@@ -63,7 +68,7 @@ function _add_permutation_operator!(P, (states, state_index), mapper, perm, weig
         state2 = permute_state(state, mapper, perm)
         i = state_index(state2)
         iszero(i) && throw(ArgumentError("The permutation maps the basis state `$state` outside the space."))
-        push_inds_amps!(P, i, j, weight * phase(state, state2))
+        push_inds_amps!(P, i, j, weight * phase(j, i))
     end
     return P
 end
@@ -123,7 +128,7 @@ function permutation_projector(H::AbstractHilbertSpace, Hs, perms, weights = not
     mapper = state_mapper(H, Hs)
     states = basisstates(H)
     si = Base.Fix2(state_index, H)
-    add_permutation_operators!(accum, (states, si), mapper, perms, ws, perm -> _permutation_phase(H, Hs, perm, phase_factors))
+    add_permutation_operators!(accum, (states, si), mapper, perms, ws, _permutation_phases(H, Hs, phase_factors))
     P = if sparse
         SparseArrays.sparse(finalize!(accum, H))
     else
@@ -278,7 +283,7 @@ function _orbit_sector_basis(H, Hs, parity, ::Type{T}; normalize = true, sparse 
     n = length(Hs)
     substates = unique_split_state(first(states), mapper)
     gens = [_match_perm([1:k-1; k + 1; k; k+2:n], substates) for k in 1:n-1]
-    phases = [_permutation_phase(H, Hs, g, phase_factors) for g in gens]
+    phases = map(_permutation_phases(H, Hs, phase_factors), gens)
     parent, rel, odd = _signed_orbits(states, Base.Fix2(state_index, H), mapper, gens, phases, parity)
 
     d = length(parent)
@@ -322,7 +327,7 @@ function _signed_orbits(states, state_index, mapper, gens, phases, parity)
         newstate = permute_state(state, mapper, g)
         i = state_index(newstate)
         iszero(i) && throw(ArgumentError("The permutation maps the basis state `$state` outside the space."))
-        p = parity * phase(state, newstate)
+        p = parity * phase(j, i)
         ri, si = _find_signed!(parent, rel, i)
         rj, sj = _find_signed!(parent, rel, j)
         if ri == rj
@@ -381,7 +386,7 @@ function _orbit_block_basis(H, Hs, perms, weights, method, ::Type{T}; check = tr
     mapper = state_mapper(H, Hs)
     substates = unique_split_state(first(states), mapper)
     gs = [_match_perm(perm, substates) for perm in perms]
-    phases = [_permutation_phase(H, Hs, g, phase_factors) for g in gs]
+    phases = map(_permutation_phases(H, Hs, phase_factors), gs)
     onedim = _has_equal_magnitudes(weights)
     onedim && check && _check_1d_character(perms, weights)
 
@@ -393,15 +398,15 @@ function _orbit_block_basis(H, Hs, perms, weights, method, ::Type{T}; check = tr
     entries = (Int[], Int[], F[])
     orbits = Vector{Int}[]
     blocks = Matrix{F}[]
-    for (s, state) in enumerate(states)
+    for s in eachindex(states)
         iszero(owner[s]) || continue
-        _permutation_images!(entries, (state,), si, mapper, gs, weights, phases)
+        _permutation_images!(entries, [s], states, si, mapper, gs, weights, phases)
         orbit = Int[]
         push!(orbits, orbit)
         for t in entries[1]
             iszero(owner[t]) && (push!(orbit, t); owner[t] = length(orbits); pos[t] = length(orbit))
         end
-        onedim || _permutation_images!(entries, [states[x] for x in orbit], si, mapper, gs, weights, phases)
+        onedim || _permutation_images!(entries, orbit, states, si, mapper, gs, weights, phases)
         B = zeros(F, length(orbit), onedim ? 1 : length(orbit))
         for (i, j, w) in zip(entries...)
             owner[i] == length(orbits) || throw(ArgumentError("`perms` is not closed under composition, so it is not a group."))
@@ -429,10 +434,11 @@ function _orbit_block_basis(H, Hs, perms, weights, method, ::Type{T}; check = tr
     return SparseArrays.sparse(rows, cols, vals, d, c)
 end
 
-function _permutation_images!(entries, states, state_index, mapper, gs, weights, phases)
+# The images of `states[inds]`, with column `j` in `entries` for `states[inds[j]]`.
+function _permutation_images!(entries, inds, states, state_index, mapper, gs, weights, phases)
     foreach(empty!, entries)
     for (g, w, phase) in zip(gs, weights, phases)
-        _add_permutation_operator!(entries, (states, state_index), mapper, g, w, phase)
+        _add_permutation_operator!(entries, ((states[x] for x in inds), state_index), mapper, g, w, (j, i) -> phase(inds[j], i))
     end
     return entries
 end
