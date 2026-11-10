@@ -829,7 +829,8 @@ end
         0.5 * f[1]' * f[1] * b[1]' * b[1] + s[:z] * b[2]' * b[2],
         1im * f[1]' * s[:-] * b[2] + hc + 2.5,
         f[1]' * f[2] + f[2]' * f[1],
-        sum(0.3n * (b[1]' + b[1]) * f[n]' * f[n] for n in 1:2) + 1im * s[:x] * f[1]' * f[2] * b[2]]
+        sum(0.3n * (b[1]' + b[1]) * f[n]' * f[n] for n in 1:2) + 1im * s[:x] * f[1]' * f[2] * b[2],
+    ]
     for op in ops, repr in (:sparse, :dense, EagerDenseRepr())
         M = representation(op, H, repr)
         Mc = representation(op, Hc, repr; projection=true)
