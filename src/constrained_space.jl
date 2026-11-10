@@ -23,8 +23,8 @@ constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector, Basis
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, _states_of(space, states))
 function constrain_space(space, constraint::AbstractConstraint)
-    constraint, translation = _split_translation(constraint)
-    isnothing(translation) || return constrain_space(constrain_space(space, constraint), translation)
+    constraint, symmetry = _split_symmetry(constraint)
+    isnothing(symmetry) || return constrain_space(constrain_space(space, constraint), symmetry)
     split = pruning_split(space, constraint)
     isnothing(split) && return constrain_space(space, constraint, basisstates(space))
     # The search varies its last space fastest and `basisstates(space)` its first atom, so the reversed split keeps that order.
@@ -33,7 +33,7 @@ function constrain_space(space, constraint::AbstractConstraint)
     return constrain_states(space, constraint, states, unpruned_part(constraint))
 end
 function constrain_space(space, constraint::AbstractConstraint, labels)
-    supports_filtering(constraint) || throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
+    isnothing(last(_split_symmetry(constraint))) && supports_filtering(constraint) || throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     return constrain_states(space, constraint, _states_of(space, labels))
 end
 # The subspace of the candidate `states` that satisfy `constraint`, grouped into sectors when it supports it.
