@@ -26,6 +26,7 @@ using SparseArrays: SparseArrays, AbstractSparseArray, AbstractSparseMatrix, Spa
     nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
 using TestItems: TestItems, @testitem, @testmodule
 import TupleTools
+using Random: Xoshiro
 using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 
 
