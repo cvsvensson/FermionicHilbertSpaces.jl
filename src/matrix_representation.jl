@@ -764,7 +764,7 @@ H = hilbert_space(f, 1:2)
 expectation(f[1]' * f[1] + 2, ψ, H) == 3
 ```
 """
-expectation(op, ψ::AbstractVector, H::AbstractHilbertSpace) = dot(ψ, representation(op, H), ψ)
+expectation(op, ψ::AbstractVector, H::AbstractHilbertSpace) = dot(ψ, representation(op, H, :lazy), ψ)
 expectation(op, ρ::AbstractMatrix, H::AbstractHilbertSpace) = dot(ρ', representation(op, H))
 
 @testitem "Expectation values" begin
@@ -779,6 +779,12 @@ expectation(op, ρ::AbstractMatrix, H::AbstractHilbertSpace) = dot(ρ', represen
     @test expectation(op, ρ, H) ≈ tr(ρ * M)
     ρs = sprand(ComplexF64, dim(H), dim(H), 0.3)
     @test expectation(op, ρs, H) ≈ tr(ρs * M)
+
+    N = 30
+    Hlarge = hilbert_space(f, 1:N)
+    occupied = [1, 5, 7]
+    ψs = representation(join(i in occupied ? "1" : "0" for i in 1:N), Hlarge, SparseVector)
+    @test expectation(sum(i * f[i]' * f[i] for i in 1:N), ψs, Hlarge) ≈ sum(occupied)
 end
 
 @testitem "Expectation values with symbolic coefficients" begin
