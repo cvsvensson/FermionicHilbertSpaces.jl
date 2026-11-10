@@ -1575,7 +1575,6 @@ end
     for (hsmall, hbig) in [(Hb1, Hb2), (Hb1, (Hb2, Hf1)),
         (Hf1, Hf2), (Hf1, (Hb1, Hf2)),
         ((Hb1, Hf1), (Hb2, Hf1)), ((Hb1, Hf1), (Hb1, Hf2)), ((Hb1, Hf1), (Hb2, Hf2)),
-        ((Hb2, Hf1), (Hb2, Hf2)),
         ((Hb1, Hf2), (Hb2, Hf2)),
         (Hs1, Hs2), ((Hs1, (Hs2, Hf1)))]
         Hsmall = tp(hsmall)

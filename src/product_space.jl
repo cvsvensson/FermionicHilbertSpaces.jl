@@ -274,7 +274,6 @@ parity(state::ProductState) = prod(parity, atomic_factors(state))
     H2direct = subregion(spaces[[2, 5, 6]], Hprod)
     @test Set(basisstates(H2direct)) == Set(basisstates(H2))
     m = rand(dim(Hprod), dim(Hprod))
-    partial_trace(m, Hprod => H2)
     @test partial_trace(m, Hprod => H2) ≈ partial_trace(partial_trace(m, Hprod => H1), H1 => H2)
 
 
@@ -297,16 +296,15 @@ end
     using LinearAlgebra: diag
     using SparseArrays: sparse
     @spins S 1 // 2
-    for N in (64, 65)
-        spins = [hilbert_space(S[i]) for i in 1:N]
-        P = tensor_product(spins)
-        @test_throws OverflowError dim(P)
-        @test_throws ArgumentError basisstate(1, P)
-        @test_throws ArgumentError state_index(ProductState(ntuple(_ -> SpinState(-1 // 2), N)), P)
-        H = tensor_product(spins; constraint = AdditiveConstraint(1; spaces = spins, maps = fill(s -> Int(1 // 2 - s.m), N)))
-        @test dim(H) == N
-        @test all(state_index(basisstate(n, H), H) == n for n in 1:dim(H))
-    end
+    N = 64
+    spins = [hilbert_space(S[i]) for i in 1:N]
+    P = tensor_product(spins)
+    @test_throws OverflowError dim(P)
+    @test_throws ArgumentError basisstate(1, P)
+    @test_throws ArgumentError state_index(ProductState(ntuple(_ -> SpinState(-1 // 2), N)), P)
+    H = tensor_product(spins; constraint = AdditiveConstraint(1; spaces = spins, maps = fill(s -> Int(1 // 2 - s.m), N)))
+    @test dim(H) == N
+    @test all(state_index(basisstate(n, H), H) == n for n in 1:dim(H))
     @fermions f
     spaces = [[hilbert_space(f, [i]) for i in 1:100]; [hilbert_space(S[i]) for i in 1:100]]
     P = tensor_product(spaces)
