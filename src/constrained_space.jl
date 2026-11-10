@@ -111,7 +111,7 @@ function _states_of(space, labels)
         # A subspace can store basis states of another type than its parent, which the parent cannot look up.
         label isa AbstractBasisState && !(label isa statetype(space)) && return label
         state = label isa statetype(space) ? label : interpret_state(label, space)
-        space isa AbstractSubspace || !iszero(state_index(state, space)) || throw(ArgumentError("The state `$label` is not a basis state of the space."))
+        space isa AbstractSubspace || isbasisstate(state, space) || throw(ArgumentError("The state `$label` is not a basis state of the space."))
         state
     end
 end

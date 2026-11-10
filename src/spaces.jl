@@ -102,6 +102,11 @@ Spaces implement the lookup of a basis state as a method of `_state_index(state,
 state_index(state, H) = _state_index(state, H)
 state_index(state::Union{AbstractString,AbstractChar}, H) = _state_index(interpret_state(state, H), H)
 
+# A key that sorts the basis states of `H` in its order and has a zero entry for other states. Unlike `state_index`, it
+# exists for a product space with more than `typemax(Int)` states.
+order_key(state, H) = (state_index(state, H),)
+isbasisstate(state, H) = all(!iszero, order_key(state, H))
+
 """
     hilbert_space(f, labels, [constraint])
     hilbert_space(b, labels, dimension, [constraint])
