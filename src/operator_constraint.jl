@@ -285,9 +285,14 @@ function branch_constraint(constraints::AbstractVector{<:SumConstraint}, spaces)
     allequal(exact) && return _sums_branch_constraint(sums, allspaces)
     return ProductConstraint([_sums_branch_constraint(sums[exact], allspaces), _sums_branch_constraint(sums[.!exact], allspaces)])
 end
+# Prunes on the integer `(value - first(r)) / step(r)`, since rational arithmetic is much slower. The allowed values
+# off the lattice `r` are dropped, as no state has them.
 function _sum_terms(c::OperatorConstraint, allspaces)
     units = _subspace_positions(c.spaces, allspaces)
-    return (; c.terms.constant, positions = [units[u] for u in c.terms.units], c.terms.strides, c.terms.tables, c.allowed, modulus = 0)
+    r = _value_range(c.terms)
+    tables = Vector{Int}[Int[(v - minimum(t)) // step(r) for v in t] for t in c.terms.tables]
+    allowed = Int[searchsortedfirst(r, a) - 1 for a in c.allowed if a in r]
+    return (; constant = 0, positions = [units[u] for u in c.terms.units], c.terms.strides, tables, allowed, modulus = 0)
 end
 # Prunes by several sums at once. The groups of the terms are evaluated at the depth of their last space, and a step is
 # the groups of one sum at one depth, so that each depth only evaluates the sums it changes.
@@ -373,6 +378,7 @@ end
         (hilbert_space(f, hubbard), (Nup => 2, Ndn => 2, D => 0)),
         (hilbert_space(S, 1:6), (sum(S[i][:z] for i in 1:6) => 0,)),
         (hilbert_space(S, 1:5), (sum(S[i][:z] for i in 1:5) => 1 // 2, S[1][:z] + S[2][:z] => 0)),
+        (hilbert_space(S, 1:5), (sum(S[i][:z] for i in 1:5) => (1.0, 3 // 2),)),
         (hilbert_space(f, 1:6), (sum(n(i) for i in 1:6) => 3, sum(i * n(i) for i in 1:6) => 10)),
         (tensor_product(Hmixed), (a'a + n(1) + n(2) + S[1][:z] => [1 // 2, 3 // 2],)),
         (hilbert_space(b, 1:3, 4), (sum(b[i]'b[i] for i in 1:3) => 3,)),
