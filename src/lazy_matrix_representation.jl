@@ -166,21 +166,30 @@ end
 function chunked_operator_indices_and_amplitudes_generic!(acc::MulAccumulator{<:AbstractVecOrMat}, term::KronTerm, space::AbstractHilbertSpace, precomp, input_inds, col_offset; kwargs...)
     return _kron_mul!(acc, term.factors, dim(space), 0, 0, true, input_inds)
 end
-# The entries of `amp * kron(…, A_2, I, A_1, I)` on `n` states in the columns `cols`, offset by `row` and `col`.
+# The entries of `amp * kron(…, A_2, I, A_1, I)` on `n` states in the columns `cols ⊆ col+1:col+n`, offset by `row` and `col`.
 function _kron_mul!(acc, factors, n, row, col, amp, cols)
     A, r = last(factors)
     rows, vals = rowvals(A), nonzeros(A)
     for b in 0:(r * size(A, 2)):(n - 1), c in axes(A, 2)
         j0 = col + b + (c - 1) * r
-        (j0 >= last(cols) || j0 + r < first(cols)) && continue
-        for p in nzrange(A, c)
-            _kron_mul!(acc, Base.front(factors), r, row + b + (rows[p] - 1) * r, j0, amp * vals[p], cols)
+        js = max(j0 + 1, first(cols)):min(j0 + r, last(cols))
+        isempty(js) && continue
+        if factors isa Tuple{Any} && r == 1 && acc.y isa AbstractVector
+            # The runs have length one, so the loop over the stored entries is innermost.
+            xj = _conj_if(amp, acc.conjugate) * acc.coeff * acc.x[j0 + 1]
+            for p in nzrange(A, c)
+                acc.y[row + b + rows[p]] += _conj_if(vals[p], acc.conjugate) * xj
+            end
+        else
+            for p in nzrange(A, c)
+                _kron_mul!(acc, Base.front(factors), r, row + b + (rows[p] - 1) * r, j0, amp * vals[p], js)
+            end
         end
     end
     return acc
 end
 function _kron_mul!(acc, ::Tuple{}, n, row, col, amp, cols)
-    for j in max(col + 1, first(cols)):min(col + n, last(cols))
+    for j in cols
         push_inds_amps!(acc, j + row - col, j, amp)
     end
     return acc
@@ -517,6 +526,7 @@ end
     vprod = randn(ComplexF64, dim(Hprod))
     @test Ltprod * vprod ≈ Mprod * vprod
     @test Lsprod * vprod ≈ Mprod * vprod
+    @test representation(op_prod, Hprod, :lazy; chunking = StateChunking(StaticScheduler(; nchunks = 3))) * vprod ≈ Mprod * vprod
 
     Hcons = constrain_space(Hprod, NumberConservation(2, [Hf]))
     vcons = randn(ComplexF64, dim(Hcons))
