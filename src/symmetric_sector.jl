@@ -15,7 +15,9 @@ struct Relabel
     map
 end
 Base.show(io::IO, r::Relabel) = print(io, "Relabel(", r.map, ")")
-as_constraint(::Relabel) = throw(ArgumentError("A relabeling needs an eigenvalue, as in `Relabel(g) => 1`."))
+as_constraint(::Relabel) = throw(ArgumentError("`Relabel(g)` needs an eigenvalue, as in `Relabel(g) => 1`."))
+hilbert_space(::Field, ::AbstractVector, r::Relabel) = as_constraint(r)
+constrain_space(space, r::Relabel) = as_constraint(r)
 
 # The fields are not type parameters, so that spaces with different maps share their compiled methods.
 struct SymmetryConstraint <: AbstractConstraint
@@ -44,6 +46,9 @@ function _root_of_unity(λ, n)
     λ isa Number && λ^n ≈ 1 || throw(ArgumentError("The eigenvalue of a symmetry of order $n is a root of unity with `λ^$n ≈ 1`, got `$λ`."))
     return cispi(2 * round(Int, n * angle(λ) / 2π) / n)
 end
+
+_canonical(λ) = all(isinteger, reim(λ)) ? (isreal(λ) ? Int(real(λ)) : Complex{Int}(λ)) : λ
+_rounded(λ) = λ isa Complex{<:AbstractFloat} ? round(λ; digits = 4) : λ
 
 # The least common multiple of the cycle lengths
 function _order(perm)
@@ -116,7 +121,10 @@ end
 function constrain_space(space::AbstractHilbertSpace, c::SymmetryConstraint)
     atoms = collect(atomic_factors(space))
     generators = [_atom_permutation(g, atoms) for g in c.maps]
-    perms, λs = _group_and_characters(generators, [_root_of_unity(λ, _order(g)) for (g, λ) in zip(generators, c.eigenvalues)])
+    roots = [_root_of_unity(λ, _order(g)) for (g, λ) in zip(generators, c.eigenvalues)]
+    # The sector does not depend on how its eigenvalues were written.
+    c = SymmetryConstraint(c.maps, Tuple(map(_canonical, roots)))
+    perms, λs = _group_and_characters(generators, roots)
     T = all(isreal, λs) ? Float64 : ComplexF64
     # The permutation operator of `perm` is the inverse of the unitary `U` of its map, so the projector with the weights
     # `λ` keeps the states with `U * ψ == λ * ψ`.
@@ -151,7 +159,7 @@ factors(H::SymmetricSector) = throw(_no_factors_error(H))
 _no_factors_error(H) = ArgumentError("The basis states of `$H` are orbits of a symmetry, not product states, so it has no factors. Use its parent space.")
 Base.:(==)(H1::SymmetricSector, H2::SymmetricSector) = H1 === H2 || (H1.parent == H2.parent && H1.symmetry == H2.symmetry && H1.transposed == H2.transposed)
 Base.hash(H::SymmetricSector, h::UInt) = hash((H.parent, H.symmetry, H.transposed), h)
-Base.show(io::IO, H::SymmetricSector) = print(io, "$(dim(H))-dimensional SymmetricSector(", join(("Relabel($g) => $λ" for (g, λ) in zip(H.symmetry.maps, H.symmetry.eigenvalues)), ", "), ")")
+Base.show(io::IO, H::SymmetricSector) = print(io, "$(dim(H))-dimensional SymmetricSector(", join(("Relabel($g) => $(_rounded(λ))" for (g, λ) in zip(H.symmetry.maps, H.symmetry.eigenvalues)), ", "), ")")
 # The basis of the transposed space is the complex conjugate one.
 TransposedSpace(H::SymmetricSector) = SymmetricSector(TransposedSpace(H.parent), H.symmetry, H.amplitudes, H.reps, H.norms, !H.transposed)
 
@@ -277,6 +285,8 @@ end
     @test_throws ArgumentError representation(Sz, Axes(sector(0, space), H0))
     @test_throws ArgumentError hilbert_space(S, 1:N, Relabel(j -> j + 1) => 1)
     @test_throws ArgumentError hilbert_space(S, 1:N, Relabel(T) => im)
+    @test_throws "needs an eigenvalue" hilbert_space(S, 1:N, Relabel(T))
+    @test hilbert_space(S, 1:N, Relabel(T) => 1.0) == hilbert_space(S, 1:N, Relabel(T) => exp(0im))
     @test_throws ArgumentError constrain_space(space, Relabel(T) => 1, basisstates(space))
     @test sum(k -> dim(hilbert_space(S, 1:N, Relabel(T) => cispi(2k / N))), 0:(N - 1)) == 2^N
     @test size(representation(Sz, hilbert_space(S, 1:N, (Sz => N // 2, Relabel(T) => -1)))) == (0, 0)
