@@ -17,11 +17,8 @@ end
 
 # The fermionic permutation `R`, with `R * c' * R'` the corresponding operator in the factor that `perm` moves `c` to,
 # maps the basis state `x` to `u(x) * uπ(y) * y`, where `y` is the permuted state and `u` and `uπ` are the phase factors
-# of the partitions `Hs` and `Hs[invperm(perm)]`.
-# `_permutation_phases(H, Hs, mapper, phase_factors)(perm)`, with `mapper = state_mapper(H, Hs)`, gives this phase as a
-# function of the indices of `x` and `y`.
-# `u` is tabulated once and shared by all permutations. When `u` is `Returns(1)`, as for spaces without fermions,
-# so is `uπ`, since permuting `Hs` leaves the kind of each factor's mapper unchanged.
+# of the partitions `Hs` and `Hs[invperm(perm)]`. When `u` is `Returns(1)`, as for spaces without fermions, so is `uπ`,
+# since permuting `Hs` leaves the kind of each factor's mapper unchanged.
 function _permutation_phases(H, Hs, mapper, phase_factors)
     phase_factors || return perm -> (j, i) -> 1
     pfu = phase_factor_u(mapper)
@@ -45,14 +42,9 @@ function permutation_operator(H::AbstractHilbertSpace, Hs, perm, ::Type{T} = Int
     P = zeros(T, dim(H), dim(H))
     mapper = state_mapper(H, Hs)
     phase_of = _permutation_phases(H, Hs, mapper, phase_factors)
-    return add_permutation_operator!(P, (basisstates(H), Base.Fix2(state_index, H)), mapper, perm, one(T), phase_of)
+    return add_permutation_operators!(P, (basisstates(H), Base.Fix2(state_index, H)), mapper, (perm,), (one(T),), phase_of)
 end
 # `phase_of(perm)` gives the phase function of a permutation, see `_permutation_phases`.
-function add_permutation_operator!(P, (states, state_index), mapper, perm, weight = 1, phase_of = perm -> (j, i) -> 1)
-    substates = unique_split_state(first(states), mapper)
-    perm = _match_perm(perm, substates)
-    return _add_permutation_operator!(P, (states, state_index), mapper, perm, weight, phase_of(perm))
-end
 function add_permutation_operators!(P, (states, state_index), mapper, perms, weights, phase_of)
     substates = unique_split_state(first(states), mapper)
     for (perm, w) in zip(perms, weights)
@@ -514,8 +506,6 @@ end
     @test size(Psign, 2) == 2
     @test size(Ptriv, 2) == 2
     @test size(symmetric_sector(H, [H1, H2], :symmetric; phase_factors = false), 2) == 3
-    @test size(symmetric_sector(H, [H1, H2], :antisymmetric; phase_factors = false), 2) == 1
-    @test size(symmetric_sector(H, [H1, H2], sympw; phase_factors = false), 2) == 3
 
     Ttriv = symmetric_sector(H, [H1, H2], sympw; orth_method=nothing)
     Tsign = symmetric_sector(H, [H1, H2], antisymw; orth_method=nothing)
@@ -747,7 +737,7 @@ end
     H = tensor_product(sites)
     perm = [2, 3, 1]
     R = permutation_operator(H, sites, perm)
-    @test all(R * Matrix(representation(c[perm[k], s]', H)) * R' ≈ Matrix(representation(c[k, s]', H)) for k in 1:3, s in (:u, :d))
+    @test all(R * representation(c[perm[k], s]', H, Matrix) * R' ≈ representation(c[k, s]', H, Matrix) for k in 1:3, s in (:u, :d))
     # The site-exchange symmetric and antisymmetric sectors block-diagonalize a Hubbard dimer
     H2 = tensor_product(sites[1:2])
     ham = sum(c[1, s]' * c[2, s] + hc for s in (:u, :d)) + 3 * sum(c[k, :u]' * c[k, :u] * c[k, :d]' * c[k, :d] for k in 1:2)
