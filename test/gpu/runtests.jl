@@ -1,7 +1,7 @@
 # Runs on JLArrays, a CPU implementation of the GPU array interface that disallows scalar indexing.
 # Not part of the main suite: `julia --project=test/gpu test/gpu/runtests.jl`.
 using FermionicHilbertSpaces, JLArrays, Test
-using FermionicHilbertSpaces: FixedNumberFockState, NoScalarIndexingAlg, change_basis, partial_trace!
+using FermionicHilbertSpaces: FixedNumberFockState, NoScalarIndexingAlg, change_basis, partial_trace!, partial_transpose!
 JLArrays.allowscalar(false)
 
 @testset "partial_trace of GPU arrays" begin
@@ -22,6 +22,37 @@ JLArrays.allowscalar(false)
     A = [ψ[1] - ψ[2], ψ[3]]
     splits = [((1, 1, 1),), ((1, 1, -1),), ((2, 1, 1),)]
     @test Array(FermionicHilbertSpaces._gather_partial_trace(JLArray(ψ), splits, 2, 1)) ≈ A * A'
+end
+
+@testset "partial_transpose of GPU arrays" begin
+    @fermions f
+    @boson b
+    @spin s 1 // 2
+    H = hilbert_space(f, 1:4)
+    Hnum = hilbert_space(f, 1:4, NumberConservation(2))
+    Hpar = hilbert_space(f, 1:4, ParityConservation(-1))
+    Hmixed = tensor_product(hilbert_space(f, 1:3), hilbert_space(s), hilbert_space(b, 3))
+    Hmixednum = tensor_product(hilbert_space(f, 1:3, NumberConservation(1)), hilbert_space(s), hilbert_space(b, 3))
+    cases = (
+        (H => H, hilbert_space(f, [1])), (H => H, hilbert_space(f, [1, 3])), (H => H, hilbert_space(f, [2, 3, 4])), (H => H, H),
+        (Hnum => H, hilbert_space(f, [1, 3])), (Hpar => H, hilbert_space(f, [2, 3])),
+        (Hmixed => Hmixed, hilbert_space(s)), (Hmixed => Hmixed, hilbert_space(f, [1, 3])),
+        (Hmixednum => Hmixed, tensor_product(hilbert_space(f, [2]), hilbert_space(b, 3))),
+    )
+    for (Hs, Hsub) in cases, phase_factors in (true, false)
+        m = rand(ComplexF64, dim(first(Hs)), dim(first(Hs)))
+        out = partial_transpose(JLArray(m), Hs, Hsub; phase_factors)
+        @test out isa JLArray
+        @test Array(out) ≈ partial_transpose(m, Hs, Hsub; phase_factors)
+    end
+    HA = hilbert_space(f, [1, 3])
+    m, ψ = rand(ComplexF64, dim(Hnum), dim(Hnum)), rand(ComplexF64, dim(Hnum))
+    @test Array(partial_transpose(JLArray(ψ), Hnum => H, HA)) ≈ partial_transpose(ψ, Hnum => H, HA)
+    @test Array(partial_transpose(JLArray(m)', Hnum => H, HA)) ≈ partial_transpose(m', Hnum => H, HA)
+    @test Array(partial_transpose(JLArray(m), Hnum, HA; projection = true)) ≈ partial_transpose(m, Hnum, HA; projection = true)
+    @test Array(partial_transpose!(JLArray(zeros(ComplexF64, 16, 16)), JLArray(m), Hnum => H, HA)) ≈ partial_transpose(m, Hnum => H, HA)
+    @test_throws ArgumentError partial_transpose(JLArray(m), Hnum, HA)
+    @test_throws ArgumentError partial_transpose(representation(f[1]' * f[2] + hc, H, JLSparseMatrixCSC), H, HA)
 end
 
 @testset "change_basis of GPU arrays" begin

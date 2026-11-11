@@ -6,8 +6,8 @@ using KernelAbstractions: @index, @kernel, allocate, get_backend, synchronize
 using NonCommutativeProducts: NCMul
 using SparseArrays: SparseArrays, SparseMatrixCSC
 import FermionicHilbertSpaces: _canonicalize_repr, _convert_repr_eltype, _repr_eltype, _skip_outside, _terms_matrix,
-    change_basis, default_indexing_alg, default_partial_trace_alg, embed, partial_trace, partial_trace!, push_inds_amps!,
-    state_position
+    change_basis, default_indexing_alg, default_partial_trace_alg, embed, partial_trace, partial_trace!, partial_transpose,
+    push_inds_amps!, state_position
 using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, Axes, ConstrainedSpace, DeviceFermionicSpace,
     DeviceProductSpace, FermionicSpace, IndexTable, NoScalarIndexingAlg, Op, ProductOperator, ProductSpace,
     RootIndexDict, _SpaceMapping,
@@ -63,6 +63,8 @@ partial_trace!(_, ::GPUSparseInput, ::AbstractHilbertSpace, ::AbstractHilbertSpa
 embed(::GPUSparseInput, ::AbstractHilbertSpace, ::AbstractHilbertSpace; _...) = _throw_sparse(embed)
 change_basis(::GPUSparseInput, ::Union{AbstractHilbertSpace, Axes}, ::Union{AbstractHilbertSpace, Axes}; _...) = _throw_sparse(change_basis)
 Base.reshape(::GPUSparseInput, ::_SpaceMapping, ::_SpaceMapping...; _...) = _throw_sparse(reshape)
+partial_transpose(::GPUSparseInput, ::AbstractHilbertSpace, _; _...) = _throw_sparse(partial_transpose)
+partial_transpose(::GPUSparseInput, ::Pair{<:AbstractHilbertSpace, <:AbstractHilbertSpace}, _; _...) = _throw_sparse(partial_transpose)
 
 ## Device copies of spaces and operators
 
