@@ -201,8 +201,8 @@ struct ParityConservation{H} <: AbstractAdditiveConstraint
     allowed_parities::Vector{Int}
     spaces::H
     function ParityConservation(_allowed, _spaces)
-        allowed = _normalize_constraint_values(_allowed)
-        allowed in Set([[-1, 1], [1], [-1]]) || throw(ArgumentError("The allowed parities must be a subset of `[-1, 1]`, got $allowed."))
+        allowed = sort!(unique(_normalize_constraint_values(_allowed)))
+        allowed in ([-1, 1], [1], [-1]) || throw(ArgumentError("The allowed parities must be a subset of `[-1, 1]`, got $allowed."))
         subspace = _normalize_constraint_subspace(_spaces)
         new{typeof(subspace)}(allowed, subspace)
     end
@@ -325,6 +325,13 @@ constrain_space
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
     @test all(isone ∘ dim, sectors(H))
+end
+
+@testitem "ParityConservation accepts any collection of parities" begin
+    @fermions f
+    H = hilbert_space(f, 1:2)
+    @test sectors(constrain_space(H, ParityConservation((1, -1)))) == sectors(constrain_space(H, ParityConservation()))
+    @test_throws ArgumentError ParityConservation([0])
 end
 
 @testitem "ProductConstraint filtering" begin
