@@ -75,13 +75,13 @@ quantumnumbers(H::SectorHilbertSpace) = collect(keys(H.qn_to_states))
 quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 
 """
-    sector(qn, H)
+    sector(qn, H, constraint=NoSymmetry())
 
 Return the sector of `H` corresponding to quantum number `qn`, for example a particle
 number for `NumberConservation` or `1` (even) / `-1` (odd) for `ParityConservation`.
 For `qn === nothing`, this returns `H` for non-sector spaces.
 The quantum number of a product of constraints is a vector, which can also be given as a tuple: `sector((1, -1), H)`.
-Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
+A `constraint` is applied to the sector with [`constrain_space`](@ref).
 
 ```jldoctest
 julia> using FermionicHilbertSpaces; @fermions f;
@@ -101,11 +101,10 @@ function _sector_states(qn, H::SectorHilbertSpace)
     states
 end
 
-# sectors(H::SectorHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 """
-    sectors(H)
+    sectors(H, constraint=NoSymmetry())
 
-Return all sectors of `H` in the same order as `quantumnumbers(H)`.
+Return all sectors of `H` in the same order as `quantumnumbers(H)`, each constrained by `constraint` as in [`sector`](@ref).
 """
 sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
 

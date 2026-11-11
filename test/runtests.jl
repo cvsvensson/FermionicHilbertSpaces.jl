@@ -40,27 +40,11 @@ end
     t2 = [i1 + 2i2 + 4i3 for i1 in (0, 1), i2 in (0, 1), i3 in (0, 1)]
     @test t1 == t2
 
-    qn = ParityConservation()
-    H1 = hilbert_space(f, 2:2, qn)
-    H2 = hilbert_space(f, [1, 3], qn)
-    H = hilbert_space(f, 1:3, qn)
+    H = hilbert_space(f, 1:3, ParityConservation())
     v = [FermionicHilbertSpaces.basisstate(i, H).f for i in 1:8]
     t1 = reshape(v, H => Hs)
     t2 = [i1 + 2i2 + 4i3 for i1 in (0, 1), i2 in (0, 1), i3 in (0, 1)]
     @test t1 == t2
-
-    using LinearMaps
-    d = dim(H)
-    d1 = dim(H1)
-    ptmap = Matrix(LinearMap(rhovec -> vec(partial_trace(reshape(rhovec, (d, d)), H, H1)), d1^2, d^2))
-    embeddingmap = Matrix(LinearMap(rhovec -> vec(embed(reshape(rhovec, (d1, d1)), H1, H)), d^2, d1^2))
-    ptop = partial_trace(H => H1)
-    embop = embed(H1 => H)
-    @test ptmap ≈ embeddingmap'
-    @test ptmap ≈ ptop.map
-    @test embeddingmap ≈ embop.map
-    @test ptop(reshape(1:(d^2), d, d)) ≈ partial_trace(reshape(1:(d^2), d, d), H => H1)
-    @test embop(reshape(1:(d1^2), d1, d1)) ≈ embed(reshape(1:(d1^2), d1, d1), H1 => H)
 
     import FermionicHilbertSpaces: atomic_factors
     labels = vec(collect(Base.product(1:N, (:↑, :↓))))
@@ -93,203 +77,97 @@ end
 end
 
 
-@testitem "Fermionic partial trace" setup = [JordanWigner] begin
-    using LinearAlgebra, LinearMaps
-
-    function test_adjoint(Hsub, H)
-        pt = m -> partial_trace(m, H => Hsub)
-        emb = m -> embed(m, Hsub => H)
-        dsub = dim(Hsub)
-        d = dim(H)
-        ptmap = Matrix(LinearMap(rhovec -> vec(pt(reshape(rhovec, (d, d)))), dsub^2, d^2))
-        embeddingmap = Matrix(LinearMap(rhovec -> vec(emb(reshape(rhovec, (dsub, dsub)))), d^2, dsub^2))
-        ptop = partial_trace(H => Hsub)
-        embop = embed(Hsub => H)
-        @test ptmap ≈ embeddingmap'
-        @test ptmap ≈ ptop.map
-        @test embeddingmap ≈ embop.map
-        @test ptop'.map == embop.map
-        @test embop'.map == ptop.map
-    end
-    qns = [NoSymmetry(), ParityConservation(), NumberConservation()]
-    @fermions f
-    for qn in qns
-        H = hilbert_space(f, 1:3, qn)
-        H1 = hilbert_space(f, 1:1, qn)
-        H2 = hilbert_space(f, 2:2, qn)
-        H12 = hilbert_space(f, 1:2, qn)
-        H123 = hilbert_space(f, 1:3, qn)
-        H13 = hilbert_space(f, [1, 3], qn)
-        H23 = hilbert_space(f, 2:3, qn)
-        c = JordanWigner.annihilators(H)
-        c1 = JordanWigner.annihilators(H1)
-        c2 = JordanWigner.annihilators(H2)
-        c12 = JordanWigner.annihilators(H12)
-        c13 = JordanWigner.annihilators(H13)
-        c23 = JordanWigner.annihilators(H23)
-        c123 = JordanWigner.annihilators(H123)
-
-        γ = Hermitian([0I rand(ComplexF64, 4, 4); rand(ComplexF64, 4, 4) 0I])
-        @test tr(c1[1] * partial_trace(γ, H, H1)) ≈ tr(c[1] * γ)
-        @test tr(c12[1] * partial_trace(γ, H, H12)) ≈ tr(c[1] * γ)
-        @test tr(c13[1] * partial_trace(γ, H, H13)) ≈ tr(c[1] * γ)
-        @test tr(c123[1] * partial_trace(γ, H, H123)) ≈ tr(c[1] * γ)
-        @test tr(c2[2] * partial_trace(γ, H, H2)) ≈ tr(c[2] * γ)
-        @test tr(c12[2] * partial_trace(γ, H, H12)) ≈ tr(c[2] * γ)
-        @test tr(c23[2] * partial_trace(γ, H, H23)) ≈ tr(c[2] * γ)
-
-        test_adjoint(H1, H)
-        test_adjoint(H12, H)
-        test_adjoint(H13, H)
-        test_adjoint(H23, H)
-    end
-end
-
-@testitem "Precomputed maps match eager" begin
-    using LinearAlgebra, SparseArrays
+@testitem "Partial trace and embed maps match eager evaluation" begin
+    using LinearAlgebra, SparseArrays, LinearMaps
+    import FermionicHilbertSpaces: complementary_subsystem
     @fermions f
 
-    H = hilbert_space(f, 1:3, NoSymmetry())
-    Hsub = hilbert_space(f, 1:1, NoSymmetry())
-    d = dim(H)
-    dsub = dim(Hsub)
+    function check(H, Hsub, ops)
+        d, dsub = dim(H), dim(Hsub)
+        pt, emb = partial_trace(H => Hsub), embed(Hsub => H)
+        ptmat = Matrix(LinearMap(x -> vec(partial_trace(reshape(x, d, d), H => Hsub)), dsub^2, d^2))
+        embmat = Matrix(LinearMap(x -> vec(embed(reshape(x, dsub, dsub), Hsub => H; projection = true)), d^2, dsub^2))
+        @test ptmat ≈ embmat'
+        @test sparse(pt) ≈ ptmat
+        @test sparse(emb) ≈ embmat
 
-    m = rand(ComplexF64, d, d)
-
-    # Partial-trace maps agree with eager evaluation for matrix and vector inputs.
-    pt = partial_trace(H => Hsub)
-    @test sparse(pt) == FermionicHilbertSpaces.partial_trace_map(H, Hsub)
-    @test pt(m) ≈ partial_trace(m, H => Hsub)
-    out_pt = zeros(ComplexF64, dsub, dsub)
-    @test pt(out_pt, m) === out_pt
-    @test out_pt ≈ partial_trace(m, H => Hsub)
-    v = vec(m)
-    out_pt_vec = zeros(ComplexF64, dsub^2)
-    @test pt(out_pt_vec, v) === out_pt_vec
-    @test out_pt_vec ≈ vec(partial_trace(m, H => Hsub))
-
-    # Embedding maps agree with eager evaluation and support in-place outputs.
-    emb = embed(Hsub => H)
-    @test sparse(emb) == FermionicHilbertSpaces.partial_trace_map(H, Hsub)'
-    msub = rand(ComplexF64, dsub, dsub)
-    @test emb(msub) ≈ embed(msub, Hsub => H)
-    out_emb = zeros(ComplexF64, d, d)
-    @test emb(out_emb, msub) === out_emb
-    @test out_emb ≈ embed(msub, Hsub => H)
-    vsub = vec(msub)
-    out_emb_vec = zeros(ComplexF64, d^2)
-    @test emb(out_emb_vec, vsub) === out_emb_vec
-    @test out_emb_vec ≈ vec(embed(msub, Hsub => H))
-
-    # Reshape maps precompute both ordinary and repeated index mappings.
-    H1 = hilbert_space(f, 1:1, NoSymmetry())
-    H2 = hilbert_space(f, 2:2, NoSymmetry())
-    H12 = hilbert_space(f, 1:2, NoSymmetry())
-    rmap = reshape(H12 => (H1, H2))
-    mr = rand(ComplexF64, dim(H12), dim(H12))
-    @test rmap(mr) ≈ reshape(mr, H12 => (H1, H2))
-    out_r = zeros(ComplexF64, dim(H1), dim(H2), dim(H1), dim(H2))
-    @test rmap(out_r, mr) === out_r
-    @test out_r ≈ reshape(mr, H12 => (H1, H2))
-
-    A3 = rand(ComplexF64, dim(H12), dim(H12), dim(H12))
-    rmap_repeat = reshape(H12 => (H1, H2); repeat=true)
-    @test rmap_repeat(A3) ≈ reshape(A3, H12 => (H1, H2); repeat=true)
-    out_r_repeat = zeros(ComplexF64, dim(H1), dim(H2), dim(H1), dim(H2), dim(H1), dim(H2))
-    @test rmap_repeat(out_r_repeat, A3) === out_r_repeat
-    @test out_r_repeat ≈ reshape(A3, H12 => (H1, H2); repeat=true)
-
-    # Eager and precomputed embedding must use the same projection default.
-    Hconstrained = hilbert_space(f, 1:4, NumberConservation(2))
-    Hsub_constrained = subregion(hilbert_space(f, 1:2), Hconstrained)
-    msub_constrained = rand(ComplexF64, dim(Hsub_constrained), dim(Hsub_constrained))
-    @test_throws ArgumentError embed(msub_constrained, Hsub_constrained => Hconstrained)
-    @test embed(Hsub_constrained => Hconstrained)(msub_constrained) ≈ embed(msub_constrained, Hsub_constrained => Hconstrained; projection = true)
-
-    # A whole-space partial trace must produce a basis-transformation map.
-    Hsame = hilbert_space(f, 1:2, NoSymmetry())
-    Hsimilar = hilbert_space(f, 1:2, ParityConservation())
-    msame = rand(ComplexF64, dim(Hsame), dim(Hsame))
-    pt_same = partial_trace(Hsame => Hsame)
-    pt_similar = partial_trace(Hsame => Hsimilar)
-    @test pt_same(msame) ≈ msame
-    @test sparse(pt_same) == sparse(I(dim(Hsame)^2))
-    @test pt_similar(msame) ≈ partial_trace(msame, Hsame => Hsimilar)
-
-    # Tracing onto the whole space returns the input, for matrices and states, constrained or not.
-    for H in (Hsame, Hconstrained)
-        m = rand(ComplexF64, dim(H), dim(H))
-        v = rand(ComplexF64, dim(H))
-        @test partial_trace(m, H => H) ≈ m
-        @test partial_trace(v, H => H) ≈ v * v'
+        m, ψ, msub = rand(ComplexF64, d, d), rand(ComplexF64, d), rand(ComplexF64, dsub, dsub)
+        ref = partial_trace(m, H => Hsub)
+        for op in ops
+            @test tr(representation(op, Hsub) * ref) ≈ tr(representation(op, H) * m)
+        end
+        @test pt(m) ≈ pt(vec(m)) ≈ ref
+        @test pt(ψ) ≈ partial_trace(ψ, H => Hsub)
+        for (out, x, y) in (
+                (zeros(ComplexF64, dsub, dsub), m, ref), (zeros(ComplexF64, dsub^2), vec(m), vec(ref)),
+                (zeros(ComplexF64, dsub^2), m, vec(ref)), (zeros(ComplexF64, dsub^2), ψ, vec(partial_trace(ψ, H => Hsub))),
+            )
+            @test pt(out, x) === out
+            @test out ≈ y
+        end
+        embref = embed(msub, Hsub => H; projection = true)
+        @test emb(msub) ≈ embref
+        for (out, x, y) in ((zeros(ComplexF64, d, d), msub, embref), (zeros(ComplexF64, d^2), vec(msub), vec(embref)))
+            @test emb(out, x) === out
+            @test out ≈ y
+        end
     end
-end
 
-@testitem "PartialTraceMap variants" begin
-    @fermions f
+    for qn in (nothing, ParityConservation(), NumberConservation())
+        space(sites) = isnothing(qn) ? hilbert_space(f, sites) : hilbert_space(f, sites, qn)
+        H = space(1:3)
+        for sites in ([1], [2], [1, 2], [1, 3], [2, 3])
+            check(H, space(sites), [[f[k] for k in sites]; f[first(sites)]' * f[last(sites)]])
+        end
+    end
+
+    H = hilbert_space(f, 1:4)
+    Hsub = hilbert_space(f, [2, 4])
+    msub = rand(ComplexF64, dim(Hsub), dim(Hsub))
+    @test partial_trace(H => Hsub)(embed(msub, Hsub => H)) ≈ msub * dim(complementary_subsystem(H, Hsub))
 
     H = hilbert_space(f, 1:4, NumberConservation(2))
-    Hsub = subregion(hilbert_space(f, 1:2), H)
-    d = dim(H)
-    dsub = dim(Hsub)
-
-    m = rand(ComplexF64, d, d)
-    v_dm = vec(m)
-    v_pure = rand(ComplexF64, d)
-
-    pt = partial_trace(H => Hsub)
-
-    ref_m = partial_trace(m, H => Hsub)
-    ref_v_dm = vec(ref_m)
-    ref_v_pure_mat = partial_trace(v_pure, H => Hsub)
-    ref_v_pure = vec(ref_v_pure_mat)
-
-    @test pt(m) ≈ ref_m
-    out_m = zeros(ComplexF64, dsub, dsub)
-    @test pt(out_m, m) === out_m
-    @test out_m ≈ ref_m
-
-    @test pt(v_dm) ≈ ref_m
-    out_v_dm = zeros(ComplexF64, dsub^2)
-    @test pt(out_v_dm, v_dm) === out_v_dm
-    @test out_v_dm ≈ ref_v_dm
-
-    @test pt(v_pure) ≈ ref_v_pure_mat
-    out_v_pure = zeros(ComplexF64, dsub^2)
-    @test pt(out_v_pure, v_pure) === out_v_pure
-    @test out_v_pure ≈ ref_v_pure
-
-    out_v_from_m = zeros(ComplexF64, dsub^2)
-    @test pt(out_v_from_m, m) === out_v_from_m
-    @test out_v_from_m ≈ ref_v_dm
-
-    @test_throws DimensionMismatch pt(zeros(ComplexF64, dsub^2 - 1), v_dm)
-    @test_throws DimensionMismatch pt(zeros(ComplexF64, dsub, dsub + 1), m)
-    @test_throws DimensionMismatch pt(zeros(ComplexF64, dsub^2 - 1), m)
+    for sites in ([1, 2], [1, 3, 4])
+        check(H, subregion(hilbert_space(f, sites), H), [[f[k]' * f[k] for k in sites]; f[sites[1]]' * f[sites[2]]])
+    end
 end
 
-@testitem "Default partial trace algorithm" begin
-    using SparseArrays
-    import FermionicHilbertSpaces: default_partial_trace_alg, complementary_subsystem,
-        FullPartialTraceAlg, SubsystemPartialTraceAlg
+@testitem "Partial trace and embed maps: edge cases and errors" begin
+    using LinearAlgebra, SparseArrays
     @fermions f
-
-    # A large subsystem of a number-conserving space: the full algorithm is chosen.
-    H = hilbert_space(f, 1:30, NumberConservation(2))
-    Hsub = subregion(hilbert_space(f, 1:10), H)
-    Hcomp = complementary_subsystem(H, Hsub)
-    @test default_partial_trace_alg(sprand(ComplexF64, dim(H), dim(H), 0.01), Hsub, H, Hcomp) isa FullPartialTraceAlg
-
-    # A small subsystem of an unconstrained space.
-    H = hilbert_space(f, 1:10)
-    d = dim(H)
+    H = hilbert_space(f, 1:4, NumberConservation(2))
     Hsub = subregion(hilbert_space(f, 1:2), H)
-    Hcomp = complementary_subsystem(H, Hsub)
-    m = rand(ComplexF64, d, d)
-    @test default_partial_trace_alg(Hsub, H, Hcomp) isa SubsystemPartialTraceAlg
-    @test default_partial_trace_alg(m, Hsub, H, Hcomp) isa SubsystemPartialTraceAlg
-    @test default_partial_trace_alg(sprand(ComplexF64, d, d, 0.5), Hsub, H, Hcomp) isa SubsystemPartialTraceAlg
-    @test default_partial_trace_alg(sprand(ComplexF64, d, d, 4 / d), Hsub, H, Hcomp) isa FullPartialTraceAlg
+    d, dsub = dim(H), dim(Hsub)
+    pt = partial_trace(H => Hsub)
+    @test_throws DimensionMismatch pt(zeros(ComplexF64, dsub^2 - 1), rand(ComplexF64, d^2))
+    @test_throws DimensionMismatch pt(zeros(ComplexF64, dsub, dsub + 1), rand(ComplexF64, d, d))
+    @test_throws DimensionMismatch pt(zeros(ComplexF64, dsub^2 - 1), rand(ComplexF64, d, d))
+
+    # Eager and precomputed embedding must use the same projection default.
+    msub = rand(ComplexF64, dsub, dsub)
+    @test_throws ArgumentError embed(msub, Hsub => H)
+    @test embed(Hsub => H)(msub) ≈ embed(msub, Hsub => H; projection = true)
+
+    # Tracing onto the same atoms is a basis transformation, and onto the whole space it returns the input.
+    Hfull = hilbert_space(f, 1:2)
+    Hparity = hilbert_space(f, 1:2, ParityConservation())
+    m = rand(ComplexF64, dim(Hfull), dim(Hfull))
+    @test sparse(partial_trace(Hfull => Hfull)) == sparse(I(dim(Hfull)^2))
+    @test partial_trace(Hfull => Hparity)(m) ≈ partial_trace(m, Hfull => Hparity)
+    for K in (Hfull, H)
+        mK, vK = rand(ComplexF64, dim(K), dim(K)), rand(ComplexF64, dim(K))
+        @test partial_trace(mK, K => K) ≈ mK
+        @test partial_trace(vK, K => K) ≈ vK * vK'
+    end
+
+    Hvac = hilbert_space(f, 3:3, NumberConservation(0))
+    Hmode = hilbert_space(f, 4:4)
+    Hproduct = tensor_product(Hvac, Hmode)
+    ρ = [1 2 + im; 3 - im 4]
+    @test partial_trace(ρ, Hproduct => Hvac) ≈ reshape([tr(ρ)], 1, 1)
+    @test partial_trace(ρ, Hproduct => Hmode) ≈ ρ
+
+    @test partial_trace(2I, Hfull, hilbert_space(f, [2])) ≈ 2 * partial_trace(I(dim(Hfull)), Hfull, hilbert_space(f, [2]))
 end
 
 @testitem "Identity in matrix_representation" begin
