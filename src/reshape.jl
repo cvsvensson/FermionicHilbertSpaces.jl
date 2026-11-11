@@ -434,10 +434,10 @@ end
 
     # ── 2-subsystem property tests across symmetry types ──────────────────────
     for (qn1, qn2, qn3) in [
-        (NoConstraint(), NoConstraint(), NoConstraint()),
+            (NoConstraint(), NoConstraint(), NoConstraint()),
         (ParityConservation(), ParityConservation(), ParityConservation()),
         (NumberConservation(), NumberConservation(), NumberConservation()),
-        (NoConstraint(), ParityConservation(), NumberConservation()),
+            (NoConstraint(), ParityConservation(), NumberConservation()),
     ]
         H1 = hilbert_space(f, [1, 2], qn1)
         H2 = hilbert_space(f, [3, 4], qn2)

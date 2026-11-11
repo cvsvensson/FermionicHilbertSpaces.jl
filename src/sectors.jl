@@ -90,9 +90,9 @@ julia> dim(sector(-1, hilbert_space(f, 1:3, ParityConservation())))
 4
 ```
 """
-sector(qn, H::SectorHilbertSpace, constraint=NoConstraint()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
-sector(::Nothing, H::AbstractHilbertSpace, constraint=NoConstraint()) = constrain_space(H, constraint)
-sector(qn::Nothing, H::SectorHilbertSpace, constraint=NoConstraint()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
+sector(qn, H::SectorHilbertSpace, constraint = NoConstraint()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
+sector(::Nothing, H::AbstractHilbertSpace, constraint = NoConstraint()) = constrain_space(H, constraint)
+sector(qn::Nothing, H::SectorHilbertSpace, constraint = NoConstraint()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
 sector(qn::Tuple, H::SectorHilbertSpace{<:Any, <:Any, <:AbstractVector}, constraint = NoConstraint()) = sector(collect(qn), H, constraint)
 
 function _sector_states(qn, H::SectorHilbertSpace)
@@ -107,7 +107,7 @@ end
 
 Return all sectors of `H` in the same order as `quantumnumbers(H)`.
 """
-sectors(H::AbstractHilbertSpace, constraint=NoConstraint()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
+sectors(H::AbstractHilbertSpace, constraint = NoConstraint()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
 
 """
     highest_weight_states(H, raisers; basis = Returns(I), check = true)

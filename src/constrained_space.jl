@@ -5,7 +5,7 @@ struct ConstrainedSpace{B,H,S,I} <: AbstractSubspace{B,H}
     ConstrainedSpace{B,H,S,I}(parent, states, index) where {B,H,S,I} = new{B,H,S,I}(parent, states, index)
 end
 
-function ConstrainedSpace(space, states; constraint=NoConstraint())
+function ConstrainedSpace(space, states; constraint = NoConstraint())
     parent, members = unnest(space, states)
     stored = _stored_states(members)
     ConstrainedSpace(parent, stored, build_subspace_index(constraint, parent, stored))
