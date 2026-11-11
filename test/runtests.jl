@@ -103,8 +103,10 @@ end
         end
         @test pt(m) ≈ pt(vec(m)) ≈ ref
         @test pt(ψ) ≈ partial_trace(ψ, H => Hsub)
-        for (out, x, y) in ((zeros(ComplexF64, dsub, dsub), m, ref), (zeros(ComplexF64, dsub^2), vec(m), vec(ref)),
-                (zeros(ComplexF64, dsub^2), m, vec(ref)), (zeros(ComplexF64, dsub^2), ψ, vec(partial_trace(ψ, H => Hsub))))
+        for (out, x, y) in (
+                (zeros(ComplexF64, dsub, dsub), m, ref), (zeros(ComplexF64, dsub^2), vec(m), vec(ref)),
+                (zeros(ComplexF64, dsub^2), m, vec(ref)), (zeros(ComplexF64, dsub^2), ψ, vec(partial_trace(ψ, H => Hsub))),
+            )
             @test pt(out, x) === out
             @test out ≈ y
         end
