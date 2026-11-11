@@ -569,29 +569,14 @@ end
     representation(op, Axes(Hout, Hin), [repr]; kwargs...)
     representation(state_expression; kwargs...)
 
-Return a concrete representation of `op_or_state` in Hilbert space `space`. This is the main entry point, which calls
-[`matrix_representation`](@ref) for operators and [`vector_representation`](@ref) for states.
+Return the matrix of an operator, or the vector of a state, on `space`. This is the main entry point, which calls
+[`matrix_representation`](@ref) or [`vector_representation`](@ref). With `Axes(Hout, Hin)`, `op` is represented as a map
+from `Hin` to `Hout`. Without `space`, the expression must consist of symbolic states, and the space is taken from them.
 
-- For symbolic operators and numbers, returns a sparse matrix by default. The optional `repr` selects the format:
-  an array type such as `Matrix` or `SparseMatrixCSC`, with an optional element type as in `Matrix{ComplexF64}`,
-  or a number type such as `Float64` for a sparse result of that element type. `:lazy` gives a matrix-free
-  `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`, and `:sparse` also works.
-  A number `c` gives `c` times the identity. With a GPU package loaded, a GPU array type such as `CuArray` or
-  `cuSPARSE.CuSparseMatrixCSR{Float32}` builds the matrix on the GPU.
-- For `AbstractBasisState` and strings such as `"10"`, returns a one-hot sparse column vector.
-- For `SymbolicState` kets and bras, and sums of them, returns the corresponding column or row vector. Their array types
-  are `Vector` and `SparseVector`. `Array` gives a dense result for both states and operators.
-- For ketbras, and operators that contain ketbras, returns a matrix.
-
-Coefficients are converted to a format's element type, so a complex coefficient with element type `Float64` throws an `InexactError`.
-Matrix elements are computed in the precision of a float element type. Without an element type, `Float32` coefficients give `Float32` matrix elements.
-
-Expressions that combine kets or bras with operators or with states of other spaces have no representation and throw an
-`ArgumentError`. Without the `space` argument, only expressions of symbolic states are accepted, and the space is taken from the states.
-The single-particle space `hilbert_space(f, labels, FreeFermions.SingleParticle())` and the Bogoliubov-de Gennes space `hilbert_space(f, labels, FreeFermions.BdG())`
-represent quadratic fermionic operators only, and a number is represented by the zero matrix.
-
-With `Axes(Hout, Hin)`, `op` is represented as a map from `Hin` to `Hout`.
+The result is sparse by default. `repr` selects another format: an array type such as `Matrix` or `Matrix{ComplexF64}`
+(or a GPU array type such as `CuArray`), a number type such as `Float64` for a sparse result of that element type,
+or `:lazy` for a matrix-free operator. Coefficients are converted to the element type of `repr` (a complex coefficient
+with `Float64` throws an `InexactError`), and matrix elements are computed in its precision.
 
 ```jldoctest
 julia> @fermions f;
