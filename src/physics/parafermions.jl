@@ -141,6 +141,14 @@ function _matrix_unit_exponent(a::ParafermionState{N}, b::ParafermionState{N}) w
 end
 partial_trace_phase_factor(a, b, ::ParafermionicSpace{N}) where {N} = _omega(N, _matrix_unit_exponent(a, b))
 partial_trace_phase_factor_eltype(::ParafermionicSpace) = ComplexF64
+# The transpose T(XY) = ω^(gh) T(Y) T(X) of operators of charges g and h is T(X) = q(g) Xᵗ, with q(g + h) = q(g) q(h) ω^(gh).
+# The solution q(g) = η^(g²), η² = ω, is a function of g mod N only if η^(N²) = 1, which needs η = -cispi(1 / N) for odd N.
+# The ratio of phase factors converts Xᵗ back to the basis of ordered products of mode operators.
+function partial_transpose_phase_factor(a, b, ::ParafermionicSpace{N}) where {N}
+    g = mod(particle_number(a) - particle_number(b), N)
+    q = cispi(mod(g^2 * (isodd(N) ? N + 1 : 1), 2N) / N)
+    return q * _omega(N, _matrix_unit_exponent(a, b) - _matrix_unit_exponent(b, a))
+end
 function kron_phase_factor(mapper::ParafermionMapper{N}) where {N}
     return function (a, b)
         parts = sum(map(_matrix_unit_exponent, only(first(split_state(a, mapper))), only(first(split_state(b, mapper)))))
@@ -199,4 +207,28 @@ end
     @fermions f
     ham(a) = a[1]' * a[2] + a[2] * a[3] + hc + a[2]' * a[2]
     @test representation(ham(p), hilbert_space(p, 1:3)) ≈ representation(ham(f), hilbert_space(f, 1:3))
+end
+
+@testitem "Parafermion partial transpose" begin
+    using LinearAlgebra
+    import FermionicHilbertSpaces: particle_number
+    for N in (3, 4)
+        @parafermions N c
+        H, HA, HB = hilbert_space(c, 1:3), hilbert_space(c, [1, 3]), hilbert_space(c, [2])
+        # A random density matrix that commutes with the total Z_N charge.
+        function neutral_state(H)
+            q = [mod(particle_number(s), N) for s in basisstates(H)]
+            X = randn(ComplexF64, dim(H), dim(H))
+            ρ = (X * X') .* (q .== q')
+            return ρ / tr(ρ)
+        end
+        ρ = neutral_state(H)
+        @test partial_transpose(ρ, H, H) ≈ transpose(ρ)
+        ρAB = tensor_product((neutral_state(HA), neutral_state(HB)), (HA, HB) => H)
+        @test sum(svdvals(Matrix(partial_transpose(ρAB, H, HA)))) ≈ 1
+    end
+    @parafermions 2 p
+    @fermions f
+    m = randn(ComplexF64, 8, 8)
+    @test all(partial_transpose(m, hilbert_space(p, 1:3), hilbert_space(p, A)) ≈ partial_transpose(m, hilbert_space(f, 1:3), hilbert_space(f, A)) for A in ([2], [1, 3]))
 end
