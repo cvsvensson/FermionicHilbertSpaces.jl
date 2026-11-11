@@ -35,6 +35,8 @@ tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 tensor_product(H::AbstractHilbertSpace; kwargs...) = tensor_product((H,); kwargs...)
 function tensor_product(spaces; @nospecialize(constraint = NoSymmetry()))
     constraint = as_constraint(constraint)
+    constraint, symmetry = _split_symmetry(constraint)
+    isnothing(symmetry) || return constrain_space(tensor_product(spaces; constraint), symmetry)
     if length(spaces) == 1
         return constrain_space(only(spaces), constraint)
     end
@@ -516,6 +518,7 @@ change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwar
 function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, alg = default_indexing_alg(m), kwargs...)
     alg isa Union{ScalarIndexingAlg, NoScalarIndexingAlg} || throw(ArgumentError("`change_basis` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
     alg isa NoScalarIndexingAlg && m isa UniformScaling && throw(ArgumentError("`UniformScaling` is not supported with `alg = NoScalarIndexingAlg()`."))
+    projection || _check_projection(Hfrom, Hto)
     n = m isa UniformScaling ? 2 : ndims(m)
     from, to = _per_axis(Hfrom, Val(n)), _per_axis(Hto, Val(n))
     size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, and a `UniformScaling` needs the same space on both axes, got $(summary(m))."))
@@ -535,6 +538,8 @@ function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{Ab
     Us = map(first, transformations)
     return alg isa NoScalarIndexingAlg ? _gather_transform(m, map(U -> _basis_gather_table(m, U), Us)...) : _change_basis(m, Us)
 end
+# Rejects targets, such as symmetric sectors, that `m` can leak out of without weight on a dropped basis state.
+_check_projection(Hfrom, Hto) = nothing
 _per_axis(H::AbstractHilbertSpace, n::Val) = Axes(ntuple(_ -> H, n))
 _per_axis(ax::Axes, n::Val) = ax
 _change_basis(m::AbstractMatrix, (Uout, Uin)) = Uout * m * Uin'

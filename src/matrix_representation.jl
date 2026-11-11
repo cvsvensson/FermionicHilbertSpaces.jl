@@ -330,7 +330,7 @@ function _matrix_representation(op::NCMul, bases, space, repr, chunking; kwargs.
     if isempty(op.factors)
         return _convert_repr_eltype(op.coeff * I(dim(space)), repr)
     else
-        newop = length(bases) > 1 ? partition_product(op, bases, groups(space)) : op
+        newop = length(bases) > 1 ? partition_product(op, bases, groups(_input_space(space))) : op
         return _term_matrix_representation(newop, space, repr, chunking; kwargs...)
     end
 end
@@ -618,6 +618,8 @@ function matrix_representation(op, space::AbstractHilbertSpace, repr = EagerSpar
     if trivial_operator(op)
         return _convert_repr_eltype(get_trivial_op_coeff(op) * I(dim(space)), repr)
     end
+    _check_operator(op, space)
+    format, kwargs = _with_amplitude_eltype(format, op, space, kwargs)
     return _with_format_eltype(_matrix_representation(_at_format_precision(op, format), _checked_group_ids(op, space), space, format, chunking; projection, kwargs...), format)
 end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
@@ -625,12 +627,29 @@ function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=
     Hout == Hin && return matrix_representation(op, Hin, repr; projection, chunking, kwargs...)
     repr = _matrix_format(repr)
     repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("Lazy and chunked representations with `Axes(Hout, Hin)` need `Hout == Hin`."))
+    _check_operator(op, ax)
     if trivial_operator(op)
         coeff = get_trivial_op_coeff(op)
         return _accumulated_matrix(_repr_eltype(typeof(coeff), repr), (), coeff, ax, repr; projection)
     end
+    repr, kwargs = _with_amplitude_eltype(repr, op, Hin, kwargs)
     return _with_format_eltype(_matrix_representation(_at_format_precision(op, repr), _checked_group_ids(op, Hin), ax, repr, chunking; projection, kwargs...), repr)
 end
+# A space whose basis states are not product states, such as a `SymmetricSector`, can throw for operators it cannot
+# represent with `_check_operator`, and give the amplitudes of its basis vectors with `_amplitude_eltype`, which is
+# promoted with the element type of the operator.
+_check_operator(op, space) = nothing
+_check_operator(op, space::AbstractSubspace) = _check_operator(op, parent(space))
+_check_operator(op, ax::Axes) = _check_operator(op, _input_space(ax))
+_amplitude_eltype(space) = nothing
+_amplitude_eltype(space::AbstractSubspace) = _amplitude_eltype(parent(space))
+_with_amplitude_eltype(format, op, space, kwargs) = _with_amplitude_eltype(format, op, _amplitude_eltype(space), kwargs)
+_with_amplitude_eltype(format, op, ::Nothing, kwargs) = format, kwargs
+_with_amplitude_eltype(format, op, ::Type{S}, kwargs) where {S} = _with_eltype(format, promote_type(mat_eltype(op), S), kwargs)
+_with_eltype(format::EagerSparseRepr{Missing}, ::Type{T}, kwargs) where {T} = EagerSparseRepr{T}(), kwargs
+_with_eltype(format::EagerDenseRepr{Missing}, ::Type{T}, kwargs) where {T} = EagerDenseRepr{T}(), kwargs
+_with_eltype(format::LazyRepr, ::Type{T}, kwargs) where {T} = format, (; T, kwargs...)
+_with_eltype(format, _, kwargs) = format, kwargs
 function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
     space_groups = group_ids(space)
