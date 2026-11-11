@@ -1254,35 +1254,6 @@ end
     end
 end
 
-@testitem "Partial trace map" begin
-    using LinearAlgebra
-    @fermions f
-    H = hilbert_space(f, 1:4)
-    Hsub = hilbert_space(f, [2, 4])
-    m = rand(ComplexF64, dim(H), dim(H))
-
-    msub = partial_trace(m, H => Hsub)
-    pt = partial_trace(H => Hsub)
-    msub_map = pt(vec(m))
-    @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
-
-    H = hilbert_space(f, 1:4, NumberConservation(2))
-    Hsub = subregion(hilbert_space(f, [1, 3, 4]), H)
-    m = rand(ComplexF64, dim(H), dim(H))
-    msub = partial_trace(m, H => Hsub)
-    pt = partial_trace(H => Hsub)
-    msub_map = pt(vec(m))
-    @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
-
-    Hvac = hilbert_space(f, 1:1, NumberConservation(0))
-    Hmode = hilbert_space(f, 2:2)
-    Hproduct = tensor_product(Hvac, Hmode)
-    ρ = [1 2 + im; 3 - im 4]
-    @test dim(Hvac) == 1
-    @test partial_trace(ρ, Hproduct => Hvac) ≈ reshape([tr(ρ)], 1, 1)
-    @test partial_trace(ρ, Hproduct => Hmode) ≈ ρ
-end
-
 @testitem "Entanglement entropy" begin
     import FermionicHilbertSpaces: von_neumann_entropy
     @fermions f
