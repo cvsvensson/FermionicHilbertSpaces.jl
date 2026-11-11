@@ -713,7 +713,7 @@ end
 
 @testitem "Sectors of one-dimensional characters from orbits" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: permutation_projector, AdditiveConstraint
+    using FermionicHilbertSpaces: permutation_projector, symmetric_sector, AdditiveConstraint
     # Momentum sectors of a ring of spins 1/2 with total Sz = 0. Both vanish on the orbit of the
     # Néel states, whose stabilizer contains the translation by two sites.
     @spins S 1 // 2
@@ -749,7 +749,7 @@ end
 
 @testitem "Fermionic translation sectors" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: permutation_projector
+    using FermionicHilbertSpaces: permutation_projector, symmetric_sector
     # The fermionic translations commute with the boundary hopping of a ring
     @fermions c
     N = 10
@@ -767,6 +767,7 @@ end
 end
 
 @testitem "Checks on the weights of symmetric_sector" begin
+    using FermionicHilbertSpaces: symmetric_sector
     @fermions f
     H = hilbert_space(f, 1:3)
     Hs = factors(H)

@@ -5,7 +5,7 @@
 # nonzero matrix elements of the Hamiltonian from them.
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots
-using FermionicHilbertSpaces: fragment
+using FermionicHilbertSpaces: fragment, symmetric_sector
 
 # ## The PXP model
 # Rydberg atoms in the blockade regime are described by the PXP chain
@@ -46,7 +46,7 @@ ham = representation(pxp, H, Matrix; projection = true);
 # The states ``|\mathbb{Z}_2\rangle = |{\uparrow\downarrow\uparrow\downarrow\cdots}\rangle`` and its translate
 # ``|\mathbb{Z}_2'\rangle`` are swapped by the dynamics. We follow their cat state
 # ``(|\mathbb{Z}_2\rangle + |\mathbb{Z}_2'\rangle)/\sqrt{2}``, which has zero momentum and is even under inversion, in
-# that sector of the ring's translations and reflections, built with [`symmetric_sector`](@ref).
+# that sector of the ring's translations and reflections, built with [`symmetric_sector`](@ref FermionicHilbertSpaces.symmetric_sector).
 
 perms = [[mod1(r * i + s, N) for i in 1:N] for s in 0:(N - 1) for r in (1, -1)]
 B = symmetric_sector(H, factors(H), (perms, ones(length(perms))))

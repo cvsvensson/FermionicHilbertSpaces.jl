@@ -67,7 +67,7 @@ weights = [[cis(-2π * k * s / N) for s in 0:N-1] for k in momenta];
 # factors permuted by the group. Given these bases, `highest_weight_states` returns the states annihilated by $S^+$
 # in each irrep, keyed by total spin. We diagonalize $H$ on that subspace; an absent block gets energy `Inf`.
 
-using FermionicHilbertSpaces: highest_weight_states
+using FermionicHilbertSpaces: highest_weight_states, symmetric_sector
 Splus = sum(S[k][:+] for k in 1:N)
 spins = filter(>=(0), quantumnumbers(space))
 blocks = Dict(s => representation(H, sector(s, space)) for s in spins)

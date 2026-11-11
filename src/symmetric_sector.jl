@@ -107,7 +107,7 @@ end
 
 The sector `constrain_space(H, Relabel(g) => λ)` of a [`Relabel`](@ref), with one basis vector per orbit of the basis
 states of `H`. Representing an operator throws an `ArgumentError` unless relabeling its modes by each map leaves it
-unchanged. Move states with `embed(v, Hk => H)` and `change_basis(v, H => Hk; projection = true)`.
+unchanged. `embed(v, Hk => H)` gives a state of the sector on the parent space.
 """
 struct SymmetricSector{B, P, T, M <: SparseMatrixCSC{T}} <: AbstractHilbertSpace{OrbitRep{B}}
     parent::P
@@ -149,7 +149,7 @@ basisstates(H::SymmetricSector) = BasisStates(H, Iterators.map(n -> basisstate(n
 _state_index(state::OrbitRep, ::SymmetricSector) = state.index
 _state_index(state, H::SymmetricSector) = _state_index(interpret_state(state, H), H)
 interpret_state(state::OrbitRep, ::SymmetricSector) = state
-interpret_state(state, ::SymmetricSector) = throw(ArgumentError("`$state` is not a basis state of a `SymmetricSector`. Represent it on the parent space `H` and use `change_basis(v, H => Hk; projection = true)`."))
+interpret_state(state, ::SymmetricSector) = throw(ArgumentError("`$state` is not a basis state of a `SymmetricSector`. Represent it on the parent space instead."))
 has_arithmetic_state_index(::SymmetricSector) = true
 isconstrained(::SymmetricSector) = true
 groups(H::SymmetricSector) = groups(H.parent)
@@ -180,7 +180,7 @@ function _check_operator(op, ax::Axes{<:Tuple{_OrbitSpace, _OrbitSpace}})
 end
 _check_operator(op, ::Axes{<:Tuple{_OrbitSpace, AbstractHilbertSpace}}) = throw(_axes_error())
 _check_operator(op, ::Axes{<:Tuple{AbstractHilbertSpace, _OrbitSpace}}) = throw(_axes_error())
-_axes_error() = ArgumentError("`Axes(Hout, Hin)` with a symmetric sector needs two sectors of the same `SymmetricSector`. Use `embed` and `change_basis` to move between it and its parent space.")
+_axes_error() = ArgumentError("`Axes(Hout, Hin)` with a symmetric sector needs two sectors of the same `SymmetricSector`. Use `embed` to move to its parent space.")
 
 # For an operator that commutes with the symmetries, ⟨c′|op|c⟩ = Σ_t conj(q_c′(t)) ⟨t|op|r⟩ / q_c(r), where `r`
 # is the representative of `c` and `q_c` the amplitudes of basis vector `c`.
@@ -238,7 +238,7 @@ end
 
 @testitem "Symmetric sectors of a spin ring" begin
     using LinearAlgebra, SparseArrays
-    using FermionicHilbertSpaces: Relabel, Axes, change_basis, TransposedSpace
+    using FermionicHilbertSpaces: Relabel, Axes, change_basis, TransposedSpace, symmetric_sector
     N = 6
     @spins S 1 // 2
     Sz = sum(S[j][:z] for j in 1:N)
