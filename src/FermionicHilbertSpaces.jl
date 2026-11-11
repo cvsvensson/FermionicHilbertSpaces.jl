@@ -36,7 +36,7 @@ export parityoperator, numberoperator, representation, expectation
 export Kets, Ket, ProductState, SpinState, BosonicState
 
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
-export @fermion, @fermions, @majoranas, @boson, @bosons, @spin, @spins
+export @fermion, @fermions, @majoranas, @boson, @bosons, @spin, @spins, @parafermions
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export LocalMap
 export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
@@ -168,6 +168,7 @@ include("physics/fermions/fixednumberfock.jl")
 include("physics/bosons.jl")
 include("physics/spin.jl")
 include("physics/open_systems.jl")
+include("physics/parafermions.jl")
 include("symbolic_states.jl")
 include("symmetric_sector.jl")
 
