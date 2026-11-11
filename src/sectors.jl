@@ -101,7 +101,6 @@ function _sector_states(qn, H::SectorHilbertSpace)
     states
 end
 
-# sectors(H::SectorHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 """
     sectors(H)
 

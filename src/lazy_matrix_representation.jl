@@ -382,9 +382,6 @@ end
     @test Matrix(L') ≈ M'
     @test Matrix(transpose(L)) ≈ transpose(M)
     @test Matrix(transpose(L)') ≈ conj(M)
-
-    # @test !ishermitian(L)
-    # @test ishermitian(representation(op + hc, Hcons; lazy=true, projection=true)) #SciMLOperators doesn't check termwise ishermitian for an added operator
 end
 
 @testitem "lazy matrix_representation with dimensions wider than Int" begin

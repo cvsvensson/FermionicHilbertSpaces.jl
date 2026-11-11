@@ -1412,41 +1412,6 @@ end
     end
 end
 
-## Symmetries
-isnumberconserving(x::AbstractSym) = false
-isnumberconserving(x::NCMul) = iszero(sum(s -> 2s.kind.creation - 1, x.factors))
-isnumberconserving(x::NCAdd) = all(isnumberconserving, NCterms(x))
-
-isparityconserving(x::AbstractSym) = false
-isparityconserving(x::NCMul) = iseven(length(x.factors))
-isparityconserving(x::NCAdd) = all(isparityconserving, NCterms(x))
-
-isquadratic(::AbstractSym) = false
-isquadratic(x::NCMul) = length(x.factors) == 2
-isquadratic(x::NCAdd) = all(isquadratic, NCterms(x))
-
-@testitem "Fermion symmetry property checks" begin
-    import FermionicHilbertSpaces: isnumberconserving, isparityconserving, isquadratic
-    @fermions f
-    # isnumberconserving
-    @test !isnumberconserving(f[1])
-    @test isnumberconserving(f[1]'f[2])
-    @test !isnumberconserving(f[1]f[2])
-    @test !isnumberconserving(f[1]'f[2] + f[3])
-    @test isnumberconserving(f[1]'f[2] + f[3]f[3]' + 1)
-    # isparityconserving
-    @test !isparityconserving(f[1])
-    @test isparityconserving(f[1]f[2])
-    @test !isparityconserving(f[1]f[2] * f[3])
-    @test !isparityconserving(f[1]f[2] + f[3])
-    @test isparityconserving(f[1]f[2] + f[3]f[3]' + 1)
-    # isquadratic
-    @test !isquadratic(f[1])
-    @test isquadratic(f[1]f[2])
-    @test !isquadratic(f[1]f[2] * f[3])
-    @test isquadratic(f[1]f[2] + f[3] * f[3]' + 1)
-end
-
 @testitem "Single-particle and BdG operator checks" begin
     using FermionicHilbertSpaces.FreeFermions
     @fermions f

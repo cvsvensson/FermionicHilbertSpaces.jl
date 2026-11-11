@@ -1,8 +1,7 @@
 
 combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
 combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("The group `$group_id` requires a single space, got $spaces."))
-# Base's tuple `map` and `setindex`, and `LinearIndices`, are not inferred past 32 entries.
-@generated _tuple_map(f::F, a::NTuple{N, Any}, b::NTuple{N, Any}) where {F, N} = Expr(:tuple, (:(f(a[$i], b[$i])) for i in 1:N)...)
+# Base's `LinearIndices` is not inferred past 32 entries.
 function _linear_index(inds::NTuple{N, Int}, axes) where {N}
     k, stride = 1, 1
     for n in 1:N
@@ -85,7 +84,7 @@ atom_position(x, H::ProductSpace) = get(H.atom_index, atomic_id(x), 0)
 # Iterates `cartinds` rather than `Iterators.product`, whose iteration allocates per state from 12 factors on
 basisstates(H::ProductSpace) = BasisStates(H, Iterators.map(I -> _product_basisstate(I, H), _index_array(H.cartinds)))
 Base.@propagate_inbounds basisstate(n::Integer, H::_ProductSpace) = _product_basisstate(_index_array(H.cartinds)[n], H)
-Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::_ProductSpace) = ProductState(_tuple_map(basisstate, Tuple(I), H.factors))
+Base.@propagate_inbounds _product_basisstate(I::CartesianIndex, H::_ProductSpace) = ProductState(tuplemap(basisstate, Tuple(I), H.factors))
 function _state_index(state::ProductState, H::_ProductSpace)
     inds = _factor_indices(state, H)
     # `all` on a tuple of one type keeps the tuple in memory, which on a GPU is slow local memory
@@ -94,7 +93,7 @@ function _state_index(state::ProductState, H::_ProductSpace)
 end
 function _factor_indices(state::ProductState, H::_ProductSpace)
     length(state.states) == length(H.factors) || throw(MethodError(state_index, (state, H)))
-    return _tuple_map(_state_index, state.states, H.factors)
+    return tuplemap(_state_index, state.states, H.factors)
 end
 # The last factor varies slowest in the order of `H`
 order_key(state::ProductState, H::ProductSpace) = reverse(_factor_indices(state, H))
@@ -482,7 +481,7 @@ physical_rep(state::T, space::ProductSpace) where T<:Integer = basisstate(state,
 @inline function _apply_local_operators(ops::ProductOperator, state::ProductState{B}, space::_ProductSpace, precomps) where {B}
     if !ismissing(fast_path(space))
         T = typeof(fast_path(space))
-        internal_reps = _tuple_map((s, f) -> _internal_rep(s, f, T), state.states, groups(space))
+        internal_reps = tuplemap((s, f) -> _internal_rep(s, f, T), state.states, groups(space))
         newrep, amp = _apply_local_operators_fast(ops, internal_reps, precomps)
         return ProductState{B}(newrep), amp
     else
