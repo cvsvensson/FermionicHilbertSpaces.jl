@@ -235,7 +235,7 @@ function Base.show(io::IO, H::SpinSpace)
 end
 Base.show(io::IO, s::SpinState) = print(io, "SpinState(", s.m, ")")
 
-Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace: ", m.sym); show(IOContext(io, :compact => true), m.parent))
+Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace: ", m.field); show(IOContext(io, :compact => true), m.parent))
 
 
 Base.show(io::IO, f::FockNumber) = print(io, "FockNumber(", f.f, ")")

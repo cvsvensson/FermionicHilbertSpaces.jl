@@ -114,6 +114,8 @@ isbasisstate(state, H) = all(!iszero, order_key(state, H))
 
 Construct the Hilbert space of the fermions `f`, bosons `b` (truncated at `dimension`) or spins `s`
 (spin `J`) with the given `labels`, optionally restricted by a constraint, e.g. `NumberConservation(2)`.
+Majoranas `γ` are used like fermions, with an even number of labels.
+A custom field `c` takes the basis states of one mode, `hilbert_space(c, labels, states)`.
 
 ```jldoctest
 julia> @fermions f; @bosons b; @spins s 1//2;
@@ -263,15 +265,11 @@ of `Int`, so methods for any `T<:Integer` keep the integer path there.
 internal_rep(state, space, ::Type{T}) where T = internal_rep(state, parent(space), T)
 
 """
-    apply_local_operator(op, state, space, precomp) -> (newstate, amplitude)
+    apply_local_operator(kind, state, space, precomp) -> (newstate, amplitude)
 
-Apply the symbolic operator `op` to the basis state `state` of `space`. Returns the new
-state and its amplitude; an amplitude of zero means that `op` annihilates `state`.
-`space` is the group that `op` acts on, so it can be used for dispatch. `precomp` is the
-value of [`_precomputation_before_operator_application`](@ref) for `op` and `space`.
-
-This is the method that connects a custom operator type to matrix representations, partial
-traces and the other operations on spaces.
+Apply an operator of kind `kind` to the basis state `state` of `space`, the group it acts on. An amplitude
+of zero means that the operator annihilates `state`. Methods are defined on the kind, and `precomp` is the
+value of [`_precomputation_before_operator_application`](@ref) for the operator and `space`.
 """
 function apply_local_operator end
 # Operators with amplitudes that need rounding add a method that computes them in the float type `P`

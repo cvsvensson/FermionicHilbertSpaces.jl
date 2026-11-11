@@ -1,5 +1,5 @@
 """
-    Field{K}(name, group=nothing, params=nothing)
+    Field{K}(name, group=nothing, params=nothing, tags=Tags(nothing))
 
 A named family of modes for operators of kind `K`, created by [`@field`](@ref) or by macros such as
 [`@bosons`](@ref). `field[l]` is the mode labelled `l`, or the operator of that mode if `K` has a
@@ -138,8 +138,7 @@ add_tag(g::Group{K}, tag) where {K} = Group{K}(g.names, add_tag(g.tags, tag))
 
 symbolic_group(m::Mode) = isnothing(m.field.group) ? m : Group(m.field)
 symbolic_group(op::Op) = symbolic_group(op.mode)
-atomic_id(m::Mode) = m
-atomic_id(op::Op) = op.mode
+atomic_id(x::Union{Mode, Op}) = mode(x)
 _atom_names(x::Union{Mode, Op}) = (mode(x),)
 
 # The methods of `hilbert_space(field, labels, ...)` take a vector of labels. Other collections, such as tuples,
@@ -167,7 +166,7 @@ function _no_space(x, args...)
     throw(ArgumentError("`hilbert_space` cannot build a space for `$x` $got. See `?hilbert_space`."))
 end
 function hilbert_space(m::Mode{<:Field{K}}, states) where {K}
-    (isnothing(mode_operator(K)) && states isa Union{AbstractVector, Tuple, BasisStates}) || _no_space(m, states)
+    states isa Union{AbstractVector, Tuple, BasisStates} || _no_space(m, states)
     isnothing(m.field.group) || throw(ArgumentError("The grouped field `$(m.field)` needs its own space type and a `combine_into_group(::Group{K}, atoms)` method."))
     return GenericHilbertSpace(m, states)
 end
@@ -220,6 +219,10 @@ end
     H = hilbert_space(c, 1:2, Site.(0:2))
     @test H == tensor_product([GenericHilbertSpace(c[i], Site.(0:2)) for i in 1:2])
     @test_throws ArgumentError hilbert_space(FermionicHilbertSpaces.Field{Shift}(:g, (:g,)), 1:2, Site.(0:2))
+    struct Lower end
+    FermionicHilbertSpaces.mode_operator(::Type{Lower}) = Lower()
+    @field a::Lower
+    @test hilbert_space(a, 1:2, Site.(0:2)) == tensor_product([hilbert_space(a[i], Site.(0:2)) for i in 1:2])
     A = c[1][1] * c[2][-1]
     MA = representation(A, H, Matrix)
     @test c[1][2] * c[1][1] == c[1][1] * c[1][2] && c[1][1] * c[1][-1] == 1

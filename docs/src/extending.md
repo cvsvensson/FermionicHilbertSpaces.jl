@@ -32,7 +32,7 @@ Required:
   of that kind acts on a basis state. The amplitude is zero for a state that the operator annihilates or maps
   out of a truncated basis. The method goes on the kind, not on `Op{MyKind}`.
 - [`@field`](@ref) `c::MyKind` creates the field. `c[l]` is the mode labelled `l`, `c[l][k]` is
-  `Op(MyKind(k), c[l])`, so a tuple index needs a constructor `MyKind(::Tuple)`, and
+  `Op(MyKind(k), c[l])`, and
   `hilbert_space(c, labels, states)` has one space per mode, whose basis order is the order of `states`. A field names one kind type: an operator of
   another kind on the same mode is `Op(OtherKind(...), c[l])`, or the field is typed by a common abstract
   supertype whose constructor picks the kind, as in
@@ -44,7 +44,7 @@ Optional:
   `nothing` keeps it, `Swap(c)` rewrites it as `c * b * a`, `AddTerms((Swap(c), r, ...))` adds further terms, and
   a number, operator or sum replaces it. A rule that returns `nothing`, a number or a `Swap` is defined
   on the kinds, `local_mul_effect(a::MyKind, b::MyKind)`. A rule that returns operators or needs the mode is
-  defined on `Op{MyKind}`: there `a.kind` and `a.mode` are the parts of an operator, and `a.mode[k]` or
+  defined on `Op{MyKind}`: there `a.kind` and `a.mode` are the parts of an operator, and
   `Op(MyKind(...), a.mode)` is another operator on the same mode. Without a rule, products stay as written, so
   operators that are equal in your algebra can compare unequal. Rules are applied before a basis is truncated,
   so a simplified product can differ from the product of the truncated matrices at the edge of the basis, as
