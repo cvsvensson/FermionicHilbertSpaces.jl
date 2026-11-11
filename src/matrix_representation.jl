@@ -510,7 +510,8 @@ function matrix_accumulator(::Type{T}, N::Int, (d1, d2), ::EagerDenseRepr) where
     zeros(T, d1, d2)
 end
 function add_identity!!(m::Matrix{T}, coeff, space::AbstractHilbertSpace; _...) where T
-    return view(m, LinearAlgebra.diagind(m)) .+= coeff
+    view(m, LinearAlgebra.diagind(m)) .+= coeff
+    return m
 end
 function add_identity!!(accumulator, coeff, ax::Axes; projection)
     Hout = _output_space(ax)
