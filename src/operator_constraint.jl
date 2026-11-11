@@ -223,6 +223,7 @@ _operator_terms(op::AbstractSym) = _operator_terms(1 * op)
 _operator_terms(op) = throw(ArgumentError("A constraint quantity must be a symbolic operator or a function of the basis state, got `$op`."))
 
 function _unit_of(x, unit_of, spaces)
+    x isa Op || throw(ArgumentError("A constraint quantity must be built from operators, got the factor `$x`."))
     k = get(unit_of, atomic_id(x), 0)
     iszero(k) || return k
     k = something(findfirst(H -> _acts_in(x, H), spaces), 0)
@@ -473,6 +474,8 @@ end
     @test_throws "rational" hilbert_space(f, 1:2, 0.5 * f[1]'f[1] => 1)
     @test_throws "mod(v, N)" hilbert_space(f, 1:2, 1im * f[1]'f[1] => 1)
     @test_throws ArgumentError hilbert_space(f, 1:2, f[3]'f[3] => 1)
+    k = FermionicHilbertSpaces.Kets(hilbert_space(f, 1:1))[1]
+    @test_throws ArgumentError hilbert_space(f, 1:2, (k * k') => 1)
     @test_throws "1//10" hilbert_space(f, 1:2, (1 // 10) * f[1]'f[1] => 0.1)
     @test dim(hilbert_space(f, 1:2, f[1]'f[1] => 1.0)) == 2
     @test_throws "1//2" hilbert_space(f, 1:20, sum(i^4 * f[i]'f[i] for i in 1:20) => [0.5])

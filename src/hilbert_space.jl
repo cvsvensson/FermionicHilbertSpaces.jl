@@ -3,7 +3,7 @@
     GenericHilbertSpace{B}(label, basisstates[, state_index])
 
 Atomic Hilbert space whose basis states are given explicitly by `basisstates`, indexed by integers.
-`label` is returned by `symbolic_group` and `atomic_id` and identifies the space in symbolic expressions.
+`label` identifies the space, and an operator acts on it if the operator's mode equals `label`, as in `GenericHilbertSpace(c[1], states)` for a field `c`.
 `state_index` gives the integer index of a basis state. It is either an `AbstractDict` from basis states
 to indices, or a function that takes a basis state and returns its index. By default it is a dictionary
 built from `basisstates`.
