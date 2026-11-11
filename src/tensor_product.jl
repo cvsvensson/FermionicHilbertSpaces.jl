@@ -627,7 +627,7 @@ Algorithm that avoids scalar indexing, which is what makes GPU arrays work: it u
 indexing, broadcasting and reductions, and returns an array of the input's kind. A pure state `ψ`
 is traced as `A * A'`, with `A` gathered from `ψ`, without forming `ψ * ψ'`. It is not specific to
 the partial trace; the operations that accept it as `alg` are [`partial_trace`](@ref),
-[`partial_trace!`](@ref), [`embed`](@ref), [`change_basis`](@ref) and `reshape`, and it is their default
+[`partial_trace!`](@ref), [`partial_transpose`](@ref), [`embed`](@ref), [`change_basis`](@ref) and `reshape`, and it is their default
 for dense GPU arrays. GPU sparse arrays are not supported.
 """
 struct NoScalarIndexingAlg end
