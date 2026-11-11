@@ -157,3 +157,8 @@ end
     no_double = prod(NumberConservation(0:1, [c[i, :↑], c[i, :↓]]) for i in 1:n)
     check(tj, constrain_space(updown(1), no_double), Float32; projection = true)
 end
+
+@testset "No method ambiguities involving the extension" begin
+    ext = Base.get_extension(FermionicHilbertSpaces, :GPUArraysExt)
+    @test !any(a -> ext in (a[1].module, a[2].module), Test.detect_ambiguities(FermionicHilbertSpaces; recursive = true))
+end

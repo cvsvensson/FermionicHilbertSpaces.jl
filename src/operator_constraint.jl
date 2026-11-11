@@ -75,6 +75,7 @@ function _apply(f, v)
     try
         return f(v)
     catch e
+        e isa InterruptException && rethrow()
         throw(ArgumentError("Applying `$f` to the value $(repr(v)) of a constraint quantity failed: $(sprint(showerror, e))"))
     end
 end
@@ -155,7 +156,8 @@ end
 function _applies(f, values)
     try
         foreach(f, values)
-    catch
+    catch e
+        e isa InterruptException && rethrow()
         return false
     end
     return true
