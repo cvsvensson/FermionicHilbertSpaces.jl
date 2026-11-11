@@ -229,10 +229,7 @@ function basis_transformation(Hfrom::AbstractHilbertSpace, Hto::_OrbitSpace)
     U, _ = basis_transformation(Hto, Hfrom)
     return sparse(U'), Int[]
 end
-function change_basis(m, Hfrom::AbstractHilbertSpace, Hto::_OrbitSpace; projection = false, kwargs...)
-    Hfrom isa _OrbitSpace || projection || throw(ArgumentError("A state of `$Hfrom` is in general not in the symmetric sector. Pass `projection = true` to project it."))
-    return invoke(change_basis, Tuple{Any, Union{AbstractHilbertSpace, Axes}, Union{AbstractHilbertSpace, Axes}}, m, Hfrom, Hto; projection, kwargs...)
-end
+_check_projection(Hfrom::AbstractHilbertSpace, ::_OrbitSpace) = Hfrom isa _OrbitSpace || throw(ArgumentError("A state of `$Hfrom` is in general not in the symmetric sector. Pass `projection = true` to project it."))
 
 
 @testitem "Symmetric sectors of a spin ring" begin
