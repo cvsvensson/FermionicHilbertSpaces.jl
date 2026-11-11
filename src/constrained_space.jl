@@ -33,7 +33,8 @@ function constrain_space(space, constraint::AbstractConstraint)
     return constrain_states(space, constraint, states, unpruned_part(constraint))
 end
 function constrain_space(space, constraint::AbstractConstraint, labels)
-    isnothing(last(_split_symmetry(constraint))) && supports_filtering(constraint) || throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
+    isnothing(last(_split_symmetry(constraint))) || throw(ArgumentError("A symmetry such as `Relabel(g) => λ` cannot filter a list of states. Constrain the space of those states with it."))
+    supports_filtering(constraint) || throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     return constrain_states(space, constraint, _states_of(space, labels))
 end
 # The subspace of the candidate `states` that satisfy `constraint`, grouped into sectors when it supports it.
