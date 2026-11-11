@@ -1,16 +1,16 @@
 struct _QR end
 struct _EIG end
 
-function permute_state(state, mapper, perm::AbstractVector)
+function permute_state(state, mapper, perm::AbstractVector, f = (i, s) -> s)
     substates = unique_split_state(state, mapper) #only support unique splits for now
-    permuted = substates[perm]
+    permuted = map(i -> f(i, substates[perm[i]]), eachindex(perm))
     newstate = only(first(combine_states(permuted, mapper))) # only support unique combination for now
     return newstate
 end
 # `ntuple` rather than `map` (as in `TupleTools.permute`), which allocates for more than 32 factors
-function permute_state(state, mapper, perm::NTuple{N}) where {N}
+function permute_state(state, mapper, perm::NTuple{N}, f = (i, s) -> s) where {N}
     substates = unique_split_state(state, mapper) #only support unique splits for now
-    permuted = ntuple(i -> substates[perm[i]], Val(N))
+    permuted = ntuple(i -> f(i, substates[perm[i]]), Val(N))
     newstate = only(first(combine_states(permuted, mapper))) # only support unique combination for now
     return newstate
 end

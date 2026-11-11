@@ -22,10 +22,11 @@ using BitIntegers: UInt256, UInt512, UInt1024, @define_integers
 @define_integers 4096
 @define_integers 2048
 using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice, ishalfinteger
-using SparseArrays: SparseArrays, AbstractSparseArray, AbstractSparseMatrix, SparseVector, findnz,
+using SparseArrays: SparseArrays, AbstractSparseArray, AbstractSparseMatrix, SparseVector, dropzeros!, findnz,
     nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
 using TestItems: TestItems, @testitem, @testmodule
 import TupleTools
+using Random: Xoshiro
 using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 
 
@@ -37,6 +38,7 @@ export Kets, Ket, ProductState, SpinState, BosonicState
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
 export @fermion, @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export NoConstraint, ParityConservation, NumberConservation, constrain_space
+export LocalMap
 export BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export symmetric_sector

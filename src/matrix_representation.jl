@@ -639,7 +639,7 @@ function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=
 end
 # A space whose basis states are not product states, such as a `SymmetricSector`, can throw for operators it cannot
 # represent with `_check_operator`, and give the amplitudes of its basis vectors with `_amplitude_eltype`, which is
-# promoted with the element type of the operator.
+# given the float precision of the operator and promoted with its element type.
 _check_operator(op, space) = nothing
 _check_operator(op, space::AbstractSubspace) = _check_operator(op, parent(space))
 _check_operator(op, ax::Axes) = _check_operator(op, _input_space(ax))
@@ -647,7 +647,10 @@ _amplitude_eltype(space) = nothing
 _amplitude_eltype(space::AbstractSubspace) = _amplitude_eltype(parent(space))
 _with_amplitude_eltype(format, op, space, kwargs) = _with_amplitude_eltype(format, op, _amplitude_eltype(space), kwargs)
 _with_amplitude_eltype(format, op, ::Nothing, kwargs) = format, kwargs
-_with_amplitude_eltype(format, op, ::Type{S}, kwargs) where {S} = _with_eltype(format, promote_type(mat_eltype(op), S), kwargs)
+function _with_amplitude_eltype(format, op, ::Type{S}, kwargs) where {S}
+    T = mat_eltype(op)
+    return _with_eltype(format, promote_type(T, _with_precision(S, _precision(T))), kwargs)
+end
 _with_eltype(format::EagerSparseRepr{Missing}, ::Type{T}, kwargs) where {T} = EagerSparseRepr{T}(), kwargs
 _with_eltype(format::EagerDenseRepr{Missing}, ::Type{T}, kwargs) where {T} = EagerDenseRepr{T}(), kwargs
 _with_eltype(format::LazyRepr, ::Type{T}, kwargs) where {T} = format, (; T, kwargs...)

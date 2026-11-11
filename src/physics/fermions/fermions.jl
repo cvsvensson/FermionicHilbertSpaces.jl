@@ -82,7 +82,6 @@ mode_position(op, H) = get(mode_ordering(H), mode(op), 0)
 
 combine_into_group(group::Group{Fermion}, atoms) = FermionicSpace(atoms, group)
 
-operators(H::FermionicSpace) = fermions(H)
 isconstrained(H::FermionicSpace) = false
 combine_states(states, H::FermionicSpace{F}) where {F} = (_catenate_fock_states(states, Iterators.repeated(1), F),), (1,)
 
@@ -185,51 +184,20 @@ end
 
 
 
-"""
-    fermion_sparse_matrix(fermion_number, H::AbstractHilbertSpace)
-
-Constructs a sparse matrix of size representing a fermionic annihilation operator at bit position `fermion_number` on the Hilbert space H. 
-"""
-function fermion_sparse_matrix(fermion_number, H::AbstractHilbertSpace{<:AbstractFockState})
-    sparse_operator(Int, Base.Fix1(removefermion, fermion_number), H)
-end
-
-
-function sparse_operator(T, op, H::AbstractHilbertSpace)
-    fs = basisstates(H)
-    N = length(fs)
-    amps = sizehint!(T[], N)
-    ininds = sizehint!(Int[], N)
-    outinds = sizehint!(Int[], N)
-    for f in fs
-        n = state_index(f, H)
-        newstate, amp = op(f)
-        if !iszero(amp)
-            push!(amps, amp)
-            push!(ininds, n)
-            push!(outinds, state_index(newstate, H))
-        end
-    end
-    return SparseArrays.sparse!(outinds, ininds, amps, N, N)
-end
-
-
 @testitem "Parity and number operator" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: parityoperator, numberoperator, fermion_sparse_matrix
-    numopvariant(H) = sum(l -> fermion_sparse_matrix(l, H)' * fermion_sparse_matrix(l, H), 1:2)
     @fermions f
     H = hilbert_space(f, 1:2)
     @test parityoperator(H) == Diagonal([1, -1, -1, 1])
-    @test numberoperator(H) == Diagonal([0, 1, 1, 2]) == numopvariant(H)
+    @test numberoperator(H) == Diagonal([0, 1, 1, 2])
 
     H = hilbert_space(f, 1:2, ParityConservation())
     @test parityoperator(H) == Diagonal([-1, -1, 1, 1])
-    @test numberoperator(H) == Diagonal([1, 1, 0, 2]) == numopvariant(H)
+    @test numberoperator(H) == Diagonal([1, 1, 0, 2])
 
     H = hilbert_space(f, 1:2, NumberConservation())
     @test parityoperator(H) == Diagonal([1, -1, -1, 1])
-    @test numberoperator(H) == Diagonal([0, 1, 1, 2]) == numopvariant(H)
+    @test numberoperator(H) == Diagonal([0, 1, 1, 2])
 
     ## Truncated Hilbert space
     states = map(FockNumber, 0:2)
@@ -243,38 +211,42 @@ end
     @test numberoperator(H) == Diagonal([1])
 end
 
-"""
-    fermions(H)
+@testmodule JordanWigner begin
+    import FermionicHilbertSpaces as FHS
+    using SparseArrays: sparse
 
-Return a dictionary of fermionic annihilation operators for the Hilbert space `H`.
-"""
-function fermions(H)
-    M = nbr_of_atoms(H)
-    labelvec = map(label, atomic_factors(H))
-    reps = [fermion_sparse_matrix(n, H) for n in 1:M]
-    OrderedDict(zip(labelvec, reps))
+    # Annihilators keyed by mode label, built from the bits of the basis states independently of
+    # `representation`, so tests can use them as a reference.
+    function annihilators(H)
+        states = collect(FHS.basisstates(H))
+        d = length(states)
+        Dict(
+            map(enumerate(FHS.atomic_factors(H))) do (n, atom)
+                bit = one(first(states).f) << (n - 1)
+                js = filter(j -> !iszero(states[j].f & bit), 1:d)
+                is = map(j -> FHS.state_index(FHS.FockNumber(states[j].f ⊻ bit), H), js)
+                signs = map(j -> isodd(count_ones(states[j].f & (bit - 1))) ? -1 : 1, js)
+                FHS.label(atom) => sparse(is, js, signs, d, d)
+            end
+        )
+    end
 end
 
-"""
-    majoranas(fermions)
-
-Return a dictionary of Majorana operators for the Hilbert space `H`.
-"""
-function majoranas(fermions::AbstractDict, majlabels=(:-, :+))
-    labels = Base.product(collect(keys(fermions)), majlabels)
-    fs = values(fermions)
-    majA = map(f -> f + f', fs)
-    majB = map(f -> 1im * (f - f'), fs)
-    majs = vcat(majA, majB)
-    OrderedDict(zip(labels, majs))
+@testitem "Jordan-Wigner annihilators match representation" setup = [JordanWigner] begin
+    @fermions f
+    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
+        H = hilbert_space(f, 1:3, qn)
+        c = JordanWigner.annihilators(H)
+        @test all(c[l] == representation(f[l], H) for l in 1:3)
+    end
 end
 
 @testitem "Canonical anticommutation relations (CAR)" begin
     using LinearAlgebra
-    import FermionicHilbertSpaces: fermions
     @fermions f
     for qn in [NoConstraint(), ParityConservation(), NumberConservation()]
-        c = fermions(hilbert_space(f, 1:2, qn))
+        H = hilbert_space(f, 1:2, qn)
+        c = [representation(f[l], H) for l in 1:2]
         @test c[1] * c[1] == 0I
         @test c[1]' * c[1] + c[1] * c[1]' == I
         @test c[1]' * c[2] + c[2] * c[1]' == 0I
@@ -284,13 +256,11 @@ end
 
 @testitem "Majorana operators" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: majoranas, fermions
-    @fermions f
-    H = hilbert_space(f, 1:2)
-    γ = majoranas(fermions(H))
+    using FermionicHilbertSpaces: majoranas
+    @majoranas y
+    γ = majoranas(hilbert_space(y, 1:4))
     # There should be 4 Majorana operators for 2 modes
     @test length(γ) == 4
-    # Test Hermiticity: γ₁ = c + c†, γ₂ = i(c - c†) are Hermitian
     for op in values(γ)
         @test op ≈ op'
     end
@@ -547,7 +517,6 @@ end
 @testitem "Tensor product of fermionic operators" begin
     using Random, LinearAlgebra
     import SparseArrays: SparseMatrixCSC
-    import FermionicHilbertSpaces: fermions
     Random.seed!(1234)
     @fermions f
     for qn in [NoConstraint(), ParityConservation(), NumberConservation()]
@@ -560,15 +529,14 @@ end
         @test H3w == tensor_product((H1, H2)) == tensor_product([H1, H2])
         @test tensor_product(H1) == tensor_product((H1,))
         Hs = [H1, H2]
-        b1 = fermions(H1)
-        b2 = fermions(H2)
-        b3 = fermions(H3w)
+        c1 = representation(f[1], H1)
+        c2 = representation(f[2], H2)
 
         #test that they keep sparsity
-        @test typeof(tensor_product((b1[1], b2[2]), Hs => H3)) == typeof(b1[1])
-        @test typeof(generalized_kron((b1[1], b2[2]), Hs, H3)) == typeof(b1[1])
-        @test typeof(tensor_product((b1[1], I), Hs => H3)) == typeof(b1[1])
-        @test typeof(generalized_kron((b1[1], I), Hs, H3)) == typeof(b1[1])
+        @test typeof(tensor_product((c1, c2), Hs => H3)) == typeof(c1)
+        @test typeof(generalized_kron((c1, c2), Hs, H3)) == typeof(c1)
+        @test typeof(tensor_product((c1, I), Hs => H3)) == typeof(c1)
+        @test typeof(generalized_kron((c1, I), Hs, H3)) == typeof(c1)
         @test tensor_product((I, I), Hs => H3) isa SparseMatrixCSC
         @test generalized_kron((I, I), Hs, H3) isa SparseMatrixCSC
     end
