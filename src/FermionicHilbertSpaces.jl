@@ -38,7 +38,7 @@ export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
 export @fermion, @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
-export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
+export quantumnumbers, sector, sectors, indices, factors
 export symmetric_sector
 export open_system
 public particle_number, Axes, dissipator, FreeFermions, NonCommutativeProducts, add!!, matrix_representation, vector_representation

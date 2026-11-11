@@ -266,6 +266,7 @@ qn_indices(qn::Tuple, H::SectorHilbertSpace{<:Any, <:Any, <:AbstractVector}) = q
 indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
 
 @testitem "SectorHilbertSpace sectors" begin
+    using FermionicHilbertSpaces: SectorHilbertSpace
     @fermions f
 
     H = hilbert_space(f, 1:4, NumberConservation())
@@ -514,6 +515,7 @@ end
 end
 
 @testitem "Sector propagation in tensor_product" begin
+    using FermionicHilbertSpaces: SectorHilbertSpace
     @fermions f
 
     # Both inputs NumberConservation → QNs are [n1, n2] vectors
@@ -556,7 +558,7 @@ end
 end
 
 @testitem "Sector propagation with custom SectorConstraint" begin
-    import FermionicHilbertSpaces: fermionnumber
+    import FermionicHilbertSpaces: fermionnumber, SectorHilbertSpace
     @fermions f
     k = 2
 

@@ -414,6 +414,7 @@ end
 end
 
 @testitem "Scalar, collection and bare quantities" begin
+    using FermionicHilbertSpaces: SectorHilbertSpace
     @fermions f
     N = sum(f[i]'f[i] for i in 1:4)
     P = sum(i * f[i]'f[i] for i in 1:4)
@@ -488,6 +489,7 @@ end
 end
 
 @testitem "Specifications select and label the values of a quantity" begin
+    using FermionicHilbertSpaces: SectorHilbertSpace
     using LinearAlgebra
     # The reference maps each kept state to its label, with `rule(v)` the label of the value `v`, `nothing` to keep
     # the state without a label and `missing` to drop it.
@@ -540,6 +542,7 @@ end
 end
 
 @testitem "Specifications on edge cases" begin
+    using FermionicHilbertSpaces: SectorHilbertSpace
     @fermions f
     N = sum(f[i]'f[i] for i in 1:4)
     P = sum(i * f[i]'f[i] for i in 1:4)
@@ -568,6 +571,7 @@ end
 end
 
 @testitem "Constraint types keep their label rules" begin
+    using FermionicHilbertSpaces: SectorHilbertSpace
     @fermions f
     Hnumber = hilbert_space(f, 1:4, NumberConservation())
     unlabelled = [
