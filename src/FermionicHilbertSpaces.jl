@@ -37,8 +37,8 @@ export Kets, Ket, ProductState, SpinState, BosonicState
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
 export @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export BosonField, SpinField
-export NoSymmetry, ParityConservation, NumberConservation, constrain_space
-export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
+export NoConstraint, ParityConservation, NumberConservation, constrain_space
+export BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export symmetric_sector
 export open_system

@@ -90,10 +90,10 @@ julia> dim(sector(-1, hilbert_space(f, 1:3, ParityConservation())))
 4
 ```
 """
-sector(qn, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
-sector(::Nothing, H::AbstractHilbertSpace, constraint=NoSymmetry()) = constrain_space(H, constraint)
-sector(qn::Nothing, H::SectorHilbertSpace, constraint=NoSymmetry()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
-sector(qn::Tuple, H::SectorHilbertSpace{<:Any, <:Any, <:AbstractVector}, constraint = NoSymmetry()) = sector(collect(qn), H, constraint)
+sector(qn, H::SectorHilbertSpace, constraint=NoConstraint()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
+sector(::Nothing, H::AbstractHilbertSpace, constraint=NoConstraint()) = constrain_space(H, constraint)
+sector(qn::Nothing, H::SectorHilbertSpace, constraint=NoConstraint()) = constrain_space(parent(H), constraint, _sector_states(qn, H))
+sector(qn::Tuple, H::SectorHilbertSpace{<:Any, <:Any, <:AbstractVector}, constraint = NoConstraint()) = sector(collect(qn), H, constraint)
 
 function _sector_states(qn, H::SectorHilbertSpace)
     states = get(H.qn_to_states, qn, nothing)
@@ -107,7 +107,7 @@ end
 
 Return all sectors of `H` in the same order as `quantumnumbers(H)`.
 """
-sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
+sectors(H::AbstractHilbertSpace, constraint=NoConstraint()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
 
 """
     highest_weight_states(H, raisers; basis = Returns(I), check = true)
@@ -556,7 +556,7 @@ end
 end
 
 @testitem "Sector propagation with custom SectorConstraint" begin
-    import FermionicHilbertSpaces: fermionnumber
+    import FermionicHilbertSpaces: fermionnumber, SectorConstraint
     @fermions f
     k = 2
 

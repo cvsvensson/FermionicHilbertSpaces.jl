@@ -159,8 +159,8 @@ end
 # Tuples and vectors are mapped over directly; other iterables (generators, sets, matrices) are flattened to a vector.
 _field_labels(labels::Union{Tuple,AbstractVector}) = labels
 _field_labels(labels) = vec(collect(labels))
-hilbert_space(sym::SpinField, labels, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = tensor_product(map(l -> hilbert_space(sym[l]), _field_labels(labels)); constraint)
-function hilbert_space(sym::SpinField, labels, J, @nospecialize(constraint::ConstraintLike = NoSymmetry()))
+hilbert_space(sym::SpinField, labels, @nospecialize(constraint::ConstraintLike = NoConstraint())) = tensor_product(map(l -> hilbert_space(sym[l]), _field_labels(labels)); constraint)
+function hilbert_space(sym::SpinField, labels, J, @nospecialize(constraint::ConstraintLike = NoConstraint()))
     _check_spin_unset(sym)
     tensor_product(map(l -> hilbert_space(sym[l], J), _field_labels(labels)); constraint)
 end

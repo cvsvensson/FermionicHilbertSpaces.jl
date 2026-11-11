@@ -1,13 +1,13 @@
 
 """
-    NoSymmetry()
+    NoConstraint()
 
 Constraint that leaves a Hilbert space unchanged.
 """
-struct NoSymmetry <: AbstractConstraint end
-supports_sector_grouping(::NoSymmetry) = false
-supports_filtering(::NoSymmetry) = false
-supports_branch_pruning(::NoSymmetry) = false
+struct NoConstraint <: AbstractConstraint end
+supports_sector_grouping(::NoConstraint) = false
+supports_filtering(::NoConstraint) = false
+supports_branch_pruning(::NoConstraint) = false
 
 struct ProductConstraint{C} <: AbstractConstraint
     constraints::C
@@ -292,14 +292,14 @@ Build a constrained Hilbert space from `space`.
 With a `constraint`, keep the basis states of `space` that satisfy it. If `states` is
 given, only those states are candidates. Constraints that group states into sectors,
 such as `NumberConservation`, return a space with sectors, with states ordered by sector.
-`constrain_space(space, NoSymmetry())` returns `space` unchanged.
+`constrain_space(space, NoConstraint())` returns `space` unchanged.
 A constraint can also be `quantity` or `quantity => spec`, where `quantity` is a diagonal operator or a function
 of the basis state, such as `constrain_space(H, N => 2)` with `N = sum(f[i]'f[i] for i in 1:4)`;
 see [Constraints and sectors](@ref) for what `spec` can be.
 A `quantity => spec` constraint on a space with sectors keeps its labels, and its own labels follow them.
 
 With only `states`, return the subspace spanned by exactly those basis states, in the
-given order; this is equivalent to `constrain_space(space, NoSymmetry(), states)`.
+given order; this is equivalent to `constrain_space(space, NoConstraint(), states)`.
 """
 constrain_space
 
@@ -328,7 +328,7 @@ constrain_space
 end
 
 @testitem "ProductConstraint filtering" begin
-    using FermionicHilbertSpaces: particle_number
+    using FermionicHilbertSpaces: FilterConstraint, particle_number
     @fermions f
     H = hilbert_space(f, 1:2)
     constraint = NumberConservation(1) * FilterConstraint(state -> state != basisstate(2, H))
@@ -340,7 +340,7 @@ end
 end
 
 @testitem "Constraint maps must match spaces" begin
-    using FermionicHilbertSpaces: AdditiveConstraint, particle_number
+    using FermionicHilbertSpaces: AdditiveConstraint, FilterConstraint, particle_number
     @fermions f
     Hs = [hilbert_space(f[i]) for i in 1:3]
     @test_throws ArgumentError tensor_product(Hs...; constraint=AdditiveConstraint(1; maps=(particle_number, particle_number)))

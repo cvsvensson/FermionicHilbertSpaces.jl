@@ -280,7 +280,7 @@ _summand(S, x) = x
     @test Set(states) == Set(states2)
 end
 @testitem "BranchConstraint keeps the same states when filtering as when pruning" begin
-    using FermionicHilbertSpaces: particle_number
+    using FermionicHilbertSpaces: FilterConstraint, particle_number
     @fermions f
     H = hilbert_space(f, 1:6)
     blockade = BranchConstraint((p, d, s) -> d == 1 || count_ones(p[d].f) + count_ones(p[d - 1].f) < 2)
@@ -322,6 +322,7 @@ end
     @test Set(basisstates(tensor_product(Hfs; constraint=weighted_all))) == Set(FockNumber.([0b010, 0b101]))
 end
 @testitem "AdditiveConstraint without allowed values keeps all sectors" begin
+    using FermionicHilbertSpaces: AdditiveConstraint
     @spins S 1 // 2
     Hs = [hilbert_space(S[k]) for k in 1:3]
     H = tensor_product(Hs; constraint = AdditiveConstraint(missing; maps = s -> s.m))

@@ -292,7 +292,7 @@ end
     using LinearAlgebra
     import FermionicHilbertSpaces: fermions
     @fermions f
-    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
+    for qn in [NoConstraint(), ParityConservation(), NumberConservation()]
         c = fermions(hilbert_space(f, 1:2, qn))
         @test c[1] * c[1] == 0I
         @test c[1]' * c[1] + c[1] * c[1]' == I
@@ -569,7 +569,7 @@ end
     import FermionicHilbertSpaces: fermions
     Random.seed!(1234)
     @fermions f
-    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
+    for qn in [NoConstraint(), ParityConservation(), NumberConservation()]
         H1 = hilbert_space(f, 1:1, qn)
         H2 = hilbert_space(f, 1:3, qn)
         @test_throws ArgumentError tensor_product(H1, H2)
@@ -610,7 +610,7 @@ end
     @boson b
     Hb = hilbert_space(b, 2)
     mb = representation(b'b, Hb)
-    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
+    for qn in [NoConstraint(), ParityConservation(), NumberConservation()]
         H = hilbert_space(f, 1:0, qn)
         @test dim(H) == 1
         @test only(basisstates(H)) == FockNumber(0)

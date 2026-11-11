@@ -292,7 +292,7 @@ end
 end
 
 @testitem "Product space with more than typemax(Int) states" begin
-    import FermionicHilbertSpaces: basisstate, particle_number, state_index, ProductState, SpinState
+    import FermionicHilbertSpaces: basisstate, particle_number, state_index, ProductState, SpinState, AdditiveConstraint
     using LinearAlgebra: diag
     using SparseArrays: sparse
     @spins S 1 // 2
@@ -369,7 +369,7 @@ end
 
 @testitem "Matrix on a fermion, boson and spin product of more than 32 groups" begin
     using LinearAlgebra
-    import FermionicHilbertSpaces: matrix_representation, BosonicState, SpinState
+    import FermionicHilbertSpaces: matrix_representation, BosonicState, SpinState, AdditiveConstraint
     @fermions f
     @bosons b
     @spins s 1 // 2

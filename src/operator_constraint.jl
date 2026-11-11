@@ -10,7 +10,7 @@ function as_constraint(@nospecialize(cs::Union{Tuple, AbstractVector, Base.Gener
         c = as_constraint(c)
         c isa ProductConstraint ? append!(constraints, c.constraints) : push!(constraints, c)
     end
-    isempty(constraints) && return NoSymmetry()
+    isempty(constraints) && return NoConstraint()
     return length(constraints) == 1 ? only(constraints) : ProductConstraint(map(identity, constraints))
 end
 function as_constraint((quantity, spec)::Pair)
@@ -537,6 +537,7 @@ end
 end
 
 @testitem "Specifications on edge cases" begin
+    using FermionicHilbertSpaces: FilterConstraint
     @fermions f
     N = sum(f[i]'f[i] for i in 1:4)
     P = sum(i * f[i]'f[i] for i in 1:4)
@@ -552,6 +553,7 @@ end
 end
 
 @testitem "Vectors and products of constraints" begin
+    using FermionicHilbertSpaces: FilterConstraint
     @fermions f
     N = sum(f[i]'f[i] for i in 1:4)
     P = sum(i * f[i]'f[i] for i in 1:4)
@@ -565,6 +567,7 @@ end
 end
 
 @testitem "Constraint types keep their label rules" begin
+    using FermionicHilbertSpaces: FilterConstraint, SectorConstraint
     @fermions f
     Hnumber = hilbert_space(f, 1:4, NumberConservation())
     unlabelled = [

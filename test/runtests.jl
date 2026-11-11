@@ -114,7 +114,7 @@ end
         @test ptop'.map == embop.map
         @test embop'.map == ptop.map
     end
-    qns = [NoSymmetry(), ParityConservation(), NumberConservation()]
+    qns = [NoConstraint(), ParityConservation(), NumberConservation()]
     @fermions f
     import FermionicHilbertSpaces: fermions
     for qn in qns
@@ -153,8 +153,8 @@ end
     using LinearAlgebra, SparseArrays
     @fermions f
 
-    H = hilbert_space(f, 1:3, NoSymmetry())
-    Hsub = hilbert_space(f, 1:1, NoSymmetry())
+    H = hilbert_space(f, 1:3, NoConstraint())
+    Hsub = hilbert_space(f, 1:1, NoConstraint())
     d = dim(H)
     dsub = dim(Hsub)
 
@@ -186,9 +186,9 @@ end
     @test out_emb_vec ≈ vec(embed(msub, Hsub => H))
 
     # Reshape maps precompute both ordinary and repeated index mappings.
-    H1 = hilbert_space(f, 1:1, NoSymmetry())
-    H2 = hilbert_space(f, 2:2, NoSymmetry())
-    H12 = hilbert_space(f, 1:2, NoSymmetry())
+    H1 = hilbert_space(f, 1:1, NoConstraint())
+    H2 = hilbert_space(f, 2:2, NoConstraint())
+    H12 = hilbert_space(f, 1:2, NoConstraint())
     rmap = reshape(H12 => (H1, H2))
     mr = rand(ComplexF64, dim(H12), dim(H12))
     @test rmap(mr) ≈ reshape(mr, H12 => (H1, H2))
@@ -211,7 +211,7 @@ end
     @test embed(Hsub_constrained => Hconstrained)(msub_constrained) ≈ embed(msub_constrained, Hsub_constrained => Hconstrained; projection = true)
 
     # A whole-space partial trace must produce a basis-transformation map.
-    Hsame = hilbert_space(f, 1:2, NoSymmetry())
+    Hsame = hilbert_space(f, 1:2, NoConstraint())
     Hsimilar = hilbert_space(f, 1:2, ParityConservation())
     msame = rand(ComplexF64, dim(Hsame), dim(Hsame))
     pt_same = partial_trace(Hsame => Hsame)
