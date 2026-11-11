@@ -1,15 +1,15 @@
 struct MajoranaSingleParticleHilbertSpace{D}
-    majoranaindices::D
+    mode_ordering::D
 end
-dim(H::MajoranaSingleParticleHilbertSpace) = length(H.majoranaindices)
-mode_ordering(H::MajoranaSingleParticleHilbertSpace) = H.majoranaindices
-modes(H::MajoranaSingleParticleHilbertSpace) = keys(H.majoranaindices)
-Base.:(==)(a::MajoranaSingleParticleHilbertSpace, b::MajoranaSingleParticleHilbertSpace) = a.majoranaindices == b.majoranaindices
-Base.hash(x::MajoranaSingleParticleHilbertSpace, h::UInt) = hash(x.majoranaindices, h)
+dim(H::MajoranaSingleParticleHilbertSpace) = length(H.mode_ordering)
+mode_ordering(H::MajoranaSingleParticleHilbertSpace) = H.mode_ordering
+modes(H::MajoranaSingleParticleHilbertSpace) = keys(H.mode_ordering)
+Base.:(==)(a::MajoranaSingleParticleHilbertSpace, b::MajoranaSingleParticleHilbertSpace) = a.mode_ordering == b.mode_ordering
+Base.hash(x::MajoranaSingleParticleHilbertSpace, h::UInt) = hash(x.mode_ordering, h)
 Base.show(io::IO, H::MajoranaSingleParticleHilbertSpace) = print(io, "MajoranaSingleParticleHilbertSpace($(dim(H)) Majoranas)")
 
 """
-    hilbert_space(γ::SymbolicMajoranaBasis, labels, ::SingleParticle)
+    hilbert_space(γ::Field{Majorana}, labels, ::SingleParticle)
 
 The space of the Majoranas `γ[l]`, `l in labels`, for quadratic Majorana operators. `representation(op, H)` is the antisymmetric matrix `R` with `op = Σᵢⱼ R[i, j] γ[i] γ[j] / 2` up to a constant.
 
@@ -19,10 +19,10 @@ H = hilbert_space(γ, 1:2, SingleParticle())
 representation(1im * γ[1] * γ[2], H, Matrix) # [0 1im; -1im 0]
 ```
 """
-function hilbert_space(γ::SymbolicMajoranaBasis, labels::AbstractVector, ::SingleParticle)
+function hilbert_space(γ::Field{Majorana}, labels::AbstractVector, ::SingleParticle)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even, got $(length(labels))."))
     allunique(labels) || throw(ArgumentError("The Majorana labels must be distinct, got $labels."))
-    return MajoranaSingleParticleHilbertSpace(OrderedDict(γ[l] => n for (n, l) in enumerate(labels)))
+    return MajoranaSingleParticleHilbertSpace(OrderedDict(Mode(γ, l) => n for (n, l) in enumerate(labels)))
 end
 
 representation(op, H::MajoranaSingleParticleHilbertSpace, repr = EagerSparseRepr(); chunking = NoChunking(), kwargs...) = matrix_representation(op, H, repr; chunking = chunking, kwargs...)

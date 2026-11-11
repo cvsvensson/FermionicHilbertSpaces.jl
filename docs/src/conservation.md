@@ -101,10 +101,38 @@ pair_constraint = prod(NumberConservation(0:1, Hk) for Hk in pairs) * NumberCons
 tensor_product(pairs; constraint = pair_constraint)
 ```
 
+#### AdditiveConstraint
+Conserves a sum of contributions from the factors of a tensor product, given by `maps` applied to the state of each factor. It works for any space, also one without symbolic operators:
+```@example constraints
+import FermionicHilbertSpaces: AdditiveConstraint, FilterConstraint, SectorConstraint
+spins = [hilbert_space(S[k]) for k in 1:4]
+magnetization = AdditiveConstraint(-2:2; maps = s -> s.m)
+Hmag = tensor_product(spins; constraint = magnetization)
+quantumnumbers(Hmag)
+```
+
+#### FilterConstraint
+Keeps the states for which a function returns `true`. With `maps` and `spaces`, the function receives the value of each map on the state of its space. Here the particle numbers of two bosonic modes must be sorted:
+```@example constraints
+import FermionicHilbertSpaces: particle_number
+@bosons d
+Hbb = hilbert_space(d, 1:2, 3)
+sorted = FilterConstraint(issorted; maps = particle_number, spaces = factors(Hbb))
+basisstates(constrain_space(Hbb, sorted))
+```
+
+#### SectorConstraint
+Like `FilterConstraint`, but the function returns a sector label, or `missing` to discard the state. Here the two modes must hold different numbers of bosons, and the sectors are labelled by the total:
+```@example constraints
+distinct = SectorConstraint(n -> allunique(n) ? sum(n) : missing;
+    maps = particle_number, spaces = factors(Hbb))
+Hdistinct = constrain_space(Hbb, distinct)
+map((qn, Hsec) -> qn => basisstates(Hsec), quantumnumbers(Hdistinct), sectors(Hdistinct))
+```
+
 #### BranchConstraint
 Builds the states one factor at a time and calls `f(partial_state, depth, spaces)` after each factor is assigned. Returning `false` discards every state that starts this way, so a sector much smaller than the full space is found without enumerating it. Here no two neighbouring modes are both occupied:
 ```@example constraints
-import FermionicHilbertSpaces: particle_number
 no_neighbours = BranchConstraint((p, depth, spaces) -> depth == 1 || particle_number(p[depth]) + particle_number(p[depth-1]) < 2)
 dim(hilbert_space(f, 1:20, no_neighbours))
 ```

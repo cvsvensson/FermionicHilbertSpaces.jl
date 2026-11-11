@@ -366,11 +366,11 @@ end
     @test dim(constrain_space(H, ParityConservation([-1, 1]))) == 2^5
 
     ## ProductSymmetry
-    qn = ParityConservation([1]) * NumberConservation(1:2, H.modes[1:3])
-    states = FermionicHilbertSpaces.generate_states(H.modes, qn)
+    qn = ParityConservation([1]) * NumberConservation(1:2, FermionicHilbertSpaces.atomic_factors(H)[1:3])
+    states = FermionicHilbertSpaces.generate_states(FermionicHilbertSpaces.atomic_factors(H), qn)
     H2 = hilbert_space(f, 1:5, qn)
     T = FermionicHilbertSpaces.statetype(H2)
-    @test sort(collect(basisstates(H2))) == sort(map(state -> FermionicHilbertSpaces.catenate_fock_states(state, H.modes, T), states))
+    @test sort(collect(basisstates(H2))) == sort(map(state -> FermionicHilbertSpaces.catenate_fock_states(state, FermionicHilbertSpaces.atomic_factors(H), T), states))
     @test all(iseven ∘ fermionnumber, basisstates(H2))
 end
 

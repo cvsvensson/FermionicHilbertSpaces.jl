@@ -114,6 +114,8 @@ isbasisstate(state, H) = all(!iszero, order_key(state, H))
 
 Construct the Hilbert space of the fermions `f`, bosons `b` (truncated at `dimension`) or spins `s`
 (spin `J`) with the given `labels`, optionally restricted by a constraint, e.g. `NumberConservation(2)`.
+Majoranas `γ` are used like fermions, with an even number of labels.
+A custom field `c` takes the basis states of one mode, `hilbert_space(c, labels, states)`.
 
 ```jldoctest
 julia> @fermions f; @bosons b; @spins s 1//2;
@@ -193,18 +195,17 @@ group_id(H::AbstractAtomicHilbertSpace) = atomic_id(H)
     atomic_id(atom)
 
 Name of an atom: the key that identifies its degrees of freedom. It is built only from
-symbolic identity (basis, label and tags), never from truncation, spin value, transposition
+symbolic identity (field, label and tags), never from truncation, spin value, transposition
 or constraints, so a symbol naming a whole atom has the same id as the atom. Only atoms and
 symbols have an `atomic_id`; composite spaces are named by `atom_ids`.
 """
-atomic_id(f::AbstractSym) = symbolic_group(f) # generic fallback
+function atomic_id end
 
 """
     symbolic_group(op)
 
 Key that matches the symbolic operator `op` to the group of a Hilbert space it acts on:
-`symbolic_group(op) == group_id(group)`. A custom operator type adds a method that returns
-the label of its space, for example the `label` of a [`GenericHilbertSpace`](@ref).
+`symbolic_group(op) == group_id(group)`. The group of an [`Op`](@ref) follows from its mode.
 """
 function symbolic_group end
 
@@ -232,7 +233,6 @@ atom_position(x, H::AbstractHilbertSpace) = something(findfirst(==(atomic_id(x))
 atom_position(x, H::AbstractAtomicHilbertSpace) = atomic_id(x) == atomic_id(H) ? 1 : 0
 
 isconstrained(H::AbstractAtomicHilbertSpace) = false
-atomic_factors(f::AbstractSym) = (f,)
 
 partial_trace_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1
 
@@ -265,15 +265,11 @@ of `Int`, so methods for any `T<:Integer` keep the integer path there.
 internal_rep(state, space, ::Type{T}) where T = internal_rep(state, parent(space), T)
 
 """
-    apply_local_operator(op, state, space, precomp) -> (newstate, amplitude)
+    apply_local_operator(kind, state, space, precomp) -> (newstate, amplitude)
 
-Apply the symbolic operator `op` to the basis state `state` of `space`. Returns the new
-state and its amplitude; an amplitude of zero means that `op` annihilates `state`.
-`space` is the group that `op` acts on, so it can be used for dispatch. `precomp` is the
-value of [`_precomputation_before_operator_application`](@ref) for `op` and `space`.
-
-This is the method that connects a custom operator type to matrix representations, partial
-traces and the other operations on spaces.
+Apply an operator of kind `kind` to the basis state `state` of `space`, the group it acts on. An amplitude
+of zero means that the operator annihilates `state`. Methods are defined on the kind, and `precomp` is the
+value of [`_precomputation_before_operator_application`](@ref) for the operator and `space`.
 """
 function apply_local_operator end
 # Operators with amplitudes that need rounding add a method that computes them in the float type `P`
@@ -375,7 +371,7 @@ true
 """
 function subregion(Hs, H::AbstractHilbertSpace)
     Hs_items = Hs isa Tuple || Hs isa AbstractVector ? Hs : (Hs,)
-    names = _pair_majoranas(collect(Iterators.flatten(Iterators.map(_subregion_atoms, Hs_items))), H)
+    names = _pair_majoranas(collect(Iterators.flatten(Iterators.map(_atom_names, Hs_items))), H)
     isempty(names) && throw(ArgumentError("`Hs` must contain at least one space or symbolic operator."))
     positions = map(x -> atom_position(x, H), names)
     all(>(0), positions) || throw(ArgumentError("The spaces/operators in `Hs` must match atomic factors of `H`, got the following unmatched ones: $(names[iszero.(positions)])."))
@@ -389,8 +385,9 @@ function subregion(Hs, H::AbstractHilbertSpace)
     states = _find_subregion_states(H, state_mapper(H, (Hsub,)))
     ConstrainedSpace(Hsub, states)
 end
-_subregion_atoms(x) = applicable(atomic_factors, x) ? atomic_factors(x) :
-    throw(ArgumentError("expected a Hilbert space or a collection of symbols, got $x"))
+# The atoms that a space or symbol names, for lookups by `atomic_id`; a symbol names the atom it acts on.
+_atom_names(x::AbstractHilbertSpace) = atomic_factors(x)
+_atom_names(x) = throw(ArgumentError("expected a Hilbert space or a collection of symbols, got $x"))
 # A subsystem of `H` given as a space, or as symbols resolved by `subregion`
 _subsystem(Hsub::AbstractHilbertSpace, H) = Hsub
 _subsystem(Hs, H) = subregion(Hs, H)
