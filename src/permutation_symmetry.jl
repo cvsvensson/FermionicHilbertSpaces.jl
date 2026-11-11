@@ -169,10 +169,10 @@ Return a matrix whose orthonormal columns span the sector of `H` selected by `se
 of the factors `Hs` (all or some of the factors of `H`). `sector` is `:symmetric`, `:antisymmetric`, or a tuple
 `(perms, weights)` with permutations of `1:length(Hs)` and one weight per permutation. For an orthonormal basis,
 `perms` must form a group and `weights` a positive multiple of a character of it.
-`T` is the element type, by default the float type of the weights.
+`T` is the element type, by default `Float64`, or the float type of the weights.
 
-`orth_method` is `:qr` or `:eig`, or `nothing` to return the projector, with `normalize` and `sparse`
-as in `permutation_projector`. `check=false` skips the validation of `(perms, weights)`.
+`orth_method` is `:qr` or `:eig`, or `nothing` to return the projector, scaled to `P^2 == P` unless
+`normalize=false` and dense if `sparse=false`. `check=false` skips the validation of `(perms, weights)`.
 `phase_factors` includes the fermionic signs of the permutations, as in [`permutation_operator`](@ref).
 """
 function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type{T}=_default_sector_eltype(sector);

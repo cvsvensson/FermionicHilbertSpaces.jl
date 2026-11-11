@@ -654,7 +654,7 @@ Compute the partial trace of `m` from `H` to `Hsub`, with fermionic phase factor
 A vector `m` is treated as a pure state `ψ`, and the result is the reduced density matrix of `ψψ†`.
 `Hsub` can also be given as symbols naming its modes, meaning [`subregion`](@ref)`(Hsub, H)`, as in `H => [f[1], f[3]]`.
 Unless `projection=true`, throws an `ArgumentError` if `m` has weight on a state of `H` that does not
-split into a state of `Hsub` and a state of `complement`.
+split into a state of `Hsub` and a state of `complement`. The map `partial_trace(H => Hsub)` skips this check.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces; @fermions f;
