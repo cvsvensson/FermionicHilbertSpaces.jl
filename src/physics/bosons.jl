@@ -194,7 +194,6 @@ parity(s::BosonicState) = iseven(s.n) ? 1 : -1
     end
     return BosonicState(n), amplitude
 end
-symbolic_group(H::TruncatedBosonicHilbertSpace) = H.mode
 atomic_id(H::TruncatedBosonicHilbertSpace) = H.mode
 
 @testitem "Bosonic hilbert space" begin
