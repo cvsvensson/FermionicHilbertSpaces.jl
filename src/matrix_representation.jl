@@ -902,7 +902,6 @@ _convert_repr_eltype(M, ::EagerSparseRepr{T}) where T = SparseArrays.sparse(T.(M
 _convert_repr_eltype(M, ::EagerDenseRepr{T}) where T = Matrix{T}(M)
 _convert_repr_eltype(M, ::Union{LazyRepr, PartitionedSparseRepr}) = M
 _convert_repr_eltype(M, repr::Type) = _convert_repr_eltype(M, _canonicalize_repr(repr))
-_convert_repr_eltype(M, ::Type{A}) where {A <: SparseArrays.AbstractSparseArray} = SparseArrays.sparse(_convert_repr_eltype(M, _canonicalize_repr(A)))
 
 # A concrete element type fixes the matrix type, also where inference cannot follow the assembly
 _with_format_eltype(M, ::Any) = M
@@ -1238,7 +1237,7 @@ end
         @test (@inferred representation(k, H, vformat)) isa VT
         @test representation("10", H, vformat) == ket
     end
-    @test (@inferred representation(op, H)) isa SparseMatrixCSC{Int, Int}
+    @test (@inferred representation(op, H)) isa SparseMatrixCSC
     @test representation(2, H) isa SparseMatrixCSC{Int, Int}
     for format in (:dense, nothing, Any, Diagonal, Hermitian, Array{Float64, 3}, SparseMatrixCSC{Float64, Int32})
         @test_throws ArgumentError representation(op, H, format)
