@@ -272,8 +272,8 @@ end
     @test parities == [1, -1]
     F = eigen(Hermitian(representation(quadratic, H, Matrix)))
     @test_throws ArgumentError ground_state_parity(Eigen(F.values, 2 * F.vectors), H)
-    F32 = eigen(Hermitian(ComplexF32.(representation(quadratic, H, :dense))))
-    @test ground_state_parity(F32, H) == ground_state_parity(eigen(Hermitian(representation(quadratic, H, :dense))), H)
+    F32 = eigen(Hermitian(ComplexF32.(representation(quadratic, H, Matrix))))
+    @test ground_state_parity(F32, H) == ground_state_parity(eigen(Hermitian(representation(quadratic, H, Matrix))), H)
 
     # Two zero modes, γ[1] and γ[4], whose eigenvectors `eigen` does not pair. The ground states are degenerate, so the
     # parity is undefined and G is that of their equal mixture.
@@ -282,7 +282,7 @@ end
     F = eigen(Hermitian(representation(ham, Hzero, Matrix)))
     @test_throws ArgumentError ground_state_parity(F, Hzero)
     Hzero_mb = hilbert_space(γ, 1:4)
-    vals, vecs = eigen(Hermitian(representation(ham, Hzero_mb, :dense)))
+    vals, vecs = eigen(Hermitian(representation(ham, Hzero_mb, Matrix)))
     ground = vecs[:, vals .≈ vals[1]]
     @test correlation_matrix(F) ≈ correlation_matrix(ground * ground' / size(ground, 2), Hzero_mb, Hzero)
 end

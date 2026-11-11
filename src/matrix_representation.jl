@@ -583,7 +583,7 @@ Return a concrete representation of `op_or_state` in Hilbert space `space`. This
 - For symbolic operators and numbers, returns a sparse matrix by default. The optional `repr` selects the format:
   an array type such as `Matrix` or `SparseMatrixCSC`, with an optional element type as in `Matrix{ComplexF64}`,
   or a number type such as `Float64` for a sparse result of that element type. `:lazy` gives a matrix-free
-  `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`, and `:sparse` also works.
+  `SciMLOperators.FunctionOperator` that wraps a `LazyOperator`.
   A number `c` gives `c` times the identity. With a GPU package loaded, a GPU array type such as `CuArray` or
   `cuSPARSE.CuSparseMatrixCSR{Float32}` builds the matrix on the GPU.
 - For `AbstractBasisState` and strings such as `"10"`, returns a one-hot sparse column vector.
@@ -634,7 +634,6 @@ size(M) == (dim(H), dim(H))
 ```
 """
 function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
-    repr === :dense && return Matrix(matrix_representation(op, space, EagerSparseRepr(); projection, chunking, kwargs...))
     # The barrier keeps inference from compiling every format a runtime Symbol could select
     repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, space, _canonicalize_repr(repr); projection, chunking, kwargs...)
     format = _matrix_format(repr)
@@ -646,7 +645,6 @@ end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
     Hout == Hin && return matrix_representation(op, Hin, repr; projection, chunking, kwargs...)
-    repr === :dense && return Matrix(matrix_representation(op, ax, EagerSparseRepr(); projection, chunking, kwargs...))
     repr = _matrix_format(repr)
     repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("Lazy and chunked representations with `Axes(Hout, Hin)` need `Hout == Hin`."))
     if trivial_operator(op)
@@ -885,23 +883,20 @@ _canonicalize_repr(::Union{Type{Array{T}}, Type{Matrix{T}}, Type{Vector{T}}}) wh
 _canonicalize_repr(::Union{Type{SparseArrays.SparseMatrixCSC}, Type{SparseArrays.SparseVector}}) = EagerSparseRepr()
 _canonicalize_repr(::Union{Type{SparseArrays.SparseMatrixCSC{T}}, Type{SparseArrays.SparseMatrixCSC{T, Int}}, Type{SparseArrays.SparseVector{T}}, Type{SparseArrays.SparseVector{T, Int}}}) where {T} = EagerSparseRepr{T}()
 _canonicalize_repr(::Type{T}) where T<:Number = EagerSparseRepr{T}()
-_canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:sparse`, `:lazy`, a number type, or `Array`, `Matrix`, `Vector`, `SparseMatrixCSC` or `SparseVector`, optionally with an element type."))
+_canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:lazy`, a number type, or `Array`, `Matrix`, `Vector`, `SparseMatrixCSC` or `SparseVector`, optionally with an element type."))
 _matrix_format(repr) = _canonicalize_repr(repr)
 _matrix_format(repr::Type{<:Union{Vector, SparseArrays.SparseVector}}) = throw(ArgumentError("`$(repr)` is a vector format, but this representation is a matrix. Use `Matrix`, `SparseMatrixCSC` or `Array`."))
 _vector_format(repr) = _canonicalize_repr(repr)
 _vector_format(repr::Type{<:Union{Matrix, SparseArrays.SparseMatrixCSC}}) = throw(ArgumentError("`$(repr)` is a matrix format, but kets and bras give vectors. Use `Vector`, `SparseVector` or `Array`."))
 function _canonicalize_repr(s::Symbol)
-    s == :sparse && return EagerSparseRepr()
-    s == :dense && return EagerDenseRepr()
     s == :lazy && return LazyRepr()
-    throw(ArgumentError("The representation type must be `:sparse`, `:dense` or `:lazy`, got `:$s`."))
+    throw(ArgumentError("The only symbol format is `:lazy`, got `:$s`. Use an array type such as `Matrix` or `SparseMatrixCSC`."))
 end
 
 
 group_ids(space::AbstractHilbertSpace) = map(group_id, groups(space))
 
-# The default sparse format keeps the structured identity; the other formats give the matrix type they name
-_convert_repr_eltype(M, ::EagerSparseRepr{Missing}) = M
+_convert_repr_eltype(M, ::EagerSparseRepr{Missing}) = SparseArrays.sparse(M)
 _convert_repr_eltype(M, ::EagerDenseRepr{Missing}) = Matrix(M)
 _convert_repr_eltype(M, ::EagerSparseRepr{T}) where T = SparseArrays.sparse(T.(M))
 _convert_repr_eltype(M, ::EagerDenseRepr{T}) where T = Matrix{T}(M)
@@ -1004,7 +999,7 @@ end
         f[1]' * f[2] + f[2]' * f[1],
         sum(0.3n * (b[1]' + b[1]) * f[n]' * f[n] for n in 1:2) + 1im * s[:x] * f[1]' * f[2] * b[2],
     ]
-    for op in ops, repr in (:sparse, :dense, EagerDenseRepr())
+    for op in ops, repr in (SparseMatrixCSC, Matrix, EagerDenseRepr())
         M = representation(op, H, repr)
         Mc = representation(op, Hc, repr; projection=true)
         @test typeof(Mc) == typeof(M)
@@ -1243,7 +1238,9 @@ end
         @test (@inferred representation(k, H, vformat)) isa VT
         @test representation("10", H, vformat) == ket
     end
-    for format in ("dense", nothing, Any, Diagonal, Hermitian, Array{Float64, 3}, SparseMatrixCSC{Float64, Int32})
+    @test (@inferred representation(op, H)) isa SparseMatrixCSC{Int, Int}
+    @test representation(2, H) isa SparseMatrixCSC{Int, Int}
+    for format in (:dense, nothing, Any, Diagonal, Hermitian, Array{Float64, 3}, SparseMatrixCSC{Float64, Int32})
         @test_throws ArgumentError representation(op, H, format)
         @test_throws ArgumentError representation(2, H, format)
         @test_throws ArgumentError representation("10", H, format)
