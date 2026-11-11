@@ -133,10 +133,11 @@ generalized_kron(ms, Hs::Pair; kwargs...) = generalized_kron(ms, first(Hs), last
 uniform_to_sparse_type(::Type{UniformScaling{T}}) where {T} = SparseMatrixCSC{T,Int}
 uniform_to_sparse_type(::Type{T}) where {T} = T
 function allocate_tensor_product_result(ms, Hs, H)
-    T = Base.promote_eltype(ms...)
+    P = partial_trace_phase_factor_eltype(H)
+    T = promote_type(Base.promote_eltype(ms...), P)
     N = ndims(first(ms))
     types = map(uniform_to_sparse_type ∘ typeof, ms)
-    MT = Base.promote_op(kron, types...)
+    MT = Base.promote_op(*, Base.promote_op(kron, types...), P)
     Nout = dim(H)
     _mout = Zeros(T, ntuple(j -> Nout, N))
     try
@@ -375,7 +376,7 @@ function ordered_product(ms, Hs, H; phase_factors = true, projection = false)
         phase = phase_factors && !isnothing(complement) ? kron_phase_factor(mapper) : (f1, f2) -> 1
         (sparse(m isa UniformScaling ? m(dim(Hk)) : m), Hk, mapper, phase)
     end
-    return _ordered_product(factors, H, promote_type(Int, Base.promote_eltype(ms...)), projection)
+    return _ordered_product(factors, H, promote_type(partial_trace_phase_factor_eltype(H), Base.promote_eltype(ms...)), projection)
 end
 function _ordered_product(factors, H, ::Type{T}, projection) where {T}
     Is, Js, Vs = Int[], Int[], T[]
@@ -688,7 +689,7 @@ function _foreach_partial_trace_term(op::F, inds, H, Hsub, complement, mapper, :
     # factor σ of the pair (this state, the first such state), so that the phase factor of a pair is σ1 * conj(σ2).
     f0 = first(substates)
     fullstates0, amps0 = combine_states((f0, first(barstates)), mapper)
-    hits = Tuple{Int,Int,eltype(amps0)}[]
+    hits = Tuple{Int, Int, promote_type(eltype(amps0), partial_trace_phase_factor_eltype(H))}[]
     for fbar in barstates
         empty!(hits)
         ref = nothing
