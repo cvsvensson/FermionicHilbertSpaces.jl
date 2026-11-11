@@ -300,7 +300,6 @@ end
 
 @testitem "Symmetric sectors of a Hubbard ring" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: Relabel
     N = 4
     T((i, σ)) = (mod1(i + 1, N), σ)
     flip((i, σ)) = (i, σ == :↑ ? :↓ : :↑)

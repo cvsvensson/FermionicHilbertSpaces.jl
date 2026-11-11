@@ -39,6 +39,7 @@ export @fermion, @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
+export Relabel
 export open_system
 public particle_number, Axes, dissipator, FreeFermions, NonCommutativeProducts, add!!, matrix_representation, vector_representation
 

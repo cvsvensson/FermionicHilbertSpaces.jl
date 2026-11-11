@@ -270,7 +270,6 @@ Hsub_frac = subregion(Hsub_full, Hfrac)
 A symmetry that relabels the modes is a function on their labels: `Relabel(g) => λ` keeps the states whose amplitudes obey ``\psi(g(s)) = \lambda\psi(s)``, where ``g(s)`` is the product state ``s`` with the mode of every label `l` moved to the label `g(l)`, as in Bloch's theorem ``\psi(x + a) = e^{ika}\psi(x)``. On a ring of ``N`` sites with the translation `T(j) = mod1(j + 1, N)`, a plane wave with the amplitude ``e^{2\pi i k j/N}`` on site ``j`` has ``\lambda = e^{2\pi i k/N}``, so `Relabel(T) => cispi(2k / N)` keeps the states of momentum ``k``. The result has one basis vector per orbit of product states under translations, so it is about ``N`` times smaller than its parent, and its matrix elements are computed from one representative product state per basis vector, without building the operator on the parent. Combined with a conserved quantity, it keeps its sectors. The lowest energy of a Heisenberg ring at ``S^z_\mathrm{tot} = 0`` for each momentum is
 ```@example momentum
 using FermionicHilbertSpaces, LinearAlgebra
-using FermionicHilbertSpaces: Relabel
 @spins S 1 // 2
 N = 10
 ham = sum(S[j][:]'S[mod1(j + 1, N)][:] for j in 1:N)
