@@ -1,14 +1,15 @@
 """
     Relabel(g)
 
-The symmetry that moves the mode with label `l` to the mode with label `g(l)`: the unitary `U` with
-`U * f[l] * U' == f[g(l)]`, fermion signs included. The constraint `Relabel(g) => λ` keeps the states with
-`U * ψ == λ * ψ`, where `λ^n ≈ 1` for the order `n` of the permutation of the modes, and several pairs keep their
-common eigenstates. The result is a [`SymmetricSector`](@ref).
+The symmetry that moves the mode with label `l` to the mode with label `g(l)`. The constraint `Relabel(g) => λ` keeps
+the states whose amplitudes obey `ψ(g(s)) == λ * ψ(s)`, where `g(s)` is the product state `s` with every mode moved,
+with the sign of reordering fermions; `λ` is the eigenvalue of `U'` for the `U` that maps each `s` to `g(s)`. It needs
+`λ^n ≈ 1` for the order `n` of the permutation of the modes, several pairs keep their common eigenstates, and the
+result is a [`SymmetricSector`](@ref).
 
 ```julia
 T(j) = mod1(j + 1, N)
-Hk = hilbert_space(S, 1:N, (Sz, Relabel(T) => cispi(-2k / N)))   # amplitude cispi(2k j / N) on site j
+Hk = hilbert_space(S, 1:N, (Sz, Relabel(T) => cispi(2k / N)))   # momentum k: amplitude cispi(2k j / N) on site j
 ```
 """
 struct Relabel
@@ -19,10 +20,10 @@ Base.show(io::IO, r::Relabel) = print(io, "Relabel(", r.map, ")")
 """
     LocalMap(f)
 
-The symmetry `U` that acts on each site `l` with `f(l)`, a single-site operator or its matrix, which must permute the
-basis states of the site, as `l -> 2S[l][:x]` does for spin 1/2. `LocalMap(f) => λ` works like [`Relabel`](@ref) and
-composes with it: `Relabel(g) ∘ LocalMap(f) => λ` takes the eigenvalue of the product of the two unitaries, which
-acts with the local map and then moves the modes.
+The symmetry that acts on site `l` of each product state with `f(l)`, a single-site operator or its matrix, which must
+permute the basis states of the site, as `l -> 2S[l][:x]` does for spin 1/2. `LocalMap(f) => λ` keeps the states with
+`ψ(f(s)) == λ * ψ(s)`, like [`Relabel`](@ref), and composes with it: `Relabel(g) ∘ LocalMap(f) => λ` is the map that
+applies the local map to `s` and then moves the modes.
 """
 struct LocalMap
     op
@@ -50,7 +51,7 @@ as_constraint(p::Pair{<:_MaybeSymmetry}) = _is_symmetry(first(p)) ? SymmetryCons
 
 # A group element `(perm, locs)` maps a product state to the one whose factor `i` is the image of the old factor
 # `perm[i]` under `locs[i]`, a permutation of the basis states of site `i`. The element of a symmetry is the inverse of
-# its unitary `U`, so a composition has the elements of its parts in reverse order.
+# the `U` that maps each product state to its image, so a composition has the elements of its parts in reverse order.
 _element(r::Relabel, space, atoms) = (_atom_permutation(r.map, atoms), [collect(1:dim(atom)) for atom in atoms])
 function _element(l::LocalMap, space, atoms)
     phase_factor_u(state_mapper(space, atoms)) == Returns(1) || throw(ArgumentError("A `LocalMap` does not support fermions."))
@@ -90,7 +91,7 @@ function _atom_permutation(@nospecialize(g), atoms)
     modes = map(atomic_id, atoms)
     position = Dict(m => n for (n, m) in enumerate(modes))
     perm = map(modes) do m
-        m isa Mode || throw(ArgumentError("A relabeling acts on mode labels, but `$m` is not a mode."))
+        m isa Mode || throw(ArgumentError("A relabeling moves single modes, but the factor `$m` is not one. The pairs of a Majorana space cannot be relabeled."))
         image = _image(g, m)
         get(() -> throw(ArgumentError("`$g` maps `$m` to `$image`, which is not in the space.")), position, image)
     end
@@ -100,8 +101,8 @@ end
 
 # `λ` as an exact `cispi`, so that real eigenvalues give real characters
 function _root_of_unity(λ, n)
-    λ isa Number && λ^n ≈ 1 || throw(ArgumentError("The eigenvalue of a symmetry of order $n is a root of unity with `λ^$n ≈ 1`, got `$λ`."))
-    return cispi(2 * round(Int, n * angle(λ) / 2π) / n)
+    λ isa Number && ComplexF64(λ)^n ≈ 1 || throw(ArgumentError("The eigenvalue of a symmetry of order $n is a root of unity with `λ^$n ≈ 1`, got `$λ`."))
+    return cispi(2 * round(Int, n * angle(ComplexF64(λ)) / 2π) / n)
 end
 
 _canonical(λ) = all(isinteger, reim(λ)) ? (isreal(λ) ? Int(real(λ)) : Complex{Int}(λ)) : λ
@@ -171,9 +172,9 @@ function constrain_space(space::AbstractHilbertSpace, c::SymmetryConstraint)
     # Without local maps the elements are plain permutations, which are faster to apply and carry the fermionic signs.
     perms = all(g -> last(g) == last(e), elements) ? first.(elements) : [SiteMap(perm, locs, atoms) for (perm, locs) in elements]
     T = all(isreal, λs) ? Float64 : ComplexF64
-    # The elements are the inverses of the unitaries `U`, so the projector with the weights `λ` keeps the states with
-    # `U * ψ == λ * ψ`.
-    Q = _orbit_block_basis(space, atoms, perms, T.(λs), _QR(), T; check = false)
+    # The elements are the inverses `U'` of the `U` that map each product state `s` to its image `g(s)`, so the projector
+    # with the weights `conj(λ)` keeps the states with `U' * ψ == λ * ψ`, which is `ψ(g(s)) == λ * ψ(s)`.
+    Q = _orbit_block_basis(space, atoms, perms, T.(conj.(λs)), _QR(), T; check = false)
     reps = [basisstate(rowvals(Q)[first(nzrange(Q, n))], space) for n in axes(Q, 2)]
     norms = [real(nonzeros(Q)[first(nzrange(Q, n))]) for n in axes(Q, 2)]
     H = SymmetricSector(space, c, sparse(transpose(Q)), reps, norms, false)
@@ -266,7 +267,7 @@ function _check_invariant(op, space, g)
         v = copy(u)
         foreach((n, loc) -> v[n] = u[n][loc], perm, locs)
         x, y = _expectation_values(left, u), _expectation_values(right, v)
-        abs(sum(x) - sum(y)) <= Base.rtoldefault(real(T)) * sum(abs, y) || throw(err)
+        abs(sum(x) - sum(y)) <= sqrt(eps(real(T))) * sum(abs, y) || throw(err)
     end
     return nothing
 end
@@ -325,7 +326,7 @@ end
 
 @testitem "Symmetric sectors of a spin ring" begin
     using LinearAlgebra, SparseArrays
-    using FermionicHilbertSpaces: Relabel, Axes, change_basis, permutation_operator, TransposedSpace
+    using FermionicHilbertSpaces: Relabel, Axes, change_basis, TransposedSpace
     N = 6
     @spins S 1 // 2
     Sz = sum(S[j][:z] for j in 1:N)
@@ -335,7 +336,7 @@ end
     perms = [[mod1(i + s, N) for i in 1:N] for s in 0:(N - 1)]
     T(j) = mod1(j + 1, N)
     R(j) = N + 1 - j
-    Hks = [hilbert_space(S, 1:N, (Sz, Relabel(T) => cispi(-2k / N))) for k in 0:(N - 1)]
+    Hks = [hilbert_space(S, 1:N, (Sz, Relabel(T) => cispi(2k / N))) for k in 0:(N - 1)]
 
     @test sort(reduce(vcat, [eigvals(Hermitian(representation(ham, sector(0, Hk), Matrix))) for Hk in Hks])) ≈
         eigvals(Hermitian(representation(ham, sector(0, space), Matrix)))
@@ -352,15 +353,10 @@ end
     Q(m) = symmetric_sector(sector(m, space), factors(space), (perms, [cispi(-2k * s / N) for s in 0:(N - 1)]))
     @test representation(Splus, Axes(sector(1, Hk), H0)) ≈ Q(1)' * representation(Splus, Axes(sector(1, space), sector(0, space))) * Q(0)
 
-    # a single excitation has amplitude cispi(2k j / N) on site j
+    # ψ(T(s)) == λ ψ(s): a single excitation has amplitude cispi(2k j / N) on site j
     magnon = embed([1], sector(N // 2 - 1, Hk) => space)
     amplitudes = [magnon[state_index(join(i == j ? "↓" : "↑" for i in 1:N), space)] for j in 1:N]
     @test amplitudes ≈ amplitudes[1] * [cispi(2k * j / N) for j in 0:(N - 1)]
-
-    # `U` moves site `j` to site `T(j)`
-    U = permutation_operator(space, factors(space), invperm(T.(1:N)))
-    @test U * representation(S[1][:z], space) * U' ≈ representation(S[T(1)][:z], space)
-    @test U * embed(v, H0 => space) ≈ cispi(-2k / N) * embed(v, H0 => space)
 
     @test change_basis(embed(v, H0 => space), space => H0; projection = true) ≈ v
     @test_throws ArgumentError change_basis(embed(v, H0 => space), space => H0)
@@ -373,6 +369,7 @@ end
     @test_throws ArgumentError representation(Sz, Axes(sector(0, space), H0))
     @test_throws ArgumentError hilbert_space(S, 1:N, Relabel(j -> j + 1) => 1)
     @test_throws ArgumentError hilbert_space(S, 1:N, Relabel(T) => im)
+    @test_throws ArgumentError hilbert_space(S, 1:N, Relabel(R) => typemin(Int) + 1)
     @test_throws "needs an eigenvalue" hilbert_space(S, 1:N, Relabel(T))
     @test hilbert_space(S, 1:N, Relabel(T) => 1.0) == hilbert_space(S, 1:N, Relabel(T) => exp(0im))
     @test_throws ArgumentError constrain_space(space, Relabel(T) => 1, basisstates(space))
@@ -391,7 +388,7 @@ end
 
 @testitem "Symmetric sectors of a Hubbard ring" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: Relabel, permutation_operator, atomic_factors
+    using FermionicHilbertSpaces: Relabel
     N = 4
     T((i, σ)) = (mod1(i + 1, N), σ)
     flip((i, σ)) = (i, σ == :↑ ? :↓ : :↑)
@@ -414,13 +411,14 @@ end
     @test sort([Ek(Relabel(flip) => 1); Ek(Relabel(flip) => -1)]) ≈ Ek()
     @test_throws ArgumentError constrain_space(H, Relabel(flip) => 1)
 
-    # `U * f[l] * U' == f[T(l)]`, with the fermionic signs
-    U = permutation_operator(Hn, atomic_factors(Hn), invperm([findfirst(==(T(l)), labels) for l in labels]))
-    hop(a, b) = representation(f[a...]'f[b...], Hn)
-    @test U * hop((4, :↑), (2, :↓)) * U' ≈ hop(T((4, :↑)), T((2, :↓)))
-    Hi = constrain_space(Hn, Relabel(T) => im)
-    ψ = embed(randn(dim(Hi)), Hi => Hn)
-    @test U * ψ ≈ im * ψ
+    # ψ(T(s)) == λ ψ(s) for three fermions, where moving the modes of `s` gives `T(s)` with its sign
+    Hf = hilbert_space(f, labels)
+    c(l) = representation(f[l...]', Hf)
+    vacuum = representation(prod(f[l...] * f[l...]' for l in labels), Hf) * ones(dim(Hf))
+    s = [(3, :↑), (4, :↑), (1, :↓)]
+    Hi = constrain_space(Hf, Relabel(T) => im)
+    ψ = embed(randn(dim(Hi)), Hi => Hf)
+    @test dot(prod(c ∘ T, s) * vacuum, ψ) ≈ im * dot(prod(c, s) * vacuum, ψ)
 
     # A composition of relabelings keeps the fermionic signs
     H2(λ) = hilbert_space(f, 1:2, Relabel(j -> 3 - j) ∘ Relabel(identity) => λ)
@@ -455,7 +453,7 @@ end
     @test sort(reduce(vcat, [E(staggered, H(Relabel(T) ∘ flip => cispi(2k / N))) for k in 0:(N - 1)])) ≈ E(staggered, H())
     @test_throws ArgumentError E(staggered, H(Relabel(T) => 1))
 
-    # The two orders of a translation and the inversion of the even sites are different unitaries
+    # The two orders of a translation and the inversion of the even sites are different maps `U` of the product states
     T4(j) = mod1(j + 1, 4)
     fliphalf = LocalMap(j -> iseven(j) ? 2S[j][:x] : 1)
     ring(c) = sum(S[j][:x] * S[T4(j)][:x] + c[j] * S[j][:z] for j in 1:4)
@@ -468,7 +466,7 @@ end
         @test_throws ArgumentError E(ring(changed), hilbert_space(S, 1:4, g => 1))
         Hi = hilbert_space(S, 1:4, g => im)
         ψ = embed(randn(dim(Hi)), Hi => H4)
-        @test U * ψ ≈ im * ψ
+        @test U' * ψ ≈ im * ψ
     end
 
     # A product over many sites
@@ -486,5 +484,5 @@ end
     L2 = hilbert_space(L, 1:2)
     Hc = hilbert_space(L, 1:2, LocalMap(j -> C) => cispi(2 / 3))
     ψ = embed(randn(dim(Hc)), Hc => L2)
-    @test kron(C, C) * ψ ≈ cispi(2 / 3) * ψ
+    @test kron(C, C)' * ψ ≈ cispi(2 / 3) * ψ
 end
