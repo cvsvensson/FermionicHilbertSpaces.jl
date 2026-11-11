@@ -259,7 +259,6 @@ end
     γ = majoranas(hilbert_space(y, 1:4))
     # There should be 4 Majorana operators for 2 modes
     @test length(γ) == 4
-    # Test Hermiticity: γ₁ = c + c†, γ₂ = i(c - c†) are Hermitian
     for op in values(γ)
         @test op ≈ op'
     end
