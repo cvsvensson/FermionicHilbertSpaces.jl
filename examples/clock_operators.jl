@@ -73,11 +73,11 @@ X, Z = [0 0 1; 1 0 0; 0 1 0], Diagonal(ω .^ (0:(D - 1)))
 charge(state) = mod(sum(s.n for s in state.states), D)
 Hq = constrain_space(H, charge)
 
-# The ring is also invariant under the translation `T`, and `Relabel(T) => λ` keeps the states that a
-# translation multiplies by `λ`: the [momentum sectors](@ref "Momentum sectors"), each still split by charge.
+# The ring is also invariant under the translation `T`, and `Relabel(T) => cispi(2k / N)` keeps the states of
+# momentum `k`: the [momentum sectors](@ref "Momentum sectors"), each still split by charge.
 # The blocks of all charges and momenta together reproduce the spectrum of the full space.
 using FermionicHilbertSpaces: Relabel
-Hks = [constrain_space(Hq, Relabel(T) => cispi(-2k / N)) for k in 0:(N - 1)]
+Hks = [constrain_space(Hq, Relabel(T) => cispi(2k / N)) for k in 0:(N - 1)]
 energies = [eigvals(Hermitian(representation(ham, sector(q, Hk), Matrix))) for q in 0:(D - 1), Hk in Hks]
 @assert sort(reduce(vcat, energies)) ≈ eigvals(Hermitian(representation(ham, H, Matrix)))
 [dim(sector(q, Hk)) for q in 0:(D - 1), Hk in Hks]
