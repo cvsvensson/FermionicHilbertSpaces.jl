@@ -143,6 +143,8 @@ function _group_product(states::Tuple)
     NCAdd(NCMul(1, factors))
 end
 SymbolicState(space, state) = SymbolicState(space, state, nothing)
+# Operators return kets in the state type of the space, which may differ from that of the ket they act on
+Base.convert(::Type{SymbolicState{K,B,H}}, s::SymbolicState) where {K,B,H} = SymbolicState{K,B,H}(s.space, s.ket, s.bra)
 has_ket(s::SymbolicState) = !isnothing(s.ket)
 has_bra(s::SymbolicState) = !isnothing(s.bra)
 isket(s::SymbolicState) = has_ket(s) && !has_bra(s)
@@ -1022,6 +1024,10 @@ end
     @test f[1] * vf("00") == 0
     @test s[:+] * vs("↑") == 0
     @test (f[1] + f[2]') * vf("00") == vf("01")
+    # a ket whose state has another integer type than the states of its space
+    Hf = hilbert_space(f, 1:2)
+    ψ = (f[1]' + f[2]') * FermionicHilbertSpaces.SymbolicState(Hf, FockNumber(0))
+    @test representation(ψ, Hf) ≈ representation(Ket("10", Hf) + Ket("01", Hf), Hf)
 end
 
 @testitem "Operators on symbolic states agree with matrix representations" begin
