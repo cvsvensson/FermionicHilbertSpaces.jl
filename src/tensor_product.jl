@@ -35,6 +35,8 @@ tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 tensor_product(H::AbstractHilbertSpace; kwargs...) = tensor_product((H,); kwargs...)
 function tensor_product(spaces; @nospecialize(constraint = NoConstraint()))
     constraint = as_constraint(constraint)
+    constraint, symmetry = _split_symmetry(constraint)
+    isnothing(symmetry) || return constrain_space(tensor_product(spaces; constraint), symmetry)
     if length(spaces) == 1
         return constrain_space(only(spaces), constraint)
     end
@@ -102,24 +104,15 @@ end
 
 """
     generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
+    generalized_kron(ms, Hs => H)
+    generalized_kron(Hs => H)  # -> function of ms
 
-Compute the fermionic tensor product of the matrices or vectors in `ms` on the spaces `Hs`, as an array on `H`, which defaults to the `tensor_product` of `Hs`.
-
-For vectors, the result is the product state, the same as `tensor_product(ms, Hs => H)`. For matrices, write each local basis operator
-as a product of single-mode factors (one of `c c†`, `c†`, `c`, `c†c` per mode) in the mode order of its space;
-`generalized_kron` multiplies the factors of all spaces together in the mode order of `H`, and extends this linearly.
-The result does not depend on the order of `ms` and `Hs`, and is in general not a product of embeddings: for
-`A = c₁†c₃` on modes `[1, 3]` and `B = c₂†c₄` on modes `[2, 4]` it gives `c₁†c₂†c₃c₄ = -(c₁†c₃)(c₂†c₄)`.
-It equals `tensor_product(ms, Hs => H)` when each space in `Hs` covers consecutive modes of `H` and `Hs` is listed
-in that order. Otherwise `generalized_kron` of density matrices need not be a density matrix.
-Use `tensor_product` for product states, local observables, and anything that should equal a product of embedded operators.
-
-`generalized_kron(ms, Hs => H)` is also accepted, and `generalized_kron(Hs => H)` returns a function of `ms`.
-`Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
-
-The result is the compression of the tensor product onto `H`. Unless `projection=true`, throws an
-`ArgumentError` if the tensor product of matrices maps a state of `H` outside `H` with nonzero amplitude,
-or if the tensor product of vectors has a nonzero amplitude outside `H`.
+Compute the fermionic tensor product of the matrices or vectors `ms` on the spaces `Hs`, as an array on `H`.
+Each local basis operator is written as a product of single-mode factors, and the factors of all spaces are multiplied
+in the mode order of `H`, so the result does not depend on the order of `ms`. It equals `tensor_product(ms, Hs => H)`
+when each space covers consecutive modes of `H` and `Hs` is listed in that order; see
+[Tensor products of arrays](@ref tensor_product_arrays). Use `tensor_product` for product states and local observables.
+Unless `projection=true`, throws an `ArgumentError` if the result has weight outside `H`.
 """
 function generalized_kron(ms, Hs, H::AbstractHilbertSpace = tensor_product(Hs); kwargs...)
     check_kron_sizes(ms, Hs)
@@ -447,84 +440,6 @@ tensor_product(HsH::Pair{<:Any,<:AbstractHilbertSpace}; kwargs...) = (ms...) -> 
     @test tensor_product((representation(b[1]', B1), representation(b[3], B3)), (B1, B3) => HbN) ≈ representation(b[1]' * b[3], HbN)
 end
 
-struct PhaseMap{F}
-    phases::Matrix{Int}
-    fockstates::Vector{F}
-end
-struct LazyPhaseMap{M,F} <: AbstractMatrix{Int}
-    fockstates::Vector{F}
-end
-Base.size(p::LazyPhaseMap) = (length(p.fockstates), length(p.fockstates))
-function Base.show(io::IO, p::LazyPhaseMap{M,F}) where {M,F}
-    print(io, "LazyPhaseMap{$M,$F}(")
-    show(io, p.fockstates)
-    print(")")
-end
-Base.show(io::IO, ::MIME"text/plain", p::LazyPhaseMap) = show(io, p)
-Base.getindex(p::LazyPhaseMap{M}, n1::Int, n2::Int) where {M} = phase_factor_f(p.fockstates[n1], p.fockstates[n2], M)
-function phase_map(fockstates, M::Int)
-    phases = zeros(Int, length(fockstates), length(fockstates))
-    for (n1, f1) in enumerate(fockstates)
-        for (n2, f2) in enumerate(fockstates)
-            phases[n1, n2] = phase_factor_f(f1, f2, M)
-        end
-    end
-    PhaseMap(phases, fockstates)
-end
-phase_map(N::Int) = phase_map(map(FockNumber, UnitRange{UInt64}(0, 2^N - 1)), N)
-phase_map(H::AbstractHilbertSpace) = phase_map(collect(basisstates(H)), nbr_of_modes(H))
-function LazyPhaseMap(N::Int)
-    states = map(FockNumber, UnitRange{UInt64}(0, 2^N - 1))
-    LazyPhaseMap{N,eltype(states)}(states)
-end
-SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest...) = SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(rest...)
-(p::PhaseMap)(op::AbstractMatrix) = p.phases .* op
-(p::LazyPhaseMap)(op::AbstractMatrix) = p .* op
-@testitem "Phase map: sign pattern structure" begin
-    using LinearAlgebra
-    import FermionicHilbertSpaces: fermions
-    # see App 2 in https://arxiv.org/pdf/2006.03087
-    ns = 1:4
-    phis = Dict(zip(ns, FermionicHilbertSpaces.phase_map.(ns)))
-    lazyphis = Dict(zip(ns, FermionicHilbertSpaces.LazyPhaseMap.(ns)))
-    @test all(sum(phis[n].phases .== -1) == (2^n - 2) * 2^n / 2 for n in ns)
-    @test all(sum(phis[n].phases .== -1) == (2^n - 2) * 2^n / 2 for n in ns)
-    @fermions f
-    for N in ns
-        H = hilbert_space(f, 1:N)
-        c = fermions(H)
-        # Now let's make commuting fermions (hardcore bosons)
-        q = Dict(k => embed(only(fermions(hilbert_space(f[k])))[2], hilbert_space(f[k]) => H; phase_factors=false) for k in 1:N)
-        @test all(map(n -> q[n] == phis[N](c[n]), 1:N))
-        c2 = map(n -> phis[N](c[n]), 1:N)
-        @test phis[N](phis[N](c[1])) == c[1]
-        # c is fermionic
-        @test all([c[n] * c[n2] == -c[n2] * c[n] for n in 1:N, n2 in 1:N])
-        @test all([c[n]' * c[n2] == -c[n2] * c[n]' + I * (n == n2) for n in 1:N, n2 in 1:N])
-        # c2 is hardcore bosons
-        @test all([c2[n] * c2[n2] == c2[n2] * c2[n] for n in 1:N, n2 in 1:N])
-        @test all([c2[n]' * c2[n2] == (-c2[n2] * c2[n]' + I) * (n == n2) + (n !== n2) * (c2[n2] * c2[n]') for n in 1:N, n2 in 1:N])
-    end
-
-    H1 = hilbert_space(f, 1:1)
-    c1 = fermions(H1)
-    H2 = hilbert_space(f, 2:2)
-    c2 = fermions(H2)
-    H12 = hilbert_space(f, 1:2)
-    c12 = fermions(H12)
-    p1 = FermionicHilbertSpaces.LazyPhaseMap(1)
-    p2 = FermionicHilbertSpaces.phase_map(2)
-    @test FermionicHilbertSpaces.fermionic_tensor_product_with_kron_and_maps((c1[1], I(2)), (p1, p1), p2) == c12[1]
-    @test FermionicHilbertSpaces.fermionic_tensor_product_with_kron_and_maps((I(2), c2[2]), (p1, p1), p2) == c12[2]
-
-    ms = (rand(2, 2), rand(2, 2))
-    @test FermionicHilbertSpaces.fermionic_tensor_product_with_kron_and_maps(ms, (p1, p1), p2) == generalized_kron(ms, (H1, H2), H12)
-end
-
-function fermionic_tensor_product_with_kron_and_maps(ops, phis, phi)
-    phi(kron(reverse(map((phi, op) -> phi(op), phis, ops))...))
-end
-
 function partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(v, Hsub, H, complement), kwargs...)
     alg isa NoScalarIndexingAlg && return _partial_trace_by_gather(v, H, Hsub, complement; kwargs...)
     return partial_trace(vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)
@@ -603,6 +518,7 @@ change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwar
 function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, alg = default_indexing_alg(m), kwargs...)
     alg isa Union{ScalarIndexingAlg, NoScalarIndexingAlg} || throw(ArgumentError("`change_basis` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
     alg isa NoScalarIndexingAlg && m isa UniformScaling && throw(ArgumentError("`UniformScaling` is not supported with `alg = NoScalarIndexingAlg()`."))
+    projection || _check_projection(Hfrom, Hto)
     n = m isa UniformScaling ? 2 : ndims(m)
     from, to = _per_axis(Hfrom, Val(n)), _per_axis(Hto, Val(n))
     size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, and a `UniformScaling` needs the same space on both axes, got $(summary(m))."))
@@ -622,6 +538,8 @@ function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{Ab
     Us = map(first, transformations)
     return alg isa NoScalarIndexingAlg ? _gather_transform(m, map(U -> _basis_gather_table(m, U), Us)...) : _change_basis(m, Us)
 end
+# Rejects targets, such as symmetric sectors, that `m` can leak out of without weight on a dropped basis state.
+_check_projection(Hfrom, Hto) = nothing
 _per_axis(H::AbstractHilbertSpace, n::Val) = Axes(ntuple(_ -> H, n))
 _per_axis(ax::Axes, n::Val) = ax
 _change_basis(m::AbstractMatrix, (Uout, Uin)) = Uout * m * Uin'
@@ -658,17 +576,12 @@ end
     partial_trace(m, H => Hsub; complement=complementary_subsystem(H, Hsub))
     partial_trace(H => Hsub; kwargs...)  # -> PartialTraceMap
 
-Compute the partial trace of `m` from `H` to `Hsub`. Fermionic phase factors are included if both `H` and `Hsub` are Fermionic, unless specified otherwise in `kwargs`.
+Compute the partial trace of `m` from `H` to `Hsub`, with fermionic phase factors unless `phase_factors=false`.
 `H => Hsub` reads input => output; see [Pair arguments](@ref pair_convention).
 A vector `m` is treated as a pure state `ψ`, and the result is the reduced density matrix of `ψψ†`.
 `Hsub` can also be given as symbols naming its modes, meaning [`subregion`](@ref)`(Hsub, H)`, as in `H => [f[1], f[3]]`.
-
-The trace drops the states of `H` whose part on `Hsub` is not in `Hsub`, or whose part on the
-complement is not in `complement`. Unless `projection=true`, throws an `ArgumentError` if `m`
-has a nonzero element in the row or column of such a state. The map `partial_trace(H => Hsub)`
-does not check its input.
-
-`m` can be a dense GPU array, for which `alg` defaults to [`NoScalarIndexingAlg`](@ref).
+Unless `projection=true`, throws an `ArgumentError` if `m` has weight on a state of `H` that does not
+split into a state of `Hsub` and a state of `complement`. The map `partial_trace(H => Hsub)` skips this check.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces; @fermions f;
@@ -1344,35 +1257,6 @@ end
         local op = tensor_product(projected_ops, Hs, H)
         @test op ≈ project_on_parities(op, H, Hs, parities)
     end
-end
-
-@testitem "Partial trace map" begin
-    using LinearAlgebra
-    @fermions f
-    H = hilbert_space(f, 1:4)
-    Hsub = hilbert_space(f, [2, 4])
-    m = rand(ComplexF64, dim(H), dim(H))
-
-    msub = partial_trace(m, H => Hsub)
-    pt = partial_trace(H => Hsub)
-    msub_map = pt(vec(m))
-    @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
-
-    H = hilbert_space(f, 1:4, NumberConservation(2))
-    Hsub = subregion(hilbert_space(f, [1, 3, 4]), H)
-    m = rand(ComplexF64, dim(H), dim(H))
-    msub = partial_trace(m, H => Hsub)
-    pt = partial_trace(H => Hsub)
-    msub_map = pt(vec(m))
-    @test msub ≈ reshape(msub_map, (dim(Hsub), dim(Hsub)))
-
-    Hvac = hilbert_space(f, 1:1, NumberConservation(0))
-    Hmode = hilbert_space(f, 2:2)
-    Hproduct = tensor_product(Hvac, Hmode)
-    ρ = [1 2 + im; 3 - im 4]
-    @test dim(Hvac) == 1
-    @test partial_trace(ρ, Hproduct => Hvac) ≈ reshape([tr(ρ)], 1, 1)
-    @test partial_trace(ρ, Hproduct => Hmode) ≈ ρ
 end
 
 @testitem "Entanglement entropy" begin

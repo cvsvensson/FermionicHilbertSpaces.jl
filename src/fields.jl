@@ -91,7 +91,13 @@ Base.hash(f::Field, h::UInt) = hash(f.name, hash(f.tags, h))
 Base.:(==)(a::Mode, b::Mode) = a.field == b.field && a.label == b.label
 Base.hash(m::Mode, h::UInt) = hash(m.label, hash(m.field, h))
 Base.:(==)(a::Op, b::Op) = a.kind == b.kind && a.mode == b.mode
-Base.hash(op::Op, h::UInt) = hash(op.kind, hash(op.mode, h))
+# The default hash of a kind changes when its module is precompiled, and with it the order of the terms of a sum.
+Base.hash(op::Op, h::UInt) = _hash_kind(op.kind, hash(op.mode, h))
+function _hash_kind(kind::K, h::UInt) where {K}
+    # A type without fields that is not a singleton, such as `Symbol`, has its value outside its fields.
+    fieldcount(K) == 0 && !Base.issingletontype(K) && return hash(kind, h)
+    return hash(ntuple(i -> getfield(kind, i), Val(fieldcount(K))), hash(nameof(K), h))
+end
 _order_key(f::Field{K}) where {K} = (nameof(K), f.name, tagset(f), f.params, f.group)
 Base.isless(a::Mode, b::Mode) = _order_isless((_order_key(a.field), a.label), (_order_key(b.field), b.label))
 
@@ -131,7 +137,7 @@ Group{K}(names, tags::Tags) where {K} = Group{K, typeof(names), typeof(tags)}(na
 Group(f::Field{K}) where {K} = Group{K}(f.group, f.tags)
 Base.:(==)(::Group, ::Group) = false
 Base.:(==)(a::Group{K}, b::Group{K}) where {K} = a.names == b.names && a.tags == b.tags
-Base.hash(g::Group{K}, h::UInt) where {K} = hash(g.tags, hash(g.names, hash(K, h)))
+Base.hash(g::Group{K}, h::UInt) where {K} = hash(g.tags, hash(g.names, hash(nameof(K), h)))
 Base.isless(a::Group{K}, b::Group{P}) where {K, P} = _order_isless((nameof(K), a.names, tagset(a)...), (nameof(P), b.names, tagset(b)...))
 tags(g::Group) = g.tags
 add_tag(g::Group{K}, tag) where {K} = Group{K}(g.names, add_tag(g.tags, tag))
@@ -194,6 +200,13 @@ end
     @test repr(hilbert_space((@fermion h)); context = :compact => true) == "h"
     @fermions g
     @test_throws ArgumentError FermionicHilbertSpaces.FermionicSpace(f, [g[1]])
+    # A kind hashes by its name and fields, so a kind of another module with the same ones hashes alike.
+    import FermionicHilbertSpaces: Op, Mode
+    struct Fermion
+        creation::Bool
+    end
+    @test hash(f[1]') == hash(Op(Fermion(true), Mode(f, 1))) != hash(f[1])
+    @test hash(Op(:a, Mode(f, 1))) != hash(Op(:b, Mode(f, 1)))
 end
 
 @testitem "Custom operators on a field" begin
@@ -231,4 +244,18 @@ end
     ρ = randn(dim(H), dim(H))
     v = reshape(ρ, (Hl, Hr) => Hlr)
     @test reshape(representation(left(A) * right(A'), Hlr) * v, Hlr => (Hl, Hr)) ≈ MA * ρ * MA'
+end
+
+@testitem "Plain values as basis states" begin
+    import FermionicHilbertSpaces: @field, apply_local_operator
+    struct Hop
+        k::Int
+    end
+    Base.adjoint(s::Hop) = Hop(-s.k)
+    apply_local_operator(s::Hop, n::Int, space, precomp) = (mod(n + s.k, 3), 1)
+    @field c::Hop
+    @fermions f
+    H = hilbert_space(c[1], 0:2)
+    @test c[1][1] * Ket(0, H) == Ket(1, H)
+    @test_throws "no particle number" constrain_space(tensor_product(H, hilbert_space(f, 1:2)), NumberConservation(1))
 end

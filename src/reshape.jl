@@ -226,7 +226,6 @@ function _repeat_mapping(t::AbstractArray, mappings)
     return ntuple(_ -> only(mappings), ndims(t) ÷ n)
 end
 
-# _flatten(groups::Tuple) = reduce((a, b) -> (a..., b...), groups; init=())
 _flatten(groups::Tuple) = TupleTools.flatten(groups...)
 struct _ComposedMapper{M1,M2}
     combine_mapper::M1

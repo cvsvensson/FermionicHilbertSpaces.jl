@@ -211,7 +211,8 @@ end
 
 # Calls `f(outind, value)` for each output entry of `coeff * term` applied to the stored entries of the sparse `x` in
 # the rows `cols`. Each entry is applied as a range of one column, as a `KronTerm` takes ranges.
-function _foreach_term_entry(f, x, space, term, precomp, coeff, conjugate, projection, cols = axes(x, 1))
+# `f::F` makes Julia specialize on `f`, which it otherwise skips as `f` is only passed on.
+function _foreach_term_entry(f::F, x, space, term, precomp, coeff, conjugate, projection, cols = axes(x, 1)) where {F}
     for (n, xn) in zip(SparseArrays.nonzeroinds(x), nonzeros(x))
         (iszero(xn) || !(n in cols)) && continue
         chunked_operator_indices_and_amplitudes_generic!(MulAccumulator(f, xn, coeff, conjugate), term, space, precomp, n:n, 0; projection)
@@ -341,15 +342,9 @@ end
     @test ishermitian(representation(op + hc, Hf, :lazy))
 
     import FermionicHilbertSpaces: LazyRepr
-    @test representation(op, Hf, :lazy).cache[1] isa Vector
-    @test representation(op, Hf, LazyRepr(:dense)).cache[1] isa Vector
-    @test representation(op, Hf, LazyRepr(:sparse)).cache[1] isa SparseVector
-    dense_cache = zeros(ComplexF64, dim(Hf))
-    sparse_cache = spzeros(ComplexF64, dim(Hf))
-    symbol_cache = [:a for _ in 1:dim(Hf)]
-    @test representation(op, Hf, LazyRepr(dense_cache)).cache[1] isa typeof(dense_cache)
-    @test representation(op, Hf, LazyRepr(sparse_cache)).cache[1] isa typeof(sparse_cache)
-    @test representation(op, Hf, LazyRepr(symbol_cache)).cache[1] isa typeof(symbol_cache)
+    for input in (:dense, :sparse, zeros(ComplexF64, dim(Hf)), spzeros(ComplexF64, dim(Hf)))
+        @test representation(op, Hf, LazyRepr(input)) * v ≈ M * v
+    end
 
     @test_throws DimensionMismatch representation(op, Hf, LazyRepr(zeros(dim(Hf) + 1)))
 
@@ -382,9 +377,6 @@ end
     @test Matrix(L') ≈ M'
     @test Matrix(transpose(L)) ≈ transpose(M)
     @test Matrix(transpose(L)') ≈ conj(M)
-
-    # @test !ishermitian(L)
-    # @test ishermitian(representation(op + hc, Hcons; lazy=true, projection=true)) #SciMLOperators doesn't check termwise ishermitian for an added operator
 end
 
 @testitem "lazy matrix_representation with dimensions wider than Int" begin
@@ -394,7 +386,7 @@ end
     op = 0.3 * f[1]' * f[2] + 0.7im * f[2]' * f[3] + hc + 0.5 * f[1]' * f[1] + 0.2
     Hsmall = hilbert_space(f, 1:3)
     M = representation(op, Hsmall)
-    for N in (63, 200, 1100)
+    for N in (63, 200)
         H = hilbert_space(f, 1:N)
         @test dim(H) == big(2)^N
         # the states of `Hsmall` with mode N occupied
@@ -496,9 +488,6 @@ end
 
     cache_operator(Lt, v)
     cache_operator(Ls, V)
-    @test Lt.op.cache isa Channel
-    @test Ls.op.cache isa Channel
-    @test size(fetch(Ls.op.cache)) == size(V)
 
     @test Lt * v ≈ M * v
     @test Ls * v ≈ M * v

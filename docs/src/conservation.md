@@ -267,6 +267,28 @@ Hsub_full = hilbert_space(f, [(i, s) for i in 1:div(N,2) for s in (:↑,:↓)])
 Hsub_frac = subregion(Hsub_full, Hfrac)
 ```
 
+## Momentum sectors
+A symmetry that relabels the modes is a function on their labels: `Relabel(g) => λ` keeps the states whose amplitudes obey ``\psi(g(s)) = \lambda\psi(s)``, where ``g(s)`` is the product state ``s`` with the mode of every label `l` moved to the label `g(l)`, as in Bloch's theorem ``\psi(x + a) = e^{ika}\psi(x)``. On a ring of ``N`` sites with the translation `T(j) = mod1(j + 1, N)`, a plane wave with the amplitude ``e^{2\pi i k j/N}`` on site ``j`` has ``\lambda = e^{2\pi i k/N}``, so `Relabel(T) => cispi(2k / N)` keeps the states of momentum ``k``. The result has one basis vector per orbit of product states under translations, so it is about ``N`` times smaller than its parent, and its matrix elements are computed from one representative product state per basis vector, without building the operator on the parent. Combined with a conserved quantity, it keeps its sectors. The lowest energy of a Heisenberg ring at ``S^z_\mathrm{tot} = 0`` for each momentum is
+```@example momentum
+using FermionicHilbertSpaces, LinearAlgebra
+using FermionicHilbertSpaces: Relabel
+@spins S 1 // 2
+N = 10
+ham = sum(S[j][:]'S[mod1(j + 1, N)][:] for j in 1:N)
+Sz = sum(S[j][:z] for j in 1:N)
+T(j) = mod1(j + 1, N)
+Hks = [hilbert_space(S, 1:N, (Sz, Relabel(T) => cispi(2k / N))) for k in 0:(N - 1)]
+[k => eigmin(Hermitian(representation(ham, sector(0, Hk), Matrix))) for (k, Hk) in zip(0:(N - 1), Hks)]
+```
+A lazy representation applies the operator to one representative per basis vector, which suits Krylov methods on larger rings, and `embed` gives a state on the parent space:
+```@example momentum
+L = representation(ham, sector(0, Hks[1]), :lazy)
+v = normalize(randn(size(L, 1)))
+ψ = embed(v, sector(0, Hks[1]) => hilbert_space(S, 1:N, Sz))
+norm(ψ), real(dot(v, L * v))
+```
+The eigenvalue is a root of unity, ``\lambda^n = 1`` for the order ``n`` of the permutation of the modes, and several such pairs keep the common eigenstates of the group they generate. For example, `(Relabel(T) => 1, Relabel(R) => -1)` with the reflection `R(j) = N + 1 - j` keeps the states of zero momentum that are odd under reflection, and a function such as `((i, σ),) -> (i, σ == :↑ ? :↓ : :↑)` gives spin inversion on a Hubbard ring. Representing an operator throws unless relabeling its modes by each map leaves it unchanged, and two sectors are equal only when they are built from the same function objects. These sectors are the one-dimensional representations of the group; [`symmetric_sector`](@ref) gives those of higher dimension.
+
 ## Total spin and SU(N) multiplets
 A multiplet of total spin ``S`` has exactly one highest-weight state, the state with ``S^z_\mathrm{tot} = S`` that ``S^+_\mathrm{tot}`` annihilates; lowering it with ``S^-_\mathrm{tot}`` gives the rest of the multiplet. On a space split into ``S^z_\mathrm{tot}`` sectors, `highest_weight_states` returns these states, one column per multiplet, keyed by ``S``. This gives the lowest energy for each total spin of a Heisenberg ring:
 ```@example multiplets

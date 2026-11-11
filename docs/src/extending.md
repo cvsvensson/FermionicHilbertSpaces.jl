@@ -74,7 +74,9 @@ For speed:
 
 The simplest custom space is a [`GenericHilbertSpace`](@ref)`(label, states)`, which works with
 any type of state. Its optional third argument `state_index` can be a function that computes
-the index of a state, which avoids the default dictionary lookup.
+the index of a state, which avoids the default dictionary lookup. A new space type subtypes
+[`AbstractAtomicHilbertSpace`](@ref) or [`AbstractGroupedHilbertSpace`](@ref), whose docstrings list
+the methods it implements.
 
 - [`AbstractBasisState`](@ref) is the supertype of basis-state types. Subtyping it lets strings
   name states, and lets constrained spaces return index `0` for states of other types.
