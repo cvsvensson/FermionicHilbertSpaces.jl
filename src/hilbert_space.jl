@@ -36,7 +36,7 @@ dim(H::GenericHilbertSpace) = length(H.basisstates)
 Base.@propagate_inbounds basisstate(ind::Integer, H::GenericHilbertSpace) = H.basisstates[ind]
 Base.keys(H::GenericHilbertSpace) = (H.label,)
 _state_index(state::B, H::GenericHilbertSpace{B,<:Any,<:Any,<:AbstractDict}) where B = get(H.state_index, state, 0)
-_state_index(state::B, H::GenericHilbertSpace{B}) where B = H.state_index(state)
+_state_index(state::B, H::GenericHilbertSpace{B}) where {B} = H.state_index(state)
 atomic_id(H::GenericHilbertSpace) = H.label
 add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(tag_label(H.label, tag), H.basisstates, H.state_index)
 
