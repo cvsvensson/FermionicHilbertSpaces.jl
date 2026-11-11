@@ -633,7 +633,7 @@ M = FermionicHilbertSpaces.matrix_representation(op, H)
 size(M) == (dim(H), dim(H))
 ```
 """
-function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
+function matrix_representation(op, space::AbstractHilbertSpace, repr = EagerSparseRepr(); projection = false, chunking = NoChunking(), kwargs...)
     # The barrier keeps inference from compiling every format a runtime Symbol could select
     repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, space, _canonicalize_repr(repr); projection, chunking, kwargs...)
     format = _matrix_format(repr)
