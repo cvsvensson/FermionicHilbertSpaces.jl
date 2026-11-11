@@ -234,7 +234,7 @@ end
 
 @testitem "Jordan-Wigner annihilators match representation" setup = [JordanWigner] begin
     @fermions f
-    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
+    for qn in [NoConstraint(), ParityConservation(), NumberConservation()]
         H = hilbert_space(f, 1:3, qn)
         c = JordanWigner.annihilators(H)
         @test all(c[l] == representation(f[l], H) for l in 1:3)
