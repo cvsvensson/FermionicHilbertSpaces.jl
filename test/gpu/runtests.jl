@@ -159,6 +159,7 @@ end
         @test_throws ArgumentError partial_trace(S', H => HA; kwargs...)
         @test_throws ArgumentError partial_trace!(JLArray(zeros(4, 4)), S, H => HA; kwargs...)
         @test_throws ArgumentError partial_transpose!(JLArray(zeros(16, 16)), S, H, HA; kwargs...)
+        @test_throws ArgumentError partial_transpose!(JLArray(zeros(16, 16)), S, H => H, HA; kwargs...)
         @test_throws ArgumentError embed(S, H => H; kwargs...)
         @test_throws ArgumentError change_basis(S, H => H; kwargs...)
         @test_throws ArgumentError reshape(S, H => (HA, HB), H => (HA, HB); kwargs...)
