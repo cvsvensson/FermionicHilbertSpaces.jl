@@ -75,13 +75,13 @@ quantumnumbers(H::SectorHilbertSpace) = collect(keys(H.qn_to_states))
 quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 
 """
-    sector(qn, H)
+    sector(qn, H, constraint=NoSymmetry())
 
 Return the sector of `H` corresponding to quantum number `qn`, for example a particle
 number for `NumberConservation` or `1` (even) / `-1` (odd) for `ParityConservation`.
 For `qn === nothing`, this returns `H` for non-sector spaces.
 The quantum number of a product of constraints is a vector, which can also be given as a tuple: `sector((1, -1), H)`.
-Throws an `ArgumentError` if `qn` is not one of `quantumnumbers(H)`.
+A `constraint` is applied to the sector with [`constrain_space`](@ref).
 
 ```jldoctest
 julia> using FermionicHilbertSpaces; @fermions f;
@@ -101,11 +101,10 @@ function _sector_states(qn, H::SectorHilbertSpace)
     states
 end
 
-# sectors(H::SectorHilbertSpace) = map(qn -> sector(qn, H), quantumnumbers(H))
 """
-    sectors(H)
+    sectors(H, constraint=NoSymmetry())
 
-Return all sectors of `H` in the same order as `quantumnumbers(H)`.
+Return all sectors of `H` in the same order as `quantumnumbers(H)`, each constrained by `constraint` as in [`sector`](@ref).
 """
 sectors(H::AbstractHilbertSpace, constraint=NoSymmetry()) = map(qn -> sector(qn, H, constraint), quantumnumbers(H))
 
@@ -366,11 +365,11 @@ end
     @test dim(constrain_space(H, ParityConservation([-1, 1]))) == 2^5
 
     ## ProductSymmetry
-    qn = ParityConservation([1]) * NumberConservation(1:2, H.modes[1:3])
-    states = FermionicHilbertSpaces.generate_states(H.modes, qn)
+    qn = ParityConservation([1]) * NumberConservation(1:2, FermionicHilbertSpaces.atomic_factors(H)[1:3])
+    states = FermionicHilbertSpaces.generate_states(FermionicHilbertSpaces.atomic_factors(H), qn)
     H2 = hilbert_space(f, 1:5, qn)
     T = FermionicHilbertSpaces.statetype(H2)
-    @test sort(collect(basisstates(H2))) == sort(map(state -> FermionicHilbertSpaces.catenate_fock_states(state, H.modes, T), states))
+    @test sort(collect(basisstates(H2))) == sort(map(state -> FermionicHilbertSpaces.catenate_fock_states(state, FermionicHilbertSpaces.atomic_factors(H), T), states))
     @test all(iseven ∘ fermionnumber, basisstates(H2))
 end
 

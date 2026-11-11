@@ -3,7 +3,7 @@
     GenericHilbertSpace{B}(label, basisstates[, state_index])
 
 Atomic Hilbert space whose basis states are given explicitly by `basisstates`, indexed by integers.
-`label` is returned by `symbolic_group` and `atomic_id` and identifies the space in symbolic expressions.
+`label` identifies the space, and an operator acts on it if the operator's mode equals `label`, as in `GenericHilbertSpace(c[1], states)` for a field `c`.
 `state_index` gives the integer index of a basis state. It is either an `AbstractDict` from basis states
 to indices, or a function that takes a basis state and returns its index. By default it is a dictionary
 built from `basisstates`.
@@ -36,8 +36,7 @@ dim(H::GenericHilbertSpace) = length(H.basisstates)
 Base.@propagate_inbounds basisstate(ind::Integer, H::GenericHilbertSpace) = H.basisstates[ind]
 Base.keys(H::GenericHilbertSpace) = (H.label,)
 _state_index(state::B, H::GenericHilbertSpace{B,<:Any,<:Any,<:AbstractDict}) where B = get(H.state_index, state, 0)
-_state_index(state::B, H::GenericHilbertSpace{B}) where B = H.state_index(state)
-symbolic_group(H::GenericHilbertSpace) = H.label
+_state_index(state::B, H::GenericHilbertSpace{B}) where {B} = H.state_index(state)
 atomic_id(H::GenericHilbertSpace) = H.label
 add_tag(H::GenericHilbertSpace, tag) = GenericHilbertSpace(tag_label(H.label, tag), H.basisstates, H.state_index)
 
