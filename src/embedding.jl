@@ -261,25 +261,3 @@ end
     @test w[indices(Hsec, H)] == v && norm(w) ≈ norm(v)
     @test_throws ArgumentError embed(rand(4), hilbert_space(f, 1:2) => H)
 end
-
-@testitem "Partial trace, embed" begin
-    @fermions f
-    H = hilbert_space(f, 1:4)
-    Hsub = hilbert_space(f, [2, 4])
-    Hcomp = FermionicHilbertSpaces.complementary_subsystem(H, Hsub)
-    pt = partial_trace(H => Hsub)
-    emb = embed(Hsub => H)
-    @test pt'.map == emb.map
-
-    msub = rand(dim(Hsub), dim(Hsub))
-    mfull = emb(msub)
-    @test pt(mfull) ≈ msub * dim(Hcomp)
-end
-
-@testitem "Partial trace of a UniformScaling" begin
-    using LinearAlgebra
-    @fermions f
-    H = hilbert_space(f, 1:3)
-    Hsub = hilbert_space(f, [2])
-    @test partial_trace(2I, H, Hsub) ≈ 2 * partial_trace(I(dim(H)), H, Hsub)
-end

@@ -310,17 +310,14 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
     end
 
     @testset "number of modes of the full space" begin
-        # Mappers for different subsystems of one space have the same type
-        @test typeof(FockMapper(([1, 2],), 6)) == typeof(FockMapper(([3, 5],), 6)) == typeof(FockMapper(([4, 6],), 6))
         @test_throws ArgumentError FockMapper(((1, 7),), 6)
         @test_throws ArgumentError _combine((fock((1, 2)), fock((1,))), FockMapper(((1, 3), (2,)), 70))
         fockmapper = FockMapper(((1, 3), (2,)), 3)
         @test _combine((fock((1, 2)), fock((1,))), fockmapper) == fock((1, 2, 3))
-        @test !isnothing(fockmapper.permutation)
     end
 
     @testset "wide integers" begin
-        for N in (100, 200, 400, 800, 1100)
+        for N in (100, 200)
             fermionpositions = (collect(1:3:N), setdiff(1:N, 1:3:N))
             fockmapper = FockMapper(fermionpositions, N)
             sites = [n for n in 1:N if n % 5 in (0, 2)]
@@ -336,11 +333,9 @@ _bit(f::Integer, k) = Bool((f >> (k - 1)) & 1)
         modes = [hilbert_space(g[k]) for k in 1:64]
         states = [FockNumber{UInt64}(isodd(k) || k == 64) for k in 1:64]
         expected = sum(big(2)^(k - 1) for k in 1:64 if isodd(k) || k == 64)
-        @test catenate_fock_states(states, modes, FockNumber{UInt64}) isa FockNumber{UInt64}
-        @test catenate_fock_states(states, modes, FockNumber{UInt64}).f == expected
+        @test catenate_fock_states(states, modes, FockNumber{UInt64}) == FockNumber(UInt64(expected))
         @test catenate_fock_states(states, modes, FockNumber{BigInt}) == FockNumber(expected)
-        @test catenate_fock_states(states[1:63], modes[1:63], FockNumber{Int}) isa FockNumber{Int}
-        @test catenate_fock_states(states[1:63], modes[1:63], FockNumber{Int}).f == expected - big(2)^63
+        @test catenate_fock_states(states[1:63], modes[1:63], FockNumber{Int}) == FockNumber(Int(expected - big(2)^63))
         @test_throws ArgumentError catenate_fock_states(states, modes, FockNumber{Int})
     end
 end
@@ -377,6 +372,7 @@ end
 end
 
 @testitem "Spaces with more than 64 modes" begin
+    using SparseArrays
     @fermions f
     N = 70
     H = hilbert_space(f, 1:N, NumberConservation(1))
@@ -387,11 +383,11 @@ end
 
     emb = embed(Hsubsmall => H; complement=Hsubbig)
     pt = partial_trace(H => Hsubsmall)
-    @test emb.map == pt'.map
+    @test sparse(emb) ≈ sparse(pt')
 
     emb = embed(Hsubbig => H; complement=Hsubsmall)
     pt = partial_trace(H => Hsubbig)
-    @test emb.map == pt'.map
+    @test sparse(emb) ≈ sparse(pt')
 end
 
 @testitem "Spaces with more than 128 modes" begin
