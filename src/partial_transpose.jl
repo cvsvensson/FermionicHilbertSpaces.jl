@@ -75,8 +75,17 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
     size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
     _check_no_alias(mout, m)
-    fill!(mout, zero(eltype(mout)))
     splits = _split_all_states(H, mapper_in)
+    if mout isa SparseMatrixCSC
+        Is, Js, Vs = Int[], Int[], eltype(mout)[]
+        _foreach_partial_transpose_term(tensor_product_iterator(m, H), H, Hsub, Hout, splits, mapper_out; phase_factors, projection) do J1, J2, K1, K2, v
+            push!(Is, K1)
+            push!(Js, K2)
+            push!(Vs, v * m[J1, J2])
+        end
+        return mout .= SparseArrays.sparse!(Is, Js, Vs, size(mout)...)
+    end
+    fill!(mout, zero(eltype(mout)))
     _foreach_partial_transpose_term(tensor_product_iterator(m, H), H, Hsub, Hout, splits, mapper_out; phase_factors, projection) do J1, J2, K1, K2, v
         mout[K1, K2] += v * m[J1, J2]
     end
@@ -131,7 +140,7 @@ function _partial_transpose(m::AbstractMatrix, H, Hsub, Hout;
     mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
     mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
     T = promote_type(eltype(m), partial_transpose_phase_factor_eltype(H))
-    mout = zeros(T, dim(Hout), dim(Hout))
+    mout = m isa AbstractSparseMatrix ? spzeros(T, dim(Hout), dim(Hout)) : zeros(T, dim(Hout), dim(Hout))
     return partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection)
 end
 
@@ -329,6 +338,16 @@ end
     @test partial_transpose!(mout2, m2, Hfull, HA2) ≈ partial_transpose(m2, Hfull, HA2)
     @test partial_transpose!(mout2, m2, Hfull, HA2; phase_factors=false) ≈ partial_transpose(m2, Hfull, HA2; phase_factors=false)
     @test_throws ArgumentError partial_transpose!(m2, m2, Hfull, HA2)
+end
+
+@testitem "Partial transpose: sparse input gives sparse output" begin
+    using SparseArrays
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    m = sprand(ComplexF64, 8, 8, 0.3)
+    R = partial_transpose(m, H, hilbert_space(f, [1, 3]))
+    @test R isa AbstractSparseMatrix
+    @test R ≈ partial_transpose(Matrix(m), H, hilbert_space(f, [1, 3]))
 end
 
 @testitem "Partial transpose: output space only as a Pair" begin
