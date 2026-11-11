@@ -1,4 +1,5 @@
 using FermionicHilbertSpaces
+using FermionicHilbertSpaces: symmetric_sector
 using SymPy, LinearAlgebra, Combinatorics
 
 # We construct a two-site Hubbard model (e.g., a double quantum dot) 

@@ -60,7 +60,7 @@ minimum.(spectra)
 # On a space with all magnetization sectors, `highest_weight_states` returns these states for each sector $J$,
 # one per multiplet, in the basis of `sector(J, Hsz)`.
 
-using FermionicHilbertSpaces: highest_weight_states, multiplets
+using FermionicHilbertSpaces: highest_weight_states, multiplets, symmetric_sector
 Splus = sum(S[k][:+] for k in 1:N)
 Hsz = hilbert_space(S, 1:N, Sz)
 hw_spectra = [eigvals(Hermitian(V' * representation(ham, sector(J, Hsz), Matrix) * V)) for (J, V) in highest_weight_states(Hsz, Splus)]
@@ -73,7 +73,7 @@ W = multiplets(Hsz, Splus)
 @assert all(eigvals(Hermitian(B' * representation(ham, sector(M, Hsz), Matrix) * B)) ≈ spectra[2] for ((J, M), B) in W if J == 1)
 
 # States symmetric under all permutations of the sites have the maximal total spin, so the symmetric
-# sector, built with [`symmetric_sector`](@ref), reproduces the highest-weight spectrum for $J = N/2$.
+# sector, built with [`symmetric_sector`](@ref FermionicHilbertSpaces.symmetric_sector), reproduces the highest-weight spectrum for $J = N/2$.
 
 Psym = symmetric_sector(Hm, factors(Hm))
 @assert eigvals(Hermitian(Psym' * Mham * Psym)) ≈ hw_spectra[end]
@@ -101,4 +101,4 @@ Stot2 = sum(sum(S[k][op] for k in 1:N)^2 for op in (:x, :y, :z))
 P = nullspace(representation(Stot2, sector(2, H2), Matrix) - 12I)
 @assert E32 ≈ eigvals(Hermitian(P' * representation(ring, sector(2, H2), Matrix) * P))
 
-# For Hamiltonians symmetric under permuting sites, [`symmetric_sector`](@ref) projects onto permutation sectors; see [Spatial symmetries](translation_symmetry.md).
+# For Hamiltonians symmetric under permuting sites, [`symmetric_sector`](@ref FermionicHilbertSpaces.symmetric_sector) projects onto permutation sectors; see [Spatial symmetries](translation_symmetry.md).
