@@ -107,7 +107,7 @@ function hilbert_space(sym::SpinMode, J)
     _check_spin_unset(sym.field)
     SpinSpace(sym, J)
 end
-hilbert_space(f::Field{Spin}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint)
+hilbert_space(f::Field{Spin}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike = NoConstraint())) = _mode_product(f, labels, constraint)
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.mode == b.mode && a.spin == b.spin)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.mode, hash(x.spin, h))
 

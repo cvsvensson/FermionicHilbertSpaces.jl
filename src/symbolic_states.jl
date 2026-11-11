@@ -285,6 +285,16 @@ function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{Boson
     BosonicState(n)
 end
 
+function interpret_state(input::Union{AbstractString, AbstractChar}, H::Union{_FockSpace, MajoranaHilbertSpace})
+    length(input) <= nbr_of_modes(H) || throw(ArgumentError("The Fock string `\"$input\"` has $(length(input)) characters, but the space has only $(nbr_of_modes(H)) modes."))
+    return interpret_state(input, statetype(H))
+end
+function interpret_state(input::Union{AbstractString, AbstractChar}, H::TruncatedBosonicHilbertSpace)
+    state = interpret_state(input, BosonicState)
+    isbasisstate(state, H) || throw(ArgumentError("The occupation `\"$input\"` is outside the boson space, whose occupations are 0 to $(dim(H) - 1)."))
+    return state
+end
+
 function interpret_state(input, space::ProductSpace{B}) where B
     length(input) == length(groups(space)) || throw(ArgumentError("Product-state input must have length $(length(groups(space))), got $(length(input))"))
     return B(map(interpret_state, input, groups(space)))
@@ -862,6 +872,21 @@ end
     @test basisstate('1', hilbert_space(f, 1:1)) == basisstate(2, hilbert_space(f, 1:1))
     @test_throws ArgumentError basisstate("111", H)
     @test_throws ArgumentError basisstate("12", H)
+end
+
+@testitem "State strings outside the space" begin
+    @fermions f
+    @majoranas γ
+    @boson b
+    H = hilbert_space(f, 1:3)
+    @test Ket("0", H) == Ket("000", H)
+    @test_throws ArgumentError Ket("1000", H)
+    @test_throws ArgumentError state_index("0001", hilbert_space(γ, 1:6))
+    Hb = hilbert_space(b, 4)
+    @test state_index("3", Hb) == 4
+    @test_throws ArgumentError Ket("4", Hb)
+    @test_throws ArgumentError Ket("-1", Hb)
+    @test_throws ArgumentError Kets(tensor_product(H, Hb))("0000", "1")
 end
 
 @testitem "Symbolic ket and bra algebra" begin

@@ -162,7 +162,7 @@ end
 # The product of the spaces `hilbert_space(f[l], args...)` of the modes of `f`, constrained by `constraint`.
 _mode_product(f::Field, labels, constraint, args...) =
     tensor_product(map(l -> hilbert_space(Mode(f, l), args...), labels); constraint)
-hilbert_space(f::Field, labels::AbstractVector, x, @nospecialize(constraint::ConstraintLike = NoSymmetry())) = _mode_product(f, labels, constraint, x)
+hilbert_space(f::Field, labels::AbstractVector, x, @nospecialize(constraint::ConstraintLike = NoConstraint())) = _mode_product(f, labels, constraint, x)
 hilbert_space(f::Field) = throw(ArgumentError("The field `$f` needs labels. See `?hilbert_space`."))
 hilbert_space(op::Op, args...) = hilbert_space(op.mode, args...)
 hilbert_space(m::Mode, args...) = _no_space(m, args...)

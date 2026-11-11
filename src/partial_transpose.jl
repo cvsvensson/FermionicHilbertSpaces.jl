@@ -68,11 +68,12 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     complement, Hout::AbstractHilbertSpace,
     mapper_in=state_mapper(H, _pt_parts(Hsub, complement)),
     mapper_out=_partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in);
-        phase_factors = true, projection = false
+        phase_factors = true, projection = false, alg = default_indexing_alg(m)
     )
     size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
     size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
     _check_no_alias(mout, m)
+    alg isa NoScalarIndexingAlg && return copyto!(mout, _partial_transpose_by_gather(m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection))
     splits = _split_all_states(H, mapper_in)
     if mout isa SparseMatrixCSC
         Is, Js, Vs = Int[], Int[], eltype(mout)[]
@@ -111,6 +112,7 @@ gives the ordinary one. Without `m`, a callable [`PartialTransposeMap`](@ref) is
 
 The result is on `Hout`, which defaults to `H`; see [Pair arguments](@ref pair_convention). The partial transpose
 does not preserve number or parity constraints, so for constrained `H` pass a larger `Hout` on the same modes.
+A dense GPU array `m` gives a GPU array, with `alg = `[`NoScalarIndexingAlg`](@ref)`()` as the default.
 """
 partial_transpose(m, H::AbstractHilbertSpace, Hsub; kwargs...) =
     _partial_transpose(m, H, _subsystem(Hsub, H), H; kwargs...)
@@ -122,10 +124,14 @@ partial_transpose(Hs::Pair{<:AbstractHilbertSpace, <:AbstractHilbertSpace}, Hsub
     PartialTransposeMap(first(Hs), _subsystem(Hsub, first(Hs)), last(Hs); kwargs...)
 
 function _partial_transpose(m::AbstractMatrix, H, Hsub, Hout;
-        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false
+        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = default_indexing_alg(m)
     )
     mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
     mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
+    if alg isa NoScalarIndexingAlg
+        size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
+        return _partial_transpose_by_gather(m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection)
+    end
     T = promote_type(eltype(m), partial_transpose_phase_factor_eltype(H))
     mout = m isa AbstractSparseMatrix ? spzeros(T, dim(Hout), dim(Hout)) : zeros(T, dim(Hout), dim(Hout))
     return partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection)
@@ -133,9 +139,10 @@ end
 
 # Pure state: direct kernel, no superoperator, and no ψψ† either (iterate nonzero pairs).
 function _partial_transpose(ψ::AbstractVector, H, Hsub, Hout;
-        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false
+        complement = complementary_subsystem(H, Hsub), phase_factors = true, projection = false, alg = default_indexing_alg(ψ)
     )
     if length(ψ) == dim(H)
+        alg isa NoScalarIndexingAlg && return _partial_transpose(ψ * ψ', H, Hsub, Hout; complement, phase_factors, projection, alg)
         mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
         mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
         T = promote_type(eltype(ψ), partial_transpose_phase_factor_eltype(H))
@@ -148,13 +155,58 @@ function _partial_transpose(ψ::AbstractVector, H, Hsub, Hout;
         return mout
     end
     if length(ψ) == dim(H)^2
-        return _partial_transpose(reshape(ψ, dim(H), dim(H)), H, Hsub, Hout; complement, phase_factors, projection)
+        return _partial_transpose(reshape(ψ, dim(H), dim(H)), H, Hsub, Hout; complement, phase_factors, projection, alg)
     end
     throw(DimensionMismatch("The vector must have length $(dim(H)) (pure state) or $(dim(H)^2) (vectorized density matrix), got $(length(ψ))"))
 end
 
 _partial_transpose(λ::UniformScaling, H, Hsub, Hout; kwargs...) =
     _partial_transpose(λ.λ * I(dim(H)), H, Hsub, Hout; kwargs...)
+
+## Without scalar indexing
+
+# A basis state of `H` or `Hout` is the pair (a, b) of a state of `Hsub` and one of the complement, and the partial
+# transpose is |a1 b1⟩⟨a2 b2| ↦ |a2 b1⟩⟨a1 b2|. Its phase is τ(a1, a2) times a sign for each of the four states, so
+# only tables over single states and over pairs of states of `Hsub` are built here. The arrays of the size of the
+# result come from indexing them with the index vectors `a` and `b` of the states of `Hout`.
+function _partial_transpose_by_gather(m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors = true, projection = false)
+    parts = _pt_parts(Hsub, complement)
+    cutsign(Hx) = phase_factors && !isnothing(complement) ? phase_factor_u(state_mapper(Hx, (complement, Hsub))) : Returns(1)
+    abin, win = _product_positions(H, mapper_in, parts, cutsign(H))
+    all(!iszero, win) || throw(ArgumentError("`alg = NoScalarIndexingAlg()` needs every basis state of `H` to split into one basis state of `Hsub` and one of the complement."))
+    about, wout = Hout === H ? (abin, win) : _product_positions(Hout, mapper_out, parts, cutsign(Hout))
+    sz = (dim(Hsub), isnothing(complement) ? 1 : dim(complement))
+    if !projection
+        inout = falses(sz)
+        inout[about[findall(!iszero, wout)]] .= true
+        all(inout[unique(first.(Tuple.(abin))), unique(last.(Tuple.(abin)))]) ||
+            throw(ArgumentError("The partial transpose does not preserve number/parity constraints: pass a larger output space as `H => Hout` (e.g. the unconstrained space on the same modes), or `projection=true` to drop the terms outside the output Hilbert space."))
+    end
+    # Padded with index 1 and weight 0, which `_masked_mul` drops
+    J, W = ones(Int, sz), zeros(eltype(win), sz)
+    J[abin] = eachindex(abin)
+    W[abin] = win
+    τ = partial_transpose_phase_factor_eltype(H)[
+        phase_factors ? partial_trace_phase_factor(a1, a2, Hsub) * partial_trace_phase_factor(a2, a1, Hsub) * partial_transpose_phase_factor(a1, a2, Hsub) : 1
+            for a2 in basisstates(Hsub), a1 in basisstates(Hsub)
+    ]
+    a, b, w, J, W, τ = map(A -> _adapt_like(m, A), (first.(Tuple.(about)), last.(Tuple.(about)), wout, J, W, τ))
+    # Entry (K1, K2) of the result has a1 = a[K2], b1 = b[K1], a2 = a[K1] and b2 = b[K2]
+    J2, W2 = J[a, b], W[a, b]
+    return _masked_mul.(w .* transpose(W2) .* τ[a, a] .* conj.(W2) .* adjoint(w), m[transpose(J2) .+ size(m, 1) .* (J2 .- 1)])
+end
+
+# The indices (a, b) of each basis state of `H` in `parts`, and its split weight times `sign`. A state that does not
+# split into one basis state of each part gets (1, 1) and weight 0.
+function _product_positions(H, mapper, parts, sign)
+    positions = map(basisstates(H)) do f
+        substates, amps = split_state(f, mapper)
+        ks = length(substates) == 1 ? map(state_index, only(substates), parts) : (0,)
+        w = first(amps) * sign(f)
+        any(iszero, ks) ? (CartesianIndex(1, 1), zero(w)) : (CartesianIndex(first(ks), get(ks, 2, 1)), w)
+    end
+    return first.(positions), last.(positions)
+end
 
 ## Sparse superoperator
 

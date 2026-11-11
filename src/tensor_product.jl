@@ -13,8 +13,8 @@ function product_space(spaces)
     return space
 end
 """
-    tensor_product(spaces...; constraint=NoSymmetry())
-    tensor_product(spaces; constraint=NoSymmetry())
+    tensor_product(spaces...; constraint=NoConstraint())
+    tensor_product(spaces; constraint=NoConstraint())
 
 Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
 
@@ -33,7 +33,7 @@ julia> state_index("10", H)
 """
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 tensor_product(H::AbstractHilbertSpace; kwargs...) = tensor_product((H,); kwargs...)
-function tensor_product(spaces; @nospecialize(constraint = NoSymmetry()))
+function tensor_product(spaces; @nospecialize(constraint = NoConstraint()))
     constraint = as_constraint(constraint)
     constraint, symmetry = _split_symmetry(constraint)
     isnothing(symmetry) || return constrain_space(tensor_product(spaces; constraint), symmetry)
@@ -44,7 +44,7 @@ function tensor_product(spaces; @nospecialize(constraint = NoSymmetry()))
     constrained = any(isconstrained, spaces)
     # Only computed when needed, since a large product space has no `basisstates`, and `generate_states` does not use them
     all_states() = constrained ? _find_combined_states(space, spaces) : basisstates(space)
-    if constraint == NoSymmetry()
+    if constraint == NoConstraint()
         combined = _combined_sector_constraint(spaces)
         !ismissing(combined) && return sector_space(space, all_states(), sector_function(combined, space), combined)
         return constrained ? ConstrainedSpace(space, all_states()) : space
@@ -690,8 +690,9 @@ Algorithm that avoids scalar indexing, which is what makes GPU arrays work: it u
 indexing, broadcasting and reductions, and returns an array of the input's kind. A pure state `ψ`
 is traced as `A * A'`, with `A` gathered from `ψ`, without forming `ψ * ψ'`. It is not specific to
 the partial trace; the operations that accept it as `alg` are [`partial_trace`](@ref),
-[`partial_trace!`](@ref), [`embed`](@ref), [`change_basis`](@ref), `reshape`, [`generalized_kron`](@ref) and
-[`tensor_product`](@ref) of arrays, and it is their default for dense GPU arrays. GPU sparse arrays are not supported.
+[`partial_trace!`](@ref), [`partial_transpose`](@ref), [`embed`](@ref), [`change_basis`](@ref), `reshape`,
+[`generalized_kron`](@ref) and [`tensor_product`](@ref) of arrays, and it is their default for dense GPU arrays. GPU sparse
+arrays are not supported.
 """
 struct NoScalarIndexingAlg end
 """

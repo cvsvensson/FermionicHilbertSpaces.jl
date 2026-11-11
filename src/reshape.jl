@@ -433,10 +433,10 @@ end
 
     # ── 2-subsystem property tests across symmetry types ──────────────────────
     for (qn1, qn2, qn3) in [
-        (NoSymmetry(), NoSymmetry(), NoSymmetry()),
+            (NoConstraint(), NoConstraint(), NoConstraint()),
         (ParityConservation(), ParityConservation(), ParityConservation()),
         (NumberConservation(), NumberConservation(), NumberConservation()),
-        (NoSymmetry(), ParityConservation(), NumberConservation()),
+            (NoConstraint(), ParityConservation(), NumberConservation()),
     ]
         H1 = hilbert_space(f, [1, 2], qn1)
         H2 = hilbert_space(f, [3, 4], qn2)
@@ -488,8 +488,8 @@ end
     # ── Fixed-number sector: NumberConservation(1) ─────────────────────────────
     H_nc = hilbert_space(f, 1:4, NumberConservation())
     Hn1 = sector(1, H_nc)
-    H1_ns = hilbert_space(f, [1, 2], NoSymmetry())
-    H2_ns = hilbert_space(f, [3, 4], NoSymmetry())
+    H1_ns = hilbert_space(f, [1, 2], NoConstraint())
+    H2_ns = hilbert_space(f, [3, 4], NoConstraint())
     d_n1 = dim(Hn1)
     m_n1 = rand(ComplexF64, d_n1, d_n1)
     @test reshape(reshape(m_n1, Hn1 => (H1_ns, H2_ns)), (H1_ns, H2_ns) => Hn1) ≈ m_n1
@@ -498,15 +498,15 @@ end
     @test reshape(reshape(v_n1, Hn1 => (H1_ns, H2_ns)), (H1_ns, H2_ns) => Hn1) ≈ v_n1
 
     # ── 3-subsystem: round-trip and subsystem reorder ─────────────────────────
-    H1_3 = hilbert_space(f, [1], NoSymmetry())
-    H2_3 = hilbert_space(f, [2], NoSymmetry())
-    H3_3 = hilbert_space(f, [3], NoSymmetry())
+    H1_3 = hilbert_space(f, [1], NoConstraint())
+    H2_3 = hilbert_space(f, [2], NoConstraint())
+    H3_3 = hilbert_space(f, [3], NoConstraint())
     H_3 = tensor_product(H1_3, H2_3, H3_3)
     d_3 = dim(H_3)
     m3 = rand(ComplexF64, d_3, d_3)
 
     # ── 4-subsystem: rectangular operator, mixed reshape, identity ───────────
-    H4_3 = hilbert_space(f, [4], NoSymmetry())
+    H4_3 = hilbert_space(f, [4], NoConstraint())
     H12_3 = tensor_product(H1_3, H2_3)
     H34_3 = tensor_product(H3_3, H4_3)
 
@@ -569,14 +569,14 @@ end
 @testitem "Mixed reshape mapping check" begin
     @fermions f
     # Build elementary spaces
-    H1a = hilbert_space(f, [1], NoSymmetry())
+    H1a = hilbert_space(f, [1], NoConstraint())
     H1b = hilbert_space(f, [2], NumberConservation())
-    H2a = hilbert_space(f, [3], NoSymmetry())
+    H2a = hilbert_space(f, [3], NoConstraint())
     H2b = hilbert_space(f, [4], ParityConservation())
-    H3a = hilbert_space(f, [5], NoSymmetry())
+    H3a = hilbert_space(f, [5], NoConstraint())
     H3b = hilbert_space(f, [6], NumberConservation())
-    H3c = hilbert_space(f, [7], NoSymmetry())
-    H4 = hilbert_space(f, [8], NoSymmetry())
+    H3c = hilbert_space(f, [7], NoConstraint())
+    H4 = hilbert_space(f, [8], NoConstraint())
 
     # Composite spaces used in the mapping
     H1ab = tensor_product(H1a, H1b)

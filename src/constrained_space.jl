@@ -5,7 +5,7 @@ struct ConstrainedSpace{B,H,S,I} <: AbstractSubspace{B,H}
     ConstrainedSpace{B,H,S,I}(parent, states, index) where {B,H,S,I} = new{B,H,S,I}(parent, states, index)
 end
 
-function ConstrainedSpace(space, states; constraint=NoSymmetry())
+function ConstrainedSpace(space, states; constraint = NoConstraint())
     parent, members = unnest(space, states)
     stored = _stored_states(members)
     ConstrainedSpace(parent, stored, build_subspace_index(constraint, parent, stored))
@@ -18,10 +18,10 @@ subspace_states(H::ConstrainedSpace) = H.states
 subspace_index(H::ConstrainedSpace) = H.index
 rewrap(H::ConstrainedSpace, parent) = ConstrainedSpace(parent, H.states, H.index)
 
-constrain_space(space::AbstractHilbertSpace, ::NoSymmetry) = space
-constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector, BasisStates}) = _holds_constraints(states) ? constrain_space(space, as_constraint(states)) : constrain_space(space, NoSymmetry(), states)
+constrain_space(space::AbstractHilbertSpace, ::NoConstraint) = space
+constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector, BasisStates}) = _holds_constraints(states) ? constrain_space(space, as_constraint(states)) : constrain_space(space, NoConstraint(), states)
 
-constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, _states_of(space, states))
+constrain_space(space, ::NoConstraint, states) = ConstrainedSpace(space, _states_of(space, states))
 function constrain_space(space, constraint::AbstractConstraint)
     constraint, symmetry = _split_symmetry(constraint)
     isnothing(symmetry) || return constrain_space(constrain_space(space, constraint), symmetry)
@@ -254,7 +254,7 @@ same_state_kind(state::ProductState, ::Type{ProductState{S}}) where {S<:Tuple} =
     states = collect(basisstates(H))[2:6]
     Hs = constrain_space(H, states)
     @test basisstates(Hs) == states
-    @test Hs == constrain_space(H, NoSymmetry(), states)
+    @test Hs == constrain_space(H, NoConstraint(), states)
     Hc = constrain_space(H, NumberConservation(1), states)
     one_particle = Set(basisstates(constrain_space(H, NumberConservation(1))))
     @test basisstates(Hc) == filter(in(one_particle), states)
@@ -262,7 +262,7 @@ same_state_kind(state::ProductState, ::Type{ProductState{S}}) where {S<:Tuple} =
 end
 
 @testitem "constrain_space on subspaces matches filtering all basis states" begin
-    using FermionicHilbertSpaces: AdditiveConstraint, particle_number
+    using FermionicHilbertSpaces: AdditiveConstraint, FilterConstraint, particle_number
     @fermions f
     @spins s 1 // 2
     N = 8
@@ -293,6 +293,7 @@ end
 end
 
 @testitem "constrain_space reads labels unless they are states" begin
+    using FermionicHilbertSpaces: FilterConstraint
     using LinearAlgebra
     struct Level
         n::Int
@@ -331,7 +332,7 @@ end
 end
 
 @testitem "FilterConstraint agrees with NumberConservation" begin
-    using FermionicHilbertSpaces: particle_number
+    using FermionicHilbertSpaces: FilterConstraint, SectorConstraint, particle_number
     @fermions f
     N = 4
     H = hilbert_space(f, 1:N)
@@ -461,7 +462,7 @@ end
 end
 
 @testitem "Tensor product keeps the sector rule of a factor" begin
-    using FermionicHilbertSpaces: particle_number
+    using FermionicHilbertSpaces: SectorConstraint, particle_number
     @fermions f
     rule = s -> particle_number(s) >= 2 ? :hi : :lo
     H1 = hilbert_space(f, 1:2, NumberConservation() * SectorConstraint(rule))

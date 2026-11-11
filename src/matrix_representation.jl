@@ -787,7 +787,7 @@ end
 
 @testitem "fragment" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: fragment
+    using FermionicHilbertSpaces: fragment, FilterConstraint
     @spins S 1 // 2
     N = 6
     H = hilbert_space(S, 1:N)

@@ -18,13 +18,13 @@ vf = Kets(H)
 vf("10")
 ```
 
-The string is a Fock bitstring: one `'0'`/`'1'` character per mode, in the same order as the labels used to build `H`. A bra is obtained with `'`:
+The string is a Fock bitstring: one `'0'`/`'1'` character per mode, in the same order as the labels used to build `H`. A shorter string is padded with zeros, so `vf("0")` is the vacuum, and a longer one throws an `ArgumentError`. A bra is obtained with `'`:
 
 ```@example states
 vf("10")'
 ```
 
-Other space types parse their labels differently. Bosons use an occupation-number string, e.g. `vb("3")` for a boson space `vb = Kets(hilbert_space(b, 1))`. For a `ProductSpace`, pass one label per factor, either as separate arguments or as a tuple: `vfb("0", "2")` for a fermion factor and a boson factor combined with `tensor_product`.
+Other space types parse their labels differently. Bosons use an occupation-number string, e.g. `vb("3")` for a boson space `vb = Kets(hilbert_space(b, 4))`. For a `ProductSpace`, pass one label per factor, either as separate arguments or as a tuple: `vfb("0", "2")` for a fermion factor and a boson factor combined with `tensor_product`.
 
 `Kets(H)` can also be indexed and iterated. `vf[i]` is the ket of the `i`-th basis state, in the order of `basisstates(H)` and of the vector and matrix representations:
 
