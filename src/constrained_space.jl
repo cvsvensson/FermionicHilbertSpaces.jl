@@ -23,6 +23,8 @@ constrain_space(space::AbstractHilbertSpace, states::Union{AbstractVector, Basis
 
 constrain_space(space, ::NoSymmetry, states) = ConstrainedSpace(space, _states_of(space, states))
 function constrain_space(space, constraint::AbstractConstraint)
+    constraint, symmetry = _split_symmetry(constraint)
+    isnothing(symmetry) || return constrain_space(constrain_space(space, constraint), symmetry)
     split = pruning_split(space, constraint)
     isnothing(split) && return constrain_space(space, constraint, basisstates(space))
     # The search varies its last space fastest and `basisstates(space)` its first atom, so the reversed split keeps that order.
@@ -31,6 +33,7 @@ function constrain_space(space, constraint::AbstractConstraint)
     return constrain_states(space, constraint, states, unpruned_part(constraint))
 end
 function constrain_space(space, constraint::AbstractConstraint, labels)
+    isnothing(last(_split_symmetry(constraint))) || throw(ArgumentError("A symmetry such as `Relabel(g) => λ` cannot filter a list of states. Constrain the space of those states with it."))
     supports_filtering(constraint) || throw(ArgumentError("Cannot constrain a space with an unsupported constraint, got `$constraint`."))
     return constrain_states(space, constraint, _states_of(space, labels))
 end
