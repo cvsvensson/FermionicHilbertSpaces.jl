@@ -211,7 +211,8 @@ end
 
 # Calls `f(outind, value)` for each output entry of `coeff * term` applied to the stored entries of the sparse `x` in
 # the rows `cols`. Each entry is applied as a range of one column, as a `KronTerm` takes ranges.
-function _foreach_term_entry(f, x, space, term, precomp, coeff, conjugate, projection, cols = axes(x, 1))
+# `f::F` makes Julia specialize on `f`, which it otherwise skips as `f` is only passed on.
+function _foreach_term_entry(f::F, x, space, term, precomp, coeff, conjugate, projection, cols = axes(x, 1)) where {F}
     for (n, xn) in zip(SparseArrays.nonzeroinds(x), nonzeros(x))
         (iszero(xn) || !(n in cols)) && continue
         chunked_operator_indices_and_amplitudes_generic!(MulAccumulator(f, xn, coeff, conjugate), term, space, precomp, n:n, 0; projection)
