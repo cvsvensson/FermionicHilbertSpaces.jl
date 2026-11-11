@@ -13,7 +13,7 @@ function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
         return change_basis(m, Hsub, H; projection = true, alg, kwargs...)
     end
     alg isa NoScalarIndexingAlg && return _embed_by_gather(m, Hsub, H, complement; projection, kwargs...)
-    return generalized_kron((m, I), (Hsub, complement), H; projection, kwargs...)
+    return generalized_kron((m, I), (Hsub, complement), H; projection, alg, kwargs...)
 end
 
 """

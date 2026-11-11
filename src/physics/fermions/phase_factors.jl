@@ -265,6 +265,21 @@ function phase_factor_u(state_mapper::FockMapper)
     end
 end
 
+# One pair `(x, Q)` per fermionic group: the occupations `x` of `state` and parities `Q`, linear in `x`, such that
+# `kron_phase_factor(mapper)(state1, state2)` is -1 to the power `count_ones(x2 & (Q1 ⊻ Q2))`, summed over the groups.
+# Bit i of `Q` is the parity of the modes above i in the other subsystems. With `ordered` it is the parity of the
+# later subsystems, which gives the phase of the ordered product of embeddings divided by `phase_factor_u` of both states.
+_kron_phase_bits(::AtomicStateMapper, state, ordered) = ()
+function _kron_phase_bits(mapper::FockMapper, state, ordered)
+    x = FockNumber(state).f
+    Q = later = zero(x)
+    for mask in reverse(mapper.masks)
+        Q ⊻= ordered ? ifelse(isodd(count_ones(x & later)), mask.f, zero(mask.f)) : mask.f & _parity_above(x & ~mask.f)
+        later |= mask.f
+    end
+    return ((x, Q),)
+end
+
 
 @testitem "Phase factor u" begin
     # Appendix C.4

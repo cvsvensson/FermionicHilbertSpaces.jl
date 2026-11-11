@@ -100,6 +100,40 @@ end
     @test_throws ArgumentError reshape(JLArray(rand(dim(H1), dim(H2))), (H1, H2) => H; alg)
 end
 
+@testset "generalized_kron and tensor_product of GPU arrays" begin
+    @fermions f
+    @spin s 1 // 2
+    @boson b
+    Hnum = hilbert_space(f, 1:4, NumberConservation(2))
+    Hpar = hilbert_space(f, 1:5, ParityConservation())
+    Hmixed = tensor_product(hilbert_space(f, 1:3), hilbert_space(s), hilbert_space(b, 3))
+    cases = (
+        (hilbert_space(f, 1:5), (hilbert_space(f, [1, 3]), hilbert_space(f, [2, 4, 5]))),
+        (hilbert_space(f, 1:6), (hilbert_space(f, [3, 6]), hilbert_space(f, [1, 4]), hilbert_space(f, [2, 5]))),
+        (Hnum, (subregion(hilbert_space(f, [1, 3]), Hnum), subregion(hilbert_space(f, [2, 4]), Hnum))),
+        (Hpar, (hilbert_space(f, [4]), hilbert_space(f, [2, 3], ParityConservation(-1)), hilbert_space(f, [1, 5]))),
+        (Hmixed, (hilbert_space(f, [1, 3]), tensor_product(hilbert_space(f, 2:2), hilbert_space(s)), hilbert_space(b, 3))),
+    )
+    for (H, Hs) in cases
+        ms = map(Hk -> rand(ComplexF64, dim(Hk), dim(Hk)), Hs)
+        vs = map(Hk -> rand(ComplexF64, dim(Hk)), Hs)
+        for (op, xs) in ((generalized_kron, ms), (tensor_product, ms), (tensor_product, vs))
+            out = op(map(JLArray, xs), Hs => H; projection = true)
+            @test out isa JLArray
+            @test Array(out) ≈ op(xs, Hs => H; projection = true)
+        end
+    end
+    H, Hs = cases[3]
+    ms = map(Hk -> rand(dim(Hk), dim(Hk)), Hs)
+    @test_throws ArgumentError tensor_product(map(JLArray, ms), Hs => H)
+    diagonal = map(m -> m .* (axes(m, 1) .== axes(m, 2)'), ms)
+    @test Array(tensor_product(map(JLArray, diagonal), Hs => H)) ≈ tensor_product(diagonal, Hs => H)
+    S = representation(f[1]' * f[3] + hc, Hs[1], JLSparseMatrixCSC)
+    for op in (generalized_kron, tensor_product), kwargs in ((;), (; alg = NoScalarIndexingAlg()))
+        @test_throws ArgumentError op((S, JLArray(ms[2])), Hs => H; kwargs...)
+    end
+end
+
 @testset "GPU arrays select NoScalarIndexingAlg by default" begin
     @fermions f
     H, HA, HB = hilbert_space(f, 1:4), hilbert_space(f, [1, 3]), hilbert_space(f, [2, 4])

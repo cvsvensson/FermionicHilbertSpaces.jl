@@ -768,3 +768,5 @@ function phase_factor_u(sp::ProductSpaceMapper)
         return tuplefoldl(*, 1, tuplemap((s, pfu) -> isnothing(pfu) ? 1 : pfu(s), state.states, leaf_pfus))
     end
 end
+_kron_phase_bits(sp::ProductSpaceMapper, state, ordered) =
+    mapreduce((leaf, s) -> _kron_phase_bits(leaf.mapper, s, ordered), (a, b) -> (a..., b...), sp.leaves, state.states)
