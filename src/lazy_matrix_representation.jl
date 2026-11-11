@@ -478,7 +478,6 @@ end
     import FermionicHilbertSpaces: TermChunking, StateChunking, NoChunking, cache_operator!
 
     scheduler = StaticScheduler(; nchunks=4)
-    scheduler = SerialScheduler()
 
     @fermions f
     Hf = hilbert_space(f, 1:4)
@@ -515,6 +514,9 @@ end
     @test Ls * Vs ≈ M * Vs
     @test concretize(Lt) ≈ M
     @test concretize(Ls) ≈ M
+    for L in (Lt, Ls)
+        @test all(tmap(k -> (X = isodd(k) ? v : V; L * X ≈ M * X), 1:100))
+    end
 
     @spin s 1 // 2
     Hs = hilbert_space(s)
