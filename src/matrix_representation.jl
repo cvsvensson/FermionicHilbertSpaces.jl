@@ -1,5 +1,3 @@
-abstract type AbstractFermionSym <: AbstractSym end
-
 """
     EagerDenseRepr{T}()
     EagerDenseRepr()
@@ -91,12 +89,12 @@ end
 _factors_eltype(C, factors) = mapreduce(f -> _term_eltype(C, typeof(f)), promote_type, factors; init = C)
 mat_eltype(::S) where {S} = mat_eltype(S)
 """
-    mat_eltype(::Type{O})
+    mat_eltype(::Type{K})
 
-Element type of the matrix elements of a symbolic operator of type `O`. Matrix
+Element type of the matrix elements of operators of kind `K`. Matrix
 representations promote it with the coefficients of the expression, after giving its floats
-the precision of float coefficients. The fallback is `Float64`, so an operator type with
-complex matrix elements must add a method, for example `mat_eltype(::Type{<:MyOp}) = ComplexF64`.
+the precision of float coefficients. The fallback is `Float64`, so a kind with
+complex matrix elements must add a method, for example `mat_eltype(::Type{MyKind}) = ComplexF64`.
 """
 mat_eltype(::Type{S}) where {S} = Float64
 
@@ -554,8 +552,8 @@ end
 """
     symbolic_groups(op)
 
-Extract all unique symbolic bases from an operator expression.
-Returns a set of unique bases found in the operator.
+Extract all unique groups from an operator expression.
+Returns a set of the groups found in the operator.
 """
 function symbolic_groups(op)
     combine(x, y) = nothing
@@ -652,7 +650,7 @@ end
 function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
     space_groups = group_ids(space)
-    all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic bases of the operator must match the atomic groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
+    all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic groups of the operator must match the groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
     return space_groups
 end
 
@@ -1068,41 +1066,37 @@ end
 
 @testitem "Amplitudes of custom operators in the requested precision" begin
     import FermionicHilbertSpaces as FHS
-    struct RootOp <: FHS.AbstractSym end
-    struct PreciseRootOp <: FHS.AbstractSym end
-    Base.adjoint(op::Union{RootOp, PreciseRootOp}) = op
-    FHS.apply_local_operator(::RootOp, state, space, precomp) = (state, sqrt(2.0))
-    FHS.apply_local_operator(::PreciseRootOp, state, space, precomp, ::Type{T}) where {T} = (state, sqrt(T(2)))
+    struct Root end
+    struct PreciseRoot end
+    Base.adjoint(k::Union{Root, PreciseRoot}) = k
+    FHS.apply_local_operator(::Root, state, space, precomp) = (state, sqrt(2.0))
+    FHS.apply_local_operator(::PreciseRoot, state, space, precomp, ::Type{T}) where {T} = (state, sqrt(T(2)))
 
     @boson b
     H = hilbert_space(b, 3)
-    amplitude(op, ::Type{T}, H, transpose) where {T} =
-        last(FHS.apply_local_operators(FHS.NCMul(one(T), [op]), FHS.basisstate(1, H), H, (nothing,); transpose))
+    amplitude(kind, ::Type{T}, H, transpose) where {T} =
+        last(FHS.apply_local_operators(FHS.NCMul(one(T), [FHS.Op(kind, b.mode)]), FHS.basisstate(1, H), H, (nothing,); transpose))
 
-    @test (@inferred amplitude(RootOp(), Float32, H, false)) === Float32(sqrt(2.0))
-    @test (@inferred amplitude(RootOp(), Float32, H, true)) === Float32(sqrt(2.0))
-    @test amplitude(PreciseRootOp(), BigFloat, H, false) == sqrt(big(2))
+    @test (@inferred amplitude(Root(), Float32, H, false)) === Float32(sqrt(2.0))
+    @test (@inferred amplitude(Root(), Float32, H, true)) === Float32(sqrt(2.0))
+    @test amplitude(PreciseRoot(), BigFloat, H, false) == sqrt(big(2))
 
-    struct BigRootOp <: FHS.AbstractSym end
-    Base.adjoint(op::BigRootOp) = op
-    FHS.symbolic_group(::BigRootOp) = FHS.symbolic_group(b)
-    FHS.mat_eltype(::Type{BigRootOp}) = BigFloat
-    FHS.apply_local_operator(::BigRootOp, state, space, precomp) = (state, sqrt(big(2)))
-    @test representation(BigRootOp(), H)[1, 1] == sqrt(big(2))
+    struct BigRoot end
+    Base.adjoint(k::BigRoot) = k
+    FHS.mat_eltype(::Type{BigRoot}) = BigFloat
+    FHS.apply_local_operator(::BigRoot, state, space, precomp) = (state, sqrt(big(2)))
+    @test representation(FHS.Op(BigRoot(), b.mode), H)[1, 1] == sqrt(big(2))
 end
 
 @testitem "Products of operator types with different matrix element types" begin
     using LinearAlgebra
-    import FermionicHilbertSpaces: AbstractSym, AbstractBasisState, symbolic_group, apply_local_operator, mat_eltype
-    import FermionicHilbertSpaces.NonCommutativeProducts: @nc
-    struct Shift <: AbstractSym
+    import FermionicHilbertSpaces: @field, Op, AbstractBasisState, apply_local_operator, mat_eltype
+    struct Shift
         k::Int
     end
-    struct Phase <: AbstractSym end
-    @nc Shift Phase
+    struct Phase end
     Base.adjoint(s::Shift) = Shift(-s.k)
     Base.adjoint(p::Phase) = p
-    symbolic_group(::Union{Shift, Phase}) = 1
     struct Site <: AbstractBasisState
         n::Int
     end
@@ -1111,10 +1105,12 @@ end
     mat_eltype(::Type{Shift}) = Int
     mat_eltype(::Type{Phase}) = ComplexF64
 
-    H = GenericHilbertSpace(1, Site.(0:2))
-    S = representation(Shift(1), H, Matrix)
-    @test representation(Phase() * Shift(1), H, Matrix) ≈ Diagonal(im .^ (0:2)) * S
-    @test representation(Phase() * Shift(1) + Shift(1), H) ≈ (Diagonal(im .^ (0:2)) + I) * S
+    @field c::Shift
+    H = hilbert_space(c[1], Site.(0:2))
+    shift, phase = c[1][1], Op(Phase(), c[1])
+    S = representation(shift, H, Matrix)
+    @test representation(phase * shift, H, Matrix) ≈ Diagonal(im .^ (0:2)) * S
+    @test representation(phase * shift + shift, H) ≈ (Diagonal(im .^ (0:2)) + I) * S
 end
 
 @testitem "Operators between two spaces with Axes" begin

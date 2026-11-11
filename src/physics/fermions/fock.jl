@@ -157,12 +157,13 @@ function combine_states(f, fm::FockMapper{N}) where N
     end
     (FockNumber{IT}(result),), (1,)
 end
-function catenate_fock_states(fock_states, spaces, ::Type{T}) where T
+catenate_fock_states(fock_states, spaces, ::Type{T}) where {T} = _catenate_fock_states(fock_states, Iterators.map(nbr_of_modes, spaces), T)
+function _catenate_fock_states(fock_states, sizes, ::Type{T}) where {T}
     num = zero(T)
     shift = 0
-    for (state, space) in zip(fock_states, spaces)
+    for (state, n) in zip(fock_states, sizes)
         num |= convert(T, state) << shift
-        shift += nbr_of_modes(space)
+        shift += n
     end
     shift <= _max_fock_modes(T) || throw(ArgumentError("Cannot store $shift modes in a $T."))
     num

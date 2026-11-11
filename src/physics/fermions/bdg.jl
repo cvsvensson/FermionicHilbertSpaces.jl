@@ -25,7 +25,7 @@ is_ph_symmetric(m; kwargs...) = iseven(size(m, 1)) && isapprox(m, ph_conjugate(m
 
 struct BdGHilbertSpace{H}
     parent::H
-    function BdGHilbertSpace(f::SymbolicFermionBasis, labels)
+    function BdGHilbertSpace(f::Field{Fermion}, labels)
         states = vec([NambuState(i, hole) for (i, label) in enumerate(labels), hole in (true, false)])
         H = hilbert_space(f, labels, states)
         return new{typeof(H)}(H)
@@ -49,7 +49,7 @@ Marker passed as the last argument of `hilbert_space(f, labels, BdG())` to selec
 struct BdG end
 
 """
-    hilbert_space(f::SymbolicFermionBasis, labels, ::BdG)
+    hilbert_space(f::Field{Fermion}, labels, ::BdG)
 
 The space of Nambu states `[f[l] for l in labels; f[l]' for l in labels]`. `representation` gives the particle-hole symmetric BdG matrix, `[h Δ; -Δ* -h*] / 2` for `op = Σᵢⱼ h[i, j] f[i]' f[j] + (Δ[i, j] f[i]' f[j]' + h.c.) / 2`, and only quadratic operators can be represented.
 
@@ -58,7 +58,7 @@ H = hilbert_space(f, 1:2, BdG())
 representation(f[1]' * f[1], H, Matrix) # diagm([1, 0, -1, 0]) / 2
 ```
 """
-hilbert_space(f::SymbolicFermionBasis, labels, ::BdG) = BdGHilbertSpace(f, labels)
+hilbert_space(f::Field{Fermion}, labels::AbstractVector, ::BdG) = BdGHilbertSpace(f, labels)
 dim(h::BdGHilbertSpace) = dim(h.parent)
 mode_ordering(h::BdGHilbertSpace) = mode_ordering(h.parent)
 Base.:(==)(a::BdGHilbertSpace, b::BdGHilbertSpace) = a === b || a.parent == b.parent
@@ -92,7 +92,7 @@ end
 # The term c_a^(d1) c_b^(d2), with `a` and `b` at `positions`, maps the Nambu state (b, !d2) to (a, d1)
 function _nambu_in_out(term, positions)
     a, b = term.factors
-    return NambuState(positions[2], !b.creation), NambuState(positions[1], a.creation)
+    return NambuState(positions[2], !b.kind.creation), NambuState(positions[1], a.kind.creation)
 end
 function _precomputation_before_operator_application(op::FermionSym, space::AbstractHilbertSpace{NambuState})
     position = mode_position(op, space)
@@ -441,9 +441,9 @@ end
 end
 
 # The operators Ψ_j^† that create the basis states of `H`, such that `representation(Σ_ab M_ab Ψ_a^† Ψ_b, H) == M`
-_nambu_creators(H::SingleParticleHilbertSpace) = map(adjoint, modes(H))
-_nambu_creators(H::BdGHilbertSpace) = vcat(map(adjoint, modes(H)), modes(H))
-_nambu_creators(H::MajoranaSingleParticleHilbertSpace) = [γ / sqrt(2) for γ in modes(H)]
+_nambu_creators(H::SingleParticleHilbertSpace) = [Op(Fermion(true), m) for m in modes(H)]
+_nambu_creators(H::BdGHilbertSpace) = [[Op(Fermion(true), m) for m in modes(H)]; [Op(Fermion(false), m) for m in modes(H)]]
+_nambu_creators(H::MajoranaSingleParticleHilbertSpace) = [Op(Majorana(), m) / sqrt(2) for m in modes(H)]
 
 """
     quasiparticle(v, H)

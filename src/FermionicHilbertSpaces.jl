@@ -35,8 +35,7 @@ export parityoperator, numberoperator, representation, expectation
 export Kets, Ket, ProductState, SpinState, BosonicState
 
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
-export @fermions, @majoranas, @boson, @bosons, @spin, @spins
-export BosonField, SpinField
+export @fermion, @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
 export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
@@ -61,16 +60,15 @@ Base.:+(m, ::HC) = (m + m')
 Base.:-(m, ::HC) = (m - m')
 """
     hc
-Adding this is equivalent to adding the hermitian conjugate.
+`op + hc` is `op + op'` and `op - hc` is `op - op'`, for example `f[1]'f[2] + hc`.
 """
 const hc = HC()
 
 """
     AbstractSym
 
-Supertype of symbolic operators such as fermions, Majoranas, bosons and spins. A custom
-operator type subtypes it, registers itself with `NonCommutativeProducts.@nc` and defines
-[`apply_local_operator`](@ref) and [`symbolic_group`](@ref).
+Supertype of the factors of symbolic expressions: operators on fields, which are [`Op`](@ref)s, and symbolic
+states.
 """
 abstract type AbstractSym end
 NonCommutativeProducts.atom_group(op::AbstractSym) = symbolic_group(op)
@@ -99,24 +97,20 @@ function _order_isless(a::Tuple, b::Tuple)
     return _order_isless(Base.tail(a), Base.tail(b))
 end
 
-# The tags that identify a group of symbolic operators. `tags` is `nothing` or a tuple. For `@fermions` and
-# `@majoranas` the first element is the tuple of names given to the macro, so the names determine the group.
-# Elements appended by `add_tag` are symbols such as `:left` and `:right`.
-# Tags are ordered by `_order_isless` of their tag tuples. For groups created by the macros this is the lexicographic order
-# of the macro's names, e.g. the operators of `@fermions a` sort before those of `@fermions b`.
+# The tags of a field, `nothing` or a tuple of the tags appended by `add_tag`, such as `:left` and `:right`.
 struct Tags{T}
     tags::T
 end
 Base.hash(id::Tags, h::UInt) = hash(id.tags, h)
+Base.hash(::Tags{Nothing}, h::UInt) = h
 Base.:(==)(a::Tags, b::Tags) = a.tags == b.tags
 Base.isless(a::Tags, b::Tags) = _order_isless(tagset(a), tagset(b))
 tagset(id::Tags) = id.tags
 tagset(::Tags{Nothing}) = ()
 tagset(x) = tagset(tags(x))
 
-function _symbolic_name_with_tags(name, tagged; skip_first=0)
+function _symbolic_name_with_tags(name, tagged)
     tags = tagset(tagged)
-    tags = skip_first > 0 ? tags[(skip_first+1):end] : tags
     isempty(tags) && return string(name)
     return string(name, "(", join(tags, ","), ")")
 end
@@ -127,9 +121,7 @@ add_tag(::Tags{Nothing}, tag) = Tags((tag,))
 """
     tag_label(label, tag)
 
-Return the group label `label` with `tag` appended. Any label works, e.g. `1` or `:a`. A custom
-operator supports [`open_system`](@ref) by rebuilding itself with a tagged label:
-`add_tag(s::Shift, tag) = Shift(tag_label(s.site, tag), s.k)`.
+Return the group label `label` with `tag` appended. Any label works, e.g. `1` or `:a`.
 """
 tag_label(label, tag) = Tags((label, tag))
 tag_label(label::Tags, tag) = add_tag(label, tag)
@@ -161,6 +153,7 @@ include("matrix_representation.jl")
 include("sparse_assembly.jl")
 include("lazy_matrix_representation.jl")
 
+include("fields.jl")
 include("physics/fermions/fock.jl")
 include("physics/fermions/phase_factors.jl")
 include("physics/fermions/symbolic_fermions.jl")

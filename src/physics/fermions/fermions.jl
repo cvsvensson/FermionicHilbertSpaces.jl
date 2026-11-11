@@ -1,30 +1,22 @@
-
-struct FermionicSpace{F,L,FG<:FermionicGroup} <: AbstractGroupedHilbertSpace{F}
-    modes::Vector{L}
-    mode_ordering::OrderedDict{L,Int}
+struct FermionicSpace{F, M, FG <: Group} <: AbstractGroupedHilbertSpace{F}
+    modes::Vector{M}
+    mode_ordering::OrderedDict{M, Int}
     group::FG
-    function FermionicSpace(_modes::AbstractVector{L}, group::FG, ::Type{F}=FockNumber{default_fock_representation(length(_modes))}) where {F,L<:FermionSym,FG<:FermionicGroup}
-        modes = map(_normalize_sym, _modes)
-        mode_ordering = OrderedDict{L,Int}(m => i for (i, m) in enumerate(modes))
+    function FermionicSpace(_modes::AbstractVector, group::FG, ::Type{F} = FockNumber{default_fock_representation(length(_modes))}) where {F, FG <: Group}
+        # Without `map` on modes, inference of an enclosing `map`, such as in `atomic_factors`, is not widened.
+        modes = _modes isa AbstractVector{<:Mode} ? collect(_modes) : map(mode, _modes)
+        all(m -> symbolic_group(m) == group, modes) || throw(ArgumentError("All modes must belong to the group `$group`."))
+        M = eltype(modes)
+        mode_ordering = OrderedDict{M, Int}(m => i for (i, m) in enumerate(modes))
         length(mode_ordering) == length(modes) || throw(ArgumentError("The modes of a fermionic group must be distinct, got $modes."))
-        new{F,L,FG}(modes, mode_ordering, group)
+        return new{F, M, FG}(modes, mode_ordering, group)
     end
 end
-function FermionicSpace(factors::AbstractVector{L}, group::FermionicGroup, ::Type{F}=FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F,L<:FermionicSpace}
+function FermionicSpace(factors::AbstractVector{<:FermionicSpace}, group::Group, ::Type{F} = FockNumber{default_fock_representation(sum(nbr_of_modes, factors))}) where {F}
     all(c -> group_id(c) == group, factors) || throw(ArgumentError("All factors must belong to the group `$group`."))
-    fermionsyms = collect(Iterators.flatten(Iterators.map(modes, factors)))
-    FermionicSpace(fermionsyms, group, F)
+    return FermionicSpace(collect(Iterators.flatten(Iterators.map(modes, factors))), group, F)
 end
-function FermionicSpace(modes::AbstractVector{F}) where {F<:FermionSym}
-    FermionicSpace(modes, only(unique(map(group_id, modes))))
-end
-function FermionicSpace(a::SymbolicFermionBasis, modes::AbstractVector{F}) where {F<:FermionSym}
-    agroup = symbolic_group(a)
-    if length(modes) > 0
-        all(mode -> group_id(mode) == agroup, modes) || throw(ArgumentError("All modes must belong to the group `$agroup` of the basis."))
-    end
-    return FermionicSpace(modes, agroup)
-end
+FermionicSpace(a::Field{Fermion}, modes::AbstractVector) = FermionicSpace(modes, Group(a))
 # The copy of a `FermionicSpace` that GPU kernels use: only its number of modes
 struct DeviceFermionicSpace{F} <: AbstractHilbertSpace{F}
     nbr_of_modes::Int
@@ -76,11 +68,6 @@ mode_ordering(H::FermionicSpace) = H.mode_ordering
 modes(H::FermionicSpace) = H.modes
 add_tag(H::FermionicSpace, tag) = FermionicSpace(map(m -> add_tag(m, tag), H.modes), add_tag(group_id(H), tag), statetype(H))
 
-_normalize_sym(f::FermionSym) = FermionSym(false, f.label, f.basis)
-statetype(f::FermionSym) = FockNumber{default_fock_representation(1)}
-basisstates(f::FermionSym) = [statetype(f)(0), statetype(f)(1)]
-nbr_of_modes(f::FermionSym) = 1
-isconstrained(f::FermionSym) = false
 
 partial_trace_phase_factor_eltype(::FermionicSpace) = Int
 partial_transpose_phase_factor_eltype(::FermionicSpace) = Complex{Int}
@@ -91,19 +78,13 @@ partial_transpose_phase_factor_eltype(::FermionicSpace) = Complex{Int}
 Position of the mode that the operator `op` acts on, in the mode ordering of `H` (e.g. the
 Jordan-Wigner order of fermions), or `0` if `H` has no such mode.
 """
-mode_position(f::FermionSym, H) = get(mode_ordering(H), _normalize_sym(f), 0)
+mode_position(op, H) = get(mode_ordering(H), mode(op), 0)
 
-function combine_into_group(group::FermionicGroup, fermions)
-    if all(f -> group_id(f) == group, fermions)
-        return FermionicSpace(fermions, group)
-    else
-        throw(ArgumentError("All fermions must belong to the group `$group`."))
-    end
-end
+combine_into_group(group::Group{Fermion}, atoms) = FermionicSpace(atoms, group)
 
 operators(H::FermionicSpace) = fermions(H)
 isconstrained(H::FermionicSpace) = false
-combine_states(states, H::FermionicSpace{F}) where F = (catenate_fock_states(states, H.modes, F),), (1,)
+combine_states(states, H::FermionicSpace{F}) where {F} = (_catenate_fock_states(states, Iterators.repeated(1), F),), (1,)
 
 state_mapper(H::FermionicSpace, Hs::AbstractHilbertSpace) = state_mapper(H, (Hs,))
 state_mapper(H::FermionicSpace, Hs) = _fock_mapper(H, Hs)
@@ -114,7 +95,7 @@ function _fock_mapper(H, Hs)
 end
 # The atoms of `Hsub`, or for fermionic spaces the modes naming them, which `atom_position`
 # accepts without building one single-mode space per mode.
-_fock_atoms(Hsub) = atomic_factors(Hsub)
+_fock_atoms(Hsub) = _atom_names(Hsub)
 _fock_atoms(Hsub::FermionicSpace) = nbr_of_modes(Hsub) == 0 ? (Hsub,) : modes(Hsub)
 _fock_atoms(Hsub::AbstractSubspace) = _fock_atoms(parent(Hsub))
 
@@ -127,10 +108,10 @@ function _compact_fermionic_modes(io::IO, c::FermionicSpace;
 
     isempty(c.modes) && return print(io, "FermionicSpace()")
 
-    # Group consecutive modes by symbolic basis name
+    # Group consecutive modes by field
     groups = Tuple{Any,Vector{Any}}[]
     for m in c.modes
-        mode_name = _symbolic_name_with_tags(m.basis.name, m.basis; skip_first=1)
+        mode_name = m.field
         if !isempty(groups) && last(groups)[1] == mode_name
             push!(last(groups)[2], m.label)
         else
@@ -138,7 +119,7 @@ function _compact_fermionic_modes(io::IO, c::FermionicSpace;
         end
     end
 
-    fmt((name, labels)) = "$name[$(join(_truncate(labels, max_labels_per_group, edge_labels), ", "))]"
+    fmt((name, labels)) = labels == [()] ? "$name" : "$name[$(join(_truncate(labels, max_labels_per_group, edge_labels), ", "))]"
     print(io, join(_truncate(map(fmt, groups), max_groups, edge_groups), ", "))
 end
 function embedding_unitary(partition, H::FermionicSpace)
@@ -155,7 +136,7 @@ function (processor::CombineFockNumbersProcessor{T})(full_state, spaces) where T
 end
 # _init_results(spaces, ::CombineFockNumbersProcessor{T}) where T = T[]
 
-focknbr_from_site_label(mode::FermionSym, H::FermionicSpace) = focknbr_from_site_index(mode_position(mode, H))
+focknbr_from_site_label(m, H::FermionicSpace) = focknbr_from_site_index(mode_position(m, H))
 focknbr_from_site_labels(Hsub::FermionicSpace, H::FermionicSpace) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
 
 
@@ -167,7 +148,7 @@ function _precomputation_before_operator_application(op::FermionSym, space::Abst
 end
 
 
-function apply_local_operators(op::NCMul{<:Any, <:FermionSym}, state::FockNumber{I}, space::_FockSpace, bitmasks; transpose) where {I}
+function apply_local_operators(op::NCMul{<:Any, <:Union{Fermion, FermionSym}}, state::FockNumber{I}, space::_FockSpace, bitmasks; transpose) where {I}
     factors = op.factors
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1
@@ -175,7 +156,7 @@ function apply_local_operators(op::NCMul{<:Any, <:FermionSym}, state::FockNumber
     @inbounds for m in eachindex(factors, bitmasks)
         n = !transpose ? N - m + 1 : m
         factor = factors[n]
-        dagger = xor(factor.creation, transpose)
+        dagger = xor(kind(factor).creation, transpose)
         bitmask = bitmasks[n]
         occupied = !iszero(bitmask & newfocknbr)
         if dagger == occupied
@@ -187,7 +168,7 @@ function apply_local_operators(op::NCMul{<:Any, <:FermionSym}, state::FockNumber
     return newfocknbr, (fermionparity ? -op.coeff : op.coeff)
 end
 
-function apply_local_operator(op::FermionSym, state::FockNumber{I}, space, bitmask) where I
+function apply_local_operator(op::Fermion, state::FockNumber{I}, space, bitmask) where {I}
     newfocknbr = state
     fermionparity = false  # false = +1, true = -1
     factor = op
@@ -321,9 +302,9 @@ end
     end
 end
 
-hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
-hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState},BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
-function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, @nospecialize(constraint::ConstraintLike))
+hilbert_space(a::Field{Fermion}, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
+hilbert_space(a::Field{Fermion}, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState}, BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
+function hilbert_space(a::Field{Fermion}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike))
     length(labels) == 0 && return hilbert_space(a, labels)
     constraint = as_constraint(constraint)
     # The states of a total number of fermions are built directly.
@@ -337,7 +318,7 @@ function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, @nospeci
     return tensor_product(map(l -> hilbert_space(a[l]), labels); constraint)
 end
 
-function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::ParityConservation{Missing})
+function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::ParityConservation{Missing})
     H = hilbert_space(a, labels)
     nbr_of_modes(H) == 0 && return H
     states = if constraint.allowed_parities == [-1, 1]
@@ -348,7 +329,7 @@ function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constrai
     end
     sector_space(H, states, parity, constraint)
 end
-function hilbert_space(a::SymbolicFermionBasis, labels::AbstractVector, constraint::NumberConservation{T,Missing,Missing}) where T
+function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::NumberConservation{T, Missing, Missing}) where {T}
     H = hilbert_space(a, labels)
     N = nbr_of_modes(H)
     N == 0 && return H

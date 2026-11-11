@@ -33,12 +33,12 @@ partial_trace_phase_factor_eltype(H::TransposedSpace) = partial_trace_phase_fact
 partial_transpose_phase_factor_eltype(H::TransposedSpace) = partial_transpose_phase_factor_eltype(parent(H))
 partial_transpose_phase_factor(f1, f2, H::TransposedSpace) = partial_transpose_phase_factor(f1, f2, parent(H))
 
-function FermionicSpace(spaces::AbstractVector{F}, group) where {F<:TransposedSpace}
+function FermionicSpace(spaces::AbstractVector{<:TransposedSpace}, group::Group)
     only(unique(map(group_id, spaces))) == group || throw(ArgumentError("All spaces must belong to the group `$group`."))
     TransposedSpace(FermionicSpace(map(H -> H.parent, spaces), group))
 end
 
-combine_into_group(group::MajoranaGroup, spaces::AbstractVector{<:TransposedSpace}) =
+combine_into_group(group::Group{Majorana}, spaces::AbstractVector{<:TransposedSpace}) =
     TransposedSpace(combine_into_group(group, map(parent, spaces)))
 
 
@@ -94,7 +94,7 @@ end
     dissipator(L)
 
 The symbolic Lindblad dissipator `ρ ↦ LρL† - ½{L†L, ρ}` for the jump operator `L`, acting on the
-vectorized density matrix of a space returned by [`open_system`](@ref). Public, not exported.
+vectorized density matrix of a space returned by [`open_system`](@ref). A prefactor belongs to `L`: `dissipator(c * L)` has rate `abs2(c)`. Public, not exported.
 
 # Examples
 ```julia
@@ -107,11 +107,6 @@ representation(dissipator(c[1]), Hlr)
 """
 dissipator(L) = tag_left(L) * tag_right(L') - (tag_left(L' * L) + tag_right(L' * L)) / 2
 
-function add_tag(factor::AbstractSym, tag)
-    basis = symbolic_basis(factor)
-    new_basis = add_tag(basis, tag)
-    return with_basis(factor, new_basis)
-end
 add_tag(expr, tag) = NonCommutativeProducts.ncmap(Base.Fix2(add_tag, tag), expr)
 
 
@@ -219,10 +214,10 @@ end
     H = hilbert_space(s)
     Ht = TransposedSpace(H)
 
-    A = sum((n + 1im) * s[n] for n in 0:3)
+    A = sum((n + 1im) * s[op] for (n, op) in zip(0:3, (:I, :x, :y, :z)))
     @test transpose(representation(A, H)) ≈ representation(A, Ht)
 
-    B = sum((n + 2)^2 * s[n] for n in 0:3)
+    B = sum((n + 2)^2 * s[op] for (n, op) in zip(0:3, (:I, :x, :y, :z)))
     @test representation(A * B, H) ≈ representation(A, H) * representation(B, H)
     @test representation(A * B, Ht) ≈ representation(B, Ht) * representation(A, Ht)
     @test representation(A * B, Ht) ≈ transpose(representation(A * B, H))
@@ -379,30 +374,26 @@ _keep_transposed_parts(newstate, state, H) = newstate
 rewrap(::TransposedSpace, space) = TransposedSpace(space)
 @testitem "open_system of a custom algebra" begin
     using LinearAlgebra
-    import FermionicHilbertSpaces: AbstractSym, AbstractBasisState, symbolic_group, local_mul_effect,
-        apply_local_operator, mat_eltype, add_tag, tag_label, open_system, dissipator
-    import FermionicHilbertSpaces.NonCommutativeProducts: @nc, Swap, AddTerms
-    struct Shift <: AbstractSym
-        site::Any
+    import FermionicHilbertSpaces: @field, Op, AbstractBasisState, local_mul_effect,
+        apply_local_operator, mat_eltype, add_tag, open_system, dissipator
+    import FermionicHilbertSpaces.NonCommutativeProducts: Swap, AddTerms
+    struct ShiftKind
         k::Int
     end
-    struct Num <: AbstractSym
-        site::Any
-    end
-    @nc Shift Num
-    Base.adjoint(s::Shift) = Shift(s.site, -s.k)
-    Base.adjoint(n::Num) = n
-    symbolic_group(op::Union{Shift, Num}) = op.site
-    local_mul_effect(a::Shift, b::Shift) = Shift(a.site, a.k + b.k)
-    local_mul_effect(a::Num, b::Shift) = AddTerms((Swap(1), b.k * b))
+    struct NumKind end
+    Base.adjoint(s::ShiftKind) = ShiftKind(-s.k)
+    Base.adjoint(n::NumKind) = n
+    local_mul_effect(a::Op{ShiftKind}, b::Op{ShiftKind}) = Op(ShiftKind(a.kind.k + b.kind.k), a.mode)
+    local_mul_effect(a::Op{NumKind}, b::Op{ShiftKind}) = AddTerms((Swap(1), b.kind.k * b))
     struct Site <: AbstractBasisState
         n::Int
     end
-    apply_local_operator(s::Shift, state::Site, space, precomp) = (Site(mod(state.n + s.k, 3)), 1)
-    apply_local_operator(::Num, state::Site, space, precomp) = (state, state.n)
-    mat_eltype(::Type{Shift}) = Int
-    add_tag(s::Shift, tag) = Shift(tag_label(s.site, tag), s.k)
-    add_tag(n::Num, tag) = Num(tag_label(n.site, tag))
+    apply_local_operator(s::ShiftKind, state::Site, space, precomp) = (Site(mod(state.n + s.k, 3)), 1)
+    apply_local_operator(::NumKind, state::Site, space, precomp) = (state, state.n)
+    mat_eltype(::Type{ShiftKind}) = Int
+    @field c::ShiftKind
+    Shift(site, k) = c[site][k]
+    Num(site) = Op(NumKind(), c[site])
 
     l(x) = add_tag(x, :l)
     r(x) = add_tag(x, :r)
@@ -410,7 +401,7 @@ rewrap(::TransposedSpace, space) = TransposedSpace(space)
     @test l(Num(1)) * r(Shift(1, 1)) == r(Shift(1, 1)) * l(Num(1))
     @test l(r(Shift(1, 1))) != r(l(Shift(1, 1)))
     labels = (1, 2)
-    H = tensor_product([GenericHilbertSpace(k, Site.(0:2)) for k in labels])
+    H = hilbert_space(c, labels, Site.(0:2))
     Hlr, Hl, Hr, left, right = open_system(H)
     A = Shift(labels[1], 1) * Num(labels[2]) + 2 * Num(labels[1])
     B = Shift(labels[2], -1) + Shift(labels[1], 1) * Shift(labels[2], 1)
