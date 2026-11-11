@@ -144,7 +144,7 @@ function _group_product(states::Tuple)
 end
 SymbolicState(space, state) = SymbolicState(space, state, nothing)
 # Operators return kets in the state type of the space, which may differ from that of the ket they act on
-Base.convert(::Type{SymbolicState{K,B,H}}, s::SymbolicState) where {K,B,H} = SymbolicState{K,B,H}(s.space, s.ket, s.bra)
+Base.convert(::Type{SymbolicState{K, B, H}}, s::SymbolicState) where {K, B, H} = SymbolicState{K, B, H}(s.space, s.ket, s.bra)
 has_ket(s::SymbolicState) = !isnothing(s.ket)
 has_bra(s::SymbolicState) = !isnothing(s.bra)
 isket(s::SymbolicState) = has_ket(s) && !has_bra(s)
