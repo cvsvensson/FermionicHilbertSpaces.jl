@@ -88,13 +88,13 @@ end
 
 # A constraint with a symmetry is applied as the rest of the constraint followed by the symmetry.
 _split_symmetry(c) = (c, nothing)
-_split_symmetry(c::SymmetryConstraint) = (NoSymmetry(), c)
+_split_symmetry(c::SymmetryConstraint) = (NoConstraint(), c)
 function _split_symmetry(c::ProductConstraint)
     cs = collect(c.constraints)
     syms, rest = filter(x -> x isa SymmetryConstraint, cs), filter(x -> !(x isa SymmetryConstraint), cs)
     isempty(syms) && return (c, nothing)
     joined = SymmetryConstraint(Tuple(g for s in syms for g in s.maps), Tuple(λ for s in syms for λ in s.eigenvalues))
-    return (isempty(rest) ? NoSymmetry() : as_constraint(rest)), joined
+    return (isempty(rest) ? NoConstraint() : as_constraint(rest)), joined
 end
 
 struct OrbitRep{B} <: AbstractBasisState

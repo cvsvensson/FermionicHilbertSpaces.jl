@@ -75,7 +75,7 @@ quantumnumbers(H::SectorHilbertSpace) = collect(keys(H.qn_to_states))
 quantumnumbers(::AbstractHilbertSpace) = (nothing,)
 
 """
-    sector(qn, H, constraint=NoSymmetry())
+    sector(qn, H, constraint=NoConstraint())
 
 Return the sector of `H` corresponding to quantum number `qn`, for example a particle
 number for `NumberConservation` or `1` (even) / `-1` (odd) for `ParityConservation`.
@@ -102,7 +102,7 @@ function _sector_states(qn, H::SectorHilbertSpace)
 end
 
 """
-    sectors(H, constraint=NoSymmetry())
+    sectors(H, constraint=NoConstraint())
 
 Return all sectors of `H` in the same order as `quantumnumbers(H)`, each constrained by `constraint` as in [`sector`](@ref).
 """
