@@ -259,13 +259,14 @@ function _check_invariant(op, space, g)
     atoms = collect(atomic_factors(space))
     perm, locs = _element(g, space, atoms)
     left, right = _site_products(relabeled, atoms), _site_products(op, atoms)
+    T = complex(float(mapreduce(_product_eltype, promote_type, [left; right])))
     rng = Xoshiro(1)
     for _ in 1:3
-        u = [normalize(randn(rng, ComplexF64, dim(atom))) for atom in atoms]
+        u = [normalize(randn(rng, T, dim(atom))) for atom in atoms]
         v = copy(u)
         foreach((n, loc) -> v[n] = u[n][loc], perm, locs)
         x, y = _expectation_values(left, u), _expectation_values(right, v)
-        abs(sum(x) - sum(y)) <= 1.0e-12 * sum(abs, y) || throw(err)
+        abs(sum(x) - sum(y)) <= Base.rtoldefault(real(T)) * sum(abs, y) || throw(err)
     end
     return nothing
 end
@@ -279,20 +280,21 @@ _relabel(op, g) = throw(ArgumentError("Only operators on fields can be checked f
 # The terms of `op` without its constant, each as its coefficient and the matrices of its factors multiplied site by site
 function _site_products(op, atoms)
     position = Dict(atomic_id(atom) => n for (n, atom) in enumerate(atoms))
-    matrices = Dict{Any, Matrix{ComplexF64}}()
+    matrices = Dict{Any, Matrix}()
     return map(first(_operator_terms(op))) do term
         term.coeff isa Union{_NumericWeight, Complex{<:_NumericWeight}} || throw(ArgumentError("Checking an operator against a `LocalMap` needs numeric coefficients, got `$(term.coeff)`."))
-        sites = Pair{Int, Matrix{ComplexF64}}[]
+        sites = Pair{Int, Matrix}[]
         for o in term.factors
             n = get(() -> throw(ArgumentError("Only operators on the modes of the space can be checked for symmetry, got `$o`.")), position, atomic_id(o))
             A = get!(() -> representation(o, atoms[n], Matrix), matrices, o)
             k = findfirst(==(n) ∘ first, sites)
             isnothing(k) ? push!(sites, n => A) : (sites[k] = n => last(sites[k]) * A)
         end
-        ComplexF64(term.coeff) => sites
+        term.coeff => sites
     end
 end
-_expectation_values(terms, u) = ComplexF64[c * prod(dot(u[n], A, u[n]) for (n, A) in sites) for (c, sites) in terms]
+_expectation_values(terms, u) = [c * prod(dot(u[n], A, u[n]) for (n, A) in sites) for (c, sites) in terms]
+_product_eltype((c, sites)) = mapreduce(eltype ∘ last, promote_type, sites; init = typeof(c))
 
 complementary_subsystem(H::AbstractHilbertSpace, ::_OrbitSpace) = nothing
 function basis_transformation(Hfrom::_OrbitSpace, Hto::_OrbitSpace)
@@ -404,6 +406,8 @@ end
             eigvals(Hermitian(representation(ham, sector(q, H), Matrix)))
     end
     @test_throws ArgumentError representation(f[1, :↑]'f[1, :↑], sector((2, 1), Hks[1]))
+    @test eltype(representation(Float32(1) * ham, Hks[3])) == Float32
+    @test eltype(representation(Float32(1) * ham, Hks[2])) == ComplexF32
 
     Hn = hilbert_space(f, labels, NumberConservation(3))
     Ek(cs...) = eigvals(Hermitian(representation(ham, constrain_space(Hn, (Relabel(T) => 1, cs...)), Matrix)))
