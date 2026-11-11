@@ -13,8 +13,8 @@ function product_space(spaces)
     return space
 end
 """
-    tensor_product(spaces...; constraint=NoSymmetry())
-    tensor_product(spaces; constraint=NoSymmetry())
+    tensor_product(spaces...; constraint=NoConstraint())
+    tensor_product(spaces; constraint=NoConstraint())
 
 Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
 
@@ -33,7 +33,7 @@ julia> state_index("10", H)
 """
 tensor_product(spaces...; kwargs...) = tensor_product(spaces; kwargs...)
 tensor_product(H::AbstractHilbertSpace; kwargs...) = tensor_product((H,); kwargs...)
-function tensor_product(spaces; @nospecialize(constraint = NoSymmetry()))
+function tensor_product(spaces; @nospecialize(constraint = NoConstraint()))
     constraint = as_constraint(constraint)
     constraint, symmetry = _split_symmetry(constraint)
     isnothing(symmetry) || return constrain_space(tensor_product(spaces; constraint), symmetry)
@@ -44,7 +44,7 @@ function tensor_product(spaces; @nospecialize(constraint = NoSymmetry()))
     constrained = any(isconstrained, spaces)
     # Only computed when needed, since a large product space has no `basisstates`, and `generate_states` does not use them
     all_states() = constrained ? _find_combined_states(space, spaces) : basisstates(space)
-    if constraint == NoSymmetry()
+    if constraint == NoConstraint()
         combined = _combined_sector_constraint(spaces)
         !ismissing(combined) && return sector_space(space, all_states(), sector_function(combined, space), combined)
         return constrained ? ConstrainedSpace(space, all_states()) : space

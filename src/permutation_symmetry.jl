@@ -439,7 +439,7 @@ end
 
 @testitem "Permutation symmetry" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: permutation_operator, permutation_projector, symmetric_sector
+    using FermionicHilbertSpaces: permutation_operator, permutation_projector, symmetric_sector, SectorConstraint
     using Combinatorics: permutations
 
     permutation_sign(perm) = isodd(sum(perm[i] > perm[j] for i in 1:(length(perm)-1) for j in (i+1):length(perm))) ? -1.0 : 1.0

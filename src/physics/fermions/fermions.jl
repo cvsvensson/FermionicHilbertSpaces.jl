@@ -234,7 +234,7 @@ end
 
 @testitem "Jordan-Wigner annihilators match representation" setup = [JordanWigner] begin
     @fermions f
-    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
+    for qn in [NoConstraint(), ParityConservation(), NumberConservation()]
         H = hilbert_space(f, 1:3, qn)
         c = JordanWigner.annihilators(H)
         @test all(c[l] == representation(f[l], H) for l in 1:3)
@@ -244,7 +244,7 @@ end
 @testitem "Canonical anticommutation relations (CAR)" begin
     using LinearAlgebra
     @fermions f
-    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
+    for qn in [NoConstraint(), ParityConservation(), NumberConservation()]
         H = hilbert_space(f, 1:2, qn)
         c = [representation(f[l], H) for l in 1:2]
         @test c[1] * c[1] == 0I
@@ -519,7 +519,7 @@ end
     import SparseArrays: SparseMatrixCSC
     Random.seed!(1234)
     @fermions f
-    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
+    for qn in [NoConstraint(), ParityConservation(), NumberConservation()]
         H1 = hilbert_space(f, 1:1, qn)
         H2 = hilbert_space(f, 1:3, qn)
         @test_throws ArgumentError tensor_product(H1, H2)
@@ -559,7 +559,7 @@ end
     @boson b
     Hb = hilbert_space(b, 2)
     mb = representation(b'b, Hb)
-    for qn in [NoSymmetry(), ParityConservation(), NumberConservation()]
+    for qn in [NoConstraint(), ParityConservation(), NumberConservation()]
         H = hilbert_space(f, 1:0, qn)
         @test dim(H) == 1
         @test only(basisstates(H)) == FockNumber(0)

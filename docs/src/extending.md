@@ -97,7 +97,7 @@ the methods it implements.
 - [`default_subspace_index`](@ref)`(constraint, parent, states)` builds the lookup that
   `state_index` uses on constrained and sector spaces. A method that dispatches on the type of
   `constraint` only, not on `parent`, selects a custom index. It returns
-  `default_subspace_index(NoSymmetry(), parent, states)` when `states` don't fit it.
+  `default_subspace_index(NoConstraint(), parent, states)` when `states` don't fit it.
 - [`state_position`](@ref)`(index, state, parent)` is the one method a custom index
   implements: the position of `state` in the subspace, or `0`. It may use `parent` only through
   its basis states and `state_index`. Constructors check the index on the first, middle and
@@ -106,10 +106,10 @@ the methods it implements.
 A custom operator that is diagonal in the basis, with integer or rational values, can be the
 quantity of a [constraint](@ref "Writing a constraint"), like the Floquet number in
 [Custom operators: Floquet](literate_output/floquet_tutorial.md).
-Otherwise, to restrict a space of custom states, use [`SectorConstraint`](@ref) or
-[`FilterConstraint`](@ref). Their required argument is the reducer, which is called on each
-basis state, which on a product space is a [`ProductState`](@ref) with parts `state.states`. With `maps` and `spaces` together, it is called instead on the values that `maps`
-gives for the parts of the state in `spaces`. See
-[Constrained Hilbert spaces and conserved quantum numbers](conservation.md).
+Otherwise, a function `f` of the basis state can be the quantity, as in
+`constrain_space(H, f => 2)`. On a product space the basis state is a [`ProductState`](@ref)
+with parts `state.states`. To call `f` instead on the values that `maps` gives for the parts of
+the state in `spaces`, use [`FermionicHilbertSpaces.SectorConstraint`](@ref) or
+[`FermionicHilbertSpaces.FilterConstraint`](@ref).
 
 Internally, `tensor_product`, `reshape` and `partial_trace` decompose and recombine basis states through a common mapper protocol. [`state_mapper`](@ref)`(H, Hs)` returns a mapper object, [`split_state`](@ref)`(state, mapper)` returns a pair `(outcomes, weights)`, where each outcome is a tuple with one substate per target subsystem, and [`combine_states`](@ref)`(substates, mapper)` returns a pair `(states, weights)`. The collections can have any concrete type; treat them as iterables.

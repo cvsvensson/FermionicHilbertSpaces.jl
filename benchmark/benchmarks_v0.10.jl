@@ -71,10 +71,10 @@ end
 ## Reshape
 let rng = Xoshiro(3)
     @fermions f
-    H1 = hilbert_space(f, 1:3, NoSymmetry())
-    H2 = hilbert_space(f, 4:5, NoSymmetry())
-    H3 = hilbert_space(f, 6:8, NoSymmetry())
-    H4 = hilbert_space(f, 9:12, NoSymmetry())
+    H1 = hilbert_space(f, 1:3)
+    H2 = hilbert_space(f, 4:5)
+    H3 = hilbert_space(f, 6:8)
+    H4 = hilbert_space(f, 9:12)
     H12 = tensor_product(H1, H2)
     H34 = tensor_product(H3, H4)
     H = tensor_product(H12, H34)

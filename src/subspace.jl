@@ -67,14 +67,14 @@ Build the index (see [`state_position`](@ref)) of the subspace of `parent` with 
 in order. `constraint` is the constraint that selected `states`: the one given to
 `hilbert_space`, `constrain_space`, `tensor_product` or `sector`, or for a `tensor_product` of
 sector spaces without a new constraint, the one built from the constraints of the factors. It is
-`NoSymmetry()` otherwise, for example for listed states and for `sector` without a constraint.
+`NoConstraint()` otherwise, for example for listed states and for `sector` without a constraint.
 The generic method returns a lookup table or a `Dict`, and throws an `ArgumentError` on
 repeated states.
 
 To specialize, add a method that dispatches on the type of `constraint` only, since restricting
 `parent` as well makes extensions ambiguous with each other. When `states` don't fit the custom
 index, for example when they are not a whole sector in the expected order, return
-`default_subspace_index(NoSymmetry(), parent, states)`.
+`default_subspace_index(NoConstraint(), parent, states)`.
 """
 default_subspace_index(constraint, parent, states) = generic_subspace_index(parent, states)
 function generic_subspace_index(parent, states)
@@ -145,7 +145,7 @@ end
     end
     function EveryOtherState(space)
         states = collect(basisstates(space))[1:2:end]
-        EveryOtherState(space, states, default_subspace_index(NoSymmetry(), space, states))
+        EveryOtherState(space, states, default_subspace_index(NoConstraint(), space, states))
     end
     Base.parent(H::EveryOtherState) = H.space
     subspace_states(H::EveryOtherState) = H.states
@@ -162,7 +162,7 @@ end
 end
 
 @testitem "Custom subspace indices" begin
-    import FermionicHilbertSpaces: state_position, default_subspace_index, particle_number
+    import FermionicHilbertSpaces: state_position, default_subspace_index, particle_number, FilterConstraint, SectorConstraint
     struct LinearSearch{V}
         states::V
     end

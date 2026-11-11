@@ -104,6 +104,7 @@ tensor_product(pairs; constraint = pair_constraint)
 #### AdditiveConstraint
 Conserves a sum of contributions from the factors of a tensor product, given by `maps` applied to the state of each factor. It works for any space, also one without symbolic operators:
 ```@example constraints
+import FermionicHilbertSpaces: AdditiveConstraint, FilterConstraint, SectorConstraint
 spins = [hilbert_space(S[k]) for k in 1:4]
 magnetization = AdditiveConstraint(-2:2; maps = s -> s.m)
 Hmag = tensor_product(spins; constraint = magnetization)
