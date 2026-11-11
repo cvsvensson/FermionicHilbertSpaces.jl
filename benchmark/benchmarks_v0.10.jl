@@ -214,13 +214,13 @@ let
     @spins S 1 // 2
     H = hilbert_space(S, 1:6, FHS.AdditiveConstraint(2; maps=s -> s.m))
     Hs = factors(H)
-    SUITE["permutations"]["many_small"] = @benchmarkable symmetric_sector($H, $Hs, :symmetric)
+    SUITE["permutations"]["many_small"] = @benchmarkable FHS.symmetric_sector($H, $Hs, :symmetric)
 end
 let
     @spins S 3
     H = hilbert_space(S, 1:4)
     Hs = factors(H)
-    SUITE["permutations"]["few_large"] = @benchmarkable symmetric_sector($H, $Hs, :symmetric)
+    SUITE["permutations"]["few_large"] = @benchmarkable FHS.symmetric_sector($H, $Hs, :symmetric)
 end
 
 ## Lazy operator for a closed system
