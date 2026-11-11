@@ -30,24 +30,20 @@ const MajoranaSym{M} = Op{Majorana, M}
 mode_operator(::Type{Majorana}) = Majorana()
 Base.adjoint(k::Majorana) = k
 Base.show(io::IO, x::MajoranaSym) = show(io, x.mode)
-function Base.isless(a::MajoranaSym, b::MajoranaSym)
-    ga, gb = symbolic_group(a), symbolic_group(b)
-    return if ga != gb
-        ga < gb
-    elseif a.mode.field.name == b.mode.field.name
-        _order_isless(a.mode.label, b.mode.label)
-    else
-        a.mode.field.name < b.mode.field.name
-    end
+# The order within a group: by field name, then by label.
+function _local_isless(a::MajoranaSym, b::MajoranaSym)
+    na, nb = a.mode.field.name, b.mode.field.name
+    return na == nb ? _order_isless(a.mode.label, b.mode.label) : na < nb
 end
+Base.isless(a::MajoranaSym, b::MajoranaSym) = _group_isless(a, b) || (!_group_isless(b, a) && _local_isless(a, b))
 exchange_phase(a::MajoranaSym, b::MajoranaSym) = symbolic_group(a) == symbolic_group(b) ? -1 : 1
-function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym)
-    if a == b
+function local_mul_effect(a::MajoranaSym, b::MajoranaSym)
+    return if a == b
         1
-    elseif a < b
+    elseif _local_isless(a, b)
         nothing
-    elseif a > b
-        return Swap(exchange_phase(a, b))
+    elseif _local_isless(b, a)
+        Swap(-1)
     else
         throw(ArgumentError("Cannot multiply `$a` and `$b`."))
     end
