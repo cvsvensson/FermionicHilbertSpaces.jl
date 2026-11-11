@@ -165,43 +165,14 @@ end
 """
     symmetric_sector(H, Hs, sector=:symmetric, T=default; orth_method=:qr, check=true, normalize=true, sparse=true, phase_factors=true)
 
-Return a basis for the sector of `H` selected by `sector`, under permutations of the
-factors `Hs`.
+Return a matrix whose orthonormal columns span the sector of `H` selected by `sector`, under permutations
+of the factors `Hs` (all or some of the factors of `H`). `sector` is `:symmetric`, `:antisymmetric`, or a tuple
+`(perms, weights)` with permutations of `1:length(Hs)` and one weight per permutation. For an orthonormal basis,
+`perms` must form a group and `weights` a positive multiple of a character of it.
+`T` is the element type, by default the float type of the weights.
 
-`sector` is either a tuple `(perms, weights)`, with permutations of `1:length(Hs)` and
-one weight per permutation, or `:symmetric` or `:antisymmetric`, which stand for all
-permutations with weight one or the permutation sign.
-`T` is the element type of the result. It defaults to `Float64` for `:symmetric` and
-`:antisymmetric`, and for a tuple `(perms, weights)` to the floating point version of the
-element type of `weights`, for example `ComplexF64` for complex weights.
-
-With `Hs` a partition of `H` and `orth_method` not `nothing`, the projector is not built,
-the basis is a `SparseMatrixCSC` with element type `float(T)`, and `sparse` has no effect.
-For `:symmetric` and `:antisymmetric` `normalize` has no effect either, since scaling does
-not change the span.
-Otherwise the projector is built with
-`permutation_projector(H, Hs, perms, weights, T; normalize, sparse)`, and `:symmetric` and
-`:antisymmetric` require `Combinatorics.jl` to be loaded.
-`orth_method` selects what is returned:
-- `:qr`: a matrix with orthonormal columns spanning the sector, from a QR decomposition
-  of the projector.
-- `:eig`: a matrix with orthonormal columns spanning the sector, from the eigenvectors of
-  the projector with nonzero eigenvalue.
-- `nothing`: the projector itself.
-
-`:qr` and `:eig` find the numerical rank with a tolerance relative to the scale of the
-projector, so they assume that the projector is proportional to an orthogonal projector.
-This holds when `perms` form a group and `weights` are a positive multiple of a character
-of it or of its complex conjugate.
-
-With `check=true` and a tuple `(perms, weights)`, `symmetric_sector` throws an
-`ArgumentError` if `perms` does not contain the identity permutation or its weight is not
-real and positive, and, for `orth_method` not `nothing`, if the projector is not
-Hermitian or, for weights of equal magnitude, not a multiple of a one-dimensional character.
-`check=false` skips these checks.
-
-`Hs` may be either a full partition of `H` or a proper subsystem list; in the latter
-case the sector is constructed on `tensor_product(Hs...)` and embedded back into `H`.
+`orth_method` is `:qr` or `:eig`, or `nothing` to return the projector, with `normalize` and `sparse`
+as in `permutation_projector`. `check=false` skips the validation of `(perms, weights)`.
 `phase_factors` includes the fermionic signs of the permutations, as in [`permutation_operator`](@ref).
 """
 function symmetric_sector(H::AbstractHilbertSpace, Hs, sector=:symmetric, ::Type{T}=_default_sector_eltype(sector);

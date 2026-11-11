@@ -98,23 +98,12 @@ partial_transpose!(mout, m, Hs::Pair{<:AbstractHilbertSpace, <:AbstractHilbertSp
     partial_transpose(H => Hout, Hsub; kwargs...)  # -> PartialTransposeMap
 
 Partial transpose of `m` (an operator on `H`, a pure state, or a vectorized density matrix)
-on the subsystem `Hsub`, which may be any subset of the modes of `H` (contiguous or not), given
-as a space or as symbols naming the modes, meaning [`subregion`](@ref)`(Hsub, H)`.
-The result is an operator on `Hout`, which defaults to `H`. `H => Hout` reads input => output;
-see [Pair arguments](@ref pair_convention).
+on the subsystem `Hsub`, given as a space or as symbols naming its modes, meaning [`subregion`](@ref)`(Hsub, H)`.
+For fermions this is the [fermionic partial transpose](@ref "The fermionic partial transpose"); `phase_factors=false`
+gives the ordinary one. Without `m`, a callable [`PartialTransposeMap`](@ref) is returned.
 
-Without `m`, a callable [`PartialTransposeMap`](@ref) is returned. It takes the same keyword
-arguments.
-
-For fermions this is the fermionic partial transpose (partial time reversal)
-`R_A(Ẽ^{ν,ν'}) = i^{k_A} Ẽ^{(ν'_A,ν_B),(ν_A,ν'_B)}` in the fermionic operator basis, which is
-independent of the mode ordering. With `phase_factors=false`, or for spaces without phase
-factors, it is the ordinary partial transpose.
-
-The partial transpose does not preserve number or parity constraints. For constrained `H`,
-pass a larger output space on the same modes as `H => Hout`. For fermions the result is not
-Hermitian: `(ρ^{R_A})' == p_A ρ^{R_A} p_A` for Hermitian `ρ`, with `p_A` the parity of `Hsub`.
-Applying the fermionic partial transpose twice gives `p_A ρ p_A`, not `ρ`.
+The result is on `Hout`, which defaults to `H`; see [Pair arguments](@ref pair_convention). The partial transpose
+does not preserve number or parity constraints, so for constrained `H` pass a larger `Hout` on the same modes.
 """
 partial_transpose(m, H::AbstractHilbertSpace, Hsub; kwargs...) =
     _partial_transpose(m, H, _subsystem(Hsub, H), H; kwargs...)

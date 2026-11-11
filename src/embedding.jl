@@ -19,20 +19,11 @@ end
 """
     embed(m, Hsub => H; complement=complementary_subsystem(H, Hsub), kwargs...)
 
-Compute the embedding of a matrix `m` in the basis `Hsub` into the basis `H`. Fermionic phase factors are included if the two spaces are fermionic Hilbert spaces.
+Embed the matrix `m` on `Hsub` into `H`, as `m ⊗ I` restricted to `H`, with fermionic phase factors.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 `Hsub` can also be given as symbols naming its modes, meaning [`subregion`](@ref)`(Hsub, H)`.
-
-The result is the compression `P (m ⊗ I) P` onto `H`, so that `tr(embed(A, Hsub => H) * ρ) ==
-tr(A * partial_trace(ρ, H => Hsub))` for `ρ` on `H`. Unless `projection=true`, throws an `ArgumentError`
-if `m ⊗ I` maps a state of `H` outside `H` with nonzero amplitude. Columns of `m` for states of
-`Hsub` that no state of `H` contains are dropped, and states of `H` whose part on `Hsub` is not
-in `Hsub` get zero.
-
-`m` can be a dense GPU array, for which `alg` defaults to [`NoScalarIndexingAlg`](@ref).
-
-If `m` is a vector, `Hsub` and `H` must have the same modes, as for a sector `Hsub` of `H`. The
-result is `m` placed at the indices [`indices`](@ref)`(Hsub, H)` and zero elsewhere.
+Unless `projection=true`, throws an `ArgumentError` if `m ⊗ I` maps a state of `H` outside `H`.
+A vector `m` can only be embedded into a space with the same modes, such as from a sector into its parent space.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces

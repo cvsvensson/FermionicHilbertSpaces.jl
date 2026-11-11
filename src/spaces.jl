@@ -96,8 +96,6 @@ Return the index of the basis state `state` in the Hilbert space `H`, the invers
 `basisstate`. A string or character that spells a state of `H` is accepted in place of the state.
 Returns `0` for a state of the same kind as the states of `H` (the same type up to type parameters)
 that is not in `H`, and throws a `MethodError` for a value of another kind.
-
-Spaces implement the lookup of a basis state as a method of `_state_index(state, H)`.
 """
 state_index(state, H) = _state_index(state, H)
 state_index(state::Union{AbstractString,AbstractChar}, H) = _state_index(interpret_state(state, H), H)
@@ -177,8 +175,7 @@ groups(H::AbstractGroupedHilbertSpace) = (H,)
 
 Split `H` one level down: a product space into its groups, a grouped space (such as a
 fermionic space) into its atoms, and an atomic space into itself. Use this when building
-partitions, permutations and constraints. Internal code that needs the state layout
-should use `groups` instead.
+partitions, permutations and constraints.
 """
 factors(H::AbstractAtomicHilbertSpace) = (H,)
 factors(H::AbstractGroupedHilbertSpace) = atomic_factors(H)

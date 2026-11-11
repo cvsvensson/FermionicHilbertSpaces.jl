@@ -102,24 +102,15 @@ end
 
 """
     generalized_kron(ms, Hs, H::AbstractHilbertSpace=tensor_product(Hs))
+    generalized_kron(ms, Hs => H)
+    generalized_kron(Hs => H)  # -> function of ms
 
-Compute the fermionic tensor product of the matrices or vectors in `ms` on the spaces `Hs`, as an array on `H`, which defaults to the `tensor_product` of `Hs`.
-
-For vectors, the result is the product state, the same as `tensor_product(ms, Hs => H)`. For matrices, write each local basis operator
-as a product of single-mode factors (one of `c c†`, `c†`, `c`, `c†c` per mode) in the mode order of its space;
-`generalized_kron` multiplies the factors of all spaces together in the mode order of `H`, and extends this linearly.
-The result does not depend on the order of `ms` and `Hs`, and is in general not a product of embeddings: for
-`A = c₁†c₃` on modes `[1, 3]` and `B = c₂†c₄` on modes `[2, 4]` it gives `c₁†c₂†c₃c₄ = -(c₁†c₃)(c₂†c₄)`.
-It equals `tensor_product(ms, Hs => H)` when each space in `Hs` covers consecutive modes of `H` and `Hs` is listed
-in that order. Otherwise `generalized_kron` of density matrices need not be a density matrix.
-Use `tensor_product` for product states, local observables, and anything that should equal a product of embedded operators.
-
-`generalized_kron(ms, Hs => H)` is also accepted, and `generalized_kron(Hs => H)` returns a function of `ms`.
-`Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
-
-The result is the compression of the tensor product onto `H`. Unless `projection=true`, throws an
-`ArgumentError` if the tensor product of matrices maps a state of `H` outside `H` with nonzero amplitude,
-or if the tensor product of vectors has a nonzero amplitude outside `H`.
+Compute the fermionic tensor product of the matrices or vectors `ms` on the spaces `Hs`, as an array on `H`.
+Each local basis operator is written as a product of single-mode factors, and the factors of all spaces are multiplied
+in the mode order of `H`, so the result does not depend on the order of `ms`. It equals `tensor_product(ms, Hs => H)`
+when each space covers consecutive modes of `H` and `Hs` is listed in that order; see
+[Tensor products of arrays](@ref tensor_product_arrays). Use `tensor_product` for product states and local observables.
+Unless `projection=true`, throws an `ArgumentError` if the result has weight outside `H`.
 """
 function generalized_kron(ms, Hs, H::AbstractHilbertSpace = tensor_product(Hs); kwargs...)
     check_kron_sizes(ms, Hs)
@@ -658,17 +649,12 @@ end
     partial_trace(m, H => Hsub; complement=complementary_subsystem(H, Hsub))
     partial_trace(H => Hsub; kwargs...)  # -> PartialTraceMap
 
-Compute the partial trace of `m` from `H` to `Hsub`. Fermionic phase factors are included if both `H` and `Hsub` are Fermionic, unless specified otherwise in `kwargs`.
+Compute the partial trace of `m` from `H` to `Hsub`, with fermionic phase factors unless `phase_factors=false`.
 `H => Hsub` reads input => output; see [Pair arguments](@ref pair_convention).
 A vector `m` is treated as a pure state `ψ`, and the result is the reduced density matrix of `ψψ†`.
 `Hsub` can also be given as symbols naming its modes, meaning [`subregion`](@ref)`(Hsub, H)`, as in `H => [f[1], f[3]]`.
-
-The trace drops the states of `H` whose part on `Hsub` is not in `Hsub`, or whose part on the
-complement is not in `complement`. Unless `projection=true`, throws an `ArgumentError` if `m`
-has a nonzero element in the row or column of such a state. The map `partial_trace(H => Hsub)`
-does not check its input.
-
-`m` can be a dense GPU array, for which `alg` defaults to [`NoScalarIndexingAlg`](@ref).
+Unless `projection=true`, throws an `ArgumentError` if `m` has weight on a state of `H` that does not
+split into a state of `Hsub` and a state of `complement`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces; @fermions f;
