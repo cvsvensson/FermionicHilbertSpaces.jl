@@ -152,7 +152,7 @@ defined for spins. This is the quantity [`NumberConservation`](@ref) conserves.
 """
 function particle_number end
 
-particle_number(state::AbstractBasisState) = throw(ArgumentError("States of type `$(typeof(state))` have no particle number. Define `FermionicHilbertSpaces.particle_number(::$(typeof(state)))`, or restrict the constraint to the spaces that have one with `spaces = [...]`."))
+particle_number(state) = throw(ArgumentError("States of type `$(typeof(state))` have no particle number. Define `FermionicHilbertSpaces.particle_number(::$(typeof(state)))`, or restrict the constraint to the spaces that have one with `spaces = [...]`."))
 
 """
     NumberConservation(total=missing; spaces=missing, weights=missing)

@@ -305,7 +305,7 @@ end
 # Symbolic states are tied to the degrees of freedom of their space, not to its basis
 _same_space_id(a, b) = a === b || atom_ids(a) == atom_ids(b)
 
-function _apply_symbolic_operator_to_state(op::AbstractSym, state::AbstractBasisState, space::AbstractHilbertSpace; transpose=false)
+function _apply_symbolic_operator_to_state(op::AbstractSym, state, space::AbstractHilbertSpace; transpose=false)
     # Tuple-backed, so that the term and its precomputation (a map over the factors) need no vectors
     term = NCMul(1, (op,))
     precomp = precomputation_before_operator_application(term, space)

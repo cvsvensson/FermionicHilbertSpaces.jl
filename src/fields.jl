@@ -232,3 +232,17 @@ end
     v = reshape(ρ, (Hl, Hr) => Hlr)
     @test reshape(representation(left(A) * right(A'), Hlr) * v, Hlr => (Hl, Hr)) ≈ MA * ρ * MA'
 end
+
+@testitem "Plain values as basis states" begin
+    import FermionicHilbertSpaces: @field, apply_local_operator
+    struct Hop
+        k::Int
+    end
+    Base.adjoint(s::Hop) = Hop(-s.k)
+    apply_local_operator(s::Hop, n::Int, space, precomp) = (mod(n + s.k, 3), 1)
+    @field c::Hop
+    @fermions f
+    H = hilbert_space(c[1], 0:2)
+    @test c[1][1] * Ket(0, H) == Ket(1, H)
+    @test_throws "no particle number" constrain_space(tensor_product(H, hilbert_space(f, 1:2)), NumberConservation(1))
+end

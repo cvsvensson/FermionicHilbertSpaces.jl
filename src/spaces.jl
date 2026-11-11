@@ -11,8 +11,24 @@ abstract type AbstractBasisState end
 abstract type AbstractFockState <: AbstractBasisState end
 abstract type AbstractHilbertSpace{S} end
 abstract type AbstractConstraint end
+"""
+    AbstractAtomicHilbertSpace{B}
+
+Supertype of spaces of one mode, with basis states of type `B`. A subtype implements
+[`basisstates`](@ref)`(H)`, `basisstate(i, H)`, `_state_index(state, H)` (`0` for a state not in `H`) and
+`atomic_id(H)`, the mode its operators act on; [`open_system`](@ref) also needs `add_tag(H, tag)`.
+[`GenericHilbertSpace`](@ref) is such a space for any list of states. See [Extending](extending.md).
+"""
 abstract type AbstractAtomicHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractProductHilbertSpace{B} <: AbstractHilbertSpace{B} end
+"""
+    AbstractGroupedHilbertSpace{B}
+
+Supertype of spaces of several modes with one joint basis state of type `B`, such as `FermionicSpace`. Besides the
+methods of [`AbstractAtomicHilbertSpace`](@ref), a subtype implements `group_id`, `atomic_factors`, `state_mapper`,
+`combine_states`, `partial_trace_phase_factor`, `partial_transpose_phase_factor`, and
+`combine_into_group(::Group{K}, atoms)` for its kind `K`.
+"""
 abstract type AbstractGroupedHilbertSpace{B} <: AbstractProductHilbertSpace{B} end
 
 """
