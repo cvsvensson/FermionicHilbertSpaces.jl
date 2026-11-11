@@ -245,7 +245,6 @@ function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...
     length(majorana_position) == length(labels) || throw(ArgumentError("The Majoranas of a Hilbert space must be distinct, got $labels."))
     MajoranaHilbertSpace(majorana_position, Hf, y)
 end
-# MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
 MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
 
 # Replace each pair of Majoranas in `names` that forms an atom of `H` by that atom, placed

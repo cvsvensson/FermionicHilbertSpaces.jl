@@ -550,12 +550,6 @@ function _term_matrix_representation(op, H, repr::Union{EagerSparseRepr, EagerDe
     finalize!(accumulator, H)
 end
 
-# function apply_local_operator(op::NCMul{C,F}, state::AbstractFockState, space::AbstractHilbertSpace, (pos, daggers)) where {C,F<:AbstractFermionSym}
-#     new_state, amp = togglefermions(Iterators.reverse(pos), Iterators.reverse(daggers), state)
-#     return new_state, amp
-# end
-
-
 ## Automatic basis inference from operator
 """
     symbolic_groups(op)
@@ -1420,41 +1414,6 @@ end
         w = pvector(inds -> rand(ComplexF64, length(inds)), Mp.col_partition)
         @test collect(Mp * w) ≈ representation(opp, Hp) * collect(w)
     end
-end
-
-## Symmetries
-isnumberconserving(x::AbstractFermionSym) = false
-isnumberconserving(x::NCMul) = iszero(sum(s -> 2s.creation - 1, x.factors))
-isnumberconserving(x::NCAdd) = all(isnumberconserving, NCterms(x))
-
-isparityconserving(x::AbstractFermionSym) = false
-isparityconserving(x::NCMul) = iseven(length(x.factors))
-isparityconserving(x::NCAdd) = all(isparityconserving, NCterms(x))
-
-isquadratic(::AbstractFermionSym) = false
-isquadratic(x::NCMul) = length(x.factors) == 2
-isquadratic(x::NCAdd) = all(isquadratic, NCterms(x))
-
-@testitem "Fermion symmetry property checks" begin
-    import FermionicHilbertSpaces: isnumberconserving, isparityconserving, isquadratic
-    @fermions f
-    # isnumberconserving
-    @test !isnumberconserving(f[1])
-    @test isnumberconserving(f[1]'f[2])
-    @test !isnumberconserving(f[1]f[2])
-    @test !isnumberconserving(f[1]'f[2] + f[3])
-    @test isnumberconserving(f[1]'f[2] + f[3]f[3]' + 1)
-    # isparityconserving
-    @test !isparityconserving(f[1])
-    @test isparityconserving(f[1]f[2])
-    @test !isparityconserving(f[1]f[2] * f[3])
-    @test !isparityconserving(f[1]f[2] + f[3])
-    @test isparityconserving(f[1]f[2] + f[3]f[3]' + 1)
-    # isquadratic
-    @test !isquadratic(f[1])
-    @test isquadratic(f[1]f[2])
-    @test !isquadratic(f[1]f[2] * f[3])
-    @test isquadratic(f[1]f[2] + f[3] * f[3]' + 1)
 end
 
 @testitem "Single-particle and BdG operator checks" begin

@@ -1,8 +1,6 @@
 
 partial_transpose_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1
 
-# _nbr_differing_modes(f1, f2, N::Int) = count(i -> _bit(f1, i) ⊻ _bit(f2, i), 1:N) # generic fallback
-
 # `complement === nothing` means Hsub spans all of H, so states split into (a,) instead of (a, b)
 _pt_parts(Hsub, complement) = isnothing(complement) ? (Hsub,) : (Hsub, complement)
 
