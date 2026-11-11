@@ -118,7 +118,7 @@ function _group_and_characters(e, generators, λs)
         for (g, λ) in zip(generators, λs)
             gh, λgh = _compose(g, h), characters[h] * λ
             if haskey(characters, gh)
-                characters[gh] ≈ λgh || throw(ArgumentError("The eigenvalues are not consistent with the group the symmetries generate."))
+                characters[gh] ≈ λgh || throw(ArgumentError("The eigenvalues are not consistent with the group the symmetries generate, so no state has all of them. This happens when the symmetries do not commute on the sector, such as a reflection with a momentum other than 0 or π. Use a subset that does."))
             else
                 characters[gh] = λgh
                 push!(queue, gh)
