@@ -22,7 +22,7 @@ using BitIntegers: UInt256, UInt512, UInt1024, @define_integers
 @define_integers 4096
 @define_integers 2048
 using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice, ishalfinteger
-using SparseArrays: SparseArrays, AbstractSparseArray, AbstractSparseMatrix, SparseVector, findnz,
+using SparseArrays: SparseArrays, AbstractSparseArray, AbstractSparseMatrix, SparseVector, dropzeros!, findnz,
     nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
 using TestItems: TestItems, @testitem, @testmodule
 import TupleTools

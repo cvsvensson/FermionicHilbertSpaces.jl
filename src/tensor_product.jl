@@ -480,9 +480,8 @@ end
 SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest...) = SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(rest...)
 (p::PhaseMap)(op::AbstractMatrix) = p.phases .* op
 (p::LazyPhaseMap)(op::AbstractMatrix) = p .* op
-@testitem "Phase map: sign pattern structure" begin
+@testitem "Phase map: sign pattern structure" setup = [JordanWigner] begin
     using LinearAlgebra
-    import FermionicHilbertSpaces: fermions
     # see App 2 in https://arxiv.org/pdf/2006.03087
     ns = 1:4
     phis = Dict(zip(ns, FermionicHilbertSpaces.phase_map.(ns)))
@@ -492,9 +491,9 @@ SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest..
     @fermions f
     for N in ns
         H = hilbert_space(f, 1:N)
-        c = fermions(H)
+        c = JordanWigner.annihilators(H)
         # Now let's make commuting fermions (hardcore bosons)
-        q = Dict(k => embed(only(fermions(hilbert_space(f[k])))[2], hilbert_space(f[k]) => H; phase_factors=false) for k in 1:N)
+        q = Dict(k => embed(JordanWigner.annihilators(hilbert_space(f[k]))[k], hilbert_space(f[k]) => H; phase_factors=false) for k in 1:N)
         @test all(map(n -> q[n] == phis[N](c[n]), 1:N))
         c2 = map(n -> phis[N](c[n]), 1:N)
         @test phis[N](phis[N](c[1])) == c[1]
@@ -507,11 +506,11 @@ SparseArrays.HigherOrderFns.is_supported_sparse_broadcast(::LazyPhaseMap, rest..
     end
 
     H1 = hilbert_space(f, 1:1)
-    c1 = fermions(H1)
+    c1 = JordanWigner.annihilators(H1)
     H2 = hilbert_space(f, 2:2)
-    c2 = fermions(H2)
+    c2 = JordanWigner.annihilators(H2)
     H12 = hilbert_space(f, 1:2)
-    c12 = fermions(H12)
+    c12 = JordanWigner.annihilators(H12)
     p1 = FermionicHilbertSpaces.LazyPhaseMap(1)
     p2 = FermionicHilbertSpaces.phase_map(2)
     @test FermionicHilbertSpaces.fermionic_tensor_product_with_kron_and_maps((c1[1], I(2)), (p1, p1), p2) == c12[1]

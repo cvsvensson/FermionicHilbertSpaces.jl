@@ -132,30 +132,29 @@ function interpret_state(input::AbstractString, H::SpinSpace{T}) where {T}
 end
 interpret_state(input::AbstractChar, H::SpinSpace) = interpret_state(string(input), H)
 
-function operators(H::SpinSpace)
-    Jhalf = H.spin
-    Splus = spzeros(Float64, dim(H), dim(H))
-    Sminus = spzeros(Float64, dim(H), dim(H))
-    Sz = spzeros(Float64, dim(H), dim(H))
-    for state in basisstates(H)
-        m = state.m
-        i = state_index(state, H)
-        if m < Jhalf
-            j = state_index(SpinState(m + 1), H)
-            Splus[j, i] = sqrt(Jhalf * (Jhalf + 1) - m * (m + 1))
-        end
-        if m > -Jhalf
-            j = state_index(SpinState(m - 1), H)
-            Sminus[j, i] = sqrt(Jhalf * (Jhalf + 1) - m * (m - 1))
-        end
-        Sz[i, i] = m
-    end
-    return Dict(:+ => Splus, :- => Sminus, :Z => Sz, :X => (Splus + Sminus) / 2, :Y => (Splus - Sminus) / (2im))
-end
-
 @testitem "Spin" begin
-    using FermionicHilbertSpaces: SpinState, operators, Half
-    using LinearAlgebra
+    using FermionicHilbertSpaces: SpinState, Half
+    using LinearAlgebra, SparseArrays
+    function operators(H)
+        Jhalf = H.spin
+        Splus = spzeros(Float64, dim(H), dim(H))
+        Sminus = spzeros(Float64, dim(H), dim(H))
+        Sz = spzeros(Float64, dim(H), dim(H))
+        for state in basisstates(H)
+            m = state.m
+            i = state_index(state, H)
+            if m < Jhalf
+                j = state_index(SpinState(m + 1), H)
+                Splus[j, i] = sqrt(Jhalf * (Jhalf + 1) - m * (m + 1))
+            end
+            if m > -Jhalf
+                j = state_index(SpinState(m - 1), H)
+                Sminus[j, i] = sqrt(Jhalf * (Jhalf + 1) - m * (m - 1))
+            end
+            Sz[i, i] = m
+        end
+        return Dict(:+ => Splus, :- => Sminus, :Z => Sz, :X => (Splus + Sminus) / 2, :Y => (Splus - Sminus) / (2im))
+    end
     @spin s
     @test basisstates(hilbert_space(s, 1 // 2)) == [SpinState(-1 // 2), SpinState(1 // 2)]
     @test basisstates(hilbert_space(s, 1)) == [SpinState(-1), SpinState(0), SpinState(1)]

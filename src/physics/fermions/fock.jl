@@ -203,36 +203,6 @@ permute(f::FockNumber{T}, p) where T = FockNumber{T}(bitpermute(f.f, p))
         @test focknbr_from_site_indices([3, 5]) == focknumber
     end
 
-    @testset "removefermion" begin
-        focknbr = FockNumber(rand(1:(2^N)) - 1)
-        fockbits = bits(focknbr, N)
-        function test_remove(n)
-            FermionicHilbertSpaces.removefermion(n, focknbr) == (fockbits[n] ? (FockNumber(focknbr.f - 2^(n - 1)), (-1)^sum(fockbits[1:(n-1)])) : (FockNumber(0), 0))
-        end
-        @test all([test_remove(n) for n in 1:N])
-    end
-
-    @testset "ToggleFermions" begin
-        focknbr = FockNumber(177) # = 1000 1101, msb to the right
-        digitpositions = Vector([7, 8, 2, 3])
-        daggers = BitVector([1, 0, 1, 1])
-        newfocknbr, sign = FermionicHilbertSpaces.togglefermions(digitpositions, daggers, focknbr)
-        @test newfocknbr == FockNumber(119) # = 1110 1110
-        @test sign == 1
-        # swap two operators
-        digitpositions = Vector([7, 2, 8, 3])
-        daggers = BitVector([1, 1, 0, 1])
-        newfocknbr, sign = FermionicHilbertSpaces.togglefermions(digitpositions, daggers, focknbr)
-        @test newfocknbr == FockNumber(119) # = 1110 1110
-        @test sign == -1
-
-        # annihilate twice
-        digitpositions = Vector([5, 3, 5])
-        daggers = BitVector([0, 1, 0])
-        _, sign = FermionicHilbertSpaces.togglefermions(digitpositions, daggers, focknbr)
-        @test sign == 0
-    end
-
     @testset "Fixed particle number Fock states" begin
         fs = FermionicHilbertSpaces.fixed_particle_number_fockstates(10, 5)
         @test length(fs) == binomial(10, 5)

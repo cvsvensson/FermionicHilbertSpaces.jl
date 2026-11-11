@@ -294,10 +294,9 @@ indices(::Nothing, H::AbstractHilbertSpace) = 1:dim(H)
     @test_throws ArgumentError sector((2, -1), Hprod)
 
     ## test fermions on sector spaces
-    import FermionicHilbertSpaces: fermions
     N = 4
     H = hilbert_space(f, 1:N, NumberConservation(0:(N-1)))
-    @test size(fermions(H)[1], 1) == 2^N - 1
+    @test size(representation(f[1], H), 1) == 2^N - 1
 end
 
 

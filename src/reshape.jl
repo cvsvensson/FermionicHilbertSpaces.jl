@@ -428,7 +428,7 @@ end
 
 @testitem "Reshape Properties" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: permutation_operator, fermions
+    using FermionicHilbertSpaces: permutation_operator
 
     @fermions f
 
@@ -462,8 +462,7 @@ end
         @test to_matrix(to_tensor(m)) ≈ m
 
         # Property 3: Norm invariance (reshape is an isometry)
-        b = fermions(H)
-        op = b[1]
+        op = representation(f[1], H)
         @test norm(op) ≈ norm(reshape(op, H => Hs))
 
         # Property 4: Multiplication consistency — tensor contraction equals matrix product

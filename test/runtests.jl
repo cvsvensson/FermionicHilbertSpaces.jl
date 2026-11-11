@@ -19,22 +19,19 @@ else
 end
 
 
-@testitem "Basis" begin
+@testitem "Basis" setup = [JordanWigner] begin
     using SparseArrays, LinearAlgebra, Random
-    import FermionicHilbertSpaces: fermions
     Random.seed!(1234)
     @fermions f
     N = 2
     H = hilbert_space(f, 1:N)
-    B = fermions(H)
     labels = vec(collect(Base.product(1:N, (:↑, :↓))))
     Hspin = hilbert_space(f, labels, NumberConservation())
-    @test B[1] isa SparseMatrixCSC
+    @test representation(f[1], H) isa SparseMatrixCSC
     @test parityoperator(H) isa SparseMatrixCSC
     @test parityoperator(Hspin) isa SparseMatrixCSC
 
     H = hilbert_space(f, 1:3)
-    a = fermions(H)
     Hs = (hilbert_space(f, 1:1), hilbert_space(f, 2:2), hilbert_space(f, 3:3))
     Hw = tensor_product(Hs)
 
@@ -72,7 +69,7 @@ end
     ρ = Matrix(Hermitian(rand(2^4, 2^4) .- 0.5))
     ρ = ρ / tr(ρ)
     function bilinears(H, labels)
-        c = fermions(H)
+        c = JordanWigner.annihilators(H)
         ops = reduce(vcat, [[c[l], c[l]'] for l in labels])
         return [op1 * op2 for (op1, op2) in Base.product(ops, ops)]
     end
@@ -96,7 +93,7 @@ end
 end
 
 
-@testitem "Fermionic partial trace" begin
+@testitem "Fermionic partial trace" setup = [JordanWigner] begin
     using LinearAlgebra, LinearMaps
 
     function test_adjoint(Hsub, H)
@@ -116,7 +113,6 @@ end
     end
     qns = [NoSymmetry(), ParityConservation(), NumberConservation()]
     @fermions f
-    import FermionicHilbertSpaces: fermions
     for qn in qns
         H = hilbert_space(f, 1:3, qn)
         H1 = hilbert_space(f, 1:1, qn)
@@ -125,13 +121,13 @@ end
         H123 = hilbert_space(f, 1:3, qn)
         H13 = hilbert_space(f, [1, 3], qn)
         H23 = hilbert_space(f, 2:3, qn)
-        c = fermions(H)
-        c1 = fermions(H1)
-        c2 = fermions(H2)
-        c12 = fermions(H12)
-        c13 = fermions(H13)
-        c23 = fermions(H23)
-        c123 = fermions(H123)
+        c = JordanWigner.annihilators(H)
+        c1 = JordanWigner.annihilators(H1)
+        c2 = JordanWigner.annihilators(H2)
+        c12 = JordanWigner.annihilators(H12)
+        c13 = JordanWigner.annihilators(H13)
+        c23 = JordanWigner.annihilators(H23)
+        c123 = JordanWigner.annihilators(H123)
 
         γ = Hermitian([0I rand(ComplexF64, 4, 4); rand(ComplexF64, 4, 4) 0I])
         @test tr(c1[1] * partial_trace(γ, H, H1)) ≈ tr(c[1] * γ)
