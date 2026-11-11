@@ -1,7 +1,7 @@
 
 combine_into_group(::AbstractAtomicHilbertSpace, atoms) = only(atoms)
+combine_into_group(group_id, spaces) = length(spaces) == 1 ? only(spaces) : throw(ArgumentError("The group `$group_id` requires a single space, got $spaces."))
 # Base's `LinearIndices` is not inferred past 32 entries.
-# Base's tuple `map` and `setindex`, and `LinearIndices`, are not inferred past 32 entries.
 function _linear_index(inds::NTuple{N, Int}, axes) where {N}
     k, stride = 1, 1
     for n in 1:N
