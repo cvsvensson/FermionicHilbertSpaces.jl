@@ -19,22 +19,19 @@ else
 end
 
 
-@testitem "Basis" begin
+@testitem "Basis" setup = [JordanWigner] begin
     using SparseArrays, LinearAlgebra, Random
-    import FermionicHilbertSpaces: fermions
     Random.seed!(1234)
     @fermions f
     N = 2
     H = hilbert_space(f, 1:N)
-    B = fermions(H)
     labels = vec(collect(Base.product(1:N, (:↑, :↓))))
     Hspin = hilbert_space(f, labels, NumberConservation())
-    @test B[1] isa SparseMatrixCSC
+    @test representation(f[1], H) isa SparseMatrixCSC
     @test parityoperator(H) isa SparseMatrixCSC
     @test parityoperator(Hspin) isa SparseMatrixCSC
 
     H = hilbert_space(f, 1:3)
-    a = fermions(H)
     Hs = (hilbert_space(f, 1:1), hilbert_space(f, 2:2), hilbert_space(f, 3:3))
     Hw = tensor_product(Hs)
 
@@ -56,7 +53,7 @@ end
     ρ = Matrix(Hermitian(rand(2^4, 2^4) .- 0.5))
     ρ = ρ / tr(ρ)
     function bilinears(H, labels)
-        c = fermions(H)
+        c = JordanWigner.annihilators(H)
         ops = reduce(vcat, [[c[l], c[l]'] for l in labels])
         return [op1 * op2 for (op1, op2) in Base.product(ops, ops)]
     end
