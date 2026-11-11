@@ -270,7 +270,7 @@ end
     # Appendix C.4
     import FermionicHilbertSpaces: phase_factor_u, bits, focknbr_from_site_indices, _bit
     N = 2
-    fockstates = sort(map(FockNumber, 0:2^N-1), by=Base.Fix2(bits, N))
+    fockstates = sort(map(FockNumber, 0:(2^N - 1)), by = Base.Fix2(bits, N))
     uξ(p, fockstates) = [phase_factor_u(p, map(focknbr_from_site_indices, p), f1) for f1 in fockstates]
 
     p = [[1], [2]]

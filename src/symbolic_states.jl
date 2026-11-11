@@ -534,7 +534,7 @@ symbolic kets or of symbolic bras. Kets give a column vector, and bras give the 
 This is the state-specific form of [`representation`](@ref).
 The optional `repr` selects the format as in [`representation`](@ref), except `:lazy`; for example `Vector` gives a dense vector.
 """
-function vector_representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr::Union{EagerSparseRepr,EagerDenseRepr}=EagerSparseRepr(); kwargs...) where {B}
+function vector_representation(state::Union{AbstractBasisState, AbstractString, AbstractChar, B}, space::AbstractHilbertSpace{B}, repr::Union{EagerSparseRepr, EagerDenseRepr} = EagerSparseRepr(); kwargs...) where {B}
     ind = _checked_state_index(state, space)
     v = _zero_vector(space, repr)
     v[ind] = one(eltype(v))
