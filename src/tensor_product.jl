@@ -113,9 +113,15 @@ in the mode order of `H`, so the result does not depend on the order of `ms`. It
 when each space covers consecutive modes of `H` and `Hs` is listed in that order; see
 [Tensor products of arrays](@ref tensor_product_arrays). Use `tensor_product` for product states and local observables.
 Unless `projection=true`, throws an `ArgumentError` if the result has weight outside `H`.
+`ms` can be dense GPU arrays, for which `alg` defaults to [`NoScalarIndexingAlg`](@ref).
 """
-function generalized_kron(ms, Hs, H::AbstractHilbertSpace = tensor_product(Hs); kwargs...)
+function generalized_kron(ms, Hs, H::AbstractHilbertSpace = tensor_product(Hs); alg = default_indexing_alg(first(ms)), kwargs...)
     check_kron_sizes(ms, Hs)
+    _check_kron_alg(alg)
+    if alg isa NoScalarIndexingAlg
+        ispartition(Hs, H) || throw(ArgumentError("The spaces $Hs must split $H into subsystems that contain each of its atoms exactly once."))
+        return _kron_by_gather(ms, Hs, H, false; kwargs...)
+    end
     N = ndims(first(ms))
     mout = allocate_tensor_product_result(ms, Hs, H)
     extend_state = state_mapper(H, Hs)
@@ -126,6 +132,9 @@ function generalized_kron(ms, Hs, H::AbstractHilbertSpace = tensor_product(Hs); 
     end
     throw(ArgumentError("Only 1D or 2D arrays are supported, got $(N)D."))
 end
+
+_check_kron_alg(alg) = alg isa Union{ScalarIndexingAlg, NoScalarIndexingAlg} ||
+    throw(ArgumentError("`generalized_kron` and `tensor_product` support `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
 
 generalized_kron(Hs::Pair; kwargs...) = (ms...) -> generalized_kron(ms, Hs; kwargs...)
 generalized_kron(ms, Hs::Pair; kwargs...) = generalized_kron(ms, first(Hs), last(Hs); kwargs...)
@@ -337,6 +346,24 @@ end
     @test generalized_kron(map(rep, ops, spaces), spaces => H) ≈ rep(f[1]' * f[2]' * f[3] * f[4] * f[5] * S[1][:x] * b', H)
 end
 
+@testitem "Tensor products of arrays by gather" begin
+    import FermionicHilbertSpaces: NoScalarIndexingAlg
+    using LinearAlgebra
+    alg = NoScalarIndexingAlg()
+    @fermions f
+    @fermions g
+    @boson b
+    H = tensor_product(hilbert_space(f, 1:3), hilbert_space(g, 1:2), hilbert_space(b, 2))
+    Hs = (tensor_product(hilbert_space(f, [1, 3]), hilbert_space(g, 2:2)), hilbert_space(b, 2), tensor_product(hilbert_space(f, 2:2), hilbert_space(g, 1:1)))
+    ms = map(Hk -> rand(ComplexF64, dim(Hk), dim(Hk)), Hs)
+    vs = map(Hk -> rand(ComplexF64, dim(Hk)), Hs)
+    for (op, xs) in ((generalized_kron, ms), (tensor_product, ms), (tensor_product, vs)), phase_factors in (true, false)
+        @test op(xs, Hs => H; alg, phase_factors) ≈ op(xs, Hs => H; phase_factors)
+    end
+    @test_throws ArgumentError generalized_kron((ms[1], I, ms[3]), Hs => H; alg)
+    @test_throws ArgumentError tensor_product(ms, Hs => H; alg = :fast)
+end
+
 """
     tensor_product(ms, Hs, H::AbstractHilbertSpace; kwargs...)
     tensor_product(ms, Hs => H; kwargs...)
@@ -351,22 +378,58 @@ For vectors, the result is the product state: if each `ms[k] = ψₖ|0⟩` with 
 the result is `ψ₁ψ₂⋯|0⟩`. Swapping two odd states flips the sign.
 `kwargs` can be passed a bool `phase_factors`. The last form returns a function of `ms`.
 `Hs => H` reads input => output; see [Pair arguments](@ref pair_convention).
+`ms` can be dense GPU arrays, for which `alg` defaults to [`NoScalarIndexingAlg`](@ref).
 """
-function tensor_product(ms::Union{<:AbstractVector, <:Tuple}, Hs, H::AbstractHilbertSpace; kwargs...)
+function tensor_product(ms::Union{<:AbstractVector, <:Tuple}, Hs, H::AbstractHilbertSpace; alg = default_indexing_alg(first(ms)), kwargs...)
     # See eq. 26 in J. Phys. A: Math. Theor. 54 (2021) 393001
+    _check_kron_alg(alg)
     if all(_issquare, ms)
         check_kron_sizes(ms, Hs)
+        alg isa NoScalarIndexingAlg && ispartition(Hs, H) && return _kron_by_gather(ms, Hs, H, true; kwargs...)
         # on an unconstrained space, the product of embeddings is used
-        isconstrained(H) || return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; kwargs...), *, zip(ms, Hs))
+        isconstrained(H) || return mapreduce(((m, fine_basis),) -> embed(m, fine_basis, H; alg, kwargs...), *, zip(ms, Hs))
         return ordered_product(Tuple(ms), Tuple(Hs), H; kwargs...)
     elseif all(_isket, ms)
-        return generalized_kron(map(vec, ms), Hs, H; kwargs...)
+        return generalized_kron(map(vec, ms), Hs, H; alg, kwargs...)
     elseif all(_isbra, ms)
         # All matrices are row vectors, so we can treat them as vectors and then reshape the result
-        return transpose(generalized_kron(map(vec, ms), Hs, H; kwargs...))
+        return transpose(generalized_kron(map(vec, ms), Hs, H; alg, kwargs...))
     end
     throw(ArgumentError("The elements of `ms` must be either all square matrices, all column vectors or all row vectors, got sizes $(map(size, ms))."))
 end
+
+# Entry (K1, K2) of the result is the product of the entries of `ms` at the indices in `Hs` of the parts of the
+# states K1 and K2 of `H`, times a phase, so the result is one broadcast. A vector is a matrix with one column.
+# With `ordered` the phase is that of the ordered product of embeddings. `Hs` must be a partition of `H`.
+function _kron_by_gather(ms, Hs, H, ordered; phase_factors = true, projection = false)
+    ms, Hs = map(_gather_input, Tuple(ms)), Tuple(Hs)
+    isvec = ndims(first(ms)) == 1
+    mapper = state_mapper(H, Hs)
+    states = basisstates(H)
+    inds = map(state -> map(state_index, unique_split_state(state, mapper), Hs), states)
+    present = map(I -> !any(iszero, I), inds)
+    u = phase_factors && (isvec || ordered) ? map(phase_factor_u(mapper), states) : true
+    bits = phase_factors && !isvec ? map(state -> _kron_phase_bits(mapper, state, ordered), states) : [()]
+    adapt(A) = _adapt_like(first(ms), A)
+    rows, w, bits = adapt((map(I -> max.(I, 1), inds), Int8.(present .* u), bits))
+    cols, wc = isvec ? adapt(([map(Returns(1), Hs)], Int8[1])) : (rows, w)
+    col(A) = reshape(A, 1, :)
+    if !projection && count(present) < prod(dim, Hs)
+        # The nonzero products of entries in the columns of `H` are counted, and those that also have their row in `H`.
+        nonzero = map(m -> .!iszero.(m), ms)
+        counts = map(nz -> sum(nz; dims = 1), nonzero)
+        from_H = sum(_masked_mul.(.!iszero.(col(wc)), _entry_prod.(Ref(counts), Ref(map(Returns(1), Hs)), col(cols))))
+        within_H = sum(_masked_mul.(.!iszero.(w .* col(wc)), _entry_prod.(Ref(nonzero), rows, col(cols))))
+        from_H == within_H || throw(ArgumentError("The tensor product has weight outside `H`. Pass `projection=true` to drop such terms."))
+    end
+    out = _masked_mul.(w .* col(wc) .* _kron_sign.(bits, col(bits)), _entry_prod.(Ref(ms), rows, col(cols)))
+    return isvec ? vec(out) : out
+end
+_gather_input(m) = m
+_gather_input(::UniformScaling) = throw(ArgumentError("`UniformScaling` is not supported with `alg = NoScalarIndexingAlg()`."))
+_entry_prod(ms, I, J) = prod(map((m, i, j) -> m[i, j], ms, I, J))
+_kron_sign(b1, b2) = isodd(sum(map((p1, p2) -> count_ones(p2[1] & (p1[2] ⊻ p2[2])), b1, b2); init = 0)) ? Int8(-1) : Int8(1)
+
 # Apply the factors right to left to each basis state of H. Only the final states are looked up in H.
 function ordered_product(ms, Hs, H; phase_factors = true, projection = false)
     factors = map(ms, Hs) do m, Hk
@@ -627,15 +690,15 @@ Algorithm that avoids scalar indexing, which is what makes GPU arrays work: it u
 indexing, broadcasting and reductions, and returns an array of the input's kind. A pure state `ψ`
 is traced as `A * A'`, with `A` gathered from `ψ`, without forming `ψ * ψ'`. It is not specific to
 the partial trace; the operations that accept it as `alg` are [`partial_trace`](@ref),
-[`partial_trace!`](@ref), [`embed`](@ref), [`change_basis`](@ref) and `reshape`, and it is their default
-for dense GPU arrays. GPU sparse arrays are not supported.
+[`partial_trace!`](@ref), [`embed`](@ref), [`change_basis`](@ref), `reshape`, [`generalized_kron`](@ref) and
+[`tensor_product`](@ref) of arrays, and it is their default for dense GPU arrays. GPU sparse arrays are not supported.
 """
 struct NoScalarIndexingAlg end
 """
     ScalarIndexingAlg()
 
-The element-wise code path of an operation, and the default `alg` of [`embed`](@ref), [`change_basis`](@ref) and `reshape`
-for inputs other than GPU arrays.
+The element-wise code path of an operation, and the default `alg` of [`embed`](@ref), [`change_basis`](@ref), `reshape`,
+[`generalized_kron`](@ref) and [`tensor_product`](@ref) of arrays for inputs other than GPU arrays.
 """
 struct ScalarIndexingAlg end
 
