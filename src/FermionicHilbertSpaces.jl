@@ -26,6 +26,7 @@ using SparseArrays: SparseArrays, AbstractSparseArray, AbstractSparseMatrix, Spa
     nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
 using TestItems: TestItems, @testitem, @testmodule
 import TupleTools
+using Random: Xoshiro
 using NonCommutativeProducts: NonCommutativeProducts, @nc, Swap, NCAdd, NCMul, NCterms, AddTerms, add!!
 
 
@@ -37,6 +38,7 @@ export Kets, Ket, ProductState, SpinState, BosonicState
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
 export @fermion, @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export NoSymmetry, ParityConservation, NumberConservation, constrain_space
+export LocalMap
 export SectorConstraint, FilterConstraint, AdditiveConstraint, BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export symmetric_sector
