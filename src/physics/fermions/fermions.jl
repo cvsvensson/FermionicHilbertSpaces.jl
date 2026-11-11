@@ -220,13 +220,15 @@ end
     function annihilators(H)
         states = collect(FHS.basisstates(H))
         d = length(states)
-        Dict(map(enumerate(FHS.atomic_factors(H))) do (n, atom)
-            bit = one(first(states).f) << (n - 1)
-            js = filter(j -> !iszero(states[j].f & bit), 1:d)
-            is = map(j -> FHS.state_index(FHS.FockNumber(states[j].f ⊻ bit), H), js)
-            signs = map(j -> isodd(count_ones(states[j].f & (bit - 1))) ? -1 : 1, js)
-            FHS.label(atom) => sparse(is, js, signs, d, d)
-        end)
+        Dict(
+            map(enumerate(FHS.atomic_factors(H))) do (n, atom)
+                bit = one(first(states).f) << (n - 1)
+                js = filter(j -> !iszero(states[j].f & bit), 1:d)
+                is = map(j -> FHS.state_index(FHS.FockNumber(states[j].f ⊻ bit), H), js)
+                signs = map(j -> isodd(count_ones(states[j].f & (bit - 1))) ? -1 : 1, js)
+                FHS.label(atom) => sparse(is, js, signs, d, d)
+            end
+        )
     end
 end
 

@@ -5,7 +5,7 @@ Return the fermionic parity operator `(-1)^N` for the Hilbert space `H`: `1` on 
 on odd basis states.
 """
 function parityoperator(H::AbstractHilbertSpace{<:AbstractFockState})
-    diagonal_operator(parity, H)
+    return diagonal_operator(parity, H)
 end
 
 
@@ -15,7 +15,7 @@ end
 Return the number operator `Σ_j n_j` for the Hilbert space `H`.
 """
 function numberoperator(H::AbstractHilbertSpace{<:AbstractFockState})
-    diagonal_operator(particle_number, H)
+    return diagonal_operator(particle_number, H)
 end
 
 
