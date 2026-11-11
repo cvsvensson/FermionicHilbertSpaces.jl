@@ -372,7 +372,6 @@ end
 end
 
 @testitem "Spaces with more than 64 modes" begin
-    using SparseArrays
     @fermions f
     N = 70
     H = hilbert_space(f, 1:N, NumberConservation(1))
@@ -381,13 +380,12 @@ end
     Hcomp = FermionicHilbertSpaces.complementary_subsystem(H, Hsubsmall)
     @test Hcomp == Hsubbig
 
-    emb = embed(Hsubsmall => H; complement=Hsubbig)
-    pt = partial_trace(H => Hsubsmall)
-    @test sparse(emb) ≈ sparse(pt')
-
-    emb = embed(Hsubbig => H; complement=Hsubsmall)
-    pt = partial_trace(H => Hsubbig)
-    @test sparse(emb) ≈ sparse(pt')
+    m = rand(ComplexF64, dim(H), dim(H))
+    for (Hsub, Hc) in ((Hsubsmall, Hsubbig), (Hsubbig, Hsubsmall))
+        msub = rand(ComplexF64, dim(Hsub), dim(Hsub))
+        @test partial_trace(H => Hsub)(m) ≈ partial_trace(m, H => Hsub)
+        @test embed(Hsub => H; complement = Hc)(msub) ≈ embed(msub, Hsub => H; complement = Hc, projection = true)
+    end
 end
 
 @testitem "Spaces with more than 128 modes" begin

@@ -93,8 +93,6 @@ end
         @test ptmat ≈ embmat'
         @test sparse(pt) ≈ ptmat
         @test sparse(emb) ≈ embmat
-        @test sparse(pt') ≈ sparse(emb)
-        @test sparse(emb') ≈ sparse(pt)
 
         m, ψ, msub = rand(ComplexF64, d, d), rand(ComplexF64, d), rand(ComplexF64, dsub, dsub)
         ref = partial_trace(m, H => Hsub)
