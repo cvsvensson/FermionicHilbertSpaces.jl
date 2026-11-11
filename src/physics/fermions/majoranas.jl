@@ -1,24 +1,3 @@
-struct MajoranaGroup{F<:FermionicGroup}
-    group::F
-end
-Base.hash(x::MajoranaGroup, h::UInt) = hash(MajoranaGroup, hash(x.group, h))
-Base.:(==)(a::MajoranaGroup, b::MajoranaGroup) = a.group == b.group
-symbolic_group(g::MajoranaGroup) = g
-Base.isless(g1::MajoranaGroup, g2::MajoranaGroup) = isless(g1.group, g2.group)
-add_tag(g::MajoranaGroup, tag) = MajoranaGroup(add_tag(g.group, tag))
-tags(g::MajoranaGroup) = g.group
-
-struct SymbolicMajoranaBasis{T<:MajoranaGroup}
-    name::Symbol
-    group::T
-end
-Base.hash(x::SymbolicMajoranaBasis, h::UInt) = hash(x.name, hash(x.group, h))
-symbolic_group(f::SymbolicMajoranaBasis) = f.group
-tags(f::SymbolicMajoranaBasis) = f.group
-add_tag(f::SymbolicMajoranaBasis, tag) = SymbolicMajoranaBasis(f.name, add_tag(f.group, tag))
-Base.show(io::IO, x::SymbolicMajoranaBasis) = print(io, "SymbolicMajoranaBasis(", x.name, ")")
-
-abstract type AbstractMajoranaSym <: AbstractFermionSym end
 """
     @majoranas a b ...
 
@@ -39,66 +18,42 @@ Majoranas are Hermitian and normalised to square to one: `γᵢγⱼ + γⱼγ�
 See also [`@fermions`](@ref).
 """
 macro majoranas(xs...)
-    group = MajoranaGroup(FermionicGroup(Tags((xs,))))
     defs = map(xs) do x
-        :($(esc(x)) = SymbolicMajoranaBasis($(Expr(:quote, x)), $group))
+        :($(esc(x)) = Field{Majorana}($(Expr(:quote, x)), $xs))
     end
     length(defs) == 1 && return only(defs)
     Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
 end
-Base.getindex(f::SymbolicMajoranaBasis, is...) = MajoranaSym(is, f)
-Base.getindex(f::SymbolicMajoranaBasis, i) = MajoranaSym(i, f)
-Base.:(==)(a::SymbolicMajoranaBasis, b::SymbolicMajoranaBasis) = a.name == b.name && a.group == b.group
-
-struct MajoranaSym{L,B} <: AbstractMajoranaSym
-    label::L
-    basis::B
+struct Majorana end
+const MajoranaSym{M} = Op{Majorana, M}
+mode_operator(::Type{Majorana}) = Majorana()
+Base.adjoint(k::Majorana) = k
+Base.show(io::IO, x::MajoranaSym) = show(io, x.mode)
+# The order within a group: by field name, then by label.
+function _local_isless(a::MajoranaSym, b::MajoranaSym)
+    na, nb = a.mode.field.name, b.mode.field.name
+    return na == nb ? _order_isless(a.mode.label, b.mode.label) : na < nb
 end
-Base.:(==)(a::MajoranaSym, b::MajoranaSym) = a.label == b.label && a.basis == b.basis
-Base.hash(a::MajoranaSym, h::UInt) = hash(a.label, hash(a.basis, h))
-Base.adjoint(x::MajoranaSym) = MajoranaSym(x.label, x.basis)
-Base.iszero(x::MajoranaSym) = false
-symbolic_group(f::AbstractMajoranaSym) = symbolic_group(f.basis)
-symbolic_basis(f::AbstractMajoranaSym) = f.basis
-with_basis(f::MajoranaSym, newbasis) = MajoranaSym(f.label, newbasis)
-function Base.show(io::IO, x::MajoranaSym)
-    print(io, _symbolic_name_with_tags(x.basis.name, x.basis; skip_first=1))
-    if Base.isiterable(typeof(x.label))
-        Base.show_delim_array(io, x.label, "[", ",", "]", false)
-    else
-        print(io, "[", x.label, "]")
-    end
-end
-function Base.isless(a::MajoranaSym, b::MajoranaSym)
-    if a.basis.group !== b.basis.group
-        a.basis.group < b.basis.group
-    elseif a.basis.name == b.basis.name
-        _order_isless(a.label, b.label)
-    else
-        a.basis.name < b.basis.name
-    end
-end
-exchange_phase(a::MajoranaSym, b::MajoranaSym) = a.basis.group == b.basis.group ? -1 : 1
-function NonCommutativeProducts.mul_effect(a::MajoranaSym, b::MajoranaSym)
-    if a == b
+Base.isless(a::MajoranaSym, b::MajoranaSym) = _group_isless(a, b) || (!_group_isless(b, a) && _local_isless(a, b))
+exchange_phase(a::MajoranaSym, b::MajoranaSym) = symbolic_group(a) == symbolic_group(b) ? -1 : 1
+function local_mul_effect(a::MajoranaSym, b::MajoranaSym)
+    return if a == b
         1
-    elseif a < b
+    elseif _local_isless(a, b)
         nothing
-    elseif a > b
-        return Swap(exchange_phase(a, b))
+    elseif _local_isless(b, a)
+        Swap(-1)
     else
         throw(ArgumentError("Cannot multiply `$a` and `$b`."))
     end
 end
 
-mat_eltype(::Type{S}) where {S<:AbstractMajoranaSym} = Complex{Int}
-@nc MajoranaSym
+mat_eltype(::Type{Majorana}) = Complex{Int}
 
 @testitem "@majoranas return value" begin
     γ = @majoranas γ
-    @test γ isa FermionicHilbertSpaces.SymbolicMajoranaBasis
-    @test repr(γ) == "SymbolicMajoranaBasis(γ)"
+    @test repr(γ) == "γ"
     a, b = @majoranas a b
     @test a[1] * b[1] == -b[1] * a[1]
 end
@@ -161,63 +116,63 @@ end
     end
 end
 
-struct MajoranaHilbertSpace{B,L,H,S<:SymbolicMajoranaBasis} <: AbstractGroupedHilbertSpace{B}
-    majoranaindices::L
+struct MajoranaHilbertSpace{B, L, H, S <: Field{Majorana}} <: AbstractGroupedHilbertSpace{B}
+    mode_ordering::L
     parent::H
-    sym::S
-    function MajoranaHilbertSpace(majoranaindices::L, parent::H, sym::S) where {L,H<:FermionicSpace,S<:SymbolicMajoranaBasis}
+    field::S
+    function MajoranaHilbertSpace(mode_ordering::L, parent::H, field::S) where {L, H <: FermionicSpace, S <: Field{Majorana}}
         B = statetype(parent)
-        new{B,L,H,S}(majoranaindices, parent, sym)
+        return new{B, L, H, S}(mode_ordering, parent, field)
     end
 end
 
 dim(H::MajoranaHilbertSpace) = dim(H.parent)
-mode_ordering(H::MajoranaHilbertSpace) = H.majoranaindices
-modes(H::MajoranaHilbertSpace) = keys(H.majoranaindices)
-Base.:(==)(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace) = H1.majoranaindices == H2.majoranaindices && H1.parent == H2.parent && H1.sym == H2.sym
-Base.hash(H::MajoranaHilbertSpace, h::UInt) = hash(H.majoranaindices, hash(H.parent, hash(H.sym, h)))
+mode_ordering(H::MajoranaHilbertSpace) = H.mode_ordering
+modes(H::MajoranaHilbertSpace) = keys(H.mode_ordering)
+Base.:(==)(H1::MajoranaHilbertSpace, H2::MajoranaHilbertSpace) = H1.mode_ordering == H2.mode_ordering && H1.parent == H2.parent && H1.field == H2.field
+Base.hash(H::MajoranaHilbertSpace, h::UInt) = hash(H.mode_ordering, hash(H.parent, hash(H.field, h)))
 basisstates(m::MajoranaHilbertSpace) = basisstates(m.parent)
 Base.@propagate_inbounds basisstate(i::Integer, m::MajoranaHilbertSpace) = basisstate(i, m.parent)
 Base.parent(H::MajoranaHilbertSpace) = H.parent
 isconstrained(H::MajoranaHilbertSpace) = false
-group_id(H::MajoranaHilbertSpace) = symbolic_group(H.sym)
+group_id(H::MajoranaHilbertSpace) = Group(H.field)
 function add_tag(H::MajoranaHilbertSpace, tag)
-    majoranaindices = OrderedDict(add_tag(γ, tag) => n for (γ, n) in H.majoranaindices)
-    MajoranaHilbertSpace(majoranaindices, add_tag(parent(H), tag), add_tag(H.sym, tag))
+    mode_ordering = OrderedDict(add_tag(γ, tag) => n for (γ, n) in H.mode_ordering)
+    return MajoranaHilbertSpace(mode_ordering, add_tag(parent(H), tag), add_tag(H.field, tag))
 end
 # The atoms of a Majorana space are pairs of Majoranas (one fermionic mode each), named by the
-# pair. A single Majorana does not name an atom: its `atomic_id` is that of its whole group.
+# tuple of their two modes. A single Majorana's `atomic_id` is its mode, which names no atom.
 function atomic_id(H::MajoranaHilbertSpace)
-    length(H.majoranaindices) == 2 || throw(ArgumentError("Only Majorana spaces with exactly two Majoranas have an atomic_id, use atom_ids for $H"))
-    Tuple(keys(H.majoranaindices))
+    length(modes(H)) == 2 || throw(ArgumentError("Only Majorana spaces with exactly two Majoranas have an atomic_id, use atom_ids for $H"))
+    return Tuple(modes(H))
 end
 # Fast versions of the generic definitions, without building the atoms. The Majoranas of the
 # k:th pair sit at positions 2k-1 and 2k.
 function atom_ids(H::MajoranaHilbertSpace)
-    γs = collect(keys(H.majoranaindices))
+    γs = collect(modes(H))
     [(γs[2k-1], γs[2k]) for k in 1:length(γs)÷2]
 end
-_acts_in(x::AbstractMajoranaSym, H::MajoranaHilbertSpace) = haskey(H.majoranaindices, x)
+_acts_in(x, H::MajoranaHilbertSpace) = mode_position(x, H) > 0
 function atom_position(x, H::MajoranaHilbertSpace)
     id = atomic_id(x)
     id isa Tuple{Any,Any} || return 0 # only pairs name atoms
-    p = get(H.majoranaindices, id[1], 0)
-    isodd(p) && get(H.majoranaindices, id[2], 0) == p + 1 ? (p + 1) ÷ 2 : 0
+    p = get(mode_ordering(H), id[1], 0)
+    return isodd(p) && get(mode_ordering(H), id[2], 0) == p + 1 ? (p + 1) ÷ 2 : 0
 end
 
-function combine_into_group(group::MajoranaGroup, spaces)
-    fermionic_space = combine_into_group(group.group, map(parent, spaces))
-    D = typeof(first(spaces).majoranaindices)
-    majoranaindices = D()
+function combine_into_group(group::Group{Majorana}, spaces)
+    fermionic_space = combine_into_group(Group{Fermion}(group.names, group.tags), map(parent, spaces))
+    D = typeof(first(spaces).mode_ordering)
+    mode_ordering = D()
     count = 1
     for space in spaces
-        l1, p1 = first(space.majoranaindices)
-        l2, p2 = last(space.majoranaindices)
-        majoranaindices[l1] = count
-        majoranaindices[l2] = count + 1
+        l1, p1 = first(space.mode_ordering)
+        l2, p2 = last(space.mode_ordering)
+        mode_ordering[l1] = count
+        mode_ordering[l2] = count + 1
         count += 2
     end
-    MajoranaHilbertSpace(majoranaindices, fermionic_space, first(spaces).sym)
+    return MajoranaHilbertSpace(mode_ordering, fermionic_space, first(spaces).field)
 end
 
 function combine_states(states, ::MajoranaHilbertSpace)
@@ -229,33 +184,31 @@ partial_transpose_phase_factor(f1, f2, H::MajoranaHilbertSpace) = partial_transp
 partial_trace_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_trace_phase_factor_eltype(parent(H))
 partial_transpose_phase_factor_eltype(H::MajoranaHilbertSpace) = partial_transpose_phase_factor_eltype(parent(H))
 
-function majoranas(H::MajoranaHilbertSpace)
-    γ = symbolic_basis(H)
-    OrderedDict(f.label => representation(γ[f.label], H) for f in modes(H))
-end
-symbolic_basis(H::MajoranaHilbertSpace) = H.sym
+majoranas(H::MajoranaHilbertSpace) = OrderedDict(m.label => representation(Op(Majorana(), m), H) for m in modes(H))
 
-hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, @nospecialize(c::QuantitySpec)) = constrain_space(hilbert_space(y, labels), c)
-function hilbert_space(y::SymbolicMajoranaBasis, labels::AbstractVector, args...; kwargs...)
+hilbert_space(y::Field{Majorana}, labels::AbstractVector, @nospecialize(c::QuantitySpec)) = constrain_space(hilbert_space(y, labels), c)
+hilbert_space(y::Field{Majorana}, labels::AbstractVector) = _majorana_space(y, labels)
+hilbert_space(m::Mode{<:Field{Majorana}}, states) = _no_space(m, states)
+hilbert_space(y::Field{Majorana}, labels::AbstractVector, x::Union{AbstractConstraint, AbstractVector, BasisStates}) = _majorana_space(y, labels, x)
+function _majorana_space(y, labels, args...)
     iseven(length(labels)) || throw(ArgumentError("The number of Majoranas must be even to define a Hilbert space, got $(length(labels))."))
     pairs = [(labels[i], labels[i+1]) for i in 1:2:length(labels)-1]
-    f = SymbolicFermionBasis(y.name, tags(y).group)
-    Hf = hilbert_space(f, pairs, args...; kwargs...)
-    majorana_position = OrderedDict(y[label] => n for (n, label) in enumerate(labels))
-    length(majorana_position) == length(labels) || throw(ArgumentError("The Majoranas of a Hilbert space must be distinct, got $labels."))
-    MajoranaHilbertSpace(majorana_position, Hf, y)
+    f = Field{Fermion}(y.name, y.group, nothing, y.tags)
+    Hf = hilbert_space(f, pairs, args...)
+    mode_ordering = OrderedDict(Mode(y, label) => n for (n, label) in enumerate(labels))
+    length(mode_ordering) == length(labels) || throw(ArgumentError("The Majoranas of a Hilbert space must be distinct, got $labels."))
+    return MajoranaHilbertSpace(mode_ordering, Hf, y)
 end
-# MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = MajoranaHilbertSpace(majoranaindices, parent(space), sym)
-MajoranaHilbertSpace(majoranaindices, space::AbstractHilbertSpace, sym) = rewrap(space, MajoranaHilbertSpace(majoranaindices, parent(space), sym))
+MajoranaHilbertSpace(mode_ordering, space::AbstractHilbertSpace, field) = rewrap(space, MajoranaHilbertSpace(mode_ordering, parent(space), field))
 
 # Replace each pair of Majoranas in `names` that forms an atom of `H` by that atom, placed
 # where the first of the two appears.
 function _pair_majoranas(names, H)
-    γs = Set(x for x in names if x isa AbstractMajoranaSym)
+    γs = Set(x for x in names if x isa Mode{<:Field{Majorana}})
     isempty(γs) && return names
-    pair_of = Dict(γ => a for a in atomic_factors(H) if a isa MajoranaHilbertSpace for γ in keys(a.majoranaindices) if γ in γs)
+    pair_of = Dict(γ => a for a in atomic_factors(H) if a isa MajoranaHilbertSpace for γ in modes(a) if γ in γs)
     for a in values(pair_of)
-        γ1, γ2 = keys(a.majoranaindices)
+        γ1, γ2 = modes(a)
         γ1 in γs && γ2 in γs || throw(ArgumentError("A Majorana names a mode only together with its partner, got $(γ1 in γs ? γ1 : γ2) without $(γ1 in γs ? γ2 : γ1)."))
     end
     placed = Set{MajoranaHilbertSpace}()
@@ -265,24 +218,24 @@ end
 
 function subregion(Hsub::MajoranaHilbertSpace, H::MajoranaHilbertSpace)
     parent_subregion = subregion(parent(Hsub), parent(H))
-    MajoranaHilbertSpace(Hsub.majoranaindices, parent_subregion, Hsub.sym)
+    return MajoranaHilbertSpace(Hsub.mode_ordering, parent_subregion, Hsub.field)
 end
 
 partial_trace!(mout, m::AbstractMatrix, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace, complement::MajoranaHilbertSpace, alg, args...; kwargs...) = partial_trace!(mout, m, H.parent, Hsub.parent, complement.parent, alg, args...; kwargs...)
 
-function partial_trace(m::NCMul{C,S,F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C,S<:AbstractMajoranaSym,F}
+function partial_trace(m::NCMul{C, S, F}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace) where {C, S <: MajoranaSym, F}
     sub_modes = modes(Hsub)
     for f in m.factors
-        if f ∉ sub_modes
+        if mode(f) ∉ sub_modes
             return 0 * m
         end
     end
     return m * dim(H) / dim(Hsub)
 end
-function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace; kwargs...) where {C,C2,S<:AbstractMajoranaSym,F}
+function partial_trace(m::NCAdd{C, NCMul{C2, S, F}}, H::MajoranaHilbertSpace, Hsub::MajoranaHilbertSpace; kwargs...) where {C, C2, S <: MajoranaSym, F}
     return sum(partial_trace(term, H, Hsub; kwargs...) for term in NCterms(m); init=0 * m) + m.coeff * dim(H) / dim(Hsub)
 end
-function partial_trace(m::NCAdd{C,NCMul{C2,S,F}}, Hs::Pair{<:MajoranaHilbertSpace,<:MajoranaHilbertSpace}) where {C,C2,S<:AbstractMajoranaSym,F}
+function partial_trace(m::NCAdd{C, NCMul{C2, S, F}}, Hs::Pair{<:MajoranaHilbertSpace, <:MajoranaHilbertSpace}) where {C, C2, S <: MajoranaSym, F}
     return partial_trace(m, Hs...)
 end
 
@@ -298,7 +251,6 @@ end
 
 
 _state_index(state, H::MajoranaHilbertSpace) = _state_index(state, H.parent)
-mode_position(f::MajoranaSym, H) = get(mode_ordering(H), f, 0)
 
 function _precomputation_before_operator_application(op::MajoranaSym, space::AbstractHilbertSpace{<:FockNumber})
     majoranaposition = mode_position(op, space)
@@ -322,17 +274,17 @@ function apply_local_operators(op::NCMul, f::FockNumber, H::MajoranaHilbertSpace
 end
 
 function atomic_factors(H::MajoranaHilbertSpace)
-    γs = collect(keys(H.majoranaindices))
+    γs = collect(modes(H))
     map(i -> _majorana_atomic_factor(H, i, γs), 1:nbr_of_modes(H.parent))
 end
-atomic_factor(H::MajoranaHilbertSpace, i) = _majorana_atomic_factor(H, i, collect(keys(H.majoranaindices)))
+atomic_factor(H::MajoranaHilbertSpace, i) = _majorana_atomic_factor(H, i, collect(modes(H)))
 # The i:th atom is the i:th fermionic atom of the parent, with the Majoranas at positions 2i-1
-# and 2i. The Majoranas are taken from the space's own keys, not rebuilt from `H.sym`, since a
+# and 2i. The Majoranas are taken from the space's own keys, not rebuilt from `H.field`, since a
 # space can hold Majoranas with several names from one `@majoranas` block.
 function _majorana_atomic_factor(H::MajoranaHilbertSpace, i, γs)
     atom = atomic_factor(H.parent, i)
     γ1, γ2 = γs[2i-1], γs[2i]
-    MajoranaHilbertSpace(OrderedDict(γ1 => 1, γ2 => 2), atom, symbolic_basis(γ1))
+    return MajoranaHilbertSpace(OrderedDict(γ1 => 1, γ2 => 2), atom, γ1.field)
 end
 @testitem "Majoranas of fermion modes from 64" begin
     import FermionicHilbertSpaces: FockNumber
@@ -346,15 +298,15 @@ end
     using LinearAlgebra
     @majoranas γ
     H = hilbert_space(γ, 1:2)
-    Hf = H.parent
-    f = H.parent.modes[1].basis
+    @fermions f
+    Hf = hilbert_space(f, [(1, 2)])
 
-    @test parityoperator(H.parent) == representation(1im * γ[1] * γ[2], H)
+    @test parityoperator(Hf) == representation(1im * γ[1] * γ[2], H)
     y1 = representation(γ[1], H)
     y2 = representation(γ[2], H)
     @test y1 * y2 == representation(γ[1] * γ[2], H)
 
-    maj(f) = f.creation ? -1im * f + hc : f + hc
+    maj(f) = f.kind.creation ? -1im * f + hc : f + hc
     @test representation(γ[1], H) == representation(maj(f[(1, 2)]), Hf)
     @test representation(γ[2], H) == representation(maj(f[(1, 2)]'), Hf)
     @test representation(1, H) == representation(1, Hf) == representation(1I, H) == representation(1I, Hf)
@@ -381,7 +333,7 @@ end
     @test dim(H) == 2
     Hsub = subregion(hilbert_space(γ, 1:2), H)
     @test dim(Hsub) == 2
-    f = H.parent.parent.modes[1].basis
+    @fermions f
     Hf = hilbert_space(f, [(1, 2), (3, 4)], ParityConservation(1))
     Hfsub = subregion(hilbert_space(f, [(1, 2)]), Hf)
     m = rand(dim(H), dim(H))
@@ -416,10 +368,11 @@ end
 end
 
 @testitem "Majorana spaces with several names" begin
-    using FermionicHilbertSpaces: atom_ids, atomic_id, atomic_factors, add_tag
+    using FermionicHilbertSpaces: atom_ids, atomic_id, atomic_factors, add_tag, mode, modes
     @majoranas a c
     @bosons b
     Ha, Hc = hilbert_space(a, 1:2), hilbert_space(c, 1:2)
+    @test collect(modes(Ha)) == [mode(a[1]), mode(a[2])]
     Hac = tensor_product(Ha, Hc)
     # each atom keeps its own Majoranas, so the atoms of a and c are distinct
     @test collect(atomic_factors(Hac)) == [Ha, Hc]

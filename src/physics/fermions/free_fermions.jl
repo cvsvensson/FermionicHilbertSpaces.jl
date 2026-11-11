@@ -9,8 +9,7 @@ their eigendecomposition and Gaussian states.
 module FreeFermions
 
     using ..FermionicHilbertSpaces: FermionicHilbertSpaces, AbstractFockState, AbstractHilbertSpace,
-        EagerDenseRepr, EagerSparseRepr, FermionSym, FixedNumberFockState, MajoranaSym, NoChunking, SymbolicFermionBasis,
-        SymbolicMajoranaBasis,
+    EagerDenseRepr, EagerSparseRepr, Fermion, FermionSym, FixedNumberFockState, Majorana, MajoranaSym, Mode, NoChunking, Field, Op,
     _FermionModeSpace, _canonicalize_repr, _matrix_format, _repr_eltype, _xlogx, _zero_matrix, exchange_phase, finalize!,
         matrix_accumulator, mode_position, push_inds_amps!, state_index
     import ..FermionicHilbertSpaces: _precomputation_before_operator_application, _state_index,
@@ -56,7 +55,7 @@ function _quadratic_matrix(entries, op, H, repr)
     _is_quadratic_operator(op::NCAdd, isvalid) = all(term -> _is_quadratic_operator(term, isvalid), keys(op.dict))
     # Whether every term of `op` is a product of two `FermionSym`s, with one creation and one annihilation
     # operator if `number_conserving`
-    _is_quadratic_fermion_operator(op, number_conserving) = _is_quadratic_operator(op, (a, b) -> a isa FermionSym && b isa FermionSym && (!number_conserving || a.creation != b.creation))
+_is_quadratic_fermion_operator(op, number_conserving) = _is_quadratic_operator(op, (a, b) -> a isa FermionSym && b isa FermionSym && (!number_conserving || a.kind.creation != b.kind.creation))
 
 _check_size(G, H) = size(G) == (dim(H), dim(H)) ||
     throw(DimensionMismatch("The correlation matrix has size $(size(G)), but the space has dimension $(dim(H))."))

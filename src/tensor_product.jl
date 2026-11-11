@@ -1,3 +1,4 @@
+atomic_factors(op::AbstractSym) = throw(ArgumentError("The operator `$op` is not a space. Use `hilbert_space(...)` to construct the space it acts on."))
 # The unconstrained product of `spaces`.
 function product_space(spaces)
     atoms = collect(Iterators.flatten(Iterators.map(atomic_factors, spaces)))
@@ -18,7 +19,8 @@ end
 Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
 
 Spaces of the same group, such as fermions of one `@fermions` basis, merge into one factor where
-the group first appears. The first factor varies fastest.
+the group first appears. The first factor varies fastest, so an operator `A` on the first of two spaces has the matrix
+`kron(I, A)`; use `embed` to build it.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces; @fermions f;

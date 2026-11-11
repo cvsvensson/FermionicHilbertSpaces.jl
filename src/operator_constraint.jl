@@ -223,6 +223,7 @@ _operator_terms(op::AbstractSym) = _operator_terms(1 * op)
 _operator_terms(op) = throw(ArgumentError("A constraint quantity must be a symbolic operator or a function of the basis state, got `$op`."))
 
 function _unit_of(x, unit_of, spaces)
+    x isa Op || throw(ArgumentError("A constraint quantity must be built from operators, got the factor `$x`."))
     k = get(unit_of, atomic_id(x), 0)
     iszero(k) || return k
     k = something(findfirst(H -> _acts_in(x, H), spaces), 0)
@@ -393,7 +394,7 @@ end
     H = hilbert_space(f, 1:6)
     weighted = sum(i * n(i) for i in 1:6)
     expected = brute_force(H, (sum(n(i) for i in 1:6) => 2, weighted => 7))
-    @test Set(FermionicHilbertSpaces.generate_states(H.modes, NumberConservation(2) * (weighted => 7), H)) == expected
+    @test Set(FermionicHilbertSpaces.generate_states(atomic_factors(H), NumberConservation(2) * (weighted => 7), H)) == expected
 end
 
 @testitem "Operator constraints match the existing constraints" begin
@@ -473,6 +474,8 @@ end
     @test_throws "rational" hilbert_space(f, 1:2, 0.5 * f[1]'f[1] => 1)
     @test_throws "mod(v, N)" hilbert_space(f, 1:2, 1im * f[1]'f[1] => 1)
     @test_throws ArgumentError hilbert_space(f, 1:2, f[3]'f[3] => 1)
+    k = FermionicHilbertSpaces.Kets(hilbert_space(f, 1:1))[1]
+    @test_throws ArgumentError hilbert_space(f, 1:2, (k * k') => 1)
     @test_throws "1//10" hilbert_space(f, 1:2, (1 // 10) * f[1]'f[1] => 0.1)
     @test dim(hilbert_space(f, 1:2, f[1]'f[1] => 1.0)) == 2
     @test_throws "1//2" hilbert_space(f, 1:20, sum(i^4 * f[i]'f[i] for i in 1:20) => [0.5])
@@ -599,26 +602,18 @@ end
 end
 
 @testitem "The diagonal of an operator is found numerically" begin
-    import FermionicHilbertSpaces: AbstractBasisState, AbstractSym, apply_local_operator, symbolic_group
-    import FermionicHilbertSpaces.NonCommutativeProducts: @nc
+    import FermionicHilbertSpaces: @field, Op, AbstractBasisState, apply_local_operator
     # A cyclic shift, whose cube is the identity, which its products do not simplify to.
-    struct Shift <: AbstractSym
-        site::Int
-    end
-    @nc Shift
+    struct Shift end
     struct Clock <: AbstractBasisState
         n::Int
     end
     apply_local_operator(::Shift, s::Clock, space, precomp) = Clock(mod(s.n + 1, 3)), 1
-    symbolic_group(op::Shift) = op.site
-    X(i) = Shift(i)
-    Hs = [GenericHilbertSpace(k, Clock.(0:2)) for k in 1:2]
+    @field x::Shift
+    X(i) = Op(Shift(), x[i])
+    Hs = [hilbert_space(x[k], Clock.(0:2)) for k in 1:2]
     @test Set(basisstates(tensor_product(Hs; constraint = X(1) * X(1) * X(1) + 2 * X(2) * X(2) * X(2) => 3))) == Set(basisstates(tensor_product(Hs)))
-    struct Root2 <: AbstractSym
-        site::Int
-    end
-    @nc Root2
+    struct Root2 end
     apply_local_operator(::Root2, s::Clock, space, precomp) = s, sqrt(2)
-    symbolic_group(op::Root2) = op.site
-    @test_throws "not exact fractions" tensor_product(Hs; constraint = Root2(1) => 1)
+    @test_throws "not exact fractions" tensor_product(Hs; constraint = Op(Root2(), x[1]) => 1)
 end

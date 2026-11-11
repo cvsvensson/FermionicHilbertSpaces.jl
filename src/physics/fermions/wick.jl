@@ -39,21 +39,21 @@ function _mean_field(op, contraction, keep = Returns(true), unit = 1)
 end
 
 function _mode_position(x, H)
-    position = x isa Union{FermionSym, MajoranaSym} ? mode_position(x, H) : 0
+    position = mode_position(x, H)
     iszero(position) && throw(ArgumentError("The operator `$x` is not a mode of the space `$H`."))
     return position
 end
-_nambu_index(x, H) = state_index(NambuState(_mode_position(x, H), !x.creation), H)
+_nambu_index(x, H) = state_index(NambuState(_mode_position(x, H), !x.kind.creation), H)
 _contraction(G, H::BdGHilbertSpace) = (x, y) -> G[_nambu_index(x', H), _nambu_index(y, H)]
 _contraction(G, H::MajoranaSingleParticleHilbertSpace) = (x, y) -> 2 * G[_mode_position(x, H), _mode_position(y, H)]
 function _contraction(G, H::SingleParticleHilbertSpace)
     index(x) = state_index(SingleParticleState(_mode_position(x, H)), H)
     return function (x, y)
         i, j = index(x), index(y)
-        return x.creation == y.creation ? zero(eltype(G)) : x.creation ? G[i, j] : (i == j) - G[j, i]
+        return x.kind.creation == y.kind.creation ? zero(eltype(G)) : x.kind.creation ? G[i, j] : (i == j) - G[j, i]
     end
 end
-_acts_within(fs, ::SingleParticleHilbertSpace) = 2 * count(x -> x.creation, fs) == length(fs)
+_acts_within(fs, ::SingleParticleHilbertSpace) = 2 * count(x -> x.kind.creation, fs) == length(fs)
 _acts_within(fs, ::Union{BdGHilbertSpace, MajoranaSingleParticleHilbertSpace}) = iseven(length(fs))
 # The modes are checked for every term, since not every term looks up all of its modes in `G`.
 function _in_space(fs, H, projection)

@@ -1,22 +1,3 @@
-struct FermionicGroup{T}
-    id::T
-end
-Base.hash(x::FermionicGroup, h::UInt) = hash(x.id, h)
-Base.:(==)(a::FermionicGroup, b::FermionicGroup) = a.id == b.id
-symbolic_group(g::FermionicGroup) = g
-Base.isless(g1::FermionicGroup, g2::FermionicGroup) = isless(g1.id, g2.id)
-add_tag(g::FermionicGroup, tag) = FermionicGroup(add_tag(g.id, tag))
-tags(g::FermionicGroup) = g.id
-
-struct SymbolicFermionBasis{T<:Tags}
-    name::Symbol
-    tags::FermionicGroup{T}
-end
-Base.show(io::IO, x::SymbolicFermionBasis) = print(io, _symbolic_name_with_tags(x.name, x; skip_first=1))
-Base.hash(x::SymbolicFermionBasis, h::UInt) = hash(x.name, hash(x.tags, h))
-symbolic_group(x::SymbolicFermionBasis) = tags(x)
-tags(x::SymbolicFermionBasis) = x.tags
-add_tag(x::SymbolicFermionBasis, tag) = SymbolicFermionBasis(x.name, add_tag(x.tags, tag))
 
 """
     @fermions a b ...
@@ -24,7 +5,7 @@ add_tag(x::SymbolicFermionBasis, tag) = SymbolicFermionBasis(x.name, add_tag(x.t
 Create one or more fermion species with the given names. Indexing into fermions species
 gives a concrete fermion. Fermions in one `@fermions` block anticommute with each other, 
 and commute with fermions in other `@fermions` blocks.
-`a[l]` is the annihilation operator of the mode labelled `l`, `a[l]'` its creation operator, and `a[i, σ]` is the mode labelled `(i, σ)`.
+`a[l]` is the annihilation operator of the mode labelled `l`, `a[l]'` its creation operator, and `a[i, σ]` is the annihilation operator of the mode labelled `(i, σ)`.
 
 # Examples:
 - `@fermions a b` creates two species of fermions that anticommute:
@@ -37,79 +18,57 @@ and commute with fermions in other `@fermions` blocks.
 See also [`@majoranas`](@ref).
 """
 macro fermions(xs...)
-    group = FermionicGroup(Tags((xs,)))
     defs = map(xs) do x
-        :($(esc(x)) = SymbolicFermionBasis($(Expr(:quote, x)), $group))
+        :($(esc(x)) = Field{Fermion}($(Expr(:quote, x)), $xs))
     end
     fermions = Expr(:block, defs...,
         :(tuple($(map(x -> esc(x), xs)...))))
     length(defs) == 1 && return only(defs)
     return fermions
 end
-Base.:(==)(a::SymbolicFermionBasis, b::SymbolicFermionBasis) = a.name == b.name && a.tags == b.tags
-Base.getindex(f::SymbolicFermionBasis, is...) = FermionSym(false, is, f)
-Base.getindex(f::SymbolicFermionBasis, i) = FermionSym(false, i, f)
 
-struct FermionSym{L,B} <: AbstractFermionSym
+"""
+    @fermion f
+
+Create the annihilation operator `f` of a single fermionic mode, with space `hilbert_space(f)`. It is the
+mode `f[]` of `@fermions f`.
+"""
+macro fermion(x)
+    return :($(esc(x)) = Field{Fermion}($(QuoteNode(x)), ($(QuoteNode(x)),))[])
+end
+
+struct Fermion
     creation::Bool
-    label::L
-    basis::B
 end
-Base.getindex(::SymbolicFermionBasis, i::FermionSym) = throw(ArgumentError("Modes are indexed by labels, not by operators, got `$i`."))
-Base.adjoint(x::FermionSym) = FermionSym(!x.creation, x.label, x.basis)
-Base.iszero(x::FermionSym) = false
-symbolic_group(h::FermionSym) = symbolic_group(h.basis)
-symbolic_basis(h::FermionSym) = h.basis
-with_basis(h::FermionSym, newbasis) = FermionSym(h.creation, h.label, newbasis)
-atomic_id(h::FermionSym) = _normalize_sym(h) # names the single-mode FermionicSpace of h
-label(h::FermionSym) = h.label
-group_id(f::FermionSym) = symbolic_group(f)
+const FermionSym{M} = Op{Fermion, M}
+mode_operator(::Type{Fermion}) = Fermion(false)
+Base.adjoint(k::Fermion) = Fermion(!k.creation)
 
-function Base.show(io::IO, x::FermionSym)
-    print(io, _symbolic_name_with_tags(x.basis.name, x.basis; skip_first=1), x.creation ? "†" : "")
-    if Base.isiterable(typeof(x.label))
-        Base.show_delim_array(io, x.label, "[", ",", "]", false)
-    else
-        print(io, "[", x.label, "]")
-    end
+Base.show(io::IO, x::FermionSym) = (show(io, x.mode.field); print(io, x.kind.creation ? "†" : ""); _show_label(io, x.mode.label))
+# The order within a group: creation operators first, then by field name and label.
+function _local_isless(a::FermionSym, b::FermionSym)
+    a.kind.creation == b.kind.creation || return a.kind.creation
+    fa, fb = a.mode.field, b.mode.field
+    return fa.name == fb.name ? _order_isless(a.mode.label, b.mode.label) : fa.name < fb.name
 end
-function Base.isless(a::FermionSym, b::FermionSym)
-    if tags(a.basis) !== tags(b.basis)
-        tags(a.basis) < tags(b.basis)
-    elseif a.creation == b.creation
-        a.basis.name == b.basis.name && return _order_isless(a.label, b.label)
-        a.basis.name < b.basis.name
-    else
-        a.creation > b.creation
-    end
-end
-Base.:(==)(a::FermionSym, b::FermionSym) = a.creation == b.creation && a.label == b.label && a.basis == b.basis
-Base.hash(a::FermionSym, h::UInt) = hash(a.creation, hash(a.label, hash(a.basis, h)))
+Base.isless(a::FermionSym, b::FermionSym) = _group_isless(a, b) || (!_group_isless(b, a) && _local_isless(a, b))
 
-hilbert_space(f::FermionSym) = FermionicSpace([_normalize_sym(f)], symbolic_group(f))
+hilbert_space(m::Mode{<:Field{Fermion}}) = FermionicSpace([m], symbolic_group(m))
+hilbert_space(m::Mode{<:Field{Fermion}}, states) = _no_space(m, states)
 
 # The sign λ in a * b = λ * b * a + scalar
-exchange_phase(a::FermionSym, b::FermionSym) = tags(a.basis) == tags(b.basis) ? -1 : 1
-function NonCommutativeProducts.mul_effect(a::FermionSym, b::FermionSym)
-    if a == b
+exchange_phase(a::FermionSym, b::FermionSym) = symbolic_group(a) == symbolic_group(b) ? -1 : 1
+function local_mul_effect(a::FermionSym, b::FermionSym)
+    return if a == b
         0
-    elseif a < b
-        nothing
-    elseif a > b
-        swap = Swap(exchange_phase(a, b))
-        if a.label == b.label && a.basis == b.basis
-            return AddTerms((swap, 1))
-        else
-            return swap
-        end
+    elseif _local_isless(b, a)
+        a.mode == b.mode ? AddTerms((Swap(-1), 1)) : Swap(-1)
     else
-        return nothing
+        nothing
     end
 end
 
-mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
-
-@nc FermionSym
+mat_eltype(::Type{Fermion}) = Int
 
 @testitem "SymbolicFermions" begin
     using Symbolics, LinearAlgebra
@@ -180,32 +139,39 @@ mat_eltype(::Type{S}) where {S<:AbstractFermionSym} = Int
 
 end
 
+@testitem "Single fermionic mode" begin
+    @fermion f
+    @fermions g
+    @test representation(f' * f, hilbert_space(f), Matrix) == [0 0; 0 1]
+    @test f * f' + f' * f == 1
+    @test f * g[1] == g[1] * f
+end
+
 @testitem "Deterministic ordering of groups" begin
-    using FermionicHilbertSpaces: Tags, tags, add_tag, SymbolicState
+    using FermionicHilbertSpaces: add_tag, symbolic_group, SymbolicState
     @fermions a
     @fermions b
     @fermions c d
     @majoranas γ
 
-    # the groups are identified by the names given to the macro, not by a hash of them
-    @test tags(a).id.tags == ((:a,),)
-    @test tags(c).id.tags == ((:c, :d),)
-    @test tags(γ).group.id.tags == ((:γ,),)
     a_old = a
     @fermions a
-    @test a == a_old
+    @test a == a_old && a[1] == a_old[1] && hash(a[1]) == hash(a_old[1])
+    @test c[1] * d[1] == -d[1] * c[1]
 
     # groups are in lexicographic order of the names given to the macro
-    @test tags(a) < tags(b) < tags(c)
+    g(x) = symbolic_group(x[1])
+    @test g(a) < g(b) < g(c) == g(d)
     @test a[2] < b[1] && b[1] < c[1] && !(b[1] < a[2])
     @test a[1]' < b[1]
     @test only(keys((b[1] * a[1]).dict)).factors == [a[1], b[1]]
     @test only(keys((c[1] * b[1]' * a[2]).dict)).factors == [a[2], b[1]', c[1]]
 
     # the order is total and consistent with ==
-    ts = [Tags(nothing), tags(a).id, tags(b).id, tags(c).id,
-        add_tag(tags(a).id, :left), add_tag(tags(a).id, :right), add_tag(add_tag(tags(a).id, :left), :right),
-        Tags(((:a,),)), Tags(((:a, :b),))]
+    ts = [
+        g(a), g(b), g(c), g(γ), g(add_tag(a, :left)), g(add_tag(a, :right)), g(add_tag(add_tag(a, :left), :right)),
+        g(add_tag(γ, :left)),
+    ]
     for x in ts, y in ts
         @test (x == y) == (!(x < y) && !(y < x))
         @test !(x < y && y < x)
