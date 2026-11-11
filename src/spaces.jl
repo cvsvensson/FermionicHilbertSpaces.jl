@@ -11,8 +11,25 @@ abstract type AbstractBasisState end
 abstract type AbstractFockState <: AbstractBasisState end
 abstract type AbstractHilbertSpace{S} end
 abstract type AbstractConstraint end
+"""
+    AbstractAtomicHilbertSpace{B}
+
+Supertype of spaces of one mode, with basis states of type `B`. A subtype implements
+[`basisstates`](@ref)`(H)`, [`dim`](@ref)`(H)`, `basisstate(i, H)`, `_state_index(state, H)` (`0` for a state not in `H`) and
+`atomic_id(H)`, the mode its operators act on; [`open_system`](@ref) also needs `add_tag(H, tag)`.
+[`GenericHilbertSpace`](@ref) is such a space for any list of states. See [Extending](extending.md).
+"""
 abstract type AbstractAtomicHilbertSpace{B} <: AbstractHilbertSpace{B} end
 abstract type AbstractProductHilbertSpace{B} <: AbstractHilbertSpace{B} end
+"""
+    AbstractGroupedHilbertSpace{B}
+
+Supertype of spaces of several modes with one joint basis state of type `B`, such as `FermionicSpace`. Besides the
+methods of [`AbstractAtomicHilbertSpace`](@ref) (`atomic_id` only on its single-mode spaces), a subtype implements
+`group_id`, `atomic_factors`, `isconstrained`, `combine_states(states, H)`, `state_mapper` with the mapper protocol in
+[Extending](extending.md), `partial_trace_phase_factor`, `partial_trace_phase_factor_eltype`,
+`partial_transpose_phase_factor`, and `combine_into_group(::Group{K}, atoms)` for its kind `K`.
+"""
 abstract type AbstractGroupedHilbertSpace{B} <: AbstractProductHilbertSpace{B} end
 
 """
@@ -96,8 +113,6 @@ Return the index of the basis state `state` in the Hilbert space `H`, the invers
 `basisstate`. A string or character that spells a state of `H` is accepted in place of the state.
 Returns `0` for a state of the same kind as the states of `H` (the same type up to type parameters)
 that is not in `H`, and throws a `MethodError` for a value of another kind.
-
-Spaces implement the lookup of a basis state as a method of `_state_index(state, H)`.
 """
 state_index(state, H) = _state_index(state, H)
 state_index(state::Union{AbstractString,AbstractChar}, H) = _state_index(interpret_state(state, H), H)
@@ -177,8 +192,7 @@ groups(H::AbstractGroupedHilbertSpace) = (H,)
 
 Split `H` one level down: a product space into its groups, a grouped space (such as a
 fermionic space) into its atoms, and an atomic space into itself. Use this when building
-partitions, permutations and constraints. Internal code that needs the state layout
-should use `groups` instead.
+partitions, permutations and constraints.
 """
 factors(H::AbstractAtomicHilbertSpace) = (H,)
 factors(H::AbstractGroupedHilbertSpace) = atomic_factors(H)

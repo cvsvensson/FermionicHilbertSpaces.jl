@@ -305,7 +305,7 @@ end
 # Symbolic states are tied to the degrees of freedom of their space, not to its basis
 _same_space_id(a, b) = a === b || atom_ids(a) == atom_ids(b)
 
-function _apply_symbolic_operator_to_state(op::AbstractSym, state::AbstractBasisState, space::AbstractHilbertSpace; transpose=false)
+function _apply_symbolic_operator_to_state(op::AbstractSym, state, space::AbstractHilbertSpace; transpose = false)
     # Tuple-backed, so that the term and its precomputation (a map over the factors) need no vectors
     term = NCMul(1, (op,))
     precomp = precomputation_before_operator_application(term, space)
@@ -539,13 +539,7 @@ symbolic kets or of symbolic bras. Kets give a column vector, and bras give the 
 This is the state-specific form of [`representation`](@ref).
 The optional `repr` selects the format as in [`representation`](@ref), except `:lazy`; for example `Vector` gives a dense vector.
 """
-function vector_representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr::EagerSparseRepr{T}=EagerSparseRepr(); kwargs...) where {B,T}
-    ind = _checked_state_index(state, space)
-    v = _zero_vector(space, repr)
-    v[ind] = one(eltype(v))
-    return v
-end
-function vector_representation(state::Union{AbstractBasisState,AbstractString,AbstractChar,B}, space::AbstractHilbertSpace{B}, repr::EagerDenseRepr{T}; kwargs...) where {B,T}
+function vector_representation(state::Union{AbstractBasisState, AbstractString, AbstractChar, B}, space::AbstractHilbertSpace{B}, repr::Union{EagerSparseRepr, EagerDenseRepr} = EagerSparseRepr(); kwargs...) where {B}
     ind = _checked_state_index(state, space)
     v = _zero_vector(space, repr)
     v[ind] = one(eltype(v))

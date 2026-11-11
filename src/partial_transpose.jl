@@ -1,8 +1,6 @@
 
 partial_transpose_phase_factor(f1, f2, ::AbstractAtomicHilbertSpace) = 1
 
-# _nbr_differing_modes(f1, f2, N::Int) = count(i -> _bit(f1, i) ⊻ _bit(f2, i), 1:N) # generic fallback
-
 # `complement === nothing` means Hsub spans all of H, so states split into (a,) instead of (a, b)
 _pt_parts(Hsub, complement) = isnothing(complement) ? (Hsub,) : (Hsub, complement)
 
@@ -75,8 +73,17 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
     size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
     _check_no_alias(mout, m)
-    fill!(mout, zero(eltype(mout)))
     splits = _split_all_states(H, mapper_in)
+    if mout isa SparseMatrixCSC
+        Is, Js, Vs = Int[], Int[], eltype(mout)[]
+        _foreach_partial_transpose_term(tensor_product_iterator(m, H), H, Hsub, Hout, splits, mapper_out; phase_factors, projection) do J1, J2, K1, K2, v
+            push!(Is, K1)
+            push!(Js, K2)
+            push!(Vs, v * m[J1, J2])
+        end
+        return mout .= SparseArrays.sparse!(Is, Js, Vs, size(mout)...)
+    end
+    fill!(mout, zero(eltype(mout)))
     _foreach_partial_transpose_term(tensor_product_iterator(m, H), H, Hsub, Hout, splits, mapper_out; phase_factors, projection) do J1, J2, K1, K2, v
         mout[K1, K2] += v * m[J1, J2]
     end
@@ -98,23 +105,12 @@ partial_transpose!(mout, m, Hs::Pair{<:AbstractHilbertSpace, <:AbstractHilbertSp
     partial_transpose(H => Hout, Hsub; kwargs...)  # -> PartialTransposeMap
 
 Partial transpose of `m` (an operator on `H`, a pure state, or a vectorized density matrix)
-on the subsystem `Hsub`, which may be any subset of the modes of `H` (contiguous or not), given
-as a space or as symbols naming the modes, meaning [`subregion`](@ref)`(Hsub, H)`.
-The result is an operator on `Hout`, which defaults to `H`. `H => Hout` reads input => output;
-see [Pair arguments](@ref pair_convention).
+on the subsystem `Hsub`, given as a space or as symbols naming its modes, meaning [`subregion`](@ref)`(Hsub, H)`.
+For fermions this is the [fermionic partial transpose](@ref "The fermionic partial transpose"); `phase_factors=false`
+gives the ordinary one. Without `m`, a callable [`PartialTransposeMap`](@ref) is returned.
 
-Without `m`, a callable [`PartialTransposeMap`](@ref) is returned. It takes the same keyword
-arguments.
-
-For fermions this is the fermionic partial transpose (partial time reversal)
-`R_A(Ẽ^{ν,ν'}) = i^{k_A} Ẽ^{(ν'_A,ν_B),(ν_A,ν'_B)}` in the fermionic operator basis, which is
-independent of the mode ordering. With `phase_factors=false`, or for spaces without phase
-factors, it is the ordinary partial transpose.
-
-The partial transpose does not preserve number or parity constraints. For constrained `H`,
-pass a larger output space on the same modes as `H => Hout`. For fermions the result is not
-Hermitian: `(ρ^{R_A})' == p_A ρ^{R_A} p_A` for Hermitian `ρ`, with `p_A` the parity of `Hsub`.
-Applying the fermionic partial transpose twice gives `p_A ρ p_A`, not `ρ`.
+The result is on `Hout`, which defaults to `H`; see [Pair arguments](@ref pair_convention). The partial transpose
+does not preserve number or parity constraints, so for constrained `H` pass a larger `Hout` on the same modes.
 """
 partial_transpose(m, H::AbstractHilbertSpace, Hsub; kwargs...) =
     _partial_transpose(m, H, _subsystem(Hsub, H), H; kwargs...)
@@ -131,7 +127,7 @@ function _partial_transpose(m::AbstractMatrix, H, Hsub, Hout;
     mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
     mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
     T = promote_type(eltype(m), partial_transpose_phase_factor_eltype(H))
-    mout = zeros(T, dim(Hout), dim(Hout))
+    mout = m isa AbstractSparseMatrix ? spzeros(T, dim(Hout), dim(Hout)) : zeros(T, dim(Hout), dim(Hout))
     return partial_transpose!(mout, m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection)
 end
 
@@ -329,6 +325,16 @@ end
     @test partial_transpose!(mout2, m2, Hfull, HA2) ≈ partial_transpose(m2, Hfull, HA2)
     @test partial_transpose!(mout2, m2, Hfull, HA2; phase_factors=false) ≈ partial_transpose(m2, Hfull, HA2; phase_factors=false)
     @test_throws ArgumentError partial_transpose!(m2, m2, Hfull, HA2)
+end
+
+@testitem "Partial transpose: sparse input gives sparse output" begin
+    using SparseArrays
+    @fermions f
+    H = hilbert_space(f, 1:3)
+    m = sprand(ComplexF64, 8, 8, 0.3)
+    R = partial_transpose(m, H, hilbert_space(f, [1, 3]))
+    @test R isa AbstractSparseMatrix
+    @test R ≈ partial_transpose(Matrix(m), H, hilbert_space(f, [1, 3]))
 end
 
 @testitem "Partial transpose: output space only as a Pair" begin
