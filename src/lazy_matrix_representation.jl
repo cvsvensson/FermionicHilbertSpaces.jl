@@ -477,7 +477,7 @@ end
     using OhMyThreads
     import FermionicHilbertSpaces: TermChunking, StateChunking, NoChunking, cache_operator!
 
-    scheduler = StaticScheduler(; nchunks=4)
+    scheduler = StaticScheduler(; nchunks = 4)
 
     @fermions f
     Hf = hilbert_space(f, 1:4)
