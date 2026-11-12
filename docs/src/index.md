@@ -36,24 +36,20 @@ S = -sum(λ * log(λ) for λ in eigvals(Hermitian(ρ)) if λ > 0)
 E[1], S
 ```
 
-## Where to go next
+## How to use this documentation
 
-Tutorials:
-* [Interacting Kitaev chain](literate_output/kitaev_chain.md): parity sectors, ground states and the locality of many-body Majoranas.
-* [Bosons](literate_output/bosons.md) and [Spins](literate_output/spin_chain.md): truncated bosonic modes and spin chains.
-* [Mixed fermion-spin-boson system](mixed_fermion_spin_boson.md): combining different particle types in one space.
-* [Open systems](literate_output/open_system_lindblad.md): Lindblad dynamics on the doubled space, with `reshape` between vectors and density matrices.
-* [Spatial symmetries](literate_output/translation_symmetry.md): translation-symmetry sectors.
+New here? Start with the [Fermions tutorial](literate_output/fermions_tutorial.md).
 
-Guides:
-* [Constrained spaces and quantum numbers](conservation.md): building sectors and custom constraints.
-* [Hilbert space operations](hilbert_space_operations.md): tensor products, embeddings, partial traces and sector blocks.
-* [Symbolic states](symbolic_states.md): acting with operators on states without building matrices.
-* [Fermionic tensor products and partial traces](fermions.md): the conventions behind the fermionic signs[^1].
-* [Non-interacting systems](non_interacting.md): free-fermion methods for quadratic Hamiltonians.
-* [Extending](extending.md): adding your own operators, with [clock](literate_output/clock_operators.md) and [Floquet](literate_output/floquet_tutorial.md) examples.
+- **Cheat sheet**: *recall* common tasks and the functions that do them, on one page.
+- **Tutorials**: *learn* the basics step by step, from fermions to mixed systems.
+- **How-to guides**: *do* a specific task, such as restricting to a particle-number sector or taking a partial trace, independent of the physical model.
+- **Examples**: *see* the package applied to complete physical models, worked from start to finish.
+- **Explanation**: *understand* the concepts and design behind the package, such as fermionic tensor products and signs.
+- **Performance**: *speed up* matrix construction, with parallelization and GPUs.
+- **Extending**: *add* your own operators, basis states and spaces.
+- **Reference**: *look up* the public API. Internals for contributors are listed separately.
+
+The documentation structure is inspired by the [Diataxis framework](https://diataxis.fr/).
 
 ## Related packages
 FermionicHilbertSpaces.jl grew out of [QuantumDots.jl](https://github.com/cvsvensson/QuantumDots.jl). Its symbolic operator algebra is built on [NonCommutativeProducts.jl](https://github.com/cvsvensson/NonCommutativeProducts.jl).
-
-[^1]: Szalay, Szilárd, et al. "Fermionic systems for quantum information people." [Journal of Physics A: Mathematical and Theoretical 54.39 (2021): 393001](https://doi.org/10.1088/1751-8121/ac0646), [arXiv:2006.03087](https://arxiv.org/abs/2006.03087)

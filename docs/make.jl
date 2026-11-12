@@ -11,6 +11,7 @@ literate_files = [
     "examples/bosons.jl",
     "examples/braiding.jl",
     "examples/clock_operators.jl",
+    "examples/fermions_tutorial.jl",
     "examples/floquet_tutorial.jl",
     "examples/fragmentation.jl",
     "examples/free_fermions.jl",
@@ -29,41 +30,49 @@ for file in literate_files
 end
 
 pages = [
-    "Home" => "index.md",
+    "Welcome page" => "index.md",
     "Cheat sheet" => "cheatsheet.md",
     "Tutorials" => [
-        "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
+        "Fermions" => "literate_output/fermions_tutorial.md",
         "Bosons" => "literate_output/bosons.md",
         "Spins" => "literate_output/spin_chain.md",
         "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md",
-        "Open systems" => "literate_output/open_system_lindblad.md",
-        "Entanglement and negativity" => "literate_output/partial_transpose.md",
-        "SYK model" => "literate_output/syk_model.md",
-        "Braiding Majorana zero modes" => "literate_output/braiding.md",
+    ],
+    "How-to guides" => [
+        "Constrained spaces and quantum numbers" => "conservation.md",
         "Spatial symmetries" => "literate_output/translation_symmetry.md",
         "Hilbert-space fragmentation and quantum many-body scars" => "literate_output/fragmentation.md",
-    ],
-    "Guides" => [
-        "Constrained spaces and quantum numbers" => "conservation.md",
-        "Hilbert space operations" => "hilbert_space_operations.md",
-        "Symbolic states" => "symbolic_states.md",
-        "Fermionic tensor products, partial traces, and partial transpose" => "fermions.md",
+        "Hilbert space and array operations" => "hilbert_space_operations.md",
+        "Entanglement and negativity" => "literate_output/partial_transpose.md",
+        "Symbolic bras and kets" => "symbolic_states.md",
+        "Open systems" => "literate_output/open_system_lindblad.md",
         "Non-interacting systems" => "non_interacting.md",
-        "Example: Free fermions" => "literate_output/free_fermions.md",
+    ],
+    "Examples" => [
+        "Interacting Kitaev chain" => "literate_output/kitaev_chain.md",
+        "Braiding Majorana zero modes" => "literate_output/braiding.md",
+        "SYK model" => "literate_output/syk_model.md",
+        "Free fermions in 2D" => "literate_output/free_fermions.md",
+    ],
+    "Explanation" => [
+        "How the package works" => "how_it_works.md",
+        "Fermionic tensor products, partial traces, and partial transpose" => "fermions.md",
     ],
     "Performance" => [
+        "Performance tips" => "performance.md",
         "Parallelization" => "parallelization.md",
+        "Benchmarking" => "benchmarking.md",
     ],
     "Extending" => [
-        "Extending and performance hooks" => "extending.md",
+        "Extending the package" => "extending.md",
         "Custom operators: Clock" => "literate_output/clock_operators.md",
         "Custom operators: Floquet" => "literate_output/floquet_tutorial.md",
-        "Internal functions" => "internals.md",
-        "Internal types" => "internal_types.md",
     ],
-    "API reference" => [
+    "Reference" => [
         "Public API" => "docstrings.md",
         "Free fermions API" => "free_fermions_api.md",
+        "Internal functions" => "internals.md",
+        "Internal types" => "internal_types.md",
     ],
 ]
 
@@ -82,7 +91,7 @@ makedocs(;
 )
 
 # llms.txt (https://llmstxt.org/) is served next to the pages, so relative links resolve per docs version.
-optional = ["Extending", "API reference"]
+optional = ["Extending", "Reference"]
 sections = [
     "Docs" => filter(p -> p.second isa String, pages),
     [p for p in pages if p.second isa Vector && p.first ∉ optional]...,
