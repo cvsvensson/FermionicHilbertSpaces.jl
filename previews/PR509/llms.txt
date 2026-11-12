@@ -1,0 +1,56 @@
+# FermionicHilbertSpaces.jl
+
+> Julia package for fermionic, bosonic and spin Hilbert spaces with constraints and symmetry sectors, and their sparse, dense or lazy operator matrices.
+
+Typical workflow: define symbols with `@fermions`/`@bosons`/`@spins`, build a space with `hilbert_space` (optionally with a constraint such as `NumberConservation`), get matrices with `representation(op, H)`, and reduce with `partial_trace`. Use `representation(op, H, Matrix)` only when a dense matrix is needed.
+
+## Docs
+
+- [Welcome page](./)
+- [Cheat sheet](cheatsheet/)
+
+## Tutorials
+
+- [Fermions](literate_output/fermions_tutorial/)
+- [Bosons](literate_output/bosons/)
+- [Spins](literate_output/spin_chain/)
+- [Mixed fermion-spin-boson system](mixed_fermion_spin_boson/)
+
+## How-to guides
+
+- [Constrained spaces and quantum numbers](conservation/)
+- [Spatial symmetries](literate_output/translation_symmetry/)
+- [Hilbert-space fragmentation and quantum many-body scars](literate_output/fragmentation/)
+- [Hilbert space and array operations](hilbert_space_operations/)
+- [Entanglement and negativity](literate_output/partial_transpose/)
+- [Symbolic bras and kets](symbolic_states/)
+- [Open systems](literate_output/open_system_lindblad/)
+- [Non-interacting systems](non_interacting/)
+
+## Examples
+
+- [Interacting Kitaev chain](literate_output/kitaev_chain/)
+- [Braiding Majorana zero modes](literate_output/braiding/)
+- [SYK model](literate_output/syk_model/)
+- [Free fermions in 2D](literate_output/free_fermions/)
+
+## Explanation
+
+- [How the package works](how_it_works/)
+- [Fermionic tensor products, partial traces, and partial transpose](fermions/)
+
+## Performance
+
+- [Performance tips](performance/)
+- [Parallelization](parallelization/)
+- [Benchmarking](benchmarking/)
+
+## Optional
+
+- [Extending the package](extending/)
+- [Custom operators: Clock](literate_output/clock_operators/)
+- [Custom operators: Floquet](literate_output/floquet_tutorial/)
+- [Public API](docstrings/)
+- [Free fermions API](free_fermions_api/)
+- [Internal functions](internals/)
+- [Internal types](internal_types/)
