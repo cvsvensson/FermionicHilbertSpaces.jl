@@ -2,7 +2,7 @@
 CurrentModule = FermionicHilbertSpaces
 ```
 
-# Extending and performance hooks
+# Extending the package
 
 This page lists the places where code outside the package can plug in new operators, states
 and spaces. Each entry links to the full docstring.
