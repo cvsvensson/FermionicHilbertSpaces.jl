@@ -5,7 +5,7 @@ The symmetry that moves the mode with label `l` to the mode with label `g(l)`. T
 the states whose amplitudes obey `ψ(g(s)) == λ * ψ(s)`, where `g(s)` is the product state `s` with every mode moved,
 with the sign of reordering fermions; `λ` is the eigenvalue of `U'` for the `U` that maps each `s` to `g(s)`. It needs
 `λ^n ≈ 1` for the order `n` of the permutation of the modes, several pairs keep their common eigenstates, and the
-result is a [`SymmetricSector`](@ref). `representation(Relabel(g), H)` is the sparse matrix `U`.
+result is a [`SymmetricSector`](@ref). `representation(Relabel(g), H)` is the matrix `U`.
 
 ```julia
 T(j) = mod1(j + 1, N)
@@ -99,9 +99,12 @@ function _atom_permutation(@nospecialize(g), atoms)
     return perm
 end
 
-function representation(r::Relabel, space::AbstractHilbertSpace)
+function representation(r::Relabel, space::AbstractHilbertSpace, repr = EagerSparseRepr())
+    format = _matrix_format(repr)
+    format isa Union{EagerSparseRepr, EagerDenseRepr} || throw(ArgumentError("A `Relabel` is represented as a sparse or dense matrix, got `$repr`."))
     atoms = collect(atomic_factors(space))
-    return permutation_operator(space, atoms, invperm(_atom_permutation(r.map, atoms)))
+    U = permutation_operator(space, atoms, invperm(_atom_permutation(r.map, atoms)), _repr_eltype(Int, format))
+    return format isa EagerDenseRepr ? Matrix(U) : U
 end
 
 # `λ` as an exact `cispi`, so that real eigenvalues give real characters
@@ -422,6 +425,7 @@ end
     U = representation(Relabel(T), Hf)
     @test all(U * c(l) * U' ≈ c(T(l)) for l in labels)
     @test U' * ψ ≈ im * ψ
+    @test representation(Relabel(T), Hf, Matrix{ComplexF64}) == U
 
     # A composition of relabelings keeps the fermionic signs
     H2(λ) = hilbert_space(f, 1:2, Relabel(j -> 3 - j) ∘ Relabel(identity) => λ)
