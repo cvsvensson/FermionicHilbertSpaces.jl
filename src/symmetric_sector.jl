@@ -5,7 +5,7 @@ The symmetry that moves the mode with label `l` to the mode with label `g(l)`. T
 the states whose amplitudes obey `ψ(g(s)) == λ * ψ(s)`, where `g(s)` is the product state `s` with every mode moved,
 with the sign of reordering fermions; `λ` is the eigenvalue of `U'` for the `U` that maps each `s` to `g(s)`. It needs
 `λ^n ≈ 1` for the order `n` of the permutation of the modes, several pairs keep their common eigenstates, and the
-result is a [`SymmetricSector`](@ref).
+result is a [`SymmetricSector`](@ref). `representation(Relabel(g), H)` is the sparse matrix `U`.
 
 ```julia
 T(j) = mod1(j + 1, N)
@@ -97,6 +97,11 @@ function _atom_permutation(@nospecialize(g), atoms)
     end
     isperm(perm) || throw(ArgumentError("`$g` does not permute the modes of the space."))
     return perm
+end
+
+function representation(r::Relabel, space::AbstractHilbertSpace)
+    atoms = collect(atomic_factors(space))
+    return permutation_operator(space, atoms, invperm(_atom_permutation(r.map, atoms)))
 end
 
 # `λ` as an exact `cispi`, so that real eigenvalues give real characters
@@ -414,6 +419,9 @@ end
     Hi = constrain_space(Hf, Relabel(T) => im)
     ψ = embed(randn(dim(Hi)), Hi => Hf)
     @test dot(prod(c ∘ T, s) * vacuum, ψ) ≈ im * dot(prod(c, s) * vacuum, ψ)
+    U = representation(Relabel(T), Hf)
+    @test all(U * c(l) * U' ≈ c(T(l)) for l in labels)
+    @test U' * ψ ≈ im * ψ
 
     # A composition of relabelings keeps the fermionic signs
     H2(λ) = hilbert_space(f, 1:2, Relabel(j -> 3 - j) ∘ Relabel(identity) => λ)
@@ -424,7 +432,7 @@ end
 
 @testitem "Spin inversion sectors" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: Relabel, LocalMap, permutation_operator
+    using FermionicHilbertSpaces: Relabel, LocalMap
     N = 6
     @spins S 1 // 2
     T(j) = mod1(j + 1, N)
@@ -454,7 +462,7 @@ end
     ring(c) = sum(S[j][:x] * S[T4(j)][:x] + c[j] * S[j][:z] for j in 1:4)
     a, b = (1, 1, -1, -1), (1, -1, -1, 1)
     H4 = hilbert_space(S, 1:4)
-    UT = permutation_operator(H4, factors(H4), invperm(T4.(1:4)))
+    UT = representation(Relabel(T4), H4)
     Uf = representation(prod(2S[j][:x] for j in 2:2:4), H4)
     for (g, U, kept, changed) in ((fliphalf ∘ Relabel(T4), Uf * UT, b, a), (Relabel(T4) ∘ fliphalf, UT * Uf, a, b))
         @test sort(reduce(vcat, [E(ring(kept), hilbert_space(S, 1:4, g => im^k)) for k in 0:3])) ≈ E(ring(kept), H4)
