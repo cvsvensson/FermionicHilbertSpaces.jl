@@ -421,6 +421,44 @@ function _apply_group_operators!!(c, x, b, groupops, precomps)
     end
     return c
 end
+# A sum of operators acting on a sum of kets is applied one ket at a time with `_matrix_column`, which merges the
+# contributions of all terms to each ket before they are added to `c`. Other sums, and kets that are not all basis
+# states of the same spaces, are multiplied term by term.
+function NonCommutativeProducts.mul_terms!!(c, op::NCAdd{<:Any, <:NCMul{<:Any, <:AbstractSym}}, ψ::NCAdd{<:Any, <:NCMul{<:Any, <:SymbolicState}})
+    termwise() = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any, NCAdd, NCAdd}, c, op, ψ)
+    spaces = _ket_spaces(ψ)
+    (isnothing(spaces) || _operator_type(op) != :operator) && return termwise()
+    H = length(spaces) == 1 ? only(spaces) : ProductSpace(Tuple(spaces))
+    all(in(group_ids(H)), symbolic_groups(op)) || return termwise()
+    states = [_basis_state(k.factors) for k in keys(ψ.dict)]
+    all(s -> isbasisstate(s, H), states) || return termwise()
+    factors1 = first(keys(ψ.dict)).factors
+    return _apply_columns!!(_with_factor_type(c, factors1), _matrix_column(op, H), statetype(H)[s for s in states], collect(values(ψ.dict)), factors1)
+end
+_basis_state(factors) = length(factors) == 1 ? only(factors).ket : ProductState(Tuple(f.ket for f in factors))
+# The spaces of the factors of every term of the sum of kets `ψ`, or `nothing` if they differ between terms
+function _ket_spaces(ψ::NCAdd)
+    (iszero(ψ.coeff) && !isempty(ψ.dict)) || return nothing
+    spaces = [f.space for f in first(keys(ψ.dict)).factors]
+    issame(k) = length(k.factors) == length(spaces) && all(((f, H),) -> isket(f) && _same_space_id(f.space, H), zip(k.factors, spaces))
+    return all(issame, keys(ψ.dict)) ? spaces : nothing
+end
+function _apply_columns!!(c, col, states::AbstractVector{B}, amps, factors1::AbstractVector{F}) where {B, F}
+    T = promote_type(typeof(first(col(first(states)))), eltype(amps))
+    out = Dict{B, T}()
+    for (s, a) in zip(states, amps)
+        diagonal, elements = col(s)
+        out[s] = get(out, s, zero(T)) + a * diagonal
+        for (t, b) in elements
+            out[t] = get(out, t, zero(T)) + a * b
+        end
+    end
+    for (t, a) in out
+        newstates = length(factors1) == 1 ? (t,) : t.states
+        c = add!!(c, NCMul(a, F[SymbolicState(f.space, x, nothing) for (f, x) in zip(factors1, newstates)]))
+    end
+    return c
+end
 _first_factors(b::NCMul) = b.factors
 _first_factors(b::NCAdd) = isempty(b.dict) ? () : first(keys(b.dict)).factors
 # Whether `factors[k]` is a ket of the same type and space as `ket`
@@ -1047,6 +1085,7 @@ end
 @testitem "Operators on sums of kets and inner products of sums agree with matrix representations" begin
     using LinearAlgebra, Random
     using FermionicHilbertSpaces.NonCommutativeProducts.VectorInterface: inner
+    using FermionicHilbertSpaces.NonCommutativeProducts: mul!!
     Random.seed!(1)
     @fermions f
     @spin s 1
@@ -1059,6 +1098,7 @@ end
         v, w = Vector(representation(ψ, H)), Vector(representation(φ, H))
         M = representation(op, H, Matrix)
         @test Vector(representation(op * ψ, H)) ≈ M * v
+        @test Vector(representation(mul!!(copy(φ), op, ψ), H)) ≈ w + M * v
         @test inner(φ, ψ) ≈ dot(w, v)
         @test dot(φ, op, ψ) ≈ dot(w, M, v)
         @test norm(ψ) ≈ norm(v)
