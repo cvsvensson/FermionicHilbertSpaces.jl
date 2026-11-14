@@ -151,9 +151,8 @@ const INDEX_TABLE_MAX_LENGTH = 2^28
 """
     root_keyed_index(space, states)
 
-An `IndexTable` of the positions of `states` when it is small enough, otherwise a
-`RootIndexDict`, or `nothing` when `space` has no arithmetic `state_index` with `Int` values.
-Throws an `ArgumentError` if a state appears more than once.
+A [`RootKeyedIndex`](@ref) of the positions of `states`, or `nothing` when `space` has no arithmetic
+`state_index` with `Int` values. Throws an `ArgumentError` if a state appears more than once.
 """
 function root_keyed_index(space, states)
     has_arithmetic_state_index(space) || return nothing
@@ -162,12 +161,10 @@ function root_keyed_index(space, states)
     d = dim(space)
     # Wide integer keys measured slower than keying by state.
     d isa Int || return nothing
-    if d <= min(INDEX_TABLE_RATIO * length(states), INDEX_TABLE_MAX_LENGTH)
-        table = fill_positions!(zeros(Int32, d), space, states)
-        return isnothing(table) ? nothing : IndexTable(table)
-    end
-    positions = fill_positions!(sizehint!(Dict{Int, Int}(), length(states)), space, states)
-    return isnothing(positions) ? nothing : RootIndexDict(positions)
+    use_table = d <= min(INDEX_TABLE_RATIO * length(states), INDEX_TABLE_MAX_LENGTH)
+    table, dict = zeros(Int32, use_table ? d : 0), Dict{Int, Int}()
+    positions = use_table ? table : sizehint!(dict, length(states))
+    return isnothing(fill_positions!(positions, space, states)) ? nothing : RootKeyedIndex(table, dict)
 end
 function fill_positions!(positions, space, states)
     for (i, state) in enumerate(states)
@@ -188,28 +185,22 @@ function position_dict(states)
 end
 _duplicate_state_error(state) = ArgumentError("The state `$state` appears more than once.")
 """
-    IndexTable(positions)
+    RootKeyedIndex(table, dict)
 
-A subspace index whose `positions[state_index(state, parent)]` is the position of `state`, or
-`0` for a state of `parent` outside the subspace.
+A subspace index keyed by the parent's integer `state_index` `k`: the position of a state is `table[k]` when `table`
+is not empty and `dict[k]` otherwise, and `0` for a state of the parent outside the subspace.
 """
-struct IndexTable{V}
-    positions::V
+# One type for both storages, so that small and large sectors of a space share their compiled code.
+struct RootKeyedIndex{V, D}
+    table::V
+    dict::D
 end
-function state_position(table::IndexTable, state, parent)
+function state_position(index::RootKeyedIndex, state, parent)
     k = state_index(state, parent)
-    iszero(k) ? 0 : Int(table.positions[k])
+    return checkbounds(Bool, index.table, k) ? Int(index.table[k]) : _dict_position(index.dict, k)
 end
-"""
-    RootIndexDict(positions)
-
-A subspace index whose `positions[state_index(state, parent)]` is the position of `state`. It
-is keyed by the integer index rather than by the state.
-"""
-struct RootIndexDict
-    positions::Dict{Int, Int}
-end
-state_position(d::RootIndexDict, state, parent) = get(d.positions, state_index(state, parent), 0)
+# Out of line: an inlined `Dict` lookup made the table lookups slower.
+@noinline _dict_position(dict, k) = get(dict, k, 0)
 state_position(d::Dict, state, parent) = get(d, state, 0)
 # Whether `state` has the type `B` up to type parameters, so that `state_index` of a space with states of type `B` accepts it.
 same_state_kind(state, ::Type{B}) where {B} = _type_family(typeof(state)) === _type_family(B)
@@ -428,6 +419,7 @@ end
     @test state_index(T(2), Hlarge) == 0
     @test state_index(FockNumber(3), Hint) == 0
     @test state_index(statetype(Hsparse)(3), Hsparse) == 0
+    @test allequal(typeof(sector(n, hilbert_space(f, 1:12, NumberConservation()))) for n in 0:12)
     @test state_index(statetype(hilbert_space(f, 1:4))(1), Hint) == 2
     @test_throws MethodError state_index(BosonicState(0), Hsector)
     @test_throws MethodError state_index(FockNumber(0), Hconstrained)
