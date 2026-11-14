@@ -565,7 +565,7 @@ function vector_representation(s::SymbolicState, space::AbstractHilbertSpace, re
 end
 function vector_representation(op, space, repr; kwargs...)
     _repr = _vector_format(repr)
-    _repr isa LazyRepr && throw(ArgumentError("Kets and bras support `:sparse` and `Matrix` representations. `:lazy` is only for operators and ketbras."))
+    _repr isa LazyRepr && throw(ArgumentError("Kets and bras support the `SparseVector` and `Vector` representations. `:lazy` is only for operators and ketbras."))
     return vector_representation(op, space, _repr; kwargs...)
 end
 
@@ -669,7 +669,7 @@ end
     op = f[1]' * f[2] + hc + 2
     @test representation(op, Hf) == matrix_representation(op, Hf)
     @test representation(op, Hf, :lazy) == matrix_representation(op, Hf, :lazy)
-    @test representation(op, Hf, Matrix) == representation(op, Hf, :sparse)
+    @test representation(op, Hf, Matrix) == representation(op, Hf)
 
     sf = basisstate(3, Hf)
     vf = representation(sf, Hf)

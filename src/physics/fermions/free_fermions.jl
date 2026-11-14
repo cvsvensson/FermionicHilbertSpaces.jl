@@ -36,7 +36,7 @@ function _identity_free_zero(H, repr)
 end
     function _eager_repr(repr, H)
     _repr = _matrix_format(repr)
-    _repr isa Union{EagerSparseRepr, EagerDenseRepr} || throw(ArgumentError("Only the `:sparse` and `Matrix` representations are supported on $(typeof(H)). Got $repr."))
+    _repr isa Union{EagerSparseRepr, EagerDenseRepr} || throw(ArgumentError("Only the `SparseMatrixCSC` and `Matrix` representations are supported on $(typeof(H)). Got $repr."))
         return _repr
     end
 # The matrix of a sum of two-fermion terms, where `entries(term, H)` gives a tuple of the (row, column, value) entries of each term
