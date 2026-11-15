@@ -9,8 +9,8 @@ import FermionicHilbertSpaces: _canonicalize_repr, _convert_repr_eltype, _gather
     change_basis, default_indexing_alg, default_partial_trace_alg, embed, partial_trace, partial_trace!, partial_transpose,
     push_inds_amps!, state_position
 using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, Axes, ConstrainedSpace, DeviceFermionicSpace,
-    DeviceProductSpace, FermionicSpace, IndexTable, NoScalarIndexingAlg, Op, ProductOperator, ProductSpace,
-    RootIndexDict, _SpaceMapping,
+    DeviceProductSpace, FermionicSpace, NoScalarIndexingAlg, Op, ProductOperator, ProductSpace,
+    RootKeyedIndex, _SpaceMapping,
     SpinSpace, TruncatedBosonicHilbertSpace, TupleConcretizer, __concretize,
     chunked_operator_indices_and_amplitudes_generic!, dim, mat_eltype, nbr_of_modes, precomputation_before_operator_application,
     state_index, subspace_index, subspace_states, tensor_product
@@ -95,7 +95,12 @@ Adapt.adapt_structure(to::DeviceAdaptor, H::AbstractSubspace) =
 # Limited to device copies, whose arrays the backend's own adaptor must reach
 Adapt.adapt_structure(to, H::ConstrainedSpace{<:Any, <:Any, <:AbstractGPUArray}) =
     ConstrainedSpace(H.parent, adapt(to, H.states), adapt(to, H.index))
-Adapt.@adapt_structure IndexTable
+# The device copy of a table index drops its unused dictionary, which has no device version.
+Adapt.adapt_structure(to, index::RootKeyedIndex) = isempty(index.table) ? index : RootKeyedIndex(adapt(to, index.table), nothing)
+function state_position(index::RootKeyedIndex{<:Any, Nothing}, state, parent)
+    k = state_index(state, parent)
+    return iszero(k) ? 0 : Int(index.table[k])
+end
 
 # A subspace index that finds `key(state, parent)` by binary search in the sorted `keys`, for the `Dict` indices,
 # which have no device version
@@ -113,7 +118,7 @@ end
 _root_key(state, parent) = state_index(state, parent)
 _state_key(state, parent) = state
 _sorted_index(index) = index
-_sorted_index(index::RootIndexDict) = SortedIndex(index.positions, _root_key)
+_sorted_index(index::RootKeyedIndex) = isempty(index.table) ? SortedIndex(index.dict, _root_key) : index
 _sorted_index(index::AbstractDict) = SortedIndex(index, _state_key)
 function state_position(index::SortedIndex, state, parent)
     k = index.key(state, parent)
