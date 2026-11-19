@@ -38,12 +38,11 @@ export Kets, Ket, ProductState, SpinState, BosonicState
 export partial_trace, generalized_kron, tensor_product, embed, partial_transpose
 export @fermion, @fermions, @majoranas, @boson, @bosons, @spin, @spins
 export NoConstraint, ParityConservation, NumberConservation, constrain_space
-export LocalMap
 export BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export symmetric_sector
 export open_system
-public particle_number, Axes, Relabel, dissipator, FreeFermions, NonCommutativeProducts, add!!, matrix_representation, vector_representation
+public particle_number, Axes, Relabel, LocalMap, dissipator, FreeFermions, NonCommutativeProducts, add!!, matrix_representation, vector_representation
 
 """
     add!!(a, b)
