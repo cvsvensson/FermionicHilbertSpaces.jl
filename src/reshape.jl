@@ -4,85 +4,18 @@ const _SpaceMapping = Pair{<:_SpaceGroup,<:_SpaceGroup}
 
 """
     reshape(t, mappings...; repeat=false, projection=false, alg)
-
-Reshape the array `t` by splitting or combining its indices according to
-Hilbert-space mappings. The mappings are applied left to right, each one
-consuming the next consecutive group of input indices. Each mapping reads
-input => output; see [Pair arguments](@ref pair_convention).
-
-# Mapping forms
-
-    H => (H1, H2, ...)   split one index into several
-    (H1, H2, ...) => H   combine several consecutive indices into one
-    (H1, H2, ...) => (K1, K2, ...)  repartition several indices into several
-    H => H               leave one index unchanged
-
-# Specifying multiple mappings
-
-Give one mapping per group of input indices:
-
-    reshape(A, H1 => (H1a, H1b), (H2a, H2b) => H2, H3 => H3)
-
-This splits the first index, combines the next two, and leaves the last
-unchanged.
-
-# Single-mapping shorthand
-
-When only one mapping is given, it is replicated if needed:
-
-- If it consumes all indices of `t`, it is applied once:
-
-      reshape(v, H => (H1, H2))        # length-1 vector → 2-index tensor
-
-- If `t` has twice as many indices as the mapping consumes, the mapping
-  is applied to the first half and again to the second half. This covers
-  the common case of a square operator matrix, where the first index is
-  the output space and the second is the input space:
-
-      reshape(m, H => (H1, H2))        # matrix → 4-index tensor
-      # equivalent to reshape(m, H => (H1, H2), H => (H1, H2))
-
-      reshape(T, (H1, H2) => H)        # 4-index tensor → matrix
-      # equivalent to reshape(T, (H1, H2) => H, (H1, H2) => H)
-
-For asymmetric operators, specify both mappings explicitly:
-
-    reshape(m, Hout => (H1, H2), Hin => (K1, K2))
-
-Many-to-many mappings are evaluated directly and are equivalent to an explicit
-combine-then-split composition:
-
-    reshape(A, (H1, H2) => (K1, K2))
-    # equivalent to reshape(reshape(A, (H1, H2) => Hmid), Hmid => (K1, K2))
-
-where `Hmid` is the canonical combined space of the input tuple.
-
-When `repeat=true`, the single given mapping is applied to every
-consecutive group of input indices. For example, with a 3-index array
-where every index lives on `H`:
-
-    reshape(A, H => (H1, H2); repeat=true)
-    # equivalent to reshape(A, H => (H1, H2), H => (H1, H2), H => (H1, H2))
-
-# Missing states
-
-Some basis states of the input spaces may have no counterpart in the output
-spaces, e.g. when splitting into a truncated space or combining into a
-symmetry-constrained space. By default an `ArgumentError` is thrown if `t` has
-a nonzero entry on such a state, since that amplitude would be lost. Zero
-entries are fine, so e.g. combining unconstrained spaces into a
-parity-conserving space works for parity-preserving operators. With
-`projection=true`, the components on missing states are silently dropped.
-
-With `alg = NoScalarIndexingAlg()`, the default for dense GPU arrays, `t` is reshaped by array
-indexing and broadcasting only.
-
-# Precomputed form
-
     reshape(mappings...; repeat=false, projection=false)
 
-returns a callable `ReshapeMap` that precomputes the transitions, and can be
-applied as `op(t)` or in place as `op(out, t)`.
+Reshape the array `t` by splitting, combining or repartitioning its indices, as in `(H1, H2) => (K1, K2)`. Each mapping reads input => output (see
+[Pair arguments](@ref pair_convention)) and consumes the next consecutive group of indices of `t`:
+`reshape(A, H1 => (H1a, H1b), (H2a, H2b) => H2)` splits the first index and combines the next two. A single mapping
+that consumes half the indices of `t` is applied to both halves, so `reshape(m, H => (H1, H2))` turns an operator
+matrix into a 4-index tensor, and `repeat=true` applies it to every group.
+
+A nonzero entry on a basis state with no counterpart in the output spaces throws an `ArgumentError`, unless
+`projection=true` drops it. `alg = NoScalarIndexingAlg()`, the default for dense GPU arrays, avoids scalar indexing.
+Without `t`, `reshape(mappings...)` returns a callable that precomputes the mappings and is applied as `op(t)` or in
+place as `op(out, t)`.
 """
 function Base.reshape(t::AbstractArray, mapping::_SpaceMapping, rest::_SpaceMapping...; repeat = false, projection = false, alg = default_indexing_alg(t))
     alg isa ScalarIndexingAlg || alg isa NoScalarIndexingAlg || throw(ArgumentError("`reshape` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
