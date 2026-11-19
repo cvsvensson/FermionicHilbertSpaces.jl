@@ -45,7 +45,7 @@ function _check_permutable(Hs, perm)
     end
     return nothing
 end
-_same_basis(a, b) = a == b || (length(a) == length(b) && issetequal(a, b))
+_same_basis(a, b) = a == b || issetequal(a, b)
 
 """
     permutation_operator(H, Hs, perm; phase_factors=true)
