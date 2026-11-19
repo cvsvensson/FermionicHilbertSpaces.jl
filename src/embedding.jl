@@ -1,6 +1,6 @@
 function embed(m, Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), projection = false, alg = default_indexing_alg(m), kwargs...)
     # See eq. 20 in J. Phys. A: Math. Theor. 54 (2021) 393001
-    size_compatible(m, Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(Hsub)), got $(size(m))."))
+    check_size(m, Hsub)
     !isnothing(complement) && m isa AbstractVector && throw(ArgumentError("A state vector can only be embedded into a space with the same modes, such as from a sector into its parent space. A state on a subsystem does not fix the state of the rest; use `tensor_product` of states or `embed` a density matrix instead."))
     alg isa Union{ScalarIndexingAlg, NoScalarIndexingAlg} || throw(ArgumentError("`embed` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
     if isnothing(complement)
@@ -110,11 +110,11 @@ function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
 end
 
 function (op::EmbedMap)(m::AbstractMatrix)
-    size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
+    check_size(m, op.Hsub)
     _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(m), dim(op.H))
 end
 function (op::EmbedMap)(m::SparseMatrixCSC)
-    size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
+    check_size(m, op.Hsub)
     _embed_sparse_matrix(op.map, m, dim(op.H))
 end
 
@@ -139,8 +139,8 @@ function _embed_sparse_matrix(map::SparseMatrixCSC, m::SparseMatrixCSC, D)
 end
 
 function (op::EmbedMap)(out::AbstractMatrix, m::AbstractMatrix)
-    size_compatible(m, op.Hsub) || throw(ArgumentError("The size of `m` must match `dim(Hsub)` = $(dim(op.Hsub)), got $(size(m))."))
-    size_compatible(out, op.H) || throw(DimensionMismatch("The output matrix must have size ($(dim(op.H)), $(dim(op.H))), got $(size(out))"))
+    check_size(m, op.Hsub)
+    check_size(out, op.H)
     mul!(vec(out), op.map, _vectorize_pt_density_matrix(m))
     out
 end

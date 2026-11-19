@@ -264,7 +264,7 @@ end
 function _check_invariant(op, space, g)
     err = ArgumentError("The operator changes under `$g`, so it has no representation on the symmetric sector.")
     relabeled = foldr(_permute, _leaves(g); init = op)
-    any(l -> l isa LocalMap, _leaves(g)) || return iszero(relabeled - op) || throw(err)
+    any(l -> l isa LocalMap, _leaves(g)) || return _isnegligible(relabeled - op, op) || throw(err)
     atoms = collect(atomic_factors(space))
     perm, locs = _element(g, space, atoms)
     left, right = _site_products(relabeled, atoms), _site_products(op, atoms)
@@ -284,6 +284,9 @@ _relabel(op::Op, @nospecialize(g)) = Op(op.kind, _image(g, op.mode))
 _relabel(m::NCMul, @nospecialize(g)) = m.coeff * prod(_relabel(x, g) for x in m.factors)
 _relabel(a::NCAdd, @nospecialize(g)) = a.coeff + sum((c * _relabel(m, g) for (m, c) in a.dict); init = 0)
 _relabel(op, g) = throw(ArgumentError("Only operators on fields can be checked for symmetry, got `$op`."))
+# Float coefficients may cancel only up to round-off. A comparison that is not a `Bool`, as with symbolic coefficients, fails.
+_isnegligible(d, op) = iszero(d) ||
+    (sum(t -> abs(t.coeff), first(_operator_terms(d))) <= 1.0e-12 * sum(t -> abs(t.coeff), first(_operator_terms(op)))) === true
 
 # The terms of `op` without its constant, each as its coefficient and the matrices of its factors multiplied site by site
 function _site_products(op, atoms)
@@ -435,6 +438,12 @@ end
     hop2 = f[1]'f[2] + hc
     @test sort(reduce(vcat, [eigvals(Hermitian(representation(hop2, H2(λ), Matrix))) for λ in (1, -1)])) ≈ [-1, 0, 0, 1]
     @test_throws ArgumentError representation(f[1] * f[2] + hc, H2(1))
+
+    H3 = hilbert_space(f, 1:3, Relabel(j -> mod1(j + 1, 3)) => 1)
+    hop3(t) = t * f[1]'f[2] + 0.3 * f[2]'f[3] + 0.3 * f[3]'f[1] + hc
+    @test representation(hop3(0.1 + 0.2), H3) ≈ representation(hop3(0.3), H3)
+    @test representation(hop3(0.3) + 1.0e-16 * f[1]'f[1], H3) ≈ representation(hop3(0.3), H3)
+    @test_throws ArgumentError representation(hop3(0.3 + 0.1im), H3)
 end
 
 @testitem "Spin inversion sectors" begin

@@ -28,7 +28,8 @@ _format_eltype(::Type{<:AbstractArray{T}}) where {T} = T
 _format_eltype(::Type) = Missing
 _index_type(::Type{<:SparseArrays.AbstractSparseArray{<:Any, Ti}}) where {Ti} = Ti
 _index_type(::Type) = Int32
-_backend(A::Type{<:AbstractGPUArray}) = get_backend(adapt(A, Matrix{Bool}(undef, 0, 0)))
+# `adapt` to a partially parameterized alias such as `CuMatrix` returns its input unchanged, so this adapts to the bare array type
+_backend(A::Type{<:AbstractGPUArray}) = get_backend(adapt(Base.typename(A).wrapper, Matrix{Bool}(undef, 0, 0)))
 
 _canonicalize_repr(F::Type{<:AbstractGPUArray}) = GPURepr{_format_eltype(F), F}(_backend(F))
 _canonicalize_repr(F::Type{<:GPUSparseMatrix}) = GPURepr{_format_eltype(F), F}(_backend(GPUArrays.dense_array_type(F)))

@@ -647,10 +647,9 @@ _amplitude_eltype(space) = nothing
 _amplitude_eltype(space::AbstractSubspace) = _amplitude_eltype(parent(space))
 _with_amplitude_eltype(format, op, space, kwargs) = _with_amplitude_eltype(format, op, _amplitude_eltype(space), kwargs)
 _with_amplitude_eltype(format, op, ::Nothing, kwargs) = format, kwargs
-function _with_amplitude_eltype(format, op, ::Type{S}, kwargs) where {S}
-    T = mat_eltype(op)
-    return _with_eltype(format, promote_type(T, _with_precision(S, _precision(T))), kwargs)
-end
+_with_amplitude_eltype(format, op, ::Type{S}, kwargs) where {S} = _with_eltype(format, _promote_amplitude_eltype(mat_eltype(op), S), kwargs)
+_promote_amplitude_eltype(::Type{T}, ::Nothing) where {T} = T
+_promote_amplitude_eltype(::Type{T}, ::Type{S}) where {T, S} = promote_type(T, _with_precision(S, _precision(T)))
 _with_eltype(format::EagerSparseRepr{Missing}, ::Type{T}, kwargs) where {T} = EagerSparseRepr{T}(), kwargs
 _with_eltype(format::EagerDenseRepr{Missing}, ::Type{T}, kwargs) where {T} = EagerDenseRepr{T}(), kwargs
 _with_eltype(format::LazyRepr, ::Type{T}, kwargs) where {T} = format, (; T, kwargs...)
@@ -713,7 +712,7 @@ end
 function _matrix_column(op, H)
     terms, coeff = trivial_operator(op) ? ((), get_trivial_op_coeff(op)) : _operator_terms(op)
     prodops = isempty(terms) ? terms : _partitioned_terms(terms, _checked_group_ids(op, H), groups(H))
-    T = promote_type(typeof(coeff), mapreduce(mat_eltype, promote_type, prodops; init = Bool))
+    T = _promote_amplitude_eltype(promote_type(typeof(coeff), mapreduce(mat_eltype, promote_type, prodops; init = Bool)), _amplitude_eltype(H))
     termgroups = _grouped_by_type(_precomputed_terms(map(t -> __concretize(t, TupleConcretizer()), prodops), H))
     diagonal = convert(T, coeff)
     return function (state)
@@ -783,6 +782,9 @@ end
     @test matrix_column(2I, Hn)(x) == [x => 2]
     @test_throws ArgumentError matrix_column(f[1]' + f[4]', Hn)(x)
     @test isempty(matrix_column(f[1]' + f[4]', Hn; projection = true)(x))
+
+    Hc = hilbert_space(f, 1:3, FermionicHilbertSpaces.Relabel(j -> mod1(j + 1, 3)) => cispi(2 / 3))
+    @test matches_matrix(sum(f[j]' * f[mod1(j + 1, 3)] + hc for j in 1:3), Hc)
 end
 
 @testitem "fragment" begin
@@ -835,8 +837,9 @@ On `hilbert_space(f, labels, FreeFermions.SingleParticle())`, `state` is the cor
 `hilbert_space(f, labels, FreeFermions.BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in
 the order of the BdG space. On the Majorana space `hilbert_space(γ, labels, FreeFermions.SingleParticle())` it is
 `G[i, j] = ⟨γ_i γ_j⟩ / 2`. The state is then the Gaussian state with that correlation matrix, and `op` of any degree
-is evaluated with Wick's theorem. Terms that do not conserve the particle number (single-particle space) or the parity
-(BdG and Majorana spaces) throw an error, unless `projection=true`, which drops them.
+is evaluated with Wick's theorem. A vector on the single-particle space is the one-particle state `Σᵢ ψ[i] f_i'|0⟩`.
+Terms that do not conserve the particle number (single-particle space) or the parity (BdG and Majorana spaces) throw
+an error, unless `projection=true`, which drops them.
 
 # Examples
 ```julia
@@ -887,9 +890,9 @@ _canonicalize_repr(::Union{Type{SparseArrays.SparseMatrixCSC{T}}, Type{SparseArr
 _canonicalize_repr(::Type{T}) where T<:Number = EagerSparseRepr{T}()
 _canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:sparse`, `:lazy`, a number type, or `Array`, `Matrix`, `Vector`, `SparseMatrixCSC` or `SparseVector`, optionally with an element type."))
 _matrix_format(repr) = _canonicalize_repr(repr)
-_matrix_format(repr::Type{<:Union{Vector, SparseArrays.SparseVector}}) = throw(ArgumentError("`$(repr)` is a vector format, but this representation is a matrix. Use `Matrix`, `SparseMatrixCSC` or `Array`."))
+_matrix_format(repr::Type{<:AbstractVector}) = throw(ArgumentError("`$(repr)` is a vector format, but this representation is a matrix. Use a matrix type or `Array`."))
 _vector_format(repr) = _canonicalize_repr(repr)
-_vector_format(repr::Type{<:Union{Matrix, SparseArrays.SparseMatrixCSC}}) = throw(ArgumentError("`$(repr)` is a matrix format, but kets and bras give vectors. Use `Vector`, `SparseVector` or `Array`."))
+_vector_format(repr::Type{<:AbstractMatrix}) = throw(ArgumentError("`$(repr)` is a matrix format, but kets and bras give vectors. Use a vector type or `Array`."))
 function _canonicalize_repr(s::Symbol)
     s == :sparse && return EagerSparseRepr()
     s == :dense && return EagerDenseRepr()

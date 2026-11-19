@@ -186,13 +186,14 @@ end
         (f[1]' * f[2] * s[:+] + hc + 2im, tensor_product(hilbert_space(f, 1:2), hilbert_space(s))),
         (f[1]' * f[2] * s[:+] + hc, tensor_product(Hfixed, hilbert_space(s))),
     )
-    for (op, H) in cases, format in (JLArray, JLSparseMatrixCSC, JLSparseMatrixCSR{ComplexF32})
+    for (op, H) in cases, format in (JLArray, JLMatrix, JLSparseMatrixCSC, JLSparseMatrixCSR{ComplexF32})
         M = representation(op, H, format)
         @test M isa format
         @test collect(M) ≈ representation(op, H, Matrix)
     end
     @test_throws ArgumentError representation(f[1], hilbert_space(f, 1:4, NumberConservation(2)), JLArray)
     @test_throws ArgumentError representation("1010", hilbert_space(f, 1:4), JLVector)
+    @test_throws ArgumentError representation(hopping, hilbert_space(f, 1:4), JLVector)
     @test_throws ArgumentError representation(hopping, hilbert_space(f, 1:4), JLSparseMatrixCSC{Float64, Int8})
     @majoranas γ
     @test_throws ArgumentError representation(1im * γ[1] * γ[2], hilbert_space(γ, 1:4), JLArray)
