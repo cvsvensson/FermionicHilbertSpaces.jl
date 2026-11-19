@@ -577,7 +577,8 @@ from `Hin` to `Hout`. Without `space`, the expression must consist of symbolic s
 The result is sparse by default. `repr` selects another format: an array type such as `Matrix` or `Matrix{ComplexF64}`
 (or a GPU array type such as `CuArray`), a number type such as `Float64` for a sparse result of that element type,
 or `:lazy` for a matrix-free operator. Coefficients are converted to the element type of `repr` (a complex coefficient
-with `Float64` throws an `InexactError`), and matrix elements are computed in its precision.
+with `Float64` throws an `InexactError`), and matrix elements are computed in its precision. On a
+[`SymmetricSector`](@ref) the orbit amplitudes are stored in `Float64`, which limits the accuracy to that of `Float64`.
 
 ```jldoctest
 julia> @fermions f;
@@ -592,24 +593,12 @@ representation
     matrix_representation(op, space::AbstractHilbertSpace, [repr]; kwargs...)
     matrix_representation(op, Axes(Hout, Hin), [repr]; kwargs...)
 
-Return the matrix representation of symbolic operator `op` in Hilbert space `space`. This is the operator-specific form of [`representation`](@ref).
+Return the matrix of the symbolic operator `op` on `space`, the operator form of [`representation`](@ref), with `repr`
+as there. With [`Axes`](@ref)`(Hout, Hin)` it maps `Hin` to `Hout`, which must have the same groups, such as two
+sectors of the same modes; two different spaces support only eager formats without chunking.
 
-With [`Axes`](@ref)`(Hout, Hin)`, return the `dim(Hout) × dim(Hin)` matrix of `op` from `Hin` to `Hout`. The two
-spaces must have the same groups, for example two sectors of the same modes. Two different spaces support only eager
-formats without chunking.
-
-The optional `repr` selects the format, as in [`representation`](@ref).
-
-Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space (outside `Hout` with `Axes`). Projection drops matrix elements to states outside the space, so an operator that changes a conserved quantity gives zero on a single sector; use `Axes(Hout, Hin)` with the two sectors instead. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
-
-# Examples
-```julia
-@fermions f
-H = hilbert_space(f, 1:2)
-op = f[1]' * f[2] + hc
-M = FermionicHilbertSpaces.matrix_representation(op, H)
-size(M) == (dim(H), dim(H))
-```
+`projection=true` drops matrix elements to states outside the space (outside `Hout` with `Axes`) instead of throwing.
+`chunking` is `NoChunking()`, `TermChunking(scheduler)` or `StateChunking(scheduler)`.
 """
 function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     repr === :dense && return Matrix(matrix_representation(op, space, EagerSparseRepr(); projection, chunking, kwargs...))
@@ -830,16 +819,13 @@ end
 """
     expectation(op, state, H)
 
-Return the expectation value of the operator `op` in `state` on the space `H`. A vector `ψ` gives `ψ' * M * ψ` and a
-density matrix `ρ` gives `tr(ρ * M)`, where `M = representation(op, H)`. The state is assumed to be normalized.
+Return the expectation value of `op` in the normalized state vector `ψ` (`ψ' * M * ψ`) or density matrix `ρ`
+(`tr(ρ * M)`) on `H`, where `M = representation(op, H)`.
 
-On `hilbert_space(f, labels, FreeFermions.SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on
-`hilbert_space(f, labels, FreeFermions.BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in
-the order of the BdG space. On the Majorana space `hilbert_space(γ, labels, FreeFermions.SingleParticle())` it is
-`G[i, j] = ⟨γ_i γ_j⟩ / 2`. The state is then the Gaussian state with that correlation matrix, and `op` of any degree
-is evaluated with Wick's theorem. A vector on the single-particle space is the one-particle state `Σᵢ ψ[i] f_i'|0⟩`.
-Terms that do not conserve the particle number (single-particle space) or the parity (BdG and Majorana spaces) throw
-an error, unless `projection=true`, which drops them.
+On the single-particle, BdG and Majorana spaces of `FreeFermions`, `state` is a correlation matrix as returned by
+`FreeFermions.correlation_matrix`, and `op` of any degree is evaluated with Wick's theorem in that Gaussian state. Terms
+that break the particle number (single-particle space) or the parity (BdG and Majorana spaces) throw unless
+`projection=true` drops them. A vector on the single-particle space is the one-particle state `Σᵢ ψ[i] f_i'|0⟩`.
 
 # Examples
 ```julia
