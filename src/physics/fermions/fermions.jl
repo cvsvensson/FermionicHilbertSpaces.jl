@@ -95,7 +95,7 @@ end
 # The atoms of `Hsub`, or for fermionic spaces the modes naming them, which `atom_position`
 # accepts without building one single-mode space per mode.
 _fock_atoms(Hsub) = _atom_names(Hsub)
-_fock_atoms(Hsub::FermionicSpace) = nbr_of_modes(Hsub) == 0 ? (Hsub,) : modes(Hsub)
+_fock_atoms(Hsub::FermionicSpace) = modes(Hsub)
 _fock_atoms(Hsub::AbstractSubspace) = _fock_atoms(parent(Hsub))
 
 _truncate(items, max, edge) =
@@ -290,7 +290,6 @@ end
 
 function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::ParityConservation{Missing})
     H = hilbert_space(a, labels)
-    nbr_of_modes(H) == 0 && return H
     states = if constraint.allowed_parities == [-1, 1]
         basisstates(H)
     else
@@ -302,7 +301,6 @@ end
 function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::NumberConservation{T, Missing, Missing}) where {T}
     H = hilbert_space(a, labels)
     N = nbr_of_modes(H)
-    N == 0 && return H
     numbers = T === Missing ? (0:N) : constraint.total
     state_blocks = map(n -> fixed_particle_number_fockstates(N, n), numbers)
     dict = OrderedDict(zip(numbers, state_blocks))
