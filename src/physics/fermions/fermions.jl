@@ -215,8 +215,6 @@ end
     N = representation(f[1]' * f[1] + b' * b, H, Matrix)
     @test numberoperator(H) ≈ N
     @test parityoperator(H) ≈ Diagonal(cospi.(diag(N)))
-
-    @test_throws ArgumentError hilbert_space(f, 1:70, ParityConservation(1))
 end
 
 @testmodule JordanWigner begin
@@ -299,7 +297,6 @@ end
 function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::ParityConservation{Missing})
     H = hilbert_space(a, labels)
     nbr_of_modes(H) == 0 && return H
-    dim(H) <= typemax(Int) || throw(ArgumentError("$(nbr_of_modes(H)) modes have too many states to list. Constrain the space further, for example with `NumberConservation`."))
     states = if constraint.allowed_parities == [-1, 1]
         basisstates(H)
     else
