@@ -168,7 +168,8 @@ end
     @test partial_trace(ρ, Hproduct => Hmode) ≈ ρ
 
     @test partial_trace(2I, Hfull, hilbert_space(f, [2])) ≈ 2 * partial_trace(I(dim(Hfull)), Hfull, hilbert_space(f, [2]))
-    @test partial_trace(m, Hfull, [f[2]]) == partial_trace(m, Hfull => [f[2]])
+    @test partial_trace(m, Hfull, [f[2]]) ≈ partial_trace(m, Hfull, hilbert_space(f, [2]))
+    @test FermionicHilbertSpaces.partial_trace!(zeros(ComplexF64, 2, 2), m, Hfull => [f[2]]) ≈ partial_trace(m, Hfull, hilbert_space(f, [2]))
 end
 
 @testitem "Identity in matrix_representation" begin
