@@ -66,7 +66,6 @@ Base.hash(x::BdGHilbertSpace, h::UInt) = hash(x.parent, h)
 modes(H::BdGHilbertSpace) = modes(H.parent)
 basisstates(h::BdGHilbertSpace) = basisstates(h.parent)
 Base.parent(h::BdGHilbertSpace) = h.parent
-Base.keys(h::BdGHilbertSpace) = keys(h.parent)
 Base.@propagate_inbounds basisstate(ind::Integer, H::BdGHilbertSpace) = basisstate(ind, parent(H))
 _state_index(state, H::BdGHilbertSpace) = _state_index(state, parent(H))
 
