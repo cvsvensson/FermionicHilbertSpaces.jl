@@ -36,11 +36,12 @@ function _phase_function(H, Hs, mapper, phase_factors)
     end
 end
 
-# `permute_state` moves the substate of factor `perm[i]` into factor `i`, which does not check that it is a basis state there.
+# `permute_state` copies the substate of factor `perm[i]` unchanged into factor `i`, so it must be a basis state there.
 function _check_permutable(Hs, perm)
     for i in eachindex(perm)
-        dim(Hs[perm[i]]) == dim(Hs[i]) ||
-            throw(ArgumentError("The permutation `$perm` moves factor $(perm[i]) of dimension $(dim(Hs[perm[i]])) to factor $i of dimension $(dim(Hs[i])), but permuted factors must have the same dimension."))
+        j = perm[i]
+        dim(Hs[j]) == dim(Hs[i]) && issetequal(basisstates(Hs[j]), basisstates(Hs[i])) ||
+            throw(ArgumentError("The symmetry moves factor $j to factor $i, which have different basis states. Permuted factors must be the same space up to labels."))
     end
     return nothing
 end
@@ -605,9 +606,10 @@ end
 
     # Invalid input: Hs not a subsystem of H
     @test_throws ArgumentError permutation_projector(H, [H1, H3], [idperm, swapperm])
-    # Factors of different dimensions cannot be permuted
-    Ha, Hb = hilbert_space(f, 1:2), hilbert_space(f, 3:5)
-    @test_throws ArgumentError symmetric_sector(tensor_product(Ha, Hb), [Ha, Hb], :symmetric)
+    # A fermion mode and a spin 1/2 have the same dimension but cannot be swapped
+    @spins s
+    Hf, Hs = hilbert_space(f[1]), hilbert_space(s[1], 1 // 2)
+    @test_throws "different basis states" symmetric_sector(tensor_product(Hf, Hs), [Hf, Hs], :symmetric)
 end
 
 @testitem "Permutation of more than 32 factors" begin
