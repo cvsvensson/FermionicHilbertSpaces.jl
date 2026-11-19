@@ -197,6 +197,10 @@ end
     H = hilbert_space(f, 1:2, NumberConservation())
     @test parityoperator(H) == Diagonal([1, -1, -1, 1])
     @test numberoperator(H) == Diagonal([0, 1, 1, 2])
+    @test dim(hilbert_space(f, 1:2, NumberConservation(Int[]))) == 0
+    @test hilbert_space(f, 1:2, NumberConservation(1.0)) == hilbert_space(f, 1:2, NumberConservation(1))
+    @test_throws ArgumentError NumberConservation(1.5)
+    @test dim(hilbert_space(f, 1:2, NumberConservation(1.5, [f[1], f[2]], [1, 0.5]))) == 1
 
     ## Truncated Hilbert space
     states = map(FockNumber, 0:2)
@@ -303,7 +307,7 @@ function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::Nu
     N = nbr_of_modes(H)
     N == 0 && return H
     numbers = T === Missing ? (0:N) : constraint.total
-    state_blocks = map(n -> fixed_particle_number_fockstates(N, n), numbers)
+    state_blocks = Vector{statetype(H)}[fixed_particle_number_fockstates(N, n) for n in numbers]
     dict = OrderedDict(zip(numbers, state_blocks))
     _sector_space(H, dict, constraint)
 end

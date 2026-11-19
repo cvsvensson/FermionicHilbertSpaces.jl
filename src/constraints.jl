@@ -13,10 +13,12 @@ struct ProductConstraint{C} <: AbstractConstraint
     constraints::C
 end
 
-Base.:*(sym1::AbstractConstraint, sym2::AbstractConstraint) = ProductConstraint([sym1, sym2])
-Base.:*(sym1::AbstractConstraint, sym2::ProductConstraint) = ProductConstraint([sym1, sym2.constraints...])
-Base.:*(sym1::ProductConstraint, sym2::AbstractConstraint) = ProductConstraint([sym1.constraints..., sym2])
-Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint([sym1.constraints..., sym2.constraints...])
+_factors(c::AbstractConstraint) = (c,)
+_factors(c::ProductConstraint) = c.constraints
+Base.:*(sym1::AbstractConstraint, sym2::AbstractConstraint) = ProductConstraint([_factors(sym1)..., _factors(sym2)...])
+Base.:*(::NoConstraint, sym::AbstractConstraint) = sym
+Base.:*(sym::AbstractConstraint, ::NoConstraint) = sym
+Base.:*(sym::NoConstraint, ::NoConstraint) = sym
 function branch_constraint(constraint::ProductConstraint, space)
     prunable = filter(supports_branch_pruning, constraint.constraints)
     sums = SumConstraint[c for c in prunable if c isa SumConstraint]
@@ -162,6 +164,7 @@ particle_number(state) = throw(ArgumentError("States of type `$(typeof(state))` 
 
 Constraint enforcing conservation of a (possibly weighted) particle number, optionally on selected spaces.
 `total` can be a single value or collection of allowed values; `missing` allows any value.
+Totals must be integers unless some weight is non-integer.
 `spaces` restricts the count to the given subspaces (default: all of them). `weights` gives one
 weight per subspace in `spaces` (default: all `1`), and the conserved quantity is the weighted sum of their particle numbers.
 """
@@ -170,13 +173,16 @@ struct NumberConservation{T, H, W} <: AbstractAdditiveConstraint
     spaces::H
     weights::W
     function NumberConservation(_total, _spaces, _weights)
-        total = _normalize_constraint_values(_total)
-        subspace = _normalize_constraint_subspace(_spaces)
         weights = _normalize_constraint_values(_weights)
+        total = _normalize_constraint_values(_total)
+        total = ismissing(weights) || all(isinteger, weights) ? _integer_totals(total) : total
+        subspace = _normalize_constraint_subspace(_spaces)
         _check_maps_length(weights, subspace, "weights")
         new{typeof(total),typeof(subspace),typeof(weights)}(total, subspace, weights)
     end
 end
+_integer_totals(::Missing) = missing
+_integer_totals(total) = all(isinteger, total) ? map(Int, total) : throw(ArgumentError("Particle number totals must be integers, got $total."))
 _normalize_constraint_subspace(subspace::AbstractHilbertSpace) = (subspace,)
 _normalize_constraint_subspace(spaces) = spaces
 _normalize_constraint_subspace(spaces::Missing) = spaces
@@ -323,6 +329,9 @@ constrain_space
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
     @test all(isone ∘ dim, sectors(H))
+    H = hilbert_space(f, 1:3)
+    @test NoConstraint() * NoConstraint() == NoConstraint()
+    @test constrain_space(H, NumberConservation(1) * NoConstraint()) == constrain_space(H, NoConstraint() * NumberConservation(1)) == constrain_space(H, NumberConservation(1))
 end
 
 @testitem "ParityConservation accepts any collection of parities" begin
