@@ -5,7 +5,7 @@ using GPUArrays: GPUArrays, @allowscalar, AbstractGPUArray, AbstractGPUSparseArr
 using KernelAbstractions: @index, @kernel, allocate, get_backend, synchronize
 using NonCommutativeProducts: NCMul
 using SparseArrays: SparseArrays, SparseMatrixCSC
-import FermionicHilbertSpaces: _canonicalize_repr, _convert_repr_eltype, _gather_input, _repr_eltype, _skip_outside, _terms_matrix, _vector_format,
+import FermionicHilbertSpaces: _canonicalize_repr, _convert_repr_eltype, _gather_input, _repr_eltype, _skip_outside, _terms_matrix,
     change_basis, default_indexing_alg, default_partial_trace_alg, embed, partial_trace, partial_trace!, partial_transpose, partial_transpose!,
     push_inds_amps!, state_position
 using FermionicHilbertSpaces: AbstractHilbertSpace, AbstractSubspace, Axes, ConstrainedSpace, DeviceFermionicSpace,
@@ -34,7 +34,6 @@ _backend(A::Type{<:AbstractGPUArray}) = get_backend(adapt(Base.typename(A).wrapp
 _canonicalize_repr(F::Type{<:AbstractGPUArray}) = GPURepr{_format_eltype(F), F}(_backend(F))
 _canonicalize_repr(F::Type{<:GPUSparseMatrix}) = GPURepr{_format_eltype(F), F}(_backend(GPUArrays.dense_array_type(F)))
 _repr_eltype(default, ::GPURepr{T}) where {T} = T === Missing ? default : T
-_vector_format(F::Type{<:Union{AbstractGPUArray, GPUSparseMatrix}}) = throw(ArgumentError("Kets and bras have no GPU format, got `$F`. Use `Vector` or `SparseVector` and move the result to the GPU."))
 
 _csc_type(F::Type{<:AbstractGPUSparseMatrixCSC}) = GPUArrays.sparse_array_type(F)
 _csc_type(F::Type{<:AbstractGPUSparseMatrixCSR}) = GPUArrays.csc_type(F)

@@ -246,14 +246,7 @@ function Base.show(io::IO, m::MajoranaHilbertSpace)
     end
 end
 
-function Base.show(io::IO, ax::Axes)
-    print(io, "Axes(")
-    for (i, H) in enumerate(ax.spaces)
-        i > 1 && print(io, ", ")
-        show(IOContext(io, :compact => true), H)
-    end
-    return print(io, ")")
-end
+Base.show(io::IO, ax::Axes) = (print(io, "Axes("); join(IOContext(io, :compact => true), ax.spaces, ", "); print(io, ")"))
 
 
 Base.show(io::IO, f::FockNumber) = print(io, "FockNumber(", f.f, ")")

@@ -66,7 +66,6 @@ Base.hash(x::SpinState, h::UInt) = hash(twice(x.m), h)
 
 _no_spin_count() = throw(ArgumentError("Spins have no particle number or fermion parity, so `NumberConservation` and `ParityConservation` do not apply to spin spaces. To count spin excitations, constrain an operator, such as `sum(S[i][:z] + J for i in labels) => k`."))
 particle_number(::SpinState) = _no_spin_count()
-parity(::SpinState) = _no_spin_count()
 
 internal_rep(state::SpinState, ::AbstractHilbertSpace, ::Type{T}) where {T <: Integer} = T(twice(state.m))
 physical_rep(state::Integer, ::Type{SpinState}) = SpinState(half(state))

@@ -152,6 +152,7 @@ defined for spins. This is the quantity [`NumberConservation`](@ref) conserves.
 """
 function particle_number end
 
+parity(state) = iseven(particle_number(state)) ? 1 : -1
 particle_number(state) = throw(ArgumentError("States of type `$(typeof(state))` have no particle number. Define `FermionicHilbertSpaces.particle_number(::$(typeof(state)))`, or restrict the constraint to the spaces that have one with `spaces = [...]`."))
 
 """
