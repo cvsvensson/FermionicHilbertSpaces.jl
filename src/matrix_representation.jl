@@ -647,10 +647,9 @@ _amplitude_eltype(space) = nothing
 _amplitude_eltype(space::AbstractSubspace) = _amplitude_eltype(parent(space))
 _with_amplitude_eltype(format, op, space, kwargs) = _with_amplitude_eltype(format, op, _amplitude_eltype(space), kwargs)
 _with_amplitude_eltype(format, op, ::Nothing, kwargs) = format, kwargs
-function _with_amplitude_eltype(format, op, ::Type{S}, kwargs) where {S}
-    T = mat_eltype(op)
-    return _with_eltype(format, promote_type(T, _with_precision(S, _precision(T))), kwargs)
-end
+_with_amplitude_eltype(format, op, ::Type{S}, kwargs) where {S} = _with_eltype(format, _promote_amplitude_eltype(mat_eltype(op), S), kwargs)
+_promote_amplitude_eltype(::Type{T}, ::Nothing) where {T} = T
+_promote_amplitude_eltype(::Type{T}, ::Type{S}) where {T, S} = promote_type(T, _with_precision(S, _precision(T)))
 _with_eltype(format::EagerSparseRepr{Missing}, ::Type{T}, kwargs) where {T} = EagerSparseRepr{T}(), kwargs
 _with_eltype(format::EagerDenseRepr{Missing}, ::Type{T}, kwargs) where {T} = EagerDenseRepr{T}(), kwargs
 _with_eltype(format::LazyRepr, ::Type{T}, kwargs) where {T} = format, (; T, kwargs...)
@@ -713,7 +712,7 @@ end
 function _matrix_column(op, H)
     terms, coeff = trivial_operator(op) ? ((), get_trivial_op_coeff(op)) : _operator_terms(op)
     prodops = isempty(terms) ? terms : _partitioned_terms(terms, _checked_group_ids(op, H), groups(H))
-    T = promote_type(typeof(coeff), mapreduce(mat_eltype, promote_type, prodops; init = Bool))
+    T = _promote_amplitude_eltype(promote_type(typeof(coeff), mapreduce(mat_eltype, promote_type, prodops; init = Bool)), _amplitude_eltype(H))
     termgroups = _grouped_by_type(_precomputed_terms(map(t -> __concretize(t, TupleConcretizer()), prodops), H))
     diagonal = convert(T, coeff)
     return function (state)
@@ -783,6 +782,9 @@ end
     @test matrix_column(2I, Hn)(x) == [x => 2]
     @test_throws ArgumentError matrix_column(f[1]' + f[4]', Hn)(x)
     @test isempty(matrix_column(f[1]' + f[4]', Hn; projection = true)(x))
+
+    Hc = hilbert_space(f, 1:3, FermionicHilbertSpaces.Relabel(j -> mod1(j + 1, 3)) => cispi(2 / 3))
+    @test matches_matrix(sum(f[j]' * f[mod1(j + 1, 3)] + hc for j in 1:3), Hc)
 end
 
 @testitem "fragment" begin
