@@ -167,6 +167,7 @@ struct SymmetricSector{B, P, T, M <: SparseMatrixCSC{T}} <: AbstractHilbertSpace
     amplitudes::M
     reps::Vector{B}
     norms::Vector{Float64}
+    order::Int
     transposed::Bool
 end
 
@@ -186,7 +187,7 @@ function constrain_space(space::AbstractHilbertSpace, c::SymmetryConstraint)
     Q = _orbit_block_basis(space, atoms, perms, T.(conj.(λs)), _QR(), T; check = false)
     reps = [basisstate(rowvals(Q)[first(nzrange(Q, n))], space) for n in axes(Q, 2)]
     norms = [real(nonzeros(Q)[first(nzrange(Q, n))]) for n in axes(Q, 2)]
-    H = SymmetricSector(space, c, sparse(transpose(Q)), reps, norms, false)
+    H = SymmetricSector(space, c, sparse(transpose(Q)), reps, norms, length(elements), false)
     space isa SectorHilbertSpace || return H
     qn = Dict(state => q for q in quantumnumbers(space) for state in _sector_states(q, space))
     for n in axes(Q, 2)
@@ -216,7 +217,7 @@ Base.:(==)(H1::SymmetricSector, H2::SymmetricSector) = H1 === H2 || (H1.parent =
 Base.hash(H::SymmetricSector, h::UInt) = hash((H.parent, H.symmetry, H.transposed), h)
 Base.show(io::IO, H::SymmetricSector) = print(io, "$(dim(H))-dimensional SymmetricSector(", join(("$g => $(_rounded(λ))" for (g, λ) in zip(H.symmetry.maps, H.symmetry.eigenvalues)), ", "), ")")
 # The basis of the transposed space is the complex conjugate one.
-TransposedSpace(H::SymmetricSector) = SymmetricSector(TransposedSpace(H.parent), H.symmetry, H.amplitudes, H.reps, H.norms, !H.transposed)
+TransposedSpace(H::SymmetricSector) = SymmetricSector(TransposedSpace(H.parent), H.symmetry, H.amplitudes, H.reps, H.norms, H.order, !H.transposed)
 
 # A symmetric sector, or a subspace of one, with the orbit indices of its basis states
 const _OrbitSpace = Union{SymmetricSector, AbstractSubspace{<:OrbitRep, <:SymmetricSector}}
@@ -248,7 +249,15 @@ function _apply_local_operators(op, state::OrbitRep, H::SymmetricSector, precomp
     # an orbit that has no state in this sector
     p == SparseArrays.getcolptr(H.amplitudes)[t + 1] && return state, zero(T)
     c, q = rowvals(H.amplitudes)[p], nonzeros(H.amplitudes)[p]
-    return OrbitRep(H.reps[c], c), T(amp * (H.transposed ? q : conj(q)) / H.norms[state.index])
+    return OrbitRep(H.reps[c], c), T(amp * _amplitude_ratio(H.transposed ? q : conj(q), H.norms[state.index], H.order, _precision(typeof(amp))))
+end
+# `q / norm` is a root of unity of order dividing `2n`, for a group of order `n`, times the square root of a ratio of
+# orbit sizes, so it is recomputed exactly in a precision `P` wider than that of `q`.
+_amplitude_ratio(q, norm, n, ::Nothing) = q / norm
+function _amplitude_ratio(q, norm, n, ::Type{P}) where {P}
+    precision(P) > precision(real(typeof(q))) || return q / norm
+    r = sqrt(P(round(Int, inv(norm)^2)) / round(Int, inv(abs2(q))))
+    return q isa Real ? sign(q) * r : cispi(P(round(Int, n * angle(q) / π)) / n) * r
 end
 
 function _check_invariant(op, H::SymmetricSector)
@@ -364,6 +373,13 @@ _check_projection(Hfrom::AbstractHilbertSpace, ::_OrbitSpace) = Hfrom isa _Orbit
     magnon = embed([1], sector(N // 2 - 1, Hk) => space)
     amplitudes = [magnon[state_index(join(i == j ? "↓" : "↑" for i in 1:N), space)] for j in 1:N]
     @test amplitudes ≈ amplitudes[1] * [cispi(2k * j / N) for j in 0:(N - 1)]
+
+    # In the precision of `repr`, against the basis vectors Σ_j λ^j U^j e_r, with orbits of three and six states
+    Hb = hilbert_space(S, 1:N, (Sz => 1, Relabel(T) => cispi(4 / N)))
+    λ, U = cispi(big(4) / N), representation(Relabel(T), parent(Hb), Matrix)
+    e(r) = Int.(1:dim(parent(Hb)) .== state_index(r.state, parent(Hb)))
+    Qb = reduce(hcat, [normalize(sum(λ^j * U^j * e(r) for j in 0:(N - 1))) for r in basisstates(Hb)])
+    @test norm(representation(ham, Hb, Matrix{Complex{BigFloat}}) - Qb' * representation(ham, parent(Hb), Matrix{BigFloat}) * Qb) < 1.0e-60
 
     @test change_basis(embed(v, H0 => space), space => H0; projection = true) ≈ v
     @test_throws ArgumentError change_basis(embed(v, H0 => space), space => H0)
