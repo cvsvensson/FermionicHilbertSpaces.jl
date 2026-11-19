@@ -70,8 +70,8 @@ function partial_transpose!(mout::AbstractMatrix, m::AbstractMatrix, H::Abstract
     mapper_out=_partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in);
         phase_factors = true, projection = false, alg = default_indexing_alg(m)
     )
-    size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
-    size_compatible(mout, Hout) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hout)), $(dim(Hout))), got $(size(mout))"))
+    check_size(m, H)
+    check_size(mout, Hout)
     _check_no_alias(mout, m)
     alg isa NoScalarIndexingAlg && return copyto!(mout, _partial_transpose_by_gather(m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection))
     splits = _split_all_states(H, mapper_in)
@@ -129,7 +129,7 @@ function _partial_transpose(m::AbstractMatrix, H, Hsub, Hout;
     mapper_in = state_mapper(H, _pt_parts(Hsub, complement))
     mapper_out = _partial_transpose_out_mapper(H, Hout, Hsub, complement, mapper_in)
     if alg isa NoScalarIndexingAlg
-        size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
+        check_size(m, H)
         return _partial_transpose_by_gather(m, H, Hsub, complement, Hout, mapper_in, mapper_out; phase_factors, projection)
     end
     T = promote_type(eltype(m), partial_transpose_phase_factor_eltype(H))

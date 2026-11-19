@@ -17,7 +17,6 @@ struct SingleParticleHilbertSpace{H}
 end
 dim(h::SingleParticleHilbertSpace) = dim(h.parent)
 Base.parent(h::SingleParticleHilbertSpace) = h.parent
-Base.keys(h::SingleParticleHilbertSpace) = keys(h.parent)
 mode_ordering(h::SingleParticleHilbertSpace) = mode_ordering(h.parent)
 modes(h::SingleParticleHilbertSpace) = modes(h.parent)
 basisstates(h::SingleParticleHilbertSpace) = basisstates(h.parent)

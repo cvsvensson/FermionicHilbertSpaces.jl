@@ -285,19 +285,6 @@ function Base.show(io::IO, ::MIME"text/plain", bs::BasisStates)
 end
 
 
-function _show_mapping_summary(io::IO, mappings; max_mappings=3)
-    nm = length(mappings)
-    nshow = min(nm, max_mappings)
-    for i in 1:nshow
-        i > 1 && print(io, ", ")
-        m = mappings[i]
-        show(IOContext(io, :compact => true), first(m))
-        print(io, " => ")
-        show(IOContext(io, :compact => true), last(m))
-    end
-    nm > nshow && print(io, ", ... (", nm - nshow, " more)")
-end
-
 function Base.show(io::IO, op::PartialTransposeMap)
     in_dim = dim(op.H)
     out_dim = dim(op.Hout)

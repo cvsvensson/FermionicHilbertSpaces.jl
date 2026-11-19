@@ -256,14 +256,14 @@ function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr::Uni
 end
 # Kronecker product of the group matrices, with the first group as the fastest-varying index.
 # Only the groups in `active` have a matrix other than the identity.
-_kron_groups(matrices, active, repr) = _kron_groups_generic(matrices, repr)
-function _kron_groups_generic(matrices, repr)
-    mergedmatrices = _merge_diags(matrices, repr)
+_kron_groups(matrices, active, repr) = _kron_groups_generic(matrices)
+function _kron_groups_generic(matrices)
+    mergedmatrices = _merge_diags(matrices)
     return foldl(kron, Iterators.reverse(mergedmatrices))
 end
 function _kron_groups(matrices, active, repr::EagerSparseRepr)
     if isempty(active) || !all(n -> matrices[n] isa SparseMatrixCSC, active)
-        return _kron_groups_generic(matrices, repr)
+        return _kron_groups_generic(matrices)
     end
     first_active, last_active = extrema(active)
     # Bool identities between the active groups keep the element type and the values of the other factors
@@ -306,7 +306,7 @@ end
 function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; kwargs...)
     return Eye{_repr_eltype(Bool, repr)}(dim(space))
 end
-function _merge_diags(matrices, repr)
+function _merge_diags(matrices)
     # go through list of matrices and merge consecutive Diagonals with kron
     newmats = Any[]
     n = 1
@@ -577,7 +577,8 @@ from `Hin` to `Hout`. Without `space`, the expression must consist of symbolic s
 The result is sparse by default. `repr` selects another format: an array type such as `Matrix` or `Matrix{ComplexF64}`
 (or a GPU array type such as `CuArray`), a number type such as `Float64` for a sparse result of that element type,
 or `:lazy` for a matrix-free operator. Coefficients are converted to the element type of `repr` (a complex coefficient
-with `Float64` throws an `InexactError`), and matrix elements are computed in its precision.
+with `Float64` throws an `InexactError`), and matrix elements are computed in its precision. On a
+[`SymmetricSector`](@ref) the matrix elements are only `Float64`-accurate, even with a higher-precision `repr`.
 
 ```jldoctest
 julia> @fermions f;
@@ -592,27 +593,14 @@ representation
     matrix_representation(op, space::AbstractHilbertSpace, [repr]; kwargs...)
     matrix_representation(op, Axes(Hout, Hin), [repr]; kwargs...)
 
-Return the matrix representation of symbolic operator `op` in Hilbert space `space`. This is the operator-specific form of [`representation`](@ref).
+Return the matrix of the symbolic operator `op` on `space`; see [`representation`](@ref) for `repr`. With
+[`Axes`](@ref)`(Hout, Hin)` it maps `Hin` to `Hout`; the two must have the same groups, such as two sectors of the
+same modes, and two different spaces support only eager formats without chunking.
 
-With [`Axes`](@ref)`(Hout, Hin)`, return the `dim(Hout) × dim(Hin)` matrix of `op` from `Hin` to `Hout`. The two
-spaces must have the same groups, for example two sectors of the same modes. Two different spaces support only eager
-formats without chunking.
-
-The optional `repr` selects the format, as in [`representation`](@ref).
-
-Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space (outside `Hout` with `Axes`). Projection drops matrix elements to states outside the space, so an operator that changes a conserved quantity gives zero on a single sector; use `Axes(Hout, Hin)` with the two sectors instead. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
-
-# Examples
-```julia
-@fermions f
-H = hilbert_space(f, 1:2)
-op = f[1]' * f[2] + hc
-M = FermionicHilbertSpaces.matrix_representation(op, H)
-size(M) == (dim(H), dim(H))
-```
+`projection=true` drops matrix elements to states outside the space (outside `Hout` with `Axes`) instead of throwing.
+`chunking` is `NoChunking()`, `TermChunking(scheduler)` or `StateChunking(scheduler)`.
 """
-function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
-    repr === :dense && return Matrix(matrix_representation(op, space, EagerSparseRepr(); projection, chunking, kwargs...))
+function matrix_representation(op, space::AbstractHilbertSpace, repr = EagerSparseRepr(); projection = false, chunking = NoChunking(), kwargs...)
     # The barrier keeps inference from compiling every format a runtime Symbol could select
     repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, space, _canonicalize_repr(repr); projection, chunking, kwargs...)
     format = _matrix_format(repr)
@@ -626,7 +614,6 @@ end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
     Hout == Hin && return matrix_representation(op, Hin, repr; projection, chunking, kwargs...)
-    repr === :dense && return Matrix(matrix_representation(op, ax, EagerSparseRepr(); projection, chunking, kwargs...))
     repr = _matrix_format(repr)
     repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("Lazy and chunked representations with `Axes(Hout, Hin)` need `Hout == Hin`."))
     _check_operator(op, ax)
@@ -647,10 +634,9 @@ _amplitude_eltype(space) = nothing
 _amplitude_eltype(space::AbstractSubspace) = _amplitude_eltype(parent(space))
 _with_amplitude_eltype(format, op, space, kwargs) = _with_amplitude_eltype(format, op, _amplitude_eltype(space), kwargs)
 _with_amplitude_eltype(format, op, ::Nothing, kwargs) = format, kwargs
-function _with_amplitude_eltype(format, op, ::Type{S}, kwargs) where {S}
-    T = mat_eltype(op)
-    return _with_eltype(format, promote_type(T, _with_precision(S, _precision(T))), kwargs)
-end
+_with_amplitude_eltype(format, op, ::Type{S}, kwargs) where {S} = _with_eltype(format, _promote_amplitude_eltype(mat_eltype(op), S), kwargs)
+_promote_amplitude_eltype(::Type{T}, ::Nothing) where {T} = T
+_promote_amplitude_eltype(::Type{T}, ::Type{S}) where {T, S} = promote_type(T, _with_precision(S, _precision(T)))
 _with_eltype(format::EagerSparseRepr{Missing}, ::Type{T}, kwargs) where {T} = EagerSparseRepr{T}(), kwargs
 _with_eltype(format::EagerDenseRepr{Missing}, ::Type{T}, kwargs) where {T} = EagerDenseRepr{T}(), kwargs
 _with_eltype(format::LazyRepr, ::Type{T}, kwargs) where {T} = format, (; T, kwargs...)
@@ -713,7 +699,7 @@ end
 function _matrix_column(op, H)
     terms, coeff = trivial_operator(op) ? ((), get_trivial_op_coeff(op)) : _operator_terms(op)
     prodops = isempty(terms) ? terms : _partitioned_terms(terms, _checked_group_ids(op, H), groups(H))
-    T = promote_type(typeof(coeff), mapreduce(mat_eltype, promote_type, prodops; init = Bool))
+    T = _promote_amplitude_eltype(promote_type(typeof(coeff), mapreduce(mat_eltype, promote_type, prodops; init = Bool)), _amplitude_eltype(H))
     termgroups = _grouped_by_type(_precomputed_terms(map(t -> __concretize(t, TupleConcretizer()), prodops), H))
     diagonal = convert(T, coeff)
     return function (state)
@@ -783,6 +769,9 @@ end
     @test matrix_column(2I, Hn)(x) == [x => 2]
     @test_throws ArgumentError matrix_column(f[1]' + f[4]', Hn)(x)
     @test isempty(matrix_column(f[1]' + f[4]', Hn; projection = true)(x))
+
+    Hc = hilbert_space(f, 1:3, FermionicHilbertSpaces.Relabel(j -> mod1(j + 1, 3)) => cispi(2 / 3))
+    @test matches_matrix(sum(f[j]' * f[mod1(j + 1, 3)] + hc for j in 1:3), Hc)
 end
 
 @testitem "fragment" begin
@@ -828,15 +817,13 @@ end
 """
     expectation(op, state, H)
 
-Return the expectation value of the operator `op` in `state` on the space `H`. A vector `ψ` gives `ψ' * M * ψ` and a
-density matrix `ρ` gives `tr(ρ * M)`, where `M = representation(op, H)`. The state is assumed to be normalized.
+Return the expectation value of `op` in the normalized state vector `ψ` (`ψ' * M * ψ`) or density matrix `ρ`
+(`tr(ρ * M)`) on `H`, where `M = representation(op, H)`.
 
-On `hilbert_space(f, labels, FreeFermions.SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on
-`hilbert_space(f, labels, FreeFermions.BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in
-the order of the BdG space. On the Majorana space `hilbert_space(γ, labels, FreeFermions.SingleParticle())` it is
-`G[i, j] = ⟨γ_i γ_j⟩ / 2`. The state is then the Gaussian state with that correlation matrix, and `op` of any degree
-is evaluated with Wick's theorem. Terms that do not conserve the particle number (single-particle space) or the parity
-(BdG and Majorana spaces) throw an error, unless `projection=true`, which drops them.
+On the single-particle, BdG and Majorana spaces of `FreeFermions`, `state` is a correlation matrix as returned by
+`FreeFermions.correlation_matrix`, and `op` of any degree is evaluated with Wick's theorem in that Gaussian state. Terms
+that break the particle number (single-particle space) or the parity (BdG and Majorana spaces) throw unless
+`projection=true` drops them. A vector on the single-particle space is the one-particle state `Σᵢ ψ[i] f_i'|0⟩`.
 
 # Examples
 ```julia
@@ -887,9 +874,9 @@ _canonicalize_repr(::Union{Type{SparseArrays.SparseMatrixCSC{T}}, Type{SparseArr
 _canonicalize_repr(::Type{T}) where T<:Number = EagerSparseRepr{T}()
 _canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:sparse`, `:lazy`, a number type, or `Array`, `Matrix`, `Vector`, `SparseMatrixCSC` or `SparseVector`, optionally with an element type."))
 _matrix_format(repr) = _canonicalize_repr(repr)
-_matrix_format(repr::Type{<:Union{Vector, SparseArrays.SparseVector}}) = throw(ArgumentError("`$(repr)` is a vector format, but this representation is a matrix. Use `Matrix`, `SparseMatrixCSC` or `Array`."))
+_matrix_format(repr::Type{<:AbstractVector}) = throw(ArgumentError("`$(repr)` is a vector format, but this representation is a matrix. Use a matrix type or `Array`."))
 _vector_format(repr) = _canonicalize_repr(repr)
-_vector_format(repr::Type{<:Union{Matrix, SparseArrays.SparseMatrixCSC}}) = throw(ArgumentError("`$(repr)` is a matrix format, but kets and bras give vectors. Use `Vector`, `SparseVector` or `Array`."))
+_vector_format(repr::Type{<:AbstractMatrix}) = throw(ArgumentError("`$(repr)` is a matrix format, but kets and bras give vectors. Use a vector type or `Array`."))
 function _canonicalize_repr(s::Symbol)
     s == :sparse && return EagerSparseRepr()
     s == :dense && return EagerDenseRepr()
