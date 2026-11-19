@@ -95,7 +95,7 @@ end
 # The atoms of `Hsub`, or for fermionic spaces the modes naming them, which `atom_position`
 # accepts without building one single-mode space per mode.
 _fock_atoms(Hsub) = _atom_names(Hsub)
-_fock_atoms(Hsub::FermionicSpace) = nbr_of_modes(Hsub) == 0 ? (Hsub,) : modes(Hsub)
+_fock_atoms(Hsub::FermionicSpace) = modes(Hsub)
 _fock_atoms(Hsub::AbstractSubspace) = _fock_atoms(parent(Hsub))
 
 _truncate(items, max, edge) =
@@ -133,7 +133,6 @@ struct CombineFockNumbersProcessor{T} end
 function (processor::CombineFockNumbersProcessor{T})(full_state, spaces) where T
     catenate_fock_states(full_state, spaces, T)
 end
-# _init_results(spaces, ::CombineFockNumbersProcessor{T}) where T = T[]
 
 focknbr_from_site_label(m, H::FermionicSpace) = focknbr_from_site_index(mode_position(m, H))
 focknbr_from_site_labels(Hsub::FermionicSpace, H::FermionicSpace) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))
@@ -198,6 +197,10 @@ end
     H = hilbert_space(f, 1:2, NumberConservation())
     @test parityoperator(H) == Diagonal([1, -1, -1, 1])
     @test numberoperator(H) == Diagonal([0, 1, 1, 2])
+    @test dim(hilbert_space(f, 1:2, NumberConservation(Int[]))) == 0
+    @test hilbert_space(f, 1:2, NumberConservation(1.0)) == hilbert_space(f, 1:2, NumberConservation(1))
+    @test_throws ArgumentError NumberConservation(1.5)
+    @test dim(hilbert_space(f, 1:2, NumberConservation(1.5, [f[1], f[2]], [1, 0.5]))) == 1
 
     ## Truncated Hilbert space
     states = map(FockNumber, 0:2)
@@ -275,7 +278,7 @@ end
 hilbert_space(a::Field{Fermion}, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
 hilbert_space(a::Field{Fermion}, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState}, BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
 function hilbert_space(a::Field{Fermion}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike))
-    length(labels) == 0 && return hilbert_space(a, labels)
+    length(labels) == 0 && return constrain_space(hilbert_space(a, labels), constraint)
     constraint = as_constraint(constraint)
     # The states of a total number of fermions are built directly.
     if constraint isa OperatorConstraint && constraint.op == sum(a[l]'a[l] for l in labels)
@@ -290,7 +293,6 @@ end
 
 function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::ParityConservation{Missing})
     H = hilbert_space(a, labels)
-    nbr_of_modes(H) == 0 && return H
     states = if constraint.allowed_parities == [-1, 1]
         basisstates(H)
     else
@@ -302,9 +304,8 @@ end
 function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::NumberConservation{T, Missing, Missing}) where {T}
     H = hilbert_space(a, labels)
     N = nbr_of_modes(H)
-    N == 0 && return H
     numbers = T === Missing ? (0:N) : constraint.total
-    state_blocks = map(n -> fixed_particle_number_fockstates(N, n), numbers)
+    state_blocks = Vector{statetype(H)}[fixed_particle_number_fockstates(N, n) for n in numbers]
     dict = OrderedDict(zip(numbers, state_blocks))
     _sector_space(H, dict, constraint)
 end

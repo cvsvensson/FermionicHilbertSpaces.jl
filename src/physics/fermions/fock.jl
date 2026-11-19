@@ -73,10 +73,6 @@ _nbr_differing_modes(f1::FockNumber, f2::FockNumber, N::Int) = count_ones(f1.f â
 internal_rep(state::FockNumber, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.f)
 physical_rep(state::T, ::Type{FockNumber{I}}) where {T,I} = FockNumber{I}(state)
 
-fermionnumber(f::FockNumber{<:Integer}, mask) = count_weighted_ones(f.f, mask)
-count_weighted_ones(x, mask::Integer) = count_ones(x & mask)
-count_weighted_ones(x, weights::Union{Vector,Tuple}) = sum(w for (i, w) in enumerate(weights) if _bit(x, i))
-
 """
     jwstring(site, focknbr)
 
@@ -84,7 +80,6 @@ The parity, `1` or `-1`, of the number of fermions on the sites before `site`.
 """
 jwstring(site, focknbr) = jwstring_left(site, focknbr)
 jwstring_anti(site, focknbr) = jwstring_right(site, focknbr)
-jwstring_bool(site, focknbr) = jwstring_left_bool(site, focknbr)
 jwstring_anti_bool(site, focknbr) = jwstring_right_bool(site, focknbr)
 jwstring_right(site, focknbr) = jwstring_right_bool(site, focknbr) ? -1 : 1
 jwstring_left(site, focknbr) = jwstring_left_bool(site, focknbr) ? -1 : 1
@@ -104,8 +99,7 @@ end
 FockMapper(fermionpositions) = FockMapper(fermionpositions, maximum(maximum, fermionpositions))
 function FockMapper(fermionpositions::P, N) where P
     widths = map(length, fermionpositions)
-    Nmax = maximum(maximum, fermionpositions)
-    Nmax <= N || throw(ArgumentError("Fermion positions must be at most the number of modes $N, got $fermionpositions."))
+    all(<=(N), Iterators.flatten(fermionpositions)) || throw(ArgumentError("Fermion positions must be at most the number of modes $N, got $fermionpositions."))
     perm = mapreduce(collect, vcat, fermionpositions)
     all(issorted, fermionpositions) || throw(ArgumentError("The fermions in each subsystem must be ordered as in the full system, got unsorted fermion positions $fermionpositions."))
     T = default_fock_representation(N)
@@ -330,6 +324,9 @@ end
     @test size(representation(f[1], H, Matrix)) == (0, 0)
     @test size(representation(f[1], H; projection = true)) == (0, 0)
     @test size(representation(f[1], H, :lazy)) == (0, 0)
+    for (c, d) in [NumberConservation(0) => 1, NumberConservation(1) => 0, ParityConservation(1) => 1, ParityConservation(-1) => 0, NumberConservation(1) * ParityConservation(1) => 0]
+        @test dim(hilbert_space(f, 1:0, c)) == dim(constrain_space(hilbert_space(f, 1:0), c)) == d
+    end
 end
 
 @testitem "Number-conserving space with more than 1024 modes" begin

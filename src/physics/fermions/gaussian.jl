@@ -1,9 +1,7 @@
 """
     correlation_matrix(state, H, Hbdg::BdGHilbertSpace)
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of a normalized state vector or density matrix `state` on `H`.
-
-Here `Ψ = (f; f')` lists the annihilation and then the creation operators of the modes of `Hbdg` in its order. `expectation(op, G, Hbdg)` then gives `⟨op⟩`. A BdG space over a subset of the modes gives the reduced correlation matrix. On a Majorana space `hilbert_space(γ, labels, SingleParticle())`, `Ψ = γ / √2`, so `G[i, j] = ⟨γ_i γ_j⟩ / 2`. On a number-conserving space `hilbert_space(f, labels, SingleParticle())`, `Ψ = f`.
+The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` over the modes of `Hbdg` in its order, of a normalized state vector or density matrix `state` on `H`. `Hbdg` may cover a subset of the modes. On `hilbert_space(f, labels, SingleParticle())`, `Ψ = f`, and on `hilbert_space(γ, labels, SingleParticle())`, `Ψ = γ / √2`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions; @fermions f;
@@ -61,7 +59,7 @@ von_neumann_entropy(G, H::BdGHilbertSpace) = -sum(_xlogx, _occupations(G, H))
 """
     correlation_matrix(F::LinearAlgebra.Eigen; β = Inf)
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩` of the BdG ground state, where `F` is `eigen(A, BdGEigen())` or `eigen(Hermitian(A))`. It equals `correlation_matrix(ψ, H, Hbdg)` for the many-body ground state `ψ`. Zero-energy modes are half occupied, which gives the equal mixture of the degenerate ground states. A finite `β` gives the thermal state `exp(-β * H) / Z` of the many-body Hamiltonian `H` that `A` represents. For the matrix `R` of a Majorana operator, `F = eigen(Hermitian(R))` gives `G[i, j] = ⟨γ_i γ_j⟩ / 2`.
+The correlation matrix, as in `correlation_matrix(ψ, H, Hbdg)`, of the ground state of the quadratic Hamiltonian with BdG matrix `A` (`F = eigen(A, BdGEigen())` or `eigen(Hermitian(A))`) or Majorana matrix `A` (`F = eigen(Hermitian(A))`). Zero-energy modes are half occupied, and a finite `β` gives the thermal state.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions, LinearAlgebra; @fermions f;
