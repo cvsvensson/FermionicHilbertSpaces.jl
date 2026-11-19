@@ -82,6 +82,7 @@ struct SiteMap{P, A}
     atoms::A
 end
 _match_perm(g::SiteMap, substates::NTuple{N, Any}) where {N} = SiteMap(_match_perm(g.perm, substates), g.locs, g.atoms)
+_check_permutable(Hs, g::SiteMap) = _check_permutable(Hs, g.perm)
 permute_state(state, mapper, g::SiteMap) = permute_state(state, mapper, g.perm, (i, s) -> basisstate(g.locs[i][state_index(s, g.atoms[i])], g.atoms[i]))
 
 _image(@nospecialize(g), m::Mode) = Mode(m.field, g(m.label))
