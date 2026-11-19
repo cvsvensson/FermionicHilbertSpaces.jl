@@ -51,9 +51,9 @@ function constrain_states(space, constraint, states, unchecked = nothing)
     end
     return ConstrainedSpace(space, states; constraint)
 end
-# A `quantity => spec` constraint on a space with sectors keeps them, and its own labels follow theirs.
+# A constraint with a rule on a space with sectors keeps them, and its own labels follow theirs.
 _keeps_sectors(space, constraint) = false
-_keeps_sectors(space::SectorHilbertSpace, constraint) = !isnothing(space.constraint) && _spec_form(constraint)
+_keeps_sectors(space::SectorHilbertSpace, constraint) = !isnothing(space.constraint) && _has_rule(constraint)
 _with_sector_labels(space, constraint) = _keeps_sectors(space, constraint) ? space.constraint * constraint : constraint
 function _restricted_space(space, states, constraint)
     _keeps_sectors(space, constraint) || return ConstrainedSpace(space, states; constraint)

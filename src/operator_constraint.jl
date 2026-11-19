@@ -121,10 +121,8 @@ function sector_function(c::RuleConstraint, space::AbstractHilbertSpace)
     return state -> _label(rule, value(state))
 end
 filter_function(c::RuleConstraint, space::AbstractHilbertSpace) = !ismissing ∘ sector_function(c, space)
-# Whether a constraint follows the label rules of `quantity => spec`.
-_spec_form(c) = false
-_spec_form(::Union{OperatorConstraint, StateConstraint{<:Any, <:Any, <:Any, <:ValueRule}}) = true
-_spec_form(c::ProductConstraint) = any(_spec_form, c.constraints)
+# Whether a factor of `c` has a `ValueRule`. Such constraints keep the labels of a space with sectors and add their own.
+_has_rule(c) = any(ci -> ci isa RuleConstraint, constraint_factors(c))
 
 # Decides whether a rule ending in a function selects or labels, by its value at the first of the candidate `states`.
 # Without states it labels, so that the empty result has sectors.
@@ -571,16 +569,20 @@ end
     end
 end
 
-@testitem "Constraint types keep their label rules" begin
+@testitem "Named constraints label as their quantity forms" begin
     using FermionicHilbertSpaces: FilterConstraint, SectorConstraint
     @fermions f
     Hnumber = hilbert_space(f, 1:4, NumberConservation())
-    unlabelled = [
-        NumberConservation(2) * FilterConstraint(s -> s.f != 3), ParityConservation() * FilterConstraint(s -> isodd(s.f)),
-        FilterConstraint(s -> s.f > 2) * SectorConstraint(s -> isodd(s.f) ? 1.0 : 2),
-    ]
-    @test !any(c -> hilbert_space(f, 1:4, c) isa SectorHilbertSpace, unlabelled)
-    @test !(constrain_space(hilbert_space(f, 1:4, NumberConservation(2)), FilterConstraint(s -> s.f != 3)) isa SectorHilbertSpace)
+    keep(s) = s.f != 3
+    odd(s) = isodd(s.f) ? 1.0 : 2
+    same(H1, H2) = quantumnumbers(H1) == quantumnumbers(H2) && basisstates(H1) == basisstates(H2)
+    @test same(hilbert_space(f, 1:4, NumberConservation(2) * FilterConstraint(keep)), hilbert_space(f, 1:4, (NumberConservation(2), keep)))
+    @test same(hilbert_space(f, 1:4, FilterConstraint(keep) * SectorConstraint(odd)), hilbert_space(f, 1:4, (keep, odd)))
+    @test quantumnumbers(constrain_space(Hnumber, FilterConstraint(keep))) == quantumnumbers(Hnumber)
+    @test same(constrain_space(Hnumber, FilterConstraint(keep)), constrain_space(Hnumber, keep))
+    @test same(constrain_space(Hnumber, SectorConstraint(odd)), constrain_space(Hnumber, odd))
+    factors = (hilbert_space(f, 1:2, NumberConservation()), hilbert_space(f, 3:4))
+    @test same(tensor_product(factors; constraint = SectorConstraint(odd)), tensor_product(factors; constraint = odd))
     H2 = constrain_space(Hnumber, NumberConservation(2))
     @test quantumnumbers(H2) == [2] && dim(sector(2, H2)) == 6
     @test quantumnumbers(constrain_space(Hnumber, ParityConservation())) == [-1, 1]

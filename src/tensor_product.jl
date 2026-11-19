@@ -51,8 +51,8 @@ function tensor_product(spaces; @nospecialize(constraint = NoConstraint()))
     end
 
     constraint = supply_missing_constraint_info(constraint, space, spaces)
-    # A `quantity => spec` constraint keeps the labels of the factors, and its own labels follow theirs.
-    labels = _spec_form(constraint) ? _combined_sector_constraint(spaces) : missing
+    # A constraint with a rule keeps the labels of the factors, and its own labels follow theirs.
+    labels = _has_rule(constraint) ? _combined_sector_constraint(spaces) : missing
     ismissing(labels) || (constraint = labels * constraint)
 
     supports_branch_pruning(constraint) || return constrain_states(space, constraint, all_states())
