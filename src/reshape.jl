@@ -172,7 +172,7 @@ function _precompute_mapping(mapping::Pair)
 end
 
 _spaces(H::AbstractHilbertSpace) = (H,)
-_spaces(Hs::Union{Tuple,AbstractVector}) = Tuple(Hs)
+_spaces(Hs::Union{Tuple, AbstractVector}) = Tuple(Hs)
 
 # Split one mapping into (input spaces, output spaces).
 function _mapping_spaces(mapping::Pair)

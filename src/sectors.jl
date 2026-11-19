@@ -45,7 +45,7 @@ function _group!(d, f::F, itr) where {F}
     end
     d
 end
-function groupby(f::F, itr, ::Type{B}; sortkeys=:auto) where {F,B}
+function groupby(f::F, itr, ::Type{B}; sortkeys = :auto) where {F, B}
     d = _group(f, itr, B)
     _ks = identity.(keys(d))
     K = eltype(_ks)
