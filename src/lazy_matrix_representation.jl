@@ -74,8 +74,7 @@ end
 (L::LazyOperator)(w, v, u, p, t) = mul!(w, L, v)
 (L::LazyOperator)(v, u, p, t) = L * v
 
-_ishermitian(x::NCMul) = iszero(x - hc)
-_ishermitian(x::NCAdd) = iszero(x - hc)
+_ishermitian(x) = iszero(x - hc)
 function _ishermitian(x::ProductOperator)
     _ishermitian(prod(x.ops))
 end
