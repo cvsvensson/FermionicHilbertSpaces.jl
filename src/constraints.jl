@@ -172,13 +172,17 @@ struct NumberConservation{T, H, W} <: AbstractAdditiveConstraint
     spaces::H
     weights::W
     function NumberConservation(_total, _spaces, _weights)
-        total = _normalize_constraint_values(_total)
-        subspace = _normalize_constraint_subspace(_spaces)
         weights = _normalize_constraint_values(_weights)
+        total = _normalize_constraint_values(_total)
+        total = ismissing(weights) || all(isinteger, weights) ? _integer_totals(total) : total
+        subspace = _normalize_constraint_subspace(_spaces)
         _check_maps_length(weights, subspace, "weights")
         new{typeof(total),typeof(subspace),typeof(weights)}(total, subspace, weights)
     end
 end
+_integer_totals(total::Union{Missing, AbstractVector{<:Integer}, Tuple{Vararg{Integer}}}) = total
+_integer_totals(total) = map(_integer_total, total)
+_integer_total(x) = isinteger(x) ? Int(x) : throw(ArgumentError("With integer weights, the total of a `NumberConservation` must be an integer, got `$x`."))
 _normalize_constraint_subspace(subspace::AbstractHilbertSpace) = (subspace,)
 _normalize_constraint_subspace(spaces) = spaces
 _normalize_constraint_subspace(spaces::Missing) = spaces

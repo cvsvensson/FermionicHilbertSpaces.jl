@@ -199,7 +199,8 @@ end
     @test parityoperator(H) == Diagonal([1, -1, -1, 1])
     @test numberoperator(H) == Diagonal([0, 1, 1, 2])
     @test dim(hilbert_space(f, 1:2, NumberConservation(Int[]))) == 0
-    @test Set(basisstates(hilbert_space(f, 1:2, NumberConservation(1.0)))) == Set(basisstates(hilbert_space(f, 1:2, NumberConservation(1))))
+    @test hilbert_space(f, 1:2, NumberConservation(1.0)) == hilbert_space(f, 1:2, NumberConservation(1))
+    @test_throws ArgumentError NumberConservation(1.5)
 
     ## Truncated Hilbert space
     states = map(FockNumber, 0:2)
@@ -301,7 +302,7 @@ function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::Pa
     end
     sector_space(H, states, parity, constraint)
 end
-function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::NumberConservation{T, Missing, Missing}) where {T <: Union{Missing, AbstractVector{<:Integer}, Tuple{Vararg{Integer}}}}
+function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::NumberConservation{T, Missing, Missing}) where {T}
     H = hilbert_space(a, labels)
     N = nbr_of_modes(H)
     N == 0 && return H
