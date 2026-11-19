@@ -1410,6 +1410,7 @@ end
         rand(length(inds))
     end
     @test collect(M_dist * v) ≈ M_ref * collect(v)
+    @test_throws ArgumentError representation(op, H, PartitionedSparseRepr())
 
     @boson b
     Hp = tensor_product(H, hilbert_space(b, 2))

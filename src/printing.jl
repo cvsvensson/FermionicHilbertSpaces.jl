@@ -235,7 +235,25 @@ function Base.show(io::IO, H::SpinSpace)
 end
 Base.show(io::IO, s::SpinState) = print(io, "SpinState(", s.m, ")")
 
-Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace: ", m.field); show(IOContext(io, :compact => true), m.parent))
+function Base.show(io::IO, m::MajoranaHilbertSpace)
+    if get(io, :compact, false)
+        print(io, "MajoranaHilbertSpace(")
+        show(io, m.parent)
+        print(io, ")")
+    else
+        println(io, "MajoranaHilbertSpace: ", m.field)
+        show(IOContext(io, :compact => true), m.parent)
+    end
+end
+
+function Base.show(io::IO, ax::Axes)
+    print(io, "Axes(")
+    for (i, H) in enumerate(ax.spaces)
+        i > 1 && print(io, ", ")
+        show(IOContext(io, :compact => true), H)
+    end
+    print(io, ")")
+end
 
 
 Base.show(io::IO, f::FockNumber) = print(io, "FockNumber(", f.f, ")")

@@ -352,6 +352,9 @@ _check_projection(Hfrom::AbstractHilbertSpace, ::_OrbitSpace) = Hfrom isa _Orbit
     @test L * v ≈ M * v
     @test L' * v ≈ M' * v
     @test transpose(L) * v ≈ transpose(M) * v
+    heisenberg = sum(S[j][:z] * S[T(j)][:z] + (S[j][:+] * S[T(j)][:-] + hc) / 2 for j in 1:N)
+    w = randn(dim(H0))
+    @test transpose(representation(heisenberg, H0, :lazy)) * w ≈ transpose(representation(heisenberg, H0, Matrix)) * w
 
     Q(m) = symmetric_sector(sector(m, space), factors(space), (perms, [cispi(-2k * s / N) for s in 0:(N - 1)]))
     @test representation(Splus, Axes(sector(1, Hk), H0)) ≈ Q(1)' * representation(Splus, Axes(sector(1, space), sector(0, space))) * Q(0)

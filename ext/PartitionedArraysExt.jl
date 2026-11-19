@@ -5,6 +5,7 @@ import FermionicHilbertSpaces: PartitionedSparseRepr, _terms_matrix, _collect_ij
 
 function _resolve_ranks(repr::PartitionedSparseRepr)
     repr.nparts > 0 || throw(ArgumentError("`nparts` must be positive, got $(repr.nparts)."))
+    isnothing(repr.backend) && throw(ArgumentError("`PartitionedSparseRepr` needs a `backend`, such as `DebugArray`, or both `row_partition` and `col_partition`."))
     ranks_source = LinearIndices((repr.nparts,))
     return repr.backend(ranks_source)
 end

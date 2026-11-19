@@ -192,6 +192,7 @@ end
         @test collect(M) ≈ representation(op, H, Matrix)
     end
     @test_throws ArgumentError representation(f[1], hilbert_space(f, 1:4, NumberConservation(2)), JLArray)
+    @test_throws ArgumentError representation("1010", hilbert_space(f, 1:4), JLVector)
     @test_throws ArgumentError representation(hopping, hilbert_space(f, 1:4), JLSparseMatrixCSC{Float64, Int8})
     @majoranas γ
     @test_throws ArgumentError representation(1im * γ[1] * γ[2], hilbert_space(γ, 1:4), JLArray)
