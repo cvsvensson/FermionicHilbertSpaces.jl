@@ -236,7 +236,7 @@ end
 Base.show(io::IO, s::SpinState) = print(io, "SpinState(", s.m, ")")
 
 function Base.show(io::IO, m::MajoranaHilbertSpace)
-    if get(io, :compact, false)
+    return if get(io, :compact, false)
         print(io, "MajoranaHilbertSpace(")
         show(io, m.parent)
         print(io, ")")
@@ -252,7 +252,7 @@ function Base.show(io::IO, ax::Axes)
         i > 1 && print(io, ", ")
         show(IOContext(io, :compact => true), H)
     end
-    print(io, ")")
+    return print(io, ")")
 end
 
 
