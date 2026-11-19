@@ -155,7 +155,7 @@ add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add
 
 function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
     lbl = H.mode
-    if get(io, :compact, false)
+    return if get(io, :compact, false)
         print(io, "Bosons(", lbl, ", dim=", dim(H), ")")
     else
         print(io, "$(dim(H))-dimensional TruncatedBosonicHilbertSpace\n")
@@ -184,13 +184,13 @@ hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer, @nospecialize(constra
 particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
 
-function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{BosonicState})
+function interpret_state(input::Union{AbstractString, AbstractChar}, ::Type{BosonicState})
     n = try
         parse(Int, input)
     catch
         throw(ArgumentError("A bosonic occupation string must be an integer, got `\"$input\"`."))
     end
-    BosonicState(n)
+    return BosonicState(n)
 end
 
 function interpret_state(input::Union{AbstractString, AbstractChar}, H::TruncatedBosonicHilbertSpace)

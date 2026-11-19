@@ -114,7 +114,7 @@ Base.hash(x::SpinSpace, h::UInt) = hash(x.mode, hash(x.spin, h))
 function Base.show(io::IO, H::SpinSpace)
     J = H.spin
     lbl = H.mode
-    if get(io, :compact, false)
+    return if get(io, :compact, false)
         print(io, "Spin{", J, "}(", lbl, ")")
     else
         print(io, "$(dim(H))-dimensional Spin{", J, "}")

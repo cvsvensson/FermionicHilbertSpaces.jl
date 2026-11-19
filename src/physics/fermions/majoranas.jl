@@ -203,8 +203,8 @@ MajoranaHilbertSpace(mode_ordering, space::AbstractHilbertSpace, field) = rewrap
 
 Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace: ", m.field); show(IOContext(io, :compact => true), m.parent))
 
-const _FermionModeSpace = Union{FermionicSpace,MajoranaHilbertSpace}
-_state_label_atomic(f::FockNumber, H::_FermionModeSpace) = join(digits(Int, f.f; base=2, pad=nbr_of_modes(H)))
+const _FermionModeSpace = Union{FermionicSpace, MajoranaHilbertSpace}
+_state_label_atomic(f::FockNumber, H::_FermionModeSpace) = join(digits(Int, f.f; base = 2, pad = nbr_of_modes(H)))
 
 function interpret_state(input::Union{AbstractString, AbstractChar}, H::Union{_FockSpace, MajoranaHilbertSpace})
     length(input) <= nbr_of_modes(H) || throw(ArgumentError("The Fock string `\"$input\"` has $(length(input)) characters, but the space has only $(nbr_of_modes(H)) modes."))
