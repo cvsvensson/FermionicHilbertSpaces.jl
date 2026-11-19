@@ -384,8 +384,8 @@ end
 # forms the products of terms with equal keys. Bras and ketbras have no key and are paired with every term.
 NonCommutativeProducts.contraction_key(s::SymbolicState) = isket(s) ? (group_id(s.space), s.ket) : nothing
 
-# An operator string acting on a product of kets is applied to the ket of each group it acts on, with one
-# precomputation per group for all terms of `b`, as in `matrix_representation`. Other products are sorted factor by factor.
+# An operator string on one group acting on a product of kets is applied to the ket of that group, with one
+# precomputation for all terms of `b`, as in `matrix_representation`. Other products are sorted factor by factor.
 function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any, <:AbstractSym}, b::Union{NCAdd, NCMul})
     factors1 = _first_factors(b)
     any(s -> s isa SymbolicState, factors1) || return _sorted_product(c, x, b)
@@ -429,19 +429,15 @@ function _is_like_ket(factors, k, ket)
     s = factors[k]
     return s isa typeof(ket) && _same_space_id(s.space, ket.space)
 end
-# Tuples `(k, factors[k], op)`, one per segment `op` of the sorted product `x`, where `factors[k]` is the ket that `op`
-# acts on, or `nothing` unless each segment acts on a different ket. `mul_terms!!` calls this once per term of an
-# operator sum, so the common case of a single segment returns a 1-tuple, which keeps the precomputations inferable.
+# The 1-tuple `((k, factors[k], op),)`, where `factors[k]` is the ket that the product `x` of operators on one group
+# acts on, or `nothing` if `x` acts on several groups or on no ket. Products on several groups are left to the sorted
+# product, which is faster for them.
 function _group_operators(x::NCMul, factors)
     isempty(x.factors) && return nothing
     parts = NonCommutativeProducts.split_by_group(NCMul(one(x.coeff), x.factors))
-    if length(parts) == 1
-        k = _ket_index(first(x.factors), factors)
-        return isnothing(k) ? nothing : ((k, factors[k], last(only(parts))),)
-    end
-    inds = map(((_, op),) -> _ket_index(first(op.factors), factors), parts)
-    (any(isnothing, inds) || !allunique(inds)) && return nothing
-    return map((k, (_, op)) -> (k, factors[k], op), inds, parts)
+    length(parts) == 1 || return nothing
+    k = _ket_index(first(x.factors), factors)
+    return isnothing(k) ? nothing : ((k, factors[k], last(only(parts))),)
 end
 _ket_index(::SymbolicState, factors) = nothing
 _ket_index(op, factors) = findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)

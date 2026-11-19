@@ -352,6 +352,8 @@ end
 # that several sums share are mostly on the diagonal.
 function _product_terms(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}; tree_split = 10, kwargs...)
     spaces = groups(space)
+    # The local matrices are combined as sparse matrices, whatever the format of the sum
+    repr = EagerSparseRepr{_repr_eltype(Missing, repr)}()
     by_span = Dict{UnitRange{Int}, Vector{Any}}()
     for prodop in _partitioned_terms(NCterms(op), bases, spaces)
         push!(get!(() -> [], by_span, minimum(prodop.inds):maximum(prodop.inds)), prodop)
