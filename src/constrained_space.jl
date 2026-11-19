@@ -39,26 +39,23 @@ function constrain_space(space, constraint::AbstractConstraint, labels)
 end
 # The subspace of the candidate `states` that satisfy `constraint`, grouped into sectors when it supports it.
 # Only `unchecked`, the part of `constraint` that `states` may violate, is filtered by when not grouping.
-# A constraint that cannot filter is taken to hold for all of `states`.
-function constrain_states(space, constraint, states, unchecked = nothing)
+# A constraint that cannot filter is taken to hold for all of `states`. A constraint that does not label sectors keeps
+# the sectors of `labels`, the constraint that labels the existing sectors, or `missing`.
+function constrain_states(space, constraint, states, unchecked = nothing, labels = sector_labels(space))
     constraint = resolve(constraint, space, states)
     unchecked = isnothing(unchecked) ? constraint : resolve(unchecked, space, states)
+    if !supports_sector_grouping(constraint) && !ismissing(labels)
+        constraint = unchecked = labels * unchecked
+    end
     if supports_sector_grouping(constraint) && supports_filtering(constraint)
-        grouping = _with_sector_labels(space, constraint)
-        return sector_space(space, states, sector_function(grouping, space), grouping)
+        return sector_space(space, states, sector_function(constraint, space), constraint)
     elseif supports_filtering(unchecked)
-        return _restricted_space(space, collect(Iterators.filter(filter_function(unchecked, space), states)), constraint)
+        return ConstrainedSpace(space, collect(Iterators.filter(filter_function(unchecked, space), states)); constraint)
     end
     return ConstrainedSpace(space, states; constraint)
 end
-# A constraint with a rule on a space with sectors keeps them, and its own labels follow theirs.
-_keeps_sectors(space, constraint) = false
-_keeps_sectors(space::SectorHilbertSpace, constraint) = !isnothing(space.constraint) && _has_rule(constraint)
-_with_sector_labels(space, constraint) = _keeps_sectors(space, constraint) ? space.constraint * constraint : constraint
-function _restricted_space(space, states, constraint)
-    _keeps_sectors(space, constraint) || return ConstrainedSpace(space, states; constraint)
-    return sector_space(space, states, sector_function(space.constraint, parent(space)), space.constraint)
-end
+sector_labels(space) = missing
+sector_labels(space::SectorHilbertSpace) = something(space.constraint, missing)
 # The factors of `constraint` that the branch pruning of `generate_states` does not enforce.
 unpruned_part(constraint) = ProductConstraint(filter(!supports_branch_pruning, collect(constraint_factors(constraint))))
 

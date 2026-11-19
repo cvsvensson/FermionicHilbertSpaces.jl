@@ -68,7 +68,7 @@ A function of the basis state works the same way:
 nup(state) = count(s -> s.m > 0, state.states)
 dim(hilbert_space(S, 1:6, nup => 2)), dim(hilbert_space(S, 1:6, s -> nup(s) <= 1))
 ```
-Applied to a space with sectors, a constraint written this way keeps those sectors, and its own labels follow theirs.
+A constraint that labels sectors replaces the sectors of the space it is applied to; one that only selects states, such as `N => 2`, keeps them.
 
 ### How a constrained space is built
 The states are built one factor at a time, as a tree. Each term of an operator is assigned to the factors it acts on, so after each factor the value so far is known, along with the range that the remaining factors can still add. A branch that cannot reach an allowed value is skipped. For a particle number, a magnetization or a blockade, every branch that is kept leads to a kept state, so the cost grows with the size of the result rather than the full space. A term that acts on several factors is tabulated on their product, which may have at most 4096 states.

@@ -17,6 +17,7 @@ end
     tensor_product(spaces; constraint=NoConstraint())
 
 Construct the composite Hilbert space from the spaces in `spaces`, with optional keyword argument `constraint`.
+The sectors of the factors combine, unless `constraint` labels sectors.
 
 Spaces of the same group, such as fermions of one `@fermions` basis, merge into one factor where
 the group first appears. The first factor varies fastest, so an operator `A` on the first of two spaces has the matrix
@@ -51,12 +52,9 @@ function tensor_product(spaces; @nospecialize(constraint = NoConstraint()))
     end
 
     constraint = supply_missing_constraint_info(constraint, space, spaces)
-    # A constraint with a rule keeps the labels of the factors, and its own labels follow theirs.
-    labels = _has_rule(constraint) ? _combined_sector_constraint(spaces) : missing
-    ismissing(labels) || (constraint = labels * constraint)
-
-    supports_branch_pruning(constraint) || return constrain_states(space, constraint, all_states())
-    return constrain_states(space, constraint, generate_states(spaces, constraint, space), unpruned_part(constraint))
+    labels = _combined_sector_constraint(spaces)
+    supports_branch_pruning(constraint) || return constrain_states(space, constraint, all_states(), nothing, labels)
+    return constrain_states(space, constraint, generate_states(spaces, constraint, space), unpruned_part(constraint), labels)
 end
 
 size_compatible(m, H) = size(m) == ntuple(_ -> dim(H), ndims(m))

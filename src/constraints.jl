@@ -28,8 +28,8 @@ function branch_constraint(constraint::ProductConstraint, space)
 end
 supports_branch_pruning(c::ProductConstraint) = any(supports_branch_pruning, c.constraints)
 supports_filtering(c::ProductConstraint) = any(supports_filtering, c.constraints)
-# A product with a rule factor also groups when only some factors do, and the others then filter.
-supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c.constraints) || (_has_rule(c) && any(supports_sector_grouping, c.constraints))
+# A product labels sectors when some factor does, and the other factors filter.
+supports_sector_grouping(c::ProductConstraint) = any(supports_sector_grouping, c.constraints)
 
 supply_missing_constraint_info(constraint::ProductConstraint, space, spaces) = ProductConstraint(map(cons -> supply_missing_constraint_info(cons, space, spaces), constraint.constraints))
 
@@ -246,14 +246,9 @@ function sector_function(constraint::ProductConstraint, space::AbstractHilbertSp
         return isconcretetype(V) ? sectors : map(identity, sectors) # narrow the element type
     end
 end
+filter_function(c::AbstractConstraint, space::AbstractHilbertSpace) = !ismissing ∘ sector_function(c, space)
 function filter_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
-    subspace_functions = map(constraint.constraints) do cons
-        if supports_sector_grouping(cons)
-            sector = sector_function(cons, space)
-            return state -> !ismissing(sector(state))
-        end
-        filter_function(cons, space)
-    end
+    subspace_functions = map(cons -> filter_function(cons, space), constraint.constraints)
     state -> all(f -> f(state), subspace_functions)
 end
 
@@ -276,7 +271,7 @@ such as `NumberConservation`, return a space with sectors, with states ordered b
 A constraint can also be `quantity` or `quantity => spec`, where `quantity` is a diagonal operator or a function
 of the basis state, such as `constrain_space(H, N => 2)` with `N = sum(f[i]'f[i] for i in 1:4)`;
 see [Constraints and sectors](@ref) for what `spec` can be.
-A `quantity => spec`, `FilterConstraint` or `SectorConstraint` on a space with sectors keeps the sectors of the space, and its own labels follow them.
+A constraint that labels sectors replaces the sectors of `space`; one that only selects states, such as `N => 2`, keeps them.
 
 With only `states`, return the subspace spanned by exactly those basis states, in the
 given order; this is equivalent to `constrain_space(space, NoConstraint(), states)`.
