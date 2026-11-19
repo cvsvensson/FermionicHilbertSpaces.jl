@@ -133,7 +133,6 @@ struct CombineFockNumbersProcessor{T} end
 function (processor::CombineFockNumbersProcessor{T})(full_state, spaces) where T
     catenate_fock_states(full_state, spaces, T)
 end
-# _init_results(spaces, ::CombineFockNumbersProcessor{T}) where T = T[]
 
 focknbr_from_site_label(m, H::FermionicSpace) = focknbr_from_site_index(mode_position(m, H))
 focknbr_from_site_labels(Hsub::FermionicSpace, H::FermionicSpace) = mapreduce(Base.Fix2(focknbr_from_site_label, H), |, modes(Hsub), init=FockNumber(zero(default_fock_representation(nbr_of_modes(H)))))

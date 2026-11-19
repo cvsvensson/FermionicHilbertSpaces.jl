@@ -289,7 +289,6 @@ end
     H = tensor_product(Hs)
 
     v1 = rand(ComplexF64, dim(H1))
-    # v1 = FermionicHilbertSpaces.project_on_parity(v1, H1, 1)
     v2 = rand(ComplexF64, dim(H2))
     v2 = FermionicHilbertSpaces.project_on_parity(v2, H2, 1)
     mout = zeros(ComplexF64, dim(H))

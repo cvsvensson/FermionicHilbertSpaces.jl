@@ -166,8 +166,8 @@ function combine_into_group(group::Group{Majorana}, spaces)
     mode_ordering = D()
     count = 1
     for space in spaces
-        l1, p1 = first(space.mode_ordering)
-        l2, p2 = last(space.mode_ordering)
+        l1, _ = first(space.mode_ordering)
+        l2, _ = last(space.mode_ordering)
         mode_ordering[l1] = count
         mode_ordering[l2] = count + 1
         count += 2
