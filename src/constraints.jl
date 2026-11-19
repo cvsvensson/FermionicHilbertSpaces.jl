@@ -13,10 +13,12 @@ struct ProductConstraint{C} <: AbstractConstraint
     constraints::C
 end
 
-Base.:*(sym1::AbstractConstraint, sym2::AbstractConstraint) = ProductConstraint([sym1, sym2])
-Base.:*(sym1::AbstractConstraint, sym2::ProductConstraint) = ProductConstraint([sym1, sym2.constraints...])
-Base.:*(sym1::ProductConstraint, sym2::AbstractConstraint) = ProductConstraint([sym1.constraints..., sym2])
-Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint([sym1.constraints..., sym2.constraints...])
+_factors(c::AbstractConstraint) = (c,)
+_factors(c::ProductConstraint) = c.constraints
+Base.:*(sym1::AbstractConstraint, sym2::AbstractConstraint) = ProductConstraint([_factors(sym1)..., _factors(sym2)...])
+Base.:*(::NoConstraint, sym::AbstractConstraint) = sym
+Base.:*(sym::AbstractConstraint, ::NoConstraint) = sym
+Base.:*(sym::NoConstraint, ::NoConstraint) = sym
 function branch_constraint(constraint::ProductConstraint, space)
     prunable = filter(supports_branch_pruning, constraint.constraints)
     sums = SumConstraint[c for c in prunable if c isa SumConstraint]
@@ -325,6 +327,8 @@ constrain_space
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
     @test all(isone ∘ dim, sectors(H))
+    H = hilbert_space(f, 1:3)
+    @test constrain_space(H, NumberConservation(1) * NoConstraint()) == constrain_space(H, NoConstraint() * NumberConservation(1)) == constrain_space(H, NumberConservation(1))
 end
 
 @testitem "ParityConservation accepts any collection of parities" begin

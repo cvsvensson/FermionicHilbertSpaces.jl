@@ -198,6 +198,8 @@ end
     H = hilbert_space(f, 1:2, NumberConservation())
     @test parityoperator(H) == Diagonal([1, -1, -1, 1])
     @test numberoperator(H) == Diagonal([0, 1, 1, 2])
+    @test dim(hilbert_space(f, 1:2, NumberConservation(Int[]))) == 0
+    @test Set(basisstates(hilbert_space(f, 1:2, NumberConservation(1.0)))) == Set(basisstates(hilbert_space(f, 1:2, NumberConservation(1))))
 
     ## Truncated Hilbert space
     states = map(FockNumber, 0:2)
@@ -299,12 +301,12 @@ function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::Pa
     end
     sector_space(H, states, parity, constraint)
 end
-function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::NumberConservation{T, Missing, Missing}) where {T}
+function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::NumberConservation{T, Missing, Missing}) where {T <: Union{Missing, AbstractVector{<:Integer}, Tuple{Vararg{Integer}}}}
     H = hilbert_space(a, labels)
     N = nbr_of_modes(H)
     N == 0 && return H
     numbers = T === Missing ? (0:N) : constraint.total
-    state_blocks = map(n -> fixed_particle_number_fockstates(N, n), numbers)
+    state_blocks = Vector{statetype(H)}[fixed_particle_number_fockstates(N, n) for n in numbers]
     dict = OrderedDict(zip(numbers, state_blocks))
     _sector_space(H, dict, constraint)
 end
