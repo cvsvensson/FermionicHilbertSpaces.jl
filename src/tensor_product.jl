@@ -656,7 +656,8 @@ julia> partial_trace(representation(f[1]' * f[1], H), H => Hsub) == [0 0; 0 2]
 true
 ```
 """
-partial_trace(m, (H, Hsub)::Pair{<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, H, _subsystem(Hsub, H); kwargs...)
+partial_trace(m, Hs::Pair{<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, Hs...; kwargs...)
+partial_trace(m, H::AbstractHilbertSpace, Hsub; kwargs...) = partial_trace(m, H, _subsystem(Hsub, H); kwargs...)
 
 """
     von_neumann_entropy(ρ)
@@ -870,7 +871,8 @@ function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertS
     isnothing(complement) && return copyto!(mout, change_basis(m, H, Hsub; kwargs...))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
-partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
+partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub; kwargs...) = partial_trace!(mout, m, H, _subsystem(Hsub, H); kwargs...)
+partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
 
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg, mapper = _partial_trace_mapper(H, Hsub, complement); projection = false, phase_factors = true)
     alg isa NoScalarIndexingAlg && return copyto!(mout, _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection, phase_factors))
