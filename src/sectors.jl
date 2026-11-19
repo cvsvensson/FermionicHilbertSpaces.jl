@@ -113,9 +113,10 @@ sectors(H::AbstractHilbertSpace, constraint = NoConstraint()) = map(qn -> sector
 
 Return a dictionary from sector labels of `H` to the states in that sector annihilated by all `raisers` (an operator,
 its matrix on `H`, or a vector of these), as orthonormal columns in `sector(qn, H)` coordinates, one per multiplet. With
-`H = hilbert_space(S, 1:N, Sz => 0:N//2)` and `Splus = sum(S[k][:+] for k in 1:N)`, the keys of
+`H = hilbert_space(S, 1:N, Sz => 0:N//2)` for even `N` and `Splus = sum(S[k][:+] for k in 1:N)`, the keys of
 `highest_weight_states(H, Splus)` are the total spins. The sectors must be labelled by the weights of the symmetry
-(`Sz`, or each flavour number for SU(N)) and run up to the top weight.
+(`Sz`, or each flavour number for SU(N)), and `H` must contain every sector the raisers reach; otherwise
+representing the raisers throws.
 
 `basis(qn)` restricts the search to the span of orthonormal columns in `sector(qn, H)`, such as a momentum sector.
 `check` verifies the raisers and the bases.

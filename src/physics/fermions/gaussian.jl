@@ -1,7 +1,7 @@
 """
     correlation_matrix(state, H, Hbdg::BdGHilbertSpace)
 
-The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` over the modes of `Hbdg` in its order, of a normalized state vector or density matrix `state` on `H`. `Hbdg` may cover a subset of the modes. On a single-particle space `Ψ = f`, and on a Majorana space `Ψ = γ / √2`.
+The Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` over the modes of `Hbdg` in its order, of a normalized state vector or density matrix `state` on `H`. `Hbdg` may cover a subset of the modes. On `hilbert_space(f, labels, SingleParticle())`, `Ψ = f`, and on `hilbert_space(γ, labels, SingleParticle())`, `Ψ = γ / √2`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions; @fermions f;
@@ -59,7 +59,7 @@ von_neumann_entropy(G, H::BdGHilbertSpace) = -sum(_xlogx, _occupations(G, H))
 """
     correlation_matrix(F::LinearAlgebra.Eigen; β = Inf)
 
-The correlation matrix of the ground state of the BdG or Majorana matrix `A`, as in `correlation_matrix(ψ, H, Hbdg)`, where `F` is `eigen(A, BdGEigen())` or `eigen(Hermitian(A))`. Zero-energy modes are half occupied, and a finite `β` gives the thermal state of the many-body Hamiltonian that `A` represents.
+The correlation matrix, as in `correlation_matrix(ψ, H, Hbdg)`, of the ground state of the quadratic Hamiltonian with BdG matrix `A` (`F = eigen(A, BdGEigen())` or `eigen(Hermitian(A))`) or Majorana matrix `A` (`F = eigen(Hermitian(A))`). Zero-energy modes are half occupied, and a finite `β` gives the thermal state.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces, FermionicHilbertSpaces.FreeFermions, LinearAlgebra; @fermions f;

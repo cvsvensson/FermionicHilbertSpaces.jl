@@ -578,7 +578,7 @@ The result is sparse by default. `repr` selects another format: an array type su
 (or a GPU array type such as `CuArray`), a number type such as `Float64` for a sparse result of that element type,
 or `:lazy` for a matrix-free operator. Coefficients are converted to the element type of `repr` (a complex coefficient
 with `Float64` throws an `InexactError`), and matrix elements are computed in its precision. On a
-[`SymmetricSector`](@ref) the orbit amplitudes are stored in `Float64`, which limits the accuracy to that of `Float64`.
+[`SymmetricSector`](@ref) the matrix elements are only `Float64`-accurate, even with a higher-precision `repr`.
 
 ```jldoctest
 julia> @fermions f;
@@ -593,9 +593,9 @@ representation
     matrix_representation(op, space::AbstractHilbertSpace, [repr]; kwargs...)
     matrix_representation(op, Axes(Hout, Hin), [repr]; kwargs...)
 
-Return the matrix of the symbolic operator `op` on `space`, the operator form of [`representation`](@ref), with `repr`
-as there. With [`Axes`](@ref)`(Hout, Hin)` it maps `Hin` to `Hout`, which must have the same groups, such as two
-sectors of the same modes; two different spaces support only eager formats without chunking.
+Return the matrix of the symbolic operator `op` on `space`; see [`representation`](@ref) for `repr`. With
+[`Axes`](@ref)`(Hout, Hin)` it maps `Hin` to `Hout`; the two must have the same groups, such as two sectors of the
+same modes, and two different spaces support only eager formats without chunking.
 
 `projection=true` drops matrix elements to states outside the space (outside `Hout` with `Axes`) instead of throwing.
 `chunking` is `NoChunking()`, `TermChunking(scheduler)` or `StateChunking(scheduler)`.

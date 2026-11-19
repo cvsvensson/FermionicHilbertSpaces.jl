@@ -6,7 +6,7 @@ const _SpaceMapping = Pair{<:_SpaceGroup,<:_SpaceGroup}
     reshape(t, mappings...; repeat=false, projection=false, alg)
     reshape(mappings...; repeat=false, projection=false)
 
-Reshape the array `t` by splitting or combining its indices. Each mapping reads input => output (see
+Reshape the array `t` by splitting, combining or repartitioning its indices, as in `(H1, H2) => (K1, K2)`. Each mapping reads input => output (see
 [Pair arguments](@ref pair_convention)) and consumes the next consecutive group of indices of `t`:
 `reshape(A, H1 => (H1a, H1b), (H2a, H2b) => H2)` splits the first index and combines the next two. A single mapping
 that consumes half the indices of `t` is applied to both halves, so `reshape(m, H => (H1, H2))` turns an operator
