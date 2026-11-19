@@ -350,7 +350,8 @@ _check_projection(Hfrom::AbstractHilbertSpace, ::_OrbitSpace) = Hfrom isa _Orbit
     T4(j) = mod1(j + 1, 4)
     H4 = hilbert_space(S, 1:4, (sum(S[j][:z] for j in 1:4) => 0, Relabel(T4) => 1))
     ham4 = sum(S[j][:]'S[T4(j)][:] for j in 1:4)
-    @test ishermitian(representation(ham4, H4, Matrix)) && ishermitian(representation(ham4, H4))
+    @test ishermitian(representation(ham4, H4, Matrix))
+    @test ishermitian(representation(ham4, H4))
 
     k = 1
     Hk = Hks[k + 1]

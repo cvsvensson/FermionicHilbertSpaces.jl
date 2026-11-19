@@ -639,8 +639,8 @@ function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=
     return _with_format_eltype(_matrix_representation(_at_format_precision(op, repr), _checked_group_ids(op, Hin), ax, repr, chunking; projection, kwargs...), repr)
 end
 # A space whose basis states are not product states, such as a `SymmetricSector`, can throw for operators it cannot
-# represent with `_check_operator`, give the amplitudes of its basis vectors with `_amplitude_eltype`, which is
-# given the float precision of the operator and promoted with its element type, and adjust the matrix with `_symmetrize`.
+# represent with `_check_operator` and give the amplitudes of its basis vectors with `_amplitude_eltype`, which is
+# given the float precision of the operator and promoted with its element type. `_symmetrize` adjusts the assembled matrix.
 _check_operator(op, space) = nothing
 _check_operator(op, space::AbstractSubspace) = _check_operator(op, parent(space))
 _check_operator(op, ax::Axes) = _check_operator(op, _input_space(ax))
