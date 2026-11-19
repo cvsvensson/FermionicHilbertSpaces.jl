@@ -256,14 +256,14 @@ function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr::Uni
 end
 # Kronecker product of the group matrices, with the first group as the fastest-varying index.
 # Only the groups in `active` have a matrix other than the identity.
-_kron_groups(matrices, active, repr) = _kron_groups_generic(matrices, repr)
-function _kron_groups_generic(matrices, repr)
-    mergedmatrices = _merge_diags(matrices, repr)
+_kron_groups(matrices, active, repr) = _kron_groups_generic(matrices)
+function _kron_groups_generic(matrices)
+    mergedmatrices = _merge_diags(matrices)
     return foldl(kron, Iterators.reverse(mergedmatrices))
 end
 function _kron_groups(matrices, active, repr::EagerSparseRepr)
     if isempty(active) || !all(n -> matrices[n] isa SparseMatrixCSC, active)
-        return _kron_groups_generic(matrices, repr)
+        return _kron_groups_generic(matrices)
     end
     first_active, last_active = extrema(active)
     # Bool identities between the active groups keep the element type and the values of the other factors
@@ -306,7 +306,7 @@ end
 function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; kwargs...)
     return Eye{_repr_eltype(Bool, repr)}(dim(space))
 end
-function _merge_diags(matrices, repr)
+function _merge_diags(matrices)
     # go through list of matrices and merge consecutive Diagonals with kron
     newmats = Any[]
     n = 1
@@ -611,8 +611,7 @@ M = FermionicHilbertSpaces.matrix_representation(op, H)
 size(M) == (dim(H), dim(H))
 ```
 """
-function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
-    repr === :dense && return Matrix(matrix_representation(op, space, EagerSparseRepr(); projection, chunking, kwargs...))
+function matrix_representation(op, space::AbstractHilbertSpace, repr = EagerSparseRepr(); projection = false, chunking = NoChunking(), kwargs...)
     # The barrier keeps inference from compiling every format a runtime Symbol could select
     repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, space, _canonicalize_repr(repr); projection, chunking, kwargs...)
     format = _matrix_format(repr)
@@ -626,7 +625,6 @@ end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
     Hout == Hin && return matrix_representation(op, Hin, repr; projection, chunking, kwargs...)
-    repr === :dense && return Matrix(matrix_representation(op, ax, EagerSparseRepr(); projection, chunking, kwargs...))
     repr = _matrix_format(repr)
     repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("Lazy and chunked representations with `Axes(Hout, Hin)` need `Hout == Hin`."))
     _check_operator(op, ax)

@@ -107,7 +107,6 @@ end
 
 _normalize_constraint_values(values::AbstractVector) = values
 _normalize_constraint_values(values::Tuple) = values
-_normalize_constraint_values(values::AbstractRange) = values
 _normalize_constraint_values(value) = [value]
 _normalize_constraint_values(::Missing) = missing
 

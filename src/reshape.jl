@@ -168,13 +168,11 @@ function _precompute_mapping(mapping::Pair)
     Hsin, Hsout = _mapping_spaces(mapping)
     mapper = _mapper(Hsin, Hsout)
     blocks = _transitions(Hsin, Hsout, mapper)
-    return (; mapping, Hsin, Hsout, blocks)
+    return (; Hsin, Hsout, blocks)
 end
 
 _spaces(H::AbstractHilbertSpace) = (H,)
-_spaces(Hs::Union{Tuple,AbstractVector}) = Tuple(Hs)
-_spaces(x) = throw(ArgumentError("Expected a Hilbert space or a tuple of Hilbert \
-                                  spaces, got $(typeof(x))"))
+_spaces(Hs::Union{Tuple, AbstractVector}) = Tuple(Hs)
 
 # Split one mapping into (input spaces, output spaces).
 function _mapping_spaces(mapping::Pair)

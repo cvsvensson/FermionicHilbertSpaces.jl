@@ -275,8 +275,6 @@ function filter_function(constraint::ProductConstraint, space::AbstractHilbertSp
     state -> all(f -> f(state), subspace_functions)
 end
 
-sectors(::AbstractConstraint) = nothing
-
 map_spaces(f, c) = c
 map_spaces(f, c::ProductConstraint) = ProductConstraint(map(ci -> map_spaces(f, ci), c.constraints))
 _map_spaces(f, spaces) = map(f, spaces)

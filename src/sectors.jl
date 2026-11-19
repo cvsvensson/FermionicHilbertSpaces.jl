@@ -23,7 +23,6 @@ subspace_key(H::SectorHilbertSpace) = (parent(H), H.ordered_basis_states, H.qn_t
 rewrap(H::SectorHilbertSpace, parent) = SectorHilbertSpace(parent, H.ordered_basis_states, H.qn_to_states, H.constraint, H.index)
 map_parent(f, H::SectorHilbertSpace) = SectorHilbertSpace(f(parent(H)), H.ordered_basis_states, H.qn_to_states, map_spaces(f, H.constraint), H.index)
 
-sector_space(space, states, ::Missing) = ConstrainedSpace(space, states)
 function sector_space(space, states, sector_function, constraint)
     B = statetype(space)
     parent, members = unnest(space, states)
@@ -46,15 +45,12 @@ function _group!(d, f::F, itr) where {F}
     end
     d
 end
-function groupby(f::F, itr, ::Type{B}; sortkeys=:auto, sortvals=false) where {F,B}
+function groupby(f::F, itr, ::Type{B}; sortkeys = :auto) where {F, B}
     d = _group(f, itr, B)
     _ks = identity.(keys(d))
     K = eltype(_ks)
     sortkeys = sortkeys == :auto ? Base.hasmethod(isless, Tuple{K,K}) : false
     ks = sortkeys ? sort!(_ks) : _ks
-    if sortvals
-        foreach(sort!, values(d))
-    end
     return OrderedDict{K,Vector{B}}(k => d[k] for k in ks)
 end
 

@@ -73,10 +73,6 @@ _nbr_differing_modes(f1::FockNumber, f2::FockNumber, N::Int) = count_ones(f1.f â
 internal_rep(state::FockNumber, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.f)
 physical_rep(state::T, ::Type{FockNumber{I}}) where {T,I} = FockNumber{I}(state)
 
-fermionnumber(f::FockNumber{<:Integer}, mask) = count_weighted_ones(f.f, mask)
-count_weighted_ones(x, mask::Integer) = count_ones(x & mask)
-count_weighted_ones(x, weights::Union{Vector,Tuple}) = sum(w for (i, w) in enumerate(weights) if _bit(x, i))
-
 """
     jwstring(site, focknbr)
 
@@ -84,7 +80,6 @@ The parity, `1` or `-1`, of the number of fermions on the sites before `site`.
 """
 jwstring(site, focknbr) = jwstring_left(site, focknbr)
 jwstring_anti(site, focknbr) = jwstring_right(site, focknbr)
-jwstring_bool(site, focknbr) = jwstring_left_bool(site, focknbr)
 jwstring_anti_bool(site, focknbr) = jwstring_right_bool(site, focknbr)
 jwstring_right(site, focknbr) = jwstring_right_bool(site, focknbr) ? -1 : 1
 jwstring_left(site, focknbr) = jwstring_left_bool(site, focknbr) ? -1 : 1
