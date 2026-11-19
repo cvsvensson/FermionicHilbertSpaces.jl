@@ -385,6 +385,7 @@ true
 """
 function subregion(Hs, H::AbstractHilbertSpace)
     Hs_items = Hs isa Tuple || Hs isa AbstractVector ? Hs : (Hs,)
+    any(x -> x isa AbstractHilbertSpace && isconstrained(x), Hs_items) && throw(ArgumentError("A constrained space cannot name a subregion; pass the unconstrained space or its symbols instead."))
     names = _pair_majoranas(collect(Iterators.flatten(Iterators.map(_atom_names, Hs_items))), H)
     isempty(names) && throw(ArgumentError("`Hs` must contain at least one space or symbolic operator."))
     positions = map(x -> atom_position(x, H), names)
@@ -421,6 +422,7 @@ _subsystem(Hs, H) = subregion(Hs, H)
     @test_throws ArgumentError subregion([f[4]], H)
     @test subregion(Hf, H) == Hf
     @test subregion(Hb, H) == Hb
+    @test_throws ArgumentError subregion(hilbert_space(f, 1:2, NumberConservation(1)), H)
 
     @test subregion([f[1]], Hf) == hilbert_space(f, 1:1)
     @test subregion([b[1]], Hb) == hilbert_space(b, 1:1, 2)
