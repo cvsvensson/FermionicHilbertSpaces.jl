@@ -153,6 +153,19 @@ _state_index(s::BosonicState, H::TruncatedBosonicHilbertSpace) = 0 <= s.n < dim(
 has_arithmetic_state_index(::TruncatedBosonicHilbertSpace) = true
 add_tag(H::TruncatedBosonicHilbertSpace, tag) = TruncatedBosonicHilbertSpace(add_tag(H.mode, tag), H.dimension)
 
+function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
+    lbl = H.mode
+    if get(io, :compact, false)
+        print(io, "Bosons(", lbl, ", dim=", dim(H), ")")
+    else
+        print(io, "$(dim(H))-dimensional TruncatedBosonicHilbertSpace\n")
+        print(io, "Label: ", lbl, ", dimension: ", dim(H))
+    end
+end
+
+Base.show(io::IO, state::BosonicState) = print(io, "BosonicState(", state.n, ")")
+_state_label_atomic(s::BosonicState, H) = string(s.n)
+
 """
     hilbert_space(b::BosonSym, dimension[, constraint])
     hilbert_space(b::Field{Boson}, labels, dimension[, constraint])
@@ -170,6 +183,21 @@ hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer) = TruncatedBosonicHil
 hilbert_space(m::Mode{<:Field{Boson}}, dimension::Integer, @nospecialize(constraint::ConstraintLike)) = constrain_space(hilbert_space(m, dimension), constraint)
 particle_number(s::BosonicState) = s.n
 parity(s::BosonicState) = iseven(s.n) ? 1 : -1
+
+function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{BosonicState})
+    n = try
+        parse(Int, input)
+    catch
+        throw(ArgumentError("A bosonic occupation string must be an integer, got `\"$input\"`."))
+    end
+    BosonicState(n)
+end
+
+function interpret_state(input::Union{AbstractString, AbstractChar}, H::TruncatedBosonicHilbertSpace)
+    state = interpret_state(input, BosonicState)
+    isbasisstate(state, H) || throw(ArgumentError("The occupation `\"$input\"` is outside the boson space, whose occupations are 0 to $(dim(H) - 1)."))
+    return state
+end
 
 @inline function apply_local_operator(factor::Boson, state::BosonicState, space::TruncatedBosonicHilbertSpace, precomp, ::Type{T} = Float64) where {T}
     n = state.n
