@@ -63,6 +63,7 @@ size_compatible(m, H) = size(m) == ntuple(_ -> dim(H), ndims(m))
 size_compatible(m, ax::Axes) = size(m) == map(dim, ax.spaces)
 size_compatible(m::UniformScaling, H) = true
 size_compatible(m::UniformScaling, ax::Axes) = length(ax.spaces) == 2 && ax.spaces[1] == ax.spaces[2]
+check_size(m, H) = size_compatible(m, H) || throw(DimensionMismatch("Expected an array of size $(ntuple(_ -> dim(H), ndims(m))), got $(size(m))."))
 kron_sizes_compatible(ms, Hs) = length(ms) == length(Hs) && all(size_compatible(m, H) for (m, H) in zip(ms, Hs))
 check_kron_sizes(ms, Hs) = kron_sizes_compatible(ms, Hs) || throw(ArgumentError("`ms` must have one array per space in `Hs`, with sizes matching their dimensions, got sizes $(map(m -> m isa UniformScaling ? m : size(m), ms)) and dimensions $(map(dim, Hs))."))
 
@@ -86,7 +87,7 @@ check_kron_sizes(ms, Hs) = kron_sizes_compatible(ms, Hs) || throw(ArgumentError(
     @test_throws ArgumentError generalized_kron(ms, reverse(Hs))
     H12 = tensor_product(H1, H2)
     m_too_large = rand(dim(H12) + 1, dim(H12) + 1)
-    @test_throws ArgumentError partial_trace(m_too_large, H12 => H1)
+    @test_throws DimensionMismatch partial_trace(m_too_large, H12 => H1)
 
     Hfull = hilbert_space(a, 1:4)
     c = representation(a[1], H1)
@@ -98,7 +99,7 @@ check_kron_sizes(ms, Hs) = kron_sizes_compatible(ms, Hs) || throw(ArgumentError(
         @test_throws ArgumentError op(Hs => H123)(ms_wrong...)
     end
     @test_throws ArgumentError tensor_product(vs[1:2], Hs => H123)
-    @test_throws ArgumentError embed(rand(3, 3), H1 => H123)
+    @test_throws DimensionMismatch embed(rand(3, 3), H1 => H123)
     @test_throws ArgumentError tensor_product((rand(3, 3), m2, m3), Hs => H123)
 end
 
@@ -508,7 +509,7 @@ function partial_trace(v::AbstractVector, H::AbstractHilbertSpace, Hsub::Abstrac
     return partial_trace(vec_to_density_matrix(v), H, Hsub; complement, alg, kwargs...)
 end
 function _partial_trace_by_gather(m, H, Hsub, complement; projection = false, phase_factors = true)
-    size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
+    check_size(m, H)
     if isnothing(complement)
         φ = change_basis(m, H, Hsub; projection, alg = NoScalarIndexingAlg())
         return m isa AbstractVector ? φ * φ' : φ
@@ -522,7 +523,7 @@ function _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection = f
     return _gather_partial_trace(m, splits, dim(Hsub), dim(complement))
 end
 function partial_trace(m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
-    size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
+    check_size(m, H)
     alg isa NoScalarIndexingAlg && return _partial_trace_by_gather(m, H, Hsub, complement; kwargs...)
     isnothing(complement) && return Base.inferencebarrier(change_basis)(m, H, Hsub; kwargs...)
     mout = zeros(promote_type(eltype(m), partial_trace_phase_factor_eltype(H)), dim(Hsub), dim(Hsub))
@@ -656,6 +657,7 @@ true
 ```
 """
 partial_trace(m, (H, Hsub)::Pair{<:AbstractHilbertSpace}; kwargs...) = partial_trace(m, H, _subsystem(Hsub, H); kwargs...)
+partial_trace(m, H::AbstractHilbertSpace, Hsub; kwargs...) = partial_trace(m, H, _subsystem(Hsub, H); kwargs...)
 
 """
     von_neumann_entropy(ρ)
@@ -863,13 +865,14 @@ function partial_trace!(mout, v::AbstractVector, H::AbstractHilbertSpace, Hsub::
     return copyto!(mout, _partial_trace_by_gather(v, H, Hsub, complement; kwargs...))
 end
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(m, Hsub, H, complement), kwargs...)
-    size_compatible(m, H) || throw(ArgumentError("The size of `m` must match `dim(H)` = $(dim(H)), got $(size(m))."))
+    check_size(m, H)
     _check_partial_trace_output(mout, m, Hsub)
     alg isa NoScalarIndexingAlg && return copyto!(mout, _partial_trace_by_gather(m, H, Hsub, complement; kwargs...))
     isnothing(complement) && return copyto!(mout, change_basis(m, H, Hsub; kwargs...))
     partial_trace!(mout, m, H, Hsub, complement, alg; kwargs...)
 end
-partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace,<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
+partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub; kwargs...) = partial_trace!(mout, m, H, _subsystem(Hsub, H); kwargs...)
+partial_trace!(mout, m, Hs::Pair{<:AbstractHilbertSpace}; kwargs...) = partial_trace!(mout, m, Hs...; kwargs...)
 
 function partial_trace!(mout, m, H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, complement, alg, mapper = _partial_trace_mapper(H, Hsub, complement); projection = false, phase_factors = true)
     alg isa NoScalarIndexingAlg && return copyto!(mout, _partial_trace_by_gather(m, H, Hsub, complement, mapper; projection, phase_factors))
@@ -1161,10 +1164,8 @@ function _canonicalize_pt_input(v::AbstractVector, H::AbstractHilbertSpace)
         throw(DimensionMismatch("The input vector must have length $(dim(H)^2) (interpreted as a vectorized density matrix) or $(dim(H)) (interpreted as a pure state, which is then converted to a density matrix), got $(length(v))"))
     end
 end
-_check_pt_input_size(m::AbstractMatrix, H::AbstractHilbertSpace) =
-    size_compatible(m, H) || throw(DimensionMismatch("The input matrix must have size ($(dim(H)), $(dim(H))), got $(size(m))"))
 function _canonicalize_pt_input(m::AbstractMatrix, H::AbstractHilbertSpace)
-    _check_pt_input_size(m, H)
+    check_size(m, H)
     return _vectorize_pt_density_matrix(m)
 end
 function _canonicalize_pt_input(m::UniformScaling, H::AbstractHilbertSpace)
@@ -1175,7 +1176,7 @@ function _canonicalize_pt_output(v::AbstractVector, Hsub::AbstractHilbertSpace)
     return v
 end
 function _canonicalize_pt_output(m::AbstractMatrix, Hsub::AbstractHilbertSpace)
-    size_compatible(m, Hsub) || throw(DimensionMismatch("The output matrix must have size ($(dim(Hsub)), $(dim(Hsub))), got $(size(m))"))
+    check_size(m, Hsub)
     return vec(m)
 end
 
@@ -1184,14 +1185,14 @@ function (op::PartialTraceMap)(in::AbstractMatrix)
     _devectorize_pt_output(op.map * v, dim(op.Hsub))
 end
 function (op::PartialTraceMap)(in::SparseMatrixCSC)
-    _check_pt_input_size(in, op.H)
+    check_size(in, op.H)
     n = dim(op.Hsub)
     w = _superop_mul_matrix!(zeros(promote_type(eltype(op.map), eltype(in)), n^2), op.map, in)
     return sparse(reshape(w, n, n))
 end
 function (op::PartialTraceMap)(out, in::SparseMatrixCSC)
     vout = _canonicalize_pt_output(out, op.Hsub)
-    _check_pt_input_size(in, op.H)
+    check_size(in, op.H)
     _superop_mul_matrix!(vout, op.map, in)
     out
 end
