@@ -151,7 +151,7 @@ const INDEX_TABLE_MAX_LENGTH = 2^28
 """
     root_keyed_index(space, states)
 
-A [`RootKeyedIndex`](@ref) of the positions of `states`, or `nothing` when `space` has no arithmetic
+A `RootKeyedIndex` of the positions of `states`, or `nothing` when `space` has no arithmetic
 `state_index` with `Int` values. Throws an `ArgumentError` if a state appears more than once.
 """
 function root_keyed_index(space, states)
