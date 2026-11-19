@@ -164,6 +164,7 @@ particle_number(state) = throw(ArgumentError("States of type `$(typeof(state))` 
 
 Constraint enforcing conservation of a (possibly weighted) particle number, optionally on selected spaces.
 `total` can be a single value or collection of allowed values; `missing` allows any value.
+Totals must be integers unless some weight is non-integer.
 `spaces` restricts the count to the given subspaces (default: all of them). `weights` gives one
 weight per subspace in `spaces` (default: all `1`), and the conserved quantity is the weighted sum of their particle numbers.
 """
@@ -180,9 +181,8 @@ struct NumberConservation{T, H, W} <: AbstractAdditiveConstraint
         new{typeof(total),typeof(subspace),typeof(weights)}(total, subspace, weights)
     end
 end
-_integer_totals(total::Union{Missing, AbstractVector{<:Integer}, Tuple{Vararg{Integer}}}) = total
-_integer_totals(total) = map(_integer_total, total)
-_integer_total(x) = isinteger(x) ? Int(x) : throw(ArgumentError("With integer weights, the total of a `NumberConservation` must be an integer, got `$x`."))
+_integer_totals(::Missing) = missing
+_integer_totals(total) = all(isinteger, total) ? map(Int, total) : throw(ArgumentError("Particle number totals must be integers, got $total."))
 _normalize_constraint_subspace(subspace::AbstractHilbertSpace) = (subspace,)
 _normalize_constraint_subspace(spaces) = spaces
 _normalize_constraint_subspace(spaces::Missing) = spaces
@@ -332,6 +332,7 @@ constrain_space
     @test dim(H) == 2^4
     @test all(isone ∘ dim, sectors(H))
     H = hilbert_space(f, 1:3)
+    @test NoConstraint() * NoConstraint() == NoConstraint()
     @test constrain_space(H, NumberConservation(1) * NoConstraint()) == constrain_space(H, NoConstraint() * NumberConservation(1)) == constrain_space(H, NumberConservation(1))
 end
 

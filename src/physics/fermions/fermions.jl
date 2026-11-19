@@ -201,6 +201,7 @@ end
     @test dim(hilbert_space(f, 1:2, NumberConservation(Int[]))) == 0
     @test hilbert_space(f, 1:2, NumberConservation(1.0)) == hilbert_space(f, 1:2, NumberConservation(1))
     @test_throws ArgumentError NumberConservation(1.5)
+    @test dim(hilbert_space(f, 1:2, NumberConservation(1.5, [f[1], f[2]], [1, 0.5]))) == 1
 
     ## Truncated Hilbert space
     states = map(FockNumber, 0:2)
