@@ -275,7 +275,7 @@ end
 hilbert_space(a::Field{Fermion}, labels::AbstractVector) = FermionicSpace(a, map(l -> a[l], labels))
 hilbert_space(a::Field{Fermion}, labels::AbstractVector, states::Union{AbstractVector{<:AbstractBasisState}, BasisStates}) = ConstrainedSpace(hilbert_space(a, labels), states)
 function hilbert_space(a::Field{Fermion}, labels::AbstractVector, @nospecialize(constraint::ConstraintLike))
-    length(labels) == 0 && return hilbert_space(a, labels)
+    length(labels) == 0 && return constrain_space(hilbert_space(a, labels), constraint)
     constraint = as_constraint(constraint)
     # The states of a total number of fermions are built directly.
     if constraint isa OperatorConstraint && constraint.op == sum(a[l]'a[l] for l in labels)

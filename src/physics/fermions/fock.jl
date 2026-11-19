@@ -329,7 +329,7 @@ end
     @test size(representation(f[1], H, Matrix)) == (0, 0)
     @test size(representation(f[1], H; projection = true)) == (0, 0)
     @test size(representation(f[1], H, :lazy)) == (0, 0)
-    for (c, d) in [NumberConservation(0) => 1, NumberConservation(1) => 0, ParityConservation(1) => 1, ParityConservation(-1) => 0]
+    for (c, d) in [NumberConservation(0) => 1, NumberConservation(1) => 0, ParityConservation(1) => 1, ParityConservation(-1) => 0, NumberConservation(1) * ParityConservation(1) => 0]
         @test dim(hilbert_space(f, 1:0, c)) == dim(constrain_space(hilbert_space(f, 1:0), c)) == d
     end
 end
