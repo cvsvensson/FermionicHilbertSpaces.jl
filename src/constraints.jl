@@ -272,7 +272,7 @@ such as `NumberConservation`, return a space with sectors, with states ordered b
 A constraint can also be `quantity` or `quantity => spec`, where `quantity` is a diagonal operator or a function
 of the basis state, such as `constrain_space(H, N => 2)` with `N = sum(f[i]'f[i] for i in 1:4)`;
 see [Constraints and sectors](@ref) for what `spec` can be.
-A `quantity => spec`, `FilterConstraint` or `SectorConstraint` on a space with sectors keeps its labels, and its own labels follow them.
+A `quantity => spec`, `FilterConstraint` or `SectorConstraint` on a space with sectors keeps the sectors of the space, and its own labels follow them.
 
 With only `states`, return the subspace spanned by exactly those basis states, in the
 given order; this is equivalent to `constrain_space(space, NoConstraint(), states)`.

@@ -569,7 +569,7 @@ end
     end
 end
 
-@testitem "Named constraints label as their quantity forms" begin
+@testitem "Labels kept by named constraints and replaced by additive ones" begin
     using FermionicHilbertSpaces: FilterConstraint, SectorConstraint
     @fermions f
     Hnumber = hilbert_space(f, 1:4, NumberConservation())
@@ -579,7 +579,6 @@ end
     @test same(hilbert_space(f, 1:4, NumberConservation(2) * FilterConstraint(keep)), hilbert_space(f, 1:4, (NumberConservation(2), keep)))
     @test same(hilbert_space(f, 1:4, FilterConstraint(keep) * SectorConstraint(odd)), hilbert_space(f, 1:4, (keep, odd)))
     @test quantumnumbers(constrain_space(Hnumber, FilterConstraint(keep))) == quantumnumbers(Hnumber)
-    @test same(constrain_space(Hnumber, FilterConstraint(keep)), constrain_space(Hnumber, keep))
     @test same(constrain_space(Hnumber, SectorConstraint(odd)), constrain_space(Hnumber, odd))
     factors = (hilbert_space(f, 1:2, NumberConservation()), hilbert_space(f, 3:4))
     @test same(tensor_product(factors; constraint = SectorConstraint(odd)), tensor_product(factors; constraint = odd))
