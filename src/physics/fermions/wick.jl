@@ -66,8 +66,10 @@ function expectation(op, G::AbstractMatrix, H::Union{SingleParticleHilbertSpace,
     _check_size(G, H)
     return zero(eltype(G)) + wick_expectation(op, _contraction(G, H), fs -> _in_space(fs, H, projection), one(eltype(G)))
 end
-# These spaces have no lazy representation
-expectation(op, ψ::AbstractVector, H::Union{SingleParticleHilbertSpace, BdGHilbertSpace, MajoranaSingleParticleHilbertSpace}) = dot(ψ, representation(op, H), ψ)
+# The one-particle state Σᵢ ψ[i] fᵢ'|0⟩ has the correlation matrix ⟨fᵢ' fⱼ⟩ = conj(ψ[i]) ψ[j]
+expectation(op, ψ::AbstractVector, H::SingleParticleHilbertSpace; kwargs...) = expectation(op, conj(ψ) * transpose(ψ), H; kwargs...)
+expectation(op, ψ::AbstractVector, H::Union{BdGHilbertSpace, MajoranaSingleParticleHilbertSpace}; kwargs...) =
+    throw(ArgumentError("A vector on `$H` is a quasiparticle, not a state. Pass the correlation matrix of the state, see `correlation_matrix`."))
 
 """
     mean_field(op, G, H; projection = false)
@@ -108,8 +110,14 @@ end
     for op in (quartic + quartic', sextic + hc)
         @test expectation(op, G, H) ≈ tr(ρ * representation(op, Hfock, Matrix))
     end
+    ψ = normalize(randn(ComplexF64, N))
+    ψfock = sum(ψ[i] * representation(f[i]', Hfock, Matrix) for i in 1:N) * representation("0"^N, Hfock)
+    for op in (q + 2, f[1] * f[1]' * f[2] * f[2]')
+        @test expectation(op, ψ, H) ≈ ψfock' * representation(op, Hfock, Matrix) * ψfock
+    end
 
     H = hilbert_space(f, 1:N, BdG())
+    @test_throws ArgumentError expectation(q, normalize(randn(2N)), H)
     q = hop + pair + hc
     ρ = thermal(q)
     G = transpose(inv(I + exp(2β * representation(q, H, Matrix))))
