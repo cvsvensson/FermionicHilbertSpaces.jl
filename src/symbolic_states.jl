@@ -389,34 +389,31 @@ NonCommutativeProducts.contraction_key(s::SymbolicState) = isket(s) ? (group_id(
 function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any, <:AbstractSym}, b::Union{NCAdd, NCMul})
     factors1 = _first_factors(b)
     any(s -> s isa SymbolicState, factors1) || return _sorted_product(c, x, b)
-    groupops = _group_operators(x, factors1)
-    isnothing(groupops) && return _sorted_product(c, x, b)
-    precomps = map(((_, ket, op),) -> precomputation_before_operator_application(op, ket.space), groupops)
-    return _apply_group_operators!!(_with_factor_type(c, factors1), x, b, groupops, precomps)
+    groupop = _group_operator(x, factors1)
+    isnothing(groupop) && return _sorted_product(c, x, b)
+    k, ket, op = groupop
+    precomp = precomputation_before_operator_application(op, ket.space)
+    return _apply_group_operator!!(_with_factor_type(c, factors1), x, b, k, ket, op, precomp)
 end
 # An empty sum takes the factor type of the kets. Otherwise its keys, typed by the operator and the kets together, have
 # an abstract factor type, which makes every key hash through dynamic dispatch and be copied into a new vector.
 _with_factor_type(c::NCAdd{C}, ::AbstractVector{T}) where {C, T} = iszero(c) ? convert(NCAdd{C, NCMul{Int, T, Vector{T}}}, c) : c
 _with_factor_type(c, _) = c
 _sorted_product(c, x, b) = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any, NCMul, Union{NCAdd, NCMul}}, c, x, b)
-# Function barrier: the types of `groupops` and `precomps` depend on the kets in `b`
-function _apply_group_operators!!(c, x, b, groupops, precomps)
+# Function barrier: the types of `ket1`, `op` and `precomp` depend on the kets in `b`
+function _apply_group_operator!!(c, x, b, k, ket1, op, precomp)
     for (factors, coeff) in NonCommutativeProducts.termpairs(b)
-        if !all(((k, ket, _),) -> _is_like_ket(factors, k, ket), groupops)
+        if !_is_like_ket(factors, k, ket1)
             c = _sorted_product(c, x, NCMul(coeff, factors))
             continue
         end
-        newkets = map(groupops, precomps) do (k, ket1, op), precomp
-            ket = factors[k]::typeof(ket1)
-            _apply_local_operators(op, ket.ket, ket.space, precomp)
-        end
-        amp = x.coeff * coeff * prod(last, newkets; init = true)
+        ket = factors[k]::typeof(ket1)
+        newket, localamp = _apply_local_operators(op, ket.ket, ket.space, precomp)
+        amp = x.coeff * coeff * localamp
         # Copy the factors only for terms of `b` that `x` does not annihilate
         iszero(amp) && continue
         newfactors = copy(factors)
-        for ((k, _, _), (newket, _)) in zip(groupops, newkets)
-            newfactors[k] = SymbolicState(factors[k].space, newket, nothing)
-        end
+        newfactors[k] = SymbolicState(ket.space, newket, nothing)
         c = add!!(c, NCMul(amp, newfactors))
     end
     return c
@@ -429,15 +426,14 @@ function _is_like_ket(factors, k, ket)
     s = factors[k]
     return s isa typeof(ket) && _same_space_id(s.space, ket.space)
 end
-# The 1-tuple `((k, factors[k], op),)`, where `factors[k]` is the ket that the product `x` of operators on one group
-# acts on, or `nothing` if `x` acts on several groups or on no ket. Products on several groups are left to the sorted
-# product, which is faster for them.
-function _group_operators(x::NCMul, factors)
+# `(k, factors[k], op)`, where `factors[k]` is the ket that the product `x` of operators on one group acts on, or
+# `nothing` if `x` acts on several groups or on no ket. Products on several groups are faster as sorted products.
+function _group_operator(x::NCMul, factors)
     isempty(x.factors) && return nothing
     parts = NonCommutativeProducts.split_by_group(NCMul(one(x.coeff), x.factors))
     length(parts) == 1 || return nothing
     k = _ket_index(first(x.factors), factors)
-    return isnothing(k) ? nothing : ((k, factors[k], last(only(parts))),)
+    return isnothing(k) ? nothing : (k, factors[k], last(only(parts)))
 end
 _ket_index(::SymbolicState, factors) = nothing
 _ket_index(op, factors) = findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)
