@@ -372,6 +372,7 @@ If `Hs` contains only symbolic operators, their order does not matter: the modes
 as in `H`. If any element of `Hs` is a space, the modes must keep their order within each
 group of `H` (e.g. the Jordan-Wigner order of fermions), otherwise an `ArgumentError` is thrown.
 A Majorana names a mode only together with its partner, as in `[γ[1], γ[2]]`.
+The subregion holds the states consistent with `H` and with every constrained space in `Hs`.
 
 # Examples
 ```jldoctest
@@ -385,7 +386,6 @@ true
 """
 function subregion(Hs, H::AbstractHilbertSpace)
     Hs_items = Hs isa Tuple || Hs isa AbstractVector ? Hs : (Hs,)
-    any(x -> x isa AbstractHilbertSpace && isconstrained(x), Hs_items) && throw(ArgumentError("A constrained space cannot name a subregion; pass the unconstrained space or its symbols instead."))
     names = _pair_majoranas(collect(Iterators.flatten(Iterators.map(_atom_names, Hs_items))), H)
     isempty(names) && throw(ArgumentError("`Hs` must contain at least one space or symbolic operator."))
     positions = map(x -> atom_position(x, H), names)
@@ -396,8 +396,13 @@ function subregion(Hs, H::AbstractHilbertSpace)
     # Resolve the names to H's own atoms, so the basis of the subregion is that of H
     Hsub = tensor_product(collect(atomic_factors(H))[positions])
     match_atoms(Hsub, H) # checks the ordering within groups
-    !isconstrained(H) && return Hsub
-    states = _find_subregion_states(H, state_mapper(H, (Hsub,)))
+    restrictions = filter(x -> x isa AbstractHilbertSpace && isconstrained(x), collect(Hs_items))
+    !isconstrained(H) && isempty(restrictions) && return Hsub
+    states = isconstrained(H) ? _find_subregion_states(H, state_mapper(H, (Hsub,))) : collect(basisstates(Hsub))
+    for Hr in restrictions
+        split = Base.Fix2(split_state, state_mapper(Hsub, (Hr,)))
+        states = filter(s -> any(sub -> !iszero(state_index(only(sub), Hr)), first(split(s))), states)
+    end
     ConstrainedSpace(Hsub, states)
 end
 # The atoms that a space or symbol names, for lookups by `atomic_id`; a symbol names the atom it acts on.
@@ -422,7 +427,9 @@ _subsystem(Hs, H) = subregion(Hs, H)
     @test_throws ArgumentError subregion([f[4]], H)
     @test subregion(Hf, H) == Hf
     @test subregion(Hb, H) == Hb
-    @test_throws ArgumentError subregion(hilbert_space(f, 1:2, NumberConservation(1)), H)
+    Hone = hilbert_space(f, 1:2, NumberConservation(1))
+    @test basisstates(subregion(Hone, H)) == basisstates(Hone)
+    @test dim(subregion([Hone, b[2]], H)) == dim(Hone) * dim(Hbsub)
 
     @test subregion([f[1]], Hf) == hilbert_space(f, 1:1)
     @test subregion([b[1]], Hb) == hilbert_space(b, 1:1, 2)
