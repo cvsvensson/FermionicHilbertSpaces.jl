@@ -396,12 +396,12 @@ function subregion(Hs, H::AbstractHilbertSpace)
     # Resolve the names to H's own atoms, so the basis of the subregion is that of H
     Hsub = tensor_product(collect(atomic_factors(H))[positions])
     match_atoms(Hsub, H) # checks the ordering within groups
-    restrictions = filter(x -> x isa AbstractHilbertSpace && isconstrained(x), collect(Hs_items))
+    restrictions = filter(x -> x isa AbstractHilbertSpace && isconstrained(x), Hs_items)
     !isconstrained(H) && isempty(restrictions) && return Hsub
     states = isconstrained(H) ? _find_subregion_states(H, state_mapper(H, (Hsub,))) : collect(basisstates(Hsub))
     for Hr in restrictions
-        split = Base.Fix2(split_state, state_mapper(Hsub, (Hr,)))
-        states = filter(s -> any(sub -> !iszero(state_index(only(sub), Hr)), first(split(s))), states)
+        mapper = state_mapper(Hsub, (Hr,))
+        filter!(s -> any(sub -> isbasisstate(only(sub), Hr), first(split_state(s, mapper))), states)
     end
     ConstrainedSpace(Hsub, states)
 end
@@ -439,6 +439,7 @@ _subsystem(Hs, H) = subregion(Hs, H)
     Hbsub = subregion([b[2], b[3]], H)
     @test dim(Hfsub) == 3
     @test dim(Hbsub) == 3
+    @test dim(subregion(Hone, H)) == 2
 
     using FermionicHilbertSpaces: complementary_subsystem
     @test complementary_subsystem(H, subregion([f[3], b[2]], H)) ==
