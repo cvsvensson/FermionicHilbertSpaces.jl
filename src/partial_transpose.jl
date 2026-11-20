@@ -242,7 +242,7 @@ PartialTransposeMap
 
 function PartialTransposeMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, Hout::AbstractHilbertSpace=H; complement=complementary_subsystem(H, Hsub), kwargs...)
     smap = partial_transpose_map(H, Hsub, complement, Hout; kwargs...)
-    PartialTransposeMap(H, Hout, Hsub, complement, kwargs, smap)
+    return PartialTransposeMap(H, Hout, Hsub, complement, kwargs, smap)
 end
 
 # |ψ⟩ ↦ map * vec(ψψ†) without forming ψψ†

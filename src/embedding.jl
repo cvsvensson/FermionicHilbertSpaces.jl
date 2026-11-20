@@ -98,20 +98,20 @@ function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
     else
         _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, kwargs...))
     end
-    EmbedMap(Hsub, H, Hsub, complement, kwargs, map)
+    return EmbedMap(Hsub, H, Hsub, complement, kwargs, map)
 end
 
 # An embedding takes operators only, and maps a vectorized operator to a vectorized operator.
 _is_pure_state(::EmbedMap, in) = false
 function _map_input(op::EmbedMap, v::AbstractVector)
     length(v) == dim(op.Hin)^2 || throw(DimensionMismatch("The input vector must have length $(dim(op.Hin)^2), got $(length(v))"))
-    v
+    return v
 end
 (op::EmbedMap)(v::AbstractVector) = op.map * _map_input(op, v)
 
 function (op::EmbedMap)(m::SparseMatrixCSC)
     check_size(m, op.Hin)
-    _embed_sparse_matrix(op.map, m, dim(op.Hout))
+    return _embed_sparse_matrix(op.map, m, dim(op.Hout))
 end
 
 # map * vec(m) as a sparse D × D matrix, avoiding the dense length-D^2 vector that map * m[:] would allocate
@@ -136,7 +136,7 @@ end
 
 Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hout, op.Hin, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
 Base.adjoint(op::EmbedMap) = PartialTraceMap(op.Hout, op.Hin, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
-Base.transpose(op::Union{PartialTraceMap,EmbedMap}) = adjoint(op)
+Base.transpose(op::Union{PartialTraceMap, EmbedMap}) = adjoint(op)
 
 """
     embed(Hsub => H; kwargs...)
