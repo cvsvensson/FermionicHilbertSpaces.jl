@@ -42,15 +42,17 @@ function get_nchunks(scheduler)
     return n
 end
 
-cache_operator(L::LazyOperator, input::AbstractVecOrMat) = cache_operator!(L, input)
+cache_operator(L::LazyOperator, input::AbstractVecOrMat) = (cache_operator!(L, input); L)
+# Returns the buffer channel; callers use it rather than re-reading `L.cache`, which a concurrent call may replace.
 function cache_operator!(L::LazyOperator, input::AbstractVecOrMat)
-    _cache_matches(L, L.cache, input) && return L
+    cache = L.cache
+    _cache_matches(L, cache, input) && return cache
     y = _lazy_output_prototype(L, input)
     nbuffers = Threads.nthreads()
     chnl = Channel{typeof(y)}(nbuffers)
     foreach(_ -> put!(chnl, similar(y)), 1:nbuffers)
     L.cache = chnl
-    return L
+    return chnl
 end
 
 function _cache_matches(L, cache, input::AbstractVecOrMat)
@@ -67,8 +69,7 @@ function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:NCAdd,<:Any,<:Any,<
     else
         rmul!(y, β)
     end
-    cache_operator!(L, y)
-    _apply_term_chunks!(y, x, L, α, L.cache)
+    _apply_term_chunks!(y, x, L, α, cache_operator!(L, y))
     return _add_scalar!(y, L, x, α)
 end
 
@@ -95,8 +96,7 @@ function lazy_mul!(y::AbstractVecOrMat{T}, L::LazyOperator{<:Any, <:Any, <:Any, 
     else
         rmul!(y, β)
     end
-    cache_operator!(L, y)
-    _apply_terms!(y, x, L.space, _lazy_terms(L), α, L.conjugate, L.projection, L.chunking, L.cache)
+    _apply_terms!(y, x, L.space, _lazy_terms(L), α, L.conjugate, L.projection, L.chunking, cache_operator!(L, y))
     return _add_scalar!(y, L, x, α)
 end
 
