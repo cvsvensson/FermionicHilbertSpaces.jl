@@ -51,6 +51,8 @@ products of groups without an integer internal representation, `Axes(Hout, Hin)`
 matrix may need more entries than it can count. Operator coefficients keep their type on the GPU, usually `Float64`, and
 boson and spin matrix elements are computed in `Float64`, which Apple GPUs do not support.
 
+Custom operators run on the GPU when their kind is isbits. A method of `apply_local_operator` that takes the float type of the matrix keeps `Float64` arithmetic out of the kernels; see [Extending the package](extending.md).
+
 `partial_trace`, `partial_transpose`, `embed`, `reshape`, `change_basis`, `generalized_kron` and `tensor_product` of dense GPU
 arrays also run on the GPU. GPU sparse arrays throw
 an `ArgumentError` there.

@@ -14,7 +14,7 @@ FermionicHilbertSpaces.jl turns symbolic fermion, boson and spin operators into 
 
 It is not a solver: combine it with LinearAlgebra, KrylovKit or ODE solvers for eigenstates and time evolution.
 
-Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`. See the [documentation](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/) for getting started, tutorials, guides and the API reference.
+Install the package from the Julia package manager with `Pkg.add("FermionicHilbertSpaces")`. See the [documentation](https://cvsvensson.github.io/FermionicHilbertSpaces.jl/dev/) for getting started, tutorials, how-to guides, examples and the reference.
 
 
 ## Quick example

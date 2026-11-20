@@ -2,7 +2,7 @@
 CurrentModule = FermionicHilbertSpaces
 ```
 
-# API reference
+# Public API
 Exported names and names declared `public`. Free-fermion functions are on [Free fermions API](free_fermions_api.md).
 
 ```@index

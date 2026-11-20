@@ -1,4 +1,4 @@
-# Mixed fermion-spin-boson example
+# Mixed fermion-spin-boson system
 
 This example combines several features at once: fermionic, spin, and bosonic Hilbert spaces; constraints on operators acting on all of them; and reduced density matrices.
 

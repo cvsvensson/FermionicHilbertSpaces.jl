@@ -5,7 +5,7 @@
 # global clock charge to diagonalise a Hamiltonian sector by sector and to
 # resolve the entanglement entropy of a subsystem.
 #
-# The pieces a new algebra needs are listed in [Extending and performance hooks](../extending.md).
+# The pieces a new algebra needs are listed in [Extending the package](../extending.md).
 
 using FermionicHilbertSpaces, LinearAlgebra, Plots, Arpack
 import FermionicHilbertSpaces: @field, AbstractBasisState, Op, apply_local_operator, local_mul_effect, mat_eltype

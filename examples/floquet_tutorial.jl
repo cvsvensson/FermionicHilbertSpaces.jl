@@ -27,7 +27,7 @@
 
 # ## The Floquet algebra
 
-# The required pieces are listed in [Extending and performance hooks](../extending.md). Compared to the
+# The required pieces are listed in [Extending the package](../extending.md). Compared to the
 # [Clock operators](clock_operators.md), the Floquet operators are combined with spin operators, and their
 # `local_mul_effect` simplifies products.
 

@@ -1,7 +1,7 @@
 # # Interacting Kitaev chain
 
 # An interacting Kitaev chain has two nearly degenerate ground states of opposite parity, which define
-# many-body Majorana operators. This tutorial builds the chain from a symbolic Hamiltonian, diagonalizes it
+# many-body Majorana operators. This example builds the chain from a symbolic Hamiltonian, diagonalizes it
 # per parity sector with `ParityConservation`, and uses `partial_trace` on low-rank operators to show that
 # these Majoranas stay localized at the chain ends (see Ref. [^1]).
 #
