@@ -293,19 +293,17 @@ end
 
 function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::ParityConservation{Missing})
     H = hilbert_space(a, labels)
-    states = if constraint.allowed_parities == [-1, 1]
-        basisstates(H)
-    else
-        valid_parity = only(constraint.allowed_parities)
-        Iterators.filter(isequal(valid_parity) ∘ parity, basisstates(H))
-    end
+    allowed = _normalize_constraint_values(allowed_values(constraint))
+    states = allowed == [-1, 1] ? basisstates(H) : Iterators.filter(isequal(only(allowed)) ∘ parity, basisstates(H))
+    supports_sector_grouping(constraint) || return ConstrainedSpace(H, collect(states); constraint)
     sector_space(H, states, parity, constraint)
 end
 function hilbert_space(a::Field{Fermion}, labels::AbstractVector, constraint::NumberConservation{T, Missing, Missing}) where {T}
     H = hilbert_space(a, labels)
     N = nbr_of_modes(H)
-    numbers = T === Missing ? (0:N) : constraint.total
+    numbers = T === Missing ? (0:N) : _normalize_constraint_values(constraint.total)
     state_blocks = Vector{statetype(H)}[fixed_particle_number_fockstates(N, n) for n in numbers]
+    supports_sector_grouping(constraint) || return ConstrainedSpace(H, only(state_blocks); constraint)
     dict = OrderedDict(zip(numbers, state_blocks))
     _sector_space(H, dict, constraint)
 end

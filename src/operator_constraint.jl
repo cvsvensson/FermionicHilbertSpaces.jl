@@ -47,7 +47,7 @@ struct ValueRule{L, M, A}
 end
 ValueRule{L}(map::M, allowed::A) where {L, M, A} = ValueRule{L, M, A}(map, allowed)
 _labels(::ValueRule{L}) where {L} = L
-_rule(x::Union{Number, AbstractString, Symbol, AbstractChar}) = ValueRule{false}(identity, (x,))
+_rule(x::SingleValue) = ValueRule{false}(identity, (x,))
 _rule(xs::Union{AbstractArray, AbstractSet, Tuple}) = ValueRule{true}(identity, xs)
 _rule((f, rest)::Pair) = (r = _rule(rest); ValueRule{_labels(r)}(_then(f, r.map), r.allowed))
 _rule(f) = ValueRule{nothing}(f, Bool)
@@ -577,11 +577,12 @@ end
     @test same(hilbert_space(f, 1:4, NumberConservation(2) * FilterConstraint(keep)), hilbert_space(f, 1:4, (NumberConservation(2), keep)))
     @test same(hilbert_space(f, 1:4, FilterConstraint(keep) * SectorConstraint(odd)), hilbert_space(f, 1:4, (keep, odd)))
     @test same(constrain_space(Hn, SectorConstraint(odd)), constrain_space(Hn, odd))
-    @test quantumnumbers(constrain_space(Hn, N => iseven)) == [0, 2, 4]
+    @test quantumnumbers(constrain_space(Hn, ParityConservation(1))) == [0, 2, 4]
+    @test quantumnumbers(constrain_space(Hn, NumberConservation(2))) == quantumnumbers(constrain_space(Hn, N => 2)) == [2]
     @test quantumnumbers(constrain_space(Hn, ParityConservation())) == [-1, 1]
     labels = [(i, σ) for i in 1:2 for σ in (:↑, :↓)]
     Sz = sum(f[i, :↑]'f[i, :↑] - f[i, :↓]'f[i, :↓] for i in 1:2)
-    @test quantumnumbers(constrain_space(hilbert_space(f, labels, Sz), sum(f[l]'f[l] for l in labels) => 2)) == [-2, 0, 2]
+    @test quantumnumbers(constrain_space(hilbert_space(f, labels, Sz), NumberConservation(2))) == [-2, 0, 2]
     A, B = hilbert_space(f, 1:2, NumberConservation()), hilbert_space(f, 3:4, NumberConservation())
     noneighbours = BranchConstraint((p, d, _) -> d == 1 || particle_number(p[d]) + particle_number(p[d - 1]) < 2)
     @test quantumnumbers(tensor_product(A, B; constraint = noneighbours)) == [[0, 0], [0, 1], [1, 0]]

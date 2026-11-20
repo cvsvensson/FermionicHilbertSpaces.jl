@@ -1,6 +1,6 @@
 
 _indent(s, p) = join([(i > 1 ? p : "") * l for (i, l) in enumerate(split(s, '\n'))], '\n')
-_parity(p) = p == [-1, 1] ? "any" : p == [1] ? "even" : p == [-1] ? "odd" : string(p)
+_parity(p) = p == [-1, 1] ? "any" : p == 1 ? "even" : p == -1 ? "odd" : "[" * join(map(_parity, p), ", ") * "]"
 
 function Base.show(io::IO, nc::NumberConservation{T,H,W}) where {T,H,W}
     if get(io, :compact, false)
@@ -11,7 +11,7 @@ function Base.show(io::IO, nc::NumberConservation{T,H,W}) where {T,H,W}
         print(io, "NumberConservation(", join(parts, ", "), ")")
     else
         lines = filter(!isnothing, [
-            ismissing(nc.total) ? nothing : "total: " * (isa(nc.total, AbstractVector) && length(nc.total) == 1 ? string(only(nc.total)) : sprint(show, nc.total)),
+            ismissing(nc.total) ? nothing : "total: " * sprint(show, nc.total),
             ismissing(nc.spaces) ? nothing : "subspaces: $(length(nc.spaces))",
             ismissing(nc.weights) ? nothing : "weights: " * sprint(show, nc.weights)])
         isempty(lines) ? print(io, "NumberConservation()") : print(io, "NumberConservation(", join(lines, ", "), ")")
@@ -408,6 +408,7 @@ end
     @test occursin("FockNumber(3)", repr(MIME"text/plain"(), basisstates(Hg)))
     @majoranas γ
     @test repr(basisstates(hilbert_space(γ, 1:4, ParityConservation(1)))) == "[00, 11]"
+    @test occursin("even", repr(ParityConservation(1))) && occursin("odd", repr(ParityConservation([-1])))
 
     bs6 = basisstates(hilbert_space(f, 1:6))
     @test repr(bs6) == "[" * join(map(n -> join(digits(n; base=2, pad=6)), 0:63), ", ") * "]"

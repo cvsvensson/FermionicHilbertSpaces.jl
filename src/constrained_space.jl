@@ -430,9 +430,9 @@ end
     @fermions f
     @boson b
     Hb = hilbert_space(b, 3)
-    H2 = tensor_product(hilbert_space(f, 1:2, NumberConservation(1)), hilbert_space(f, 3:4, ParityConservation(-1)))
+    H2 = tensor_product(hilbert_space(f, 1:2, NumberConservation([1])), hilbert_space(f, 3:4, ParityConservation([-1])))
     Hf1, Hf2 = hilbert_space(f, 1:2), hilbert_space(f, 3:4)
-    H3 = tensor_product(Hf1, Hf2; constraint = NumberConservation(1, [Hf1]) * NumberConservation(1, [Hf2]))
+    H3 = tensor_product(Hf1, Hf2; constraint = NumberConservation([1], [Hf1]) * NumberConservation([1], [Hf2]))
     for H in (H2, H3)
         H4 = tensor_product(H, Hb)
         @test dim(H4) == dim(H) * dim(Hb)

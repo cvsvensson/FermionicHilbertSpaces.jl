@@ -86,6 +86,8 @@ map_spaces(f, c::StateConstraint) = StateConstraint(c.reducer, c.maps, _map_spac
 # `k`th space, `modulus(c)` (`nothing`, or `m` to sum modulo `m`), `label(c, sum)` for the sector
 # label, and `with_spaces(c, spaces)`.
 abstract type AbstractAdditiveConstraint <: AbstractConstraint end
+# An allowed value that is not a collection. A constraint that allows a single value selects states without labelling them.
+const SingleValue = Union{Number, AbstractString, Symbol, AbstractChar}
 constraint_spaces(c::AbstractAdditiveConstraint) = c.spaces
 modulus(::AbstractAdditiveConstraint) = nothing
 label(::AbstractAdditiveConstraint, value) = value
@@ -95,7 +97,7 @@ label(::AbstractAdditiveConstraint, value) = value
     AdditiveConstraint(allowed_values, maps)
 
 Constraint enforcing that the sum of per-subspace contributions lies in
-`allowed_values`. The contribution of each subspace in `spaces` is the value of
+`allowed_values`, a single value that selects states or a collection that also labels sectors. The contribution of each subspace in `spaces` is the value of
 its map applied to the subspace's state. A single function in `maps` is applied
 to all spaces; a collection of maps supplies one function per subspace.
 
@@ -139,7 +141,7 @@ particle_number(state) = throw(ArgumentError("States of type `$(typeof(state))` 
     NumberConservation(space)
 
 Constraint enforcing conservation of a (possibly weighted) particle number, optionally on selected spaces.
-`total` can be a single value or collection of allowed values; `missing` allows any value.
+`total` is a single value, which selects states, or a collection of allowed values, which also labels sectors; `missing` allows any value.
 Totals must be integers unless some weight is non-integer.
 `spaces` restricts the count to the given subspaces (default: all of them). `weights` gives one
 weight per subspace in `spaces` (default: all `1`), and the conserved quantity is the weighted sum of their particle numbers.
@@ -150,7 +152,7 @@ struct NumberConservation{T, H, W} <: AbstractAdditiveConstraint
     weights::W
     function NumberConservation(_total, _spaces, _weights)
         weights = _normalize_constraint_values(_weights)
-        total = _normalize_constraint_values(_total)
+        total = _total isa SingleValue ? _total : _normalize_constraint_values(_total)
         total = ismissing(weights) || all(isinteger, weights) ? _integer_totals(total) : total
         subspace = _normalize_constraint_subspace(_spaces)
         _check_maps_length(weights, subspace, "weights")
@@ -176,17 +178,18 @@ NumberConservation(space::AbstractHilbertSpace) = NumberConservation(missing; sp
     ParityConservation(space)
 
 Constraint enforcing allowed parities of the particle number, which also counts bosons, optionally on selected spaces.
-`parities` is a parity or a collection of parities, each `1` (even) or `-1` (odd).
+`parities` is `1` (even), `-1` (odd) or a collection of them; a single parity selects states, and a collection also labels sectors.
 Sectors are ordered by increasing quantum number, so the odd sector comes first.
 """
-struct ParityConservation{H} <: AbstractAdditiveConstraint
-    allowed_parities::Vector{Int}
+struct ParityConservation{H, A} <: AbstractAdditiveConstraint
+    allowed_parities::A
     spaces::H
     function ParityConservation(_allowed, _spaces)
         allowed = sort(unique(_allowed))
         allowed in ([-1, 1], [1], [-1]) || throw(ArgumentError("The allowed parities must be a subset of `[-1, 1]`, got $allowed."))
+        allowed = _allowed isa SingleValue ? only(allowed) : allowed
         subspace = _normalize_constraint_subspace(_spaces)
-        new{typeof(subspace)}(allowed, subspace)
+        new{typeof(subspace), typeof(allowed)}(allowed, subspace)
     end
 end
 ParityConservation(parities=[-1, 1]; spaces=missing) = ParityConservation(parities, spaces)
@@ -199,12 +202,12 @@ with_spaces(c::ParityConservation, spaces) = ParityConservation(c.allowed_pariti
 
 # A constraint that allows every value restricts nothing, so pruning by it would only cost time.
 function supports_branch_pruning(c::AbstractAdditiveConstraint)
-    allowed, m = allowed_values(c), modulus(c)
+    allowed, m = _normalize_constraint_values(allowed_values(c)), modulus(c)
     ismissing(allowed) && return false
     return isnothing(m) || !all(r -> label(c, r) in allowed, 0:(m - 1))
 end
 supports_filtering(::AbstractAdditiveConstraint) = true
-supports_sector_grouping(::AbstractAdditiveConstraint) = true
+supports_sector_grouping(c::AbstractAdditiveConstraint) = !(allowed_values(c) isa SingleValue)
 supply_missing_constraint_info(c::AbstractAdditiveConstraint, space, spaces) = ismissing(constraint_spaces(c)) ? with_spaces(c, spaces) : c
 map_spaces(f, c::AbstractAdditiveConstraint) = with_spaces(c, _map_spaces(f, constraint_spaces(c)))
 
@@ -214,7 +217,7 @@ function sector_function(c::AbstractAdditiveConstraint, space::AbstractHilbertSp
     spaces = coalesce(constraint_spaces(c), (space,))
     c isa NumberConservation && _check_maps_length(c.weights, spaces, "weights")
     mapper = state_mapper(space, spaces)
-    allowed = allowed_values(c)
+    allowed = _normalize_constraint_values(allowed_values(c))
     S = _sum_type(allowed)
     return function sector(state)
         substates = unique_split_state(state, mapper)

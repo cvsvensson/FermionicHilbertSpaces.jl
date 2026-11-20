@@ -122,7 +122,7 @@ function _subspace_positions(subspaces, allspaces)
 end
 # The contribution of each space is a table over its states, and a modulus `m` is pruned by the residues it allows.
 function _sum_terms(c::AbstractAdditiveConstraint, allspaces)
-    allowed, m = allowed_values(c), modulus(c)
+    allowed, m = _normalize_constraint_values(allowed_values(c)), modulus(c)
     S = _sum_type(allowed)
     spaces = constraint_spaces(c)
     positions = ismissing(spaces) ? eachindex(allspaces) : _subspace_positions(map(hilbert_space, spaces), allspaces)

@@ -48,7 +48,7 @@ Hparity = hilbert_space(f, 1:4, N => parity => 0:1)
 Q3 = sum(k * f[k]'f[k] for k in 1:4) => (v -> mod(v, 3))
 Hdip = hilbert_space(f, 1:4, Q3)
 ```
-[`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total particle number, which also counts bosons.
+[`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total particle number, which also counts bosons. `NumberConservation(total)` and `ParityConservation(p)` follow the same table, so a single value selects and a collection labels.
 
 Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
 ```@example constraints
@@ -94,7 +94,7 @@ quantumnumbers(hilbert_space(f, 1:4, ParityConservation()))
 ```
 
 #### Products of constraints
-Multiplying constraints imposes all of them, and the quantum number of a sector has one entry per factor. Here each pair of modes holds at most one fermion, and there are two fermions in total:
+Multiplying constraints imposes all of them, and the quantum number of a sector has one entry per labelling factor. Here each pair of modes holds at most one fermion, and there are two fermions in total:
 ```@example constraints
 pairs = [hilbert_space(f, 2k-1:2k) for k in 1:3]
 pair_constraint = prod(NumberConservation(0:1, Hk) for Hk in pairs) * NumberConservation(2)
