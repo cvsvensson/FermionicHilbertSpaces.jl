@@ -609,7 +609,8 @@ function matrix_representation(op, space::AbstractHilbertSpace, repr = EagerSpar
     end
     _check_operator(op, space)
     format, kwargs = _with_amplitude_eltype(format, op, space, kwargs)
-    return _with_format_eltype(_matrix_representation(_at_format_precision(op, format), _checked_group_ids(op, space), space, format, chunking; projection, kwargs...), format)
+    M = _with_format_eltype(_matrix_representation(_at_format_precision(op, format), _checked_group_ids(op, space), space, format, chunking; projection, kwargs...), format)
+    return _symmetrize(M, op, space)
 end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
@@ -625,11 +626,12 @@ function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=
     return _with_format_eltype(_matrix_representation(_at_format_precision(op, repr), _checked_group_ids(op, Hin), ax, repr, chunking; projection, kwargs...), repr)
 end
 # A space whose basis states are not product states, such as a `SymmetricSector`, can throw for operators it cannot
-# represent with `_check_operator`, and give the amplitudes of its basis vectors with `_amplitude_eltype`, which is
-# given the float precision of the operator and promoted with its element type.
+# represent with `_check_operator` and give the amplitudes of its basis vectors with `_amplitude_eltype`, which is
+# given the float precision of the operator and promoted with its element type. `_symmetrize` adjusts the assembled matrix.
 _check_operator(op, space) = nothing
 _check_operator(op, space::AbstractSubspace) = _check_operator(op, parent(space))
 _check_operator(op, ax::Axes) = _check_operator(op, _input_space(ax))
+_symmetrize(M, op, space) = M
 _amplitude_eltype(space) = nothing
 _amplitude_eltype(space::AbstractSubspace) = _amplitude_eltype(parent(space))
 _with_amplitude_eltype(format, op, space, kwargs) = _with_amplitude_eltype(format, op, _amplitude_eltype(space), kwargs)

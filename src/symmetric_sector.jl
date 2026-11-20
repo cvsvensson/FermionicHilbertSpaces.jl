@@ -226,6 +226,9 @@ _orbits(H::AbstractSubspace{<:OrbitRep, <:SymmetricSector}) = (parent(H), [state
 _amplitude_eltype(H::SymmetricSector) = eltype(H.amplitudes)
 _precomputation_before_operator_application(op, H::_OrbitSpace) = _precomputation_before_operator_application(op, parent(first(_orbits(H))))
 _check_operator(op, H::SymmetricSector) = _check_invariant(op, H)
+# The two elements ⟨c′|op|c⟩ and conj(⟨c|op|c′⟩) are computed from different representatives and round differently.
+_symmetrize(M::Union{Matrix{T}, SparseMatrixCSC{T}}, op, ::_OrbitSpace) where {T <: Union{AbstractFloat, Complex{<:AbstractFloat}}} =
+    _ishermitian(op) ? (M + M') / 2 : M
 # The output index of a basis state is its orbit in the input space, so both spaces must share the orbits.
 function _check_operator(op, ax::Axes{<:Tuple{_OrbitSpace, _OrbitSpace}})
     Hout, Hin = ax.spaces
@@ -347,6 +350,12 @@ _check_projection(Hfrom::AbstractHilbertSpace, ::_OrbitSpace) = Hfrom isa _Orbit
 
     @test sort(reduce(vcat, [eigvals(Hermitian(representation(ham, sector(0, Hk), Matrix))) for Hk in Hks])) ≈
         eigvals(Hermitian(representation(ham, sector(0, space), Matrix)))
+    # orbits of different sizes
+    T4(j) = mod1(j + 1, 4)
+    H4 = hilbert_space(S, 1:4, (sum(S[j][:z] for j in 1:4) => 0, Relabel(T4) => 1))
+    ham4 = sum(S[j][:]'S[T4(j)][:] for j in 1:4)
+    @test ishermitian(representation(ham4, H4, Matrix))
+    @test ishermitian(representation(ham4, H4))
 
     k = 1
     Hk = Hks[k + 1]
