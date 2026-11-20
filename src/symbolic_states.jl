@@ -430,9 +430,9 @@ function _is_like_ket(factors, k, ket)
     return s isa typeof(ket) && _same_space_id(s.space, ket.space)
 end
 # A tuple of `(k, factors[k], op)`, one per segment `op` of the sorted product `x`, where `factors[k]` is the ket that
-# `op` acts on, or `nothing` unless each segment acts on a different ket. Unlike a `Vector`, a tuple keeps the concrete
-# type of each segment, which makes `_apply_group_operators!!` inferable when the segments act on kets of different
-# types. `mul_terms!!` calls this once per term of an operator sum, so the common case of a single segment skips `inds`.
+# `op` acts on, or `nothing` unless each segment acts on a different ket. A tuple, unlike a `Vector`, keeps each
+# segment's type when the segments are of different kinds. A single segment skips `inds`, as `mul_terms!!` calls this
+# once per operator term.
 function _group_operators(x::NCMul, factors)
     isempty(x.factors) && return nothing
     parts = NonCommutativeProducts.split_by_group(NCMul(one(x.coeff), x.factors))
