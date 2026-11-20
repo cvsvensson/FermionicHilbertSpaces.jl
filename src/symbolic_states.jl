@@ -384,36 +384,39 @@ end
 # forms the products of terms with equal keys. Bras and ketbras have no key and are paired with every term.
 NonCommutativeProducts.contraction_key(s::SymbolicState) = isket(s) ? (group_id(s.space), s.ket) : nothing
 
-# An operator string on one group acting on a product of kets is applied to the ket of that group, with one
-# precomputation for all terms of `b`, as in `matrix_representation`. Other products are sorted factor by factor.
+# An operator string acting on a product of kets is applied to the ket of each group it acts on, with one
+# precomputation per group for all terms of `b`, as in `matrix_representation`. Other products are sorted factor by factor.
 function NonCommutativeProducts.mul_terms!!(c, x::NCMul{<:Any, <:AbstractSym}, b::Union{NCAdd, NCMul})
     factors1 = _first_factors(b)
     any(s -> s isa SymbolicState, factors1) || return _sorted_product(c, x, b)
-    groupop = _group_operator(x, factors1)
-    isnothing(groupop) && return _sorted_product(c, x, b)
-    k, ket, op = groupop
-    precomp = precomputation_before_operator_application(op, ket.space)
-    return _apply_group_operator!!(_with_factor_type(c, factors1), x, b, k, ket, op, precomp)
+    groupops = _group_operators(x, factors1)
+    isnothing(groupops) && return _sorted_product(c, x, b)
+    return _apply_group_operators!!(_with_factor_type(c, factors1), x, b, groupops)
 end
 # An empty sum takes the factor type of the kets. Otherwise its keys, typed by the operator and the kets together, have
 # an abstract factor type, which makes every key hash through dynamic dispatch and be copied into a new vector.
 _with_factor_type(c::NCAdd{C}, ::AbstractVector{T}) where {C, T} = iszero(c) ? convert(NCAdd{C, NCMul{Int, T, Vector{T}}}, c) : c
 _with_factor_type(c, _) = c
 _sorted_product(c, x, b) = invoke(NonCommutativeProducts.mul_terms!!, Tuple{Any, NCMul, Union{NCAdd, NCMul}}, c, x, b)
-# Function barrier: the types of `ket1`, `op` and `precomp` depend on the kets in `b`
-function _apply_group_operator!!(c, x, b, k, ket1, op, precomp)
+# Function barrier: the type of `groupops` depends on the kets in `b`
+function _apply_group_operators!!(c, x, b, groupops)
+    precomps = map(((_, ket, op),) -> precomputation_before_operator_application(op, ket.space), groupops)
     for (factors, coeff) in NonCommutativeProducts.termpairs(b)
-        if !_is_like_ket(factors, k, ket1)
+        if !all(((k, ket, _),) -> _is_like_ket(factors, k, ket), groupops)
             c = _sorted_product(c, x, NCMul(coeff, factors))
             continue
         end
-        ket = factors[k]::typeof(ket1)
-        newket, localamp = _apply_local_operators(op, ket.ket, ket.space, precomp)
-        amp = x.coeff * coeff * localamp
+        newkets = map(groupops, precomps) do (k, ket1, op), precomp
+            ket = factors[k]::typeof(ket1)
+            _apply_local_operators(op, ket.ket, ket.space, precomp)
+        end
+        amp = x.coeff * coeff * prod(last, newkets; init = true)
         # Copy the factors only for terms of `b` that `x` does not annihilate
         iszero(amp) && continue
         newfactors = copy(factors)
-        newfactors[k] = SymbolicState(ket.space, newket, nothing)
+        for ((k, _, _), (newket, _)) in zip(groupops, newkets)
+            newfactors[k] = SymbolicState(factors[k].space, newket, nothing)
+        end
         c = add!!(c, NCMul(amp, newfactors))
     end
     return c
@@ -426,14 +429,20 @@ function _is_like_ket(factors, k, ket)
     s = factors[k]
     return s isa typeof(ket) && _same_space_id(s.space, ket.space)
 end
-# `(k, factors[k], op)`, where `factors[k]` is the ket that the product `x` of operators on one group acts on, or
-# `nothing` if `x` acts on several groups or on no ket. Products on several groups are faster as sorted products.
-function _group_operator(x::NCMul, factors)
+# A tuple of `(k, factors[k], op)`, one per segment `op` of the sorted product `x`, where `factors[k]` is the ket that
+# `op` acts on, or `nothing` unless each segment acts on a different ket. Unlike a `Vector`, a tuple keeps the concrete
+# type of each segment, which makes `_apply_group_operators!!` inferable when the segments act on kets of different
+# types. `mul_terms!!` calls this once per term of an operator sum, so the common case of a single segment skips `inds`.
+function _group_operators(x::NCMul, factors)
     isempty(x.factors) && return nothing
     parts = NonCommutativeProducts.split_by_group(NCMul(one(x.coeff), x.factors))
-    length(parts) == 1 || return nothing
-    k = _ket_index(first(x.factors), factors)
-    return isnothing(k) ? nothing : (k, factors[k], last(only(parts)))
+    if length(parts) == 1
+        k = _ket_index(first(x.factors), factors)
+        return isnothing(k) ? nothing : ((k, factors[k], last(only(parts))),)
+    end
+    inds = map(((_, op),) -> _ket_index(first(op.factors), factors), parts)
+    (any(isnothing, inds) || !allunique(inds)) && return nothing
+    return ntuple(n -> (inds[n], factors[inds[n]], last(parts[n])), length(parts))
 end
 _ket_index(::SymbolicState, factors) = nothing
 _ket_index(op, factors) = findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)
