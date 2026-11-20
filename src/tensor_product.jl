@@ -1128,7 +1128,7 @@ end
 
 # A precomputed superoperator `map` from operators on `Hin` to operators on `Hout`, applied as `map * vec(m)`.
 # `K` names the kind and `Hsub` is the subsystem the map acts on.
-struct SuperoperatorMap{K,HI,HO,HS,C,KW,M}
+struct SuperoperatorMap{K, HI, HO, HS, C, KW, M}
     Hin::HI
     Hout::HO
     Hsub::HS
@@ -1137,7 +1137,7 @@ struct SuperoperatorMap{K,HI,HO,HS,C,KW,M}
     map::M
 end
 SuperoperatorMap{K}(Hin, Hout, Hsub, complement, kwargs, map) where {K} =
-    SuperoperatorMap{K,typeof(Hin),typeof(Hout),typeof(Hsub),typeof(complement),typeof(kwargs),typeof(map)}(Hin, Hout, Hsub, complement, kwargs, map)
+    SuperoperatorMap{K, typeof(Hin), typeof(Hout), typeof(Hsub), typeof(complement), typeof(kwargs), typeof(map)}(Hin, Hout, Hsub, complement, kwargs, map)
 
 const PartialTraceMap = SuperoperatorMap{:PartialTraceMap}
 const EmbedMap = SuperoperatorMap{:EmbedMap}
@@ -1146,7 +1146,7 @@ const PartialTransposeMap = SuperoperatorMap{:PartialTransposeMap}
 # The map checks nothing, so `projection` has no effect.
 function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(Hsub, H, complement), projection = false, kwargs...)
     map = partial_trace_map(H, Hsub, complement, alg; kwargs...)
-    PartialTraceMap(H, Hsub, Hsub, complement, kwargs, map)
+    return PartialTraceMap(H, Hsub, Hsub, complement, kwargs, map)
 end
 
 vec_to_density_matrix(v::AbstractVector) = LowRankMatrix(v, conj(v))
@@ -1194,7 +1194,7 @@ _map_input(op::SuperoperatorMap, in) = _canonicalize_pt_input(in, op.Hin)
 function (op::SuperoperatorMap)(in)
     n = dim(op.Hout)
     _is_pure_state(op, in) && return reshape(_apply_superop_on_pure_state(op.map, in), n, n)
-    _devectorize_pt_output(op.map * _map_input(op, in), n)
+    return _devectorize_pt_output(op.map * _map_input(op, in), n)
 end
 function (op::SuperoperatorMap)(out, in)
     vout = _canonicalize_pt_output(out, op.Hout)
@@ -1203,7 +1203,7 @@ function (op::SuperoperatorMap)(out, in)
     else
         mul!(vout, op.map, _map_input(op, in))
     end
-    out
+    return out
 end
 SparseArrays.sparse(op::SuperoperatorMap) = op.map
 
