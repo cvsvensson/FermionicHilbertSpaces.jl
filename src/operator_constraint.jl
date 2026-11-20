@@ -47,7 +47,7 @@ struct ValueRule{L, M, A}
 end
 ValueRule{L}(map::M, allowed::A) where {L, M, A} = ValueRule{L, M, A}(map, allowed)
 _labels(::ValueRule{L}) where {L} = L
-_rule(x::Union{Number, AbstractString, Symbol, AbstractChar}) = ValueRule{false}(identity, (x,))
+_rule(x::SingleValue) = ValueRule{false}(identity, (x,))
 _rule(xs::Union{AbstractArray, AbstractSet, Tuple}) = ValueRule{true}(identity, xs)
 _rule((f, rest)::Pair) = (r = _rule(rest); ValueRule{_labels(r)}(_then(f, r.map), r.allowed))
 _rule(f) = ValueRule{nothing}(f, Bool)
@@ -120,9 +120,6 @@ function sector_function(c::RuleConstraint, space::AbstractHilbertSpace)
     value, rule = quantity_function(c, space), c.rule
     return state -> _label(rule, value(state))
 end
-filter_function(c::RuleConstraint, space::AbstractHilbertSpace) = !ismissing ∘ sector_function(c, space)
-# Whether a factor of `c` has a `ValueRule`. Such constraints keep the labels of a space with sectors and add their own.
-_has_rule(c) = any(ci -> ci isa RuleConstraint, constraint_factors(c))
 
 # Decides whether a rule ending in a function selects or labels, by its value at the first of the candidate `states`.
 # Without states it labels, so that the empty result has sectors.
@@ -569,25 +566,30 @@ end
     end
 end
 
-@testitem "Labels kept by named constraints and replaced by additive ones" begin
-    using FermionicHilbertSpaces: FilterConstraint, SectorConstraint
+@testitem "A labelling constraint replaces the sectors, a selecting one keeps them" begin
+    using FermionicHilbertSpaces: FilterConstraint, SectorConstraint, particle_number
     @fermions f
-    Hnumber = hilbert_space(f, 1:4, NumberConservation())
+    N = sum(f[i]'f[i] for i in 1:4)
+    Hn = hilbert_space(f, 1:4, NumberConservation())
     keep(s) = s.f != 3
     odd(s) = isodd(s.f) ? 1.0 : 2
     same(H1, H2) = quantumnumbers(H1) == quantumnumbers(H2) && basisstates(H1) == basisstates(H2)
     @test same(hilbert_space(f, 1:4, NumberConservation(2) * FilterConstraint(keep)), hilbert_space(f, 1:4, (NumberConservation(2), keep)))
     @test same(hilbert_space(f, 1:4, FilterConstraint(keep) * SectorConstraint(odd)), hilbert_space(f, 1:4, (keep, odd)))
-    @test quantumnumbers(constrain_space(Hnumber, FilterConstraint(keep))) == quantumnumbers(Hnumber)
-    @test same(constrain_space(Hnumber, SectorConstraint(odd)), constrain_space(Hnumber, odd))
-    factors = (hilbert_space(f, 1:2, NumberConservation()), hilbert_space(f, 3:4))
-    @test same(tensor_product(factors; constraint = SectorConstraint(odd)), tensor_product(factors; constraint = odd))
-    H2 = constrain_space(Hnumber, NumberConservation(2))
-    @test quantumnumbers(H2) == [2] && dim(sector(2, H2)) == 6
-    @test quantumnumbers(constrain_space(Hnumber, ParityConservation())) == [-1, 1]
+    @test same(constrain_space(Hn, SectorConstraint(odd)), constrain_space(Hn, odd))
+    @test quantumnumbers(constrain_space(Hn, ParityConservation(1))) == [0, 2, 4]
+    @test quantumnumbers(constrain_space(Hn, NumberConservation(2))) == quantumnumbers(constrain_space(Hn, N => 2)) == [2]
+    @test quantumnumbers(constrain_space(Hn, ParityConservation())) == [-1, 1]
+    @test quantumnumbers(hilbert_space(f, 1:4, NumberConservation(2))) == quantumnumbers(hilbert_space(f, 1:4, N => 2)) != quantumnumbers(hilbert_space(f, 1:4, NumberConservation([2]))) == [2]
+    labels = [(i, σ) for i in 1:2 for σ in (:↑, :↓)]
+    Sz = sum(f[i, :↑]'f[i, :↑] - f[i, :↓]'f[i, :↓] for i in 1:2)
+    @test quantumnumbers(constrain_space(hilbert_space(f, labels, Sz), NumberConservation(2))) == [-2, 0, 2]
+    A, B = hilbert_space(f, 1:2, NumberConservation()), hilbert_space(f, 3:4, NumberConservation())
+    noneighbours = BranchConstraint((p, d, _) -> d == 1 || particle_number(p[d]) + particle_number(p[d - 1]) < 2)
+    @test quantumnumbers(tensor_product(A, B; constraint = noneighbours)) == [[0, 0], [0, 1], [1, 0]]
 end
 
-@testitem "Tensor products keep the labels of their factors" begin
+@testitem "A constraint in tensor_product labels like constrain_space on the product" begin
     @fermions f
     N = sum(f[i]'f[i] for i in 1:4)
     factors = (hilbert_space(f, 1:2, f[1]'f[1] - f[2]'f[2]), hilbert_space(f[3]), hilbert_space(f[4]))
@@ -599,7 +601,7 @@ end
 @testitem "Labels of several constraints combine" begin
     @fermions f
     N(r) = sum(f[i]'f[i] for i in r)
-    H = constrain_space(hilbert_space(f, 1:4, N(1:4)), N(1:2))
+    H = hilbert_space(f, 1:4, (N(1:4), N(1:2)))
     @test Set(quantumnumbers(H)) == Set([a + b, a] for a in 0:2, b in 0:2)
     @spins S 1 // 2
     nup(s) = count(x -> x.m > 0, s.states)

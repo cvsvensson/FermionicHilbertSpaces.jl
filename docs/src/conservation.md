@@ -48,9 +48,9 @@ Hparity = hilbert_space(f, 1:4, N => parity => 0:1)
 Q3 = sum(k * f[k]'f[k] for k in 1:4) => (v -> mod(v, 3))
 Hdip = hilbert_space(f, 1:4, Q3)
 ```
-[`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total particle number, which also counts bosons.
+[`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total particle number, which also counts bosons. `NumberConservation(total)` and `ParityConservation(p)` follow the same table, so a single value selects and a collection labels.
 
-Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
+Several constraints go in a tuple or a vector, and a sector label then has one entry per labelling quantity. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
 ```@example constraints
 @spins S 1 // 2
 Sz = sum(S[i][:z] for i in 1:6)
@@ -68,7 +68,7 @@ A function of the basis state works the same way:
 nup(state) = count(s -> s.m > 0, state.states)
 dim(hilbert_space(S, 1:6, nup => 2)), dim(hilbert_space(S, 1:6, s -> nup(s) <= 1))
 ```
-Applied to a space with sectors, a constraint written this way keeps those sectors, and its own labels follow theirs.
+A constraint that labels sectors replaces the sectors of the space it is applied to; one that only selects states, such as `N => 2`, keeps them.
 
 ### How a constrained space is built
 The states are built one factor at a time, as a tree. Each term of an operator is assigned to the factors it acts on, so after each factor the value so far is known, along with the range that the remaining factors can still add. A branch that cannot reach an allowed value is skipped. For a particle number, a magnetization or a blockade, every branch that is kept leads to a kept state, so the cost grows with the size of the result rather than the full space. A term that acts on several factors is tabulated on their product, which may have at most 4096 states.
@@ -94,7 +94,7 @@ quantumnumbers(hilbert_space(f, 1:4, ParityConservation()))
 ```
 
 #### Products of constraints
-Multiplying constraints imposes all of them, and the quantum number of a sector has one entry per factor. Here each pair of modes holds at most one fermion, and there are two fermions in total:
+Multiplying constraints imposes all of them, and the quantum number of a sector has one entry per labelling factor. Here each pair of modes holds at most one fermion, and there are two fermions in total:
 ```@example constraints
 pairs = [hilbert_space(f, 2k-1:2k) for k in 1:3]
 pair_constraint = prod(NumberConservation(0:1, Hk) for Hk in pairs) * NumberConservation(2)

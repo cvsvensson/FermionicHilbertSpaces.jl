@@ -28,8 +28,8 @@ function branch_constraint(constraint::ProductConstraint, space)
 end
 supports_branch_pruning(c::ProductConstraint) = any(supports_branch_pruning, c.constraints)
 supports_filtering(c::ProductConstraint) = any(supports_filtering, c.constraints)
-# A product with a rule factor also groups when only some factors do, and the others then filter.
-supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c.constraints) || (_has_rule(c) && any(supports_sector_grouping, c.constraints))
+# A product labels sectors when some factor does, and the other factors filter.
+supports_sector_grouping(c::ProductConstraint) = any(supports_sector_grouping, c.constraints)
 
 supply_missing_constraint_info(constraint::ProductConstraint, space, spaces) = ProductConstraint(map(cons -> supply_missing_constraint_info(cons, space, spaces), constraint.constraints))
 
@@ -86,6 +86,8 @@ map_spaces(f, c::StateConstraint) = StateConstraint(c.reducer, c.maps, _map_spac
 # `k`th space, `modulus(c)` (`nothing`, or `m` to sum modulo `m`), `label(c, sum)` for the sector
 # label, and `with_spaces(c, spaces)`.
 abstract type AbstractAdditiveConstraint <: AbstractConstraint end
+# An allowed value that is not a collection. A constraint that allows a single value selects states without labelling them.
+const SingleValue = Union{Number, AbstractString, Symbol, AbstractChar}
 constraint_spaces(c::AbstractAdditiveConstraint) = c.spaces
 modulus(::AbstractAdditiveConstraint) = nothing
 label(::AbstractAdditiveConstraint, value) = value
@@ -95,7 +97,7 @@ label(::AbstractAdditiveConstraint, value) = value
     AdditiveConstraint(allowed_values, maps)
 
 Constraint enforcing that the sum of per-subspace contributions lies in
-`allowed_values`. The contribution of each subspace in `spaces` is the value of
+`allowed_values`, a single value that selects states or a collection that also labels sectors. The contribution of each subspace in `spaces` is the value of
 its map applied to the subspace's state. A single function in `maps` is applied
 to all spaces; a collection of maps supplies one function per subspace.
 
@@ -140,7 +142,7 @@ particle_number(state) = throw(ArgumentError("States of type `$(typeof(state))` 
     NumberConservation(space)
 
 Constraint enforcing conservation of a (possibly weighted) particle number, optionally on selected spaces.
-`total` can be a single value or collection of allowed values; `missing` allows any value.
+`total` is a single value, which selects states, or a collection of allowed values, which also labels sectors; `missing` allows any value.
 Totals must be integers unless some weight is non-integer.
 `spaces` restricts the count to the given subspaces (default: all of them). `weights` gives one
 weight per subspace in `spaces` (default: all `1`), and the conserved quantity is the weighted sum of their particle numbers.
@@ -151,7 +153,7 @@ struct NumberConservation{T, H, W} <: AbstractAdditiveConstraint
     weights::W
     function NumberConservation(_total, _spaces, _weights)
         weights = _normalize_constraint_values(_weights)
-        total = _normalize_constraint_values(_total)
+        total = _total isa SingleValue ? _total : _normalize_constraint_values(_total)
         total = ismissing(weights) || all(isinteger, weights) ? _integer_totals(total) : total
         subspace = _normalize_constraint_subspace(_spaces)
         _check_maps_length(weights, subspace, "weights")
@@ -177,17 +179,18 @@ NumberConservation(space::AbstractHilbertSpace) = NumberConservation(missing; sp
     ParityConservation(space)
 
 Constraint enforcing allowed parities of the particle number, which also counts bosons, optionally on selected spaces.
-`parities` is a parity or a collection of parities, each `1` (even) or `-1` (odd).
+`parities` is `1` (even), `-1` (odd) or a collection of them; a single parity selects states, and a collection also labels sectors.
 Sectors are ordered by increasing quantum number, so the odd sector comes first.
 """
-struct ParityConservation{H} <: AbstractAdditiveConstraint
-    allowed_parities::Vector{Int}
+struct ParityConservation{H, A} <: AbstractAdditiveConstraint
+    allowed_parities::A
     spaces::H
     function ParityConservation(_allowed, _spaces)
         allowed = sort(unique(_allowed))
         allowed in ([-1, 1], [1], [-1]) || throw(ArgumentError("The allowed parities must be a subset of `[-1, 1]`, got $allowed."))
+        allowed = _allowed isa SingleValue ? only(allowed) : allowed
         subspace = _normalize_constraint_subspace(_spaces)
-        new{typeof(subspace)}(allowed, subspace)
+        return new{typeof(subspace), typeof(allowed)}(allowed, subspace)
     end
 end
 ParityConservation(parities=[-1, 1]; spaces=missing) = ParityConservation(parities, spaces)
@@ -200,12 +203,12 @@ with_spaces(c::ParityConservation, spaces) = ParityConservation(c.allowed_pariti
 
 # A constraint that allows every value restricts nothing, so pruning by it would only cost time.
 function supports_branch_pruning(c::AbstractAdditiveConstraint)
-    allowed, m = allowed_values(c), modulus(c)
+    allowed, m = _normalize_constraint_values(allowed_values(c)), modulus(c)
     ismissing(allowed) && return false
     return isnothing(m) || !all(r -> label(c, r) in allowed, 0:(m - 1))
 end
 supports_filtering(::AbstractAdditiveConstraint) = true
-supports_sector_grouping(::AbstractAdditiveConstraint) = true
+supports_sector_grouping(c::AbstractAdditiveConstraint) = !(allowed_values(c) isa SingleValue)
 supply_missing_constraint_info(c::AbstractAdditiveConstraint, space, spaces) = ismissing(constraint_spaces(c)) ? with_spaces(c, spaces) : c
 map_spaces(f, c::AbstractAdditiveConstraint) = with_spaces(c, _map_spaces(f, constraint_spaces(c)))
 
@@ -215,7 +218,7 @@ function sector_function(c::AbstractAdditiveConstraint, space::AbstractHilbertSp
     spaces = coalesce(constraint_spaces(c), (space,))
     c isa NumberConservation && _check_maps_length(c.weights, spaces, "weights")
     mapper = state_mapper(space, spaces)
-    allowed = allowed_values(c)
+    allowed = _normalize_constraint_values(allowed_values(c))
     S = _sum_type(allowed)
     return function sector(state)
         substates = unique_split_state(state, mapper)
@@ -247,14 +250,9 @@ function sector_function(constraint::ProductConstraint, space::AbstractHilbertSp
         return isconcretetype(V) ? sectors : map(identity, sectors) # narrow the element type
     end
 end
+filter_function(c::AbstractConstraint, space::AbstractHilbertSpace) = !ismissing ∘ sector_function(c, space)
 function filter_function(constraint::ProductConstraint, space::AbstractHilbertSpace)
-    subspace_functions = map(constraint.constraints) do cons
-        if supports_sector_grouping(cons)
-            sector = sector_function(cons, space)
-            return state -> !ismissing(sector(state))
-        end
-        filter_function(cons, space)
-    end
+    subspace_functions = map(cons -> filter_function(cons, space), constraint.constraints)
     state -> all(f -> f(state), subspace_functions)
 end
 
@@ -272,12 +270,12 @@ Build a constrained Hilbert space from `space`.
 
 With a `constraint`, keep the basis states of `space` that satisfy it. If `states` is
 given, only those states are candidates. Constraints that group states into sectors,
-such as `NumberConservation`, return a space with sectors, with states ordered by sector.
+such as `NumberConservation()`, return a space with sectors, with states ordered by sector.
 `constrain_space(space, NoConstraint())` returns `space` unchanged.
 A constraint can also be `quantity` or `quantity => spec`, where `quantity` is a diagonal operator or a function
 of the basis state, such as `constrain_space(H, N => 2)` with `N = sum(f[i]'f[i] for i in 1:4)`;
 see [Constraints and sectors](@ref) for what `spec` can be.
-A `quantity => spec`, `FilterConstraint` or `SectorConstraint` on a space with sectors keeps the sectors of the space, and its own labels follow them.
+A constraint that labels sectors replaces the sectors of `space`; one that only selects states, such as `N => 2`, keeps them.
 
 With only `states`, return the subspace spanned by exactly those basis states, in the
 given order; this is equivalent to `constrain_space(space, NoConstraint(), states)`.
