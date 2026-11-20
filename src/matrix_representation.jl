@@ -352,6 +352,8 @@ end
 # that several sums share are mostly on the diagonal.
 function _product_terms(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}; tree_split = 10, kwargs...)
     spaces = groups(space)
+    # The factors of the KronTerms are sparse, so the local matrices are built sparse whatever the output format
+    local_repr = EagerSparseRepr{_repr_eltype(Missing, repr)}()
     by_span = Dict{UnitRange{Int}, Vector{Any}}()
     for prodop in _partitioned_terms(NCterms(op), bases, spaces)
         push!(get!(() -> [], by_span, minimum(prodop.inds):maximum(prodop.inds)), prodop)
@@ -365,8 +367,8 @@ function _product_terms(op::NCAdd, bases, space::ProductSpace, repr::Union{Eager
     for p in get(by_span, eachindex(spaces), [])
         push!(get!(() -> [], products, (p.inds, map(op -> op.factors, Base.tail(p.ops)))), p)
     end
-    sums = [(convert(SparseMatrixCSC, _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)), _stride(spaces, first(span))) for (span, prodops) in by_span if span != eachindex(spaces)]
-    return [_split_diagonals(sums, dim(space)); [_kron_term(ps, spaces, repr; kwargs...) for ps in values(products)]]
+    sums = [(convert(SparseMatrixCSC, _sum_matrices([_span_matrix(p, span, spaces, local_repr; kwargs...) for p in prodops], local_repr; tree_split)), _stride(spaces, first(span))) for (span, prodops) in by_span if span != eachindex(spaces)]
+    return [_split_diagonals(sums, dim(space)); [_kron_term(ps, spaces, local_repr; kwargs...) for ps in values(products)]]
 end
 function _span_matrix(prodop, span, spaces, repr; kwargs...)
     matrices = map(span) do n
