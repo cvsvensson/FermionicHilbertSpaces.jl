@@ -269,32 +269,6 @@ function _checked_state_index(state, space)
     i
 end
 
-interpret_state(state::FockNumber, ::Type{B}) where {B <: FockNumber} = convert(B, state)
-function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{B}) where {I,B<:FockNumber{I}}
-    all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only `'0'` and `'1'`, got `\"$input\"`."))
-    bits = map(c -> c == '1', collect(input))
-    return B(focknbr_from_bits(bits, I))
-end
-
-function interpret_state(input::Union{AbstractString,AbstractChar}, ::Type{BosonicState})
-    n = try
-        parse(Int, input)
-    catch
-        throw(ArgumentError("A bosonic occupation string must be an integer, got `\"$input\"`."))
-    end
-    BosonicState(n)
-end
-
-function interpret_state(input::Union{AbstractString, AbstractChar}, H::Union{_FockSpace, MajoranaHilbertSpace})
-    length(input) <= nbr_of_modes(H) || throw(ArgumentError("The Fock string `\"$input\"` has $(length(input)) characters, but the space has only $(nbr_of_modes(H)) modes."))
-    return interpret_state(input, statetype(H))
-end
-function interpret_state(input::Union{AbstractString, AbstractChar}, H::TruncatedBosonicHilbertSpace)
-    state = interpret_state(input, BosonicState)
-    isbasisstate(state, H) || throw(ArgumentError("The occupation `\"$input\"` is outside the boson space, whose occupations are 0 to $(dim(H) - 1)."))
-    return state
-end
-
 function interpret_state(input, space::ProductSpace{B}) where B
     length(input) == length(groups(space)) || throw(ArgumentError("Product-state input must have length $(length(groups(space))), got $(length(input))"))
     return B(map(interpret_state, input, groups(space)))
