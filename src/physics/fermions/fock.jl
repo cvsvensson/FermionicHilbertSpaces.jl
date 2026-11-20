@@ -14,6 +14,7 @@ Base.convert(::Type{FockNumber{I}}, f::FockNumber) where {I} = FockNumber{I}(I(f
 Base.:(==)(f1::FockNumber, f2::FockNumber) = f1.f == f2.f
 Base.hash(f::FockNumber, h::UInt) = hash(f.f, h)
 Base.isless(f1::FockNumber, f2::FockNumber) = f1.f < f2.f
+Base.show(io::IO, f::FockNumber) = print(io, "FockNumber(", f.f, ")")
 
 """
     default_fock_representation(N)
@@ -68,6 +69,14 @@ parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
 particle_number(s::FockNumber) = fermionnumber(s)
+
+interpret_state(state::FockNumber, ::Type{B}) where {B <: FockNumber} = convert(B, state)
+function interpret_state(input::Union{AbstractString, AbstractChar}, ::Type{B}) where {I, B <: FockNumber{I}}
+    all(c -> c == '0' || c == '1', input) || throw(ArgumentError("Fock strings must contain only `'0'` and `'1'`, got `\"$input\"`."))
+    bits = map(c -> c == '1', collect(input))
+    return B(focknbr_from_bits(bits, I))
+end
+
 _nbr_differing_modes(f1::FockNumber, f2::FockNumber, N::Int) = count_ones(f1.f ⊻ f2.f)
 
 internal_rep(state::FockNumber, ::AbstractHilbertSpace, ::Type{T}) where T<:Integer = T(state.f)

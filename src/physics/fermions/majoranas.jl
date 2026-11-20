@@ -201,6 +201,16 @@ function _majorana_space(y, labels, args...)
 end
 MajoranaHilbertSpace(mode_ordering, space::AbstractHilbertSpace, field) = rewrap(space, MajoranaHilbertSpace(mode_ordering, parent(space), field))
 
+Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace: ", m.field); show(IOContext(io, :compact => true), m.parent))
+
+const _FermionModeSpace = Union{FermionicSpace, MajoranaHilbertSpace}
+_state_label_atomic(f::FockNumber, H::_FermionModeSpace) = join(digits(Int, f.f; base = 2, pad = nbr_of_modes(H)))
+
+function interpret_state(input::Union{AbstractString, AbstractChar}, H::Union{_FockSpace, MajoranaHilbertSpace})
+    length(input) <= nbr_of_modes(H) || throw(ArgumentError("The Fock string `\"$input\"` has $(length(input)) characters, but the space has only $(nbr_of_modes(H)) modes."))
+    return interpret_state(input, statetype(H))
+end
+
 # Replace each pair of Majoranas in `names` that forms an atom of `H` by that atom, placed
 # where the first of the two appears.
 function _pair_majoranas(names, H)

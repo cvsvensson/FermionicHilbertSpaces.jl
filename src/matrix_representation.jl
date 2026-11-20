@@ -352,6 +352,8 @@ end
 # that several sums share are mostly on the diagonal.
 function _product_terms(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}; tree_split = 10, kwargs...)
     spaces = groups(space)
+    # The factors of the KronTerms are sparse, so the local matrices are built sparse whatever the output format
+    local_repr = EagerSparseRepr{_repr_eltype(Missing, repr)}()
     by_span = Dict{UnitRange{Int}, Vector{Any}}()
     for prodop in _partitioned_terms(NCterms(op), bases, spaces)
         push!(get!(() -> [], by_span, minimum(prodop.inds):maximum(prodop.inds)), prodop)
@@ -365,8 +367,8 @@ function _product_terms(op::NCAdd, bases, space::ProductSpace, repr::Union{Eager
     for p in get(by_span, eachindex(spaces), [])
         push!(get!(() -> [], products, (p.inds, map(op -> op.factors, Base.tail(p.ops)))), p)
     end
-    sums = [(convert(SparseMatrixCSC, _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)), _stride(spaces, first(span))) for (span, prodops) in by_span if span != eachindex(spaces)]
-    return [_split_diagonals(sums, dim(space)); [_kron_term(ps, spaces, repr; kwargs...) for ps in values(products)]]
+    sums = [(convert(SparseMatrixCSC, _sum_matrices([_span_matrix(p, span, spaces, local_repr; kwargs...) for p in prodops], local_repr; tree_split)), _stride(spaces, first(span))) for (span, prodops) in by_span if span != eachindex(spaces)]
+    return [_split_diagonals(sums, dim(space)); [_kron_term(ps, spaces, local_repr; kwargs...) for ps in values(products)]]
 end
 function _span_matrix(prodop, span, spaces, repr; kwargs...)
     matrices = map(span) do n
@@ -577,8 +579,7 @@ from `Hin` to `Hout`. Without `space`, the expression must consist of symbolic s
 The result is sparse by default. `repr` selects another format: an array type such as `Matrix` or `Matrix{ComplexF64}`
 (or a GPU array type such as `CuArray`), a number type such as `Float64` for a sparse result of that element type,
 or `:lazy` for a matrix-free operator. Coefficients are converted to the element type of `repr` (a complex coefficient
-with `Float64` throws an `InexactError`), and matrix elements are computed in its precision. On a
-[`SymmetricSector`](@ref) the matrix elements are only `Float64`-accurate, even with a higher-precision `repr`.
+with `Float64` throws an `InexactError`), and matrix elements are computed in its precision.
 
 ```jldoctest
 julia> @fermions f;
@@ -609,7 +610,8 @@ function matrix_representation(op, space::AbstractHilbertSpace, repr = EagerSpar
     end
     _check_operator(op, space)
     format, kwargs = _with_amplitude_eltype(format, op, space, kwargs)
-    return _with_format_eltype(_matrix_representation(_at_format_precision(op, format), _checked_group_ids(op, space), space, format, chunking; projection, kwargs...), format)
+    M = _with_format_eltype(_matrix_representation(_at_format_precision(op, format), _checked_group_ids(op, space), space, format, chunking; projection, kwargs...), format)
+    return _symmetrize(M, op, space)
 end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
@@ -625,11 +627,12 @@ function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=
     return _with_format_eltype(_matrix_representation(_at_format_precision(op, repr), _checked_group_ids(op, Hin), ax, repr, chunking; projection, kwargs...), repr)
 end
 # A space whose basis states are not product states, such as a `SymmetricSector`, can throw for operators it cannot
-# represent with `_check_operator`, and give the amplitudes of its basis vectors with `_amplitude_eltype`, which is
-# given the float precision of the operator and promoted with its element type.
+# represent with `_check_operator` and give the amplitudes of its basis vectors with `_amplitude_eltype`, which is
+# given the float precision of the operator and promoted with its element type. `_symmetrize` adjusts the assembled matrix.
 _check_operator(op, space) = nothing
 _check_operator(op, space::AbstractSubspace) = _check_operator(op, parent(space))
 _check_operator(op, ax::Axes) = _check_operator(op, _input_space(ax))
+_symmetrize(M, op, space) = M
 _amplitude_eltype(space) = nothing
 _amplitude_eltype(space::AbstractSubspace) = _amplitude_eltype(parent(space))
 _with_amplitude_eltype(format, op, space, kwargs) = _with_amplitude_eltype(format, op, _amplitude_eltype(space), kwargs)

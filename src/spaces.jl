@@ -372,6 +372,7 @@ If `Hs` contains only symbolic operators, their order does not matter: the modes
 as in `H`. If any element of `Hs` is a space, the modes must keep their order within each
 group of `H` (e.g. the Jordan-Wigner order of fermions), otherwise an `ArgumentError` is thrown.
 A Majorana names a mode only together with its partner, as in `[γ[1], γ[2]]`.
+The subregion holds the states consistent with `H` and with every constrained space in `Hs`.
 
 # Examples
 ```jldoctest
@@ -395,8 +396,13 @@ function subregion(Hs, H::AbstractHilbertSpace)
     # Resolve the names to H's own atoms, so the basis of the subregion is that of H
     Hsub = tensor_product(collect(atomic_factors(H))[positions])
     match_atoms(Hsub, H) # checks the ordering within groups
-    !isconstrained(H) && return Hsub
-    states = _find_subregion_states(H, state_mapper(H, (Hsub,)))
+    restrictions = filter(x -> x isa AbstractHilbertSpace && isconstrained(x), Hs_items)
+    !isconstrained(H) && isempty(restrictions) && return Hsub
+    states = isconstrained(H) ? _find_subregion_states(H, state_mapper(H, (Hsub,))) : collect(basisstates(Hsub))
+    for Hr in restrictions
+        mapper = state_mapper(Hsub, (Hr,))
+        filter!(s -> any(sub -> isbasisstate(only(sub), Hr), first(split_state(s, mapper))), states)
+    end
     ConstrainedSpace(Hsub, states)
 end
 # The atoms that a space or symbol names, for lookups by `atomic_id`; a symbol names the atom it acts on.
@@ -421,6 +427,9 @@ _subsystem(Hs, H) = subregion(Hs, H)
     @test_throws ArgumentError subregion([f[4]], H)
     @test subregion(Hf, H) == Hf
     @test subregion(Hb, H) == Hb
+    Hone = hilbert_space(f, 1:2, NumberConservation(1))
+    @test basisstates(subregion(Hone, H)) == basisstates(Hone)
+    @test dim(subregion([Hone, b[2]], H)) == dim(Hone) * dim(Hbsub)
 
     @test subregion([f[1]], Hf) == hilbert_space(f, 1:1)
     @test subregion([b[1]], Hb) == hilbert_space(b, 1:1, 2)
@@ -430,6 +439,7 @@ _subsystem(Hs, H) = subregion(Hs, H)
     Hbsub = subregion([b[2], b[3]], H)
     @test dim(Hfsub) == 3
     @test dim(Hbsub) == 3
+    @test dim(subregion(Hone, H)) == 2
 
     using FermionicHilbertSpaces: complementary_subsystem
     @test complementary_subsystem(H, subregion([f[3], b[2]], H)) ==

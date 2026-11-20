@@ -107,6 +107,8 @@ end
         end
         embref = embed(msub, Hsub => H; projection = true)
         @test emb(msub) ≈ embref
+        @test pt'(msub) ≈ embref
+        @test emb'(m) ≈ ref
         for (out, x, y) in ((zeros(ComplexF64, d, d), msub, embref), (zeros(ComplexF64, d^2), vec(msub), vec(embref)))
             @test emb(out, x) === out
             @test out ≈ y

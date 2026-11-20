@@ -90,14 +90,6 @@ function _gather_embed(m::AbstractMatrix, P, B, S)
     return reshape(_gather_reduce(WW, (2, 4), m, LL), D, D)
 end
 
-struct EmbedMap{HS,H,C,K,M}
-    Hsub::HS
-    H::H
-    complement::C
-    kwargs::K
-    map::M
-end
-
 # The map is the compression onto `H` and checks nothing, so `projection` has no effect.
 function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(Hsub, H, complement), projection = false, kwargs...)
     alg isa AbstractPartialTraceAlg || throw(ArgumentError("The map `embed(Hsub => H)` supports `alg = SubsystemPartialTraceAlg()` or `FullPartialTraceAlg()`, got $alg."))
@@ -106,16 +98,20 @@ function EmbedMap(Hsub::AbstractHilbertSpace, H::AbstractHilbertSpace; complemen
     else
         _adjoint_superop(partial_trace_map(H, Hsub; complement, alg, kwargs...))
     end
-    EmbedMap(Hsub, H, complement, kwargs, map)
+    return EmbedMap(Hsub, H, Hsub, complement, kwargs, map)
 end
 
-function (op::EmbedMap)(m::AbstractMatrix)
-    check_size(m, op.Hsub)
-    _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(m), dim(op.H))
+# An embedding takes operators only, and maps a vectorized operator to a vectorized operator.
+_is_pure_state(::EmbedMap, in) = false
+function _map_input(op::EmbedMap, v::AbstractVector)
+    length(v) == dim(op.Hin)^2 || throw(DimensionMismatch("The input vector must have length $(dim(op.Hin)^2), got $(length(v))"))
+    return v
 end
+(op::EmbedMap)(v::AbstractVector) = op.map * _map_input(op, v)
+
 function (op::EmbedMap)(m::SparseMatrixCSC)
-    check_size(m, op.Hsub)
-    _embed_sparse_matrix(op.map, m, dim(op.H))
+    check_size(m, op.Hin)
+    return _embed_sparse_matrix(op.map, m, dim(op.Hout))
 end
 
 # map * vec(m) as a sparse D × D matrix, avoiding the dense length-D^2 vector that map * m[:] would allocate
@@ -138,34 +134,9 @@ function _embed_sparse_matrix(map::SparseMatrixCSC, m::SparseMatrixCSC, D)
     return sparse(J1s, J2s, Vs, D, D)
 end
 
-function (op::EmbedMap)(out::AbstractMatrix, m::AbstractMatrix)
-    check_size(m, op.Hsub)
-    check_size(out, op.H)
-    mul!(vec(out), op.map, _vectorize_pt_density_matrix(m))
-    out
-end
-
-function (op::EmbedMap)(v::AbstractVector)
-    length(v) == dim(op.Hsub)^2 || throw(DimensionMismatch("The input vector must have length $(dim(op.Hsub)^2), got $(length(v))"))
-    op.map * v
-end
-
-function (op::EmbedMap)(out::AbstractVector, v::AbstractVector)
-    length(v) == dim(op.Hsub)^2 || throw(DimensionMismatch("The input vector must have length $(dim(op.Hsub)^2), got $(length(v))"))
-    length(out) == dim(op.H)^2 || throw(DimensionMismatch("The output vector must have length $(dim(op.H)^2), got $(length(out))"))
-    mul!(out, op.map, v)
-    out
-end
-
-function (op::EmbedMap)(m::UniformScaling)
-    mfull = m.λ * I(dim(op.Hsub))
-    _devectorize_pt_output(op.map * _vectorize_pt_density_matrix(mfull), dim(op.H))
-end
-SparseArrays.sparse(op::EmbedMap) = op.map
-Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
-Base.transpose(op::PartialTraceMap) = EmbedMap(op.Hsub, op.H, op.complement, op.kwargs, _adjoint_superop(op.map))
-Base.adjoint(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
-Base.transpose(op::EmbedMap) = PartialTraceMap(op.H, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
+Base.adjoint(op::PartialTraceMap) = EmbedMap(op.Hout, op.Hin, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
+Base.adjoint(op::EmbedMap) = PartialTraceMap(op.Hout, op.Hin, op.Hsub, op.complement, op.kwargs, _adjoint_superop(op.map))
+Base.transpose(op::Union{PartialTraceMap, EmbedMap}) = adjoint(op)
 
 """
     embed(Hsub => H; kwargs...)
