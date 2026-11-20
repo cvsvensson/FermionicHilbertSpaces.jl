@@ -44,22 +44,6 @@ function Base.show(io::IO, ac::AdditiveConstraint{T,H,F}) where {T,H,F}
     end
 end
 
-function Base.show(io::IO, fc::Union{FilterConstraint, SectorConstraint})
-    name = fc isa FilterConstraint ? "FilterConstraint" : "SectorConstraint"
-    if get(io, :compact, false)
-        parts = filter(!isnothing, [
-            ismissing(fc.spaces) ? nothing : "subspaces: $(length(fc.spaces))",
-            ismissing(fc.maps) ? nothing : "$(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s)"])
-        print(io, name, "(", join(parts, ", "), ")")
-    else
-        lines = filter(!isnothing, [
-            ismissing(fc.spaces) ? nothing : "subspaces: $(length(fc.spaces))",
-            ismissing(fc.maps) ? nothing : "maps: $(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s)",
-            "reducer: $(fc.reducer)"])
-        print(io, name, "(", join(lines, ", "), ")")
-    end
-end
-
 function Base.show(io::IO, pc::ProductConstraint{C}) where {C}
     nconstraints = length(pc.constraints)
     nshow = min(nconstraints, 6)
