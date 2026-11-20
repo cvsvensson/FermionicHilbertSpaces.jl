@@ -580,6 +580,7 @@ end
     @test quantumnumbers(constrain_space(Hn, ParityConservation(1))) == [0, 2, 4]
     @test quantumnumbers(constrain_space(Hn, NumberConservation(2))) == quantumnumbers(constrain_space(Hn, N => 2)) == [2]
     @test quantumnumbers(constrain_space(Hn, ParityConservation())) == [-1, 1]
+    @test quantumnumbers(hilbert_space(f, 1:4, NumberConservation(2))) == quantumnumbers(hilbert_space(f, 1:4, N => 2)) != quantumnumbers(hilbert_space(f, 1:4, NumberConservation([2]))) == [2]
     labels = [(i, σ) for i in 1:2 for σ in (:↑, :↓)]
     Sz = sum(f[i, :↑]'f[i, :↑] - f[i, :↓]'f[i, :↓] for i in 1:2)
     @test quantumnumbers(constrain_space(hilbert_space(f, labels, Sz), NumberConservation(2))) == [-2, 0, 2]

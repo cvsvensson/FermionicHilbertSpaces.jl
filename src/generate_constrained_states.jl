@@ -131,7 +131,7 @@ function _sum_terms(c::AbstractAdditiveConstraint, allspaces)
         isempty(table) && throw(ArgumentError("Cannot build an `AdditiveConstraint` from a space with no basis states."))
         table
     end
-    targets = isnothing(m) ? _normalize_constraint_values(allowed) : filter(r -> label(c, r) in allowed, 0:(m - 1))
+    targets = isnothing(m) ? allowed : filter(r -> label(c, r) in allowed, 0:(m - 1))
     return (; constant = zero(S), positions = [[p] for p in positions], strides = [[1] for _ in positions], tables, allowed = targets, modulus = something(m, 0))
 end
 # Whether a sum in `lo:hi` can equal one of the sorted `targets`, or, with a nonzero modulus `m`, be congruent to one.

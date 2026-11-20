@@ -45,14 +45,13 @@ function tensor_product(spaces; @nospecialize(constraint = NoConstraint()))
     constrained = any(isconstrained, spaces)
     # Only computed when needed, since a large product space has no `basisstates`, and `generate_states` does not use them
     all_states() = constrained ? _find_combined_states(space, spaces) : basisstates(space)
+    labels = _combined_sector_constraint(spaces)
     if constraint == NoConstraint()
-        combined = _combined_sector_constraint(spaces)
-        !ismissing(combined) && return sector_space(space, all_states(), sector_function(combined, space), combined)
+        !ismissing(labels) && return sector_space(space, all_states(), sector_function(labels, space), labels)
         return constrained ? ConstrainedSpace(space, all_states()) : space
     end
 
     constraint = supply_missing_constraint_info(constraint, space, spaces)
-    labels = _combined_sector_constraint(spaces)
     supports_branch_pruning(constraint) || return constrain_states(space, constraint, all_states(), nothing, labels)
     return constrain_states(space, constraint, generate_states(spaces, constraint, space), unpruned_part(constraint), labels)
 end

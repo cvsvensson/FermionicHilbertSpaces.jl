@@ -269,7 +269,7 @@ Build a constrained Hilbert space from `space`.
 
 With a `constraint`, keep the basis states of `space` that satisfy it. If `states` is
 given, only those states are candidates. Constraints that group states into sectors,
-such as `NumberConservation`, return a space with sectors, with states ordered by sector.
+such as `NumberConservation()`, return a space with sectors, with states ordered by sector.
 `constrain_space(space, NoConstraint())` returns `space` unchanged.
 A constraint can also be `quantity` or `quantity => spec`, where `quantity` is a diagonal operator or a function
 of the basis state, such as `constrain_space(H, N => 2)` with `N = sum(f[i]'f[i] for i in 1:4)`;

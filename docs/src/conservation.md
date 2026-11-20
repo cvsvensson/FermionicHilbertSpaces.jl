@@ -50,7 +50,7 @@ Hdip = hilbert_space(f, 1:4, Q3)
 ```
 [`ParityConservation`](@ref) is a shorthand for `N => (v -> (-1)^v) => [-1, 1]` with `N` the total particle number, which also counts bosons. `NumberConservation(total)` and `ParityConservation(p)` follow the same table, so a single value selects and a collection labels.
 
-Several constraints go in a tuple or a vector, and a sector label then has one entry per quantity. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
+Several constraints go in a tuple or a vector, and a sector label then has one entry per labelling quantity. A spin chain split into sectors of total ``S^z``, and the Rydberg blockade, which forbids neighbouring excitations:
 ```@example constraints
 @spins S 1 // 2
 Sz = sum(S[i][:z] for i in 1:6)
