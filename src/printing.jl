@@ -11,7 +11,7 @@ function Base.show(io::IO, nc::NumberConservation{T,H,W}) where {T,H,W}
         print(io, "NumberConservation(", join(parts, ", "), ")")
     else
         lines = filter(!isnothing, [
-            ismissing(nc.total) ? nothing : "total: " * sprint(show, nc.total),
+                ismissing(nc.total) ? nothing : "total: " * sprint(show, nc.total),
             ismissing(nc.spaces) ? nothing : "subspaces: $(length(nc.spaces))",
             ismissing(nc.weights) ? nothing : "weights: " * sprint(show, nc.weights)])
         isempty(lines) ? print(io, "NumberConservation()") : print(io, "NumberConservation(", join(lines, ", "), ")")
