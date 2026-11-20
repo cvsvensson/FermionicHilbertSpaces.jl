@@ -189,7 +189,7 @@ struct ParityConservation{H, A} <: AbstractAdditiveConstraint
         allowed in ([-1, 1], [1], [-1]) || throw(ArgumentError("The allowed parities must be a subset of `[-1, 1]`, got $allowed."))
         allowed = _allowed isa SingleValue ? only(allowed) : allowed
         subspace = _normalize_constraint_subspace(_spaces)
-        new{typeof(subspace), typeof(allowed)}(allowed, subspace)
+        return new{typeof(subspace), typeof(allowed)}(allowed, subspace)
     end
 end
 ParityConservation(parities=[-1, 1]; spaces=missing) = ParityConservation(parities, spaces)
