@@ -163,3 +163,17 @@ F = eigen(Hermitian(representation(ham, H, Matrix)))
 G = correlation_matrix(F)
 ground_state_parity(F, H), expectation(ham, G, H)
 ```
+
+## Coupling to other systems
+`tensor_product(Hfree, Haux)` combines a `SingleParticle()`, `BdG()` or Majorana space with the space of another system, such as spins. Its basis is the single-particle basis times the basis of `Haux`, not the many-body tensor product. For an operator `Σₖ Qₖ Xₖ + Σⱼ Yⱼ`, with `Qₖ` quadratic in the fermions and `Xₖ`, `Yⱼ` acting on the other system, `representation` gives `Σₖ representation(Qₖ, Hfree) ⊗ Xₖ`, plus each `Yⱼ` that does not commute with the couplings `Xₖ`, scaled like the matrix of `Hfree`. Terms `Yⱼ` that commute with all couplings, such as constants, don't change the quasiparticles and drop out.
+
+The fermions are free only if the couplings commute with each other, and `representation` throws an `ArgumentError` otherwise. With a conserved coupling, the matrix is block diagonal with one free problem per eigenvalue of the coupling:
+```julia
+@fermions f
+@spins σ 1//2
+Hspins = hilbert_space(σ, 1:2)
+op = σ[1][:z] * (f[1]' * f[2] + f[1]' * f[2]' + hc) + 0.7 * σ[2][:x]   # σ[2][:x] drops out
+H = tensor_product(hilbert_space(f, 1:2, BdG()), Hspins)
+M = representation(op, H, :dense)   # eigenvalues: those of the BdG problems with σ[1][:z] = ±1/2
+```
+A term that does not commute with the couplings is kept, as for a counting operator `K` and couplings `Tᵐ` with `[K, Tᵐ] = m Tᵐ`. The checks do not catch every such term that makes the fermions interacting, so this case is tested only for terms like `K`. A kept term should be zero on the state that the quasiparticles are expanded around, since adding a constant to it shifts all eigenvalues. Index `i` of `Hfree` and `a` of `Haux` is index `(a - 1) * dim(Hfree) + i`. `BdGEigen` does not yet support these spaces.
