@@ -301,66 +301,21 @@ function Base.show(io::IO, ::MIME"text/plain", bs::BasisStates)
 end
 
 
-function Base.show(io::IO, op::PartialTransposeMap)
-    in_dim = dim(op.H)
+function Base.show(io::IO, op::SuperoperatorMap{K}) where {K}
+    in_dim = dim(op.Hin)
     out_dim = dim(op.Hout)
+    cio = IOContext(io, :compact => true)
     if get(io, :compact, false)
-        print(io, "PartialTransposeMap(", in_dim, "^2 → ", out_dim, "^2, transpose=")
-        show(IOContext(io, :compact => true), op.Hsub)
+        print(io, K, "(", in_dim, "^2 → ", out_dim, "^2")
+        op isa PartialTransposeMap && (print(io, ", transpose="); show(cio, op.Hsub))
         length(op.kwargs) > 0 && print(io, ", ", length(op.kwargs), " kw")
         print(io, ")")
     else
-        print(io, "PartialTransposeMap\n")
-        print(io, "  Input space: ")
-        show(IOContext(io, :compact => true), op.H)
-        print(io, "\n  Transposed subsystem: ")
-        show(IOContext(io, :compact => true), op.Hsub)
+        print(io, K, "\n  Input space: ")
+        show(cio, op.Hin)
+        op isa PartialTransposeMap && (print(io, "\n  Transposed subsystem: "); show(cio, op.Hsub))
         print(io, "\n  Output space: ")
-        show(IOContext(io, :compact => true), op.Hout)
-        print(io, "\n  Superoperator size: ", out_dim^2, " x ", in_dim^2)
-        print(io, "\n  Stored map nnz: ", nnz(op.map))
-        if length(op.kwargs) > 0
-            print(io, "\n  kwargs: ")
-            show(io, op.kwargs)
-        end
-    end
-end
-
-function Base.show(io::IO, op::PartialTraceMap)
-    in_dim = dim(op.H)
-    out_dim = dim(op.Hsub)
-    if get(io, :compact, false)
-        print(io, "PartialTraceMap(", in_dim, "^2 → ", out_dim, "^2")
-        length(op.kwargs) > 0 && print(io, ", ", length(op.kwargs), " kw")
-        print(io, ")")
-    else
-        print(io, "PartialTraceMap\n")
-        print(io, "  Input space: ")
-        show(IOContext(io, :compact => true), op.H)
-        print(io, "\n  Output space: ")
-        show(IOContext(io, :compact => true), op.Hsub)
-        print(io, "\n  Superoperator size: ", out_dim^2, " x ", in_dim^2)
-        print(io, "\n  Stored map nnz: ", nnz(op.map))
-        if length(op.kwargs) > 0
-            print(io, "\n  kwargs: ")
-            show(io, op.kwargs)
-        end
-    end
-end
-
-function Base.show(io::IO, op::EmbedMap)
-    in_dim = dim(op.Hsub)
-    out_dim = dim(op.H)
-    if get(io, :compact, false)
-        print(io, "EmbedMap(", in_dim, "^2 → ", out_dim, "^2")
-        length(op.kwargs) > 0 && print(io, ", ", length(op.kwargs), " kw")
-        print(io, ")")
-    else
-        print(io, "EmbedMap\n")
-        print(io, "  Input space: ")
-        show(IOContext(io, :compact => true), op.Hsub)
-        print(io, "\n  Output space: ")
-        show(IOContext(io, :compact => true), op.H)
+        show(cio, op.Hout)
         print(io, "\n  Superoperator size: ", out_dim^2, " x ", in_dim^2)
         print(io, "\n  Stored map nnz: ", nnz(op.map))
         if length(op.kwargs) > 0

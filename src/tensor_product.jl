@@ -1126,18 +1126,27 @@ function _superop_mul_matrix!(y::AbstractVector, S::LinearAlgebra.Transpose{<:An
     return y
 end
 
-struct PartialTraceMap{H,HS,C,K,M}
-    H::H
+# A precomputed superoperator `map` from operators on `Hin` to operators on `Hout`, applied as `map * vec(m)`.
+# `K` names the kind and `Hsub` is the subsystem the map acts on.
+struct SuperoperatorMap{K,HI,HO,HS,C,KW,M}
+    Hin::HI
+    Hout::HO
     Hsub::HS
     complement::C
-    kwargs::K
+    kwargs::KW
     map::M
 end
+SuperoperatorMap{K}(Hin, Hout, Hsub, complement, kwargs, map) where {K} =
+    SuperoperatorMap{K,typeof(Hin),typeof(Hout),typeof(Hsub),typeof(complement),typeof(kwargs),typeof(map)}(Hin, Hout, Hsub, complement, kwargs, map)
+
+const PartialTraceMap = SuperoperatorMap{:PartialTraceMap}
+const EmbedMap = SuperoperatorMap{:EmbedMap}
+const PartialTransposeMap = SuperoperatorMap{:PartialTransposeMap}
 
 # The map checks nothing, so `projection` has no effect.
 function PartialTraceMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace; complement = Base.inferencebarrier(complementary_subsystem(H, Hsub)), alg = default_partial_trace_alg(Hsub, H, complement), projection = false, kwargs...)
     map = partial_trace_map(H, Hsub, complement, alg; kwargs...)
-    PartialTraceMap(H, Hsub, complement, kwargs, map)
+    PartialTraceMap(H, Hsub, Hsub, complement, kwargs, map)
 end
 
 vec_to_density_matrix(v::AbstractVector) = LowRankMatrix(v, conj(v))
@@ -1179,62 +1188,39 @@ function _canonicalize_pt_output(m::AbstractMatrix, Hsub::AbstractHilbertSpace)
     return vec(m)
 end
 
-function (op::PartialTraceMap)(in::AbstractMatrix)
-    v = _canonicalize_pt_input(in, op.H)
-    _devectorize_pt_output(op.map * v, dim(op.Hsub))
+_is_pure_state(op::SuperoperatorMap, in) = in isa AbstractVector && length(in) == dim(op.Hin)
+_map_input(op::SuperoperatorMap, in) = _canonicalize_pt_input(in, op.Hin)
+
+function (op::SuperoperatorMap)(in)
+    n = dim(op.Hout)
+    _is_pure_state(op, in) && return reshape(_apply_superop_on_pure_state(op.map, in), n, n)
+    _devectorize_pt_output(op.map * _map_input(op, in), n)
 end
+function (op::SuperoperatorMap)(out, in)
+    vout = _canonicalize_pt_output(out, op.Hout)
+    if _is_pure_state(op, in)
+        _apply_superop_on_pure_state!(vout, op.map, in)
+    else
+        mul!(vout, op.map, _map_input(op, in))
+    end
+    out
+end
+SparseArrays.sparse(op::SuperoperatorMap) = op.map
+
+_apply_superop_on_pure_state(S, ψ) = _apply_superop_on_pure_state!(zeros(promote_type(eltype(S), eltype(ψ)), size(S, 1)), S, ψ)
+
 function (op::PartialTraceMap)(in::SparseMatrixCSC)
-    check_size(in, op.H)
-    n = dim(op.Hsub)
+    check_size(in, op.Hin)
+    n = dim(op.Hout)
     w = _superop_mul_matrix!(zeros(promote_type(eltype(op.map), eltype(in)), n^2), op.map, in)
     return sparse(reshape(w, n, n))
 end
 function (op::PartialTraceMap)(out, in::SparseMatrixCSC)
-    vout = _canonicalize_pt_output(out, op.Hsub)
-    check_size(in, op.H)
+    vout = _canonicalize_pt_output(out, op.Hout)
+    check_size(in, op.Hin)
     _superop_mul_matrix!(vout, op.map, in)
     out
 end
-function (op::PartialTraceMap)(in::AbstractVector)
-    if length(in) == dim(op.H)
-        # pure state: apply the map directly, without forming the density matrix
-        w = _apply_ptmap_on_vec(op, in)
-        return reshape(w, dim(op.Hsub), dim(op.Hsub))
-    end
-    v = _canonicalize_pt_input(in, op.H)
-    _devectorize_pt_output(op.map * v, dim(op.Hsub))
-end
-function (op::PartialTraceMap)(in::UniformScaling)
-    v = _canonicalize_pt_input(in, op.H)
-    _devectorize_pt_output(op.map * v, dim(op.Hsub))
-end
-
-function _apply_ptmap_on_vec(ptmap::PartialTraceMap, ψ::AbstractVector)
-    w = zeros(eltype(ψ), dim(ptmap.Hsub)^2)
-    _apply_ptmap_on_vec!(w, ptmap, ψ)
-    return w
-end
-_apply_ptmap_on_vec!(w::AbstractVector, ptmap::PartialTraceMap, ψ::AbstractVector) = _apply_superop_on_pure_state!(w, ptmap.map, ψ)
-
-function (op::PartialTraceMap)(out, in::AbstractMatrix)
-    vout = _canonicalize_pt_output(out, op.Hsub)
-    vin = _canonicalize_pt_input(in, op.H)
-    mul!(vout, op.map, vin)
-    out
-end
-function (op::PartialTraceMap)(out, in::AbstractVector)
-    if length(in) == dim(op.H)
-        # pure state: apply the map directly, without forming the density matrix
-        vout = _canonicalize_pt_output(out, op.Hsub)
-        _apply_ptmap_on_vec!(vout, op, in)
-        return out
-    end
-    vout = _canonicalize_pt_output(out, op.Hsub)
-    vin = _canonicalize_pt_input(in, op.H)
-    mul!(vout, op.map, vin)
-    out
-end
-SparseArrays.sparse(op::PartialTraceMap) = op.map
 
 """
     partial_trace(H => Hsub; kwargs...)

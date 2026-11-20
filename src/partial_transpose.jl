@@ -238,21 +238,14 @@ Callable partial-transpose superoperator created by `partial_transpose(H, Hsub; 
 or `partial_transpose(H => Hout, Hsub; kwargs...)`.
 Apply it as `op(m)`, `op(ψ)` (pure state) or `op(out, m)`; get the sparse matrix with `sparse(op)`.
 """
-struct PartialTransposeMap{H,HS,C,HO,K,M}
-    H::H
-    Hsub::HS
-    complement::C
-    Hout::HO
-    kwargs::K
-    map::M
-end
+PartialTransposeMap
 
 function PartialTransposeMap(H::AbstractHilbertSpace, Hsub::AbstractHilbertSpace, Hout::AbstractHilbertSpace=H; complement=complementary_subsystem(H, Hsub), kwargs...)
     smap = partial_transpose_map(H, Hsub, complement, Hout; kwargs...)
-    PartialTransposeMap(H, Hsub, complement, Hout, kwargs, smap)
+    PartialTransposeMap(H, Hout, Hsub, complement, kwargs, smap)
 end
 
-# |ψ⟩ ↦ map * vec(ψψ†) without forming ψψ†. Shared by PartialTraceMap and PartialTransposeMap.
+# |ψ⟩ ↦ map * vec(ψψ†) without forming ψψ†
 function _apply_superop_on_pure_state!(w::AbstractVector, mat::SparseMatrixCSC, ψ::AbstractVector)
     D = length(ψ)
     size(mat, 2) == D^2 || throw(DimensionMismatch("The map must have `length(ψ)^2` = $(D^2) columns, got $(size(mat, 2))"))
@@ -274,37 +267,6 @@ function _apply_superop_on_pure_state!(w::AbstractVector, mat::SparseMatrixCSC, 
     end
     return w
 end
-
-function (op::PartialTransposeMap)(in::Union{AbstractMatrix,UniformScaling})
-    v = _canonicalize_pt_input(in, op.H)
-    _devectorize_pt_output(op.map * v, dim(op.Hout))
-end
-function (op::PartialTransposeMap)(in::AbstractVector)
-    if length(in) == dim(op.H)
-        w = zeros(promote_type(eltype(op.map), eltype(in)), dim(op.Hout)^2)
-        _apply_superop_on_pure_state!(w, op.map, in)
-        return reshape(w, dim(op.Hout), dim(op.Hout))
-    end
-    v = _canonicalize_pt_input(in, op.H)
-    _devectorize_pt_output(op.map * v, dim(op.Hout))
-end
-function (op::PartialTransposeMap)(out, in::Union{AbstractMatrix,UniformScaling})
-    vout = _canonicalize_pt_output(out, op.Hout)
-    vin = _canonicalize_pt_input(in, op.H)
-    mul!(vout, op.map, vin)
-    out
-end
-function (op::PartialTransposeMap)(out, in::AbstractVector)
-    vout = _canonicalize_pt_output(out, op.Hout)
-    if length(in) == dim(op.H)
-        _apply_superop_on_pure_state!(vout, op.map, in)
-        return out
-    end
-    vin = _canonicalize_pt_input(in, op.H)
-    mul!(vout, op.map, vin)
-    out
-end
-SparseArrays.sparse(op::PartialTransposeMap) = op.map
 
 """
     logarithmic_negativity(ρ, H, Hsub; kwargs...)
