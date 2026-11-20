@@ -38,16 +38,16 @@ E[1], S
 
 ## How to use this documentation
 
-New here? Start with the [Fermions tutorial](literate_output/fermions_tutorial.md).
+New here? Start with the [Bosons tutorial](literate_output/bosons.md).
 
 - **Cheat sheet**: *recall* common tasks and the functions that do them, on one page.
 - **Tutorials**: *learn* the basics step by step, from fermions to mixed systems.
-- **How-to guides**: *do* a specific task, such as restricting to a particle-number sector or taking a partial trace, independent of the physical model.
+- **How-to guides**: *do* a specific task, such as restricting to a particle-number sector or taking a partial trace, with a concrete model as the running example.
 - **Examples**: *see* the package applied to complete physical models, worked from start to finish.
 - **Explanation**: *understand* the concepts and design behind the package, such as fermionic tensor products and signs.
 - **Performance**: *speed up* matrix construction, with parallelization and GPUs.
 - **Extending**: *add* your own operators, basis states and spaces.
-- **Reference**: *look up* the public API. Internals for contributors are listed separately.
+- **Reference**: *look up* the public API, and the internal functions and types for contributors.
 
 The documentation structure is inspired by the [Diataxis framework](https://diataxis.fr/).
 

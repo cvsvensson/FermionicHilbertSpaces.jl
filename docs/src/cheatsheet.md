@@ -32,7 +32,7 @@ longham = foldl(add!!, (f[n+1]'f[n] + hc for n in 1:999); init = 0);
 ```
 
 ## Free fermions
-A quadratic Hamiltonian on a `SingleParticle()` space is its single-particle matrix `h`, whose negative eigenvalues sum to the ground-state energy. `BdG()` includes pairing, where the energy is `tr(h)/2 - sum(filter(>(0), ε))` for the eigenvalues `ε` of the BdG matrix; see [Non-interacting hamiltonians](non_interacting.md).
+A quadratic Hamiltonian on a `SingleParticle()` space is its single-particle matrix `h`, whose negative eigenvalues sum to the ground-state energy. `BdG()` includes pairing, where the energy is `tr(h)/2 - sum(filter(>(0), ε))` for the eigenvalues `ε` of the BdG matrix; see [Non-interacting systems](non_interacting.md).
 ```@example cheat
 using FermionicHilbertSpaces.FreeFermions
 h = Hermitian(rand(N, N))

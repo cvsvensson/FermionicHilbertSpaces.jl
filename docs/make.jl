@@ -11,7 +11,6 @@ literate_files = [
     "examples/bosons.jl",
     "examples/braiding.jl",
     "examples/clock_operators.jl",
-    "examples/fermions_tutorial.jl",
     "examples/floquet_tutorial.jl",
     "examples/fragmentation.jl",
     "examples/free_fermions.jl",
@@ -33,7 +32,6 @@ pages = [
     "Welcome page" => "index.md",
     "Cheat sheet" => "cheatsheet.md",
     "Tutorials" => [
-        "Fermions" => "literate_output/fermions_tutorial.md",
         "Bosons" => "literate_output/bosons.md",
         "Spins" => "literate_output/spin_chain.md",
         "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md",
@@ -55,13 +53,10 @@ pages = [
         "Free fermions in 2D" => "literate_output/free_fermions.md",
     ],
     "Explanation" => [
-        "How the package works" => "how_it_works.md",
         "Fermionic tensor products, partial traces, and partial transpose" => "fermions.md",
     ],
     "Performance" => [
-        "Performance tips" => "performance.md",
         "Parallelization" => "parallelization.md",
-        "Benchmarking" => "benchmarking.md",
     ],
     "Extending" => [
         "Extending the package" => "extending.md",
