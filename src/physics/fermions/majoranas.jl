@@ -166,8 +166,8 @@ function combine_into_group(group::Group{Majorana}, spaces)
     mode_ordering = D()
     count = 1
     for space in spaces
-        l1, p1 = first(space.mode_ordering)
-        l2, p2 = last(space.mode_ordering)
+        l1, _ = first(space.mode_ordering)
+        l2, _ = last(space.mode_ordering)
         mode_ordering[l1] = count
         mode_ordering[l2] = count + 1
         count += 2
@@ -200,6 +200,25 @@ function _majorana_space(y, labels, args...)
     return MajoranaHilbertSpace(mode_ordering, Hf, y)
 end
 MajoranaHilbertSpace(mode_ordering, space::AbstractHilbertSpace, field) = rewrap(space, MajoranaHilbertSpace(mode_ordering, parent(space), field))
+
+function Base.show(io::IO, m::MajoranaHilbertSpace)
+    return if get(io, :compact, false)
+        print(io, "MajoranaHilbertSpace(")
+        show(io, m.parent)
+        print(io, ")")
+    else
+        println(io, "MajoranaHilbertSpace: ", m.field)
+        show(IOContext(io, :compact => true), m.parent)
+    end
+end
+
+const _FermionModeSpace = Union{FermionicSpace, MajoranaHilbertSpace}
+_state_label_atomic(f::FockNumber, H::_FermionModeSpace) = join(digits(Int, f.f; base = 2, pad = nbr_of_modes(H)))
+
+function interpret_state(input::Union{AbstractString, AbstractChar}, H::Union{_FockSpace, MajoranaHilbertSpace})
+    length(input) <= nbr_of_modes(H) || throw(ArgumentError("The Fock string `\"$input\"` has $(length(input)) characters, but the space has only $(nbr_of_modes(H)) modes."))
+    return interpret_state(input, statetype(H))
+end
 
 # Replace each pair of Majoranas in `names` that forms an atom of `H` by that atom, placed
 # where the first of the two appears.

@@ -107,6 +107,8 @@ end
         end
         embref = embed(msub, Hsub => H; projection = true)
         @test emb(msub) ≈ embref
+        @test pt'(msub) ≈ embref
+        @test emb'(m) ≈ ref
         for (out, x, y) in ((zeros(ComplexF64, d, d), msub, embref), (zeros(ComplexF64, d^2), vec(msub), vec(embref)))
             @test emb(out, x) === out
             @test out ≈ y
@@ -168,6 +170,8 @@ end
     @test partial_trace(ρ, Hproduct => Hmode) ≈ ρ
 
     @test partial_trace(2I, Hfull, hilbert_space(f, [2])) ≈ 2 * partial_trace(I(dim(Hfull)), Hfull, hilbert_space(f, [2]))
+    @test partial_trace(m, Hfull, [f[2]]) ≈ partial_trace(m, Hfull, hilbert_space(f, [2]))
+    @test FermionicHilbertSpaces.partial_trace!(zeros(ComplexF64, 2, 2), m, Hfull => [f[2]]) ≈ partial_trace(m, Hfull, hilbert_space(f, [2]))
 end
 
 @testitem "Identity in matrix_representation" begin

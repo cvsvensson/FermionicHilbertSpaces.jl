@@ -34,7 +34,6 @@ Base.hash(H::GenericHilbertSpace, h::UInt) = hash((H.label, H.basisstates), h)
 basisstates(H::GenericHilbertSpace) = H.basisstates isa AbstractVector ? BasisStates(H, H.basisstates) : H.basisstates
 dim(H::GenericHilbertSpace) = length(H.basisstates)
 Base.@propagate_inbounds basisstate(ind::Integer, H::GenericHilbertSpace) = H.basisstates[ind]
-Base.keys(H::GenericHilbertSpace) = (H.label,)
 _state_index(state::B, H::GenericHilbertSpace{B,<:Any,<:Any,<:AbstractDict}) where B = get(H.state_index, state, 0)
 _state_index(state::B, H::GenericHilbertSpace{B}) where {B} = H.state_index(state)
 atomic_id(H::GenericHilbertSpace) = H.label

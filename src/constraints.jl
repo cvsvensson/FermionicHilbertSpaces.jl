@@ -13,10 +13,12 @@ struct ProductConstraint{C} <: AbstractConstraint
     constraints::C
 end
 
-Base.:*(sym1::AbstractConstraint, sym2::AbstractConstraint) = ProductConstraint([sym1, sym2])
-Base.:*(sym1::AbstractConstraint, sym2::ProductConstraint) = ProductConstraint([sym1, sym2.constraints...])
-Base.:*(sym1::ProductConstraint, sym2::AbstractConstraint) = ProductConstraint([sym1.constraints..., sym2])
-Base.:*(sym1::ProductConstraint, sym2::ProductConstraint) = ProductConstraint([sym1.constraints..., sym2.constraints...])
+_factors(c::AbstractConstraint) = (c,)
+_factors(c::ProductConstraint) = c.constraints
+Base.:*(sym1::AbstractConstraint, sym2::AbstractConstraint) = ProductConstraint([_factors(sym1)..., _factors(sym2)...])
+Base.:*(::NoConstraint, sym::AbstractConstraint) = sym
+Base.:*(sym::AbstractConstraint, ::NoConstraint) = sym
+Base.:*(sym::NoConstraint, ::NoConstraint) = sym
 function branch_constraint(constraint::ProductConstraint, space)
     prunable = filter(supports_branch_pruning, constraint.constraints)
     sums = SumConstraint[c for c in prunable if c isa SumConstraint]
@@ -26,8 +28,8 @@ function branch_constraint(constraint::ProductConstraint, space)
 end
 supports_branch_pruning(c::ProductConstraint) = any(supports_branch_pruning, c.constraints)
 supports_filtering(c::ProductConstraint) = any(supports_filtering, c.constraints)
-# A product with a `quantity => spec` factor also groups when only some factors do, and the others then filter.
-supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c.constraints) || (_spec_form(c) && any(supports_sector_grouping, c.constraints))
+# A product with a rule factor also groups when only some factors do, and the others then filter.
+supports_sector_grouping(c::ProductConstraint) = all(supports_sector_grouping, c.constraints) || (_has_rule(c) && any(supports_sector_grouping, c.constraints))
 
 supply_missing_constraint_info(constraint::ProductConstraint, space, spaces) = ProductConstraint(map(cons -> supply_missing_constraint_info(cons, space, spaces), constraint.constraints))
 
@@ -44,45 +46,21 @@ struct StateConstraint{R, FS, H, U} <: AbstractConstraint
         return new{R, FS, H, U}(reducer, maps, spaces, rule)
     end
 end
-_keep_true(keep) = keep ? nothing : missing
-_label(rule::Function, value) = rule(value)
-_labels(::typeof(_keep_true)) = false
-_labels(::typeof(identity)) = true
-
 """
     FilterConstraint(reducer; maps=missing, spaces=missing)
-    FilterConstraint(reducer, maps, spaces)
 
-Constraint that keeps complete basis states for which `reducer` returns `true`.
-
-With only `reducer`, the reducer is called directly as `reducer(state)`. When
-`maps` and `spaces` are provided, the state is split into the selected
-spaces, each map is applied to its corresponding subspace, and the
-reducer is called on the resulting values. A single function is applied to all
-spaces; a collection of maps supplies one function per subspace.
+Constraint that keeps the basis states for which `reducer` returns `true`. With `maps` and `spaces`, `reducer`
+receives the values of the maps on the states of those spaces, one map per space or one for all, as in
+`FilterConstraint(issorted; maps = particle_number, spaces = factors(H))`.
 """
-const FilterConstraint{R, FS, H} = StateConstraint{R, FS, H, typeof(_keep_true)}
-FilterConstraint(reducer, maps, spaces) = StateConstraint(reducer, maps, spaces, _keep_true)
-FilterConstraint(reducer::Function; maps = missing, spaces = missing) = FilterConstraint(reducer, maps, spaces)
+FilterConstraint(reducer; maps = missing, spaces = missing) = StateConstraint(reducer, maps, spaces, ValueRule{false}(identity, Bool))
 
 """
     SectorConstraint(reducer; maps=missing, spaces=missing)
-    SectorConstraint(reducer, maps, spaces)
 
-Constraint that groups complete basis states into sectors according to a
-custom rule. It has the same `reducer`, `maps`, and `spaces` interface
-as [`FilterConstraint`](@ref), but `reducer` must return the sector label for a
-state. Returning `missing` discards the state; states with the same non-missing
-label are placed in the same sector.
-
-When `maps` and `spaces` are provided, the state is split into the
-selected spaces, the maps are applied to them, and the reducer receives
-the resulting values. A single function is applied to all spaces; a
-collection of maps supplies one function per subspace.
+Like [`FilterConstraint`](@ref), but `reducer` returns the sector label of a state, or `missing` to discard it.
 """
-const SectorConstraint{R, FS, H} = StateConstraint{R, FS, H, typeof(identity)}
-SectorConstraint(reducer, maps, spaces) = StateConstraint(reducer, maps, spaces, identity)
-SectorConstraint(reducer; maps = missing, spaces = missing) = SectorConstraint(reducer, maps, spaces)
+SectorConstraint(reducer; maps = missing, spaces = missing) = StateConstraint(reducer, maps, spaces, ValueRule{true}(identity, missing))
 
 function _check_maps_length(maps, spaces, name = "maps")
     (maps isa Function || ismissing(maps) || ismissing(spaces)) && return nothing
@@ -163,6 +141,7 @@ particle_number(state) = throw(ArgumentError("States of type `$(typeof(state))` 
 
 Constraint enforcing conservation of a (possibly weighted) particle number, optionally on selected spaces.
 `total` can be a single value or collection of allowed values; `missing` allows any value.
+Totals must be integers unless some weight is non-integer.
 `spaces` restricts the count to the given subspaces (default: all of them). `weights` gives one
 weight per subspace in `spaces` (default: all `1`), and the conserved quantity is the weighted sum of their particle numbers.
 """
@@ -171,13 +150,16 @@ struct NumberConservation{T, H, W} <: AbstractAdditiveConstraint
     spaces::H
     weights::W
     function NumberConservation(_total, _spaces, _weights)
-        total = _normalize_constraint_values(_total)
-        subspace = _normalize_constraint_subspace(_spaces)
         weights = _normalize_constraint_values(_weights)
+        total = _normalize_constraint_values(_total)
+        total = ismissing(weights) || all(isinteger, weights) ? _integer_totals(total) : total
+        subspace = _normalize_constraint_subspace(_spaces)
         _check_maps_length(weights, subspace, "weights")
         new{typeof(total),typeof(subspace),typeof(weights)}(total, subspace, weights)
     end
 end
+_integer_totals(::Missing) = missing
+_integer_totals(total) = all(isinteger, total) ? map(Int, total) : throw(ArgumentError("Particle number totals must be integers, got $total."))
 _normalize_constraint_subspace(subspace::AbstractHilbertSpace) = (subspace,)
 _normalize_constraint_subspace(spaces) = spaces
 _normalize_constraint_subspace(spaces::Missing) = spaces
@@ -276,8 +258,6 @@ function filter_function(constraint::ProductConstraint, space::AbstractHilbertSp
     state -> all(f -> f(state), subspace_functions)
 end
 
-sectors(::AbstractConstraint) = nothing
-
 map_spaces(f, c) = c
 map_spaces(f, c::ProductConstraint) = ProductConstraint(map(ci -> map_spaces(f, ci), c.constraints))
 _map_spaces(f, spaces) = map(f, spaces)
@@ -297,7 +277,7 @@ such as `NumberConservation`, return a space with sectors, with states ordered b
 A constraint can also be `quantity` or `quantity => spec`, where `quantity` is a diagonal operator or a function
 of the basis state, such as `constrain_space(H, N => 2)` with `N = sum(f[i]'f[i] for i in 1:4)`;
 see [Constraints and sectors](@ref) for what `spec` can be.
-A `quantity => spec` constraint on a space with sectors keeps its labels, and its own labels follow them.
+A `quantity => spec`, `FilterConstraint` or `SectorConstraint` on a space with sectors keeps the sectors of the space, and its own labels follow them.
 
 With only `states`, return the subspace spanned by exactly those basis states, in the
 given order; this is equivalent to `constrain_space(space, NoConstraint(), states)`.
@@ -326,6 +306,9 @@ constrain_space
     H = hilbert_space(f, labels, qn)
     @test dim(H) == 2^4
     @test all(isone ∘ dim, sectors(H))
+    H = hilbert_space(f, 1:3)
+    @test NoConstraint() * NoConstraint() == NoConstraint()
+    @test constrain_space(H, NumberConservation(1) * NoConstraint()) == constrain_space(H, NoConstraint() * NumberConservation(1)) == constrain_space(H, NumberConservation(1))
 end
 
 @testitem "ParityConservation accepts any collection of parities" begin

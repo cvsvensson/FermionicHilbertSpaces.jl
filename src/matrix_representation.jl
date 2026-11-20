@@ -256,14 +256,14 @@ function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr::Uni
 end
 # Kronecker product of the group matrices, with the first group as the fastest-varying index.
 # Only the groups in `active` have a matrix other than the identity.
-_kron_groups(matrices, active, repr) = _kron_groups_generic(matrices, repr)
-function _kron_groups_generic(matrices, repr)
-    mergedmatrices = _merge_diags(matrices, repr)
+_kron_groups(matrices, active, repr) = _kron_groups_generic(matrices)
+function _kron_groups_generic(matrices)
+    mergedmatrices = _merge_diags(matrices)
     return foldl(kron, Iterators.reverse(mergedmatrices))
 end
 function _kron_groups(matrices, active, repr::EagerSparseRepr)
     if isempty(active) || !all(n -> matrices[n] isa SparseMatrixCSC, active)
-        return _kron_groups_generic(matrices, repr)
+        return _kron_groups_generic(matrices)
     end
     first_active, last_active = extrema(active)
     # Bool identities between the active groups keep the element type and the values of the other factors
@@ -306,7 +306,7 @@ end
 function _term_matrix_representation(::Missing, space::AbstractHilbertSpace, repr::Union{EagerDenseRepr,EagerSparseRepr}, chunking; kwargs...)
     return Eye{_repr_eltype(Bool, repr)}(dim(space))
 end
-function _merge_diags(matrices, repr)
+function _merge_diags(matrices)
     # go through list of matrices and merge consecutive Diagonals with kron
     newmats = Any[]
     n = 1
@@ -352,6 +352,8 @@ end
 # that several sums share are mostly on the diagonal.
 function _product_terms(op::NCAdd, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}; tree_split = 10, kwargs...)
     spaces = groups(space)
+    # The factors of the KronTerms are sparse, so the local matrices are built sparse whatever the output format
+    local_repr = EagerSparseRepr{_repr_eltype(Missing, repr)}()
     by_span = Dict{UnitRange{Int}, Vector{Any}}()
     for prodop in _partitioned_terms(NCterms(op), bases, spaces)
         push!(get!(() -> [], by_span, minimum(prodop.inds):maximum(prodop.inds)), prodop)
@@ -365,8 +367,8 @@ function _product_terms(op::NCAdd, bases, space::ProductSpace, repr::Union{Eager
     for p in get(by_span, eachindex(spaces), [])
         push!(get!(() -> [], products, (p.inds, map(op -> op.factors, Base.tail(p.ops)))), p)
     end
-    sums = [(convert(SparseMatrixCSC, _sum_matrices([_span_matrix(p, span, spaces, repr; kwargs...) for p in prodops], repr; tree_split)), _stride(spaces, first(span))) for (span, prodops) in by_span if span != eachindex(spaces)]
-    return [_split_diagonals(sums, dim(space)); [_kron_term(ps, spaces, repr; kwargs...) for ps in values(products)]]
+    sums = [(convert(SparseMatrixCSC, _sum_matrices([_span_matrix(p, span, spaces, local_repr; kwargs...) for p in prodops], local_repr; tree_split)), _stride(spaces, first(span))) for (span, prodops) in by_span if span != eachindex(spaces)]
+    return [_split_diagonals(sums, dim(space)); [_kron_term(ps, spaces, local_repr; kwargs...) for ps in values(products)]]
 end
 function _span_matrix(prodop, span, spaces, repr; kwargs...)
     matrices = map(span) do n
@@ -592,27 +594,14 @@ representation
     matrix_representation(op, space::AbstractHilbertSpace, [repr]; kwargs...)
     matrix_representation(op, Axes(Hout, Hin), [repr]; kwargs...)
 
-Return the matrix representation of symbolic operator `op` in Hilbert space `space`. This is the operator-specific form of [`representation`](@ref).
+Return the matrix of the symbolic operator `op` on `space`; see [`representation`](@ref) for `repr`. With
+[`Axes`](@ref)`(Hout, Hin)` it maps `Hin` to `Hout`; the two must have the same groups, such as two sectors of the
+same modes, and two different spaces support only eager formats without chunking.
 
-With [`Axes`](@ref)`(Hout, Hin)`, return the `dim(Hout) × dim(Hin)` matrix of `op` from `Hin` to `Hout`. The two
-spaces must have the same groups, for example two sectors of the same modes. Two different spaces support only eager
-formats without chunking.
-
-The optional `repr` selects the format, as in [`representation`](@ref).
-
-Keyword arguments include `projection` (default `false`) which if true will ignore the error thrown when the operator maps outside the space (outside `Hout` with `Axes`). Projection drops matrix elements to states outside the space, so an operator that changes a conserved quantity gives zero on a single sector; use `Axes(Hout, Hin)` with the two sectors instead. Use `chunking` to control NCAdd construction strategy: `NoChunking()`, `TermChunking(scheduler)`, or `StateChunking(scheduler)`.
-
-# Examples
-```julia
-@fermions f
-H = hilbert_space(f, 1:2)
-op = f[1]' * f[2] + hc
-M = FermionicHilbertSpaces.matrix_representation(op, H)
-size(M) == (dim(H), dim(H))
-```
+`projection=true` drops matrix elements to states outside the space (outside `Hout` with `Axes`) instead of throwing.
+`chunking` is `NoChunking()`, `TermChunking(scheduler)` or `StateChunking(scheduler)`.
 """
-function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
-    repr === :dense && return Matrix(matrix_representation(op, space, EagerSparseRepr(); projection, chunking, kwargs...))
+function matrix_representation(op, space::AbstractHilbertSpace, repr = EagerSparseRepr(); projection = false, chunking = NoChunking(), kwargs...)
     # The barrier keeps inference from compiling every format a runtime Symbol could select
     repr isa Symbol && return Base.inferencebarrier(matrix_representation)(op, space, _canonicalize_repr(repr); projection, chunking, kwargs...)
     format = _matrix_format(repr)
@@ -621,12 +610,12 @@ function matrix_representation(op, space::AbstractHilbertSpace, repr=EagerSparse
     end
     _check_operator(op, space)
     format, kwargs = _with_amplitude_eltype(format, op, space, kwargs)
-    return _with_format_eltype(_matrix_representation(_at_format_precision(op, format), _checked_group_ids(op, space), space, format, chunking; projection, kwargs...), format)
+    M = _with_format_eltype(_matrix_representation(_at_format_precision(op, format), _checked_group_ids(op, space), space, format, chunking; projection, kwargs...), format)
+    return _symmetrize(M, op, space)
 end
 function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=false, chunking=NoChunking(), kwargs...)
     Hout, Hin = _operator_axes(ax)
     Hout == Hin && return matrix_representation(op, Hin, repr; projection, chunking, kwargs...)
-    repr === :dense && return Matrix(matrix_representation(op, ax, EagerSparseRepr(); projection, chunking, kwargs...))
     repr = _matrix_format(repr)
     repr isa Union{EagerSparseRepr,EagerDenseRepr} && chunking isa NoChunking || throw(ArgumentError("Lazy and chunked representations with `Axes(Hout, Hin)` need `Hout == Hin`."))
     _check_operator(op, ax)
@@ -638,11 +627,12 @@ function matrix_representation(op, ax::Axes, repr=EagerSparseRepr(); projection=
     return _with_format_eltype(_matrix_representation(_at_format_precision(op, repr), _checked_group_ids(op, Hin), ax, repr, chunking; projection, kwargs...), repr)
 end
 # A space whose basis states are not product states, such as a `SymmetricSector`, can throw for operators it cannot
-# represent with `_check_operator`, and give the amplitudes of its basis vectors with `_amplitude_eltype`, which is
-# given the float precision of the operator and promoted with its element type.
+# represent with `_check_operator` and give the amplitudes of its basis vectors with `_amplitude_eltype`, which is
+# given the float precision of the operator and promoted with its element type. `_symmetrize` adjusts the assembled matrix.
 _check_operator(op, space) = nothing
 _check_operator(op, space::AbstractSubspace) = _check_operator(op, parent(space))
 _check_operator(op, ax::Axes) = _check_operator(op, _input_space(ax))
+_symmetrize(M, op, space) = M
 _amplitude_eltype(space) = nothing
 _amplitude_eltype(space::AbstractSubspace) = _amplitude_eltype(parent(space))
 _with_amplitude_eltype(format, op, space, kwargs) = _with_amplitude_eltype(format, op, _amplitude_eltype(space), kwargs)
@@ -830,16 +820,13 @@ end
 """
     expectation(op, state, H)
 
-Return the expectation value of the operator `op` in `state` on the space `H`. A vector `ψ` gives `ψ' * M * ψ` and a
-density matrix `ρ` gives `tr(ρ * M)`, where `M = representation(op, H)`. The state is assumed to be normalized.
+Return the expectation value of `op` in the normalized state vector `ψ` (`ψ' * M * ψ`) or density matrix `ρ`
+(`tr(ρ * M)`) on `H`, where `M = representation(op, H)`.
 
-On `hilbert_space(f, labels, FreeFermions.SingleParticle())`, `state` is the correlation matrix `G[i, j] = ⟨f_i' f_j⟩`, and on
-`hilbert_space(f, labels, FreeFermions.BdG())` it is the Nambu correlation matrix `G[i, j] = ⟨Ψ_i' Ψ_j⟩`, with `Ψ = (f; f')` in
-the order of the BdG space. On the Majorana space `hilbert_space(γ, labels, FreeFermions.SingleParticle())` it is
-`G[i, j] = ⟨γ_i γ_j⟩ / 2`. The state is then the Gaussian state with that correlation matrix, and `op` of any degree
-is evaluated with Wick's theorem. A vector on the single-particle space is the one-particle state `Σᵢ ψ[i] f_i'|0⟩`.
-Terms that do not conserve the particle number (single-particle space) or the parity (BdG and Majorana spaces) throw
-an error, unless `projection=true`, which drops them.
+On the single-particle, BdG and Majorana spaces of `FreeFermions`, `state` is a correlation matrix as returned by
+`FreeFermions.correlation_matrix`, and `op` of any degree is evaluated with Wick's theorem in that Gaussian state. Terms
+that break the particle number (single-particle space) or the parity (BdG and Majorana spaces) throw unless
+`projection=true` drops them. A vector on the single-particle space is the one-particle state `Σᵢ ψ[i] f_i'|0⟩`.
 
 # Examples
 ```julia

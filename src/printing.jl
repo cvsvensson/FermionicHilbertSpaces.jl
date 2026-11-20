@@ -44,22 +44,6 @@ function Base.show(io::IO, ac::AdditiveConstraint{T,H,F}) where {T,H,F}
     end
 end
 
-function Base.show(io::IO, fc::Union{FilterConstraint, SectorConstraint})
-    name = fc isa FilterConstraint ? "FilterConstraint" : "SectorConstraint"
-    if get(io, :compact, false)
-        parts = filter(!isnothing, [
-            ismissing(fc.spaces) ? nothing : "subspaces: $(length(fc.spaces))",
-            ismissing(fc.maps) ? nothing : "$(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s)"])
-        print(io, name, "(", join(parts, ", "), ")")
-    else
-        lines = filter(!isnothing, [
-            ismissing(fc.spaces) ? nothing : "subspaces: $(length(fc.spaces))",
-            ismissing(fc.maps) ? nothing : "maps: $(isa(fc.maps, Tuple) ? length(fc.maps) : 1) function(s)",
-            "reducer: $(fc.reducer)"])
-        print(io, name, "(", join(lines, ", "), ")")
-    end
-end
-
 function Base.show(io::IO, pc::ProductConstraint{C}) where {C}
     nconstraints = length(pc.constraints)
     nshow = min(nconstraints, 6)
@@ -178,19 +162,6 @@ function show_details(io, H::SectorHilbertSpace)
     end
 end
 
-
-function Base.show(io::IO, c::FermionicSpace)
-    max_modes = 10
-    if get(io, :compact, false)
-        _compact_fermionic_modes(io, c; max_groups=4, edge_groups=2, max_labels_per_group=6, edge_labels=2)
-    else
-        n = nbr_of_modes(c)
-        print(io, "$(dim(c))-dimensional FermionicSpace\nModes: ")
-        n > max_modes && print(io, "$n total ")
-        _compact_fermionic_modes(io, c; (n > max_modes ? (max_groups=6, edge_groups=3, max_labels_per_group=8, edge_labels=3) : (;))...)
-    end
-end
-
 function Base.show(io::IO, H::TransposedSpace)
     if get(io, :compact, false)
         show(io, parent(H))
@@ -211,48 +182,7 @@ function Base.show(io::IO, H::GenericHilbertSpace)
     end
 end
 
-function Base.show(io::IO, H::TruncatedBosonicHilbertSpace)
-    lbl = H.mode
-    if get(io, :compact, false)
-        print(io, "Bosons(", lbl, ", dim=", dim(H), ")")
-    else
-        print(io, "$(dim(H))-dimensional TruncatedBosonicHilbertSpace\n")
-        print(io, "Label: ", lbl, ", dimension: ", dim(H))
-    end
-end
-
-Base.show(io::IO, state::BosonicState) = print(io, "BosonicState(", state.n, ")")
-
-function Base.show(io::IO, H::SpinSpace)
-    J = H.spin
-    lbl = H.mode
-    if get(io, :compact, false)
-        print(io, "Spin{", J, "}(", lbl, ")")
-    else
-        print(io, "$(dim(H))-dimensional Spin{", J, "}")
-        print(io, "(", lbl, ")")
-    end
-end
-Base.show(io::IO, s::SpinState) = print(io, "SpinState(", s.m, ")")
-
-function Base.show(io::IO, m::MajoranaHilbertSpace)
-    return if get(io, :compact, false)
-        print(io, "MajoranaHilbertSpace(")
-        show(io, m.parent)
-        print(io, ")")
-    else
-        println(io, "MajoranaHilbertSpace: ", m.field)
-        show(IOContext(io, :compact => true), m.parent)
-    end
-end
-
 Base.show(io::IO, ax::Axes) = (print(io, "Axes("); join(IOContext(io, :compact => true), ax.spaces, ", "); print(io, ")"))
-
-
-Base.show(io::IO, f::FockNumber) = print(io, "FockNumber(", f.f, ")")
-Base.show(io::IO, f::FixedNumberFockState) = print(io, "FixedNumberFockState(", f.sites, ")")
-
-
 
 function Base.show(io::IO, H::ProductSpace)
     if get(io, :compact, false)
@@ -278,11 +208,6 @@ end
 _state_label(state, space) = _state_label_atomic(state, _unwrap_space(space))
 _unwrap_space(H::Union{TransposedSpace,AbstractSubspace}) = _unwrap_space(parent(H))
 _unwrap_space(H) = H
-const _FermionModeSpace = Union{FermionicSpace,MajoranaHilbertSpace}
-_state_label_atomic(f::FockNumber, H::_FermionModeSpace) = join(digits(Int, f.f; base=2, pad=nbr_of_modes(H)))
-_state_label_atomic(f::FixedNumberFockState, H::_FermionModeSpace) = _state_label_atomic(FockNumber(f), H)
-_state_label_atomic(s::BosonicState, H) = string(s.n)
-_state_label_atomic(s::SpinState, H::SpinSpace) = H.spin == 1 // 2 ? (s.m > 0 ? "↑" : "↓") : string(s.m)
 _state_label_atomic(s::ProductState, H::ProductSpace) = "(" * join(map(_state_label, s.states, H.factors), ", ") * ")"
 _state_label_atomic(s, H) = sprint(print, s)
 
@@ -312,79 +237,21 @@ function Base.show(io::IO, ::MIME"text/plain", bs::BasisStates)
 end
 
 
-function _show_mapping_summary(io::IO, mappings; max_mappings=3)
-    nm = length(mappings)
-    nshow = min(nm, max_mappings)
-    for i in 1:nshow
-        i > 1 && print(io, ", ")
-        m = mappings[i]
-        show(IOContext(io, :compact => true), first(m))
-        print(io, " => ")
-        show(IOContext(io, :compact => true), last(m))
-    end
-    nm > nshow && print(io, ", ... (", nm - nshow, " more)")
-end
-
-function Base.show(io::IO, op::PartialTransposeMap)
-    in_dim = dim(op.H)
+function Base.show(io::IO, op::SuperoperatorMap{K}) where {K}
+    in_dim = dim(op.Hin)
     out_dim = dim(op.Hout)
+    cio = IOContext(io, :compact => true)
     if get(io, :compact, false)
-        print(io, "PartialTransposeMap(", in_dim, "^2 → ", out_dim, "^2, transpose=")
-        show(IOContext(io, :compact => true), op.Hsub)
+        print(io, K, "(", in_dim, "^2 → ", out_dim, "^2")
+        op isa PartialTransposeMap && (print(io, ", transpose="); show(cio, op.Hsub))
         length(op.kwargs) > 0 && print(io, ", ", length(op.kwargs), " kw")
         print(io, ")")
     else
-        print(io, "PartialTransposeMap\n")
-        print(io, "  Input space: ")
-        show(IOContext(io, :compact => true), op.H)
-        print(io, "\n  Transposed subsystem: ")
-        show(IOContext(io, :compact => true), op.Hsub)
+        print(io, K, "\n  Input space: ")
+        show(cio, op.Hin)
+        op isa PartialTransposeMap && (print(io, "\n  Transposed subsystem: "); show(cio, op.Hsub))
         print(io, "\n  Output space: ")
-        show(IOContext(io, :compact => true), op.Hout)
-        print(io, "\n  Superoperator size: ", out_dim^2, " x ", in_dim^2)
-        print(io, "\n  Stored map nnz: ", nnz(op.map))
-        if length(op.kwargs) > 0
-            print(io, "\n  kwargs: ")
-            show(io, op.kwargs)
-        end
-    end
-end
-
-function Base.show(io::IO, op::PartialTraceMap)
-    in_dim = dim(op.H)
-    out_dim = dim(op.Hsub)
-    if get(io, :compact, false)
-        print(io, "PartialTraceMap(", in_dim, "^2 → ", out_dim, "^2")
-        length(op.kwargs) > 0 && print(io, ", ", length(op.kwargs), " kw")
-        print(io, ")")
-    else
-        print(io, "PartialTraceMap\n")
-        print(io, "  Input space: ")
-        show(IOContext(io, :compact => true), op.H)
-        print(io, "\n  Output space: ")
-        show(IOContext(io, :compact => true), op.Hsub)
-        print(io, "\n  Superoperator size: ", out_dim^2, " x ", in_dim^2)
-        print(io, "\n  Stored map nnz: ", nnz(op.map))
-        if length(op.kwargs) > 0
-            print(io, "\n  kwargs: ")
-            show(io, op.kwargs)
-        end
-    end
-end
-
-function Base.show(io::IO, op::EmbedMap)
-    in_dim = dim(op.Hsub)
-    out_dim = dim(op.H)
-    if get(io, :compact, false)
-        print(io, "EmbedMap(", in_dim, "^2 → ", out_dim, "^2")
-        length(op.kwargs) > 0 && print(io, ", ", length(op.kwargs), " kw")
-        print(io, ")")
-    else
-        print(io, "EmbedMap\n")
-        print(io, "  Input space: ")
-        show(IOContext(io, :compact => true), op.Hsub)
-        print(io, "\n  Output space: ")
-        show(IOContext(io, :compact => true), op.H)
+        show(cio, op.Hout)
         print(io, "\n  Superoperator size: ", out_dim^2, " x ", in_dim^2)
         print(io, "\n  Stored map nnz: ", nnz(op.map))
         if length(op.kwargs) > 0

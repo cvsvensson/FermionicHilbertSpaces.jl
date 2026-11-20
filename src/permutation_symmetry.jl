@@ -19,7 +19,12 @@ end
 # maps the basis state `x` to `u(x) * uπ(y) * y`, where `y` is the permuted state and `u` and `uπ` are the phase factors
 # of the partitions `Hs` and `Hs[invperm(perm)]`. When `u` is `Returns(1)`, as for spaces without fermions, so is `uπ`,
 # since permuting `Hs` leaves the kind of each factor's mapper unchanged.
+# Every permutation passes through here, so this is also where it is checked against `Hs`.
 function _permutation_phases(H, Hs, mapper, phase_factors)
+    phase_of = _phase_function(H, Hs, mapper, phase_factors)
+    return perm -> (_check_permutable(Hs, perm); phase_of(perm))
+end
+function _phase_function(H, Hs, mapper, phase_factors)
     phase_factors || return perm -> (j, i) -> 1
     pfu = phase_factor_u(mapper)
     pfu == Returns(1) && return perm -> (j, i) -> 1
@@ -30,6 +35,17 @@ function _permutation_phases(H, Hs, mapper, phase_factors)
         return (j, i) -> u[j] * uπ[i]
     end
 end
+
+# `permute_state` copies the substate of factor `perm[i]` unchanged into factor `i`, so it must be a basis state there.
+function _check_permutable(Hs, perm)
+    for i in eachindex(perm)
+        j = perm[i]
+        j == i || _same_basis(basisstates(Hs[j]), basisstates(Hs[i])) ||
+            throw(ArgumentError("The symmetry moves factor $j to factor $i, which have different basis states. Permuted factors must be the same space up to labels."))
+    end
+    return nothing
+end
+_same_basis(a, b) = a == b || issetequal(a, b)
 
 """
     permutation_operator(H, Hs, perm; phase_factors=true)
@@ -591,6 +607,10 @@ end
 
     # Invalid input: Hs not a subsystem of H
     @test_throws ArgumentError permutation_projector(H, [H1, H3], [idperm, swapperm])
+    # A fermion mode and a spin 1/2 have the same dimension but cannot be swapped
+    @spins s
+    Hf, Hs = hilbert_space(f[1]), hilbert_space(s[1], 1 // 2)
+    @test_throws "different basis states" symmetric_sector(tensor_product(Hf, Hs), [Hf, Hs], :symmetric)
 end
 
 @testitem "Permutation of more than 32 factors" begin

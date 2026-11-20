@@ -110,6 +110,19 @@ hilbert_space(f::Field{Spin}, labels::AbstractVector, @nospecialize(constraint::
 Base.:(==)(a::SpinSpace, b::SpinSpace) = a === b || (a.mode == b.mode && a.spin == b.spin)
 Base.hash(x::SpinSpace, h::UInt) = hash(x.mode, hash(x.spin, h))
 
+function Base.show(io::IO, H::SpinSpace)
+    J = H.spin
+    lbl = H.mode
+    return if get(io, :compact, false)
+        print(io, "Spin{", J, "}(", lbl, ")")
+    else
+        print(io, "$(dim(H))-dimensional Spin{", J, "}")
+        print(io, "(", lbl, ")")
+    end
+end
+Base.show(io::IO, s::SpinState) = print(io, "SpinState(", s.m, ")")
+_state_label_atomic(s::SpinState, H::SpinSpace) = H.spin == 1 // 2 ? (s.m > 0 ? "↑" : "↓") : string(s.m)
+
 function interpret_state(input::AbstractString, H::SpinSpace{T}) where {T}
     Jhalf = H.spin
     input in ("up", "↑", "down", "↓") && Jhalf != 1 // 2 && throw(ArgumentError("The spin state `\"$input\"` is only defined for `J` = 1/2, got `J` = $Jhalf. Give `m` as a half-integer instead."))

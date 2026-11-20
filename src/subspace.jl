@@ -162,7 +162,7 @@ end
 end
 
 @testitem "Custom subspace indices" begin
-    import FermionicHilbertSpaces: state_position, default_subspace_index, particle_number, FilterConstraint, SectorConstraint
+    import FermionicHilbertSpaces: state_position, default_subspace_index, particle_number, FilterConstraint, SectorConstraint, StateConstraint
     struct LinearSearch{V}
         states::V
     end
@@ -177,7 +177,7 @@ end
     selected = Ref(0)
     keep(state) = isodd(particle_number(state))
     label(state) = isodd(particle_number(state))
-    function default_subspace_index(::Union{FilterConstraint{typeof(keep)}, SectorConstraint{typeof(label)}}, parent, states)
+    function default_subspace_index(::Union{StateConstraint{typeof(keep)}, StateConstraint{typeof(label)}}, parent, states)
         selected[] += 1
         LinearSearch(states)
     end
@@ -190,7 +190,7 @@ end
     end
 
     wrong(state) = iseven(particle_number(state))
-    default_subspace_index(::FilterConstraint{typeof(wrong)}, parent, states) = LinearSearch(reverse(states))
+    default_subspace_index(::StateConstraint{typeof(wrong)}, parent, states) = LinearSearch(reverse(states))
     @test_throws ArgumentError constrain_space(H, FilterConstraint(wrong))
 end
 

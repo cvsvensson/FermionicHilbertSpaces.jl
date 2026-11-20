@@ -5,6 +5,8 @@ end
 FixedNumberFockState(sites::NTuple{N,Int}) where N = FixedNumberFockState{N}(TupleTools.sort(sites))
 Base.:(==)(f1::FixedNumberFockState, f2::FixedNumberFockState) = f1.sites == f2.sites
 Base.hash(f::FixedNumberFockState, h::UInt) = hash(f.sites, h)
+Base.show(io::IO, f::FixedNumberFockState) = print(io, "FixedNumberFockState(", f.sites, ")")
+_state_label_atomic(f::FixedNumberFockState, H::_FermionModeSpace) = _state_label_atomic(FockNumber(f), H)
 
 function jwstring_left_bool(site, f::FixedNumberFockState)
     sign = false
