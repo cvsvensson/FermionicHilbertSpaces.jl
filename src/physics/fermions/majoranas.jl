@@ -201,7 +201,16 @@ function _majorana_space(y, labels, args...)
 end
 MajoranaHilbertSpace(mode_ordering, space::AbstractHilbertSpace, field) = rewrap(space, MajoranaHilbertSpace(mode_ordering, parent(space), field))
 
-Base.show(io::IO, m::MajoranaHilbertSpace) = (println(io, "MajoranaHilbertSpace: ", m.field); show(IOContext(io, :compact => true), m.parent))
+function Base.show(io::IO, m::MajoranaHilbertSpace)
+    return if get(io, :compact, false)
+        print(io, "MajoranaHilbertSpace(")
+        show(io, m.parent)
+        print(io, ")")
+    else
+        println(io, "MajoranaHilbertSpace: ", m.field)
+        show(IOContext(io, :compact => true), m.parent)
+    end
+end
 
 const _FermionModeSpace = Union{FermionicSpace, MajoranaHilbertSpace}
 _state_label_atomic(f::FockNumber, H::_FermionModeSpace) = join(digits(Int, f.f; base = 2, pad = nbr_of_modes(H)))

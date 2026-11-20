@@ -215,6 +215,9 @@ end
         show(io, H_sym)
         true
     end
+    @test !occursin('\n', sprint(show, FermionicHilbertSpaces.Axes(H_sym, H_simple)))
+    @majoranas γ
+    @test !occursin('\n', sprint(show, hilbert_space(γ, 1:4); context = :compact => true))
 end
 
 @testitem "Complementary system" begin

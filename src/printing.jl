@@ -182,6 +182,8 @@ function Base.show(io::IO, H::GenericHilbertSpace)
     end
 end
 
+Base.show(io::IO, ax::Axes) = (print(io, "Axes("); join(IOContext(io, :compact => true), ax.spaces, ", "); print(io, ")"))
+
 function Base.show(io::IO, H::ProductSpace)
     if get(io, :compact, false)
         print(io, "ProductSpace($(dim(H))-dim, $(length(H.factors)) factors)")

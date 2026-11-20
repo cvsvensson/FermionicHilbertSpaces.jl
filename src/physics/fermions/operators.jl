@@ -1,10 +1,11 @@
 """
     parityoperator(H)
 
-Return the fermionic parity operator `(-1)^N` for the Hilbert space `H`: `1` on even and `-1`
-on odd basis states.
+Return the parity operator `(-1)^N` for the Hilbert space `H`: `1` on even and `-1` on odd basis states.
+`N` counts every particle, so on a space with fermions and bosons this is the total parity; the fermion parity
+is `parityoperator` of the fermionic factor.
 """
-function parityoperator(H::AbstractHilbertSpace{<:AbstractFockState})
+function parityoperator(H::AbstractHilbertSpace)
     return diagonal_operator(parity, H)
 end
 
@@ -12,9 +13,9 @@ end
 """
     numberoperator(H)
 
-Return the number operator `Σ_j n_j` for the Hilbert space `H`.
+Return the number operator `Σ_j n_j` for the Hilbert space `H`, counting fermions and bosons.
 """
-function numberoperator(H::AbstractHilbertSpace{<:AbstractFockState})
+function numberoperator(H::AbstractHilbertSpace)
     return diagonal_operator(particle_number, H)
 end
 

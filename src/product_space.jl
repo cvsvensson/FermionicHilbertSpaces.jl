@@ -99,7 +99,6 @@ order_key(state::ProductState, H::ProductSpace) = reverse(_factor_indices(state,
 has_arithmetic_state_index(H::ProductSpace) = all(has_arithmetic_state_index, H.factors) && !isnothing(H.lininds)
 
 particle_number(state::ProductState) = sum(particle_number, atomic_factors(state))
-parity(state::ProductState) = prod(parity, atomic_factors(state))
 
 
 @testitem "ProductSpace" begin

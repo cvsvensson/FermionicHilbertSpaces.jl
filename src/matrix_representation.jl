@@ -878,7 +878,11 @@ _canonicalize_repr(::Type{T}) where T<:Number = EagerSparseRepr{T}()
 _canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:sparse`, `:lazy`, a number type, or `Array`, `Matrix`, `Vector`, `SparseMatrixCSC` or `SparseVector`, optionally with an element type."))
 _matrix_format(repr) = _canonicalize_repr(repr)
 _matrix_format(repr::Type{<:AbstractVector}) = throw(ArgumentError("`$(repr)` is a vector format, but this representation is a matrix. Use a matrix type or `Array`."))
-_vector_format(repr) = _canonicalize_repr(repr)
+function _vector_format(repr)
+    r = _canonicalize_repr(repr)
+    r isa Union{EagerSparseRepr, EagerDenseRepr, LazyRepr} || throw(ArgumentError("Kets and bras have no `$repr` format. Use `Vector` or `SparseVector`."))
+    return r
+end
 _vector_format(repr::Type{<:AbstractMatrix}) = throw(ArgumentError("`$(repr)` is a matrix format, but kets and bras give vectors. Use a vector type or `Array`."))
 function _canonicalize_repr(s::Symbol)
     s == :sparse && return EagerSparseRepr()
@@ -1400,6 +1404,7 @@ end
         rand(length(inds))
     end
     @test collect(M_dist * v) ≈ M_ref * collect(v)
+    @test_throws ArgumentError representation(op, H, PartitionedSparseRepr())
 
     @boson b
     Hp = tensor_product(H, hilbert_space(b, 2))

@@ -64,8 +64,7 @@ focknbr_from_site_index(site::Integer, ::Type{T}=default_fock_representation(sit
 focknbr_from_site_indices(sites, ::Type{T}=default_fock_representation(maximum(sites, init=0))) where T =
     FockNumber{T}(reduce((acc, s) -> acc | (one(T) << (s - 1)), sites; init=zero(T)))
 
-bits(f::FockNumber, N) = digits(Bool, f.f, base=2, pad=N)
-parity(f::FockNumber) = iseven(fermionnumber(f)) ? 1 : -1
+bits(f::FockNumber, N) = digits(Bool, f.f, base = 2, pad = N)
 fermionnumber(f::FockNumber) = count_ones(f)
 Base.count_ones(f::FockNumber) = count_ones(f.f)
 particle_number(s::FockNumber) = fermionnumber(s)

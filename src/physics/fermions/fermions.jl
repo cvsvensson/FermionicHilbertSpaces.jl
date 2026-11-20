@@ -223,6 +223,12 @@ end
     H = hilbert_space(f, 1:2, states)
     @test parityoperator(H) == Diagonal([-1])
     @test numberoperator(H) == Diagonal([1])
+
+    @boson b
+    H = tensor_product(hilbert_space(f, 1:1), hilbert_space(b, 3))
+    N = representation(f[1]' * f[1] + b' * b, H, Matrix)
+    @test numberoperator(H) ≈ N
+    @test parityoperator(H) ≈ Diagonal(cospi.(diag(N)))
 end
 
 @testmodule JordanWigner begin

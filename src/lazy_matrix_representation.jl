@@ -82,10 +82,10 @@ end
 Base.size(L::LazyOperator) = (d = dim(L.space); (d, d))
 Base.size(L::LazyOperator, i::Int) = size(L)[i]
 Base.eltype(::LazyOperator{O,S,T,C,P}) where {O,S,T,C,P} = T
-Base.conj(L::LazyOperator) = LazyOperator(L.op, L.space, L.chunking, L.precomp; projection=L.projection, conjugate=!L.conjugate, ishermitian=L.ishermitian)
+Base.conj(L::LazyOperator) = LazyOperator(L.op, L.space, L.chunking, L.precomp; projection = L.projection, conjugate = !L.conjugate, ishermitian = L.ishermitian, T = eltype(L))
 Base.adjoint(L::LazyOperator) = conj(transpose(L))
 function Base.transpose(L::LazyOperator)
-    return LazyOperator(_transposed(L.op), TransposedSpace(L.space), L.chunking, _transposed_precomp(L); projection = L.projection, conjugate = L.conjugate, ishermitian = L.ishermitian)
+    return LazyOperator(_transposed(L.op), TransposedSpace(L.space), L.chunking, _transposed_precomp(L); projection = L.projection, conjugate = L.conjugate, ishermitian = L.ishermitian, T = eltype(L))
 end
 # On the transposed space, operators act transposed with the same precomputation, except for the
 # spaces of a `ProductOperator` and the matrices of a `KronTerm`.
