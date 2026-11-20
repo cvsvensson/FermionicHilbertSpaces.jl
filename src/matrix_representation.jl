@@ -577,8 +577,7 @@ from `Hin` to `Hout`. Without `space`, the expression must consist of symbolic s
 The result is sparse by default. `repr` selects another format: an array type such as `Matrix` or `Matrix{ComplexF64}`
 (or a GPU array type such as `CuArray`), a number type such as `Float64` for a sparse result of that element type,
 or `:lazy` for a matrix-free operator. Coefficients are converted to the element type of `repr` (a complex coefficient
-with `Float64` throws an `InexactError`), and matrix elements are computed in its precision. On a
-[`SymmetricSector`](@ref) the matrix elements are only `Float64`-accurate, even with a higher-precision `repr`.
+with `Float64` throws an `InexactError`), and matrix elements are computed in its precision.
 
 ```jldoctest
 julia> @fermions f;
