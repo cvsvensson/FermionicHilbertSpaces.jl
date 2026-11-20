@@ -52,6 +52,7 @@ pages = [
         "Example: Free fermions" => "literate_output/free_fermions.md",
     ],
     "Performance" => [
+        "Benchmarks" => "performance.md",
         "Parallelization" => "parallelization.md",
     ],
     "Extending" => [
