@@ -40,11 +40,12 @@ end
 function _check_permutable(Hs, perm)
     for i in eachindex(perm)
         j = perm[i]
-        dim(Hs[j]) == dim(Hs[i]) && issetequal(basisstates(Hs[j]), basisstates(Hs[i])) ||
+        j == i || _same_basis(basisstates(Hs[j]), basisstates(Hs[i])) ||
             throw(ArgumentError("The symmetry moves factor $j to factor $i, which have different basis states. Permuted factors must be the same space up to labels."))
     end
     return nothing
 end
+_same_basis(a, b) = a == b || issetequal(a, b)
 
 """
     permutation_operator(H, Hs, perm; phase_factors=true)
