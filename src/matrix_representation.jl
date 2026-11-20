@@ -875,7 +875,7 @@ _canonicalize_repr(::Union{Type{Array{T}}, Type{Matrix{T}}, Type{Vector{T}}}) wh
 _canonicalize_repr(::Union{Type{SparseArrays.SparseMatrixCSC}, Type{SparseArrays.SparseVector}}) = EagerSparseRepr()
 _canonicalize_repr(::Union{Type{SparseArrays.SparseMatrixCSC{T}}, Type{SparseArrays.SparseMatrixCSC{T, Int}}, Type{SparseArrays.SparseVector{T}}, Type{SparseArrays.SparseVector{T, Int}}}) where {T} = EagerSparseRepr{T}()
 _canonicalize_repr(::Type{T}) where T<:Number = EagerSparseRepr{T}()
-_canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:sparse`, `:lazy`, a number type, or `Array`, `Matrix`, `Vector`, `SparseMatrixCSC` or `SparseVector`, optionally with an element type."))
+_canonicalize_repr(repr) = throw(ArgumentError("Unknown representation format `$(repr)`. Use `:lazy`, a number type, or `Array`, `Matrix`, `Vector`, `SparseMatrixCSC` or `SparseVector`, optionally with an element type."))
 _matrix_format(repr) = _canonicalize_repr(repr)
 _matrix_format(repr::Type{<:AbstractVector}) = throw(ArgumentError("`$(repr)` is a vector format, but this representation is a matrix. Use a matrix type or `Array`."))
 function _vector_format(repr)
@@ -885,23 +885,19 @@ function _vector_format(repr)
 end
 _vector_format(repr::Type{<:AbstractMatrix}) = throw(ArgumentError("`$(repr)` is a matrix format, but kets and bras give vectors. Use a vector type or `Array`."))
 function _canonicalize_repr(s::Symbol)
-    s == :sparse && return EagerSparseRepr()
-    s == :dense && return EagerDenseRepr()
     s == :lazy && return LazyRepr()
-    throw(ArgumentError("The representation type must be `:sparse`, `:dense` or `:lazy`, got `:$s`."))
+    throw(ArgumentError("The only symbol format is `:lazy`, got `:$s`. Use an array type such as `Matrix` or `SparseMatrixCSC`."))
 end
 
 
 group_ids(space::AbstractHilbertSpace) = map(group_id, groups(space))
 
-# The default sparse format keeps the structured identity; the other formats give the matrix type they name
-_convert_repr_eltype(M, ::EagerSparseRepr{Missing}) = M
+_convert_repr_eltype(M, ::EagerSparseRepr{Missing}) = SparseArrays.sparse(M)
 _convert_repr_eltype(M, ::EagerDenseRepr{Missing}) = Matrix(M)
 _convert_repr_eltype(M, ::EagerSparseRepr{T}) where T = SparseArrays.sparse(T.(M))
 _convert_repr_eltype(M, ::EagerDenseRepr{T}) where T = Matrix{T}(M)
 _convert_repr_eltype(M, ::Union{LazyRepr, PartitionedSparseRepr}) = M
 _convert_repr_eltype(M, repr::Type) = _convert_repr_eltype(M, _canonicalize_repr(repr))
-_convert_repr_eltype(M, ::Type{A}) where {A <: SparseArrays.AbstractSparseArray} = SparseArrays.sparse(_convert_repr_eltype(M, _canonicalize_repr(A)))
 
 # A concrete element type fixes the matrix type, also where inference cannot follow the assembly
 _with_format_eltype(M, ::Any) = M
@@ -998,7 +994,7 @@ end
         f[1]' * f[2] + f[2]' * f[1],
         sum(0.3n * (b[1]' + b[1]) * f[n]' * f[n] for n in 1:2) + 1im * s[:x] * f[1]' * f[2] * b[2],
     ]
-    for op in ops, repr in (:sparse, :dense, EagerDenseRepr())
+    for op in ops, repr in (SparseMatrixCSC, Matrix, EagerDenseRepr())
         M = representation(op, H, repr)
         Mc = representation(op, Hc, repr; projection=true)
         @test typeof(Mc) == typeof(M)
@@ -1235,7 +1231,9 @@ end
         @test (@inferred representation(k, H, vformat)) isa VT
         @test representation("10", H, vformat) == ket
     end
-    for format in ("dense", nothing, Any, Diagonal, Hermitian, Array{Float64, 3}, SparseMatrixCSC{Float64, Int32})
+    @test (@inferred representation(op, H)) isa SparseMatrixCSC
+    @test representation(2, H) isa SparseMatrixCSC{Int, Int}
+    for format in (:dense, nothing, Any, Diagonal, Hermitian, Array{Float64, 3}, SparseMatrixCSC{Float64, Int32})
         @test_throws ArgumentError representation(op, H, format)
         @test_throws ArgumentError representation(2, H, format)
         @test_throws ArgumentError representation("10", H, format)

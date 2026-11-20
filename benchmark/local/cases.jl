@@ -22,15 +22,15 @@ bdg_chain(c, N) = sum(0.1n * c[n]' * c[n] for n in 1:N) + sum(c[n]' * c[n + 1] +
 const FIRSTCALL = Dict(
     "bdg eigen" => function ()
         @fermions f
-        return eigen(representation(bdg_chain(f, 4), hilbert_space(f, 1:4, BdG()), :dense), BdGEigen())
+        return eigen(representation(bdg_chain(f, 4), hilbert_space(f, 1:4, BdG()), Matrix), BdGEigen())
     end,
     "dense bdg" => function ()
         @fermions f
-        return representation(bdg_chain(f, 4), hilbert_space(f, 1:4, BdG()), :dense)
+        return representation(bdg_chain(f, 4), hilbert_space(f, 1:4, BdG()), Matrix)
     end,
     "dense sector" => function ()
         @fermions f
-        return representation(chain(f, 4), hilbert_space(f, 1:4, NumberConservation(2)), :dense)
+        return representation(chain(f, 4), hilbert_space(f, 1:4, NumberConservation(2)), Matrix)
     end,
     "tensor_product constraint" => function ()
         @fermions f
@@ -81,7 +81,7 @@ function runtime_cases(full)
     end
     case!("dense half filling", (12,), (14,)) do N
         H, ham = hilbert_space(f, 1:N, NumberConservation(N ÷ 2)), chain(f, N)
-        () -> representation(ham, H, :dense)
+        () -> representation(ham, H, Matrix)
     end
     case!("partial_trace dense (n, k)", ((11, 2), (11, 6), (11, 9)), ((12, 2), (12, 6), (12, 10))) do (N, k)
         H = hilbert_space(f, 1:N)
@@ -100,12 +100,12 @@ function runtime_cases(full)
     case!(N -> lazy_mul(hilbert_space(f, 1:N), N), "lazy mul! full space", (14, 16), (16, 18))
     case!(N -> lazy_mul(hilbert_space(f, 1:N, NumberConservation(N ÷ 2)), N), "lazy mul! half filling", (16,), (20,))
     case!("bdg eigen", (300,), (800,)) do N
-        A = representation(bdg_chain(f, N), hilbert_space(f, 1:N, BdG()), :dense)
+        A = representation(bdg_chain(f, N), hilbert_space(f, 1:N, BdG()), Matrix)
         () -> eigen(A, BdGEigen())
     end
     case!("mean_field", (200,), (400,)) do N
         H = hilbert_space(f, 1:N, BdG())
-        G = correlation_matrix(eigen(representation(bdg_chain(f, N), H, :dense), BdGEigen()))
+        G = correlation_matrix(eigen(representation(bdg_chain(f, N), H, Matrix), BdGEigen()))
         op = chain(f, N)
         () -> mean_field(op, G, H)
     end
