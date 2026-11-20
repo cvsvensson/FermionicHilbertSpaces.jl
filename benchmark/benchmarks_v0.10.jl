@@ -349,7 +349,7 @@ let
     @spins S 1 // 2
     N = 8
     H = hilbert_space(S, 1:N)
-    xxz = sum(S[k][:x] * S[k+1][:x] + S[k][:y] * S[k+1][:y] + 0.7 * S[k][:z] * S[k+1][:z] for k in 1:N-1)
+    xxz = sum(S[k][:x] * S[k + 1][:x] + S[k][:y] * S[k + 1][:y] + 0.7 * S[k][:z] * S[k + 1][:z] for k in 1:(N - 1))
     ψ = Kets(H)(repeat(["↑", "↓"], N ÷ 2)...)
     SUITE["symbolic_states"]["xxz_on_state"] = @benchmarkable $xxz * ($xxz * ($xxz * $ψ))
 end
@@ -358,7 +358,7 @@ let
     @bosons b
     N = 6
     H = tensor_product(hilbert_space(c, 1:N), hilbert_space(b[1], 4))
-    ham = -sum(c[i]' * c[i+1] + hc for i in 1:N-1) + b[1]' * b[1] + 0.5 * sum(c[i]' * c[i] for i in 1:N) * (b[1]' + b[1])
+    ham = -sum(c[i]' * c[i + 1] + hc for i in 1:(N - 1)) + b[1]' * b[1] + 0.5 * sum(c[i]' * c[i] for i in 1:N) * (b[1]' + b[1])
     ψ = Kets(H)("101010", "1")
     SUITE["symbolic_states"]["holstein_on_state"] = @benchmarkable $ham * ($ham * ($ham * $ψ))
 end
