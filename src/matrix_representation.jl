@@ -240,7 +240,7 @@ function _part_on_basis(parts, group_inds, ind)
     length(runs) == 1 && return only(runs)
     return NCMul(prod(run -> run.coeff, runs), reduce(vcat, [run.factors for run in runs]))
 end
-_basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
+_basis_index(group, bases) = something(findfirst(b -> _contains(b, group), bases), 0)
 
 # Other formats have no identity matrices for the groups without factors
 function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}, chunking; kwargs...)
@@ -702,7 +702,7 @@ _with_eltype(format, _, kwargs) = format, kwargs
 function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
     space_groups = group_ids(space)
-    all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic groups of the operator must match the groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
+    all(g -> any(s -> _contains(s, g), space_groups), op_groups) || throw(ArgumentError("Each symbolic group of the operator must lie in a factor of the space, got operator groups $op_groups and factor supports $space_groups."))
     return space_groups
 end
 

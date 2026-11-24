@@ -2,7 +2,11 @@ atomic_factors(op::AbstractSym) = throw(ArgumentError("The operator `$op` is not
 # The unconstrained product of `spaces`.
 function product_space(spaces)
     atoms = collect(Iterators.flatten(Iterators.map(atomic_factors, spaces)))
-    factors = map(unique(map(group_id, atoms))) do id
+    ids = unique(map(group_id, atoms))
+    for (n, a) in enumerate(ids), b in ids[(n + 1):end]
+        _overlaps(a, b) && throw(ArgumentError("Spaces of the groups `$a` and `$b` describe some of the same degrees of freedom, so they cannot be combined."))
+    end
+    factors = map(ids) do id
         combine_into_group(id, map(identity, filter(a -> group_id(a) == id, atoms)))
     end
     space = if length(factors) == 1

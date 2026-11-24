@@ -10,16 +10,16 @@ end
 _eigen_qn(state::EigenState) = state.qn
 
 # One atom whose basis states are the columns of `vectors`, given in the basis of `parent`. Operators act on it as on
-# `parent`, so the atom takes the group of `parent`, which must be a single group: its basis states are superpositions
-# of states of all its modes, and only operators on other groups commute with them without phase factors.
-struct EigenbasisSpace{Q, P, M, E} <: AbstractAtomicHilbertSpace{EigenState{Q}}
+# `parent`, and its support is that of `parent`.
+struct EigenbasisSpace{Q, P, M, E, G} <: AbstractAtomicHilbertSpace{EigenState{Q}}
     parent::P
     vectors::M
     energies::Vector{E}
     qns::Vector{Q}
     key::UInt
+    support::G
 end
-EigenbasisSpace(parent, vectors, energies, qns) = EigenbasisSpace(parent, vectors, energies, qns, hash(vectors))
+EigenbasisSpace(parent, vectors, energies, qns, key = hash(vectors)) = EigenbasisSpace(parent, vectors, energies, qns, key, _support(group_ids(parent)))
 
 """
     eigenbasis(ham, H)
@@ -28,8 +28,8 @@ The space spanned by the eigenstates of the Hermitian `ham`, a symbolic operator
 sector of `H` and ordered by increasing energy within each sector. It has the sectors of `H`, and `ham` must not
 couple them. `representation(op, Heig)` is `S' * M * S` for the matrix `M` of `op` on `H` and the eigenvectors `S`,
 and `change_basis(ρ, Heig => H)` is `S * ρ * S'`. The space works as a factor of `tensor_product` and
-[`open_system`](@ref) together with spaces of other groups, but not with other modes of the group of `H`. See
-[`energies`](@ref).
+[`open_system`](@ref) together with spaces of other symbolic groups, but not with other spaces of the groups of `H`.
+See [`energies`](@ref).
 
 ```julia
 Heig = eigenbasis(ham, hilbert_space(f, 1:2, NumberConservation()))
@@ -38,7 +38,6 @@ L = representation(-1im * (left(ham) - right(ham)) + dissipator(f[1]), Hlr)
 ```
 """
 function eigenbasis(ham, H::AbstractHilbertSpace)
-    length(groups(H)) == 1 || throw(ArgumentError("The eigenbasis of a space with several groups is not supported, got the groups $(group_ids(H))."))
     M = ham isa AbstractMatrix ? ham : representation(ham, H)
     size(M) == (dim(H), dim(H)) || throw(DimensionMismatch("The matrix of `ham` must have the size $((dim(H), dim(H))), got $(size(M))."))
     qns = collect(quantumnumbers(H))
@@ -89,7 +88,7 @@ interpret_state(state::EigenState, ::EigenbasisSpace) = state
 interpret_state(state, H::EigenbasisSpace) = throw(ArgumentError("`$state` is not a basis state of `$H`. Represent it on the parent space `H` and use `change_basis(v, H => Heig)`."))
 has_arithmetic_state_index(::EigenbasisSpace) = true
 atomic_id(H::EigenbasisSpace) = (:eigenbasis, H.key, atom_ids(H.parent)...)
-group_id(H::EigenbasisSpace) = group_id(only(groups(H.parent)))
+group_id(H::EigenbasisSpace) = H.support
 add_tag(H::EigenbasisSpace, tag) = EigenbasisSpace(add_tag(H.parent, tag), H.vectors, H.energies, H.qns, H.key)
 # The transposed space has the complex conjugate basis, so that its matrices are the transposes.
 TransposedSpace(H::EigenbasisSpace) = EigenbasisSpace(TransposedSpace(H.parent), conj(H.vectors), H.energies, H.qns, H.key)
@@ -98,15 +97,36 @@ Base.hash(H::EigenbasisSpace, h::UInt) = hash((H.parent, H.key), h)
 Base.show(io::IO, H::EigenbasisSpace) = print(io, "$(dim(H))-dimensional eigenbasis of ", H.parent)
 _amplitude_eltype(H::EigenbasisSpace) = eltype(H.vectors)
 
-# An eigenbasis is a group of its own. Joining it with other modes of its group would need the fermionic phase factors
-# of each Fock state in an eigenstate, which a basis state of the atom does not have.
+# Another atom with the support of an eigenbasis describes some of its degrees of freedom in another basis, so an
+# eigenbasis is combined with no other atom.
 combine_into_group(::Group{Fermion}, atoms::AbstractVector{<:EigenbasisSpace}) = only(atoms)
 combine_into_group(::Group{Majorana}, atoms::AbstractVector{<:EigenbasisSpace}) = only(atoms)
 mode(H::EigenbasisSpace) = throw(ArgumentError("`$H` cannot be combined with other modes of its group. Build the eigenbasis on all of them, or put the other modes in another field."))
 
-function _eigen_matrix(op, root::EigenbasisSpace; projection = false)
-    M = representation(op, root.parent; projection)
-    return root.vectors' * M * root.vectors
+# Operators are rotated from the parent, and ketbras of the eigenbasis are matrix units.
+_rotated(op, root; projection) = root.vectors' * representation(op, root.parent; projection) * root.vectors
+_has_state(m::NCMul) = any(x -> x isa SymbolicState, m.factors)
+function _eigen_matrix(op::NCAdd, root::EigenbasisSpace; projection = false)
+    any(_has_state, keys(op.dict)) || return _rotated(op, root; projection)
+    rest = Dict(m => c for (m, c) in op.dict if !_has_state(m))
+    M = isempty(rest) ? sparse(op.coeff * I, dim(root), dim(root)) : _rotated(NCAdd(op.coeff, rest), root; projection)
+    return M + sum(m -> op.dict[m] * _eigen_matrix(m, root; projection), filter(_has_state, collect(keys(op.dict))))
+end
+function _eigen_matrix(op::NCMul, root::EigenbasisSpace; projection = false)
+    matrices = []
+    run = []
+    for x in op.factors
+        x isa SymbolicState || (push!(run, x); continue)
+        isempty(run) || push!(matrices, _rotated(NCMul(1, run), root; projection))
+        run = []
+        push!(matrices, _ketbra_matrix(x, root))
+    end
+    isempty(run) || push!(matrices, _rotated(NCMul(1, run), root; projection))
+    return op.coeff * prod(matrices)
+end
+function _ketbra_matrix(s::SymbolicState, root)
+    isketbra(s) && _same_space_id(s.space, root) || throw(ArgumentError("Only ketbras of the eigenbasis act on it, got `$s`."))
+    return sparse([state_index(s.ket, root)], [state_index(s.bra, root)], [1], dim(root), dim(root))
 end
 _eigen_indices(H::EigenbasisSpace) = 1:dim(H)
 _eigen_indices(H::AbstractSubspace) = [state.index for state in basisstates(H)]
@@ -124,11 +144,11 @@ end
 _term_matrix_representation(op::NCMul, H::EigenbasisSpace, repr::Union{EagerSparseRepr, EagerDenseRepr}, chunking; projection = false, kwargs...) =
     _eigen_matrix(op, H, H, repr; projection)
 
-_acts_by_matrix(::EigenbasisSpace) = true
+_acts_by_matrix(::_EigenSpaces) = true
 _apply_local_operators(op, ::EigenState, ::EigenbasisSpace, precomp) = throw(ArgumentError("An operator maps an eigenstate to a superposition, so only eager matrix representations are supported on an eigenbasis."))
 
 # Operator constraints: a conserved quantity is diagonal in the eigenbasis only as a sum, and only up to roundoff.
-_acts_in(x, H::_EigenSpaces) = symbolic_group(x) == group_id(H)
+_acts_in(x, H::_EigenSpaces) = _contains(group_id(H), symbolic_group(x))
 function _diagonal_values(weighted_terms, H::_EigenSpaces)
     foreach(((w, t),) -> _check_exact(w, t), weighted_terms)
     op = sum(((w, t),) -> w * NCMul(1, t.factors), weighted_terms)
@@ -162,7 +182,7 @@ _check_projection(Hfrom::AbstractHilbertSpace, Hto::_EigenSpaces) = Hfrom isa _E
 
 @testitem "Eigenbasis" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: eigenbasis, energies, change_basis, embed, Axes
+    using FermionicHilbertSpaces: eigenbasis, energies, change_basis, embed, Axes, Kets
     @fermions f
     @bosons b
     ham = sum(0.3k * f[k]'f[k] for k in 1:3) + sum(0.5 * f[k]'f[k + 1] + hc for k in 1:2) + 0.7 * f[1]'f[1] * f[2]'f[2]
@@ -195,6 +215,43 @@ _check_projection(Hfrom::AbstractHilbertSpace, Hto::_EigenSpaces) = Hfrom isa _E
     # A matrix on one eigenbasis is not a matrix on another eigenbasis of the same space
     other = eigenbasis(ham0 + 0.2 * f[2]'f[2], H0)
     @test_throws ArgumentError embed(representation(f[1], other), other => tensor_product(eigenbasis(ham0, H0), Hb))
+
+    # Ketbras of eigenstates are matrix units, also next to operators and in products with other groups
+    k = Kets(Heig)
+    E12 = zeros(dim(Heig), dim(Heig)); E12[1, 2] = 1
+    @test representation(k[1] * k[2]', Heig) ≈ E12
+    @test representation(k[1] * k[2]' * f[1]' * f[2] + 2 * f[3]'f[3], Heig) ≈ E12 * S' * representation(f[1]' * f[2], H) * S + 2 * S' * representation(f[3]'f[3], H) * S
+    P = tensor_product(Heig, Hb)
+    @test representation(k[1] * k[2]' * b[1], P) ≈ tensor_product((E12, representation(b[1], Hb)), (Heig, Hb) => P)
+end
+
+@testitem "Eigenbasis of several groups" begin
+    using LinearAlgebra
+    using FermionicHilbertSpaces: eigenbasis, Kets
+    @fermions f
+    @fermions g
+    @bosons b
+    H = tensor_product(hilbert_space(f, 1:2), hilbert_space(b[1], 3))
+    ham = 0.3 * f[1]'f[1] + 0.7 * f[2]'f[2] + (0.5 * f[1]'f[2] + hc) + 0.4 * b[1]'b[1] + 0.2 * (f[1]'f[1] - f[2]'f[2]) * (b[1] + b[1]')
+    Heig = eigenbasis(ham, H)
+    S = eigen(Hermitian(Matrix(representation(ham, H)))).vectors
+    op = f[1]' * b[1] + 0.3im * f[2]' * f[1] * b[1]'b[1]
+    @test representation(op, Heig) ≈ S' * representation(op, H) * S
+    Hb = hilbert_space(b[2], 2)
+    U = kron(I(2), S)
+    op2 = op * b[2] + f[1]' * f[2] * b[2]'
+    @test representation(op2, tensor_product(Heig, Hb)) ≈ U' * representation(op2, tensor_product(H, Hb)) * U
+    # Spaces and states of some of the same groups cannot be combined with it
+    @test_throws ArgumentError tensor_product(Heig, hilbert_space(f, 3:3))
+    Hbg = eigenbasis(b[1]'b[1] + 0.3 * (g[1]' * b[1] + hc), tensor_product(hilbert_space(b[1], 3), hilbert_space(g, 1:1)))
+    @test_throws ArgumentError Kets(Heig)[1] * Kets(Hbg)[1]
+    # A ketbra of several groups commutes with no operator of them, so products with those operators are rejected
+    @test_throws ArgumentError b[1] * (Kets(Heig)[1] * Kets(Heig)[2]')
+    # An eigenbasis of a space that contains an eigenbasis
+    H2 = tensor_product(Heig, hilbert_space(g, 1:1))
+    E2 = eigenbasis(representation(ham + g[1]'g[1] + 0.2 * (g[1]' * f[1] + hc), H2, Matrix), H2)
+    S2 = eigen(Hermitian(representation(ham + g[1]'g[1] + 0.2 * (g[1]' * f[1] + hc), H2, Matrix))).vectors
+    @test representation(f[1], E2) ≈ S2' * representation(f[1], H2) * S2
 end
 
 @testitem "Lindbladian in an eigenbasis" begin
