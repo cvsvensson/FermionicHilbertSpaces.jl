@@ -330,20 +330,16 @@ function apply_local_operator(op::SymbolicState, state, space::AbstractHilbertSp
     return state == op.bra ? (op.ket, 1) : (state, 0)
 end
 
-# On a space whose operators act by matrices, the product of an operator and a ketbra is left as it is. With several
-# groups the ketbra commutes with no operator of its groups, while those operators commute with each other, so the
-# products have no canonical order.
-_unevaluated(s) = group_id(s.space) isa GroupSet ? throw(ArgumentError("Products of operators and ketbras of `$(s.space)`, which carries several groups, are not supported. Multiply their matrices.")) : nothing
 _scaled_state(amp, state) = iszero(amp) ? 0 : NCMul(amp * 1, (state,))
 
 function NonCommutativeProducts.mul_effect(op::AbstractSym, s::SymbolicState)
     if !_contains(group_id(s.space), symbolic_group(op))
         return _group_isless(s, op) ? Swap(1) : nothing
     end
-    _acts_by_matrix(s.space) && isketbra(s) && return _unevaluated(s)
     if !has_ket(s)
         throw(ArgumentError("Cannot act with operator $op on the left of $s"))
     end
+    _acts_by_matrix(s.space) && return _superposition(op, s, true)
     newket, amp = _apply_symbolic_operator_to_state(op, s.ket, s.space)
     return _scaled_state(amp, SymbolicState(s.space, newket, s.bra))
 end
@@ -352,10 +348,10 @@ function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
     if !_contains(group_id(s.space), symbolic_group(op))
         return _group_isless(op, s) ? Swap(1) : nothing
     end
-    _acts_by_matrix(s.space) && isketbra(s) && return _unevaluated(s)
     if !has_bra(s)
         throw(ArgumentError("Cannot act with operator $op on the right of $s"))
     end
+    _acts_by_matrix(s.space) && return _superposition(op, s, false)
     newbra, amp = _apply_symbolic_operator_to_state(op, s.bra, s.space; transpose=true)
     return _scaled_state(amp, SymbolicState(s.space, s.ket, newbra))
 end
@@ -425,7 +421,7 @@ function _group_operators(x::NCMul, factors)
     return ntuple(n -> (inds[n], factors[inds[n]], last(parts[n])), length(parts))
 end
 _ket_index(::SymbolicState, factors) = nothing
-_ket_index(op, factors) = findfirst(s -> s isa SymbolicState && isket(s) && _contains(group_id(s.space), symbolic_group(op)), factors)
+_ket_index(op, factors) = findfirst(s -> s isa SymbolicState && isket(s) && !_acts_by_matrix(s.space) && _contains(group_id(s.space), symbolic_group(op)), factors)
 # Operators and states of one group are separate segments, so that a segment of operators acts on a ket
 NonCommutativeProducts.atom_group(s::SymbolicState) = (group_id(s.space), :state)
 

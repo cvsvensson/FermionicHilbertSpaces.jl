@@ -3,9 +3,7 @@ atomic_factors(op::AbstractSym) = throw(ArgumentError("The operator `$op` is not
 function product_space(spaces)
     atoms = collect(Iterators.flatten(Iterators.map(atomic_factors, spaces)))
     ids = unique(map(group_id, atoms))
-    for (n, a) in enumerate(ids), b in ids[(n + 1):end]
-        _overlaps(a, b) && throw(ArgumentError("Spaces of the groups `$a` and `$b` describe some of the same degrees of freedom, so they cannot be combined."))
-    end
+    allunique(Iterators.flatten(map(_members, ids))) || throw(ArgumentError("Some of the spaces describe the same degrees of freedom in different ways, so they cannot be combined, got the supports $ids."))
     factors = map(ids) do id
         combine_into_group(id, map(identity, filter(a -> group_id(a) == id, atoms)))
     end
@@ -542,9 +540,41 @@ in `Hfrom` give zero rows. `Hfrom` and `Hto` must have the same atoms (see `matc
 but their groups may come in different orders.
 """
 function basis_transformation(Hfrom, Hto)
+    if !issetequal(atom_ids(Hfrom), atom_ids(Hto))
+        _acts_by_matrices(Hfrom) && return _transformation_through_parents(Hfrom, Hto)
+        _acts_by_matrices(Hto) && return _adjoint_transformation(Hfrom, Hto)
+    end
     match_same_atoms(Hfrom, Hto)
     # the mapper puts each state of Hfrom in the group order of Hto
     return _basis_transformation(Hfrom, Hto, state_mapper(Hto, (Hfrom,)))
+end
+# A group that acts by matrices has basis states given by the columns of `_basis_vectors(group)` in `parent(group)`.
+# A space with such groups changes basis through the product of their parents.
+function _transformation_through_parents(Hfrom, Hto)
+    gs = groups(Hfrom)
+    parents = map(g -> _acts_by_matrix(g) ? parent(g) : g, gs)
+    P = length(gs) == 1 ? only(parents) : tensor_product(parents...)
+    T = mapreduce(g -> _acts_by_matrix(g) ? eltype(_basis_vectors(g)) : Int, promote_type, gs)
+    Is, Js, Vs = Int[], Int[], T[]
+    for (j, state) in enumerate(basisstates(Hfrom))
+        parts = map(_parent_components, gs, length(gs) == 1 ? (state,) : state.states)
+        for combo in Iterators.product(parts...)
+            push!(Is, state_index(_joined_state(map(first, combo)), P))
+            push!(Js, j)
+            push!(Vs, prod(last, combo))
+        end
+    end
+    K = sparse(Is, Js, Vs, dim(P), dim(Hfrom))
+    U, dropped = basis_transformation(P, Hto)
+    return U * K, findall(j -> !iszero(K[dropped, j]), axes(K, 2))
+end
+_parent_components(g, s) = _acts_by_matrix(g) ? [(basisstate(i, parent(g)), v) for (i, v) in zip(findnz(_basis_vectors(g)[:, state_index(s, g)])...)] : [(s, 1)]
+_joined_state(parts) = length(parts) == 1 ? only(parts) : ProductState(Tuple(Iterators.flatten(p isa ProductState ? p.states : (p,) for p in parts)))
+# The adjoint of the transformation back, which is an isometry. A state of `Hfrom` is dropped if part of it is outside `Hto`.
+function _adjoint_transformation(Hfrom, Hto)
+    U = sparse(first(basis_transformation(Hto, Hfrom))')
+    tol = sqrt(eps(real(float(eltype(U)))))
+    return U, findall(j -> norm(U[:, j]) < 1 - tol, axes(U, 2))
 end
 function _basis_transformation(Hfrom, Hto, mapper)
     Is = Int[]

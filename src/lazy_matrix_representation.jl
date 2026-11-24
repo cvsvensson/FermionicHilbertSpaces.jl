@@ -33,6 +33,8 @@ end
 function LazyOperator(_op, space::S, chunking::C=NoChunking(); projection=false, conjugate=false, ishermitian=_ishermitian(_op), T=mat_eltype(_op), concretizer=NoConcretizer()
 ) where {S,C<:AbstractChunkingStrategy}
     op = __concretize(_op, concretizer)
+    # On spaces whose operators act by matrices, every operator takes the path of a sum
+    op = _acts_by_matrices(space) && !(op isa NCAdd) ? NCAdd(1 * op) : op
     precomp = lazy_precomputation(op, space; projection)
     O = typeof(op)
     P = typeof(precomp)
@@ -48,7 +50,14 @@ end
 lazy_precomputation(op, space; _...) = precomputation_before_operator_application(op, space)
 function lazy_precomputation(op::NCAdd, space; projection)
     bases = group_ids(space)
-    terms = length(bases) == 1 ? NCterms(op) : _product_terms(op, bases, space, EagerSparseRepr(); projection)
+    terms = if length(bases) > 1
+        _product_terms(op, bases, space, EagerSparseRepr(); projection)
+    elseif _acts_by_matrices(space)
+        # The matrix of `op` without its scalar, which `lazy_mul!` adds
+        [KronTerm(((sparse(representation(NCAdd(zero(op.coeff), op.dict), space; projection)), 1),))]
+    else
+        NCterms(op)
+    end
     return _precomputed_terms(terms, space)
 end
 

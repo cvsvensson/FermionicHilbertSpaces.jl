@@ -101,7 +101,7 @@ _amplitude_eltype(H::EigenbasisSpace) = eltype(H.vectors)
 # eigenbasis is combined with no other atom.
 combine_into_group(::Group{Fermion}, atoms::AbstractVector{<:EigenbasisSpace}) = only(atoms)
 combine_into_group(::Group{Majorana}, atoms::AbstractVector{<:EigenbasisSpace}) = only(atoms)
-mode(H::EigenbasisSpace) = throw(ArgumentError("`$H` cannot be combined with other modes of its group. Build the eigenbasis on all of them, or put the other modes in another field."))
+mode(H::EigenbasisSpace) = throw(ArgumentError("`$H` cannot be combined with other spaces of its groups. Build the eigenbasis on all of them."))
 
 # Operators are rotated from the parent, and ketbras of the eigenbasis are matrix units.
 _rotated(op, root; projection) = root.vectors' * representation(op, root.parent; projection) * root.vectors
@@ -145,7 +145,24 @@ _term_matrix_representation(op::NCMul, H::EigenbasisSpace, repr::Union{EagerSpar
     _eigen_matrix(op, H, H, repr; projection)
 
 _acts_by_matrix(::_EigenSpaces) = true
-_apply_local_operators(op, ::EigenState, ::EigenbasisSpace, precomp) = throw(ArgumentError("An operator maps an eigenstate to a superposition, so only eager matrix representations are supported on an eigenbasis."))
+# An operator maps an eigenstate to a superposition: a column of its matrix acting on a ket, a row acting on a bra.
+# Unless the eigenbasis spans all states of its groups, a single operator can leave it, so products with ketbras are
+# left for the matrix representation, which applies runs of operators together.
+function _superposition(op, s::SymbolicState, onket::Bool)
+    root = _eigen_root(s.space)
+    if dim(root) != prod(dim, atomic_factors(root.parent))
+        isketbra(s) && return nothing
+        throw(ArgumentError("An operator can map a state of `$(s.space)` out of it, as it does not span all states of its groups. Use the matrix of the operator."))
+    end
+    M = sparse(_eigen_matrix(NCMul(1, [op]), root))
+    inds, amps = findnz(onket ? M[:, state_index(s.ket, root)] : M[state_index(s.bra, root), :])
+    terms = [_scaled_state(a, onket ? SymbolicState(s.space, basisstate(i, root), s.bra) : SymbolicState(s.space, s.ket, basisstate(i, root))) for (i, a) in zip(inds, amps) if !iszero(a)]
+    return isempty(terms) ? 0 : NonCommutativeProducts.AddTerms(terms)
+end
+_apply_local_operators(op, ::EigenState, ::EigenbasisSpace, precomp) = throw(ArgumentError("An operator maps an eigenstate to a superposition, so it is applied through its matrix."))
+# The fermionic partial transpose has phases that depend on the Fock states, so it is not a transpose in another basis.
+partial_transpose_phase_factor(f1, f2, H::EigenbasisSpace) = partial_transpose_phase_factor_eltype(H.parent) <: Real ? 1 :
+    throw(ArgumentError("The fermionic partial transpose is defined in the Fock basis. Change the basis of `$H` to its parent space and take the partial transpose there."))
 
 # Operator constraints: a conserved quantity is diagonal in the eigenbasis only as a sum, and only up to roundoff.
 _acts_in(x, H::_EigenSpaces) = _contains(group_id(H), symbolic_group(x))
@@ -154,35 +171,23 @@ function _diagonal_values(weighted_terms, H::_EigenSpaces)
     op = sum(((w, t),) -> w * NCMul(1, t.factors), weighted_terms)
     M = representation(op, H, Matrix)
     maximum(abs, M - Diagonal(diag(M)); init = 0.0) <= _roundoff(M) || throw(ArgumentError("A constraint operator must be diagonal in the eigenbasis, but `$op` is not."))
-    values = map(v -> _exact_value(v, op), diag(M))
-    all(isreal, values) || throw(ArgumentError("Constraint operators with complex values are not supported, but `$op` has complex values. $_ZN_HINT"))
-    return Rational{Int}.(real.(values))
+    tol = _roundoff(M)
+    all(v -> abs(imag(v)) <= tol, diag(M)) || throw(ArgumentError("Constraint operators with complex values are not supported, but `$op` has complex values. $_ZN_HINT"))
+    return map(diag(M)) do v
+        r = rationalize(Int, real(v); tol)
+        denominator(r) <= MAX_DENOMINATOR || throw(ArgumentError("The values of the constraint operator `$op` are not exact fractions, such as $v."))
+        r
+    end
 end
 
 # Moving between an eigenbasis and the space it was built on
 complementary_subsystem(H::AbstractHilbertSpace, Hsub::_EigenSpaces) =
     atomic_id(_eigen_root(Hsub)) in atom_ids(H) ? invoke(complementary_subsystem, Tuple{AbstractHilbertSpace, Any}, H, Hsub) : nothing
-function basis_transformation(Hfrom::_EigenSpaces, Hto::AbstractHilbertSpace)
-    root = _eigen_root(Hfrom)
-    U, dropped = basis_transformation(root.parent, Hto)
-    S = root.vectors[:, _eigen_indices(Hfrom)]
-    return U * S, findall(j -> !iszero(S[dropped, j]), axes(S, 2))
-end
-basis_transformation(Hfrom::AbstractHilbertSpace, Hto::_EigenSpaces) = (sparse(first(basis_transformation(Hto, Hfrom))'), Int[])
-function basis_transformation(Hfrom::_EigenSpaces, Hto::_EigenSpaces)
-    _eigen_root(Hfrom) == _eigen_root(Hto) && return invoke(basis_transformation, Tuple{Any, Any}, Hfrom, Hto)
-    U, dropped = basis_transformation(Hfrom, _eigen_root(Hto).parent)
-    return first(basis_transformation(_eigen_root(Hto).parent, Hto)) * U, dropped
-end
-# The eigenbasis of a symmetric sector is not supported, so these only resolve ambiguities.
-basis_transformation(Hfrom::_EigenSpaces, Hto::_OrbitSpace) = throw(ArgumentError("Cannot change basis between an eigenbasis and a symmetric sector."))
-basis_transformation(Hfrom::_OrbitSpace, Hto::_EigenSpaces) = throw(ArgumentError("Cannot change basis between an eigenbasis and a symmetric sector."))
-_check_projection(Hfrom::AbstractHilbertSpace, Hto::_EigenSpaces) = Hfrom isa _EigenSpaces || dim(Hfrom) == dim(Hto) ||
-    throw(ArgumentError("A state of `$Hfrom` is in general not in `$Hto`. Pass `projection = true` to project it."))
+_basis_vectors(H::EigenbasisSpace) = H.vectors
 
 @testitem "Eigenbasis" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: eigenbasis, energies, change_basis, embed, Axes, Kets
+    using FermionicHilbertSpaces: eigenbasis, energies, change_basis, embed, Axes, Kets, vector_representation, partial_transpose, constrain_space
     @fermions f
     @bosons b
     ham = sum(0.3k * f[k]'f[k] for k in 1:3) + sum(0.5 * f[k]'f[k + 1] + hc for k in 1:2) + 0.7 * f[1]'f[1] * f[2]'f[2]
@@ -211,10 +216,28 @@ _check_projection(Hfrom::AbstractHilbertSpace, Hto::_EigenSpaces) = Hfrom isa _E
 
     @test_throws ArgumentError eigenbasis(ham0, H)
     @test_throws ArgumentError tensor_product(Heig, hilbert_space(f, 4:4))
-    @test_throws ArgumentError representation(f[1], Heig, :lazy) * ψ
+    @test representation(f[1]' * f[2] + 0.5, Heig, :lazy) * ψ ≈ representation(f[1]' * f[2] + 0.5, Heig) * ψ
     # A matrix on one eigenbasis is not a matrix on another eigenbasis of the same space
     other = eigenbasis(ham0 + 0.2 * f[2]'f[2], H0)
     @test_throws ArgumentError embed(representation(f[1], other), other => tensor_product(eigenbasis(ham0, H0), Hb))
+
+    # An operator maps an eigenstate to the column of its matrix
+    E0 = eigenbasis(ham0, H0)
+    @test vector_representation(f[1]' * Kets(E0)[2], E0) ≈ representation(f[1]', E0)[:, 2]
+    # Changing basis of a product with an eigenbasis factor, and of eigen sectors
+    U0 = kron(I(3), S0)
+    ρ = randn(ComplexF64, 12, 12)
+    @test change_basis(ρ, tensor_product(E0, Hb) => tensor_product(H0, Hb)) ≈ U0 * ρ * U0'
+    @test change_basis(U0 * ρ * U0', tensor_product(H0, Hb) => tensor_product(E0, Hb)) ≈ ρ
+    ψ1 = randn(dim(sector(1, H)))
+    @test change_basis(change_basis(ψ1, sector(1, H) => sector(1, Heig)), sector(1, Heig) => sector(1, H)) ≈ ψ1
+    @test_throws ArgumentError change_basis(ψ1, sector(1, H) => sector(2, Heig))
+    # Operator constraints on larger eigenbases, where the rotated diagonal carries more roundoff
+    H6 = hilbert_space(f, 1:6, NumberConservation())
+    E6 = eigenbasis(sum(0.5 * f[k]'f[k + 1] + hc for k in 1:5) + sum(0.1k * f[k]'f[k] for k in 1:6), H6)
+    @test dim(constrain_space(E6, sum(f[k]'f[k] for k in 1:6) => 2)) == binomial(6, 2)
+    # The fermionic partial transpose is defined in the Fock basis only
+    @test_throws ArgumentError partial_transpose(Matrix(I, 3 * dim(E0), 3 * dim(E0)), tensor_product(E0, Hb), E0)
 
     # Ketbras of eigenstates are matrix units, also next to operators and in products with other groups
     k = Kets(Heig)
@@ -245,8 +268,9 @@ end
     @test_throws ArgumentError tensor_product(Heig, hilbert_space(f, 3:3))
     Hbg = eigenbasis(b[1]'b[1] + 0.3 * (g[1]' * b[1] + hc), tensor_product(hilbert_space(b[1], 3), hilbert_space(g, 1:1)))
     @test_throws ArgumentError Kets(Heig)[1] * Kets(Hbg)[1]
-    # A ketbra of several groups commutes with no operator of them, so products with those operators are rejected
-    @test_throws ArgumentError b[1] * (Kets(Heig)[1] * Kets(Heig)[2]')
+    # Operators of any of its groups act on a ketbra of it
+    E12 = zeros(dim(Heig), dim(Heig)); E12[1, 2] = 1
+    @test representation(b[1] * Kets(Heig)[1] * Kets(Heig)[2]' * f[1], Heig) ≈ representation(b[1], Heig) * E12 * representation(f[1], Heig)
     # An eigenbasis of a space that contains an eigenbasis
     H2 = tensor_product(Heig, hilbert_space(g, 1:1))
     E2 = eigenbasis(representation(ham + g[1]'g[1] + 0.2 * (g[1]' * f[1] + hc), H2, Matrix), H2)
