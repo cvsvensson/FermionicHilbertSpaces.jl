@@ -55,6 +55,8 @@ Returns `(Hlr, Hl, Hr, left, right)`: `Hl` and `Hr` are the left and right copie
 the space of vectorized density matrices, and `left(A) * right(B)` represents `ρ -> A ρ B`.
 Use `reshape(ρ, (Hl, Hr) => Hlr)` and `reshape(v, Hlr => (Hl, Hr))` to convert between density
 matrices and vectors.
+For matrices `A` and `B` on `H`, `ρ -> A ρ B` is `tensor_product((A, transpose(B)), (Hl, Hr) => Hlr)`,
+and one-sided terms are `embed(A, Hl => Hlr)` and `embed(transpose(B), Hr => Hlr)`.
 
 ```jldoctest
 julia> using FermionicHilbertSpaces: dissipator; @fermions f;

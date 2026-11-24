@@ -144,6 +144,7 @@ Base.transpose(op::Union{PartialTraceMap, EmbedMap}) = adjoint(op)
 Create a callable embedding operation from `Hsub` into `H`.
 
 The operation can be applied directly as `op(m)` and converted to a sparse matrix map with `sparse(op)`.
+Reusing `op`, in place as `op(out, m)`, is much faster than calling `embed(m, Hsub => H)` repeatedly.
 `Hsub => H` reads input => output; see [Pair arguments](@ref pair_convention).
 It is the compression onto `H` and, unlike [`embed`](@ref), does not check its input.
 """
