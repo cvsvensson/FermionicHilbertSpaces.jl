@@ -329,6 +329,8 @@ end
 function _matrix_representation(op::NCMul, bases, space, repr, chunking; kwargs...)
     if isempty(op.factors)
         return _convert_repr_eltype(op.coeff * I(dim(space)), repr)
+    elseif length(bases) > 1 && repr isa Union{EagerDenseRepr, EagerSparseRepr} && _acts_by_matrices(space)
+        return __matrix_representation(NCAdd(op), bases, space, repr, chunking; kwargs...)
     else
         newop = length(bases) > 1 ? partition_product(op, bases, groups(_input_space(space))) : op
         return _term_matrix_representation(newop, space, repr, chunking; kwargs...)
@@ -441,11 +443,59 @@ operator_indices_and_amplitudes_generic!(accumulator, term::KronTerm, space, pre
 # On spaces with a basis-state loop (for example a constrained space over a ProductSpace) and for formats with no method of its own,
 # `_terms_matrix` builds the sum of all terms.
 function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split = 10, kwargs...)
-    prodops = _product_terms(op, bases, space, repr)
+    prodops = _product_terms(op, bases, space, repr; tree_split, kwargs...)
     T = _repr_eltype(promote_type(mapreduce(mat_eltype, promote_type, prodops), typeof(op.coeff)), repr)
     return _terms_matrix(T, prodops, op.coeff, space, repr, chunking; kwargs...)
 end
 _product_terms(op::NCAdd, bases, space, repr; _...) = _partitioned_terms(NCterms(op), bases, groups(_input_space(space)))
+
+# A group with `_acts_by_matrix`, such as an eigenbasis, maps a basis state to a superposition and has no basis-state
+# loop. On a subspace of a product with such a group, the `KronTerm`s of the product are applied to the columns of the
+# subspace.
+_acts_by_matrix(H) = false
+_acts_by_matrices(space) = any(_acts_by_matrix, groups(_input_space(space)))
+function _product_terms(op::NCAdd, bases, space, repr::Union{EagerDenseRepr, EagerSparseRepr}; kwargs...)
+    _acts_by_matrices(space) || return _partitioned_terms(NCterms(op), bases, groups(_input_space(space)))
+    Hin, Hout = _input_space(space), _output_space(space)
+    P = _product_parent(Hin)
+    P isa ProductSpace && P == _product_parent(Hout) || throw(ArgumentError("Both axes must be subspaces of one product space, got `$Hout` and `$Hin`."))
+    cols = [state_index(state, P) for state in basisstates(Hin)]
+    rows = zeros(Int, dim(P))
+    foreach(((k, state),) -> rows[state_index(state, P)] = k, enumerate(basisstates(Hout)))
+    return [_SubspaceTerm(term, P, cols, rows) for term in _product_terms(op, bases, P, repr; kwargs...)]
+end
+_product_parent(H::AbstractSubspace) = parent(H)
+_product_parent(H) = H
+# `term` of the product `parent` on a subspace, whose basis state k is the state `cols[k]` of `parent`, and whose basis
+# state `rows[i]` is the state i of `parent` (0 for a state outside the subspace).
+struct _SubspaceTerm{K, P}
+    term::K
+    parent::P
+    cols::Vector{Int}
+    rows::Vector{Int}
+end
+mat_eltype(t::_SubspaceTerm) = mat_eltype(t.term)
+precomputation_before_operator_application(::_SubspaceTerm, ::AbstractHilbertSpace) = nothing
+function chunked_operator_indices_and_amplitudes_generic!(accumulator, t::_SubspaceTerm, space::AbstractHilbertSpace, precomp, input_inds, col_offset; projection = false, _...)
+    rows = _SubspaceRows(accumulator, t.rows, projection)
+    for k in input_inds
+        j = t.cols[k]
+        chunked_operator_indices_and_amplitudes_generic!(rows, t.term, t.parent, nothing, j:j, j - k + col_offset)
+    end
+    return accumulator
+end
+operator_indices_and_amplitudes_generic!(accumulator, t::_SubspaceTerm, space, precomp; kwargs...) =
+    chunked_operator_indices_and_amplitudes_generic!(accumulator, t, t.parent, precomp, eachindex(t.cols), 0; kwargs...)
+struct _SubspaceRows{A}
+    accumulator::A
+    rows::Vector{Int}
+    projection::Bool
+end
+function push_inds_amps!(a::_SubspaceRows, outind, inind, amp)
+    row = a.rows[outind]
+    _skip_outside(row, a.projection) || push_inds_amps!(a.accumulator, row, inind, amp)
+    return nothing
+end
 _partitioned_terms(terms, bases, spaces) = [length(bases) > 1 ? partition_product(term, bases, spaces) : term for term in terms]
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the type of `coeff`.

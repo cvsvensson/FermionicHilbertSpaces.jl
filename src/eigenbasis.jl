@@ -17,7 +17,9 @@ struct EigenbasisSpace{Q, P, M, E} <: AbstractAtomicHilbertSpace{EigenState{Q}}
     vectors::M
     energies::Vector{E}
     qns::Vector{Q}
+    key::UInt
 end
+EigenbasisSpace(parent, vectors, energies, qns) = EigenbasisSpace(parent, vectors, energies, qns, hash(vectors))
 
 """
     eigenbasis(ham, H)
@@ -86,13 +88,13 @@ _state_index(state::EigenState, H::EigenbasisSpace) = checkbounds(Bool, H.qns, s
 interpret_state(state::EigenState, ::EigenbasisSpace) = state
 interpret_state(state, H::EigenbasisSpace) = throw(ArgumentError("`$state` is not a basis state of `$H`. Represent it on the parent space `H` and use `change_basis(v, H => Heig)`."))
 has_arithmetic_state_index(::EigenbasisSpace) = true
-atomic_id(H::EigenbasisSpace) = (:eigenbasis, atom_ids(H.parent)...)
+atomic_id(H::EigenbasisSpace) = (:eigenbasis, H.key, atom_ids(H.parent)...)
 group_id(H::EigenbasisSpace) = group_id(only(groups(H.parent)))
-add_tag(H::EigenbasisSpace, tag) = EigenbasisSpace(add_tag(H.parent, tag), H.vectors, H.energies, H.qns)
+add_tag(H::EigenbasisSpace, tag) = EigenbasisSpace(add_tag(H.parent, tag), H.vectors, H.energies, H.qns, H.key)
 # The transposed space has the complex conjugate basis, so that its matrices are the transposes.
-TransposedSpace(H::EigenbasisSpace) = EigenbasisSpace(TransposedSpace(H.parent), conj(H.vectors), H.energies, H.qns)
+TransposedSpace(H::EigenbasisSpace) = EigenbasisSpace(TransposedSpace(H.parent), conj(H.vectors), H.energies, H.qns, H.key)
 Base.:(==)(H1::EigenbasisSpace, H2::EigenbasisSpace) = H1 === H2 || (H1.parent == H2.parent && H1.vectors == H2.vectors)
-Base.hash(H::EigenbasisSpace, h::UInt) = hash((H.parent, H.vectors), h)
+Base.hash(H::EigenbasisSpace, h::UInt) = hash((H.parent, H.key), h)
 Base.show(io::IO, H::EigenbasisSpace) = print(io, "$(dim(H))-dimensional eigenbasis of ", H.parent)
 _amplitude_eltype(H::EigenbasisSpace) = eltype(H.vectors)
 
@@ -102,11 +104,9 @@ combine_into_group(::Group{Fermion}, atoms::AbstractVector{<:EigenbasisSpace}) =
 combine_into_group(::Group{Majorana}, atoms::AbstractVector{<:EigenbasisSpace}) = only(atoms)
 mode(H::EigenbasisSpace) = throw(ArgumentError("`$H` cannot be combined with other modes of its group. Build the eigenbasis on all of them, or put the other modes in another field."))
 
-# The matrix of `op` in the eigenbasis `root`. Entries at the level of the roundoff are dropped, so that conserved
-# quantities are diagonal.
 function _eigen_matrix(op, root::EigenbasisSpace; projection = false)
     M = representation(op, root.parent; projection)
-    return droptol!(root.vectors' * M * root.vectors, _roundoff(M))
+    return root.vectors' * M * root.vectors
 end
 _eigen_indices(H::EigenbasisSpace) = 1:dim(H)
 _eigen_indices(H::AbstractSubspace) = [state.index for state in basisstates(H)]
@@ -124,55 +124,16 @@ end
 _term_matrix_representation(op::NCMul, H::EigenbasisSpace, repr::Union{EagerSparseRepr, EagerDenseRepr}, chunking; projection = false, kwargs...) =
     _eigen_matrix(op, H, H, repr; projection)
 
-# On a subspace of a product, an operator maps an eigenstate to a superposition, so the matrix of each eigenbasis group
-# is applied column by column instead of state by state.
-struct _EigenAction{M}
-    matrix::M
-end
-precomputation_before_operator_application(op::NCMul, H::EigenbasisSpace) = _EigenAction(_eigen_matrix(op, H))
-_eigen_outputs(state, root, action) = ((basisstate(rowvals(action.matrix)[p], root), nonzeros(action.matrix)[p]) for p in nzrange(action.matrix, state.index))
+_acts_by_matrix(::EigenbasisSpace) = true
 _apply_local_operators(op, ::EigenState, ::EigenbasisSpace, precomp) = throw(ArgumentError("An operator maps an eigenstate to a superposition, so only eager matrix representations are supported on an eigenbasis."))
 
-# A product over groups, some of which are eigenbases, gives the product of the outputs of each group.
-function chunked_operator_indices_and_amplitudes_generic!(accumulator, op::ProductOperator, space::AbstractHilbertSpace, precomps::Tuple, input_inds, col_offset; projection)
-    any(p -> p isa _EigenAction, precomps) || return invoke(chunked_operator_indices_and_amplitudes_generic!, Tuple{Any, Any, AbstractHilbertSpace, Any, Any, Any}, accumulator, op, space, precomps, input_inds, col_offset; projection)
-    return _push_outputs!(state -> _product_outputs(op, state, precomps), accumulator, space, input_inds, col_offset, projection)
-end
-function operator_indices_and_amplitudes_generic!(accumulator, op::ProductOperator, space, precomps::Tuple; projection)
-    any(p -> p isa _EigenAction, precomps) || return invoke(operator_indices_and_amplitudes_generic!, Tuple{Any, Any, Any, Any}, accumulator, op, space, precomps; projection)
-    return chunked_operator_indices_and_amplitudes_generic!(accumulator, op, space, precomps, 1:dim(_input_space(space)), 0; projection)
-end
-function _product_outputs(op, state::ProductState, precomps)
-    outcomes = [(state.states, true)]
-    for (part, group, precomp, n) in zip(op.ops, op.spaces, precomps, op.inds)
-        outcomes = [(Base.setindex(states, s, n), amp * a) for (states, amp) in outcomes for (s, a) in _group_outputs(part, states[n], group, precomp)]
-    end
-    return ((typeof(state)(states), amp) for (states, amp) in outcomes)
-end
-_group_outputs(part, state, group, action::_EigenAction) = _eigen_outputs(state, group, action)
-_group_outputs(part, state, group, precomp) = (_apply_local_operators(part, state, group, precomp),)
-
-function _push_outputs!(outputs, accumulator, space, input_inds, col_offset, projection)
-    Hin, Hout = _input_space(space), _output_space(space)
-    for inind in input_inds
-        state = basisstate(inind, Hin)
-        for (newstate, amp) in outputs(state)
-            iszero(amp) && continue
-            outind = state_index(newstate, Hout)
-            _skip_outside(outind, projection, newstate, state, Hout) || push_inds_amps!(accumulator, outind, inind - col_offset, amp)
-        end
-    end
-    return accumulator
-end
-
-# Operator constraints: a conserved quantity is diagonal in the eigenbasis only as a sum, so its values are those of
-# the sum.
+# Operator constraints: a conserved quantity is diagonal in the eigenbasis only as a sum, and only up to roundoff.
 _acts_in(x, H::_EigenSpaces) = symbolic_group(x) == group_id(H)
 function _diagonal_values(weighted_terms, H::_EigenSpaces)
     foreach(((w, t),) -> _check_exact(w, t), weighted_terms)
     op = sum(((w, t),) -> w * NCMul(1, t.factors), weighted_terms)
     M = representation(op, H, Matrix)
-    isdiag(M) || throw(ArgumentError("A constraint operator must be diagonal in the eigenbasis, but `$op` is not."))
+    maximum(abs, M - Diagonal(diag(M)); init = 0.0) <= _roundoff(M) || throw(ArgumentError("A constraint operator must be diagonal in the eigenbasis, but `$op` is not."))
     values = map(v -> _exact_value(v, op), diag(M))
     all(isreal, values) || throw(ArgumentError("Constraint operators with complex values are not supported, but `$op` has complex values. $_ZN_HINT"))
     return Rational{Int}.(real.(values))
@@ -201,7 +162,7 @@ _check_projection(Hfrom::AbstractHilbertSpace, Hto::_EigenSpaces) = Hfrom isa _E
 
 @testitem "Eigenbasis" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: eigenbasis, energies, change_basis, Axes
+    using FermionicHilbertSpaces: eigenbasis, energies, change_basis, embed, Axes
     @fermions f
     @bosons b
     ham = sum(0.3k * f[k]'f[k] for k in 1:3) + sum(0.5 * f[k]'f[k + 1] + hc for k in 1:2) + 0.7 * f[1]'f[1] * f[2]'f[2]
@@ -231,6 +192,9 @@ _check_projection(Hfrom::AbstractHilbertSpace, Hto::_EigenSpaces) = Hfrom isa _E
     @test_throws ArgumentError eigenbasis(ham0, H)
     @test_throws ArgumentError tensor_product(Heig, hilbert_space(f, 4:4))
     @test_throws ArgumentError representation(f[1], Heig, :lazy) * ψ
+    # A matrix on one eigenbasis is not a matrix on another eigenbasis of the same space
+    other = eigenbasis(ham0 + 0.2 * f[2]'f[2], H0)
+    @test_throws ArgumentError embed(representation(f[1], other), other => tensor_product(eigenbasis(ham0, H0), Hb))
 end
 
 @testitem "Lindbladian in an eigenbasis" begin
@@ -253,6 +217,7 @@ end
     for (Hd, Ed) in ((Hlr, Elr), (tensor_product((Hl, Hr); constraint = left(Ntot) - right(Ntot) => 0), tensor_product((El, Er); constraint = left(Ntot) - right(Ntot) => 0)))
         L, Le = representation(lindbladian(left, right), Hd), representation(lindbladian(left, right), Ed)
         @test spectrum(Le) ≈ spectrum(L)
+        @test svdvals(Matrix(representation(left(f[1]) * right(f[1]'), Ed))) ≈ svdvals(Matrix(representation(left(f[1]) * right(f[1]'), Hd)))
         @test change_basis(steady_state(Le, Ed, El, Er), Heig => H) ≈ steady_state(L, Hd, Hl, Hr)
     end
 
