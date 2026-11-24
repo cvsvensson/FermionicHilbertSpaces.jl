@@ -240,6 +240,12 @@ _check_exact(x, term) = _isexact(x) || throw(ArgumentError("A constraint operato
 # denominators, and then multiplied by the exact coefficient.
 function _diagonal_table(weighted_terms, spaces)
     H = length(spaces) == 1 ? only(spaces) : tensor_product(spaces)
+    values = _diagonal_values(weighted_terms, H)
+    length(spaces) == 1 && return values
+    mapper = state_mapper(H, spaces)
+    return vec([values[state_index(only(first(combine_states(states, mapper))), H)] for states in Iterators.product(map(basisstates, spaces)...)])
+end
+function _diagonal_values(weighted_terms, H)
     monomials = map(((_, t),) -> representation(NCMul(1, t.factors), H), weighted_terms)
     if !isdiag(sum(map(((w, _), m) -> complex(float(w)) * m, weighted_terms, monomials)))
         k = something(findfirst(!isdiag, monomials), 1)
@@ -249,10 +255,7 @@ function _diagonal_table(weighted_terms, spaces)
     contributions = map(((w, t), m) -> w .* map(v -> _exact_value(v, t), Vector(diag(m))), weighted_terms, monomials)
     k = findfirst(c -> !all(isreal, c), contributions)
     isnothing(k) || throw(ArgumentError("Constraint operators with complex values are not supported, but the term `$(weighted_terms[k][2])` has complex values. $_ZN_HINT"))
-    values = Rational{Int}.(real.(sum(contributions)))
-    length(spaces) == 1 && return values
-    mapper = state_mapper(H, spaces)
-    return vec([values[state_index(only(first(combine_states(states, mapper))), H)] for states in Iterators.product(map(basisstates, spaces)...)])
+    return Rational{Int}.(real.(sum(contributions)))
 end
 # The values of built-in operators have power-of-two denominators far below this bound, while an irrational value such as
 # `√2` only rounds to a fraction with a larger denominator.

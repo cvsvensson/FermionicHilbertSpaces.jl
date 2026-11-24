@@ -22,7 +22,7 @@ using BitIntegers: UInt256, UInt512, UInt1024, @define_integers
 @define_integers 4096
 @define_integers 2048
 using HalfIntegers: HalfIntegers, Half, HalfInt, HalfInteger, half, twice, ishalfinteger
-using SparseArrays: SparseArrays, AbstractSparseArray, AbstractSparseMatrix, SparseVector, dropzeros!, findnz,
+using SparseArrays: SparseArrays, AbstractSparseArray, AbstractSparseMatrix, SparseVector, dropzeros!, droptol!, findnz,
     nnz, nonzeros, nzrange, rowvals, sparse, sprandn, spzeros, SparseMatrixCSC
 using TestItems: TestItems, @testitem, @testmodule
 import TupleTools
@@ -42,7 +42,7 @@ export BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export symmetric_sector
 export open_system
-public particle_number, Axes, Relabel, LocalMap, dissipator, FreeFermions, NonCommutativeProducts, add!!, matrix_representation, vector_representation
+public particle_number, eigenbasis, energies, Axes, Relabel, LocalMap, dissipator, FreeFermions, NonCommutativeProducts, add!!, matrix_representation, vector_representation
 
 """
     add!!(a, b)
@@ -169,6 +169,7 @@ include("physics/spin.jl")
 include("physics/open_systems.jl")
 include("symbolic_states.jl")
 include("symmetric_sector.jl")
+include("eigenbasis.jl")
 
 include("printing.jl")
 include("physics/fermions/free_fermions.jl")
