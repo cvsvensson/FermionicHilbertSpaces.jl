@@ -28,7 +28,8 @@ The space spanned by the eigenstates of the Hermitian `ham`, a symbolic operator
 sector of `H` and ordered by increasing energy within each sector. It has the sectors of `H`, and `ham` must not
 couple them. `representation(op, Heig)` is `S' * M * S` for the matrix `M` of `op` on `H` and the eigenvectors `S`,
 and `change_basis(ρ, Heig => H)` is `S * ρ * S'`. The space works as a factor of `tensor_product` and
-[`open_system`](@ref) together with spaces of other symbolic groups, but not with other spaces of the groups of `H`.
+[`open_system`](@ref) together with spaces of other symbolic groups, but not with other spaces of the groups of `H`;
+for a dot next to lead modes of the same fermions, take the eigenbasis of the dot and lead Hamiltonians on all modes.
 See [`energies`](@ref).
 
 ```julia
@@ -70,7 +71,9 @@ _roundoff(M) = isempty(M) ? 0.0 : 100 * eps(float(real(eltype(M)))) * size(M, 1)
 """
     energies(Heig)
 
-The energies of the basis states of an [`eigenbasis`](@ref) space or of a sector of one.
+The energies of the basis states of an [`eigenbasis`](@ref) space or of a sector of one. With `E = energies(Heig)`,
+`A .* g.(E .- transpose(E))` weights each matrix element of `A` on `Heig` by its Bohr frequency. The populations alone
+follow a rate equation only when no energies are degenerate.
 """
 energies(H::EigenbasisSpace) = H.energies
 energies(H::AbstractSubspace{<:EigenState, <:EigenbasisSpace}) = [parent(H).energies[state.index] for state in basisstates(H)]
