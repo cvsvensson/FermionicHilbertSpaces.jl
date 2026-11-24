@@ -57,6 +57,7 @@ function _check_block_diagonal(M, blocks)
     for (i, j, v) in zip(findnz(sparse(M))...)
         block[i] == block[j] || abs(v) <= tol || throw(ArgumentError("The Hamiltonian couples the sectors of the space, so it has no eigenbasis sector by sector."))
     end
+    return
 end
 function _hermitian_eigen(A)
     A = Matrix(A)
