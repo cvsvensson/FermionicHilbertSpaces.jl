@@ -33,8 +33,8 @@ end
 function LazyOperator(_op, space::S, chunking::C=NoChunking(); projection=false, conjugate=false, ishermitian=_ishermitian(_op), T=mat_eltype(_op), concretizer=NoConcretizer()
 ) where {S,C<:AbstractChunkingStrategy}
     op = __concretize(_op, concretizer)
-    # On spaces whose operators act by matrices, every operator takes the path of a sum
-    op = _acts_by_matrices(space) && !(op isa NCAdd) ? NCAdd(1 * op) : op
+    # Operators that act by matrices, or on spaces whose operators do, take the path of a sum
+    op = _by_matrices(op, space) && !(op isa NCAdd) ? NCAdd(1 * op) : op
     precomp = lazy_precomputation(op, space; projection)
     O = typeof(op)
     P = typeof(precomp)

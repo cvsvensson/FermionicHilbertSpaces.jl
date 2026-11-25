@@ -66,9 +66,9 @@ end
 """
     energies(Heig)
 
-The energies of the basis states of an [`eigenbasis`](@ref) space or of a sector of one. With `E = energies(Heig)`,
-`A .* g.(E .- transpose(E))` weights each matrix element of `A` on `Heig` by its Bohr frequency. The populations alone
-follow a rate equation only when no energies are degenerate.
+The energies of the basis states of an [`eigenbasis`](@ref) space or of a sector of one. [`MatrixOperator`](@ref)
+turns matrices weighted by Bohr frequencies into jump operators. The populations alone follow a rate equation only when
+no energies are degenerate.
 """
 energies(H::EigenbasisSpace) = H.energies
 energies(H::AbstractSubspace{<:EigenState, <:EigenbasisSpace}) = [parent(H).energies[state.index] for state in basisstates(H)]
@@ -102,20 +102,10 @@ function _rotated(op, root; projection)
     return SparseArrays.droptol!(sparse(M), _roundoff(M))
 end
 _has_state(m::NCMul) = any(x -> x isa SymbolicState, m.factors)
-function _eigen_matrix(op::NCMul, root::EigenbasisSpace; projection = false)
-    matrices = []
-    run = []
-    for x in op.factors
-        x isa SymbolicState || (push!(run, x); continue)
-        isempty(run) || push!(matrices, _rotated(NCMul(1, run), root; projection))
-        run = []
-        push!(matrices, _ketbra_matrix(x, root))
-    end
-    isempty(run) || push!(matrices, _rotated(NCMul(1, run), root; projection))
-    return op.coeff * prod(matrices)
-end
+_eigen_matrix(op::NCMul, root::EigenbasisSpace; projection = false) = _runs_matrix(run -> _rotated(run, root; projection), op, root)
+_is_matrix_factor(::SymbolicState, ::EigenbasisSpace) = true
 _istransposed(root) = all(g -> g isa TransposedSpace, groups(parent(root)))
-function _ketbra_matrix(s::SymbolicState, root)
+function _factor_matrix(s::SymbolicState, root::EigenbasisSpace)
     isketbra(s) && _same_space_id(s.space, root) || throw(ArgumentError("Only ketbras of the eigenbasis act on it, got `$s`."))
     return sparse([state_index(s.ket, root)], [state_index(s.bra, root)], [1], dim(root), dim(root))
 end

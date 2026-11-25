@@ -329,7 +329,7 @@ end
 function _matrix_representation(op::NCMul, bases, space, repr, chunking; kwargs...)
     if isempty(op.factors)
         return _convert_repr_eltype(op.coeff * I(dim(space)), repr)
-    elseif repr isa Union{EagerDenseRepr, EagerSparseRepr} && _acts_by_matrices(space)
+    elseif repr isa Union{EagerDenseRepr, EagerSparseRepr} && _by_matrices(op, space)
         return __matrix_representation(NCAdd(op), bases, space, repr, chunking; kwargs...)
     else
         newop = length(bases) > 1 ? partition_product(op, bases, groups(_input_space(space))) : op
@@ -337,7 +337,7 @@ function _matrix_representation(op::NCMul, bases, space, repr, chunking; kwargs.
     end
 end
 function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs...)
-    if length(bases) == 1 && !_acts_by_matrices(space)
+    if length(bases) == 1 && !_by_matrices(op, space)
         return _matrix_representation_single_space(op, space, repr, chunking; kwargs...)
     end
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
@@ -456,7 +456,7 @@ _acts_by_matrix(H) = false
 _acts_by_matrices(space) = any(_acts_by_matrix, groups(_input_space(space)))
 function _product_terms(op::NCAdd, bases, space, repr; kwargs...)
     Hin, Hout = _input_space(space), _output_space(space)
-    repr isa Union{EagerDenseRepr, EagerSparseRepr} && _acts_by_matrices(space) || return _partitioned_terms(NCterms(op), bases, groups(Hin))
+    repr isa Union{EagerDenseRepr, EagerSparseRepr} && _by_matrices(op, space) || return _partitioned_terms(NCterms(op), bases, groups(Hin))
     P = _product_parent(Hin)
     terms = P isa ProductSpace ? _product_terms(op, bases, P, repr; kwargs...) :
         [KronTerm(((sparse(c * _term_matrix_representation(m, P, EagerSparseRepr{_repr_eltype(Missing, repr)}(), NoChunking(); kwargs...)), 1),)) for (m, c) in op.dict]
@@ -599,6 +599,7 @@ end
 
 _term_matrix_representation(op, H, repr, chunking; kwargs...) = _terms_matrix(_repr_eltype(mat_eltype(op), repr), (op,), 0, H, repr, chunking; kwargs...)
 function _term_matrix_representation(op, H, repr::Union{EagerSparseRepr, EagerDenseRepr}, chunking; kwargs...)
+    _has_matrix_factor(op) && return _matrix_factors_matrix(op, H, repr; kwargs...)
     _accumulator = matrix_accumulator(op, H, repr)
     accumulator = operator_indices_and_amplitudes!(_accumulator, op, H; kwargs...)
     finalize!(accumulator, H)
@@ -708,7 +709,7 @@ _with_eltype(format, _, kwargs) = format, kwargs
 function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
     space_groups = group_ids(space)
-    all(g -> any(s -> _contains(s, g), space_groups), op_groups) || throw(ArgumentError("Each symbolic group of the operator must lie in a factor of the space, got operator groups $op_groups and factor supports $space_groups."))
+    all(g -> any(s -> _contains(s, g), space_groups), op_groups) || throw(ArgumentError("Each symbolic group of the operator must lie in a factor of the space, got operator groups $op_groups and factor supports $space_groups." * (_has_matrix_factor(op) ? " A `MatrixOperator` on several groups is represented where they form one factor, such as an eigenbasis." : "")))
     return space_groups
 end
 

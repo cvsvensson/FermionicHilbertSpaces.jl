@@ -42,7 +42,7 @@ export BranchConstraint, GenericHilbertSpace
 export SectorHilbertSpace, quantumnumbers, sector, sectors, indices, factors
 export symmetric_sector
 export open_system
-public particle_number, eigenbasis, energies, Axes, Relabel, LocalMap, dissipator, FreeFermions, NonCommutativeProducts, add!!, matrix_representation, vector_representation
+public particle_number, eigenbasis, energies, MatrixOperator, Axes, Relabel, LocalMap, dissipator, FreeFermions, NonCommutativeProducts, add!!, matrix_representation, vector_representation
 
 """
     add!!(a, b)
@@ -169,6 +169,7 @@ include("physics/spin.jl")
 include("physics/open_systems.jl")
 include("symbolic_states.jl")
 include("symmetric_sector.jl")
+include("matrix_operator.jl")
 include("eigenbasis.jl")
 
 include("printing.jl")
