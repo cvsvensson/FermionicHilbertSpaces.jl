@@ -68,10 +68,20 @@ end
 
 The energies of the basis states of an [`eigenbasis`](@ref) space or of a sector of one. [`MatrixOperator`](@ref)
 turns matrices weighted by Bohr frequencies into jump operators. The populations alone follow a rate equation only when
-no energies are degenerate.
+no energies are degenerate: with `Hlr, El, Er = open_system(Heig)`, `representation(L, tensor_product((El, Er); constraint
+= s -> s.states[1] == s.states[2]); projection = true)` is the Pauli rate matrix, with states in eigenstate order.
 """
 energies(H::EigenbasisSpace) = H.energies
 energies(H::AbstractSubspace{<:EigenState, <:EigenbasisSpace}) = [parent(H).energies[state.index] for state in basisstates(H)]
+
+"""
+    eigenvectors(Heig)
+
+The eigenvectors of an [`eigenbasis`](@ref) space or of a sector of one, as columns in the basis of the space `H` it was
+built on, so that `change_basis(ψ, Heig => H) ≈ eigenvectors(Heig) * ψ`.
+"""
+eigenvectors(H::EigenbasisSpace) = _basis_vectors(H)
+eigenvectors(H::AbstractSubspace{<:EigenState, <:EigenbasisSpace}) = _basis_vectors(parent(H))[:, [state.index for state in basisstates(H)]]
 
 Base.parent(H::EigenbasisSpace) = H.parent
 dim(H::EigenbasisSpace) = length(H.energies)
@@ -141,7 +151,7 @@ _basis_vectors(H::EigenbasisSpace) = H.vectors
 
 @testitem "Eigenbasis" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: eigenbasis, energies, change_basis, embed, Axes, Kets, vector_representation, partial_transpose, constrain_space
+    using FermionicHilbertSpaces: eigenbasis, energies, eigenvectors, change_basis, embed, Axes, Kets, vector_representation, partial_transpose, constrain_space
     @fermions f
     @bosons b
     ham = sum(0.3k * f[k]'f[k] for k in 1:3) + sum(0.5 * f[k]'f[k + 1] + hc for k in 1:2) + 0.7 * f[1]'f[1] * f[2]'f[2]
@@ -158,6 +168,8 @@ _basis_vectors(H::EigenbasisSpace) = H.vectors
     @test representation(f[1], Axes(sector(1, Heig), sector(2, Heig))) ≈ (S' * representation(f[1], H) * S)[indices(1, Heig), indices(2, Heig)]
     ψ = randn(ComplexF64, dim(H))
     @test change_basis(ψ, Heig => H) ≈ S * ψ
+    @test abs.(eigenvectors(Heig)' * S) ≈ I
+    @test eigenvectors(sector(1, Heig)) ≈ eigenvectors(Heig)[:, indices(1, Heig)]
 
     # A factor of a tensor product with other groups
     H0 = hilbert_space(f, 1:2)
@@ -285,8 +297,36 @@ end
     c = representation(J, Heig)
     @test representation(dissipator(J), Elr) ≈ sandwich(c, c') - (embed(c'c, El => Elr) + embed(transpose(c'c), Er => Elr)) / 2
 
+    # Between the doubled spaces of two eigenbases, through the space they were built on
+    E2 = eigenbasis(ham + (0.4im * f[1]'f[3] + hc), H)
+    _, El2, Er2 = open_system(E2)
+    Ed, Ed2 = (tensor_product((l, r); constraint = left(Ntot) - right(Ntot) => 0) for (l, r) in ((El, Er), (El2, Er2)))
+    v = randn(ComplexF64, dim(Ed))
+    @test reshape(change_basis(v, Ed => Ed2), Ed2 => (El2, Er2)) ≈ change_basis(change_basis(reshape(v, Ed => (El, Er)), Heig => H), H => E2)
+
     # The populations: the Pauli rate matrix with rates |⟨a|J|b⟩|² from b to a
-    populations = tensor_product((El, Er); constraint = s -> s.states[1].index == s.states[2].index)
+    populations = tensor_product((El, Er); constraint = s -> s.states[1] == s.states[2])
     R = sum(J -> abs2.(representation(J, Heig, Matrix)), jumps)
     @test representation(lindbladian(left, right), populations; projection = true) ≈ R - Diagonal(vec(sum(R; dims = 1)))
+end
+
+@testitem "Precomputed change of basis" begin
+    using LinearAlgebra, SparseArrays
+    using FermionicHilbertSpaces: eigenbasis, change_basis, open_system
+    @fermions f
+    H = hilbert_space(f, 1:3, NumberConservation())
+    Ntot = sum(f[k]'f[k] for k in 1:3)
+    ham = sum(0.3k * f[k]'f[k] for k in 1:3) + sum(0.5 * f[k]'f[k + 1] + hc for k in 1:2)
+    E1, E2 = eigenbasis(ham, H), eigenbasis(ham + (0.4im * f[1]'f[3] + hc), H)
+    _, El, Er, left, right = open_system(E1)
+    _, El2, Er2 = open_system(E2)
+    Ed, Ed2 = (tensor_product((l, r); constraint = left(Ntot) - right(Ntot) => 0) for (l, r) in ((El, Er), (El2, Er2)))
+    Ud = change_basis(Ed => Ed2)
+    v, L = randn(ComplexF64, dim(Ed)), randn(ComplexF64, dim(Ed), dim(Ed))
+    @test Ud(v) ≈ change_basis(v, Ed => Ed2)
+    @test Ud(L) ≈ change_basis(L, Ed => Ed2)
+    @test Ud(similar(v), v) ≈ Ud(v)
+    @test sparse(Ud) * v ≈ Ud(v)
+    @test sparse(change_basis(Ed2 => Ed)) ≈ sparse(Ud)'
+    @test_throws ArgumentError change_basis(sector(1, H) => sector(2, E1))(randn(dim(sector(1, H))))
 end

@@ -544,6 +544,7 @@ but their groups may come in different orders.
 """
 function basis_transformation(Hfrom, Hto)
     if !issetequal(atom_ids(Hfrom), atom_ids(Hto))
+        _same_groups(Hfrom, Hto) && return _groupwise_transformation(Hfrom, Hto)
         _acts_by_matrices(Hfrom) && return _transformation_through_parents(Hfrom, Hto)
         _acts_by_matrices(Hto) && return _adjoint_transformation(Hfrom, Hto)
     end
@@ -570,6 +571,33 @@ function _transformation_through_parents(Hfrom, Hto)
     K = sparse(Is, Js, Vs, dim(P), dim(Hfrom))
     U, dropped = basis_transformation(P, Hto)
     return U * K, findall(j -> !iszero(K[dropped, j]), axes(K, 2))
+end
+# Between subspaces of products of the same groups, a basis state goes to the product of the columns of the
+# transformations of its groups, which is cheaper than going through the product of their parents.
+function _same_groups(Hfrom, Hto)
+    Pf, Pt = _product_parent(Hfrom), _product_parent(Hto)
+    return Pf isa ProductSpace && Pt isa ProductSpace && has_arithmetic_state_index(Pt) && map(group_id, groups(Pf)) == map(group_id, groups(Pt))
+end
+_groupwise_transformation(Hfrom, Hto) = _groupwise_transformation(Hfrom, Hto, map(basis_transformation, groups(_product_parent(Hfrom)), groups(_product_parent(Hto))))
+function _groupwise_transformation(Hfrom, Hto, transformations)
+    Pf, Pt = _product_parent(Hfrom), _product_parent(Hto)
+    Us = map(first, transformations)
+    rows = zeros(Int, dim(Pt))
+    foreach(((k, state),) -> rows[state_index(state, Pt)] = k, enumerate(basisstates(Hto)))
+    Is, Js, Vs = Int[], Int[], promote_type(map(eltype, Us)...)[]
+    dropped = Int[]
+    for (j, state) in enumerate(basisstates(Hfrom))
+        inds = _factor_indices(state, Pf)
+        # The first group varies fastest in the order of the product
+        column = reduce(kron, reverse(map((U, i) -> U[:, i], Us, inds)))
+        isdropped = any(map((i, (_, d)) -> i in d, inds, transformations))
+        for (k, v) in zip(findnz(column)...)
+            i = rows[k]
+            iszero(i) ? (isdropped = true) : (push!(Is, i); push!(Js, j); push!(Vs, v))
+        end
+        isdropped && push!(dropped, j)
+    end
+    return sparse(Is, Js, Vs, dim(Hto), dim(Hfrom)), dropped
 end
 _parent_components(g, s) = _acts_by_matrix(g) ? [(basisstate(i, parent(g)), v) for (i, v) in zip(findnz(_basis_vectors(g)[:, state_index(s, g)])...)] : [(s, 1)]
 _joined_state(parts) = length(parts) == 1 ? only(parts) : ProductState(Tuple(Iterators.flatten(p isa ProductState ? p.states : (p,) for p in parts)))
@@ -600,6 +628,7 @@ end
 """
     change_basis(m, Hfrom => Hto; projection=false, alg)
     change_basis(m, Hfrom, Hto; projection=false, alg)
+    change_basis(Hfrom => Hto; projection=false)
 
 Express `m` in the basis of `Hto`, where `Hfrom` and `Hto` have the same atoms but possibly
 different (or differently ordered) basis states. Unless `projection=true`, throws an
@@ -609,22 +638,54 @@ Either side can be an [`Axes`](@ref), one space per axis of `m`: `change_basis(m
 extracts the block of `m` with rows on `Hout` and columns on `Hin`, and `change_basis(blk, Axes(Hout, Hin) => H)`
 places it in a matrix on `H` that is zero elsewhere.
 
+Without `m`, `change_basis(Hfrom => Hto)` computes the change once and returns an operation applied as `op(m)` or
+`op(out, m)`; `sparse(op)` is the matrix `U` with `op(v) == U * v`.
+
+```julia
+Ud = change_basis(Ed => Ed2)
+v2 = Ud(v)
+```
+
 A vector or matrix `m` can be a dense GPU array, for which `alg` defaults to [`NoScalarIndexingAlg`](@ref).
 """
 change_basis(m, Hs::Pair; kwargs...) = change_basis(m, first(Hs), last(Hs); kwargs...)
-function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, alg = default_indexing_alg(m), kwargs...)
-    alg isa Union{ScalarIndexingAlg, NoScalarIndexingAlg} || throw(ArgumentError("`change_basis` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
-    alg isa NoScalarIndexingAlg && m isa UniformScaling && throw(ArgumentError("`UniformScaling` is not supported with `alg = NoScalarIndexingAlg()`."))
+change_basis(Hs::Pair; projection = false) = ChangeBasisMap(first(Hs), last(Hs); projection)
+change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{AbstractHilbertSpace, Axes}; projection = false, alg = default_indexing_alg(m), kwargs...) =
+    ChangeBasisMap(Hfrom, Hto; projection)(m; alg)
+
+struct ChangeBasisMap{F, T, U}
+    from::F
+    to::T
+    # `(U, dropped)` of each axis, or one for all axes between two spaces
+    transformations::U
+    projection::Bool
+end
+function ChangeBasisMap(Hfrom, Hto; projection = false)
     projection || _check_projection(Hfrom, Hto)
-    n = m isa UniformScaling ? 2 : ndims(m)
+    n = max(_naxes(Hfrom), _naxes(Hto))
     from, to = _per_axis(Hfrom, Val(n)), _per_axis(Hto, Val(n))
-    size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, and a `UniformScaling` needs the same space on both axes, got $(summary(m))."))
-    length(to.spaces) == n || throw(ArgumentError("The output needs one space per axis of `m`, got $(length(to.spaces)) spaces for $n axes."))
     U1 = basis_transformation(first(from.spaces), first(to.spaces))
     # a bare space gives every axis the same transformation, so it is computed once
     transformation(Hf, Ht) = Hf === first(from.spaces) && Ht === first(to.spaces) ? U1 : basis_transformation(Hf, Ht)
-    transformations = map(transformation, from.spaces, to.spaces)
-    if !projection
+    return ChangeBasisMap(Hfrom, Hto, map(transformation, from.spaces, to.spaces), projection)
+end
+_naxes(H::AbstractHilbertSpace) = 1
+_naxes(ax::Axes) = length(ax.spaces)
+SparseArrays.sparse(op::ChangeBasisMap{<:AbstractHilbertSpace, <:AbstractHilbertSpace}) = first(only(op.transformations))
+(op::ChangeBasisMap)(m; alg = default_indexing_alg(m)) = _transform(m, _checked_transformations(op, m, alg), alg)
+function (op::ChangeBasisMap)(out, m; alg = default_indexing_alg(m))
+    Us = _checked_transformations(op, m, alg)
+    return alg isa NoScalarIndexingAlg ? copyto!(out, _transform(m, Us, alg)) : _change_basis!(out, m, Us)
+end
+function _checked_transformations(op::ChangeBasisMap, m, alg)
+    alg isa Union{ScalarIndexingAlg, NoScalarIndexingAlg} || throw(ArgumentError("`change_basis` supports `alg = ScalarIndexingAlg()` or `NoScalarIndexingAlg()`, got $alg."))
+    alg isa NoScalarIndexingAlg && m isa UniformScaling && throw(ArgumentError("`UniformScaling` is not supported with `alg = NoScalarIndexingAlg()`."))
+    n = m isa UniformScaling ? 2 : ndims(m)
+    from, to = _per_axis(op.from, Val(n)), _per_axis(op.to, Val(n))
+    size_compatible(m, from) || throw(ArgumentError("The size of `m` must match the dimensions $(map(dim, from.spaces)) of the input spaces, and a `UniformScaling` needs the same space on both axes, got $(summary(m))."))
+    length(to.spaces) == n || throw(ArgumentError("The output needs one space per axis of `m`, got $(length(to.spaces)) spaces for $n axes."))
+    transformations = length(op.transformations) == n ? op.transformations : ntuple(_ -> only(op.transformations), n)
+    if !op.projection
         has_support_on = alg isa NoScalarIndexingAlg ? _copied_support_on : _has_support_on
         for (axis, Hf, (_, dropped)) in zip(1:n, from.spaces, transformations)
             has_support_on(m, axis, dropped) || continue
@@ -632,9 +693,9 @@ function change_basis(m, Hfrom::Union{AbstractHilbertSpace, Axes}, Hto::Union{Ab
             throw(ArgumentError("The state $(basisstate(j, Hf)) has nonzero weight but is not in the target Hilbert space. Pass `projection=true` to drop it."))
         end
     end
-    Us = map(first, transformations)
-    return alg isa NoScalarIndexingAlg ? _gather_transform(m, map(U -> _basis_gather_table(m, U), Us)...) : _change_basis(m, Us)
+    return map(first, transformations)
 end
+_transform(m, Us, alg) = alg isa NoScalarIndexingAlg ? _gather_transform(m, map(U -> _basis_gather_table(m, U), Us)...) : _change_basis(m, Us)
 # Rejects targets, such as symmetric sectors, that `m` can leak out of without weight on a dropped basis state.
 _check_projection(Hfrom, Hto) = nothing
 _per_axis(H::AbstractHilbertSpace, n::Val) = Axes(ntuple(_ -> H, n))
@@ -643,6 +704,9 @@ _change_basis(m::AbstractMatrix, (Uout, Uin)) = Uout * m * Uin'
 _change_basis(m::LowRankMatrix, (Uout, Uin)) = Uout * Matrix(m) * Uin'
 _change_basis(v::AbstractVector, (U,)) = U * v
 _change_basis(m::UniformScaling, (Uout, Uin)) = m.λ * (Uout * Uin')
+_change_basis!(out, v::AbstractVector, (U,)) = mul!(out, U, v)
+_change_basis!(out, m::AbstractMatrix, (Uout, Uin)) = mul!(out, Uout, m * Uin')
+_change_basis!(out, m, Us) = copyto!(out, _change_basis(m, Us))
 
 # Whether `m` is nonzero on any of the indices `js` along `axis`
 _has_support_on(m, axis, js) = !iszero(selectdim(m, axis, js))
