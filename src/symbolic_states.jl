@@ -551,6 +551,11 @@ function vector_representation(op::Union{NCMul,NCAdd}, space::AbstractHilbertSpa
 end
 # `kind` is `:kets` or `:bras`, as computed by `_operator_type`
 Base.@constprop :aggressive function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, kind; kwargs...)
+    # Operators left unevaluated on kets, as on an eigenbasis that does not span its groups, act by their matrix
+    k = something(findfirst(x -> x isa SymbolicState, op.factors), 1)
+    if kind === :mixed && k > 1 && all(x -> x isa SymbolicState && isket(x), op.factors[k:end])
+        return representation(NCMul(op.coeff, op.factors[1:(k - 1)]), space) * vector_representation(NCMul(1, op.factors[k:end]), space, repr; kwargs...)
+    end
     symstates = op.factors
     perm = map(symstates) do state
         i = findfirst(g -> _same_space_id(g, state.space), groups(space))

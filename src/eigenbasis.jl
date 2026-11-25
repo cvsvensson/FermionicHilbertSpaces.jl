@@ -79,6 +79,7 @@ basisstate(n::Integer, H::EigenbasisSpace) = EigenState(H.qns[n], Int(n))
 basisstates(H::EigenbasisSpace) = BasisStates(H, Iterators.map(n -> basisstate(n, H), 1:dim(H)))
 _state_index(state::EigenState, H::EigenbasisSpace) = checkbounds(Bool, H.qns, state.index) && isequal(H.qns[state.index], state.qn) ? state.index : 0
 interpret_state(state::EigenState, ::EigenbasisSpace) = state
+interpret_state(n::Integer, H::EigenbasisSpace) = basisstate(n, H)
 interpret_state(state, H::EigenbasisSpace) = throw(ArgumentError("`$state` is not a basis state of `$H`. Represent it on the space `H` the eigenbasis was built on and use `change_basis(v, H => Heig)`."))
 has_arithmetic_state_index(::EigenbasisSpace) = true
 atomic_id(H::EigenbasisSpace) = (:eigenbasis, H.key, atom_ids(H.parent)...)
@@ -95,7 +96,11 @@ _state_label_atomic(s::EigenState, H) = string(s.index)
 particle_number(::EigenState) = throw(ArgumentError("Eigenstates have no particle number or parity, so `NumberConservation` and `ParityConservation` do not apply to an eigenbasis. Constrain an operator instead, such as `sum(f[k]'f[k] for k in 1:N) => n`."))
 
 # Operators are rotated from the parent, and ketbras of the eigenbasis are matrix units.
-_rotated(op, root; projection) = _basis_vectors(root)' * representation(op, parent(root); projection) * _basis_vectors(root)
+# Roundoff where a symmetry forces zeros is dropped, so that symbolic superpositions and sparsity stay exact
+function _rotated(op, root; projection)
+    M = _basis_vectors(root)' * representation(op, parent(root); projection) * _basis_vectors(root)
+    return SparseArrays.droptol!(sparse(M), _roundoff(M))
+end
 _has_state(m::NCMul) = any(x -> x isa SymbolicState, m.factors)
 function _eigen_matrix(op::NCMul, root::EigenbasisSpace; projection = false)
     matrices = []
@@ -131,7 +136,8 @@ function _superposition(op, s::SymbolicState, onket::Bool)
     S, M = _basis_vectors(root), representation(op, parent(root))
     i = state_index(onket ? s.ket : s.bra, root)
     inds, amps = findnz(onket ? S' * (M * S[:, i]) : conj(S' * (M' * S[:, i])))
-    terms = [_scaled_state(a, onket ? SymbolicState(s.space, basisstate(i, root), s.bra) : SymbolicState(s.space, s.ket, basisstate(i, root))) for (i, a) in zip(inds, amps) if !iszero(a)]
+    tol = _roundoff(M)
+    terms = [_scaled_state(a, onket ? SymbolicState(s.space, basisstate(i, root), s.bra) : SymbolicState(s.space, s.ket, basisstate(i, root))) for (i, a) in zip(inds, amps) if abs(a) > tol]
     return isempty(terms) ? 0 : NonCommutativeProducts.AddTerms(terms)
 end
 _apply_local_operators(op, ::EigenState, ::EigenbasisSpace, precomp) = throw(ArgumentError("An operator maps an eigenstate to a superposition, so it is applied through its matrix."))
@@ -184,6 +190,9 @@ _basis_vectors(H::EigenbasisSpace) = H.vectors
     # An operator maps an eigenstate to the column of its matrix
     E0 = eigenbasis(ham0, H0)
     @test vector_representation(f[1]' * Kets(E0)[2], E0) ≈ representation(f[1]', E0)[:, 2]
+    E1 = eigenbasis(ham, hilbert_space(f, 1:3, NumberConservation(1)))
+    @test vector_representation(f[1]' * f[2] * Kets(E1)[1], E1) ≈ representation(f[1]' * f[2], E1)[:, 1]
+    @test ishermitian(representation(f[1]' * f[2] + hc, E0))
     # Changing basis of a product with an eigenbasis factor, and of eigen sectors
     ρ = randn(ComplexF64, 12, 12)
     @test change_basis(ρ, tensor_product(E0, Hb) => tensor_product(H0, Hb)) ≈ U * ρ * U'

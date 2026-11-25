@@ -686,6 +686,9 @@ _check_operator(op, space) = nothing
 _check_operator(op, space::AbstractSubspace) = _check_operator(op, parent(space))
 _check_operator(op, ax::Axes) = _check_operator(op, _input_space(ax))
 _symmetrize(M, op, space) = M
+# A rotated matrix is Hermitian only up to roundoff
+_symmetrize(M::Union{Matrix{T}, SparseMatrixCSC{T}}, op, space::AbstractHilbertSpace) where {T <: Union{AbstractFloat, Complex{<:AbstractFloat}}} =
+    _acts_by_matrices(space) && _ishermitian(op) ? (M + M') / 2 : M
 _amplitude_eltype(space) = nothing
 _amplitude_eltype(space::AbstractSubspace) = _amplitude_eltype(parent(space))
 _amplitude_eltype(space::ProductSpace) = mapreduce(_amplitude_eltype, _promote_amplitudes, groups(space))
