@@ -163,7 +163,7 @@ hilbert_space
 #   the parent (truncation, spin, transposition); such a difference shows up as missing states,
 #   which each operation (partial trace, embed, ...) handles. Complements are built from the
 #   parent's atoms.
-# - Operators match at the group level, `symbolic_group(op) == group_id(group)`.
+# - Operators act on the factor whose support contains their group, `_contains(group_id(factor), symbolic_group(op))`.
 
 """
     atomic_factors(H)
@@ -200,10 +200,30 @@ factors(H::AbstractGroupedHilbertSpace) = atomic_factors(H)
 """
     group_id(atom)
 
-Key used by `tensor_product` to merge atoms into one group (see `combine_into_group`).
-It equals `symbolic_group(op)` for every symbolic operator `op` acting on the atom.
+The support of an atom or factor of a space: one symbolic group or a `GroupSet` of several. An operator acts on the
+factor whose support contains `symbolic_group(op)`.
 """
 group_id(H::AbstractAtomicHilbertSpace) = atomic_id(H)
+
+# The support of a space that carries several symbolic groups. Its members are sorted, and a single group is not
+# wrapped, so that equal supports are equal keys.
+struct GroupSet{T <: Tuple}
+    groups::T
+end
+_support(groups) = (sorted = sort!(unique(collect(Iterators.flatten(map(_members, groups)))); lt = _order_isless); length(sorted) == 1 ? only(sorted) : GroupSet(Tuple(sorted)))
+Base.:(==)(a::GroupSet, b::GroupSet) = a.groups == b.groups
+Base.hash(g::GroupSet, h::UInt) = hash(g.groups, hash(:GroupSet, h))
+Base.show(io::IO, g::GroupSet) = print(io, "{", join(map(_group_label, g.groups), ", "), "}")
+_group_label(g) = sprint(print, g)
+_members(g) = (g,)
+_members(g::GroupSet) = g.groups
+# Whether the support `inner` lies in the support `outer`
+_contains(outer, inner) = all(in(_members(outer)), _members(inner))
+_overlaps(a, b) = any(in(_members(b)), _members(a))
+# Supports in one space are disjoint, so ordering a `GroupSet` by its first member is a total order among them.
+_order_isless(a::GroupSet, b) = _order_isless(first(a.groups), b)
+_order_isless(a, b::GroupSet) = _order_isless(a, first(b.groups))
+_order_isless(a::GroupSet, b::GroupSet) = _order_isless(first(a.groups), first(b.groups))
 
 """
     atomic_id(atom)
@@ -218,8 +238,8 @@ function atomic_id end
 """
     symbolic_group(op)
 
-Key that matches the symbolic operator `op` to the group of a Hilbert space it acts on:
-`symbolic_group(op) == group_id(group)`. The group of an [`Op`](@ref) follows from its mode.
+The symbolic group of `op`: `op` acts on the factor of a space whose support [`group_id`](@ref) contains it. The
+group of an [`Op`](@ref) follows from its mode.
 """
 function symbolic_group end
 
@@ -763,7 +783,7 @@ function _match_atoms(Hsub, H)
 end
 function _match_atoms_message(problem, Hsub, H)
     kind = first(problem)
-    kind == :missing && return "The atoms of `Hsub` must be atoms of `H`, got `$(problem[2])` which is not in `$H`."
+    kind == :missing && return "The atoms of `Hsub` must be atoms of `H`, got `$(problem[2])` which is not in `$H`." * (_acts_by_matrices(H) ? " Change the basis of its factors whose basis is given in another space to that space first, with `change_basis`." : "")
     kind == :duplicate && return "The atoms of `Hsub` must be distinct, got duplicates in `$Hsub`."
     return "The atoms of `Hsub` must keep their order within each group of `H`, got `$Hsub` and `$H`."
 end

@@ -240,7 +240,7 @@ function _part_on_basis(parts, group_inds, ind)
     length(runs) == 1 && return only(runs)
     return NCMul(prod(run -> run.coeff, runs), reduce(vcat, [run.factors for run in runs]))
 end
-_basis_index(basis, bases) = something(findfirst(==(basis), bases), 0)
+_basis_index(group, bases) = something(findfirst(b -> _contains(b, group), bases), 0)
 
 # Other formats have no identity matrices for the groups without factors
 function _matrix_representation(op::NCMul, bases, space::ProductSpace, repr::Union{EagerDenseRepr, EagerSparseRepr}, chunking; kwargs...)
@@ -329,13 +329,15 @@ end
 function _matrix_representation(op::NCMul, bases, space, repr, chunking; kwargs...)
     if isempty(op.factors)
         return _convert_repr_eltype(op.coeff * I(dim(space)), repr)
+    elseif repr isa Union{EagerDenseRepr, EagerSparseRepr} && _by_matrices(op, space)
+        return __matrix_representation(NCAdd(op), bases, space, repr, chunking; kwargs...)
     else
         newop = length(bases) > 1 ? partition_product(op, bases, groups(_input_space(space))) : op
         return _term_matrix_representation(newop, space, repr, chunking; kwargs...)
     end
 end
 function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs...)
-    if length(bases) == 1
+    if length(bases) == 1 && !_by_matrices(op, space)
         return _matrix_representation_single_space(op, space, repr, chunking; kwargs...)
     end
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
@@ -400,7 +402,9 @@ function _split_diagonals(sums, N)
 end
 # The term kron(…, A_2, I, A_1, I) of a sum, with identities on the groups that no factor acts on. Each pair `(A, r)` in
 # the tuple `factors` is a square matrix on one group or a range of groups, and the product `r` of the dimensions of the
-# groups before them.
+# groups before them. A term type implements `mat_eltype`, `precomputation_before_operator_application`,
+# `operator_indices_and_amplitudes_generic!`, `chunked_operator_indices_and_amplitudes_generic!` and, for lazy
+# transposes, `_transposed`.
 struct KronTerm{F <: Tuple}
     factors::F
 end
@@ -441,11 +445,60 @@ operator_indices_and_amplitudes_generic!(accumulator, term::KronTerm, space, pre
 # On spaces with a basis-state loop (for example a constrained space over a ProductSpace) and for formats with no method of its own,
 # `_terms_matrix` builds the sum of all terms.
 function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_split = 10, kwargs...)
-    prodops = _product_terms(op, bases, space, repr)
+    prodops = _product_terms(op, bases, space, repr; tree_split, kwargs...)
     T = _repr_eltype(promote_type(mapreduce(mat_eltype, promote_type, prodops), typeof(op.coeff)), repr)
     return _terms_matrix(T, prodops, op.coeff, space, repr, chunking; kwargs...)
 end
-_product_terms(op::NCAdd, bases, space, repr; _...) = _partitioned_terms(NCterms(op), bases, groups(_input_space(space)))
+# A group with `_acts_by_matrix`, such as an eigenbasis, has basis vectors `_basis_vectors(group)` in `parent(group)`, so
+# an operator maps a basis state to a superposition and the group has no basis-state loop. Its matrices are `KronTerm`s,
+# and on a subspace they are applied to the columns of the subspace.
+_acts_by_matrix(H) = false
+_acts_by_matrices(space) = any(_acts_by_matrix, groups(_input_space(space)))
+function _product_terms(op::NCAdd, bases, space, repr; kwargs...)
+    Hin, Hout = _input_space(space), _output_space(space)
+    repr isa Union{EagerDenseRepr, EagerSparseRepr} && _by_matrices(op, space) || return _partitioned_terms(NCterms(op), bases, groups(Hin))
+    P = _product_parent(Hin)
+    terms = P isa ProductSpace ? _product_terms(op, bases, P, repr; kwargs...) :
+        [KronTerm(((sparse(c * _term_matrix_representation(m, P, EagerSparseRepr{_repr_eltype(Missing, repr)}(), NoChunking(); kwargs...)), 1),)) for (m, c) in op.dict]
+    Hin === P === Hout && return terms
+    P == _product_parent(Hout) || throw(ArgumentError("Both axes must be subspaces of one space, got `$Hout` and `$Hin`."))
+    cols = [state_index(state, P) for state in basisstates(Hin)]
+    rows = zeros(Int, dim(P))
+    foreach(((k, state),) -> rows[state_index(state, P)] = k, enumerate(basisstates(Hout)))
+    return [_SubspaceTerm(term, P, cols, rows) for term in terms]
+end
+_product_parent(H::AbstractSubspace) = parent(H)
+_product_parent(H) = H
+# `term` of the product `parent` on a subspace, whose basis state k is the state `cols[k]` of `parent`, and whose basis
+# state `rows[i]` is the state i of `parent` (0 for a state outside the subspace).
+struct _SubspaceTerm{K, P}
+    term::K
+    parent::P
+    cols::Vector{Int}
+    rows::Vector{Int}
+end
+mat_eltype(t::_SubspaceTerm) = mat_eltype(t.term)
+precomputation_before_operator_application(::_SubspaceTerm, ::AbstractHilbertSpace) = nothing
+function chunked_operator_indices_and_amplitudes_generic!(accumulator, t::_SubspaceTerm, space::AbstractHilbertSpace, precomp, input_inds, col_offset; projection = false, _...)
+    rows = _SubspaceRows(accumulator, t.rows, projection)
+    for k in input_inds
+        j = t.cols[k]
+        chunked_operator_indices_and_amplitudes_generic!(rows, t.term, t.parent, nothing, j:j, j - k + col_offset)
+    end
+    return accumulator
+end
+operator_indices_and_amplitudes_generic!(accumulator, t::_SubspaceTerm, space, precomp; kwargs...) =
+    chunked_operator_indices_and_amplitudes_generic!(accumulator, t, t.parent, precomp, eachindex(t.cols), 0; kwargs...)
+struct _SubspaceRows{A}
+    accumulator::A
+    rows::Vector{Int}
+    projection::Bool
+end
+function push_inds_amps!(a::_SubspaceRows, outind, inind, amp)
+    row = a.rows[outind]
+    _skip_outside(row, a.projection) || push_inds_amps!(a.accumulator, row, inind, amp)
+    return nothing
+end
 _partitioned_terms(terms, bases, spaces) = [length(bases) > 1 ? partition_product(term, bases, spaces) : term for term in terms]
 # The terms are summed in the element type of their matrices, and the identity term is added in that element type
 # promoted with the type of `coeff`.
@@ -546,6 +599,7 @@ end
 
 _term_matrix_representation(op, H, repr, chunking; kwargs...) = _terms_matrix(_repr_eltype(mat_eltype(op), repr), (op,), 0, H, repr, chunking; kwargs...)
 function _term_matrix_representation(op, H, repr::Union{EagerSparseRepr, EagerDenseRepr}, chunking; kwargs...)
+    _has_matrix_factor(op) && return _matrix_factors_matrix(op, H, repr; kwargs...)
     _accumulator = matrix_accumulator(op, H, repr)
     accumulator = operator_indices_and_amplitudes!(_accumulator, op, H; kwargs...)
     finalize!(accumulator, H)
@@ -633,8 +687,16 @@ _check_operator(op, space) = nothing
 _check_operator(op, space::AbstractSubspace) = _check_operator(op, parent(space))
 _check_operator(op, ax::Axes) = _check_operator(op, _input_space(ax))
 _symmetrize(M, op, space) = M
+# A rotated matrix is Hermitian only up to roundoff
+_symmetrize(M::Union{Matrix{T}, SparseMatrixCSC{T}}, op, space::AbstractHilbertSpace) where {T <: Union{AbstractFloat, Complex{<:AbstractFloat}}} =
+    _acts_by_matrices(space) && _ishermitian(op) ? (M + M') / 2 : M
 _amplitude_eltype(space) = nothing
 _amplitude_eltype(space::AbstractSubspace) = _amplitude_eltype(parent(space))
+_amplitude_eltype(space::ProductSpace) = mapreduce(_amplitude_eltype, _promote_amplitudes, groups(space))
+_promote_amplitudes(::Nothing, ::Nothing) = nothing
+_promote_amplitudes(S, ::Nothing) = S
+_promote_amplitudes(::Nothing, S) = S
+_promote_amplitudes(S, T) = promote_type(S, T)
 _with_amplitude_eltype(format, op, space, kwargs) = _with_amplitude_eltype(format, op, _amplitude_eltype(space), kwargs)
 _with_amplitude_eltype(format, op, ::Nothing, kwargs) = format, kwargs
 _with_amplitude_eltype(format, op, ::Type{S}, kwargs) where {S} = _with_eltype(format, _promote_amplitude_eltype(mat_eltype(op), S), kwargs)
@@ -647,7 +709,7 @@ _with_eltype(format, _, kwargs) = format, kwargs
 function _checked_group_ids(op, space)
     op_groups = symbolic_groups(op)
     space_groups = group_ids(space)
-    all(in(space_groups), op_groups) || throw(ArgumentError("The symbolic groups of the operator must match the groups of the provided space, got operator groups $op_groups and space groups $space_groups."))
+    all(g -> any(s -> _contains(s, g), space_groups), op_groups) || throw(ArgumentError("Each symbolic group of the operator must lie in a factor of the space, got operator groups $op_groups and factor supports $space_groups." * (_has_matrix_factor(op) ? " A `MatrixOperator` on several groups is represented where they form one factor, such as an eigenbasis." : "")))
     return space_groups
 end
 

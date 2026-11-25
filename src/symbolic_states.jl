@@ -301,7 +301,7 @@ end
 
 function NonCommutativeProducts.mul_effect(a::SymbolicState, b::SymbolicState)
     if !_same_space_id(a.space, b.space)
-        group_id(a) == group_id(b) && throw(ArgumentError("Cannot multiply symbolic states on different spaces of the same group, got `$(a.space)` and `$(b.space)`."))
+        _overlaps(group_id(a), group_id(b)) && throw(ArgumentError("Cannot multiply symbolic states on different spaces of some of the same groups, got `$(a.space)` and `$(b.space)`."))
         return _group_isless(b, a) ? Swap(1) : nothing
     end
     if has_bra(a) && has_ket(b)
@@ -333,23 +333,25 @@ end
 _scaled_state(amp, state) = iszero(amp) ? 0 : NCMul(amp * 1, (state,))
 
 function NonCommutativeProducts.mul_effect(op::AbstractSym, s::SymbolicState)
-    if !(symbolic_group(op) == group_id(s.space))
+    if !_contains(group_id(s.space), symbolic_group(op))
         return _group_isless(s, op) ? Swap(1) : nothing
     end
     if !has_ket(s)
         throw(ArgumentError("Cannot act with operator $op on the left of $s"))
     end
+    _acts_by_matrices(s.space) && return _superposition(op, s, true)
     newket, amp = _apply_symbolic_operator_to_state(op, s.ket, s.space)
     return _scaled_state(amp, SymbolicState(s.space, newket, s.bra))
 end
 
 function NonCommutativeProducts.mul_effect(s::SymbolicState, op::AbstractSym)
-    if !(symbolic_group(op) == group_id(s.space))
+    if !_contains(group_id(s.space), symbolic_group(op))
         return _group_isless(op, s) ? Swap(1) : nothing
     end
     if !has_bra(s)
         throw(ArgumentError("Cannot act with operator $op on the right of $s"))
     end
+    _acts_by_matrices(s.space) && return _superposition(op, s, false)
     newbra, amp = _apply_symbolic_operator_to_state(op, s.bra, s.space; transpose=true)
     return _scaled_state(amp, SymbolicState(s.space, s.ket, newbra))
 end
@@ -419,7 +421,7 @@ function _group_operators(x::NCMul, factors)
     return ntuple(n -> (inds[n], factors[inds[n]], last(parts[n])), length(parts))
 end
 _ket_index(::SymbolicState, factors) = nothing
-_ket_index(op, factors) = findfirst(s -> s isa SymbolicState && isket(s) && symbolic_group(op) == group_id(s.space), factors)
+_ket_index(op, factors) = findfirst(s -> s isa SymbolicState && isket(s) && !_acts_by_matrices(s.space) && _contains(group_id(s.space), symbolic_group(op)), factors)
 # Operators and states of one group are separate segments, so that a segment of operators acts on a ket
 NonCommutativeProducts.atom_group(s::SymbolicState) = (group_id(s.space), :state)
 
@@ -549,6 +551,11 @@ function vector_representation(op::Union{NCMul,NCAdd}, space::AbstractHilbertSpa
 end
 # `kind` is `:kets` or `:bras`, as computed by `_operator_type`
 Base.@constprop :aggressive function _vector_representation(op::NCMul, space::AbstractHilbertSpace, repr, kind; kwargs...)
+    # Operators left unevaluated on kets, as on an eigenbasis that does not span its groups, act by their matrix
+    k = something(findfirst(x -> x isa SymbolicState, op.factors), 1)
+    if kind === :mixed && k > 1 && all(x -> x isa SymbolicState && isket(x), op.factors[k:end])
+        return representation(NCMul(op.coeff, op.factors[1:(k - 1)]), space) * vector_representation(NCMul(1, op.factors[k:end]), space, repr; kwargs...)
+    end
     symstates = op.factors
     perm = map(symstates) do state
         i = findfirst(g -> _same_space_id(g, state.space), groups(space))

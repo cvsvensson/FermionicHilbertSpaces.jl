@@ -134,6 +134,7 @@ struct Group{K, G, T <: Tags}
     tags::T
 end
 Group{K}(names, tags::Tags) where {K} = Group{K, typeof(names), typeof(tags)}(names, tags)
+_group_label(g::Group) = join(g.names, ", ")
 Group(f::Field{K}) where {K} = Group{K}(f.group, f.tags)
 Base.:(==)(::Group, ::Group) = false
 Base.:(==)(a::Group{K}, b::Group{K}) where {K} = a.names == b.names && a.tags == b.tags
