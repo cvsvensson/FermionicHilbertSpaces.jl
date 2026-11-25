@@ -38,7 +38,7 @@ E[1], S
 
 ## How to use this documentation
 
-New here? Start with the [Bosons tutorial](literate_output/bosons.md).
+New here? Start with the [Fermions tutorial](literate_output/fermions_tutorial.md).
 
 - **Cheat sheet**: *recall* common tasks and the functions that do them, on one page.
 - **Tutorials**: *learn* the basics step by step, from fermions to mixed systems.

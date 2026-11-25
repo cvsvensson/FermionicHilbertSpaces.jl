@@ -11,6 +11,7 @@ literate_files = [
     "examples/bosons.jl",
     "examples/braiding.jl",
     "examples/clock_operators.jl",
+    "examples/fermions_tutorial.jl",
     "examples/floquet_tutorial.jl",
     "examples/fragmentation.jl",
     "examples/free_fermions.jl",
@@ -32,6 +33,7 @@ pages = [
     "Welcome page" => "index.md",
     "Cheat sheet" => "cheatsheet.md",
     "Tutorials" => [
+        "Fermions" => "literate_output/fermions_tutorial.md",
         "Bosons" => "literate_output/bosons.md",
         "Spins" => "literate_output/spin_chain.md",
         "Mixed fermion-spin-boson system" => "mixed_fermion_spin_boson.md",
