@@ -264,7 +264,7 @@ end
 
 @testitem "Lindbladian in an eigenbasis" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: eigenbasis, change_basis, open_system, dissipator, Kets
+    using FermionicHilbertSpaces: eigenbasis, change_basis, open_system, dissipator, Kets, Axes
     @fermions f
     ham = sum(0.3k * f[k]'f[k] for k in 1:3) + sum(0.5 * f[k]'f[k + 1] + hc for k in 1:2) + 0.7 * f[1]'f[1] * f[2]'f[2]
     Ntot = sum(f[k]'f[k] for k in 1:3)
@@ -303,6 +303,7 @@ end
     Ed, Ed2 = (tensor_product((l, r); constraint = left(Ntot) - right(Ntot) => 0) for (l, r) in ((El, Er), (El2, Er2)))
     v = randn(ComplexF64, dim(Ed))
     @test reshape(change_basis(v, Ed => Ed2), Ed2 => (El2, Er2)) ≈ change_basis(change_basis(reshape(v, Ed => (El, Er)), Heig => H), H => E2)
+    @test change_basis(I, Ed => Axes(Ed2, Ed)) * v ≈ change_basis(v, Ed => Ed2)
 
     # The populations: the Pauli rate matrix with rates |⟨a|J|b⟩|² from b to a
     populations = tensor_product((El, Er); constraint = s -> s.states[1] == s.states[2])

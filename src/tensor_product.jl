@@ -544,6 +544,7 @@ but their groups may come in different orders.
 """
 function basis_transformation(Hfrom, Hto)
     if !issetequal(atom_ids(Hfrom), atom_ids(Hto))
+        _same_groups(Hfrom, Hto) && return _groupwise_transformation(Hfrom, Hto)
         _acts_by_matrices(Hfrom) && return _transformation_through_parents(Hfrom, Hto)
         _acts_by_matrices(Hto) && return _adjoint_transformation(Hfrom, Hto)
     end
@@ -570,6 +571,33 @@ function _transformation_through_parents(Hfrom, Hto)
     K = sparse(Is, Js, Vs, dim(P), dim(Hfrom))
     U, dropped = basis_transformation(P, Hto)
     return U * K, findall(j -> !iszero(K[dropped, j]), axes(K, 2))
+end
+# Between subspaces of products of the same groups, a basis state goes to the product of the columns of the
+# transformations of its groups, which is cheaper than going through the product of their parents.
+function _same_groups(Hfrom, Hto)
+    Pf, Pt = _product_parent(Hfrom), _product_parent(Hto)
+    return Pf isa ProductSpace && Pt isa ProductSpace && has_arithmetic_state_index(Pt) && map(group_id, groups(Pf)) == map(group_id, groups(Pt))
+end
+_groupwise_transformation(Hfrom, Hto) = _groupwise_transformation(Hfrom, Hto, map(basis_transformation, groups(_product_parent(Hfrom)), groups(_product_parent(Hto))))
+function _groupwise_transformation(Hfrom, Hto, transformations)
+    Pf, Pt = _product_parent(Hfrom), _product_parent(Hto)
+    Us = map(first, transformations)
+    rows = zeros(Int, dim(Pt))
+    foreach(((k, state),) -> rows[state_index(state, Pt)] = k, enumerate(basisstates(Hto)))
+    Is, Js, Vs = Int[], Int[], promote_type(map(eltype, Us)...)[]
+    dropped = Int[]
+    for (j, state) in enumerate(basisstates(Hfrom))
+        inds = _factor_indices(state, Pf)
+        # The first group varies fastest in the order of the product
+        column = reduce(kron, reverse(map((U, i) -> U[:, i], Us, inds)))
+        isdropped = any(map((i, (_, d)) -> i in d, inds, transformations))
+        for (k, v) in zip(findnz(column)...)
+            i = rows[k]
+            iszero(i) ? (isdropped = true) : (push!(Is, i); push!(Js, j); push!(Vs, v))
+        end
+        isdropped && push!(dropped, j)
+    end
+    return sparse(Is, Js, Vs, dim(Hto), dim(Hfrom)), dropped
 end
 _parent_components(g, s) = _acts_by_matrix(g) ? [(basisstate(i, parent(g)), v) for (i, v) in zip(findnz(_basis_vectors(g)[:, state_index(s, g)])...)] : [(s, 1)]
 _joined_state(parts) = length(parts) == 1 ? only(parts) : ProductState(Tuple(Iterators.flatten(p isa ProductState ? p.states : (p,) for p in parts)))
@@ -607,7 +635,8 @@ different (or differently ordered) basis states. Unless `projection=true`, throw
 
 Either side can be an [`Axes`](@ref), one space per axis of `m`: `change_basis(m, H => Axes(Hout, Hin))`
 extracts the block of `m` with rows on `Hout` and columns on `Hin`, and `change_basis(blk, Axes(Hout, Hin) => H)`
-places it in a matrix on `H` that is zero elsewhere.
+places it in a matrix on `H` that is zero elsewhere. `change_basis(I, Hfrom => Axes(Hto, Hfrom))` is the matrix that
+changes the basis of vectors.
 
 A vector or matrix `m` can be a dense GPU array, for which `alg` defaults to [`NoScalarIndexingAlg`](@ref).
 """
