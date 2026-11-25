@@ -261,6 +261,10 @@ function Base.show(io::IO, op::SuperoperatorMap{K}) where {K}
     end
 end
 
+Base.show(io::IO, op::ChangeBasisMap) = print(io, "ChangeBasisMap(", _axis_dims(op.from), " -> ", _axis_dims(op.to), ")")
+_axis_dims(H::AbstractHilbertSpace) = dim(H)
+_axis_dims(ax::Axes) = map(dim, ax.spaces)
+
 function Base.show(io::IO, op::ReshapeMap)
     dims_in = map(p -> Tuple(map(dim, p.Hsin)), op.precomputed)
     dims_out = map(p -> Tuple(map(dim, p.Hsout)), op.precomputed)

@@ -264,7 +264,7 @@ end
 
 @testitem "Lindbladian in an eigenbasis" begin
     using LinearAlgebra
-    using FermionicHilbertSpaces: eigenbasis, change_basis, open_system, dissipator, Kets, Axes
+    using FermionicHilbertSpaces: eigenbasis, change_basis, open_system, dissipator, Kets
     @fermions f
     ham = sum(0.3k * f[k]'f[k] for k in 1:3) + sum(0.5 * f[k]'f[k + 1] + hc for k in 1:2) + 0.7 * f[1]'f[1] * f[2]'f[2]
     Ntot = sum(f[k]'f[k] for k in 1:3)
@@ -303,10 +303,30 @@ end
     Ed, Ed2 = (tensor_product((l, r); constraint = left(Ntot) - right(Ntot) => 0) for (l, r) in ((El, Er), (El2, Er2)))
     v = randn(ComplexF64, dim(Ed))
     @test reshape(change_basis(v, Ed => Ed2), Ed2 => (El2, Er2)) ≈ change_basis(change_basis(reshape(v, Ed => (El, Er)), Heig => H), H => E2)
-    @test change_basis(I, Ed => Axes(Ed2, Ed)) * v ≈ change_basis(v, Ed => Ed2)
 
     # The populations: the Pauli rate matrix with rates |⟨a|J|b⟩|² from b to a
     populations = tensor_product((El, Er); constraint = s -> s.states[1] == s.states[2])
     R = sum(J -> abs2.(representation(J, Heig, Matrix)), jumps)
     @test representation(lindbladian(left, right), populations; projection = true) ≈ R - Diagonal(vec(sum(R; dims = 1)))
+end
+
+@testitem "Precomputed change of basis" begin
+    using LinearAlgebra, SparseArrays
+    using FermionicHilbertSpaces: eigenbasis, change_basis, open_system
+    @fermions f
+    H = hilbert_space(f, 1:3, NumberConservation())
+    Ntot = sum(f[k]'f[k] for k in 1:3)
+    ham = sum(0.3k * f[k]'f[k] for k in 1:3) + sum(0.5 * f[k]'f[k + 1] + hc for k in 1:2)
+    E1, E2 = eigenbasis(ham, H), eigenbasis(ham + (0.4im * f[1]'f[3] + hc), H)
+    _, El, Er, left, right = open_system(E1)
+    _, El2, Er2 = open_system(E2)
+    Ed, Ed2 = (tensor_product((l, r); constraint = left(Ntot) - right(Ntot) => 0) for (l, r) in ((El, Er), (El2, Er2)))
+    Ud = change_basis(Ed => Ed2)
+    v, L = randn(ComplexF64, dim(Ed)), randn(ComplexF64, dim(Ed), dim(Ed))
+    @test Ud(v) ≈ change_basis(v, Ed => Ed2)
+    @test Ud(L) ≈ change_basis(L, Ed => Ed2)
+    @test Ud(similar(v), v) ≈ Ud(v)
+    @test sparse(Ud) * v ≈ Ud(v)
+    @test sparse(change_basis(Ed2 => Ed)) ≈ sparse(Ud)'
+    @test_throws ArgumentError change_basis(sector(1, H) => sector(2, E1))(randn(dim(sector(1, H))))
 end

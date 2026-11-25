@@ -109,7 +109,7 @@ Use `tensor_product` for product states, local observables and anything that sho
 
 ### Reusable operations
 
-Called with only spaces, `partial_trace(H => Hsub)`, `embed(Hsub => H)` and `partial_transpose(H, Hsub)` return an operation that is applied as `op(m)`, or in place as `op(out, m)`. `sparse(op)` gives it as a sparse superoperator. This pays off when the same operation is applied many times.
+Called with only spaces, `partial_trace(H => Hsub)`, `embed(Hsub => H)`, `partial_transpose(H, Hsub)` and `change_basis(Hfrom => Hto)` return an operation that is applied as `op(m)`, or in place as `op(out, m)`. `sparse(op)` gives it as a sparse superoperator, or for `change_basis` as the matrix that acts on vectors. This pays off when the same operation is applied many times.
 
 ### Reshaping
 
