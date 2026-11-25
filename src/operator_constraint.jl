@@ -227,8 +227,9 @@ function _unit_of(x, unit_of, spaces)
     iszero(k) && throw(ArgumentError("The constraint operator acts on `$x`, which is not in the space."))
     return k
 end
-# A symbol that names no atom, such as a single Majorana, acts in the space that contains it.
-_acts_in(x, H) = false
+# A symbol that names no atom, such as a single Majorana or a mode of a group whose basis is given in another space, acts
+# in the space that contains it.
+_acts_in(x, H) = any(g -> _acts_by_matrix(g) && _contains(group_id(g), symbolic_group(x)), groups(H))
 
 _isexact(x) = x isa Union{Integer, Rational}
 _isexact(x::Complex) = _isexact(real(x)) && _isexact(imag(x))
@@ -257,6 +258,21 @@ function _diagonal_values(weighted_terms, H)
     isnothing(k) || throw(ArgumentError("Constraint operators with complex values are not supported, but the term `$(weighted_terms[k][2])` has complex values. $_ZN_HINT"))
     return Rational{Int}.(real.(sum(contributions)))
 end
+# In a basis given in another space, a conserved quantity is diagonal only as a sum, and only up to roundoff.
+function _rotated_diagonal_values(weighted_terms, H)
+    foreach(((w, t),) -> _check_exact(w, t), weighted_terms)
+    op = sum(((w, t),) -> w * NCMul(1, t.factors), weighted_terms)
+    M = representation(op, H, Matrix)
+    tol = _roundoff(M)
+    maximum(abs, M - Diagonal(diag(M)); init = 0.0) <= tol || throw(ArgumentError("A constraint operator must be diagonal in the basis of the space, but `$op` is not. In an eigenbasis of an operator that commutes with it, build the eigenbasis on a space with that constraint, so that degenerate eigenstates are not mixed."))
+    all(v -> abs(imag(v)) <= tol, diag(M)) || throw(ArgumentError("Constraint operators with complex values are not supported, but `$op` has complex values. $_ZN_HINT"))
+    return map(diag(M)) do v
+        r = rationalize(Int, real(v); tol)
+        denominator(r) <= MAX_DENOMINATOR || throw(ArgumentError("The values of the constraint operator `$op` are not exact fractions, such as $v."))
+        r
+    end
+end
+_roundoff(M) = isempty(M) ? 0.0 : 100 * eps(float(real(eltype(M)))) * size(M, 1) * maximum(abs, M)
 # The values of built-in operators have power-of-two denominators far below this bound, while an irrational value such as
 # `√2` only rounds to a fraction with a larger denominator.
 const MAX_DENOMINATOR = 2^16

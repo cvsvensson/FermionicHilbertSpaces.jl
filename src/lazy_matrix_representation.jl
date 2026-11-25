@@ -50,14 +50,7 @@ end
 lazy_precomputation(op, space; _...) = precomputation_before_operator_application(op, space)
 function lazy_precomputation(op::NCAdd, space; projection)
     bases = group_ids(space)
-    terms = if length(bases) > 1
-        _product_terms(op, bases, space, EagerSparseRepr(); projection)
-    elseif _acts_by_matrices(space)
-        # The matrix of `op` without its scalar, which `lazy_mul!` adds
-        [KronTerm(((sparse(representation(NCAdd(zero(op.coeff), op.dict), space; projection)), 1),))]
-    else
-        NCterms(op)
-    end
+    terms = length(bases) > 1 || _acts_by_matrices(space) ? _product_terms(op, bases, space, EagerSparseRepr(); projection) : NCterms(op)
     return _precomputed_terms(terms, space)
 end
 

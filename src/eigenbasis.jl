@@ -63,7 +63,6 @@ function _hermitian_eigen(A)
     norm(A - A') <= _roundoff(A) || throw(ArgumentError("The Hamiltonian must be Hermitian."))
     return LinearAlgebra.eigen(Hermitian(A))
 end
-_roundoff(M) = isempty(M) ? 0.0 : 100 * eps(float(real(eltype(M)))) * size(M, 1) * maximum(abs, M)
 
 """
     energies(Heig)
@@ -74,10 +73,6 @@ follow a rate equation only when no energies are degenerate.
 """
 energies(H::EigenbasisSpace) = H.energies
 energies(H::AbstractSubspace{<:EigenState, <:EigenbasisSpace}) = [parent(H).energies[state.index] for state in basisstates(H)]
-
-const _EigenSpaces = Union{EigenbasisSpace, AbstractSubspace{<:EigenState, <:EigenbasisSpace}}
-_eigen_root(H::EigenbasisSpace) = H
-_eigen_root(H::AbstractSubspace) = parent(H)
 
 Base.parent(H::EigenbasisSpace) = H.parent
 dim(H::EigenbasisSpace) = length(H.energies)
@@ -101,7 +96,7 @@ _state_label_atomic(s::EigenState, H) = string(s.index)
 particle_number(::EigenState) = throw(ArgumentError("Eigenstates have no particle number or parity, so `NumberConservation` and `ParityConservation` do not apply to an eigenbasis. Constrain an operator instead, such as `sum(f[k]'f[k] for k in 1:N) => n`."))
 
 # Operators are rotated from the parent, and ketbras of the eigenbasis are matrix units.
-_rotated(op, root; projection) = root.vectors' * representation(op, root.parent; projection) * root.vectors
+_rotated(op, root; projection) = _basis_vectors(root)' * representation(op, parent(root); projection) * _basis_vectors(root)
 _has_state(m::NCMul) = any(x -> x isa SymbolicState, m.factors)
 function _eigen_matrix(op::NCAdd, root::EigenbasisSpace; projection = false)
     any(_has_state, keys(op.dict)) || return _rotated(op, root; projection)
@@ -110,6 +105,7 @@ function _eigen_matrix(op::NCAdd, root::EigenbasisSpace; projection = false)
     return M + sum(m -> op.dict[m] * _eigen_matrix(m, root; projection), filter(_has_state, collect(keys(op.dict))))
 end
 function _eigen_matrix(op::NCMul, root::EigenbasisSpace; projection = false)
+    _istransposed(root) && return transpose(_eigen_matrix(op, TransposedSpace(root); projection))
     matrices = []
     run = []
     for x in op.factors
@@ -119,42 +115,28 @@ function _eigen_matrix(op::NCMul, root::EigenbasisSpace; projection = false)
         push!(matrices, _ketbra_matrix(x, root))
     end
     isempty(run) || push!(matrices, _rotated(NCMul(1, run), root; projection))
-    # On a transposed copy, the rotated runs are already transposed, so the product is taken in reverse
-    return op.coeff * prod(_istransposed(root) ? reverse(matrices) : matrices)
+    return op.coeff * prod(matrices)
 end
-_istransposed(root) = all(g -> g isa TransposedSpace, groups(root.parent))
+_istransposed(root) = all(g -> g isa TransposedSpace, groups(parent(root)))
 function _ketbra_matrix(s::SymbolicState, root)
     isketbra(s) && _same_space_id(s.space, root) || throw(ArgumentError("Only ketbras of the eigenbasis act on it, got `$s`."))
-    i, j = state_index(s.ket, root), state_index(s.bra, root)
-    _istransposed(root) && ((i, j) = (j, i))
-    return sparse([i], [j], [1], dim(root), dim(root))
+    return sparse([state_index(s.ket, root)], [state_index(s.bra, root)], [1], dim(root), dim(root))
 end
-_eigen_indices(H::EigenbasisSpace) = 1:dim(H)
-_eigen_indices(H::AbstractSubspace) = [state.index for state in basisstates(H)]
-function _eigen_matrix(op, Hout, Hin, repr; projection = false)
-    A = _eigen_matrix(op, _eigen_root(Hin); projection)[:, _eigen_indices(Hin)]
-    rows = _eigen_indices(Hout)
-    projection || iszero(A[setdiff(axes(A, 1), rows), :]) || throw(ArgumentError("The operator `$op` maps states of `$Hin` out of `$Hout`. Pass `projection=true` to drop those matrix elements."))
-    return repr isa EagerDenseRepr ? Matrix(A[rows, :]) : A[rows, :]
+function _term_matrix_representation(op::Union{NCMul, NCAdd}, H::EigenbasisSpace, repr::Union{EagerSparseRepr, EagerDenseRepr}, chunking; projection = false, kwargs...)
+    M = _eigen_matrix(op, H; projection)
+    return repr isa EagerDenseRepr ? Matrix(M) : M
 end
-const _EigenAxes = Axes{<:Tuple{_EigenSpaces, _EigenSpaces}}
-for T in (NCMul, NCAdd)
-    @eval _matrix_representation(op::$T, bases, space::Union{_EigenSpaces, _EigenAxes}, repr::Union{EagerSparseRepr, EagerDenseRepr}, chunking; projection = false, kwargs...) =
-        _eigen_matrix(op, _output_space(space), _input_space(space), repr; projection)
-end
-_term_matrix_representation(op::NCMul, H::EigenbasisSpace, repr::Union{EagerSparseRepr, EagerDenseRepr}, chunking; projection = false, kwargs...) =
-    _eigen_matrix(op, H, H, repr; projection)
 
-_acts_by_matrix(::_EigenSpaces) = true
+_acts_by_matrix(::EigenbasisSpace) = true
 # An operator maps an eigenstate to a superposition: a column of its matrix acting on a ket, a row acting on a bra.
 # The product is left unevaluated, for the matrix representation, when a single operator can leave an eigenbasis that
 # does not span all states of its groups, and on a bra of several groups, which operators of a group ordered between
 # them cannot reach.
 function _superposition(op, s::SymbolicState, onket::Bool)
-    root = _eigen_root(s.space)
-    dim(root) == prod(dim, atomic_factors(root.parent)) || return nothing
+    root = _product_parent(s.space)
+    dim(root) == prod(dim, atomic_factors(parent(root))) || return nothing
     onket || !(group_id(root) isa GroupSet) || return nothing
-    S, M = root.vectors, representation(op, root.parent)
+    S, M = _basis_vectors(root), representation(op, parent(root))
     i = state_index(onket ? s.ket : s.bra, root)
     inds, amps = findnz(onket ? S' * (M * S[:, i]) : conj(S' * (M' * S[:, i])))
     terms = [_scaled_state(a, onket ? SymbolicState(s.space, basisstate(i, root), s.bra) : SymbolicState(s.space, s.ket, basisstate(i, root))) for (i, a) in zip(inds, amps) if !iszero(a)]
@@ -162,25 +144,11 @@ function _superposition(op, s::SymbolicState, onket::Bool)
 end
 _apply_local_operators(op, ::EigenState, ::EigenbasisSpace, precomp) = throw(ArgumentError("An operator maps an eigenstate to a superposition, so it is applied through its matrix."))
 # The fermionic partial transpose has phases that depend on the Fock states, so it is not a transpose in another basis.
-partial_transpose_phase_factor(f1, f2, H::EigenbasisSpace) = partial_transpose_phase_factor_eltype(H.parent) <: Real ? 1 :
+partial_transpose_phase_factor(f1, f2, H::EigenbasisSpace) = partial_transpose_phase_factor_eltype(parent(H)) <: Real ? 1 :
     throw(ArgumentError("The fermionic partial transpose is defined in the Fock basis. Change the basis of `$H` to its parent space and take the partial transpose there."))
 
-# Operator constraints: a conserved quantity is diagonal in the eigenbasis only as a sum, and only up to roundoff.
-_acts_in(x, H::_EigenSpaces) = _contains(group_id(H), symbolic_group(x))
-function _rotated_diagonal_values(weighted_terms, H)
-    foreach(((w, t),) -> _check_exact(w, t), weighted_terms)
-    op = sum(((w, t),) -> w * NCMul(1, t.factors), weighted_terms)
-    M = representation(op, H, Matrix)
-    maximum(abs, M - Diagonal(diag(M)); init = 0.0) <= _roundoff(M) || throw(ArgumentError("A constraint operator must be diagonal in the eigenbasis, but `$op` is not. If it commutes with the Hamiltonian, build the eigenbasis on a space with that constraint, so that degenerate eigenstates are not mixed."))
-    tol = _roundoff(M)
-    all(v -> abs(imag(v)) <= tol, diag(M)) || throw(ArgumentError("Constraint operators with complex values are not supported, but `$op` has complex values. $_ZN_HINT"))
-    return map(diag(M)) do v
-        r = rationalize(Int, real(v); tol)
-        denominator(r) <= MAX_DENOMINATOR || throw(ArgumentError("The values of the constraint operator `$op` are not exact fractions, such as $v."))
-        r
-    end
-end
-
+# Orthonormal columns in `parent(H)`, with exact zeros between states that a symmetry of `parent(H)` separates, so that
+# operators that keep a sector have exact zeros outside it.
 _basis_vectors(H::EigenbasisSpace) = H.vectors
 
 @testitem "Eigenbasis" begin

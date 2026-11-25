@@ -7,7 +7,7 @@ function product_space(spaces)
     factors = map(ids) do id
         group = map(identity, filter(a -> group_id(a) == id, atoms))
         any(_acts_by_matrix, group) || return combine_into_group(id, group)
-        # Its other atoms describe some of the same degrees of freedom in another basis
+        # A space whose basis is given in another space is a factor by itself, whatever kind its groups are
         length(group) == 1 ? only(group) : throw(ArgumentError("`$(first(filter(_acts_by_matrix, group)))` cannot be combined with other spaces of its groups. Build it on all of them."))
     end
     space = if length(factors) == 1

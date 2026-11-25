@@ -785,7 +785,7 @@ function _match_atoms(Hsub, H)
 end
 function _match_atoms_message(problem, Hsub, H)
     kind = first(problem)
-    kind == :missing && return "The atoms of `Hsub` must be atoms of `H`, got `$(problem[2])` which is not in `$H`." * (_acts_by_matrices(H) ? " Use `change_basis` to the spaces its eigenbases were built on first." : "")
+    kind == :missing && return "The atoms of `Hsub` must be atoms of `H`, got `$(problem[2])` which is not in `$H`." * (_acts_by_matrices(H) ? " Change the basis of its factors whose basis is given in another space to that space first, with `change_basis`." : "")
     kind == :duplicate && return "The atoms of `Hsub` must be distinct, got duplicates in `$Hsub`."
     return "The atoms of `Hsub` must keep their order within each group of `H`, got `$Hsub` and `$H`."
 end

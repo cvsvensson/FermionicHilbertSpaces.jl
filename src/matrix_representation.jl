@@ -329,7 +329,7 @@ end
 function _matrix_representation(op::NCMul, bases, space, repr, chunking; kwargs...)
     if isempty(op.factors)
         return _convert_repr_eltype(op.coeff * I(dim(space)), repr)
-    elseif length(bases) > 1 && repr isa Union{EagerDenseRepr, EagerSparseRepr} && _acts_by_matrices(space)
+    elseif repr isa Union{EagerDenseRepr, EagerSparseRepr} && _acts_by_matrices(space)
         return __matrix_representation(NCAdd(op), bases, space, repr, chunking; kwargs...)
     else
         newop = length(bases) > 1 ? partition_product(op, bases, groups(_input_space(space))) : op
@@ -337,7 +337,7 @@ function _matrix_representation(op::NCMul, bases, space, repr, chunking; kwargs.
     end
 end
 function _matrix_representation(op::NCAdd, bases, space, repr, chunking; kwargs...)
-    if length(bases) == 1
+    if length(bases) == 1 && !_acts_by_matrices(space)
         return _matrix_representation_single_space(op, space, repr, chunking; kwargs...)
     end
     __matrix_representation(op, bases, space, repr, chunking; kwargs...)
@@ -447,18 +447,19 @@ function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_s
     T = _repr_eltype(promote_type(mapreduce(mat_eltype, promote_type, prodops), typeof(op.coeff)), repr)
     return _terms_matrix(T, prodops, op.coeff, space, repr, chunking; kwargs...)
 end
-# A group with `_acts_by_matrix`, such as an eigenbasis, maps a basis state to a superposition and has no basis-state
-# loop. On a subspace of a product with such a group, the `KronTerm`s of the product are applied to the columns of the
-# subspace.
+# A group with `_acts_by_matrix`, such as an eigenbasis, has basis vectors `_basis_vectors(group)` in `parent(group)`, so
+# an operator maps a basis state to a superposition and the group has no basis-state loop. Its matrices are `KronTerm`s,
+# and on a subspace they are applied to the columns of the subspace.
 _acts_by_matrix(H) = false
 _acts_by_matrices(space) = any(_acts_by_matrix, groups(_input_space(space)))
 function _product_terms(op::NCAdd, bases, space, repr; kwargs...)
     Hin, Hout = _input_space(space), _output_space(space)
     repr isa Union{EagerDenseRepr, EagerSparseRepr} && _acts_by_matrices(space) || return _partitioned_terms(NCterms(op), bases, groups(Hin))
     P = _product_parent(Hin)
-    terms = _product_terms(op, bases, P, repr; kwargs...)
+    terms = P isa ProductSpace ? _product_terms(op, bases, P, repr; kwargs...) :
+        [KronTerm(((sparse(_term_matrix_representation(NCAdd(zero(op.coeff), op.dict), P, EagerSparseRepr{_repr_eltype(Missing, repr)}(), NoChunking(); kwargs...)), 1),))]
     Hin === P === Hout && return terms
-    P isa ProductSpace && P == _product_parent(Hout) || throw(ArgumentError("Both axes must be subspaces of one product space, got `$Hout` and `$Hin`."))
+    P == _product_parent(Hout) || throw(ArgumentError("Both axes must be subspaces of one space, got `$Hout` and `$Hin`."))
     cols = [state_index(state, P) for state in basisstates(Hin)]
     rows = zeros(Int, dim(P))
     foreach(((k, state),) -> rows[state_index(state, P)] = k, enumerate(basisstates(Hout)))
