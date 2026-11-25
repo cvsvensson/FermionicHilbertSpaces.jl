@@ -18,7 +18,9 @@ struct MatrixOperator{M <: AbstractMatrix, H <: AbstractHilbertSpace} <: Abstrac
     end
 end
 Base.:(==)(a::MatrixOperator, b::MatrixOperator) = a.space == b.space && a.matrix == b.matrix
-Base.hash(a::MatrixOperator, h::UInt) = hash(a.matrix, hash(a.space, h))
+# Hashing every entry, or the basis of the space, would dominate building sums of many matrix operators. The groups of
+# the space and the positions of the first and last nonzero entries are cheap and mostly tell operators apart.
+Base.hash(a::MatrixOperator, h::UInt) = hash(findfirst(!iszero, a.matrix), hash(findlast(!iszero, a.matrix), hash(group_ids(a.space), h)))
 Base.adjoint(a::MatrixOperator) = MatrixOperator(a.matrix', a.space)
 Base.show(io::IO, a::MatrixOperator) = print(io, "MatrixOperator(", summary(a.matrix), ")")
 symbolic_group(a::MatrixOperator) = _support(group_ids(a.space))
@@ -65,7 +67,14 @@ function _runs_matrix(run_matrix, op::NCMul, H)
 end
 _is_matrix_factor(x::MatrixOperator, H) = true
 _is_matrix_factor(x, H) = false
-_factor_matrix(x::MatrixOperator, H) = x.space == H ? x.matrix : embed(x.matrix, x.space => H)
+function _factor_matrix(x::MatrixOperator, H)
+    x.space == H && return x.matrix
+    _product_parent(x.space) == H || return embed(x.matrix, x.space => H)
+    # A subspace sits in its parent by an index map, which is much cheaper than the general `embed`
+    inds = [state_index(state, H) for state in basisstates(x.space)]
+    rows, cols, vals = findnz(sparse(x.matrix))
+    return sparse(inds[rows], inds[cols], vals, dim(H), dim(H))
+end
 function _matrix_factors_matrix(op::NCMul, H, repr; projection = false, _...)
     H isa TransposedSpace && return transpose(_matrix_factors_matrix(op, parent(H), repr; projection))
     return _runs_matrix(run -> _term_matrix_representation(run, H, repr, NoChunking(); projection), op, H)

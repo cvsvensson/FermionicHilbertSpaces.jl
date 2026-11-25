@@ -236,8 +236,9 @@ end
 # A product that isn't sorted can have several runs of factors on one basis. Operators on different bases commute, so
 # the runs can be joined.
 function _part_on_basis(parts, group_inds, ind)
-    runs = [last(part) for (part, i) in zip(parts, group_inds) if i == ind]
-    length(runs) == 1 && return only(runs)
+    ks = findall(==(ind), group_inds)
+    length(ks) == 1 && return last(parts[only(ks)])
+    runs = [last(parts[k]) for k in ks]
     return NCMul(prod(run -> run.coeff, runs), reduce(vcat, [run.factors for run in runs]))
 end
 _basis_index(group, bases) = something(findfirst(b -> _contains(b, group), bases), 0)
@@ -689,7 +690,7 @@ _check_operator(op, ax::Axes) = _check_operator(op, _input_space(ax))
 _symmetrize(M, op, space) = M
 # A rotated matrix is Hermitian only up to roundoff
 _symmetrize(M::Union{Matrix{T}, SparseMatrixCSC{T}}, op, space::AbstractHilbertSpace) where {T <: Union{AbstractFloat, Complex{<:AbstractFloat}}} =
-    _acts_by_matrices(space) && _ishermitian(op) ? (M + M') / 2 : M
+    _acts_by_matrices(space) && norm(M - M') <= _roundoff(M) ? (M + M') / 2 : M
 _amplitude_eltype(space) = nothing
 _amplitude_eltype(space::AbstractSubspace) = _amplitude_eltype(parent(space))
 _amplitude_eltype(space::ProductSpace) = mapreduce(_amplitude_eltype, _promote_amplitudes, groups(space))
