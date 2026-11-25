@@ -60,7 +60,7 @@ representation(hop, H2, Matrix)
 N = 6
 t = 1.0
 V = 4.0
-ham = sum(-(t * c[j]' * c[j+1] + hc) + V * c[j]' * c[j] * c[j+1]' * c[j+1] for j in 1:N-1)
+ham = sum(-(t * c[j]' * c[j + 1] + hc) + V * c[j]' * c[j] * c[j + 1]' * c[j + 1] for j in 1:(N - 1))
 
 # Like the two-site hopping, this Hamiltonian conserves the number of fermions.
 # We can check this symbolically by evaluating the commutator:
@@ -98,7 +98,7 @@ basisstates(HL)
 # and round the result to make it easier to read:
 
 ρL = partial_trace(ψ, H => HL)
-round.(ρL; digits=2)
+round.(ρL; digits = 2)
 
 # The density matrix is block diagonal: it has no coherences between different
 # numbers of fermions on the left, because the whole chain has a fixed number of fermions.
@@ -128,7 +128,7 @@ expectation(hop13, ψ, H), expectation(hop13, ρ13, H13)
 # terms. The ordinary partial trace (which `phase_factors = false` gives) ignores these signs and gets an
 # answer about four times too large:
 
-ρ13_naive = partial_trace(ψ, H => H13; phase_factors=false)
+ρ13_naive = partial_trace(ψ, H => H13; phase_factors = false)
 expectation(hop13, ρ13_naive, H13)
 
 # Every function in the package that combines or splits fermionic spaces includes these signs. Why they appear
