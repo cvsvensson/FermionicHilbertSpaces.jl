@@ -5,7 +5,10 @@ function product_space(spaces)
     ids = unique(map(group_id, atoms))
     allunique(Iterators.flatten(map(_members, ids))) || throw(ArgumentError("Some of the spaces describe the same degrees of freedom in different ways, so they cannot be combined, got the supports $ids."))
     factors = map(ids) do id
-        combine_into_group(id, map(identity, filter(a -> group_id(a) == id, atoms)))
+        group = map(identity, filter(a -> group_id(a) == id, atoms))
+        any(_acts_by_matrix, group) || return combine_into_group(id, group)
+        # Its other atoms describe some of the same degrees of freedom in another basis
+        length(group) == 1 ? only(group) : throw(ArgumentError("`$(first(filter(_acts_by_matrix, group)))` cannot be combined with other spaces of its groups. Build it on all of them."))
     end
     space = if length(factors) == 1
         only(factors)

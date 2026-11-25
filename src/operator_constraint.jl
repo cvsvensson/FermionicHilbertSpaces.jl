@@ -240,7 +240,7 @@ _check_exact(x, term) = _isexact(x) || throw(ArgumentError("A constraint operato
 # denominators, and then multiplied by the exact coefficient.
 function _diagonal_table(weighted_terms, spaces)
     H = length(spaces) == 1 ? only(spaces) : tensor_product(spaces)
-    values = _diagonal_values(weighted_terms, H)
+    values = _acts_by_matrices(H) ? _rotated_diagonal_values(weighted_terms, H) : _diagonal_values(weighted_terms, H)
     length(spaces) == 1 && return values
     mapper = state_mapper(H, spaces)
     return vec([values[state_index(only(first(combine_states(states, mapper))), H)] for states in Iterators.product(map(basisstates, spaces)...)])

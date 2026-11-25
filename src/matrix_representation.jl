@@ -447,22 +447,22 @@ function __matrix_representation(op::NCAdd, bases, space, repr, chunking; tree_s
     T = _repr_eltype(promote_type(mapreduce(mat_eltype, promote_type, prodops), typeof(op.coeff)), repr)
     return _terms_matrix(T, prodops, op.coeff, space, repr, chunking; kwargs...)
 end
-_product_terms(op::NCAdd, bases, space, repr; _...) = _partitioned_terms(NCterms(op), bases, groups(_input_space(space)))
-
 # A group with `_acts_by_matrix`, such as an eigenbasis, maps a basis state to a superposition and has no basis-state
 # loop. On a subspace of a product with such a group, the `KronTerm`s of the product are applied to the columns of the
 # subspace.
 _acts_by_matrix(H) = false
 _acts_by_matrices(space) = any(_acts_by_matrix, groups(_input_space(space)))
-function _product_terms(op::NCAdd, bases, space, repr::Union{EagerDenseRepr, EagerSparseRepr}; kwargs...)
-    _acts_by_matrices(space) || return _partitioned_terms(NCterms(op), bases, groups(_input_space(space)))
+function _product_terms(op::NCAdd, bases, space, repr; kwargs...)
     Hin, Hout = _input_space(space), _output_space(space)
+    repr isa Union{EagerDenseRepr, EagerSparseRepr} && _acts_by_matrices(space) || return _partitioned_terms(NCterms(op), bases, groups(Hin))
     P = _product_parent(Hin)
+    terms = _product_terms(op, bases, P, repr; kwargs...)
+    Hin === P === Hout && return terms
     P isa ProductSpace && P == _product_parent(Hout) || throw(ArgumentError("Both axes must be subspaces of one product space, got `$Hout` and `$Hin`."))
     cols = [state_index(state, P) for state in basisstates(Hin)]
     rows = zeros(Int, dim(P))
     foreach(((k, state),) -> rows[state_index(state, P)] = k, enumerate(basisstates(Hout)))
-    return [_SubspaceTerm(term, P, cols, rows) for term in _product_terms(op, bases, P, repr; kwargs...)]
+    return [_SubspaceTerm(term, P, cols, rows) for term in terms]
 end
 _product_parent(H::AbstractSubspace) = parent(H)
 _product_parent(H) = H
