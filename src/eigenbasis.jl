@@ -26,8 +26,7 @@ EigenbasisSpace(parent, vectors, energies, qns, key = hash(vectors)) = Eigenbasi
 
 The space spanned by the eigenstates of the Hermitian `ham`, a symbolic operator or its matrix on `H`, found sector by
 sector of `H` and ordered by increasing energy within each sector. Give `H` the symmetries of `ham` as constraints:
-degenerate eigenstates of different sectors are otherwise mixed. `change_basis(ρ, Heig => H)` returns to `H`. See
-[`energies`](@ref).
+degenerate eigenstates of different sectors are otherwise mixed. `change_basis(ρ, Heig => H)` returns to `H`.
 
 ```julia
 Heig = eigenbasis(ham, hilbert_space(f, 1:2, NumberConservation()))
@@ -98,14 +97,7 @@ particle_number(::EigenState) = throw(ArgumentError("Eigenstates have no particl
 # Operators are rotated from the parent, and ketbras of the eigenbasis are matrix units.
 _rotated(op, root; projection) = _basis_vectors(root)' * representation(op, parent(root); projection) * _basis_vectors(root)
 _has_state(m::NCMul) = any(x -> x isa SymbolicState, m.factors)
-function _eigen_matrix(op::NCAdd, root::EigenbasisSpace; projection = false)
-    any(_has_state, keys(op.dict)) || return _rotated(op, root; projection)
-    rest = Dict(m => c for (m, c) in op.dict if !_has_state(m))
-    M = isempty(rest) ? sparse(op.coeff * I, dim(root), dim(root)) : _rotated(NCAdd(op.coeff, rest), root; projection)
-    return M + sum(m -> op.dict[m] * _eigen_matrix(m, root; projection), filter(_has_state, collect(keys(op.dict))))
-end
 function _eigen_matrix(op::NCMul, root::EigenbasisSpace; projection = false)
-    _istransposed(root) && return transpose(_eigen_matrix(op, TransposedSpace(root); projection))
     matrices = []
     run = []
     for x in op.factors
@@ -122,8 +114,8 @@ function _ketbra_matrix(s::SymbolicState, root)
     isketbra(s) && _same_space_id(s.space, root) || throw(ArgumentError("Only ketbras of the eigenbasis act on it, got `$s`."))
     return sparse([state_index(s.ket, root)], [state_index(s.bra, root)], [1], dim(root), dim(root))
 end
-function _term_matrix_representation(op::Union{NCMul, NCAdd}, H::EigenbasisSpace, repr::Union{EagerSparseRepr, EagerDenseRepr}, chunking; projection = false, kwargs...)
-    M = _eigen_matrix(op, H; projection)
+function _term_matrix_representation(op::NCMul, H::EigenbasisSpace, repr::Union{EagerSparseRepr, EagerDenseRepr}, chunking; projection = false, kwargs...)
+    M = _istransposed(H) ? transpose(_eigen_matrix(op, TransposedSpace(H); projection)) : _eigen_matrix(op, H; projection)
     return repr isa EagerDenseRepr ? Matrix(M) : M
 end
 
@@ -135,7 +127,7 @@ _acts_by_matrix(::EigenbasisSpace) = true
 function _superposition(op, s::SymbolicState, onket::Bool)
     root = _product_parent(s.space)
     dim(root) == prod(dim, atomic_factors(parent(root))) || return nothing
-    onket || !(group_id(root) isa GroupSet) || return nothing
+    onket || length(_members(group_id(root))) == 1 || return nothing
     S, M = _basis_vectors(root), representation(op, parent(root))
     i = state_index(onket ? s.ket : s.bra, root)
     inds, amps = findnz(onket ? S' * (M * S[:, i]) : conj(S' * (M' * S[:, i])))
@@ -183,6 +175,8 @@ _basis_vectors(H::EigenbasisSpace) = H.vectors
     @test_throws ArgumentError eigenbasis(ham0, H)
     @test_throws ArgumentError tensor_product(Heig, hilbert_space(f, 4:4))
     @test representation(f[1]' * f[2] + 0.5, Heig, :lazy) * ψ ≈ representation(f[1]' * f[2] + 0.5, Heig) * ψ
+    ψ1 = randn(ComplexF64, dim(sector(1, Heig)))
+    @test transpose(representation(f[1]' * f[2] + 0.5im * f[2]' * f[3], sector(1, Heig), :lazy)) * ψ1 ≈ transpose(representation(f[1]' * f[2] + 0.5im * f[2]' * f[3], sector(1, Heig))) * ψ1
     # A matrix on one eigenbasis is not a matrix on another eigenbasis of the same space
     other = eigenbasis(ham0 + 0.2 * f[2]'f[2], H0)
     @test_throws ArgumentError embed(representation(f[1], other), other => tensor_product(eigenbasis(ham0, H0), Hb))
@@ -191,10 +185,9 @@ _basis_vectors(H::EigenbasisSpace) = H.vectors
     E0 = eigenbasis(ham0, H0)
     @test vector_representation(f[1]' * Kets(E0)[2], E0) ≈ representation(f[1]', E0)[:, 2]
     # Changing basis of a product with an eigenbasis factor, and of eigen sectors
-    U0 = kron(I(3), S0)
     ρ = randn(ComplexF64, 12, 12)
-    @test change_basis(ρ, tensor_product(E0, Hb) => tensor_product(H0, Hb)) ≈ U0 * ρ * U0'
-    @test change_basis(U0 * ρ * U0', tensor_product(H0, Hb) => tensor_product(E0, Hb)) ≈ ρ
+    @test change_basis(ρ, tensor_product(E0, Hb) => tensor_product(H0, Hb)) ≈ U * ρ * U'
+    @test change_basis(U * ρ * U', tensor_product(H0, Hb) => tensor_product(E0, Hb)) ≈ ρ
     ψ1 = randn(dim(sector(1, H)))
     @test change_basis(change_basis(ψ1, sector(1, H) => sector(1, Heig)), sector(1, Heig) => sector(1, H)) ≈ ψ1
     @test_throws ArgumentError change_basis(ψ1, sector(1, H) => sector(2, Heig))

@@ -402,7 +402,9 @@ function _split_diagonals(sums, N)
 end
 # The term kron(…, A_2, I, A_1, I) of a sum, with identities on the groups that no factor acts on. Each pair `(A, r)` in
 # the tuple `factors` is a square matrix on one group or a range of groups, and the product `r` of the dimensions of the
-# groups before them.
+# groups before them. A term type implements `mat_eltype`, `precomputation_before_operator_application`,
+# `operator_indices_and_amplitudes_generic!`, `chunked_operator_indices_and_amplitudes_generic!` and, for lazy
+# transposes, `_transposed`.
 struct KronTerm{F <: Tuple}
     factors::F
 end
@@ -457,7 +459,7 @@ function _product_terms(op::NCAdd, bases, space, repr; kwargs...)
     repr isa Union{EagerDenseRepr, EagerSparseRepr} && _acts_by_matrices(space) || return _partitioned_terms(NCterms(op), bases, groups(Hin))
     P = _product_parent(Hin)
     terms = P isa ProductSpace ? _product_terms(op, bases, P, repr; kwargs...) :
-        [KronTerm(((sparse(_term_matrix_representation(NCAdd(zero(op.coeff), op.dict), P, EagerSparseRepr{_repr_eltype(Missing, repr)}(), NoChunking(); kwargs...)), 1),))]
+        [KronTerm(((sparse(c * _term_matrix_representation(m, P, EagerSparseRepr{_repr_eltype(Missing, repr)}(), NoChunking(); kwargs...)), 1),)) for (m, c) in op.dict]
     Hin === P === Hout && return terms
     P == _product_parent(Hout) || throw(ArgumentError("Both axes must be subspaces of one space, got `$Hout` and `$Hin`."))
     cols = [state_index(state, P) for state in basisstates(Hin)]

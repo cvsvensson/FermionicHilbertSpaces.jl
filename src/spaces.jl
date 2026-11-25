@@ -200,10 +200,8 @@ factors(H::AbstractGroupedHilbertSpace) = atomic_factors(H)
 """
     group_id(atom)
 
-The support of an atom or factor of a space: the symbolic groups it carries, one group or a `GroupSet` of several.
-Each symbolic group lies in one factor of a space, and an operator acts on the factor whose support contains
-`symbolic_group(op)`. `tensor_product` passes atoms with equal supports to `combine_into_group`, and rejects atoms
-whose supports overlap without being equal.
+The support of an atom or factor of a space: one symbolic group or a `GroupSet` of several. An operator acts on the
+factor whose support contains `symbolic_group(op)`.
 """
 group_id(H::AbstractAtomicHilbertSpace) = atomic_id(H)
 
@@ -225,7 +223,7 @@ _overlaps(a, b) = any(in(_members(b)), _members(a))
 # Supports in one space are disjoint, so ordering a `GroupSet` by its first member is a total order among them.
 _order_isless(a::GroupSet, b) = _order_isless(first(a.groups), b)
 _order_isless(a, b::GroupSet) = _order_isless(a, first(b.groups))
-_order_isless(a::GroupSet, b::GroupSet) = _order_isless(a.groups, b.groups)
+_order_isless(a::GroupSet, b::GroupSet) = _order_isless(first(a.groups), first(b.groups))
 
 """
     atomic_id(atom)

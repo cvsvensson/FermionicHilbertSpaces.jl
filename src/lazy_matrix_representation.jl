@@ -50,7 +50,7 @@ end
 lazy_precomputation(op, space; _...) = precomputation_before_operator_application(op, space)
 function lazy_precomputation(op::NCAdd, space; projection)
     bases = group_ids(space)
-    terms = length(bases) > 1 || _acts_by_matrices(space) ? _product_terms(op, bases, space, EagerSparseRepr(); projection) : NCterms(op)
+    terms = _product_terms(op, bases, space, EagerSparseRepr(); projection)
     return _precomputed_terms(terms, space)
 end
 
@@ -94,6 +94,7 @@ end
 _transposed(op) = op
 _transposed(op::ProductOperator{C}) where {C} = ProductOperator{C}(op.ops, map(TransposedSpace, op.spaces), op.inds)
 _transposed(term::KronTerm) = KronTerm(map(((A, r),) -> (_transposed_matrix(A), r), term.factors))
+_transposed(t::_SubspaceTerm) = _SubspaceTerm(_transposed(t.term), TransposedSpace(t.parent), t.cols, t.rows)
 # Symmetric factors, such as the diagonal term of a product space, are shared instead of copied.
 _transposed_matrix(A) = issymmetric(A) ? A : copy(transpose(A))
 _transposed_precomp(L::LazyOperator) = L.precomp

@@ -300,13 +300,13 @@ ham = sum(S[k][:]'S[mod1(k + 1, N)][:] for k in 1:N)
 Sz = sum(S[k][:z] for k in 1:N)
 Splus = sum(S[k][:+] for k in 1:N)
 H = hilbert_space(S, 1:N, Sz => 0:(N // 2))
-energies(op, V, qn, H) = eigvals(Hermitian(V' * representation(op, sector(qn, H), Matrix) * V))
-[s => minimum(energies(ham, V, s, H)) for (s, V) in highest_weight_states(H, Splus)]
+block_energies(op, V, qn, H) = eigvals(Hermitian(V' * representation(op, sector(qn, H), Matrix) * V))
+[s => minimum(block_energies(ham, V, s, H)) for (s, V) in highest_weight_states(H, Splus)]
 ```
 Total spin ``S`` at ``S^z_\mathrm{tot} = M`` needs the sectors from ``M`` up to the top, so `Sz => 0:N//2` covers every ``S`` at ``M \geq 0``. `multiplets(H, Splus)[S, M]` is the subspace with total spin ``S`` and ``S^z_\mathrm{tot} = M``, with one column per multiplet:
 ```@example multiplets
 W = multiplets(H, Splus)[1, 0]
-energies(ham, W, 0, H)
+block_energies(ham, W, 0, H)
 ```
 
 #### Hubbard ring: spin and pseudospin
@@ -322,7 +322,7 @@ hub = sum(-f[i, σ]'f[mod1(i + 1, L), σ] + hc for i in 1:L for σ in (:↑, :�
 Splus = sum(f[i, :↑]'f[i, :↓] for i in 1:L)
 etaplus = sum((-1)^i * f[i, :↑]'f[i, :↓]' for i in 1:L)
 @assert iszero(hub * Splus - Splus * hub) && iszero(hub * etaplus - etaplus * hub)
-[(S = (nup - ndn) // 2, η = (nup + ndn - L) // 2) => minimum(energies(hub, V, [nup, ndn], H))
+[(S = (nup - ndn) // 2, η = (nup + ndn - L) // 2) => minimum(block_energies(hub, V, [nup, ndn], H))
  for ((nup, ndn), V) in highest_weight_states(H, [Splus, etaplus])]
 ```
 Passing only `Splus` gives the spin multiplets alone. The functions never see the Hamiltonian, so the check that it commutes with the raisers is up to the caller. For example, ``η^+`` commutes only with the particle-hole-symmetric interaction ``U (n_↑ - 1/2)(n_↓ - 1/2)``; with ``U n_↑ n_↓`` its multiplets do not block-diagonalize the Hamiltonian, and nothing warns about it.
@@ -337,7 +337,7 @@ one_per_site = [sum(c[i, a]'c[i, a] for a in 1:3) => 1 for i in 1:L]
 H = hilbert_space(c, [(i, a) for i in 1:L for a in 1:3], (one_per_site..., n(1), n(2), n(3)))
 raisers = [sum(c[i, a]'c[i, a + 1] for i in 1:L) for a in 1:2]
 exchange = sum(c[i, a]'c[i, b] * c[mod1(i + 1, L), b]'c[mod1(i + 1, L), a] for i in 1:L for a in 1:3 for b in 1:3)
-[w => energies(exchange, V, w, H) for (w, V) in highest_weight_states(H, raisers)]
+[w => block_energies(exchange, V, w, H) for (w, V) in highest_weight_states(H, raisers)]
 ```
 With `check = true`, the default, both functions throw if the raisers are not raising operators of a symmetry or the sector labels are too coarse to resolve the weights.
 

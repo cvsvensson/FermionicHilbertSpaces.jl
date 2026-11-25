@@ -262,7 +262,7 @@ end
 function _rotated_diagonal_values(weighted_terms, H)
     foreach(((w, t),) -> _check_exact(w, t), weighted_terms)
     op = sum(((w, t),) -> w * NCMul(1, t.factors), weighted_terms)
-    M = representation(op, H, Matrix)
+    M = representation(op, H)
     tol = _roundoff(M)
     maximum(abs, M - Diagonal(diag(M)); init = 0.0) <= tol || throw(ArgumentError("A constraint operator must be diagonal in the basis of the space, but `$op` is not. In an eigenbasis of an operator that commutes with it, build the eigenbasis on a space with that constraint, so that degenerate eigenstates are not mixed."))
     all(v -> abs(imag(v)) <= tol, diag(M)) || throw(ArgumentError("Constraint operators with complex values are not supported, but `$op` has complex values. $_ZN_HINT"))
